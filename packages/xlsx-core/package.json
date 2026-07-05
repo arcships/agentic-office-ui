@@ -1,0 +1,12 @@
+{
+  "name": "@extend-ai/xlsx-core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": { "build": "tsup src/index.ts --format esm --dts --clean", "typecheck": "tsc --noEmit" },
+  "dependencies": { "@dukelib/sheets-wasm": "^0.1.17", "fflate": "^0.8.2" },
+  "devDependencies": { "tsup": "^8.0.0", "typescript": "^5.0.0" }
+}

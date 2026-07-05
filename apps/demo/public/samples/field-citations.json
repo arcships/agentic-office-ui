@@ -1,0 +1,70 @@
+{
+  "file": "/samples/invoice.png",
+  "fields": [
+    {
+      "id": "vendor",
+      "label": "Vendor",
+      "page": 1,
+      "rect": [
+        0.07,
+        0.1,
+        0.48,
+        0.15
+      ],
+      "value": "Northwind Industrial Supplies",
+      "confidence": 0.96
+    },
+    {
+      "id": "tax_id",
+      "label": "Tax ID",
+      "page": 1,
+      "rect": [
+        0.07,
+        0.135,
+        0.33,
+        0.17
+      ],
+      "value": "US-98-7654321",
+      "confidence": 0.83
+    },
+    {
+      "id": "invoice_no",
+      "label": "Invoice #",
+      "page": 1,
+      "rect": [
+        0.64,
+        0.1,
+        0.91,
+        0.14
+      ],
+      "value": "INV-2026-0705",
+      "confidence": 0.74
+    },
+    {
+      "id": "total",
+      "label": "Total Due",
+      "page": 1,
+      "rect": [
+        0.64,
+        0.64,
+        0.92,
+        0.7
+      ],
+      "value": "$2,882.58",
+      "confidence": 0.42
+    },
+    {
+      "id": "terms",
+      "label": "Payment Terms",
+      "page": 1,
+      "rect": [
+        0.07,
+        0.88,
+        0.58,
+        0.91
+      ],
+      "value": "Net 30",
+      "confidence": 0.91
+    }
+  ]
+}

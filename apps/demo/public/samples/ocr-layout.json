@@ -1,0 +1,93 @@
+{
+  "file": "/samples/contract-page.png",
+  "output": {
+    "width": 1000,
+    "height": 1330,
+    "blocks": [
+      {
+        "id": "title",
+        "kind": "title",
+        "bbox": [
+          90,
+          65,
+          640,
+          55
+        ],
+        "text": "MASTER SERVICES AGREEMENT",
+        "confidence": 0.98
+      },
+      {
+        "id": "h1",
+        "kind": "header",
+        "bbox": [
+          90,
+          148,
+          360,
+          42
+        ],
+        "text": "1. Scope of Services",
+        "confidence": 0.93
+      },
+      {
+        "id": "body1",
+        "kind": "text",
+        "bbox": [
+          90,
+          195,
+          820,
+          130
+        ],
+        "text": "Provider will deliver document intelligence and workflow automation.",
+        "confidence": 0.89
+      },
+      {
+        "id": "h2",
+        "kind": "header",
+        "bbox": [
+          90,
+          360,
+          310,
+          42
+        ],
+        "text": "2. Service Levels",
+        "confidence": 0.91
+      },
+      {
+        "id": "body2",
+        "kind": "text",
+        "bbox": [
+          90,
+          410,
+          820,
+          130
+        ],
+        "text": "Provider will maintain availability targets and escalation paths.",
+        "confidence": 0.86
+      },
+      {
+        "id": "table",
+        "kind": "table",
+        "bbox": [
+          90,
+          870,
+          820,
+          190
+        ],
+        "text": "Authorized Signatures",
+        "confidence": 0.77
+      },
+      {
+        "id": "footer",
+        "kind": "footer",
+        "bbox": [
+          90,
+          1195,
+          650,
+          30
+        ],
+        "text": "Confidential",
+        "confidence": 0.64
+      }
+    ]
+  }
+}
