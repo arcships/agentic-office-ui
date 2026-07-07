@@ -37,6 +37,7 @@ export * from "./zoom-utils";
 export * from "./dom-helpers";
 export * from "./default-model";
 export * from "./state";
+export * from "./page-measurement";
 export * from "./xml-parsing";
 export * from "./style-to-css";
 export * from "./paragraph-inspect";
