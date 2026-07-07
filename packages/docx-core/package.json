@@ -16,7 +16,7 @@
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts src/docx-import-worker.ts --format esm --dts --clean && cp src/docx_wasm_bg.wasm dist/docx_wasm_bg.wasm",
+    "build": "tsup",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

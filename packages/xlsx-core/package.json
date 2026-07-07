@@ -7,7 +7,7 @@
   "types": "./dist/index.d.ts",
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --clean && node scripts/copy-wasm.mjs",
+    "build": "tsup",
     "typecheck": "tsc --noEmit",
     "copy-wasm": "node scripts/copy-wasm.mjs"
   },
