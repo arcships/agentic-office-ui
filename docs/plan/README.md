@@ -26,7 +26,10 @@
 
 ### XLSX 迁移
 
-master 上已有 xlsx-core 模块化迁移成果（charts/colors/images/wasm 等），vue-xlsx 为 stub。task/xlsx-005 分支有未合并的 XlsxViewer 重写工作（已回退）。
+master 上已有 xlsx-core 模块化迁移成果（charts/colors/images/wasm 等），但 charts.ts(4366行)、images.ts(3870行)、types.ts(1307行)超 1000 行需拆分。vue-xlsx 为 stub（composables.ts 4724行单文件），XlsxViewer/chart-renderer/surface-regl 缺失。
+
+架构设计：`docs/xlsx-migration-architecture.md`
+Workflow：`xlsx-modular-remigration`（8 个任务，verify 循环打回重做）
 
 ## 任务列表
 
@@ -45,6 +48,19 @@ master 上已有 xlsx-core 模块化迁移成果（charts/colors/images/wasm 等
 | docx-components | Vue 组件重写（18 文件，~10900 行） | vue-docx | docx-composables, docx-render | pending |
 | docx-demo | demo 页面对齐 26 项功能 + 构建配置 | demo | docx-components | pending |
 | docx-verify | 全量验证（typecheck + build + python-docx + 视口） | — | docx-demo | pending |
+
+### XLSX 模块化重做任务
+
+| ID | 任务 | scope | depends-on | status |
+|---|---|---|---|---|
+| xlsx-core-types-split | xlsx-core types.ts 拆分（1307→4 文件） | xlsx-core | — | pending |
+| xlsx-core-charts-split | xlsx-core charts.ts 拆分（4366→7 文件） | xlsx-core | xlsx-core-types-split | pending |
+| xlsx-core-images-split | xlsx-core images.ts 拆分（3870→7 文件） | xlsx-core | xlsx-core-types-split | pending |
+| xlsx-composables-split | vue-xlsx composables 拆分（4724→8 文件） | vue-xlsx | xlsx-core-charts-split, xlsx-core-images-split | pending |
+| xlsx-render | chart-renderer + surface-regl 重写（~8359 行） | vue-xlsx | xlsx-composables-split | pending |
+| xlsx-components | XlsxViewer 组件重写（16615→8 文件） | vue-xlsx | xlsx-composables-split, xlsx-render | pending |
+| xlsx-demo | demo XlsxViewerPage 接入 | demo | xlsx-components | pending |
+| xlsx-verify | 全量验证 | — | xlsx-demo | pending |
 
 ### XLSX 迁移任务（旧任务体系，保留参考）
 
