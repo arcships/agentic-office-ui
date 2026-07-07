@@ -75,6 +75,78 @@ export interface DocxTextRange {
   end: DocxTextRangeBoundary;
 }
 
+// Range-comparison helpers (upstream editor.tsx:3413-3480). Pure functions
+// colocated with the range types; consumed by selection-helpers and the
+// pagination/normalize paths.
+export function compareParagraphLocations(
+  a: ParagraphLocation,
+  b: ParagraphLocation
+): number {
+  if (a.kind === "paragraph" && b.kind === "paragraph") {
+    return Math.sign(a.nodeIndex - b.nodeIndex);
+  }
+
+  if (a.kind === "paragraph" && b.kind === "table-cell") {
+    if (a.nodeIndex !== b.tableIndex) {
+      return Math.sign(a.nodeIndex - b.tableIndex);
+    }
+
+    return -1;
+  }
+
+  if (a.kind === "table-cell" && b.kind === "paragraph") {
+    if (a.tableIndex !== b.nodeIndex) {
+      return Math.sign(a.tableIndex - b.nodeIndex);
+    }
+
+    return 1;
+  }
+
+  if (a.kind === "table-cell" && b.kind === "table-cell") {
+    if (a.tableIndex !== b.tableIndex) {
+      return Math.sign(a.tableIndex - b.tableIndex);
+    }
+
+    if (a.rowIndex !== b.rowIndex) {
+      return Math.sign(a.rowIndex - b.rowIndex);
+    }
+
+    if (a.cellIndex !== b.cellIndex) {
+      return Math.sign(a.cellIndex - b.cellIndex);
+    }
+
+    return Math.sign(a.paragraphIndex - b.paragraphIndex);
+  }
+
+  return 0;
+}
+
+export function compareTextRangeBoundaries(
+  a: DocxTextRangeBoundary,
+  b: DocxTextRangeBoundary
+): number {
+  const locationCompare = compareParagraphLocations(a.location, b.location);
+  if (locationCompare !== 0) {
+    return locationCompare;
+  }
+
+  return Math.sign(a.offset - b.offset);
+}
+
+export function normalizeTextRange(range: DocxTextRange): DocxTextRange {
+  if (compareTextRangeBoundaries(range.start, range.end) <= 0) {
+    return {
+      start: range.start,
+      end: range.end,
+    };
+  }
+
+  return {
+    start: range.end,
+    end: range.start,
+  };
+}
+
 export interface DocxHistorySnapshot {
   model: DocModel;
   selection: DocxEditorSelection;
