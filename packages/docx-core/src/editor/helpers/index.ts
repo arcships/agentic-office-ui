@@ -6,26 +6,42 @@
 // Each module is framework-agnostic (React types replaced with plain
 // equivalents) and kept ≤1000 lines per the migration hard constraints.
 //
-// Completed modules:
-//   constants.ts          — global constants + theme/handle/wrap-mode tables
-//   performance.ts        — import performance tracing
-//   cache-utils.ts        — shared cache Maps/WeakMaps + cache helpers
-//   editor-types.ts       — public API types (part 1: selection/range/history/...)
-//   editor-types-extra.ts — public API types (part 2: controller/menu/viewer/...)
-//   ooxml-helpers.ts      — OOXML parsing, embedded fonts, twips/points, xmlAttribute
-//   zoom-utils.ts         — zoom/scroll/clamp utilities
-//   dom-helpers.ts        — scheduled DOM writes + selection placement
-//   default-model.ts      — defaultStarterModel / createBlankDocumentModel
+// Completed modules (30):
+//   constants.ts           — global constants + theme/handle/wrap-mode tables
+//   performance.ts         — import performance tracing
+//   cache-utils.ts         — shared cache Maps/WeakMaps + cache helpers
+//   editor-types.ts        — public API types (part 1: selection/range/history/...)
+//   editor-types-extra.ts  — public API types (part 2: controller/menu/viewer/...)
+//   ooxml-helpers.ts       — OOXML parsing, embedded fonts, twips/points, xmlAttribute
+//   zoom-utils.ts          — zoom/scroll/clamp utilities
+//   dom-helpers.ts         — scheduled DOM writes + selection placement
+//   default-model.ts       — defaultStarterModel / createBlankDocumentModel
+//   state.ts               — editor state machine
+//   page-measurement.ts    — page height measurement
+//   xml-parsing.ts         — XML parsing (part 1)
+//   style-to-css.ts        — runStyleToCss (part 1)
+//   paragraph-inspect.ts   — paragraph property extraction (part 1)
+//   text-mutation.ts       — text mutation helpers
+//   numbering.ts           — list numbering
+//   table-utils.ts         — table utilities (part 1)
+//   table-utils-extra.ts   — table utilities (part 2)
+//   paragraph-toc.ts       — paragraph table-of-contents leaf (cycle-breaker)
+//   field-helpers.ts       — form-field helpers
+//   synthetic-textbox.ts   — synthetic textbox
+//   paragraph-geometry.ts  — paragraph geometry / wrap calculation
+//   drop-cap.ts            — drop-cap layout
+//   letterhead.ts          — letterhead layout
+//   line-height.ts         — estimateParagraphLineHeightPx (part 1)
+//   header-footer.ts       — header/footer reserve
+//   paragraph-tracked.ts   — paragraph tracked-change extraction
+//   selection-helpers.ts   — selection/cursor helpers (clone/normalize/compare)
+//   selection-restore.ts   — DOM selection restore heuristics
+//   section-manipulation.ts — section paragraph/image mutation at location
 //
-// Pending modules (see docs/docx-editor-helpers-split-plan.md):
-//   header-footer, page-measurement, paragraph-inspect, paragraph-geometry,
-//   paragraph-tracked, pretext-build, pretext-measure, drop-cap, letterhead,
-//   line-height, line-height-table, table-height, pagination-plan-core,
-//   pagination-plan-iterate, pagination-plan-stabilize, style-to-css,
-//   style-block-css, xml-parsing, xml-parsing-extra, synthetic-textbox,
-//   tracked-changes, tracked-changes-gutter, field-helpers, numbering,
-//   table-utils, table-utils-extra, text-mutation, selection-helpers,
-//   selection-restore, section-manipulation, state
+// Pending modules (see docs/docx-editor-helpers-split-plan.md) — 11 remaining:
+//   pretext-build, pretext-measure, line-height-table, table-height,
+//   pagination-plan-core, pagination-plan-iterate, pagination-plan-stabilize,
+//   style-block-css, xml-parsing-extra, tracked-changes, tracked-changes-gutter
 
 export * from "./constants";
 export * from "./performance";
@@ -54,3 +70,6 @@ export * from "./letterhead";
 export * from "./line-height";
 export * from "./header-footer";
 export * from "./paragraph-tracked";
+export * from "./selection-helpers";
+export * from "./selection-restore";
+export * from "./section-manipulation";
