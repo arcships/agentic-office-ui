@@ -1,7 +1,7 @@
 ---
 id: docx-002
 scope: docx-core
-status: pending
+status: done
 depends-on: [docx-001]
 ---
 
