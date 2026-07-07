@@ -22,6 +22,9 @@ export * from "./layout";
 // Editor operations (complete)
 export * from "./editor/editor-ops";
 
+// Editor helpers (modular split in progress — see editor/helpers/index.ts)
+export * from "./editor/helpers";
+
 // Viewer layer (complete)
 export * from "./viewer";
 
