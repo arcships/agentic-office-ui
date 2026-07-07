@@ -38,3 +38,12 @@ demo（DocxViewerPage + DocxEditorPage）
 vue-extend（shadcn 组件，无上游，不迁移）
 demo（路由 + fixture + wasm 部署）
 ```
+
+## 包导出状态
+
+| 包 | 状态 | 说明 |
+|---|---|---|
+| `@extend-ai/xlsx-core` | ✅ done | 引擎层：wasm, safe-calculate, worker-client, xlsx-worker, colors, images, charts, types（React 类型已清理） |
+| `@extend-ai/vue-xlsx` | pending | controller + viewer |
+| `@extend-ai/docx-core` | pending | 引擎层 |
+| `@extend-ai/vue-docx` | pending | composables + editor + viewer |

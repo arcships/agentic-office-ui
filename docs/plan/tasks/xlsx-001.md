@@ -1,7 +1,7 @@
 ---
 id: xlsx-001
 scope: xlsx-core
-status: pending
+status: done
 depends-on: []
 ---
 
