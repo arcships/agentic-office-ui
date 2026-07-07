@@ -15,7 +15,7 @@ import {
   type PageFieldKind,
   instructionTextToPageFieldKind,
   instructionTextToStyleRefTarget
-} from "./field-helpers";
+} from "./paragraph-toc";
 import { formatPageFieldValue } from "./numbering";
 import { WORD_IMAGE_Z_INDEX_STEP } from "./constants";
 import { estimateTextAdvanceWidthPx } from "./drop-cap";

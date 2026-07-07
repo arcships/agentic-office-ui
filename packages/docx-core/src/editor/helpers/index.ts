@@ -44,6 +44,7 @@ export * from "./text-mutation";
 export * from "./numbering";
 export * from "./table-utils";
 export * from "./table-utils-extra";
+export * from "./paragraph-toc";
 export * from "./field-helpers";
 export * from "./synthetic-textbox";
 export * from "./paragraph-geometry";

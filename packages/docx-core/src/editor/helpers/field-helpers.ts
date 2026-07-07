@@ -10,41 +10,26 @@ import { decodeXmlText } from "./xml-parsing";
 import { numberToRoman } from "./numbering";
 import { formFieldDisplayValue } from "./paragraph-inspect";
 import { resolveParagraphFirstLineLeftTabStopsPx } from "./line-height";
+import {
+  isTableOfContentsParagraph,
+  isTableOfContentsStyle,
+  tableOfContentsLevel,
+  instructionTextToPageFieldKind,
+  instructionTextToStyleRefTarget
+} from "./paragraph-toc";
+import type { PageFieldKind } from "./paragraph-toc";
 
-const TABLE_OF_CONTENTS_STYLE_ID = /^toc(?:[\s_-]*\d+)?$/i;
-
-export function isTableOfContentsStyle(styleId?: string): boolean {
-  if (!styleId) {
-    return false;
-  }
-  return TABLE_OF_CONTENTS_STYLE_ID.test(styleId.trim());
-}
-
-export function tableOfContentsLevel(paragraph: ParagraphNode): number | undefined {
-  const candidates = [paragraph.style?.styleId, paragraph.style?.styleName];
-  for (const candidate of candidates) {
-    if (!candidate) {
-      continue;
-    }
-    const match = candidate.trim().match(/^toc(?:[\s_-]*(\d+))?$/i);
-    if (!match) {
-      continue;
-    }
-    const parsedLevel = match[1] ? Number.parseInt(match[1], 10) : 1;
-    if (Number.isFinite(parsedLevel) && parsedLevel > 0) {
-      return Math.round(parsedLevel);
-    }
-    return 1;
-  }
-  return undefined;
-}
-
-export function isTableOfContentsParagraph(paragraph: ParagraphNode): boolean {
-  return (
-    isTableOfContentsStyle(paragraph.style?.styleId) ||
-    isTableOfContentsStyle(paragraph.style?.styleName)
-  );
-}
+// Re-export the TOC predicates and field-instruction parsers from the
+// paragraph-toc leaf module so existing barrel consumers are unaffected.
+// The canonical declarations live in paragraph-toc.ts (acyclic leaf).
+export {
+  isTableOfContentsStyle,
+  tableOfContentsLevel,
+  isTableOfContentsParagraph,
+  instructionTextToPageFieldKind,
+  instructionTextToStyleRefTarget
+};
+export type { PageFieldKind } from "./paragraph-toc";
 
 export function paragraphUsesTabLeaders(paragraph: ParagraphNode): boolean {
   if (!isTableOfContentsParagraph(paragraph)) {
@@ -196,8 +181,6 @@ export function paragraphUsesCenterRightTabLayout(paragraph: ParagraphNode): boo
   return paragraphAnchoredTabLayout(paragraph) === "center-right";
 }
 
-export type PageFieldKind = "PAGE" | "NUMPAGES";
-
 export interface PageFieldValueToken {
   kind: PageFieldKind;
   rawText: string;
@@ -206,40 +189,6 @@ export interface PageFieldValueToken {
 export interface StyleRefFieldValueToken {
   target: string;
   rawText: string;
-}
-
-export function instructionTextToPageFieldKind(
-  rawInstruction: string
-): PageFieldKind | undefined {
-  const normalized = decodeXmlText(rawInstruction)
-    .replace(/\s+/g, " ")
-    .trim()
-    .toUpperCase();
-  if (!normalized || normalized.includes("PAGEREF")) {
-    return undefined;
-  }
-
-  if (/\bNUMPAGES\b/.test(normalized)) {
-    return "NUMPAGES";
-  }
-  if (/\bPAGE\b/.test(normalized)) {
-    return "PAGE";
-  }
-
-  return undefined;
-}
-
-export function instructionTextToStyleRefTarget(
-  rawInstruction: string
-): string | undefined {
-  const normalized = decodeXmlText(rawInstruction).replace(/\s+/g, " ").trim();
-  if (!normalized) {
-    return undefined;
-  }
-
-  const match = normalized.match(/\bSTYLEREF\b\s+(?:"([^"]+)"|([^\s\\]+))/i);
-  const target = (match?.[1] ?? match?.[2] ?? "").trim();
-  return target.length > 0 ? target : undefined;
 }
 
 export function paragraphPageFieldSequence(paragraph: ParagraphNode): PageFieldKind[] {

@@ -46,7 +46,7 @@ import {
 import { twipsToSignedPixels } from "./ooxml-helpers";
 import { cssFontFamily } from "./style-to-css";
 import { formFieldDisplayValue } from "./paragraph-inspect";
-import { isTableOfContentsParagraph } from "./field-helpers";
+import { isTableOfContentsParagraph } from "./paragraph-toc";
 import {
   paragraphHasCheckboxFormField,
   paragraphHasOnlyWhitespaceText,
@@ -251,6 +251,14 @@ export function paragraphRendersTextFreeLine(paragraph: ParagraphNode): boolean 
   return (
     paragraphHasOnlyWhitespaceText(paragraph) ||
     paragraphIsFloatingImageAnchorOnly(paragraph)
+  );
+}
+
+export function paragraphContainsExplicitLineBreakText(
+  paragraph: ParagraphNode
+): boolean {
+  return paragraph.children.some(
+    (child) => child.type === "text" && /[\r\n]/.test(child.text)
   );
 }
 
