@@ -83,6 +83,16 @@ export * from "./wasm-source";
 // --- Editor state ---
 export * from "./core/state";
 
+// --- Editor helpers (pure functions + types from editor.tsx front half) ---
+export * from "./editor-helpers";
+// editor-helpers carries upstream duplicates of two pagination helpers that are
+// canonically defined in page-segmentation (re-exported via layout-core). Break
+// the `export *` ambiguity by explicitly re-exporting the canonical versions.
+export {
+  buildDocumentPageNodeSegments,
+  paragraphLetterheadColumnGroupAtSegmentOffset
+} from "./layout-core";
+
 // --- Canvas ---
 export * from "./canvas/types";
 export * from "./canvas/layout-diagnostics";
