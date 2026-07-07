@@ -3,7 +3,7 @@
     <h2>📑 PDF Viewer — Verification</h2>
     <p class="desc">Verify PdfViewer with real sample PDFs: text, scanned, rotated, large and corrupted fixtures.</p>
 
-    <div class="controls">
+    <div class="controls control-panel">
       <label>
         Sample PDF
         <select v-model="selectedSample" @change="loadSelectedSample">
@@ -17,7 +17,7 @@
       <p v-if="error" class="error">{{ error }}</p>
     </div>
 
-    <div class="status-grid">
+    <div class="status-grid info-grid">
       <div><strong>Loaded:</strong> {{ fileName || "None" }}</div>
       <div><strong>Source:</strong> {{ sourceKind }}</div>
       <div><strong>Expected coverage:</strong> thumbnails, zoom, search, rotate, download, error state</div>

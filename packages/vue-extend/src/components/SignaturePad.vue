@@ -32,7 +32,8 @@ function setupCanvas() {
   const ratio = window.devicePixelRatio || 1
   canvas.width = props.width * ratio
   canvas.height = props.height * ratio
-  canvas.style.width = `${props.width}px`
+  canvas.style.width = "100%"
+  canvas.style.maxWidth = `${props.width}px`
   canvas.style.height = `${props.height}px`
   ctx = canvas.getContext("2d")
   if (!ctx) return
@@ -111,7 +112,7 @@ defineExpose({
 </script>
 
 <template>
-  <div :class="['inline-block', props.className]">
+  <div :class="['inline-block max-w-full', props.className]">
     <canvas
       ref="canvasRef"
       class="block rounded-md border border-border bg-background"

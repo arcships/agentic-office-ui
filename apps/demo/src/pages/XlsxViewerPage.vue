@@ -3,7 +3,7 @@
     <h2>📊 XLSX Viewer — Verification</h2>
     <p class="desc">Verify real workbook loading, sheet tabs, selection, editing, zoom, read-only and large-grid behavior.</p>
 
-    <div class="controls">
+    <div class="controls control-panel">
       <label>
         Sample workbook
         <select v-model="selectedSample" @change="loadSelectedSample">
@@ -20,7 +20,7 @@
       <p v-if="error" class="error">{{ error }}</p>
     </div>
 
-    <div class="status-grid">
+    <div class="status-grid info-grid">
       <div><strong>Loaded:</strong> {{ displayName || "None" }}</div>
       <div><strong>Source:</strong> {{ sourceKind }}</div>
       <div><strong>Mode:</strong> {{ readOnly ? "Read only" : "Editable" }}</div>
@@ -49,8 +49,8 @@
       <table>
         <thead><tr><th>Check</th><th>Expected</th><th>Result</th></tr></thead>
         <tbody>
-          <tr><td><code>XlsxViewer</code></td><td>Accepts file/src/readOnly/showToolbar/showSheetTabs</td><td class="pass">✅ READY</td></tr>
-          <tr><td><code>useXlsxViewerController()</code></td><td>Selection, zoom, editing, tabs controller</td><td class="pass">✅ READY</td></tr>
+          <tr><td><code>XlsxViewer</code></td><td>Accepts file/src/readOnly/showToolbar/showSheetTabs; visible spreadsheet surface is scoped vs upstream</td><td class="warn">⚠️ SCOPED</td></tr>
+          <tr><td><code>useXlsxViewerController()</code></td><td>Selection, zoom, editing, tabs controller; some advanced APIs are partial/no-op</td><td class="warn">⚠️ PARTIAL</td></tr>
           <tr><td><code>columnLabel(26)</code></td><td>AA</td><td class="pass">{{ columnAA }}</td></tr>
           <tr><td><code>rangeToA1()</code></td><td>A1:C6</td><td class="pass">{{ rangeCheck }}</td></tr>
         </tbody>
@@ -135,4 +135,5 @@ h2 { margin-bottom: 4px; }
 .api-verify table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .api-verify th, .api-verify td { padding: 6px 12px; text-align: left; border-bottom: 1px solid var(--border); }
 .pass { color: #16a34a; font-weight: 600; }
+.warn { color: #b45309; font-weight: 600; }
 </style>

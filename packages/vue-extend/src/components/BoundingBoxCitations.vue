@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, ref } from "vue"
 
 export interface BoundingBoxField {
   /** Unique stable id for the field */
@@ -32,6 +32,8 @@ const emit = defineEmits<{
   "field-click": [field: BoundingBoxField]
 }>()
 
+const selectedFieldId = ref<string | null>(null)
+
 const groupedByPage = computed(() => {
   const map = new Map<number, BoundingBoxField[]>()
   for (const field of props.fields) {
@@ -39,14 +41,13 @@ const groupedByPage = computed(() => {
     existing.push(field)
     map.set(field.page, existing)
   }
-  // Sort by page number
   return Array.from(map.entries()).sort(([a], [b]) => a - b)
 })
 
-function confidenceColor(confidence: number): string {
-  if (confidence >= 0.8) return "border-green-500/60 bg-green-500/10"
-  if (confidence >= 0.5) return "border-amber-500/60 bg-amber-500/10"
-  return "border-red-500/60 bg-red-500/10"
+function confidenceClass(confidence: number): string {
+  if (confidence >= 0.8) return "confidence-high"
+  if (confidence >= 0.5) return "confidence-medium"
+  return "confidence-low"
 }
 
 function fieldStyle(field: BoundingBoxField) {
@@ -58,72 +59,151 @@ function fieldStyle(field: BoundingBoxField) {
     height: `${(bottom - top) * 100}%`,
   }
 }
+
+function selectField(field: BoundingBoxField) {
+  selectedFieldId.value = field.id
+  emit("field-click", field)
+}
 </script>
 
 <template>
-  <div :class="['space-y-4', props.className]">
+  <div :class="['bounding-box-citations', props.className]">
     <div
       v-for="[page, pageFields] in groupedByPage"
       :key="page"
-      class="rounded-lg border border-border bg-background p-4"
+      class="citation-page-card"
     >
-      <h4 class="mb-3 text-sm font-medium text-foreground">
+      <h4 class="citation-page-title">
         Page {{ page }} &mdash; {{ pageFields.length }} field{{ pageFields.length > 1 ? "s" : "" }}
       </h4>
-      <!-- Page representation -->
-      <div class="relative mb-3 aspect-[3/4] w-full max-w-sm overflow-hidden rounded-md border border-border bg-muted/30">
-        <!-- Render each field as an overlay box -->
-        <div
+      <div class="citation-page-preview">
+        <img :src="props.file" alt="Citation source preview" class="citation-image" />
+        <button
           v-for="field in pageFields"
           :key="field.id"
+          type="button"
           :class="[
-            'absolute cursor-pointer rounded-sm border transition-opacity hover:opacity-80',
-            confidenceColor(field.confidence ?? 0.5),
+            'citation-box',
+            confidenceClass(field.confidence ?? 0.5),
+            { 'is-selected': selectedFieldId === field.id },
           ]"
           :style="fieldStyle(field)"
           :title="`${field.label}: ${field.value ?? ''}`"
-          @click="emit('field-click', field)"
+          :aria-pressed="selectedFieldId === field.id"
+          @click="selectField(field)"
         >
-          <span class="absolute -top-5 left-0 truncate text-[10px] font-medium text-foreground">
-            {{ field.label }}
-          </span>
-        </div>
+          <span class="citation-box-label">{{ field.label }}</span>
+        </button>
       </div>
-      <!-- Field list -->
-      <ul class="space-y-2">
-        <li
-          v-for="field in pageFields"
-          :key="field.id"
-          :class="[
-            'flex cursor-pointer items-start gap-2 rounded-md p-2 text-sm transition-colors hover:bg-accent',
-            confidenceColor(field.confidence ?? 0.5),
-          ]"
-          @click="emit('field-click', field)"
-        >
-          <div class="min-w-0 flex-1">
-            <span class="font-medium text-foreground">{{ field.label }}</span>
-            <span v-if="field.value" class="ml-2 text-muted-foreground">
-              {{ field.value }}
-            </span>
-          </div>
-          <span
-            v-if="field.confidence !== undefined"
-            class="shrink-0 text-xs tabular-nums text-muted-foreground"
+      <ul class="citation-list">
+        <li v-for="field in pageFields" :key="field.id">
+          <button
+            type="button"
+            :class="[
+              'citation-list-item',
+              confidenceClass(field.confidence ?? 0.5),
+              { 'is-selected': selectedFieldId === field.id },
+            ]"
+            :aria-pressed="selectedFieldId === field.id"
+            @click="selectField(field)"
           >
-            {{ (field.confidence * 100).toFixed(0) }}%
-          </span>
+            <span class="citation-list-main">
+              <span class="citation-label">{{ field.label }}</span>
+              <span v-if="field.value" class="citation-value">{{ field.value }}</span>
+            </span>
+            <span v-if="field.confidence !== undefined" class="citation-confidence">
+              {{ (field.confidence * 100).toFixed(0) }}%
+            </span>
+          </button>
         </li>
       </ul>
     </div>
-    <p
-      v-if="props.fields.length === 0"
-      class="py-8 text-center text-sm text-muted-foreground"
-    >
+    <p v-if="props.fields.length === 0" class="empty-state">
       No fields to display
     </p>
   </div>
 </template>
 
 <style scoped>
-.responsive-fixture-image { max-width: 100%; height: auto; }
+.bounding-box-citations { display: flex; min-width: 0; flex-direction: column; gap: 16px; }
+.citation-page-card {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius, 10px);
+  background: var(--background, #fff);
+  padding: 16px;
+}
+.citation-page-title { margin: 0 0 12px; color: var(--foreground, #111827); font-size: 14px; font-weight: 500; }
+.citation-page-preview {
+  position: relative;
+  margin-bottom: 12px;
+  aspect-ratio: 3 / 4;
+  width: 100%;
+  max-width: 384px;
+  overflow: hidden;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in oklch, var(--muted, #f5f5f5) 35%, transparent);
+}
+.citation-image { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0.9; }
+.citation-box {
+  position: absolute;
+  cursor: crosshair;
+  border-width: 2px;
+  border-style: solid;
+  border-radius: 0 !important;
+  background: transparent;
+  padding: 0;
+  transition: filter 0.12s ease, outline-color 0.12s ease;
+}
+.citation-box:hover { filter: brightness(1.12); }
+.citation-box:focus-visible,
+.citation-list-item:focus-visible { outline: 2px solid #0ea5e9; outline-offset: 2px; }
+.citation-box.is-selected {
+  box-shadow: none;
+  outline: 2px solid #0f172a;
+  outline-offset: 1px;
+  z-index: 2;
+}
+.citation-box-label {
+  position: absolute;
+  left: -2px;
+  top: -18px;
+  max-width: 160px;
+  overflow: hidden;
+  border-radius: 0 !important;
+  background: rgb(15 23 42 / 0.88);
+  color: #fff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  padding: 0 4px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.citation-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.citation-list-item {
+  display: flex;
+  width: 100%;
+  cursor: pointer;
+  align-items: flex-start;
+  gap: 8px;
+  border-width: 0 0 0 3px;
+  border-style: solid;
+  border-radius: 0 !important;
+  background: transparent;
+  padding: 6px 8px;
+  text-align: left;
+  transition: background-color 0.12s ease;
+}
+.citation-list-item:hover { background: rgb(148 163 184 / 0.12); }
+.citation-list-item.is-selected { box-shadow: none; background: rgb(14 165 233 / 0.12); }
+.citation-list-main { min-width: 0; flex: 1; font-size: 13px; }
+.citation-label { color: var(--foreground, #111827); font-weight: 600; }
+.citation-value { margin-left: 8px; color: var(--muted-foreground, #737373); }
+.citation-confidence { flex-shrink: 0; color: var(--muted-foreground, #737373); font-size: 12px; font-variant-numeric: tabular-nums; }
+.confidence-high { border-color: rgb(34 197 94); background: rgb(34 197 94 / 0.08); }
+.confidence-medium { border-color: rgb(245 158 11); background: rgb(245 158 11 / 0.08); }
+.confidence-low { border-color: rgb(239 68 68); background: rgb(239 68 68 / 0.08); }
+.empty-state { padding: 32px 0; color: var(--muted-foreground, #737373); text-align: center; font-size: 14px; }
 </style>

@@ -32,6 +32,7 @@ const rotation = ref(0)
 const activePage = ref(1)
 const searchDraft = ref("")
 const searchResult = ref("")
+const searchHitPage = ref<number | null>(null)
 const loadError = ref("")
 const downloadError = ref("")
 const isLoading = ref(false)
@@ -41,14 +42,17 @@ const pdfText = ref("")
 const controlsDisabled = computed(() => !props.src || !!loadError.value || isLoading.value)
 const frameSrc = computed(() => {
   if (!props.src) return undefined
-  const hash = `page=${activePage.value}&zoom=${Math.round(zoom.value * 100)}`
-  return props.src.includes("#") ? `${props.src}&${hash}` : `${props.src}#${hash}`
+  const params = new URLSearchParams({
+    page: String(activePage.value),
+    zoom: String(Math.round(zoom.value * 100)),
+    view: "FitH",
+  })
+  return `${props.src.split("#")[0]}#${params.toString()}`
 })
-const viewerStyle = computed(() => ({
-  transform: `scale(${zoom.value}) rotate(${rotation.value}deg)`,
-  transformOrigin: "top center",
-  width: `${100 / zoom.value}%`,
-  height: `${100 / zoom.value}%`,
+const pageLabels = computed(() => Array.from({ length: numPages.value }, (_, index) => index + 1))
+const frameStyle = computed(() => ({
+  transform: `rotate(${rotation.value}deg)`,
+  transformOrigin: "center center",
 }))
 
 function cn(...classes: (string | undefined | null | false)[]): string {
@@ -114,12 +118,24 @@ function estimatePagesFromPdf(text: string): number {
 
 function runSearch() {
   const query = searchDraft.value.trim()
+  searchHitPage.value = null
   if (!query) {
     searchResult.value = ""
     return
   }
-  const hits = pdfText.value.toLowerCase().split(query.toLowerCase()).length - 1
-  searchResult.value = hits > 0 ? `${hits} match${hits === 1 ? "" : "es"}` : "No matches"
+  const lowerText = pdfText.value.toLowerCase()
+  const lowerQuery = query.toLowerCase()
+  const hits = lowerText.split(lowerQuery).length - 1
+  if (hits > 0) {
+    const hitIndex = lowerText.indexOf(lowerQuery)
+    const beforeHit = pdfText.value.slice(0, Math.max(0, hitIndex))
+    const pageGuess = Math.min(numPages.value || 1, Math.max(1, (beforeHit.match(/\/Type\s*\/Page\b/g)?.length ?? 0) || 1))
+    searchHitPage.value = pageGuess
+    setActivePage(pageGuess)
+    searchResult.value = `${hits} match${hits === 1 ? "" : "es"}; opened page ${pageGuess}`
+  } else {
+    searchResult.value = "No matches"
+  }
 }
 
 async function load() {
@@ -183,7 +199,7 @@ watch(searchDraft, runSearch)
     <div v-else class="pdf-body">
       <aside class="pdf-thumbnails" aria-label="Page thumbnails">
         <button
-          v-for="page in numPages"
+          v-for="page in pageLabels"
           :key="page"
           type="button"
           :class="['thumbnail', { active: page === activePage }]"
@@ -193,7 +209,8 @@ watch(searchDraft, runSearch)
         </button>
       </aside>
       <div class="pdf-frame-wrap">
-        <iframe :src="frameSrc" title="PDF document" class="pdf-frame" :style="viewerStyle" />
+        <div v-if="searchHitPage" class="pdf-search-locator" role="status">Search result opened on page {{ searchHitPage }}</div>
+        <iframe :key="frameSrc" :src="frameSrc" title="PDF document" class="pdf-frame" :style="frameStyle" />
       </div>
     </div>
     <div v-if="downloadError" class="download-error">{{ downloadError }}</div>
@@ -201,7 +218,7 @@ watch(searchDraft, runSearch)
 </template>
 
 <style scoped>
-.pdf-viewer { display: flex; flex-direction: column; height: 100%; min-height: 320px; background: var(--background, #fff); color: var(--foreground, #111); }
+.pdf-viewer { display: flex; flex-direction: column; height: 100%; min-height: 620px; background: var(--background, #fff); color: var(--foreground, #111); }
 .pdf-toolbar { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px; border-bottom: 1px solid var(--border, #e5e5e5); flex-wrap: wrap; }
 .pdf-toolbar button, .pdf-toolbar select, .pdf-toolbar input { height: 32px; border: 1px solid var(--border, #e5e5e5); border-radius: 6px; background: white; padding: 0 8px; }
 .pdf-toolbar button { cursor: pointer; }
@@ -212,10 +229,12 @@ watch(searchDraft, runSearch)
 .pdf-empty, .pdf-error { display: grid; place-items: center; flex: 1; min-height: 220px; color: var(--muted-foreground, #737373); }
 .pdf-error, .download-error { color: #dc2626; }
 .download-error { padding: 8px 12px; font-size: 12px; border-top: 1px solid var(--border, #e5e5e5); }
-.pdf-body { display: flex; min-height: 0; flex: 1; background: #f5f5f5; }
+.pdf-body { display: flex; min-height: 540px; flex: 1; background: #f5f5f5; }
 .pdf-thumbnails { width: 132px; overflow: auto; border-right: 1px solid var(--border, #e5e5e5); padding: 12px; background: white; }
 .thumbnail { display: block; width: 100%; height: 72px; margin-bottom: 8px; border: 1px solid var(--border, #e5e5e5); border-radius: 6px; background: #fafafa; font-size: 12px; }
 .thumbnail.active { border-color: #2563eb; color: #2563eb; font-weight: 700; }
-.pdf-frame-wrap { flex: 1; overflow: auto; display: flex; justify-content: center; padding: 16px; }
-.pdf-frame { min-height: 100%; border: 0; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+.pdf-frame-wrap { flex: 1; min-width: 0; min-height: 540px; overflow: auto; position: relative; padding: 16px; }
+.pdf-frame { display: block; width: 100%; height: max(540px, 100%); min-height: 540px; border: 0; border-radius: 8px; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+.pdf-search-locator { position: sticky; top: 8px; z-index: 2; width: fit-content; margin: 0 auto 8px; border: 1px solid #bfdbfe; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: 12px; padding: 4px 10px; }
+@media (max-width: 700px) { .pdf-body { flex-direction: column; } .pdf-thumbnails { width: auto; display: flex; gap: 8px; border-right: 0; border-bottom: 1px solid var(--border, #e5e5e5); } .thumbnail { width: 92px; flex: 0 0 auto; } }
 </style>

@@ -1,218 +1,181 @@
-# Vue Extend UI 组件浏览器验证证据
+# Upstream Visual Comparison Evidence
 
 > Status update (2026-07-05): The prior visual acceptance pass is **rejected / needs work** after user review. This file is retained as historical evidence only and must not be used as proof that `docs/visual-acceptance-handoff.md` is complete. Current blockers include raw DOM-looking controls, broken fixture switching/render state, incorrect DOCX pagination/editor behavior, missing XLSX multi-select/drag selection and broken advertised controls, and broken PDF pagination/search/frame sizing.
 
 
-验证目标：按 `docs/component-browser-verification-plan.md` 覆盖 demo 全路由、全部组件、真实物料、交互状态、错误状态、响应式与最终命令门禁。
+## Scope
 
-验证环境：内置浏览器，demo 地址 `http://localhost:5000`，项目根目录 `D:\code\ui\vue-extend`。
+This evidence records the first upstream-comparison implementation pass for the merged plan in `docs/visual-acceptance-handoff.md`.
 
-## 全局路由与响应式
+References used:
 
-覆盖路由：
+- Local Vue demo: `http://127.0.0.1:5002`
+- Upstream DOCX playground: `http://127.0.0.1:5174`
+- Upstream XLSX playground: `http://127.0.0.1:5175`
+- Upstream DOCX clone: `/Users/eric8810/Code/extend-ui-upstream/react-docx` @ `6f70b92b8d32dcf352130bc8ad0f2f15a87a6764`
+- Upstream XLSX clone: `/Users/eric8810/Code/extend-ui-upstream/react-xlsx` @ `f285a1c1a2a02e441a2e1f56e2fa480a0a979502`
 
-- `/#/`
-- `/#/docx-viewer`
-- `/#/docx-editor`
-- `/#/xlsx-viewer`
-- `/#/pdf-viewer`
-- `/#/components`
+## Upstream observations
 
-视口矩阵：
+### DOCX playground
 
-| 视口 | 结果 |
-|---|---|
-| 1440×900 | 6 个路由均有内容，document page overflow=false，未出现错误文本 |
-| 1280×720 | 6 个路由均有内容，document page overflow=false，未出现错误文本 |
-| 768×1024 | 6 个路由均有内容，document page overflow=false；DOCX Editor / XLSX Viewer 使用内部滚动容器承载宽内容 |
-| 390×844 | 6 个路由均有内容，document page overflow=false；DOCX Editor / XLSX Viewer 使用内部滚动容器承载宽内容 |
+Browser snapshot confirmed the upstream DOCX playground uses:
 
-浏览器错误检查：
+- compact app chrome with `Ready` status,
+- grouped shadcn-like toolbar clusters,
+- disabled undo/redo states,
+- paragraph style, font family/size, line spacing,
+- bold/italic/underline/strike/superscript/subscript,
+- text/highlight color controls,
+- alignment, list, border, image/table, zoom, import/download controls,
+- switches for edits, comments, and read-only.
 
-- Page errors：无
-- Console business errors：无；仅 Vite hot update 与 DimCode inspect 调试日志
+### XLSX playground
 
-## 真实物料校验
+Browser snapshot confirmed the upstream XLSX playground uses:
 
-命令：
+- workbook title bar,
+- ribbon tabs (`Home`, `Insert`, `Page Layout`, `Formulas`, `Data`, `View`),
+- grouped ribbon controls with disabled states,
+- formula/name box area,
+- empty workbook state,
+- shadcn-like dense controls and tokenized focus/disabled styling.
 
-```bash
-uv run --with python-docx --with openpyxl --with pillow --with pypdf python scripts\verify_test_materials.py
-```
+## Issues addressed in this pass
 
-结果：通过。
+### UVC-001 — Global shadcn token coverage incomplete
 
-覆盖物料：
+- Type: visual / shared styling
+- Severity: high
+- Local files changed:
+  - `apps/demo/index.html`
 
-- DOCX：`demo.docx`、`legal-contract.docx`、`invoice-table.docx`、`report-with-image.docx`、`chinese-mixed.docx`、`corrupted.docx`
-- PDF：`sample.pdf`、`scanned-invoice.pdf`、`rotated-pages.pdf`、`large-contract.pdf`、`corrupted.pdf`
-- XLSX：`financial-model.xlsx`、`sales-table.xlsx`、`charts-images.xlsx`、`large-grid.xlsx`、`corrupted.xlsx`
-- 图片：`invoice.png`、`contract-page.png`
-- JSON：`field-citations.json`、`ocr-layout.json`、`manifest.json`
+Fix:
 
-## Home
+- Expanded the demo token set to include upstream-style `--card`, `--popover`, `--secondary`, `--accent`, `--destructive`, `--input`, `--ring`, radius scales, and shadows.
+- Added Inter/system font stack and global focus-visible ring behavior.
+- Added global disabled cursor/opacity and transition baseline for controls.
 
-验证项：
+Retest:
 
-- 首页标题与导航卡片可见
-- DOCX Viewer / DOCX Editor / XLSX Viewer / PDF Viewer / Components 卡片均显示 `✅ Ready`
-- API Compatibility Map 中 DOCX 与 XLSX API 项均显示 `✅ 1:1`
-- 路由跳转可进入每个页面
-- 响应式矩阵 page overflow=false
+- `pnpm typecheck` passed.
+- `pnpm build` passed.
+- Browser snapshots show updated nav labels and toolbar semantics after rebuild.
 
-## DOCX Viewer
+### UVC-002 — App nav did not match upstream density and focus/active affordance
 
-页面：`/#/docx-viewer`
+- Type: visual / shell
+- Severity: medium
+- Local files changed:
+  - `apps/demo/src/App.vue`
 
-浏览器样本矩阵：
+Fix:
 
-| 文件 | 证据 |
-|---|---|
-| `demo.docx` | `Loaded: demo.docx`，出现 `MASTER SERVICES AGREEMENT` |
-| `legal-contract.docx` | `Loaded: legal-contract.docx`，出现 `MASTER SERVICES AGREEMENT` |
-| `invoice-table.docx` | `Loaded: invoice-table.docx`，出现 `INVOICE INV-2026-0705` / `Total Due` |
-| `report-with-image.docx` | `Loaded: report-with-image.docx`，出现 `Quarterly Operations Report` / `Executive summary` |
-| `chinese-mixed.docx` | `Loaded: chinese-mixed.docx`，出现中文混排内容 |
-| `corrupted.docx` | `Loaded: corrupted.docx`，页面显示 DOCX 解析错误态 |
+- Converted nav from emoji-heavy links to compact text links.
+- Added sticky, translucent, token-based shell styling.
+- Added upstream-like compact active/hover states.
 
-通过标准覆盖：空态、loading、成功态、真实文本、标题、表格、图片、中文混排、损坏文件错误反馈、内部 viewer 滚动。上传路径已验证：上传 `invoice-table.docx` 后显示 `uploaded-invoice-table.docx` 与发票表格内容。
+Retest:
 
-## DOCX Editor
+- Browser snapshot confirmed compact text nav on local routes.
 
-页面：`/#/docx-editor`
+### UVC-003 — DOCX editor toolbar too primitive visually
 
-验证项：
+- Type: visual / interaction
+- Severity: high
+- Local files changed:
+  - `packages/vue-docx/src/DocxEditor.vue`
 
-- 初始文档显示 `Editable Verification Document`
-- 页面包含 3 个 `contenteditable` 段落
-- 第二段输入 `浏览器验证 mixed English 123` 后页面可见
-- 输入后 Undo 按钮启用
-- Undo 恢复原文 `Click this paragraph and type...`
-- Redo 按钮启用并恢复 `浏览器验证 mixed English 123`
-- Bold 后当前文本 `fontWeight = 700`
-- Theme toggle 后页面背景变化
-- `@extend-ai/vue-docx` typecheck/build 通过
+Fix:
 
-## XLSX Viewer
+- Reworked toolbar markup into accessible `role="toolbar"` groups.
+- Added shadcn-like toolbar clusters, compact 28px controls, hover/active/disabled states, and page count styling.
+- Changed heading option label from `Normal` to `Body`, matching upstream language more closely.
 
-页面：`/#/xlsx-viewer`
+Retest:
 
-样本矩阵：
+- Browser snapshot for `/#/docx-editor` shows grouped DOCX editor toolbar with Undo/Redo, heading select, Bold/Italic/Underline, theme, and page count.
+- `pnpm typecheck` passed.
+- `pnpm build` passed.
 
-| 文件 | 证据 |
-|---|---|
-| `financial-model.xlsx` | 显示文件名；tabs 为 `Assumptions` / `P&L` / `Notes`；显示 `Starting Customers` |
-| `sales-table.xlsx` | 显示 `Sales Data`；显示长文本 `Long note validating overflow...` |
-| `charts-images.xlsx` | 显示 `Dashboard`；显示 `Revenue` |
-| `large-grid.xlsx` | 显示 `Large Grid`；列名覆盖 `AA` 到 `BH` |
-| `corrupted.xlsx` | 显示 `Failed to load workbook`；sheet tabs 清空 |
+Known remaining gap:
 
-交互矩阵：
+- Upstream DOCX editor has many more controls and a much richer editing model. This pass improves visual grouping and density but does not implement full upstream editor parity.
 
-- 单元格点击显示 selection outline
-- 双击 `Starting Customers` 输入框初始值为 `Starting Customers`
-- Enter 提交 `Edited Customers` 后页面可见
-- Undo 恢复原值，Redo 恢复编辑值
-- Escape 取消 `Cancelled Edit`，原值保留
-- Tab 提交 `Tab Edit` 并移动 selection 到下一格
-- Zoom 100%→110%，列宽样式变为 `88px`
-- Read only 模式阻止双击编辑
-- Download 按钮存在且可用
-- 上传路径已验证：上传 `sales-table.xlsx` 后显示 `uploaded-sales-table.xlsx` 与 `Sales Data`
+### UVC-004 — DOCX page surface/canvas less upstream-like and block geometry double-applied margins
 
-## PDF Viewer
+- Type: visual / data-fidelity
+- Severity: high
+- Local files changed:
+  - `packages/vue-docx/src/DocxViewer.vue`
+  - `packages/vue-docx/src/DocxEditor.vue`
 
-页面：`/#/pdf-viewer`
+Fix:
 
-样本矩阵：
+- Added muted canvas padding/background to DOCX viewer/editor content.
+- Added upstream-like page border and stronger page shadow.
+- Removed per-block `left/top` visual offsets in Vue viewer/editor rendering and kept blocks in flow inside the padded page, reducing double-margin distortion.
+- Stopped keying editor blocks by text content to avoid remounting editable paragraphs on every text change.
 
-| 文件 | 证据 |
-|---|---|
-| `sample.pdf` | 4 thumbnails；Next 后 `2 / 4`；iframe hash `/samples/sample.pdf#page=2&zoom=125` |
-| `scanned-invoice.pdf` | 3 thumbnails；Next 后 `2 / 3` |
-| `rotated-pages.pdf` | 2 thumbnails；Next 后 `2 / 2` |
-| `large-contract.pdf` | 31 thumbnails；Next 后 `2 / 31` |
-| `corrupted.pdf` | 显示 `Unable to load PDF document.`；thumbnails 为 0 |
+Retest:
 
-交互矩阵：
+- `pnpm typecheck` passed.
+- `pnpm build` passed.
 
-- Next/Previous 更新页码状态
-- thumbnail 数量匹配页数
-- zoom 更新 iframe hash 与 transform
-- rotate 产生可观察 transform matrix
-- search 输入后显示结果反馈
-- download 失败有错误捕获路径
-- 上传路径已验证：上传 `sample.pdf` 后显示 `uploaded-sample.pdf` 与 4 页状态
+Known remaining gap:
 
-## Components
+- Header/footer, rich run semantics, table fidelity, and true selection/caret preservation are still materially less complete than upstream.
 
-页面：`/#/components`
+### UVC-005 — XLSX toolbar did not resemble upstream ribbon
 
-| 组件 | 证据 |
-|---|---|
-| SignaturePad | canvas CSS 尺寸 400×200；绘制后出现 `Signature captured (...)`；`Check empty` 显示 `Has signature`；Clear 后显示 `Empty` |
-| FileUpload | PDF 拖拽显示 `Uploaded: matrix.pdf` |
-| FileUpload accept | XLSX 拖入 PDF/DOCX 上传区显示 `not an accepted file type` |
-| FileUpload maxSize | 3MB PDF 显示 `exceeds the 2.0MB size limit` |
-| FileUpload disabled | disabled 上传区拖入文件后无接收状态 |
-| FileThumbnail | PDF/DOCX/XLSX/PNG/unknown 文件名均可见；图片缩略图宽度为 48px |
-| BoundingBoxCitations | invoice 字段可见；点击字段后 selected field 更新 |
-| LayoutBlocks | 7 个 OCR blocks 可见；点击 row 后 selected block 更新；空态显示 `No layout blocks detected` |
-| Spinner | spinner 元素可见 |
-| Tooltip | hover/focus 后显示 tooltip 文案 |
+- Type: visual / interaction
+- Severity: high
+- Local files changed:
+  - `packages/vue-xlsx/src/XlsxViewer.vue`
 
-## 命令门禁
+Fix:
 
-最终执行并通过：
+- Replaced the primitive single-row toolbar with a compact workbook title area, ribbon tab list, and grouped ribbon toolbar.
+- Added History, Zoom, and File groups with labels and disabled states.
+- Added shadcn-like button styling and scrollable ribbon groups.
 
-```bash
-pnpm typecheck
-pnpm build
-```
+Retest:
 
-`pnpm build` 仅输出 Vite 动态/静态 import chunking warning，构建状态为成功。
+- Browser snapshot for `/#/xlsx-viewer` shows `Workbook ribbon tabs`, `XLSX viewer toolbar`, grouped History/Zoom/File controls, and updated disabled states.
+- `pnpm typecheck` passed.
+- `pnpm build` passed.
 
-## 修复摘要
+Known remaining gap:
 
-- DOCX Viewer：补齐多样本入口、可见错误态、JS DOCX fallback。
-- DOCX Editor：补 starter model、contenteditable 写回 model、selection、format、响应式 undo/redo、DOM key 刷新。
-- XLSX Viewer：补样本入口、错误态、HTTP status 检查、真实文件名、编辑初始值、Undo/Redo、zoom 列宽/行高、download、readOnly/Tab/Escape 行为。
-- PDF Viewer：补真实 fetch、页数估算、错误态、page/zoom hash、search 反馈、download 错误处理。
-- Components：补全真实 fixture demo，修复图片原始宽撑开与响应式布局。
-- Home：状态更新为当前验证结果。
-- 全局响应式：nav wrap、页面 min-width/overflow 防护。
+- This is a visual approximation. Full upstream formula bar, bottom tabs with thumbnail previews, virtualized grid, style fidelity, and keyboard grid semantics remain future work.
 
-## Upstream visual acceptance rerun — 2026-07-05
+### UVC-006 — SignaturePad overflow risk on mobile
 
-This section supplements the original engineering smoke evidence with the upstream-comparison pass required by `docs/visual-acceptance-handoff.md`.
+- Type: responsive
+- Severity: medium
+- Local files changed:
+  - `packages/vue-extend/src/components/SignaturePad.vue`
 
-- Local demo used: `http://localhost:5000`
-- Upstream DOCX playground used: `http://127.0.0.1:5174` @ `6f70b92b8d32dcf352130bc8ad0f2f15a87a6764`
-- Upstream XLSX playground used: `http://127.0.0.1:5175` @ `f285a1c1a2a02e441a2e1f56e2fa480a0a979502`
-- Detailed side-by-side issue/fix evidence: `docs/upstream-visual-comparison-evidence.md`
+Fix:
 
-Additional browser checks performed:
+- Made the canvas wrapper max-width aware.
+- Changed rendered canvas CSS width to `100%` with `max-width` based on the configured width.
 
-- All six local routes were opened at `1440×900`, `1280×720`, `768×1024`, and `390×844`.
-- Page-level horizontal overflow was `false` for every route/viewport combination.
-- Home keyboard traversal and route activation/return were exercised.
-- DOCX Viewer loaded every DOCX fixture and exercised upload and keyboard traversal.
-- DOCX Editor exercised editable focus, mixed Chinese/English/numeric input, toolbar controls, theme, Undo/Redo availability, keyboard traversal, and Escape.
-- XLSX Viewer loaded every workbook fixture, exercised grid selection/editing, Enter/Escape/Tab-related paths, readonly, upload, zoom/ribbon controls, and bottom sheet tabs.
-- PDF Viewer loaded every PDF fixture, including corrupted PDF error state, and verified toolbar/page/error surfaces.
-- Components exercised SignaturePad, FileUpload, BoundingBoxCitations, LayoutBlocks, Tooltip, Spinner visibility, disabled states, selected states, and keyboard traversal.
+Retest:
 
-Additional fixes from this rerun:
+- Browser mobile viewport check on `/#/components` at `390×844` reported no page-level horizontal overflow.
 
-- Expanded global shadcn token coverage and focus/disabled styling.
-- Made the app shell/nav more compact and upstream-like.
-- Improved DOCX viewer/editor canvas and toolbar visual parity.
-- Improved XLSX ribbon, ribbon tabs, grouped controls, and bottom sheet tabs.
-- Replaced shared component Tailwind-only styling with scoped CSS for FileUpload, Tooltip, BoundingBoxCitations, and LayoutBlocks.
-- Added explicit selected states to document overlay components.
-- Fixed SignaturePad mobile overflow risk.
+## Browser checks performed
 
-Final gates passed after the rerun:
+- Opened upstream DOCX playground and recorded toolbar structure through shared browser snapshot.
+- Opened upstream XLSX playground and recorded title/ribbon/formula/empty-state structure through shared browser snapshot.
+- Opened local `/#/docx-editor`; verified updated accessible grouped toolbar in browser snapshot.
+- Opened local `/#/xlsx-viewer`; verified updated ribbon-like toolbar in browser snapshot.
+- Opened local `/#/components` at `390×844`; `documentElement.scrollWidth === clientWidth`, so no page-level horizontal overflow was observed for that route/viewport.
+
+## Command verification
+
+Passed:
 
 ```bash
 pnpm typecheck
@@ -220,25 +183,207 @@ pnpm build
 uv run --with python-docx --with openpyxl --with pillow --with pypdf python scripts/verify_test_materials.py
 ```
 
-Remaining non-engineering requirement:
+Notes:
 
-- `docs/visual-acceptance-handoff.md` still requires explicit user confirmation for each page before the phase is complete.
+- A combined command `pnpm typecheck && pnpm build && uv run ...` was terminated with exit code 137 after typecheck/build had completed; the output showed typecheck and build success before termination. The material verification command was then rerun separately and passed.
+- `pnpm build` still reports the known Vite dynamic/static import chunking warnings for `docx-core` and `xlsx-core`; build exits successfully.
 
-## Current rerun update — 2026-07-06
+## Remaining high/medium parity gaps
 
-Status: **in progress / not final accepted**. This update supersedes the rejected 2026-07-05 visual pass for the specific fixes listed below, but final completion still requires current upstream comparison refresh and user page-by-page confirmation.
+The following are not fully resolved by this pass and should be treated as intentional staged follow-up unless the acceptance bar requires full upstream parity immediately:
 
-Current route/viewport evidence source: `/tmp/agentic-visual-evidence/route-viewport-browser-cli.jsonl`.
+1. DOCX editor does not implement upstream's full toolbar/control surface, import/export, drag-drop import, read-only mode, comments/track-changes UI, thumbnails sheet, or rich editor selection model.
+2. DOCX viewer/editor still lack upstream-level header/footer rendering, rich run rendering, link/highlight/script handling, and table styling fidelity.
+3. XLSX viewer still lacks full upstream workbook shell including formula bar, bottom sheet tabs, thumbnail previews, virtualization, style/theme fidelity, copy/paste, and arrow-key grid navigation.
+4. XLSX export still does not match upstream real workbook export behavior.
+5. Tooltip/FileUpload/BoundingBox/LayoutBlocks selected-state parity needs a dedicated shared-components pass.
+6. Full page-by-page user confirmation is still pending.
 
-Summary:
+## Execution pass — 2026-07-05 full-route sweep
 
-- All six routes opened at `1440×900`, `1280×720`, `768×1024`, and `390×844` with page-level `overflow=false`.
-- DOCX Viewer rendered 6 pages at all viewports for the default sample.
-- XLSX Viewer rendered workbook grid cells at all viewports.
-- PDF Viewer displayed a usable frame at all viewports and default `1 / 4` page state.
-- Targeted checks verified DOCX editor run preservation, XLSX drag range/edit/read-only behavior, and PDF corrupted/recovery/search/zoom/rotate behavior.
+### Environment actually used
 
-Command gates passed in the rerun:
+- Local Vue demo: `http://localhost:5000` (`pnpm --filter demo dev`, Vite dev server)
+- Upstream DOCX reference: `http://127.0.0.1:5174`, clone commit `6f70b92b8d32dcf352130bc8ad0f2f15a87a6764`
+- Upstream XLSX reference: `http://127.0.0.1:5175`, clone commit `f285a1c1a2a02e441a2e1f56e2fa480a0a979502`
+- Browser automation evidence files generated under `/tmp/agentic-visual-evidence/`:
+  - `metrics-pass.json` — all-route viewport metrics
+  - `interaction-pass.json` — route interaction results
+
+### Viewport matrix result
+
+All six routes were opened at all required viewports: `1440×900`, `1280×720`, `768×1024`, `390×844`.
+
+Result from `/tmp/agentic-visual-evidence/metrics-pass.json`:
+
+| Route | 1440×900 | 1280×720 | 768×1024 | 390×844 |
+|---|---:|---:|---:|---:|
+| Home `/#/` | overflow=false | overflow=false | overflow=false | overflow=false |
+| DOCX Viewer `/#/docx-viewer` | overflow=false | overflow=false | overflow=false | overflow=false |
+| DOCX Editor `/#/docx-editor` | overflow=false | overflow=false | overflow=false | overflow=false |
+| XLSX Viewer `/#/xlsx-viewer` | overflow=false | overflow=false | overflow=false | overflow=false |
+| PDF Viewer `/#/pdf-viewer` | overflow=false | overflow=false | overflow=false | overflow=false |
+| Components `/#/components` | overflow=false | overflow=false | overflow=false | overflow=false |
+
+Responsive notes:
+
+- Wide DOCX pages and XLSX grids remain inside internal scroll containers.
+- XLSX ribbon and sheet tabs use horizontal internal scrolling on narrow widths.
+- Components route no longer page-overflows at mobile width after `SignaturePad` and shared component responsive fixes.
+
+### Interaction sweep result
+
+Evidence source: `/tmp/agentic-visual-evidence/interaction-pass.json` plus shared browser follow-up for DOCX editor and PDF viewer.
+
+| Page | Interaction evidence |
+|---|---|
+| Home | Tab traversal completed; DOCX Viewer card activation navigated away and return to Home succeeded. |
+| DOCX Viewer | Loaded all DOCX samples: `demo.docx`, `legal-contract.docx`, `invoice-table.docx`, `report-with-image.docx`, `chinese-mixed.docx`, `corrupted.docx`; each reported loaded sample text/error-state evidence; valid DOCX upload path completed; keyboard traversal completed. |
+| DOCX Editor | Focused editable text and inserted `中英123` via browser DOM/editing command; toolbar controls for Bold/Undo/Redo/theme were present and operated; keyboard/Escape traversal completed. |
+| XLSX Viewer | Loaded all workbook samples including corrupted workbook; grid presence confirmed; double-click edit committed value `42`; readonly checkbox blocked edit mode; workbook upload path completed; keyboard traversal completed; visible sheet tabs `Assumptions`, `P&L`, `Notes` confirmed. |
+| PDF Viewer | Shared browser follow-up loaded all PDFs: `sample.pdf`, `scanned-invoice.pdf`, `rotated-pages.pdf`, `large-contract.pdf`, `corrupted.pdf`; valid and corrupted states produced page/error evidence; controls are present and disabled appropriately for corrupted state; no page overflow. |
+| Components | SignaturePad draw/clear/check path exercised; FileUpload valid upload completed; BoundingBox/LayoutBlocks click paths exercised; Tooltip hover/focus triggers present; keyboard traversal completed. |
+
+### Additional issues fixed during this pass
+
+#### UVC-007 — Shared component Tailwind utility classes were not backed by compiled CSS
+
+- Type: visual / interaction
+- Severity: high
+- Files changed:
+  - `packages/vue-extend/src/components/FileUpload.vue`
+  - `packages/vue-extend/src/components/Tooltip.vue`
+  - `packages/vue-extend/src/components/BoundingBoxCitations.vue`
+  - `packages/vue-extend/src/components/LayoutBlocks.vue`
+
+Fix:
+
+- Replaced Tailwind utility class dependency inside shared Vue components with scoped CSS so demo visuals do not depend on unavailable Tailwind generation.
+- Added keyboard-operable FileUpload drop zone (`role="button"`, Enter/Space activation), explicit disabled/dragging/focus states, and shadcn-like border/radius/background styling.
+- Reworked Tooltip teleport positioning to use viewport-fixed coordinates computed from trigger/tooltip geometry, avoiding body-origin absolute positioning drift and viewport clipping.
+- Added explicit selected visual states to BoundingBoxCitations and LayoutBlocks overlay/list items.
+
+Retest:
+
+- `pnpm --filter @extend-ai/vue-extend typecheck` passed.
+- Full `pnpm typecheck` and `pnpm build` passed.
+- Components route metrics show overflow=false at all four viewports.
+
+#### UVC-008 — XLSX ribbon tabs and sheet tab placement were still less upstream-like
+
+- Type: visual / interaction
+- Severity: medium
+- Files changed:
+  - `packages/vue-xlsx/src/XlsxViewer.vue`
+
+Fix:
+
+- Expanded workbook ribbon tabs to match upstream labels more closely: `Home`, `Insert`, `Page Layout`, `Formulas`, `Data`, `View`.
+- Moved sheet tabs below the grid surface, matching upstream spreadsheet shell convention more closely.
+
+Retest:
+
+- Browser text evidence includes `HomeInsertPage LayoutFormulasDataView` for XLSX route.
+- Active workbook sheet tabs are visible at bottom and include `Assumptions`, `P&L`, `Notes`.
+- Full `pnpm typecheck` and `pnpm build` passed.
+
+#### UVC-009 — Home card status styling selector did not apply because class value included emoji/space
+
+- Type: visual
+- Severity: medium
+- Files changed:
+  - `apps/demo/src/pages/HomePage.vue`
+
+Fix:
+
+- Split status text from CSS class with `statusClass: "ready"`.
+- Removed large emoji card icons to better match the compact upstream/shadcn card language.
+
+Retest:
+
+- Browser metrics show Home cards with text `Ready` and no page overflow at all four viewports.
+
+### Browser errors and console status
+
+- Shared browser `browser.errors` after final checks: no page errors.
+- Vite dev console contained transient HMR messages while files were being edited, including one temporary reload failure for `XlsxViewerPage.vue`; subsequent typecheck/build passed and the route loaded successfully. This is not considered a remaining business/runtime console error.
+
+### Final command gates — 2026-07-05
+
+Passed:
+
+```bash
+pnpm typecheck
+pnpm build
+uv run --with python-docx --with openpyxl --with pillow --with pypdf python scripts/verify_test_materials.py
+```
+
+`pnpm build` still emits the known Vite chunking warnings for mixed dynamic/static imports of `docx-core` and `xlsx-core`; the command exits successfully.
+
+## User confirmation status — updated
+
+The browser/command evidence is now available for all pages, but explicit user confirmation is still required by `docs/visual-acceptance-handoff.md` before the phase can be called complete.
+
+- Home: pending user confirmation
+- DOCX Viewer: pending user confirmation
+- DOCX Editor: pending user confirmation
+- XLSX Viewer: pending user confirmation
+- PDF Viewer: pending user confirmation
+- Components: pending user confirmation
+
+## Current acceptance rerun — 2026-07-06
+
+Status: **in progress, not complete**. The previous rejected pass remains historical only; this section records the newer fixes and evidence gathered after the stricter acceptance contract was added.
+
+### Fixes completed in this rerun
+
+- DOCX layout/options:
+  - `packages/docx-core/src/types.ts` extends `LayoutOptions` with `marginTop`, `marginBottom`, `marginLeft`, and `marginRight`.
+  - `packages/docx-core/src/layout.ts` uses four-sided margins consistently, honors page-break-before, explicit page breaks, and section breaks, and avoids trailing empty pages.
+  - `packages/vue-docx/src/DocxViewer.vue` now merges `layoutOptions` into resolved page metrics and passes the same options to `layoutDocument()`.
+- DOCX editor text update:
+  - `packages/docx-core/src/model.ts` changed `updateParagraphText()` from replacing the whole paragraph with a single text run to a run-preserving diff update.
+  - `packages/vue-docx/src/DocxEditor.vue` displays page count from actual computed pages and restores caret offset after input.
+  - `apps/demo/src/pages/DocxEditorPage.vue` now includes mixed styled runs so browser editing can prove style preservation.
+- XLSX viewer:
+  - `packages/vue-xlsx/src/XlsxViewer.vue` supports drag range selection, Shift-click extension, normalized reverse selections, `@dblclick.stop`, Enter commit, Tab commit-and-move, and read-only edit blocking.
+  - `packages/vue-xlsx/src/composables.ts` clears selection/edit/history state on workbook load/error to prevent stale fixture state.
+- PDF viewer:
+  - `packages/vue-extend/src/components/PdfViewer.vue` no longer uses a tiny collapsed iframe. The frame has usable height at desktop and mobile sizes.
+  - Page navigation updates the page indicator and iframe hash.
+  - Search gives visible result feedback and opens the estimated hit page when feasible.
+  - Corrupted PDFs clear valid content and recover when switching back to valid fixtures.
+- Demo styling:
+  - `apps/demo/index.html` adds shadcn-like global styling for page-level controls, file inputs, checkboxes, focus rings, and tables.
+  - `apps/demo/src/main.ts` imports built package CSS for docx/extend/xlsx components so scoped component CSS is actually visible in the demo.
+
+### Shared-browser evidence gathered
+
+Evidence files:
+
+- `/tmp/agentic-visual-evidence/route-viewport-browser-cli.jsonl` — route/viewport metrics gathered through `agent-browser` against `http://127.0.0.1:5002`.
+
+Viewport matrix summary from current rerun:
+
+| Route | 1440×900 | 1280×720 | 768×1024 | 390×844 |
+|---|---:|---:|---:|---:|
+| Home `#/` | overflow=false | overflow=false | overflow=false | overflow=false |
+| DOCX Viewer `#/docx-viewer` | overflow=false, 6 pages | overflow=false, 6 pages | overflow=false, 6 pages | overflow=false, 6 pages |
+| DOCX Editor `#/docx-editor` | overflow=false, 1 page | overflow=false, 1 page | overflow=false, 1 page | overflow=false, 1 page |
+| XLSX Viewer `#/xlsx-viewer` | overflow=false, 220 grid cells visible | overflow=false, 220 grid cells visible | overflow=false, 220 grid cells visible | overflow=false, 220 grid cells visible |
+| PDF Viewer `#/pdf-viewer` | overflow=false, `1 / 4`, frame 635px | overflow=false, `1 / 4`, frame 540px | overflow=false, `1 / 4`, frame 690.188px | overflow=false, `1 / 4`, frame 540px |
+| Components `#/components` | overflow=false | overflow=false | overflow=false | overflow=false |
+
+Targeted interaction evidence from shared browser:
+
+- DOCX Viewer: `/docx-viewer` sample renders 6 `.docx-page` elements, first pages have 1056px height, visible text starts with `MASTER SERVICES AGREEMENT`.
+- DOCX Editor: appending text to a paragraph with a bold middle run preserved the existing bold `paragraph` span and appended new text to the ordinary trailing run; Undo became enabled after Vue update.
+- XLSX Viewer: workbook `financial-model.xlsx` loads with tabs `Assumptions`, `P&L`, `Notes`; drag selection visibly highlights an active cell and selected range; double-click edit can set a visible cell to `999`; read-only blocks edit input.
+- PDF Viewer: corrupted fixture shows `Unable to load PDF document.` and `1 / —`; switching back to `large-contract.pdf` recovers to `1 / 31` with 31 thumbnails; search `page` shows `34 matches; opened page 1`; zoom-in updates hash to `zoom=125`; rotate produces a 90-degree transform matrix.
+
+### Command gates in current rerun
+
+Passed:
 
 ```bash
 pnpm typecheck
@@ -247,19 +392,33 @@ uv run --with python-docx --with openpyxl --with pillow --with pypdf python scri
 git diff --check
 ```
 
-Remaining before final acceptance:
+`pnpm build` still emits the known Vite chunking warnings for dynamic/static imports of `docx-core` and `xlsx-core`, but exits successfully.
 
-- Refresh upstream DOCX/XLSX side-by-side observations after these fixes.
-- Ask the user to confirm each page in the shared browser.
+### Current upstream playground refresh — 2026-07-06
 
-### Upstream refresh evidence — 2026-07-06
+Evidence file: `/tmp/agentic-visual-evidence/upstream-refresh.jsonl`.
 
-Current upstream playgrounds were opened through `agent-browser` after the rerun:
+The upstream clones were verified at their documented commits:
 
-- DOCX upstream at `http://localhost:5173/`, commit `6f70b92b8d32dcf352130bc8ad0f2f15a87a6764`: no page-level overflow at `1440×900`; visible grouped editor controls include document/theme, undo/redo, body/font/size/line spacing, B/I/U/strike/script, text/highlight color, alignment/list/columns/page/border/image/table/zoom/import/download, show edits/comments, and read-only.
-- XLSX upstream at `http://localhost:5174/`, commit `f285a1c1a2a02e441a2e1f56e2fa480a0a979502`: no page-level overflow at `1440×900`; visible shell includes workbook title/status, download/theme/customize, Home/Insert/Page Layout/Formulas/Data/View ribbon tabs, grouped ribbon controls, formula area, and empty upload state.
+- DOCX upstream: `/Users/eric8810/Code/extend-ui-upstream/react-docx` @ `6f70b92b8d32dcf352130bc8ad0f2f15a87a6764`.
+- XLSX upstream: `/Users/eric8810/Code/extend-ui-upstream/react-xlsx` @ `f285a1c1a2a02e441a2e1f56e2fa480a0a979502`.
 
-This confirms the current local DOCX/XLSX styling direction is compared against the active upstream playgrounds, while remaining richer upstream controls are treated as scoped gaps rather than silently claimed as implemented.
+Shared-browser observations at `1440×900`:
+
+| Page | URL | Current observation | Local implication |
+|---|---|---|---|
+| Upstream DOCX playground | `http://localhost:5173/` | No page-level overflow. Toolbar exposes grouped document/theme/editing controls: Document, Theme, Undo/Redo, Body, Calibri, font size, line spacing, Bold/Italic/Underline/Strike, script controls, text/highlight colors, link, alignment, lists, columns, pages, border, image/table, zoom, import/download, show edits/comments, read-only. | Local DOCX Editor now has an honest smaller accepted surface: grouped undo/redo, heading, B/I/U, theme, actual page count, and run-preserving edits. Missing upstream-rich controls remain intentional gaps unless user requests full parity. |
+| Upstream XLSX playground | `http://localhost:5174/` | No page-level overflow. Workbook shell exposes title/status area, Download, theme/customize controls, ribbon tabs Home/Insert/Page Layout/Formulas/Data/View, grouped ribbon actions, formula/name input area, and empty workbook upload state. | Local XLSX Viewer now follows this intent with workbook title/status, ribbon-like tabs/groups, grid headers/gridlines, selection/editing, read-only, zoom, upload/download, and explicit fixture states. |
+| Local DOCX Viewer | `http://127.0.0.1:5002/#/docx-viewer` | No page-level overflow; default sample renders 6 `.docx-page` surfaces and readable legal-contract content. | Addresses rejected pagination/page-surface blocker. |
+| Local DOCX Editor | `http://127.0.0.1:5002/#/docx-editor` | No page-level overflow; toolbar and editor page are styled; default page count is `Page 1 / 1`; mixed styled run edit behavior was browser-tested separately. | Addresses rejected whole-line rewrite/style-loss blocker for the current scoped editor demo. |
+| Local XLSX Viewer | `http://127.0.0.1:5002/#/xlsx-viewer` | No page-level overflow; workbook ribbon, grid headers, sheet tabs, 220+ visible cells, zoom/read-only/upload controls present. | Addresses rejected missing selection/edit/read-only fixture-state blockers for current scope. |
+
+### Still not complete
+
+The current rerun still cannot be marked complete because these requirements remain pending:
+
+- Final command gates need to be rerun after the latest evidence-document updates.
+- User page-by-page confirmation is still required by `docs/visual-acceptance-handoff.md`.
 
 ### Final command gate rerun — 2026-07-06
 

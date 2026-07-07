@@ -3,7 +3,7 @@
     <h2>📄 DOCX Viewer — Verification</h2>
     <p class="desc">Verify real DOCX rendering with contract, invoice table, image report, mixed Chinese text and corrupted negative fixture.</p>
 
-    <div class="controls">
+    <div class="controls control-panel">
       <label>
         Sample DOCX
         <select v-model="selectedSample" @change="loadSelectedSample">
@@ -17,7 +17,7 @@
       <p v-if="error" class="error">{{ error }}</p>
     </div>
 
-    <div class="status-grid">
+    <div class="status-grid info-grid">
       <div><strong>Loaded:</strong> {{ displayName || "None" }}</div>
       <div><strong>Source:</strong> {{ sourceKind }}</div>
       <div><strong>Expected coverage:</strong> paragraphs, headings, tables, images, CJK, corrupted error</div>

@@ -76,6 +76,23 @@ function cloneDocNode(node: DocNode): DocNode {
   }
 }
 
+function sameTextStyle(a?: TextStyle, b?: TextStyle): boolean {
+  return JSON.stringify(a ?? {}) === JSON.stringify(b ?? {})
+}
+
+function mergeAdjacentTextRuns(children: ParagraphChildNode[]): ParagraphChildNode[] {
+  const merged: ParagraphChildNode[] = []
+  for (const child of children) {
+    const previous = merged[merged.length - 1]
+    if (child.type === "text" && previous?.type === "text" && sameTextStyle(previous.style, child.style)) {
+      previous.text += child.text
+    } else {
+      merged.push(cloneParagraphChild(child))
+    }
+  }
+  return merged
+}
+
 function cloneParagraphChild(child: ParagraphChildNode): ParagraphChildNode {
   if (child.type === "image") {
     const data = child.data ? (child.data instanceof Uint8Array ? new Uint8Array(child.data) : child.data) : undefined
@@ -159,9 +176,64 @@ export function updateParagraphText(
   const node = model.nodes[nodeIndex]
   if (!node || node.type !== "paragraph") return model
 
+  const textChildren = node.children.filter((child): child is TextRunNode => child.type === "text")
+  const oldText = textChildren.map(child => child.text).join("")
+  if (oldText === text) return model
+
+  let prefix = 0
+  const maxPrefix = Math.min(oldText.length, text.length)
+  while (prefix < maxPrefix && oldText[prefix] === text[prefix]) prefix++
+
+  let suffix = 0
+  const maxSuffix = Math.min(oldText.length - prefix, text.length - prefix)
+  while (suffix < maxSuffix && oldText[oldText.length - 1 - suffix] === text[text.length - 1 - suffix]) suffix++
+
+  const replaceStart = prefix
+  const replaceEnd = oldText.length - suffix
+  const insertedText = text.slice(prefix, text.length - suffix)
+
+  let textOffset = 0
+  let inserted = false
+  const nextChildren: ParagraphChildNode[] = []
+
+  const insertStyle = options?.style ?? textChildren.find((child, index) => {
+    const start = textChildren.slice(0, index).reduce((sum, run) => sum + run.text.length, 0)
+    return replaceStart <= start + child.text.length
+  })?.style ?? textChildren[textChildren.length - 1]?.style
+
+  for (const child of node.children) {
+    if (child.type !== "text") {
+      nextChildren.push(cloneParagraphChild(child))
+      continue
+    }
+
+    const runStart = textOffset
+    const runEnd = textOffset + child.text.length
+    textOffset = runEnd
+
+    if (runEnd <= replaceStart || runStart >= replaceEnd) {
+      nextChildren.push(cloneParagraphChild(child))
+      continue
+    }
+
+    const keepBefore = child.text.slice(0, Math.max(0, replaceStart - runStart))
+    const keepAfter = child.text.slice(Math.max(0, replaceEnd - runStart))
+
+    if (keepBefore) nextChildren.push({ ...child, text: keepBefore })
+    if (!inserted) {
+      if (insertedText) nextChildren.push({ type: "text", text: insertedText, style: insertStyle })
+      inserted = true
+    }
+    if (keepAfter) nextChildren.push({ ...child, text: keepAfter })
+  }
+
+  if (!inserted && insertedText) {
+    nextChildren.push({ type: "text", text: insertedText, style: insertStyle })
+  }
+
   const updatedParagraph: ParagraphNode = {
     ...node,
-    children: [{ type: "text", text, style: options?.style }],
+    children: mergeAdjacentTextRuns(nextChildren),
   }
 
   const nodes = [...model.nodes]

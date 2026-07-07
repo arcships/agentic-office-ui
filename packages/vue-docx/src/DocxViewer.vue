@@ -30,20 +30,17 @@
           width: `${pageWidth}px`,
           minHeight: `${pageHeight}px`,
           padding: `${marginTop}px ${marginRight}px ${marginBottom}px ${marginLeft}px`,
-          margin: '0 auto 16px',
+          margin: '0 auto 24px',
           background: 'white',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
         }"
       >
         <div
           v-for="block in page.blocks"
           :key="block.id"
           :style="{
-            position: block.kind === 'paragraph' ? 'relative' : 'relative',
-            left: `${block.x}px`,
-            top: `${block.y - (page.number - 1) * pageHeight - marginTop}px`,
-            width: `${block.width}px`,
+            width: '100%',
             minHeight: `${block.height}px`,
+            marginBottom: '6px',
           }"
         >
           <!-- Paragraph block -->
@@ -104,7 +101,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from "vue"
-import type { DocModel, LayoutPage, LayoutRun } from "@extend-ai/docx-core"
+import type { DocModel, LayoutOptions, LayoutPage, LayoutRun } from "@extend-ai/docx-core"
 import {
   layoutDocument,
   resolveDocumentLayout,
@@ -116,7 +113,7 @@ export interface DocxViewerProps {
   model?: DocModel | null
   className?: string
   style?: Record<string, string | number>
-  layoutOptions?: Record<string, unknown>
+  layoutOptions?: Partial<LayoutOptions>
   emptyState?: unknown // Component or vnode
 }
 
@@ -157,9 +154,21 @@ watch(
 
 // Layout
 const layoutMetrics = computed(() => {
-  if (!model.value) return { pageWidth: 816, pageHeight: 1056, marginTop: 72, marginBottom: 72, marginLeft: 72, marginRight: 72 }
-  return resolveDocumentLayout(model.value)
+  const base = model.value
+    ? resolveDocumentLayout(model.value)
+    : { pageWidth: 816, pageHeight: 1056, marginTop: 72, marginBottom: 72, marginLeft: 72, marginRight: 72 }
+  return { ...base, ...(props.layoutOptions ?? {}) }
 })
+
+const layoutOptions = computed<Partial<LayoutOptions>>(() => ({
+  ...(props.layoutOptions ?? {}),
+  pageWidth: layoutMetrics.value.pageWidth,
+  pageHeight: layoutMetrics.value.pageHeight,
+  marginTop: layoutMetrics.value.marginTop,
+  marginBottom: layoutMetrics.value.marginBottom,
+  marginLeft: layoutMetrics.value.marginLeft,
+  marginRight: layoutMetrics.value.marginRight,
+}))
 
 const pageWidth = computed(() => layoutMetrics.value.pageWidth)
 const pageHeight = computed(() => layoutMetrics.value.pageHeight)
@@ -170,7 +179,7 @@ const marginRight = computed(() => layoutMetrics.value.marginRight)
 
 const pages = computed<LayoutPage[]>(() => {
   if (!model.value) return []
-  return layoutDocument(model.value)
+  return layoutDocument(model.value, layoutOptions.value)
 })
 
 // Text style helper
@@ -194,3 +203,21 @@ function cn(...classes: (string | undefined | null | false)[]): string {
 // Re-export heading scale for template use
 const headingScale = headingScaleFn
 </script>
+
+<style scoped>
+.docx-viewer {
+  min-width: 0;
+  background: color-mix(in oklch, var(--muted, #f5f5f5) 58%, var(--background, #fff));
+}
+.docx-viewer-content {
+  min-width: 0;
+  padding: 24px;
+}
+.docx-page {
+  border: 1px solid color-mix(in oklch, var(--border, #e5e7eb) 75%, transparent);
+  box-shadow: 0 12px 28px rgb(15 23 42 / 0.10), 0 2px 6px rgb(15 23 42 / 0.08);
+}
+@media (max-width: 640px) {
+  .docx-viewer-content { padding: 12px; }
+}
+</style>

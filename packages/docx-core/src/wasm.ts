@@ -213,7 +213,78 @@ function textFromElement(el: Element): string {
   return Array.from(el.getElementsByTagName("w:t")).map((t) => t.textContent ?? "").join("")
 }
 
-function runFromElement(run: Element): ParagraphChildNode {
+function base64FromBytes(bytes: Uint8Array): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  let output = ""
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i]!
+    const b = bytes[i + 1]
+    const c = bytes[i + 2]
+    output += alphabet[a >> 2]
+    output += alphabet[((a & 0x03) << 4) | ((b ?? 0) >> 4)]
+    output += b === undefined ? "=" : alphabet[((b & 0x0f) << 2) | ((c ?? 0) >> 6)]
+    output += c === undefined ? "=" : alphabet[c & 0x3f]
+  }
+  return output
+}
+
+function mimeTypeForPath(path: string): string {
+  const lower = path.toLowerCase()
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg"
+  if (lower.endsWith(".gif")) return "image/gif"
+  if (lower.endsWith(".webp")) return "image/webp"
+  if (lower.endsWith(".bmp")) return "image/bmp"
+  if (lower.endsWith(".svg")) return "image/svg+xml"
+  return "image/png"
+}
+
+function documentRelationships(pkg: OoxmlPackage): Map<string, string> {
+  const rels = pkg.parts.get("/word/_rels/document.xml.rels")?.content
+  const map = new Map<string, string>()
+  if (!rels) return map
+  const doc = parseXml(rels)
+  for (const rel of Array.from(doc.documentElement.children)) {
+    const id = rel.getAttribute("Id")
+    const target = rel.getAttribute("Target")
+    if (!id || !target) continue
+    const normalized = target.startsWith("/") ? target : `/word/${target.replace(/^\.\.\//, "")}`
+    map.set(id, normalized)
+  }
+  return map
+}
+
+function firstDescendantByLocalName(el: Element, localName: string): Element | undefined {
+  return Array.from(el.getElementsByTagName("*")).find((child) => child.localName === localName)
+}
+
+function imageRunFromElement(run: Element, pkg: OoxmlPackage, rels: Map<string, string>): ParagraphChildNode | undefined {
+  const drawing = firstDescendantByLocalName(run, "drawing")
+  if (!drawing) return undefined
+  const blip = firstDescendantByLocalName(drawing, "blip")
+  const relId = blip?.getAttribute("r:embed") ?? blip?.getAttribute("embed")
+  if (!relId) return undefined
+  const target = rels.get(relId)
+  if (!target) return undefined
+  const data = pkg.binaryAssets.get(target)
+  if (!data) return undefined
+  const extent = firstDescendantByLocalName(drawing, "extent")
+  const cx = Number(extent?.getAttribute("cx") ?? 0)
+  const cy = Number(extent?.getAttribute("cy") ?? 0)
+  const mimeType = mimeTypeForPath(target)
+  return {
+    type: "image",
+    src: `data:${mimeType};base64,${base64FromBytes(data)}`,
+    alt: firstDescendantByLocalName(drawing, "docPr")?.getAttribute("name") ?? "Document image",
+    widthPx: cx ? Math.round(cx / 9525) : undefined,
+    heightPx: cy ? Math.round(cy / 9525) : undefined,
+    data: new Uint8Array(data),
+    mimeType,
+  }
+}
+
+function runFromElement(run: Element, pkg: OoxmlPackage, rels: Map<string, string>): ParagraphChildNode {
+  const imageRun = imageRunFromElement(run, pkg, rels)
+  if (imageRun) return imageRun
   const text = textFromElement(run)
   const rPr = run.getElementsByTagName("w:rPr")[0]
   return {
@@ -229,13 +300,13 @@ function runFromElement(run: Element): ParagraphChildNode {
   }
 }
 
-function paragraphFromElement(p: Element): ParagraphNode {
+function paragraphFromElement(p: Element, pkg: OoxmlPackage, rels: Map<string, string>): ParagraphNode {
   const pPr = Array.from(p.children).find((child) => child.localName === "pPr")
   const pStyle = pPr?.getElementsByTagName("w:pStyle")[0]?.getAttribute("w:val") ?? ""
   const headingMatch = /Heading([1-6])|标题\s*([1-6])/i.exec(pStyle)
   const children = Array.from(p.children)
     .filter((child) => child.localName === "r")
-    .map((run) => runFromElement(run))
+    .map((run) => runFromElement(run, pkg, rels))
     .filter((run) => run.type !== "text" || run.text)
 
   if (children.length === 0) children.push({ type: "text", text: textFromElement(p) })
@@ -247,7 +318,7 @@ function paragraphFromElement(p: Element): ParagraphNode {
   }
 }
 
-function tableFromElement(tbl: Element): TableNode {
+function tableFromElement(tbl: Element, pkg: OoxmlPackage, rels: Map<string, string>): TableNode {
   const rows: TableRowNode[] = Array.from(tbl.children)
     .filter((child) => child.localName === "tr")
     .map((tr) => ({
@@ -258,7 +329,7 @@ function tableFromElement(tbl: Element): TableNode {
           type: "table-cell",
           nodes: Array.from(tc.children)
             .filter((child) => child.localName === "p" || child.localName === "tbl")
-            .map((child) => child.localName === "tbl" ? tableFromElement(child) : paragraphFromElement(child)),
+            .map((child) => child.localName === "tbl" ? tableFromElement(child, pkg, rels) : paragraphFromElement(child, pkg, rels)),
         })),
     }))
   return { type: "table", rows }
@@ -269,11 +340,12 @@ function buildDocModelFallback(pkg: OoxmlPackage): DocModel {
   if (!xml) throw new Error("Invalid DOCX: missing /word/document.xml")
   const doc = parseXml(xml)
   const body = doc.getElementsByTagName("w:body")[0]
+  const rels = documentRelationships(pkg)
   const nodes: DocNode[] = []
 
   for (const child of Array.from(body?.children ?? [])) {
-    if (child.localName === "p") nodes.push(paragraphFromElement(child))
-    if (child.localName === "tbl") nodes.push(tableFromElement(child))
+    if (child.localName === "p") nodes.push(paragraphFromElement(child, pkg, rels))
+    if (child.localName === "tbl") nodes.push(tableFromElement(child, pkg, rels))
   }
 
   return {

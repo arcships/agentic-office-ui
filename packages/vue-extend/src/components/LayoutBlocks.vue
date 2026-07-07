@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, ref } from "vue"
 
 export interface LayoutBlock {
   id: string
@@ -37,6 +37,8 @@ const emit = defineEmits<{
   "block-click": [block: LayoutBlock]
 }>()
 
+const selectedBlockId = ref<string | null>(null)
+
 const imageStyle = computed(() => ({
   aspectRatio: `${props.output.width} / ${props.output.height}`,
   width: "100%",
@@ -44,18 +46,18 @@ const imageStyle = computed(() => ({
   height: "auto",
 }))
 
-const kindColors: Record<string, string> = {
-  text: "border-blue-500/60 bg-blue-500/10 text-blue-700 dark:text-blue-400",
-  title: "border-violet-500/60 bg-violet-500/10 text-violet-700 dark:text-violet-400",
-  table: "border-emerald-500/60 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  figure: "border-amber-500/60 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  list: "border-cyan-500/60 bg-cyan-500/10 text-cyan-700 dark:text-cyan-400",
-  header: "border-pink-500/60 bg-pink-500/10 text-pink-700 dark:text-pink-400",
-  footer: "border-orange-500/60 bg-orange-500/10 text-orange-700 dark:text-orange-400",
+const kindClasses: Record<string, string> = {
+  text: "kind-text",
+  title: "kind-title",
+  table: "kind-table",
+  figure: "kind-figure",
+  list: "kind-list",
+  header: "kind-header",
+  footer: "kind-footer",
 }
 
 function blockKindClass(kind: string): string {
-  return kindColors[kind] ?? "border-border bg-muted/30 text-muted-foreground"
+  return kindClasses[kind] ?? "kind-default"
 }
 
 function blockStyle(block: LayoutBlock) {
@@ -71,67 +73,127 @@ function blockStyle(block: LayoutBlock) {
 function truncatedText(text: string, maxLen = 80): string {
   return text.length > maxLen ? text.slice(0, maxLen) + "…" : text
 }
+
+function selectBlock(block: LayoutBlock) {
+  selectedBlockId.value = block.id
+  emit("block-click", block)
+}
 </script>
 
 <template>
-  <div :class="['space-y-4', props.className]">
-    <!-- Image with overlay blocks -->
-    <div class="relative overflow-hidden rounded-lg border border-border">
+  <div :class="['layout-blocks', props.className]">
+    <div class="layout-image-frame">
       <img
         :src="props.file"
         alt="Layout preview"
-        class="block w-full responsive-fixture-image"
+        class="layout-image"
         :style="imageStyle"
       />
-      <!-- Overlay blocks -->
-      <div
+      <button
         v-for="block in props.output.blocks"
         :key="block.id"
+        type="button"
         :class="[
-          'absolute cursor-pointer rounded-sm border transition-opacity hover:opacity-90',
+          'layout-block-box',
           blockKindClass(block.kind),
+          { 'is-selected': selectedBlockId === block.id },
         ]"
         :style="blockStyle(block)"
         :title="block.kind"
-        @click="emit('block-click', block)"
+        :aria-pressed="selectedBlockId === block.id"
+        @click="selectBlock(block)"
       />
     </div>
 
-    <!-- Block list -->
-    <div class="grid gap-2 sm:grid-cols-2">
-      <div
+    <div class="layout-block-list">
+      <button
         v-for="block in props.output.blocks"
         :key="block.id"
+        type="button"
         :class="[
-          'cursor-pointer rounded-md border p-3 text-sm transition-colors hover:bg-accent',
+          'layout-block-card',
           blockKindClass(block.kind),
+          { 'is-selected': selectedBlockId === block.id },
         ]"
-        @click="emit('block-click', block)"
+        :aria-pressed="selectedBlockId === block.id"
+        @click="selectBlock(block)"
       >
-        <div class="flex items-center justify-between gap-2">
-          <span class="font-medium capitalize">{{ block.kind }}</span>
-          <span
-            v-if="block.confidence !== undefined"
-            class="text-xs tabular-nums text-muted-foreground"
-          >
+        <span class="layout-block-header">
+          <span class="layout-kind">{{ block.kind }}</span>
+          <span v-if="block.confidence !== undefined" class="layout-confidence">
             {{ (block.confidence * 100).toFixed(0) }}%
           </span>
-        </div>
-        <p v-if="block.text" class="mt-1 text-xs leading-relaxed text-muted-foreground">
+        </span>
+        <span v-if="block.text" class="layout-text">
           {{ truncatedText(block.text) }}
-        </p>
-      </div>
+        </span>
+      </button>
     </div>
 
-    <p
-      v-if="props.output.blocks.length === 0"
-      class="py-8 text-center text-sm text-muted-foreground"
-    >
+    <p v-if="props.output.blocks.length === 0" class="empty-state">
       No layout blocks detected
     </p>
   </div>
 </template>
 
 <style scoped>
-.responsive-fixture-image { max-width: 100%; height: auto; }
+.layout-blocks { display: flex; min-width: 0; flex-direction: column; gap: 16px; }
+.layout-image-frame {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: var(--radius, 10px);
+  background: var(--muted, #f5f5f5);
+}
+.layout-image { display: block; width: 100%; max-width: 100%; height: auto; }
+.layout-block-box {
+  position: absolute;
+  cursor: crosshair;
+  border-width: 2px;
+  border-style: solid;
+  border-radius: 0 !important;
+  background: transparent;
+  padding: 0;
+  transition: filter 0.12s ease, outline-color 0.12s ease;
+}
+.layout-block-box:hover { filter: brightness(1.12); }
+.layout-block-box:focus-visible,
+.layout-block-card:focus-visible { outline: 2px solid #0ea5e9; outline-offset: 2px; }
+.layout-block-box.is-selected {
+  box-shadow: none;
+  outline: 2px solid #0f172a;
+  outline-offset: 1px;
+  z-index: 2;
+}
+.layout-block-list { display: grid; gap: 6px; }
+@media (min-width: 640px) { .layout-block-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.layout-block-card {
+  display: flex;
+  min-width: 0;
+  cursor: pointer;
+  flex-direction: column;
+  gap: 4px;
+  border-width: 0 0 0 3px;
+  border-style: solid;
+  border-radius: 0 !important;
+  background: transparent;
+  padding: 8px 10px;
+  text-align: left;
+  transition: background-color 0.12s ease;
+}
+.layout-block-card:hover { background: rgb(148 163 184 / 0.12); }
+.layout-block-card.is-selected { box-shadow: none; background: rgb(14 165 233 / 0.12); }
+.layout-block-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.layout-kind { color: currentColor; font-size: 14px; font-weight: 600; text-transform: capitalize; }
+.layout-confidence { color: var(--muted-foreground, #737373); font-size: 12px; font-variant-numeric: tabular-nums; }
+.layout-text { color: var(--muted-foreground, #737373); font-size: 12px; line-height: 1.45; }
+.kind-text { border-color: rgb(59 130 246 / 0.65); background: rgb(59 130 246 / 0.10); color: rgb(29 78 216); }
+.kind-title { border-color: rgb(139 92 246 / 0.65); background: rgb(139 92 246 / 0.10); color: rgb(109 40 217); }
+.kind-table { border-color: rgb(16 185 129 / 0.65); background: rgb(16 185 129 / 0.10); color: rgb(4 120 87); }
+.kind-figure { border-color: rgb(245 158 11 / 0.65); background: rgb(245 158 11 / 0.10); color: rgb(180 83 9); }
+.kind-list { border-color: rgb(6 182 212 / 0.65); background: rgb(6 182 212 / 0.10); color: rgb(14 116 144); }
+.kind-header { border-color: rgb(236 72 153 / 0.65); background: rgb(236 72 153 / 0.10); color: rgb(190 24 93); }
+.kind-footer { border-color: rgb(249 115 22 / 0.65); background: rgb(249 115 22 / 0.10); color: rgb(194 65 12); }
+.kind-default { border-color: var(--border, #e5e7eb); background: color-mix(in oklch, var(--muted, #f5f5f5) 35%, transparent); color: var(--muted-foreground, #737373); }
+.empty-state { padding: 32px 0; color: var(--muted-foreground, #737373); text-align: center; font-size: 14px; }
 </style>

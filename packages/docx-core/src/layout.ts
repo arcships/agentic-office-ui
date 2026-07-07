@@ -19,6 +19,10 @@ export const DEFAULT_LAYOUT_OPTIONS: Required<LayoutOptions> = {
   pageWidth: 816,    // US Letter @ 96dpi
   pageHeight: 1056,
   margin: 72,         // 1 inch
+  marginTop: 72,
+  marginBottom: 72,
+  marginLeft: 72,
+  marginRight: 72,
   minLineHeight: 22,
   paragraphSpacing: 8,
   tableCellPadding: 8,
@@ -134,6 +138,7 @@ export function paragraphToLayout(
     height,
     children: runs,
     headingLevel: paragraph.style?.headingLevel,
+    align: paragraph.style?.align,
   }
 }
 
@@ -237,23 +242,34 @@ export function estimateBlockHeight(block: LayoutBlock): number {
 
 export function layoutDocument(model: DocModel, options: Partial<LayoutOptions> = {}): LayoutPage[] {
   const resolved = { ...DEFAULT_LAYOUT_OPTIONS, ...options }
+  resolved.marginTop = options.marginTop ?? options.margin ?? resolved.marginTop
+  resolved.marginBottom = options.marginBottom ?? options.margin ?? resolved.marginBottom
+  resolved.marginLeft = options.marginLeft ?? options.margin ?? resolved.marginLeft
+  resolved.marginRight = options.marginRight ?? options.margin ?? resolved.marginRight
   const pages: LayoutPage[] = [{ number: 1, blocks: [] }]
-  const contentWidth = resolved.pageWidth - resolved.margin * 2
-  const pageBottom = resolved.pageHeight - resolved.margin
-  let cursorY = resolved.margin
+  const contentWidth = resolved.pageWidth - resolved.marginLeft - resolved.marginRight
+  const pageBottom = resolved.pageHeight - resolved.marginBottom
+  let cursorY = resolved.marginTop
 
   for (const [index, node] of model.nodes.entries()) {
+    let currentPage = pages[pages.length - 1]
+    if (node.type === "paragraph" && (paragraphHasPageBreakBefore(node) || paragraphHasExplicitPageBreak(node)) && currentPage.blocks.length > 0) {
+      pages.push({ number: pages.length + 1, blocks: [] })
+      cursorY = resolved.marginTop
+      currentPage = pages[pages.length - 1]
+    }
+
     const block = node.type === "paragraph"
-      ? paragraphToLayout(node, `paragraph-${index}`, resolved.margin, cursorY, contentWidth, resolved.minLineHeight)
-      : tableToLayout(node, `table-${index}`, resolved.margin, cursorY, contentWidth, resolved)
+      ? paragraphToLayout(node, `paragraph-${index}`, resolved.marginLeft, cursorY, contentWidth, resolved.minLineHeight)
+      : tableToLayout(node, `table-${index}`, resolved.marginLeft, cursorY, contentWidth, resolved)
 
     const blockHeight = estimateBlockHeight(block)
-    const currentPage = pages[pages.length - 1]
 
-    // Page break: if block doesn't fit and current page already has content
+    // Page break: if block does not fit and current page already has content
     if (cursorY + blockHeight > pageBottom && currentPage.blocks.length > 0) {
       pages.push({ number: pages.length + 1, blocks: [] })
-      cursorY = resolved.margin
+      cursorY = resolved.marginTop
+      currentPage = pages[pages.length - 1]
     }
 
     // Update block y position
@@ -267,8 +283,14 @@ export function layoutDocument(model: DocModel, options: Partial<LayoutOptions> 
         ? spacingForBlock(resolved.paragraphSpacing, block.headingLevel)
         : resolved.paragraphSpacing + 10
     )
+
+    if (node.type === "paragraph" && sectionBreakAfterParagraphStartsNewPage(node)) {
+      pages.push({ number: pages.length + 1, blocks: [] })
+      cursorY = resolved.marginTop
+    }
   }
 
+  if (pages.length > 1 && pages[pages.length - 1].blocks.length === 0) pages.pop()
   return pages
 }
 

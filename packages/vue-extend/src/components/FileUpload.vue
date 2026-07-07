@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue"
+import { computed, ref } from "vue"
 
 export interface FileUploadProps {
   accept?: string
@@ -25,13 +25,10 @@ const isDragging = ref(false)
 const error = ref("")
 const inputRef = ref<HTMLInputElement | null>(null)
 
-const dropZoneClass = computed(() => {
-  const base =
-    "relative flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 transition-colors"
-  if (props.disabled) return `${base} border-muted bg-muted/50 cursor-not-allowed text-muted-foreground`
-  if (isDragging.value) return `${base} border-primary bg-primary/5 text-primary cursor-copy`
-  return `${base} border-border bg-background hover:border-muted-foreground/50 hover:bg-accent/50 cursor-pointer text-muted-foreground`
-})
+const dropZoneClass = computed(() => ({
+  "is-disabled": props.disabled,
+  "is-dragging": isDragging.value && !props.disabled,
+}))
 
 function validateFiles(files: FileList): File[] {
   const accepted: File[] = []
@@ -108,8 +105,19 @@ function openPicker() {
 </script>
 
 <template>
-  <div>
-    <div :class="[dropZoneClass, props.className]" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop" @click="openPicker">
+  <div class="file-upload-root">
+    <div
+      :class="['file-upload-zone', dropZoneClass, props.className]"
+      role="button"
+      :aria-disabled="props.disabled"
+      tabindex="0"
+      @dragover="onDragOver"
+      @dragleave="onDragLeave"
+      @drop="onDrop"
+      @click="openPicker"
+      @keydown.enter.prevent="openPicker"
+      @keydown.space.prevent="openPicker"
+    >
       <input
         ref="inputRef"
         type="file"
@@ -122,7 +130,7 @@ function openPicker() {
       />
       <slot name="icon">
         <svg
-          class="size-8"
+          class="file-upload-icon"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
@@ -133,18 +141,76 @@ function openPicker() {
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
         </svg>
       </slot>
-      <div class="text-center text-sm">
-        <p class="font-medium">
+      <div class="file-upload-copy">
+        <p class="file-upload-label">
           <slot name="label">Drag & drop files here, or click to select</slot>
         </p>
-        <p v-if="props.accept" class="text-xs text-muted-foreground">
+        <p v-if="props.accept" class="file-upload-meta">
           Accepted: {{ props.accept }}
         </p>
-        <p v-if="props.maxSize !== Infinity" class="text-xs text-muted-foreground">
+        <p v-if="props.maxSize !== Infinity" class="file-upload-meta">
           Max size: {{ (props.maxSize / (1024 * 1024)).toFixed(1) }}MB
         </p>
       </div>
     </div>
-    <p v-if="error" class="mt-2 text-sm text-destructive">{{ error }}</p>
+    <p v-if="error" class="file-upload-error">{{ error }}</p>
   </div>
 </template>
+
+<style scoped>
+.file-upload-root { min-width: 0; }
+.file-upload-zone {
+  position: relative;
+  display: flex;
+  min-height: 180px;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed var(--border, #e5e7eb);
+  border-radius: var(--radius, 10px);
+  background: var(--background, #fff);
+  color: var(--muted-foreground, #737373);
+  cursor: pointer;
+  padding: 32px;
+  text-align: center;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.file-upload-zone:hover:not(.is-disabled) {
+  border-color: color-mix(in oklch, var(--muted-foreground, #737373) 50%, var(--border, #e5e7eb));
+  background: color-mix(in oklch, var(--accent, #f5f5f5) 55%, transparent);
+}
+.file-upload-zone:focus-visible {
+  outline: 2px solid var(--ring, #3b82f6);
+  outline-offset: 2px;
+}
+.file-upload-zone.is-dragging {
+  border-color: var(--primary, #111827);
+  background: color-mix(in oklch, var(--primary, #111827) 7%, transparent);
+  color: var(--primary, #111827);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary, #111827) 16%, transparent);
+}
+.file-upload-zone.is-disabled {
+  background: color-mix(in oklch, var(--muted, #f5f5f5) 70%, transparent);
+  color: var(--muted-foreground, #737373);
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+.file-upload-icon { width: 32px; height: 32px; flex-shrink: 0; }
+.file-upload-copy { font-size: 14px; line-height: 1.35; }
+.file-upload-label { margin: 0; font-weight: 500; color: var(--foreground, #111827); }
+.file-upload-meta { margin: 4px 0 0; color: var(--muted-foreground, #737373); font-size: 12px; }
+.file-upload-error { margin: 8px 0 0; color: var(--destructive, #ef4444); font-size: 14px; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .file-upload-zone { min-height: 148px; padding: 20px; }
+}
+</style>

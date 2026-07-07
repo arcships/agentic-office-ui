@@ -16,6 +16,33 @@ import {
 export const XLSX_VIEWER_KEY: unique symbol = Symbol("xlsx-viewer")
 export const XLSX_VIEWER_DARK_KEY: unique symbol = Symbol("xlsx-viewer-dark")
 
+function ensureXlsxFileName(fileName: string): string {
+  const trimmed = fileName.trim() || "workbook.xlsx"
+  return /\.xlsx$/i.test(trimmed) ? trimmed : `${trimmed.replace(/\.(xls|csv|json)$/i, "")}.xlsx`
+}
+
+function downloadBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = fileName
+  a.rel = "noopener"
+  document.body.append(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function downloadUrl(url: string, fileName: string): void {
+  const a = document.createElement("a")
+  a.href = url
+  a.download = fileName
+  a.rel = "noopener"
+  document.body.append(a)
+  a.click()
+  a.remove()
+}
+
 // ============================================================
 // Core types aligned with the public @extend-ai/react-xlsx API surface
 // ============================================================
@@ -425,6 +452,8 @@ export interface XlsxViewerController {
   isLoadDeferred: boolean
   isLoading: boolean
   isChartsLoading: boolean
+  loadWorkbookFromBuffer: (buffer: ArrayBuffer, fileName?: string) => Promise<void>
+  loadWorkbookFromUrl: (url: string, fileName?: string) => Promise<void>
   images: XlsxImage[]
   shapes: XlsxShape[]
   formControls: unknown[]
@@ -658,6 +687,92 @@ function cellRangeToString(range: XlsxCellRange): string {
   return `${cellAddressToString(range.start)}:${cellAddressToString(range.end)}`
 }
 
+
+function parseA1Address(ref: string): XlsxCellAddress | null {
+  const match = /^\$?([A-Z]+)\$?(\d+)$/i.exec(ref.trim())
+  if (!match) return null
+  let col = 0
+  for (const ch of match[1].toUpperCase()) col = col * 26 + ch.charCodeAt(0) - 64
+  return { col: col - 1, row: Number(match[2]) - 1 }
+}
+
+function parseA1Range(ref: string): XlsxCellRange | null {
+  const cleaned = ref.replace(/'/g, "").split("!").pop() ?? ref
+  const [startRef, endRef = startRef] = cleaned.split(":")
+  const start = parseA1Address(startRef)
+  const end = parseA1Address(endRef)
+  return start && end ? { start, end } : null
+}
+
+function numericCellValue(sheet: XlsxSheetData & { cellText?: Record<string, string> }, cell: XlsxCellAddress, seen = new Set<string>()): number {
+  const key = `${cell.row}:${cell.col}`
+  if (seen.has(key)) return 0
+  const raw = sheet.cellText?.[key] ?? sheet.cachedFormulaValues?.[key] ?? ""
+  if (raw.startsWith("=")) {
+    seen.add(key)
+    const value = evaluateFormula(sheet, raw, seen)
+    seen.delete(key)
+    return value
+  }
+  const numeric = Number(String(raw).replace(/,/g, ""))
+  return Number.isFinite(numeric) ? numeric : 0
+}
+
+function rangeValues(sheet: XlsxSheetData & { cellText?: Record<string, string> }, range: XlsxCellRange, seen: Set<string>): number[] {
+  const startRow = Math.min(range.start.row, range.end.row)
+  const endRow = Math.max(range.start.row, range.end.row)
+  const startCol = Math.min(range.start.col, range.end.col)
+  const endCol = Math.max(range.start.col, range.end.col)
+  const values: number[] = []
+  for (let row = startRow; row <= endRow; row++) {
+    for (let col = startCol; col <= endCol; col++) values.push(numericCellValue(sheet, { row, col }, seen))
+  }
+  return values
+}
+
+function evaluateFormula(sheet: XlsxSheetData & { cellText?: Record<string, string> }, input: string, seen = new Set<string>()): number {
+  const formula = input.replace(/^=/, "").trim()
+  const aggregate = /^(SUM|AVERAGE|MIN|MAX|COUNT)\((.+)\)$/i.exec(formula)
+  if (aggregate) {
+    const fn = aggregate[1].toUpperCase()
+    const values = aggregate[2].split(",").flatMap((part) => {
+      const range = parseA1Range(part.trim())
+      return range ? rangeValues(sheet, range, seen) : [Number(part.trim())].filter(Number.isFinite)
+    })
+    if (fn === "SUM") return values.reduce((sum, value) => sum + value, 0)
+    if (fn === "AVERAGE") return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0
+    if (fn === "MIN") return values.length ? Math.min(...values) : 0
+    if (fn === "MAX") return values.length ? Math.max(...values) : 0
+    if (fn === "COUNT") return values.filter((value) => Number.isFinite(value)).length
+  }
+  const expression = formula.replace(/('[^']+'!)?\$?[A-Z]+\$?\d+/gi, (token) => {
+    const cell = parseA1Address(token.split("!").pop() ?? token)
+    return cell ? String(numericCellValue(sheet, cell, seen)) : "0"
+  })
+  if (!/^[0-9+\-*/().,\s]+$/.test(expression)) return 0
+  try {
+    const value = Function(`"use strict"; return (${expression.replace(/,/g, "")})`)() as unknown
+    return typeof value === "number" && Number.isFinite(value) ? value : 0
+  } catch {
+    return 0
+  }
+}
+
+function formatFormulaValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(10)))
+}
+
+function recalculateSheetFormulas(sheet: XlsxSheetData & { cellText?: Record<string, string> }): number {
+  let count = 0
+  sheet.cachedFormulaValues ??= {}
+  for (const [key, value] of Object.entries(sheet.cellText ?? {})) {
+    if (!value.startsWith("=")) continue
+    sheet.cachedFormulaValues[key] = formatFormulaValue(evaluateFormula(sheet, value))
+    count++
+  }
+  return count
+}
+
 export function useXlsxViewerController(options: UseXlsxViewerControllerOptions = {}): XlsxViewerController {
   // Core state
   const activeCell = ref<XlsxCellAddress | null>(null)
@@ -702,7 +817,12 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions 
   const activeTab = computed(() => tabs.value[activeTabIndex.value] ?? null)
   const activeCellAddress = computed(() => activeCell.value ? cellAddressToString(activeCell.value) : null)
   const selectedRangeAddress = computed(() => selection.value ? cellRangeToString(selection.value) : null)
-  const selectedCellFormula = computed(() => "")
+  const selectedCellFormula = computed(() => {
+    if (!activeCell.value || !activeSheet.value) return ""
+    const sheet = activeSheet.value as XlsxSheetData & { cellText?: Record<string, string> }
+    const value = sheet.cellText?.[`${activeCell.value.row}:${activeCell.value.col}`] ?? ""
+    return value.startsWith("=") ? value : ""
+  })
   const selectedChartFormula = computed(() => null)
   const selectedImage = computed(() => selectedImageId.value ? images.value.find(i => i.id === selectedImageId.value) ?? null : null)
   const selectedChart = computed(() => selectedChartId.value ? charts.value.find(c => c.id === selectedChartId.value) ?? null : null)
@@ -715,14 +835,91 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions 
   const canExport = computed(() => sheets.value.length > 0)
   const canLoadDeferred = computed(() => isLoadDeferred.value)
 
-  const displayFileName = options.fileName ?? options.src?.split(/[?#]/)[0]?.split("/").pop() ?? "Untitled.xlsx"
+  const displayFileName = ref(options.fileName ?? options.src?.split(/[?#]/)[0]?.split("/").pop() ?? "Untitled.xlsx")
+  const sourceBuffer = ref<ArrayBuffer | null>(null)
+  const sourceUrl = ref<string | null>(options.src ?? null)
   const defaultZoomScale = 1
   const maxZoomScale = 4
   const minZoomScale = 0.25
   const workbook = null
 
+  type MutableSheet = XlsxSheetData & {
+    cellText?: Record<string, string>
+    cellStyles?: Record<string, XlsxCellStyleInput>
+    mergedRanges?: XlsxCellRange[]
+  }
+  type WorkbookSnapshot = { sheets: MutableSheet[]; tabs: XlsxWorkbookTab[]; activeSheetIndex: number; activeTabIndex: number }
+
+  function cloneJson<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T
+  }
+
+  function snapshotWorkbook(): WorkbookSnapshot {
+    return {
+      sheets: cloneJson(sheets.value as MutableSheet[]),
+      tabs: cloneJson(tabs.value),
+      activeSheetIndex: activeSheetIndex.value,
+      activeTabIndex: activeTabIndex.value,
+    }
+  }
+
+  function restoreWorkbookSnapshot(snapshot: WorkbookSnapshot) {
+    sheets.value = cloneJson(snapshot.sheets)
+    tabs.value = cloneJson(snapshot.tabs)
+    activeSheetIndex.value = Math.max(0, Math.min(snapshot.activeSheetIndex, sheets.value.length - 1))
+    activeTabIndex.value = Math.max(0, Math.min(snapshot.activeTabIndex, tabs.value.length - 1))
+    activeCell.value = null
+    selection.value = null
+    revision.value++
+  }
+
+  function commitWorkbookMutation(mutator: () => void) {
+    const before = snapshotWorkbook()
+    mutator()
+    history.push({ kind: "snapshot", before, after: snapshotWorkbook() })
+    future.length = 0
+    sourceBuffer.value = null
+    revision.value++
+  }
+
+  function normalizeRange(range: XlsxCellRange): XlsxCellRange {
+    return {
+      start: { row: Math.min(range.start.row, range.end.row), col: Math.min(range.start.col, range.end.col) },
+      end: { row: Math.max(range.start.row, range.end.row), col: Math.max(range.start.col, range.end.col) },
+    }
+  }
+
+  function activeMutableSheet(): MutableSheet | null {
+    return activeSheet.value as MutableSheet | null
+  }
+
+  function eachCell(range: XlsxCellRange, cb: (cell: XlsxCellAddress) => void) {
+    const normalized = normalizeRange(range)
+    for (let row = normalized.start.row; row <= normalized.end.row; row++) {
+      for (let col = normalized.start.col; col <= normalized.end.col; col++) cb({ row, col })
+    }
+  }
+
   // === Sheet parsing ===
-  async function loadFile(buffer: ArrayBuffer) {
+  function resetWorkbookState() {
+    activeSheetIndex.value = 0
+    activeTabIndex.value = 0
+    activeCell.value = null
+    selection.value = null
+    selectedValue.value = ""
+    selectedFormula.value = ""
+    selectedImageId.value = null
+    selectedChartId.value = null
+    selectedChartElement.value = null
+    sortState.value = null
+    history.length = 0
+    future.length = 0
+  }
+
+  async function loadFile(buffer: ArrayBuffer, fileName?: string) {
+    if (fileName) displayFileName.value = fileName
+    sourceBuffer.value = buffer.slice(0)
+    sourceUrl.value = null
     const size = buffer.byteLength
     const maxSize = options.maxFileSizeBytes ?? 25 * 1024 * 1024
     const deferThreshold = options.deferLoadingAboveBytes ?? 0
@@ -760,8 +957,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions 
       images.value = result.images ?? []
       charts.value = result.charts ?? []
       tables.value = result.tables ?? []
-      activeSheetIndex.value = 0
-      activeTabIndex.value = 0
+      resetWorkbookState()
       revision.value++
     } catch (e) {
       const err = e instanceof Error ? e : new Error(String(e))
@@ -771,8 +967,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions 
       images.value = []
       charts.value = []
       tables.value = []
-      activeSheetIndex.value = 0
-      activeTabIndex.value = 0
+      resetWorkbookState()
       revision.value++
     } finally {
       isLoading.value = false
@@ -818,28 +1013,40 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions 
     }
   }
 
+  async function loadUrl(url: string, fileName?: string) {
+    const trimmed = url.trim()
+    if (!trimmed) throw new Error("Workbook URL is required")
+    isLoading.value = true
+    error.value = null
+    try {
+      const response = await fetch(trimmed)
+      if (!response.ok) throw new Error(`Failed to fetch workbook (${response.status})`)
+      const buffer = await response.arrayBuffer()
+      await loadFile(buffer, fileName ?? trimmed.split(/[?#]/)[0]?.split("/").pop())
+      sourceUrl.value = trimmed
+    } catch (e) {
+      const err = e instanceof Error ? e : new Error(String(e))
+      error.value = err
+      throw err
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   function continueDeferredLoad() {
     isLoadDeferred.value = false
     deferredLoadFileSize.value = null
-    if (options.file) loadFile(options.file)
+    if (options.file) void loadFile(options.file)
   }
 
   // Watch file option
   if (options.file) {
-    loadFile(options.file)
+    loadFile(options.file, options.fileName)
   }
 
   // Watch src option
   if (options.src) {
-    isLoading.value = true
-    fetch(options.src)
-      .then(r => {
-        if (!r.ok) throw new Error(`Failed to fetch workbook (${r.status})`)
-        return r.arrayBuffer()
-      })
-      .then(buf => loadFile(buf))
-      .catch(e => { error.value = e instanceof Error ? e : new Error(String(e)) })
-      .finally(() => { isLoading.value = false })
+    void loadUrl(options.src)
   }
 
   // === Controller object ===
@@ -860,7 +1067,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions 
     get canZoomOut() { return canZoomOut.value },
     defaultZoomScale,
     get deferredLoadFileSize() { return deferredLoadFileSize.value },
-    displayFileName,
+    get displayFileName() { return displayFileName.value },
     get charts() { return charts.value },
     get chartsheets() { return chartsheets.value },
     get error() { return error.value },
@@ -906,30 +1113,93 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions 
     },
     continueDeferredLoad,
     async copySelectionToClipboard(): Promise<boolean> {
-      if (!selection.value) return false
+      if (!selection.value || !activeSheet.value) return false
       try {
-        const addr = selectedRangeAddress.value ?? ""
-        await navigator.clipboard.writeText(addr)
+        const sheet = activeMutableSheet()
+        const normalized = normalizeRange(selection.value)
+        const lines: string[] = []
+        for (let row = normalized.start.row; row <= normalized.end.row; row++) {
+          const values: string[] = []
+          for (let col = normalized.start.col; col <= normalized.end.col; col++) {
+            values.push(sheet?.cellText?.[`${row}:${col}`] ?? "")
+          }
+          lines.push(values.join("\t"))
+        }
+        await navigator.clipboard.writeText(lines.join("\n"))
         return true
       } catch { return false }
     },
     defineNamedRange(_name: string, _range?: XlsxCellRange | null) { /* noop */ },
+    async loadWorkbookFromBuffer(buffer: ArrayBuffer, fileName?: string) { await loadFile(buffer, fileName) },
+    async loadWorkbookFromUrl(url: string, fileName?: string) { await loadUrl(url, fileName) },
     download() {
-      const payload = JSON.stringify({ sheets: sheets.value.map((sheet) => ({ name: sheet.name, rowCount: sheet.rowCount, colCount: sheet.colCount })) }, null, 2)
-      const blob = new Blob([payload], { type: "application/json" })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = displayFileName.toLowerCase().endsWith(".xlsx") ? displayFileName : `${displayFileName}.xlsx`
-      a.rel = "noopener"
-      document.body.append(a)
-      a.click()
-      a.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 0)
+      if (sourceBuffer.value) {
+        downloadBlob(
+          new Blob([sourceBuffer.value], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+          ensureXlsxFileName(displayFileName.value),
+        )
+        return
+      }
+      if (sourceUrl.value) {
+        downloadUrl(sourceUrl.value, ensureXlsxFileName(displayFileName.value))
+        return
+      }
+      this.exportXlsx()
     },
-    exportCsv() { /* noop */ },
-    exportXlsx() { this.download() },
-    fillSelection(_targetRange: XlsxCellRange) { /* noop */ },
+    exportCsv() {
+      const sheet = activeSheet.value
+      if (!sheet) return
+      const parsed = sheet as unknown as { cellText?: Record<string, string> }
+      const rows = Math.min(sheet.rowCount, Math.max(1, sheet.maxUsedRow + 1))
+      const cols = Math.min(sheet.colCount, Math.max(1, sheet.maxUsedCol + 1))
+      const lines: string[] = []
+      for (let r = 0; r < rows; r++) {
+        const values: string[] = []
+        for (let c = 0; c < cols; c++) {
+          const raw = parsed.cellText?.[`${r}:${c}`] ?? ""
+          values.push(/[",\n]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw)
+        }
+        lines.push(values.join(","))
+      }
+      downloadBlob(
+        new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" }),
+        `${activeSheet.value?.name ?? "sheet"}.csv`,
+      )
+    },
+    exportXlsx() {
+      if (sheets.value.length === 0) return
+      void import("@extend-ai/xlsx-core").then(({ writeXlsxWorkbook }) => {
+        const bytes = writeXlsxWorkbook(sheets.value as unknown as Parameters<typeof writeXlsxWorkbook>[0])
+        const arrayBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+        downloadBlob(
+          new Blob([arrayBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+          ensureXlsxFileName(displayFileName.value),
+        )
+      }).catch((e) => {
+        error.value = e instanceof Error ? e : new Error(String(e))
+      })
+    },
+    fillSelection(targetRange: XlsxCellRange) {
+      if (!selection.value || !activeSheet.value) return
+      const source = normalizeRange(selection.value)
+      const target = normalizeRange(targetRange)
+      const sheet = activeMutableSheet()
+      if (!sheet) return
+      commitWorkbookMutation(() => {
+        sheet.cellText ??= {}
+        const sourceValues: string[] = []
+        eachCell(source, (cell) => sourceValues.push(sheet.cellText?.[`${cell.row}:${cell.col}`] ?? ""))
+        if (sourceValues.length === 0) return
+        let i = 0
+        eachCell(target, (cell) => {
+          const value = sourceValues[i % sourceValues.length]
+          const key = `${cell.row}:${cell.col}`
+          if (value) sheet.cellText![key] = value
+          else delete sheet.cellText![key]
+          i++
+        })
+      })
+    },
     clearSelectedChart() { selectedChartId.value = null },
     clearSelectedChartElement() { selectedChartElement.value = null },
     clearSelectedImage() { selectedImageId.value = null },
@@ -955,35 +1225,162 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions 
         (f: unknown) => (f as Record<string, unknown>).workbookSheetIndex === idx
       )
     },
-    getClipboardData() { return null },
-    getCellDisplayValue(_cell?: XlsxCellAddress | null): string { return "" },
-    getCellFormula(_cell?: XlsxCellAddress | null): string { return "" },
-    mergeSelection() { /* noop */ },
+    getClipboardData() {
+      if (!selection.value || !activeSheet.value) return null
+      const sheet = activeMutableSheet()
+      if (!sheet) return null
+      const normalized = normalizeRange(selection.value)
+      const lines: string[] = []
+      for (let row = normalized.start.row; row <= normalized.end.row; row++) {
+        const values: string[] = []
+        for (let col = normalized.start.col; col <= normalized.end.col; col++) values.push(sheet.cellText?.[`${row}:${col}`] ?? "")
+        lines.push(values.join("\t"))
+      }
+      const text = lines.join("\n")
+      const html = `<table>${lines.map((line) => `<tr>${line.split("\t").map((value) => `<td>${value.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</td>`).join("")}</tr>`).join("")}</table>`
+      return { text, html, structured: JSON.stringify({ range: normalized, text }) }
+    },
+    getCellDisplayValue(cell?: XlsxCellAddress | null): string {
+      const target = cell ?? activeCell.value
+      if (!target || !activeSheet.value) return ""
+      const sheet = activeSheet.value as unknown as { cellText?: Record<string, string>; cachedFormulaValues?: Record<string, string> }
+      const key = `${target.row}:${target.col}`
+      const raw = sheet.cellText?.[key] ?? selectedValue.value
+      return raw.startsWith("=") ? (sheet.cachedFormulaValues?.[key] ?? raw) : raw
+    },
+    getCellFormula(cell?: XlsxCellAddress | null): string {
+      const value = this.getCellDisplayValue(cell)
+      return value.startsWith("=") ? value : ""
+    },
+    mergeSelection() {
+      if (!selection.value || !activeSheet.value) return
+      const range = normalizeRange(selection.value)
+      const sheet = activeMutableSheet()
+      if (!sheet) return
+      commitWorkbookMutation(() => {
+        sheet.mergedRanges ??= []
+        sheet.mergedRanges.push(range)
+        sheet.hasHorizontalMerges = sheet.hasHorizontalMerges || range.start.col !== range.end.col
+        sheet.hasVerticalMerges = sheet.hasVerticalMerges || range.start.row !== range.end.row
+        sheet.maxHorizontalMergeEndCol = Math.max(sheet.maxHorizontalMergeEndCol, range.end.col)
+        sheet.maxVerticalMergeEndRow = Math.max(sheet.maxVerticalMergeEndRow, range.end.row)
+      })
+    },
     moveChartBy(_id: string, _deltaX: number, _deltaY: number) { /* noop */ },
     moveImageBy(_id: string, _deltaX: number, _deltaY: number) { /* noop */ },
-    removeActiveSheet() { /* noop */ },
-    recalculate() { /* noop */ },
+    removeActiveSheet() {
+      if (sheets.value.length <= 1) return
+      const idx = activeSheetIndex.value
+      sheets.value.splice(idx, 1)
+      tabs.value.splice(idx, 1)
+      tabs.value = tabs.value.map((tab, index) => ({ ...tab, index, sheetIndex: index, workbookSheetIndex: index }))
+      activeSheetIndex.value = Math.max(0, Math.min(idx, sheets.value.length - 1))
+      activeTabIndex.value = activeSheetIndex.value
+      revision.value++
+    },
+    recalculate() {
+      let count = 0
+      commitWorkbookMutation(() => {
+        for (const sheet of sheets.value as Array<XlsxSheetData & { cellText?: Record<string, string> }>) count += recalculateSheetFormulas(sheet)
+      })
+      selectedValue.value = activeCell.value ? this.getCellDisplayValue(activeCell.value) : selectedValue.value
+      return count
+    },
     resetZoom() { zoomScale.value = defaultZoomScale },
     resizeChartBy(_id: string, _handle: XlsxImageResizeHandlePosition, _deltaX: number, _deltaY: number) { /* noop */ },
     resizeImageBy(_id: string, _handle: XlsxImageResizeHandlePosition, _deltaX: number, _deltaY: number) { /* noop */ },
-    resizeColumn(_col: number, _widthPx: number) { /* noop */ },
-    resizeRow(_row: number, _heightPx: number) { /* noop */ },
-    redo() { /* noop */ },
+    resizeColumn(col: number, widthPx: number) {
+      const sheet = activeMutableSheet()
+      if (!sheet || col < 0 || !Number.isFinite(widthPx)) return
+      commitWorkbookMutation(() => {
+        const width = Math.max(8, Math.round(widthPx))
+        sheet.colWidthOverridesPx[col] = width
+        sheet.colWidths[col] = width
+      })
+    },
+    resizeRow(row: number, heightPx: number) {
+      const sheet = activeMutableSheet()
+      if (!sheet || row < 0 || !Number.isFinite(heightPx)) return
+      commitWorkbookMutation(() => {
+        const height = Math.max(8, Math.round(heightPx))
+        sheet.rowHeightOverridesPx[row] = height
+        sheet.rowHeights[row] = height
+      })
+    },
+    redo() {
+      const entry = future.pop() as { kind?: string; before?: WorkbookSnapshot; after?: WorkbookSnapshot } | undefined
+      if (!entry) return
+      if (entry.kind === "snapshot" && entry.after) {
+        restoreWorkbookSnapshot(entry.after)
+        history.push(entry)
+      }
+    },
     async pasteFromClipboard(): Promise<boolean> {
       try {
         const text = await navigator.clipboard.readText()
         return this.pasteText(text)
       } catch { return false }
     },
-    pasteStructuredClipboardData(_payload: string): boolean { return false },
-    pasteText(_text: string): boolean { return false },
-    setCellFormula(_cell: XlsxCellAddress, _formula: string) { /* noop */ },
-    setCellStyle(_cell: XlsxCellAddress, _style: XlsxCellStyleInput) { /* noop */ },
-    setCellValue(_cell: XlsxCellAddress, value: string) {
-      selectedValue.value = value
-      revision.value++
+    pasteStructuredClipboardData(payload: string): boolean { return this.pasteText(payload) },
+    pasteText(text: string): boolean {
+      if (!activeCell.value || !activeSheet.value) return false
+      const sheet = activeMutableSheet()
+      if (!sheet) return false
+      const rows = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n")
+      if (rows.length === 0) return false
+      commitWorkbookMutation(() => {
+        sheet.cellText ??= {}
+        rows.forEach((line, rowOffset) => {
+          line.split("\t").forEach((value, colOffset) => {
+            const row = activeCell.value!.row + rowOffset
+            const col = activeCell.value!.col + colOffset
+            const key = `${row}:${col}`
+            if (value) sheet.cellText![key] = value
+            else delete sheet.cellText![key]
+            sheet.maxUsedRow = Math.max(sheet.maxUsedRow, row)
+            sheet.maxUsedCol = Math.max(sheet.maxUsedCol, col)
+          })
+        })
+      })
+      return true
     },
-    setRangeStyle(_range: XlsxCellRange, _style: XlsxCellStyleInput) { /* noop */ },
+    setCellFormula(cell: XlsxCellAddress, formula: string) { this.setCellValue(cell, formula.startsWith("=") ? formula : `=${formula}`) },
+    setCellStyle(cell: XlsxCellAddress, style: XlsxCellStyleInput) {
+      const sheet = activeMutableSheet()
+      if (!sheet) return
+      commitWorkbookMutation(() => {
+        sheet.cellStyles ??= {}
+        sheet.cellStyles[`${cell.row}:${cell.col}`] = { ...(sheet.cellStyles[`${cell.row}:${cell.col}`] ?? {}), ...style }
+      })
+    },
+    setCellValue(cell: XlsxCellAddress, value: string) {
+      if (!activeSheet.value) return
+      const sheet = activeMutableSheet()
+      if (!sheet) return
+      sheet.cellText ??= {}
+      const key = `${cell.row}:${cell.col}`
+      commitWorkbookMutation(() => {
+        if (value) sheet.cellText![key] = value
+        else delete sheet.cellText![key]
+        if (value.startsWith("=")) sheet.cachedFormulaValues[key] = formatFormulaValue(evaluateFormula(sheet, value))
+        else delete sheet.cachedFormulaValues[key]
+        sheet.maxUsedRow = Math.max(sheet.maxUsedRow, cell.row)
+        sheet.maxUsedCol = Math.max(sheet.maxUsedCol, cell.col)
+      })
+      selectedValue.value = value.startsWith("=") ? (sheet.cachedFormulaValues[key] ?? value) : value
+      selectedFormula.value = value.startsWith("=") ? value : ""
+    },
+    setRangeStyle(range: XlsxCellRange, style: XlsxCellStyleInput) {
+      const sheet = activeMutableSheet()
+      if (!sheet) return
+      commitWorkbookMutation(() => {
+        sheet.cellStyles ??= {}
+        eachCell(range, (cell) => {
+          const key = `${cell.row}:${cell.col}`
+          sheet.cellStyles![key] = { ...(sheet.cellStyles![key] ?? {}), ...style }
+        })
+      })
+    },
     setZoomScale(s: number) {
       zoomScale.value = Math.max(minZoomScale, Math.min(maxZoomScale, s))
     },
@@ -1018,22 +1415,75 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions 
         }
       }
     },
-    setSelectedFormula(_formula: string): boolean { return false },
-    setSelectedCellFormula(_formula: string) { /* noop */ },
-    setSelectedCellStyle(_style: XlsxCellStyleInput) { /* noop */ },
+    setSelectedFormula(formula: string): boolean {
+      if (!activeCell.value) return false
+      this.setCellValue(activeCell.value, formula)
+      return true
+    },
+    setSelectedCellFormula(formula: string) { if (activeCell.value) this.setCellValue(activeCell.value, formula) },
+    setSelectedCellStyle(style: XlsxCellStyleInput) {
+      if (selection.value) this.setRangeStyle(selection.value, style)
+      else if (activeCell.value) this.setCellStyle(activeCell.value, style)
+    },
     setSelectedCellValue(value: string) {
-      selectedValue.value = value
-      revision.value++
+      if (activeCell.value) this.setCellValue(activeCell.value, value)
+      else { selectedValue.value = value; revision.value++ }
     },
     sortTable(tableName: string, columnIndex: number, direction: XlsxTableSortDirection) {
+      const sheet = activeMutableSheet()
+      if (!sheet) return
+      const table = tables.value.find((item) => item.name === tableName || item.displayName === tableName)
+      const startRow = table ? table.start.row + Math.max(1, table.headerRowCount) : sheet.minUsedRow
+      const endRow = table ? table.end.row : sheet.maxUsedRow
+      const startCol = table ? table.start.col : sheet.minUsedCol
+      const endCol = table ? table.end.col : sheet.maxUsedCol
+      const sortCol = startCol + columnIndex
+      commitWorkbookMutation(() => {
+        sheet.cellText ??= {}
+        const rowsData = [] as Array<{ row: number; values: string[]; key: string }>
+        for (let row = startRow; row <= endRow; row++) {
+          const values: string[] = []
+          for (let col = startCol; col <= endCol; col++) values.push(sheet.cellText?.[`${row}:${col}`] ?? "")
+          rowsData.push({ row, values, key: sheet.cellText?.[`${row}:${sortCol}`] ?? "" })
+        }
+        rowsData.sort((a, b) => direction === "ascending" ? a.key.localeCompare(b.key, undefined, { numeric: true }) : b.key.localeCompare(a.key, undefined, { numeric: true }))
+        rowsData.forEach((rowData, offset) => {
+          const row = startRow + offset
+          rowData.values.forEach((value, colOffset) => {
+            const key = `${row}:${startCol + colOffset}`
+            if (value) sheet.cellText![key] = value
+            else delete sheet.cellText![key]
+          })
+        })
+      })
       sortState.value = { tableName, columnIndex, direction }
     },
     setChartSeriesFormula(_chartId: string, _seriesIndex: number, _formula: string): boolean { return false },
     selectImage(id: string | null) { selectedImageId.value = id },
     setChartRect(_id: string, _rect: XlsxImageRect) { /* noop */ },
     setImageRect(_id: string, _rect: XlsxImageRect) { /* noop */ },
-    undo() { /* noop */ },
-    unmergeSelection() { /* noop */ },
+    undo() {
+      const entry = history.pop() as { kind?: string; before?: WorkbookSnapshot; after?: WorkbookSnapshot } | undefined
+      if (!entry) return
+      if (entry.kind === "snapshot" && entry.before) {
+        restoreWorkbookSnapshot(entry.before)
+        future.push(entry)
+      }
+    },
+    unmergeSelection() {
+      if (!selection.value || !activeSheet.value) return
+      const target = normalizeRange(selection.value)
+      const sheet = activeMutableSheet()
+      if (!sheet?.mergedRanges) return
+      commitWorkbookMutation(() => {
+        sheet.mergedRanges = sheet.mergedRanges?.filter((range) => {
+          const normalized = normalizeRange(range)
+          return normalized.start.row !== target.start.row || normalized.start.col !== target.start.col || normalized.end.row !== target.end.row || normalized.end.col !== target.end.col
+        }) ?? []
+        sheet.hasHorizontalMerges = sheet.mergedRanges.some((range) => range.start.col !== range.end.col)
+        sheet.hasVerticalMerges = sheet.mergedRanges.some((range) => range.start.row !== range.end.row)
+      })
+    },
     updateChart(_id: string, _patch: Partial<XlsxChart>) { /* noop */ },
     zoomIn() { zoomScale.value = Math.min(maxZoomScale, zoomScale.value + 0.1) },
     zoomOut() { zoomScale.value = Math.max(minZoomScale, zoomScale.value - 0.1) },
@@ -1250,7 +1700,33 @@ export function useXlsxViewerThumbnails(
         contentWidth: contentW,
         height: 150,
         width: Math.round(150 * aspect),
-        paint(_canvas: HTMLCanvasElement | null): boolean { return false },
+        paint(canvas: HTMLCanvasElement | null): boolean {
+          if (!canvas) return false
+          const ctx = canvas.getContext("2d")
+          if (!ctx) return false
+          const width = canvas.width || 180
+          const height = canvas.height || 120
+          ctx.clearRect(0, 0, width, height)
+          ctx.fillStyle = "#ffffff"
+          ctx.fillRect(0, 0, width, height)
+          ctx.strokeStyle = "#d1d5db"
+          ctx.lineWidth = 1
+          const rows = Math.min(12, sheet.rowCount)
+          const cols = Math.min(8, sheet.colCount)
+          const cellW = width / Math.max(1, cols)
+          const cellH = height / Math.max(1, rows)
+          const text = (sheet as unknown as { cellText?: Record<string, string> }).cellText ?? {}
+          ctx.font = "8px sans-serif"
+          ctx.fillStyle = "#111827"
+          for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+              ctx.strokeRect(col * cellW, row * cellH, cellW, cellH)
+              const value = text[`${row}:${col}`]
+              if (value) ctx.fillText(value.slice(0, 8), col * cellW + 2, row * cellH + Math.min(10, cellH - 2))
+            }
+          }
+          return true
+        },
         sheet,
         sheetIndex: i,
         sourceRange: {

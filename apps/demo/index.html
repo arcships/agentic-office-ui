@@ -7,17 +7,94 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --background: #ffffff;
-      --foreground: #0a0a0a;
-      --muted: #f5f5f5;
-      --muted-foreground: #737373;
-      --border: #e5e5e5;
-      --primary: #171717;
-      --primary-foreground: #fafafa;
-      --radius: 0.5rem;
+      --background: oklch(1 0 0);
+      --foreground: oklch(0.145 0 0);
+      --card: oklch(1 0 0);
+      --card-foreground: oklch(0.145 0 0);
+      --popover: oklch(1 0 0);
+      --popover-foreground: oklch(0.145 0 0);
+      --primary: oklch(0.205 0 0);
+      --primary-foreground: oklch(0.985 0 0);
+      --secondary: oklch(0.97 0 0);
+      --secondary-foreground: oklch(0.205 0 0);
+      --muted: oklch(0.97 0 0);
+      --muted-foreground: oklch(0.556 0 0);
+      --accent: oklch(0.97 0 0);
+      --accent-foreground: oklch(0.205 0 0);
+      --destructive: oklch(0.58 0.22 27);
+      --border: oklch(0.922 0 0);
+      --input: oklch(0.922 0 0);
+      --ring: oklch(0.708 0 0);
+      --radius: 0.625rem;
+      --radius-sm: calc(var(--radius) - 4px);
+      --radius-md: calc(var(--radius) - 2px);
+      --radius-lg: var(--radius);
+      --radius-xl: calc(var(--radius) + 4px);
+      --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+      --shadow-md: 0 4px 12px rgb(0 0 0 / 0.08);
     }
     html, body, #app { width: 100%; min-width: 0; overflow-x: hidden; }
-    body { font-family: system-ui, -apple-system, sans-serif; background: var(--background); color: var(--foreground); }
+    html { font-family: 'Inter Variable', Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { min-height: 100vh; background: var(--background); color: var(--foreground); font-feature-settings: "cv02", "cv03", "cv04", "cv11"; }
+    button, input, select, textarea { font: inherit; }
+    button, select, input[type="file"]::file-selector-button { transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease, opacity 0.15s ease; }
+    button:disabled, select:disabled, input:disabled { cursor: not-allowed !important; opacity: 0.5; }
+    .page :is(button, select, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea),
+    .page input[type="file"]::file-selector-button {
+      min-height: 2.25rem;
+      border: 1px solid var(--input);
+      border-radius: var(--radius-md);
+      background: var(--background);
+      color: var(--foreground);
+      box-shadow: var(--shadow-sm);
+      padding: 0.45rem 0.75rem;
+    }
+    .page :is(button, select):hover:not(:disabled),
+    .page input[type="file"]::file-selector-button:hover {
+      background: var(--accent);
+      color: var(--accent-foreground);
+    }
+    .page select {
+      appearance: none;
+      background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+      background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+      background-size: 5px 5px, 5px 5px;
+      background-repeat: no-repeat;
+      padding-right: 2rem !important;
+    }
+    .page input[type="file"] {
+      border: 1px solid var(--input);
+      border-radius: var(--radius-md);
+      background: color-mix(in oklch, var(--background) 92%, var(--muted));
+      color: var(--muted-foreground);
+      padding: 0.25rem;
+    }
+    .page input[type="checkbox"] {
+      width: 1rem;
+      height: 1rem;
+      accent-color: var(--primary);
+    }
+    .page table {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      border-collapse: separate !important;
+      border-spacing: 0;
+      overflow: hidden;
+      background: var(--card);
+      box-shadow: var(--shadow-sm);
+    }
+    .page :is(th, td) { border-color: var(--border) !important; }
+    .page th { background: var(--muted); color: var(--muted-foreground); font-weight: 600; }
+    a:focus-visible, a:focus,
+    button:focus-visible, button:focus,
+    select:focus-visible, select:focus,
+    input:focus-visible, input:focus,
+    textarea:focus-visible, textarea:focus,
+    [contenteditable="true"]:focus-visible, [contenteditable="true"]:focus {
+      outline: 2px solid var(--ring);
+      outline-offset: 2px;
+      box-shadow: 0 0 0 4px color-mix(in oklch, var(--ring) 18%, transparent);
+    }
     table { min-width: 0; }
   </style>
 </head>

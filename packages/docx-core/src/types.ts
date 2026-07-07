@@ -271,6 +271,10 @@ export interface LayoutOptions {
   pageWidth?: number
   pageHeight?: number
   margin?: number
+  marginTop?: number
+  marginBottom?: number
+  marginLeft?: number
+  marginRight?: number
   minLineHeight?: number
   paragraphSpacing?: number
   tableCellPadding?: number
@@ -285,6 +289,7 @@ export interface LayoutBlock {
   height: number
   children?: LayoutRun[]
   headingLevel?: number
+  align?: "left" | "center" | "right" | "justify"
   rows?: LayoutTableRow[]
 }
 
