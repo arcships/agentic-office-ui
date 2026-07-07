@@ -155,9 +155,15 @@ importers:
 
   packages/vue-xlsx:
     dependencies:
+      '@dukelib/sheets-wasm':
+        specifier: ^0.1.17
+        version: 0.1.17
       '@extend-ai/xlsx-core':
         specifier: workspace:*
         version: link:../xlsx-core
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.3
     devDependencies:
       '@vitejs/plugin-vue':
         specifier: ^5.0.0

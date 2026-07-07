@@ -16,7 +16,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@extend-ai/xlsx-core": "workspace:*"
+    "@dukelib/sheets-wasm": "^0.1.17",
+    "@extend-ai/xlsx-core": "workspace:*",
+    "fflate": "^0.8.2"
   },
   "peerDependencies": {
     "vue": ">=3.2.0"
