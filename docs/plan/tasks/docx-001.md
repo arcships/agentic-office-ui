@@ -5,6 +5,11 @@ status: pending
 depends-on: []
 ---
 
+> ⚠️ **已失效（2026-07-07）**：本任务按旧方案（机械复制上游巨型文件）设计，已回退。
+> 实际执行以 `docs/plan/README.md` 的「DOCX 模块化重做任务」为准。
+> 架构设计见 `docs/docx-migration-architecture.md`。
+
+
 # docx-core 引擎+布局+辅助复制（~10500 行）
 
 ## objective

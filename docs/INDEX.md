@@ -7,6 +7,8 @@
 | [visual-acceptance-handoff.md](visual-acceptance-handoff.md) | 验收标准：路由/视口/交互 gate，上游 parity 要求 |
 | [upstream-xlsx-feature-alignment.md](upstream-xlsx-feature-alignment.md) | XLSX 上游功能对齐清单 + 迁移操作方案（14 源文件，~41000 行） |
 | [upstream-docx-feature-alignment.md](upstream-docx-feature-alignment.md) | DOCX 上游功能对齐清单 + 迁移操作方案（8 子包，~68000 行） |
+| [docx-migration-architecture.md](docx-migration-architecture.md) | DOCX 模块化重做架构设计（单文件 ≤1000 行，~124 文件规划） |
+| [docx-editor-helpers-split-plan.md](docx-editor-helpers-split-plan.md) | editor.tsx 24953 行拆分为 24 模块的详细方案（分析员产出） |
 | [upstream-extend-ui.md](upstream-extend-ui.md) | 上游 Extend UI 归属与 sync 策略 |
 | [shadcn-components-browser-acceptance.md](shadcn-components-browser-acceptance.md) | shadcn 组件验收标准（PDF/Components 路由用） |
 | [component-browser-verification-plan.md](component-browser-verification-plan.md) | 组件浏览器验证计划 |
@@ -45,5 +47,5 @@ demo（路由 + fixture + wasm 部署）
 |---|---|---|
 | `@extend-ai/xlsx-core` | ✅ done | 引擎层：wasm, safe-calculate, worker-client, xlsx-worker, colors, images, charts, types（React 类型已清理） |
 | `@extend-ai/vue-xlsx` | pending | controller + viewer |
-| `@extend-ai/docx-core` | pending | 引擎层 |
-| `@extend-ai/vue-docx` | pending | composables + editor + viewer |
+| `@extend-ai/docx-core` | 进行中 | 引擎层（engine/）已完成 ✅，布局/viewer/editor 层待迁移 |
+| `@extend-ai/vue-docx` | pending | composables + components + render（stub 状态） |

@@ -2,57 +2,72 @@
 
 ## 模型分配策略
 
+### DOCX 模块化重做
+
 | 难度 | 任务 | 模型 | provider | 理由 |
 |---|---|---|---|---|
-| 🔴 高 | xlsx-005, docx-003, docx-004 | `glm-5.2` | `dimcode-api-oauth` | canvas 渲染管线 / 事务分发器 / contentEditable + 选区恢复时序，需要深度推理和长上下文（1M context） |
-| 🟡 中 | xlsx-003, xlsx-004, docx-002 | `glm-5.2` | `dimcode-api-oauth` | hook 改写 / JSX→render / 类型清理，需要理解 React→Vue 语义差异 |
-| 🟢 低 | xlsx-001, docx-001, docx-005, cross-001, xlsx-006, docx-006, xlsx-integ, docx-integ, cross-integ | `deepseek-v4-pro` | `dimcode-api-oauth` | 复制 / 配置 / 验证，机械执行，1M context + 0.87 $/M 性价比高 |
+| ✅ done | docx-engine | deepseek-v4-pro | dimcode-api-oauth | 引擎层复制+wasm smoke |
+| 🟢 低 | docx-layout, docx-canvas | deepseek-v4-pro | dimcode-api-oauth | 复制+改 import 路径,机械执行 |
+| 🟡 中 | docx-viewer | deepseek-v4-pro | dimcode-api-oauth | 辅助模块复制+拆分 pretext/thumbnail |
+| 🟡 中 | docx-helpers | glm-5.2 | dimcode-api-oauth | 30+ 模块拆分,需理解 editor.tsx 内部依赖 |
+| 🔴 高 | docx-composables | glm-5.2 | dimcode-api-oauth | useDocxEditor 事务分发器+选区恢复,深度推理 |
+| 🟡 中 | docx-render | glm-5.2 | dimcode-api-oauth | JSX→Vue h() render,语义转换 |
+| 🔴 高 | docx-components | glm-5.2 | dimcode-api-oauth | 18 个 Vue 组件+虚拟化+contentEditable |
+| 🟢 低 | docx-demo | deepseek-v4-pro | dimcode-api-oauth | demo 接入+构建配置 |
+| 🟢 低 | docx-verify | deepseek-v4-pro | dimcode-api-oauth | 全量验证,按清单检查 |
 
-## 执行顺序
+### XLSX（旧任务体系）
 
-当前环境无 worktree，所有任务串行执行。
+| 难度 | 任务 | 模型 | provider | 理由 |
+|---|---|---|---|---|
+| 🔴 高 | xlsx-005 | glm-5.2 | dimcode-api-oauth | canvas 渲染管线 |
+| 🟢 低 | xlsx-006, cross-integ | deepseek-v4-pro | dimcode-api-oauth | 配置/验证 |
+
+## DOCX 执行顺序
 
 ```
-Phase 1: 引擎层（两条线串行或先做一条）
-  ① xlsx-001 (glm-5.2? 不，低难度) → deepseek-v4-pro
-  ② docx-001 → deepseek-v4-pro
-  ③ cross-001 → deepseek-v4-pro
+Phase 1: ✅ 引擎层
+  ① docx-engine → deepseek-v4-pro（已完成）
 
-Phase 2: 类型清理 + helpers
-  ④ docx-002 → glm-5.2
+Phase 2: 布局层 + canvas
+  ② docx-layout → deepseek-v4-pro
+  ③ docx-canvas → deepseek-v4-pro
 
-Phase 3: controller 改写
-  ⑤ xlsx-003 → glm-5.2
-  ⑥ docx-003 → glm-5.2
+Phase 3: viewer 辅助模块
+  ④ docx-viewer → deepseek-v4-pro（拆分 pretext-layout/thumbnail-raster）
 
-Phase 4: 集成验证（controller → engine）
-  ⑦ xlsx-integ → deepseek-v4-pro
-  ⑧ docx-integ → deepseek-v4-pro
+Phase 4: editor-helpers 拆分（最大工作量）
+  ⑤ docx-helpers → glm-5.2（30+ 模块,分批 5-6 个）
 
-Phase 5: 渲染层改写
-  ⑨ xlsx-004 → glm-5.2
-  ⑩ docx-005 → deepseek-v4-pro（简单只读 viewer）
-  ⑪ docx-004 → glm-5.2
-  ⑫ xlsx-005 → glm-5.2
+Phase 5: editor-ops + state
+  ⑥ docx-editor-ops → deepseek-v4-pro
 
-Phase 6: demo 接入
-  ⑬ xlsx-006 → deepseek-v4-pro
-  ⑭ docx-006 → deepseek-v4-pro
+Phase 6: composables 改写
+  ⑦ docx-composables → glm-5.2（26 个 composable）
 
-Phase 7: 全链路集成验证
-  ⑮ cross-integ → deepseek-v4-pro
+Phase 7: render 重写
+  ⑧ docx-render → glm-5.2（renderParagraphRuns → h()）
+
+Phase 8: Vue 组件重写
+  ⑨ docx-components → glm-5.2（18 个组件,先 DocxViewer 再 DocxEditor）
+
+Phase 9: demo 接入 + 验证
+  ⑩ docx-demo → deepseek-v4-pro
+  ⑪ docx-verify → deepseek-v4-pro（全量 gate）
 ```
 
 ## 每个任务的执行流程
 
 ```
-1. 创建分支 task/{id}
+1. 创建分支 task/{id}（或继续在 task/docx-remigration 上）
 2. dispatch develop agent（指定模型）
-   - prompt: "你的任务文件是 docs/plan/tasks/{id}.md。阅读任务文件，只完成 objective 中定义的开发目标，不超出任务范围。context 指向的设计文档是你理解需求的来源。docs/INDEX.md 是文档总索引。完成后运行 typecheck 和任务要求的测试。"
+   - prompt: "你的任务是 {id}。阅读 docs/docx-migration-architecture.md 对应章节,
+     按 objective 完成。硬约束:单文件 ≤1000 行。完成后运行 typecheck + build。"
 3. develop 完成后 commit
-4. dispatch verify agent（用 glm-5.2 做高难度任务的 review，deepseek-v4-pro 做低难度）
-   - prompt: "review 任务 {id} 的开发产出。任务文件：docs/plan/tasks/{id}.md。开发产出：任务文件中 path 指向的路径。设计文档：任务文件中 context 指向的路径。详细阅读源码与设计文档，判断实现是否达到可交付状态。写入 docs/plan/reviews/{id}-1.md。"
-5. verify pass → merge to main → 全量 test → 标记 done
+4. dispatch verify agent
+   - prompt: "review 任务 {id} 的开发产出。架构文档:docs/docx-migration-architecture.md。
+     检查:单文件 ≤1000 行、typecheck 通过、功能对齐。写入 docs/plan/reviews/{id}-1.md。"
+5. verify pass → commit → 全量 gate → 标记 done
    verify blocked → fix → re-verify
 ```
 
@@ -64,7 +79,7 @@ Phase 7: 全链路集成验证
 agent create:
   providerId: dimcode-api-oauth
   modelId: glm-5.2
-  forkContext: none  # 任务文件已自包含
+  forkContext: none
 ```
 
 ### 低难度任务（deepseek-v4-pro）
@@ -80,47 +95,32 @@ agent create:
 
 | 被验证任务难度 | verify 模型 | 理由 |
 |---|---|---|
-| 🔴 高（xlsx-005, docx-003, docx-004） | `glm-5.2` | 需要深度理解判断实现是否正确 |
-| 🟡 中（xlsx-003, xlsx-004, docx-002） | `glm-5.2` | 需要判断 hook 改写/JSX 转换是否语义正确 |
-| 🟢 低（其余） | `deepseek-v4-pro` | 按清单检查，机械验证 |
+| 🔴 高（docx-composables, docx-components） | glm-5.2 | 需深度判断事务/选区/渲染正确性 |
+| 🟡 中（docx-viewer, docx-helpers, docx-render） | glm-5.2 | 需判断拆分/render 转换语义 |
+| 🟢 低（其余） | deepseek-v4-pro | 按清单检查 |
 
 ## 分支管理
 
 ```
 master（主线）
-  ├── task/xlsx-001 → merge → done
-  ├── task/docx-001 → merge → done
-  ├── task/cross-001 → merge → done
-  ├── task/docx-002 → merge → done
-  ├── task/xlsx-003 → merge → done
-  ├── task/docx-003 → merge → done
-  ├── task/xlsx-integ → merge → done
-  ├── task/docx-integ → merge → done
-  ├── task/xlsx-004 → merge → done
-  ├── task/docx-005 → merge → done
-  ├── task/docx-004 → merge → done
-  ├── task/xlsx-005 → merge → done
-  ├── task/xlsx-006 → merge → done
-  ├── task/docx-006 → merge → done
-  └── task/cross-integ → merge → done
+  └── task/docx-remigration（当前,已完成 engine 回退+引擎层重做）
+      ├── docx-layout → commit
+      ├── docx-canvas → commit
+      ├── docx-viewer → commit
+      ├── docx-helpers → commit（分批）
+      ├── docx-editor-ops → commit
+      ├── docx-composables → commit（分批）
+      ├── docx-render → commit
+      ├── docx-components → commit（分批）
+      ├── docx-demo → commit
+      └── docx-verify → merge to master
 ```
-
-每个任务：创建分支 → develop → commit → verify → pass/merge 或 blocked/fix。
 
 ## 中断恢复
 
-中断后从 `docs/plan/tasks/` 的 status 字段恢复：
+从 `docs/plan/README.md` 的 status 字段 + git log 恢复。
 
-| 任务 status | git 状态 | 恢复动作 |
-|---|---|---|
-| pending | 无分支 | 等待依赖完成 |
-| ready | 无分支 | 创建分支，dispatch develop |
-| in-progress | 分支存在，无 review | 继续 develop 或重新 dispatch |
-| in-progress | 分支存在，有 review blocked | dispatch fix |
-| in-progress | 分支存在，有 review pass | 执行 merge |
-| in-progress | 分支不存在 | 重置为 ready，重新 dispatch |
-
-## 全量 gate（每个任务 merge 后运行）
+## 全量 gate（每个任务 commit 后运行）
 
 ```bash
 pnpm typecheck && pnpm build && \
@@ -128,4 +128,4 @@ uv run --with python-docx --with openpyxl --with pillow --with pypdf python scri
 git diff --check
 ```
 
-如果 gate 失败，revert merge，任务重新 rebase + re-verify。
+如果 gate 失败，revert commit，任务重新 fix + re-verify。
