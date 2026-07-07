@@ -11,7 +11,7 @@
 //   editor/   — editor-ops (pure paragraph/text editing operations)
 //   layout/   — pagination + page-segmentation + layout-engine (complete)
 //   viewer/   — pretext-layout + thumbnail-raster + docx-import (pending)
-//   canvas/   — layout-diagnostics + canvas types (pending)
+//   canvas/   — layout-diagnostics + canvas types (complete)
 
 // Engine layer (complete)
 export * from "./engine";
@@ -21,3 +21,7 @@ export * from "./layout";
 
 // Editor operations (complete)
 export * from "./editor/editor-ops";
+
+// Canvas layer (complete)
+export * from "./canvas/types";
+export * from "./canvas/layout-diagnostics";
