@@ -10,7 +10,7 @@
 //   engine/   — wasm + ooxml-core + serializer + doc-model (types/clone/normalize)
 //   editor/   — editor-ops (pure paragraph/text editing operations)
 //   layout/   — pagination + page-segmentation + layout-engine (complete)
-//   viewer/   — pretext-layout + thumbnail-raster + docx-import (pending)
+//   viewer/   — pretext-layout + thumbnail-raster + docx-import (complete)
 //   canvas/   — layout-diagnostics + canvas types (complete)
 
 // Engine layer (complete)
@@ -21,6 +21,9 @@ export * from "./layout";
 
 // Editor operations (complete)
 export * from "./editor/editor-ops";
+
+// Viewer layer (complete)
+export * from "./viewer";
 
 // Canvas layer (complete)
 export * from "./canvas/types";
