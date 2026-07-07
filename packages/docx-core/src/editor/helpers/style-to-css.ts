@@ -6,17 +6,7 @@
 import type { FormFieldRunNode, TextRunNode } from "../../engine/types";
 import { HIGHLIGHT_TO_CSS, SCRIPT_FONT_SCALE } from "./constants";
 import type { DocxDocumentTheme } from "./editor-types";
-
-// Forward type for tracked inline change (defined in tracked-changes.ts).
-// Duplicated here to avoid a circular module dependency; tracked-changes.ts
-// re-exports the canonical declaration.
-export interface ParagraphTrackedInlineChange {
-  id: string;
-  kind: string;
-  author?: string;
-  date?: string;
-  text?: string;
-}
+import type { ParagraphTrackedInlineChange } from "./tracked-changes";
 
 export function resolveHighlightColor(value?: string): string | undefined {
   if (!value) {

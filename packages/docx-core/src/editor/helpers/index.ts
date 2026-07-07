@@ -73,3 +73,7 @@ export * from "./paragraph-tracked";
 export * from "./selection-helpers";
 export * from "./selection-restore";
 export * from "./section-manipulation";
+export * from "./pretext-build";
+export * from "./pretext-measure";
+export * from "./tracked-changes";
+export * from "./tracked-changes-gutter";
