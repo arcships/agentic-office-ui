@@ -14,8 +14,6 @@ export const DocxEditorViewer = defineComponent({
   },
 })
 
-export function useDocxEditor() {
-  return {}
-}
+export { useDocxEditor } from "./composables"
 
-export type DocModel = Record<string, unknown>
+export type { DocModel } from "@extend-ai/docx-core"
