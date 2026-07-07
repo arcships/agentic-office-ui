@@ -47,3 +47,8 @@ export * from "./table-utils-extra";
 export * from "./field-helpers";
 export * from "./synthetic-textbox";
 export * from "./paragraph-geometry";
+export * from "./drop-cap";
+export * from "./letterhead";
+export * from "./line-height";
+export * from "./header-footer";
+export * from "./paragraph-tracked";

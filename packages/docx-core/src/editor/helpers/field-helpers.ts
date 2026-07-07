@@ -9,22 +9,7 @@ import { xmlAttribute } from "./ooxml-helpers";
 import { decodeXmlText } from "./xml-parsing";
 import { numberToRoman } from "./numbering";
 import { formFieldDisplayValue } from "./paragraph-inspect";
-
-// Forward declaration: resolveParagraphFirstLineLeftTabStopsPx lives in
-// line-height.ts (not yet migrated). Replaced with a placeholder until that
-// module lands; the real implementation is imported from line-height then.
-function resolveParagraphFirstLineLeftTabStopsPx(
-  paragraph: ParagraphNode
-): number[] {
-  return (paragraph.style?.tabStops ?? [])
-    .filter((tabStop) => tabStop.alignment === "left")
-    .map((tabStop) => twipsToPixels(tabStop.positionTwips))
-    .filter(
-      (positionPx): positionPx is number =>
-        Number.isFinite(positionPx) && (positionPx as number) > 0
-    )
-    .sort((left, right) => left - right);
-}
+import { resolveParagraphFirstLineLeftTabStopsPx } from "./line-height";
 
 const TABLE_OF_CONTENTS_STYLE_ID = /^toc(?:[\s_-]*\d+)?$/i;
 

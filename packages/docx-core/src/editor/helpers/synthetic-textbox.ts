@@ -18,15 +18,7 @@ import {
 } from "./field-helpers";
 import { formatPageFieldValue } from "./numbering";
 import { WORD_IMAGE_Z_INDEX_STEP } from "./constants";
-
-// Forward declaration: estimateTextAdvanceWidthPx lives in drop-cap.ts (not
-// yet migrated). Placeholder until that module lands.
-function estimateTextAdvanceWidthPx(
-  _text: string,
-  _style?: TextRunNode["style"] | FormFieldRunNode["style"]
-): number {
-  return 0;
-}
+import { estimateTextAdvanceWidthPx } from "./drop-cap";
 
 export function escapeSvgText(text: string): string {
   return text
