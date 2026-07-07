@@ -9,12 +9,15 @@
 // Layered structure:
 //   engine/   — wasm + ooxml-core + serializer + doc-model (types/clone/normalize)
 //   editor/   — editor-ops (pure paragraph/text editing operations)
-//   layout/   — pagination + page-segmentation + layout-engine (pending)
+//   layout/   — pagination + page-segmentation + layout-engine (complete)
 //   viewer/   — pretext-layout + thumbnail-raster + docx-import (pending)
 //   canvas/   — layout-diagnostics + canvas types (pending)
 
 // Engine layer (complete)
 export * from "./engine";
+
+// Layout layer (complete)
+export * from "./layout";
 
 // Editor operations (complete)
 export * from "./editor/editor-ops";
