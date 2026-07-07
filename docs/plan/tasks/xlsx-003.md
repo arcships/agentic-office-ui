@@ -1,7 +1,7 @@
 ---
 id: xlsx-003
 scope: vue-xlsx
-status: pending
+status: done
 depends-on: [xlsx-001]
 ---
 
