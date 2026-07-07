@@ -11,6 +11,5 @@
     "jsx": "preserve",
     "jsxImportSource": "vue"
   },
-  "include": ["src"],
-  "exclude": ["src/pending-rewrite"]
+  "include": ["src"]
 }

@@ -1,98 +1,122 @@
-// docx-core — engine layer + layout + editor helpers (zero React dependency)
+// docx-core — upstream DOCX engine port (modular remigration in progress).
+//
+// Migration source: @extend-ai/react-docx @ commit 6f70b92
+// Upstream path: /Users/eric8810/Code/extend-ui-upstream/react-docx/packages
+//
+// Unlike the previous mechanical copy, this port rebuilds the engine
+// module-by-module with sane file boundaries. Each module is ported from
+// upstream and verified independently before the next one lands.
 
-// --- Engine layer ---
-export * from "./ooxml-core";
-export * from "./types";
-export { cloneDocModel } from "./clone";
-export { normalizeDocModel } from "./normalize";
-export { buildDocModel, buildDocModelFromBytes } from "./doc-model";
-// wasm low-level API (note: initWasm/setWasmSource/WasmSource are re-exported from wasm-source below)
-export {
-  wasmParseDocx,
-  wasmBuildDocModelFromBytes,
-  wasmBuildDocModelFromPackage,
-  wasmSerializeDocx,
-  wasmModelToDocumentXml,
-  wasmPackageToArrayBuffer,
-  wasmPackageToMaps,
-  mapsToWasmPackage,
-  docModelToWasmJson,
-  type WasmOoxmlPart,
-  type WasmOoxmlPackage,
-} from "./wasm";
-export * from "./serializer";
+// Stage 0: minimal DocModel type so downstream packages (vue-docx, demo)
+// can typecheck while the engine is being rebuilt.
+export type DocModel = {
+  nodes: DocNode[]
+  metadata: DocModelMetadata
+}
 
-// --- Editor operations ---
-export * from "./editor-ops";
+export type DocNode = ParagraphNode | TableNode
 
-// --- Editor types (shared with vue-docx) ---
-export * from "./editor-types";
+export interface ParagraphNode {
+  type: "paragraph"
+  children: ParagraphChildNode[]
+  style?: ParagraphStyle
+  sourceXml?: string
+}
 
-// --- Layout layer ---
-// layout-core re-exports pagination + page-segmentation
-export * from "./layout-core";
-export * from "./layout-engine";
-// layout-snapshot has some name overlaps with layout-core/layout-engine;
-// re-export only the non-conflicting members
-export {
-  type LayoutInvalidationScope,
-  type LayoutParagraphLineRange,
-  type LayoutTableRowRange,
-  type LayoutTableRowSlice,
-  type LayoutNodeSegment,
-  type FloatingObjectDraftState,
-  type SelectionState,
-  type LayoutLineFragment,
-  type LayoutRegion,
-  type BuildLayoutSnapshotArgs,
-  type LayoutEditOperation,
-  type LayoutPoint,
-  type LayoutOffsetTarget,
-  type SnapshotSelectionRect,
-  mapPointToDocOffset,
-  mapOffsetToCaretRect,
-  resolveSelectionRectsForNode,
-  withLineFragments,
-  applyEditOperation,
-} from "./layout-snapshot";
+export interface TableNode {
+  type: "table"
+  rows: TableRowNode[]
+  style?: TableStyle
+  sourceXml?: string
+}
 
-// --- Section layout ---
-export * from "./section-layout";
+export type ParagraphChildNode = TextRunNode | ImageRunNode | FormFieldRunNode
 
-// --- Pretext layout ---
-export * from "./pretext-layout";
+export interface TextRunNode {
+  type: "text"
+  text: string
+  style?: TextStyle
+  sourceXml?: string
+}
 
-// --- Page count reconciliation ---
-export * from "./page-count-reconciliation";
+export interface ImageRunNode {
+  type: "image"
+  src: string
+  alt?: string
+  widthPx?: number
+  heightPx?: number
+  data: Uint8Array
+  mimeType: string
+}
 
-// --- Content signature ---
-export * from "./content-signature";
+export interface FormFieldRunNode {
+  type: "form-field"
+  fieldType: "checkbox" | "text" | "date" | "dropdown"
+  // detailed shape filled in during editor-ops port
+  [key: string]: unknown
+}
 
-// --- Image render ---
-export * from "./image-render";
+export interface TextStyle {
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  strike?: boolean
+  superscript?: boolean
+  subscript?: boolean
+  color?: string
+  highlight?: string
+  fontFamily?: string
+  fontSizePt?: number
+  linkHref?: string
+}
 
-// --- Thumbnail raster ---
-export * from "./thumbnail-raster";
+export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6
 
-// --- DOCX import ---
-export * from "./docx-import";
+export type ParagraphAlignment = "left" | "center" | "right" | "justify"
 
-// --- WASM source (worker-safe initWasm/setWasmSource wrapping wasm.ts) ---
-export * from "./wasm-source";
+export interface ParagraphStyle {
+  headingLevel?: HeadingLevel
+  styleId?: string
+  alignment?: ParagraphAlignment
+  lineHeight?: number
+  spaceBeforeTwips?: number
+  spaceAfterTwips?: number
+  indentTwips?: number
+}
 
-// --- Editor state ---
-export * from "./core/state";
+export interface ParagraphStyleDefinition {
+  styleId: string
+  name: string
+  basedOn?: string
+  headingLevel?: HeadingLevel
+  alignment?: ParagraphAlignment
+  [key: string]: unknown
+}
 
-// --- Editor helpers (pure functions + types from editor.tsx front half) ---
-export * from "./editor-helpers";
-// editor-helpers carries upstream duplicates of two pagination helpers that are
-// canonically defined in page-segmentation (re-exported via layout-core). Break
-// the `export *` ambiguity by explicitly re-exporting the canonical versions.
-export {
-  buildDocumentPageNodeSegments,
-  paragraphLetterheadColumnGroupAtSegmentOffset
-} from "./layout-core";
+export interface TableStyle {
+  [key: string]: unknown
+}
 
-// --- Canvas ---
-export * from "./canvas/types";
-export * from "./canvas/layout-diagnostics";
+export interface TableRowNode {
+  type: "table-row"
+  cells: TableCellNode[]
+}
+
+export type TableCellContentNode = ParagraphNode | TableNode
+
+export interface TableCellNode {
+  type: "table-cell"
+  nodes: TableCellContentNode[]
+}
+
+export interface DocModelMetadata {
+  sections?: unknown[]
+  headerSections?: unknown[]
+  footerSections?: unknown[]
+  paragraphStyles?: ParagraphStyleDefinition[]
+  numberingDefinitions?: unknown[]
+  footnotes?: unknown[]
+  endnotes?: unknown[]
+  comments?: unknown[]
+  compatibility?: Record<string, unknown>
+}
