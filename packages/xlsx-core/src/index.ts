@@ -134,3 +134,33 @@ export type {
   XlsxViewerZoom,
   XlsxViewerTables,
 } from "./types";
+
+import type { XlsxCellAddress, XlsxCellRange } from "./types";
+
+export function columnLabel(col: number): string {
+  let label = "";
+  let nextValue = col;
+
+  while (nextValue >= 0) {
+    label = String.fromCharCode(65 + (nextValue % 26)) + label;
+    nextValue = Math.floor(nextValue / 26) - 1;
+  }
+
+  return label;
+}
+
+export function rangeToA1(range: XlsxCellRange): string {
+  const normalized = {
+    start: {
+      row: Math.min(range.start.row, range.end.row),
+      col: Math.min(range.start.col, range.end.col),
+    },
+    end: {
+      row: Math.max(range.start.row, range.end.row),
+      col: Math.max(range.start.col, range.end.col),
+    },
+  };
+  const start = `${columnLabel(normalized.start.col)}${normalized.start.row + 1}`;
+  const end = `${columnLabel(normalized.end.col)}${normalized.end.row + 1}`;
+  return start === end ? start : `${start}:${end}`;
+}
