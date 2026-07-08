@@ -487,7 +487,7 @@ export function useDocxEditor(
   const lst = createEditorList(ctx, applyModelChange)
 
   // 10. editor-clipboard
-  const clp = createEditorClipboard()
+  const clp = createEditorClipboard(ctx)
 
   // 11. editor-import-export
   const ie = createEditorImportExport(ctx)
@@ -633,5 +633,7 @@ export function useDocxEditor(
     commitTableCellText: txt.commitTableCellText,
     commitTableCellParagraphTextRecursive: txt.commitTableCellParagraphTextRecursive,
     commitSectionParagraphText: txt.commitSectionParagraphText,
+    copy: clp.copy,
+    paste: clp.paste,
   }
 }

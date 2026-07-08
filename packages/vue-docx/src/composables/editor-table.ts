@@ -133,9 +133,43 @@ export function createEditorTable(
   }
 
   const moveEmbeddedTableToBody = (
-    _tableRuntimeKey: string, _targetNodeIndex: number
+    tableRuntimeKey: string, targetNodeIndex: number
   ): void => {
-    // Embedded table extraction — reserved for nested-table scenarios
+    // Extracts a nested table from a table cell into the document body.
+    // tableRuntimeKey identifies the nested table via its parent location.
+    // Reserved for nested-table scenarios — the runtime key format will be
+    // determined during component integration.
+    const parts = tableRuntimeKey.split(":")
+    if (parts.length < 3) return
+
+    applyChange((current) => {
+      const nextModel = cloneDocModel(current)
+      const parentTableIndex = Number(parts[0])
+      const parentRowIndex = Number(parts[1])
+      const parentCellIndex = Number(parts[2])
+      const nestedTableIndex = parts[3] !== undefined ? Number(parts[3]) : undefined
+
+      const parentTable = nextModel.nodes[parentTableIndex]
+      if (!parentTable || parentTable.type !== "table") return current
+
+      const parentCell = parentTable.rows[parentRowIndex]?.cells[parentCellIndex]
+      if (!parentCell) return current
+
+      if (nestedTableIndex !== undefined && !isNaN(nestedTableIndex)) {
+        const cellNodes = parentCell.nodes
+        const nestedTable = cellNodes[nestedTableIndex]
+        if (!nestedTable || nestedTable.type !== "table") return current
+
+        // Extract nested table from cell
+        cellNodes.splice(nestedTableIndex, 1)
+
+        // Insert into body at target position
+        const adjustedTarget = Math.min(targetNodeIndex, nextModel.nodes.length)
+        nextModel.nodes.splice(adjustedTarget, 0, nestedTable)
+      }
+
+      return nextModel
+    })
   }
 
   return {

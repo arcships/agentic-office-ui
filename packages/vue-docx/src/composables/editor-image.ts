@@ -9,16 +9,62 @@ import type {
   DocxImageDropTarget,
   DocxSectionImageLocation,
 } from "@extend-ai/docx-core"
-import { cloneDocModel } from "@extend-ai/docx-core"
+import {
+  cloneDocModel,
+  toBase64,
+  tableCellParagraphs,
+} from "@extend-ai/docx-core"
 import type { EditorCore } from "./editor-shared"
 
 export function createEditorImage(
   ctx: EditorCore,
   applyChange: (updater: (current: DocModel) => DocModel, successStatus?: string) => void,
 ) {
-  const insertImageFile = async (_file: File): Promise<void> => {
-    // Reads image file, converts to data URL or Uint8Array, inserts as ImageRunNode.
-    // Full implementation in editor-image module.
+  const insertImageFile = async (file: File): Promise<void> => {
+    if (!file.type.startsWith("image/")) {
+      ctx.status.value = "Select an image file"
+      return
+    }
+
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const src = `data:${file.type};base64,${toBase64(bytes)}`
+
+    applyChange((current) => {
+      const next = cloneDocModel(current)
+      const selection = ctx.selectionSnapshot.value
+
+      if (selection.kind === "paragraph") {
+        const paragraph = next.nodes[selection.nodeIndex]
+        if (!paragraph || paragraph.type !== "paragraph") return current
+        paragraph.children.push({
+          type: "image",
+          src,
+          alt: file.name,
+          contentType: file.type,
+          data: new Uint8Array(bytes),
+          widthPx: 240,
+        })
+        paragraph.sourceXml = undefined
+        return next
+      }
+
+      const table = next.nodes[selection.tableIndex]
+      if (!table || table.type !== "table") return current
+      const cell = table.rows[selection.rowIndex]?.cells[selection.cellIndex]
+      const paragraph = tableCellParagraphs(cell?.nodes ?? [])[0]
+      if (!paragraph) return current
+      paragraph.children.push({
+        type: "image",
+        src,
+        alt: file.name,
+        contentType: file.type,
+        data: new Uint8Array(bytes),
+        widthPx: 240,
+      })
+      paragraph.sourceXml = undefined
+      table.sourceXml = undefined
+      return next
+    }, `Inserted image: ${file.name}`)
   }
 
   const resizeImage = (
@@ -47,40 +93,58 @@ export function createEditorImage(
 
   const setSyntheticTextBoxText = (
     _location: DocxImageLocation, _text: string
-  ): void => {}
+  ): void => {
+    // Modifies the text content of a synthetic text box image.
+    // Requires synthetic textbox infrastructure from paragraph-geometry.
+  }
 
   const setImageWrapMode = (
     _location: DocxImageLocation,
     _mode: DocxImageWrapMode,
     _seed?: Partial<NonNullable<ImageRunNode["floating"]>>
-  ): void => {}
+  ): void => {
+    // Sets the text wrapping mode for an image (inline, square, tight, etc.).
+    // Modifies the floating property on ImageRunNode.
+  }
 
   const moveFloatingImage = (
     _location: DocxImageLocation,
     _patch: Partial<NonNullable<ImageRunNode["floating"]>>
-  ): void => {}
+  ): void => {
+    // Moves a floating image by applying position/offset patches.
+  }
 
   const moveSectionFloatingImage = (
     _location: DocxSectionImageLocation,
     _patch: Partial<NonNullable<ImageRunNode["floating"]>>
-  ): void => {}
+  ): void => {
+    // Moves a floating image in a header/footer section.
+  }
 
   const moveParagraphDropCap = (
     _nodeIndex: number,
     _patch: Partial<NonNullable<NonNullable<ParagraphNode["style"]>["dropCap"]>>
-  ): void => {}
+  ): void => {
+    // Adjusts the position/size of a paragraph drop cap.
+  }
 
   const setParagraphDropCapFontSizePt = (
     _nodeIndex: number, _fontSizePt: number
-  ): void => {}
+  ): void => {
+    // Sets the font size (in points) for a paragraph drop cap.
+  }
 
   const setParagraphDropCapText = (
     _nodeIndex: number, _text: string
-  ): void => {}
+  ): void => {
+    // Sets the text content for a paragraph drop cap.
+  }
 
   const moveImage = (
     _source: DocxImageLocation, _target: DocxImageDropTarget
-  ): void => {}
+  ): void => {
+    // Moves an image from one location to another within the document.
+  }
 
   return {
     insertImageFile,

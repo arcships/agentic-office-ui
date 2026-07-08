@@ -291,6 +291,8 @@ export interface DocxEditorController {
     location: DocxSectionParagraphLocation,
     text: string
   ) => void;
+  copy: () => Promise<void>;
+  paste: () => Promise<void>;
 }
 
 export type DocxTableContextMenuActionId =

@@ -15,10 +15,19 @@ import type {
   DocxEditorTransactionPatch,
   DocxListType,
 } from "@extend-ai/docx-core"
-import { cloneDocModel, mutateParagraphTextStyleInRange } from "@extend-ai/docx-core"
 import {
+  cloneDocModel,
+  mutateParagraphTextStyleInRange,
   resolveSelectedParagraphLocation,
   getParagraphAtLocation,
+  normalizeTextRange,
+  compareTextRangeBoundaries,
+  cloneParagraphStyle,
+  tableBorderPresetState,
+  applyTableBorderPreset,
+  applyParagraphBorderPresetForRangeEntry,
+  paragraphRangePresetActive,
+  paragraphRangeForMutate,
 } from "@extend-ai/docx-core"
 import type { EditorCore } from "./editor-shared"
 
@@ -206,9 +215,104 @@ export function createEditorFormat(
     })
   }
 
-  const applyBorderPreset = (_preset: DocxBorderPreset): void => {
-    // Schema stub — actual border application is handled by the toolbar
-    // with paragraph-level or table-level border style mutations.
+  // ── applyBorderPreset ────────────────────────────────────────────
+  const applyBorderPreset = (preset: DocxBorderPreset): void => {
+    const targetLocation = ctx.selectedParagraphLocation.value
+    const activeRange = ctx.activeTextRangeSnapshot.value
+    const normalizedRange = activeRange ? normalizeTextRange(activeRange) : undefined
+    const hasExpandedRange = Boolean(
+      normalizedRange && compareTextRangeBoundaries(normalizedRange.start, normalizedRange.end) < 0
+    )
+
+    applyChange((current) => {
+      if (targetLocation.kind === "table-cell") {
+        const next = cloneDocModel(current)
+        const tableNode = next.nodes[targetLocation.tableIndex]
+        if (!tableNode || tableNode.type !== "table") return current
+
+        const targetCell = tableNode.rows[targetLocation.rowIndex]?.cells[targetLocation.cellIndex]
+        if (!targetCell) return current
+
+        const presetState = tableBorderPresetState(tableNode.style?.borders, targetCell.style?.borders)
+        const removePreset = preset !== "none" && presetState[preset]
+
+        // Diagonal borders are deferred to component integration
+        if (preset === "diagonal-down" || preset === "diagonal-up") return current
+
+        const nextBorders = applyTableBorderPreset(tableNode.style?.borders, preset, removePreset)
+        if (!nextBorders) return current
+
+        tableNode.style = { ...(tableNode.style ?? {}), borders: nextBorders }
+        tableNode.sourceXml = undefined
+        return next
+      }
+
+      // Paragraph border preset
+      if (hasExpandedRange && normalizedRange) {
+        const rangeLocations = paragraphRangeForMutate(
+          current,
+          normalizedRange.start.location,
+          normalizedRange.end.location
+        ).map((entry) => entry.location)
+        if (rangeLocations.length === 0) return current
+
+        const paragraphsWithLocation = rangeLocations
+          .map((location) => {
+            const lookup = getParagraphAtLocation(current, location)
+            if (!lookup.paragraph) return undefined
+            return { location, borders: lookup.paragraph.style?.borders as any }
+          })
+          .filter((entry): entry is { location: import("@extend-ai/docx-core").ParagraphLocation; borders: any } => Boolean(entry))
+        if (paragraphsWithLocation.length === 0) return current
+
+        const removePreset = preset !== "none" &&
+          paragraphRangePresetActive(preset, paragraphsWithLocation.map((e) => e.borders))
+        const next = cloneDocModel(current)
+
+        for (let index = 0; index < paragraphsWithLocation.length; index += 1) {
+          const target = paragraphsWithLocation[index]
+          const { paragraph, tableNode } = getParagraphAtLocation(next, target.location)
+          if (!paragraph) continue
+
+          const clonedStyle = cloneParagraphStyle(paragraph.style) ?? {}
+          const nextBorders = applyParagraphBorderPresetForRangeEntry(
+            clonedStyle.borders,
+            preset,
+            removePreset,
+            index,
+            paragraphsWithLocation.length
+          )
+          paragraph.style = { ...clonedStyle, borders: nextBorders }
+          paragraph.sourceXml = undefined
+          if (tableNode) tableNode.sourceXml = undefined
+        }
+        return next
+      }
+
+      // Single paragraph — apply border directly
+      const next = cloneDocModel(current)
+      const loc = resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, ctx.activeTextRangeSnapshot.value)
+      const { paragraph, tableNode } = getParagraphAtLocation(next, loc)
+      if (!paragraph) return current
+
+      const clonedStyle = cloneParagraphStyle(paragraph.style) ?? {}
+      const borderActive = !!(
+        clonedStyle.borders?.top && clonedStyle.borders?.bottom &&
+        clonedStyle.borders?.left && clonedStyle.borders?.right
+      )
+      const removePreset: boolean = preset !== "none" && borderActive
+      const nextBorders = applyParagraphBorderPresetForRangeEntry(
+        clonedStyle.borders,
+        preset,
+        removePreset,
+        0,
+        1
+      )
+      paragraph.style = { ...clonedStyle, borders: nextBorders }
+      paragraph.sourceXml = undefined
+      if (tableNode) tableNode.sourceXml = undefined
+      return next
+    })
   }
 
   return {

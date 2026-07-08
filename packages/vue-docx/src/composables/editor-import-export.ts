@@ -3,7 +3,7 @@
 // Extracted from useDocxEditor.ts.
 
 import type { DocModel } from "@extend-ai/docx-core"
-import { cloneDocModel } from "@extend-ai/docx-core"
+import { cloneDocModel, serializeDocx } from "@extend-ai/docx-core"
 import type { EditorCore } from "./editor-shared"
 
 export function createEditorImportExport(ctx: EditorCore) {
@@ -76,7 +76,46 @@ export function createEditorImportExport(ctx: EditorCore) {
 
   // ── exportDocx ───────────────────────────────────────────────────
   const exportDocx = (): void => {
-    ctx.status.value = "Export... (see save dialog)"
+    const fileName = ctx.fileName.value
+
+    ;(async () => {
+      try {
+        const sourceModel = ctx.model.value
+        const transformer = ctx.pendingExportModelTransformer.value
+        const transformedModel = transformer ? transformer(sourceModel) : sourceModel
+        if (transformedModel !== sourceModel) {
+          ctx.model.value = transformedModel
+        }
+
+        const output = await serializeDocx(transformedModel, ctx.basePackage.value)
+        const blob = new Blob([output], {
+          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        })
+
+        const url = URL.createObjectURL(blob)
+        const anchor = globalThis.document?.createElement("a")
+        if (!anchor) {
+          ctx.status.value = "Export failed: no document available"
+          return
+        }
+        anchor.href = url
+        anchor.download = /\.docx?$/i.test(fileName)
+          ? fileName.replace(/\.docx?$/i, "") + "-edited.docx"
+          : "edited.docx"
+        anchor.style.display = "none"
+        globalThis.document.body.append(anchor)
+        anchor.click()
+        setTimeout(() => {
+          anchor.remove()
+          URL.revokeObjectURL(url)
+        }, 1000)
+
+        ctx.status.value = "Exported DOCX"
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error("Unknown export error")
+        ctx.status.value = `Export failed: ${err.message}`
+      }
+    })()
   }
 
   return {
