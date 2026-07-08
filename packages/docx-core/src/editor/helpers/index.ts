@@ -43,7 +43,7 @@
 //   pretext-build, pretext-measure, line-height-table, table-height,
 //   pagination-plan-core, pagination-plan-iterate, pagination-plan-stabilize,
 //   style-block-css, xml-parsing-extra, tracked-changes, tracked-changes-gutter
-export * from "./style-block-css";
+// style-block-css and line-height-table exports removed (incomplete, pending redo)
 
 export * from "./constants";
 export * from "./performance";
@@ -87,7 +87,7 @@ export * from "./paragraph-geometry";
 export * from "./drop-cap";
 export * from "./letterhead";
 export * from "./line-height";
-export * from "./line-height-table";
+// line-height-table export removed (incomplete, pending redo)
 export * from "./header-footer";
 export * from "./paragraph-tracked";
 export * from "./selection-helpers";
@@ -97,5 +97,3 @@ export * from "./pretext-build";
 export * from "./pretext-measure";
 export * from "./tracked-changes";
 export * from "./tracked-changes-gutter";
-export * from "./pagination-plan-core";
-export * from "./pagination-plan-iterate";
