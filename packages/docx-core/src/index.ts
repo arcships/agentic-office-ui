@@ -17,6 +17,10 @@
 export * from "./engine";
 
 // Layout layer (complete)
+export {
+  collectTableExplicitPageBreakInfo,
+  collectTopLevelExplicitPageBreakStartNodeIndexes,
+} from "./layout";
 export * from "./layout";
 
 // Editor operations (complete)
