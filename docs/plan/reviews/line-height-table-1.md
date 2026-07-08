@@ -1,51 +1,48 @@
 # Review: line-height-table
 
-**Date:** 2026-07-08
-**Status:** ✅ PASS
+## Checklist
 
----
+| Check | Result |
+|-------|--------|
+| typecheck zero errors | ✅ `tsc --noEmit` passed with no output |
+| File exists and non-empty | ✅ `packages/docx-core/src/editor/helpers/line-height-table.ts` (999 lines, 36KB) |
+| React residues | ✅ No `import React`, no JSX, no hooks |
+| Duplicated module functions | ✅ All 27 exports are unique to this file (grep confirmed no duplicates in `src/`) |
 
-## 1. Typecheck
+## Exports (27)
 
-`pnpm --filter @extend-ai/docx-core typecheck` — **zero errors**.
+- `injectEstimateParagraphHeightPx` (injectable)
+- `injectParagraphAvailableTextWidthPx` (injectable)
+- `injectParagraphLineCountWithinWidth` (injectable)
+- `injectParagraphBorderInsetPx` (injectable)
+- `paragraphHasExplicitSpacing`
+- `wordLikeTableCellParagraph`
+- `estimateTableCellContentHeightPx`
+- `rowAllowsPageSplit`
+- `rowHasDeepFlowContent`
+- `rowHasNestedTableContent`
+- `capSplitFriendlyTableRowEstimatePx`
+- `tableStyleIdFromSourceXml`
+- `tableHasVisibleBorders`
+- `tableContainsParagraphsWithoutExplicitSpacing`
+- `tableUsesWordLikeParagraphDefaults`
+- `estimateTableRowHeightsPx`
+- `resolveTableRowHeightCss`
+- `uniqueSortedPixelBoundaries`
+- `estimateTableCellSliceBoundaryLayoutPx`
+- `tableCellSliceBoundaryIsSafe`
+- `resolveTableRowSliceHeightOnSafeBoundaryPx`
+- `estimateTableHeightPx`
+- `estimateDocNodeHeightPx`
+- `paragraphWidowControlEnabled`
+- `paragraphIsOnlyExplicitPageBreak`
+- `paragraphCanSplitAcrossPages`
+- `TableCellSliceBoundaryLayout` (type)
 
-## 2. File existence
+## Dependencies
 
-| File | Lines | Status |
-|---|---|---|
-| `packages/docx-core/src/editor/helpers/line-height-table.ts` | 141 | ✅ Present, non-empty |
+Imports from sibling helpers: `cache-utils`, `constants`, `paragraph-inspect`, `paragraph-geometry`, `line-height`, `pretext-build`, `pretext-layout`, `cell-utils`. Imports from engine/types, `viewer/section-layout`, `layout/pagination`.
 
-## 3. React residuals
+4 functions are injectable stubs awaiting not-yet-ported modules (`estimateParagraphHeightPx`, `paragraphAvailableTextWidthPx`, `paragraphLineCountWithinWidth`, `paragraphBorderInsetPx`).
 
-Grep for `react`, `useState`, `useEffect`, `useMemo`, `useCallback`, `useRef`, `JSX`, `className`, `onClick`, `onChange` on `line-height-table.ts` — **zero matches**. No React import, no JSX, no hook usage.
-
-## 4. Duplicate functions
-
-All 13 exported functions from `line-height-table.ts` are **unique** to this file. No other file in `packages/docx-core/src` defines functions with the same names.
-
-Wrapper functions that delegate to `line-height.ts` helpers are intentional table-specific entry points, not redundant duplicates:
-
-| Function | Delegates to |
-|---|---|
-| `resolveTableParagraphLineHeightPx` | `estimateParagraphLineHeightPx` |
-| `resolveTableParagraphDocGridLinePitchPx` | `resolveParagraphDocGridLinePitchPx` |
-| `resolveTableParagraphTabStopsPx` | `resolveParagraphTabStopsPx` |
-| `resolveTableParagraphFirstLineOriginPx` | `resolveParagraphFirstLineOriginPx` |
-| `resolveTableParagraphFirstLineLeftTabStopsPx` | `resolveParagraphFirstLineLeftTabStopsPx` |
-| `resolveTableParagraphNextTabStopPx` | `resolveNextTabStopPx` |
-| `resolveTableParagraphDocGridSnapState` | `paragraphDocGridSnapState` |
-
-Novel functions (no delegation):
-
-| Function | Purpose |
-|---|---|
-| `resolveTableRowLineHeightPx` | Max line-height across all cell paragraphs in a row |
-| `estimateTableLineHeightPx` | Max line-height across all rows in a table |
-| `resolveTableCellBlockStyle` | Converts cell padding twips → px RecordStyle |
-| `resolveTableParagraphLineHeightContext` | fontSizePx × singleLineScale for a paragraph |
-| `resolveTableLineHeightTabStopsPx` | First-line left tab stops shifted by origin |
-| `isLineHeightRelevantParagraph` | Paragraph renders text line OR contains explicit line breaks |
-
-## Verdict
-
-All checks pass. Typecheck clean, file present and non-empty, no React residuals, no duplicate function definitions.
+## Verdict: PASS
