@@ -5,7 +5,9 @@ import {
   strToU8
 } from "fflate";
 import type {
-  XlsxCellRange
+  XlsxCellRange,
+  XlsxResolvedCellStyle,
+  XlsxSheetData
 } from "@extend-ai/xlsx-core";
 import {
   MAX_INTERACTIVE_SHARED_STRINGS_BYTES,
@@ -283,3 +285,21 @@ export function resolveDisplayFileName(src?: string, fileName?: string): string 
 // Re-exported for type-only consumers that need the cell-range shape alongside
 // formatting helpers (e.g. clipboard HTML builders).
 export type { XlsxCellRange };
+
+export function resolveInheritedCellStyle(sheet: XlsxSheetData | null | undefined, row: number, col: number): XlsxResolvedCellStyle | null {
+  if (!sheet) {
+    return null;
+  }
+
+  const rowStyleId = sheet.rowStyleIds[row];
+  if (rowStyleId !== undefined) {
+    return sheet.styleById[rowStyleId] ?? null;
+  }
+
+  const colStyleId = sheet.colStyleIds[col];
+  if (colStyleId !== undefined) {
+    return sheet.styleById[colStyleId] ?? null;
+  }
+
+  return null;
+}

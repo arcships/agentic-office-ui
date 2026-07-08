@@ -7,6 +7,7 @@ import type {
 import { loadWorkbookChartAssets } from "@extend-ai/xlsx-core";
 import { cellAddressToA1, normalizeRange, rangeContainsCell, rangeToA1 } from "./selection";
 import {
+  applyCellMutationState,
   cloneCellStyle,
   coerceUserEnteredValue,
   normalizeCellValue,
@@ -17,24 +18,8 @@ import {
 import { buildSheetList, buildVisibleSheetIndexMap } from "./workbook-state";
 import type { XlsxControllerContext } from "./navigation";
 
-export { cloneCellStyle, coerceUserEnteredValue, normalizeCellValue, pushHistoryEntry };
+export { applyCellMutationState, cloneCellStyle, coerceUserEnteredValue, normalizeCellValue, pushHistoryEntry };
 export type { CellMutationState, HistoryEntry };
-
-export function applyCellMutationState(
-  worksheet: ReturnType<Workbook["getSheet"]>,
-  cell: XlsxCellAddress,
-  state: CellMutationState
-) {
-  if (state.formula) {
-    worksheet.setFormula(cellAddressToA1(cell), state.formula);
-  } else {
-    worksheet.setCell(cellAddressToA1(cell), normalizeCellValue(state.value));
-  }
-
-  if (state.style && typeof state.style === "object") {
-    worksheet.setCellStyleAt(cell.row, cell.col, state.style);
-  }
-}
 
 export function createEditingDomain(ctx: XlsxControllerContext) {
   function selectCell(cell: XlsxCellAddress, options?: { extend?: boolean }) {

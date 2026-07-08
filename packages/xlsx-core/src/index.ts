@@ -76,6 +76,7 @@ export type {
   XlsxChartAxis,
   XlsxChartDataLabels,
   XlsxChartElementSelection,
+  XlsxChartLegend,
   XlsxChartLoadingRenderProps,
   XlsxChartPointDataLabel,
   XlsxChartPointStyle,

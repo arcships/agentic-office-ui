@@ -24,6 +24,7 @@ import {
   type XlsxTable,
   type XlsxTableSortDirection,
   type XlsxTableStyleDefinition,
+  type XlsxThemePalette,
   type XlsxWorkbookTab
 } from "@extend-ai/xlsx-core";
 import type { UseXlsxViewerControllerOptions } from "@extend-ai/xlsx-core";
@@ -62,7 +63,7 @@ import {
   resolveDisplayFileName,
   sanitizeSavedWorkbookBytes
 } from "./formatting";
-import { applyCellMutationState } from "./editing";
+import { applyCellMutationState } from "./internal";
 import { loadWorkbookImageAssets } from "./image-assets";
 import { downloadArrayBuffer, downloadBytes, downloadText, downloadUrl } from "./clipboard";
 import type { XlsxControllerContext } from "./navigation";
@@ -393,23 +394,7 @@ export function buildVisibleSheetIndexMap(sheets: XlsxSheetData[]) {
   return new Map(sheets.map((sheet, index) => [sheet.workbookSheetIndex, index]));
 }
 
-export function resolveInheritedCellStyle(sheet: XlsxSheetData | null | undefined, row: number, col: number) {
-  if (!sheet) {
-    return null;
-  }
-
-  const rowStyleId = sheet.rowStyleIds[row];
-  if (rowStyleId !== undefined) {
-    return sheet.styleById[rowStyleId] ?? null;
-  }
-
-  const colStyleId = sheet.colStyleIds[col];
-  if (colStyleId !== undefined) {
-    return sheet.styleById[colStyleId] ?? null;
-  }
-
-  return null;
-}
+export { resolveInheritedCellStyle } from "./formatting";
 
 export function mapWorksheetTables(worksheet: ReturnType<Workbook["getSheet"]> | null): XlsxTable[] {
   const rawTables = (worksheet?.tables ?? []) as Array<Record<string, unknown>>;

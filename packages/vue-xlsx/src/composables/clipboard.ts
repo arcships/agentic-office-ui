@@ -8,22 +8,12 @@ import type {
 } from "@extend-ai/xlsx-core";
 import { resolveWorkbookColor, resolveWorkbookFillStyle } from "@extend-ai/xlsx-core";
 import { cellAddressToA1, normalizeRange, rangeToA1 } from "./selection";
-import { decodeHtmlEntities, escapeHtml, mapBorder } from "./formatting";
-import { resolveInheritedCellStyle } from "./workbook-state";
+import { decodeHtmlEntities, escapeHtml, mapBorder, resolveInheritedCellStyle } from "./formatting";
 import { coerceUserEnteredValue } from "./internal";
 import type { XlsxControllerContext } from "./navigation";
 
-export { INTERNAL_CLIPBOARD_MIME };
+export { INTERNAL_CLIPBOARD_MIME, escapeHtml };
 export type { ClipboardPayload, ClipboardMatrixCell, ClipboardMerge };
-
-export function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 export function parseClipboardText(text: string): string[][] {
   const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");

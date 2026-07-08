@@ -14,6 +14,7 @@ import {
   updateWorkbookImageAnchor,
   type XlsxChart,
   type XlsxChartElementSelection,
+  type XlsxChartLegend,
   type XlsxFormControl,
   type XlsxImage,
   type XlsxImageRect,

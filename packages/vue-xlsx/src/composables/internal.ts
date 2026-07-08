@@ -1,8 +1,10 @@
+import type { Workbook } from "@dukelib/sheets-wasm";
 import type {
   XlsxCellAddress,
   XlsxCellRange,
   XlsxSheetVisibility
 } from "@extend-ai/xlsx-core";
+import { cellAddressToA1 } from "./selection";
 
 export const FORMULA_COUNT_THRESHOLD = 1000;
 export const DEFAULT_ROW_HEIGHT = 24;
@@ -205,4 +207,20 @@ export function scheduleLowPriorityTask(task: () => void) {
 
 export function asFiniteNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export function applyCellMutationState(
+  worksheet: ReturnType<Workbook["getSheet"]>,
+  cell: XlsxCellAddress,
+  state: CellMutationState
+) {
+  if (state.formula) {
+    worksheet.setFormula(cellAddressToA1(cell), state.formula);
+  } else {
+    worksheet.setCell(cellAddressToA1(cell), normalizeCellValue(state.value));
+  }
+
+  if (state.style && typeof state.style === "object") {
+    worksheet.setCellStyleAt(cell.row, cell.col, state.style);
+  }
 }
