@@ -97,3 +97,4 @@ export * from "./pretext-build";
 export * from "./pretext-measure";
 export * from "./tracked-changes";
 export * from "./tracked-changes-gutter";
+export * from "./pagination-plan-iterate";
