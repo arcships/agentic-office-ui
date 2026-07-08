@@ -6,7 +6,7 @@
 // Each module is framework-agnostic (React types replaced with plain
 // equivalents) and kept ≤1000 lines per the migration hard constraints.
 //
-// Completed modules (30):
+// Completed modules (31):
 //   constants.ts           — global constants + theme/handle/wrap-mode tables
 //   performance.ts         — import performance tracing
 //   cache-utils.ts         — shared cache Maps/WeakMaps + cache helpers
@@ -20,7 +20,7 @@
 //   page-measurement.ts    — page height measurement
 //   xml-parsing.ts         — XML parsing (part 1)
 //   style-to-css.ts        — runStyleToCss (part 1)
-//   style-block-css.ts     — paragraphStyleToCss / tableCellStyleToCss
+//   style-block-css.ts     — paragraph border CSS helpers
 //   paragraph-inspect.ts   — paragraph property extraction (part 1)
 //   text-mutation.ts       — text mutation helpers
 //   numbering.ts           — list numbering
@@ -41,10 +41,9 @@
 //   selection-restore.ts   — DOM selection restore heuristics
 //   section-manipulation.ts — section paragraph/image mutation at location
 //
-// Pending modules (see docs/docx-editor-helpers-split-plan.md) — 9 remaining:
+// Pending modules (see docs/docx-editor-helpers-split-plan.md) — 8 remaining:
 //   pagination-plan-core, pagination-plan-iterate, pagination-plan-stabilize,
-//   style-block-css, xml-parsing-extra, tracked-changes, tracked-changes-gutter
-// style-block-css export removed (incomplete, pending redo)
+//   xml-parsing-extra
 
 export * from "./constants";
 export * from "./performance";
@@ -76,6 +75,7 @@ export {
   resolveImageRenderTransformStyle,
 } from "./xml-parsing";
 export * from "./style-to-css";
+export * from "./style-block-css";
 export * from "./paragraph-inspect";
 export * from "./text-mutation";
 export * from "./numbering";

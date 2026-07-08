@@ -2,7 +2,7 @@
 // and paragraph spacing helpers for pagination.
 // Upstream editor.tsx: lines 10541-11590.
 // TODO: estimateParagraphHeightPx, paragraphAvailableTextWidthPx,
-// paragraphLineCountWithinWidth, paragraphBorderInsetPx live in not-yet-ported
+// paragraphLineCountWithinWidth live in not-yet-ported
 // modules. Replace stubs with real imports when those modules land.
 
 import type {
@@ -58,6 +58,7 @@ import {
   tableColumnCount,
 } from "./table-utils";
 import { resolveCollapsedTableHorizontalOuterBleedPx } from "./table-utils-extra";
+import { paragraphBorderInsetPx } from "./style-block-css";
 
 // -- Missing dependency stubs (replace with real imports when modules land) --
 
@@ -90,20 +91,13 @@ const _paraLnCount = makeInjectable<[PNode, number, NumDefs], number>(
   "paragraphLineCountWithinWidth"
 );
 
-const _paraBordInset = makeInjectable<
-  [{ type?: string; size?: number; color?: string } | undefined],
-  number
->("paragraphBorderInsetPx");
-
 export const injectEstimateParagraphHeightPx = _estParaH.inject;
 export const injectParagraphAvailableTextWidthPx = _paraAvailW.inject;
 export const injectParagraphLineCountWithinWidth = _paraLnCount.inject;
-export const injectParagraphBorderInsetPx = _paraBordInset.inject;
 
 const estimateParagraphHeightPx = _estParaH.call;
 const paragraphAvailableTextWidthPx = _paraAvailW.call;
 const paragraphLineCountWithinWidth = _paraLnCount.call;
-const paragraphBorderInsetPx = _paraBordInset.call;
 
 // -- Paragraph spacing introspection --
 
