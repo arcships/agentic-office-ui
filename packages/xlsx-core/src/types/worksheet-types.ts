@@ -1,4 +1,26 @@
 import type { Workbook, Worksheet } from "@dukelib/sheets-wasm";
+import type { XlsxChart, XlsxChartElementSelection, XlsxChartsheet } from "./chart-types";
+import type {
+  XlsxFormControl,
+  XlsxImage,
+  XlsxImageRect,
+  XlsxImageResizeHandlePosition,
+  XlsxShape,
+} from "./image-types";
+
+// ── Cell addressing ──────────────────────────────────────────────────────
+
+export interface XlsxCellAddress {
+  col: number;
+  row: number;
+}
+
+export interface XlsxCellRange {
+  end: XlsxCellAddress;
+  start: XlsxCellAddress;
+}
+
+// ── Theme / styles ───────────────────────────────────────────────────────
 
 export interface XlsxThemePalette {
   colorsByIndex: Record<number, string>;
@@ -20,6 +42,8 @@ export interface XlsxResolvedCellStyle {
 export interface XlsxTableStyleDefinition {
   [elementType: string]: XlsxResolvedCellStyle;
 }
+
+// ── Conditional formatting ───────────────────────────────────────────────
 
 export interface XlsxConditionalFormatValueObject {
   type: string;
@@ -72,6 +96,8 @@ export type XlsxConditionalFormatRule =
   | XlsxConditionalDataBarRule
   | XlsxConditionalIconSetRule;
 
+// ── Data validation / freeze panes ───────────────────────────────────────
+
 export interface XlsxDataValidation {
   allowBlank?: boolean;
   errorMessage?: string;
@@ -91,6 +117,8 @@ export interface XlsxFreezePanes {
 }
 
 export type XlsxSheetVisibility = "hidden" | "veryHidden" | "visible";
+
+// ── Sheet data ───────────────────────────────────────────────────────────
 
 export interface XlsxSheetData {
   cachedFormulaValues: Record<string, string>;
@@ -132,15 +160,7 @@ export interface XlsxSheetData {
   zoomScale?: number;
 }
 
-export interface XlsxCellAddress {
-  col: number;
-  row: number;
-}
-
-export interface XlsxCellRange {
-  end: XlsxCellAddress;
-  start: XlsxCellAddress;
-}
+// ── Cell style inputs ────────────────────────────────────────────────────
 
 /**
  * Color value accepted by persisted workbook style mutation APIs.
@@ -306,6 +326,8 @@ export interface XlsxCellStyleInput {
   protection?: XlsxCellProtectionInput;
 }
 
+// ── Sparklines ───────────────────────────────────────────────────────────
+
 export interface XlsxSparkline {
   color?: string;
   firstColor?: string;
@@ -322,11 +344,15 @@ export interface XlsxSparkline {
   type: "column" | "line" | "winLoss";
 }
 
+// ── Clipboard ────────────────────────────────────────────────────────────
+
 export interface XlsxClipboardData {
   html: string;
   structured: string;
   text: string;
 }
+
+// ── Tables ───────────────────────────────────────────────────────────────
 
 export interface XlsxTableColumn {
   id: number;
@@ -364,356 +390,7 @@ export interface XlsxTableSortState {
   tableName: string;
 }
 
-export interface XlsxImageMarker {
-  col: number;
-  colOffsetEmu: number;
-  row: number;
-  rowOffsetEmu: number;
-}
-
-export type XlsxImageAnchor =
-  | {
-      from: XlsxImageMarker;
-      kind: "one-cell";
-      sizeEmu: {
-        cx: number;
-        cy: number;
-      };
-    }
-  | {
-      kind: "absolute";
-      positionEmu: {
-        x: number;
-        y: number;
-      };
-      sizeEmu: {
-        cx: number;
-        cy: number;
-      };
-    }
-  | {
-      from: XlsxImageMarker;
-      kind: "two-cell";
-      to: XlsxImageMarker;
-    };
-
-export interface XlsxImage {
-  anchor: XlsxImageAnchor;
-  description?: string;
-  editable?: boolean;
-  hyperlink?: string;
-  id: string;
-  mediaPath?: string;
-  mimeType: string;
-  name?: string;
-  sheetIndex: number;
-  src: string;
-  workbookSheetIndex: number;
-  zIndex: number;
-}
-
-export interface XlsxShapeFill {
-  color?: string;
-  none?: boolean;
-  opacity?: number;
-}
-
-export interface XlsxShapeStroke {
-  color?: string;
-  dash?: string;
-  headEndType?: string;
-  none?: boolean;
-  opacity?: number;
-  tailEndType?: string;
-  widthPx?: number;
-}
-
-export interface XlsxShapeTextRun {
-  bold?: boolean;
-  color?: string;
-  fontFamily?: string;
-  fontSizePt?: number;
-  italic?: boolean;
-  text: string;
-  underline?: boolean;
-}
-
-export interface XlsxShapeParagraph {
-  align?: "center" | "justify" | "left" | "right";
-  runs: XlsxShapeTextRun[];
-}
-
-export interface XlsxShapeTextBox {
-  horizontalAlign?: "center" | "left";
-  insetPx?: {
-    bottom: number;
-    left: number;
-    right: number;
-    top: number;
-  };
-  verticalAlign?: "bottom" | "middle" | "top";
-}
-
-export interface XlsxShape {
-  anchor: XlsxImageAnchor;
-  description?: string;
-  fill?: XlsxShapeFill;
-  flipH?: boolean;
-  flipV?: boolean;
-  geometry: string;
-  geometryAdjustments?: Record<string, number>;
-  hidden?: boolean;
-  hyperlink?: string;
-  id: string;
-  name?: string;
-  paragraphs: XlsxShapeParagraph[];
-  rotationDeg?: number;
-  scaleX?: number;
-  scaleY?: number;
-  sheetIndex: number;
-  svgPath?: string;
-  svgViewBox?: {
-    height: number;
-    width: number;
-  };
-  stroke?: XlsxShapeStroke;
-  textBox?: XlsxShapeTextBox;
-  workbookSheetIndex: number;
-  zIndex: number;
-}
-
-export type XlsxFormControlKind =
-  | "button"
-  | "checkbox"
-  | "dropdown"
-  | "editbox"
-  | "group-box"
-  | "label"
-  | "listbox"
-  | "radio"
-  | "scrollbar"
-  | "spinner"
-  | "unknown";
-
-export interface XlsxFormControl {
-  anchor: XlsxImageAnchor;
-  checked?: boolean;
-  fontFamily?: string;
-  fontSizePt?: number;
-  hidden?: boolean;
-  id: string;
-  kind: XlsxFormControlKind;
-  label?: string;
-  linkedCell?: string;
-  name?: string;
-  sheetIndex: number;
-  textAlign?: "center" | "left" | "right";
-  textColor?: string;
-  workbookSheetIndex: number;
-  zIndex: number;
-}
-
-export interface XlsxChartReference {
-  formula?: string;
-  refType?: string;
-  values?: Array<number | string | null>;
-}
-
-export interface XlsxChartDataLabels {
-  pointLabels?: XlsxChartPointDataLabel[];
-  raw?: Record<string, unknown>;
-  showBubbleSize?: boolean;
-  showCategoryName?: boolean;
-  showLegendKey?: boolean;
-  showPercent?: boolean;
-  showSeriesName?: boolean;
-  showValue?: boolean;
-}
-
-export interface XlsxChartPointDataLabel {
-  deleted?: boolean;
-  fontSizePt?: number;
-  index: number;
-  showBubbleSize?: boolean;
-  showCategoryName?: boolean;
-  showPercent?: boolean;
-  showSeriesName?: boolean;
-  showValue?: boolean;
-  x?: number;
-  y?: number;
-}
-
-export interface XlsxChartLegend {
-  overlay?: boolean;
-  position?: string;
-  raw?: Record<string, unknown>;
-}
-
-export interface XlsxChartAxis {
-  crossId?: number;
-  crosses?: string;
-  crossBetween?: string;
-  delete?: boolean;
-  id?: number;
-  labelPosition?: string;
-  logBase?: number;
-  orientation?: string;
-  majorUnit?: number;
-  max?: number;
-  min?: number;
-  majorGridlines?: boolean;
-  majorTickMark?: string;
-  minorUnit?: number;
-  minorGridlines?: boolean;
-  minorTickMark?: string;
-  numberFormat?: {
-    formatCode?: string;
-    sourceLinked?: boolean;
-  };
-  position?: string;
-  raw?: Record<string, unknown>;
-  shapeProperties?: Record<string, unknown>;
-  tickLabelSkip?: number;
-  tickMarkSkip?: number;
-}
-
-export interface XlsxChartPointStyle {
-  color?: string;
-  explosion?: number;
-  index: number;
-  lineColor?: string;
-}
-
-export interface XlsxChartSeries {
-  bubbleSizeRef?: XlsxChartReference | null;
-  bubbleSizes?: Array<number | null>;
-  categories: Array<number | string | null>;
-  categoriesRef?: XlsxChartReference | null;
-  color?: string;
-  dataPoints: unknown[];
-  dataPointStyles?: XlsxChartPointStyle[];
-  formatIdx?: number;
-  hidden?: boolean;
-  id: string;
-  invertIfNegative?: boolean;
-  lineColor?: string;
-  lineWidthPx?: number;
-  marker?: Record<string, unknown>;
-  markerColor?: string;
-  markerLineColor?: string;
-  markerSize?: number;
-  markerSymbol?: string;
-  name?: string;
-  negativeColor?: string;
-  negativeLineColor?: string;
-  raw?: Record<string, unknown>;
-  shapeProperties?: Record<string, unknown>;
-  smooth?: boolean;
-  values: Array<number | null>;
-  valuesRef?: XlsxChartReference | null;
-}
-
-export type XlsxChartElementSelection =
-  | { kind: "chart"; chartId: string }
-  | { kind: "series"; chartId: string; seriesId: string; seriesIndex: number }
-  | { kind: "point"; chartId: string; seriesId: string; seriesIndex: number; pointIndex: number }
-  | { kind: "legendEntry"; chartId: string; seriesId: string; seriesIndex: number };
-
-export type XlsxFormulaTarget =
-  | { kind: "cell"; cell: XlsxCellAddress | null }
-  | { kind: "chartSeries"; chartId: string; seriesId: string; seriesIndex: number }
-  | null;
-
-export interface XlsxChartTypeGroup {
-  axisIds?: number[];
-  chartType: string;
-  dataLabels?: XlsxChartDataLabels | null;
-  gapWidth?: number;
-  is3d?: boolean;
-  overlap?: number;
-  raw?: Record<string, unknown>;
-  series: XlsxChartSeries[];
-  varyColors?: boolean;
-}
-
-export interface XlsxChartWall {
-  fillColor?: string;
-  hidden?: boolean;
-  lineColor?: string;
-  thickness?: number;
-}
-
-export interface XlsxChart {
-  anchor: XlsxImageAnchor;
-  autoTitleDeleted?: boolean;
-  axes: XlsxChartAxis[];
-  axisLabelColor?: string;
-  axisLineColor?: string;
-  categoryAxis?: XlsxChartAxis | null;
-  chartExLayout?: string;
-  chartAreaBorderColor?: string;
-  chartAreaFillColor?: string;
-  chartColorPalette?: string[];
-  chartColorPaletteOffset?: number;
-  chartPath?: string;
-  chartStyleId?: number;
-  chartType: string;
-  dataLabels?: XlsxChartDataLabels | null;
-  displayBlanksAs?: string;
-  editable?: boolean;
-  firstSliceAngle?: number;
-  fontFamily?: string;
-  gapWidth?: number;
-  holeSize?: number;
-  id: string;
-  is3d?: boolean;
-  legend?: XlsxChartLegend | null;
-  name?: string;
-  overlap?: number;
-  plotVisibleOnly?: boolean;
-  raw?: Record<string, unknown>;
-  radarStyle?: string;
-  scatterStyle?: string;
-  roundedCorners?: boolean;
-  shape3d?: string;
-  seriesAxis?: XlsxChartAxis | null;
-  series: XlsxChartSeries[];
-  sheetIndex: number;
-  showDlblsOverMax?: boolean;
-  sideWall?: XlsxChartWall | null;
-  backWall?: XlsxChartWall | null;
-  bubbleScale?: number;
-  bubble3d?: boolean;
-  floor?: XlsxChartWall | null;
-  surfaceMaterial?: string;
-  textColor?: string;
-  title?: string;
-  titleColor?: string;
-  titleFontFamily?: string;
-  typeGroups?: XlsxChartTypeGroup[];
-  valueAxis?: XlsxChartAxis | null;
-  varyColors?: boolean;
-  view3d?: {
-    depthPercent?: number;
-    perspective?: number;
-    rAngAx?: boolean;
-    rotX?: number;
-    rotY?: number;
-  };
-  wireframe?: boolean;
-  workbookSheetIndex: number;
-  zIndex: number;
-}
-
-export interface XlsxChartsheet {
-  chartIds: string[];
-  chartPath?: string;
-  id: string;
-  index: number;
-  name: string;
-  raw?: Record<string, unknown>;
-  workbookSheetIndex?: number;
-}
+// ── Workbook tab ─────────────────────────────────────────────────────────
 
 export interface XlsxWorkbookTab {
   chartsheetIndex?: number;
@@ -726,72 +403,66 @@ export interface XlsxWorkbookTab {
   workbookSheetIndex?: number;
 }
 
-export interface XlsxImageRect {
-  height: number;
-  left: number;
-  top: number;
-  width: number;
+// ── Formula target ───────────────────────────────────────────────────────
+
+export type XlsxFormulaTarget =
+  | { kind: "cell"; cell: XlsxCellAddress | null }
+  | { kind: "chartSeries"; chartId: string; seriesId: string; seriesIndex: number }
+  | null;
+
+// ── Cell style context ───────────────────────────────────────────────────
+
+export interface XlsxCellStyleContext {
+  /** Address of the cell being styled. */
+  cell: XlsxCellAddress;
+  /** True when the cell is part of a selected chart's highlighted source range. */
+  hasChartHighlight: boolean;
+  /** True when a conditional format (color scale, data bar, or icon set) applies to the cell. */
+  hasConditionalFormat: boolean;
+  /** True when the cell has a hyperlink. */
+  hasHyperlink: boolean;
+  /** True when the cell has a data validation rule. */
+  hasValidation: boolean;
+  /** True when the cell is the anchor of a merged range. */
+  isMerged: boolean;
+  /** True when the cell is a table header cell. */
+  isTableHeader: boolean;
+  /**
+   * The fully resolved style the viewer computed for this cell, combining the workbook's
+   * own formatting with the viewer's built-in styling. Treat this as read-only; returning
+   * a partial style from `getCellStyle` merges on top of it.
+   */
+  resolvedStyle: Record<string, string | number | undefined>;
+  /** Display name of the sheet the cell belongs to. */
+  sheetName: string;
+  /** The cell's resolved display value. */
+  value: string;
+  /** Workbook sheet index of the cell's sheet. */
+  workbookSheetIndex: number;
 }
 
-export type XlsxImageResizeHandlePosition = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
+// ── Table header menu ────────────────────────────────────────────────────
 
-export interface XlsxImageRenderProps {
-  /** The built-in image element that react-xlsx would render without customization. */
-  defaultNode: unknown;
-  /** Workbook image metadata, including source, anchor, name, alt text, and editability. */
-  image: XlsxImage;
-  /** The image rectangle in viewer pixels, including the current zoom level. */
-  rect: XlsxImageRect;
-  /** Absolute positioning styles to apply when rendering a replacement image node. */
-  style: Record<string, string | number | undefined>;
+export interface XlsxTableHeaderMenuRenderProps {
+  /** Address of the table header cell that owns this menu. */
+  cell: XlsxCellAddress;
+  /** Table column metadata for the active header. */
+  column: XlsxTableColumn;
+  /** Current sort direction for this column, or `null` when unsorted. */
+  direction: XlsxTableSortDirection | null;
+  /** Sorts the table by this column in ascending order. */
+  sortAscending: () => void;
+  /** Sorts the table by this column in descending order. */
+  sortDescending: () => void;
+  /** Table metadata for the active header. */
+  table: XlsxTable;
+  /** Built-in trigger text/icon. Useful when composing your own trigger button. */
+  triggerIcon: string;
+  /** Props that must be applied to your menu trigger button so grid selection does not receive the click. */
+  triggerProps: Record<string, unknown>;
 }
 
-export interface XlsxImageSelectionRenderProps {
-  /** The built-in selected-image outline and resize handles. */
-  defaultNode: unknown;
-  /** Returns pointer handlers and styles for a custom resize handle. */
-  getHandleProps: (
-    position: XlsxImageResizeHandlePosition
-  ) => {
-    onPointerDown: (event: Record<string, unknown>) => void;
-    style: Record<string, string | number | undefined>;
-  };
-  /** The currently selected image. */
-  image: XlsxImage;
-  /** The selected image rectangle in viewer pixels, including the current zoom level. */
-  rect: XlsxImageRect;
-}
-
-export interface XlsxChartLoadingRenderProps {
-  /** The chart that is waiting for its renderer or data. */
-  chart: XlsxChart;
-  /** The built-in chart loading placeholder. */
-  defaultNode: unknown;
-  /** The chart rectangle in viewer pixels, including the current zoom level. */
-  rect: XlsxImageRect;
-}
-
-export interface XlsxFileTooLargeRenderProps {
-  /** The built-in file-too-large message. */
-  defaultNode: unknown;
-  /** File name displayed in the viewer UI. */
-  displayFileName: string;
-  /** Actual file size in bytes. */
-  fileSizeBytes: number;
-  /** Configured maximum file size in bytes. */
-  maxFileSizeBytes: number;
-}
-
-export interface XlsxScrollerRenderProps {
-  /** Workbook grid content that should be rendered inside the scrollable viewport. */
-  children: unknown;
-  /** Props that must be applied to the actual scrollable viewport element. */
-  viewportProps: Record<string, unknown> & {
-    ref: unknown;
-    style: Record<string, string | number | undefined>;
-    tabIndex: number;
-  };
-}
+// ── Viewer controller ────────────────────────────────────────────────────
 
 export interface UseXlsxViewerControllerOptions {
   /**
@@ -1057,6 +728,8 @@ export interface XlsxViewerController {
   addSheet: (name?: string) => void;
 }
 
+// ── Sub-controller interfaces ────────────────────────────────────────────
+
 export interface XlsxViewerSelection {
   activeCell: XlsxCellAddress | null;
   activeCellAddress: string | null;
@@ -1228,6 +901,8 @@ export interface XlsxViewerCharts {
   updateChart: (id: string, patch: Partial<XlsxChart>) => void;
 }
 
+// ── Thumbnails ───────────────────────────────────────────────────────────
+
 export type XlsxSheetThumbnailResolution =
   | number
   | {
@@ -1258,50 +933,26 @@ export interface XlsxViewerThumbnails {
   thumbnails: XlsxSheetThumbnail[];
 }
 
-export interface XlsxTableHeaderMenuRenderProps {
-  /** Address of the table header cell that owns this menu. */
-  cell: XlsxCellAddress;
-  /** Table column metadata for the active header. */
-  column: XlsxTableColumn;
-  /** Current sort direction for this column, or `null` when unsorted. */
-  direction: XlsxTableSortDirection | null;
-  /** Sorts the table by this column in ascending order. */
-  sortAscending: () => void;
-  /** Sorts the table by this column in descending order. */
-  sortDescending: () => void;
-  /** Table metadata for the active header. */
-  table: XlsxTable;
-  /** Built-in trigger text/icon. Useful when composing your own trigger button. */
-  triggerIcon: string;
-  /** Props that must be applied to your menu trigger button so grid selection does not receive the click. */
-  triggerProps: Record<string, unknown>;
+// ── Render props ─────────────────────────────────────────────────────────
+
+export interface XlsxFileTooLargeRenderProps {
+  /** The built-in file-too-large message. */
+  defaultNode: unknown;
+  /** File name displayed in the viewer UI. */
+  displayFileName: string;
+  /** Actual file size in bytes. */
+  fileSizeBytes: number;
+  /** Configured maximum file size in bytes. */
+  maxFileSizeBytes: number;
 }
 
-export interface XlsxCellStyleContext {
-  /** Address of the cell being styled. */
-  cell: XlsxCellAddress;
-  /** True when the cell is part of a selected chart's highlighted source range. */
-  hasChartHighlight: boolean;
-  /** True when a conditional format (color scale, data bar, or icon set) applies to the cell. */
-  hasConditionalFormat: boolean;
-  /** True when the cell has a hyperlink. */
-  hasHyperlink: boolean;
-  /** True when the cell has a data validation rule. */
-  hasValidation: boolean;
-  /** True when the cell is the anchor of a merged range. */
-  isMerged: boolean;
-  /** True when the cell is a table header cell. */
-  isTableHeader: boolean;
-  /**
-   * The fully resolved style the viewer computed for this cell, combining the workbook's
-   * own formatting with the viewer's built-in styling. Treat this as read-only; returning
-   * a partial style from `getCellStyle` merges on top of it.
-   */
-  resolvedStyle: Record<string, string | number | undefined>;
-  /** Display name of the sheet the cell belongs to. */
-  sheetName: string;
-  /** The cell's resolved display value. */
-  value: string;
-  /** Workbook sheet index of the cell's sheet. */
-  workbookSheetIndex: number;
+export interface XlsxScrollerRenderProps {
+  /** Workbook grid content that should be rendered inside the scrollable viewport. */
+  children: unknown;
+  /** Props that must be applied to the actual scrollable viewport element. */
+  viewportProps: Record<string, unknown> & {
+    ref: unknown;
+    style: Record<string, string | number | undefined>;
+    tabIndex: number;
+  };
 }
