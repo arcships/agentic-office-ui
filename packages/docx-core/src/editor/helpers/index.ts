@@ -57,6 +57,23 @@ export * from "./default-model";
 export * from "./state";
 export * from "./page-measurement";
 export * from "./xml-parsing";
+export {
+  extractBalancedTagRanges,
+  trackedChangeKindFromTagName,
+  normalizeTrackedChangeSnippet,
+  formatTrackedChangeDate,
+  stripTextBoxContentFromRunXml,
+  parseTrackedRunTokens,
+  xmlBooleanFlag,
+  xmlColorValue,
+  parseRunStyleFromRunXml,
+  balancedTagXmlBlocks,
+  mergeTextRunStyles,
+  parseParagraphAlignmentFromXml,
+  parseDrawingImageTransformFromSourceXml,
+  joinCssTransforms,
+  resolveImageRenderTransformStyle,
+} from "./xml-parsing-extra";
 export * from "./style-to-css";
 export * from "./paragraph-inspect";
 export * from "./text-mutation";
