@@ -1,44 +1,37 @@
-# style-block-css review
+# style-block-css Review
 
-**File:** `packages/docx-core/src/editor/helpers/style-block-css.ts`
-**Date:** 2026-07-08
-**Status:** ✅ pass
+**Date**: 2026-07-08
+**Module**: `packages/docx-core/src/editor/helpers/style-block-css.ts`
+**Status**: ✅ pass
 
-## 1. Typecheck
+## Checklist
 
-```sh
-pnpm --filter @extend-ai/docx-core typecheck
-# tsc --noEmit
-```
+| Check | Result |
+|---|---|
+| Typecheck zero errors | ✅ `tsc --noEmit` passed with no output |
+| File exists and non-empty | ✅ 51 lines, 4 exports |
+| No React residuals | ✅ Zero React imports |
+| No duplicate functions | ✅ All 4 exports defined only in this module |
 
-Zero errors. All type imports (`ParagraphBorderSet`, `ParagraphIndent`, `ParagraphStyleDefinition`, `TableBorderSet`, `TableCellStyle`, `TableRowStyle`) resolve correctly from `../../engine/types`. Import of `twipsToPixels` from `../../viewer/section-layout` resolves correctly.
+## Module summary
 
-## 2. File existence and content
+Extracts paragraph border CSS helpers from upstream `editor.tsx:15036-15079`. Four exports:
 
-File exists at `packages/docx-core/src/editor/helpers/style-block-css.ts` (115 lines, 5 functions). Non-empty.
+- `paragraphBorderToCss` — delegates to `tableBorderToCss` (shared shape between `ParagraphBorderStyle` and `TableBorderStyle`)
+- `paragraphBorderPaddingPx` — border space in pixels via `pointsToPixels`
+- `paragraphBorderStrokeWidthPx` — stroke width in pixels from `sizeEighthPt` (eighth-points), min 0.5px
+- `paragraphBorderInsetPx` — total inset = stroke + padding
 
-Barrel export registered in `index.ts` line 46: `export * from "./style-block-css"`.
+## Dependencies
 
-## 3. React residuals
+- Imports from `table-utils.ts`: `normalizeBorderType`, `tableBorderToCss` — intentional shared utilities
+- Imports from `ooxml-helpers.ts`: `pointsToPixels` — standard OOXML conversion
+- Consumer: `line-height-table.ts` uses `paragraphBorderInsetPx` (4 call sites)
 
-No React residuals. The only mentions of `react`, `jsx`, `tsx` are in comments documenting the upstream extraction source (`editor.tsx`). No `className`, no hooks (`useState`, `useEffect`, `useMemo`, `useCallback`), no `createElement`, no JSX syntax. Module is framework-agnostic.
+## Type compatibility
 
-## 4. Duplicate function check
+`paragraphBorderToCss` casts `ParagraphBorderStyle` to `TableBorderStyle` — both share `type`, `color`, `sizeEighthPt`, `spacePt`, `shadow` fields. No runtime risk.
 
-All 5 functions exist only in this file — no duplicates anywhere in `packages/docx-core/src`:
+## Verdict
 
-| Function | Defined in | Duplicated elsewhere? |
-|---|---|---|
-| `toFiniteNumber` | style-block-css.ts (private) | No |
-| `twipsToCssPx` | style-block-css.ts (private) | No |
-| `borderStyleToCss` | style-block-css.ts (private) | No |
-| `paragraphStyleToCss` | style-block-css.ts (exported) | No |
-| `tableCellStyleToCss` | style-block-css.ts (exported) | No |
-
-`twipsToPixels` is imported from `viewer/section-layout.ts` (the canonical exported definition) rather than redefined — correct re-use.
-
-No overlap with the sister module `style-to-css.ts`, which handles run-level/inline CSS conversion (font, color, decoration, highlight, link) while `style-block-css.ts` handles block-level CSS conversion (paragraph margins/indents/borders, table cell padding/height/borders).
-
-## 5. Module register
-
-Listed as completed in `index.ts` header comment (line 23: `style-block-css.ts — paragraphStyleToCss / tableCellStyleToCss`) and exported (line 46).
+Module is clean, correctly extracted, typecheck-clean, and has no duplication with existing helpers.
