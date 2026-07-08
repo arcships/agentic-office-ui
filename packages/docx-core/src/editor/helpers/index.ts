@@ -20,6 +20,7 @@
 //   page-measurement.ts    — page height measurement
 //   xml-parsing.ts         — XML parsing (part 1)
 //   style-to-css.ts        — runStyleToCss (part 1)
+//   style-block-css.ts     — paragraphStyleToCss / tableCellStyleToCss
 //   paragraph-inspect.ts   — paragraph property extraction (part 1)
 //   text-mutation.ts       — text mutation helpers
 //   numbering.ts           — list numbering
@@ -42,6 +43,7 @@
 //   pretext-build, pretext-measure, line-height-table, table-height,
 //   pagination-plan-core, pagination-plan-iterate, pagination-plan-stabilize,
 //   style-block-css, xml-parsing-extra, tracked-changes, tracked-changes-gutter
+export * from "./style-block-css";
 
 export * from "./constants";
 export * from "./performance";
