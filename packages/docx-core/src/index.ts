@@ -23,8 +23,8 @@ export {
 } from "./layout";
 export * from "./layout";
 
-// Editor operations (complete)
-export * from "./editor/editor-ops";
+// Editor operations — paragraph-ops + table-ops + run-style-ops (split from editor-ops.ts)
+export * from "./editor";
 
 // Editor helpers (modular split in progress — see editor/helpers/index.ts)
 export * from "./editor/helpers";

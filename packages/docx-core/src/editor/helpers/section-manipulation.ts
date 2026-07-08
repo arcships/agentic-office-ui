@@ -13,8 +13,10 @@ import type {
 import { cloneDocModel } from "../../engine/clone";
 import {
   updateParagraphText,
+} from "../paragraph-ops";
+import {
   updateTableCellParagraphText
-} from "../editor-ops";
+} from "../table-ops";
 import type {
   DocxSectionImageLocation,
   DocxSectionParagraphLocation,

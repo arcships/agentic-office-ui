@@ -87,7 +87,7 @@ function canUseDocxImportWorker(options: DocxImportOptions): boolean {
 function createDocxImportWorker(): Worker {
   return new Worker(new URL("./docx-import-worker.js", import.meta.url), {
     type: "module",
-    name: "react-docx-import",
+    name: "@extend-ai/docx-core-import",
   });
 }
 

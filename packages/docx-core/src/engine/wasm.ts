@@ -22,7 +22,7 @@ let overrideSource: WasmSource | undefined;
 export function setWasmSource(source: WasmSource): void {
   if (initPromise) {
     throw new Error(
-      "react-docx: setWasmSource must be called before the first parse/serialize call initializes WASM"
+      "@extend-ai/docx-core: setWasmSource must be called before the first parse/serialize call initializes WASM"
     );
   }
   overrideSource = source;
@@ -56,9 +56,9 @@ async function defaultWasmSource(): Promise<WasmSource> {
   const response = await fetch(wasmUrl);
   if (!response.ok) {
     throw new Error(
-      `react-docx: failed to load the bundled WebAssembly binary from ${wasmUrl.href} ` +
+      `@extend-ai/docx-core: failed to load the bundled WebAssembly binary from ${wasmUrl.href} ` +
         `(${response.status} ${response.statusText}). If your bundler did not emit this asset, ` +
-        "import @extend-ai/react-docx/docx_wasm_bg.wasm?url and pass it to setWasmSource() before importing a document."
+        "import @extend-ai/docx-core/docx_wasm_bg.wasm?url and pass it to setWasmSource() before importing a document."
     );
   }
   return response;
@@ -72,7 +72,7 @@ export async function initWasm(source?: WasmSource): Promise<InitOutput> {
       .catch((error: unknown) => {
         if (error instanceof WebAssembly.CompileError) {
           throw new Error(
-            "react-docx: the bundled WebAssembly binary failed to compile. It requires " +
+            "@extend-ai/docx-core: the bundled WebAssembly binary failed to compile. It requires " +
               "WebAssembly SIMD support (Chrome 91+, Firefox 89+, Safari 16.4+, Node 16.4+). " +
               `Original error: ${error.message}`,
             { cause: error }
