@@ -9,8 +9,10 @@ import XlsxViewerPage from "./pages/XlsxViewerPage.vue"
 import PdfViewerPage from "./pages/PdfViewerPage.vue"
 import ComponentsPage from "./pages/ComponentsPage.vue"
 import { setWasmSource as setXlsxWasmSource } from "@extend-ai/xlsx-core"
+import { setWasmSource as setDocxWasmSource } from "@extend-ai/docx-core"
 
 setXlsxWasmSource("/duke_sheets_wasm_bg.wasm")
+setDocxWasmSource("/docx_wasm_bg.wasm")
 
 const router = createRouter({
   history: createWebHashHistory(),

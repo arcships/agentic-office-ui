@@ -57,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, provide, watch, computed, onMounted, onUnmounted } from "vue"
+import { ref, provide, watch, onMounted, onUnmounted } from "vue"
 import type {
   DocxEditorController,
   DocxContextMenuContext,
@@ -72,6 +72,7 @@ import DocxDragOverlay from "./DocxDragOverlay.vue"
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
   defineProps<{
+    editor?: DocxEditorController
     file?: ArrayBuffer
     model?: import("@extend-ai/docx-core").DocModel
     className?: string
@@ -83,9 +84,12 @@ const props = withDefaults(
 )
 
 // ── Controller ─────────────────────────────────────────────────────
-const controller = useDocxEditor({
-  initialFileName: props.file ? "(imported document)" : "(new document)",
-})
+const internalController = !props.editor
+  ? useDocxEditor({
+      initialFileName: props.file ? "(imported document)" : "(new document)",
+    })
+  : null
+const controller = props.editor ?? internalController!
 
 // Provide controller to all child components
 provide("docxEditorController", controller)
@@ -94,7 +98,7 @@ provide("docxEditorController", controller)
 watch(
   () => props.file,
   async (newFile) => {
-    if (newFile && controller) {
+    if (newFile && controller && !props.editor) {
       await controller.importDocxFile(
         new File([newFile], "document.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })
       )
