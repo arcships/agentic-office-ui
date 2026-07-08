@@ -26,7 +26,7 @@ import {
   GRID_HEADER_HEIGHT,
   GRID_ROW_HEADER_WIDTH
 } from "./internal";
-import type { XlsxControllerContext } from "./navigation";
+import type { XlsxControllerContext } from "./internal";
 
 // Re-export image/chart asset parsing helpers so consumers can import the full
 // surface from the chart-controller module.
@@ -311,28 +311,12 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
 
   function setChartRect(id: string, rect: XlsxImageRect) {
     const hydratedChartAssets = ctx.ensureChartAssetsHydrated(ctx.workbook.value, ctx.sheets.value);
-    console.info("[react-xlsx debug] setChartRect", {
-      hasActiveSheet: Boolean(ctx.activeSheet.value),
-      hasHydratedChartAssets: Boolean(hydratedChartAssets),
-      hasImageAssets: Boolean(ctx.imageAssetsRef.value),
-      hasWorkbook: Boolean(ctx.workbook.value),
-      id,
-      readOnly: ctx.readOnly.value,
-      rect
-    });
     if (ctx.readOnly.value || !ctx.workbook.value || !ctx.activeSheet.value || !ctx.imageAssetsRef.value || !hydratedChartAssets) {
       return;
     }
 
     const worksheet = ctx.workbook.value.getSheet(ctx.activeSheet.value.workbookSheetIndex);
     const currentChart = getChartById(id);
-    console.info("[react-xlsx debug] currentChart", {
-      activeWorkbookSheetIndex: ctx.activeSheet.value.workbookSheetIndex,
-      editable: currentChart?.editable,
-      found: Boolean(currentChart),
-      originCount: hydratedChartAssets.chartOriginsById.size,
-      workbookSheetIndex: currentChart?.workbookSheetIndex
-    });
     if (!currentChart || currentChart.editable === false || currentChart.workbookSheetIndex !== ctx.activeSheet.value.workbookSheetIndex) {
       return;
     }
@@ -345,8 +329,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     });
 
     ctx.recordHistoryBeforeMutation();
-    const didUpdateAnchor = updateWorkbookChartAnchor(ctx.imageAssetsRef.value, hydratedChartAssets, id, nextAnchor);
-    console.info("[react-xlsx debug] updateWorkbookChartAnchor", { didUpdateAnchor, nextAnchor });
+    updateWorkbookChartAnchor(ctx.imageAssetsRef.value, hydratedChartAssets, id, nextAnchor);
 
     hydratedChartAssets.chartsByWorkbookSheetIndex = hydratedChartAssets.chartsByWorkbookSheetIndex.map((sheetCharts) => (
       sheetCharts.map((chart) => chart.id === id ? { ...chart, anchor: nextAnchor } : chart)

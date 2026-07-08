@@ -1,8 +1,26 @@
+import type { ComputedRef, Ref, ShallowRef } from "vue";
 import type { Workbook } from "@dukelib/sheets-wasm";
 import type {
   XlsxCellAddress,
   XlsxCellRange,
-  XlsxSheetVisibility
+  XlsxChart,
+  XlsxChartElementSelection,
+  XlsxChartsheet,
+  XlsxFormControl,
+  XlsxImage,
+  XlsxShape,
+  XlsxSheetData,
+  XlsxTable,
+  XlsxTableSortState,
+  XlsxWorkbookTab,
+  XlsxSheetVisibility,
+  UseXlsxViewerControllerOptions
+} from "@extend-ai/xlsx-core";
+import type {
+  XlsxWorkerClient,
+  WorkbookChartAssets,
+  WorkbookImageAssets,
+  WorkbookImageSheetOrigin
 } from "@extend-ai/xlsx-core";
 import { cellAddressToA1 } from "./selection";
 
@@ -224,3 +242,110 @@ export function applyCellMutationState(
     worksheet.setCellStyleAt(cell.row, cell.col, state.style);
   }
 }
+
+/**
+ * Shared mutable state and helpers across all controller domain modules.
+ * Defined once inside `useXlsxViewerController` and passed to each domain
+ * factory so the closure body can be split into ≤1000-line files.
+ */
+export interface XlsxControllerContext {
+  // Options (destructured from UseXlsxViewerControllerOptions)
+  file: ArrayBuffer | undefined;
+  src: string | undefined;
+  fileName: string | undefined;
+  maxFileSizeBytes: number;
+  deferLoadingAboveBytes: number;
+  skipXmlParsing: boolean;
+  showHiddenSheets: boolean;
+  workerSupported: boolean;
+  shouldDeferLoading: boolean;
+  canUseWorkerForRequestedReadOnly: boolean;
+  requestedReadOnly: boolean;
+
+  // Core reactive state
+  isLoading: Ref<boolean>;
+  error: Ref<Error | null>;
+  workbook: Ref<Workbook | null>;
+  sheets: Ref<XlsxSheetData[]>;
+  chartsByWorkbookSheetIndex: Ref<XlsxChart[][]>;
+  chartsheets: Ref<XlsxChartsheet[]>;
+  tabs: Ref<XlsxWorkbookTab[]>;
+  isChartsLoading: Ref<boolean>;
+  workerTablesByWorkbookSheetIndex: Ref<XlsxTable[][]>;
+  formControlsByWorkbookSheetIndex: Ref<XlsxFormControl[][]>;
+  imagesByWorkbookSheetIndex: Ref<XlsxImage[][]>;
+  shapesByWorkbookSheetIndex: Ref<XlsxShape[][]>;
+  activeSheetIndex: Ref<number>;
+  activeTabIndex: Ref<number>;
+  zoomScaleOverridesByTabId: Ref<Record<string, number>>;
+  activeCell: Ref<XlsxCellAddress | null>;
+  selection: Ref<XlsxCellRange | null>;
+  selectedChartId: Ref<string | null>;
+  selectedChartElement: Ref<XlsxChartElementSelection | null>;
+  selectedImageId: Ref<string | null>;
+  revision: Ref<number>;
+  selectionAnchorRef: ShallowRef<XlsxCellAddress | null>;
+  undoStackRef: ShallowRef<HistoryEntry[]>;
+  redoStackRef: ShallowRef<HistoryEntry[]>;
+  isApplyingHistoryRef: ShallowRef<boolean>;
+  historyRevision: Ref<number>;
+  shouldAutoCalculate: Ref<boolean>;
+  workerCellSnapshotRevision: Ref<number>;
+  isWorkerBacked: Ref<boolean>;
+  sortState: Ref<XlsxTableSortState | null>;
+  forcedReadOnly: Ref<boolean>;
+  deferredBufferRef: ShallowRef<ArrayBuffer | null>;
+  deferredLoadFileSize: Ref<number | null>;
+  imageAssetsRef: ShallowRef<WorkbookImageAssets | null>;
+  chartAssetsRef: ShallowRef<WorkbookChartAssets | null>;
+  chartLoadRequestTokenRef: ShallowRef<number>;
+  chartDisplayFallbackCleanupRef: ShallowRef<(() => void) | null>;
+  sheetOriginsRef: ShallowRef<Array<WorkbookImageSheetOrigin | null>>;
+  workerClientRef: ShallowRef<XlsxWorkerClient | null>;
+  workerCellSnapshotCacheRef: ShallowRef<Map<string, { displayValue: string; formula: string }>>;
+
+  // Derived computeds defined in the orchestrator
+  activeTab: ComputedRef<XlsxWorkbookTab | null>;
+  activeSheet: ComputedRef<XlsxSheetData | null>;
+  deferredMetadataCell: ComputedRef<XlsxCellAddress | null>;
+  deferredMetadataSheet: ComputedRef<XlsxSheetData | null>;
+  activeZoomTabKey: ComputedRef<string>;
+  defaultZoomScale: ComputedRef<number>;
+  zoomScale: ComputedRef<number>;
+  canZoomIn: ComputedRef<boolean>;
+  canZoomOut: ComputedRef<boolean>;
+  readOnly: ComputedRef<boolean>;
+  canResizeReadOnly: ComputedRef<boolean>;
+  displayFileName: ComputedRef<string>;
+  visibleSheetIndexByWorkbookSheetIndex: ComputedRef<Map<number, number>>;
+
+  // Shared mutation helpers (defined in editing/history domains, referenced widely)
+  refreshWorkbookState: (targetWorkbook: Workbook) => void;
+  maybeRecalculateWorkbook: (targetWorkbook: Workbook) => void;
+  getActiveWorksheet: () => ReturnType<Workbook["getSheet"]> | null;
+  setChartAssets: (assets: WorkbookChartAssets | null) => void;
+  setImageAssets: (assets: WorkbookImageAssets | null) => void;
+  clearImageAssets: () => void;
+  clearChartAssets: () => void;
+  getWorkerClient: () => XlsxWorkerClient;
+  disposeWorkerClient: () => void;
+  startChartDisplayHydration: (buffer: ArrayBuffer, targetWorkbook: Workbook, targetSheets: XlsxSheetData[]) => void;
+  loadWorkbookOnMainThread: (buffer: ArrayBuffer) => Promise<{ imageAssets: WorkbookImageAssets; parsedWorkbook: { shouldAutoCalculate: boolean; workbook: Workbook } }>;
+  hasIncompleteWorkerChartSnapshot: (snapshot: { chartsByWorkbookSheetIndex: XlsxChart[][] }) => boolean;
+  shouldFallbackFromWorkerError: (error: unknown) => boolean;
+  ensureChartAssetsHydrated: (targetWorkbook: Workbook | null, targetSheets: XlsxSheetData[]) => WorkbookChartAssets | null;
+  shouldForceReadOnlyForBuffer: (bufferByteLength: number) => boolean;
+  shouldUseWorkerForReadOnlyLoad: (willForceReadOnly: boolean) => boolean;
+  createSavedWorkbookBytes: (targetWorkbook: Workbook) => Uint8Array;
+  captureCellMutationState: (cell: XlsxCellAddress) => CellMutationState | null;
+  recordHistoryBeforeMutation: () => void;
+  recordCellEditHistory: (cell: XlsxCellAddress, before: CellMutationState, after: CellMutationState) => void;
+  recordRangeEditHistory: (mutations: RangeCellMutation[], selectionAfter: XlsxCellRange | null, activeCellAfter: XlsxCellAddress | null) => void;
+  setChartSeriesFormula: (chartId: string, seriesIndex: number, formula: string) => boolean;
+  selectedFormulaTarget: ComputedRef<
+    | { kind: "chartSeries"; chartId: string; seriesId: string; seriesIndex: number }
+    | { kind: "cell"; cell: XlsxCellAddress | null }
+  >;
+}
+
+export type { UseXlsxViewerControllerOptions };

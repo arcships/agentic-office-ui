@@ -16,7 +16,7 @@ import {
   type HistoryEntry
 } from "./internal";
 import { buildSheetList, buildVisibleSheetIndexMap } from "./workbook-state";
-import type { XlsxControllerContext } from "./navigation";
+import type { XlsxControllerContext } from "./internal";
 
 export { applyCellMutationState, cloneCellStyle, coerceUserEnteredValue, normalizeCellValue, pushHistoryEntry };
 export type { CellMutationState, HistoryEntry };
@@ -128,10 +128,10 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     }
 
     const trimmedFormula = formula.trim();
-    if (!formula.trim()) {
+    if (!trimmedFormula) {
       worksheet.setCell(cellAddressToA1(cell), "");
     } else {
-      worksheet.setFormula(cellAddressToA1(cell), formula);
+      worksheet.setFormula(cellAddressToA1(cell), trimmedFormula);
     }
     const after = ctx.captureCellMutationState(cell);
     if (!after) {

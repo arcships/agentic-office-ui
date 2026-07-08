@@ -10,7 +10,7 @@ import { resolveWorkbookColor, resolveWorkbookFillStyle } from "@extend-ai/xlsx-
 import { cellAddressToA1, normalizeRange, rangeToA1 } from "./selection";
 import { decodeHtmlEntities, escapeHtml, mapBorder, resolveInheritedCellStyle } from "./formatting";
 import { coerceUserEnteredValue } from "./internal";
-import type { XlsxControllerContext } from "./navigation";
+import type { XlsxControllerContext } from "./internal";
 
 export { INTERNAL_CLIPBOARD_MIME, escapeHtml };
 export type { ClipboardPayload, ClipboardMatrixCell, ClipboardMerge };

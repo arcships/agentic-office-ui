@@ -66,7 +66,7 @@ import {
 import { applyCellMutationState } from "./internal";
 import { loadWorkbookImageAssets } from "./image-assets";
 import { downloadArrayBuffer, downloadBytes, downloadText, downloadUrl } from "./clipboard";
-import type { XlsxControllerContext } from "./navigation";
+import type { XlsxControllerContext } from "./internal";
 
 export {
   resolveDisplayFileName,
