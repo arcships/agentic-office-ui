@@ -3,10 +3,25 @@
 // Upstream editor.tsx: lines 14888-14904 (resolveHighlightColor) and
 // 15636-15863 (themedRunColor ... trackedDeletedStyle).
 
-import type { FormFieldRunNode, TextRunNode } from "../../engine/types";
+import type {
+  FormFieldRunNode,
+  NumberingDefinitionSet,
+  ParagraphNode,
+  TextRunNode
+} from "../../engine/types";
 import { HIGHLIGHT_TO_CSS, SCRIPT_FONT_SCALE } from "./constants";
 import type { DocxDocumentTheme } from "./editor-types";
 import type { ParagraphTrackedInlineChange } from "./tracked-changes";
+import { resolveListParagraphIndent } from "./xml-parsing-extra";
+import { twipsToSignedPixels } from "./ooxml-helpers";
+import {
+  measureTextWidthPx,
+  paragraphBaseFontSizePx
+} from "./line-height";
+import { tableOfContentsLeadingLeftTabStopPx } from "./field-helpers";
+import { isTableOfContentsParagraph } from "./paragraph-toc";
+import type { ParagraphNumberingLabel } from "./numbering";
+import { clampNumber } from "./zoom-utils";
 
 export function resolveHighlightColor(value?: string): string | undefined {
   if (!value) {
@@ -253,3 +268,114 @@ export function trackedDeletedStyle(
   };
 }
 
+
+// ---- Numbering marker CSS helpers ----
+// Upstream editor.tsx: 15325-15432
+
+export function resolveNumberingMarkerBoxWidthPx(
+  paragraph: ParagraphNode,
+  numberingDefinitions?: NumberingDefinitionSet,
+  numberingLabel?: ParagraphNumberingLabel
+): number | undefined {
+  const resolvedIndent = resolveListParagraphIndent(
+    paragraph,
+    numberingDefinitions
+  );
+  const hangingIndentPx = twipsToSignedPixels(resolvedIndent?.hangingTwips);
+  const firstLineIndentPx = twipsToSignedPixels(resolvedIndent?.firstLineTwips);
+  const candidateWidthPx =
+    Number.isFinite(hangingIndentPx) && Math.abs(hangingIndentPx as number) > 0
+      ? Math.abs(hangingIndentPx as number)
+      : Number.isFinite(firstLineIndentPx) && (firstLineIndentPx as number) < 0
+      ? Math.abs(firstLineIndentPx as number)
+      : undefined;
+
+  const labelTextForWidth = numberingLabel?.imageSrc
+    ? numberingLabel.trailingText ?? ""
+    : numberingLabel?.text ?? "";
+  const normalizedLabelTextForWidth = labelTextForWidth
+    .replace(/\t/g, " ")
+    .replace(/\u00a0/g, " ");
+  const measuredLabelWidthPx =
+    normalizedLabelTextForWidth.length > 0
+      ? Math.ceil(
+          measureTextWidthPx(
+            normalizedLabelTextForWidth,
+            numberingLabel?.style,
+            paragraphBaseFontSizePx(paragraph)
+          )
+        ) + 4
+      : 0;
+
+  const imageWidthPx = numberingLabel?.imageWidthPx;
+  const tocLeadingLeftTabStopPx =
+    tableOfContentsLeadingLeftTabStopPx(paragraph);
+  const tocLabelGapPx = isTableOfContentsParagraph(paragraph) ? 6 : 0;
+  const tocMarkerTargetWidthPx =
+    Number.isFinite(tocLeadingLeftTabStopPx) &&
+    (tocLeadingLeftTabStopPx as number) > 0
+      ? Math.min(
+          Math.ceil(tocLeadingLeftTabStopPx as number),
+          Math.max(
+            measuredLabelWidthPx + tocLabelGapPx,
+            measuredLabelWidthPx + 16
+          )
+        )
+      : 0;
+  const minimumVisualWidthPx = Math.max(
+    measuredLabelWidthPx + tocLabelGapPx,
+    Number.isFinite(imageWidthPx) && (imageWidthPx as number) > 0
+      ? Math.ceil(imageWidthPx as number) + 2
+      : 0,
+    tocMarkerTargetWidthPx
+  );
+
+  if (!Number.isFinite(candidateWidthPx) || (candidateWidthPx as number) < 8) {
+    return minimumVisualWidthPx > 0
+      ? clampNumber(Math.round(minimumVisualWidthPx), 8, 220)
+      : undefined;
+  }
+
+  return Math.max(
+    minimumVisualWidthPx,
+    clampNumber(Math.round(candidateWidthPx as number), 8, 220)
+  );
+}
+
+export function numberingMarkerStyle(
+  paragraph: ParagraphNode,
+  numberingDefinitions: NumberingDefinitionSet | undefined,
+  numberingLabel: ParagraphNumberingLabel,
+  baseStyle: Record<string, string | number | undefined> | undefined,
+  documentTheme: DocxDocumentTheme
+): Record<string, string | number | undefined> {
+  const markerBoxWidthPx = resolveNumberingMarkerBoxWidthPx(
+    paragraph,
+    numberingDefinitions,
+    numberingLabel
+  );
+  const markerGapPx = isTableOfContentsParagraph(paragraph)
+    ? 6
+    : markerBoxWidthPx
+    ? 0
+    : 2;
+
+  return {
+    ...(baseStyle ?? {}),
+    display: "inline-flex",
+    alignItems: "baseline",
+    justifyContent: "flex-end",
+    verticalAlign: "baseline",
+    width: markerBoxWidthPx ? `${markerBoxWidthPx}px` : undefined,
+    minWidth: markerBoxWidthPx ? `${markerBoxWidthPx}px` : "1.1em",
+    marginRight: markerGapPx,
+    whiteSpace: "pre",
+    fontFamily: cssFontFamily(
+      numberingLabel.fontFamily ?? numberingLabel.style?.fontFamily
+    ),
+    color: themedRunColor(
+      numberingLabel.color ?? numberingLabel.style?.color,
+      documentTheme
+    ),
+  };
+}

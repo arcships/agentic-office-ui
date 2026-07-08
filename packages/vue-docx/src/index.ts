@@ -16,6 +16,14 @@ export const DocxEditorViewer = defineComponent({
   },
 })
 
+// ---- Render ----
+
+export {
+  renderParagraphRuns,
+  renderStaticHtml,
+  type ParagraphRunRenderOptions,
+} from "./render"
+
 // ---- Composables ----
 
 export { useDocxEditor } from "./composables/useDocxEditor"
