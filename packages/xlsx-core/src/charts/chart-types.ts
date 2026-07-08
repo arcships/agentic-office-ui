@@ -39,6 +39,9 @@ import {
 
 import {
   getLocalChildren,
+} from "./chart-xml-utils";
+
+import {
   normalizeLegendPosition,
 } from "./chart-parser";
 

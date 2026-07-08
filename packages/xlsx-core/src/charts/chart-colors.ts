@@ -6,7 +6,7 @@ import {
   getFirstLocalDescendant,
   getLocalDescendants,
   readChartNumericAttribute,
-} from "./chart-parser";
+} from "./chart-xml-utils";
 
 export function normalizeWorksheetVisibility(value: unknown): "hidden" | "veryHidden" | "visible" {
   return value === "hidden" || value === "veryHidden" ? value : "visible";

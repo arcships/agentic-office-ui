@@ -55,7 +55,7 @@ import {
   resolveRelationshipPath,
   removeLocalChildren,
   normalizeArchivePath,
-} from "./chart-parser";
+} from "./chart-xml-utils";
 
 import {
   findPrimaryChartTypeNode,

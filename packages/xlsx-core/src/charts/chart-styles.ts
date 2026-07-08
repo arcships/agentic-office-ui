@@ -23,21 +23,27 @@ import {
   parseChartTypeFromXml,
   normalizeChartTitleForMatch,
   extractChartTitleFromXml,
+  readChartLabelFontSizePt,
+} from "./chart-parser";
+
+import {
+  parseChartCacheValues,
+  parseChartMultiLevelCacheValues,
+} from "./chart-cache";
+
+import {
   readChartNumericAttribute,
   readChartBooleanAttribute,
-  readChartLabelFontSizePt,
   getLocalChildren,
   getFirstLocalChild,
   getFirstLocalDescendant,
   getLocalDescendants,
   parseXml,
-  parseChartCacheValues,
-  parseChartMultiLevelCacheValues,
   normalizeArchivePath,
   dirname,
   readArchiveText,
   resolveRelationshipPath,
-} from "./chart-parser";
+} from "./chart-xml-utils";
 
 import type { ChartStyleAppearance } from "./chart-types";
 
