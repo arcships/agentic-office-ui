@@ -6,7 +6,7 @@
 // Each module is framework-agnostic (React types replaced with plain
 // equivalents) and kept ≤1000 lines per the migration hard constraints.
 //
-// Completed modules (31):
+// Completed modules (36):
 //   constants.ts           — global constants + theme/handle/wrap-mode tables
 //   performance.ts         — import performance tracing
 //   cache-utils.ts         — shared cache Maps/WeakMaps + cache helpers
@@ -18,7 +18,8 @@
 //   default-model.ts       — defaultStarterModel / createBlankDocumentModel
 //   state.ts               — editor state machine
 //   page-measurement.ts    — page height measurement
-//   xml-parsing.ts         — XML parsing (part 1)
+//   xml-parsing.ts         — XML parsing (part 1: run-style, tracked tokens, image transforms)
+//   xml-parsing-extra.ts   — XML parsing (part 2: paragraph indent extraction, list indent resolution)
 //   style-to-css.ts        — runStyleToCss (part 1)
 //   style-block-css.ts     — paragraph border CSS helpers
 //   paragraph-inspect.ts   — paragraph property extraction (part 1)
@@ -37,13 +38,16 @@
 //   table-height.ts        — re-export barrel for table-height-estimate (split plan)
 //   header-footer.ts       — header/footer reserve
 //   paragraph-tracked.ts   — paragraph tracked-change extraction
+//   pretext-build.ts       — buildParagraphPretextLayoutSource
+//   pretext-measure.ts     — pretext measurement integration
+//   tracked-changes.ts     — tracked changes and comments collection
+//   tracked-changes-gutter.ts — tracked-change gutter card layout
 //   selection-helpers.ts   — selection/cursor helpers (clone/normalize/compare)
 //   selection-restore.ts   — DOM selection restore heuristics
 //   section-manipulation.ts — section paragraph/image mutation at location
 //
-// Pending modules (see docs/docx-editor-helpers-split-plan.md) — 8 remaining:
-//   pagination-plan-core, pagination-plan-iterate, pagination-plan-stabilize,
-//   xml-parsing-extra
+// Pending modules (see docs/docx-editor-helpers-split-plan.md) — 3 remaining:
+//   pagination-plan-core, pagination-plan-iterate, pagination-plan-stabilize
 
 export * from "./constants";
 export * from "./performance";
@@ -57,23 +61,7 @@ export * from "./default-model";
 export * from "./state";
 export * from "./page-measurement";
 export * from "./xml-parsing";
-export {
-  extractBalancedTagRanges,
-  trackedChangeKindFromTagName,
-  normalizeTrackedChangeSnippet,
-  formatTrackedChangeDate,
-  stripTextBoxContentFromRunXml,
-  parseTrackedRunTokens,
-  xmlBooleanFlag,
-  xmlColorValue,
-  parseRunStyleFromRunXml,
-  balancedTagXmlBlocks,
-  mergeTextRunStyles,
-  parseParagraphAlignmentFromXml,
-  parseDrawingImageTransformFromSourceXml,
-  joinCssTransforms,
-  resolveImageRenderTransformStyle,
-} from "./xml-parsing";
+export * from "./xml-parsing-extra";
 export * from "./style-to-css";
 export * from "./style-block-css";
 export * from "./paragraph-inspect";
