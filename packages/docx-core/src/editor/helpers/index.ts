@@ -6,7 +6,7 @@
 // Each module is framework-agnostic (React types replaced with plain
 // equivalents) and kept ≤1000 lines per the migration hard constraints.
 //
-// Completed modules (36):
+// Completed modules (37):
 //   constants.ts           — global constants + theme/handle/wrap-mode tables
 //   performance.ts         — import performance tracing
 //   cache-utils.ts         — shared cache Maps/WeakMaps + cache helpers
@@ -47,9 +47,9 @@
 //   section-manipulation.ts — section paragraph/image mutation at location
 //   pagination-plan-iterate.ts — break collection, overflow estimation, page break index iteration
 //   pagination-plan-core.ts  — column render, segment clip/boundary helpers, page segmentation plan
+//   pagination-plan-stabilize.ts — measured page-content height stabilization, segment identity keys, section metrics
 //
-// Pending modules (see docs/docx-editor-helpers-split-plan.md) — 1 remaining:
-//   pagination-plan-stabilize
+// Pending modules (see docs/docx-editor-helpers-split-plan.md) — 0 remaining:
 
 export * from "./constants";
 export * from "./performance";
@@ -91,3 +91,4 @@ export * from "./tracked-changes";
 export * from "./tracked-changes-gutter";
 export * from "./pagination-plan-iterate";
 export * from "./pagination-plan-core";
+export * from "./pagination-plan-stabilize";

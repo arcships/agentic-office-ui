@@ -19,24 +19,16 @@ import type {
   ParagraphNode
 } from "../../engine/types";
 import type { DocumentLayoutMetrics } from "../../viewer/section-layout";
-import { parseSectionLayout } from "../../viewer/section-layout";
 import {
   type PaginationSectionMetrics,
   resolvePaginationSectionMetricsIndexForNodeIndex,
   scalePaginationSectionMetricsHeights
 } from "../../layout/pagination";
 import type { DocumentPageNodeSegment } from "../../layout/page-segmentation-core";
-import {
-  type HeaderFooterDocumentSection,
-  type HeaderFooterReserveOptions,
-  parseSectionColumns,
-  resolveSectionPaginationContentWidthPx,
-  resolveHeaderPaginationReservePx,
-  resolveFooterPaginationReservePx,
-  sectionHasVisibleHeaderContent,
-  sectionHasVisibleFooterContent
-} from "./header-footer";
 import { nodeReferencedNoteIds } from "./paragraph-tracked";
+import type {
+  PageMeasurementPaginationSectionMetrics,
+} from "./pagination-plan-stabilize";
 import {
   MEASURED_PAGE_FOOTER_CLEARANCE_BUFFER_PX,
   MEASURED_PAGE_HEADER_CLEARANCE_BUFFER_PX,
@@ -52,23 +44,19 @@ export {
 // page-measurement surface from a single module.
 export type { DocumentPageNodeSegment, PaginationSectionMetrics };
 
-// A page node segment extended with the optional table-row-slice field present
-// in the upstream DocumentPageNodeSegment (used by the identity-key serializer).
-export interface MeasuredDocumentPageNodeSegment extends DocumentPageNodeSegment {
-  tableRowSlice?: {
-    rowIndex: number;
-    startOffsetPx: number;
-    sliceHeightPx: number;
-  };
-}
-
-// Extended pagination-section metrics carrying the column multiplier used by
-// the render-time page-content-height resolver. The layout-layer
-// PaginationSectionMetrics omits this field; page-measurement augments it.
-export interface PageMeasurementPaginationSectionMetrics
-  extends PaginationSectionMetrics {
-  pageContentHeightMultiplier: number;
-}
+// Re-export stabilization functions extracted to pagination-plan-stabilize.ts
+// so existing consumers of page-measurement are not broken.
+export {
+  stabilizeMeasuredPageContentHeights,
+  documentPageNodeSegmentIdentityKey,
+  documentPageNodeSegmentsIdentityKey,
+  buildPaginationSectionMetrics,
+  scaleMeasuredPageContentHeights,
+} from "./pagination-plan-stabilize";
+export type {
+  MeasuredDocumentPageNodeSegment,
+  PageMeasurementPaginationSectionMetrics,
+} from "./pagination-plan-stabilize";
 
 // Estimate a paragraph's rendered height. Supplied by the table-height /
 // line-height estimation cluster via callback to keep this module decoupled.
@@ -262,151 +250,6 @@ export function resolveMeasuredBodyRenderedBottomPx(
   });
 
   return visualBottomPx;
-}
-
-export function stabilizeMeasuredPageContentHeights(
-  current: number[],
-  next: number[],
-  options?: {
-    currentPageIdentityKeys?: string[];
-    nextPageIdentityKeys?: string[];
-  }
-): number[] {
-  return next.map((heightPx, pageIndex) => {
-    const roundedNextHeightPx = Math.round(heightPx);
-    const currentHeightPx = current[pageIndex];
-    const currentPageIdentityKey =
-      options?.currentPageIdentityKeys?.[pageIndex];
-    const nextPageIdentityKey = options?.nextPageIdentityKeys?.[pageIndex];
-    const canPreserveConservativeHeight =
-      currentPageIdentityKey === undefined ||
-      nextPageIdentityKey === undefined ||
-      currentPageIdentityKey === nextPageIdentityKey;
-    return Number.isFinite(currentHeightPx)
-      ? canPreserveConservativeHeight
-        ? Math.min(Math.round(currentHeightPx as number), roundedNextHeightPx)
-        : roundedNextHeightPx
-      : roundedNextHeightPx;
-  });
-}
-
-// --- Page-segment identity keys (upstream 2643-2666) ---
-
-export function documentPageNodeSegmentIdentityKey(
-  segment: MeasuredDocumentPageNodeSegment
-): string {
-  const tableRowRangeKey = segment.tableRowRange
-    ? `${segment.tableRowRange.startRowIndex}-${segment.tableRowRange.endRowIndex}`
-    : "none";
-  const tableRowSliceKey = segment.tableRowSlice
-    ? `${segment.tableRowSlice.rowIndex}-${Math.round(
-        segment.tableRowSlice.startOffsetPx
-      )}-${Math.round(segment.tableRowSlice.sliceHeightPx)}`
-    : "none";
-  const paragraphLineRangeKey = segment.paragraphLineRange
-    ? `${segment.paragraphLineRange.startLineIndex}-${segment.paragraphLineRange.endLineIndex}-${segment.paragraphLineRange.totalLineCount}`
-    : "none";
-
-  return `${segment.nodeIndex}|${tableRowRangeKey}|${tableRowSliceKey}|${paragraphLineRangeKey}`;
-}
-
-export function documentPageNodeSegmentsIdentityKey(
-  pageSegments: MeasuredDocumentPageNodeSegment[]
-): string {
-  return pageSegments.map(documentPageNodeSegmentIdentityKey).join("::");
-}
-
-// --- Pagination section metrics (upstream 2667-2793) ---
-
-export function buildPaginationSectionMetrics(
-  sections: HeaderFooterDocumentSection[],
-  fallbackLayout: DocumentLayoutMetrics,
-  reserveOptions: HeaderFooterReserveOptions
-): PageMeasurementPaginationSectionMetrics[] {
-  const fallbackWidthPx =
-    resolveSectionPaginationContentWidthPx(fallbackLayout);
-  const fallbackHeightPx = Math.max(
-    120,
-    fallbackLayout.pageHeightPx -
-      fallbackLayout.marginsPx.top -
-      fallbackLayout.marginsPx.bottom
-  );
-
-  if (sections.length === 0) {
-    return [
-      {
-        startNodeIndex: 0,
-        pageContentWidthPx: fallbackWidthPx,
-        pageContentHeightPx: fallbackHeightPx,
-        pageContentHeightMultiplier: 1,
-      },
-    ];
-  }
-
-  return sections
-    .map((section) => {
-      const layout = parseSectionLayout(section.sectionPropertiesXml);
-      const sectionColumns = parseSectionColumns(section.sectionPropertiesXml);
-      const pageContentHeightMultiplier = Math.max(
-        1,
-        sectionColumns?.count ?? 1
-      );
-      const hasHeaderContent = sectionHasVisibleHeaderContent(section);
-      const hasFooterContent = sectionHasVisibleFooterContent(section);
-      const headerPaginationReservePx = hasHeaderContent
-        ? resolveHeaderPaginationReservePx(
-            section.headerSections ?? [],
-            layout,
-            reserveOptions
-          )
-        : 0;
-      const footerPaginationReservePx = hasFooterContent
-        ? resolveFooterPaginationReservePx(
-            section.footerSections ?? [],
-            layout,
-            reserveOptions
-          )
-        : 0;
-      return {
-        startNodeIndex: Math.max(0, Math.round(section.startNodeIndex)),
-        pageContentWidthPx: resolveSectionPaginationContentWidthPx(
-          layout,
-          section.sectionPropertiesXml
-        ),
-        pageContentHeightPx: Math.max(
-          120,
-          (layout.pageHeightPx -
-            layout.marginsPx.top -
-            layout.marginsPx.bottom -
-            headerPaginationReservePx -
-            footerPaginationReservePx) *
-            pageContentHeightMultiplier
-        ),
-        pageContentHeightMultiplier,
-        docGridLinePitchPx: layout.docGridLinePitchPx,
-      };
-    })
-    .sort((left, right) => left.startNodeIndex - right.startNodeIndex);
-}
-
-export function scaleMeasuredPageContentHeights(
-  measuredPageContentHeightsPxByPageIndex: number[] | undefined,
-  heightScale: number
-): number[] | undefined {
-  if (
-    !measuredPageContentHeightsPxByPageIndex ||
-    measuredPageContentHeightsPxByPageIndex.length === 0
-  ) {
-    return measuredPageContentHeightsPxByPageIndex;
-  }
-
-  if (!Number.isFinite(heightScale) || Math.abs(heightScale - 1) < 0.001) {
-    return measuredPageContentHeightsPxByPageIndex;
-  }
-
-  return measuredPageContentHeightsPxByPageIndex.map((heightPx) =>
-    Math.max(120, Math.round(heightPx * heightScale))
-  );
 }
 
 function paragraphSegmentHasPartialLineRange(
