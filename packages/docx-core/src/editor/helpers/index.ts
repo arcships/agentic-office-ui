@@ -43,7 +43,8 @@
 //   pretext-measure.ts     — pretext measurement integration
 //   tracked-changes.ts     — tracked changes and comments collection
 //   tracked-changes-gutter.ts — tracked-change gutter card layout
-//   selection-helpers.ts   — selection/cursor helpers (clone/normalize/compare)
+//   selection-helpers.ts   — selection/cursor helpers (paragraph location navigation, core helpers)
+//   selection-helpers-range.ts — range normalization/cloning/selection resolution
 //   selection-restore.ts   — DOM selection restore heuristics
 //   section-manipulation.ts — section paragraph/image mutation at location
 //   pagination-plan-iterate.ts — break collection, overflow estimation, page break index iteration
@@ -85,6 +86,7 @@ export * from "./table-height";
 export * from "./header-footer";
 export * from "./paragraph-tracked";
 export * from "./selection-helpers";
+export * from "./selection-helpers-range";
 export * from "./selection-restore";
 export * from "./section-manipulation";
 export * from "./pretext-build";

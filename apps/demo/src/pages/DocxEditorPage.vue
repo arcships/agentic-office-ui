@@ -3,9 +3,10 @@
     <h2>✏️ DOCX Editing Demo</h2>
     <p class="desc">
       Full-featured DOCX editor demo aligned with upstream playground (26 features):
-      undo/redo, paragraph styles, font formatting, lists, alignment, theme toggle,
-      import/export, and more. Keyboard shortcuts: ⌘B/I/U for bold/italic/underline,
-      ⌘Z/⇧⌘Z for undo/redo, ⌘S for export.
+      font family/size, line spacing, text/highlight color, hyperlink, borders,
+      insert image/table, zoom, undo/redo, paragraph styles, lists, alignment,
+      theme toggle, import/export. Keyboard shortcuts: ⌘B/I/U for
+      bold/italic/underline, ⌘Z/⇧⌘Z for undo/redo, ⌘S for export.
     </p>
 
     <!-- Toolbar: external file import + status controls -->
@@ -63,25 +64,25 @@
           <tr><td>2</td><td>App theme (light/dark/system)</td><td class="pass">✅</td></tr>
           <tr><td>3</td><td>Undo / Redo</td><td class="pass">✅</td></tr>
           <tr><td>4</td><td>Paragraph style select</td><td class="pass">✅</td></tr>
-          <tr><td>5</td><td>Font family (Calibri/Arial/TNR/Georgia/Helvetica/Courier)</td><td class="warn">⚠️</td></tr>
-          <tr><td>6</td><td>Font size (8–48pt)</td><td class="warn">⚠️</td></tr>
-          <tr><td>7</td><td>Line spacing (1/1.15/1.2/1.5/2/2.5/3)</td><td class="warn">⚠️</td></tr>
+          <tr><td>5</td><td>Font family (Calibri/Arial/TNR/Georgia/Helvetica/Courier)</td><td class="pass">✅</td></tr>
+          <tr><td>6</td><td>Font size (8–48pt)</td><td class="pass">✅</td></tr>
+          <tr><td>7</td><td>Line spacing (1/1.15/1.2/1.5/2/2.5/3)</td><td class="pass">✅</td></tr>
           <tr><td>8</td><td>Bold / Italic / Underline / Strikethrough</td><td class="pass">✅</td></tr>
           <tr><td>9</td><td>Superscript / Subscript</td><td class="pass">✅</td></tr>
-          <tr><td>10</td><td>Text color + highlight color</td><td class="warn">⚠️</td></tr>
-          <tr><td>11</td><td>Hyperlink edit / remove</td><td class="warn">⚠️</td></tr>
+          <tr><td>10</td><td>Text color + highlight color</td><td class="pass">✅</td></tr>
+          <tr><td>11</td><td>Hyperlink edit / remove</td><td class="pass">✅</td></tr>
           <tr><td>12</td><td>Alignment (Left/Center/Right/Justify)</td><td class="pass">✅</td></tr>
           <tr><td>13</td><td>Bullet / Numbered lists</td><td class="pass">✅</td></tr>
           <tr><td>14</td><td>Columns display</td><td class="warn">⚠️</td></tr>
           <tr><td>15</td><td>Page thumbnails (virtual scroll)</td><td class="warn">⚠️</td></tr>
-          <tr><td>16</td><td>Borders (13 presets)</td><td class="warn">⚠️</td></tr>
-          <tr><td>17</td><td>Insert image</td><td class="warn">⚠️</td></tr>
-          <tr><td>18</td><td>Insert table</td><td class="warn">⚠️</td></tr>
-          <tr><td>19</td><td>Zoom (50–200%)</td><td class="warn">⚠️</td></tr>
+          <tr><td>16</td><td>Borders (13 presets)</td><td class="pass">✅</td></tr>
+          <tr><td>17</td><td>Insert image</td><td class="pass">✅</td></tr>
+          <tr><td>18</td><td>Insert table</td><td class="pass">✅</td></tr>
+          <tr><td>19</td><td>Zoom (50–200%)</td><td class="pass">✅</td></tr>
           <tr><td>20</td><td>Import .docx / .doc</td><td class="pass">✅</td></tr>
           <tr><td>21</td><td>Export .docx</td><td class="pass">✅</td></tr>
-          <tr><td>22</td><td>Track changes toggle</td><td class="warn">⚠️</td></tr>
-          <tr><td>23</td><td>Comments toggle</td><td class="warn">⚠️</td></tr>
+          <tr><td>22</td><td>Track changes toggle</td><td class="pass">✅</td></tr>
+          <tr><td>23</td><td>Comments toggle</td><td class="pass">✅</td></tr>
           <tr><td>24</td><td>Read-only mode toggle</td><td class="pass">✅</td></tr>
           <tr><td>25</td><td>Context menu (cut/copy/paste/table ops)</td><td class="warn">⚠️</td></tr>
           <tr><td>26</td><td>Form field config (double-click dialog)</td><td class="warn">⚠️</td></tr>
