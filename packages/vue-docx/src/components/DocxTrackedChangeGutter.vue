@@ -1,81 +1,197 @@
 <template>
   <div v-if="hasContent" class="docx-tracked-change-gutter">
-    <div
-      v-for="change of trackedChanges"
-      :key="change.id"
-      class="docx-tracked-change-item"
-      :class="{ 'docx-tracked-insertion': change.kind === 'insertion', 'docx-tracked-deletion': change.kind === 'deletion' }"
-    >
-      <span class="docx-tracked-change-author">{{ change.author }}</span>
-      <span class="docx-tracked-change-text">{{ change.text }}</span>
+    <!-- Tracked changes section -->
+    <div v-if="showChanges && trackedChanges.length > 0" class="docx-gutter-section">
+      <div class="docx-gutter-section-title">
+        Tracked Changes ({{ trackedChanges.length }})
+      </div>
+      <div
+        v-for="change of trackedChanges"
+        :key="change.id"
+        class="docx-gutter-card"
+        :class="changeCardClass(change)"
+      >
+        <div class="docx-gutter-card-header">
+          <span class="docx-gutter-card-type">{{ changeLabel(change) }}</span>
+          <span class="docx-gutter-card-author">{{ change.author }}</span>
+        </div>
+        <div class="docx-gutter-card-text">
+          {{ changeText(change) }}
+        </div>
+      </div>
     </div>
-    <div
-      v-for="comment of comments"
-      :key="comment.id"
-      class="docx-comment-item"
-    >
-      <div class="docx-comment-author">{{ comment.author }}</div>
-      <div class="docx-comment-text">{{ comment.text }}</div>
+
+    <!-- Comments section -->
+    <div v-if="showComments && comments.length > 0" class="docx-gutter-section">
+      <div class="docx-gutter-section-title">
+        Comments ({{ comments.length }})
+      </div>
+      <div
+        v-for="comment of comments"
+        :key="comment.id"
+        class="docx-gutter-card docx-gutter-card--comment"
+      >
+        <div class="docx-gutter-card-header">
+          <span class="docx-gutter-card-author">{{ comment.author }}</span>
+          <span class="docx-gutter-card-date">{{ formatDate(comment.date) }}</span>
+        </div>
+        <div class="docx-gutter-card-text">
+          {{ comment.text }}
+        </div>
+        <div v-if="comment.resolved" class="docx-gutter-card-resolved">
+          ✓ Resolved
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from "vue"
-import type { DocxEditorController, LayoutPage } from "@extend-ai/docx-core"
+import type {
+  DocxEditorController,
+  DocxTrackedChange,
+  DocxComment,
+} from "@extend-ai/docx-core"
 
+// ── Props ──────────────────────────────────────────────────────────
 const props = defineProps<{
-  page: LayoutPage
-  controller?: DocxEditorController
+  pageIndex: number
+  pageLayout: { pageWidthPx: number; pageHeightPx: number; marginsPx?: { top: number; bottom: number; left: number; right: number } }
+  controller: DocxEditorController
 }>()
 
-const trackedChanges = computed(() => props.controller?.trackedChanges ?? [])
-const comments = computed(() => props.controller?.comments ?? [])
+// ── Computed ───────────────────────────────────────────────────────
+const showChanges = computed(() => props.controller.showTrackedChanges)
+const showComments = computed(() => props.controller.showComments)
+
+const trackedChanges = computed<DocxTrackedChange[]>(() => {
+  return props.controller.trackedChanges
+})
+
+const comments = computed<DocxComment[]>(() => {
+  return props.controller.comments
+})
+
 const hasContent = computed(
   () =>
-    (props.controller?.showTrackedChanges && trackedChanges.value.length > 0) ||
-    (props.controller?.showComments && comments.value.length > 0)
+    (showChanges.value && trackedChanges.value.length > 0) ||
+    (showComments.value && comments.value.length > 0)
 )
+
+// ── Helpers ────────────────────────────────────────────────────────
+function changeCardClass(change: DocxTrackedChange): string {
+  switch (change.kind) {
+    case "insertion":
+      return "docx-gutter-card--insertion"
+    case "deletion":
+      return "docx-gutter-card--deletion"
+    case "format-change":
+      return "docx-gutter-card--format"
+    default:
+      return ""
+  }
+}
+
+function changeLabel(change: DocxTrackedChange): string {
+  switch (change.kind) {
+    case "insertion":
+      return "+ Inserted"
+    case "deletion":
+      return "− Deleted"
+    case "format-change":
+      return "~ Format"
+    default:
+      return change.kind
+  }
+}
+
+function changeText(change: DocxTrackedChange): string {
+  if (change.kind === "insertion") {
+    return change.text ?? ""
+  }
+  if (change.kind === "deletion") {
+    return change.text ?? ""
+  }
+  return change.text ?? ""
+}
+
+function formatDate(dateStr?: string): string {
+  if (!dateStr) return ""
+  try {
+    const date = new Date(dateStr)
+    return date.toLocaleDateString()
+  } catch {
+    return dateStr
+  }
+}
 </script>
 
 <style scoped>
 .docx-tracked-change-gutter {
-  position: absolute;
-  right: -180px;
-  top: 0;
-  width: 160px;
+  padding: 8px 0;
+  border-top: 1px solid #e5e7eb;
+  margin-top: 8px;
+}
+.docx-gutter-section {
+  margin-bottom: 12px;
+}
+.docx-gutter-section-title {
   font-size: 11px;
+  font-weight: 600;
   color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
 }
-.docx-tracked-change-item {
-  padding: 4px 8px;
-  margin-bottom: 4px;
+.docx-gutter-card {
+  padding: 6px 8px;
   border-radius: 4px;
-}
-.docx-tracked-insertion {
-  background: #dcfce7;
-  border-left: 3px solid #22c55e;
-}
-.docx-tracked-deletion {
-  background: #fee2e2;
-  border-left: 3px solid #ef4444;
-  text-decoration: line-through;
-}
-.docx-tracked-change-author {
-  display: block;
-  font-weight: 600;
-  font-size: 10px;
-  color: #9ca3af;
-}
-.docx-comment-item {
-  padding: 4px 8px;
   margin-bottom: 4px;
-  background: #fef9c3;
-  border-radius: 4px;
+  font-size: 12px;
+  border-left: 3px solid #d1d5db;
 }
-.docx-comment-author {
+.docx-gutter-card--insertion {
+  background: #f0fdf4;
+  border-left-color: #22c55e;
+}
+.docx-gutter-card--deletion {
+  background: #fef2f2;
+  border-left-color: #ef4444;
+}
+.docx-gutter-card--format {
+  background: #eff6ff;
+  border-left-color: #3b82f6;
+}
+.docx-gutter-card--comment {
+  background: #fffbeb;
+  border-left-color: #f59e0b;
+}
+.docx-gutter-card-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+.docx-gutter-card-type {
   font-weight: 600;
-  font-size: 10px;
+  color: #374151;
+}
+.docx-gutter-card-author {
+  color: #6b7280;
+  font-size: 11px;
+}
+.docx-gutter-card-date {
   color: #9ca3af;
+  font-size: 10px;
+}
+.docx-gutter-card-text {
+  color: #4b5563;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.docx-gutter-card-resolved {
+  color: #22c55e;
+  font-size: 11px;
+  margin-top: 4px;
 }
 </style>

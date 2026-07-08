@@ -1,34 +1,63 @@
 <template>
   <div class="docx-editor-viewer" :class="className">
+    <!-- Toolbar -->
     <DocxToolbar
       v-if="showToolbar"
       :controller="controller"
     />
+
+    <!-- Editor body (thumbnails + viewer root) -->
     <div class="docx-editor-body">
+      <!-- Thumbnail panel -->
       <DocxThumbnailPanel
         v-if="showThumbnails"
         :controller="controller"
+        :current-page="currentPage"
+        :total-pages="totalPages"
+        @select-page="onSelectPage"
       />
+
+      <!-- Viewer root (main scrollable area with page surfaces) -->
       <DocxViewerRoot
+        ref="viewerRootRef"
         :controller="controller"
         :editable="editable"
+        @page-count-change="onPageCountChange"
+        @visible-page-range="onVisiblePageRange"
       />
     </div>
+
+    <!-- Context menu -->
     <DocxContextMenu
       v-if="contextMenu.visible.value"
       :context="contextMenu.context.value"
       :controller="controller"
       @close="contextMenu.hide"
     />
+
+    <!-- Drag overlay -->
     <DocxDragOverlay
       v-if="dragOverlay.visible.value"
       :controller="controller"
     />
+
+    <!-- Status bar -->
+    <div class="docx-editor-statusbar">
+      <span class="docx-editor-statusbar-page">
+        Page {{ currentPage }} of {{ totalPages }}
+      </span>
+      <span class="docx-editor-statusbar-status">
+        {{ controller.status }}
+      </span>
+      <span v-if="controller.fileName" class="docx-editor-statusbar-file">
+        {{ controller.fileName }}
+      </span>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, provide, watch, onMounted } from "vue"
+import { ref, provide, watch, computed, onMounted, onUnmounted } from "vue"
 import type {
   DocxEditorController,
   DocxContextMenuContext,
@@ -40,6 +69,7 @@ import DocxContextMenu from "./DocxContextMenu.vue"
 import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
 import DocxDragOverlay from "./DocxDragOverlay.vue"
 
+// ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
   defineProps<{
     file?: ArrayBuffer
@@ -52,24 +82,52 @@ const props = withDefaults(
   { editable: true, showToolbar: true, showThumbnails: false }
 )
 
-const controller = useDocxEditor({})
+// ── Controller ─────────────────────────────────────────────────────
+const controller = useDocxEditor({
+  initialFileName: props.file ? "(imported document)" : "(new document)",
+})
 
 // Provide controller to all child components
 provide("docxEditorController", controller)
 
-// If model is provided, set it directly via the controller
+// ── Import file ────────────────────────────────────────────────────
 watch(
-  () => props.model,
-  (newModel) => {
-    if (newModel && controller) {
-      // Model assignment is handled through import/export API
-      // The starter model is set in useDocxEditor options
+  () => props.file,
+  async (newFile) => {
+    if (newFile && controller) {
+      await controller.importDocxFile(
+        new File([newFile], "document.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })
+      )
     }
   },
   { immediate: true }
 )
 
-// Context menu state
+// ── Viewer root ref ────────────────────────────────────────────────
+const viewerRootRef = ref<InstanceType<typeof DocxViewerRoot> | undefined>()
+
+// ── Page tracking ──────────────────────────────────────────────────
+const currentPage = ref(1)
+const totalPages = ref(1)
+
+function onPageCountChange(count: number): void {
+  totalPages.value = count
+  controller.syncPaginationInfo({ currentPage: currentPage.value, totalPages: count })
+}
+
+function onVisiblePageRange(range: { startPageIndex: number; endPageIndex: number }): void {
+  const midPage = Math.floor((range.startPageIndex + range.endPageIndex) / 2) + 1
+  if (midPage !== currentPage.value) {
+    currentPage.value = midPage
+    controller.syncPaginationInfo({ currentPage: midPage, totalPages: totalPages.value })
+  }
+}
+
+function onSelectPage(pageIndex: number): void {
+  viewerRootRef.value?.scrollToPage(pageIndex)
+}
+
+// ── Context menu ───────────────────────────────────────────────────
 const contextMenu = {
   visible: ref(false),
   context: ref<DocxContextMenuContext | undefined>(undefined),
@@ -84,13 +142,47 @@ const contextMenu = {
 }
 provide("docxContextMenu", contextMenu)
 
-// Drag overlay state
+// ── Drag overlay ───────────────────────────────────────────────────
 const dragOverlay = {
   visible: ref(false),
   show() { this.visible.value = true },
   hide() { this.visible.value = false },
 }
 provide("docxDragOverlay", dragOverlay)
+
+// ── Keyboard shortcuts ─────────────────────────────────────────────
+function onKeydown(event: KeyboardEvent): void {
+  const mod = event.metaKey || event.ctrlKey
+  const ctrl = controller
+
+  if (mod && event.key === "b") {
+    event.preventDefault()
+    ctrl.toggleBold()
+  } else if (mod && event.key === "i") {
+    event.preventDefault()
+    ctrl.toggleItalic()
+  } else if (mod && event.key === "u") {
+    event.preventDefault()
+    ctrl.toggleUnderline()
+  } else if (mod && event.key === "z" && !event.shiftKey) {
+    event.preventDefault()
+    ctrl.undo()
+  } else if (mod && event.key === "z" && event.shiftKey) {
+    event.preventDefault()
+    ctrl.redo()
+  } else if (mod && event.key === "s") {
+    event.preventDefault()
+    ctrl.exportDocx()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener("keydown", onKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener("keydown", onKeydown)
+})
 </script>
 
 <style scoped>
@@ -99,10 +191,33 @@ provide("docxDragOverlay", dragOverlay)
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  background: #f3f4f6;
 }
 .docx-editor-body {
   display: flex;
   flex: 1;
   overflow: hidden;
+}
+.docx-editor-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 12px;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+  font-size: 12px;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+.docx-editor-statusbar-page {
+  font-weight: 500;
+}
+.docx-editor-statusbar-status {
+  color: #9ca3af;
+}
+.docx-editor-statusbar-file {
+  margin-left: auto;
+  color: #374151;
+  font-weight: 500;
 }
 </style>

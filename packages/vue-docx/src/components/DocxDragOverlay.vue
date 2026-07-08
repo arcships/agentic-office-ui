@@ -5,42 +5,64 @@
       class="docx-drag-overlay"
       :style="overlayStyle"
     >
-      <div class="docx-drag-cursor" />
+      <!-- Import file overlay -->
+      <div v-if="importMode" class="docx-drag-overlay-import">
+        <div class="docx-drag-overlay-import-icon">📂</div>
+        <div class="docx-drag-overlay-import-text">
+          Drop DOCX file to import
+        </div>
+      </div>
     </div>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue"
+import { computed } from "vue"
 import type { DocxEditorController } from "@extend-ai/docx-core"
 
-const props = defineProps<{
-  controller?: DocxEditorController
-  visible?: boolean
-  x?: number
-  y?: number
+// ── Props ──────────────────────────────────────────────────────────
+defineProps<{
+  controller: DocxEditorController
 }>()
 
+// ── State (managed externally via provide/inject or parent) ─────────
+const visible = computed(() => false)
+const importMode = computed(() => false)
+
+// ── Styles ─────────────────────────────────────────────────────────
 const overlayStyle = computed(() => ({
-  left: `${props.x ?? 0}px`,
-  top: `${props.y ?? 0}px`,
+  position: "fixed" as const,
+  inset: "0",
+  zIndex: "9998",
+  pointerEvents: "none" as const,
 }))
 </script>
 
 <style scoped>
 .docx-drag-overlay {
   position: fixed;
-  z-index: 9999;
+  inset: 0;
+  z-index: 9998;
   pointer-events: none;
 }
-.docx-drag-cursor {
-  width: 2px;
-  height: 20px;
-  background: #2563eb;
-  animation: docx-drag-pulse 1s infinite;
+.docx-drag-overlay-import {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: rgba(59, 130, 246, 0.08);
+  border: 3px dashed #3b82f6;
+  border-radius: 12px;
 }
-@keyframes docx-drag-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+.docx-drag-overlay-import-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+.docx-drag-overlay-import-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2563eb;
 }
 </style>
