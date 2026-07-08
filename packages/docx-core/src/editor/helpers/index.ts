@@ -73,7 +73,7 @@ export {
   parseDrawingImageTransformFromSourceXml,
   joinCssTransforms,
   resolveImageRenderTransformStyle,
-} from "./xml-parsing-extra";
+} from "./xml-parsing";
 export * from "./style-to-css";
 export * from "./paragraph-inspect";
 export * from "./text-mutation";
