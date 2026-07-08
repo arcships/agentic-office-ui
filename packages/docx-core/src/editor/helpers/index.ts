@@ -34,14 +34,14 @@
 //   letterhead.ts          — letterhead layout
 //   line-height.ts         — estimateParagraphLineHeightPx (part 1)
 //   line-height-table.ts   — table row/cell height + paragraph spacing helpers
+//   table-height.ts        — re-export barrel for table-height-estimate (split plan)
 //   header-footer.ts       — header/footer reserve
 //   paragraph-tracked.ts   — paragraph tracked-change extraction
 //   selection-helpers.ts   — selection/cursor helpers (clone/normalize/compare)
 //   selection-restore.ts   — DOM selection restore heuristics
 //   section-manipulation.ts — section paragraph/image mutation at location
 //
-// Pending modules (see docs/docx-editor-helpers-split-plan.md) — 10 remaining:
-//   pretext-build, pretext-measure, table-height,
+// Pending modules (see docs/docx-editor-helpers-split-plan.md) — 9 remaining:
 //   pagination-plan-core, pagination-plan-iterate, pagination-plan-stabilize,
 //   style-block-css, xml-parsing-extra, tracked-changes, tracked-changes-gutter
 // style-block-css export removed (incomplete, pending redo)
@@ -89,6 +89,7 @@ export * from "./drop-cap";
 export * from "./letterhead";
 export * from "./line-height";
 export * from "./line-height-table";
+export * from "./table-height";
 export * from "./header-footer";
 export * from "./paragraph-tracked";
 export * from "./selection-helpers";
