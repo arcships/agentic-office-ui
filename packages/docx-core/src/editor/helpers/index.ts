@@ -45,9 +45,10 @@
 //   selection-helpers.ts   — selection/cursor helpers (clone/normalize/compare)
 //   selection-restore.ts   — DOM selection restore heuristics
 //   section-manipulation.ts — section paragraph/image mutation at location
+//   pagination-plan-iterate.ts — break collection, overflow estimation, page break index iteration
 //
-// Pending modules (see docs/docx-editor-helpers-split-plan.md) — 3 remaining:
-//   pagination-plan-core, pagination-plan-iterate, pagination-plan-stabilize
+// Pending modules (see docs/docx-editor-helpers-split-plan.md) — 2 remaining:
+//   pagination-plan-core, pagination-plan-stabilize
 
 export * from "./constants";
 export * from "./performance";
@@ -87,3 +88,4 @@ export * from "./pretext-build";
 export * from "./pretext-measure";
 export * from "./tracked-changes";
 export * from "./tracked-changes-gutter";
+export * from "./pagination-plan-iterate";

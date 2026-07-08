@@ -74,6 +74,7 @@ export interface PaginationSectionMetrics {
   startNodeIndex: number;
   pageContentWidthPx: number;
   pageContentHeightPx: number;
+  pageContentHeightMultiplier?: number;
   docGridLinePitchPx?: number;
 }
 
