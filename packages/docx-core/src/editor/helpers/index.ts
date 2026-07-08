@@ -68,6 +68,7 @@ export * from "./paragraph-geometry";
 export * from "./drop-cap";
 export * from "./letterhead";
 export * from "./line-height";
+export * from "./line-height-table";
 export * from "./header-footer";
 export * from "./paragraph-tracked";
 export * from "./selection-helpers";
