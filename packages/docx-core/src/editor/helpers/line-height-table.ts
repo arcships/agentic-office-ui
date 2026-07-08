@@ -1,9 +1,6 @@
 // Table row/cell height estimation, table row slice boundary resolution,
-// and paragraph spacing helpers for pagination.
-// Upstream editor.tsx: lines 10541-11590.
-// TODO: estimateParagraphHeightPx, paragraphAvailableTextWidthPx,
-// paragraphLineCountWithinWidth live in not-yet-ported
-// modules. Replace stubs with real imports when those modules land.
+// paragraph height estimation, and paragraph spacing helpers for pagination.
+// Upstream editor.tsx: lines 10056-11590.
 
 import type {
   DocModel,
@@ -19,11 +16,13 @@ import {
 import type { TableSpacingTwips } from "./cache-utils";
 import {
   heightEstimateCacheKeyPx,
+  paragraphEstimatedHeightBySourceXml,
   setCacheEntry,
   tableEstimatedHeightBySourceXml,
   tableEstimatedRowHeightsByNode,
 } from "./cache-utils";
 import {
+  EMPTY_PARAGRAPH_EXTRA_HEIGHT_PX,
   MIN_PARAGRAPH_LINE_HEIGHT_PX,
   MIN_TABLE_ROW_SLICE_REMAINING_HEIGHT_PX,
   PAGE_OVERFLOW_TOLERANCE_PX,
@@ -37,16 +36,25 @@ import {
   WORD_TABLE_CELL_PARAGRAPH_BEFORE_TWIPS,
 } from "./constants";
 import { isParagraphCellContentNode, paragraphHasImage } from "./paragraph-inspect";
-import { paragraphHasFormField, paragraphHasVisibleText } from "./paragraph-geometry";
+import {
+  paragraphHasFormField,
+  paragraphHasVisibleText,
+  paragraphIsAbsoluteFloatingImageAnchorOnly,
+  paragraphAvailableTextWidthPx,
+  shouldRenderAbsoluteFloatingImage,
+  shouldRenderWrappedFloatingImage,
+} from "./paragraph-geometry";
 import {
   estimateParagraphLineHeightPx,
   paragraphDocGridSnapState,
   wrappedPretextParagraphBlockHeightPx,
 } from "./line-height";
+import { paragraphLineCountWithinWidth } from "./line-height-wrap";
 import {
   buildParagraphPretextLayoutSource,
   layoutParagraphPretextSource,
 } from "./pretext-build";
+import { resolveParagraphDualWrappedTextLayout } from "./pretext-measure";
 import {
   clampTableWidthPx,
   columnWidthsFromTableDefinition,
@@ -58,46 +66,173 @@ import {
   tableColumnCount,
 } from "./table-utils";
 import { resolveCollapsedTableHorizontalOuterBleedPx } from "./table-utils-extra";
+import {
+  paragraphIsEffectivelyEmpty,
+  paragraphIsSectionBreakAnchorCarryover,
+} from "./paragraph-tracked";
 import { paragraphBorderInsetPx } from "./style-block-css";
 
-// -- Missing dependency stubs (replace with real imports when modules land) --
+// -- Paragraph height estimation (upstream 10056-10094, 10391-10539) --
 
-type Fn<Args extends unknown[], R> = (...args: Args) => R;
+function estimateWrappedFloatingImageFootprintPx(
+  paragraph: ParagraphNode,
+  image: import("../../engine/types").ImageRunNode
+): number {
+  if (!shouldRenderWrappedFloatingImage(image)) {
+    return 0;
+  }
 
-function makeInjectable<Args extends unknown[], R>(name: string) {
-  let _fn: Fn<Args, R> | undefined;
-  return {
-    inject(fn: Fn<Args, R>): void { _fn = fn; },
-    call(...args: Args): R {
-      if (!_fn) throw new Error(`${name} not injected`);
-      return _fn(...args);
-    },
-  };
+  const wrapType = image.floating?.wrapType;
+  const isTopAndBottomWrap = wrapType === "topAndBottom";
+  const isImageOnlyAnchorParagraph = !paragraphHasVisibleText(paragraph);
+  if (!isTopAndBottomWrap && !isImageOnlyAnchorParagraph) {
+    return 0;
+  }
+
+  if (isTopAndBottomWrap && !isImageOnlyAnchorParagraph) {
+    return 0;
+  }
+
+  const floating = image.floating;
+  const imageHeightPx =
+    Number.isFinite(image.heightPx) && (image.heightPx as number) > 0
+      ? Math.round(image.heightPx as number)
+      : Number.isFinite(image.widthPx) && (image.widthPx as number) > 0
+      ? Math.round(image.widthPx as number)
+      : MIN_PARAGRAPH_LINE_HEIGHT_PX;
+  const distTPx = Math.max(0, Math.round(floating?.distTPx ?? 0));
+  const distBPx = Math.max(0, Math.round(floating?.distBPx ?? 0));
+  const verticalOffsetPx = Math.max(0, Math.round(floating?.yPx ?? 0));
+
+  return Math.max(
+    MIN_PARAGRAPH_LINE_HEIGHT_PX,
+    imageHeightPx + distTPx + distBPx + verticalOffsetPx
+  );
 }
 
-type PNode = ParagraphNode;
-type NumDefs = NumberingDefinitionSet | undefined;
+export function estimateParagraphHeightPx(
+  paragraph: ParagraphNode,
+  availableWidthPx?: number,
+  numberingDefinitions?: NumberingDefinitionSet,
+  docGridLinePitchPx?: number,
+  disableDocGridSnap = false
+): number {
+  const sourceXml = paragraph.sourceXml;
+  const baseWidthKey = heightEstimateCacheKeyPx(
+    availableWidthPx,
+    docGridLinePitchPx,
+    disableDocGridSnap
+  );
+  const widthKey: number | string = baseWidthKey;
+  if (sourceXml) {
+    const cachedByWidth = paragraphEstimatedHeightBySourceXml.get(sourceXml);
+    const cached = cachedByWidth?.get(widthKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+  }
 
-const _estParaH = makeInjectable<
-  [PNode, number | undefined, NumDefs, number | undefined, boolean | undefined],
-  number
->("estimateParagraphHeightPx");
+  const beforeSpacing =
+    twipsToPixels(paragraph.style?.spacing?.beforeTwips) ?? 0;
+  const afterSpacing = twipsToPixels(paragraph.style?.spacing?.afterTwips) ?? 0;
+  const lineHeightPx = estimateParagraphLineHeightPx(
+    paragraph,
+    docGridLinePitchPx,
+    disableDocGridSnap
+  );
+  const effectiveWidthPx =
+    Number.isFinite(availableWidthPx) && (availableWidthPx as number) > 0
+      ? paragraphAvailableTextWidthPx(
+          paragraph,
+          availableWidthPx as number,
+          numberingDefinitions
+        )
+      : undefined;
+  const dualWrappedLayout =
+    effectiveWidthPx !== undefined
+      ? resolveParagraphDualWrappedTextLayout(
+          paragraph,
+          effectiveWidthPx,
+          lineHeightPx
+        )
+      : undefined;
+  const lineCount = paragraphLineCountWithinWidth(
+    paragraph,
+    availableWidthPx,
+    numberingDefinitions
+  );
+  const absoluteFloatingAnchorOnlyParagraph =
+    paragraphIsAbsoluteFloatingImageAnchorOnly(paragraph);
+  const collapsibleAbsoluteFloatingAnchorOnlyParagraph =
+    absoluteFloatingAnchorOnlyParagraph &&
+    paragraphIsSectionBreakAnchorCarryover(paragraph);
+  const inlineImageHeightPx = paragraph.children.reduce((largest, child) => {
+    if (child.type !== "image") {
+      return largest;
+    }
+    if (
+      shouldRenderAbsoluteFloatingImage(child) ||
+      shouldRenderWrappedFloatingImage(child)
+    ) {
+      return largest;
+    }
+    return Math.max(largest, child.heightPx ?? 0);
+  }, 0);
+  const wrappedFloatingImageHeightPx = paragraph.children.reduce(
+    (largest, child) => {
+      if (child.type !== "image") {
+        return largest;
+      }
+      return Math.max(
+        largest,
+        estimateWrappedFloatingImageFootprintPx(paragraph, child)
+      );
+    },
+    0
+  );
+  const emptyParagraphHeightPx = paragraphIsEffectivelyEmpty(paragraph)
+    ? lineHeightPx + EMPTY_PARAGRAPH_EXTRA_HEIGHT_PX
+    : 0;
+  const topBorderInsetPx = paragraphBorderInsetPx(
+    paragraph.style?.borders?.top
+  );
+  const bottomBorderInsetPx = paragraphBorderInsetPx(
+    paragraph.style?.borders?.bottom
+  );
+  const textFlowHeightPx = collapsibleAbsoluteFloatingAnchorOnlyParagraph
+    ? 0
+    : dualWrappedLayout
+    ? wrappedPretextParagraphBlockHeightPx(dualWrappedLayout.layout)
+    : lineHeightPx * lineCount;
 
-const _paraAvailW = makeInjectable<[PNode, number, NumDefs], number>(
-  "paragraphAvailableTextWidthPx"
-);
-
-const _paraLnCount = makeInjectable<[PNode, number, NumDefs], number>(
-  "paragraphLineCountWithinWidth"
-);
-
-export const injectEstimateParagraphHeightPx = _estParaH.inject;
-export const injectParagraphAvailableTextWidthPx = _paraAvailW.inject;
-export const injectParagraphLineCountWithinWidth = _paraLnCount.inject;
-
-const estimateParagraphHeightPx = _estParaH.call;
-const paragraphAvailableTextWidthPx = _paraAvailW.call;
-const paragraphLineCountWithinWidth = _paraLnCount.call;
+  const contentHeightPx = Math.max(
+    collapsibleAbsoluteFloatingAnchorOnlyParagraph ? 0 : lineHeightPx,
+    textFlowHeightPx,
+    inlineImageHeightPx,
+    wrappedFloatingImageHeightPx,
+    emptyParagraphHeightPx
+  );
+  const estimatedHeightPx = Math.max(
+    1,
+    beforeSpacing +
+      afterSpacing +
+      topBorderInsetPx +
+      bottomBorderInsetPx +
+      contentHeightPx
+  );
+  if (sourceXml) {
+    const cachedByWidth =
+      paragraphEstimatedHeightBySourceXml.get(sourceXml) ??
+      new Map<number, number>();
+    cachedByWidth.set(widthKey, estimatedHeightPx);
+    setCacheEntry(
+      paragraphEstimatedHeightBySourceXml,
+      sourceXml,
+      cachedByWidth
+    );
+  }
+  return estimatedHeightPx;
+}
 
 // -- Paragraph spacing introspection --
 

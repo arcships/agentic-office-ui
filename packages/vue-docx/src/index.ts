@@ -1,20 +1,23 @@
-import { defineComponent, h } from "vue"
+// ---- Components ----
 
-// ---- Stub components (full implementations land in components/) ----
-
-export const DocxViewer = defineComponent({
-  name: "DocxViewer",
-  setup() {
-    return () => h("div", { class: "docx-viewer-stub" }, "DOCX Viewer (pending)")
-  },
-})
-
-export const DocxEditorViewer = defineComponent({
-  name: "DocxEditorViewer",
-  setup() {
-    return () => h("div", { class: "docx-editor-stub" }, "DOCX Editor (pending)")
-  },
-})
+export { default as DocxViewer } from "./components/DocxViewer.vue"
+export { default as DocxEditor } from "./components/DocxEditor.vue"
+export { default as DocxEditorViewer } from "./components/DocxEditor.vue"
+export { default as DocxViewerRoot } from "./components/DocxViewerRoot.vue"
+export { default as DocxPageWrapper } from "./components/DocxPageWrapper.vue"
+export { default as DocxPageSurface } from "./components/DocxPageSurface.vue"
+export { default as DocxPageHeader } from "./components/DocxPageHeader.vue"
+export { default as DocxPageFooter } from "./components/DocxPageFooter.vue"
+export { default as DocxPageBody } from "./components/DocxPageBody"
+export { default as DocxParagraphHost } from "./components/DocxParagraphHost.vue"
+export { default as DocxTableHost } from "./components/DocxTableHost.vue"
+export { default as DocxImageLayer } from "./components/DocxImageLayer.vue"
+export { default as DocxFormFieldLayer } from "./components/DocxFormFieldLayer.vue"
+export { default as DocxTrackedChangeGutter } from "./components/DocxTrackedChangeGutter.vue"
+export { default as DocxContextMenu } from "./components/DocxContextMenu.vue"
+export { default as DocxToolbar } from "./components/DocxToolbar.vue"
+export { default as DocxThumbnailPanel } from "./components/DocxThumbnailPanel.vue"
+export { default as DocxDragOverlay } from "./components/DocxDragOverlay.vue"
 
 // ---- Render ----
 

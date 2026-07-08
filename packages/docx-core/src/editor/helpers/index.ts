@@ -34,6 +34,7 @@
 //   drop-cap.ts            — drop-cap layout
 //   letterhead.ts          — letterhead layout
 //   line-height.ts         — estimateParagraphLineHeightPx (part 1)
+//   line-height-wrap.ts    — estimateWrappedLineCountForParagraph, paragraphLineCountWithinWidth
 //   line-height-table.ts   — table row/cell height + paragraph spacing helpers
 //   table-height.ts        — re-export barrel for table-height-estimate (split plan)
 //   header-footer.ts       — header/footer reserve
@@ -78,6 +79,7 @@ export * from "./paragraph-geometry";
 export * from "./drop-cap";
 export * from "./letterhead";
 export * from "./line-height";
+export * from "./line-height-wrap";
 export * from "./line-height-table";
 export * from "./table-height";
 export * from "./header-footer";

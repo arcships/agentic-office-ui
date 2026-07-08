@@ -10,8 +10,18 @@ import {
   type LayoutPage,
   type LayoutParagraphBlock,
   type LayoutRun,
-  type LayoutTableBlock
+  type LayoutTableBlock,
+  type LayoutBlock,
 } from "./layout-engine";
+export type {
+  LayoutOptions,
+  LayoutPage,
+  LayoutParagraphBlock,
+  LayoutRun,
+  LayoutTableBlock,
+  LayoutBlock,
+};
+export { layoutDocument };
 export * from "./pagination";
 export * from "./page-segmentation-core";
 export * from "./page-segmentation-table";

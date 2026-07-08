@@ -16,6 +16,7 @@ import type {
   DocModel,
   FormFieldRunNode,
   ImageRunNode,
+  NumberingDefinitionSet,
   ParagraphNode,
   TableNode,
   TextRunNode
@@ -35,6 +36,9 @@ import {
 } from "./synthetic-textbox";
 import { WORD_IMAGE_Z_INDEX_STEP } from "./constants";
 import type { TableCellContentNode } from "../../engine/types";
+import { resolveListParagraphIndent } from "./xml-parsing-extra";
+import { twipsToSignedPixels } from "./ooxml-helpers";
+import { paragraphBorderInsetPx } from "./style-block-css";
 
 export function paragraphHasInFlowImage(paragraph: ParagraphNode): boolean {
   return paragraph.children.some((child) => {
@@ -1518,4 +1522,52 @@ export function imageCropLayout(
     offsetXPx,
     offsetYPx,
   };
+}
+
+// --- Paragraph available text width (upstream 9936-9980) ---
+
+export function paragraphAvailableTextWidthPx(
+  paragraph: ParagraphNode,
+  availableWidthPx: number,
+  numberingDefinitions?: NumberingDefinitionSet
+): number {
+  const safeAvailableWidthPx = Math.max(24, Math.round(availableWidthPx));
+  const resolvedIndent = resolveListParagraphIndent(
+    paragraph,
+    numberingDefinitions
+  );
+  const leftIndentPx = Math.max(
+    0,
+    twipsToSignedPixels(resolvedIndent?.leftTwips) ?? 0
+  );
+  const rightIndentPx = Math.max(
+    0,
+    twipsToSignedPixels(paragraph.style?.indent?.rightTwips) ?? 0
+  );
+  const firstLineIndentPx = twipsToSignedPixels(resolvedIndent?.firstLineTwips);
+  const hangingIndentPx = twipsToSignedPixels(resolvedIndent?.hangingTwips);
+  const firstLineDeltaPx =
+    firstLineIndentPx ?? (hangingIndentPx ? -hangingIndentPx : 0);
+  const textIndentReductionPx =
+    Number.isFinite(firstLineDeltaPx) && (firstLineDeltaPx as number) > 0
+      ? (firstLineDeltaPx as number)
+      : 0;
+  const leftBorderInsetPx = paragraphBorderInsetPx(
+    paragraph.style?.borders?.left
+  );
+  const rightBorderInsetPx = paragraphBorderInsetPx(
+    paragraph.style?.borders?.right
+  );
+
+  return Math.max(
+    24,
+    Math.round(
+      safeAvailableWidthPx -
+        leftIndentPx -
+        rightIndentPx -
+        textIndentReductionPx -
+        leftBorderInsetPx -
+        rightBorderInsetPx
+    )
+  );
 }
