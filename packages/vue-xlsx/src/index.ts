@@ -1,5 +1,4 @@
-import { defineComponent, h } from "vue"
-import { useXlsxViewerController } from "./composables"
+import XlsxViewerComponent from "./components/XlsxViewer.vue"
 
 export { useXlsxViewerController } from "./composables"
 export { XlsxFileSizeLimitExceededError } from "./composables"
@@ -13,9 +12,13 @@ export type {
   LegendItem,
 } from "./render"
 
-export const XlsxViewer = defineComponent({
-  name: "XlsxViewer",
-  setup() {
-    return () => h("div", { class: "xlsx-viewer-stub" }, "XLSX Viewer (pending)")
-  },
-})
+// Component exports
+export { default as XlsxGrid } from "./components/XlsxGrid.vue"
+export { default as XlsxToolbar } from "./components/XlsxToolbar.vue"
+export { default as XlsxSheetTabs } from "./components/XlsxSheetTabs.vue"
+export { default as XlsxChartOverlay } from "./components/XlsxChartOverlay.vue"
+export { default as XlsxImageLayer } from "./components/XlsxImageLayer.vue"
+export { default as XlsxSelectionOverlay } from "./components/XlsxSelectionOverlay.vue"
+export { default as XlsxContextMenu } from "./components/XlsxContextMenu.vue"
+
+export const XlsxViewer = XlsxViewerComponent
