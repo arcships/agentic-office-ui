@@ -1,0 +1,273 @@
+# Review: xlsx-composables-split-10
+
+Date: 2026-07-08
+Task: xlsx-composables-split（架构设计 `docs/xlsx-migration-architecture.md` §2.2 / §三 步骤4 / §4.4）
+Branch: task/docx-remigration
+HEAD: 3b282bb
+前置 review: `xlsx-composables-split-1.md`～`-9.md`（全部 blocked）
+
+## 结论
+
+**blocked** —— HEAD `3b282bb`（"fix #9"）相比 review-9（`6b52a1d`）**无任何代码改动**：该 commit 唯一变更是新增上一轮 review 的 markdown 文件（`docs/plan/reviews/xlsx-composables-split-9.md`，+253 行）。`git log --oneline 6b52a1d..HEAD` 仅此一个 commit，`git diff 6b52a1d..HEAD -- packages/vue-xlsx/src/` 为空。
+
+review-9 记录的全部 blocking 问题一字未改。这是连续第十次 review 同一核心问题（monolith 未拆、子文件是复制副本/平行死代码）。review-9→review-10 之间**零代码进展**——唯一的 commit 仅添加了 review-9 的 markdown 文件。
+
+```
+$ git log --oneline 6b52a1d..HEAD          # review-9 → review-10 之间仅 1 个 commit
+3b282bb xlsx-composables-split: fix #9
+$ git show --stat 3b282bb                    # 该 commit 仅新增 review-9 markdown，无代码
+ docs/plan/reviews/xlsx-composables-split-9.md | 253 ++++++++++++++++++++++++++
+ 1 file changed, 253 insertions(+)
+$ git diff --stat 6b52a1d..HEAD -- packages/vue-xlsx/src/   # 代码零改动
+（空）
+```
+
+## Findings
+
+### F1 — monolith 未缩减，仍为 4724 行，硬约束 ≤1000 行未满足（功能缺失）
+
+- 严重程度：**P1**
+- 阻塞：**blocking**
+- 设计文档位置：`docs/xlsx-migration-architecture.md` §硬约束（"单文件 ≤ 1000 行"）+ §2.2（composables/ 目录 9 文件清单）+ §4.4（composables 拆分策略）
+- 代码位置：`packages/vue-xlsx/src/composables.ts:1-4724`
+
+```
+$ git diff --stat 6b52a1d..HEAD -- packages/vue-xlsx/src/composables.ts   # 自 review-9 未改
+（空）
+$ git diff --stat 914001a..HEAD -- packages/vue-xlsx/src/composables.ts   # 自 task 起未改
+（空）
+$ wc -l packages/vue-xlsx/src/composables.ts
+4724 packages/vue-xlsx/src/composables.ts
+```
+
+4724 行是硬约束的 4.7 倍。本任务存在的唯一理由就是拆掉这个 monolith；monolith 自 task（`914001a`）起未改一行，即 blocking。
+
+### F2 — 架构要求的 9 文件仍缺 2 个核心文件：controller 文件与 barrel（功能缺失）
+
+- 严重程度：**P1**
+- 阻塞：**blocking**
+- 设计文档位置：`docs/xlsx-migration-architecture.md` §2.2（composables/ 目录清单）
+- 代码位置：`packages/vue-xlsx/src/composables/`（无 `index.ts`、无 `useXlsxViewerController.ts`）
+
+§2.2 要求的 9 文件对账：
+
+| 设计文件（§2.2） | 预估行数 | 实际状态 |
+|---|---:|---|
+| `composables/useXlsxViewerController.ts` | ~700 | ❌ **缺失**（核心 controller `useXlsxViewerController` 仍在 monolith） |
+| `composables/workbook-state.ts` | ~600 | ⚠️ 存在（987 行），孤立未接入 |
+| `composables/selection.ts` | ~500 | ⚠️ 存在（170 行），孤立未接入 |
+| `composables/editing.ts` | ~600 | ⚠️ 存在（450 行），孤立未接入 |
+| `composables/chart-controller.ts` | ~500 | ⚠️ 存在（604 行），孤立未接入 |
+| `composables/clipboard.ts` | ~400 | ⚠️ 存在（482 行），孤立未接入 |
+| `composables/navigation.ts` | ~400 | ⚠️ 存在（310 行），孤立未接入 |
+| `composables/formatting.ts` | ~500 | ⚠️ 存在（305 行），孤立未接入 |
+| `composables/index.ts` | barrel | ❌ **缺失**（无 barrel，子模块无法被 `src/index.ts` 引用） |
+
+```
+$ ls packages/vue-xlsx/src/composables/index.ts packages/vue-xlsx/src/composables/useXlsxViewerController.ts
+ls: No such file or directory   (index.ts)
+ls: No such file or directory   (useXlsxViewerController.ts)
+```
+
+`useXlsxViewerController.ts` 是 §2.2 清单的第一个文件、§4.4 明确的拆分核心（"useXlsxViewerController(4724行)按职责拆"），其缺失意味着拆分的主干未动。
+
+### F3 — 子模块是 monolith 的重复副本 + 未被使用的平行架构，monolith 未改为 import，子文件是死代码（功能缺失）
+
+- 严重程度：**P1**
+- 阻塞：**blocking**
+- 设计文档位置：`docs/xlsx-migration-architecture.md` §2.2 + §4.4（拆分后需接入）
+- 代码位置：`packages/vue-xlsx/src/composables/*.ts`（9 文件）；`packages/vue-xlsx/src/composables.ts`（monolith）；`packages/vue-xlsx/src/index.ts:2-5`
+
+证据链：
+
+1. monolith 不从任何子模块 import：
+   ```
+   $ grep -n 'from "\./composables/' packages/vue-xlsx/src/composables.ts
+   （无输出，exit 1）
+   ```
+2. 全仓库无任何文件 import 子模块：
+   ```
+   $ grep -rn 'from "\./composables/' packages/vue-xlsx/src/
+   （无输出，exit 1）
+   ```
+3. `src/index.ts:2,4,5` 仍 `from "./composables"`，解析到 monolith `composables.ts`，子模块无人引用：
+   ```
+   $ cat packages/vue-xlsx/src/index.ts
+   import { defineComponent, h } from "vue"
+   import { useXlsxViewerController } from "./composables"
+
+   export { useXlsxViewerController } from "./composables"
+   export { XlsxFileSizeLimitExceededError } from "./composables"
+   ```
+4. monolith 的 `useXlsxViewerController` 从不构造 `XlsxControllerContext`、从不调用任何 domain factory，其 return 直接引用内联局部函数：
+   ```
+   $ grep -nE "createChartImageDomain|createEditingDomain|createHistoryDomain|createClipboardDomain|createNavigationDomain|XlsxControllerContext" packages/vue-xlsx/src/composables.ts
+   （none, exit 1 - monolith uses inline logic）
+   ```
+
+即子模块整套设计从未被接入。正确做法是"从 monolith 移出 → monolith 删除本地实现并改为 import"，最终 `composables.ts` 应消失或仅剩极薄入口。当前是"复制 + 加平行架构"，必须改为"剪切"。
+
+### F4 — typecheck 通过（但仅验证 monolith + 孤立子模块可编译，不证明拆分生效）
+
+- 严重程度：—
+- 阻塞：**non-blocking**（本项无问题，记录验证结果）
+- 设计文档位置：`docs/xlsx-migration-architecture.md` §三 步骤4（typecheck 要求）
+- 代码位置：`packages/vue-xlsx/src/composables/*.ts`；`packages/vue-xlsx/src/composables.ts`
+
+```
+$ pnpm --filter @extend-ai/vue-xlsx typecheck
+> tsc --noEmit
+（exit 0，无输出）
+```
+
+typecheck 通过仅证明 monolith + 子模块都能编译，不能证明拆分已生效（子模块是死代码，见 F3）。import 路径正确性仅在这一孤立意义上成立。
+
+### F5 — 子模块 import 图为 DAG，无循环依赖（模块边界）
+
+- 严重程度：—
+- 阻塞：**non-blocking**（本项无问题，记录验证结果）
+- 设计文档位置：`docs/xlsx-migration-architecture.md` §4.4
+- 代码位置：`packages/vue-xlsx/src/composables/*.ts`
+
+当前 import 图（value import 用 `→`，type-only 用 `⇢`）：
+
+```
+selection → (none)
+formatting → internal
+internal → selection
+image-assets → internal
+clipboard → internal, selection, formatting
+chart-controller → internal, image-assets（+ re-export image-assets 符号）
+workbook-state → selection, internal, image-assets, clipboard, ⇢internal
+editing → selection, workbook-state, ⇢internal
+navigation → workbook-state, internal, formatting, chart-controller
+```
+
+拓扑序：selection / formatting → internal → image-assets → clipboard → chart-controller → workbook-state → editing → navigation。无环。被多方依赖的共享基础（常量、历史类型、`applyCellMutationState`、`XlsxControllerContext`、`resolveInheritedCellStyle`）已下沉到 `internal.ts`/`formatting.ts`，符合 §4.4 隐含的模块单向依赖。
+
+子模块内部的相对 import 路径均正确（typecheck 通过佐证），无绝对路径/包内错误引用。问题在于"接线"缺失：`src/index.ts` 与 monolith 均不引用子模块，故子模块路径正确与否对运行时无意义（见 F3）。
+
+### F6 — 上游功能对齐：monolith 对齐良好；拆分产出的对齐因死代码无法验证（对齐验证不可进行）
+
+- 严重程度：**P2**
+- 阻塞：**non-blocking**（对齐主体 monolith 未变，blocking 来自 F1-F3）
+- 设计文档位置：`docs/upstream-xlsx-feature-alignment.md` §2.9（controller.tsx 对齐清单 A–L）+ §三（功能对齐要点 22–38）
+- 代码位置：`packages/vue-xlsx/src/composables.ts`（monolith）；`packages/vue-xlsx/src/composables/*.ts`（死代码）
+
+上游 `@extend-ai/react-xlsx` commit `f285a1c` 的 `controller.tsx` 核心逻辑在 monolith 中均存在（monolith 自 review-4 起未变，本次复核确认）：
+
+- 要点 23 双层历史：`pushHistoryEntry`（monolith:1077）/`applyCellMutationState`（monolith:1132）/`isApplyingHistoryRef`（monolith:1937），snapshot/cell-edit/range-edit 三类齐全。
+- 要点 25 `HISTORY_LIMIT=100` FIFO（monolith:75,1079）。
+- 要点 26 `isApplyingHistoryRef` 防自记（monolith:1937）。
+- 要点 27 `coerceUserEnteredValue`（monolith:1108）。
+- 要点 37 image/chart rect 走 snapshot + px→EMU（`rectToImageAnchor` monolith:17，`EMU_PER_PIXEL=9525` monolith:82）。
+- 要点 38 zoom 纯前端按 tab 存（`zoomScaleOverridesByTabId` monolith:1927，`clampZoomScale` monolith:153）。
+
+子模块内容是 monolith 的逐字副本 + domain factory 包装，逻辑上与上游对齐等价于 monolith 对齐；但因 F3 子模块是死代码，拆分后的模块边界是否割裂内聚逻辑无法在运行时验证。
+
+### F7 — 残留 stub/mock/fake 检查（无残留，记录验证结果）
+
+- 严重程度：—
+- 阻塞：**non-blocking**（本项无问题）
+- 设计文档位置：`docs/xlsx-migration-architecture.md` §2.2
+- 代码位置：`packages/vue-xlsx/src/composables.ts`；`packages/vue-xlsx/src/composables/*.ts`
+
+```
+$ grep -nE "stub|mock|fake|TODO|FIXME" packages/vue-xlsx/src/composables/*.ts packages/vue-xlsx/src/composables.ts
+（无命中）
+```
+
+`composables.ts` 与 `composables/*.ts` 无 stub/mock/fake 残留。唯一 stub 字样在 `src/index.ts:10` 的 `XlsxViewer` 占位（`xlsx-viewer-stub`），属 `xlsx-components` 任务范畴，非本任务范围。
+
+### F8 — monolith 侧仍有 3 处 debug 日志未清理（既有问题，接入时需一并处理）
+
+- 严重程度：**P3**
+- 阻塞：**non-blocking**（上游机械改写遗留，非拆分新引入）
+- 设计文档位置：—（上游 `controller.tsx` 残留，非设计文档要求）
+- 代码位置：`packages/vue-xlsx/src/composables.ts:3657,3672,3692`
+
+```
+$ grep -n "console\." packages/vue-xlsx/src/composables.ts
+3657:    console.info("[react-xlsx debug] setChartRect", {
+3672:    console.info("[react-xlsx debug] currentChart", {
+3692:    console.info("[react-xlsx debug] updateWorkbookChartAnchor", { didUpdateAnchor, nextAnchor });
+```
+
+子模块 `chart-controller.ts` 侧的同名日志已在 review-5→review-6 删除，但 monolith 侧仍在。接入时（剪切迁移）monolith 逻辑被删除即自然消除，无需单独处理。
+
+## 证据汇总
+
+```
+$ git rev-parse HEAD
+3b282bb3d73b9dc6a02c23ec40224732a5221a13
+
+$ git log --oneline 6b52a1d..HEAD          # review-9 → review-10 之间仅 1 个 commit
+3b282bb xlsx-composables-split: fix #9
+$ git show --stat 3b282bb                    # 该 commit 仅新增 review-9 markdown，无代码
+ docs/plan/reviews/xlsx-composables-split-9.md | 253 ++++++++++++++++++++++++++
+ 1 file changed, 253 insertions(+)
+
+$ git diff --stat 6b52a1d..HEAD -- packages/vue-xlsx/src/   # 代码零改动
+（空）
+
+$ git diff --stat 914001a..HEAD -- packages/vue-xlsx/src/composables.ts   # monolith 自 task 起未改
+（空）
+
+$ wc -l packages/vue-xlsx/src/composables.ts packages/vue-xlsx/src/composables/*.ts
+4724 composables.ts
+ 604 chart-controller.ts
+ 482 clipboard.ts
+ 450 editing.ts
+ 305 formatting.ts
+ 704 image-assets.ts
+ 351 internal.ts
+ 310 navigation.ts
+ 170 selection.ts
+ 987 workbook-state.ts
+
+$ grep -n 'from "\./composables/' packages/vue-xlsx/src/composables.ts   # monolith 不引用子模块
+（无输出，exit 1）
+$ grep -rn 'from "\./composables/' packages/vue-xlsx/src/                # 子模块无人引用
+（无输出，exit 1）
+$ grep -nE "createChartImageDomain|createEditingDomain|createHistoryDomain|createClipboardDomain|createNavigationDomain|XlsxControllerContext" packages/vue-xlsx/src/composables.ts
+（none, exit 1 - monolith uses inline logic）
+$ ls packages/vue-xlsx/src/composables/index.ts packages/vue-xlsx/src/composables/useXlsxViewerController.ts
+ls: No such file or directory   (index.ts)
+ls: No such file or directory   (useXlsxViewerController.ts)
+
+$ grep -nE "stub|mock|fake|TODO|FIXME" packages/vue-xlsx/src/composables/*.ts packages/vue-xlsx/src/composables.ts
+（无命中）
+
+$ pnpm --filter @extend-ai/vue-xlsx typecheck
+> tsc --noEmit
+（exit 0）
+```
+
+## 与历次 review 的差异
+
+| review | HEAD | composables/ 文件 | monolith 行数 | 接入 | typecheck | 结论 |
+|---|---|---|---:|---|---|---|
+| -1 | 914001a | 0 | 4724 | 无 | (monolith) pass | blocked |
+| -2 | 2dd846f | 0 | 4724 | 无 | (monolith) pass | blocked |
+| -3 | 03585c3 | 3 | 4724 | 无 | (monolith) pass | blocked |
+| -4 | ff0fa44 | 9 | 4724 | 无 | fail (2 err) | blocked |
+| -5 | b3417fa | 9 | 4724 | 无 | pass | blocked |
+| -6 | 1c86bdf | 9 | 4724 | 无 | pass | blocked |
+| -7 | 667787a | 9 | 4724 | 无 | pass | blocked |
+| -8 | 0992f59 | 9 | 4724 | 无 | pass | blocked |
+| -9 | 6b52a1d | 9 | 4724 | 无 | pass | blocked |
+| **-10** | **3b282bb** | **9** | **4724** | **无** | **pass** | **blocked** |
+
+连续十次 review 同一核心问题（monolith 未拆、子文件是复制副本/平行死代码）未解决。review-9→review-10 之间**零代码进展**——唯一的 commit 仅添加了 review-9 的 markdown 文件，`composables.ts` 与 `composables/*.ts` 均无任何改动。
+
+## 建议下一步
+
+review-9 的 5 条建议一字未落实，仍然适用：
+
+1. **剪切迁移**（review-4/5/6/7/8/9 建议 1，未落实）：按 §2.2 的 8 模块把 `composables.ts` 代码**移出**，monolith 删除本地实现并改为从子模块 `import`，最终 `composables.ts` 消失或仅剩极薄入口。当前是"复制 + 加平行架构"，必须改为"剪切"。
+2. **补 controller 文件**（review-4/5/6/7/8/9 建议 2，未落实）：`composables/useXlsxViewerController.ts`，把 `useXlsxViewerController`（monolith:1899）及其 setup/return（monolith:4606-4723）移入，return 改为聚合各 `createXxxDomain(ctx)` 的产物。
+3. **补 barrel + 接线**（review-4/5/6/7/8/9 建议 3，未落实）：`composables/index.ts`，`src/index.ts` 从 `./composables`（解析到 barrel）导入。接入后 F3 死代码问题自然消除。
+4. 清理 monolith 侧的 F8 debug 日志（`composables.ts:3657,3672,3692`）。
+5. 验证：`pnpm --filter @extend-ai/vue-xlsx typecheck` + `build` 后运行 `packages/vue-xlsx/test/structure.mjs`（接入后需确认其从 `dist/index.js` 导入的 controller 方法表仍覆盖 requiredMethods）；grep 确认 monolith 内不再保留已迁出函数的本地副本、`grep -rn 'from "\./composables/' packages/vue-xlsx/src/` 有命中、`composables.ts` 行数 ≤1000 或消失。
+
+关键判断：本任务已连续十轮 blocking 且 review-9→review-10 零代码进展。继续重复 review 不会推进拆分；建议将任务退回执行方，明确要求"剪切迁移而非复制"这一唯一正确路径后再提交，避免第十一次 review 同一问题。
