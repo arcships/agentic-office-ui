@@ -132,6 +132,7 @@ export type {
   XlsxViewerCharts,
   XlsxViewerSelection,
   XlsxViewerThumbnails,
+  UseXlsxViewerThumbnailsOptions,
   XlsxViewerZoom,
   XlsxViewerTables,
 } from "./types";
