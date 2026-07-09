@@ -10,6 +10,18 @@
       :controller="controller"
       :is-dark="isDark ?? false"
     />
+    <XlsxRibbon
+      v-if="showRibbon"
+      :controller="controller"
+      :is-dark="isDark ?? false"
+      :read-only="controller.readOnly"
+    />
+    <XlsxFormulaBar
+      v-if="showFormulaBar"
+      :controller="controller"
+      :is-dark="isDark ?? false"
+      :read-only="controller.readOnly"
+    />
     <div class="xlsx-viewer__body">
       <div
         v-if="controller.isLoading"
@@ -78,6 +90,8 @@ import { computed, type CSSProperties } from "vue";
 import type { XlsxViewerController, XlsxCellAddress } from "@extend-ai/xlsx-core";
 import XlsxGrid from "./XlsxGrid.vue";
 import XlsxToolbar from "./XlsxToolbar.vue";
+import XlsxRibbon from "./XlsxRibbon.vue";
+import XlsxFormulaBar from "./XlsxFormulaBar.vue";
 import XlsxSheetTabs from "./XlsxSheetTabs.vue";
 import XlsxChartOverlay from "./XlsxChartOverlay.vue";
 import XlsxImageLayer from "./XlsxImageLayer.vue";
@@ -94,6 +108,8 @@ const props = withDefaults(
     selectionColor?: string;
     selectionFillColor?: string;
     showDefaultToolbar?: boolean;
+    showRibbon?: boolean;
+    showFormulaBar?: boolean;
     showImages?: boolean;
   }>(),
   {
@@ -104,6 +120,8 @@ const props = withDefaults(
     selectionColor: undefined,
     selectionFillColor: undefined,
     showDefaultToolbar: true,
+    showRibbon: true,
+    showFormulaBar: true,
     showImages: true,
   }
 );

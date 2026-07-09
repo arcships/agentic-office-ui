@@ -1,7 +1,7 @@
 ---
 id: xlsx-006
 scope: demo
-status: pending
+status: done
 depends-on: [xlsx-005]
 ---
 

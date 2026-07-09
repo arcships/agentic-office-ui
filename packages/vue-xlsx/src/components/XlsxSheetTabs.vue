@@ -8,19 +8,36 @@
       ‹
     </button>
     <div class="xlsx-sheettabs__list">
-      <button
+      <div
         v-for="(tab, index) in controller.tabs"
         :key="tab.id ?? index"
-        class="xlsx-sheettabs__tab"
-        :class="{
-          'xlsx-sheettabs__tab--active': index === activeTabIndex,
-        }"
-        :style="tabStyle(index)"
-        @click="onTabClick(index)"
-        @dblclick="onTabDblClick(tab, index)"
+        class="xlsx-sheettabs__tab-wrapper"
+        @mouseenter="onTabHover(index, $event)"
+        @mouseleave="onTabLeave"
       >
-        <span class="xlsx-sheettabs__tab-name">{{ tab.name }}</span>
-      </button>
+        <button
+          class="xlsx-sheettabs__tab"
+          :class="{
+            'xlsx-sheettabs__tab--active': index === activeTabIndex,
+          }"
+          :style="tabStyle(index)"
+          @click="onTabClick(index)"
+          @dblclick="onTabDblClick(tab, index)"
+        >
+          <span class="xlsx-sheettabs__tab-name">{{ tab.name }}</span>
+        </button>
+        <div
+          v-if="hoveredTabIndex === index && thumbnailComputed[index]"
+          class="xlsx-sheettabs__thumbnail"
+          :style="thumbnailPopupStyle"
+        >
+          <canvas
+            :ref="(el) => setThumbnailCanvas(index, el)"
+            :height="thumbnailComputed[index]?.height"
+            :width="thumbnailComputed[index]?.width"
+          />
+        </div>
+      </div>
       <button
         v-if="!controller.readOnly"
         class="xlsx-sheettabs__add-btn"
@@ -41,15 +58,71 @@
 </template>
 
 <script setup lang="ts">
-import { computed, type CSSProperties } from "vue";
-import type { XlsxViewerController } from "@extend-ai/xlsx-core";
+import { computed, ref, watch, nextTick, onMounted, onUnmounted, type CSSProperties } from "vue";
+import type { XlsxViewerController, XlsxSheetThumbnail, UseXlsxViewerThumbnailsOptions } from "@extend-ai/xlsx-core";
+import { useXlsxViewerThumbnails } from "../composables/useXlsxViewerThumbnails";
 
 const props = defineProps<{
   controller: XlsxViewerController;
   isDark?: boolean;
+  thumbnailOptions?: UseXlsxViewerThumbnailsOptions;
 }>();
 
 const activeTabIndex = computed(() => props.controller.activeTabIndex);
+
+const { thumbnails: thumbnailComputedRaw } = useXlsxViewerThumbnails(
+  () => props.controller,
+  props.thumbnailOptions ?? { includeHeaders: true, resolution: { maxHeight: 132, maxWidth: 200 } },
+);
+
+const thumbnailComputed = computed(() => (thumbnailComputedRaw as unknown as XlsxSheetThumbnail[]));
+
+const hoveredTabIndex = ref<number | null>(null);
+const thumbnailCanvasRefs = ref<Map<number, HTMLCanvasElement | null>>(new Map());
+const popupX = ref(0);
+const popupY = ref(0);
+let popupTimer: ReturnType<typeof setTimeout> | null = null;
+
+const thumbnailPopupStyle = computed<CSSProperties>(() => ({
+  left: `${popupX.value}px`,
+  position: "fixed",
+  top: `${popupY.value}px`,
+  zIndex: 9999,
+  transform: "translate(-50%, calc(-100% - 8px))",
+  backgroundColor: props.isDark ? "#27272a" : "#fff",
+  border: `1px solid ${props.isDark ? "#3f3f46" : "#e4e4e7"}`,
+  borderRadius: "8px",
+  boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+  padding: "8px",
+  pointerEvents: "none",
+}));
+
+function setThumbnailCanvas(index: number, el: unknown) {
+  const canvas = el as HTMLCanvasElement | null;
+  thumbnailCanvasRefs.value.set(index, canvas);
+}
+
+function onTabHover(index: number, event: MouseEvent) {
+  if (popupTimer) clearTimeout(popupTimer);
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  popupX.value = rect.left + rect.width / 2;
+  popupY.value = rect.top;
+  hoveredTabIndex.value = index;
+
+  nextTick(() => {
+    const canvas = thumbnailCanvasRefs.value.get(index);
+    const thumb = thumbnailComputed.value[index];
+    if (canvas && thumb) {
+      thumb.paint(canvas as HTMLCanvasElement);
+    }
+  });
+}
+
+function onTabLeave() {
+  popupTimer = setTimeout(() => {
+    hoveredTabIndex.value = null;
+  }, 150);
+}
 
 function onTabClick(index: number) {
   props.controller.setActiveTabIndex(index);
@@ -103,6 +176,21 @@ function tabStyle(index: number): CSSProperties {
     whiteSpace: "nowrap",
   };
 }
+
+onMounted(() => {
+  // Preload thumbnails
+  nextTick(() => {
+    thumbnailComputed.value.forEach((thumb, index) => {
+      const canvas = document.createElement("canvas");
+      thumb.paint(canvas);
+      thumbnailCanvasRefs.value.set(index, canvas);
+    });
+  });
+});
+
+onUnmounted(() => {
+  if (popupTimer) clearTimeout(popupTimer);
+});
 </script>
 
 <style scoped>
@@ -115,6 +203,11 @@ function tabStyle(index: number): CSSProperties {
   flex: 1;
   gap: 2px;
   overflow-x: auto;
+}
+
+.xlsx-sheettabs__tab-wrapper {
+  position: relative;
+  flex-shrink: 0;
 }
 
 .xlsx-sheettabs__tab {
@@ -135,6 +228,20 @@ function tabStyle(index: number): CSSProperties {
 .xlsx-sheettabs__tab-name {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.xlsx-sheettabs__thumbnail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 212px;
+}
+
+.xlsx-sheettabs__thumbnail canvas {
+  border-radius: 6px;
+  display: block;
+  height: auto;
+  width: 100%;
 }
 
 .xlsx-sheettabs__add-btn {
