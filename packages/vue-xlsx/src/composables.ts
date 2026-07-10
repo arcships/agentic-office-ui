@@ -18,6 +18,7 @@ export {
   buildSheetList,
   buildVisibleSheetIndexMap,
   resolveWorkbookBuffer,
+  resolveWorkbookSource,
   parseWorkbookBuffer,
   tryRecalculate
 } from "./composables/workbook-state";

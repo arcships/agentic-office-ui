@@ -4,10 +4,17 @@ import vue from "@vitejs/plugin-vue"
 
 const workspaceRoot = path.resolve(__dirname, "../..")
 
-const workspaceSourceAliases: Record<string, string> = {
-  "@extend-ai/docx-core": path.resolve(workspaceRoot, "packages/docx-core/src/index.ts"),
-  "@extend-ai/vue-docx": path.resolve(workspaceRoot, "packages/vue-docx/src/index.ts"),
-}
+const workspaceSourceAliasIds = ["@extend-ai/docx-core", "@extend-ai/vue-docx"] as const
+const workspaceSourceAliases = [
+  {
+    find: /^@extend-ai\/docx-core$/,
+    replacement: path.resolve(workspaceRoot, "packages/docx-core/src/index.ts"),
+  },
+  {
+    find: /^@extend-ai\/vue-docx$/,
+    replacement: path.resolve(workspaceRoot, "packages/vue-docx/src/index.ts"),
+  },
+]
 
 export default defineConfig({
   plugins: [vue()],
@@ -19,13 +26,11 @@ export default defineConfig({
     exclude: [
       "us-atlas",
       "world-atlas",
-      ...Object.keys(workspaceSourceAliases),
+      ...workspaceSourceAliasIds,
     ],
   },
   resolve: {
-    alias: {
-      ...workspaceSourceAliases,
-    },
+    alias: workspaceSourceAliases,
     dedupe: ["vue"],
   },
 })

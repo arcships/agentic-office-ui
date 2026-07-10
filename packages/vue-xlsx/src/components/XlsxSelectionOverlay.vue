@@ -1,21 +1,38 @@
 <template>
-  <div class="xlsx-selection-overlay" />
+  <div
+    class="xlsx-selection-overlay"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+    :data-selection-address="selectionAddress ?? undefined"
+  >
+    <span class="xlsx-selection-overlay__announcement">
+      {{ selectionAnnouncement }}
+    </span>
+  </div>
 </template>
 
 <script setup lang="ts">
-import type { XlsxViewerController, XlsxCellAddress, XlsxResolvedCellStyle } from "@extend-ai/xlsx-core";
-import type { CSSProperties } from "vue";
+import { computed, type CSSProperties } from "vue";
+import type { XlsxViewerController, XlsxCellAddress } from "@extend-ai/xlsx-core";
 
-defineProps<{
+const props = defineProps<{
   controller: XlsxViewerController;
   getCellStyle?: ((cell: XlsxCellAddress) => Partial<CSSProperties> | undefined) | null;
   selectionColor?: string;
   selectionFillColor?: string;
 }>();
 
-// Selection rendering is handled by XlsxGrid canvas painting.
-// This component is a placeholder for future DOM-based selection overlays
-// (e.g., fill handle, resize cursors for images/charts).
+// The grid owns the visual selection. This companion layer gives the same
+// selection a stable accessibility announcement without intercepting input.
+const selectionAddress = computed(
+  () => props.controller.selectedRangeAddress ?? props.controller.activeCellAddress
+);
+const selectionAnnouncement = computed(() =>
+  selectionAddress.value
+    ? `当前选择 ${selectionAddress.value}`
+    : "当前没有选择单元格"
+);
 </script>
 
 <style scoped>
@@ -26,5 +43,14 @@ defineProps<{
   position: absolute;
   top: 0;
   width: 100%;
+}
+.xlsx-selection-overlay__announcement {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
 }
 </style>

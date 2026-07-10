@@ -400,6 +400,8 @@ export function selectSectionVariantForPage<T extends HeaderSection | FooterSect
   pageIndex: number,
   options?: {
     evenAndOddHeaders?: boolean;
+    /** Zero-based physical page index used for even/odd selection. */
+    documentPageIndex?: number;
   }
 ): T | undefined {
   if (sections.length === 0) {
@@ -417,7 +419,10 @@ export function selectSectionVariantForPage<T extends HeaderSection | FooterSect
   const evenAndOddHeadersEnabled = options?.evenAndOddHeaders ?? true;
 
   const safePageIndex = Number.isFinite(pageIndex) ? Math.max(0, Math.round(pageIndex)) : 0;
-  const oddPageNumber = safePageIndex % 2 === 0;
+  const physicalPageIndex = Number.isFinite(options?.documentPageIndex)
+    ? Math.max(0, Math.round(options?.documentPageIndex as number))
+    : safePageIndex;
+  const oddPageNumber = physicalPageIndex % 2 === 0;
 
   if (safePageIndex === 0 && titlePage) {
     return first;

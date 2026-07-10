@@ -14,6 +14,7 @@ import {
   sameTextRange,
   normalizeEditorCursorStateForModel,
   defaultStarterModel,
+  assertValidDocxModel,
   DEFAULT_PARAGRAPH_LINE_MULTIPLE,
   resolveAutoLineSpacingMultiple,
   tableBorderPresetState,
@@ -92,7 +93,9 @@ export function useDocxEditor(
   options: UseDocxEditorOptions = {}
 ): DocxEditorController {
   // --- starter template ---
-  const starterTemplate = cloneDocModel(options.starterModel ?? defaultStarterModel)
+  const starterModel = options.starterModel ?? defaultStarterModel
+  assertValidDocxModel(starterModel)
+  const starterTemplate = cloneDocModel(starterModel)
 
   // --- core state ---
   const model = ref<DocModel>(cloneDocModel(starterTemplate))
@@ -620,6 +623,7 @@ export function useDocxEditor(
     selectParagraph,
     selectTableCell,
     clearTableCellContents: tbl.clearTableCellContents,
+    setTableColumnWidths: tbl.setTableColumnWidths,
     insertTableRow: tbl.insertTableRow,
     insertTableColumn: tbl.insertTableColumn,
     deleteTableRow: tbl.deleteTableRow,

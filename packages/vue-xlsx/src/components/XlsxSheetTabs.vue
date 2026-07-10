@@ -17,6 +17,10 @@
       >
         <button
           class="xlsx-sheettabs__tab"
+          data-testid="xlsx-sheet-tab"
+          :data-sheet-name="tab.name"
+          role="tab"
+          :aria-selected="index === activeTabIndex"
           :class="{
             'xlsx-sheettabs__tab--active': index === activeTabIndex,
           }"

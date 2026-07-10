@@ -1,0 +1,196 @@
+{
+  "version": 1,
+  "root": "apps/demo/public/samples",
+  "containsSensitiveData": false,
+  "sources": {
+    "synthetic-v1": {
+      "kind": "generated",
+      "description": "Synthetic office documents created only for repository tests.",
+      "generator": "scripts/generate_test_materials.py",
+      "seed": 42
+    }
+  },
+  "entries": [
+    {
+      "file": "charts-images.xlsx",
+      "type": "xlsx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "parse workbook with charts and embedded images",
+      "bytes": 27571,
+      "sha256": "6671730189c267f4b8aeb0baa79ac5495d0befd9b367a2d9320c2c9f3c23f4b2"
+    },
+    {
+      "file": "chinese-mixed.docx",
+      "type": "docx",
+      "category": "boundary",
+      "source": "synthetic-v1",
+      "expected": "parse mixed Chinese and Latin text without losing characters",
+      "bytes": 35981,
+      "sha256": "189b875ed681299e768ef21806a80295b592bc6f237972ca2a8d4e0154f8e91e"
+    },
+    {
+      "file": "contract-page.png",
+      "type": "png",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "decode a synthetic contract page image",
+      "bytes": 33306,
+      "sha256": "8494b9445d9e1e77f8ef6cae4789afa6c435efde3c9901f75678ae189d6e37d9"
+    },
+    {
+      "file": "corrupted.docx",
+      "type": "docx",
+      "category": "malicious",
+      "source": "synthetic-v1",
+      "expected": "reject as PARSE_FAILED and keep the page recoverable",
+      "bytes": 680,
+      "sha256": "192b0379d3e2fb80d1097af0352734be79e66462d345e1cfacaa9eed49dedc6b"
+    },
+    {
+      "file": "corrupted.pdf",
+      "type": "pdf",
+      "category": "malicious",
+      "source": "synthetic-v1",
+      "expected": "reject invalid PDF bytes",
+      "bytes": 460,
+      "sha256": "28e13c89c4c9cee8c95d1d642acf36bffd2e691798f6ce183aba72a67b434b76"
+    },
+    {
+      "file": "corrupted.xlsx",
+      "type": "xlsx",
+      "category": "malicious",
+      "source": "synthetic-v1",
+      "expected": "reject invalid workbook bytes",
+      "bytes": 680,
+      "sha256": "ad01e8e26ac9f42456a5ed9c4df5a68616ba2d889aaa9a64115f29b7ad22d7a2"
+    },
+    {
+      "file": "demo.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "parse the default multi-page DOCX demo",
+      "aliasOf": "legal-contract.docx",
+      "bytes": 37275,
+      "sha256": "8f918f37b62dee50d65fc6fe120c4f58753579e1f314698c2e6f23400a7d1b35"
+    },
+    {
+      "file": "field-citations.json",
+      "type": "json",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "parse citation bounding boxes",
+      "bytes": 1142,
+      "sha256": "9484e91f8f14babb36ff0587f4a4eb8f39026b17fe7e5d2e9d926ac3ff0731e3"
+    },
+    {
+      "file": "financial-model.xlsx",
+      "type": "xlsx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "parse formulas, formatted numbers and multiple sheets",
+      "bytes": 8129,
+      "sha256": "d42c4527a7a3235ae566d990c7760cc402576f37f4545c2d54b7d07ed4ea257d"
+    },
+    {
+      "file": "invoice-table.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "preserve invoice text and table structure through roundtrip",
+      "bytes": 36004,
+      "sha256": "340d3b8c0e4517d7c789eeea6fefc7006bab13c665b6e607e19d41edc49e68b9"
+    },
+    {
+      "file": "invoice.png",
+      "type": "png",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "decode a synthetic invoice image",
+      "bytes": 29397,
+      "sha256": "0d5b4c9566a36280cd1e9b0458ff95483a19f6e8f00e4c48dfe5d0efe8132611"
+    },
+    {
+      "file": "large-contract.pdf",
+      "type": "pdf",
+      "category": "large",
+      "source": "synthetic-v1",
+      "expected": "open a multi-page PDF fixture without network access",
+      "bytes": 27641,
+      "sha256": "ac4f529551660ef2b2ac5564513d700a0a45aa58f1514ad5c66ef341189980e1"
+    },
+    {
+      "file": "large-grid.xlsx",
+      "type": "xlsx",
+      "category": "large",
+      "source": "synthetic-v1",
+      "expected": "parse and scroll a large worksheet fixture",
+      "bytes": 134402,
+      "sha256": "7d25999db907b88a47a9417c582169e3416bd4c3d02b8f897e1b9d41130fe2d2"
+    },
+    {
+      "file": "legal-contract.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "parse a multi-page legal contract",
+      "bytes": 37275,
+      "sha256": "8f918f37b62dee50d65fc6fe120c4f58753579e1f314698c2e6f23400a7d1b35"
+    },
+    {
+      "file": "ocr-layout.json",
+      "type": "json",
+      "category": "boundary",
+      "source": "synthetic-v1",
+      "expected": "parse OCR layout coordinates and rotated blocks",
+      "bytes": 1734,
+      "sha256": "ceadaeae36915496b5903c983674341a80d98c21d2138ce2a97bcaa27f816ac9"
+    },
+    {
+      "file": "report-with-image.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "parse and render an embedded image",
+      "bytes": 56892,
+      "sha256": "736d71d2aed7802e51ddea4aa7b8b2980ad4ebccce5ce4c9b69105e469f15c6d"
+    },
+    {
+      "file": "rotated-pages.pdf",
+      "type": "pdf",
+      "category": "boundary",
+      "source": "synthetic-v1",
+      "expected": "open pages with rotation metadata",
+      "bytes": 2376,
+      "sha256": "7cdd5c1a980e4c40f78bdf88e5c5268adf20c57a507795d4191b74c6a74e65a4"
+    },
+    {
+      "file": "sales-table.xlsx",
+      "type": "xlsx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "parse a sales table and preserve formulas during edits",
+      "bytes": 12421,
+      "sha256": "a906fb234dda3489f91a3416a971ed511c11a0d95eaf38ca590f2780108f9214"
+    },
+    {
+      "file": "sample.pdf",
+      "type": "pdf",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "open a valid PDF fixture",
+      "bytes": 4652,
+      "sha256": "76e533d35599f1f2c7f92785bba4a111053ca9361913bb809e9c13aa6c262253"
+    },
+    {
+      "file": "scanned-invoice.pdf",
+      "type": "pdf",
+      "category": "boundary",
+      "source": "synthetic-v1",
+      "expected": "open an image-only scanned invoice",
+      "bytes": 39568,
+      "sha256": "3d905e77053715474caa5ef239e6147635fea35b249079b8d52912badad6d437"
+    }
+  ]
+}

@@ -62,6 +62,7 @@ export * from "./ooxml-helpers";
 export * from "./zoom-utils";
 export * from "./dom-helpers";
 export * from "./default-model";
+export * from "./model-validation";
 export * from "./state";
 export * from "./page-measurement";
 export * from "./xml-parsing";

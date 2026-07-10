@@ -52,6 +52,7 @@ import type {
   DocxEditorController,
   DocxTrackedChange,
   DocxComment,
+  DocumentPageNodeSegment,
 } from "@extend-ai/docx-core"
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -59,18 +60,27 @@ const props = defineProps<{
   pageIndex: number
   pageLayout: { pageWidthPx: number; pageHeightPx: number; marginsPx?: { top: number; bottom: number; left: number; right: number } }
   controller: DocxEditorController
+  pageNodeSegments: DocumentPageNodeSegment[]
 }>()
 
 // ── Computed ───────────────────────────────────────────────────────
 const showChanges = computed(() => props.controller.showTrackedChanges)
 const showComments = computed(() => props.controller.showComments)
 
+const pageNodeIndexes = computed(
+  () => new Set(props.pageNodeSegments.map((segment) => segment.nodeIndex))
+)
+
 const trackedChanges = computed<DocxTrackedChange[]>(() => {
-  return props.controller.trackedChanges
+  return props.controller.trackedChanges.filter((change) =>
+    pageNodeIndexes.value.has(change.nodeIndex)
+  )
 })
 
 const comments = computed<DocxComment[]>(() => {
-  return props.controller.comments
+  return props.controller.comments.filter((comment) =>
+    pageNodeIndexes.value.has(comment.nodeIndex)
+  )
 })
 
 const hasContent = computed(

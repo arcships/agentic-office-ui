@@ -1,4 +1,12 @@
 import { ref, computed, watch, onUnmounted, shallowRef } from "vue";
+import {
+  createLatestTaskCoordinator,
+  createOfficeTaskSequence,
+  sanitizeOfficeUrl,
+  type OfficeLoadTask,
+  type OfficeSource,
+  type OfficeUrlPolicy,
+} from "@extend-ai/office-runtime";
 import type { Workbook } from "@dukelib/sheets-wasm";
 import type {
   UseXlsxViewerControllerOptions,
@@ -13,12 +21,16 @@ import type {
   XlsxSheetData,
   XlsxTable,
   XlsxTableSortState,
+  XlsxLoadError,
+  XlsxSourceState,
   XlsxViewerController,
-  XlsxWorkbookTab
+  XlsxWorkbookTab,
+  XlsxDiagnostic,
+  XlsxRuntime
 } from "@extend-ai/xlsx-core";
 import {
   XlsxWorkerClient,
-  canUseConfiguredWasmSourceInWorker,
+  createXlsxRuntime,
   loadWorkbookChartAssets,
   mergeWorkbookImageAssets,
   revokeWorkbookImageAssets,
@@ -46,7 +58,7 @@ import {
   resolveNextZoomScale,
   buildSheetList,
   buildVisibleSheetIndexMap,
-  resolveWorkbookBuffer,
+  resolveWorkbookSource,
   parseWorkbookBuffer,
   createHistoryDomain,
   tryRecalculate
@@ -69,27 +81,48 @@ import {
   sanitizeSavedWorkbookBytes
 } from "./formatting";
 import { cellAddressToA1, rangeToA1 } from "./selection";
+import { toXlsxLoadError } from "@extend-ai/xlsx-core";
+
+type DeferredWorkbookLoad = {
+  buffer: ArrayBuffer;
+  requestId: number;
+  resolvedUrl?: string;
+  sourceKind: "file" | "url";
+  state: "deferred" | "running" | "settled";
+  task: OfficeLoadTask;
+};
 
 export function useXlsxViewerController(options: UseXlsxViewerControllerOptions): XlsxViewerController {
   const {
     allowResizeInReadOnly = false,
+    createWorker,
     deferLoadingAboveBytes = DEFAULT_DEFER_LOADING_ABOVE_BYTES,
     file,
     fileName,
     maxFileSizeBytes = DEFAULT_MAX_FILE_SIZE_BYTES,
+    onDiagnostic,
     readOnly: requestedReadOnly = false,
     readOnlyAboveBytes = 0,
-    showHiddenSheets = false,
-    skipXmlParsing = false,
+    runtime: configuredRuntime,
+    showHiddenSheets: configuredShowHiddenSheets,
+    skipXmlParsing: configuredSkipXmlParsing,
     src,
-    useWorker = true
+    urlPolicy,
+    useWorker = true,
+    workerUrl,
   } = options;
+  const ownsXlsxRuntime = configuredRuntime === undefined;
+  const xlsxRuntime = (configuredRuntime as XlsxRuntime | undefined) ?? createXlsxRuntime({ createWorker, workerUrl });
+  const showHiddenSheets = configuredShowHiddenSheets ?? xlsxRuntime.parseOptions.showHiddenSheets ?? false;
+  const skipXmlParsing = configuredSkipXmlParsing ?? xlsxRuntime.parseOptions.skipXmlParsing ?? false;
 
   // ═══════════════════════════════════════════════════════════════════
   // State
   // ═══════════════════════════════════════════════════════════════════
   const isLoading = ref(Boolean(file ?? src));
   const error = ref<Error | null>(null);
+  const sourceState = ref<XlsxSourceState>(file || src ? "loading" : "idle");
+  const sourceError = ref<XlsxLoadError | null>(null);
   const workbook = ref<Workbook | null>(null);
   const sheets = ref<XlsxSheetData[]>([]);
   const chartsByWorkbookSheetIndex = ref<XlsxChart[][]>([]);
@@ -120,6 +153,9 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const sortState = ref<XlsxTableSortState | null>(null);
   const forcedReadOnly = ref(false);
   const deferredBufferRef = shallowRef<ArrayBuffer | null>(null);
+  const deferredLoadRequestIdRef = shallowRef<number | null>(null);
+  const deferredLoadRef = shallowRef<DeferredWorkbookLoad | null>(null);
+  const sourceBufferRef = shallowRef<ArrayBuffer | null>(null);
   const deferredLoadFileSize = ref<number | null>(null);
   const imageAssetsRef = shallowRef<WorkbookImageAssets | null>(null);
   const chartAssetsRef = shallowRef<WorkbookChartAssets | null>(null);
@@ -128,6 +164,29 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const sheetOriginsRef = shallowRef<Array<WorkbookImageSheetOrigin | null>>([]);
   const workerClientRef = shallowRef<XlsxWorkerClient | null>(null);
   const workerCellSnapshotCacheRef = shallowRef(new Map<string, { displayValue: string; formula: string }>());
+  let latestLoadRequestId = 0;
+  const xlsxRuntimeId = xlsxRuntime.id;
+  const xlsxTaskSequence = createOfficeTaskSequence(xlsxRuntimeId);
+  const xlsxLoadCoordinator = createLatestTaskCoordinator(xlsxTaskSequence);
+  const disposedWorkbooks = new WeakSet<object>();
+
+  function isCurrentLoadRequest(requestId: number): boolean {
+    return requestId === latestLoadRequestId;
+  }
+  function getCurrentLoadRequestId(): number {
+    return latestLoadRequestId;
+  }
+
+  function reportDiagnostic(diagnostic: XlsxDiagnostic) {
+    try {
+      onDiagnostic?.({
+        ...diagnostic,
+        ...(diagnostic.url ? { url: sanitizeOfficeUrl(diagnostic.url) } : {}),
+      });
+    } catch {
+      // Host diagnostics must not alter workbook loading.
+    }
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // Computed
@@ -136,7 +195,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const shouldDeferLoading = deferLoadingAboveBytes > 0;
   const readOnly = computed(() => requestedReadOnly || forcedReadOnly.value);
   const canResizeReadOnly = computed(() => requestedReadOnly && allowResizeInReadOnly && !forcedReadOnly.value);
-  const workerSupported = useWorker && typeof Worker !== "undefined" && canUseConfiguredWasmSourceInWorker();
+  const workerSupported = useWorker && typeof Worker !== "undefined";
   const canUseWorkerForRequestedReadOnly = requestedReadOnly;
 
   const activeTab = computed(() => tabs.value[activeTabIndex.value] ?? null);
@@ -151,8 +210,14 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const canZoomOut = computed(() => zoomScale.value > MIN_ZOOM_SCALE);
   const isLoadDeferred = computed(() => deferredLoadFileSize.value !== null);
   const canLoadDeferred = computed(() => !isLoading.value && isLoadDeferred.value);
-  const canUndo = computed(() => !readOnly.value && undoStackRef.value.length > 0);
-  const canRedo = computed(() => !readOnly.value && redoStackRef.value.length > 0);
+  const canUndo = computed(() => {
+    historyRevision.value;
+    return !readOnly.value && !isApplyingHistoryRef.value && undoStackRef.value.length > 0;
+  });
+  const canRedo = computed(() => {
+    historyRevision.value;
+    return !readOnly.value && !isApplyingHistoryRef.value && redoStackRef.value.length > 0;
+  });
   const visibleSheetIndexByWorkbookSheetIndex = computed(() => new Map(sheets.value.map((sheet, index) => [sheet.workbookSheetIndex, index])));
   const deferredMetadataCell = computed(() => activeCell.value);
   const deferredMetadataSheet = computed(() => activeSheet.value);
@@ -168,8 +233,40 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   }
   function disposeWorkerClient() { workerClientRef.value?.dispose(); workerClientRef.value = null; }
   function getWorkerClient() {
-    if (!workerClientRef.value) workerClientRef.value = new XlsxWorkerClient();
+    if (!workerClientRef.value) {
+      workerClientRef.value = xlsxRuntime.createWorkerClient();
+    }
     return workerClientRef.value;
+  }
+  function disposeWorkbook(target: Workbook | null | undefined) {
+    if (!target || disposedWorkbooks.has(target)) return;
+    disposedWorkbooks.add(target);
+    try {
+      target.free();
+    } catch {
+      // WASM resources are best-effort on teardown; the instance is never reused.
+    }
+  }
+  function replaceWorkbook(nextWorkbook: Workbook | null) {
+    const previousWorkbook = workbook.value;
+    if (previousWorkbook === nextWorkbook) return;
+    workbook.value = nextWorkbook;
+    disposeWorkbook(previousWorkbook);
+  }
+  function discardWorkbookLoadResult(
+    nextImageAssets: WorkbookImageAssets | null,
+    nextWorkbook: Workbook | null,
+  ) {
+    revokeWorkbookImageAssets(nextImageAssets);
+    disposeWorkbook(nextWorkbook);
+  }
+  function clearDeferredLoad(expected?: DeferredWorkbookLoad) {
+    const current = deferredLoadRef.value;
+    if (!current || (expected && current !== expected)) return;
+    deferredLoadRef.value = null;
+    deferredBufferRef.value = null;
+    deferredLoadRequestIdRef.value = null;
+    deferredLoadFileSize.value = null;
   }
   function clearImageAssets() {
     revokeWorkbookImageAssets(imageAssetsRef.value);
@@ -284,9 +381,14 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   }
   async function loadWorkbookOnMainThread(buffer: ArrayBuffer) {
     const nextParsedWorkbook = await parseWorkbookBuffer(buffer);
-    const bytes = new Uint8Array(buffer);
-    const nextImageAssets = loadWorkbookImageAssets(bytes, nextParsedWorkbook.workbook, shouldSkipXmlParsingForWorkbook(bytes, skipXmlParsing));
-    return { imageAssets: nextImageAssets, parsedWorkbook: nextParsedWorkbook };
+    try {
+      const bytes = new Uint8Array(buffer);
+      const nextImageAssets = loadWorkbookImageAssets(bytes, nextParsedWorkbook.workbook, shouldSkipXmlParsingForWorkbook(bytes, skipXmlParsing));
+      return { imageAssets: nextImageAssets, parsedWorkbook: nextParsedWorkbook };
+    } catch (error) {
+      disposeWorkbook(nextParsedWorkbook.workbook);
+      throw error;
+    }
   }
   function refreshWorkbookState(targetWorkbook: Workbook) {
     const nextSheets = buildSheetList(
@@ -350,13 +452,205 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     historyRevision.value = historyRevision.value + 1;
   }
 
+  function isCurrentWorkbookLoad(load: DeferredWorkbookLoad) {
+    return load.task.isCurrent() && isCurrentLoadRequest(load.requestId);
+  }
+
+  async function executeWorkbookLoad(load: DeferredWorkbookLoad) {
+    const { buffer, requestId, resolvedUrl, sourceKind, task } = load;
+    if (!isCurrentWorkbookLoad(load)) return;
+    if (maxFileSizeBytes > 0 && buffer.byteLength > maxFileSizeBytes) {
+      throw new XlsxFileSizeLimitExceededError(buffer.byteLength, maxFileSizeBytes);
+    }
+    const preflight = preflightWorkbookBuffer(buffer);
+    if (preflight?.tooLarge) throw createWorkbookTooLargeError(preflight);
+
+    const willForceReadOnly = shouldForceReadOnlyForBuffer(buffer.byteLength);
+    forcedReadOnly.value = willForceReadOnly;
+    const shouldUseWorkerForLoad = shouldUseWorkerForReadOnlyLoad(willForceReadOnly);
+    const effectiveSkipXmlParsing = shouldSkipXmlParsingForWorkbook(new Uint8Array(buffer), skipXmlParsing);
+
+    if (shouldUseWorkerForLoad) {
+      const client = getWorkerClient();
+      const terminateOwnedWorker = () => {
+        if (workerClientRef.value === client) disposeWorkerClient();
+      };
+      task.signal.addEventListener("abort", terminateOwnedWorker, { once: true });
+      try {
+        const snapshot = await client.loadWorkbook(
+          buffer,
+          effectiveSkipXmlParsing,
+          showHiddenSheets,
+          task.signal,
+        );
+        if (!isCurrentWorkbookLoad(load)) return;
+        if (!effectiveSkipXmlParsing && hasIncompleteWorkerChartSnapshot(snapshot)) {
+          throw new Error("Worker chart payload incomplete");
+        }
+        replaceWorkbook(null);
+        sheets.value = snapshot.sheets;
+        chartsByWorkbookSheetIndex.value = snapshot.chartsByWorkbookSheetIndex;
+        chartsheets.value = snapshot.chartsheets;
+        tabs.value = snapshot.tabs;
+        chartAssetsRef.value = null;
+        workerTablesByWorkbookSheetIndex.value = snapshot.tablesByWorkbookSheetIndex;
+        shouldAutoCalculate.value = false;
+        isWorkerBacked.value = true;
+        sourceBufferRef.value = buffer.slice(0);
+        sortState.value = null;
+        isChartsLoading.value = false;
+        isLoading.value = false;
+        sourceState.value = "ready";
+        sourceError.value = null;
+        load.state = "settled";
+        reportDiagnostic({
+          type: "load-success",
+          requestId,
+          taskId: task.context.taskId,
+          sourceKind,
+          url: resolvedUrl,
+          bytes: buffer.byteLength,
+        });
+        return;
+      } catch (workerError) {
+        if (!isCurrentWorkbookLoad(load) || isAbortError(workerError)) throw workerError;
+        if (!shouldFallbackFromWorkerError(workerError)) throw workerError;
+        disposeWorkerClient();
+      } finally {
+        task.signal.removeEventListener("abort", terminateOwnedWorker);
+      }
+    }
+
+    const { imageAssets: nextImageAssets, parsedWorkbook: nextParsedWorkbook } = await loadWorkbookOnMainThread(buffer);
+    let committed = false;
+    try {
+      if (!isCurrentWorkbookLoad(load)) return;
+      const nextSheets = buildSheetList(
+        nextParsedWorkbook.workbook,
+        nextImageAssets.sheetStatesByWorkbookSheetIndex,
+        nextImageAssets.themePalette,
+        nextImageAssets.styleById,
+        nextImageAssets.namedCellStyleByName,
+        nextImageAssets.tableStyleByName,
+        showHiddenSheets,
+      );
+      if (!isCurrentWorkbookLoad(load)) return;
+      setImageAssets(nextImageAssets);
+      replaceWorkbook(nextParsedWorkbook.workbook);
+      committed = true;
+      sheets.value = nextSheets;
+      startChartDisplayHydration(buffer, nextParsedWorkbook.workbook, nextSheets);
+      shouldAutoCalculate.value = nextParsedWorkbook.shouldAutoCalculate;
+      workerTablesByWorkbookSheetIndex.value = [];
+      isWorkerBacked.value = false;
+      sourceBufferRef.value = buffer.slice(0);
+      sortState.value = null;
+      isLoading.value = false;
+      sourceState.value = "ready";
+      sourceError.value = null;
+      load.state = "settled";
+      reportDiagnostic({
+        type: "load-success",
+        requestId,
+        taskId: task.context.taskId,
+        sourceKind,
+        url: resolvedUrl,
+        bytes: buffer.byteLength,
+      });
+    } finally {
+      if (!committed) {
+        discardWorkbookLoadResult(nextImageAssets, nextParsedWorkbook.workbook);
+      }
+    }
+  }
+
+  function handleWorkbookLoadFailure(load: DeferredWorkbookLoad, nextError: unknown) {
+    if (!isCurrentWorkbookLoad(load)) return;
+    const { requestId, resolvedUrl, sourceKind, task } = load;
+    load.state = "settled";
+    if (isAbortError(nextError)) {
+      const cancelledError = toXlsxLoadError(nextError, sourceKind, resolvedUrl);
+      isLoading.value = false;
+      sourceState.value = "idle";
+      sourceError.value = cancelledError;
+      reportDiagnostic({
+        type: "load-cancelled",
+        requestId,
+        taskId: task.context.taskId,
+        sourceKind,
+        url: resolvedUrl,
+        error: cancelledError,
+      });
+      return;
+    }
+    replaceWorkbook(null);
+    sheets.value = [];
+    clearChartAssets();
+    workerTablesByWorkbookSheetIndex.value = [];
+    clearImageAssets();
+    shouldAutoCalculate.value = false;
+    isWorkerBacked.value = false;
+    sourceBufferRef.value = null;
+    sortState.value = null;
+    const loadError = toXlsxLoadError(nextError, sourceKind, resolvedUrl);
+    error.value = nextError instanceof Error ? nextError : new Error(loadError.message);
+    isLoading.value = false;
+    sourceState.value = "error";
+    sourceError.value = loadError;
+    reportDiagnostic({
+      type: "load-error",
+      requestId,
+      taskId: task.context.taskId,
+      sourceKind,
+      url: resolvedUrl,
+      error: loadError,
+    });
+  }
+
+  function continueDeferredWorkbookLoad() {
+    const load = deferredLoadRef.value;
+    if (!load || load.state !== "deferred" || !isCurrentWorkbookLoad(load)) return;
+    load.state = "running";
+    isLoading.value = true;
+    error.value = null;
+    sourceState.value = "loading";
+    sourceError.value = null;
+    reportDiagnostic({
+      type: "load-resumed",
+      requestId: load.requestId,
+      taskId: load.task.context.taskId,
+      sourceKind: load.sourceKind,
+      url: load.resolvedUrl,
+      bytes: load.buffer.byteLength,
+    });
+    void executeWorkbookLoad(load)
+      .catch((nextError: unknown) => handleWorkbookLoadFailure(load, nextError))
+      .finally(() => {
+        clearDeferredLoad(load);
+        load.task.finish();
+      });
+  }
+
   // ═══════════════════════════════════════════════════════════════════
   // Lifecycle
   // ═══════════════════════════════════════════════════════════════════
   onUnmounted(() => {
+    latestLoadRequestId += 1;
+    xlsxLoadCoordinator.dispose();
+    xlsxTaskSequence.dispose();
+    if (ownsXlsxRuntime) xlsxRuntime.dispose();
+    const deferredLoad = deferredLoadRef.value;
+    clearDeferredLoad(deferredLoad ?? undefined);
+    deferredLoad?.task.finish();
+    sourceBufferRef.value = null;
+    sourceState.value = "idle";
+    sourceError.value = null;
+    isApplyingHistoryRef.value = false;
     chartDisplayFallbackCleanupRef.value?.();
     chartDisplayFallbackCleanupRef.value = null;
     revokeWorkbookImageAssets(imageAssetsRef.value);
+    imageAssetsRef.value = null;
+    replaceWorkbook(null);
     disposeWorkerClient();
   });
 
@@ -365,93 +659,122 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   // ═══════════════════════════════════════════════════════════════════
   watch(() => [file, src], (_value, _oldValue, onCleanup) => {
     if (!file && !src) {
+      latestLoadRequestId += 1;
+      xlsxLoadCoordinator.cancel();
+      const deferredLoad = deferredLoadRef.value;
+      clearDeferredLoad(deferredLoad ?? undefined);
+      deferredLoad?.task.finish();
       disposeWorkerClient();
       forcedReadOnly.value = false;
-      workbook.value = null; sheets.value = []; clearChartAssets();
+      replaceWorkbook(null); sheets.value = []; clearChartAssets();
       workerTablesByWorkbookSheetIndex.value = []; clearImageAssets();
-      error.value = null; isLoading.value = false; isWorkerBacked.value = false;
-      deferredBufferRef.value = null; deferredLoadFileSize.value = null;
+      error.value = null; sourceState.value = "idle"; sourceError.value = null; isLoading.value = false; isWorkerBacked.value = false;
+      sourceBufferRef.value = null;
       activeSheetIndex.value = 0; activeTabIndex.value = 0;
       activeCell.value = null; selection.value = null;
       selectedChartId.value = null; selectedChartElement.value = null; selectedImageId.value = null;
       selectionAnchorRef.value = null;
-      undoStackRef.value = []; redoStackRef.value = []; historyRevision.value = 0;
+      undoStackRef.value = []; redoStackRef.value = []; isApplyingHistoryRef.value = false; historyRevision.value = 0;
       shouldAutoCalculate.value = false;
       workerCellSnapshotCacheRef.value.clear(); workerCellSnapshotRevision.value = 0;
       sortState.value = null; zoomScaleOverridesByTabId.value = {}; revision.value = 0;
       return;
     }
-    let isCurrent = true;
-    const abortController = new AbortController();
-    isLoading.value = true; error.value = null; clearImageAssets(); clearChartAssets();
+    const requestId = ++latestLoadRequestId;
+    const sourceKind = src ? "url" as const : "file" as const;
+    const officeSource: OfficeSource = src
+      ? { kind: "url", url: src, name: fileName }
+      : { kind: "bytes", bytes: file as ArrayBuffer, name: fileName };
+    const loadTask = xlsxLoadCoordinator.start(officeSource, {
+      limits: { maxInputBytes: maxFileSizeBytes },
+      resources: {
+        workerUrl: xlsxRuntime.workerUrl,
+        wasmUrl: typeof xlsxRuntime.wasmSource === "string" ? xlsxRuntime.wasmSource : undefined,
+      },
+      urlPolicy: urlPolicy as OfficeUrlPolicy | undefined,
+    });
+    isLoading.value = true; error.value = null; sourceState.value = "loading"; sourceError.value = null; clearImageAssets(); clearChartAssets();
     workerTablesByWorkbookSheetIndex.value = []; isWorkerBacked.value = false;
-    deferredBufferRef.value = null; deferredLoadFileSize.value = null;
+    deferredLoadRef.value = null; deferredBufferRef.value = null; deferredLoadRequestIdRef.value = null; sourceBufferRef.value = null; deferredLoadFileSize.value = null;
     activeSheetIndex.value = 0; activeTabIndex.value = 0;
     activeCell.value = null; selection.value = null;
     selectedChartId.value = null; selectedChartElement.value = null; selectedImageId.value = null;
     selectionAnchorRef.value = null;
-    undoStackRef.value = []; redoStackRef.value = []; historyRevision.value = 0;
+    undoStackRef.value = []; redoStackRef.value = []; isApplyingHistoryRef.value = false; historyRevision.value = 0;
     shouldAutoCalculate.value = false;
     workerCellSnapshotCacheRef.value.clear(); workerCellSnapshotRevision.value = 0;
     sortState.value = null; zoomScaleOverridesByTabId.value = {}; revision.value = 0;
     disposeWorkerClient();
+    reportDiagnostic({ type: "load-start", requestId, taskId: loadTask.context.taskId, sourceKind, url: src });
 
-    void resolveWorkbookBuffer({ file, src }, abortController.signal)
-      .then(async (buffer) => {
-        if (!isCurrent || abortController.signal.aborted) return;
+    const activeLoad: DeferredWorkbookLoad = {
+      buffer: new ArrayBuffer(0),
+      requestId,
+      resolvedUrl: src,
+      sourceKind,
+      state: "running",
+      task: loadTask,
+    };
+    let handedToDeferredLoad = false;
+
+    void resolveWorkbookSource({ file, src, urlPolicy }, loadTask.signal)
+      .then(async (resolvedSource) => {
+        const buffer = resolvedSource.buffer;
+        activeLoad.buffer = buffer;
+        activeLoad.resolvedUrl = resolvedSource.resolvedUrl;
+        activeLoad.sourceKind = resolvedSource.sourceKind;
+        if (!isCurrentWorkbookLoad(activeLoad)) return;
         if (maxFileSizeBytes > 0 && buffer.byteLength > maxFileSizeBytes) {
           throw new XlsxFileSizeLimitExceededError(buffer.byteLength, maxFileSizeBytes);
         }
         const preflight = preflightWorkbookBuffer(buffer);
         if (preflight?.tooLarge) throw createWorkbookTooLargeError(preflight);
-        const shouldForceReadOnly = shouldForceReadOnlyForBuffer(buffer.byteLength);
-        forcedReadOnly.value = shouldForceReadOnly;
-        const shouldUseWorkerForLoad = shouldUseWorkerForReadOnlyLoad(shouldForceReadOnly);
-        const effectiveSkipXmlParsing = shouldSkipXmlParsingForWorkbook(new Uint8Array(buffer), skipXmlParsing);
         if (shouldDeferLoading && buffer.byteLength > deferLoadingAboveBytes) {
-          deferredBufferRef.value = buffer; deferredLoadFileSize.value = buffer.byteLength;
-          workbook.value = null; sheets.value = []; clearChartAssets();
-          workerTablesByWorkbookSheetIndex.value = []; isLoading.value = false; return;
+          activeLoad.state = "deferred";
+          handedToDeferredLoad = true;
+          deferredLoadRef.value = activeLoad;
+          deferredBufferRef.value = buffer;
+          deferredLoadRequestIdRef.value = requestId;
+          deferredLoadFileSize.value = buffer.byteLength;
+          replaceWorkbook(null);
+          sheets.value = [];
+          clearChartAssets();
+          workerTablesByWorkbookSheetIndex.value = [];
+          isLoading.value = false;
+          reportDiagnostic({
+            type: "load-deferred",
+            requestId,
+            taskId: loadTask.context.taskId,
+            sourceKind: activeLoad.sourceKind,
+            url: activeLoad.resolvedUrl,
+            bytes: buffer.byteLength,
+          });
+          return;
         }
-        if (shouldUseWorkerForLoad) {
-          try {
-            const snapshot = await getWorkerClient().loadWorkbook(buffer, effectiveSkipXmlParsing, showHiddenSheets);
-            if (!isCurrent || abortController.signal.aborted) return;
-            if (!effectiveSkipXmlParsing && hasIncompleteWorkerChartSnapshot(snapshot)) throw new Error("Worker chart payload incomplete");
-            workbook.value = null; sheets.value = snapshot.sheets;
-            chartsByWorkbookSheetIndex.value = snapshot.chartsByWorkbookSheetIndex;
-            chartsheets.value = snapshot.chartsheets; tabs.value = snapshot.tabs;
-            chartAssetsRef.value = null;
-            workerTablesByWorkbookSheetIndex.value = snapshot.tablesByWorkbookSheetIndex;
-            shouldAutoCalculate.value = false; isWorkerBacked.value = true;
-            sortState.value = null; isChartsLoading.value = false; isLoading.value = false;
-            return;
-          } catch (workerError) {
-            if (!isCurrent || isAbortError(workerError)) return;
-            if (!shouldFallbackFromWorkerError(workerError)) throw workerError;
-            disposeWorkerClient();
-          }
-        }
-        const { imageAssets: nextImageAssets, parsedWorkbook: nextParsedWorkbook } = await loadWorkbookOnMainThread(buffer);
-        if (!isCurrent || abortController.signal.aborted) { revokeWorkbookImageAssets(nextImageAssets); return; }
-        setImageAssets(nextImageAssets); workbook.value = nextParsedWorkbook.workbook;
-        const nextSheets = buildSheetList(nextParsedWorkbook.workbook, nextImageAssets.sheetStatesByWorkbookSheetIndex, nextImageAssets.themePalette, nextImageAssets.styleById, nextImageAssets.namedCellStyleByName, nextImageAssets.tableStyleByName, showHiddenSheets);
-        sheets.value = nextSheets;
-        startChartDisplayHydration(buffer, nextParsedWorkbook.workbook, nextSheets);
-        shouldAutoCalculate.value = nextParsedWorkbook.shouldAutoCalculate;
-        workerTablesByWorkbookSheetIndex.value = []; isWorkerBacked.value = false;
-        sortState.value = null; isLoading.value = false;
+        await executeWorkbookLoad(activeLoad);
       })
-      .catch((nextError: unknown) => {
-        if (!isCurrent || isAbortError(nextError)) return;
-        workbook.value = null; sheets.value = []; clearChartAssets();
-        workerTablesByWorkbookSheetIndex.value = []; clearImageAssets();
-        shouldAutoCalculate.value = false; isWorkerBacked.value = false;
-        sortState.value = null;
-        error.value = nextError instanceof Error ? nextError : new Error("Could not load workbook.");
-        isLoading.value = false;
+      .catch((nextError: unknown) => handleWorkbookLoadFailure(activeLoad, nextError))
+      .finally(() => {
+        if (!handedToDeferredLoad) loadTask.finish();
       });
-    onCleanup(() => { isCurrent = false; abortController.abort(); disposeWorkerClient(); });
+    onCleanup(() => {
+      const shouldReportCancellation = loadTask.isCurrent() && activeLoad.state !== "settled";
+      xlsxLoadCoordinator.cancel();
+      disposeWorkerClient();
+      if (deferredLoadRef.value === activeLoad) {
+        clearDeferredLoad(activeLoad);
+        loadTask.finish();
+      }
+      if (shouldReportCancellation) {
+        reportDiagnostic({
+          type: "load-cancelled",
+          requestId,
+          taskId: loadTask.context.taskId,
+          sourceKind: activeLoad.sourceKind,
+          url: activeLoad.resolvedUrl,
+        });
+      }
+    });
   }, { immediate: true });
 
   // ═══════════════════════════════════════════════════════════════════
@@ -471,13 +794,13 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const ctx = {
     file, src, fileName, maxFileSizeBytes, deferLoadingAboveBytes, skipXmlParsing, showHiddenSheets,
     workerSupported, shouldDeferLoading, canUseWorkerForRequestedReadOnly, requestedReadOnly,
-    isLoading, error, workbook, sheets, chartsByWorkbookSheetIndex, chartsheets, tabs,
+    isLoading, error, sourceState, sourceError, workbook, sheets, chartsByWorkbookSheetIndex, chartsheets, tabs,
     isChartsLoading, workerTablesByWorkbookSheetIndex, formControlsByWorkbookSheetIndex,
     imagesByWorkbookSheetIndex, shapesByWorkbookSheetIndex, activeSheetIndex, activeTabIndex,
     zoomScaleOverridesByTabId, activeCell, selection, selectedChartId, selectedChartElement,
     selectedImageId, revision, selectionAnchorRef, undoStackRef, redoStackRef,
     isApplyingHistoryRef, historyRevision, shouldAutoCalculate, workerCellSnapshotRevision,
-    isWorkerBacked, sortState, forcedReadOnly, deferredBufferRef, deferredLoadFileSize,
+    isWorkerBacked, sortState, forcedReadOnly, deferredBufferRef, deferredLoadRequestIdRef, sourceBufferRef, deferredLoadFileSize,
     imageAssetsRef, chartAssetsRef, chartLoadRequestTokenRef, chartDisplayFallbackCleanupRef,
     sheetOriginsRef, workerClientRef, workerCellSnapshotCacheRef,
     activeTab, activeSheet, deferredMetadataCell, deferredMetadataSheet,
@@ -485,7 +808,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     readOnly, canResizeReadOnly, displayFileName, visibleSheetIndexByWorkbookSheetIndex,
     refreshWorkbookState, maybeRecalculateWorkbook, getActiveWorksheet,
     setChartAssets, setImageAssets, clearImageAssets, clearChartAssets,
-    getWorkerClient, disposeWorkerClient,
+    getWorkerClient, disposeWorkerClient, replaceWorkbook, disposeWorkbook, discardWorkbookLoadResult,
+    isCurrentLoadRequest, getCurrentLoadRequestId, continueDeferredWorkbookLoad,
     startChartDisplayHydration, loadWorkbookOnMainThread,
     hasIncompleteWorkerChartSnapshot, shouldFallbackFromWorkerError,
     ensureChartAssetsHydrated,
@@ -507,6 +831,19 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   // Replace placeholder with actual implementation from chart domain
   _setChartSeriesFormula = chartImageDomain.setChartSeriesFormula;
 
+  function downloadSource() {
+    const sourceBuffer = sourceBufferRef.value;
+    if (!sourceBuffer) return;
+    historyDomain.download();
+    reportDiagnostic({
+      type: "download",
+      requestId: latestLoadRequestId,
+      sourceKind: src ? "url" : "file",
+      url: src,
+      bytes: sourceBuffer.byteLength,
+    });
+  }
+
   // ═══════════════════════════════════════════════════════════════════
   // Additional watchers (worker cell snapshot)
   // ═══════════════════════════════════════════════════════════════════
@@ -517,7 +854,13 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       const cacheKey = `${deferredMetadataSheet.value.workbookSheetIndex}:${deferredMetadataCell.value.row}:${deferredMetadataCell.value.col}`;
       if (workerCellSnapshotCacheRef.value.has(cacheKey)) return;
       let isCurrent = true;
-      void historyDomain.getCellSnapshotAsync(deferredMetadataSheet.value.workbookSheetIndex, deferredMetadataCell.value.row, deferredMetadataCell.value.col)
+      const controller = new AbortController();
+      void historyDomain.getCellSnapshotAsync(
+        deferredMetadataSheet.value.workbookSheetIndex,
+        deferredMetadataCell.value.row,
+        deferredMetadataCell.value.col,
+        controller.signal,
+      )
         .then((snapshot) => {
           if (!isCurrent) return;
           workerCellSnapshotCacheRef.value.set(cacheKey, snapshot);
@@ -528,7 +871,10 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
           workerCellSnapshotCacheRef.value.set(cacheKey, { displayValue: "", formula: "" });
           workerCellSnapshotRevision.value = workerCellSnapshotRevision.value + 1;
         });
-      onCleanup(() => { isCurrent = false; });
+      onCleanup(() => {
+        isCurrent = false;
+        controller.abort();
+      });
     }
   );
 
@@ -557,7 +903,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get activeTabIndex() { return activeTabIndex.value; },
     addSheet: editingDomain.addSheet,
     get canRedo() { return canRedo.value; },
-    get canDownload() { return Boolean(file ?? src); },
+    get canDownload() { return sourceState.value === "ready" && sourceBufferRef.value !== null; },
     get canExport() { return Boolean(workbook.value); },
     get canLoadDeferred() { return canLoadDeferred.value; },
     get canUndo() { return canUndo.value; },
@@ -576,7 +922,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get deferredLoadFileSize() { return deferredLoadFileSize.value; },
     defineNamedRange: editingDomain.defineNamedRange,
     get displayFileName() { return displayFileName.value; },
-    download: historyDomain.download,
+    download: downloadSource,
     exportCsv: historyDomain.exportCsv,
     exportXlsx: historyDomain.exportXlsx,
     get error() { return error.value; },
@@ -602,6 +948,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get isLoading() { return isLoading.value; },
     get isChartsLoading() { return isChartsLoading.value; },
     get isWorkerBacked() { return isWorkerBacked.value; },
+    get sourceState() { return sourceState.value; },
+    get sourceError() { return sourceError.value; },
     mergeSelection: editingDomain.mergeSelection,
     maxZoomScale: MAX_ZOOM_SCALE,
     minZoomScale: MIN_ZOOM_SCALE,

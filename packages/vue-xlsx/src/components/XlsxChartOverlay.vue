@@ -9,7 +9,6 @@
       }"
       :style="item.style"
       @pointerdown.stop="onChartPointerDown(item.chart, $event)"
-      @dblclick.stop="onChartDoubleClick(item.chart, $event)"
     >
       <MemoChartSvg
         v-if="item.chart.chartType !== 'Unsupported'"
@@ -116,8 +115,6 @@ const chartItems = computed<ChartItem[]>(() => {
 function onChartPointerDown(chart: XlsxChart, _event: PointerEvent) {
   props.controller.selectChart(chart.id);
 }
-
-function onChartDoubleClick(_chart: XlsxChart, _event: MouseEvent) {}
 
 function onChartElementPointerDown(selection: XlsxChartElementSelection, _event: PointerEvent) {
   props.controller.selectChartElement(selection);

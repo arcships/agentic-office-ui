@@ -1,50 +1,73 @@
 <template>
   <div
-    v-if="model && headerSection"
+    v-if="section && section.nodes.length > 0"
     ref="headerEl"
     data-docx-page-header="true"
-    class="docx-page-header"
+    class="docx-page-header docx-page-section--header"
     :style="headerStyle"
-    @dblclick="onHeaderDoubleClick"
   >
-    <div
-      v-for="(node, ni) of headerSection.nodes"
-      :key="`header-node-${pageIndex}-${ni}`"
-      class="docx-page-header-node"
-    >
-      <template v-if="node.type === 'paragraph'">
-        <p class="docx-page-header-paragraph">
-          {{ renderParagraphText(node) }}
-        </p>
-      </template>
-      <div v-else class="docx-page-header-unknown">
-        (header {{ node.type }})
-      </div>
-    </div>
+    <template v-for="(node, ni) of section.nodes" :key="`header-node-${pageIndex}-${ni}`">
+      <DocxParagraphHost
+        v-if="node.type === 'paragraph'"
+        :paragraph="node"
+        :paragraph-index="-(pageIndex * 1000 + ni + 1)"
+        :editable="false"
+        :document-theme="theme"
+        :controller="controller"
+        :numbering-definitions="model.metadata.numberingDefinitions"
+        :show-tracked-changes="trackedChangesEnabled"
+        :show-comment-highlights="commentsEnabled"
+        :page-number="pageNumber"
+        :total-pages="totalPages"
+        :page-number-format="pageNumberFormat"
+        :within-header-footer="true"
+        header-footer-region="header"
+      />
+      <DocxTableHost
+        v-else
+        :table="node"
+        :table-index="-(pageIndex * 1000 + ni + 1)"
+        :editable="false"
+        :document-theme="theme"
+        :controller="controller"
+        :numbering-definitions="model.metadata.numberingDefinitions"
+        :show-tracked-changes="trackedChangesEnabled"
+        :show-comment-highlights="commentsEnabled"
+        :page-number="pageNumber"
+        :total-pages="totalPages"
+        :page-number-format="pageNumberFormat"
+        :within-header-footer="true"
+        header-footer-region="header"
+      />
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue"
+import { computed } from "vue"
 import type {
+  DocModel,
   DocxEditorController,
-  ParagraphNode,
+  HeaderSection,
 } from "@extend-ai/docx-core"
-import { paragraphText } from "@extend-ai/docx-core"
+import DocxParagraphHost from "./DocxParagraphHost.vue"
+import DocxTableHost from "./DocxTableHost.vue"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = defineProps<{
   pageIndex: number
-  headerNodes: any[]
+  section?: HeaderSection
+  model: DocModel
   pageLayout: { pageWidthPx: number; pageHeightPx: number; marginsPx?: { top: number; bottom: number; left: number; right: number } }
   pageContentWidthPx: number
   theme: "light" | "dark"
-  controller: DocxEditorController
+  controller?: DocxEditorController
+  pageNumber: number
+  totalPages: number
+  pageNumberFormat?: string
+  trackedChangesEnabled?: boolean
+  commentsEnabled?: boolean
 }>()
-
-// ── Computed ───────────────────────────────────────────────────────
-const model = computed(() => props.controller.model)
-const headerSection = computed(() => model.value?.metadata?.headerSections?.[0] ?? null)
 
 const headerStyle = computed(() => ({
   display: "grid",
@@ -56,17 +79,6 @@ const headerStyle = computed(() => ({
   color: props.theme === "dark" ? "#9ca3af" : "#6b7280",
 }))
 
-// ── Helpers ────────────────────────────────────────────────────────
-function renderParagraphText(node: any): string {
-  if (node.type === "paragraph") {
-    return paragraphText(node as ParagraphNode)
-  }
-  return ""
-}
-
-function onHeaderDoubleClick(_event: MouseEvent): void {
-  // Activate header editing mode — simplified
-}
 </script>
 
 <style scoped>

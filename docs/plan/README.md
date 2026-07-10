@@ -1,5 +1,8 @@
 # Migration Plan
 
+> [!WARNING]
+> **这是 2026-07-07 的历史迁移计划。** 当前整改与发布验收统一以 [stabilization-roadmap.md](stabilization-roadmap.md) 为准。下面的“当前状态”、任务状态和 `done` 标记只记录当时的迁移进度，不能作为当前完成状态或发布通过证明。
+
 ## 概述
 
 将上游 `@extend-ai/react-xlsx`（~41000 行）和 `@extend-ai/react-docx`（~68000 行）迁移到本地 Vue workspace。

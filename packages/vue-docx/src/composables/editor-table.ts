@@ -10,6 +10,10 @@ export function createEditorTable(
   ctx: EditorCore,
   applyChange: (updater: (current: DocModel) => DocModel, successStatus?: string) => void,
 ) {
+  const unsupported = (feature: string): void => {
+    ctx.status.value = `Unsupported: ${feature}`
+  }
+
   const insertTable = (): void => {
     applyChange((current) => {
       const nextModel = cloneDocModel(current)
@@ -27,7 +31,7 @@ export function createEditorTable(
       }
       nextModel.nodes.push(table as any)
       return nextModel
-    })
+    }, "Inserted table")
   }
 
   const insertTableRow = (
@@ -47,8 +51,9 @@ export function createEditorTable(
         })),
       }
       node.rows.splice(insertIdx, 0, newRow)
+      node.sourceXml = undefined
       return nextModel
-    })
+    }, `Inserted table row ${direction}`)
   }
 
   const insertTableColumn = (
@@ -65,8 +70,9 @@ export function createEditorTable(
           nodes: [{ type: "paragraph" as const, children: [] as any[] }],
         })
       }
+      node.sourceXml = undefined
       return nextModel
-    })
+    }, `Inserted table column ${direction}`)
   }
 
   const deleteTableRow = (tableIndex: number, rowIndex: number): void => {
@@ -75,8 +81,9 @@ export function createEditorTable(
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table" || node.rows.length <= 1) return current
       node.rows.splice(rowIndex, 1)
+      node.sourceXml = undefined
       return nextModel
-    })
+    }, "Deleted table row")
   }
 
   const deleteTableColumn = (
@@ -90,16 +97,19 @@ export function createEditorTable(
       for (const row of node.rows) {
         row.cells.splice(cellIndex, 1)
       }
+      node.sourceXml = undefined
       return nextModel
-    })
+    }, "Deleted table column")
   }
 
   const deleteTable = (tableIndex: number): void => {
     applyChange((current) => {
       const nextModel = cloneDocModel(current)
+      const node = nextModel.nodes[tableIndex]
+      if (!node || node.type !== "table") return current
       nextModel.nodes.splice(tableIndex, 1)
       return nextModel
-    })
+    }, "Deleted table")
   }
 
   const clearTableCellContents = (
@@ -115,8 +125,42 @@ export function createEditorTable(
           cell.nodes = [{ type: "paragraph", children: [] }]
         }
       }
+      node.sourceXml = undefined
       return nextModel
-    })
+    }, "Cleared table cells")
+  }
+
+  const setTableColumnWidths = (tableIndex: number, widthsPx: number[]): void => {
+    if (
+      widthsPx.length === 0 ||
+      widthsPx.some((width) => !Number.isFinite(width) || width <= 0)
+    ) {
+      unsupported("table column widths must be positive")
+      return
+    }
+
+    const table = ctx.modelSnapshot.value.nodes[tableIndex]
+    const columnCount = table?.type === "table" ? table.rows[0]?.cells.length ?? 0 : 0
+    if (table?.type !== "table" || columnCount !== widthsPx.length) {
+      unsupported("table column width target is unavailable")
+      return
+    }
+
+    const normalizedPx = widthsPx.map((width) => Math.max(1, Math.round(width)))
+    const columnWidthsTwips = normalizedPx.map((width) => width * 15)
+    applyChange((current) => {
+      const nextModel = cloneDocModel(current)
+      const node = nextModel.nodes[tableIndex]
+      if (!node || node.type !== "table") return current
+      node.style = {
+        ...(node.style ?? {}),
+        layout: "fixed",
+        widthTwips: columnWidthsTwips.reduce((sum, width) => sum + width, 0),
+        columnWidthsTwips,
+      }
+      node.sourceXml = undefined
+      return nextModel
+    }, "Resized table columns")
   }
 
   const moveTable = (tableIndex: number, targetNodeIndex: number): void => {
@@ -129,7 +173,7 @@ export function createEditorTable(
         targetNodeIndex > tableIndex ? targetNodeIndex - 1 : targetNodeIndex
       nextModel.nodes.splice(adjustedTarget, 0, node)
       return nextModel
-    })
+    }, "Moved table")
   }
 
   const moveEmbeddedTableToBody = (
@@ -166,10 +210,11 @@ export function createEditorTable(
         // Insert into body at target position
         const adjustedTarget = Math.min(targetNodeIndex, nextModel.nodes.length)
         nextModel.nodes.splice(adjustedTarget, 0, nestedTable)
+        parentTable.sourceXml = undefined
       }
 
       return nextModel
-    })
+    }, "Moved embedded table")
   }
 
   return {
@@ -180,6 +225,7 @@ export function createEditorTable(
     deleteTableColumn,
     deleteTable,
     clearTableCellContents,
+    setTableColumnWidths,
     moveTable,
     moveEmbeddedTableToBody,
   }

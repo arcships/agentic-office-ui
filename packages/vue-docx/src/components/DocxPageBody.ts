@@ -45,6 +45,10 @@ export default defineComponent({
     pageContentWidthPx: { type: Number, required: true },
     controller: {
       type: Object as PropType<DocxEditorController>,
+      required: false,
+    },
+    model: {
+      type: Object as PropType<DocModel>,
       required: true,
     },
     editable: { type: Boolean, default: true },
@@ -54,9 +58,12 @@ export default defineComponent({
     },
     trackedChangesEnabled: { type: Boolean, default: false },
     commentsEnabled: { type: Boolean, default: false },
+    pageNumber: { type: Number, required: true },
+    totalPages: { type: Number, required: true },
+    pageNumberFormat: { type: String, required: false },
   },
   emits: ["measure"],
-  setup(props, { emit }) {
+  setup(props, { emit, slots }) {
     // ── Helpers ────────────────────────────────────────────────────
     function segmentKey(segment: DocumentPageNodeSegment, index: number): string {
       const base = `node-${segment.nodeIndex}`
@@ -72,9 +79,7 @@ export default defineComponent({
     function segmentNode(
       segment: DocumentPageNodeSegment
     ): ParagraphNode | TableNode | undefined {
-      const model = props.controller.model
-      if (!model) return undefined
-      return model.nodes[segment.nodeIndex]
+      return props.model.nodes[segment.nodeIndex]
     }
 
     function segmentHeightPx(_segment: DocumentPageNodeSegment): number {
@@ -87,7 +92,7 @@ export default defineComponent({
       const segments = props.pageNodeSegments
       const bodyChildren: VNode[] = []
 
-      if (segments.length === 0 && props.editable) {
+      if (segments.length === 0 && props.editable && props.controller) {
         // Empty page hint
         bodyChildren.push(
           h("div", {
@@ -100,7 +105,7 @@ export default defineComponent({
               fontSize: "13px",
             },
             onClick: () => {
-              props.controller.appendParagraph("")
+              props.controller?.appendParagraph("")
             },
           }, "Click to add content")
         )
@@ -131,14 +136,20 @@ export default defineComponent({
                 editable: props.editable && !props.trackedChangesEnabled,
                 documentTheme: props.theme,
                 controller: props.controller,
+                showTrackedChanges: props.trackedChangesEnabled,
+                showCommentHighlights: props.commentsEnabled,
+                numberingDefinitions: props.model.metadata.numberingDefinitions,
+                pageNumber: props.pageNumber,
+                totalPages: props.totalPages,
+                pageNumberFormat: props.pageNumberFormat,
                 onTextInput: (nodeIndex: number, text: string) => {
-                  props.controller.commitParagraphText(nodeIndex, text)
+                  props.controller?.commitParagraphText(nodeIndex, text)
                 },
                 onFocus: (nodeIndex: number) => {
-                  props.controller.selectParagraph(nodeIndex)
+                  props.controller?.selectParagraph(nodeIndex)
                 },
                 onClick: (nodeIndex: number, _event: MouseEvent) => {
-                  props.controller.selectParagraph(nodeIndex)
+                  props.controller?.selectParagraph(nodeIndex)
                 },
               })
             )
@@ -150,6 +161,14 @@ export default defineComponent({
                 tableIndex: segment.nodeIndex,
                 editable: props.editable && !props.trackedChangesEnabled,
                 controller: props.controller,
+                rowRange: segment.tableRowRange,
+                documentTheme: props.theme,
+                showTrackedChanges: props.trackedChangesEnabled,
+                showCommentHighlights: props.commentsEnabled,
+                numberingDefinitions: props.model.metadata.numberingDefinitions,
+                pageNumber: props.pageNumber,
+                totalPages: props.totalPages,
+                pageNumberFormat: props.pageNumberFormat,
               })
             )
           }
@@ -160,6 +179,8 @@ export default defineComponent({
         "div",
         {
           "data-docx-page-body": "true",
+          "data-testid": "docx-page",
+          "data-page": props.pageNumber,
           class: "docx-page-body",
           style: {
             isolation: "isolate",
@@ -170,7 +191,11 @@ export default defineComponent({
             color: props.theme === "dark" ? "#f9fafb" : "#111827",
           },
         },
-        bodyChildren
+        [
+          ...(slots.header?.() ?? []),
+          ...bodyChildren,
+          ...(slots.footer?.() ?? []),
+        ]
       )
     }
   },

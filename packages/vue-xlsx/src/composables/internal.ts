@@ -14,6 +14,8 @@ import type {
   XlsxTableSortState,
   XlsxWorkbookTab,
   XlsxSheetVisibility,
+  XlsxLoadError,
+  XlsxSourceState,
   UseXlsxViewerControllerOptions
 } from "@extend-ai/xlsx-core";
 import type {
@@ -265,6 +267,8 @@ export interface XlsxControllerContext {
   // Core reactive state
   isLoading: Ref<boolean>;
   error: Ref<Error | null>;
+  sourceState: Ref<XlsxSourceState>;
+  sourceError: Ref<XlsxLoadError | null>;
   workbook: Ref<Workbook | null>;
   sheets: Ref<XlsxSheetData[]>;
   chartsByWorkbookSheetIndex: Ref<XlsxChart[][]>;
@@ -295,6 +299,10 @@ export interface XlsxControllerContext {
   sortState: Ref<XlsxTableSortState | null>;
   forcedReadOnly: Ref<boolean>;
   deferredBufferRef: ShallowRef<ArrayBuffer | null>;
+  /** Load generation that owns the currently deferred buffer. */
+  deferredLoadRequestIdRef: ShallowRef<number | null>;
+  /** Exact bytes accepted for the current source; downloads must use these bytes. */
+  sourceBufferRef: ShallowRef<ArrayBuffer | null>;
   deferredLoadFileSize: Ref<number | null>;
   imageAssetsRef: ShallowRef<WorkbookImageAssets | null>;
   chartAssetsRef: ShallowRef<WorkbookChartAssets | null>;
@@ -329,6 +337,13 @@ export interface XlsxControllerContext {
   clearChartAssets: () => void;
   getWorkerClient: () => XlsxWorkerClient;
   disposeWorkerClient: () => void;
+  replaceWorkbook: (workbook: Workbook | null) => void;
+  disposeWorkbook: (workbook: Workbook | null | undefined) => void;
+  discardWorkbookLoadResult: (assets: WorkbookImageAssets | null, workbook: Workbook | null) => void;
+  isCurrentLoadRequest: (requestId: number) => boolean;
+  getCurrentLoadRequestId: () => number;
+  /** Resumes the one instance-owned deferred load; repeated calls are ignored. */
+  continueDeferredWorkbookLoad: () => void;
   startChartDisplayHydration: (buffer: ArrayBuffer, targetWorkbook: Workbook, targetSheets: XlsxSheetData[]) => void;
   loadWorkbookOnMainThread: (buffer: ArrayBuffer) => Promise<{ imageAssets: WorkbookImageAssets; parsedWorkbook: { shouldAutoCalculate: boolean; workbook: Workbook } }>;
   hasIncompleteWorkerChartSnapshot: (snapshot: { chartsByWorkbookSheetIndex: XlsxChart[][] }) => boolean;

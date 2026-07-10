@@ -22,16 +22,22 @@ export function createEditorHistory(ctx: EditorCore) {
         ...h.future,
       ],
     }
+    const restoredSelection = cloneEditorSelection(previous.selection)
+    const restoredRange = cloneTextRange(previous.activeTextRange)
+    ctx.suppressNextDomSelectionRestore.value = true
+    ctx.selection.value = restoredSelection
+    ctx.activeTextRange.value = restoredRange
+    ctx.selectionSnapshot.value = cloneEditorSelection(restoredSelection)
+    ctx.activeTextRangeSnapshot.value = cloneTextRange(restoredRange)
     ctx.model.value = previous.model
-    ctx.selection.value = cloneEditorSelection(previous.selection)
-    ctx.activeTextRange.value = cloneTextRange(previous.activeTextRange)
+    ctx.modelSnapshot.value = previous.model
 
     const nextNonce = ctx.historyRestoreNonce.value + 1
     ctx.historyRestoreNonce.value = nextNonce
     ctx.historyRestoreRequest.value = {
       nonce: nextNonce,
-      selection: cloneEditorSelection(ctx.selection.value),
-      activeTextRange: cloneTextRange(ctx.activeTextRange.value),
+      selection: cloneEditorSelection(restoredSelection),
+      activeTextRange: cloneTextRange(restoredRange),
     }
   }
 
@@ -51,9 +57,23 @@ export function createEditorHistory(ctx: EditorCore) {
       ],
       future: h.future.slice(1),
     }
+    const restoredSelection = cloneEditorSelection(next.selection)
+    const restoredRange = cloneTextRange(next.activeTextRange)
+    ctx.suppressNextDomSelectionRestore.value = true
+    ctx.selection.value = restoredSelection
+    ctx.activeTextRange.value = restoredRange
+    ctx.selectionSnapshot.value = cloneEditorSelection(restoredSelection)
+    ctx.activeTextRangeSnapshot.value = cloneTextRange(restoredRange)
     ctx.model.value = next.model
-    ctx.selection.value = cloneEditorSelection(next.selection)
-    ctx.activeTextRange.value = cloneTextRange(next.activeTextRange)
+    ctx.modelSnapshot.value = next.model
+
+    const nextNonce = ctx.historyRestoreNonce.value + 1
+    ctx.historyRestoreNonce.value = nextNonce
+    ctx.historyRestoreRequest.value = {
+      nonce: nextNonce,
+      selection: cloneEditorSelection(restoredSelection),
+      activeTextRange: cloneTextRange(restoredRange),
+    }
   }
 
   return { undo, redo }

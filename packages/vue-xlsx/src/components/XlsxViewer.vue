@@ -1,6 +1,8 @@
 <template>
   <div
     class="xlsx-viewer"
+    data-testid="xlsx-viewer"
+    :data-state="controller.isLoading ? 'loading' : controller.error ? 'error' : controller.activeSheet ? 'ready' : 'empty'"
     :style="viewerStyle"
     @keydown="onKeydown"
     tabindex="0"

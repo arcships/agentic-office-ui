@@ -8,25 +8,9 @@ import wasmInit, {
   serialize_docx_from_json_wasm,
   serialize_docx_wasm
 } from "./generated/docx_wasm.js";
+import { bundledDocxWasmUrl } from "./wasm-asset";
 
 export type WasmSource = InitInput;
-
-let initPromise: Promise<InitOutput> | undefined;
-let overrideSource: WasmSource | undefined;
-
-/**
- * Override where the `docx_wasm_bg.wasm` binary is loaded from (URL, Response,
- * bytes, or a compiled module). Must be called before the first operation that
- * touches WASM; by default the binary shipped alongside this package is used.
- */
-export function setWasmSource(source: WasmSource): void {
-  if (initPromise) {
-    throw new Error(
-      "@extend-ai/docx-core: setWasmSource must be called before the first parse/serialize call initializes WASM"
-    );
-  }
-  overrideSource = source;
-}
 
 interface FsPromisesLike {
   readFile(path: URL): Promise<Uint8Array>;
@@ -48,7 +32,7 @@ async function nodeFsPromises(): Promise<FsPromisesLike> {
 }
 
 async function defaultWasmSource(): Promise<WasmSource> {
-  const wasmUrl = new URL("./docx_wasm_bg.wasm", import.meta.url);
+  const wasmUrl = new URL(bundledDocxWasmUrl, import.meta.url);
   if (wasmUrl.protocol === "file:") {
     const fs = await nodeFsPromises();
     return fs.readFile(wasmUrl);
@@ -64,24 +48,50 @@ async function defaultWasmSource(): Promise<WasmSource> {
   return response;
 }
 
-export async function initWasm(source?: WasmSource): Promise<InitOutput> {
-  if (!initPromise) {
-    const chosen = source ?? overrideSource;
-    initPromise = (chosen !== undefined ? Promise.resolve(chosen) : defaultWasmSource())
-      .then((module_or_path) => wasmInit({ module_or_path }))
-      .catch((error: unknown) => {
-        if (error instanceof WebAssembly.CompileError) {
-          throw new Error(
-            "@extend-ai/docx-core: the bundled WebAssembly binary failed to compile. It requires " +
-              "WebAssembly SIMD support (Chrome 91+, Firefox 89+, Safari 16.4+, Node 16.4+). " +
-              `Original error: ${error.message}`,
-            { cause: error }
-          );
-        }
-        throw error;
-      });
-  }
-  return initPromise;
+function createLegacyDefaultWasmRuntime() {
+  let initPromise: Promise<InitOutput> | undefined;
+  let overrideSource: WasmSource | undefined;
+  return Object.freeze({
+    setSource(source: WasmSource): void {
+      if (initPromise) {
+        throw new Error(
+          "@extend-ai/docx-core: setWasmSource must be called before the first parse/serialize call initializes WASM"
+        );
+      }
+      overrideSource = source;
+    },
+    async init(source?: WasmSource): Promise<InitOutput> {
+      if (!initPromise) {
+        const chosen = source ?? overrideSource;
+        initPromise = (chosen !== undefined ? Promise.resolve(chosen) : defaultWasmSource())
+          .then((module_or_path) => wasmInit({ module_or_path }))
+          .catch((error: unknown) => {
+            if (error instanceof WebAssembly.CompileError) {
+              throw new Error(
+                "@extend-ai/docx-core: the bundled WebAssembly binary failed to compile. It requires " +
+                  "WebAssembly SIMD support (Chrome 91+, Firefox 89+, Safari 16.4+, Node 16.4+). " +
+                  `Original error: ${error.message}`,
+                { cause: error }
+              );
+            }
+            throw error;
+          });
+      }
+      return initPromise;
+    },
+  });
+}
+
+// Compatibility-only default instance. Explicit DOCX Runtime configuration is
+// passed to its dedicated Worker and never mutates this object.
+const legacyDefaultWasmRuntime = createLegacyDefaultWasmRuntime();
+
+export function setWasmSource(source: WasmSource): void {
+  legacyDefaultWasmRuntime.setSource(source);
+}
+
+export function initWasm(source?: WasmSource): Promise<InitOutput> {
+  return legacyDefaultWasmRuntime.init(source);
 }
 
 export interface WasmOoxmlPart {

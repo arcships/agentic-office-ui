@@ -11,6 +11,7 @@ import { cellAddressToA1, normalizeRange, rangeToA1 } from "./selection";
 import { decodeHtmlEntities, escapeHtml, mapBorder, resolveInheritedCellStyle } from "./formatting";
 import { coerceUserEnteredValue } from "./internal";
 import type { XlsxControllerContext } from "./internal";
+import { XlsxSourceError } from "@extend-ai/xlsx-core";
 
 export { INTERNAL_CLIPBOARD_MIME, escapeHtml };
 export type { ClipboardPayload, ClipboardMatrixCell, ClipboardMerge };
@@ -26,52 +27,84 @@ export function parseClipboardText(text: string): string[][] {
   return rows.map((row) => row.split("\t"));
 }
 
+function downloadBlob(blob: Blob, fileName: string) {
+  const ownerDocument = globalThis.document;
+  if (!ownerDocument?.body || typeof ownerDocument.createElement !== "function") {
+    throw new Error("下载失败：当前环境没有可用的 document。");
+  }
+  const anchor = ownerDocument.createElement("a");
+  let objectUrl: string | undefined;
+  let clicked = false;
+  try {
+    objectUrl = URL.createObjectURL(blob);
+    anchor.href = objectUrl;
+    anchor.download = fileName;
+    ownerDocument.body.append(anchor);
+    anchor.click();
+    clicked = true;
+  } finally {
+    try { anchor.remove(); } catch { /* URL cleanup must continue */ }
+    if (objectUrl) {
+      if (clicked) {
+        try {
+          setTimeout(() => URL.revokeObjectURL(objectUrl as string), 0);
+        } catch {
+          URL.revokeObjectURL(objectUrl);
+        }
+      } else {
+        URL.revokeObjectURL(objectUrl);
+      }
+    }
+  }
+}
+
 export function downloadArrayBuffer(file: ArrayBuffer, fileName: string) {
-  const blob = new Blob([file], { type: XLSX_MIME_TYPE });
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = fileName;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  downloadBlob(new Blob([file], { type: XLSX_MIME_TYPE }), fileName);
 }
 
 export function downloadBytes(bytes: Uint8Array, fileName: string, mimeType: string) {
   const normalizedBytes = new Uint8Array(bytes.byteLength);
   normalizedBytes.set(bytes);
-  const blob = new Blob([normalizedBytes], { type: mimeType });
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = fileName;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  downloadBlob(new Blob([normalizedBytes], { type: mimeType }), fileName);
 }
 
 export function downloadText(text: string, fileName: string, mimeType: string) {
-  const blob = new Blob([text], { type: mimeType });
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = fileName;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  downloadBlob(new Blob([text], { type: mimeType }), fileName);
 }
 
 export function downloadUrl(src: string, fileName: string) {
-  const anchor = document.createElement("a");
-  anchor.href = src;
-  anchor.download = fileName;
-  anchor.rel = "noreferrer";
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
+  let url: URL;
+  try {
+    url = new URL(src);
+  } catch {
+    throw new XlsxSourceError({
+      code: "SOURCE_NOT_ALLOWED",
+      message: "下载地址无效。",
+      sourceKind: "url",
+    });
+  }
+  if (url.protocol !== "blob:") {
+    throw new XlsxSourceError({
+      code: "SOURCE_NOT_ALLOWED",
+      message: "下载只能使用已验证的 Blob 地址。",
+      sourceKind: "url",
+      url: url.href,
+    });
+  }
+  const ownerDocument = globalThis.document;
+  if (!ownerDocument?.body || typeof ownerDocument.createElement !== "function") {
+    throw new Error("下载失败：当前环境没有可用的 document。");
+  }
+  const anchor = ownerDocument.createElement("a");
+  try {
+    anchor.href = url.href;
+    anchor.download = fileName;
+    anchor.rel = "noreferrer";
+    ownerDocument.body.append(anchor);
+    anchor.click();
+  } finally {
+    anchor.remove();
+  }
 }
 
 export function createClipboardDomain(ctx: XlsxControllerContext) {

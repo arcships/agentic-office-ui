@@ -1,50 +1,73 @@
 <template>
   <div
-    v-if="model && footerSection"
+    v-if="section && section.nodes.length > 0"
     ref="footerEl"
     data-docx-page-footer="true"
-    class="docx-page-footer"
+    class="docx-page-footer docx-page-section--footer"
     :style="footerStyle"
-    @dblclick="onFooterDoubleClick"
   >
-    <div
-      v-for="(node, ni) of footerSection.nodes"
-      :key="`footer-node-${pageIndex}-${ni}`"
-      class="docx-page-footer-node"
-    >
-      <template v-if="node.type === 'paragraph'">
-        <p class="docx-page-footer-paragraph">
-          {{ renderParagraphText(node) }}
-        </p>
-      </template>
-      <div v-else class="docx-page-footer-unknown">
-        (footer {{ node.type }})
-      </div>
-    </div>
+    <template v-for="(node, ni) of section.nodes" :key="`footer-node-${pageIndex}-${ni}`">
+      <DocxParagraphHost
+        v-if="node.type === 'paragraph'"
+        :paragraph="node"
+        :paragraph-index="-(pageIndex * 1000 + ni + 1)"
+        :editable="false"
+        :document-theme="theme"
+        :controller="controller"
+        :numbering-definitions="model.metadata.numberingDefinitions"
+        :show-tracked-changes="trackedChangesEnabled"
+        :show-comment-highlights="commentsEnabled"
+        :page-number="pageNumber"
+        :total-pages="totalPages"
+        :page-number-format="pageNumberFormat"
+        :within-header-footer="true"
+        header-footer-region="footer"
+      />
+      <DocxTableHost
+        v-else
+        :table="node"
+        :table-index="-(pageIndex * 1000 + ni + 1)"
+        :editable="false"
+        :document-theme="theme"
+        :controller="controller"
+        :numbering-definitions="model.metadata.numberingDefinitions"
+        :show-tracked-changes="trackedChangesEnabled"
+        :show-comment-highlights="commentsEnabled"
+        :page-number="pageNumber"
+        :total-pages="totalPages"
+        :page-number-format="pageNumberFormat"
+        :within-header-footer="true"
+        header-footer-region="footer"
+      />
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue"
+import { computed } from "vue"
 import type {
+  DocModel,
   DocxEditorController,
-  ParagraphNode,
+  FooterSection,
 } from "@extend-ai/docx-core"
-import { paragraphText } from "@extend-ai/docx-core"
+import DocxParagraphHost from "./DocxParagraphHost.vue"
+import DocxTableHost from "./DocxTableHost.vue"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = defineProps<{
   pageIndex: number
-  footerNodes: any[]
+  section?: FooterSection
+  model: DocModel
   pageLayout: { pageWidthPx: number; pageHeightPx: number; marginsPx?: { top: number; bottom: number; left: number; right: number } }
   pageContentWidthPx: number
   theme: "light" | "dark"
-  controller: DocxEditorController
+  controller?: DocxEditorController
+  pageNumber: number
+  totalPages: number
+  pageNumberFormat?: string
+  trackedChangesEnabled?: boolean
+  commentsEnabled?: boolean
 }>()
-
-// ── Computed ───────────────────────────────────────────────────────
-const model = computed(() => props.controller.model)
-const footerSection = computed(() => model.value?.metadata?.footerSections?.[0] ?? null)
 
 const footerStyle = computed(() => ({
   display: "grid",
@@ -57,17 +80,6 @@ const footerStyle = computed(() => ({
   marginTop: "auto",
 }))
 
-// ── Helpers ────────────────────────────────────────────────────────
-function renderParagraphText(node: any): string {
-  if (node.type === "paragraph") {
-    return paragraphText(node as ParagraphNode)
-  }
-  return ""
-}
-
-function onFooterDoubleClick(_event: MouseEvent): void {
-  // Activate footer editing mode — simplified
-}
 </script>
 
 <style scoped>

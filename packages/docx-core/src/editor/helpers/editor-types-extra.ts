@@ -245,6 +245,7 @@ export interface DocxEditorController {
     tableIndex: number,
     cells: Array<{ rowIndex: number; cellIndex: number }>
   ) => void;
+  setTableColumnWidths: (tableIndex: number, widthsPx: number[]) => void;
   insertTableRow: (
     tableIndex: number,
     rowIndex: number,
@@ -905,4 +906,3 @@ export interface UseDocxPageThumbnailsResult {
 export type UseDocxViewerThumbnailsOptions = UseDocxPageThumbnailsOptions;
 
 export type DocxViewerThumbnails = UseDocxPageThumbnailsResult;
-

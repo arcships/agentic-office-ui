@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import zipfile
 from pathlib import Path
 from textwrap import wrap
@@ -15,11 +16,13 @@ from openpyxl.drawing.image import Image as XlsxImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from PIL import Image, ImageDraw, ImageFont
+from reportlab import rl_config
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Image as PdfImage
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
@@ -28,6 +31,34 @@ ROOT = Path(__file__).resolve().parents[1]
 SAMPLES = ROOT / "apps" / "demo" / "public" / "samples"
 SAMPLES.mkdir(parents=True, exist_ok=True)
 random.seed(42)
+rl_config.invariant = 1
+
+FIXED_OOXML_TIMESTAMP = "2020-01-01T00:00:00Z"
+FIXED_ZIP_TIMESTAMP = (2020, 1, 1, 0, 0, 0)
+
+
+def normalize_ooxml_zip(path: Path):
+    """Make OOXML bytes reproducible across repeated local and CI runs."""
+    temporary = path.with_suffix(f"{path.suffix}.deterministic")
+    with zipfile.ZipFile(path, "r") as source, zipfile.ZipFile(
+        temporary, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
+    ) as target:
+        for original in sorted(source.infolist(), key=lambda item: item.filename):
+            data = source.read(original.filename)
+            if original.filename == "docProps/core.xml":
+                text = data.decode("utf-8")
+                text = re.sub(
+                    r"(<dcterms:(?:created|modified)[^>]*>).*?(</dcterms:(?:created|modified)>)",
+                    rf"\g<1>{FIXED_OOXML_TIMESTAMP}\g<2>",
+                    text,
+                )
+                data = text.encode("utf-8")
+            entry = zipfile.ZipInfo(original.filename, FIXED_ZIP_TIMESTAMP)
+            entry.compress_type = zipfile.ZIP_DEFLATED
+            entry.create_system = 3
+            entry.external_attr = (0o600 & 0xFFFF) << 16
+            target.writestr(entry, data, compress_type=zipfile.ZIP_DEFLATED, compresslevel=9)
+    temporary.replace(path)
 
 
 def font_path() -> str | None:
@@ -284,8 +315,9 @@ def make_pdf_sample(path: Path):
 def make_pdf_scanned(path: Path, image_path: Path):
     c = canvas.Canvas(str(path), pagesize=A4)
     w, h = A4
+    image = ImageReader(str(image_path))
     for i in range(3):
-        c.drawImage(str(image_path), 18*mm, 20*mm, width=w-36*mm, height=h-40*mm, preserveAspectRatio=True, anchor="c")
+        c.drawImage(image, 18*mm, 20*mm, width=w-36*mm, height=h-40*mm, preserveAspectRatio=True, anchor="c")
         c.drawString(20*mm, 10*mm, f"Scanned invoice page {i+1}")
         c.showPage()
     c.save()
@@ -492,9 +524,13 @@ def main():
 
     make_json_fixtures()
 
+    for path in sorted([*SAMPLES.glob("*.docx"), *SAMPLES.glob("*.xlsx")]):
+        if not path.name.startswith("corrupted."):
+            normalize_ooxml_zip(path)
+
     manifest = []
     for path in sorted(SAMPLES.iterdir()):
-        if path.is_file():
+        if path.is_file() and path.name != "manifest.json":
             manifest.append({"name": path.name, "bytes": path.stat().st_size})
     (SAMPLES / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(manifest, ensure_ascii=False, indent=2))

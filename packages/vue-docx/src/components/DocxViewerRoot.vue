@@ -20,10 +20,16 @@
           :page-index="entry.pageIndex"
           :page-layout="entry.pageLayout"
           :page-node-segments="entry.pageNodeSegments"
+          :model="model"
           :controller="controller"
           :editable="editable"
-          :page-width-px="pageWidthPx"
-          :page-content-width-px="pageContentWidthPx"
+          :page-width-px="entry.pageWidthPx"
+          :page-content-width-px="entry.pageContentWidthPx"
+          :page-number="entry.pageNumber"
+          :total-pages="pageCount"
+          :page-number-format="entry.pageNumberFormat"
+          :header-section="entry.headerSection"
+          :footer-section="entry.footerSection"
           :tracked-changes-enabled="trackedChangesEnabled"
           :comments-enabled="commentsEnabled"
           :theme="theme"
@@ -35,18 +41,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, inject, watch, shallowRef } from "vue"
-import type { DocxEditorController } from "@extend-ai/docx-core"
+import { ref, computed, onMounted, onUnmounted, watch } from "vue"
+import type {
+  DocModel,
+  DocxDocumentTheme,
+  DocxEditorController,
+  DocumentPageNodeSegment,
+  FooterSection,
+  HeaderSection,
+  LayoutOptions,
+} from "@extend-ai/docx-core"
 import {
-  layoutDocument,
+  buildLayoutSnapshot,
+  parseSectionLayout,
+  parseSectionPageNumberFormat,
+  parseSectionPageNumberStartOverride,
+  resolveDocumentSectionsFromMetadata,
   resolveDocumentLayout,
+  resolveSectionIndexForNodeIndex,
+  selectSectionVariantForPage,
   DEFAULT_DOC_PAGE_WIDTH,
   DEFAULT_DOC_PAGE_HEIGHT,
-} from "@extend-ai/docx-core"
-import type {
-  LayoutPage,
-  LayoutBlock,
-  DocumentPageNodeSegment,
 } from "@extend-ai/docx-core"
 import DocxPageSurface from "./DocxPageSurface.vue"
 
@@ -57,8 +72,11 @@ const SCROLL_MEASUREMENT_DEBOUNCE_MS = 80
 
 // ── Types ──────────────────────────────────────────────────────────
 export interface DocxViewerRootProps {
-  controller: DocxEditorController
+  model: DocModel
+  controller?: DocxEditorController
   editable?: boolean
+  layoutOptions?: LayoutOptions
+  theme?: DocxDocumentTheme
 }
 
 interface VisiblePageEntry {
@@ -67,7 +85,12 @@ interface VisiblePageEntry {
   heightPx: number
   pageLayout: ReturnType<typeof resolveDocumentLayout>
   pageNodeSegments: DocumentPageNodeSegment[]
-  blocks: LayoutBlock[]
+  pageWidthPx: number
+  pageContentWidthPx: number
+  pageNumber: number
+  pageNumberFormat?: string
+  headerSection?: HeaderSection
+  footerSection?: FooterSection
 }
 
 interface PageMeasureEvent {
@@ -77,7 +100,7 @@ interface PageMeasureEvent {
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
   defineProps<DocxViewerRootProps>(),
-  { editable: true }
+  { editable: false }
 )
 
 const emit = defineEmits<{
@@ -98,54 +121,100 @@ const dragOverDepth = ref(0)
 const isDragOver = computed(() => dragOverDepth.value > 0)
 
 // ── Pagination ─────────────────────────────────────────────────────
+const baseDocumentLayout = computed(() => resolveDocumentLayout(props.model))
+
+const resolvedLayoutOptions = computed<LayoutOptions>(() => ({
+  pageWidth: baseDocumentLayout.value.pageWidthPx,
+  pageHeight: baseDocumentLayout.value.pageHeightPx,
+  margin: baseDocumentLayout.value.marginsPx.top,
+  ...props.layoutOptions,
+}))
+
 const paginationPlan = computed(() => {
-  const model = props.controller.model
-  if (!model) return { pages: [], pageNodeSegments: [] as DocumentPageNodeSegment[][] }
-
-  const documentLayout = resolveDocumentLayout(model)
-  const layoutResult = layoutDocument(model, {
-    pageWidth: documentLayout.pageWidthPx,
-    pageHeight: documentLayout.pageHeightPx,
-    margin: documentLayout.marginsPx?.top ?? 72,
-  })
-
-  // Build page node segments from layout result
-  const pageNodeSegments: DocumentPageNodeSegment[][] = layoutResult.map((page) =>
-    page.blocks.map((block, idx) => ({
-      nodeIndex: idx,
-      ...(block.kind === "table"
-        ? { tableRowRange: undefined }
-        : {}),
-    })) as DocumentPageNodeSegment[]
+  const snapshot = buildLayoutSnapshot(props.model, resolvedLayoutOptions.value)
+  const pageNodeSegments: DocumentPageNodeSegment[][] = snapshot.pages.map((page) =>
+    page.blocks.flatMap((block) => {
+      const nodeIndex = block.source?.nodeIndex
+      return Number.isFinite(nodeIndex) && (nodeIndex as number) >= 0
+        ? [{ nodeIndex: Math.round(nodeIndex as number) }]
+        : []
+    })
   )
 
-  return { pages: layoutResult, pageNodeSegments }
+  return { pages: snapshot.pages, pageNodeSegments }
 })
 
 const pages = computed(() => paginationPlan.value.pages)
 const pageNodeSegments = computed(() => paginationPlan.value.pageNodeSegments)
 const pageCount = computed(() => pages.value.length)
 
-watch(pageCount, (count) => {
-  emit("pageCountChange", count)
-})
+watch(pageCount, (count) => emit("pageCountChange", count), { immediate: true })
 
 // ── Document layout ────────────────────────────────────────────────
-const documentLayout = computed(() => {
-  const model = props.controller.model
-  if (!model) return { pageWidthPx: DEFAULT_DOC_PAGE_WIDTH, pageHeightPx: DEFAULT_DOC_PAGE_HEIGHT, marginsPx: { top: 72, bottom: 72, left: 72, right: 72 }, headerDistancePx: 0, footerDistancePx: 0 }
-  return resolveDocumentLayout(model)
+const pagePresentations = computed(() => {
+  const sections = resolveDocumentSectionsFromMetadata(props.model.metadata)
+  const firstPageBySection = new Map<number, number>()
+  const evenAndOddHeaders = props.model.metadata.compatibility?.evenAndOddHeaders ?? false
+  let previousSectionIndex = 0
+  let previousNodeIndex = 0
+  let nextPageNumber = 1
+
+  return pageNodeSegments.value.map((segments, pageIndex) => {
+    const firstNodeIndex = segments[0]?.nodeIndex ?? previousNodeIndex
+    previousNodeIndex = firstNodeIndex
+    const sectionIndex = resolveSectionIndexForNodeIndex(
+      sections,
+      firstNodeIndex,
+      previousSectionIndex
+    )
+    previousSectionIndex = sectionIndex
+    if (!firstPageBySection.has(sectionIndex)) {
+      firstPageBySection.set(sectionIndex, pageIndex)
+      const sectionStart = parseSectionPageNumberStartOverride(
+        sections[sectionIndex]?.sectionPropertiesXml
+      )
+      if (sectionStart !== undefined) nextPageNumber = sectionStart
+    }
+
+    const section = sections[sectionIndex]
+    const sectionPageIndex = pageIndex - (firstPageBySection.get(sectionIndex) ?? pageIndex)
+    const sectionPropertiesXml =
+      section?.sectionPropertiesXml ?? props.model.metadata.sectionPropertiesXml
+    const pageLayout = sectionPropertiesXml
+      ? parseSectionLayout(sectionPropertiesXml)
+      : baseDocumentLayout.value
+    const variantOptions = { evenAndOddHeaders, documentPageIndex: pageIndex }
+    const pageNumber = nextPageNumber
+    nextPageNumber += 1
+
+    return {
+      pageLayout,
+      pageNumber,
+      pageNumberFormat: parseSectionPageNumberFormat(sectionPropertiesXml),
+      headerSection: section
+        ? selectSectionVariantForPage(
+            section.headerSections,
+            sectionPropertiesXml,
+            sectionPageIndex,
+            variantOptions
+          )
+        : undefined,
+      footerSection: section
+        ? selectSectionVariantForPage(
+            section.footerSections,
+            sectionPropertiesXml,
+            sectionPageIndex,
+            variantOptions
+          )
+        : undefined,
+    }
+  })
 })
 
-const pageWidthPx = computed(() => documentLayout.value.pageWidthPx)
-const pageContentWidthPx = computed(
-  () => documentLayout.value.pageWidthPx - (documentLayout.value.marginsPx?.left ?? 72) - (documentLayout.value.marginsPx?.right ?? 72)
-)
-
 // ── Theme / feature flags ──────────────────────────────────────────
-const theme = computed(() => props.controller.documentTheme)
-const trackedChangesEnabled = computed(() => props.controller.showTrackedChanges)
-const commentsEnabled = computed(() => props.controller.showComments)
+const theme = computed(() => props.theme ?? props.controller?.documentTheme ?? "light")
+const trackedChangesEnabled = computed(() => props.controller?.showTrackedChanges ?? false)
+const commentsEnabled = computed(() => props.controller?.showComments ?? false)
 
 // ── Page heights ───────────────────────────────────────────────────
 function getPageHeight(pageIndex: number): number {
@@ -153,7 +222,7 @@ function getPageHeight(pageIndex: number): number {
   if (Number.isFinite(measured) && (measured as number) > 0) {
     return measured as number
   }
-  return documentLayout.value.pageHeightPx
+  return pagePresentations.value[pageIndex]?.pageLayout.pageHeightPx ?? DEFAULT_DOC_PAGE_HEIGHT
 }
 
 // ── Page offsets ───────────────────────────────────────────────────
@@ -191,9 +260,20 @@ const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
         pageIndex: i,
         topPx: pageTop,
         heightPx: pageHeight,
-        pageLayout: documentLayout.value,
+        pageLayout: pagePresentations.value[i]?.pageLayout ?? baseDocumentLayout.value,
         pageNodeSegments: pageNodeSegments.value[i] ?? [],
-        blocks: pages.value[i]?.blocks ?? [],
+        pageWidthPx:
+          pagePresentations.value[i]?.pageLayout.pageWidthPx ?? DEFAULT_DOC_PAGE_WIDTH,
+        pageContentWidthPx: Math.max(
+          0,
+          (pagePresentations.value[i]?.pageLayout.pageWidthPx ?? DEFAULT_DOC_PAGE_WIDTH) -
+            (pagePresentations.value[i]?.pageLayout.marginsPx.left ?? 72) -
+            (pagePresentations.value[i]?.pageLayout.marginsPx.right ?? 72)
+        ),
+        pageNumber: pagePresentations.value[i]?.pageNumber ?? i + 1,
+        pageNumberFormat: pagePresentations.value[i]?.pageNumberFormat,
+        headerSection: pagePresentations.value[i]?.headerSection,
+        footerSection: pagePresentations.value[i]?.footerSection,
       })
     }
   }
@@ -204,6 +284,8 @@ const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
 // ── Styles ─────────────────────────────────────────────────────────
 const rootStyle = computed(() => ({
   flex: "1",
+  width: "100%",
+  minWidth: "0",
   overflowY: "auto" as const,
   overflowX: "hidden" as const,
   background: "#f3f4f6",
@@ -223,7 +305,7 @@ function pageWrapperStyle(entry: VisiblePageEntry): Record<string, string | numb
     top: `${entry.topPx}px`,
     left: "50%",
     transform: "translateX(-50%)",
-    width: `${pageWidthPx.value}px`,
+    width: `${entry.pageWidthPx}px`,
   }
 }
 
@@ -268,7 +350,7 @@ function onPageMeasure(pageIndex: number, event: PageMeasureEvent): void {
 // ── Drag-and-drop file import ──────────────────────────────────────
 function onDragOver(event: DragEvent): void {
   if (!event.dataTransfer) return
-  if (props.editable && hasDocxFile(event.dataTransfer)) {
+  if (props.editable && props.controller && hasDocxFile(event.dataTransfer)) {
     dragOverDepth.value++
     event.dataTransfer.dropEffect = "copy"
   }
@@ -280,6 +362,7 @@ function onDragLeave(): void {
 
 async function onDrop(event: DragEvent): Promise<void> {
   dragOverDepth.value = 0
+  if (!props.editable || !props.controller) return
   const file = event.dataTransfer?.files?.[0]
   if (file && file.name.endsWith(".docx")) {
     await props.controller.importDocxFile(file)
@@ -298,9 +381,15 @@ function hasDocxFile(dataTransfer: DataTransfer): boolean {
 // ── Lifecycle ──────────────────────────────────────────────────────
 onMounted(() => {
   if (scrollContainerRef.value) {
-    viewportHeight.value = scrollContainerRef.value.clientHeight
+    const height = scrollContainerRef.value.clientHeight
+    if (Number.isFinite(height) && height > 0) viewportHeight.value = height
   }
-  const observer = new ResizeObserver((entries) => {
+  const ResizeObserverConstructor = globalThis.ResizeObserver
+  if (typeof ResizeObserverConstructor !== "function") {
+    updateVisibleRange()
+    return
+  }
+  const observer = new ResizeObserverConstructor((entries) => {
     for (const entry of entries) {
       viewportHeight.value = entry.contentRect.height
     }

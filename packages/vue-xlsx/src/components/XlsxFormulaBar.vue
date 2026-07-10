@@ -2,6 +2,7 @@
   <div class="xlsx-formula-bar" :style="barStyle">
     <input
       class="xlsx-formula-bar__name-box"
+      data-testid="xlsx-name-box"
       :value="nameBoxValue"
       readonly
       title="Active cell"
@@ -10,6 +11,7 @@
     <input
       ref="formulaInputRef"
       class="xlsx-formula-bar__formula-input"
+      data-testid="xlsx-formula-input"
       :disabled="!hasFormulaTarget || isReadOnly"
       :value="formulaDraft"
       placeholder="Enter a formula or value"

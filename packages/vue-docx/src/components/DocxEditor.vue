@@ -1,5 +1,5 @@
 <template>
-  <div class="docx-editor-viewer" :class="className">
+  <div class="docx-editor-viewer" :class="className" data-testid="docx-editor">
     <!-- Toolbar -->
     <DocxToolbar
       v-if="showToolbar"
@@ -18,8 +18,9 @@
       />
 
       <!-- Viewer root (main scrollable area with page surfaces) -->
-      <DocxViewerRoot
+      <DocxDocumentSurface
         ref="viewerRootRef"
+        :model="renderedModel"
         :controller="controller"
         :editable="editable"
         @page-count-change="onPageCountChange"
@@ -29,7 +30,7 @@
 
     <!-- Context menu -->
     <DocxContextMenu
-      v-if="contextMenu.visible.value"
+      v-if="editable && contextMenu.visible.value"
       :context="contextMenu.context.value"
       :controller="controller"
       @close="contextMenu.hide"
@@ -37,7 +38,7 @@
 
     <!-- Drag overlay -->
     <DocxDragOverlay
-      v-if="dragOverlay.visible.value"
+      v-if="editable && dragOverlay.visible.value"
       :controller="controller"
     />
 
@@ -46,10 +47,10 @@
       <span class="docx-editor-statusbar-page">
         Page {{ currentPage }} of {{ totalPages }}
       </span>
-      <span class="docx-editor-statusbar-status">
+      <span class="docx-editor-statusbar-status" data-testid="editor-status">
         {{ controller.status }}
       </span>
-      <span v-if="controller.fileName" class="docx-editor-statusbar-file">
+      <span v-if="controller.fileName" class="docx-editor-statusbar-file" data-testid="editor-file-name">
         {{ controller.fileName }}
       </span>
     </div>
@@ -57,13 +58,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, provide, watch, onMounted, onUnmounted } from "vue"
+import { ref, computed, provide, watch, onMounted, onUnmounted } from "vue"
 import type {
   DocxEditorController,
   DocxContextMenuContext,
 } from "@extend-ai/docx-core"
 import { useDocxEditor } from "../composables/useDocxEditor"
-import DocxViewerRoot from "./DocxViewerRoot.vue"
+import DocxDocumentSurface from "./DocxDocumentSurface.vue"
 import DocxToolbar from "./DocxToolbar.vue"
 import DocxContextMenu from "./DocxContextMenu.vue"
 import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
@@ -86,10 +87,16 @@ const props = withDefaults(
 // ── Controller ─────────────────────────────────────────────────────
 const internalController = !props.editor
   ? useDocxEditor({
+      starterModel: props.model,
       initialFileName: props.file ? "(imported document)" : "(new document)",
     })
   : null
 const controller = props.editor ?? internalController!
+const renderedModel = computed(() =>
+  !props.editor && !props.editable && props.model
+    ? props.model
+    : controller.model
+)
 
 // Provide controller to all child components
 provide("docxEditorController", controller)
@@ -98,17 +105,23 @@ provide("docxEditorController", controller)
 watch(
   () => props.file,
   async (newFile) => {
-    if (newFile && controller && !props.editor) {
+    if (!controller || props.editor) return
+    if (newFile) {
       await controller.importDocxFile(
         new File([newFile], "document.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })
       )
+    } else {
+      // Clearing the controlled file must invalidate a pending import. The
+      // public newDocument() path owns that cancellation and restores a clean
+      // editor state without exposing another controller method.
+      controller.newDocument()
     }
   },
   { immediate: true }
 )
 
 // ── Viewer root ref ────────────────────────────────────────────────
-const viewerRootRef = ref<InstanceType<typeof DocxViewerRoot> | undefined>()
+const viewerRootRef = ref<InstanceType<typeof DocxDocumentSurface> | undefined>()
 
 // ── Page tracking ──────────────────────────────────────────────────
 const currentPage = ref(1)
@@ -180,12 +193,43 @@ function onKeydown(event: KeyboardEvent): void {
   }
 }
 
-onMounted(() => {
+let isMounted = false
+let keydownAttached = false
+
+function attachEditingListeners(): void {
+  if (!isMounted || keydownAttached || !props.editable) return
   window.addEventListener("keydown", onKeydown)
+  keydownAttached = true
+}
+
+function detachEditingListeners(): void {
+  if (!keydownAttached) return
+  window.removeEventListener("keydown", onKeydown)
+  keydownAttached = false
+}
+
+watch(
+  () => props.editable,
+  (editable) => {
+    if (editable) {
+      attachEditingListeners()
+      return
+    }
+    detachEditingListeners()
+    contextMenu.hide()
+    dragOverlay.hide()
+    controller.clearSelectionSession()
+  }
+)
+
+onMounted(() => {
+  isMounted = true
+  attachEditingListeners()
 })
 
 onUnmounted(() => {
-  window.removeEventListener("keydown", onKeydown)
+  detachEditingListeners()
+  isMounted = false
 })
 </script>
 

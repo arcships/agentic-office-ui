@@ -62,6 +62,7 @@ import { computed } from "vue"
 import type {
   DocxEditorController,
   DocxFormFieldLocation,
+  DocumentPageNodeSegment,
   FormFieldRunNode,
 } from "@extend-ai/docx-core"
 import {
@@ -86,6 +87,7 @@ interface FormFieldEntry {
 const props = defineProps<{
   pageIndex: number
   controller: DocxEditorController
+  pageNodeSegments: DocumentPageNodeSegment[]
 }>()
 
 // ── Computed ───────────────────────────────────────────────────────
@@ -95,8 +97,12 @@ const formFields = computed<FormFieldEntry[]>(() => {
 
   const fields: FormFieldEntry[] = []
   const selectedLoc = props.controller.selectedFormField?.location
+  const pageNodeIndexes = new Set(
+    props.pageNodeSegments.map((segment) => segment.nodeIndex)
+  )
 
   model.nodes.forEach((node, nodeIndex) => {
+    if (!pageNodeIndexes.has(nodeIndex)) return
     if (node.type !== "paragraph") return
     node.children.forEach((child, childIndex) => {
       if (child.type !== "form-field") return

@@ -1,4 +1,4 @@
-let wasmModulePromise: Promise<typeof import("@dukelib/sheets-wasm")> | null = null;
+import { bundledXlsxWasmUrl } from "./wasm-asset";
 
 export type XlsxWasmSource =
   | string
@@ -10,9 +10,6 @@ export type XlsxWasmSource =
 
 export type WorkerWasmSource = string | ArrayBuffer | WebAssembly.Module;
 
-let hasConfiguredWasmSource = false;
-let configuredWasmSource: XlsxWasmSource | undefined;
-let configuredWorkerWasmSource: WorkerWasmSource | undefined;
 
 function bufferSourceToArrayBuffer(source: ArrayBuffer | ArrayBufferView<ArrayBufferLike>): ArrayBuffer {
   if (source instanceof ArrayBuffer) {
@@ -44,39 +41,87 @@ function sourceToWorkerSource(source: XlsxWasmSource): WorkerWasmSource | undefi
   return undefined;
 }
 
+function createLegacyDefaultWasmRuntime() {
+  let modulePromise: Promise<typeof import("@dukelib/sheets-wasm")> | undefined;
+  let hasConfiguredSource = false;
+  let source: XlsxWasmSource | undefined;
+  let workerSource: WorkerWasmSource | undefined;
+  return Object.freeze({
+    setSource(nextSource: XlsxWasmSource): void {
+      if (modulePromise) {
+        throw new Error(
+          "@extend-ai/xlsx-core: setWasmSource must be called before the default main-thread WASM module initializes",
+        );
+      }
+      hasConfiguredSource = true;
+      source = nextSource;
+      workerSource = sourceToWorkerSource(nextSource);
+    },
+    canUseInWorker(): boolean {
+      return !hasConfiguredSource || workerSource !== undefined;
+    },
+    getWorkerSource(): WorkerWasmSource | undefined {
+      return workerSource;
+    },
+    getModule(): Promise<typeof import("@dukelib/sheets-wasm")> {
+      if (!modulePromise) {
+        modulePromise = import("@dukelib/sheets-wasm").then(async (mod) => {
+          await mod.default({ module_or_path: source ?? bundledXlsxWasmUrl });
+          return mod;
+        });
+      }
+      return modulePromise;
+    },
+  });
+}
+
+// Compatibility-only default instance. createXlsxRuntime always supplies an
+// explicit Worker source and therefore never reads this state.
+const legacyDefaultWasmRuntime = createLegacyDefaultWasmRuntime();
+
+/**
+ * Configure the compatibility default XLSX runtime.
+ *
+ * @deprecated Since 0.2.0. Create an isolated runtime with
+ * `createXlsxRuntime({ wasmSource })`. This compatibility entry remains
+ * available throughout 0.x and will not be removed before 1.0.0.
+ */
 export function setWasmSource(source: XlsxWasmSource): void {
-  hasConfiguredWasmSource = true;
-  configuredWasmSource = source;
-  configuredWorkerWasmSource = sourceToWorkerSource(source);
+  legacyDefaultWasmRuntime.setSource(source);
 }
 
 export function initWasm(source?: XlsxWasmSource) {
-  if (source !== undefined) {
-    setWasmSource(source);
-  }
-
-  return getSheetsWasmModule();
+  if (source !== undefined) setWasmSource(source);
+  return legacyDefaultWasmRuntime.getModule();
 }
 
+/**
+ * Inspect the compatibility default XLSX runtime.
+ *
+ * @deprecated Since 0.2.0. Supply a Worker-transferable `wasmSource` to
+ * `createXlsxRuntime()` instead. Kept throughout 0.x; earliest removal 1.0.0.
+ */
 export function canUseConfiguredWasmSourceInWorker(): boolean {
-  return !hasConfiguredWasmSource || configuredWorkerWasmSource !== undefined;
+  return legacyDefaultWasmRuntime.canUseInWorker();
 }
 
+/**
+ * Read the compatibility default XLSX runtime's Worker source.
+ *
+ * @deprecated Since 0.2.0. Read configuration from the owning
+ * `createXlsxRuntime()` call instead. Kept throughout 0.x; earliest removal
+ * 1.0.0.
+ */
 export function getConfiguredWorkerWasmSource(): WorkerWasmSource | undefined {
-  return configuredWorkerWasmSource;
+  return legacyDefaultWasmRuntime.getWorkerSource();
 }
 
+/**
+ * Access the module owned by the compatibility default XLSX runtime.
+ *
+ * @deprecated Since 0.2.0. Use an instance created by `createXlsxRuntime()`.
+ * Kept throughout 0.x; earliest removal 1.0.0.
+ */
 export function getSheetsWasmModule() {
-  if (!wasmModulePromise) {
-    wasmModulePromise = import("@dukelib/sheets-wasm").then(async (mod) => {
-      if (configuredWasmSource !== undefined) {
-        await mod.default({ module_or_path: configuredWasmSource });
-      } else {
-        await mod.default();
-      }
-      return mod;
-    });
-  }
-
-  return wasmModulePromise;
+  return legacyDefaultWasmRuntime.getModule();
 }

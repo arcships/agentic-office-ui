@@ -65,8 +65,9 @@ import {
 } from "./formatting";
 import { applyCellMutationState } from "./internal";
 import { loadWorkbookImageAssets } from "./image-assets";
-import { downloadArrayBuffer, downloadBytes, downloadText, downloadUrl } from "./clipboard";
+import { downloadArrayBuffer, downloadBytes, downloadText } from "./clipboard";
 import type { XlsxControllerContext } from "./internal";
+import { loadVerifiedXlsxSource } from "@extend-ai/xlsx-core";
 
 export {
   resolveDisplayFileName,
@@ -471,40 +472,37 @@ export function resolveWorkbookTableBoolean(value: unknown) {
   return false;
 }
 
-export async function resolveWorkbookBuffer(
-  { file, src }: UseXlsxViewerControllerOptions,
+export interface ResolvedWorkbookSource {
+  buffer: ArrayBuffer;
+  fileName?: string;
+  resolvedUrl?: string;
+  sourceKind: "file" | "url";
+}
+
+export async function resolveWorkbookSource(
+  { file, src, urlPolicy }: Pick<UseXlsxViewerControllerOptions, "file" | "src" | "urlPolicy">,
   signal?: AbortSignal
-): Promise<ArrayBuffer> {
-  let buffer: ArrayBuffer;
+): Promise<ResolvedWorkbookSource> {
 
   if (signal?.aborted) {
     throw createAbortError();
   }
 
   if (file) {
-    buffer = file;
+    return { buffer: file, sourceKind: "file" };
   } else if (src) {
-    let response: Response;
-    try {
-      response = await fetch(src, { signal });
-    } catch (error) {
-      if (isAbortError(error)) {
-        throw error;
-      }
-
-      throw new Error(
-        "Failed to fetch workbook. The remote URL may be blocked by CORS, unavailable, or not directly downloadable from the browser."
-      );
-    }
-    if (!response.ok) {
-      throw new Error(`Failed to fetch workbook (status ${response.status})`);
-    }
-    buffer = await response.arrayBuffer();
-  } else {
-    throw new Error("Either `file` or `src` must be provided.");
+    return loadVerifiedXlsxSource(src, urlPolicy, signal);
   }
 
-  return buffer;
+  throw new Error("Either `file` or `src` must be provided.");
+}
+
+/** Preserved public helper for callers that only need the loaded bytes. */
+export async function resolveWorkbookBuffer(
+  options: Pick<UseXlsxViewerControllerOptions, "file" | "src" | "urlPolicy">,
+  signal?: AbortSignal
+): Promise<ArrayBuffer> {
+  return (await resolveWorkbookSource(options, signal)).buffer;
 }
 
 export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{
@@ -527,6 +525,13 @@ export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{
   const result = safeCalculate(initialWorkbook, {
     reparse: () => wasmModule.Workbook.fromBytes(new Uint8Array(buffer))
   });
+  if (result.workbook !== initialWorkbook) {
+    try {
+      initialWorkbook.free();
+    } catch {
+      // A trapped WASM workbook may reject cleanup; it is never reused.
+    }
+  }
 
   return {
     shouldAutoCalculate: result.calculated,
@@ -539,13 +544,14 @@ export { tryRecalculate };
 export type { XlsxSheetVisibility };
 
 export function createHistoryDomain(ctx: XlsxControllerContext) {
+  let historyRestoreToken = 0;
   const tables = computed(() => { return (
       ctx.isWorkerBacked.value
         ? ctx.workerTablesByWorkbookSheetIndex.value[ctx.activeSheet.value?.workbookSheetIndex ?? -1] ?? []
         : mapWorksheetTables(ctx.getActiveWorksheet())
     ); })
 
-  function getCellSnapshotAsync(workbookSheetIndex: number, row: number, col: number) {
+  function getCellSnapshotAsync(workbookSheetIndex: number, row: number, col: number, signal?: AbortSignal) {
     if (!ctx.isWorkerBacked.value) {
       return Promise.resolve({
         displayValue: "",
@@ -553,15 +559,15 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
       });
     }
 
-    return ctx.getWorkerClient().getCellSnapshot(workbookSheetIndex, row, col);
+    return ctx.getWorkerClient().getCellSnapshot(workbookSheetIndex, row, col, signal);
   }
 
-  function getRowsBatchAsync(workbookSheetIndex: number, startRow: number, rowCount: number) {
+  function getRowsBatchAsync(workbookSheetIndex: number, startRow: number, rowCount: number, signal?: AbortSignal) {
     if (!ctx.isWorkerBacked.value) {
       return Promise.resolve(null);
     }
 
-    return ctx.getWorkerClient().getRowsBatch(workbookSheetIndex, startRow, rowCount);
+    return ctx.getWorkerClient().getRowsBatch(workbookSheetIndex, startRow, rowCount, signal);
   }
 
   function createHistoryEntry(): SnapshotHistoryEntry | null {
@@ -578,37 +584,91 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     };
   }
 
-  async function restoreHistoryEntry(entry: SnapshotHistoryEntry) {
-    const wasmModule = await getSheetsWasmModule();
-    const nextWorkbook = wasmModule.Workbook.fromBytes(cloneBytes(entry.bytes));
-    const nextImageAssets = loadWorkbookImageAssets(entry.bytes, nextWorkbook);
-    const nextSheets = buildSheetList(
-      nextWorkbook,
-      nextImageAssets.sheetStatesByWorkbookSheetIndex,
-      nextImageAssets.themePalette,
-      nextImageAssets.styleById,
-      nextImageAssets.namedCellStyleByName,
-      nextImageAssets.tableStyleByName,
-      ctx.showHiddenSheets
-    );
-    const nextSheetIndex = Math.max(0, Math.min(entry.activeSheetIndex, Math.max(0, nextSheets.length - 1)));
+  async function restoreHistoryEntry(
+    entry: SnapshotHistoryEntry,
+    token: number,
+    loadRequestId: number,
+  ): Promise<boolean> {
+    let nextWorkbook: Workbook | null = null;
+    let nextImageAssets: ReturnType<typeof loadWorkbookImageAssets> | null = null;
+    let committed = false;
+    try {
+      const wasmModule = await getSheetsWasmModule();
+      if (token !== historyRestoreToken || !ctx.isCurrentLoadRequest(loadRequestId)) return false;
+      nextWorkbook = wasmModule.Workbook.fromBytes(cloneBytes(entry.bytes));
+      nextImageAssets = loadWorkbookImageAssets(entry.bytes, nextWorkbook);
+      const nextSheets = buildSheetList(
+        nextWorkbook,
+        nextImageAssets.sheetStatesByWorkbookSheetIndex,
+        nextImageAssets.themePalette,
+        nextImageAssets.styleById,
+        nextImageAssets.namedCellStyleByName,
+        nextImageAssets.tableStyleByName,
+        ctx.showHiddenSheets,
+      );
+      const nextChartAssets = loadWorkbookChartAssets(
+        nextWorkbook,
+        nextImageAssets,
+        buildVisibleSheetIndexMap(nextSheets),
+        ctx.showHiddenSheets,
+      );
+      if (token !== historyRestoreToken || !ctx.isCurrentLoadRequest(loadRequestId)) return false;
+      const nextSheetIndex = Math.max(0, Math.min(entry.activeSheetIndex, Math.max(0, nextSheets.length - 1)));
 
-    ctx.error.value = null;
-    ctx.isLoading.value = false;
-    ctx.setImageAssets(nextImageAssets);
-    ctx.workbook.value = nextWorkbook;
-    ctx.sheets.value = nextSheets;
-    const nextChartAssets = loadWorkbookChartAssets(nextWorkbook, nextImageAssets, buildVisibleSheetIndexMap(nextSheets), ctx.showHiddenSheets);
-    ctx.setChartAssets(nextChartAssets);
-    ctx.activeSheetIndex.value = nextSheetIndex;
-    const nextTabIndex = nextChartAssets.tabs.findIndex((tab) => tab.kind === "sheet" && tab.sheetIndex === nextSheetIndex);
-    if (nextTabIndex >= 0) {
-      ctx.activeTabIndex.value = nextTabIndex;
+      ctx.error.value = null;
+      ctx.isLoading.value = false;
+      ctx.setImageAssets(nextImageAssets);
+      ctx.replaceWorkbook(nextWorkbook);
+      committed = true;
+      ctx.sheets.value = nextSheets;
+      ctx.setChartAssets(nextChartAssets);
+      ctx.activeSheetIndex.value = nextSheetIndex;
+      const nextTabIndex = nextChartAssets.tabs.findIndex((tab) => tab.kind === "sheet" && tab.sheetIndex === nextSheetIndex);
+      if (nextTabIndex >= 0) ctx.activeTabIndex.value = nextTabIndex;
+      ctx.activeCell.value = entry.activeCell;
+      ctx.selection.value = entry.selection;
+      ctx.selectionAnchorRef.value = entry.selection ? normalizeRange(entry.selection).start : entry.activeCell;
+      ctx.revision.value = ctx.revision.value + 1;
+      return true;
+    } finally {
+      if (!committed) ctx.discardWorkbookLoadResult(nextImageAssets, nextWorkbook);
     }
-    ctx.activeCell.value = entry.activeCell;
-    ctx.selection.value = entry.selection;
-    ctx.selectionAnchorRef.value = entry.selection ? normalizeRange(entry.selection).start : entry.activeCell;
-    ctx.revision.value = ctx.revision.value + 1;
+  }
+
+  function startSnapshotHistoryRestore(
+    entry: SnapshotHistoryEntry,
+    currentSnapshot: SnapshotHistoryEntry | null,
+    direction: "undo" | "redo",
+  ) {
+    const token = ++historyRestoreToken;
+    const loadRequestId = ctx.getCurrentLoadRequestId();
+    ctx.isApplyingHistoryRef.value = true;
+    ctx.historyRevision.value = ctx.historyRevision.value + 1;
+    void restoreHistoryEntry(entry, token, loadRequestId)
+      .then((restored) => {
+        if (!restored || token !== historyRestoreToken || !ctx.isCurrentLoadRequest(loadRequestId)) return;
+        if (currentSnapshot) {
+          pushHistoryEntry(
+            direction === "undo" ? ctx.redoStackRef.value : ctx.undoStackRef.value,
+            currentSnapshot,
+          );
+        }
+        ctx.historyRevision.value = ctx.historyRevision.value + 1;
+      })
+      .catch((restoreError: unknown) => {
+        if (token !== historyRestoreToken || !ctx.isCurrentLoadRequest(loadRequestId)) return;
+        pushHistoryEntry(
+          direction === "undo" ? ctx.undoStackRef.value : ctx.redoStackRef.value,
+          entry,
+        );
+        ctx.error.value = restoreError instanceof Error
+          ? restoreError
+          : new Error("Could not restore workbook history.");
+        ctx.historyRevision.value = ctx.historyRevision.value + 1;
+      })
+      .finally(() => {
+        if (token === historyRestoreToken) ctx.isApplyingHistoryRef.value = false;
+      });
   }
 
   function applyCellEditHistoryEntry(entry: CellEditHistoryEntry, direction: "undo" | "redo") {
@@ -768,14 +828,9 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function download() {
-    if (ctx.file) {
-      downloadArrayBuffer(ctx.file, ctx.displayFileName.value);
-      return;
-    }
-
-    if (ctx.src) {
-      downloadUrl(ctx.src, ctx.displayFileName.value);
-    }
+    const sourceBuffer = ctx.sourceBufferRef.value;
+    if (!sourceBuffer) return;
+    downloadArrayBuffer(sourceBuffer, ctx.displayFileName.value);
   }
 
   function exportXlsx() {
@@ -907,7 +962,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function undo() {
-    if (ctx.readOnly.value || !ctx.workbook.value || ctx.undoStackRef.value.length === 0) {
+    if (ctx.readOnly.value || ctx.isApplyingHistoryRef.value || !ctx.workbook.value || ctx.undoStackRef.value.length === 0) {
       return;
     }
 
@@ -931,15 +986,11 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     }
 
     const currentSnapshot = createHistoryEntry();
-    if (currentSnapshot) {
-      pushHistoryEntry(ctx.redoStackRef.value, currentSnapshot);
-    }
-    ctx.historyRevision.value = ctx.historyRevision.value + 1;
-    void restoreHistoryEntry(entry);
+    startSnapshotHistoryRestore(entry, currentSnapshot, "undo");
   }
 
   function redo() {
-    if (ctx.readOnly.value || !ctx.workbook.value || ctx.redoStackRef.value.length === 0) {
+    if (ctx.readOnly.value || ctx.isApplyingHistoryRef.value || !ctx.workbook.value || ctx.redoStackRef.value.length === 0) {
       return;
     }
 
@@ -963,11 +1014,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     }
 
     const currentSnapshot = createHistoryEntry();
-    if (currentSnapshot) {
-      pushHistoryEntry(ctx.undoStackRef.value, currentSnapshot);
-    }
-    ctx.historyRevision.value = ctx.historyRevision.value + 1;
-    void restoreHistoryEntry(entry);
+    startSnapshotHistoryRestore(entry, currentSnapshot, "redo");
   }
 
   return {

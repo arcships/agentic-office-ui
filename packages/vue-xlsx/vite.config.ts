@@ -5,7 +5,7 @@ import vueJsx from "@vitejs/plugin-vue-jsx"
 export default defineConfig({
   plugins: [vue(), vueJsx()],
   build: {
-    lib: { entry: "src/index.ts", formats: ["es"], fileName: "index" },
+    lib: { entry: "src/index.ts", formats: ["es"], fileName: "index", cssFileName: "style" },
     rollupOptions: {
       external: [
         "vue",

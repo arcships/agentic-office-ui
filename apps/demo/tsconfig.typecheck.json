@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "baseUrl": "../..",
+    "paths": {
+      "@extend-ai/docx-core": ["packages/docx-core/src/index.ts"],
+      "@extend-ai/xlsx-core": ["packages/xlsx-core/src/index.ts"],
+      "@extend-ai/vue-docx": ["packages/vue-docx/src/index.ts"],
+      "@extend-ai/vue-xlsx": ["packages/vue-xlsx/src/index.ts"],
+      "@extend-ai/vue-extend": ["packages/vue-extend/src/index.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts", "../../packages/docx-core/src/**/*.d.ts"]
+}

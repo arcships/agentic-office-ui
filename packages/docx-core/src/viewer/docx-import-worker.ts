@@ -3,6 +3,7 @@ import { parseDocx } from "../engine/ooxml-core";
 import { setWasmSource } from "../engine/wasm";
 
 import type {
+  DocxImportErrorCode,
   DocxImportWorkerRequest,
   DocxImportWorkerResponse,
   DocxImportWorkerTimings,
@@ -16,20 +17,30 @@ function performanceNow(): number {
 }
 
 function serializeError(error: unknown): {
+  code: DocxImportErrorCode;
   name?: string;
   message: string;
   stack?: string;
 } {
+  const message = error instanceof Error ? error.message : String(error);
+  const code: DocxImportErrorCode =
+    error instanceof WebAssembly.CompileError ||
+    /webassembly|wasm|instantiate|magic word/i.test(message)
+      ? "WASM_LOAD_FAILED"
+      : "PARSE_FAILED";
+
   if (error instanceof Error) {
     return {
+      code,
       name: error.name,
-      message: error.message,
+      message,
       stack: error.stack,
     };
   }
 
   return {
-    message: String(error),
+    code,
+    message,
   };
 }
 

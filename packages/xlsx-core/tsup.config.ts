@@ -5,11 +5,18 @@ import { dirname, join } from "node:path"
 
 export default defineConfig([
   {
-    entry: ["src/index.ts", "src/xlsx-worker.ts"],
+    entry: [
+      "src/index.ts",
+      "src/core.ts",
+      "src/runtime.ts",
+      "src/wasm-url.ts",
+      "src/xlsx-worker.ts",
+    ],
     format: ["esm"],
     dts: true,
     clean: true,
     external: ["@dukelib/sheets-wasm"],
+    noExternal: ["@extend-ai/office-runtime"],
     skipNodeModulesBundle: true,
     onSuccess: () => {
       const require = createRequire(import.meta.url)

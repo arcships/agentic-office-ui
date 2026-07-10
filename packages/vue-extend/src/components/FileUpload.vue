@@ -1,13 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
-
-export interface FileUploadProps {
-  accept?: string
-  multiple?: boolean
-  maxSize?: number // bytes
-  disabled?: boolean
-  className?: string
-}
+import type { FileUploadProps, FileUploadRejection } from "../types"
 
 const props = withDefaults(defineProps<FileUploadProps>(), {
   accept: "",
@@ -19,6 +12,7 @@ const props = withDefaults(defineProps<FileUploadProps>(), {
 
 const emit = defineEmits<{
   "files-accepted": [files: File[]]
+  "files-rejected": [rejections: FileUploadRejection[]]
 }>()
 
 const isDragging = ref(false)
@@ -30,9 +24,12 @@ const dropZoneClass = computed(() => ({
   "is-dragging": isDragging.value && !props.disabled,
 }))
 
-function validateFiles(files: FileList): File[] {
+function validateFiles(files: FileList): {
+  accepted: File[]
+  rejected: FileUploadRejection[]
+} {
   const accepted: File[] = []
-  const errors: string[] = []
+  const rejected: FileUploadRejection[] = []
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
@@ -48,29 +45,40 @@ function validateFiles(files: FileList): File[] {
         return file.type === type
       })
       if (!matches) {
-        errors.push(`"${file.name}" is not an accepted file type`)
+        rejected.push({
+          code: "FILE_TYPE_NOT_ACCEPTED",
+          file,
+          message: `"${file.name}" is not an accepted file type`,
+        })
         continue
       }
     }
     if (file.size > props.maxSize) {
       const maxMB = (props.maxSize / (1024 * 1024)).toFixed(1)
-      errors.push(`"${file.name}" exceeds the ${maxMB}MB size limit`)
+      rejected.push({
+        code: "FILE_TOO_LARGE",
+        file,
+        message: `"${file.name}" exceeds the ${maxMB}MB size limit`,
+      })
       continue
     }
     accepted.push(file)
   }
 
-  if (errors.length) {
-    error.value = errors.join("; ")
+  if (rejected.length) {
+    error.value = rejected.map((item) => item.message).join("; ")
   }
-  return accepted
+  return { accepted, rejected }
 }
 
 function handleFiles(files: FileList) {
   error.value = ""
-  const valid = validateFiles(files)
-  if (valid.length) {
-    emit("files-accepted", valid)
+  const result = validateFiles(files)
+  if (result.rejected.length) {
+    emit("files-rejected", result.rejected)
+  }
+  if (result.accepted.length) {
+    emit("files-accepted", result.accepted)
   }
 }
 

@@ -1,5 +1,6 @@
 import type { Workbook, Worksheet } from "@dukelib/sheets-wasm";
 import type { XlsxChart, XlsxChartElementSelection, XlsxChartsheet } from "./chart-types";
+import type { XlsxThemePalette } from "./theme-types";
 import type {
   XlsxFormControl,
   XlsxImage,
@@ -21,12 +22,6 @@ export interface XlsxCellRange {
 }
 
 // ── Theme / styles ───────────────────────────────────────────────────────
-
-export interface XlsxThemePalette {
-  colorsByIndex: Record<number, string>;
-  majorLatinFont?: string;
-  minorLatinFont?: string;
-}
 
 export interface XlsxResolvedCellStyle {
   [key: string]: unknown;
@@ -464,7 +459,60 @@ export interface XlsxTableHeaderMenuRenderProps {
 
 // ── Viewer controller ────────────────────────────────────────────────────
 
+/** Minimal structural contract accepted from an explicit XLSX Runtime. */
+export interface XlsxRuntimeLike {
+  readonly id: string;
+  readonly wasmSource: string | ArrayBuffer | WebAssembly.Module;
+  readonly workerUrl?: string;
+  readonly parseOptions: Readonly<{
+    showHiddenSheets?: boolean;
+    skipXmlParsing?: boolean;
+  }>;
+  createWorkerClient(): unknown;
+  dispose(): void;
+}
+
+export type XlsxSourceKind = "file" | "url";
+export type XlsxSourceState = "idle" | "loading" | "ready" | "error";
+
+/**
+ * Per-controller URL rules for workbook sources. The host supplies the base
+ * URL and allowed origins; core and Vue packages do not read browser globals
+ * to widen their own permissions.
+ */
+export interface XlsxUrlPolicy {
+  enabled?: boolean;
+  baseUrl?: string;
+  allowRelativeUrl?: boolean;
+  allowedProtocols?: readonly string[];
+  allowedOrigins?: readonly string[];
+  allowHttpOnLocalhost?: boolean;
+  fetch?: typeof fetch;
+}
+
+export type XlsxLoadErrorCode = "SOURCE_NOT_ALLOWED" | "FETCH_FAILED" | "INVALID_WORKBOOK" | "ABORTED";
+
+export interface XlsxLoadError {
+  code: XlsxLoadErrorCode;
+  message: string;
+  sourceKind: XlsxSourceKind;
+  url?: string;
+}
+
+export interface XlsxDiagnostic {
+  type: "load-start" | "load-deferred" | "load-resumed" | "load-success" | "load-error" | "load-cancelled" | "download";
+  requestId: number;
+  /** Globally unique task identity supplied by the instance loading boundary. */
+  taskId?: string;
+  sourceKind?: XlsxSourceKind;
+  url?: string;
+  bytes?: number;
+  error?: XlsxLoadError;
+}
+
 export interface UseXlsxViewerControllerOptions {
+  /** Explicit immutable runtime configuration shared with this controller. */
+  runtime?: XlsxRuntimeLike;
   /**
    * Allows row and column resizing even while editing is disabled by `readOnly`.
    *
@@ -542,11 +590,28 @@ export interface UseXlsxViewerControllerOptions {
    */
   src?: string;
   /**
+   * Explicit URL rules required for URL sources. Local ArrayBuffer sources do
+   * not perform a network request.
+   */
+  urlPolicy?: XlsxUrlPolicy;
+  /** Receives public loading and download diagnostics for this controller instance. */
+  onDiagnostic?: (diagnostic: XlsxDiagnostic) => void;
+  /**
+   * Creates the Worker owned by this controller. Use this when a host bundler
+   * exposes the package Worker through its public URL import.
+   */
+  createWorker?: () => Worker;
+  /**
    * Parses supported workbook data in a Web Worker so large files do not block React rendering.
    *
    * @default true
    */
   useWorker?: boolean;
+  /**
+   * Public module Worker URL for this controller. It is ignored when a Worker
+   * factory is supplied.
+   */
+  workerUrl?: string;
 }
 
 export interface XlsxViewerController {
@@ -594,7 +659,7 @@ export interface XlsxViewerController {
   getClipboardData: () => XlsxClipboardData | null;
   getCellDisplayValue: (cell?: XlsxCellAddress | null) => string;
   getCellFormula: (cell?: XlsxCellAddress | null) => string;
-  getCellSnapshotAsync?: (workbookSheetIndex: number, row: number, col: number) => Promise<{
+  getCellSnapshotAsync?: (workbookSheetIndex: number, row: number, col: number, signal?: AbortSignal) => Promise<{
     displayValue: string;
     formula: string;
   }>;
@@ -602,6 +667,8 @@ export interface XlsxViewerController {
   isLoading: boolean;
   isChartsLoading: boolean;
   isWorkerBacked?: boolean;
+  sourceState: XlsxSourceState;
+  sourceError: XlsxLoadError | null;
   images: XlsxImage[];
   moveChartBy: (id: string, deltaX: number, deltaY: number) => void;
   shapes: XlsxShape[];
@@ -714,7 +781,7 @@ export interface XlsxViewerController {
   selectImage: (id: string | null) => void;
   setChartRect: (id: string, rect: XlsxImageRect) => void;
   setImageRect: (id: string, rect: XlsxImageRect) => void;
-  getRowsBatchAsync?: (workbookSheetIndex: number, startRow: number, rowCount: number) => Promise<unknown[] | null>;
+  getRowsBatchAsync?: (workbookSheetIndex: number, startRow: number, rowCount: number, signal?: AbortSignal) => Promise<unknown[] | null>;
   tables: XlsxTable[];
   tabs: XlsxWorkbookTab[];
   undo: () => void;

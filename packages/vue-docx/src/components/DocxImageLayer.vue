@@ -44,10 +44,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue"
+import { ref, computed, watch, onUnmounted } from "vue"
 import type {
   DocxEditorController,
   DocxImageLocation,
+  DocumentPageNodeSegment,
 } from "@extend-ai/docx-core"
 import { resolveRenderableImageSource } from "@extend-ai/docx-core"
 
@@ -73,6 +74,7 @@ const props = withDefaults(
     pageWidthPx: number
     pageHeightPx: number
     controller: DocxEditorController
+    pageNodeSegments: DocumentPageNodeSegment[]
     editable?: boolean
   }>(),
   { editable: false }
@@ -84,10 +86,14 @@ const dragStartX = ref(0)
 const dragStartY = ref(0)
 const dragStartPosX = ref(0)
 const dragStartPosY = ref(0)
+const dragPreview = ref<{ key: string; xPx: number; yPx: number } | null>(null)
 
 const resizingImage = ref<FloatingImageEntry | null>(null)
 const resizeStartSize = ref<{ w: number; h: number }>({ w: 0, h: 0 })
 const resizeStartPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
+const resizePosition = ref("se")
+const resizePreview = ref<{ key: string; widthPx: number; heightPx: number } | null>(null)
+let pointerListenersAttached = false
 
 // ── Computed ───────────────────────────────────────────────────────
 const floatingImages = computed<FloatingImageEntry[]>(() => {
@@ -95,7 +101,11 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
   if (!model) return []
 
   const images: FloatingImageEntry[] = []
+  const pageNodeIndexes = new Set(
+    props.pageNodeSegments.map((segment) => segment.nodeIndex)
+  )
   model.nodes.forEach((node, nodeIndex) => {
+    if (!pageNodeIndexes.has(nodeIndex)) return
     if (node.type !== "paragraph") return
     node.children.forEach((child, childIndex) => {
       if (child.type !== "image") return
@@ -103,6 +113,7 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
 
       const run = child as any
       const src = resolveRenderableImageSource(run) ?? undefined
+      const selection = props.controller.selection
       images.push({
         key: `img-${nodeIndex}-${childIndex}`,
         nodeIndex,
@@ -113,7 +124,7 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
         heightPx: run.heightPx ?? 80,
         xPx: run.floating?.xPx ?? 0,
         yPx: run.floating?.yPx ?? 0,
-        selected: false,
+        selected: selection.kind === "paragraph" && selection.nodeIndex === nodeIndex,
         fallbackLabel: undefined,
       })
     })
@@ -141,12 +152,14 @@ const resizeHandles = [
 
 // ── Style helpers ──────────────────────────────────────────────────
 function imageContainerStyle(image: FloatingImageEntry): Record<string, string> {
+  const drag = dragPreview.value?.key === image.key ? dragPreview.value : undefined
+  const resize = resizePreview.value?.key === image.key ? resizePreview.value : undefined
   return {
     position: "absolute",
-    left: `${image.xPx}px`,
-    top: `${image.yPx}px`,
-    width: `${image.widthPx}px`,
-    height: `${image.heightPx}px`,
+    left: `${drag?.xPx ?? image.xPx}px`,
+    top: `${drag?.yPx ?? image.yPx}px`,
+    width: `${resize?.widthPx ?? image.widthPx}px`,
+    height: `${resize?.heightPx ?? image.heightPx}px`,
     pointerEvents: "auto",
     cursor: "move",
     outline: image.selected ? "2px solid #3b82f6" : "none",
@@ -165,61 +178,124 @@ function imageStyle(image: FloatingImageEntry): Record<string, string> {
 // ── Mouse handlers ─────────────────────────────────────────────────
 function onImageMouseDown(image: FloatingImageEntry, event: MouseEvent): void {
   if (!props.editable) return
+  event.preventDefault()
+  props.controller.selectParagraph(image.nodeIndex)
   draggingImage.value = image
   dragStartX.value = event.clientX
   dragStartY.value = event.clientY
   dragStartPosX.value = image.xPx
   dragStartPosY.value = image.yPx
-
-  const onMouseMove = (e: MouseEvent) => {
-    if (!draggingImage.value) return
-    const dx = e.clientX - dragStartX.value
-    const dy = e.clientY - dragStartY.value
-    // Update image position in-place (simplified)
-  }
-
-  const onMouseUp = () => {
-    draggingImage.value = null
-    document.removeEventListener("mousemove", onMouseMove)
-    document.removeEventListener("mouseup", onMouseUp)
-  }
-
-  document.addEventListener("mousemove", onMouseMove)
-  document.addEventListener("mouseup", onMouseUp)
+  dragPreview.value = { key: image.key, xPx: image.xPx, yPx: image.yPx }
+  attachPointerListeners()
 }
 
 function onResizeStart(
   image: FloatingImageEntry,
-  _position: string,
+  position: string,
   event: MouseEvent
 ): void {
+  if (!props.editable) return
   resizingImage.value = image
   resizeStartSize.value = { w: image.widthPx, h: image.heightPx }
   resizeStartPos.value = { x: event.clientX, y: event.clientY }
-
-  const onMouseMove = (e: MouseEvent) => {
-    if (!resizingImage.value) return
-    const dx = e.clientX - resizeStartPos.value.x
-    const dy = e.clientY - resizeStartPos.value.y
-    // Update image size in-place (simplified)
+  resizePosition.value = position
+  resizePreview.value = {
+    key: image.key,
+    widthPx: image.widthPx,
+    heightPx: image.heightPx,
   }
-
-  const onMouseUp = () => {
-    if (resizingImage.value) {
-      props.controller.resizeImage(
-        { kind: "paragraph", nodeIndex: resizingImage.value.nodeIndex, childIndex: resizingImage.value.childIndex },
-        resizeStartSize.value.w,
-        resizeStartSize.value.h
-      )
-    }
-    resizingImage.value = null
-    document.removeEventListener("mousemove", onMouseMove)
-    document.removeEventListener("mouseup", onMouseUp)
-  }
-
-  document.addEventListener("mousemove", onMouseMove)
-  document.addEventListener("mouseup", onMouseUp)
+  attachPointerListeners()
 }
+
+function imageLocation(image: FloatingImageEntry): DocxImageLocation {
+  return {
+    kind: "paragraph",
+    nodeIndex: image.nodeIndex,
+    childIndex: image.childIndex,
+  }
+}
+
+function updatePointerPreview(event: MouseEvent): void {
+  if (draggingImage.value) {
+    const image = draggingImage.value
+    const xPx = Math.round(dragStartPosX.value + event.clientX - dragStartX.value)
+    const yPx = Math.round(dragStartPosY.value + event.clientY - dragStartY.value)
+    dragPreview.value = {
+      key: image.key,
+      xPx: Math.max(-image.widthPx + 16, Math.min(props.pageWidthPx - 16, xPx)),
+      yPx: Math.max(-image.heightPx + 16, Math.min(props.pageHeightPx - 16, yPx)),
+    }
+  }
+
+  if (resizingImage.value) {
+    const image = resizingImage.value
+    const dx = event.clientX - resizeStartPos.value.x
+    const dy = event.clientY - resizeStartPos.value.y
+    const widthDelta = resizePosition.value.includes("w") ? -dx : dx
+    const heightDelta = resizePosition.value.includes("n") ? -dy : dy
+    resizePreview.value = {
+      key: image.key,
+      widthPx: Math.max(16, Math.round(resizeStartSize.value.w + widthDelta)),
+      heightPx: Math.max(16, Math.round(resizeStartSize.value.h + heightDelta)),
+    }
+  }
+}
+
+function onDocumentMouseMove(event: MouseEvent): void {
+  updatePointerPreview(event)
+}
+
+function onDocumentMouseUp(event: MouseEvent): void {
+  updatePointerPreview(event)
+  finishPointerInteraction(true)
+}
+
+function attachPointerListeners(): void {
+  if (pointerListenersAttached) return
+  document.addEventListener("mousemove", onDocumentMouseMove)
+  document.addEventListener("mouseup", onDocumentMouseUp)
+  pointerListenersAttached = true
+}
+
+function detachPointerListeners(): void {
+  if (!pointerListenersAttached) return
+  document.removeEventListener("mousemove", onDocumentMouseMove)
+  document.removeEventListener("mouseup", onDocumentMouseUp)
+  pointerListenersAttached = false
+}
+
+function finishPointerInteraction(commit: boolean): void {
+  const dragged = draggingImage.value
+  const moved = dragPreview.value
+  const resized = resizingImage.value
+  const size = resizePreview.value
+
+  detachPointerListeners()
+  draggingImage.value = null
+  resizingImage.value = null
+  dragPreview.value = null
+  resizePreview.value = null
+
+  if (!commit || !props.editable) return
+  if (dragged && moved?.key === dragged.key) {
+    props.controller.moveFloatingImage(imageLocation(dragged), {
+      xPx: moved.xPx,
+      yPx: moved.yPx,
+    })
+  } else if (resized && size?.key === resized.key) {
+    props.controller.resizeImage(
+      imageLocation(resized),
+      size.widthPx,
+      size.heightPx,
+    )
+  }
+}
+
+watch(() => props.editable, (editable) => {
+  if (!editable) finishPointerInteraction(false)
+})
+
+onUnmounted(() => finishPointerInteraction(false))
 </script>
 
 <style scoped>

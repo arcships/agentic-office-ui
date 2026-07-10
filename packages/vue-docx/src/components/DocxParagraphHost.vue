@@ -1,7 +1,7 @@
 <template>
   <div
     ref="paragraphEl"
-    class="docx-paragraph-host"
+    class="docx-paragraph-host docx-viewer-paragraph"
     :class="{
       'docx-paragraph-host--editable': editable,
       'docx-paragraph-host--active': isActiveParagraph,
@@ -9,6 +9,8 @@
     :contenteditable="editable ? 'true' : undefined"
     :data-docx-paragraph-host="true"
     :data-docx-paragraph-node-index="paragraphIndex"
+    data-testid="editor-paragraph"
+    :data-node-index="paragraphIndex"
     :suppresscontenteditablewarning="editable ? 'true' : undefined"
     :style="paragraphStyle"
     :spellcheck="editable ? 'true' : undefined"
@@ -29,6 +31,7 @@
 import { ref, computed, watch, inject, nextTick, onMounted, onUnmounted } from "vue"
 import type {
   DocxEditorController,
+  NumberingDefinitionSet,
   ParagraphNode,
   DocxDocumentTheme,
 } from "@extend-ai/docx-core"
@@ -52,8 +55,16 @@ const props = withDefaults(
     paragraphIndex: number
     editable?: boolean
     documentTheme?: DocxDocumentTheme
-    controller: DocxEditorController
+    controller?: DocxEditorController
     numberingLabel?: string
+    numberingDefinitions?: NumberingDefinitionSet
+    showTrackedChanges?: boolean
+    showCommentHighlights?: boolean
+    pageNumber?: number
+    totalPages?: number
+    pageNumberFormat?: string
+    withinHeaderFooter?: boolean
+    headerFooterRegion?: "header" | "footer"
   }>(),
   {
     editable: false,
@@ -76,6 +87,7 @@ const lastCommittedTextLength = ref(0)
 
 // ── Computed ───────────────────────────────────────────────────────
 const isActiveParagraph = computed(() => {
+  if (!props.editable || !props.controller) return false
   const sel = props.controller.selection
   if (sel.kind === "paragraph") {
     return sel.nodeIndex === props.paragraphIndex
@@ -97,11 +109,14 @@ const paragraphStyle = computed<Record<string, any>>(() => {
 })
 
 const displayHtml = computed(() => {
-  const text = draftText.value ?? paragraphText(props.paragraph)
   const theme = props.documentTheme
   const runOptions: ParagraphRunRenderOptions = {
-    showTrackedChanges: false,
-    showCommentHighlights: false,
+    showTrackedChanges: props.showTrackedChanges,
+    showCommentHighlights: props.showCommentHighlights,
+    numberingDefinitions: props.numberingDefinitions,
+    withinHeaderFooter: props.withinHeaderFooter,
+    headerFooterRegion: props.headerFooterRegion,
+    pageNumberFormat: props.pageNumberFormat,
   }
 
   const vnodes = renderParagraphRuns(
@@ -112,15 +127,10 @@ const displayHtml = computed(() => {
     undefined,
     undefined,
     undefined,
-    undefined,
-    undefined,
+    props.pageNumber,
+    props.totalPages,
     runOptions
   )
-
-  // If there's a draft, render draft text instead of VNodes
-  if (draftText.value !== null) {
-    return escapeHtml(text)
-  }
 
   const result = Array.isArray(vnodes) ? vnodes : [vnodes]
   return result.map((v) => renderStaticHtml(v)).join("")
@@ -158,7 +168,7 @@ function onInput(event: Event): void {
 }
 
 function onKeydown(event: KeyboardEvent): void {
-  if (!props.editable) return
+  if (!props.editable || !props.controller) return
 
   // Enter → commit and split
   if (event.key === "Enter" && !event.shiftKey && !isComposing.value) {
@@ -233,16 +243,6 @@ watch(
     }
   }
 )
-
-// ── HTML escape helper ─────────────────────────────────────────────
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;")
-}
 
 // ── Expose ─────────────────────────────────────────────────────────
 defineExpose({

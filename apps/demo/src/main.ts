@@ -1,18 +1,17 @@
 import { createApp } from "vue"
 import { createRouter, createWebHashHistory } from "vue-router"
 import App from "./App.vue"
-import "@extend-ai/vue-extend/dist/index.css"
+import "@extend-ai/vue-docx/style.css"
+import "@extend-ai/vue-xlsx/style.css"
+import "@extend-ai/vue-extend/style.css"
 import HomePage from "./pages/HomePage.vue"
 import DocxViewerPage from "./pages/DocxViewerPage.vue"
 import DocxEditorPage from "./pages/DocxEditorPage.vue"
 import XlsxViewerPage from "./pages/XlsxViewerPage.vue"
 import PdfViewerPage from "./pages/PdfViewerPage.vue"
 import ComponentsPage from "./pages/ComponentsPage.vue"
-import { setWasmSource as setXlsxWasmSource } from "@extend-ai/xlsx-core"
-import { setWasmSource as setDocxWasmSource } from "@extend-ai/docx-core"
-
-setXlsxWasmSource("/duke_sheets_wasm_bg.wasm")
-setDocxWasmSource("/docx_wasm_bg.wasm")
+import RuntimeIsolationPage from "./pages/RuntimeIsolationPage.vue"
+import DocxParityPage from "./pages/DocxParityPage.vue"
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -23,6 +22,8 @@ const router = createRouter({
     { path: "/xlsx-viewer", component: XlsxViewerPage },
     { path: "/pdf-viewer", component: PdfViewerPage },
     { path: "/components", component: ComponentsPage },
+    { path: "/runtime-isolation", component: RuntimeIsolationPage },
+    { path: "/docx-parity", component: DocxParityPage },
   ],
 })
 

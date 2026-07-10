@@ -6,9 +6,6 @@ import {
 
 export type WorkerWasmSource = string | ArrayBuffer | WebAssembly.Module;
 
-let hasConfiguredWasmSource = false;
-let configuredWorkerWasmSource: WorkerWasmSource | undefined;
-
 function bufferSourceToArrayBuffer(
   source: ArrayBuffer | ArrayBufferView<ArrayBufferLike>
 ): ArrayBuffer {
@@ -41,29 +38,51 @@ function sourceToWorkerSource(source: WasmSource): WorkerWasmSource | undefined 
   return undefined;
 }
 
-function rememberWorkerWasmSource(source: WasmSource): void {
-  hasConfiguredWasmSource = true;
-  configuredWorkerWasmSource = sourceToWorkerSource(source);
+function createLegacyWorkerWasmBridge() {
+  let hasConfiguredSource = false;
+  let workerSource: WorkerWasmSource | undefined;
+  return Object.freeze({
+    remember(source: WasmSource): void {
+      hasConfiguredSource = true;
+      workerSource = sourceToWorkerSource(source);
+    },
+    canUseInWorker(): boolean {
+      return !hasConfiguredSource || workerSource !== undefined;
+    },
+    getWorkerSource(): WorkerWasmSource | undefined {
+      return workerSource;
+    },
+  });
 }
 
+const legacyWorkerWasmBridge = createLegacyWorkerWasmBridge();
+
+/**
+ * Configure the compatibility default DOCX runtime.
+ *
+ * @deprecated Since 0.2.0. Create an isolated runtime with
+ * `createDocxRuntime({ wasmSource })` or `createDocxRuntime({ wasmUrl })`.
+ * This compatibility entry remains available throughout 0.x and will not be
+ * removed before 1.0.0.
+ */
 export function setWasmSource(source: WasmSource): void {
   setRuntimeWasmSource(source);
-  rememberWorkerWasmSource(source);
+  legacyWorkerWasmBridge.remember(source);
 }
 
 export function initWasm(source?: WasmSource): ReturnType<typeof initRuntimeWasm> {
   if (source !== undefined) {
-    rememberWorkerWasmSource(source);
+    legacyWorkerWasmBridge.remember(source);
   }
   return initRuntimeWasm(source);
 }
 
 export function canUseConfiguredWasmSourceInWorker(): boolean {
-  return !hasConfiguredWasmSource || configuredWorkerWasmSource !== undefined;
+  return legacyWorkerWasmBridge.canUseInWorker();
 }
 
 export function getConfiguredWorkerWasmSource(): WorkerWasmSource | undefined {
-  return configuredWorkerWasmSource;
+  return legacyWorkerWasmBridge.getWorkerSource();
 }
 
 export type { WasmSource };

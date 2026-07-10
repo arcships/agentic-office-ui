@@ -1,10 +1,10 @@
 // viewer barrel — text layout, thumbnails, import, and viewer helpers.
 // All zero-React modules ported from upstream @extend-ai/react-docx commit 6f70b92.
 //
-// NOTE: wasm-source, layout-snapshot, and pagination-breaks are NOT re-exported
-// here because they define symbols that collide with engine/ and layout/ barrels.
-// Import them directly: import { ... } from "@extend-ai/docx-core/viewer/wasm-source"
-// or through the editor helpers that compose them.
+// NOTE: wasm-source, layout-snapshot, and pagination-breaks are internal source
+// modules because their symbols collide with the public engine/layout entries.
+// Consumers must use the package root (for example `setWasmSource`) instead of
+// unsupported source-file deep imports.
 
 // Pretext layout (text layout around exclusions)
 export * from "./pretext-layout";

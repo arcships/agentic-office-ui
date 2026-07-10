@@ -158,7 +158,7 @@ if paras:
 async function verifyD2() {
   heading("D2: docx-import worker call (importDocxBuffer → worker path)");
 
-  const { importDocxBuffer } = await import("@extend-ai/docx-core");
+  const { createDocxRuntime, importDocxBuffer } = await import("@extend-ai/docx-core");
 
   const samplePath = resolve(
     REPO_ROOT,
@@ -191,27 +191,84 @@ async function verifyD2() {
   check("result.source is 'main-thread'", result.source === "main-thread");
   check("result.timings.totalMs > 0", result.timings?.totalMs > 0);
 
-  // Worker import — may fall back to main-thread depending on environment
-  let workerResult;
+  // Worker imports are required by default. In this Node environment there is
+  // no browser Worker, so the contract is a structured failure, never a
+  // successful main-thread result disguised as a Worker result.
   try {
-    workerResult = await importDocxBuffer(arrayBuffer, { useWorker: true });
-    check("importDocxBuffer (worker path) succeeds", !!workerResult);
-    check("worker result.model.nodes is non-empty",
-      workerResult?.model?.nodes?.length > 0);
-    // Accept both 'worker' and 'main-thread' — in some Node.js envs worker
-    // construction falls back silently
-    check("worker result.source is valid",
-      workerResult?.source === "worker" || workerResult?.source === "main-thread");
-    if (workerResult?.source === "worker") {
-      console.log("    (worker path active — real worker was used)");
+    const workerResult = await importDocxBuffer(arrayBuffer, { useWorker: true });
+    if (typeof Worker === "undefined") {
+      check("worker-unavailable import rejects instead of falling back", false,
+        `received ${workerResult.source}`);
     } else {
-      console.log("    (worker fell back to main-thread — acceptable in this env)");
+      check("worker result source is worker", workerResult.source === "worker");
     }
   } catch (err) {
-    if (err.message?.includes?.("Worker") || err.message?.includes?.("worker")) {
-      skip("Worker path import", "Worker constructor not available in this Node.js version");
+    if (typeof Worker === "undefined") {
+      check("worker-unavailable import returns structured error",
+        err?.code === "WORKER_UNAVAILABLE", `${err?.name}: ${err?.message}`);
     } else {
       check("importDocxBuffer (worker path)", false, err.message);
+    }
+  }
+
+  const runtime = createDocxRuntime();
+  check("createDocxRuntime creates an isolated runtime id", typeof runtime.id === "string" && runtime.id.length > 0);
+  runtime.dispose();
+
+  // Verify the public runtime forwards one explicit WASM URL to the Worker
+  // and exposes its lifecycle through diagnostics. This is a controlled unit
+  // double; real Worker behavior is exercised by the formal browser suite.
+  const originalWorker = globalThis.Worker;
+  const workerRequests = [];
+  class FakeWorker {
+    constructor() { this.listeners = new Map(); }
+    addEventListener(type, listener) {
+      const listeners = this.listeners.get(type) ?? [];
+      listeners.push(listener);
+      this.listeners.set(type, listeners);
+    }
+    removeEventListener(type, listener) {
+      this.listeners.set(type, (this.listeners.get(type) ?? []).filter(item => item !== listener));
+    }
+    postMessage(request) {
+      workerRequests.push(request);
+      queueMicrotask(() => {
+        for (const listener of this.listeners.get("message") ?? []) {
+          listener({ data: {
+            id: request.id,
+            type: "success",
+            package: { parts: new Map(), binaryAssets: new Map() },
+            model: {
+              nodes: [],
+              metadata: { sourceParts: 0, warnings: [], headerSections: [], footerSections: [], paragraphStyles: [] },
+            },
+            timings: { totalMs: 1, parseMs: 0.5, buildModelMs: 0.5 },
+          } });
+        }
+      });
+    }
+    terminate() {}
+  }
+
+  try {
+    globalThis.Worker = FakeWorker;
+    const diagnostics = [];
+    const configuredWasmUrl = "https://runtime.example.test/docx.wasm";
+    const configuredRuntime = createDocxRuntime({
+      wasmUrl: configuredWasmUrl,
+      createWorker: () => new FakeWorker(),
+      onDiagnostic: event => diagnostics.push(event),
+    });
+    const configuredResult = await configuredRuntime.importDocxBuffer(new ArrayBuffer(8));
+    check("runtime worker result is labelled worker", configuredResult.source === "worker");
+    check("runtime forwards configured WASM URL to worker", workerRequests[0]?.wasmSource === configuredWasmUrl);
+    check("runtime diagnostics include worker lifecycle", diagnostics.some(event => event.type === "worker-created") && diagnostics.some(event => event.type === "worker-success"));
+    configuredRuntime.dispose();
+  } finally {
+    if (originalWorker === undefined) {
+      delete globalThis.Worker;
+    } else {
+      globalThis.Worker = originalWorker;
     }
   }
 }
@@ -304,6 +361,8 @@ async function verifyD4() {
     updateParagraphText,
     toggleRunStyleFlag,
     defaultStarterModel,
+    assertValidDocxModel,
+    DocxModelValidationError,
   } = await import("@extend-ai/docx-core");
 
   const original = cloneDocModel(defaultStarterModel);
@@ -355,6 +414,23 @@ async function verifyD4() {
   check("dispatch pattern clone preserves original", original.nodes[0]?.type === "paragraph" &&
     original.nodes[0].children[0]?.type === "text" &&
     original.nodes[0].children[0].text !== "Real dispatch transaction");
+
+  let invalidModelError;
+  try {
+    assertValidDocxModel({
+      nodes: [],
+      metadata: { headerSections: [], footerSections: [] },
+    });
+  } catch (error) {
+    invalidModelError = error;
+  }
+  check("incomplete editor model has a structured validation error",
+    invalidModelError instanceof DocxModelValidationError &&
+      invalidModelError.code === "INVALID_DOC_MODEL");
+  check("editor model validation names missing metadata fields",
+    invalidModelError?.missingFields?.includes("metadata.sourceParts") &&
+      invalidModelError?.missingFields?.includes("metadata.warnings") &&
+      invalidModelError?.missingFields?.includes("metadata.paragraphStyles"));
 }
 
 // ---------------------------------------------------------------------------

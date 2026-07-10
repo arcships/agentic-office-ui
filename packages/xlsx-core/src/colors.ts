@@ -1,4 +1,4 @@
-import type { XlsxThemePalette } from "./types";
+import type { XlsxThemePalette } from "./types/theme-types";
 
 function normalizeHexColor(value: string) {
   const hex = value.replace(/^#/, "");

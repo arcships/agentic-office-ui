@@ -1,7 +1,7 @@
 <template>
   <div
     ref="tableEl"
-    class="docx-table-host"
+    class="docx-table-host docx-viewer-table"
     :class="{
       'docx-table-host--editable': editable && !isReadOnly,
       'docx-table-host--active': isActiveTable,
@@ -23,15 +23,6 @@
       />
     </div>
 
-    <!-- Table move handle -->
-    <div
-      v-if="showMoveHandle"
-      class="docx-table-move-handle"
-      @mousedown.prevent="onTableMoveStart"
-    >
-      ⠿
-    </div>
-
     <!-- Table -->
     <table class="docx-table-host-table" :style="tableStyle">
       <colgroup>
@@ -44,41 +35,61 @@
       <tbody>
         <tr
           v-for="(row, ri) of visibleRows"
-          :key="`row-${ri}`"
-          :style="rowStyle(row, ri)"
+          :key="`row-${sourceRowIndex(ri)}`"
+          :style="rowStyle(row, sourceRowIndex(ri))"
         >
           <td
             v-for="(cell, ci) of row.cells"
-            :key="`cell-${ri}-${ci}`"
+            :key="`cell-${sourceRowIndex(ri)}-${ci}`"
             :colspan="cell.style?.gridSpan"
             :data-docx-table-cell="true"
             :data-docx-table-index="tableIndex"
-            :data-docx-table-row-index="ri"
+            :data-docx-table-row-index="sourceRowIndex(ri)"
             :data-docx-table-cell-index="ci"
             class="docx-table-cell"
             :class="{
-              'docx-table-cell--active': isCellActive(ri, ci),
+              'docx-table-cell--active': isCellActive(sourceRowIndex(ri), ci),
             }"
             :style="cellStyle(cell)"
-            @click="onCellClick(ri, ci, $event)"
+            @click="onCellClick(sourceRowIndex(ri), ci, $event)"
           >
-            <div
-              v-for="(para, pi) of cell.nodes"
-              :key="`cell-para-${ri}-${ci}-${pi}`"
-              class="docx-table-cell-paragraph"
-              :contenteditable="editable && !isReadOnly ? 'true' : undefined"
-              :data-docx-table-cell-paragraph-host="true"
-              :data-docx-table-index="tableIndex"
-              :data-docx-table-row-index="ri"
-              :data-docx-table-cell-index="ci"
-              :data-docx-paragraph-index="pi"
-              :suppresscontenteditablewarning="editable ? 'true' : undefined"
-              :style="cellParagraphStyle(para)"
-              @input="onCellInput(tableIndex, ri, ci, pi, $event)"
-              @focus="onCellFocus(tableIndex, ri, ci, pi)"
-              @blur="onCellBlur(tableIndex, ri, ci, pi)"
-              v-html="cellParagraphHtml(para, ri, ci, pi)"
-            />
+            <template
+              v-for="(node, pi) of cell.nodes"
+              :key="`cell-node-${sourceRowIndex(ri)}-${ci}-${pi}`"
+            >
+              <div
+                v-if="node.type === 'paragraph'"
+                class="docx-table-cell-paragraph"
+                :contenteditable="editable && controller && !isReadOnly ? 'true' : undefined"
+                :data-docx-table-cell-paragraph-host="true"
+                :data-docx-table-index="tableIndex"
+                :data-docx-table-row-index="sourceRowIndex(ri)"
+                :data-docx-table-cell-index="ci"
+                :data-docx-paragraph-index="pi"
+                :suppresscontenteditablewarning="editable && controller ? 'true' : undefined"
+                :style="cellParagraphStyle(node)"
+                @input="onCellInput(tableIndex, sourceRowIndex(ri), ci, pi, $event)"
+                @focus="onCellFocus(tableIndex, sourceRowIndex(ri), ci, pi)"
+                @blur="onCellBlur(tableIndex, sourceRowIndex(ri), ci, pi)"
+                v-html="cellParagraphHtml(node, sourceRowIndex(ri), ci, pi)"
+              />
+              <DocxTableHost
+                v-else
+                :table="node"
+                :table-index="tableIndex"
+                :editable="false"
+                :controller="controller"
+                :document-theme="documentTheme"
+                :show-tracked-changes="showTrackedChanges"
+                :show-comment-highlights="showCommentHighlights"
+                :numbering-definitions="numberingDefinitions"
+                :page-number="pageNumber"
+                :total-pages="totalPages"
+                :page-number-format="pageNumberFormat"
+                :within-header-footer="withinHeaderFooter"
+                :header-footer-region="headerFooterRegion"
+              />
+            </template>
           </td>
         </tr>
       </tbody>
@@ -96,10 +107,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from "vue"
+import { ref, computed, watch, onUnmounted } from "vue"
 import type {
+  DocxDocumentTheme,
   DocxEditorController,
+  NumberingDefinitionSet,
+  ParagraphNode,
   TableNode,
+  TableRowRange,
 } from "@extend-ai/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
 import { renderStaticHtml } from "../render/static-html"
@@ -119,15 +134,27 @@ const SCRIPT_FONT_SCALE = 0.65
 const DEFAULT_COLUMN_WIDTH = 100
 const MIN_COLUMN_WIDTH = 48
 
+defineOptions({ name: "DocxTableHost" })
+
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
   defineProps<{
     table: TableNode
     tableIndex: number
     editable?: boolean
-    controller: DocxEditorController
+    controller?: DocxEditorController
+    rowRange?: TableRowRange
+    documentTheme?: DocxDocumentTheme
+    showTrackedChanges?: boolean
+    showCommentHighlights?: boolean
+    numberingDefinitions?: NumberingDefinitionSet
+    pageNumber?: number
+    totalPages?: number
+    pageNumberFormat?: string
+    withinHeaderFooter?: boolean
+    headerFooterRegion?: "header" | "footer"
   }>(),
-  { editable: false }
+  { editable: false, documentTheme: "light" as DocxDocumentTheme }
 )
 
 const emit = defineEmits<{
@@ -145,11 +172,16 @@ const resizeStartWidths = ref<number[]>([])
 
 // Local column width overrides (from user resizing)
 const localColumnWidths = ref<number[] | null>(null)
+let activeColumnMouseMove: ((event: MouseEvent) => void) | undefined
+let activeColumnMouseUp: (() => void) | undefined
 
 // ── Computed ───────────────────────────────────────────────────────
-const isReadOnly = computed(() => props.controller.showTrackedChanges)
+const isReadOnly = computed(
+  () => !props.editable || !props.controller || props.controller.showTrackedChanges
+)
 
 const isActiveTable = computed(() => {
+  if (!props.editable || !props.controller) return false
   const sel = props.controller.selection
   if (sel.kind === "table-cell") {
     return sel.tableIndex === props.tableIndex
@@ -166,7 +198,10 @@ const resolvedColumnWidths = computed(() => {
   if (localColumnWidths.value && localColumnWidths.value.length === columnCount.value) {
     return localColumnWidths.value
   }
-  // Use stored widths from table style, or equal distribution
+  const storedWidths = props.table.style?.columnWidthsTwips
+  if (storedWidths?.length === columnCount.value) {
+    return storedWidths.map((width) => Math.max(MIN_COLUMN_WIDTH, Math.round(width / 15)))
+  }
   return Array.from({ length: columnCount.value }, () => DEFAULT_COLUMN_WIDTH)
 })
 
@@ -185,11 +220,19 @@ const showColumnHandles = computed(
   () => props.editable && !isReadOnly && (hovered.value || isActiveTable.value)
 )
 
-const showMoveHandle = computed(
-  () => props.editable && !isReadOnly && (hovered.value || isActiveTable.value)
+const visibleRowStart = computed(() =>
+  Math.max(0, props.rowRange?.startRowIndex ?? 0)
 )
 
-const visibleRows = computed(() => props.table.rows)
+const visibleRows = computed(() => {
+  const start = visibleRowStart.value
+  const end = Math.max(start, props.rowRange?.endRowIndex ?? props.table.rows.length)
+  return props.table.rows.slice(start, end)
+})
+
+function sourceRowIndex(visibleRowIndex: number): number {
+  return visibleRowStart.value + visibleRowIndex
+}
 
 const tableStyle = computed(() => ({
   width: "100%",
@@ -215,26 +258,48 @@ function cellStyle(cell: any): Record<string, any> {
   }
 }
 
-function cellParagraphStyle(para: any): Record<string, any> {
+function cellParagraphStyle(para: ParagraphNode): Record<string, any> {
   return {
     margin: "0",
-    textAlign: (para as any).align as string,
-    fontWeight: (para as any).headingLevel ? "700" : undefined,
+    textAlign: para.style?.align,
+    fontWeight: para.style?.headingLevel ? "700" : undefined,
     minHeight: "1em",
     outline: "none",
   }
 }
 
 function cellParagraphHtml(
-  _para: any,
-  _ri: number,
-  _ci: number,
-  _pi: number
+  para: ParagraphNode,
+  ri: number,
+  ci: number,
+  pi: number
 ): string {
-  return ""
+  const runOptions: ParagraphRunRenderOptions = {
+    showTrackedChanges: props.showTrackedChanges,
+    showCommentHighlights: props.showCommentHighlights,
+    numberingDefinitions: props.numberingDefinitions,
+    withinHeaderFooter: props.withinHeaderFooter,
+    headerFooterRegion: props.headerFooterRegion,
+    pageNumberFormat: props.pageNumberFormat,
+  }
+  const rendered = renderParagraphRuns(
+    para,
+    `table-${props.tableIndex}-r${ri}-c${ci}-p${pi}`,
+    props.documentTheme,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    props.pageNumber,
+    props.totalPages,
+    runOptions
+  )
+  const nodes = Array.isArray(rendered) ? rendered : [rendered]
+  return nodes.map((node) => renderStaticHtml(node)).join("")
 }
 
 function isCellActive(rowIndex: number, cellIndex: number): boolean {
+  if (!props.editable || !props.controller) return false
   const sel = props.controller.selection
   if (sel.kind === "table-cell") {
     return sel.tableIndex === props.tableIndex &&
@@ -246,7 +311,7 @@ function isCellActive(rowIndex: number, cellIndex: number): boolean {
 
 // ── Event handlers ─────────────────────────────────────────────────
 function onCellClick(rowIndex: number, cellIndex: number, _event: MouseEvent): void {
-  if (!props.editable || isReadOnly.value) return
+  if (!props.editable || !props.controller || isReadOnly.value) return
   props.controller.selectTableCell(props.tableIndex, rowIndex, cellIndex)
 }
 
@@ -257,6 +322,7 @@ function onCellInput(
   paragraphIndex: number,
   event: Event
 ): void {
+  if (!props.editable || !props.controller || isReadOnly.value) return
   const target = event.target as HTMLElement
   const text = target.textContent ?? ""
   emit("cellInput", tableIndex, rowIndex, cellIndex, paragraphIndex, text)
@@ -268,6 +334,7 @@ function onCellFocus(
   cellIndex: number,
   paragraphIndex: number
 ): void {
+  if (!props.editable || !props.controller || isReadOnly.value) return
   props.controller.selectTableCell(tableIndex, rowIndex, cellIndex)
   emit("cellFocus", tableIndex, rowIndex, cellIndex, paragraphIndex)
 }
@@ -278,6 +345,7 @@ function onCellBlur(
   cellIndex: number,
   _paragraphIndex: number
 ): void {
+  if (!props.editable || !props.controller || isReadOnly.value) return
   // Commit cell text
   const cellEl = tableEl.value?.querySelector(
     `[data-docx-table-cell="true"][data-docx-table-row-index="${rowIndex}"][data-docx-table-cell-index="${cellIndex}"]`
@@ -289,12 +357,14 @@ function onCellBlur(
 }
 
 function onColumnResizeStart(boundaryIndex: number, event: MouseEvent): void {
+  if (!props.editable || !props.controller || isReadOnly.value) return
+  cleanupColumnResize(false)
   isResizing.value = true
   resizeBoundaryIndex.value = boundaryIndex
   resizeStartX.value = event.clientX
   resizeStartWidths.value = [...resolvedColumnWidths.value]
 
-  const onMouseMove = (e: MouseEvent) => {
+  activeColumnMouseMove = (e: MouseEvent) => {
     if (!isResizing.value) return
     const delta = e.clientX - resizeStartX.value
     const newWidths = [...resizeStartWidths.value]
@@ -314,23 +384,47 @@ function onColumnResizeStart(boundaryIndex: number, event: MouseEvent): void {
     localColumnWidths.value = newWidths
   }
 
-  const onMouseUp = () => {
-    isResizing.value = false
-    document.removeEventListener("mousemove", onMouseMove)
-    document.removeEventListener("mouseup", onMouseUp)
+  activeColumnMouseUp = () => {
+    cleanupColumnResize(true)
   }
 
-  document.addEventListener("mousemove", onMouseMove)
-  document.addEventListener("mouseup", onMouseUp)
+  document.addEventListener("mousemove", activeColumnMouseMove)
+  document.addEventListener("mouseup", activeColumnMouseUp)
+}
+
+function cleanupColumnResize(commit: boolean): void {
+  if (activeColumnMouseMove) {
+    document.removeEventListener("mousemove", activeColumnMouseMove)
+  }
+  if (activeColumnMouseUp) {
+    document.removeEventListener("mouseup", activeColumnMouseUp)
+  }
+  activeColumnMouseMove = undefined
+  activeColumnMouseUp = undefined
+
+  const widths = localColumnWidths.value ? [...localColumnWidths.value] : undefined
+  const shouldCommit = commit && isResizing.value && widths && props.controller
+  isResizing.value = false
+  if (shouldCommit) props.controller!.setTableColumnWidths(props.tableIndex, widths)
 }
 
 function onAddRow(): void {
-  props.controller.insertTableRow(props.tableIndex, props.table.rows.length, "below")
+  props.controller?.insertTableRow(props.tableIndex, props.table.rows.length, "below")
 }
 
-function onTableMoveStart(_event: MouseEvent): void {
-  // Table move drag — simplified
-}
+watch(
+  () => props.table.style?.columnWidthsTwips,
+  () => {
+    if (!isResizing.value) localColumnWidths.value = null
+  },
+  { deep: true },
+)
+
+watch([() => props.editable, isReadOnly], ([editable, readOnly]) => {
+  if (!editable || readOnly) cleanupColumnResize(false)
+})
+
+onUnmounted(() => cleanupColumnResize(false))
 </script>
 
 <style scoped>
@@ -368,24 +462,6 @@ function onTableMoveStart(_event: MouseEvent): void {
 }
 .docx-table-column-handle:hover {
   background: #3b82f6;
-}
-
-.docx-table-move-handle {
-  position: absolute;
-  left: -24px;
-  top: 0;
-  width: 20px;
-  height: 20px;
-  background: #e5e7eb;
-  border: 1px solid #d1d5db;
-  border-radius: 3px;
-  cursor: grab;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  color: #6b7280;
-  z-index: 10;
 }
 
 .docx-table-host-table {

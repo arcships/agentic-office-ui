@@ -1,0 +1,264 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { test } from "node:test";
+import { pathToFileURL } from "node:url";
+
+const requireFromVueDocx = createRequire(
+  new URL("../../packages/vue-docx/package.json", import.meta.url),
+);
+const core = await import(
+  pathToFileURL(requireFromVueDocx.resolve("@extend-ai/docx-core")).href
+);
+const runtimeEntry = await import(
+  pathToFileURL(requireFromVueDocx.resolve("@extend-ai/docx-core/runtime")).href
+);
+const samples = new URL("../../apps/demo/public/samples/", import.meta.url);
+
+function arrayBufferFromFile(name) {
+  const bytes = readFileSync(new URL(name, samples));
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+function collectText(value, result = []) {
+  if (!value || typeof value !== "object") return result;
+  if (value.type === "text" && typeof value.text === "string") {
+    result.push(value.text);
+  }
+  for (const child of Array.isArray(value) ? value : Object.values(value)) {
+    collectText(child, result);
+  }
+  return result;
+}
+
+function workerResult(request, marker) {
+  return {
+    data: {
+      id: request.id,
+      type: "success",
+      package: { parts: new Map(), binaryAssets: new Map() },
+      model: {
+        nodes: [{ id: marker, type: "paragraph", children: [] }],
+        metadata: {
+          sourceParts: 0,
+          warnings: [],
+          headerSections: [],
+          footerSections: [],
+          paragraphStyles: [],
+        },
+      },
+      timings: { totalMs: 1, parseMs: 0.5, buildModelMs: 0.5 },
+    },
+  };
+}
+
+class ControlledDocxWorker {
+  constructor({ delay = 0, marker = "worker", respond = true } = {}) {
+    this.delay = delay;
+    this.marker = marker;
+    this.respond = respond;
+    this.listeners = new Map();
+    this.terminated = false;
+    this.timer = null;
+  }
+
+  addEventListener(type, listener) {
+    this.listeners.set(type, [...(this.listeners.get(type) || []), listener]);
+  }
+
+  removeEventListener(type, listener) {
+    this.listeners.set(
+      type,
+      (this.listeners.get(type) || []).filter((item) => item !== listener),
+    );
+  }
+
+  postMessage(request) {
+    if (!this.respond) return;
+    this.timer = setTimeout(() => {
+      if (this.terminated) return;
+      for (const listener of this.listeners.get("message") || []) {
+        listener(workerResult(request, this.marker));
+      }
+    }, this.delay);
+  }
+
+  terminate() {
+    this.terminated = true;
+    if (this.timer) clearTimeout(this.timer);
+  }
+}
+
+async function withWorkerGlobal(run) {
+  const original = globalThis.Worker;
+  globalThis.Worker = ControlledDocxWorker;
+  try {
+    return await run();
+  } finally {
+    if (original === undefined) delete globalThis.Worker;
+    else globalThis.Worker = original;
+  }
+}
+
+test("DOCX parses a normal fixture and preserves content through roundtrip", async () => {
+  const input = arrayBufferFromFile("invoice-table.docx");
+  const first = await core.wasmBuildDocModelFromBytes(input);
+  const firstText = collectText(first.model).join(" ");
+  assert.match(firstText, /INVOICE INV-2026-0705/);
+  assert.ok(first.model.nodes.length > 0);
+
+  const exported = await core.wasmSerializeDocx(first.model, first.package);
+  assert.ok(exported.byteLength > 0);
+  assert.deepEqual([...new Uint8Array(exported).slice(0, 2)], [0x50, 0x4b]);
+
+  const second = await core.wasmBuildDocModelFromBytes(exported);
+  const secondText = collectText(second.model).join(" ");
+  assert.match(secondText, /INVOICE INV-2026-0705/);
+  assert.equal(second.model.nodes.length, first.model.nodes.length);
+});
+
+test("DOCX rejects empty and corrupted input with a stable parse error", async () => {
+  for (const input of [new ArrayBuffer(0), arrayBufferFromFile("corrupted.docx")]) {
+    await assert.rejects(
+      core.importDocxBuffer(input, { useWorker: false }),
+      (error) => error?.name === "DocxImportError" && error?.code === "PARSE_FAILED",
+    );
+  }
+});
+
+test("DOCX runtime entry exposes its public import error constructor", () => {
+  assert.equal(runtimeEntry.DocxImportError, core.DocxImportError);
+  const error = new runtimeEntry.DocxImportError("PARSE_FAILED", "broken document");
+  assert.equal(error.name, "DocxImportError");
+  assert.equal(error.code, "PARSE_FAILED");
+});
+
+test("DOCX abort terminates the active Worker and rejects as ABORTED", async () => {
+  await withWorkerGlobal(async () => {
+    const worker = new ControlledDocxWorker({ respond: false });
+    const runtime = core.createDocxRuntime({
+      createWorker: () => worker,
+      wasmUrl: "https://unit.invalid/docx.wasm",
+    });
+    const controller = new AbortController();
+    const pending = runtime.importDocxBuffer(new ArrayBuffer(8), {
+      signal: controller.signal,
+    });
+    controller.abort();
+    await assert.rejects(
+      pending,
+      (error) => error?.name === "AbortError" && error?.code === "ABORTED",
+    );
+    assert.equal(worker.terminated, true);
+    runtime.dispose();
+  });
+});
+
+test("DOCX loader cancels the older request and accepts only the latest result", async () => {
+  await withWorkerGlobal(async () => {
+    const workers = [];
+    const runtime = core.createDocxRuntime({
+      createWorker: () => {
+        const index = workers.length;
+        const worker = new ControlledDocxWorker({
+          delay: index === 0 ? 40 : 0,
+          marker: index === 0 ? "old" : "latest",
+        });
+        workers.push(worker);
+        return worker;
+      },
+      wasmUrl: "https://unit.invalid/docx.wasm",
+    });
+    const loader = runtime.createLoader();
+    const oldRequest = loader.load(new ArrayBuffer(8));
+    const latestRequest = loader.load(new ArrayBuffer(8));
+
+    await assert.rejects(
+      oldRequest,
+      (error) => error?.name === "AbortError" && error?.code === "ABORTED",
+    );
+    const latest = await latestRequest;
+    assert.equal(latest.source, "worker");
+    assert.equal(latest.model.nodes[0].id, "latest");
+    assert.equal(workers[0].terminated, true);
+
+    loader.dispose();
+    runtime.dispose();
+  });
+});
+
+test("DOCX runtime loads URL sources through shared policy and one task identity", async () => {
+  await withWorkerGlobal(async () => {
+    const diagnostics = [];
+    const requests = [];
+    const runtime = core.createDocxRuntime({
+      createWorker: () => new ControlledDocxWorker({ marker: "url-source" }),
+      wasmUrl: "https://assets.example/docx.wasm",
+      urlPolicy: {
+        enabled: true,
+        baseUrl: "https://app.example/viewer/",
+        allowRelativeUrl: true,
+        allowedProtocols: ["https:"],
+        allowedOrigins: ["https://app.example"],
+        fetch: async (url, init) => {
+          requests.push({ url, init });
+          const bytes = new Uint8Array(arrayBufferFromFile("invoice-table.docx"));
+          return {
+            ok: true,
+            status: 200,
+            url,
+            headers: { get: (name) => name.toLowerCase() === "content-length" ? String(bytes.byteLength) : null },
+            arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+          };
+        },
+      },
+      limits: { maxInputBytes: 1024 * 1024 },
+      onDiagnostic: (event) => diagnostics.push(event),
+    });
+    const result = await runtime.loadSource({ kind: "url", url: "invoice-table.docx?token=secret" });
+    assert.equal(result.model.nodes[0].id, "url-source");
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].init.redirect, "error");
+    assert.equal(requests[0].init.credentials, "omit");
+    const taskIds = new Set(diagnostics.map((event) => event.requestId));
+    assert.equal(taskIds.size, 1);
+    assert.match([...taskIds][0], new RegExp(`^${runtime.id}:1$`));
+    assert.equal(JSON.stringify(diagnostics).includes("secret"), false);
+    runtime.dispose();
+  });
+});
+
+test("DOCX runtime rejects a dangerous URL before fetch", async () => {
+  let requestCount = 0;
+  const runtime = core.createDocxRuntime({
+    urlPolicy: {
+      enabled: true,
+      baseUrl: "https://app.example/",
+      allowRelativeUrl: true,
+      allowedProtocols: ["https:"],
+      allowedOrigins: ["https://app.example"],
+      fetch: async () => { requestCount += 1; throw new Error("must not fetch"); },
+    },
+  });
+  await assert.rejects(
+    runtime.loadSource({ kind: "url", url: "javascript:alert(1)" }),
+    (error) => error?.name === "DocxImportError" && error?.code === "SOURCE_NOT_ALLOWED",
+  );
+  assert.equal(requestCount, 0);
+  runtime.dispose();
+});
+
+test("DOCX runtime snapshots limits instead of reading later caller mutations", async () => {
+  await withWorkerGlobal(async () => {
+    const limits = { maxInputBytes: 8 };
+    const runtime = core.createDocxRuntime({
+      limits,
+      createWorker: () => new ControlledDocxWorker({ marker: "snapshotted-config" }),
+      wasmUrl: "https://assets.example/docx.wasm",
+    });
+    limits.maxInputBytes = 1;
+    const result = await runtime.importDocxBuffer(new ArrayBuffer(4));
+    assert.equal(result.model.nodes[0].id, "snapshotted-config");
+    runtime.dispose();
+  });
+});

@@ -1,10 +1,19 @@
 export { initWasm, setWasmSource, canUseConfiguredWasmSourceInWorker, getConfiguredWorkerWasmSource, getSheetsWasmModule } from "./wasm";
 export type { XlsxWasmSource, WorkerWasmSource } from "./wasm";
+export { bundledXlsxWasmUrl } from "./wasm-asset";
 
 export { safeCalculate, tryRecalculate } from "./safe-calculate";
 export type { SafeCalculateSkipReason, SafeCalculateResult, SafeCalculateOptions } from "./safe-calculate";
 
-export { XlsxWorkerClient } from "./worker-client";
+export { XlsxWorkerClient, createBundledXlsxWorker } from "./worker-client";
+export type { XlsxWorkerClientOptions } from "./worker-client";
+export { createXlsxRuntime } from "./runtime/xlsx-runtime";
+export type {
+  XlsxRuntime,
+  XlsxRuntimeConfig,
+  XlsxRuntimeDiagnostic,
+  XlsxRuntimeParseOptions,
+} from "./runtime/xlsx-runtime";
 
 export {
   resolveWorkbookColor,
@@ -59,6 +68,13 @@ export type {
 // Types — all data model types
 export type {
   UseXlsxViewerControllerOptions,
+  XlsxRuntimeLike,
+  XlsxUrlPolicy,
+  XlsxSourceKind,
+  XlsxSourceState,
+  XlsxLoadErrorCode,
+  XlsxLoadError,
+  XlsxDiagnostic,
   XlsxCellAddress,
   XlsxCellAlignmentInput,
   XlsxCellBorderEdgeInput,
@@ -137,32 +153,24 @@ export type {
   XlsxViewerTables,
 } from "./types";
 
+export {
+  XlsxSourceError,
+  loadVerifiedXlsxSource,
+  resolveAllowedXlsxUrl,
+  toXlsxLoadError,
+} from "./runtime/xlsx-url-policy";
+export type { ResolvedXlsxSource } from "./runtime/xlsx-url-policy";
+
+import {
+  columnLabel as coreColumnLabel,
+  rangeToA1 as coreRangeToA1,
+} from "./core";
 import type { XlsxCellAddress, XlsxCellRange } from "./types";
 
 export function columnLabel(col: number): string {
-  let label = "";
-  let nextValue = col;
-
-  while (nextValue >= 0) {
-    label = String.fromCharCode(65 + (nextValue % 26)) + label;
-    nextValue = Math.floor(nextValue / 26) - 1;
-  }
-
-  return label;
+  return coreColumnLabel(col);
 }
 
 export function rangeToA1(range: XlsxCellRange): string {
-  const normalized = {
-    start: {
-      row: Math.min(range.start.row, range.end.row),
-      col: Math.min(range.start.col, range.end.col),
-    },
-    end: {
-      row: Math.max(range.start.row, range.end.row),
-      col: Math.max(range.start.col, range.end.col),
-    },
-  };
-  const start = `${columnLabel(normalized.start.col)}${normalized.start.row + 1}`;
-  const end = `${columnLabel(normalized.end.col)}${normalized.end.row + 1}`;
-  return start === end ? start : `${start}:${end}`;
+  return coreRangeToA1(range);
 }

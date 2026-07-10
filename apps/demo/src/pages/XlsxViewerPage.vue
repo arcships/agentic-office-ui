@@ -1,48 +1,65 @@
 <template>
-  <div class="page">
-    <h2>📊 XLSX Viewer — Verification</h2>
-    <p class="desc">Verify real workbook loading, sheet tabs, selection, editing, zoom, read-only, drag-drop, URL loading and large-grid behavior.</p>
+  <div class="page" data-testid="xlsx-viewer-page">
+    <h2>📊 XLSX Viewer — 安全验证页</h2>
+    <p class="desc">工作簿地址、来源规则、加载错误、下载和诊断均通过公开配置与控制器接口展示。</p>
 
     <div class="controls control-panel">
       <label>
-        Sample workbook
-        <select v-model="selectedSample" @change="loadSelectedSample">
-          <option v-for="sample in samples" :key="sample.file" :value="sample.file">
-            {{ sample.label }}
-          </option>
+        示例工作簿
+        <select v-model="selectedSample" data-testid="xlsx-sample-select" @change="loadSelectedSample">
+          <option v-for="sample in samples" :key="sample.file" :value="sample.file">{{ sample.label }}</option>
         </select>
       </label>
-      <button @click="loadSelectedSample">Load sample</button>
-      <div class="url-load">
-        <input
-          v-model="remoteUrl"
-          type="text"
-          placeholder="https://example.com/report.xlsx"
-          class="url-input"
-          @keydown.enter="loadUrl"
-        />
-        <button :disabled="!remoteUrl.trim()" @click="loadUrl">Load URL</button>
-      </div>
-      <input ref="fileInputRef" type="file" accept=".xlsx,.xls" @change="onFileChange" />
-      <label class="inline">
-        <input v-model="readOnly" type="checkbox" /> Read only
+      <button data-testid="xlsx-load-sample" @click="loadSelectedSample">加载示例</button>
+      <label>
+        本地 XLSX
+        <input data-testid="xlsx-file-input" type="file" accept=".xlsx,.xls" @change="onFileChange" />
       </label>
-      <label class="inline">
-        <input v-model="useWorker" type="checkbox" /> Worker
+      <label class="inline"><input v-model="readOnly" data-testid="xlsx-read-only" type="checkbox" /> 只读</label>
+      <label class="inline"><input v-model="useWorker" data-testid="xlsx-use-worker" type="checkbox" /> Worker</label>
+    </div>
+
+    <div class="policy-panel" data-testid="xlsx-runtime-config">
+      <h3>公开来源规则</h3>
+      <label>
+        XLSX 地址
+        <input v-model="remoteUrl" data-testid="xlsx-url-input" inputmode="url" @keydown.enter="loadUrl" />
       </label>
-      <label class="inline">
-        <input v-model="useCanvas" type="checkbox" /> Canvas
+      <label>
+        baseUrl
+        <input v-model="baseUrl" data-testid="xlsx-policy-base-url" inputmode="url" />
       </label>
-      <p v-if="error" class="error">{{ error }}</p>
+      <label>
+        允许协议（逗号分隔）
+        <input v-model="allowedProtocolsText" data-testid="xlsx-allowed-protocols" />
+      </label>
+      <label>
+        允许来源（逗号分隔）
+        <input v-model="allowedOriginsText" data-testid="xlsx-allowed-origins" />
+      </label>
+      <label class="checkbox-label">
+        <input v-model="allowHttpOnLocalhost" data-testid="xlsx-allow-localhost-http" type="checkbox" />
+        允许 localhost 的 HTTP
+      </label>
+      <label>
+        延迟解析阈值（字节，0 表示立即）
+        <input v-model.number="deferLoadingAboveBytes" data-testid="xlsx-defer-loading-above-bytes" min="0" type="number" />
+      </label>
+      <button data-testid="xlsx-apply-url" :disabled="!remoteUrl.trim()" @click="loadUrl">应用地址和规则</button>
+      <button data-testid="xlsx-continue-deferred" :disabled="!controller?.canLoadDeferred" @click="continueDeferredLoad">继续解析已验证文件</button>
+      <button data-testid="xlsx-download-source" :disabled="!controller?.canDownload" @click="downloadSource">下载已验证源文件</button>
     </div>
 
     <div class="status-grid info-grid">
-      <div><strong>Loaded:</strong> {{ displayName || "None" }}</div>
-      <div><strong>Source:</strong> {{ sourceKind }}</div>
-      <div><strong>Mode:</strong> {{ readOnly ? "Read only" : "Editable" }}</div>
-      <div><strong>Worker:</strong> {{ useWorker ? "On" : "Off" }}</div>
-      <div><strong>Canvas:</strong> {{ useCanvas ? "On" : "Off" }}</div>
-      <div><strong>Expected coverage:</strong> ribbon, formula bar, tabs, thumbnails, selection, edit, zoom, large grid</div>
+      <div><strong>状态：</strong><span data-testid="page-status" :data-state="pageState">{{ pageState }}</span></div>
+      <div><strong>已加载：</strong><span data-testid="loaded-file">{{ displayName || "无" }}</span></div>
+      <div><strong>来源：</strong>{{ sourceKind }}</div>
+      <div><strong>模式：</strong>{{ readOnly ? "只读" : "可编辑" }}</div>
+      <div><strong>Worker：</strong>{{ useWorker ? "开启" : "关闭" }}</div>
+    </div>
+
+    <div v-if="pageError" class="error" data-testid="load-error" :data-error-code="pageError.code">
+      {{ pageError.code }}: {{ pageError.message }}
     </div>
 
     <div
@@ -53,9 +70,7 @@
       @dragleave.prevent="onDragLeave"
       @drop.prevent="onDrop"
     >
-      <div v-if="isDragActive" class="drag-overlay">
-        <span>Drop .xlsx file here</span>
-      </div>
+      <div v-if="isDragActive" class="drag-overlay"><span>放下 .xlsx 文件</span></div>
       <XlsxViewerWrapper
         v-if="viewerKey"
         :key="viewerKey"
@@ -64,36 +79,37 @@
         :file-name="displayName || 'verification.xlsx'"
         :read-only="readOnly"
         :use-worker="useWorker"
+        :url-policy="urlPolicy"
+        :defer-loading-above-bytes="deferLoadingAboveBytes"
         style="height: 70vh;"
+        @controller-ready="onControllerReady"
+        @diagnostic="onDiagnostic"
       />
-      <div v-else class="empty">
-        <p>Load a workbook sample, drag &amp; drop an .xlsx file, or enter a URL to begin verification.</p>
-      </div>
+      <div v-else class="empty"><p>请选择工作簿、拖入本地文件或输入地址。</p></div>
     </div>
 
-    <div class="api-verify">
-      <h3>API Verification</h3>
-      <table>
-        <thead><tr><th>Check</th><th>Expected</th><th>Result</th></tr></thead>
-        <tbody>
-          <tr><td><code>XlsxViewer</code></td><td>Accepts controller prop; visible spreadsheet surface with ribbon, formula bar, sheet tabs</td><td class="pass">✅ PASSED</td></tr>
-          <tr><td><code>useXlsxViewerController()</code></td><td>Selection, zoom, editing, tabs controller with full ribbon integration</td><td class="pass">✅ PASSED</td></tr>
-          <tr><td><code>columnLabel(26)</code></td><td>AA</td><td class="pass">{{ columnAA }}</td></tr>
-          <tr><td><code>rangeToA1()</code></td><td>A1:C6</td><td class="pass">{{ rangeCheck }}</td></tr>
-        </tbody>
-      </table>
+    <div class="diagnostics" data-testid="xlsx-diagnostics" aria-live="polite">
+      <h3>公开诊断</h3>
+      <ol>
+        <li v-for="entry in diagnostics" :key="entry.id" :data-diagnostic-type="entry.type">
+          #{{ entry.requestId }} {{ entry.type }}<span v-if="entry.taskId"> · {{ entry.taskId }}</span><span v-if="entry.error?.code"> · {{ entry.error.code }}</span><span v-if="entry.bytes !== undefined"> · {{ entry.bytes }} bytes</span>
+        </li>
+      </ol>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, h, defineComponent, type PropType } from "vue"
-import { useXlsxViewerController, XlsxViewer } from "@extend-ai/vue-xlsx"
+import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref, shallowRef, type PropType } from "vue"
+import {
+  useXlsxViewerController,
+  XlsxViewer,
+  type XlsxDiagnostic,
+  type XlsxLoadError,
+  type XlsxUrlPolicy,
+} from "@extend-ai/vue-xlsx"
 import type { XlsxViewerController } from "@extend-ai/xlsx-core"
-import { columnLabel, rangeToA1 } from "@extend-ai/xlsx-core"
 
-// Wrapper component: creates controller via useXlsxViewerController and passes it to XlsxViewer.
-// Keyed by parent so it unmounts/remounts when the source changes, giving a fresh controller.
 const XlsxViewerWrapper = defineComponent({
   props: {
     file: { type: Object as PropType<ArrayBuffer | undefined> },
@@ -101,92 +117,162 @@ const XlsxViewerWrapper = defineComponent({
     fileName: { type: String as PropType<string | undefined> },
     readOnly: { type: Boolean, default: false },
     useWorker: { type: Boolean, default: true },
+    deferLoadingAboveBytes: { type: Number, default: 0 },
+    urlPolicy: { type: Object as PropType<XlsxUrlPolicy>, required: true },
   },
-  setup(props) {
+  emits: ["controller-ready", "diagnostic"],
+  setup(props, { emit }) {
     const controller: XlsxViewerController = useXlsxViewerController({
       file: props.file,
       src: props.src,
       fileName: props.fileName,
       readOnly: props.readOnly,
       useWorker: props.useWorker,
+      deferLoadingAboveBytes: props.deferLoadingAboveBytes,
+      urlPolicy: props.urlPolicy,
+      onDiagnostic: (diagnostic) => emit("diagnostic", diagnostic),
     })
+    onMounted(() => emit("controller-ready", controller))
     return () => h(XlsxViewer, { controller, showDefaultToolbar: true, style: { height: "100%" } })
   },
 })
 
 const samples = [
-  { file: "financial-model.xlsx", label: "Financial model — formulas + multiple sheets" },
-  { file: "sales-table.xlsx", label: "Sales table — long text + 180 rows" },
-  { file: "charts-images.xlsx", label: "Charts and images workbook" },
-  { file: "large-grid.xlsx", label: "Large grid — 550 × 60" },
-  { file: "corrupted.xlsx", label: "Corrupted workbook — negative test" },
+  { file: "financial-model.xlsx", label: "财务模型" },
+  { file: "sales-table.xlsx", label: "销售表" },
+  { file: "charts-images.xlsx", label: "图表和图片" },
+  { file: "large-grid.xlsx", label: "大表格" },
+  { file: "corrupted.xlsx", label: "损坏文件（失败用例）" },
 ]
 
+const currentOrigin = globalThis.location.origin
 const selectedSample = ref(samples[0].file)
 const src = ref<string | null>(null)
 const fileBuffer = ref<ArrayBuffer | null>(null)
 const displayName = ref("")
-const error = ref<string | null>(null)
+const inputError = ref<XlsxLoadError | null>(null)
+const controller = shallowRef<XlsxViewerController | null>(null)
 const readOnly = ref(false)
 const useWorker = ref(true)
-const useCanvas = ref(true)
-const sourceKind = ref("sample")
+const sourceKind = ref("未选择")
 const loadCounter = ref(0)
-const remoteUrl = ref("")
+const remoteUrl = ref(`/samples/${selectedSample.value}`)
+const baseUrl = ref(globalThis.location.href)
+const allowedProtocolsText = ref("https:")
+const allowedOriginsText = ref(currentOrigin)
+const allowHttpOnLocalhost = ref(true)
+const deferLoadingAboveBytes = ref(0)
 const isDragActive = ref(false)
-const fileInputRef = ref<HTMLInputElement | null>(null)
+const diagnostics = ref<Array<XlsxDiagnostic & { id: number }>>([])
+let diagnosticId = 0
 let dragDepth = 0
+let fileReadSequence = 0
+let activeFileReader: FileReader | null = null
+
+function splitList(value: string): string[] {
+  return value.split(",").map((item) => item.trim()).filter(Boolean)
+}
+
+const urlPolicy = computed<XlsxUrlPolicy>(() => ({
+  baseUrl: baseUrl.value.trim(),
+  allowRelativeUrl: true,
+  allowedProtocols: splitList(allowedProtocolsText.value),
+  allowedOrigins: splitList(allowedOriginsText.value),
+  allowHttpOnLocalhost: allowHttpOnLocalhost.value,
+}))
 
 const viewerKey = computed(() => {
   if (!src.value && !fileBuffer.value) return ""
-  return `${sourceKind.value}:${displayName.value}-${loadCounter.value}-${readOnly.value}-${useWorker.value}`
+  return `${sourceKind.value}:${displayName.value}-${loadCounter.value}-${readOnly.value}-${useWorker.value}-${deferLoadingAboveBytes.value}`
 })
-const columnAA = computed(() => columnLabel(26))
-const rangeCheck = computed(() => rangeToA1({ start: { col: 0, row: 0 }, end: { col: 2, row: 5 } }))
+const pageState = computed(() => {
+  if (inputError.value) return "error"
+  if (!viewerKey.value) return "idle"
+  return controller.value?.sourceState ?? "loading"
+})
+const pageError = computed<XlsxLoadError | null>(() => inputError.value ?? controller.value?.sourceError ?? null)
+
+function beginLoad(kind: string, name: string) {
+  controller.value = null
+  inputError.value = null
+  sourceKind.value = kind
+  displayName.value = name
+}
+
+function invalidateFileRead(): number {
+  const requestId = ++fileReadSequence
+  if (activeFileReader?.readyState === FileReader.LOADING) {
+    activeFileReader.abort()
+  }
+  activeFileReader = null
+  return requestId
+}
 
 function loadSelectedSample() {
-  error.value = null
+  invalidateFileRead()
+  const file = selectedSample.value
+  remoteUrl.value = `/samples/${file}`
+  beginLoad("示例地址", file)
   fileBuffer.value = null
-  src.value = `/samples/${selectedSample.value}`
-  displayName.value = selectedSample.value
-  sourceKind.value = "sample"
+  src.value = remoteUrl.value
   loadCounter.value++
 }
 
 function loadUrl() {
+  invalidateFileRead()
   const url = remoteUrl.value.trim()
   if (!url) return
-  error.value = null
+  beginLoad("地址", url.split(/[?#]/)[0]?.split("/").pop() || "未命名工作簿")
   fileBuffer.value = null
   src.value = url
-  displayName.value = url.split("/").pop() || url
-  sourceKind.value = "url"
   loadCounter.value++
 }
 
 function processFile(file: File) {
+  const requestId = invalidateFileRead()
   if (!file.name.toLowerCase().match(/\.xlsx?$/)) {
-    error.value = "Please select an .xlsx or .xls file"
+    inputError.value = { code: "INVALID_WORKBOOK", message: "请选择 .xlsx 或 .xls 文件。", sourceKind: "file" }
     return
   }
-  error.value = null
-  sourceKind.value = "upload"
-  displayName.value = file.name
+  beginLoad("本地文件", file.name)
   src.value = null
+  fileBuffer.value = null
   const reader = new FileReader()
+  activeFileReader = reader
   reader.onload = () => {
+    if (requestId !== fileReadSequence || activeFileReader !== reader) return
+    activeFileReader = null
     fileBuffer.value = reader.result as ArrayBuffer
     loadCounter.value++
   }
-  reader.onerror = () => { error.value = "Failed to read workbook" }
+  reader.onerror = () => {
+    if (requestId !== fileReadSequence || activeFileReader !== reader) return
+    activeFileReader = null
+    inputError.value = { code: "INVALID_WORKBOOK", message: "无法读取工作簿。", sourceKind: "file" }
+  }
   reader.readAsArrayBuffer(file)
 }
 
-function onFileChange(e: Event) {
-  const input = e.target as HTMLInputElement
+function onFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
   const file = input.files?.[0]
-  if (!file) return
-  processFile(file)
+  if (file) processFile(file)
+}
+
+function onControllerReady(nextController: XlsxViewerController) {
+  controller.value = nextController
+}
+
+function onDiagnostic(diagnostic: XlsxDiagnostic) {
+  diagnostics.value = [...diagnostics.value.slice(-9), { ...diagnostic, id: ++diagnosticId }]
+}
+
+function downloadSource() {
+  controller.value?.download()
+}
+
+function continueDeferredLoad() {
+  controller.value?.continueDeferredLoad()
 }
 
 function onDragEnter() {
@@ -194,10 +280,8 @@ function onDragEnter() {
   isDragActive.value = true
 }
 
-function onDragOver(e: DragEvent) {
-  if (e.dataTransfer) {
-    e.dataTransfer.dropEffect = "copy"
-  }
+function onDragOver(event: DragEvent) {
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "copy"
 }
 
 function onDragLeave() {
@@ -208,14 +292,16 @@ function onDragLeave() {
   }
 }
 
-function onDrop(e: DragEvent) {
+function onDrop(event: DragEvent) {
   dragDepth = 0
   isDragActive.value = false
-  const files = e.dataTransfer?.files
-  if (files && files.length > 0) {
-    processFile(files[0])
-  }
+  const file = event.dataTransfer?.files?.[0]
+  if (file) processFile(file)
 }
+
+onBeforeUnmount(() => {
+  invalidateFileRead()
+})
 
 loadSelectedSample()
 </script>
@@ -224,25 +310,23 @@ loadSelectedSample()
 .page { padding: 24px; max-width: 1200px; margin: 0 auto; width: 100%; min-width: 0; }
 h2 { margin-bottom: 4px; }
 .desc { color: var(--muted-foreground); margin-bottom: 16px; font-size: 14px; }
-.controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
-.controls label { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted-foreground); }
-.controls label:not(.inline) { flex-direction: column; align-items: flex-start; }
-.controls select, .controls button, .controls input[type="file"] { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
-.controls button { cursor: pointer; }
-.controls button:disabled { opacity: 0.5; cursor: not-allowed; }
-.url-load { display: flex; gap: 4px; }
-.url-input { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); width: 240px; font-size: 13px; }
-.url-input:focus { outline: 2px solid rgba(59, 130, 246, 0.3); outline-offset: -1px; }
-.error { color: #ef4444; font-size: 13px; }
+.controls, .policy-panel { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 12px; }
+.controls label, .policy-panel label { display: flex; gap: 6px; align-items: flex-start; flex-direction: column; font-size: 13px; color: var(--muted-foreground); }
+.controls label.inline, .policy-panel .checkbox-label { flex-direction: row; align-items: center; min-height: 36px; }
+.controls select, .controls button, .controls input[type="file"], .policy-panel input, .policy-panel button { min-height: 36px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
+.controls button, .policy-panel button { cursor: pointer; }
+.controls button:disabled, .policy-panel button:disabled { opacity: 0.5; cursor: not-allowed; }
+.policy-panel { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); }
+.policy-panel h3 { flex-basis: 100%; margin: 0; font-size: 14px; }
+.policy-panel input:not([type="checkbox"]) { min-width: 180px; }
+.error { color: #dc2626; font-size: 13px; margin: 0 0 12px; }
 .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; padding: 12px; margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); font-size: 13px; }
 .viewer-container { border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; margin-bottom: 24px; background: white; position: relative; transition: border-color 0.2s, background 0.2s; }
 .viewer-container--drag-active { border-color: #3b82f6; border-width: 2px; background: rgba(59, 130, 246, 0.04); }
 .drag-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(59, 130, 246, 0.08); z-index: 100; pointer-events: none; }
 .drag-overlay span { color: #3b82f6; font-size: 18px; font-weight: 600; }
 .empty { display: flex; align-items: center; justify-content: center; height: 240px; color: var(--muted-foreground); }
-.api-verify { margin-top: 24px; }
-.api-verify table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.api-verify th, .api-verify td { padding: 6px 12px; text-align: left; border-bottom: 1px solid var(--border); }
-.pass { color: #16a34a; font-weight: 600; }
-.warn { color: #b45309; font-weight: 600; }
+.diagnostics { margin-top: 24px; border-top: 1px solid var(--border); padding-top: 12px; font-size: 13px; }
+.diagnostics h3 { margin: 0 0 8px; }
+.diagnostics ol { margin: 0; padding-left: 20px; }
 </style>

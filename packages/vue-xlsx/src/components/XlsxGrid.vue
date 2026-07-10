@@ -2,6 +2,7 @@
   <div
     ref="containerRef"
     class="xlsx-grid"
+    data-testid="xlsx-grid"
     :style="containerStyle"
     @keydown="onGridKeydown"
     @scroll="onScroll"
@@ -40,6 +41,7 @@
       ref="editInputRef"
       v-model="editingValue"
       class="xlsx-grid__edit-input"
+      data-testid="xlsx-cell-editor"
       :style="editInputStyle"
       @keydown.enter="commitEdit"
       @keydown.escape="cancelEdit"

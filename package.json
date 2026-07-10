@@ -8,8 +8,22 @@
   ],
   "scripts": {
     "dev": "pnpm --filter=demo dev",
-    "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck"
+    "build": "pnpm typecheck && pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "node scripts/ci/run-suite.mjs test",
+    "test:unit": "node scripts/ci/run-suite.mjs unit",
+    "test:component": "node scripts/ci/run-suite.mjs component",
+    "test:blackbox": "node scripts/ci/run-suite.mjs blackbox",
+    "test:e2e": "node scripts/ci/run-suite.mjs blackbox",
+    "test:consumer": "node scripts/ci/run-suite.mjs consumer",
+    "test:pack": "node scripts/ci/run-suite.mjs consumer",
+    "test:docs": "node scripts/ci/run-suite.mjs docs",
+    "test:release": "node scripts/ci/run-suite.mjs release",
+    "ci:self-test": "node scripts/ci/verify-failure-propagation.mjs",
+    "check": "node scripts/ci/run-suite.mjs check"
+  },
+  "devDependencies": {
+    "@extend-ai/office-runtime": "workspace:*"
   },
   "packageManager": "pnpm@9.0.6"
 }

@@ -1,0 +1,48 @@
+export {
+  OfficeLoadError,
+  isOfficeAbortError,
+  sanitizeOfficeUrl,
+  toOfficeLoadError,
+} from "./errors";
+export type {
+  OfficeErrorFallback,
+  OfficeFormat,
+  OfficeLoadErrorCode,
+  OfficeLoadErrorInit,
+  OfficeSourceKind,
+} from "./errors";
+export { assertOfficeInputBytes, snapshotOfficeLimits } from "./limits";
+export type { OfficeLimits } from "./limits";
+export { resolveOfficeUrl, snapshotOfficeUrlPolicy } from "./url-policy";
+export type {
+  OfficeFetch,
+  OfficeFetchHeaders,
+  OfficeFetchInit,
+  OfficeFetchResponse,
+  OfficeUrlPolicy,
+} from "./url-policy";
+export { loadOfficeSource } from "./source";
+export type {
+  LoadOfficeSourceOptions,
+  OfficeFileLike,
+  OfficeSource,
+  ResolvedOfficeSource,
+} from "./source";
+export { createOfficeLoadContext } from "./load-context";
+export type {
+  CreateOfficeLoadContextOptions,
+  OfficeLoadContext,
+  OfficeResourceConfig,
+} from "./load-context";
+export { createLatestTaskCoordinator, createOfficeTaskSequence } from "./load-task";
+export type {
+  LatestTaskCoordinator,
+  OfficeLoadTask,
+  OfficeTaskSequence,
+  StartOfficeTaskOptions,
+} from "./load-task";
+export { createOfficeDiagnostic, emitOfficeDiagnostic } from "./diagnostics";
+export type {
+  OfficeDiagnostic,
+  OfficeDiagnosticType,
+} from "./diagnostics";

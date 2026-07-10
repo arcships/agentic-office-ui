@@ -678,6 +678,9 @@ async function loadWorkbook(buffer: ArrayBuffer, skipXmlParsing = false, showHid
     const result = safeCalculate(activeWorkbook, {
       reparse: () => wasmModule.Workbook.fromBytes(bytes)
     });
+    if (result.workbook !== activeWorkbook) {
+      try { activeWorkbook.free(); } catch { /* trapped workbook is never reused */ }
+    }
     activeWorkbook = result.workbook;
   }
 
@@ -690,37 +693,47 @@ async function loadWorkbook(buffer: ArrayBuffer, skipXmlParsing = false, showHid
         includeCachedFormulaValues: true
       });
   const sheetLayoutStates = structureAssets ? undefined : parseWorkerSheetLayoutAssets(bytes, nextWorkbook.sheetCount);
+  const previousWorkbook = workbook;
   workbook = nextWorkbook;
-  sheets = buildSheetList(nextWorkbook, structureAssets, sheetLayoutStates, showHiddenSheets);
-  tablesByWorkbookSheetIndex = Array.from({ length: nextWorkbook.sheetCount }, (_, workbookSheetIndex) =>
-    mapWorksheetTables(nextWorkbook.getSheet(workbookSheetIndex))
-  );
-  const visibleSheetIndexByWorkbookSheetIndex = new Map(sheets.map((sheet, index) => [sheet.workbookSheetIndex, index]));
-  const hasCharts = Array.from({ length: nextWorkbook.sheetCount }, (_, workbookSheetIndex) => {
-    const worksheet = nextWorkbook.getSheet(workbookSheetIndex);
-    const hasClassicCharts = Array.isArray(worksheet.charts) && worksheet.charts.length > 0;
-    const hasModernCharts = Array.isArray(worksheet.chartsEx) && worksheet.chartsEx.length > 0;
-    return hasClassicCharts || hasModernCharts;
-  }).some(Boolean);
-  const chartStyleAssets = effectiveSkipXmlParsing || !hasCharts || !canParseXmlInWorker()
-    ? null
-    : parseWorkbookChartStyleAssets(bytes);
-  const chartAssets = loadWorkbookChartAssets(
-    nextWorkbook,
-    chartStyleAssets,
-    visibleSheetIndexByWorkbookSheetIndex,
-    showHiddenSheets
-  );
-  chartsByWorkbookSheetIndex = chartAssets.chartsByWorkbookSheetIndex;
-  chartsheets = chartAssets.chartsheets;
-  tabs = chartAssets.tabs;
-  return {
-    chartsByWorkbookSheetIndex,
-    chartsheets,
-    sheets,
-    tablesByWorkbookSheetIndex,
-    tabs
-  };
+  try {
+    sheets = buildSheetList(nextWorkbook, structureAssets, sheetLayoutStates, showHiddenSheets);
+    tablesByWorkbookSheetIndex = Array.from({ length: nextWorkbook.sheetCount }, (_, workbookSheetIndex) =>
+      mapWorksheetTables(nextWorkbook.getSheet(workbookSheetIndex))
+    );
+    const visibleSheetIndexByWorkbookSheetIndex = new Map(sheets.map((sheet, index) => [sheet.workbookSheetIndex, index]));
+    const hasCharts = Array.from({ length: nextWorkbook.sheetCount }, (_, workbookSheetIndex) => {
+      const worksheet = nextWorkbook.getSheet(workbookSheetIndex);
+      const hasClassicCharts = Array.isArray(worksheet.charts) && worksheet.charts.length > 0;
+      const hasModernCharts = Array.isArray(worksheet.chartsEx) && worksheet.chartsEx.length > 0;
+      return hasClassicCharts || hasModernCharts;
+    }).some(Boolean);
+    const chartStyleAssets = effectiveSkipXmlParsing || !hasCharts || !canParseXmlInWorker()
+      ? null
+      : parseWorkbookChartStyleAssets(bytes);
+    const chartAssets = loadWorkbookChartAssets(
+      nextWorkbook,
+      chartStyleAssets,
+      visibleSheetIndexByWorkbookSheetIndex,
+      showHiddenSheets
+    );
+    chartsByWorkbookSheetIndex = chartAssets.chartsByWorkbookSheetIndex;
+    chartsheets = chartAssets.chartsheets;
+    tabs = chartAssets.tabs;
+    if (previousWorkbook && previousWorkbook !== nextWorkbook) {
+      try { previousWorkbook.free(); } catch { /* previous workbook is never reused */ }
+    }
+    return {
+      chartsByWorkbookSheetIndex,
+      chartsheets,
+      sheets,
+      tablesByWorkbookSheetIndex,
+      tabs
+    };
+  } catch (error) {
+    workbook = previousWorkbook;
+    try { nextWorkbook.free(); } catch { /* failed load is discarded */ }
+    throw error;
+  }
 }
 
 async function parseCharts(buffer: ArrayBuffer, skipXmlParsing = false, showHiddenSheets = false) {
@@ -736,25 +749,32 @@ async function parseCharts(buffer: ArrayBuffer, skipXmlParsing = false, showHidd
     const result = safeCalculate(activeWorkbook, {
       reparse: () => wasmModule.Workbook.fromBytes(bytes)
     });
+    if (result.workbook !== activeWorkbook) {
+      try { activeWorkbook.free(); } catch { /* trapped workbook is never reused */ }
+    }
     activeWorkbook = result.workbook;
   }
 
   const nextWorkbook = activeWorkbook;
-  const visibleSheetIndexByWorkbookSheetIndex = buildVisibleSheetIndexByWorkbookSheetIndex(nextWorkbook, showHiddenSheets);
-  const chartStyleAssets = effectiveSkipXmlParsing || !canParseXmlInWorker()
-    ? null
-    : parseWorkbookChartStyleAssets(bytes);
-  const chartAssets = loadWorkbookChartAssets(
-    nextWorkbook,
-    chartStyleAssets,
-    visibleSheetIndexByWorkbookSheetIndex,
-    showHiddenSheets
-  );
-  return {
-    chartsByWorkbookSheetIndex: chartAssets.chartsByWorkbookSheetIndex,
-    chartsheets: chartAssets.chartsheets,
-    tabs: chartAssets.tabs
-  };
+  try {
+    const visibleSheetIndexByWorkbookSheetIndex = buildVisibleSheetIndexByWorkbookSheetIndex(nextWorkbook, showHiddenSheets);
+    const chartStyleAssets = effectiveSkipXmlParsing || !canParseXmlInWorker()
+      ? null
+      : parseWorkbookChartStyleAssets(bytes);
+    const chartAssets = loadWorkbookChartAssets(
+      nextWorkbook,
+      chartStyleAssets,
+      visibleSheetIndexByWorkbookSheetIndex,
+      showHiddenSheets
+    );
+    return {
+      chartsByWorkbookSheetIndex: chartAssets.chartsByWorkbookSheetIndex,
+      chartsheets: chartAssets.chartsheets,
+      tabs: chartAssets.tabs
+    };
+  } finally {
+    try { nextWorkbook.free(); } catch { /* chart-only workbook is temporary */ }
+  }
 }
 
 function respond(message: WorkerResponse) {

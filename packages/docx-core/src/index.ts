@@ -16,6 +16,13 @@
 // Engine layer (complete)
 export * from "./engine";
 
+// Explicit runtime configuration is the preferred public execution path.
+export * from "./runtime";
+
+// Keep the established root API compatible while ensuring its configured WASM
+// source reaches both the legacy main-thread engine and the DOCX import Worker.
+export { setWasmSource } from "./viewer/wasm-source";
+
 // Layout layer (complete)
 export {
   collectTableExplicitPageBreakInfo,

@@ -1,15 +1,15 @@
 [
   {
     "name": "charts-images.xlsx",
-    "bytes": 60370
+    "bytes": 27571
   },
   {
     "name": "chinese-mixed.docx",
-    "bytes": 38333
+    "bytes": 35981
   },
   {
     "name": "contract-page.png",
-    "bytes": 77337
+    "bytes": 33306
   },
   {
     "name": "corrupted.docx",
@@ -25,23 +25,23 @@
   },
   {
     "name": "demo.docx",
-    "bytes": 39700
+    "bytes": 37275
   },
   {
     "name": "field-citations.json",
-    "bytes": 1211
+    "bytes": 1142
   },
   {
     "name": "financial-model.xlsx",
-    "bytes": 8154
+    "bytes": 8129
   },
   {
     "name": "invoice-table.docx",
-    "bytes": 38364
+    "bytes": 36004
   },
   {
     "name": "invoice.png",
-    "bytes": 64308
+    "bytes": 29397
   },
   {
     "name": "large-contract.pdf",
@@ -49,19 +49,19 @@
   },
   {
     "name": "large-grid.xlsx",
-    "bytes": 137091
+    "bytes": 134402
   },
   {
     "name": "legal-contract.docx",
-    "bytes": 39700
+    "bytes": 37275
   },
   {
     "name": "ocr-layout.json",
-    "bytes": 1826
+    "bytes": 1734
   },
   {
     "name": "report-with-image.docx",
-    "bytes": 92027
+    "bytes": 56892
   },
   {
     "name": "rotated-pages.pdf",
@@ -69,7 +69,7 @@
   },
   {
     "name": "sales-table.xlsx",
-    "bytes": 12851
+    "bytes": 12421
   },
   {
     "name": "sample.pdf",
@@ -77,6 +77,6 @@
   },
   {
     "name": "scanned-invoice.pdf",
-    "bytes": 76914
+    "bytes": 39568
   }
 ]

@@ -19,12 +19,14 @@
           <div class="xlsx-ribbon__group-buttons">
             <button
               class="xlsx-ribbon__btn"
+              data-testid="xlsx-undo"
               :disabled="!controller.canUndo"
               title="Undo"
               @click="controller.undo()"
             >↩</button>
             <button
               class="xlsx-ribbon__btn"
+              data-testid="xlsx-redo"
               :disabled="!controller.canRedo"
               title="Redo"
               @click="controller.redo()"

@@ -32,76 +32,100 @@
       :style="borderStyle"
     />
 
-    <!-- Header -->
-    <DocxPageHeader
-      v-if="hasHeader"
-      :page-index="pageIndex"
-      :header-nodes="[]"
-      :page-layout="pageLayout"
-      :page-content-width-px="pageContentWidthPx"
-      :theme="theme"
-      :controller="controller"
-    />
-
     <!-- Body -->
     <DocxPageBody
       :page-index="pageIndex"
       :page-node-segments="pageNodeSegments"
       :page-layout="pageLayout"
       :page-content-width-px="pageContentWidthPx"
+      :model="model"
       :controller="controller"
       :editable="editable"
       :theme="theme"
+      :page-number="pageNumber"
+      :total-pages="totalPages"
+      :page-number-format="pageNumberFormat"
       :tracked-changes-enabled="trackedChangesEnabled"
       :comments-enabled="commentsEnabled"
-    />
-
-    <!-- Footer -->
-    <DocxPageFooter
-      v-if="hasFooter"
-      :page-index="pageIndex"
-      :footer-nodes="[]"
-      :page-layout="pageLayout"
-      :page-content-width-px="pageContentWidthPx"
-      :theme="theme"
-      :controller="controller"
-    />
+    >
+      <template v-if="hasHeader" #header>
+        <DocxPageHeader
+          :page-index="pageIndex"
+          :section="headerSection"
+          :page-layout="pageLayout"
+          :page-content-width-px="pageContentWidthPx"
+          :theme="theme"
+          :model="model"
+          :controller="controller"
+          :page-number="pageNumber"
+          :total-pages="totalPages"
+          :page-number-format="pageNumberFormat"
+          :tracked-changes-enabled="trackedChangesEnabled"
+          :comments-enabled="commentsEnabled"
+        />
+      </template>
+      <template v-if="hasFooter" #footer>
+        <DocxPageFooter
+          :page-index="pageIndex"
+          :section="footerSection"
+          :page-layout="pageLayout"
+          :page-content-width-px="pageContentWidthPx"
+          :theme="theme"
+          :model="model"
+          :controller="controller"
+          :page-number="pageNumber"
+          :total-pages="totalPages"
+          :page-number-format="pageNumberFormat"
+          :tracked-changes-enabled="trackedChangesEnabled"
+          :comments-enabled="commentsEnabled"
+        />
+      </template>
+    </DocxPageBody>
 
     <!-- Floating image layer -->
     <DocxImageLayer
+      v-if="editable && controller"
       :page-index="pageIndex"
       :page-width-px="pageWidthPx"
       :page-height-px="pageLayout.pageHeightPx"
       :controller="controller"
+      :page-node-segments="pageNodeSegments"
+      :editable="editable"
     />
 
     <!-- Form field layer -->
     <DocxFormFieldLayer
-      v-if="hasFormFields"
+      v-if="editable && controller && hasFormFields"
       :page-index="pageIndex"
       :controller="controller"
+      :page-node-segments="pageNodeSegments"
     />
 
     <!-- Tracked change / comment gutter -->
     <DocxTrackedChangeGutter
-      v-if="showGutter"
+      v-if="controller && showGutter"
       :page-index="pageIndex"
       :page-layout="pageLayout"
       :controller="controller"
+      :page-node-segments="pageNodeSegments"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue"
+import { ref, computed, onMounted, onUnmounted, watch } from "vue"
 import type {
+  DocModel,
   DocxEditorController,
   DocumentPageNodeSegment,
-  ImageRunNode,
+  FooterSection,
+  HeaderSection,
+  TableCellContentNode,
 } from "@extend-ai/docx-core"
 import {
+  docModelThumbnailMetadataSignature,
+  docNodeContentSignature,
   resolveDocumentLayout,
-  resolveRenderableImageSource,
   pageMarginPaddingStyle,
 } from "@extend-ai/docx-core"
 import DocxPageHeader from "./DocxPageHeader.vue"
@@ -110,16 +134,26 @@ import DocxPageBody from "./DocxPageBody"
 import DocxImageLayer from "./DocxImageLayer.vue"
 import DocxFormFieldLayer from "./DocxFormFieldLayer.vue"
 import DocxTrackedChangeGutter from "./DocxTrackedChangeGutter.vue"
+import {
+  ensureDocxViewerPageSurfaceRegistry,
+  notifyDocxViewerPageSurfaceListeners,
+} from "../composables/page-surface-registry"
 
 // ── Types ──────────────────────────────────────────────────────────
 interface DocxPageSurfaceProps {
   pageIndex: number
   pageLayout: ReturnType<typeof resolveDocumentLayout>
   pageNodeSegments: DocumentPageNodeSegment[]
-  controller: DocxEditorController
+  model: DocModel
+  controller?: DocxEditorController
   editable?: boolean
   pageWidthPx: number
   pageContentWidthPx: number
+  pageNumber: number
+  totalPages: number
+  pageNumberFormat?: string
+  headerSection?: HeaderSection
+  footerSection?: FooterSection
   trackedChangesEnabled?: boolean
   commentsEnabled?: boolean
   theme?: "light" | "dark"
@@ -147,12 +181,83 @@ const emit = defineEmits<{
 }>()
 
 // ── Refs ───────────────────────────────────────────────────────────
-const pageSurfaceRef = ref<HTMLElement | undefined>()
+const pageSurfaceRef = ref<HTMLDivElement | undefined>()
+
+let publishedSurface:
+  | {
+      controller: DocxEditorController
+      element: HTMLDivElement
+      pageIndex: number
+    }
+  | undefined
+
+function unpublishPageSurface(): void {
+  if (!publishedSurface) return
+  const { controller, element, pageIndex } = publishedSurface
+  const registry = ensureDocxViewerPageSurfaceRegistry(controller)
+  if (registry.pageElements.get(pageIndex) === element) {
+    registry.pageElements.delete(pageIndex)
+    registry.pageContentKeys.delete(pageIndex)
+    registry.pageSizes.delete(pageIndex)
+    registry.pageThumbnailSnapshots.delete(pageIndex)
+    notifyDocxViewerPageSurfaceListeners(controller)
+  }
+  publishedSurface = undefined
+}
+
+function publishPageSurface(): void {
+  unpublishPageSurface()
+  const controller = props.controller
+  const element = pageSurfaceRef.value
+  if (!controller || !element) return
+
+  const registry = ensureDocxViewerPageSurfaceRegistry(controller)
+  registry.pageElements.set(props.pageIndex, element)
+  registry.pageSizes.set(props.pageIndex, {
+    widthPx: props.pageWidthPx,
+    heightPx: props.pageLayout.pageHeightPx,
+  })
+  registry.pageContentKeys.set(
+    props.pageIndex,
+    [
+      controller.documentLoadNonce,
+      docModelThumbnailMetadataSignature(props.model.metadata),
+      ...props.pageNodeSegments.map((segment) =>
+        docNodeContentSignature(props.model.nodes[segment.nodeIndex])
+      ),
+    ].join(":")
+  )
+  publishedSurface = { controller, element, pageIndex: props.pageIndex }
+  notifyDocxViewerPageSurfaceListeners(controller)
+}
 
 // ── Computed ───────────────────────────────────────────────────────
-const hasHeader = computed(() => false) // Simplified: no header nodes yet
-const hasFooter = computed(() => false) // Simplified: no footer nodes yet
-const hasFormFields = computed(() => false) // Simplified: form field detection
+const hasHeader = computed(() => (props.headerSection?.nodes.length ?? 0) > 0)
+const hasFooter = computed(() => (props.footerSection?.nodes.length ?? 0) > 0)
+
+function nodesContainFormField(nodes: TableCellContentNode[]): boolean {
+  return nodes.some((node) => {
+    if (node.type === "paragraph") {
+      return node.children.some((child) => child.type === "form-field")
+    }
+    return node.rows.some((row) =>
+      row.cells.some((cell) => nodesContainFormField(cell.nodes))
+    )
+  })
+}
+
+const hasFormFields = computed(() =>
+  props.pageNodeSegments.some((segment) => {
+    const node = props.model.nodes[segment.nodeIndex]
+    if (!node) return false
+    if (node.type === "paragraph") {
+      return node.children.some((child) => child.type === "form-field")
+    }
+    return node.rows.some((row) =>
+      row.cells.some((cell) => nodesContainFormField(cell.nodes))
+    )
+  })
+)
 
 const showGutter = computed(
   () => props.trackedChangesEnabled || props.commentsEnabled
@@ -199,8 +304,10 @@ function measurePage(): void {
 }
 
 onMounted(() => {
-  if (pageSurfaceRef.value) {
-    resizeObserver = new ResizeObserver(() => {
+  publishPageSurface()
+  const ResizeObserverConstructor = globalThis.ResizeObserver
+  if (pageSurfaceRef.value && typeof ResizeObserverConstructor === "function") {
+    resizeObserver = new ResizeObserverConstructor(() => {
       measurePage()
     })
     resizeObserver.observe(pageSurfaceRef.value)
@@ -209,11 +316,25 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  unpublishPageSurface()
   if (resizeObserver) {
     resizeObserver.disconnect()
     resizeObserver = null
   }
 })
+
+watch(
+  () => [
+    props.controller,
+    props.controller?.documentLoadNonce,
+    props.model,
+    props.pageIndex,
+    props.pageWidthPx,
+    props.pageLayout.pageHeightPx,
+  ] as const,
+  () => publishPageSurface(),
+  { flush: "post" }
+)
 </script>
 
 <style scoped>

@@ -5,18 +5,25 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./style.css": "./dist/style.css"
   },
+  "sideEffects": ["./dist/style.css"],
   "scripts": {
     "build": "vite build && vue-tsc --declaration --emitDeclarationOnly --outDir dist",
-    "typecheck": "tsc --noEmit"
+    "prepack": "pnpm run build",
+    "typecheck": "vue-tsc -p tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
-    "@extend-ai/docx-core": "workspace:*"
+    "@extend-ai/docx-core": "^0.1.0"
   },
   "peerDependencies": {
     "vue": ">=3.2.0"

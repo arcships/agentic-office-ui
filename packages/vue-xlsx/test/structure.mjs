@@ -1,7 +1,7 @@
 // Structure test for useXlsxViewerController: verifies key methods exist and are callable.
 // Run: node packages/vue-xlsx/test/structure.mjs
 // Requires the built dist (pnpm --filter @extend-ai/vue-xlsx build) and vue available.
-import { effectScope } from "vue";
+import { createRenderer, h } from "vue";
 import { useXlsxViewerController, XlsxFileSizeLimitExceededError } from "../dist/index.js";
 
 // Key controller methods required by xlsx-003 verification. `loadWorkbookFromBuffer` is an
@@ -31,12 +31,49 @@ function assert(cond, msg) {
   }
 }
 
-const scope = effectScope();
 let controller;
-scope.run(() => {
-  // No file/src: controller initializes empty; load watch immediate-runs the reset branch.
-  controller = useXlsxViewerController({});
+const renderer = createRenderer({
+  patchProp() {},
+  insert(child, parent) {
+    parent.children ??= [];
+    parent.children.push(child);
+    child.parent = parent;
+  },
+  remove(child) {
+    if (!child.parent?.children) return;
+    const index = child.parent.children.indexOf(child);
+    if (index >= 0) child.parent.children.splice(index, 1);
+  },
+  createElement(type) {
+    return { type, children: [], parent: null };
+  },
+  createText(text) {
+    return { type: "#text", text, children: [], parent: null };
+  },
+  createComment(text) {
+    return { type: "#comment", text, children: [], parent: null };
+  },
+  setText(node, text) {
+    node.text = text;
+  },
+  setElementText(node, text) {
+    node.children = [{ type: "#text", text, children: [], parent: node }];
+  },
+  parentNode(node) {
+    return node.parent;
+  },
+  nextSibling() {
+    return null;
+  },
 });
+const app = renderer.createApp({
+  setup() {
+    // Create the controller inside a component so lifecycle cleanup is registered and tested.
+    controller = useXlsxViewerController({});
+    return () => h("div");
+  },
+});
+app.mount({ type: "#root", children: [], parent: null });
 
 assert(controller != null && typeof controller === "object", "controller is an object");
 
@@ -99,7 +136,7 @@ assert(
   "XlsxFileSizeLimitExceededError exported and constructible"
 );
 
-scope.stop();
+app.unmount();
 
 if (failures > 0) {
   console.error(`\n${failures} failure(s)`);

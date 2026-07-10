@@ -3,9 +3,25 @@ import XlsxViewerComponent from "./components/XlsxViewer.vue"
 export { useXlsxViewerController } from "./composables"
 export { useXlsxViewerThumbnails } from "./composables/useXlsxViewerThumbnails"
 export { XlsxFileSizeLimitExceededError } from "./composables"
+export type {
+  XlsxDiagnostic,
+  XlsxLoadError,
+  XlsxLoadErrorCode,
+  XlsxSourceKind,
+  XlsxSourceState,
+  XlsxUrlPolicy,
+} from "@extend-ai/xlsx-core"
 
 // Render module exports (chart SVG + surface WebGL rendering)
+/**
+ * @deprecated Since 0.2.0. Rendering modules are owned by `XlsxViewer`; use
+ * the high-level component and controller. Earliest removal: 1.0.0.
+ */
 export { MemoChartSvg, MemoSurfaceChartComposite } from "./render"
+/**
+ * @deprecated Since 0.2.0. Rendering types are implementation details of
+ * `XlsxViewer`. Kept throughout 0.x; earliest removal is 1.0.0.
+ */
 export type {
   ChartRendererPalette,
   ChartSvgProps,
@@ -14,14 +30,23 @@ export type {
 } from "./render"
 
 // Component exports
+/** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxGrid } from "./components/XlsxGrid.vue"
+/** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxToolbar } from "./components/XlsxToolbar.vue"
+/** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxRibbon } from "./components/XlsxRibbon.vue"
+/** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxFormulaBar } from "./components/XlsxFormulaBar.vue"
+/** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxSheetTabs } from "./components/XlsxSheetTabs.vue"
+/** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxChartOverlay } from "./components/XlsxChartOverlay.vue"
+/** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxImageLayer } from "./components/XlsxImageLayer.vue"
+/** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxSelectionOverlay } from "./components/XlsxSelectionOverlay.vue"
+/** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxContextMenu } from "./components/XlsxContextMenu.vue"
 
 export const XlsxViewer = XlsxViewerComponent

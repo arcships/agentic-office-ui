@@ -23,6 +23,10 @@ This repository currently does not vendor or commit the original Extend UI sourc
 
 See [`docs/upstream-extend-ui.md`](docs/upstream-extend-ui.md) for the detailed provenance and sync policy.
 
+## 当前架构与验收状态
+
+当前仓库仍处于迁移和稳定化阶段，不是可以直接发布的组件库。请从 [`docs/INDEX.md`](docs/INDEX.md) 进入当前架构基线、整改路线图、端到端黑盒验收方案和 Agent 执行手册。旧迁移文档与旧视觉验收文档仅作为历史或补充资料保留。
+
 ## Workspace
 
 ```text
@@ -43,7 +47,7 @@ pnpm install
 pnpm dev
 pnpm typecheck
 pnpm build
-uv run --with python-docx --with openpyxl --with pillow --with pypdf python scripts\verify_test_materials.py
+uv run --with python-docx --with openpyxl --with pillow --with pypdf python scripts/verify_test_materials.py
 ```
 
 ## Browser acceptance

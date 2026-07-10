@@ -3,7 +3,6 @@ export type {
   XlsxCellAddress,
   XlsxCellRange,
   // Theme / styles
-  XlsxThemePalette,
   XlsxResolvedCellStyle,
   XlsxTableStyleDefinition,
   // Conditional formatting
@@ -49,7 +48,14 @@ export type {
   // Table header menu
   XlsxTableHeaderMenuRenderProps,
   // Viewer controller
+  XlsxRuntimeLike,
   UseXlsxViewerControllerOptions,
+  XlsxUrlPolicy,
+  XlsxSourceKind,
+  XlsxSourceState,
+  XlsxLoadErrorCode,
+  XlsxLoadError,
+  XlsxDiagnostic,
   XlsxViewerController,
   XlsxViewerSelection,
   XlsxViewerZoom,
@@ -66,6 +72,8 @@ export type {
   XlsxFileTooLargeRenderProps,
   XlsxScrollerRenderProps,
 } from "./worksheet-types";
+
+export type { XlsxThemePalette } from "./theme-types";
 
 export type {
   // Image anchor / marker

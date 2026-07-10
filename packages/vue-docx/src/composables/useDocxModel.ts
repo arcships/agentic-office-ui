@@ -5,7 +5,7 @@
 // Parses a .docx ArrayBuffer into a DocModel via the docx-import pipeline.
 
 import { ref, watchEffect, onScopeDispose } from "vue"
-import { importDocxBuffer } from "@extend-ai/docx-core"
+import { createDocxRuntime } from "@extend-ai/docx-core"
 import type { DocModel } from "@extend-ai/docx-core"
 
 export interface UseDocxModelState {
@@ -19,45 +19,44 @@ export function useDocxModel(file?: () => ArrayBuffer | undefined): UseDocxModel
   const isLoading = ref(false)
   const error = ref<Error | undefined>(undefined)
 
-  let abortController: AbortController | undefined
-  let isCurrent = true
+  const runtime = createDocxRuntime()
+  const loader = runtime.createLoader()
 
-  watchEffect(async () => {
+  watchEffect((onCleanup) => {
     const buffer = file?.()
+    let active = true
+    onCleanup(() => { active = false })
+
     if (!buffer) {
+      loader.cancel()
       isLoading.value = false
       error.value = undefined
       model.value = undefined
       return
     }
 
-    abortController?.abort()
-    abortController = new AbortController()
-    isCurrent = false
-    isCurrent = true
-    const currentIteration = isCurrent
-
     isLoading.value = true
     error.value = undefined
 
-    try {
-      const result = await importDocxBuffer(buffer, {
-        signal: abortController.signal,
-        transferBuffer: false,
+    void loader.load(buffer, { transferBuffer: false })
+      .then((result) => {
+        if (!active) return
+        model.value = result.model
+        error.value = undefined
       })
-      if (!currentIteration) return
-      model.value = result.model
-      isLoading.value = false
-    } catch (err) {
-      if (!currentIteration) return
-      error.value = err instanceof Error ? err : new Error("Unknown DOCX parse error")
-      isLoading.value = false
-    }
+      .catch((err: unknown) => {
+        if (!active) return
+        error.value = err instanceof Error ? err : new Error("Unknown DOCX parse error")
+      })
+      .finally(() => {
+        if (!active) return
+        isLoading.value = false
+      })
   })
 
   onScopeDispose(() => {
-    isCurrent = false
-    abortController?.abort()
+    loader.dispose()
+    runtime.dispose()
   })
 
   return {

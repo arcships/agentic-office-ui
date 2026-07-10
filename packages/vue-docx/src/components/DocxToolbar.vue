@@ -2,10 +2,10 @@
   <div class="docx-toolbar">
     <!-- Undo/Redo -->
     <div class="docx-toolbar-group">
-      <button class="docx-toolbar-btn" :disabled="!controller.canUndo" title="Undo (⌘Z)" @click="controller.undo()">
+      <button data-testid="editor-undo" class="docx-toolbar-btn" :disabled="!controller.canUndo" title="Undo (⌘Z)" @click="controller.undo()">
         ↩
       </button>
-      <button class="docx-toolbar-btn" :disabled="!controller.canRedo" title="Redo (⇧⌘Z)" @click="controller.redo()">
+      <button data-testid="editor-redo" class="docx-toolbar-btn" :disabled="!controller.canRedo" title="Redo (⇧⌘Z)" @click="controller.redo()">
         ↪
       </button>
     </div>
@@ -317,7 +317,7 @@
       <button class="docx-toolbar-btn" title="Import DOCX" @click="onImport">
         📂
       </button>
-      <button class="docx-toolbar-btn" title="Export DOCX" @click="controller.exportDocx()">
+      <button data-testid="editor-export-toolbar" class="docx-toolbar-btn" title="Export DOCX" @click="controller.exportDocx()">
         💾
       </button>
       <button class="docx-toolbar-btn" title="New Document" @click="controller.newDocument()">
