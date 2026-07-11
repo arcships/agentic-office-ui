@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
@@ -496,6 +496,20 @@ for (const step of steps) {
   const finishedAt = new Date().toISOString();
   const blockedOk = step.allowBlocked && status === 2;
   const stepStatus = blockedOk ? "BLOCKED" : status === 0 ? "PASS" : "FAIL";
+
+  // When a Playwright blackbox test fails with no stdout, try reading its
+  // summary.json from the evidence directory so the failure reason shows up
+  // in CI logs.
+  if (!blockedOk && status !== 0 && !output.trim()) {
+    const summaryPath = path.join(suiteDir, step.id, "summary.json");
+    try {
+      const summary = JSON.parse(readFileSync(summaryPath, "utf8"));
+      const compact = JSON.stringify(summary, null, 2).slice(0, 8000);
+      output = `${compact}\n`;
+      process.stdout.write(output);
+    } catch { /* no summary available */ }
+  }
+
   writeFileSync(path.join(suiteDir, `${step.id}.log`), output);
   results.push({
     id: step.id,
