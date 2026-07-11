@@ -2,6 +2,20 @@
   "name": "@arcships/vue-xlsx",
   "version": "0.2.0",
   "license": "MIT",
+  "description": "Vue 3 XLSX spreadsheet viewer with charts, maps, WebGL, and controller composables",
+  "keywords": ["vue", "vue3", "xlsx", "excel", "spreadsheet", "charts", "map", "webgl"],
+  "homepage": "https://github.com/eric8810/agentic-office-ui#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eric8810/agentic-office-ui.git",
+    "directory": "packages/vue-xlsx"
+  },
+  "bugs": {
+    "url": "https://github.com/eric8810/agentic-office-ui/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "publishConfig": {
     "access": "public"
   },

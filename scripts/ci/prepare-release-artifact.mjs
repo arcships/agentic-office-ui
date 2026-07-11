@@ -461,18 +461,20 @@ function publish(candidateDir) {
   }
   if (!validTag.test(targetTag)) fail("RELEASE_TARGET_TAG is invalid");
 
+  const useProvenance = process.env.RELEASE_PROVENANCE !== "false";
   for (const archive of manifest.archives) {
     const existing = registryIntegrity(archive.package, archive.version);
     if (existing === null) {
-      runNpm([
+      const publishArgs = [
         "publish",
         path.resolve(candidateDir, archive.path),
         "--access",
         "public",
         "--tag",
         stagingTag,
-        "--provenance",
-      ]);
+      ];
+      if (useProvenance) publishArgs.push("--provenance");
+      runNpm(publishArgs);
     } else if (existing !== archive.integrity) {
       fail(`${archive.package}@${archive.version} already exists with different integrity`);
     } else {

@@ -2,6 +2,20 @@
   "name": "@arcships/docx-core",
   "version": "0.2.0",
   "license": "MIT",
+  "description": "DOCX document model, layout engine, editing commands, and instance runtime with Worker/WASM support",
+  "keywords": ["docx", "word", "document", "viewer", "editor", "wasm", "worker"],
+  "homepage": "https://github.com/eric8810/agentic-office-ui#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eric8810/agentic-office-ui.git",
+    "directory": "packages/docx-core"
+  },
+  "bugs": {
+    "url": "https://github.com/eric8810/agentic-office-ui/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "publishConfig": {
     "access": "public"
   },

@@ -112,4 +112,5 @@ jobs:
           RELEASE_EXPECTED_TAG: ${{ github.ref_name }}
           RELEASE_STAGING_TAG: candidate-${{ github.run_id }}
           RELEASE_TARGET_TAG: latest
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: node candidate/prepare-release-artifact.mjs publish candidate
