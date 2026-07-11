@@ -4,14 +4,14 @@
   "license": "MIT",
   "description": "Vue 3 UI components: signature pad, file upload, thumbnails, citations, and layout blocks",
   "keywords": ["vue", "vue3", "ui", "components", "signature", "upload", "thumbnail"],
-  "homepage": "https://github.com/eric8810/agentic-office-ui#readme",
+  "homepage": "https://github.com/arcships/agentic-office-ui#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/eric8810/agentic-office-ui.git",
+    "url": "https://github.com/arcships/agentic-office-ui.git",
     "directory": "packages/vue-ui"
   },
   "bugs": {
-    "url": "https://github.com/eric8810/agentic-office-ui/issues"
+    "url": "https://github.com/arcships/agentic-office-ui/issues"
   },
   "engines": {
     "node": ">=18"

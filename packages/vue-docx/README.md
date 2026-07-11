@@ -42,8 +42,8 @@ import "@arcships/vue-docx/style.css"
 
 ## 文档
 
-- [公开接口合同](https://github.com/eric8810/agentic-office-ui/blob/master/docs/api/public-api-contract.md)
-- [迁移指南](https://github.com/eric8810/agentic-office-ui/blob/master/docs/migration-0.2.md)
+- [公开接口合同](https://github.com/arcships/agentic-office-ui/blob/master/docs/api/public-api-contract.md)
+- [迁移指南](https://github.com/arcships/agentic-office-ui/blob/master/docs/migration-0.2.md)
 
 ## License
 
