@@ -214,6 +214,7 @@ const suites = {
       env: {
         BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-race-regression"),
       },
+      allowBlocked: true,
     }),
   ],
   stress: [

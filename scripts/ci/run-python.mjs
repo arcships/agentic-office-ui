@@ -41,8 +41,11 @@ if (!selected) {
 
 console.log(`Using Python: ${selected}`);
 const result = spawnSync(selected, args, {
-  stdio: "inherit",
+  stdio: ["ignore", "pipe", "pipe"],
   env: process.env,
+  maxBuffer: 64 * 1024 * 1024,
 });
+if (result.stdout) process.stdout.write(result.stdout);
+if (result.stderr) process.stderr.write(result.stderr);
 if (result.error) console.error(result.error);
 process.exit(result.status ?? 1);
