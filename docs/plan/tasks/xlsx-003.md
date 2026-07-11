@@ -51,8 +51,8 @@ depends-on: [xlsx-001]
 ## verification
 
 ```bash
-pnpm --filter @extend-ai/vue-xlsx typecheck
-pnpm --filter @extend-ai/vue-xlsx build
+pnpm --filter @arcships/vue-xlsx typecheck
+pnpm --filter @arcships/vue-xlsx build
 ```
 
 结构测试：验证 controller 关键方法存在且可调用（loadWorkbookFromBuffer/recalculate/exportXlsx/setCellFormula/mergeSelection/sortTable/undo/redo/resizeColumn/resizeRow/pasteText/fillSelection）。

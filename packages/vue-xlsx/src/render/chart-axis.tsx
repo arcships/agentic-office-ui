@@ -1,5 +1,5 @@
 /** @jsxImportSource vue */
-import type { XlsxChart, XlsxChartAxis } from "@extend-ai/xlsx-core";
+import type { XlsxChart, XlsxChartAxis } from "@arcships/xlsx-core";
 import {
   getCategoryLabels,
   lightenColor,

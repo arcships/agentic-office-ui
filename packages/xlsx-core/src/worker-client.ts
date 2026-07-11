@@ -1,6 +1,19 @@
-import type { XlsxChart, XlsxChartsheet, XlsxSheetData, XlsxTable, XlsxWorkbookTab } from "./types";
+import type {
+  XlsxChart,
+  XlsxChartsheet,
+  XlsxFormControl,
+  XlsxImage,
+  XlsxShape,
+  XlsxSheetData,
+  XlsxTable,
+  XlsxWorkbookTab,
+} from "./types";
 import { bundledXlsxWasmUrl } from "./wasm-asset";
 import { getConfiguredWorkerWasmSource, type WorkerWasmSource } from "./wasm";
+import {
+  resolveXlsxRuntimeLimits,
+  type XlsxRuntimeLimits,
+} from "./resource-limits";
 
 type WorkerMessage =
   | {
@@ -11,6 +24,7 @@ type WorkerMessage =
         showHiddenSheets?: boolean;
         skipXmlParsing?: boolean;
         wasmSource?: WorkerWasmSource;
+        limits: Readonly<XlsxRuntimeLimits>;
       };
     }
   | {
@@ -21,6 +35,7 @@ type WorkerMessage =
         showHiddenSheets?: boolean;
         skipXmlParsing?: boolean;
         wasmSource?: WorkerWasmSource;
+        limits: Readonly<XlsxRuntimeLimits>;
       };
     }
   | {
@@ -58,6 +73,10 @@ type WorkerSuccessMessage =
       result: {
         chartsByWorkbookSheetIndex: XlsxChart[][];
         chartsheets: XlsxChartsheet[];
+        formControlsByWorkbookSheetIndex: XlsxFormControl[][];
+        imagesByWorkbookSheetIndex: XlsxImage[][];
+        objectUrls: string[];
+        shapesByWorkbookSheetIndex: XlsxShape[][];
         sheets: XlsxSheetData[];
         tablesByWorkbookSheetIndex: XlsxTable[][];
         tabs: XlsxWorkbookTab[];
@@ -80,7 +99,14 @@ type WorkerSuccessMessage =
 type WorkerErrorMessage = {
   id: number;
   success: false;
-  error: string;
+  error: string | {
+    code?: XlsxWorkerErrorCode;
+    message: string;
+    phase?: string;
+    limit?: string;
+    actual?: number;
+    allowed?: number;
+  };
 };
 
 type WorkerResponse = WorkerSuccessMessage | WorkerErrorMessage;
@@ -98,6 +124,8 @@ export interface XlsxWorkerClientOptions {
   workerUrl?: string;
   /** Overrides the WASM source sent to this client Worker only. */
   wasmSource?: WorkerWasmSource;
+  /** Snapshot into this Worker client and sent with every parse request. */
+  limits?: XlsxRuntimeLimits;
   /** Keep the legacy module default only for callers that construct clients directly. */
   useLegacyDefaultWasmSource?: boolean;
   /** Instance runtime lifecycle hook. */
@@ -118,10 +146,36 @@ function createAbortError() {
   return error;
 }
 
+export type XlsxWorkerErrorCode =
+  | "LIMIT_EXCEEDED"
+  | "TIMEOUT"
+  | "INVALID_SOURCE"
+  | "WORKER_FAILED";
+
+export class XlsxWorkerError extends Error {
+  readonly code: XlsxWorkerErrorCode;
+  readonly phase?: string;
+  readonly limit?: string;
+  readonly actual?: number;
+  readonly allowed?: number;
+
+  constructor(
+    code: XlsxWorkerErrorCode,
+    message: string,
+    details: { phase?: string; limit?: string; actual?: number; allowed?: number } = {},
+  ) {
+    super(message);
+    this.name = "XlsxWorkerError";
+    this.code = code;
+    this.phase = details.phase;
+    this.limit = details.limit;
+    this.actual = details.actual;
+    this.allowed = details.allowed;
+  }
+}
+
 function workerFailureError(message: string) {
-  const error = new Error(message);
-  error.name = "XlsxWorkerError";
-  return error;
+  return new XlsxWorkerError("WORKER_FAILED", message);
 }
 
 export class XlsxWorkerClient {
@@ -130,6 +184,8 @@ export class XlsxWorkerClient {
   private readonly wasmSource: WorkerWasmSource | undefined;
 
   private readonly useLegacyDefaultWasmSource: boolean;
+
+  private readonly limits: Readonly<XlsxRuntimeLimits>;
 
   private readonly onDispose: (() => void) | undefined;
 
@@ -146,6 +202,7 @@ export class XlsxWorkerClient {
   constructor(options: XlsxWorkerClientOptions = {}) {
     this.wasmSource = options.wasmSource;
     this.useLegacyDefaultWasmSource = options.useLegacyDefaultWasmSource ?? true;
+    this.limits = resolveXlsxRuntimeLimits(options.limits);
     this.onDispose = options.onDispose;
     this.worker = options.createWorker
       ? options.createWorker()
@@ -175,6 +232,10 @@ export class XlsxWorkerClient {
     return this.request<{
       chartsByWorkbookSheetIndex: XlsxChart[][];
       chartsheets: XlsxChartsheet[];
+      formControlsByWorkbookSheetIndex: XlsxFormControl[][];
+      imagesByWorkbookSheetIndex: XlsxImage[][];
+      objectUrls: string[];
+      shapesByWorkbookSheetIndex: XlsxShape[][];
       sheets: XlsxSheetData[];
       tablesByWorkbookSheetIndex: XlsxTable[][];
       tabs: XlsxWorkbookTab[];
@@ -184,7 +245,8 @@ export class XlsxWorkerClient {
         buffer: workerBuffer,
         showHiddenSheets,
         skipXmlParsing,
-        wasmSource
+        wasmSource,
+        limits: this.limits,
       },
       type: "load"
     }, [workerBuffer], signal, wasmSource !== undefined);
@@ -230,7 +292,8 @@ export class XlsxWorkerClient {
         buffer: workerBuffer,
         showHiddenSheets,
         skipXmlParsing,
-        wasmSource
+        wasmSource,
+        limits: this.limits,
       },
       type: "parseCharts"
     }, [workerBuffer], signal, wasmSource !== undefined);
@@ -271,17 +334,19 @@ export class XlsxWorkerClient {
       const id = this.nextRequestId;
       this.nextRequestId += 1;
       let cleaned = false;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
       const handleAbort = () => {
-        const request = this.pendingRequests.get(id);
-        if (!request) return;
-        this.pendingRequests.delete(id);
-        request.cleanup();
-        request.reject(createAbortError());
+        if (!this.pendingRequests.has(id)) return;
+        // The Worker protocol has no per-request cancellation message. Keeping
+        // this Worker alive would let the expensive parse continue after the
+        // caller has cancelled it, so cancellation is terminal for the client.
+        this.close(createAbortError());
       };
       const cleanup = () => {
         if (cleaned) return;
         cleaned = true;
         signal?.removeEventListener("abort", handleAbort);
+        if (timeout !== undefined) clearTimeout(timeout);
       };
       this.pendingRequests.set(id, {
         cleanup,
@@ -289,15 +354,28 @@ export class XlsxWorkerClient {
         resolve: resolve as (value: unknown) => void
       });
       signal?.addEventListener("abort", handleAbort, { once: true });
+      const timeoutMs = this.limits.maxParseMs;
+      if (timeoutMs !== undefined) {
+        timeout = setTimeout(() => {
+          if (!this.pendingRequests.has(id)) return;
+          this.close(new XlsxWorkerError(
+            "TIMEOUT",
+            `XLSX Worker 操作超过 ${timeoutMs} 毫秒。`,
+            {
+              phase: "parse",
+              limit: "maxParseMs",
+              actual: timeoutMs + 1,
+              allowed: timeoutMs,
+            },
+          ));
+        }, timeoutMs);
+      }
       try {
         this.worker.postMessage({ ...message, id }, transfer);
         if (marksWasmSourceSent) this.wasmSourceSent = true;
       } catch (error) {
-        const request = this.pendingRequests.get(id);
-        if (!request) return;
-        this.pendingRequests.delete(id);
-        request.cleanup();
-        request.reject(error instanceof Error ? error : new Error(String(error)));
+        if (!this.pendingRequests.has(id)) return;
+        this.close(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }
@@ -347,7 +425,22 @@ export class XlsxWorkerClient {
     this.pendingRequests.delete(message.id);
     request.cleanup();
     if (!message.success) {
-      request.reject(new Error(message.error));
+      const error = typeof message.error === "string"
+        ? new XlsxWorkerError("WORKER_FAILED", message.error)
+        : new XlsxWorkerError(
+          message.error.code ?? "WORKER_FAILED",
+          message.error.message,
+          message.error,
+        );
+      if (error.code === "WORKER_FAILED") {
+        // Initialization/protocol failures leave this Worker untrustworthy.
+        // Closing also rejects any other pending work and forces clean recovery
+        // through a newly created client.
+        request.reject(error);
+        this.close(error);
+      } else {
+        request.reject(error);
+      }
       return;
     }
 

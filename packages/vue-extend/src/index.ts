@@ -1,5 +1,5 @@
 /**
- * @extend-ai/vue-extend
+ * @arcships/vue-extend
  *
  * Vue 3 UI components for the Extend platform.
  * Uses Tailwind CSS with design-token classes.

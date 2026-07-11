@@ -1,6 +1,10 @@
 {
-  "name": "@extend-ai/vue-xlsx",
-  "version": "0.1.0",
+  "name": "@arcships/vue-xlsx",
+  "version": "0.2.0",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -14,6 +18,21 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./chart": {
+      "types": "./dist/optional/chart.d.ts",
+      "import": "./dist/chart.js",
+      "default": "./dist/chart.js"
+    },
+    "./map": {
+      "types": "./dist/optional/map.d.ts",
+      "import": "./dist/map.js",
+      "default": "./dist/map.js"
+    },
+    "./webgl": {
+      "types": "./dist/optional/webgl.d.ts",
+      "import": "./dist/webgl.js",
+      "default": "./dist/webgl.js"
+    },
     "./style.css": "./dist/style.css"
   },
   "sideEffects": ["./dist/style.css"],
@@ -24,7 +43,7 @@
   },
   "dependencies": {
     "@dukelib/sheets-wasm": "0.1.17",
-    "@extend-ai/xlsx-core": "^0.1.0",
+    "@arcships/xlsx-core": "^0.2.0",
     "d3-geo": "^3.1.1",
     "d3-hierarchy": "^3.1.2",
     "d3-scale": "^4.0.2",
@@ -36,7 +55,7 @@
     "world-atlas": "^2.0.2"
   },
   "peerDependencies": {
-    "vue": ">=3.2.0"
+    "vue": ">=3.2.25 <4"
   },
   "devDependencies": {
     "@types/d3-geo": "^3.1.0",

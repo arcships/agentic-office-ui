@@ -2,14 +2,14 @@
 //
 // Extracted from useDocxEditor.ts.
 
-import type { DocModel } from "@extend-ai/docx-core"
-import type { DocxListType } from "@extend-ai/docx-core"
+import type { DocModel } from "@arcships/docx-core"
+import type { DocxListType } from "@arcships/docx-core"
 import {
   cloneDocModel,
   paragraphListType,
   resolveSelectedParagraphLocation,
   getParagraphAtLocation,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
 
 export function createEditorList(

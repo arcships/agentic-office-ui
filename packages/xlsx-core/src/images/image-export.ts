@@ -39,6 +39,8 @@ import {
   parseWorkbookSheets,
   parseWorkbookStructureAssetsFromArchive,
 } from "./grid-render";
+import type { XlsxRuntimeLimits } from "../resource-limits";
+import { validateXlsxImageAssets } from "./image-budget";
 
 // ── Revoke object URLs ─────────────────────────────────────────────────────
 
@@ -52,6 +54,7 @@ export function revokeWorkbookImageAssets(assets: WorkbookImageAssets | null) {
       URL.revokeObjectURL(objectUrl);
     }
   }
+  assets.objectUrls.splice(0, assets.objectUrls.length);
 }
 
 // ── Parse workbook image assets ───────────────────────────────────────────
@@ -133,8 +136,9 @@ type XlsxImageAttachment = {
   mediaPaths: string[];
 };
 
-export function parseWorkbookImageAssets(bytes: Uint8Array): WorkbookImageAssets {
+export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntimeLimits): WorkbookImageAssets {
   const archive = unzipSync(bytes);
+  validateXlsxImageAssets(archive, limits);
   const {
     contentTypes,
     namedCellStyleByName,
@@ -153,7 +157,8 @@ export function parseWorkbookImageAssets(bytes: Uint8Array): WorkbookImageAssets
   const sheetOrigins: Array<WorkbookImageSheetOrigin | null> = [];
   const imageOriginsById = new Map<string, WorkbookImageOrigin>();
 
-  workbookSheets.forEach((sheet, workbookSheetIndex) => {
+  try {
+    workbookSheets.forEach((sheet, workbookSheetIndex) => {
     const sheetRelationships = parseRelationships(archive, relsPathForDocument(sheet.path), sheet.path);
     const attachments: XlsxImageAttachment[] = [];
     const imageList: XlsxImage[] = [];
@@ -211,23 +216,30 @@ export function parseWorkbookImageAssets(bytes: Uint8Array): WorkbookImageAssets
           workbookSheetIndex
         }
       : null;
-  });
+    });
 
-  return {
-    archive,
-    formControlsByWorkbookSheetIndex,
-    imageOriginsById,
-    imagesByWorkbookSheetIndex,
-    namedCellStyleByName,
-    objectUrls,
-    shapesByWorkbookSheetIndex,
-    sheetOrigins,
-    sheetStatesByWorkbookSheetIndex,
-    styleById,
-    tableMetadataByWorkbookSheetIndex,
-    tableStyleByName,
-    themePalette
-  };
+    return {
+      archive,
+      formControlsByWorkbookSheetIndex,
+      imageOriginsById,
+      imagesByWorkbookSheetIndex,
+      namedCellStyleByName,
+      objectUrls,
+      shapesByWorkbookSheetIndex,
+      sheetOrigins,
+      sheetStatesByWorkbookSheetIndex,
+      styleById,
+      tableMetadataByWorkbookSheetIndex,
+      tableStyleByName,
+      themePalette
+    };
+  } catch (error) {
+    for (const objectUrl of objectUrls) {
+      if (objectUrl.startsWith("blob:")) URL.revokeObjectURL(objectUrl);
+    }
+    objectUrls.splice(0, objectUrls.length);
+    throw error;
+  }
 }
 
 // ── Update image anchor ────────────────────────────────────────────────────

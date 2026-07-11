@@ -153,7 +153,7 @@ for (const barrel of [
 const viewerBarrel = source("packages/docx-core/src/viewer/index.ts");
 addCheck(
   "DOCX_NO_UNSUPPORTED_DEEP_IMPORT_GUIDANCE",
-  !viewerBarrel.includes("@extend-ai/docx-core/viewer/wasm-source") &&
+  !viewerBarrel.includes("@arcships/docx-core/viewer/wasm-source") &&
     viewerBarrel.includes("unsupported source-file deep imports"),
   "源码注释不得建议消费端使用导出表拒绝的深层路径。",
 );

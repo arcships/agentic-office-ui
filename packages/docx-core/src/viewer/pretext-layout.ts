@@ -7,18 +7,10 @@ import {
   type PreparedTextWithSegments,
 } from "@chenglou/pretext";
 
-const PREPARED_TEXT_CACHE_MAX_ENTRIES = 8192;
-const LAYOUT_CACHE_MAX_ENTRIES = 4096;
-const LINE_COUNT_CACHE_MAX_ENTRIES = 16384;
-
-const preparedTextByKey = new Map<string, PreparedTextWithSegments>();
-export const layoutByKey = new Map<string, PretextVariableWidthLayout>();
-const lineCountByKey = new Map<string, number>();
 const fragmentOffsetAdvancesByFragment = new WeakMap<
   PretextLineFragment,
   number[]
 >();
-const graphemeOffsetsByText = new Map<string, number[]>();
 
 type PretextWordBreak = "normal" | "keep-all";
 
@@ -71,6 +63,16 @@ export interface PretextSelectionRect {
   width: number;
   height: number;
 }
+
+class NonRetainingMap<K, V> extends Map<K, V> {
+  set(_key: K, _value: V): this {
+    return this;
+  }
+}
+
+// Kept as a Map-compatible internal bridge for pretext-items-layout. Values are
+// deliberately not retained across calls; a viewer-owned cache can replace it later.
+export const layoutByKey = new NonRetainingMap<string, PretextVariableWidthLayout>();
 
 let measureCanvas: OffscreenCanvas | HTMLCanvasElement | undefined;
 let measureCanvasContext:
@@ -184,11 +186,6 @@ function graphemeCodeUnitOffsets(text: string): number[] {
     return [0];
   }
 
-  const cached = graphemeOffsetsByText.get(text);
-  if (cached) {
-    return cached;
-  }
-
   const segmenter = getGraphemeSegmenter();
   const offsets = [0];
   if (segmenter) {
@@ -205,7 +202,6 @@ function graphemeCodeUnitOffsets(text: string): number[] {
   if (offsets[offsets.length - 1] !== text.length) {
     offsets[offsets.length - 1] = text.length;
   }
-  graphemeOffsetsByText.set(text, offsets);
   return offsets;
 }
 
@@ -324,20 +320,11 @@ export function prepareCached(
     return undefined;
   }
 
-  const cacheKey = `${font}\u0000${wordBreak}\u0000${text}`;
-  const cached = getCachedValue(preparedTextByKey, cacheKey);
-  if (cached) {
-    return cached;
-  }
-
   try {
-    const prepared = prepareWithSegments(text, font, {
+    return prepareWithSegments(text, font, {
       whiteSpace: "pre-wrap",
       wordBreak,
     });
-    preparedTextByKey.set(cacheKey, prepared);
-    trimCache(preparedTextByKey, PREPARED_TEXT_CACHE_MAX_ENTRIES);
-    return prepared;
   } catch {
     return undefined;
   }
@@ -368,24 +355,13 @@ export function measurePretextPlainTextLineCount(
 
   const wordBreak = options?.wordBreak ?? "normal";
   const safeWidth = Math.max(1, Math.round(containerWidthPx));
-  const cacheKey =
-    `line-count\u0000${font}\u0000${wordBreak}` +
-    `\u0000${safeWidth}\u0000${text}`;
-  const cached = getCachedValue(lineCountByKey, cacheKey);
-  if (cached !== undefined) {
-    return cached;
-  }
-
   const prepared = prepareCached(text, font, wordBreak);
   if (!prepared) {
     return undefined;
   }
 
   try {
-    const lineCount = measureLineStats(prepared, safeWidth).lineCount;
-    lineCountByKey.set(cacheKey, lineCount);
-    trimCache(lineCountByKey, LINE_COUNT_CACHE_MAX_ENTRIES);
-    return lineCount;
+    return measureLineStats(prepared, safeWidth).lineCount;
   } catch {
     return undefined;
   }
@@ -571,17 +547,6 @@ export function layoutTextWithPretextAroundExclusions(
     top: Math.round(exclusion.top),
     bottom: Math.round(exclusion.bottom),
   }));
-  const cacheKey = layoutCacheKey(
-    `plain\u0000${font}\u0000${wordBreak}\u0000${text}`,
-    safeContainerWidthPx,
-    safeLineHeightPx,
-    normalizedExclusions
-  );
-  const cachedLayout = getCachedValue(layoutByKey, cacheKey);
-  if (cachedLayout) {
-    return cachedLayout;
-  }
-
   const lines: PretextLineLayout[] = [];
 
   let cursor: LayoutCursor = { segmentIndex: 0, graphemeIndex: 0 };
@@ -672,8 +637,5 @@ export function layoutTextWithPretextAroundExclusions(
     lineHeightPx: safeLineHeightPx,
     exclusions: normalizedExclusions,
   };
-  layoutByKey.set(cacheKey, nextLayout);
-  trimCache(layoutByKey, LAYOUT_CACHE_MAX_ENTRIES);
   return nextLayout;
 }
-

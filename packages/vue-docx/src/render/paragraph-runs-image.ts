@@ -4,8 +4,8 @@
 // Translates JSX to Vue h() calls.
 
 import { h, type VNode } from "vue"
-import type { ImageRunNode, ParagraphNode } from "@extend-ai/docx-core"
-import type { DocxSectionImageLocation } from "@extend-ai/docx-core"
+import type { ImageRunNode, ParagraphNode } from "@arcships/docx-core"
+import type { DocxSectionImageLocation } from "@arcships/docx-core"
 import {
   shouldRenderWrappedFloatingImage,
   shouldRenderAbsoluteFloatingImage,
@@ -23,7 +23,7 @@ import {
   resolveImageRenderTransformStyle,
   syntheticTextBoxSvg,
   sectionImageLocationKey,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 export interface ImageRunRenderExtra {
   /** Optional overlay representing a section-level image move preview. */
@@ -34,9 +34,18 @@ export interface ImageRunRenderExtra {
   } | undefined
   /** CSS filter suffix injected by the host when images are exported. */
   imageFilterSuffix?: string
+  /** Reports a browser decode failure without exposing document bytes. */
+  onImageDecodeError?: (error: DocxImageDecodeError) => void
 
   // Section image interaction callbacks
   sectionImageInteraction?: ImageInteraction | undefined
+}
+
+export interface DocxImageDecodeError {
+  code: "IMAGE_DECODE_FAILED"
+  phase: "image-decode"
+  imageKey: string
+  message: string
 }
 
 export interface ImageInteraction {
@@ -130,6 +139,15 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
     : forceWrappedTopAnchoredSectionFloat
     ? false
     : shouldRenderAbsoluteFloatingImage(child)
+
+  const imageLayoutAttributes = {
+    "data-docx-image-child-index": String(childIndex),
+    "data-docx-image-layout": isWrappedFloatingImage
+      ? "wrapped"
+      : isAbsoluteFloatingImage
+      ? "absolute"
+      : "inline",
+  }
 
   const horizontalRelativeTo =
     child.floating?.horizontalRelativeTo?.toLowerCase()
@@ -251,6 +269,7 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
         "span",
         {
           key,
+          ...imageLayoutAttributes,
           style: buildMissingImageStyle(
             isWrappedFloatingImage,
             isAbsoluteFloatingImage,
@@ -280,6 +299,7 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
         "span",
         {
           key,
+          ...imageLayoutAttributes,
           role: "img",
           "aria-label": child.alt ?? "DOCX image",
           style: buildPlaceholderStyle(
@@ -316,6 +336,23 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
       ? `translate(${-cropLayout.offsetXPx}px, ${-cropLayout.offsetYPx}px)`
       : undefined,
   })
+  const onImageLoad = (event: Event) => {
+    const image = event.currentTarget as HTMLImageElement | null
+    if (image) image.dataset.imageState = "ready"
+  }
+  const onImageError = (event: Event) => {
+    const image = event.currentTarget as HTMLImageElement | null
+    if (image) {
+      image.dataset.imageState = "error"
+      image.setAttribute("aria-invalid", "true")
+    }
+    extra?.onImageDecodeError?.({
+      code: "IMAGE_DECODE_FAILED",
+      phase: "image-decode",
+      imageKey: key,
+      message: "DOCX 图片无法解码。",
+    })
+  }
 
   if (cropLayout) {
     return {
@@ -323,6 +360,7 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
         "span",
         {
           key,
+          ...imageLayoutAttributes,
           style: buildCropFrameStyle(
             cropLayout,
             isCenteredStandaloneInlineImage,
@@ -340,6 +378,11 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
             src: renderableImageSrc,
             alt: child.alt ?? "DOCX image",
             draggable: false,
+            loading: "lazy",
+            decoding: "async",
+            "data-image-state": "loading",
+            onLoad: onImageLoad,
+            onError: onImageError,
             style: {
               width: `${cropLayout.imageWidthPx}px`,
               height: `${cropLayout.imageHeightPx}px`,
@@ -359,9 +402,15 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
   return {
     vnode: h("img", {
       key,
+      ...imageLayoutAttributes,
       src: renderableImageSrc,
       alt: child.alt ?? "DOCX image",
       draggable: false,
+      loading: "lazy",
+      decoding: "async",
+      "data-image-state": "loading",
+      onLoad: onImageLoad,
+      onError: onImageError,
       style: buildDirectImageStyle(
         widthPx,
         heightPx,

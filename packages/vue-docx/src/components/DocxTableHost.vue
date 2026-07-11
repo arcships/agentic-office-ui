@@ -38,10 +38,14 @@
           :key="`row-${sourceRowIndex(ri)}`"
           :style="rowStyle(row, sourceRowIndex(ri))"
         >
-          <td
+          <template
             v-for="(cell, ci) of row.cells"
             :key="`cell-${sourceRowIndex(ri)}-${ci}`"
-            :colspan="cell.style?.gridSpan"
+          >
+          <td
+            v-if="!cell.style?.vMergeContinuation"
+            :colspan="cell.style?.gridSpan && cell.style.gridSpan > 1 ? cell.style.gridSpan : undefined"
+            :rowspan="cell.style?.rowSpan && cell.style.rowSpan > 1 ? cell.style.rowSpan : undefined"
             :data-docx-table-cell="true"
             :data-docx-table-index="tableIndex"
             :data-docx-table-row-index="sourceRowIndex(ri)"
@@ -91,6 +95,7 @@
               />
             </template>
           </td>
+          </template>
         </tr>
       </tbody>
     </table>
@@ -115,7 +120,7 @@ import type {
   ParagraphNode,
   TableNode,
   TableRowRange,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
 import { renderStaticHtml } from "../render/static-html"
 
@@ -249,9 +254,9 @@ function cellStyle(cell: any): Record<string, any> {
   return {
     border: "1px solid #d1d5db",
     padding: "8px",
-    verticalAlign: "top",
+    verticalAlign: cell.style?.verticalAlign ?? "top",
     minWidth: "0",
-    backgroundColor: (cell as any)?.backgroundColor as string | undefined,
+    backgroundColor: cell.style?.backgroundColor as string | undefined,
     wordWrap: "break-word",
     overflowWrap: "break-word",
     wordBreak: "break-word",

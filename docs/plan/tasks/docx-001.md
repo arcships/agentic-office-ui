@@ -49,8 +49,8 @@ depends-on: []
 ## verification
 
 ```bash
-pnpm --filter @extend-ai/docx-core typecheck
-pnpm --filter @extend-ai/docx-core build
+pnpm --filter @arcships/docx-core typecheck
+pnpm --filter @arcships/docx-core build
 ```
 
 Node smoke：`wasmBuildDocModelFromBytes` + `wasmSerializeDocx` 可用。

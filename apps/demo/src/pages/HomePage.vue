@@ -1,7 +1,7 @@
 <template>
   <div class="home">
-    <h2>Vue Extend UI — Verification Demo</h2>
-    <p class="subtitle">Vue 3 port verification demo; parity is partial and explicitly tracked against upstream Extend UI</p>
+    <h2>Vue Extend UI</h2>
+    <p class="subtitle">在 Vue 3 中查看和编辑 DOCX、XLSX 与 PDF 文件。</p>
 
     <div class="grid">
       <div class="card" v-for="item in navItems" :key="item.path">
@@ -13,9 +13,9 @@
       </div>
     </div>
 
-    <div class="api-map">
-      <h3>API Compatibility Map</h3>
-      <table>
+    <details class="api-map" @toggle="onApiMapToggle">
+      <summary>开发状态与接口对照</summary>
+      <table v-if="showApiMap">
         <thead>
           <tr><th>React API</th><th>Vue API</th><th>Status</th></tr>
         </thead>
@@ -27,37 +27,47 @@
           </tr>
         </tbody>
       </table>
-    </div>
+    </details>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue"
+
+const showApiMap = ref(false)
+
+function onApiMapToggle(event: Event) {
+  showApiMap.value = (event.currentTarget as HTMLDetailsElement).open
+}
+
 const navItems = [
   { path: "/docx-viewer", title: "DOCX Viewer", desc: "View .docx files with pagination and thumbnails", status: "Ready", statusClass: "ready" },
-  { path: "/docx-editor", title: "DOCX Editing Demo", desc: "Scoped DOCX text/paragraph editing demo; not full upstream editor parity", status: "Scoped", statusClass: "scoped" },
-  { path: "/xlsx-viewer", title: "XLSX Viewer", desc: "View/edit .xlsx workbooks with ribbon, sheet tabs, selection and scoped editing", status: "Scoped", statusClass: "scoped" },
+  { path: "/docx-editor", title: "DOCX Editor", desc: "Edit DOCX text, formatting, tables and positioned images with undo and redo", status: "Ready", statusClass: "ready" },
+  { path: "/xlsx-viewer", title: "XLSX Viewer", desc: "View and edit workbooks with formulas, formatting, search, charts, tables and sheet tabs", status: "Ready", statusClass: "ready" },
   { path: "/pdf-viewer", title: "PDF Viewer", desc: "View PDF with zoom, search, and thumbnails", status: "Ready", statusClass: "ready" },
   { path: "/components", title: "Components", desc: "Signature, FileUpload, BoundingBox, LayoutBlocks", status: "Ready", statusClass: "ready" },
+  { path: "/runtime-limits", title: "Runtime Limits", desc: "Configure public DOCX/XLSX resource limits and inspect structured errors", status: "Ready", statusClass: "ready" },
+  { path: "/runtime-worker", title: "Worker Lifecycle", desc: "Verify public XLSX Worker timeout, cancellation, termination, and recovery", status: "Ready", statusClass: "ready" },
 ]
 
 const apiMap = [
   { react: "useDocxEditor(options)", vue: "useDocxEditor(options)", status: "⚠️ scoped" },
-  { react: "useDocxComments(editor)", vue: "useDocxComments(editor)", status: "⚠️ shell/no comments" },
-  { react: "useDocxTrackChanges(editor)", vue: "useDocxTrackChanges(editor)", status: "⚠️ shell/no tracked changes" },
+  { react: "useDocxComments(editor)", vue: "useDocxComments(editor)", status: "✅ implemented" },
+  { react: "useDocxTrackChanges(editor)", vue: "useDocxTrackChanges(editor)", status: "✅ implemented" },
   { react: "useDocxDocumentTheme(editor)", vue: "useDocxDocumentTheme(editor)", status: "✅ implemented" },
-  { react: "useDocxPageLayout(editor)", vue: "useDocxPageLayout(editor)", status: "⚠️ fixed defaults" },
-  { react: "useDocxPagination(editor)", vue: "useDocxPagination(editor)", status: "⚠️ basic" },
-  { react: "useDocxParagraphStyles(editor)", vue: "useDocxParagraphStyles(editor)", status: "⚠️ API shell" },
-  { react: "useDocxLineSpacing(editor)", vue: "useDocxLineSpacing(editor)", status: "⚠️ API shell" },
-  { react: "useDocxBorders(editor)", vue: "useDocxBorders(editor)", status: "⚠️ API shell" },
-  { react: "useDocxViewerThumbnails(editor)", vue: "useDocxViewerThumbnails(editor)", status: "⚠️ placeholder" },
+  { react: "useDocxPageLayout(editor)", vue: "useDocxPageLayout(editor)", status: "✅ implemented" },
+  { react: "useDocxPagination(editor)", vue: "useDocxPagination(editor)", status: "✅ implemented" },
+  { react: "useDocxParagraphStyles(editor)", vue: "useDocxParagraphStyles(editor)", status: "✅ implemented" },
+  { react: "useDocxLineSpacing(editor)", vue: "useDocxLineSpacing(editor)", status: "✅ implemented" },
+  { react: "useDocxBorders(editor)", vue: "useDocxBorders(editor)", status: "✅ implemented" },
+  { react: "useDocxViewerThumbnails(editor)", vue: "useDocxViewerThumbnails(editor)", status: "✅ implemented" },
   { react: "useDocxModel(file)", vue: "useDocxModel(file)", status: "✅ implemented" },
-  { react: "DocxEditorViewer", vue: "DocxEditorViewer", status: "⚠️ scoped" },
-  { react: "ReactDocxViewer", vue: "DocxViewer", status: "⚠️ scoped" },
-  { react: "XlsxViewer", vue: "XlsxViewer", status: "⚠️ scoped" },
-  { react: "XlsxViewerProvider", vue: "XlsxViewerProvider", status: "⚠️ partial" },
-  { react: "useXlsxViewer()", vue: "useXlsxViewer()", status: "⚠️ partial" },
-  { react: "useXlsxViewerController()", vue: "useXlsxViewerController()", status: "⚠️ partial" },
+  { react: "DocxEditorViewer", vue: "DocxEditorViewer", status: "✅ compatible" },
+  { react: "ReactDocxViewer", vue: "DocxViewer", status: "✅ implemented" },
+  { react: "XlsxViewer", vue: "XlsxViewer", status: "✅ implemented" },
+  { react: "XlsxViewerProvider", vue: "XlsxViewerProvider", status: "✅ implemented" },
+  { react: "useXlsxViewer()", vue: "useXlsxViewer()", status: "✅ implemented" },
+  { react: "useXlsxViewerController()", vue: "useXlsxViewerController()", status: "✅ implemented" },
 ]
 </script>
 
@@ -75,7 +85,9 @@ h2 { font-size: 28px; margin-bottom: 8px; }
 .card-status.ready { background: #dcfce7; color: #166534; }
 .card-status.scoped { background: #fef3c7; color: #92400e; }
 .api-map { margin-top: 24px; }
-.api-map h3 { margin-bottom: 12px; }
+.api-map { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+.api-map summary { cursor: pointer; font-size: 14px; font-weight: 600; }
+.api-map table { margin-top: 12px; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
 th { background: var(--muted); font-weight: 600; }

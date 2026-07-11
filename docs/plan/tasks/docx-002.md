@@ -55,6 +55,6 @@ depends-on: [docx-001]
 ## verification
 
 ```bash
-pnpm --filter @extend-ai/docx-core typecheck
+pnpm --filter @arcships/docx-core typecheck
 grep -r "React\." packages/docx-core/src/editor-helpers.ts  # 应为空
 ```

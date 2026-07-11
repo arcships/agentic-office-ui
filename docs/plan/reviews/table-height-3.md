@@ -2,7 +2,7 @@
 
 ## 1. Typecheck
 
-✅ `pnpm --filter @extend-ai/docx-core typecheck` — 零错误，通过。
+✅ `pnpm --filter @arcships/docx-core typecheck` — 零错误，通过。
 
 ## 2. 文件存在且非空
 

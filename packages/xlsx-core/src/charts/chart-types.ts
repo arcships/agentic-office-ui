@@ -483,22 +483,26 @@ function resolveChartExFallbackCategoryReference(
 
   const resolved = resolveReferenceSheet(workbook, fallbackSheetIndex, valueFormula);
   if (!resolved.sheet || !resolved.range || resolved.range.start.col <= 0) {
+    resolved.sheet?.free();
     return null;
   }
-
-  return normalizeChartReference({
-    formula: buildA1RangeFormula(
-      resolved.sheetName,
-      {
-        col: resolved.range.start.col - 1,
-        row: resolved.range.start.row
-      },
-      {
-        col: resolved.range.start.col - 1,
-        row: resolved.range.end.row
-      }
-    )
-  });
+  try {
+    return normalizeChartReference({
+      formula: buildA1RangeFormula(
+        resolved.sheetName,
+        {
+          col: resolved.range.start.col - 1,
+          row: resolved.range.start.row
+        },
+        {
+          col: resolved.range.start.col - 1,
+          row: resolved.range.end.row
+        }
+      )
+    });
+  } finally {
+    resolved.sheet.free();
+  }
 }
 
 export function normalizeChartExSeries(
@@ -811,4 +815,3 @@ export function normalizeChartExChart(
   applyBuiltinChartDefaults(normalizedChart, themePalette);
   return normalizedChart;
 }
-

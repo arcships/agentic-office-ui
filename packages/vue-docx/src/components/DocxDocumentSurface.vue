@@ -6,6 +6,9 @@
     :editable="editable"
     :layout-options="layoutOptions"
     :theme="theme"
+    :zoom-scale="zoomScale"
+    :show-tracked-changes="showTrackedChanges"
+    :show-comments="showComments"
     @page-count-change="emit('pageCountChange', $event)"
     @visible-page-range="emit('visiblePageRange', $event)"
   />
@@ -18,7 +21,7 @@ import type {
   DocxDocumentTheme,
   DocxEditorController,
   LayoutOptions,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import DocxViewerRoot from "./DocxViewerRoot.vue"
 
 withDefaults(
@@ -28,8 +31,11 @@ withDefaults(
     editable?: boolean
     layoutOptions?: LayoutOptions
     theme?: DocxDocumentTheme
+    zoomScale?: number
+    showTrackedChanges?: boolean
+    showComments?: boolean
   }>(),
-  { editable: false }
+  { editable: false, zoomScale: 100 }
 )
 
 const emit = defineEmits<{

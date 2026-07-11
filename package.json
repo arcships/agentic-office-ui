@@ -14,6 +14,9 @@
     "test:unit": "node scripts/ci/run-suite.mjs unit",
     "test:component": "node scripts/ci/run-suite.mjs component",
     "test:blackbox": "node scripts/ci/run-suite.mjs blackbox",
+    "test:stress": "node scripts/ci/run-suite.mjs stress",
+    "test:performance": "node scripts/ci/run-suite.mjs performance",
+    "test:matrix": "node scripts/ci/run-suite.mjs matrix",
     "test:e2e": "node scripts/ci/run-suite.mjs blackbox",
     "test:consumer": "node scripts/ci/run-suite.mjs consumer",
     "test:pack": "node scripts/ci/run-suite.mjs consumer",
@@ -23,7 +26,7 @@
     "check": "node scripts/ci/run-suite.mjs check"
   },
   "devDependencies": {
-    "@extend-ai/office-runtime": "workspace:*"
+    "@arcships/office-runtime": "workspace:*"
   },
   "packageManager": "pnpm@9.0.6"
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@extend-ai/office-runtime",
+  "name": "@arcships/office-runtime",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,6 +11,9 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2"
   },
   "devDependencies": {
     "tsup": "^8.0.0",

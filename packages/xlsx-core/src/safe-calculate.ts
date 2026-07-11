@@ -13,24 +13,28 @@ function collectReferencedSheetNames(workbook: Workbook): Set<string> {
     } catch {
       continue;
     }
-    const cells = sheet.formulaCells as FormulaCell[] | null | undefined;
-    if (!Array.isArray(cells)) {
-      continue;
-    }
-    for (const cell of cells) {
-      const formula = cell?.formula;
-      if (!formula) {
+    try {
+      const cells = sheet.formulaCells as FormulaCell[] | null | undefined;
+      if (!Array.isArray(cells)) {
         continue;
       }
-      SHEET_REF_REGEX.lastIndex = 0;
-      let match: RegExpExecArray | null;
-      while ((match = SHEET_REF_REGEX.exec(formula)) !== null) {
-        const raw = match[1] ?? match[2];
-        if (!raw) {
+      for (const cell of cells) {
+        const formula = cell?.formula;
+        if (!formula) {
           continue;
         }
-        referenced.add(raw.replace(/''/g, "'"));
+        SHEET_REF_REGEX.lastIndex = 0;
+        let match: RegExpExecArray | null;
+        while ((match = SHEET_REF_REGEX.exec(formula)) !== null) {
+          const raw = match[1] ?? match[2];
+          if (!raw) {
+            continue;
+          }
+          referenced.add(raw.replace(/''/g, "'"));
+        }
       }
+    } finally {
+      sheet.free();
     }
   }
   return referenced;

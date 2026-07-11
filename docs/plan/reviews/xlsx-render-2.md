@@ -7,7 +7,7 @@ Depends-on: xlsx-composables-split ✅ (composables already split, 9 files)
 ## 1. Typecheck
 
 ```bash
-pnpm --filter @extend-ai/vue-xlsx typecheck
+pnpm --filter @arcships/vue-xlsx typecheck
 ```
 
 **Result: ✅ Zero errors.** TypeScript compilation passes cleanly.
@@ -43,7 +43,7 @@ No architecture-required sub-files exist (`chart-bar.ts`, `chart-line.ts`, `char
 
 **Result: ✅ All imports resolve correctly.**
 
-- `@extend-ai/xlsx-core` → workspace symlink ✅
+- `@arcships/xlsx-core` → workspace symlink ✅
 - `@dukelib/sheets-wasm` → external wasm package ✅
 - Vue, d3-* packages → standard npm dependencies ✅
 - Internal cross-import (`./surface-regl` in `chart-renderer.tsx`) → correct relative path ✅

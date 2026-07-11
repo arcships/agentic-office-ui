@@ -32,6 +32,35 @@ const BOOLEAN_ATTRIBUTES = new Set([
   "selected",
 ])
 
+const UNITLESS_STYLE_PROPERTIES = new Set([
+  "animation-iteration-count",
+  "aspect-ratio",
+  "border-image-outset",
+  "border-image-slice",
+  "border-image-width",
+  "column-count",
+  "columns",
+  "flex",
+  "flex-grow",
+  "flex-shrink",
+  "font-weight",
+  "grid-column",
+  "grid-column-end",
+  "grid-column-start",
+  "grid-row",
+  "grid-row-end",
+  "grid-row-start",
+  "line-height",
+  "opacity",
+  "order",
+  "orphans",
+  "scale",
+  "tab-size",
+  "widows",
+  "z-index",
+  "zoom",
+])
+
 /**
  * Render native VNodes to a static HTML string without attaching a Vue app.
  *
@@ -106,8 +135,23 @@ function staticStyleString(value: unknown): string {
   if (typeof value !== "object" || value === null) return ""
   return Object.entries(value)
     .filter(([, propertyValue]) => propertyValue !== null && propertyValue !== undefined)
-    .map(([name, propertyValue]) => `${toKebabCase(name)}:${String(propertyValue)}`)
+    .map(([name, propertyValue]) =>
+      `${toKebabCase(name)}:${staticStyleValue(name, propertyValue)}`
+    )
     .join(";")
+}
+
+function staticStyleValue(name: string, value: unknown): string {
+  const propertyName = toKebabCase(name)
+  if (
+    typeof value === "number" &&
+    value !== 0 &&
+    !propertyName.startsWith("--") &&
+    !UNITLESS_STYLE_PROPERTIES.has(propertyName)
+  ) {
+    return `${value}px`
+  }
+  return String(value)
 }
 
 function escapeHtml(value: string): string {
@@ -247,7 +291,7 @@ function setStaticStyle(
 ): void {
   if (value === null || value === undefined) return
 
-  const text = String(value)
+  const text = staticStyleValue(name, value)
   const important = text.match(/\s*!important$/)
   if (important) {
     style.setProperty(

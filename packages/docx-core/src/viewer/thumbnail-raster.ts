@@ -161,11 +161,6 @@ async function loadThumbnailImage(src: string): Promise<HTMLImageElement> {
   return loaded;
 }
 
-const downscaledThumbnailImageCache = new Map<
-  string,
-  Promise<string | undefined>
->();
-
 async function downscaleThumbnailImageDataUri(
   src: string
 ): Promise<string | undefined> {
@@ -208,56 +203,26 @@ async function downscaleThumbnailImageDataUri(
 }
 
 /**
- * Returns a cached thumbnail-scale replacement for a large data-URI image
- * source, or `undefined` when the original should be kept. Failures are
- * cached so a broken image is only attempted once.
+ * Returns a thumbnail-scale replacement for a large data-URI image source,
+ * or `undefined` when the original should be kept. The default helper does
+ * not retain module-level state; the owning thumbnail session caches the
+ * resulting page surface with its own byte and entry limits.
  */
 export function getDownscaledThumbnailImageDataUri(
   src: string
 ): Promise<string | undefined> {
-  const cached = downscaledThumbnailImageCache.get(src);
-  if (cached) {
-    return cached;
-  }
-
-  const pending = downscaleThumbnailImageDataUri(src).catch(() => undefined);
-  downscaledThumbnailImageCache.set(src, pending);
-  return pending;
+  return downscaleThumbnailImageDataUri(src).catch(() => undefined);
 }
 
-const THUMBNAIL_DECODED_IMAGE_CACHE_MAX_ENTRIES = 48;
-const decodedThumbnailImageCache = new Map<
-  string,
-  Promise<HTMLImageElement | undefined>
->();
-
 /**
- * Decodes (and caches) an image source for the direct snapshot painter.
- * Bounded LRU so a long scanned-image document does not retain every decoded
- * page bitmap. Failures cache as `undefined` so a broken source is tried once.
+ * Decodes an image source for the direct snapshot painter. Decoded bitmaps are
+ * intentionally scoped to one render call; the owning session retains only
+ * the bounded final thumbnail surface.
  */
 function getDecodedThumbnailImage(
   src: string
 ): Promise<HTMLImageElement | undefined> {
-  const cached = decodedThumbnailImageCache.get(src);
-  if (cached) {
-    decodedThumbnailImageCache.delete(src);
-    decodedThumbnailImageCache.set(src, cached);
-    return cached;
-  }
-
-  const pending = loadThumbnailImage(src).catch(() => undefined);
-  decodedThumbnailImageCache.set(src, pending);
-  while (
-    decodedThumbnailImageCache.size > THUMBNAIL_DECODED_IMAGE_CACHE_MAX_ENTRIES
-  ) {
-    const oldestKey = decodedThumbnailImageCache.keys().next().value;
-    if (oldestKey === undefined) {
-      break;
-    }
-    decodedThumbnailImageCache.delete(oldestKey);
-  }
-  return pending;
+  return loadThumbnailImage(src).catch(() => undefined);
 }
 
 function directThumbnailPositivePx(value: number | undefined, fallback = 1): number {
@@ -319,14 +284,10 @@ function directThumbnailFont(
 const THUMBNAIL_DIRECT_TOKEN_REGEX =
   /(\r\n|\n|\t|[^\S\r\n\t]+|[^\s\r\n\t]+)/g;
 const THUMBNAIL_DIRECT_LEADING_WHITESPACE_REGEX = /^\s/;
-const THUMBNAIL_DIRECT_TEXT_MEASURE_CACHE_MAX_ENTRIES = 4096;
-const directThumbnailTextMeasureCache = new Map<string, number>();
-
 /**
- * Measures a token's advance width, memoizing by `font|text`. Tokens (spaces,
- * common words) repeat heavily across a page, so the cache turns most measures
- * into Map lookups. The caller must have already assigned `context.font` to
- * `font` so a cache miss measures with the matching face.
+ * Measures a token's advance width. The caller has already assigned
+ * `context.font`; keeping this stateless prevents one document session from
+ * retaining another document's text indefinitely.
  */
 function measureDirectThumbnailToken(
   context: CanvasRenderingContext2D,
@@ -336,23 +297,8 @@ function measureDirectThumbnailToken(
   if (!text) {
     return 0;
   }
-  const cacheKey = `${font}\u0000${text}`;
-  const cached = directThumbnailTextMeasureCache.get(cacheKey);
-  if (cached !== undefined) {
-    return cached;
-  }
-  const width = context.measureText(text).width;
-  if (
-    directThumbnailTextMeasureCache.size >=
-    THUMBNAIL_DIRECT_TEXT_MEASURE_CACHE_MAX_ENTRIES
-  ) {
-    const oldestKey = directThumbnailTextMeasureCache.keys().next().value;
-    if (oldestKey !== undefined) {
-      directThumbnailTextMeasureCache.delete(oldestKey);
-    }
-  }
-  directThumbnailTextMeasureCache.set(cacheKey, width);
-  return width;
+  void font;
+  return context.measureText(text).width;
 }
 
 interface DirectThumbnailTextSegment {

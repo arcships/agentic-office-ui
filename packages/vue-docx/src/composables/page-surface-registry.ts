@@ -3,7 +3,7 @@
 //
 // Migrated from upstream @extend-ai/react-docx, editor.tsx lines 29582-29668
 
-import type { DocxEditorController, DocxPaginationInfo } from "@extend-ai/docx-core"
+import type { DocxEditorController, DocxPaginationInfo } from "@arcships/docx-core"
 
 // ---------------------------------------------------------------------------
 // Snapshots used by the fast (direct-draw) thumbnail renderer

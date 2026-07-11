@@ -8,7 +8,7 @@ Previous: [xlsx-demo-1](docs/plan/reviews/xlsx-demo-1.md)
 ## Typecheck
 
 ```bash
-pnpm --filter @extend-ai/vue-xlsx typecheck
+pnpm --filter @arcships/vue-xlsx typecheck
 ```
 
 ✅ **零错误**。`tsc --noEmit` 通过，无类型错误。
@@ -51,8 +51,8 @@ pnpm --filter @extend-ai/vue-xlsx typecheck
 
 全部 import 路径正确：
 
-- `@extend-ai/xlsx-core`：types、API、wasm 初始化
-- `@extend-ai/vue-xlsx`：controller + viewer
+- `@arcships/xlsx-core`：types、API、wasm 初始化
+- `@arcships/vue-xlsx`：controller + viewer
 - `../composables/useXlsxViewerThumbnails`：组件内单例相对引用
 - `./components/Xxx.vue` / `./composables/xxx` / `./render`：同 package 内模块引用
 - 无直接引用 dist、无跨 workspace 裸路径
@@ -66,7 +66,7 @@ pnpm --filter @extend-ai/vue-xlsx typecheck
 
 ### Controller + Viewer 接入
 
-- ✅ `useXlsxViewerController` + `XlsxViewer` 正确 import 自 `@extend-ai/vue-xlsx`
+- ✅ `useXlsxViewerController` + `XlsxViewer` 正确 import 自 `@arcships/vue-xlsx`
 - ✅ Wrapper 组件 key 机制保证 source 切换时正确重载
 - ✅ 5 个 sample fixture 切换正常
 - ✅ Worker toggle 正确传入 `useWorker` prop

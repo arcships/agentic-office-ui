@@ -206,6 +206,8 @@ export interface XlsxChart {
 export interface XlsxChartsheet {
   chartIds: string[];
   chartPath?: string;
+  /** Read-only charts resolved from the chartsheet drawing relationship. */
+  charts?: XlsxChart[];
   id: string;
   index: number;
   name: string;

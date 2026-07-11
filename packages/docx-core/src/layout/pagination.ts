@@ -13,16 +13,32 @@ const LAST_RENDERED_PAGE_BREAK_XML_PATTERN = /<w:lastRenderedPageBreak\b[^>]*\/?
 const PAGE_BREAK_BEFORE_XML_PATTERN = /<w:pageBreakBefore\b[^>]*\/?>/i;
 const SECTION_PROPERTIES_XML_PATTERN = /<w:sectPr\b[\s\S]*?<\/w:sectPr>/i;
 const SECTION_TYPE_XML_PATTERN = /<w:type\b[^>]*w:val="([^"]+)"/i;
-const paragraphBreakFlagsBySourceXml = new Map<
-  string,
+const paragraphBreakFlagsByParagraph = new WeakMap<
+  ParagraphNode,
   {
-    explicitPageBreak: boolean;
-    lastRenderedPageBreak: boolean;
-    pageBreakBefore: boolean;
-    sectionBreakStartsNewPage: boolean;
+    sourceXml: string;
+    flags: {
+      explicitPageBreak: boolean;
+      lastRenderedPageBreak: boolean;
+      pageBreakBefore: boolean;
+      sectionBreakStartsNewPage: boolean;
+    };
   }
 >();
-const tableExplicitPageBreakInfoBySourceXml = new Map<string, TableExplicitPageBreakInfo>();
+const tableExplicitPageBreakInfoByTable = new WeakMap<
+  TableNode,
+  {
+    sourceXml: string;
+    info: TableExplicitPageBreakInfo;
+  }
+>();
+
+type ParagraphBreakFlags = {
+  explicitPageBreak: boolean;
+  lastRenderedPageBreak: boolean;
+  pageBreakBefore: boolean;
+  sectionBreakStartsNewPage: boolean;
+};
 
 export interface ResolvedModelSection {
   startNodeIndex: number;
@@ -211,23 +227,19 @@ export function sectionBreakPropertiesStartNewPage(sectionPropertiesXml: string)
   return true;
 }
 
-export function paragraphHasExplicitPageBreak(paragraph: ParagraphNode): boolean {
-  const xml = paragraph.sourceXml ?? "";
-  if (!xml) {
-    return false;
-  }
-
-  const cached = paragraphBreakFlagsBySourceXml.get(xml);
-  if (cached) {
-    return cached.explicitPageBreak;
+function resolveParagraphBreakFlags(paragraph: ParagraphNode): ParagraphBreakFlags {
+  const sourceXml = paragraph.sourceXml ?? "";
+  const cached = paragraphBreakFlagsByParagraph.get(paragraph);
+  if (cached?.sourceXml === sourceXml) {
+    return cached.flags;
   }
 
   const flags = {
-    explicitPageBreak: PAGE_BREAK_XML_PATTERN.test(xml),
-    lastRenderedPageBreak: LAST_RENDERED_PAGE_BREAK_XML_PATTERN.test(xml),
-    pageBreakBefore: isOnOffTagEnabled(xml.match(PAGE_BREAK_BEFORE_XML_PATTERN)?.[0]),
+    explicitPageBreak: PAGE_BREAK_XML_PATTERN.test(sourceXml),
+    lastRenderedPageBreak: LAST_RENDERED_PAGE_BREAK_XML_PATTERN.test(sourceXml),
+    pageBreakBefore: isOnOffTagEnabled(sourceXml.match(PAGE_BREAK_BEFORE_XML_PATTERN)?.[0]),
     sectionBreakStartsNewPage: (() => {
-      const sectionProperties = xml.match(SECTION_PROPERTIES_XML_PATTERN)?.[0];
+      const sectionProperties = sourceXml.match(SECTION_PROPERTIES_XML_PATTERN)?.[0];
       if (!sectionProperties) {
         return false;
       }
@@ -235,8 +247,16 @@ export function paragraphHasExplicitPageBreak(paragraph: ParagraphNode): boolean
       return sectionBreakPropertiesStartNewPage(sectionProperties);
     })()
   };
-  paragraphBreakFlagsBySourceXml.set(xml, flags);
-  return flags.explicitPageBreak;
+  paragraphBreakFlagsByParagraph.set(paragraph, { flags, sourceXml });
+  return flags;
+}
+
+export function paragraphHasExplicitPageBreak(paragraph: ParagraphNode): boolean {
+  if (!paragraph.sourceXml) {
+    return false;
+  }
+
+  return resolveParagraphBreakFlags(paragraph).explicitPageBreak;
 }
 
 export function paragraphHasPageBreakBefore(paragraph: ParagraphNode): boolean {
@@ -244,48 +264,27 @@ export function paragraphHasPageBreakBefore(paragraph: ParagraphNode): boolean {
     return true;
   }
 
-  const xml = paragraph.sourceXml ?? "";
-  if (!xml) {
+  if (!paragraph.sourceXml) {
     return false;
   }
 
-  const cached = paragraphBreakFlagsBySourceXml.get(xml);
-  if (cached) {
-    return cached.pageBreakBefore;
-  }
-
-  paragraphHasExplicitPageBreak(paragraph);
-  return paragraphBreakFlagsBySourceXml.get(xml)?.pageBreakBefore ?? false;
+  return resolveParagraphBreakFlags(paragraph).pageBreakBefore;
 }
 
 export function sectionBreakAfterParagraphStartsNewPage(paragraph: ParagraphNode): boolean {
-  const xml = paragraph.sourceXml ?? "";
-  if (!xml) {
+  if (!paragraph.sourceXml) {
     return false;
   }
 
-  const cached = paragraphBreakFlagsBySourceXml.get(xml);
-  if (cached) {
-    return cached.sectionBreakStartsNewPage;
-  }
-
-  paragraphHasExplicitPageBreak(paragraph);
-  return paragraphBreakFlagsBySourceXml.get(xml)?.sectionBreakStartsNewPage ?? false;
+  return resolveParagraphBreakFlags(paragraph).sectionBreakStartsNewPage;
 }
 
 export function paragraphHasLastRenderedPageBreak(paragraph: ParagraphNode): boolean {
-  const xml = paragraph.sourceXml ?? "";
-  if (!xml) {
+  if (!paragraph.sourceXml) {
     return false;
   }
 
-  const cached = paragraphBreakFlagsBySourceXml.get(xml);
-  if (cached) {
-    return cached.lastRenderedPageBreak;
-  }
-
-  paragraphHasExplicitPageBreak(paragraph);
-  return paragraphBreakFlagsBySourceXml.get(xml)?.lastRenderedPageBreak ?? false;
+  return resolveParagraphBreakFlags(paragraph).lastRenderedPageBreak;
 }
 
 export function paragraphStartsWithLastRenderedPageBreak(paragraph: ParagraphNode): boolean {
@@ -520,9 +519,9 @@ export function scalePaginationSectionMetricsHeights(
 export function collectTableExplicitPageBreakInfo(table: TableNode): TableExplicitPageBreakInfo {
   const sourceXml = table.sourceXml ?? "";
   if (sourceXml) {
-    const cached = tableExplicitPageBreakInfoBySourceXml.get(sourceXml);
-    if (cached) {
-      return cached;
+    const cached = tableExplicitPageBreakInfoByTable.get(table);
+    if (cached?.sourceXml === sourceXml) {
+      return cached.info;
     }
   }
 
@@ -572,7 +571,7 @@ export function collectTableExplicitPageBreakInfo(table: TableNode): TableExplic
   };
 
   if (sourceXml) {
-    tableExplicitPageBreakInfoBySourceXml.set(sourceXml, info);
+    tableExplicitPageBreakInfoByTable.set(table, { info, sourceXml });
   }
 
   return info;

@@ -8,7 +8,13 @@ export interface TableExplicitPageBreakInfo {
   breakAfterTable: boolean;
 }
 
-const tableExplicitPageBreakInfoBySourceXml = new Map<string, TableExplicitPageBreakInfo>();
+const tableExplicitPageBreakInfoByTable = new WeakMap<
+  TableNode,
+  {
+    sourceXml: string;
+    info: TableExplicitPageBreakInfo;
+  }
+>();
 
 function isOnOffTagEnabled(tagXml: string | undefined): boolean {
   if (!tagXml) {
@@ -126,9 +132,9 @@ function tableRowUsesTrailingSignatureCellBreakPattern(
 export function collectTableExplicitPageBreakInfo(table: TableNode): TableExplicitPageBreakInfo {
   const sourceXml = table.sourceXml ?? "";
   if (sourceXml) {
-    const cached = tableExplicitPageBreakInfoBySourceXml.get(sourceXml);
-    if (cached) {
-      return cached;
+    const cached = tableExplicitPageBreakInfoByTable.get(table);
+    if (cached?.sourceXml === sourceXml) {
+      return cached.info;
     }
   }
 
@@ -179,7 +185,7 @@ export function collectTableExplicitPageBreakInfo(table: TableNode): TableExplic
   };
 
   if (sourceXml) {
-    tableExplicitPageBreakInfoBySourceXml.set(sourceXml, info);
+    tableExplicitPageBreakInfoByTable.set(table, { info, sourceXml });
   }
 
   return info;

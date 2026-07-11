@@ -8,7 +8,7 @@ import {
   type DocxEditorController,
   type DocxTextRangeLocation,
   type DocxComment,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 export interface UseDocxCommentsResult {
   comments: DocxComment[]

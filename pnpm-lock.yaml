@@ -8,25 +8,25 @@ importers:
 
   .:
     devDependencies:
-      '@extend-ai/office-runtime':
+      '@arcships/office-runtime':
         specifier: workspace:*
         version: link:packages/office-runtime
 
   apps/demo:
     dependencies:
-      '@extend-ai/docx-core':
+      '@arcships/docx-core':
         specifier: workspace:*
         version: link:../../packages/docx-core
-      '@extend-ai/vue-docx':
+      '@arcships/vue-docx':
         specifier: workspace:*
         version: link:../../packages/vue-docx
-      '@extend-ai/vue-extend':
+      '@arcships/vue-extend':
         specifier: workspace:*
         version: link:../../packages/vue-extend
-      '@extend-ai/vue-xlsx':
+      '@arcships/vue-xlsx':
         specifier: workspace:*
         version: link:../../packages/vue-xlsx
-      '@extend-ai/xlsx-core':
+      '@arcships/xlsx-core':
         specifier: workspace:*
         version: link:../../packages/xlsx-core
       vue:
@@ -75,6 +75,10 @@ importers:
         version: 5.9.3
 
   packages/office-runtime:
+    dependencies:
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.3
     devDependencies:
       tsup:
         specifier: ^8.0.0
@@ -85,8 +89,8 @@ importers:
 
   packages/vue-docx:
     dependencies:
-      '@extend-ai/docx-core':
-        specifier: ^0.1.0
+      '@arcships/docx-core':
+        specifier: ^0.2.0
         version: link:../docx-core
     devDependencies:
       '@vitejs/plugin-vue':
@@ -183,8 +187,8 @@ importers:
       '@dukelib/sheets-wasm':
         specifier: 0.1.17
         version: 0.1.17
-      '@extend-ai/xlsx-core':
-        specifier: ^0.1.0
+      '@arcships/xlsx-core':
+        specifier: ^0.2.0
         version: link:../xlsx-core
       d3-geo:
         specifier: ^3.1.1
@@ -259,6 +263,9 @@ importers:
       '@dukelib/sheets-wasm':
         specifier: 0.1.17
         version: 0.1.17
+      '@xmldom/xmldom':
+        specifier: 0.9.10
+        version: 0.9.10
       d3-geo:
         specifier: ^3.1.1
         version: 3.1.1
@@ -1192,6 +1199,10 @@ packages:
 
   '@vue/shared@3.5.39':
     resolution: {integrity: sha512-l1rrBtBfTnmxvtsvdQDXltUUy8S1Y+ZaqdfUzmAnJkTd8Z8rv5v/ytW+TKiqEOWyHPoqtPlNFSs0lhRmYVSHVA==}
+
+  '@xmldom/xmldom@0.9.10':
+    resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
+    engines: {node: '>=14.6'}
 
   acorn@8.17.0:
     resolution: {integrity: sha512-xRQbDb9BnwDafYNn6Vwl839DYVjqXYb1XVGtWAZ1kcDc6iwAL4hg3B1dZlRiuENFeO2H53gFG3in621AdERVAg==}
@@ -2452,6 +2463,8 @@ snapshots:
       vue: 3.5.39(typescript@5.9.3)
 
   '@vue/shared@3.5.39': {}
+
+  '@xmldom/xmldom@0.9.10': {}
 
   acorn@8.17.0: {}
 

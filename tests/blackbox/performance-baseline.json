@@ -1,0 +1,1237 @@
+{
+  "schemaVersion": 1,
+  "status": "approved",
+  "rounds": 3,
+  "scrollSeconds": 10,
+  "maxRegressionPercent": 10,
+  "maxRegressionAbsoluteMs": 10,
+  "browser": {
+    "engine": "chromium",
+    "version": "149.0.7827.55",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "deviceScaleFactor": 1,
+    "locale": "zh-CN",
+    "timezone": "Asia/Shanghai"
+  },
+  "fixtures": {
+    "financial-model.xlsx": {
+      "bytes": 8129,
+      "sha256": "d42c4527a7a3235ae566d990c7760cc402576f37f4545c2d54b7d07ed4ea257d"
+    },
+    "sales-table.xlsx": {
+      "bytes": 13226,
+      "sha256": "9ba1564c45283d64879cb4d53bb1ae3af0c1478cd10c76268d1b0c2d729a0dfa"
+    },
+    "charts-images.xlsx": {
+      "bytes": 29462,
+      "sha256": "2ecadbb39feabbeebc7dc9e684550ad070f215d22eade21d556a630f58e89cbc"
+    },
+    "large-grid.xlsx": {
+      "bytes": 134402,
+      "sha256": "7d25999db907b88a47a9417c582169e3416bd4c3d02b8f897e1b9d41130fe2d2"
+    },
+    "corrupted.xlsx": {
+      "bytes": 680,
+      "sha256": "ad01e8e26ac9f42456a5ed9c4df5a68616ba2d889aaa9a64115f29b7ad22d7a2"
+    },
+    "sample.pdf": {
+      "bytes": 4652,
+      "sha256": "76e533d35599f1f2c7f92785bba4a111053ca9361913bb809e9c13aa6c262253"
+    }
+  },
+  "metrics": {
+    "asset.demo.cssGzipBytes": {
+      "samples": [
+        19930.0,
+        19930.0,
+        19930.0
+      ],
+      "median": 19930.0,
+      "worst": 19930.0,
+      "minimum": 19930.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.demo.cssRawBytes": {
+      "samples": [
+        87437.0,
+        87437.0,
+        87437.0
+      ],
+      "median": 87437.0,
+      "worst": 87437.0,
+      "minimum": 87437.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.demo.duplicateWasmCopies": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.demo.homeMainContainsXlsx": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.demo.jsGzipBytes": {
+      "samples": [
+        1054600.0,
+        1054600.0,
+        1054600.0
+      ],
+      "median": 1054600.0,
+      "worst": 1054600.0,
+      "minimum": 1054600.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.demo.jsRawBytes": {
+      "samples": [
+        3636212.0,
+        3636212.0,
+        3636212.0
+      ],
+      "median": 3636212.0,
+      "worst": 3636212.0,
+      "minimum": 3636212.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.demo.totalGzipBytes": {
+      "samples": [
+        5385398.0,
+        5385398.0,
+        5385398.0
+      ],
+      "median": 5385398.0,
+      "worst": 5385398.0,
+      "minimum": 5385398.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.demo.totalRawBytes": {
+      "samples": [
+        13701462.0,
+        13701462.0,
+        13701462.0
+      ],
+      "median": 13701462.0,
+      "worst": 13701462.0,
+      "minimum": 13701462.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.demo.typesGzipBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.demo.typesRawBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.demo.wasmGzipBytes": {
+      "samples": [
+        3856538.0,
+        3856538.0,
+        3856538.0
+      ],
+      "median": 3856538.0,
+      "worst": 3856538.0,
+      "minimum": 3856538.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.demo.wasmRawBytes": {
+      "samples": [
+        9183199.0,
+        9183199.0,
+        9183199.0
+      ],
+      "median": 9183199.0,
+      "worst": 9183199.0,
+      "minimum": 9183199.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.demo.workerGzipBytes": {
+      "samples": [
+        87177.0,
+        87177.0,
+        87177.0
+      ],
+      "median": 87177.0,
+      "worst": 87177.0,
+      "minimum": 87177.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.demo.workerRawBytes": {
+      "samples": [
+        258692.0,
+        258692.0,
+        258692.0
+      ],
+      "median": 258692.0,
+      "worst": 258692.0,
+      "minimum": 258692.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.docx-core.cssGzipBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.docx-core.cssRawBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.docx-core.jsGzipBytes": {
+      "samples": [
+        155424.0,
+        155424.0,
+        155424.0
+      ],
+      "median": 155424.0,
+      "worst": 155424.0,
+      "minimum": 155424.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.docx-core.jsRawBytes": {
+      "samples": [
+        775751.0,
+        775751.0,
+        775751.0
+      ],
+      "median": 775751.0,
+      "worst": 775751.0,
+      "minimum": 775751.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.docx-core.totalGzipBytes": {
+      "samples": [
+        618026.0,
+        618026.0,
+        618026.0
+      ],
+      "median": 618026.0,
+      "worst": 618026.0,
+      "minimum": 618026.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.docx-core.totalRawBytes": {
+      "samples": [
+        2055654.0,
+        2055654.0,
+        2055654.0
+      ],
+      "median": 2055654.0,
+      "worst": 2055654.0,
+      "minimum": 2055654.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.docx-core.typesGzipBytes": {
+      "samples": [
+        48024.0,
+        48024.0,
+        48024.0
+      ],
+      "median": 48024.0,
+      "worst": 48024.0,
+      "minimum": 48024.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.docx-core.typesRawBytes": {
+      "samples": [
+        210266.0,
+        210266.0,
+        210266.0
+      ],
+      "median": 210266.0,
+      "worst": 210266.0,
+      "minimum": 210266.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.docx-core.wasmGzipBytes": {
+      "samples": [
+        413551.0,
+        413551.0,
+        413551.0
+      ],
+      "median": 413551.0,
+      "worst": 413551.0,
+      "minimum": 413551.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.docx-core.wasmRawBytes": {
+      "samples": [
+        1066473.0,
+        1066473.0,
+        1066473.0
+      ],
+      "median": 1066473.0,
+      "worst": 1066473.0,
+      "minimum": 1066473.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.docx-core.workerGzipBytes": {
+      "samples": [
+        1027.0,
+        1027.0,
+        1027.0
+      ],
+      "median": 1027.0,
+      "worst": 1027.0,
+      "minimum": 1027.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.docx-core.workerRawBytes": {
+      "samples": [
+        3164.0,
+        3164.0,
+        3164.0
+      ],
+      "median": 3164.0,
+      "worst": 3164.0,
+      "minimum": 3164.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-docx.cssGzipBytes": {
+      "samples": [
+        4215.0,
+        4215.0,
+        4215.0
+      ],
+      "median": 4215.0,
+      "worst": 4215.0,
+      "minimum": 4215.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-docx.cssRawBytes": {
+      "samples": [
+        20617.0,
+        20617.0,
+        20617.0
+      ],
+      "median": 20617.0,
+      "worst": 20617.0,
+      "minimum": 20617.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-docx.jsGzipBytes": {
+      "samples": [
+        61505.0,
+        61505.0,
+        61505.0
+      ],
+      "median": 61505.0,
+      "worst": 61505.0,
+      "minimum": 61505.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-docx.jsRawBytes": {
+      "samples": [
+        264008.0,
+        264008.0,
+        264008.0
+      ],
+      "median": 264008.0,
+      "worst": 264008.0,
+      "minimum": 264008.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-docx.totalGzipBytes": {
+      "samples": [
+        90055.0,
+        90055.0,
+        90055.0
+      ],
+      "median": 90055.0,
+      "worst": 90055.0,
+      "minimum": 90055.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-docx.totalRawBytes": {
+      "samples": [
+        353493.0,
+        353493.0,
+        353493.0
+      ],
+      "median": 353493.0,
+      "worst": 353493.0,
+      "minimum": 353493.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-docx.typesGzipBytes": {
+      "samples": [
+        24335.0,
+        24335.0,
+        24335.0
+      ],
+      "median": 24335.0,
+      "worst": 24335.0,
+      "minimum": 24335.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-docx.typesRawBytes": {
+      "samples": [
+        68868.0,
+        68868.0,
+        68868.0
+      ],
+      "median": 68868.0,
+      "worst": 68868.0,
+      "minimum": 68868.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-docx.wasmGzipBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-docx.wasmRawBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-docx.workerGzipBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-docx.workerRawBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-extend.cssGzipBytes": {
+      "samples": [
+        3100.0,
+        3100.0,
+        3100.0
+      ],
+      "median": 3100.0,
+      "worst": 3100.0,
+      "minimum": 3100.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-extend.cssRawBytes": {
+      "samples": [
+        13862.0,
+        13862.0,
+        13862.0
+      ],
+      "median": 13862.0,
+      "worst": 13862.0,
+      "minimum": 13862.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-extend.jsGzipBytes": {
+      "samples": [
+        142026.0,
+        142026.0,
+        142026.0
+      ],
+      "median": 142026.0,
+      "worst": 142026.0,
+      "minimum": 142026.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-extend.jsRawBytes": {
+      "samples": [
+        788048.0,
+        788048.0,
+        788048.0
+      ],
+      "median": 788048.0,
+      "worst": 788048.0,
+      "minimum": 788048.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-extend.totalGzipBytes": {
+      "samples": [
+        2288371.0,
+        2288371.0,
+        2288371.0
+      ],
+      "median": 2288371.0,
+      "worst": 2288371.0,
+      "minimum": 2288371.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-extend.totalRawBytes": {
+      "samples": [
+        5465424.0,
+        5465424.0,
+        5465424.0
+      ],
+      "median": 5465424.0,
+      "worst": 5465424.0,
+      "minimum": 5465424.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-extend.typesGzipBytes": {
+      "samples": [
+        11650.0,
+        11650.0,
+        11650.0
+      ],
+      "median": 11650.0,
+      "worst": 11650.0,
+      "minimum": 11650.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-extend.typesRawBytes": {
+      "samples": [
+        29726.0,
+        29726.0,
+        29726.0
+      ],
+      "median": 29726.0,
+      "worst": 29726.0,
+      "minimum": 29726.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-extend.wasmGzipBytes": {
+      "samples": [
+        2131595.0,
+        2131595.0,
+        2131595.0
+      ],
+      "median": 2131595.0,
+      "worst": 2131595.0,
+      "minimum": 2131595.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-extend.wasmRawBytes": {
+      "samples": [
+        4633788.0,
+        4633788.0,
+        4633788.0
+      ],
+      "median": 4633788.0,
+      "worst": 4633788.0,
+      "minimum": 4633788.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-extend.workerGzipBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-extend.workerRawBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.cssGzipBytes": {
+      "samples": [
+        2692.0,
+        2692.0,
+        2692.0
+      ],
+      "median": 2692.0,
+      "worst": 2692.0,
+      "minimum": 2692.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.cssRawBytes": {
+      "samples": [
+        13090.0,
+        13090.0,
+        13090.0
+      ],
+      "median": 13090.0,
+      "worst": 13090.0,
+      "minimum": 13090.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.jsGzipBytes": {
+      "samples": [
+        592622.0,
+        592622.0,
+        592622.0
+      ],
+      "median": 592622.0,
+      "worst": 592622.0,
+      "minimum": 592622.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.jsRawBytes": {
+      "samples": [
+        1971167.0,
+        1971167.0,
+        1971167.0
+      ],
+      "median": 1971167.0,
+      "worst": 1971167.0,
+      "minimum": 1971167.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.totalGzipBytes": {
+      "samples": [
+        622777.0,
+        622777.0,
+        622777.0
+      ],
+      "median": 622777.0,
+      "worst": 622777.0,
+      "minimum": 622777.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.totalRawBytes": {
+      "samples": [
+        2082172.0,
+        2082172.0,
+        2082172.0
+      ],
+      "median": 2082172.0,
+      "worst": 2082172.0,
+      "minimum": 2082172.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.typesGzipBytes": {
+      "samples": [
+        27463.0,
+        27463.0,
+        27463.0
+      ],
+      "median": 27463.0,
+      "worst": 27463.0,
+      "minimum": 27463.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.typesRawBytes": {
+      "samples": [
+        97915.0,
+        97915.0,
+        97915.0
+      ],
+      "median": 97915.0,
+      "worst": 97915.0,
+      "minimum": 97915.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.wasmGzipBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.wasmRawBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.workerGzipBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.workerRawBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.cssGzipBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.cssRawBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.jsGzipBytes": {
+      "samples": [
+        77116.0,
+        77116.0,
+        77116.0
+      ],
+      "median": 77116.0,
+      "worst": 77116.0,
+      "minimum": 77116.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.jsRawBytes": {
+      "samples": [
+        363877.0,
+        363877.0,
+        363877.0
+      ],
+      "median": 363877.0,
+      "worst": 363877.0,
+      "minimum": 363877.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.totalGzipBytes": {
+      "samples": [
+        1460199.0,
+        1460199.0,
+        1460199.0
+      ],
+      "median": 1460199.0,
+      "worst": 1460199.0,
+      "minimum": 1460199.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.totalRawBytes": {
+      "samples": [
+        4169385.0,
+        4169385.0,
+        4169385.0
+      ],
+      "median": 4169385.0,
+      "worst": 4169385.0,
+      "minimum": 4169385.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.typesGzipBytes": {
+      "samples": [
+        19076.0,
+        19076.0,
+        19076.0
+      ],
+      "median": 19076.0,
+      "worst": 19076.0,
+      "minimum": 19076.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.typesRawBytes": {
+      "samples": [
+        76717.0,
+        76717.0,
+        76717.0
+      ],
+      "median": 76717.0,
+      "worst": 76717.0,
+      "minimum": 76717.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.wasmGzipBytes": {
+      "samples": [
+        1311392.0,
+        1311392.0,
+        1311392.0
+      ],
+      "median": 1311392.0,
+      "worst": 1311392.0,
+      "minimum": 1311392.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.wasmRawBytes": {
+      "samples": [
+        3482938.0,
+        3482938.0,
+        3482938.0
+      ],
+      "median": 3482938.0,
+      "worst": 3482938.0,
+      "minimum": 3482938.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.workerGzipBytes": {
+      "samples": [
+        52615.0,
+        52615.0,
+        52615.0
+      ],
+      "median": 52615.0,
+      "worst": 52615.0,
+      "minimum": 52615.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.workerRawBytes": {
+      "samples": [
+        245853.0,
+        245853.0,
+        245853.0
+      ],
+      "median": 245853.0,
+      "worst": 245853.0,
+      "minimum": 245853.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "browser.chart.lazyJsRequests": {
+      "samples": [
+        2.0,
+        2.0,
+        2.0
+      ],
+      "median": 2.0,
+      "worst": 2.0,
+      "minimum": 2.0,
+      "spreadPercent": 0.0,
+      "direction": "min"
+    },
+    "browser.home.transferBytes": {
+      "samples": [
+        55140.0,
+        55140.0,
+        55140.0
+      ],
+      "median": 55140.0,
+      "worst": 55140.0,
+      "minimum": 55140.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "browser.interaction.selectMs": {
+      "samples": [
+        57.5,
+        45.200000047683716,
+        18.59999990463257
+      ],
+      "median": 45.200000047683716,
+      "worst": 57.5,
+      "minimum": 18.59999990463257,
+      "spreadPercent": 86.06194702285376,
+      "direction": "max"
+    },
+    "browser.interaction.tabCommitMs": {
+      "samples": [
+        16.0,
+        15.300000190734863,
+        15.200000047683716
+      ],
+      "median": 15.300000190734863,
+      "worst": 16.0,
+      "minimum": 15.200000047683716,
+      "spreadPercent": 5.228757793092942,
+      "direction": "max"
+    },
+    "browser.interaction.undoMs": {
+      "samples": [
+        17.799999952316284,
+        23.799999952316284,
+        18.0
+      ],
+      "median": 18.0,
+      "worst": 23.799999952316284,
+      "minimum": 17.799999952316284,
+      "spreadPercent": 33.33333333333333,
+      "direction": "max"
+    },
+    "browser.largeGrid.loadLongTaskCount": {
+      "samples": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "median": 1.0,
+      "worst": 1.0,
+      "minimum": 1.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "browser.largeGrid.loadLongTaskWorstMs": {
+      "samples": [
+        557.0,
+        561.0,
+        555.0
+      ],
+      "median": 557.0,
+      "worst": 561.0,
+      "minimum": 555.0,
+      "spreadPercent": 1.0771992818671454,
+      "direction": "max"
+    },
+    "browser.largeGrid.loadToOperableMs": {
+      "samples": [
+        589.6000001430511,
+        589.2999999523163,
+        582.3000001907349
+      ],
+      "median": 589.2999999523163,
+      "worst": 589.6000001430511,
+      "minimum": 582.3000001907349,
+      "spreadPercent": 1.238757840303236,
+      "direction": "max"
+    },
+    "browser.memory.afterHomeHeapBytes": {
+      "samples": [
+        16367175.0,
+        16374619.0,
+        16373447.0
+      ],
+      "median": 16373447.0,
+      "worst": 16374619.0,
+      "minimum": 16367175.0,
+      "spreadPercent": 0.04546385376274159,
+      "direction": "max"
+    },
+    "browser.memory.afterHomeLiveElementDelta": {
+      "samples": [
+        8.0,
+        8.0,
+        8.0
+      ],
+      "median": 8.0,
+      "worst": 8.0,
+      "minimum": 8.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "browser.memory.afterHomeLiveTreeDelta": {
+      "samples": [
+        8.0,
+        8.0,
+        8.0
+      ],
+      "median": 8.0,
+      "worst": 8.0,
+      "minimum": 8.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "browser.memory.lifecycleListenerGrowth": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "browser.memory.lifecycleNodeGrowth": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "browser.memory.peakHeapBytes": {
+      "samples": [
+        54659441.0,
+        58340627.0,
+        58337862.0
+      ],
+      "median": 58337862.0,
+      "worst": 58340627.0,
+      "minimum": 54659441.0,
+      "spreadPercent": 6.310114690181824,
+      "direction": "max"
+    },
+    "browser.resources.afterHomeActiveObjectUrls": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "browser.resources.afterHomeActiveWorkers": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "browser.scroll.canvasDimensionWrites": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "browser.scroll.frameP95Ms": {
+      "samples": [
+        10.100000000000364,
+        10.100000000000364,
+        10.100000000000364
+      ],
+      "median": 10.100000000000364,
+      "worst": 10.100000000000364,
+      "minimum": 10.100000000000364,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "browser.scroll.frameWorstMs": {
+      "samples": [
+        10.400000000000546,
+        10.400000000001455,
+        18.0
+      ],
+      "median": 10.400000000001455,
+      "worst": 18.0,
+      "minimum": 10.400000000000546,
+      "spreadPercent": 73.0769230769076,
+      "direction": "max"
+    },
+    "browser.scroll.longTaskCount": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "browser.scroll.longTaskWorstMs": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "browser.scroll.maxHorizontalPixels": {
+      "samples": [
+        2362.0,
+        2362.0,
+        2362.0
+      ],
+      "median": 2362.0,
+      "worst": 2362.0,
+      "minimum": 2362.0,
+      "spreadPercent": 0.0,
+      "direction": "min"
+    },
+    "browser.scroll.maxVerticalPixels": {
+      "samples": [
+        10544.0,
+        10544.0,
+        10544.0
+      ],
+      "median": 10544.0,
+      "worst": 10544.0,
+      "minimum": 10544.0,
+      "spreadPercent": 0.0,
+      "direction": "min"
+    },
+    "browser.xlsx.additionalTransferBytes": {
+      "samples": [
+        3613384.0,
+        3613384.0,
+        3613384.0
+      ],
+      "median": 3613384.0,
+      "worst": 3613384.0,
+      "minimum": 3613384.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "browser.xlsx.totalTransferBytes": {
+      "samples": [
+        3668524.0,
+        3668524.0,
+        3668524.0
+      ],
+      "median": 3668524.0,
+      "worst": 3668524.0,
+      "minimum": 3668524.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    }
+  },
+  "baselineCommit": "af0546b18bd2a23cf5bfb05c37a8e46aed605038",
+  "capturedBrowser": "149.0.7827.55"
+}

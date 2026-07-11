@@ -2,19 +2,22 @@
 //
 // Extracted from useDocxEditor.ts.
 
-import type { DocModel, ImageRunNode, ParagraphNode } from "@extend-ai/docx-core"
+import type { DocModel, ImageRunNode, ParagraphNode } from "@arcships/docx-core"
 import type {
   DocxImageLocation,
   DocxImageWrapMode,
   DocxImageDropTarget,
   DocxSectionImageLocation,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import {
   cloneDocModel,
+  cloneEditorSelection,
+  cloneTextRange,
+  paragraphText,
   toBase64,
   tableCellParagraphs,
   updateSectionImageFloatingAtLocation,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
 
 type LocatedImage = {
@@ -54,6 +57,56 @@ function invalidateImageSource(location: LocatedImage): void {
   if (location.table) location.table.sourceXml = undefined
 }
 
+function insertImageAtTextRange(
+  paragraph: ParagraphNode,
+  image: ImageRunNode,
+  startOffset: number,
+  endOffset: number,
+): void {
+  const textLength = paragraphText(paragraph).length
+  const start = Math.max(0, Math.min(textLength, Math.min(startOffset, endOffset)))
+  const end = Math.max(start, Math.min(textLength, Math.max(startOffset, endOffset)))
+  const nextChildren: ParagraphNode["children"] = []
+  let textOffset = 0
+  let inserted = false
+
+  for (const child of paragraph.children) {
+    if (child.type !== "text") {
+      if (!inserted && textOffset >= start) {
+        nextChildren.push(image)
+        inserted = true
+      }
+      nextChildren.push(child)
+      continue
+    }
+
+    const childStart = textOffset
+    const childEnd = childStart + child.text.length
+    textOffset = childEnd
+
+    if (childEnd < start || childStart > end) {
+      nextChildren.push(child)
+      continue
+    }
+
+    const beforeLength = Math.max(0, Math.min(child.text.length, start - childStart))
+    if (beforeLength > 0) {
+      nextChildren.push({ ...child, text: child.text.slice(0, beforeLength) })
+    }
+    if (!inserted) {
+      nextChildren.push(image)
+      inserted = true
+    }
+    const afterStart = Math.max(0, Math.min(child.text.length, end - childStart))
+    if (afterStart < child.text.length) {
+      nextChildren.push({ ...child, text: child.text.slice(afterStart) })
+    }
+  }
+
+  if (!inserted) nextChildren.push(image)
+  paragraph.children = nextChildren
+}
+
 export function createEditorImage(
   ctx: EditorCore,
   applyChange: (updater: (current: DocModel) => DocModel, successStatus?: string) => void,
@@ -87,24 +140,50 @@ export function createEditorImage(
       return
     }
 
+    // Reading a local file is asynchronous. Preserve the user's insertion
+    // target at command time so a focus/selection change during that read
+    // cannot silently move the image into another paragraph or table cell.
+    const insertionSelection = cloneEditorSelection(ctx.selectionSnapshot.value)
+    const insertionRange = cloneTextRange(ctx.activeTextRangeSnapshot.value)
+
     const bytes = new Uint8Array(await file.arrayBuffer())
     const src = `data:${file.type};base64,${toBase64(bytes)}`
 
     applyChange((current) => {
       const next = cloneDocModel(current)
-      const selection = ctx.selectionSnapshot.value
+      const selection = insertionSelection
 
       if (selection.kind === "paragraph") {
         const paragraph = next.nodes[selection.nodeIndex]
         if (!paragraph || paragraph.type !== "paragraph") return current
-        paragraph.children.push({
+        const image: ImageRunNode = {
           type: "image",
           src,
           alt: file.name,
           contentType: file.type,
           data: new Uint8Array(bytes),
           widthPx: 240,
-        })
+          heightPx: 160,
+          floating: {
+            xPx: 72,
+            yPx: 72,
+            wrapType: "square",
+            behindDocument: false,
+            zIndex: 1,
+          },
+        }
+        const range = insertionRange
+        const rangeStartsHere = range?.start.location.kind === "paragraph" &&
+          range.start.location.nodeIndex === selection.nodeIndex
+        const rangeEndsHere = range?.end.location.kind === "paragraph" &&
+          range.end.location.nodeIndex === selection.nodeIndex
+        const fallbackOffset = paragraphText(paragraph).length
+        insertImageAtTextRange(
+          paragraph,
+          image,
+          rangeStartsHere ? range.start.offset : fallbackOffset,
+          rangeEndsHere ? range.end.offset : fallbackOffset,
+        )
         paragraph.sourceXml = undefined
         return next
       }

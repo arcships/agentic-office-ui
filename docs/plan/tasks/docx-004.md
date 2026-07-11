@@ -45,8 +45,8 @@ depends-on: [docx-003]
 ## verification
 
 ```bash
-pnpm --filter @extend-ai/vue-docx typecheck
-pnpm --filter @extend-ai/vue-docx build
+pnpm --filter @arcships/vue-docx typecheck
+pnpm --filter @arcships/vue-docx build
 ```
 
 浏览器验证：导入 .docx，编辑文本/格式/表格/图片，导出 .docx。

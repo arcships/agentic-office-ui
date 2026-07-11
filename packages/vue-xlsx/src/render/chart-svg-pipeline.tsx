@@ -1,5 +1,5 @@
 /** @jsxImportSource vue */
-import type { XlsxChart, XlsxChartElementSelection } from "@extend-ai/xlsx-core";
+import type { XlsxChart, XlsxChartElementSelection } from "@arcships/xlsx-core";
 import { clamp, lightenColor, darkenColor, resolveChartAxisTextColor } from "./chart-shared";
 import { chartElementDataProps, isSelectedChartPointOrSeries, renderSelectionPointHandles } from "./chart-element";
 import { chartSeriesColor, chartSeriesStrokeColor, normalizeChartMarkerSymbol } from "./chart-data";

@@ -13,13 +13,14 @@ import {
   sameEditorSelection,
   sameTextRange,
   normalizeEditorCursorStateForModel,
+  shouldReissueDomSelectionRestore,
   defaultStarterModel,
   assertValidDocxModel,
   DEFAULT_PARAGRAPH_LINE_MULTIPLE,
   resolveAutoLineSpacingMultiple,
   tableBorderPresetState,
   paragraphBorderPresetState,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import {
   firstRunStyle,
   firstTextStyleAtOffset,
@@ -31,7 +32,7 @@ import {
   getParagraphAtLocation,
   collectTrackedChangesFromModel,
   collectCommentsFromModel,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 import type {
   DocModel,
@@ -39,7 +40,7 @@ import type {
   TextRunNode,
   OoxmlPackage,
   ParagraphStyleDefinition,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import type {
   DocxEditorController,
   DocxEditorSelection,
@@ -67,7 +68,7 @@ import type {
   UseDocxEditorOptions,
   ParagraphLocation,
   DocxTextRangeLocation,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 import type { EditorCore } from "./editor-shared"
 import { createEditorTransaction } from "./editor-transaction"
@@ -81,6 +82,10 @@ import { createEditorFormField } from "./editor-form-field"
 import { createEditorList } from "./editor-list"
 import { createEditorClipboard } from "./editor-clipboard"
 import { createEditorImportExport } from "./editor-import-export"
+import {
+  DEFAULT_DOCX_HISTORY_MAX_BYTES,
+  estimateHistoryEntryBytes,
+} from "./history-budget"
 
 // helpers
 function typedKeys<T extends object>(obj: T): (keyof T)[] {
@@ -125,6 +130,26 @@ export function useDocxEditor(
     past: [],
     future: [],
   })
+  const requestedHistoryMaxEntries = options.historyMaxEntries ?? 100
+  const requestedHistoryMaxBytes = options.historyMaxBytes ?? DEFAULT_DOCX_HISTORY_MAX_BYTES
+  const historyBudget = Object.freeze({
+    maxEntries:
+      Number.isFinite(requestedHistoryMaxEntries) && requestedHistoryMaxEntries > 0
+        ? Math.max(1, Math.floor(requestedHistoryMaxEntries))
+        : 100,
+    maxBytes:
+      Number.isFinite(requestedHistoryMaxBytes) && requestedHistoryMaxBytes > 0
+        ? Math.max(1, Math.floor(requestedHistoryMaxBytes))
+      : DEFAULT_DOCX_HISTORY_MAX_BYTES,
+  })
+  const historyEntryByteEstimates = new WeakMap<DocxHistorySnapshot, number>()
+  const estimateHistorySnapshotBytes = (snapshot: DocxHistorySnapshot): number => {
+    const cached = historyEntryByteEstimates.get(snapshot)
+    if (cached !== undefined) return cached
+    const estimatedBytes = estimateHistoryEntryBytes(snapshot)
+    historyEntryByteEstimates.set(snapshot, estimatedBytes)
+    return estimatedBytes
+  }
 
   // --- selection session ---
   const selectionSessionKind = ref<DocxSelectionSessionKind>("idle")
@@ -365,14 +390,20 @@ export function useDocxEditor(
         suppressNextDomSelectionRestore = false
         return
       }
-      if (modelChanged) {
-        const nextNonce = historyRestoreNonceValue + 1
-        historyRestoreNonceValue = nextNonce
-        historyRestoreRequest.value = {
-          nonce: nextNonce,
-          selection: cloneEditorSelection(selectionSnapshot),
-          activeTextRange: cloneTextRange(activeTextRangeSnapshot),
-        }
+      if (!shouldReissueDomSelectionRestore({
+        modelChanged,
+        selectionChanged,
+        rangeChanged,
+        activeTextRange: activeTextRangeSnapshot,
+        suppressNext: false,
+        selectionSessionKind: selectionSessionKindInternal.value,
+      })) return
+      const nextNonce = historyRestoreNonceValue + 1
+      historyRestoreNonceValue = nextNonce
+      historyRestoreRequest.value = {
+        nonce: nextNonce,
+        selection: cloneEditorSelection(selectionSnapshot),
+        activeTextRange: cloneTextRange(activeTextRangeSnapshot),
       }
       return
     }
@@ -415,7 +446,8 @@ export function useDocxEditor(
 
   const ctx: EditorCore = {
     // refs
-    model, selection, activeTextRange, pendingRunStyle, history, status,
+    model, selection, activeTextRange, pendingRunStyle, history, historyBudget,
+    estimateHistorySnapshotBytes, status,
     selectedFormFieldLocation, documentLoadNonce, fileName, importError,
     isImporting, documentTheme, showTrackedChanges, showComments,
     paginationInfo, historyRestoreRequest, basePackage,
@@ -514,9 +546,18 @@ export function useDocxEditor(
     paginationInfo.value = pagination
   }
 
-  // Selection wrappers (thin dispatch calls)
+  // Browser-originated ranges are already reflected in the DOM. Keep the
+  // synchronous snapshot current without issuing a DOM restore request that
+  // would fight the user's live selection.
   const setActiveTextRange = (range?: DocxTextRange): void => {
-    dispatchEditorTransaction(() => ({ activeTextRange: range }))
+    const nextRange = normalizeEditorCursorStateForModel(
+      modelSnapshot,
+      selectionSnapshot,
+      range
+    ).activeTextRange
+    if (sameTextRange(activeTextRangeSnapshot, nextRange)) return
+    activeTextRangeSnapshot = cloneTextRange(nextRange)
+    activeTextRange.value = nextRange
   }
   const selectParagraph = (nodeIndex: number): void => {
     dispatchEditorTransaction(() => ({

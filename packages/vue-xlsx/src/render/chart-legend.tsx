@@ -1,5 +1,5 @@
 /** @jsxImportSource vue */
-import type { XlsxChart, XlsxImageRect } from "@extend-ai/xlsx-core";
+import type { XlsxChart, XlsxImageRect } from "@arcships/xlsx-core";
 import {
   buildHierarchyData,
   buildPieEntries,

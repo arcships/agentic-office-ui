@@ -108,7 +108,7 @@ image-assets.ts  internal.ts  navigation.ts  selection.ts  workbook-state.ts
 - 代码位置：`packages/vue-xlsx/src/composables/clipboard.ts:11`；`packages/vue-xlsx/src/composables/workbook-state.ts:186`
 
 ```
-$ pnpm --filter @extend-ai/vue-xlsx typecheck
+$ pnpm --filter @arcships/vue-xlsx typecheck
 src/composables/clipboard.ts(11,30): error TS2440: Import declaration conflicts with local declaration of 'escapeHtml'.
 src/composables/workbook-state.ts(186,18): error TS2304: Cannot find name 'XlsxThemePalette'.
 ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  Exit status 2
@@ -117,7 +117,7 @@ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  Exit status 2
 两处错误：
 
 1. `clipboard.ts:11` 从 `./formatting` 导入 `escapeHtml`，又在 `clipboard.ts:19` 本地重新声明 `export function escapeHtml`，二者冲突（TS2440）。这是复制 monolith 代码时未删本地副本的典型痕迹。
-2. `workbook-state.ts:186` 使用 `XlsxThemePalette` 类型但未 import（TS2304）。该类型在 `@extend-ai/xlsx-core` 导出，import 块漏了它。
+2. `workbook-state.ts:186` 使用 `XlsxThemePalette` 类型但未 import（TS2304）。该类型在 `@arcships/xlsx-core` 导出，import 块漏了它。
 
 review-3 的 typecheck 通过（仅覆盖 monolith）；本次因新增子文件被 tsc 扫描而暴露出子模块自身的类型错误，说明子模块从未经过编译验证。
 
@@ -222,7 +222,7 @@ $ ls packages/vue-xlsx/src/composables/index.ts packages/vue-xlsx/src/composable
 ls: No such file or directory   (index.ts)
 ls: No such file or directory   (useXlsxViewerController.ts)
 
-$ pnpm --filter @extend-ai/vue-xlsx typecheck
+$ pnpm --filter @arcships/vue-xlsx typecheck
 src/composables/clipboard.ts(11,30): error TS2440: Import declaration conflicts with local declaration of 'escapeHtml'.
 src/composables/workbook-state.ts(186,18): error TS2304: Cannot find name 'XlsxThemePalette'.
 Exit status 2
@@ -246,5 +246,5 @@ Exit status 2
 4. **修复 F4 编译错误**：`clipboard.ts` 删本地 `escapeHtml`（改用 `./formatting` 导入）；`workbook-state.ts` 补 `XlsxThemePalette` 的 import。
 5. **打破 F5 循环依赖**：把被多方依赖的共享基础（`XlsxControllerContext`、`resolveInheritedCellStyle` 等纯函数、共享常量）下沉到 `internal.ts` 或新设的 `context.ts`，使 `workbook-state`/`clipboard`/`editing` 间无 value 循环。
 6. **每文件 ≤1000 行**：`workbook-state.ts` 当前 1002 行，拆分时进一步切（如样式继承单独成文）。
-7. **验证**：`pnpm --filter @extend-ai/vue-xlsx typecheck` 必须通过；`pnpm --filter @extend-ai/vue-xlsx build` 后运行 `packages/vue-xlsx/test/structure.mjs` 验证 controller 方法表完整；并 grep 确认 monolith 内不再保留已迁出函数的本地副本。
-8. 依赖任务 `xlsx-core-charts-split`/`xlsx-core-images-split` 已完成，composables 从 `@extend-ai/xlsx-core` 统一入口导入（当前 monolith 已如此，拆分时保持）。
+7. **验证**：`pnpm --filter @arcships/vue-xlsx typecheck` 必须通过；`pnpm --filter @arcships/vue-xlsx build` 后运行 `packages/vue-xlsx/test/structure.mjs` 验证 controller 方法表完整；并 grep 确认 monolith 内不再保留已迁出函数的本地副本。
+8. 依赖任务 `xlsx-core-charts-split`/`xlsx-core-images-split` 已完成，composables 从 `@arcships/xlsx-core` 统一入口导入（当前 monolith 已如此，拆分时保持）。

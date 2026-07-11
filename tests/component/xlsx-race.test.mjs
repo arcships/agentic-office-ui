@@ -9,8 +9,8 @@ import {
   waitFor,
 } from "./vue-test-renderer.mjs";
 
-const { useXlsxViewerController } = await importFromDemo("@extend-ai/vue-xlsx");
-const { setWasmSource } = await importFromDemo("@extend-ai/xlsx-core");
+const { useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
+const { setWasmSource } = await importFromDemo("@arcships/xlsx-core");
 
 const workbookBytes = readFileSync(
   new URL("../../apps/demo/public/samples/sales-table.xlsx", import.meta.url),

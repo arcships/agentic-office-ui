@@ -1,6 +1,6 @@
 /** @jsxImportSource vue */
 import { defineComponent } from "vue";
-import type { XlsxChart, XlsxChartElementSelection, XlsxImageRect } from "@extend-ai/xlsx-core";
+import type { XlsxChart, XlsxChartElementSelection, XlsxImageRect } from "@arcships/xlsx-core";
 
 // Re-export all chart utilities from their dedicated modules
 export type { ChartRendererPalette, ChartSvgProps, LegendItem, PlotRect, ChartLayout, BarRect, ChartElementDataOptions, ChartHierarchyDatum, ComboRenderableGroup, ChartStage, BoxWhiskerStats, SurfaceDomain, RegionMapFeature, SurfacePathPoint, SurfaceContourSegment } from "./chart-types";

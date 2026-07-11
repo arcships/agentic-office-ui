@@ -51,8 +51,8 @@ depends-on: [xlsx-003, xlsx-004]
 ## verification
 
 ```bash
-pnpm --filter @extend-ai/vue-xlsx typecheck
-pnpm --filter @extend-ai/vue-xlsx build
+pnpm --filter @arcships/vue-xlsx typecheck
+pnpm --filter @arcships/vue-xlsx build
 ```
 
 浏览器验证：加载 welcome.xlsx / financial-model.xlsx / charts-images.xlsx，检查渲染/编辑/导出。

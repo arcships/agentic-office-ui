@@ -160,7 +160,7 @@ import type {
   DocxEditorController,
   DocxContextMenuContext,
   DocxTableContextMenuContext,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = defineProps<{

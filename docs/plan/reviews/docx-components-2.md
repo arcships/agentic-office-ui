@@ -77,12 +77,12 @@ import { twipsToPixels } from "../../viewer/section-layout";
 ```
 
 ### 4.2 vue-docx
-**使用 `@extend-ai/docx-core` 包名导入。** 这是跨 workspace 包的合法引用方式，等同于相对路径但更稳定。符合架构 Phase 3 要求。
+**使用 `@arcships/docx-core` 包名导入。** 这是跨 workspace 包的合法引用方式，等同于相对路径但更稳定。符合架构 Phase 3 要求。
 
 典型 import 模式：
 ```typescript
-import { cloneDocModel } from "@extend-ai/docx-core";
-import type { DocModel } from "@extend-ai/docx-core";
+import { cloneDocModel } from "@arcships/docx-core";
+import type { DocModel } from "@arcships/docx-core";
 ```
 
 ### 4.3 React 残留检查
@@ -92,8 +92,8 @@ import type { DocModel } from "@extend-ai/docx-core";
 
 | 包 | typecheck | build | 备注 |
 |---|---|---|---|
-| `@extend-ai/docx-core` | ✅ 零错误 | ✅ 646.97 KB ESM | 188.76 KB DTS |
-| `@extend-ai/vue-docx` | ✅ 零错误 | ✅ 174.66 KB ESM | 13.47 KB CSS |
+| `@arcships/docx-core` | ✅ 零错误 | ✅ 646.97 KB ESM | 188.76 KB DTS |
+| `@arcships/vue-docx` | ✅ 零错误 | ✅ 174.66 KB ESM | 13.47 KB CSS |
 
 ## 六、Stub/Mock/Fake 检查
 
@@ -117,7 +117,7 @@ import type { DocModel } from "@extend-ai/docx-core";
 
 ### 7.1 引擎层（wasm + ooxml-core + serializer + doc-model）
 - `engine/types.ts` 与上游 `doc-model/src/types.ts` **完全一致**（diff 零差异）
-- `engine/wasm.ts` 与上游仅差异错误消息前缀（`"react-docx"` → `"@extend-ai/docx-core"`）
+- `engine/wasm.ts` 与上游仅差异错误消息前缀（`"react-docx"` → `"@arcships/docx-core"`）
 - `engine/ooxml-core.ts` 与上游仅差异 import 路径（`@extend-ai/react-docx-wasm` → `./wasm`）
 - `engine/clone.ts`、`engine/normalize.ts`、`engine/serializer.ts` 内容一致
 

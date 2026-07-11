@@ -8,7 +8,7 @@
 ### 1. Typecheck — Zero Errors ✅
 
 ```
-pnpm --filter @extend-ai/vue-xlsx typecheck
+pnpm --filter @arcships/vue-xlsx typecheck
 ```
 
 `tsc --noEmit` completes with zero diagnostics.
@@ -40,7 +40,7 @@ No orphan files.
 
 **No parallel (duplicate) dead code found.** No function is implemented in two places.
 
-**Minor observation:** `composables.ts` re-exports a wide surface (domain creators, utilities, constants, types from all sub-modules), but the official entry point `index.ts` only re-exports `useXlsxViewerController` and `XlsxFileSizeLimitExceededError`. The remaining re-exports in `composables.ts` are unreachable from external consumers via `@extend-ai/vue-xlsx`. These are harmless — typecheck still passes and tree-shaking removes them from the bundle — but the barrel could be trimmed to match the actual public API surface.
+**Minor observation:** `composables.ts` re-exports a wide surface (domain creators, utilities, constants, types from all sub-modules), but the official entry point `index.ts` only re-exports `useXlsxViewerController` and `XlsxFileSizeLimitExceededError`. The remaining re-exports in `composables.ts` are unreachable from external consumers via `@arcships/vue-xlsx`. These are harmless — typecheck still passes and tree-shaking removes them from the bundle — but the barrel could be trimmed to match the actual public API surface.
 
 ## Summary
 

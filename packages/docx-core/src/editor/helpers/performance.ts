@@ -3,7 +3,7 @@
 // These are diagnostic-only performance.mark/measure wrappers used by the
 // composables layer to emit user-timing marks during docx import.
 
-const DOCX_IMPORT_PERFORMANCE_PREFIX = "@extend-ai/docx-core.import";
+const DOCX_IMPORT_PERFORMANCE_PREFIX = "@arcships/docx-core.import";
 
 export function markDocxImportPerformance(name: string): void {
   if (

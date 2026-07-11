@@ -2,8 +2,8 @@
 //
 // Extracted from useDocxEditor.ts.
 
-import type { DocModel } from "@extend-ai/docx-core"
-import { cloneDocModel } from "@extend-ai/docx-core"
+import type { DocModel } from "@arcships/docx-core"
+import { cloneDocModel } from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
 
 export function createEditorTable(

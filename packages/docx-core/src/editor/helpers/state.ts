@@ -13,6 +13,10 @@ import type {
   DocxEditorSelection,
   DocxTextRange
 } from "./editor-types";
+import {
+  DEFAULT_DOCX_HISTORY_MAX_BYTES,
+  trimHistoryEntriesToBudget
+} from "./history-budget";
 
 export interface EditorHistoryEntry {
   model: DocModel;
@@ -25,6 +29,12 @@ export interface EditorHistoryState {
   past: EditorHistoryEntry[];
   future: EditorHistoryEntry[];
   maxEntries: number;
+  /** Added compatibly; missing values use the default byte budget. */
+  maxBytes?: number;
+  /** Approximate retained bytes, populated by `createEditorStateV2`. */
+  pastBytes?: number;
+  /** Approximate retained bytes, populated by `createEditorStateV2`. */
+  futureBytes?: number;
 }
 
 export interface EditorCompositionState {
@@ -65,8 +75,16 @@ export function createEditorStateV2(options: {
   activeTextRange?: DocxTextRange;
   pendingTypingStyle?: TextRunNode["style"];
   historyMaxEntries?: number;
+  historyMaxBytes?: number;
 }): EditorStateV2 {
-  const maxEntries = Math.max(10, options.historyMaxEntries ?? 200);
+  const requestedMaxEntries = options.historyMaxEntries ?? 200;
+  const requestedMaxBytes = options.historyMaxBytes ?? DEFAULT_DOCX_HISTORY_MAX_BYTES;
+  const maxEntries = Number.isFinite(requestedMaxEntries) && requestedMaxEntries > 0
+    ? Math.max(1, Math.floor(requestedMaxEntries))
+    : 200;
+  const maxBytes = Number.isFinite(requestedMaxBytes) && requestedMaxBytes > 0
+    ? Math.max(1, Math.floor(requestedMaxBytes))
+    : DEFAULT_DOCX_HISTORY_MAX_BYTES;
   return {
     model: options.model,
     selection: options.selection,
@@ -75,7 +93,10 @@ export function createEditorStateV2(options: {
     history: {
       past: [],
       future: [],
-      maxEntries
+      maxEntries,
+      maxBytes,
+      pastBytes: 0,
+      futureBytes: 0
     },
     composition: {
       isComposing: false,
@@ -95,13 +116,6 @@ function snapshotState(state: EditorStateV2): EditorHistoryEntry {
     activeTextRange: state.activeTextRange,
     pendingTypingStyle: state.pendingTypingStyle
   };
-}
-
-function trimHistory(entries: EditorHistoryEntry[], maxEntries: number): EditorHistoryEntry[] {
-  if (entries.length <= maxEntries) {
-    return entries;
-  }
-  return entries.slice(entries.length - maxEntries);
 }
 
 export function applyEditorTransactionV2(
@@ -125,6 +139,9 @@ export function applyEditorTransactionV2(
 
   let past = state.history.past;
   let future = state.history.future;
+  let pastBytes = state.history.pastBytes ?? 0;
+  let futureBytes = state.history.futureBytes ?? 0;
+  const historyMaxBytes = state.history.maxBytes ?? DEFAULT_DOCX_HISTORY_MAX_BYTES;
 
   if (shouldPushHistory) {
     if (transaction.mergeWithPrevious && past.length > 0) {
@@ -132,11 +149,17 @@ export function applyEditorTransactionV2(
     } else {
       past = [...past, snapshotState(state)];
     }
-    past = trimHistory(past, state.history.maxEntries);
+    const trimmedPast = trimHistoryEntriesToBudget(past, {
+      maxEntries: state.history.maxEntries,
+      maxBytes: historyMaxBytes
+    });
+    past = trimmedPast.entries;
+    pastBytes = trimmedPast.estimatedBytes;
   }
 
   if (transaction.clearFuture !== false && shouldPushHistory) {
     future = [];
+    futureBytes = 0;
   }
 
   const nextLayoutVersion =
@@ -155,7 +178,9 @@ export function applyEditorTransactionV2(
     history: {
       ...state.history,
       past,
-      future
+      future,
+      pastBytes,
+      futureBytes
     },
     layoutCache: {
       version: nextLayoutVersion,
@@ -170,8 +195,21 @@ export function undoEditorStateV2(state: EditorStateV2): EditorStateV2 {
     return state;
   }
 
-  const updatedPast = state.history.past.slice(0, -1);
-  const updatedFuture = [snapshotState(state), ...state.history.future];
+  const updatedPast = trimHistoryEntriesToBudget(
+    state.history.past.slice(0, -1),
+    {
+      maxEntries: state.history.maxEntries,
+      maxBytes: state.history.maxBytes ?? DEFAULT_DOCX_HISTORY_MAX_BYTES
+    }
+  );
+  const updatedFuture = trimHistoryEntriesToBudget(
+    [snapshotState(state), ...state.history.future],
+    {
+      maxEntries: state.history.maxEntries,
+      maxBytes: state.history.maxBytes ?? DEFAULT_DOCX_HISTORY_MAX_BYTES,
+      newestAt: "start"
+    }
+  );
 
   return {
     ...state,
@@ -181,8 +219,10 @@ export function undoEditorStateV2(state: EditorStateV2): EditorStateV2 {
     pendingTypingStyle: previous.pendingTypingStyle,
     history: {
       ...state.history,
-      past: updatedPast,
-      future: updatedFuture
+      past: updatedPast.entries,
+      future: updatedFuture.entries,
+      pastBytes: updatedPast.estimatedBytes,
+      futureBytes: updatedFuture.estimatedBytes
     },
     layoutCache: {
       version: state.layoutCache.version + 1,
@@ -197,9 +237,20 @@ export function redoEditorStateV2(state: EditorStateV2): EditorStateV2 {
     return state;
   }
 
-  const updatedPast = trimHistory(
+  const updatedPast = trimHistoryEntriesToBudget(
     [...state.history.past, snapshotState(state)],
-    state.history.maxEntries
+    {
+      maxEntries: state.history.maxEntries,
+      maxBytes: state.history.maxBytes ?? DEFAULT_DOCX_HISTORY_MAX_BYTES
+    }
+  );
+  const updatedFuture = trimHistoryEntriesToBudget(
+    remainingFuture,
+    {
+      maxEntries: state.history.maxEntries,
+      maxBytes: state.history.maxBytes ?? DEFAULT_DOCX_HISTORY_MAX_BYTES,
+      newestAt: "start"
+    }
   );
 
   return {
@@ -210,8 +261,10 @@ export function redoEditorStateV2(state: EditorStateV2): EditorStateV2 {
     pendingTypingStyle: next.pendingTypingStyle,
     history: {
       ...state.history,
-      past: updatedPast,
-      future: remainingFuture
+      past: updatedPast.entries,
+      future: updatedFuture.entries,
+      pastBytes: updatedPast.estimatedBytes,
+      futureBytes: updatedFuture.estimatedBytes
     },
     layoutCache: {
       version: state.layoutCache.version + 1,

@@ -35,7 +35,7 @@ Status: **pass**
 | 功能对齐上游 f285a1c | ✅ | 所有数据模型类型已迁移，React 组件 prop 类型（XlsxViewerProps, XlsxViewerProviderProps）已正确移除 |
 | React 残留 | ✅ | types/ 目录零 `React.` 引用，`React.CSSProperties` → `Record<string, string | number | undefined>`，`React.ReactNode` → `unknown` |
 | import 路径 | ✅ | 6 个消费方（charts/images/colors/xlsx-worker/worker-client/index）均引用 `"./types"`，解析为 `./types/index.ts` |
-| typecheck | ✅ | `pnpm --filter @extend-ai/xlsx-core typecheck` 通过，零错误 |
+| typecheck | ✅ | `pnpm --filter @arcships/xlsx-core typecheck` 通过，零错误 |
 | stub/mock/fake | ✅ | 无残留 |
 | 单文件 ≤1000 行 | ✅ | max 958（worksheet-types.ts） |
 | 循环依赖 | ✅ | `chart-types.ts → image-types.ts`, `worksheet-types.ts → chart-types.ts + image-types.ts`，无反向依赖 |

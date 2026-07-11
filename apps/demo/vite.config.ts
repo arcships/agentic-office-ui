@@ -1,23 +1,36 @@
+import { rmSync } from "node:fs"
 import path from "path"
 import { defineConfig } from "vite"
 import vue from "@vitejs/plugin-vue"
 
 const workspaceRoot = path.resolve(__dirname, "../..")
 
-const workspaceSourceAliasIds = ["@extend-ai/docx-core", "@extend-ai/vue-docx"] as const
+const workspaceSourceAliasIds = ["@arcships/docx-core", "@arcships/vue-docx"] as const
 const workspaceSourceAliases = [
   {
-    find: /^@extend-ai\/docx-core$/,
+    find: /^@arcships\/docx-core$/,
     replacement: path.resolve(workspaceRoot, "packages/docx-core/src/index.ts"),
   },
   {
-    find: /^@extend-ai\/vue-docx$/,
+    find: /^@arcships\/vue-docx$/,
     replacement: path.resolve(workspaceRoot, "packages/vue-docx/src/index.ts"),
   },
 ]
 
+function omitLegacyPublicWasmCopies() {
+  return {
+    name: "omit-legacy-public-wasm-copies",
+    apply: "build" as const,
+    closeBundle() {
+      for (const fileName of ["docx_wasm_bg.wasm", "duke_sheets_wasm_bg.wasm"]) {
+        rmSync(path.resolve(__dirname, "dist", fileName), { force: true })
+      }
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), omitLegacyPublicWasmCopies()],
   server: { port: 5000 },
   worker: {
     format: "es",
@@ -32,5 +45,12 @@ export default defineConfig({
   resolve: {
     alias: workspaceSourceAliases,
     dedupe: ["vue"],
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        chunkFileNames: "assets/chunk-[name]-[hash].js",
+      },
+    },
   },
 })

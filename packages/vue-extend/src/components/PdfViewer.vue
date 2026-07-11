@@ -5,7 +5,7 @@ import {
   createOfficeTaskSequence,
   type OfficeSource,
   type OfficeUrlPolicy,
-} from "@extend-ai/office-runtime"
+} from "@arcships/office-runtime"
 import {
   DEFAULT_PDF_MAX_FILE_SIZE,
   loadVerifiedPdfSource,

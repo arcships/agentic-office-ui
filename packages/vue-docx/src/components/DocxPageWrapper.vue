@@ -15,7 +15,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue"
-import type { LayoutPage } from "@extend-ai/docx-core"
+import type { LayoutPage } from "@arcships/docx-core"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(

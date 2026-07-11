@@ -1,6 +1,10 @@
 {
-  "name": "@extend-ai/xlsx-core",
-  "version": "0.1.0",
+  "name": "@arcships/xlsx-core",
+  "version": "0.2.0",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -42,6 +46,7 @@
   },
   "dependencies": {
     "@dukelib/sheets-wasm": "0.1.17",
+    "@xmldom/xmldom": "0.9.10",
     "d3-geo": "^3.1.1",
     "d3-hierarchy": "^3.1.2",
     "d3-scale": "^4.0.2",

@@ -7,7 +7,7 @@ Task: [xlsx-006](docs/plan/tasks/xlsx-006.md)
 ## Typecheck
 
 ```bash
-pnpm --filter @extend-ai/vue-xlsx typecheck
+pnpm --filter @arcships/vue-xlsx typecheck
 ```
 
 ✅ **零错误**。`tsc --noEmit` 通过，无类型错误。
@@ -52,7 +52,7 @@ pnpm --filter demo build
 
 ```ts
 // main.ts:11,14
-import { setWasmSource as setXlsxWasmSource } from "@extend-ai/xlsx-core"
+import { setWasmSource as setXlsxWasmSource } from "@arcships/xlsx-core"
 setXlsxWasmSource("/duke_sheets_wasm_bg.wasm")
 ```
 
@@ -60,7 +60,7 @@ setXlsxWasmSource("/duke_sheets_wasm_bg.wasm")
 
 ### Controller + Viewer 接入
 
-✅ `useXlsxViewerController` + `XlsxViewer` 正确 import 自 `@extend-ai/vue-xlsx`。
+✅ `useXlsxViewerController` + `XlsxViewer` 正确 import 自 `@arcships/vue-xlsx`。
 ✅ Wrapper 组件通过 `defineComponent` 创建 controller 并传入 XlsxViewer，key 机制保证 source 切换时正确重载。
 ✅ Fixture 切换：5 个 sample（financial-model、sales-table、charts-images、large-grid、corrupted）通过 `<select>` + URL 加载。
 ✅ Worker toggle 正确传入 `useWorker` prop。
@@ -69,8 +69,8 @@ setXlsxWasmSource("/duke_sheets_wasm_bg.wasm")
 ### Import 路径
 
 全部 import 路径正确：
-- `@extend-ai/xlsx-core`：wasm API、类型定义
-- `@extend-ai/vue-xlsx`：controller + viewer 组件
+- `@arcships/xlsx-core`：wasm API、类型定义
+- `@arcships/vue-xlsx`：controller + viewer 组件
 - 相对路径 `./components/Xxx.vue`：组件间引用
 - 无直接引用 dist、无跨 workspace 裸路径
 

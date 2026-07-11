@@ -137,7 +137,7 @@ function makeInjectable<Args extends unknown[], R>(name: string) {
 
 ### 3.2 vue-docx: 跨包引用正确 ✅
 
-- 跨包 import 使用 `@extend-ai/docx-core`（workspace 协议）
+- 跨包 import 使用 `@arcships/docx-core`（workspace 协议）
 - composables/ 内文件间引用用相对路径
 
 ---
@@ -146,8 +146,8 @@ function makeInjectable<Args extends unknown[], R>(name: string) {
 
 | 包 | 命令 | 结果 |
 |---|---|---|
-| `@extend-ai/docx-core` | `tsc --noEmit` | ✅ 通过 |
-| `@extend-ai/vue-docx` | `tsc --noEmit` | ✅ 通过 |
+| `@arcships/docx-core` | `tsc --noEmit` | ✅ 通过 |
+| `@arcships/vue-docx` | `tsc --noEmit` | ✅ 通过 |
 
 ---
 

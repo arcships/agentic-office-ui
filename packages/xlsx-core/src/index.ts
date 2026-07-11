@@ -4,10 +4,22 @@ export { bundledXlsxWasmUrl } from "./wasm-asset";
 
 export { safeCalculate, tryRecalculate } from "./safe-calculate";
 export type { SafeCalculateSkipReason, SafeCalculateResult, SafeCalculateOptions } from "./safe-calculate";
+export { trackXlsxWorkbookLifetime } from "./workbook-lifetime";
 
-export { XlsxWorkerClient, createBundledXlsxWorker } from "./worker-client";
-export type { XlsxWorkerClientOptions } from "./worker-client";
+export { XlsxWorkerClient, XlsxWorkerError, createBundledXlsxWorker } from "./worker-client";
+export type { XlsxWorkerClientOptions, XlsxWorkerErrorCode } from "./worker-client";
 export { createXlsxRuntime } from "./runtime/xlsx-runtime";
+export {
+  DEFAULT_XLSX_RUNTIME_LIMITS,
+  resolveXlsxRuntimeLimits,
+  validateXlsxArchive,
+} from "./resource-limits";
+export type {
+  XlsxArchiveEntry,
+  XlsxArchiveValidationResult,
+  XlsxImageBudgetSnapshot,
+  XlsxRuntimeLimits,
+} from "./resource-limits";
 export type {
   XlsxRuntime,
   XlsxRuntimeConfig,
@@ -31,6 +43,8 @@ export {
   parseWorkbookStructureAssets,
   parseWorkbookChartStyleAssets,
   parseWorkbookImageAssets,
+  normalizeWorkbookTableMetadata,
+  validateXlsxImageAssets,
   updateWorkbookImageAnchor,
   mergeWorkbookImageAssets,
   emuToPixels,
@@ -40,6 +54,7 @@ export {
   resolveSheetRowHeightPixels,
   resolveRenderedSheetAxisPixels,
   resolveContentSheetAxisPixels,
+  anchorToAbsoluteRect,
   rectToImageAnchor,
   resizeImageRect,
 } from "./images";

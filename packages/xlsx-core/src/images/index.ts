@@ -131,6 +131,7 @@ export {
   parseSheetState,
   parseWorkbookSheets,
   parseWorkbookStructureAssetsFromArchive,
+  normalizeWorkbookTableMetadata,
 } from "./grid-render";
 
 // Image export / merge
@@ -142,3 +143,4 @@ export {
   updateWorkbookImageAnchor,
   mergeWorkbookImageAssets,
 } from "./image-export";
+export { validateXlsxImageAssets } from "./image-budget";

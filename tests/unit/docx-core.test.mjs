@@ -8,10 +8,10 @@ const requireFromVueDocx = createRequire(
   new URL("../../packages/vue-docx/package.json", import.meta.url),
 );
 const core = await import(
-  pathToFileURL(requireFromVueDocx.resolve("@extend-ai/docx-core")).href
+  pathToFileURL(requireFromVueDocx.resolve("@arcships/docx-core")).href
 );
 const runtimeEntry = await import(
-  pathToFileURL(requireFromVueDocx.resolve("@extend-ai/docx-core/runtime")).href
+  pathToFileURL(requireFromVueDocx.resolve("@arcships/docx-core/runtime")).href
 );
 const samples = new URL("../../apps/demo/public/samples/", import.meta.url);
 
@@ -58,6 +58,7 @@ class ControlledDocxWorker {
     this.marker = marker;
     this.respond = respond;
     this.listeners = new Map();
+    this.messages = [];
     this.terminated = false;
     this.timer = null;
   }
@@ -74,6 +75,7 @@ class ControlledDocxWorker {
   }
 
   postMessage(request) {
+    this.messages.push(request);
     if (!this.respond) return;
     this.timer = setTimeout(() => {
       if (this.terminated) return;
@@ -131,6 +133,18 @@ test("DOCX runtime entry exposes its public import error constructor", () => {
   const error = new runtimeEntry.DocxImportError("PARSE_FAILED", "broken document");
   assert.equal(error.name, "DocxImportError");
   assert.equal(error.code, "PARSE_FAILED");
+});
+
+test("DOCX page margin styles include CSS pixel units", () => {
+  assert.deepEqual(
+    core.pageMarginPaddingStyle({ top: 56, right: 48, bottom: 40, left: 32 }),
+    {
+      paddingTop: "56px",
+      paddingRight: "48px",
+      paddingBottom: "40px",
+      paddingLeft: "32px",
+    },
+  );
 });
 
 test("DOCX abort terminates the active Worker and rejects as ABORTED", async () => {
@@ -250,15 +264,42 @@ test("DOCX runtime rejects a dangerous URL before fetch", async () => {
 
 test("DOCX runtime snapshots limits instead of reading later caller mutations", async () => {
   await withWorkerGlobal(async () => {
-    const limits = { maxInputBytes: 8 };
+    const limits = { maxInputBytes: 8, maxArchiveEntries: 7, maxDocxPages: 3 };
+    const worker = new ControlledDocxWorker({ marker: "snapshotted-config" });
     const runtime = core.createDocxRuntime({
       limits,
-      createWorker: () => new ControlledDocxWorker({ marker: "snapshotted-config" }),
+      createWorker: () => worker,
       wasmUrl: "https://assets.example/docx.wasm",
     });
     limits.maxInputBytes = 1;
+    limits.maxArchiveEntries = 1;
+    limits.maxDocxPages = 1;
     const result = await runtime.importDocxBuffer(new ArrayBuffer(4));
     assert.equal(result.model.nodes[0].id, "snapshotted-config");
+    assert.equal(Object.isFrozen(runtime.limits), true);
+    assert.equal(runtime.limits.maxArchiveEntries, 7);
+    assert.equal(runtime.limits.maxDocxPages, 3);
+    assert.equal(worker.messages[0].limits.maxArchiveEntries, 7);
+    runtime.dispose();
+  });
+});
+
+test("DOCX Worker timeout is structured and terminates the blocked Worker", async () => {
+  await withWorkerGlobal(async () => {
+    const worker = new ControlledDocxWorker({ respond: false });
+    const runtime = core.createDocxRuntime({
+      createWorker: () => worker,
+      wasmUrl: "https://assets.example/docx.wasm",
+      limits: { maxInputBytes: 8, maxParseMs: 5 },
+    });
+    await assert.rejects(
+      runtime.importDocxBuffer(new ArrayBuffer(4)),
+      (error) => error?.code === "TIMEOUT" &&
+        error?.phase === "parse" &&
+        error?.limit === "maxParseMs" &&
+        error?.actual > error?.allowed,
+    );
+    assert.equal(worker.terminated, true);
     runtime.dispose();
   });
 });

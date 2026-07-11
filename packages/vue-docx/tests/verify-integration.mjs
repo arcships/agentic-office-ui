@@ -59,7 +59,7 @@ async function verifyD1() {
   const {
     wasmBuildDocModelFromBytes,
     wasmSerializeDocx,
-  } = await import("@extend-ai/docx-core");
+  } = await import("@arcships/docx-core");
 
   const samplePath = resolve(
     REPO_ROOT,
@@ -158,7 +158,7 @@ if paras:
 async function verifyD2() {
   heading("D2: docx-import worker call (importDocxBuffer → worker path)");
 
-  const { createDocxRuntime, importDocxBuffer } = await import("@extend-ai/docx-core");
+  const { createDocxRuntime, importDocxBuffer } = await import("@arcships/docx-core");
 
   const samplePath = resolve(
     REPO_ROOT,
@@ -282,7 +282,7 @@ async function verifyD3() {
   const {
     buildDocumentPageNodeSegments,
     defaultStarterModel,
-  } = await import("@extend-ai/docx-core");
+  } = await import("@arcships/docx-core");
 
   const model = defaultStarterModel;
 
@@ -363,7 +363,7 @@ async function verifyD4() {
     defaultStarterModel,
     assertValidDocxModel,
     DocxModelValidationError,
-  } = await import("@extend-ai/docx-core");
+  } = await import("@arcships/docx-core");
 
   const original = cloneDocModel(defaultStarterModel);
 
@@ -445,7 +445,7 @@ async function verifyD5() {
     wasmPackageToMaps,
     cloneDocModel,
     updateParagraphText,
-  } = await import("@extend-ai/docx-core");
+  } = await import("@arcships/docx-core");
 
   // Load a sample docx to get a real basePackage
   const samplePath = resolve(

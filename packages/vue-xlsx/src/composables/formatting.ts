@@ -8,7 +8,7 @@ import type {
   XlsxCellRange,
   XlsxResolvedCellStyle,
   XlsxSheetData
-} from "@extend-ai/xlsx-core";
+} from "@arcships/xlsx-core";
 import {
   MAX_INTERACTIVE_SHARED_STRINGS_BYTES,
   MAX_INTERACTIVE_TOTAL_XML_BYTES,

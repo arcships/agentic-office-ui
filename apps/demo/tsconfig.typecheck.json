@@ -4,11 +4,12 @@
     "noEmit": true,
     "baseUrl": "../..",
     "paths": {
-      "@extend-ai/docx-core": ["packages/docx-core/src/index.ts"],
-      "@extend-ai/xlsx-core": ["packages/xlsx-core/src/index.ts"],
-      "@extend-ai/vue-docx": ["packages/vue-docx/src/index.ts"],
-      "@extend-ai/vue-xlsx": ["packages/vue-xlsx/src/index.ts"],
-      "@extend-ai/vue-extend": ["packages/vue-extend/src/index.ts"]
+      "@arcships/docx-core": ["packages/docx-core/src/index.ts"],
+      "@arcships/xlsx-core": ["packages/xlsx-core/src/index.ts"],
+      "@arcships/xlsx-core/runtime": ["packages/xlsx-core/src/runtime.ts"],
+      "@arcships/vue-docx": ["packages/vue-docx/src/index.ts"],
+      "@arcships/vue-xlsx": ["packages/vue-xlsx/src/index.ts"],
+      "@arcships/vue-extend": ["packages/vue-extend/src/index.ts"]
     }
   },
   "include": ["src", "vite.config.ts", "../../packages/docx-core/src/**/*.d.ts"]

@@ -49,16 +49,16 @@ export const DEFAULT_DOCUMENT_LAYOUT: DocumentLayoutMetrics = {
 export function pageMarginPaddingStyle(
   marginsPx: DocumentLayoutMetrics["marginsPx"]
 ): {
-  paddingTop: number;
-  paddingRight: number;
-  paddingBottom: number;
-  paddingLeft: number;
+  paddingTop: string;
+  paddingRight: string;
+  paddingBottom: string;
+  paddingLeft: string;
 } {
   return {
-    paddingTop: marginsPx.top,
-    paddingRight: marginsPx.right,
-    paddingBottom: marginsPx.bottom,
-    paddingLeft: marginsPx.left,
+    paddingTop: `${marginsPx.top}px`,
+    paddingRight: `${marginsPx.right}px`,
+    paddingBottom: `${marginsPx.bottom}px`,
+    paddingLeft: `${marginsPx.left}px`,
   };
 }
 

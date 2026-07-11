@@ -1,41 +1,96 @@
-/**
- * Insertion-ordered LRU keyed by string. Values are typically surface
- * canvases (~4 bytes per pixel), so the entry cap bounds memory directly.
- */
-export class DocxThumbnailSurfaceCache<T> {
-  private readonly entries = new Map<string, T>();
+interface DocxThumbnailSurfaceCacheOptions<T> {
+  maxEntries: number;
+  maxBytes?: number;
+  estimateBytes?: (value: T) => number;
+}
 
-  constructor(private readonly maxEntries: number) {}
+interface DocxThumbnailSurfaceCacheEntry<T> {
+  value: T;
+  estimatedBytes: number;
+}
+
+/** Insertion-ordered, instance-owned LRU with count and byte limits. */
+export class DocxThumbnailSurfaceCache<T> {
+  private readonly entries = new Map<string, DocxThumbnailSurfaceCacheEntry<T>>();
+  private readonly maxEntries: number;
+  private readonly maxBytes: number;
+  private readonly estimateBytes: (value: T) => number;
+  private retainedBytes = 0;
+
+  constructor(options: number | DocxThumbnailSurfaceCacheOptions<T>) {
+    const normalizedOptions = typeof options === "number"
+      ? { maxEntries: options }
+      : options;
+    this.maxEntries = normalizeCacheLimit(normalizedOptions.maxEntries);
+    this.maxBytes = normalizeCacheLimit(
+      normalizedOptions.maxBytes ?? Number.MAX_SAFE_INTEGER
+    );
+    this.estimateBytes = normalizedOptions.estimateBytes ?? (() => 0);
+  }
 
   get size(): number {
     return this.entries.size;
   }
 
+  get estimatedBytes(): number {
+    return this.retainedBytes;
+  }
+
   get(key: string): T | undefined {
-    const value = this.entries.get(key);
-    if (value === undefined) {
+    const entry = this.entries.get(key);
+    if (entry === undefined) {
       return undefined;
     }
     this.entries.delete(key);
-    this.entries.set(key, value);
-    return value;
+    this.entries.set(key, entry);
+    return entry.value;
   }
 
   set(key: string, value: T): void {
-    this.entries.delete(key);
-    this.entries.set(key, value);
-    while (this.entries.size > this.maxEntries) {
+    this.delete(key);
+    const rawBytes = this.estimateBytes(value);
+    const estimatedBytes = Number.isFinite(rawBytes) && rawBytes >= 0
+      ? Math.ceil(rawBytes)
+      : Number.MAX_SAFE_INTEGER;
+    if (
+      this.maxEntries === 0 ||
+      this.maxBytes === 0 ||
+      estimatedBytes > this.maxBytes
+    ) {
+      return;
+    }
+
+    this.entries.set(key, { value, estimatedBytes });
+    this.retainedBytes += estimatedBytes;
+    while (
+      this.entries.size > this.maxEntries ||
+      this.retainedBytes > this.maxBytes
+    ) {
       const oldestKey = this.entries.keys().next().value;
       if (oldestKey === undefined) {
         break;
       }
-      this.entries.delete(oldestKey);
+      this.delete(oldestKey);
     }
+  }
+
+  delete(key: string): boolean {
+    const entry = this.entries.get(key);
+    if (!entry) return false;
+    this.entries.delete(key);
+    this.retainedBytes = Math.max(0, this.retainedBytes - entry.estimatedBytes);
+    return true;
   }
 
   clear(): void {
     this.entries.clear();
+    this.retainedBytes = 0;
   }
+}
+
+function normalizeCacheLimit(value: number): number {
+  if (!Number.isFinite(value)) return Number.MAX_SAFE_INTEGER;
+  return Math.max(0, Math.floor(value));
 }
 
 interface SerialIdleTaskQueueEntry<K> {

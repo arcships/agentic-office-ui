@@ -338,12 +338,12 @@ export function buildA1RangeFormula(sheetName: string, start: { col: number; row
 }
 
 export function resolveReferenceSheet(workbook: Workbook, fallbackSheetIndex: number, formula?: string | null) {
+  const fallback = (range: ReturnType<typeof parseA1Range>) => {
+    const sheet = workbook.getSheet(fallbackSheetIndex);
+    return { range, sheet, sheetName: sheet.name ?? "" };
+  };
   if (!formula) {
-    return {
-      range: null,
-      sheet: workbook.getSheet(fallbackSheetIndex),
-      sheetName: workbook.getSheet(fallbackSheetIndex)?.name ?? ""
-    };
+    return fallback(null);
   }
 
   const trimmedFormula = formula.trim();
@@ -360,11 +360,7 @@ export function resolveReferenceSheet(workbook: Workbook, fallbackSheetIndex: nu
 
   const split = splitSheetReference(trimmedFormula);
   if (!split) {
-    return {
-      range: parseA1Range(trimmedFormula),
-      sheet: workbook.getSheet(fallbackSheetIndex),
-      sheetName: workbook.getSheet(fallbackSheetIndex)?.name ?? ""
-    };
+    return fallback(parseA1Range(trimmedFormula));
   }
 
   try {
@@ -374,11 +370,7 @@ export function resolveReferenceSheet(workbook: Workbook, fallbackSheetIndex: nu
       sheetName: split.sheetName
     };
   } catch {
-    return {
-      range: parseA1Range(split.range),
-      sheet: workbook.getSheet(fallbackSheetIndex),
-      sheetName: workbook.getSheet(fallbackSheetIndex)?.name ?? ""
-    };
+    return fallback(parseA1Range(split.range));
   }
 }
 
@@ -394,27 +386,31 @@ export function resolveChartReferenceLabel(
 
   const resolved = resolveReferenceSheet(workbook, fallbackSheetIndex, reference.formula);
   if (!resolved.sheet || !resolved.range) {
+    resolved.sheet?.free();
     return fallbackLabel;
   }
+  try {
+    const { start } = resolved.range;
+    if (start.row > 0) {
+      const headerDisplay = cellValueToDisplay(
+        typeof resolved.sheet.getFormattedValueAt === "function"
+          ? resolved.sheet.getFormattedValueAt(start.row - 1, start.col)
+          : null
+      );
+      if (headerDisplay.length > 0) {
+        return headerDisplay;
+      }
+    }
 
-  const { start } = resolved.range;
-  if (start.row > 0) {
-    const headerDisplay = cellValueToDisplay(
+    const firstDisplay = cellValueToDisplay(
       typeof resolved.sheet.getFormattedValueAt === "function"
-        ? resolved.sheet.getFormattedValueAt(start.row - 1, start.col)
+        ? resolved.sheet.getFormattedValueAt(start.row, start.col)
         : null
     );
-    if (headerDisplay.length > 0) {
-      return headerDisplay;
-    }
+    return firstDisplay.length > 0 ? firstDisplay : fallbackLabel;
+  } finally {
+    resolved.sheet.free();
   }
-
-  const firstDisplay = cellValueToDisplay(
-    typeof resolved.sheet.getFormattedValueAt === "function"
-      ? resolved.sheet.getFormattedValueAt(start.row, start.col)
-      : null
-  );
-  return firstDisplay.length > 0 ? firstDisplay : fallbackLabel;
 }
 
 export function resolveReferenceRowPaths(
@@ -428,29 +424,35 @@ export function resolveReferenceRowPaths(
 
   const resolved = resolveReferenceSheet(workbook, fallbackSheetIndex, reference.formula);
   if (!resolved.sheet || !resolved.range) {
+    resolved.sheet?.free();
     return [];
   }
-
-  const rows: string[][] = [];
-  for (let row = resolved.range.start.row; row <= resolved.range.end.row; row += 1) {
-    const parts: string[] = [];
-    for (let col = resolved.range.start.col; col <= resolved.range.end.col; col += 1) {
-      const calculated = typeof resolved.sheet.getCalculatedValueAt === "function"
-        ? resolved.sheet.getCalculatedValueAt(row, col)
-        : null;
-      const formatted = typeof resolved.sheet.getFormattedValueAt === "function"
-        ? resolved.sheet.getFormattedValueAt(row, col)
-        : calculated;
-      const display = cellValueToDisplay(formatted ?? calculated);
-      const numeric = cellValueToNumber(calculated ?? formatted);
-      const label = display.length > 0 ? display : (numeric != null ? String(numeric) : "");
-      if (label.length > 0) {
-        parts.push(label);
+  try {
+    const rows: string[][] = [];
+    for (let row = resolved.range.start.row; row <= resolved.range.end.row; row += 1) {
+      const parts: string[] = [];
+      for (let col = resolved.range.start.col; col <= resolved.range.end.col; col += 1) {
+        const calculated = typeof resolved.sheet.getCalculatedValueAt === "function"
+          ? resolved.sheet.getCalculatedValueAt(row, col)
+          : null;
+        try {
+          const formatted = typeof resolved.sheet.getFormattedValueAt === "function"
+            ? resolved.sheet.getFormattedValueAt(row, col)
+            : calculated;
+          const display = cellValueToDisplay(formatted ?? calculated);
+          const numeric = cellValueToNumber(calculated ?? formatted);
+          const label = display.length > 0 ? display : (numeric != null ? String(numeric) : "");
+          if (label.length > 0) parts.push(label);
+        } finally {
+          calculated?.free();
+        }
       }
+      rows.push(parts);
     }
-    rows.push(parts);
+    return rows;
+  } finally {
+    resolved.sheet.free();
   }
-  return rows;
 }
 
 export function cellValueToNumber(value: unknown) {
@@ -544,29 +546,36 @@ export function resolveReferenceValues(
 
   const resolved = resolveReferenceSheet(workbook, fallbackSheetIndex, reference.formula);
   if (!resolved.sheet || !resolved.range) {
+    resolved.sheet?.free();
     return reference.values ?? [];
   }
-
-  const values: Array<number | string | null> = [];
-  for (let row = resolved.range.start.row; row <= resolved.range.end.row; row += 1) {
-    for (let col = resolved.range.start.col; col <= resolved.range.end.col; col += 1) {
-      const calculated = typeof resolved.sheet.getCalculatedValueAt === "function"
-        ? resolved.sheet.getCalculatedValueAt(row, col)
-        : null;
-      const formatted = typeof resolved.sheet.getFormattedValueAt === "function"
-        ? resolved.sheet.getFormattedValueAt(row, col)
-        : calculated;
-      if (mode === "value") {
-        values.push(cellValueToNumber(calculated ?? formatted));
-      } else {
-        const display = cellValueToDisplay(formatted ?? calculated);
-        const numeric = cellValueToNumber(calculated ?? formatted);
-        values.push(display.length > 0 ? display : (numeric !== null ? numeric : null));
+  try {
+    const values: Array<number | string | null> = [];
+    for (let row = resolved.range.start.row; row <= resolved.range.end.row; row += 1) {
+      for (let col = resolved.range.start.col; col <= resolved.range.end.col; col += 1) {
+        const calculated = typeof resolved.sheet.getCalculatedValueAt === "function"
+          ? resolved.sheet.getCalculatedValueAt(row, col)
+          : null;
+        try {
+          const formatted = typeof resolved.sheet.getFormattedValueAt === "function"
+            ? resolved.sheet.getFormattedValueAt(row, col)
+            : calculated;
+          if (mode === "value") {
+            values.push(cellValueToNumber(calculated ?? formatted));
+          } else {
+            const display = cellValueToDisplay(formatted ?? calculated);
+            const numeric = cellValueToNumber(calculated ?? formatted);
+            values.push(display.length > 0 ? display : (numeric !== null ? numeric : null));
+          }
+        } finally {
+          calculated?.free();
+        }
       }
     }
+    return values;
+  } finally {
+    resolved.sheet.free();
   }
-
-  return values;
 }
 
 export function resolveSeriesName(workbook: Workbook, fallbackSheetIndex: number, rawName: unknown) {
@@ -576,14 +585,18 @@ export function resolveSeriesName(workbook: Workbook, fallbackSheetIndex: number
 
   const resolved = resolveReferenceSheet(workbook, fallbackSheetIndex, rawName);
   if (!resolved.sheet || !resolved.range) {
+    resolved.sheet?.free();
     return rawName;
   }
-
-  const value = typeof resolved.sheet.getFormattedValueAt === "function"
-    ? resolved.sheet.getFormattedValueAt(resolved.range.start.row, resolved.range.start.col)
-    : null;
-  const display = cellValueToDisplay(value);
-  return display || rawName;
+  try {
+    const value = typeof resolved.sheet.getFormattedValueAt === "function"
+      ? resolved.sheet.getFormattedValueAt(resolved.range.start.row, resolved.range.start.col)
+      : null;
+    const display = cellValueToDisplay(value);
+    return display || rawName;
+  } finally {
+    resolved.sheet.free();
+  }
 }
 
 export function normalizeChartSeries(
@@ -658,4 +671,3 @@ export function normalizeChartReference(raw: unknown): XlsxChartReference | null
     values: Array.isArray(record.values) ? record.values as Array<number | string | null> : undefined
   };
 }
-

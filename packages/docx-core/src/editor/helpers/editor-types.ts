@@ -321,4 +321,19 @@ export interface UseDocxEditorOptions {
    * @defaultValue `false`
    */
   initialShowComments?: boolean;
+  /**
+   * Maximum number of undo and redo snapshots retained by this editor
+   * instance.
+   *
+   * @defaultValue `100`
+   */
+  historyMaxEntries?: number;
+  /**
+   * Approximate byte budget for undo and redo snapshots retained by this
+   * editor instance. The newest oversized snapshot is kept by itself so the
+   * latest edit remains undoable.
+   *
+   * @defaultValue `32 * 1024 * 1024`
+   */
+  historyMaxBytes?: number;
 }

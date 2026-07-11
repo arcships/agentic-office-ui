@@ -288,7 +288,7 @@ test("core dependency gate reports a clean recursive runtime graph", () => {
 test("published core and runtime subpaths preserve the intended declaration boundary", () => {
   const packages = ["docx-core", "xlsx-core"];
   const forbiddenCoreDeclaration =
-    /@dukelib\/sheets-wasm|@extend-ai\/office-runtime|\b(?:AbortSignal|Blob|DOMParser|File|HTMLCanvasElement|Worker|XMLSerializer|fetch)\b/u;
+    /@dukelib\/sheets-wasm|@arcships\/office-runtime|\b(?:AbortSignal|Blob|DOMParser|File|HTMLCanvasElement|Worker|XMLSerializer|fetch)\b/u;
 
   for (const packageName of packages) {
     const packageDir = resolve(rootDir, "packages", packageName);

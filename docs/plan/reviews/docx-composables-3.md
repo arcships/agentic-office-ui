@@ -126,7 +126,7 @@ Baseline: `docs/docx-migration-architecture.md` §3.1 + `docs/upstream-docx-feat
 
 | 类型 | 路径 | 状态 |
 |---|---|---|
-| 跨 package | `@extend-ai/docx-core` | ✅ monorepo workspace 解析正确，typecheck 通过 |
+| 跨 package | `@arcships/docx-core` | ✅ monorepo workspace 解析正确，typecheck 通过 |
 | Intra-composables | `./editor-shared`、`./editor-transaction` 等 | ✅ 相对路径，moduleResolution bundler 兼容 |
 
 所有 import 均正确解析，无 `../../` 越级引用、无循环依赖（composables 之间有向无环：子模块 → editor-shared ← useDocxEditor）。
@@ -136,7 +136,7 @@ Baseline: `docs/docx-migration-architecture.md` §3.1 + `docs/upstream-docx-feat
 ## 4. Typecheck 结果
 
 ```
-$ pnpm --filter @extend-ai/vue-docx typecheck
+$ pnpm --filter @arcships/vue-docx typecheck
 > tsc --noEmit
 # exit code 0，零错误
 ```

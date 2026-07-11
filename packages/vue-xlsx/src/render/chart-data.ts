@@ -1,5 +1,5 @@
 /** @jsxImportSource vue */
-import type { XlsxChart, XlsxChartAxis, XlsxChartSeries } from "@extend-ai/xlsx-core";
+import type { XlsxChart, XlsxChartAxis, XlsxChartSeries } from "@arcships/xlsx-core";
 import { safeNumber, normalizeCategoryLabel, clamp, normalizeRendererHexColor, lightenColor, darkenColor } from "./chart-shared";
 import type { ComboRenderableGroup } from "./chart-types";
 

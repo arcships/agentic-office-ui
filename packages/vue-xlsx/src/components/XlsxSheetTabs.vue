@@ -1,11 +1,14 @@
 <template>
   <div class="xlsx-sheettabs" :style="tabsStyle">
     <button
+      type="button"
       class="xlsx-sheettabs__nav-btn"
       :disabled="activeTabIndex <= 0"
+      title="上一个工作表"
+      aria-label="上一个工作表"
       @click="prevTab"
     >
-      ‹
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6" /></svg>
     </button>
     <div class="xlsx-sheettabs__list">
       <div
@@ -43,36 +46,57 @@
         </div>
       </div>
       <button
-        v-if="!controller.readOnly"
+        v-if="!isReadOnly"
+        type="button"
         class="xlsx-sheettabs__add-btn"
+        data-testid="xlsx-add-sheet"
         title="添加工作表"
+        aria-label="添加工作表"
         @click="controller.addSheet()"
       >
-        +
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+      </button>
+      <button
+        v-if="!isReadOnly"
+        type="button"
+        class="xlsx-sheettabs__remove-btn"
+        data-testid="xlsx-remove-sheet"
+        :disabled="!canRemoveActiveSheet"
+        title="删除当前工作表"
+        aria-label="删除当前工作表"
+        @click="removeActiveSheet"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M8 10v8M12 10v8M16 10v8M7 7l1 14h8l1-14" /></svg>
       </button>
     </div>
     <button
+      type="button"
       class="xlsx-sheettabs__nav-btn"
       :disabled="activeTabIndex >= controller.tabs.length - 1"
+      title="下一个工作表"
+      aria-label="下一个工作表"
       @click="nextTab"
     >
-      ›
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6" /></svg>
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onMounted, onUnmounted, type CSSProperties } from "vue";
-import type { XlsxViewerController, XlsxSheetThumbnail, UseXlsxViewerThumbnailsOptions } from "@extend-ai/xlsx-core";
+import type { XlsxViewerController, XlsxSheetThumbnail, UseXlsxViewerThumbnailsOptions } from "@arcships/xlsx-core";
 import { useXlsxViewerThumbnails } from "../composables/useXlsxViewerThumbnails";
 
 const props = defineProps<{
   controller: XlsxViewerController;
   isDark?: boolean;
+  readOnly?: boolean;
   thumbnailOptions?: UseXlsxViewerThumbnailsOptions;
 }>();
 
 const activeTabIndex = computed(() => props.controller.activeTabIndex);
+const isReadOnly = computed(() => props.controller.readOnly || props.readOnly === true);
+const canRemoveActiveSheet = computed(() => Boolean(props.controller.activeSheet) && props.controller.sheets.length > 1);
 
 const { thumbnails: thumbnailComputedRaw } = useXlsxViewerThumbnails(
   () => props.controller,
@@ -134,6 +158,11 @@ function onTabClick(index: number) {
 
 function onTabDblClick(_tab: unknown, _index: number) {
   // Future: rename sheet
+}
+
+function removeActiveSheet() {
+  if (!canRemoveActiveSheet.value || isReadOnly.value) return;
+  props.controller.removeActiveSheet();
 }
 
 function prevTab() {
@@ -248,7 +277,8 @@ onUnmounted(() => {
   width: 100%;
 }
 
-.xlsx-sheettabs__add-btn {
+.xlsx-sheettabs__add-btn,
+.xlsx-sheettabs__remove-btn {
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
@@ -263,8 +293,14 @@ onUnmounted(() => {
   width: 28px;
 }
 
-.xlsx-sheettabs__add-btn:hover {
+.xlsx-sheettabs__add-btn:hover,
+.xlsx-sheettabs__remove-btn:hover:not(:disabled) {
   background: rgba(128, 128, 128, 0.15);
+}
+
+.xlsx-sheettabs__remove-btn:disabled {
+  cursor: default;
+  opacity: 0.3;
 }
 
 .xlsx-sheettabs__nav-btn {
@@ -289,5 +325,17 @@ onUnmounted(() => {
 .xlsx-sheettabs__nav-btn:disabled {
   cursor: default;
   opacity: 0.3;
+}
+
+.xlsx-sheettabs__nav-btn svg,
+.xlsx-sheettabs__add-btn svg,
+.xlsx-sheettabs__remove-btn svg {
+  fill: none;
+  height: 16px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 16px;
 }
 </style>

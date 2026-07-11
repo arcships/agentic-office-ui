@@ -1,5 +1,5 @@
 /** @jsxImportSource vue */
-import type { XlsxChart, XlsxChartElementSelection } from "@extend-ai/xlsx-core";
+import type { XlsxChart, XlsxChartElementSelection } from "@arcships/xlsx-core";
 import type { ChartElementDataOptions } from "./chart-types";
 
 export function chartElementDataProps(seriesIndex: number, pointIndex?: number, options?: ChartElementDataOptions) {

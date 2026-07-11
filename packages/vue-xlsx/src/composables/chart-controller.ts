@@ -19,7 +19,7 @@ import {
   type XlsxImage,
   type XlsxImageRect,
   type XlsxImageResizeHandlePosition
-} from "@extend-ai/xlsx-core";
+} from "@arcships/xlsx-core";
 import {
   DEFAULT_COL_WIDTH,
   DEFAULT_ROW_HEIGHT,
@@ -80,6 +80,11 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     const lookup = new Map<string, XlsxChart>();
     for (const sheetCharts of publicChartsByWorkbookSheetIndex.value) {
       for (const chart of sheetCharts) {
+        lookup.set(chart.id, chart);
+      }
+    }
+    for (const chartsheet of ctx.chartsheets.value) {
+      for (const chart of chartsheet.charts ?? []) {
         lookup.set(chart.id, chart);
       }
     }
@@ -315,9 +320,9 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const worksheet = ctx.workbook.value.getSheet(ctx.activeSheet.value.workbookSheetIndex);
+    const worksheet = ctx.getActiveWorksheet();
     const currentChart = getChartById(id);
-    if (!currentChart || currentChart.editable === false || currentChart.workbookSheetIndex !== ctx.activeSheet.value.workbookSheetIndex) {
+    if (!worksheet || !currentChart || currentChart.editable === false || currentChart.workbookSheetIndex !== ctx.activeSheet.value.workbookSheetIndex) {
       return;
     }
 
@@ -346,9 +351,9 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const worksheet = ctx.workbook.value.getSheet(ctx.activeSheet.value.workbookSheetIndex);
+    const worksheet = ctx.getActiveWorksheet();
     const currentImage = getImageById(id);
-    if (!currentImage || currentImage.editable === false || currentImage.workbookSheetIndex !== ctx.activeSheet.value.workbookSheetIndex) {
+    if (!worksheet || !currentImage || currentImage.editable === false || currentImage.workbookSheetIndex !== ctx.activeSheet.value.workbookSheetIndex) {
       return;
     }
 
@@ -516,7 +521,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
   function updateChart(id: string, patch: Partial<XlsxChart>) {
     const currentChart = getChartById(id);
     const hydratedChartAssets = ctx.ensureChartAssetsHydrated(ctx.workbook.value, ctx.sheets.value);
-    if (ctx.readOnly.value || !currentChart) {
+    if (ctx.readOnly.value || !currentChart || currentChart.editable === false) {
       return;
     }
 

@@ -18,6 +18,14 @@ export * from "./engine";
 
 // Explicit runtime configuration is the preferred public execution path.
 export * from "./runtime";
+export {
+  assertDocxModelBudget,
+  assertDocxParseTime,
+  DEFAULT_DOCX_RUNTIME_LIMITS,
+  resolveDocxRuntimeLimits,
+} from "./resource-limits";
+export { validateDocxImageAssets } from "./image-budget";
+export type { DocxImageBudgetSnapshot } from "./image-budget";
 
 // Keep the established root API compatible while ensuring its configured WASM
 // source reaches both the legacy main-thread engine and the DOCX import Worker.

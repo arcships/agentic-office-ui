@@ -17,8 +17,8 @@
       "category": "normal",
       "source": "synthetic-v1",
       "expected": "parse workbook with charts and embedded images",
-      "bytes": 27571,
-      "sha256": "6671730189c267f4b8aeb0baa79ac5495d0befd9b367a2d9320c2c9f3c23f4b2"
+      "bytes": 29462,
+      "sha256": "2ecadbb39feabbeebc7dc9e684550ad070f215d22eade21d556a630f58e89cbc"
     },
     {
       "file": "chinese-mixed.docx",
@@ -171,8 +171,8 @@
       "category": "normal",
       "source": "synthetic-v1",
       "expected": "parse a sales table and preserve formulas during edits",
-      "bytes": 12421,
-      "sha256": "a906fb234dda3489f91a3416a971ed511c11a0d95eaf38ca590f2780108f9214"
+      "bytes": 13226,
+      "sha256": "9ba1564c45283d64879cb4d53bb1ae3af0c1478cd10c76268d1b0c2d729a0dfa"
     },
     {
       "file": "sample.pdf",

@@ -15,6 +15,7 @@ from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.drawing.image import Image as XlsxImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.table import Table as XlsxTable, TableStyleInfo
 from PIL import Image, ImageDraw, ImageFont
 from reportlab import rl_config
 from reportlab.lib import colors
@@ -225,6 +226,87 @@ def make_docx_chinese_mixed(path: Path):
     doc.save(path)
 
 
+def make_docx_review_comments(path: Path):
+    """Create a deterministic review fixture with one comment and one replacement."""
+    doc = Document()
+    set_doc_defaults(doc)
+    add_header_footer(doc, "Document Review Fixture")
+    doc.add_heading("Supplier Review Notes", 0)
+    doc.add_paragraph("COMMENT_TARGET")
+    doc.add_paragraph("REVISION_TARGET")
+    doc.add_paragraph("Use the 修订 and 批注 switches to compare the reviewed document state.")
+    doc.save(path)
+
+    with zipfile.ZipFile(path, "r") as source:
+        entries = {name: source.read(name) for name in source.namelist()}
+
+    document_xml = entries["word/document.xml"].decode("utf-8")
+    comment_paragraph = (
+        '<w:p><w:commentRangeStart w:id="0"/>'
+        '<w:r><w:t>Monthly operational report</w:t></w:r>'
+        '<w:commentRangeEnd w:id="0"/>'
+        '<w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr>'
+        '<w:commentReference w:id="0"/></w:r></w:p>'
+    )
+    revision_paragraph = (
+        '<w:p><w:r><w:t xml:space="preserve">Response time changed from </w:t></w:r>'
+        '<w:del w:id="1" w:author="Alex Reviewer" w:date="2026-07-11T00:00:00Z">'
+        '<w:r><w:delText>five business days</w:delText></w:r></w:del>'
+        '<w:r><w:t xml:space="preserve"> to </w:t></w:r>'
+        '<w:ins w:id="2" w:author="Morgan Editor" w:date="2026-07-11T00:05:00Z">'
+        '<w:r><w:t>two business days</w:t></w:r></w:ins><w:r><w:t>.</w:t></w:r></w:p>'
+    )
+    document_xml, comment_count = re.subn(
+        r"<w:p\b[^>]*>(?:(?!</w:p>).)*?<w:t>COMMENT_TARGET</w:t>(?:(?!</w:p>).)*?</w:p>",
+        comment_paragraph,
+        document_xml,
+        count=1,
+    )
+    document_xml, revision_count = re.subn(
+        r"<w:p\b[^>]*>(?:(?!</w:p>).)*?<w:t>REVISION_TARGET</w:t>(?:(?!</w:p>).)*?</w:p>",
+        revision_paragraph,
+        document_xml,
+        count=1,
+    )
+    if comment_count != 1 or revision_count != 1:
+        raise RuntimeError("Unable to inject DOCX review fixture markup")
+    entries["word/document.xml"] = document_xml.encode("utf-8")
+
+    comments_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:comment w:id="0" w:author="Priya Reviewer" w:initials="PR" '
+        'w:date="2026-07-11T00:10:00Z"><w:p><w:r>'
+        '<w:t>Please confirm this report includes the service-level summary.</w:t>'
+        '</w:r></w:p></w:comment></w:comments>'
+    )
+    entries["word/comments.xml"] = comments_xml.encode("utf-8")
+
+    content_types = entries["[Content_Types].xml"].decode("utf-8")
+    if "/word/comments.xml" not in content_types:
+        content_types = content_types.replace(
+            "</Types>",
+            '<Override PartName="/word/comments.xml" '
+            'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/>'
+            "</Types>",
+        )
+    entries["[Content_Types].xml"] = content_types.encode("utf-8")
+
+    relationships = entries["word/_rels/document.xml.rels"].decode("utf-8")
+    if "relationships/comments" not in relationships:
+        relationships = relationships.replace(
+            "</Relationships>",
+            '<Relationship Id="rIdReviewComments" '
+            'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" '
+            'Target="comments.xml"/></Relationships>',
+        )
+    entries["word/_rels/document.xml.rels"] = relationships.encode("utf-8")
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as target:
+        for name in sorted(entries):
+            target.writestr(name, entries[name])
+
+
 def make_invoice_png(path: Path):
     img = Image.new("RGB", (1000, 1330), "white")
     d = ImageDraw.Draw(img)
@@ -423,6 +505,15 @@ def make_sales_table(path: Path):
         ws.column_dimensions[get_column_letter(idx)].width = width
     for cell in ws[1]:
         cell.border = Border(bottom=Side(style="medium", color="1C3A5E"))
+    sales_table = XlsxTable(displayName="SalesRecords", ref=f"A1:H{ws.max_row}")
+    sales_table.tableStyleInfo = TableStyleInfo(
+        name="TableStyleMedium2",
+        showFirstColumn=False,
+        showLastColumn=False,
+        showRowStripes=True,
+        showColumnStripes=False,
+    )
+    ws.add_table(sales_table)
     wb.save(path)
 
 
@@ -434,6 +525,12 @@ def make_charts_images(path: Path, image_path: Path):
     for row in [("Q1", 120000, 820), ("Q2", 145000, 690), ("Q3", 168000, 540), ("Q4", 210000, 410)]:
         ws.append(row)
     style_header(ws)
+    ws.merge_cells("A7:C8")
+    ws["A7"] = "Worker merged region — image and merge parity"
+    ws["A7"].font = Font(bold=True, color="1C3A5E")
+    ws["A7"].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws.row_dimensions[7].height = 28
+    ws.row_dimensions[8].height = 28
     chart = BarChart()
     chart.title = "Revenue vs Quarter"
     chart.y_axis.title = "Revenue"
@@ -442,6 +539,13 @@ def make_charts_images(path: Path, image_path: Path):
     chart.add_data(data, titles_from_data=True)
     chart.set_categories(cats)
     ws.add_chart(chart, "E2")
+    chartsheet_chart = BarChart()
+    chartsheet_chart.title = "Revenue by Quarter"
+    chartsheet_chart.y_axis.title = "Revenue"
+    chartsheet_chart.add_data(data, titles_from_data=True)
+    chartsheet_chart.set_categories(cats)
+    chart_sheet = wb.create_chartsheet("Revenue Chart")
+    chart_sheet.add_chart(chartsheet_chart)
     img = XlsxImage(str(image_path))
     img.width = 240
     img.height = 320
@@ -507,6 +611,7 @@ def main():
     make_docx_invoice_table(SAMPLES / "invoice-table.docx")
     make_docx_report_with_image(SAMPLES / "report-with-image.docx", invoice_png)
     make_docx_chinese_mixed(SAMPLES / "chinese-mixed.docx")
+    make_docx_review_comments(SAMPLES / "review-comments.docx")
     make_docx_legal_contract(SAMPLES / "demo.docx")
     make_corrupted(SAMPLES / "corrupted.docx", "This is not a valid DOCX package. ")
 

@@ -19,7 +19,7 @@ Date: 2026-07-07
 | 1 | Console 日志仍使用 `[react-xlsx]` 前缀，应更新为 `[xlsx-core]` / `[vue-xlsx]` | [packages/xlsx-core/src/safe-calculate.ts:79](packages/xlsx-core/src/safe-calculate.ts#L79), [safe-calculate.ts:84](packages/xlsx-core/src/safe-calculate.ts#L84), [safe-calculate.ts:96](packages/xlsx-core/src/safe-calculate.ts#L96); [packages/vue-xlsx/src/composables.ts:3657](packages/vue-xlsx/src/composables.ts#L3657), [composables.ts:3672](packages/vue-xlsx/src/composables.ts#L3672), [composables.ts:3692](packages/vue-xlsx/src/composables.ts#L3692) |
 | 2 | 内部剪贴板 MIME 仍为 `application/x-react-xlsx-range+json` | [packages/vue-xlsx/src/composables.ts:76](packages/vue-xlsx/src/composables.ts#L76) |
 | 3 | JSDoc 注释中引用 `react-xlsx`（示例代码块标记为 `tsx`） | [packages/xlsx-core/src/types.ts:739](packages/xlsx-core/src/types.ts#L739), [types.ts:809](packages/xlsx-core/src/types.ts#L809), [types.ts:818](packages/xlsx-core/src/types.ts#L818) |
-| 4 | `@extend-ai/xlsx-core` 声明了 d3-*/regl/topojson/us-atlas/world-atlas 为依赖，但 xlsx-core 源码未 import 这些包（它们属于 chart-renderer/surface-regl，应在 vue-xlsx） | [packages/xlsx-core/package.json:16-24](packages/xlsx-core/package.json#L16) |
+| 4 | `@arcships/xlsx-core` 声明了 d3-*/regl/topojson/us-atlas/world-atlas 为依赖，但 xlsx-core 源码未 import 这些包（它们属于 chart-renderer/surface-regl，应在 vue-xlsx） | [packages/xlsx-core/package.json:16-24](packages/xlsx-core/package.json#L16) |
 
 ## 集成点验证
 
@@ -57,4 +57,4 @@ Date: 2026-07-07
 
 ## 结论
 
-**pass** — 三个集成点（X1-X3）全部通过真实调用路径验证。composables.ts 对 xlsx-core 的依赖均为 `@extend-ai/xlsx-core` 包导入，无 stub/noop 替代真实调用。worker 消息协议完整，导出路径覆盖 `saveXlsxBytes` + sanitize + merge images。P3 findings 均为品牌命名残留，不影响功能。
+**pass** — 三个集成点（X1-X3）全部通过真实调用路径验证。composables.ts 对 xlsx-core 的依赖均为 `@arcships/xlsx-core` 包导入，无 stub/noop 替代真实调用。worker 消息协议完整，导出路径覆盖 `saveXlsxBytes` + sanitize + merge images。P3 findings 均为品牌命名残留，不影响功能。

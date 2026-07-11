@@ -1,7 +1,10 @@
 # XLSX 迁移架构设计
 
+> [!WARNING]
+> **历史资料。** 本文记录 2026-07-07 的迁移设计、旧目录和当时状态，不再负责当前架构或任务状态。当前约束见[目标架构](architecture-review-and-target-design.md)，执行状态见[稳定化路线图](plan/stabilization-roadmap.md)。
+
 Date: 2026-07-07
-Status: 设计阶段
+Status: 历史迁移设计，不再执行
 
 ## 背景
 

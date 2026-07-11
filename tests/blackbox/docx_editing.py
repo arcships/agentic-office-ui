@@ -118,6 +118,10 @@ def navigate_ready(page) -> None:
           && document.querySelectorAll('[data-testid="editor-paragraph"]').length >= 3""",
         timeout=30_000,
     )
+    acceptance_panel = page.get_by_test_id("editor-acceptance-panel")
+    if acceptance_panel.get_attribute("open") is None:
+        acceptance_panel.locator("summary").click()
+    acceptance_panel.locator(".acceptance-actions").wait_for(state="visible")
 
 
 def target_paragraph(model: dict[str, object]) -> tuple[int, dict[str, object]]:
@@ -126,7 +130,7 @@ def target_paragraph(model: dict[str, object]) -> tuple[int, dict[str, object]]:
         if (
             isinstance(node, dict)
             and node.get("type") == "paragraph"
-            and "Try editing this paragraph" in str(node.get("text", ""))
+            and "This paragraph is ready for editing" in str(node.get("text", ""))
         ):
             return index, node
     raise AssertionError("acceptance paragraph is missing from public model snapshot")
@@ -303,15 +307,17 @@ def run_readonly(page, attempt_dir: Path) -> dict[str, object]:
 
 def run_table_image(page, attempt_dir: Path) -> dict[str, object]:
     before = read_snapshot(page, "editor-model-snapshot")
+    before_table_count = int(before.get("tableCount", 0))
+    before_image_count = int(before.get("imageCount", 0))
     page.get_by_test_id("editor-test-insert-table").click()
     with_table = wait_for_model(
         page,
-        lambda model: model.get("tableCount") == 1,
+        lambda model: model.get("tableCount") == before_table_count + 1,
         "table transaction",
     )
     tables = [node for node in with_table["nodes"] if node.get("type") == "table"]
-    assert len(tables) == 1
-    table = tables[0]
+    assert len(tables) == before_table_count + 1
+    table = tables[-1]
     assert len(table["rows"]) == 4, table
     assert all(len(row["cells"]) == 4 for row in table["rows"]), table
     assert table["style"]["layout"] == "fixed", table
@@ -320,7 +326,7 @@ def run_table_image(page, attempt_dir: Path) -> dict[str, object]:
     page.get_by_test_id("editor-test-insert-image").click()
     with_image = wait_for_model(
         page,
-        lambda model: model.get("imageCount") == 1,
+        lambda model: model.get("imageCount") == before_image_count + 1,
         "image transaction",
     )
     images = [
@@ -330,13 +336,16 @@ def run_table_image(page, attempt_dir: Path) -> dict[str, object]:
         for run in node.get("runs", [])
         if run.get("type") == "image"
     ]
-    assert len(images) == 1, images
-    image = images[0]
+    assert len(images) == before_image_count + 1, images
+    image = images[-1]
     assert image["widthPx"] == 160, image
     assert image["heightPx"] == 90, image
     assert image["floating"]["wrapType"] == "square", image
-    assert image["floating"]["xPx"] == 48, image
-    assert image["floating"]["yPx"] == 64, image
+    assert image["floating"]["xPx"] == 12, image
+    assert image["floating"]["yPx"] == 6, image
+    assert image["floating"]["wrapText"] == "bothSides", image
+    assert image["floating"]["distRPx"] == 12, image
+    assert image["floating"]["distBPx"] == 8, image
     assert not page.get_by_test_id("editor-status").inner_text().startswith("Unsupported:")
     assert page.get_by_test_id("editor-history-state").get_attribute("data-can-undo") == "true"
     write_json(

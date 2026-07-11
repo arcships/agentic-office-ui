@@ -44,8 +44,8 @@ import {
   bundledDocxWasmUrl,
   createDocxRuntime,
   type DocxImportDiagnostic,
-} from "@extend-ai/docx-core"
-import { DocxViewer } from "@extend-ai/vue-docx"
+} from "@arcships/docx-core"
+import { DocxViewer } from "@arcships/vue-docx"
 
 type State = "loading" | "ready" | "error"
 

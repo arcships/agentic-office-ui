@@ -21,7 +21,7 @@ HEAD is `62dba91`; working tree clean. Since review #6, one new helpers source f
 
 Review #6 blocked on 15 missing modules. This cycle added `page-measurement.ts` (689 lines, 15 exports including the upstream `resolveMeasuredPageContentHeightPx`@2571), closing one module and advancing the task from 26 → 27 of 40 content modules. The blocking finding F1 persists: 14 of 40 planned modules remain absent, including the pagination-plan trio, pretext-build/measure, table-height, tracked-changes, and selection helpers that carry "必须复刻" alignment obligations (#22, #23, #32) and are prerequisites for the downstream `docx-composables` task (still a stub).
 
-Independently re-ran the full check matrix against the current tree: typecheck passes for `@extend-ai/docx-core`; build (tsup) succeeds; `madge --circular` reports no cycles (38 files processed); all imports relative with zero `@extend-ai/*` package refs; no React imports; no residual stub/mock/fake/TODO/FIXME. The quality of what *is* delivered remains high and the dependency graph is clean, but the task is ~68% complete by file count (27 of 40) and the missing modules are on the critical path.
+Independently re-ran the full check matrix against the current tree: typecheck passes for `@arcships/docx-core`; build (tsup) succeeds; `madge --circular` reports no cycles (38 files processed); all imports relative with zero `@extend-ai/*` package refs; no React imports; no residual stub/mock/fake/TODO/FIXME. The quality of what *is* delivered remains high and the dependency graph is clean, but the task is ~68% complete by file count (27 of 40) and the missing modules are on the critical path.
 
 **Conclusion: blocked** — F1 persists (14 of 40 modules missing); one module closed since #6.
 
@@ -96,8 +96,8 @@ Independently re-ran the full check matrix against the current tree: typecheck p
 | Check | Result | Detail |
 |---|---|---|
 | New source since #6 | ✅ confirmed | `git log --oneline -- packages/docx-core/src/editor/helpers/` shows `62dba91 docx-helpers: fix #6` added `page-measurement.ts` (689 lines). HEAD `62dba91`, working tree clean. |
-| Typecheck (docx-core) | ✅ Pass | `pnpm --filter @extend-ai/docx-core typecheck` exits 0. |
-| Build (docx-core) | ✅ Pass | `pnpm --filter @extend-ai/docx-core build` (tsup) succeeds — ESM + DTS. |
+| Typecheck (docx-core) | ✅ Pass | `pnpm --filter @arcships/docx-core typecheck` exits 0. |
+| Build (docx-core) | ✅ Pass | `pnpm --filter @arcships/docx-core build` (tsup) succeeds — ESM + DTS. |
 | Circular deps | ✅ Pass | `madge --circular --extensions ts packages/docx-core/src/editor/helpers/index.ts` → "No circular dependency found!" (38 files processed). Intra-helper import graph is acyclic. |
 | Import paths | ✅ Pass | All relative (`./` intra-helper, `../../engine/*` / `../../viewer/*` / `../../layout/*` cross-layer). Zero `@extend-ai/*` package refs in source. |
 | React-type cleanup | ✅ Pass | No `import * as React` / `from "react"` / `@extend-ai/*` in source. |

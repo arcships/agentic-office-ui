@@ -1,21 +1,38 @@
 <template>
-  <div v-if="floatingImages.length > 0" class="docx-image-layer" :style="layerStyle">
+  <div ref="imageLayerEl" v-if="floatingImages.length > 0" class="docx-image-layer" :style="layerStyle">
     <div
       v-for="image of floatingImages"
       :key="image.key"
       class="docx-floating-image-container"
+      data-testid="docx-floating-image"
+      :data-image-node-index="image.nodeIndex"
+      :data-image-child-index="image.childIndex"
+      :data-image-layout="image.flowWrapped ? 'wrapped' : 'absolute'"
       :class="{
         'docx-floating-image--selected': image.selected,
       }"
       :style="imageContainerStyle(image)"
       @mousedown="onImageMouseDown(image, $event)"
     >
+      <div
+        v-if="image.selected && editable"
+        class="docx-image-wrap-toolbar"
+        data-testid="docx-image-wrap-toolbar"
+        @mousedown.stop
+      >
+        <button type="button" data-testid="docx-image-wrap-inline" title="Inline with text" @click.stop="setWrapMode(image, 'inline')">Inline</button>
+        <button type="button" data-testid="docx-image-wrap-square" title="Wrap text around image" @click.stop="setWrapMode(image, 'square')">Square</button>
+        <button type="button" data-testid="docx-image-wrap-behind" title="Behind text" @click.stop="setWrapMode(image, 'behindText')">Behind</button>
+        <button type="button" data-testid="docx-image-wrap-front" title="In front of text" @click.stop="setWrapMode(image, 'inFrontOfText')">Front</button>
+      </div>
+
       <!-- Resize handles -->
       <template v-if="image.selected && editable">
         <div
           v-for="handle of resizeHandles"
           :key="handle.position"
           class="docx-image-resize-handle"
+          data-testid="docx-image-resize-handle"
           :class="`docx-image-resize-handle--${handle.position}`"
           :style="handle.style"
           @mousedown.prevent.stop="onResizeStart(image, handle.position, $event)"
@@ -23,18 +40,24 @@
       </template>
 
       <img
-        v-if="image.src"
+        v-if="!image.flowWrapped && image.src && !failedImageKeys.has(image.key)"
         :src="image.src"
         :alt="image.alt ?? 'Image'"
         :draggable="false"
         :style="imageStyle(image)"
         class="docx-floating-image"
+        loading="lazy"
+        decoding="async"
+        data-image-state="loading"
+        @load="onImageLoad"
+        @error="onImageError(image, $event)"
       />
 
       <!-- Fallback for unsupported images -->
       <div
-        v-else
+        v-else-if="!image.flowWrapped"
         class="docx-floating-image-fallback"
+        :data-image-state="failedImageKeys.has(image.key) ? 'error' : 'unsupported'"
         :style="{ width: `${image.widthPx}px`, height: `${image.heightPx}px` }"
       >
         {{ image.fallbackLabel ?? "Image" }}
@@ -44,13 +67,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from "vue"
+import { ref, computed, watch, nextTick, onUnmounted } from "vue"
 import type {
   DocxEditorController,
   DocxImageLocation,
+  DocxImageWrapMode,
   DocumentPageNodeSegment,
-} from "@extend-ai/docx-core"
-import { resolveRenderableImageSource } from "@extend-ai/docx-core"
+  ImageRunNode,
+} from "@arcships/docx-core"
+import {
+  resolveRenderableImageSource,
+  shouldRenderWrappedFloatingImage,
+} from "@arcships/docx-core"
 
 // ── Types ──────────────────────────────────────────────────────────
 interface FloatingImageEntry {
@@ -63,6 +91,7 @@ interface FloatingImageEntry {
   heightPx: number
   xPx: number
   yPx: number
+  flowWrapped: boolean
   selected: boolean
   fallbackLabel?: string
 }
@@ -87,6 +116,9 @@ const dragStartY = ref(0)
 const dragStartPosX = ref(0)
 const dragStartPosY = ref(0)
 const dragPreview = ref<{ key: string; xPx: number; yPx: number } | null>(null)
+const failedImageKeys = ref(new Set<string>())
+const imageLayerEl = ref<HTMLElement | null>(null)
+const layoutRevision = ref(0)
 
 const resizingImage = ref<FloatingImageEntry | null>(null)
 const resizeStartSize = ref<{ w: number; h: number }>({ w: 0, h: 0 })
@@ -111,7 +143,7 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
       if (child.type !== "image") return
       if (!(child as any).floating) return // Only floating images
 
-      const run = child as any
+      const run = child as ImageRunNode
       const src = resolveRenderableImageSource(run) ?? undefined
       const selection = props.controller.selection
       images.push({
@@ -124,6 +156,7 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
         heightPx: run.heightPx ?? 80,
         xPx: run.floating?.xPx ?? 0,
         yPx: run.floating?.yPx ?? 0,
+        flowWrapped: shouldRenderWrappedFloatingImage(run),
         selected: selection.kind === "paragraph" && selection.nodeIndex === nodeIndex,
         fallbackLabel: undefined,
       })
@@ -152,18 +185,51 @@ const resizeHandles = [
 
 // ── Style helpers ──────────────────────────────────────────────────
 function imageContainerStyle(image: FloatingImageEntry): Record<string, string> {
+  void layoutRevision.value
   const drag = dragPreview.value?.key === image.key ? dragPreview.value : undefined
   const resize = resizePreview.value?.key === image.key ? resizePreview.value : undefined
+  const flowBox = image.flowWrapped ? wrappedImageBox(image) : undefined
+  const dragDeltaX = drag ? drag.xPx - image.xPx : 0
+  const dragDeltaY = drag ? drag.yPx - image.yPx : 0
+  const leftPx = flowBox ? flowBox.left + dragDeltaX : (drag?.xPx ?? image.xPx)
+  const topPx = flowBox ? flowBox.top + dragDeltaY : (drag?.yPx ?? image.yPx)
   return {
     position: "absolute",
-    left: `${drag?.xPx ?? image.xPx}px`,
-    top: `${drag?.yPx ?? image.yPx}px`,
-    width: `${resize?.widthPx ?? image.widthPx}px`,
-    height: `${resize?.heightPx ?? image.heightPx}px`,
+    left: `${leftPx}px`,
+    top: `${topPx}px`,
+    width: `${resize?.widthPx ?? flowBox?.width ?? image.widthPx}px`,
+    height: `${resize?.heightPx ?? flowBox?.height ?? image.heightPx}px`,
     pointerEvents: "auto",
     cursor: "move",
     outline: image.selected ? "2px solid #3b82f6" : "none",
     outlineOffset: "2px",
+  }
+}
+
+function wrappedImageBox(
+  image: FloatingImageEntry
+): { left: number; top: number; width: number; height: number } | undefined {
+  const layer = imageLayerEl.value
+  const surface = layer?.closest<HTMLElement>("[data-docx-page-surface='true']")
+  if (!surface) return undefined
+  const paragraph = surface.querySelector<HTMLElement>(
+    `[data-docx-paragraph-node-index="${image.nodeIndex}"]`
+  )
+  const wrapped = paragraph?.querySelector<HTMLElement>(
+    `[data-docx-image-child-index="${image.childIndex}"][data-docx-image-layout="wrapped"]`
+  )
+  if (!wrapped) return undefined
+  const surfaceRect = surface.getBoundingClientRect()
+  const wrappedRect = wrapped.getBoundingClientRect()
+  const scale = surface.offsetWidth > 0
+    ? surfaceRect.width / surface.offsetWidth
+    : 1
+  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1
+  return {
+    left: (wrappedRect.left - surfaceRect.left) / safeScale,
+    top: (wrappedRect.top - surfaceRect.top) / safeScale,
+    width: wrappedRect.width / safeScale,
+    height: wrappedRect.height / safeScale,
   }
 }
 
@@ -173,6 +239,19 @@ function imageStyle(image: FloatingImageEntry): Record<string, string> {
     height: "100%",
     objectFit: "contain" as const,
   }
+}
+
+function onImageLoad(event: Event): void {
+  const target = event.currentTarget as HTMLImageElement | null
+  if (target) target.dataset.imageState = "ready"
+}
+
+function onImageError(image: FloatingImageEntry, event: Event): void {
+  const target = event.currentTarget as HTMLImageElement | null
+  if (target) target.dataset.imageState = "error"
+  const next = new Set(failedImageKeys.value)
+  next.add(image.key)
+  failedImageKeys.value = next
 }
 
 // ── Mouse handlers ─────────────────────────────────────────────────
@@ -213,6 +292,14 @@ function imageLocation(image: FloatingImageEntry): DocxImageLocation {
     nodeIndex: image.nodeIndex,
     childIndex: image.childIndex,
   }
+}
+
+function setWrapMode(image: FloatingImageEntry, mode: DocxImageWrapMode): void {
+  if (!props.editable) return
+  props.controller.setImageWrapMode(imageLocation(image), mode, {
+    xPx: image.xPx,
+    yPx: image.yPx,
+  })
 }
 
 function updatePointerPreview(event: MouseEvent): void {
@@ -295,7 +382,27 @@ watch(() => props.editable, (editable) => {
   if (!editable) finishPointerInteraction(false)
 })
 
-onUnmounted(() => finishPointerInteraction(false))
+watch(
+  () => floatingImages.value.map((image) => [
+    image.key,
+    image.flowWrapped,
+    image.xPx,
+    image.yPx,
+    image.widthPx,
+    image.heightPx,
+  ].join(":")).join("|"),
+  () => {
+    void nextTick(() => {
+      layoutRevision.value += 1
+    })
+  },
+  { immediate: true }
+)
+
+onUnmounted(() => {
+  finishPointerInteraction(false)
+  failedImageKeys.value.clear()
+})
 </script>
 
 <style scoped>
@@ -304,6 +411,35 @@ onUnmounted(() => finishPointerInteraction(false))
 }
 .docx-floating-image-container {
   position: absolute;
+}
+.docx-image-wrap-toolbar {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d4d4d8;
+  border-radius: 7px;
+  box-shadow: 0 5px 16px rgba(15, 23, 42, 0.16);
+  display: flex;
+  gap: 2px;
+  left: 0;
+  padding: 3px;
+  position: absolute;
+  top: -38px;
+  white-space: nowrap;
+  z-index: 22;
+}
+.docx-image-wrap-toolbar button {
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: #3f3f46;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 6px;
+}
+.docx-image-wrap-toolbar button:hover,
+.docx-image-wrap-toolbar button:focus-visible {
+  background: #f4f4f5;
 }
 .docx-floating-image {
   display: block;

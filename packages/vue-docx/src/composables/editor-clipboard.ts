@@ -2,8 +2,8 @@
 //
 // Extracted from useDocxEditor.ts.
 
-import type { DocxTextRange } from "@extend-ai/docx-core"
-import { paragraphText } from "@extend-ai/docx-core"
+import type { DocxTextRange } from "@arcships/docx-core"
+import { paragraphText } from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
 
 export function createEditorClipboard(ctx: EditorCore) {

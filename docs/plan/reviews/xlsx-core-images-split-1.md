@@ -92,8 +92,8 @@ Status: **pass**
 
 ### 2. Typecheck
 
-- `pnpm --filter @extend-ai/xlsx-core typecheck` → **通过**
-- `pnpm --filter @extend-ai/vue-xlsx typecheck` → **通过**
+- `pnpm --filter @arcships/xlsx-core typecheck` → **通过**
+- `pnpm --filter @arcships/vue-xlsx typecheck` → **通过**
 
 ### 3. Import 路径
 

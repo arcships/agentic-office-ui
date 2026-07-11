@@ -10,14 +10,15 @@ export type {
   XlsxSourceKind,
   XlsxSourceState,
   XlsxUrlPolicy,
-} from "@extend-ai/xlsx-core"
+} from "@arcships/xlsx-core"
 
-// Render module exports (chart SVG + surface WebGL rendering)
+// Optional renderers keep their historical root names, but load the heavy
+// implementation only when a chart actually mounts.
 /**
  * @deprecated Since 0.2.0. Rendering modules are owned by `XlsxViewer`; use
  * the high-level component and controller. Earliest removal: 1.0.0.
  */
-export { MemoChartSvg, MemoSurfaceChartComposite } from "./render"
+export { MemoChartSvg, MemoSurfaceChartComposite } from "./optional/lazy-renderers"
 /**
  * @deprecated Since 0.2.0. Rendering types are implementation details of
  * `XlsxViewer`. Kept throughout 0.x; earliest removal is 1.0.0.
@@ -27,7 +28,7 @@ export type {
   ChartSvgProps,
   ChartLayout,
   LegendItem,
-} from "./render"
+} from "./render/chart-types"
 
 // Component exports
 /** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */

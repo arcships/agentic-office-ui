@@ -1,5 +1,8 @@
 # 上游 DOCX 功能对齐清单与迁移操作方案
 
+> [!WARNING]
+> **历史资料。** 本文保存 2026-07-06 的上游分析和最初迁移方案。文中的本地绝对路径、目标文件、行数和“必须复刻”均不是当前产品状态或发布承诺。当前实现与验收请从[文档索引](INDEX.md)进入。
+
 Date: 2026-07-06
 
 ## 目的
@@ -460,7 +463,7 @@ cp $UPSTREAM/react-viewer/src/utif.d.ts                   $CORE/utif.d.ts
 # core/state.ts 需先抽类型（见 Phase 2）
 ```
 
-**验证**：`pnpm --filter @extend-ai/docx-core typecheck`（修 import 路径后应通过）。
+**验证**：`pnpm --filter @arcships/docx-core typecheck`（修 import 路径后应通过）。
 
 **import 路径调整**：所有 `@extend-ai/react-docx-*` 的 import 需改为相对路径（如 `@extend-ai/react-docx-doc-model` → `./types` + `./clone` + `./normalize`）。
 
@@ -532,8 +535,8 @@ sed -n '24954,32870p' $UPSTREAM/react-viewer/src/editor.tsx > $VUE/composables.t
 
 ```bash
 # 上游依赖
-pnpm --filter @extend-ai/docx-core add @chenglou/pretext fast-png utif
-pnpm --filter @extend-ai/vue-docx add @tanstack/vue-virtual
+pnpm --filter @arcships/docx-core add @chenglou/pretext fast-png utif
+pnpm --filter @arcships/vue-docx add @tanstack/vue-virtual
 ```
 
 注意：`@chenglou/pretext` 是 pretext-layout.ts 的核心依赖，必须可用。
@@ -669,7 +672,7 @@ export default defineConfig({
 | `new URL("./worker.ts", import.meta.url)` | ✅ | Worker 打包 |
 | `new URL("./wasm.wasm", import.meta.url)` | ✅ | wasm 资源 |
 | `worker: { format: "es" }` | ✅ | ES module worker |
-| Dynamic import | ✅ | `import("@extend-ai/docx-core")` |
+| Dynamic import | ✅ | `import("@arcships/docx-core")` |
 | `@chenglou/pretext` | ✅ | ESM, MIT, npm 0.0.8 |
 | `fast-png` | ✅ | ESM |
 | `utif` | ✅ | CJS, Vite 自动转换 |
@@ -679,7 +682,7 @@ export default defineConfig({
 与 XLSX 相同，推荐 `public/` + `setWasmSource`：
 
 ```ts
-import { setWasmSource } from "@extend-ai/docx-core"
+import { setWasmSource } from "@arcships/docx-core"
 setWasmSource("/docx_wasm_bg.wasm")
 ```
 
@@ -757,11 +760,11 @@ setWasmSource("/docx_wasm_bg.wasm")
 
 | Phase | 验证命令 | 预期结果 |
 |---|---|---|
-| 1. 直接复制 28 文件 | `pnpm --filter @extend-ai/docx-core typecheck` | 零错误（修 import 路径后） |
-| 2. editor.tsx 拆分+清理 | `pnpm --filter @extend-ai/docx-core typecheck` | 零 React 类型残留 |
-| 3. hooks 改写 | `pnpm --filter @extend-ai/vue-docx typecheck` + `build` | 零错误 |
-| 4. viewer 重写 | `pnpm --filter @extend-ai/vue-docx build` | 构建通过 |
-| 5. renderParagraphRuns | `pnpm --filter @extend-ai/vue-docx typecheck` | 零错误 |
+| 1. 直接复制 28 文件 | `pnpm --filter @arcships/docx-core typecheck` | 零错误（修 import 路径后） |
+| 2. editor.tsx 拆分+清理 | `pnpm --filter @arcships/docx-core typecheck` | 零 React 类型残留 |
+| 3. hooks 改写 | `pnpm --filter @arcships/vue-docx typecheck` + `build` | 零错误 |
+| 4. viewer 重写 | `pnpm --filter @arcships/vue-docx build` | 构建通过 |
+| 5. renderParagraphRuns | `pnpm --filter @arcships/vue-docx typecheck` | 零错误 |
 | 6. 依赖安装 | `pnpm install` | 无 peer warning |
 | 7. License | `git diff --check` | 无空白错误 |
 
@@ -772,7 +775,7 @@ setWasmSource("/docx_wasm_bg.wasm")
 ```bash
 # DOCX wasm 引擎 smoke
 node --input-type=module - <<'NODE'
-import { initWasm, wasmBuildDocModelFromBytes, wasmSerializeDocx } from '@extend-ai/docx-core'
+import { initWasm, wasmBuildDocModelFromBytes, wasmSerializeDocx } from '@arcships/docx-core'
 await initWasm()
 const fs = await import('node:fs')
 const bytes = fs.readFileSync('/tmp/sample.docx')

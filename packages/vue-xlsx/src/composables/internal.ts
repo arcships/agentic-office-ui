@@ -17,13 +17,13 @@ import type {
   XlsxLoadError,
   XlsxSourceState,
   UseXlsxViewerControllerOptions
-} from "@extend-ai/xlsx-core";
+} from "@arcships/xlsx-core";
 import type {
   XlsxWorkerClient,
   WorkbookChartAssets,
   WorkbookImageAssets,
   WorkbookImageSheetOrigin
-} from "@extend-ai/xlsx-core";
+} from "@arcships/xlsx-core";
 import { cellAddressToA1 } from "./selection";
 
 export const FORMULA_COUNT_THRESHOLD = 1000;
@@ -36,6 +36,7 @@ export const MIN_ROW_HEIGHT_PX = 16;
 export const GRID_HEADER_HEIGHT = 24;
 export const GRID_ROW_HEADER_WIDTH = 40;
 export const HISTORY_LIMIT = 100;
+export const DEFAULT_HISTORY_MAX_BYTES = 32 * 1024 * 1024;
 export const INTERNAL_CLIPBOARD_MIME = "application/x-react-xlsx-range+json";
 export const DEFAULT_DEFER_LOADING_ABOVE_BYTES = 0;
 export const DEFAULT_MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
@@ -115,6 +116,11 @@ export type RangeEditHistoryEntry = {
 
 export type HistoryEntry = SnapshotHistoryEntry | CellEditHistoryEntry | RangeEditHistoryEntry;
 
+export type HistoryBudget = Readonly<{
+  maxEntries: number;
+  maxBytes: number;
+}>;
+
 export type ClipboardMatrixCell = {
   colOffset: number;
   formula: string | null;
@@ -150,10 +156,74 @@ export function isAbortError(error: unknown) {
   return error instanceof Error && error.name === "AbortError";
 }
 
-export function pushHistoryEntry(stack: HistoryEntry[], entry: HistoryEntry) {
+export function createHistoryBudget(
+  requestedMaxEntries = HISTORY_LIMIT,
+  requestedMaxBytes = DEFAULT_HISTORY_MAX_BYTES
+): HistoryBudget {
+  return Object.freeze({
+    maxEntries:
+      Number.isFinite(requestedMaxEntries) && requestedMaxEntries > 0
+        ? Math.max(1, Math.floor(requestedMaxEntries))
+        : HISTORY_LIMIT,
+    maxBytes:
+      Number.isFinite(requestedMaxBytes) && requestedMaxBytes > 0
+        ? Math.max(1, Math.floor(requestedMaxBytes))
+        : DEFAULT_HISTORY_MAX_BYTES
+  });
+}
+
+export function estimateHistoryEntryBytes(entry: HistoryEntry): number {
+  let binaryBytes = 0;
+  const seen = new WeakSet<object>();
+  try {
+    const json = JSON.stringify(entry, (_key, candidate: unknown) => {
+      if (!candidate || typeof candidate !== "object") return candidate;
+      if (candidate instanceof ArrayBuffer) {
+        binaryBytes += candidate.byteLength;
+        return null;
+      }
+      if (ArrayBuffer.isView(candidate)) {
+        binaryBytes += candidate.byteLength;
+        return null;
+      }
+      if (seen.has(candidate)) return null;
+      seen.add(candidate);
+      return candidate;
+    }) ?? "";
+    return Math.min(
+      Number.MAX_SAFE_INTEGER,
+      new TextEncoder().encode(json).byteLength + binaryBytes
+    );
+  } catch {
+    return Number.MAX_SAFE_INTEGER;
+  }
+}
+
+export function pushHistoryEntry(
+  stack: HistoryEntry[],
+  entry: HistoryEntry,
+  budget: HistoryBudget = createHistoryBudget()
+) {
   stack.push(entry);
-  if (stack.length > HISTORY_LIMIT) {
-    stack.shift();
+
+  let retainedEntries = 0;
+  let retainedBytes = 0;
+  let firstRetainedIndex = stack.length - 1;
+  for (let index = stack.length - 1; index >= 0; index -= 1) {
+    const entryBytes = estimateHistoryEntryBytes(stack[index]);
+    if (
+      retainedEntries > 0 &&
+      (retainedEntries >= budget.maxEntries || retainedBytes + entryBytes > budget.maxBytes)
+    ) {
+      break;
+    }
+    retainedEntries += 1;
+    retainedBytes = Math.min(Number.MAX_SAFE_INTEGER, retainedBytes + entryBytes);
+    firstRetainedIndex = index;
+  }
+
+  if (firstRetainedIndex > 0) {
+    stack.splice(0, firstRetainedIndex);
   }
 }
 
@@ -291,6 +361,7 @@ export interface XlsxControllerContext {
   selectionAnchorRef: ShallowRef<XlsxCellAddress | null>;
   undoStackRef: ShallowRef<HistoryEntry[]>;
   redoStackRef: ShallowRef<HistoryEntry[]>;
+  historyBudget: HistoryBudget;
   isApplyingHistoryRef: ShallowRef<boolean>;
   historyRevision: Ref<number>;
   shouldAutoCalculate: Ref<boolean>;
@@ -347,7 +418,6 @@ export interface XlsxControllerContext {
   startChartDisplayHydration: (buffer: ArrayBuffer, targetWorkbook: Workbook, targetSheets: XlsxSheetData[]) => void;
   loadWorkbookOnMainThread: (buffer: ArrayBuffer) => Promise<{ imageAssets: WorkbookImageAssets; parsedWorkbook: { shouldAutoCalculate: boolean; workbook: Workbook } }>;
   hasIncompleteWorkerChartSnapshot: (snapshot: { chartsByWorkbookSheetIndex: XlsxChart[][] }) => boolean;
-  shouldFallbackFromWorkerError: (error: unknown) => boolean;
   ensureChartAssetsHydrated: (targetWorkbook: Workbook | null, targetSheets: XlsxSheetData[]) => WorkbookChartAssets | null;
   shouldForceReadOnlyForBuffer: (bufferByteLength: number) => boolean;
   shouldUseWorkerForReadOnlyLoad: (willForceReadOnly: boolean) => boolean;

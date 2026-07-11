@@ -74,9 +74,11 @@ for (const packageDir of packageDirs) {
   const hasSource = [...files].some((file) => file.startsWith("src/"));
   const hasTests = [...files].some((file) => /^(test|tests)\//.test(file));
   const hasWorkspaceSpecifier = JSON.stringify(manifest).includes("workspace:");
-  const isVuePackage = manifest.name.startsWith("@extend-ai/vue-");
+  const isPublicPackage =
+    manifest.private !== true && manifest.publishConfig?.access === "public";
+  const isVuePackage = manifest.name.startsWith("@arcships/vue-");
   const isCorePackage = /\/(docx|xlsx)-core$/.test(manifest.name);
-  const requiresWasm = isCorePackage || manifest.name === "@extend-ai/vue-extend";
+  const requiresWasm = isCorePackage || manifest.name === "@arcships/vue-extend";
   const styleTarget = manifest.exports?.["./style.css"];
   const hasPublicStyle =
     !isVuePackage ||
@@ -90,6 +92,9 @@ for (const packageDir of packageDirs) {
   if (hasSource) failures.push(`${manifest.name}: package contains src/`);
   if (hasTests) failures.push(`${manifest.name}: package contains tests/`);
   if (hasWorkspaceSpecifier) failures.push(`${manifest.name}: contains workspace: specifier`);
+  if (!isPublicPackage) {
+    failures.push(`${manifest.name}: must be publishable with publishConfig.access=public`);
+  }
   if (!hasPublicStyle) failures.push(`${manifest.name}: missing public style.css`);
   if (isCorePackage && !hasWorker) failures.push(`${manifest.name}: missing Worker`);
   if (requiresWasm && !hasWasm) failures.push(`${manifest.name}: missing WASM`);
@@ -127,6 +132,7 @@ for (const packageDir of packageDirs) {
     hasSource,
     hasTests,
     hasWorkspaceSpecifier,
+    isPublicPackage,
     hasPublicStyle,
     hasWorker,
     hasWasm,

@@ -6,7 +6,7 @@
 
 ### 1. Typecheck
 
-`pnpm --filter @extend-ai/docx-core typecheck` — zero errors.
+`pnpm --filter @arcships/docx-core typecheck` — zero errors.
 
 ### 2. File existence and non-empty
 

@@ -32,7 +32,7 @@
       <section>
         <h3>DocxViewer</h3>
         <div ref="viewerHost" class="parity-surface" data-testid="parity-viewer">
-          <DocxViewer :model="model" />
+          <DocxViewer :model="model" :show-toolbar="false" />
         </div>
       </section>
       <section>
@@ -66,8 +66,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from "vue"
 import { useRoute } from "vue-router"
-import { createDocxRuntime, type DocModel } from "@extend-ai/docx-core"
-import { DocxEditor, DocxViewer } from "@extend-ai/vue-docx"
+import { createDocxRuntime, type DocModel } from "@arcships/docx-core"
+import { DocxEditor, DocxViewer } from "@arcships/vue-docx"
 
 type PageState = "idle" | "loading" | "ready" | "error"
 type ImageShape = { alt: string; sourceKind: string }
@@ -334,23 +334,45 @@ async function collectVirtualStructure(
     for (const wrapper of host.querySelectorAll('[data-docx-page-wrapper="true"]')) {
       const page = normalizeEditorPage(wrapper)
       pageMap.set(page.index, page)
+      // Viewer 与只读 Editor 的外层控件不同；这里验证的是文档纸张区域
+      // 是否只读，不能把上传文件框、页码选择等查看器工具栏算成正文控件。
+      interaction = mergeInteraction(
+        interaction,
+        readInteraction(wrapper.querySelector('[data-docx-page-surface="true"]')),
+      )
     }
-    interaction = mergeInteraction(interaction, readInteraction(host))
   }
 
   const previousTop = scrollRoot.scrollTop
   capture()
-  const maxScroll = Math.max(0, scrollRoot.scrollHeight - scrollRoot.clientHeight)
+  const declaredPageCount = Number(scrollRoot.dataset.docxPageCount)
+  const targetPageCount = Number.isFinite(declaredPageCount) && declaredPageCount > 0
+    ? declaredPageCount
+    : expectedPages
+  const initialMaxScroll = Math.max(0, scrollRoot.scrollHeight - scrollRoot.clientHeight)
   const viewportStep = Math.max(540, Math.floor(scrollRoot.clientHeight * 0.75))
   const scanSteps = Math.min(
     64,
-    Math.max(expectedPages * 2, Math.ceil(maxScroll / viewportStep) + 1),
+    Math.max(targetPageCount * 2, Math.ceil(initialMaxScroll / viewportStep) + 1),
   )
   for (let step = 0; step <= scanSteps; step += 1) {
     if (sequence !== loadSequence) return emptyStructure()
-    scrollRoot.scrollTop = scanSteps === 0 ? 0 : Math.round(maxScroll * step / scanSteps)
+    // Page measurement can increase the virtual spacer while the scan is in
+    // progress. Re-read the current maximum so the final step still reaches
+    // the real last page instead of stopping at a stale offset.
+    const currentMaxScroll = Math.max(0, scrollRoot.scrollHeight - scrollRoot.clientHeight)
+    scrollRoot.scrollTop = scanSteps === 0
+      ? 0
+      : Math.round(currentMaxScroll * step / scanSteps)
     scrollRoot.dispatchEvent(new Event("scroll"))
     await waitForPaint(20)
+    capture()
+  }
+  for (let attempt = 0; attempt < 4 && pageMap.size < targetPageCount; attempt += 1) {
+    if (sequence !== loadSequence) return emptyStructure()
+    scrollRoot.scrollTop = Math.max(0, scrollRoot.scrollHeight - scrollRoot.clientHeight)
+    scrollRoot.dispatchEvent(new Event("scroll"))
+    await waitForPaint(80)
     capture()
   }
   scrollRoot.scrollTop = previousTop

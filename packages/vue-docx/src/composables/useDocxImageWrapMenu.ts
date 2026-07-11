@@ -11,7 +11,7 @@ import {
   type DocxImageWrapMode,
   type DocxImageWrapState,
   type DocxImageWrapMenuOption,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 export interface UseDocxImageWrapMenuResult {
   state: DocxImageWrapState

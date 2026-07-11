@@ -2,7 +2,7 @@
   "packages": [
     {
       "directory": "packages/docx-core",
-      "name": "@extend-ai/docx-core",
+      "name": "@arcships/docx-core",
       "exports": {
         ".": {
           "types": "./dist/index.d.ts",
@@ -32,13 +32,13 @@
         "setWasmSource"
       ],
       "rootDeclarationFingerprint": {
-        "count": 1048,
-        "sha256": "f9a76b92a838d29782d4d62906b6ae0382e976b51547ba2c1cca7a8ed377d04f"
+        "count": 1054,
+        "sha256": "50454a88f3a16a51232fe173b6e4ffe377fea5f75779f802da12f84344bbc456"
       }
     },
     {
       "directory": "packages/xlsx-core",
-      "name": "@extend-ai/xlsx-core",
+      "name": "@arcships/xlsx-core",
       "exports": {
         ".": {
           "types": "./dist/index.d.ts",
@@ -71,13 +71,13 @@
         "getSheetsWasmModule"
       ],
       "rootDeclarationFingerprint": {
-        "count": 149,
-        "sha256": "55b4010a436e535608606f4f63a720841d1e83e098c5257d2e765c35f10bc964"
+        "count": 162,
+        "sha256": "b0e3c01913f8c0eacc11b72276a4632b04cb576de4a890d9ca702667715d1eb2"
       }
     },
     {
       "directory": "packages/vue-docx",
-      "name": "@extend-ai/vue-docx",
+      "name": "@arcships/vue-docx",
       "exports": {
         ".": {
           "types": "./dist/index.d.ts",
@@ -120,12 +120,27 @@
     },
     {
       "directory": "packages/vue-xlsx",
-      "name": "@extend-ai/vue-xlsx",
+      "name": "@arcships/vue-xlsx",
       "exports": {
         ".": {
           "types": "./dist/index.d.ts",
           "import": "./dist/index.js",
           "default": "./dist/index.js"
+        },
+        "./chart": {
+          "types": "./dist/optional/chart.d.ts",
+          "import": "./dist/chart.js",
+          "default": "./dist/chart.js"
+        },
+        "./map": {
+          "types": "./dist/optional/map.d.ts",
+          "import": "./dist/map.js",
+          "default": "./dist/map.js"
+        },
+        "./webgl": {
+          "types": "./dist/optional/webgl.d.ts",
+          "import": "./dist/webgl.js",
+          "default": "./dist/webgl.js"
         },
         "./style.css": "./dist/style.css"
       },
@@ -153,7 +168,7 @@
     },
     {
       "directory": "packages/vue-extend",
-      "name": "@extend-ai/vue-extend",
+      "name": "@arcships/vue-extend",
       "exports": {
         ".": {
           "types": "./dist/index.d.ts",
@@ -191,91 +206,97 @@
     "bundledDocxWasmUrl"
   ],
   "positiveSpecifiers": [
-    "@extend-ai/docx-core",
-    "@extend-ai/docx-core/core",
-    "@extend-ai/docx-core/runtime",
-    "@extend-ai/docx-core/wasm-url",
-    "@extend-ai/docx-core/assets/docx_wasm_bg.wasm",
-    "@extend-ai/docx-core/worker",
-    "@extend-ai/docx-core/package.json",
-    "@extend-ai/xlsx-core",
-    "@extend-ai/xlsx-core/core",
-    "@extend-ai/xlsx-core/runtime",
-    "@extend-ai/xlsx-core/wasm-url",
-    "@extend-ai/xlsx-core/assets/duke_sheets_wasm_bg.wasm",
-    "@extend-ai/xlsx-core/worker",
-    "@extend-ai/xlsx-core/package.json",
-    "@extend-ai/vue-docx",
-    "@extend-ai/vue-docx/style.css",
-    "@extend-ai/vue-xlsx",
-    "@extend-ai/vue-xlsx/style.css",
-    "@extend-ai/vue-extend",
-    "@extend-ai/vue-extend/assets/pdfium.wasm",
-    "@extend-ai/vue-extend/style.css",
-    "@extend-ai/vue-extend/dist/index.css"
+    "@arcships/docx-core",
+    "@arcships/docx-core/core",
+    "@arcships/docx-core/runtime",
+    "@arcships/docx-core/wasm-url",
+    "@arcships/docx-core/assets/docx_wasm_bg.wasm",
+    "@arcships/docx-core/worker",
+    "@arcships/docx-core/package.json",
+    "@arcships/xlsx-core",
+    "@arcships/xlsx-core/core",
+    "@arcships/xlsx-core/runtime",
+    "@arcships/xlsx-core/wasm-url",
+    "@arcships/xlsx-core/assets/duke_sheets_wasm_bg.wasm",
+    "@arcships/xlsx-core/worker",
+    "@arcships/xlsx-core/package.json",
+    "@arcships/vue-docx",
+    "@arcships/vue-docx/style.css",
+    "@arcships/vue-xlsx",
+    "@arcships/vue-xlsx/chart",
+    "@arcships/vue-xlsx/map",
+    "@arcships/vue-xlsx/webgl",
+    "@arcships/vue-xlsx/style.css",
+    "@arcships/vue-extend",
+    "@arcships/vue-extend/assets/pdfium.wasm",
+    "@arcships/vue-extend/style.css",
+    "@arcships/vue-extend/dist/index.css"
   ],
   "executableSpecifiers": [
-    "@extend-ai/docx-core",
-    "@extend-ai/docx-core/core",
-    "@extend-ai/docx-core/runtime",
-    "@extend-ai/docx-core/wasm-url",
-    "@extend-ai/xlsx-core",
-    "@extend-ai/xlsx-core/core",
-    "@extend-ai/xlsx-core/runtime",
-    "@extend-ai/xlsx-core/wasm-url",
-    "@extend-ai/vue-docx",
-    "@extend-ai/vue-xlsx",
-    "@extend-ai/vue-extend"
+    "@arcships/docx-core",
+    "@arcships/docx-core/core",
+    "@arcships/docx-core/runtime",
+    "@arcships/docx-core/wasm-url",
+    "@arcships/xlsx-core",
+    "@arcships/xlsx-core/core",
+    "@arcships/xlsx-core/runtime",
+    "@arcships/xlsx-core/wasm-url",
+    "@arcships/vue-docx",
+    "@arcships/vue-xlsx",
+    "@arcships/vue-xlsx/chart",
+    "@arcships/vue-xlsx/map",
+    "@arcships/vue-xlsx/webgl",
+    "@arcships/vue-extend"
   ],
   "deepImportRejections": {
-    "@extend-ai/docx-core": [
-      "@extend-ai/docx-core/src/index.ts",
-      "@extend-ai/docx-core/dist/index.js",
-      "@extend-ai/docx-core/engine",
-      "@extend-ai/docx-core/editor",
-      "@extend-ai/docx-core/layout",
-      "@extend-ai/docx-core/viewer",
-      "@extend-ai/docx-core/viewer/docx-import",
-      "@extend-ai/docx-core/viewer/wasm-source",
-      "@extend-ai/docx-core/runtime-DUMMY",
-      "@extend-ai/docx-core/assets/other.wasm",
-      "@extend-ai/docx-core/core.js"
+    "@arcships/docx-core": [
+      "@arcships/docx-core/src/index.ts",
+      "@arcships/docx-core/dist/index.js",
+      "@arcships/docx-core/engine",
+      "@arcships/docx-core/editor",
+      "@arcships/docx-core/layout",
+      "@arcships/docx-core/viewer",
+      "@arcships/docx-core/viewer/docx-import",
+      "@arcships/docx-core/viewer/wasm-source",
+      "@arcships/docx-core/runtime-DUMMY",
+      "@arcships/docx-core/assets/other.wasm",
+      "@arcships/docx-core/core.js"
     ],
-    "@extend-ai/xlsx-core": [
-      "@extend-ai/xlsx-core/src/index.ts",
-      "@extend-ai/xlsx-core/dist/index.js",
-      "@extend-ai/xlsx-core/wasm",
-      "@extend-ai/xlsx-core/worker-client",
-      "@extend-ai/xlsx-core/images",
-      "@extend-ai/xlsx-core/charts",
-      "@extend-ai/xlsx-core/types",
-      "@extend-ai/xlsx-core/assets/other.wasm",
-      "@extend-ai/xlsx-core/runtime/xlsx-runtime"
+    "@arcships/xlsx-core": [
+      "@arcships/xlsx-core/src/index.ts",
+      "@arcships/xlsx-core/dist/index.js",
+      "@arcships/xlsx-core/wasm",
+      "@arcships/xlsx-core/worker-client",
+      "@arcships/xlsx-core/images",
+      "@arcships/xlsx-core/charts",
+      "@arcships/xlsx-core/types",
+      "@arcships/xlsx-core/assets/other.wasm",
+      "@arcships/xlsx-core/runtime/xlsx-runtime"
     ],
-    "@extend-ai/vue-docx": [
-      "@extend-ai/vue-docx/src/index.ts",
-      "@extend-ai/vue-docx/dist/index.js",
-      "@extend-ai/vue-docx/components/DocxViewer.vue",
-      "@extend-ai/vue-docx/composables",
-      "@extend-ai/vue-docx/composables/useDocxEditor",
-      "@extend-ai/vue-docx/render"
+    "@arcships/vue-docx": [
+      "@arcships/vue-docx/src/index.ts",
+      "@arcships/vue-docx/dist/index.js",
+      "@arcships/vue-docx/components/DocxViewer.vue",
+      "@arcships/vue-docx/composables",
+      "@arcships/vue-docx/composables/useDocxEditor",
+      "@arcships/vue-docx/render"
     ],
-    "@extend-ai/vue-xlsx": [
-      "@extend-ai/vue-xlsx/src/index.ts",
-      "@extend-ai/vue-xlsx/dist/index.js",
-      "@extend-ai/vue-xlsx/components/XlsxViewer.vue",
-      "@extend-ai/vue-xlsx/composables",
-      "@extend-ai/vue-xlsx/composables/useXlsxViewerController",
-      "@extend-ai/vue-xlsx/render"
+    "@arcships/vue-xlsx": [
+      "@arcships/vue-xlsx/src/index.ts",
+      "@arcships/vue-xlsx/dist/index.js",
+      "@arcships/vue-xlsx/components/XlsxViewer.vue",
+      "@arcships/vue-xlsx/composables",
+      "@arcships/vue-xlsx/composables/useXlsxViewerController",
+      "@arcships/vue-xlsx/render"
     ],
-    "@extend-ai/vue-extend": [
-      "@extend-ai/vue-extend/src/index.ts",
-      "@extend-ai/vue-extend/dist/index.js",
-      "@extend-ai/vue-extend/components/PdfViewer.vue",
-      "@extend-ai/vue-extend/assets/other.wasm",
-      "@extend-ai/vue-extend/pdf-url-policy",
-      "@extend-ai/vue-extend/types",
-      "@extend-ai/vue-extend/components/FileUpload.vue"
+    "@arcships/vue-extend": [
+      "@arcships/vue-extend/src/index.ts",
+      "@arcships/vue-extend/dist/index.js",
+      "@arcships/vue-extend/components/PdfViewer.vue",
+      "@arcships/vue-extend/assets/other.wasm",
+      "@arcships/vue-extend/pdf-url-policy",
+      "@arcships/vue-extend/types",
+      "@arcships/vue-extend/components/FileUpload.vue"
     ]
   }
 }

@@ -1,11 +1,12 @@
 import { getCurrentScope, onScopeDispose, ref } from "vue"
 import {
   blitDocxThumbnailSurface,
+  DocxThumbnailSurfaceCache,
   rasterizeDocxThumbnailSurface,
   type DocxEditorController,
   type DocxPageThumbnailResolution,
   type DocxPageThumbnailResolutionOptions,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import {
   ensureDocxViewerPageSurfaceRegistry,
   subscribeDocxViewerPageSurfaces,
@@ -44,6 +45,10 @@ export interface UseDocxPageThumbnailsOptions extends DocxPageThumbnailResolutio
   visiblePageIndexes?: readonly number[]
   /** Additional page indexes to eagerly prefetch. */
   prefetchPageIndexes?: readonly number[]
+  /** Maximum number of raster surfaces retained by this composable instance. */
+  maxCacheEntries?: number
+  /** Approximate pixel byte budget retained by this composable instance. */
+  maxCacheBytes?: number
 }
 
 export interface UseDocxPageThumbnailsResult {
@@ -139,7 +144,12 @@ export function useDocxPageThumbnails(
   )
   const attachedCanvasByPage = ref<Map<number, HTMLCanvasElement>>(new Map())
   const registry = ensureDocxViewerPageSurfaceRegistry(editor)
-  const surfaceCache = new Map<number, CachedThumbnailSurface>()
+  const surfaceCache = new DocxThumbnailSurfaceCache<CachedThumbnailSurface>({
+    maxEntries: options.maxCacheEntries ?? 24,
+    maxBytes: options.maxCacheBytes ?? 32 * 1024 * 1024,
+    estimateBytes: (entry) =>
+      entry.resolution.pixelWidthPx * entry.resolution.pixelHeightPx * 4,
+  })
   const renderGeneration = new Map<number, number>()
   let disposed = false
 
@@ -177,12 +187,12 @@ export function useDocxPageThumbnails(
     const pageElement = registry.pageElements.get(pageIndex)
     const contentKey = registry.pageContentKeys.get(pageIndex)
     if (!pageElement || !contentKey) {
-      surfaceCache.delete(pageIndex)
+      surfaceCache.delete(String(pageIndex))
       updatePageThumbnailState(pageIndex, "unavailable")
       return undefined
     }
 
-    const cached = surfaceCache.get(pageIndex)
+    const cached = surfaceCache.get(String(pageIndex))
     if (!force && cached?.contentKey === contentKey) return cached
 
     const generation = (renderGeneration.get(pageIndex) ?? 0) + 1
@@ -197,7 +207,7 @@ export function useDocxPageThumbnails(
       })
       if (disposed || renderGeneration.get(pageIndex) !== generation) return undefined
       const entry = { contentKey, resolution, surface }
-      surfaceCache.set(pageIndex, entry)
+      surfaceCache.set(String(pageIndex), entry)
       updatePageThumbnailState(pageIndex, "ready")
       return entry
     } catch (error) {

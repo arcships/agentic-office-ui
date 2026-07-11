@@ -101,6 +101,7 @@ CASES = [
         "diagnosticsTestId": "xlsx-diagnostics",
         "sampleTestId": "xlsx-sample-select",
         "recovery": "sales-table.xlsx",
+        "detailsTestId": "xlsx-runtime-details",
     },
     {
         "id": "SEC-RUNTIME-PDF-CROSS-ORIGIN",
@@ -123,6 +124,7 @@ CASES = [
         "diagnosticsTestId": "xlsx-diagnostics",
         "sampleTestId": "xlsx-sample-select",
         "recovery": "sales-table.xlsx",
+        "detailsTestId": "xlsx-runtime-details",
     },
 ]
 
@@ -143,6 +145,12 @@ def run_attempt(browser, case: dict[str, str], attempt: int) -> dict[str, object
             "() => document.querySelector('[data-testid=\"page-status\"]')?.dataset.state === 'ready'",
             timeout=30_000,
         )
+        details_test_id = case.get("detailsTestId")
+        if details_test_id:
+            details = page.get_by_test_id(details_test_id)
+            if details.get_attribute("open") is None:
+                details.locator("summary").click()
+            page.get_by_test_id(case["inputTestId"]).wait_for(state="visible")
         page.get_by_test_id(case["inputTestId"]).fill(case["input"])
         page.get_by_test_id(case["applyTestId"]).click()
         page.wait_for_function(

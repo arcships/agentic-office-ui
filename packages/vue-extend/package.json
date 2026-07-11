@@ -1,6 +1,10 @@
 {
-  "name": "@extend-ai/vue-extend",
-  "version": "0.1.0",
+  "name": "@arcships/vue-extend",
+  "version": "0.2.0",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -25,7 +29,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "peerDependencies": {
-    "vue": ">=3.2.0"
+    "vue": ">=3.2.25 <4"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",

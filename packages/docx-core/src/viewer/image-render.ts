@@ -1,6 +1,8 @@
 import type { ImageRunNode } from "../engine/types";
 import { encode as encodePng } from "fast-png";
 import UTIFModule from "utif";
+import { createOfficeImageBudget } from "@arcships/office-runtime";
+import { DEFAULT_DOCX_RUNTIME_LIMITS } from "../resource-limits";
 
 // Buffer is available in Node.js environments via the global scope.
 // tsup with --shims provides a polyfill; for type-checking we declare it here.
@@ -36,7 +38,6 @@ const TIFF_DATA_URI_PREFIXES = ["data:image/tiff", "data:image/tif"];
 const EMF_DATA_URI_PREFIXES = ["data:image/emf", "data:image/x-emf"];
 const WMF_DATA_URI_PREFIXES = ["data:image/wmf", "data:image/x-wmf"];
 const UTIF = UTIFModule as unknown as UtifModule;
-const convertedTiffSrcCache = new Map<string, string | undefined>();
 
 function normalizeImageContentType(image: ImageRenderSource): string | undefined {
   return image.contentType?.trim().toLowerCase();
@@ -199,6 +200,12 @@ function selectPrimaryTiffPage(ifds: TiffIfd[]): TiffIfd | undefined {
 }
 
 function convertTiffToPngDataUri(bytes: Uint8Array): string | undefined {
+  const budget = createOfficeImageBudget(DEFAULT_DOCX_RUNTIME_LIMITS, "docx");
+  try {
+    budget.inspectAndReserve(bytes, "inline-image.tiff");
+  } finally {
+    budget.dispose();
+  }
   const tiffBuffer = toArrayBuffer(bytes);
   const ifds = UTIF.decode(tiffBuffer);
   const page = selectPrimaryTiffPage(ifds);
@@ -240,11 +247,6 @@ export function resolveRenderableImageSource(image: ImageRenderSource): string |
     return src;
   }
 
-  const cached = convertedTiffSrcCache.get(src);
-  if (cached !== undefined || convertedTiffSrcCache.has(src)) {
-    return cached;
-  }
-
   let converted: string | undefined;
   try {
     const bytes = resolveTiffBytes(image);
@@ -255,7 +257,6 @@ export function resolveRenderableImageSource(image: ImageRenderSource): string |
     converted = undefined;
   }
 
-  convertedTiffSrcCache.set(src, converted);
   return converted;
 }
 

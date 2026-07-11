@@ -216,7 +216,7 @@ Status: **BLOCKED** — 3 项硬约束违规需修复
 ## 四、Import 路径检查 ✅
 
 - **docx-core** 内部：全部使用相对路径（`../../viewer/`、`../engine/`、`./`），无跨包裸导入
-- **vue-docx** 内部：跨包使用 `@extend-ai/docx-core`，本地使用 `./` 相对路径
+- **vue-docx** 内部：跨包使用 `@arcships/docx-core`，本地使用 `./` 相对路径
 - `editor/helpers/section-manipulation.ts` 正确引用 `../editor-ops`
 - 无循环依赖检测到（TOC 相关已通过 `paragraph-toc.ts` 叶子节点打破）
 
@@ -228,8 +228,8 @@ Status: **BLOCKED** — 3 项硬约束违规需修复
 pnpm typecheck  # 全量通过
 ```
 
-- `@extend-ai/docx-core`: 零错误
-- `@extend-ai/vue-docx`: 零错误
+- `@arcships/docx-core`: 零错误
+- `@arcships/vue-docx`: 零错误
 
 ---
 
@@ -295,7 +295,7 @@ pnpm typecheck  # 全量通过
 - `engine/wasm.ts:48` — 错误消息 `"react-docx: the bundled WebAssembly binary failed..."`
 - `editor/helpers/performance.ts:6` — `DOCX_IMPORT_PERFORMANCE_PREFIX = "react-docx.import"`
 
-不影响功能，但应统一更新为 `@extend-ai/docx-core`。
+不影响功能，但应统一更新为 `@arcships/docx-core`。
 
 ### 9.2 无 public wasm 目录
 

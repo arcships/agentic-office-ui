@@ -109,7 +109,7 @@ ls: No such file or directory   (useXlsxViewerController.ts)
 - 代码位置：`packages/vue-xlsx/src/composables/*.ts`；`packages/vue-xlsx/src/composables.ts`
 
 ```
-$ pnpm --filter @extend-ai/vue-xlsx typecheck
+$ pnpm --filter @arcships/vue-xlsx typecheck
 > tsc --noEmit
 （exit 0，无输出）
 ```
@@ -200,7 +200,7 @@ $ ls packages/vue-xlsx/src/composables/index.ts packages/vue-xlsx/src/composable
 ls: No such file or directory   (index.ts)
 ls: No such file or directory   (useXlsxViewerController.ts)
 
-$ pnpm --filter @extend-ai/vue-xlsx typecheck
+$ pnpm --filter @arcships/vue-xlsx typecheck
 > tsc --noEmit
 （exit 0）
 ```
@@ -227,6 +227,6 @@ review-6 的 5 条建议一字未落实，仍然适用：
 2. **补 controller 文件**（review-4/5/6 建议 2，未落实）：`composables/useXlsxViewerController.ts`，把 `useXlsxViewerController`（monolith:1899）及其 setup/return（monolith:4606-4723）移入，return 改为聚合各 `createXxxDomain(ctx)` 的产物。
 3. **补 barrel + 接线**（review-4/5/6 建议 3，未落实）：`composables/index.ts`，`src/index.ts` 从 `./composables`（解析到 barrel）导入。接入后 F3 死代码问题自然消除。
 4. 清理 monolith 侧的 debug 日志（`composables.ts:3657,3672,3692`）。
-5. 验证：`pnpm --filter @extend-ai/vue-xlsx typecheck` + `build` 后运行 `packages/vue-xlsx/test/structure.mjs`（接入后需确认其从 `dist/index.js` 导入的 controller 方法表仍覆盖 requiredMethods）；grep 确认 monolith 内不再保留已迁出函数的本地副本、`grep -rn 'from "\./composables/' packages/vue-xlsx/src/` 有命中、`composables.ts` 行数 ≤1000 或消失。
+5. 验证：`pnpm --filter @arcships/vue-xlsx typecheck` + `build` 后运行 `packages/vue-xlsx/test/structure.mjs`（接入后需确认其从 `dist/index.js` 导入的 controller 方法表仍覆盖 requiredMethods）；grep 确认 monolith 内不再保留已迁出函数的本地副本、`grep -rn 'from "\./composables/' packages/vue-xlsx/src/` 有命中、`composables.ts` 行数 ≤1000 或消失。
 
 关键判断：本任务已连续七轮 blocking 且 review-6→review-7 零代码进展。继续重复 review 不会推进拆分；建议将任务退回执行方，明确要求"剪切迁移而非复制"这一唯一正确路径后再提交，避免第八次 review 同一问题。

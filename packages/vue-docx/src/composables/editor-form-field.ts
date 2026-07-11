@@ -2,9 +2,9 @@
 //
 // Extracted from useDocxEditor.ts.
 
-import type { DocModel, FormFieldRunNode } from "@extend-ai/docx-core"
-import type { DocxFormFieldLocation } from "@extend-ai/docx-core"
-import { cloneDocModel, getParagraphAtLocation } from "@extend-ai/docx-core"
+import type { DocModel, FormFieldRunNode } from "@arcships/docx-core"
+import type { DocxFormFieldLocation } from "@arcships/docx-core"
+import { cloneDocModel, getParagraphAtLocation } from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
 
 export function createEditorFormField(

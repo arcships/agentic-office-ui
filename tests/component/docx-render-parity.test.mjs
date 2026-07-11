@@ -9,8 +9,8 @@ import {
   walk,
 } from "./vue-test-renderer.mjs";
 
-const { DocxEditor, DocxViewer } = await importFromDemo("@extend-ai/vue-docx");
-const { wasmBuildDocModelFromBytes } = await importFromDemo("@extend-ai/docx-core");
+const { DocxEditor, DocxViewer } = await importFromDemo("@arcships/vue-docx");
+const { wasmBuildDocModelFromBytes } = await importFromDemo("@arcships/docx-core");
 
 function classes(node) {
   return String(node?.props?.class || "").split(/\s+/).filter(Boolean);
@@ -153,7 +153,8 @@ function interaction(root) {
   const nodes = walk(root);
   return {
     contentEditableTrue: nodes.filter((node) => node.props?.contenteditable === "true").length,
-    inputs: nodes.filter((node) => node.type === "input").length,
+    inputs: nodes.filter((node) =>
+      node.type === "input" && !hasClass(node, "docx-viewer__file-input")).length,
     selects: nodes.filter((node) => node.type === "select").length,
     resizeHandles: nodes.filter((node) => classes(node).some((name) =>
       /resize-handle|column-handle|move-handle|add-row/.test(name))).length,
@@ -272,7 +273,9 @@ test("DocxViewer and read-only DocxEditor render one public DocModel with identi
   const Harness = vue.defineComponent({
     setup() {
       return () => vue.h("div", { "data-testid": "docx-parity-harness" }, [
-        vue.h("section", { "data-testid": "parity-viewer" }, [vue.h(DocxViewer, { model })]),
+        vue.h("section", { "data-testid": "parity-viewer" }, [
+          vue.h(DocxViewer, { model, showToolbar: false }),
+        ]),
         vue.h("section", { "data-testid": "parity-editor" }, [vue.h(DocxEditor, {
           model,
           editable: false,

@@ -1,6 +1,6 @@
 // Structure test for useXlsxViewerController: verifies key methods exist and are callable.
 // Run: node packages/vue-xlsx/test/structure.mjs
-// Requires the built dist (pnpm --filter @extend-ai/vue-xlsx build) and vue available.
+// Requires the built dist (pnpm --filter @arcships/vue-xlsx build) and vue available.
 import { createRenderer, h } from "vue";
 import { useXlsxViewerController, XlsxFileSizeLimitExceededError } from "../dist/index.js";
 

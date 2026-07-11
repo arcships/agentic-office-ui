@@ -7,22 +7,43 @@
 // Migration source: @extend-ai/react-docx commit 6f70b92,
 //   react-viewer/src/editor.tsx — renderDocumentNode / renderPageBody sections.
 
-import { h, defineComponent, type PropType, type VNode } from "vue"
+import {
+  h,
+  defineComponent,
+  nextTick,
+  onUnmounted,
+  ref,
+  watch,
+  type PropType,
+  type VNode,
+} from "vue"
 import type {
   DocxEditorController,
   DocModel,
   ParagraphNode,
   TableNode,
   DocumentPageNodeSegment,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import DocxParagraphHost from "./DocxParagraphHost.vue"
 import DocxTableHost from "./DocxTableHost.vue"
+import {
+  restoreDomSelectionFromTextRange,
+  syncDomSelectionToEditor,
+} from "../composables/editor-selection"
 
 // ── Types ──────────────────────────────────────────────────────────
 interface PageLayoutInfo {
   pageWidthPx: number
   pageHeightPx: number
   marginsPx?: { top: number; bottom: number; left: number; right: number }
+}
+
+const SELECTION_TRACKING_OWNER = Symbol("docx-selection-tracking-owner")
+type SelectionTrackingRoot = HTMLElement & {
+  [SELECTION_TRACKING_OWNER]?: {
+    owner: object
+    detach: () => void
+  }
 }
 
 // ── Component ──────────────────────────────────────────────────────
@@ -64,6 +85,106 @@ export default defineComponent({
   },
   emits: ["measure"],
   setup(props, { emit, slots }) {
+    const selectionOwner = {}
+    const bodyElement = ref<HTMLElement>()
+    let selectionDocument: Document | undefined
+    let selectionRoot: HTMLElement | undefined
+    let toolbarPointerDown = false
+    let toolbarPointerReset: ReturnType<typeof setTimeout> | undefined
+
+    function editorRoot(): HTMLElement | undefined {
+      const body = bodyElement.value
+      return (body?.closest?.(".docx-editor-viewer") as HTMLElement | undefined) ?? body
+    }
+
+    function resetToolbarPointerState(): void {
+      toolbarPointerDown = false
+      if (toolbarPointerReset !== undefined) clearTimeout(toolbarPointerReset)
+      toolbarPointerReset = undefined
+    }
+
+    function onEditorPointerDown(event: Event): void {
+      const target = event.target as Element | null
+      toolbarPointerDown = Boolean(
+        target?.closest?.(".docx-toolbar, .docx-toolbar-shell")
+      )
+      if (toolbarPointerReset !== undefined) clearTimeout(toolbarPointerReset)
+      toolbarPointerReset = setTimeout(resetToolbarPointerState, 0)
+    }
+
+    function syncSelection(): void {
+      const root = editorRoot()
+      if (!props.editable || !props.controller || !root) return
+      syncDomSelectionToEditor(props.controller, root, undefined, {
+        preserveExpandedSelection: toolbarPointerDown,
+      })
+    }
+
+    function detachSelectionTracking(): void {
+      selectionDocument?.removeEventListener("selectionchange", syncSelection)
+      selectionRoot?.removeEventListener("pointerdown", onEditorPointerDown, true)
+      const ownedRoot = selectionRoot as SelectionTrackingRoot | undefined
+      if (ownedRoot?.[SELECTION_TRACKING_OWNER]?.owner === selectionOwner) {
+        delete ownedRoot[SELECTION_TRACKING_OWNER]
+      }
+      selectionDocument = undefined
+      selectionRoot = undefined
+      resetToolbarPointerState()
+    }
+
+    function activateSelectionTracking(): void {
+      const root = editorRoot()
+      const ownerDocument = root?.ownerDocument
+      if (!props.editable || !props.controller || !root || !ownerDocument) return
+      if (selectionDocument === ownerDocument && selectionRoot === root) return
+      const trackingRoot = root as SelectionTrackingRoot
+      const previousOwner = trackingRoot[SELECTION_TRACKING_OWNER]
+      if (previousOwner?.owner !== selectionOwner) previousOwner?.detach()
+      detachSelectionTracking()
+      selectionDocument = ownerDocument
+      selectionRoot = root
+      ownerDocument.addEventListener("selectionchange", syncSelection)
+      root.addEventListener("pointerdown", onEditorPointerDown, true)
+      trackingRoot[SELECTION_TRACKING_OWNER] = {
+        owner: selectionOwner,
+        detach: detachSelectionTracking,
+      }
+    }
+
+    function restoreRequestedSelection(focus: boolean): void {
+      const controller = props.controller
+      const root = editorRoot()
+      const range = controller?.historyRestoreRequest?.activeTextRange ??
+        controller?.activeTextRange
+      if (!props.editable || !controller || !root || !range) return
+      void nextTick(() => {
+        const restored = restoreDomSelectionFromTextRange(root, range, {
+          focus,
+          owner: bodyElement.value,
+        })
+        if (restored) {
+          // Focusing a contenteditable can synchronously collapse its native
+          // selection and run the paragraph focus handler before the browser
+          // emits selectionchange. Confirm the restored DOM range back into
+          // the public controller immediately so undo/redo never exposes that
+          // transient collapsed range as the final editor state.
+          syncDomSelectionToEditor(controller, root)
+        }
+      })
+    }
+
+    watch(
+      () => props.controller?.historyRestoreRequest?.nonce,
+      () => restoreRequestedSelection(true)
+    )
+    watch(
+      () => [props.editable, props.controller] as const,
+      ([editable, controller]) => {
+        if (!editable || !controller) detachSelectionTracking()
+      }
+    )
+    onUnmounted(detachSelectionTracking)
+
     // ── Helpers ────────────────────────────────────────────────────
     function segmentKey(segment: DocumentPageNodeSegment, index: number): string {
       const base = `node-${segment.nodeIndex}`
@@ -85,6 +206,23 @@ export default defineComponent({
     function segmentHeightPx(_segment: DocumentPageNodeSegment): number {
       // Return 0 to let content determine height dynamically
       return 0
+    }
+
+    function ensureParagraphSelection(nodeIndex: number): void {
+      const controller = props.controller
+      if (!controller) return
+      const range = controller.activeTextRange
+      const rangeStartsHere = range?.start.location.kind === "paragraph" &&
+        range.start.location.nodeIndex === nodeIndex
+      const rangeEndsHere = range?.end.location.kind === "paragraph" &&
+        range.end.location.nodeIndex === nodeIndex
+      // The browser range is the more precise selection. Do not clear a
+      // caret or expanded range just because the coarse paragraph selection
+      // has not caught up with the focus event yet.
+      if (rangeStartsHere && rangeEndsHere) return
+      const selection = controller.selection
+      if (selection.kind === "paragraph" && selection.nodeIndex === nodeIndex) return
+      controller.selectParagraph(nodeIndex)
     }
 
     // ── Render ─────────────────────────────────────────────────────
@@ -146,10 +284,10 @@ export default defineComponent({
                   props.controller?.commitParagraphText(nodeIndex, text)
                 },
                 onFocus: (nodeIndex: number) => {
-                  props.controller?.selectParagraph(nodeIndex)
+                  ensureParagraphSelection(nodeIndex)
                 },
                 onClick: (nodeIndex: number, _event: MouseEvent) => {
-                  props.controller?.selectParagraph(nodeIndex)
+                  ensureParagraphSelection(nodeIndex)
                 },
               })
             )
@@ -178,10 +316,16 @@ export default defineComponent({
       return h(
         "div",
         {
+          ref: bodyElement,
           "data-docx-page-body": "true",
           "data-testid": "docx-page",
           "data-page": props.pageNumber,
           class: "docx-page-body",
+          onPointerdown: activateSelectionTracking,
+          onFocusin: activateSelectionTracking,
+          onMouseup: syncSelection,
+          onKeyup: syncSelection,
+          onClick: syncSelection,
           style: {
             isolation: "isolate",
             display: "flex",

@@ -7,8 +7,8 @@ Scope: xlsx-verify-1 blocking finding 修复验证 + 全量回归
 
 | 包 | 结果 |
 |---|---|
-| @extend-ai/xlsx-core | ✅ pass — 零错误 |
-| @extend-ai/vue-xlsx | ✅ pass — 零错误 |
+| @arcships/xlsx-core | ✅ pass — 零错误 |
+| @arcships/vue-xlsx | ✅ pass — 零错误 |
 
 ## 二、上次 blocking finding 修复
 
@@ -61,7 +61,7 @@ chart-bar/line/pie/scatter/surface 等图表类型文件继续从 `./chart-rende
 
 ### 4.2 跨包引用
 
-- vue-xlsx → xlsx-core：47 处 `@extend-ai/xlsx-core`，全部正确
+- vue-xlsx → xlsx-core：47 处 `@arcships/xlsx-core`，全部正确
 - vue-xlsx → wasm：仅 `import type { Workbook } from "@dukelib/sheets-wasm"`（类型引用），无运行时泄漏
 
 ### 4.3 composables 内部引用
@@ -72,7 +72,7 @@ chart-bar/line/pie/scatter/surface 等图表类型文件继续从 `./chart-rende
 
 - `../render` — 正确指向 render barrel
 - `../composables/useXlsxViewerThumbnails` — 正确
-- `@extend-ai/xlsx-core` — 正确
+- `@arcships/xlsx-core` — 正确
 
 ### 4.5 render 模块间引用
 

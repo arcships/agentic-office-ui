@@ -25,7 +25,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, type CSSProperties } from "vue";
-import type { XlsxViewerController } from "@extend-ai/xlsx-core";
+import type { XlsxViewerController } from "@arcships/xlsx-core";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -66,10 +66,10 @@ const barStyle = computed<CSSProperties>(() => ({
 
 // Sync formula draft from controller when not focused
 watch(
-  () => [props.controller.selectedFormula, props.controller.activeCellAddress],
+  () => [props.controller.selectedFormula, props.controller.selectedValue, props.controller.activeCellAddress],
   () => {
     if (focusedField.value === "formula") return;
-    formulaDraft.value = props.controller.selectedFormula;
+    formulaDraft.value = props.controller.selectedFormula || props.controller.selectedValue;
   },
   { immediate: true }
 );

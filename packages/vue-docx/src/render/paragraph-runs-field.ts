@@ -4,7 +4,7 @@
 // Translates JSX to Vue h() calls.
 
 import { h, type VNode } from "vue"
-import type { FormFieldRunNode } from "@extend-ai/docx-core"
+import type { FormFieldRunNode } from "@arcships/docx-core"
 import {
   formFieldDisplayValue,
   runStyleToCss,
@@ -13,9 +13,9 @@ import {
   commentHighlightStyle,
   updateEstimatedLineWidthPxForText,
   resolveTabSpacerWidthPx,
-} from "@extend-ai/docx-core"
-import type { DocxDocumentTheme } from "@extend-ai/docx-core"
-import type { ParagraphTrackedInlineChange } from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
+import type { DocxDocumentTheme } from "@arcships/docx-core"
+import type { ParagraphTrackedInlineChange } from "@arcships/docx-core"
 
 export interface FieldRunRenderContext {
   useTabLeaderLayout: boolean

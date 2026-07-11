@@ -9,7 +9,7 @@ import {
   type DocxFormFieldLocation,
   type DocxSelectedFormField,
   type FormFieldRunNode,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 export interface UseDocxFormFieldsResult {
   formFields: DocxSelectedFormField[]

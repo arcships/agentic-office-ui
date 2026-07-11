@@ -24,7 +24,7 @@ No helpers source has landed since `a909c27` (review #3). The two intervening co
 
 The blocking finding F1 is unchanged across reviews #1–#5: 15 of 40 planned modules remain absent, including the pagination-plan trio, pretext-build/measure, table-height, line-height-table, tracked-changes/-gutter, selection-helpers/restore, section-manipulation, page-measurement, style-block-css, and xml-parsing-extra. Several carry "必须复刻" alignment obligations (#22 measurement-driven iteration, #23 pretext integration, #32 tracked-changes from-model) and are prerequisites for the downstream `docx-composables` task (still a stub — `vue-docx/src/` has no `composables/` directory).
 
-This review independently re-ran the full check matrix against the current tree (not copied from #4): typecheck passes for `@extend-ai/docx-core` and the full 6-package workspace; `madge --circular` reports no cycles (37 files processed); imports are all relative with zero `@extend-ai/*` package refs in source; no React imports; no residual stub/mock/fake/TODO/FIXME (grep for `stub|mock|fake|not.?implemented|TODO|FIXME|XXX` returns zero matches; the only `placeholder` hits are the legitimate form-field `placeholder` property and an explanatory code comment). The structural concern `paragraph-geometry.ts` at 1027 lines (27 over the ≤1000 hard constraint) is also unchanged.
+This review independently re-ran the full check matrix against the current tree (not copied from #4): typecheck passes for `@arcships/docx-core` and the full 6-package workspace; `madge --circular` reports no cycles (37 files processed); imports are all relative with zero `@extend-ai/*` package refs in source; no React imports; no residual stub/mock/fake/TODO/FIXME (grep for `stub|mock|fake|not.?implemented|TODO|FIXME|XXX` returns zero matches; the only `placeholder` hits are the legitimate form-field `placeholder` property and an explanatory code comment). The structural concern `paragraph-geometry.ts` at 1027 lines (27 over the ≤1000 hard constraint) is also unchanged.
 
 The quality of what *is* delivered remains high and the dependency graph is clean, but the task is still ~65% complete by file count (26 of 40) and the missing modules are on the critical path. No progress was made on the blocking finding across the last two review cycles (#4 and #5).
 
@@ -93,7 +93,7 @@ The quality of what *is* delivered remains high and the dependency graph is clea
 | Check | Result | Detail |
 |---|---|---|
 | No new source since #3 | ✅ confirmed | `git log --oneline -- packages/docx-core/src/editor/helpers/` shows last source commit is `a909c27`; `7cf6675` and `2659ea0` touch only review markdown. Re-verification run against current HEAD `2659ea0`, working tree clean. |
-| Typecheck (docx-core) | ✅ Pass | `pnpm --filter @extend-ai/docx-core typecheck` exits 0. |
+| Typecheck (docx-core) | ✅ Pass | `pnpm --filter @arcships/docx-core typecheck` exits 0. |
 | Typecheck (full workspace) | ✅ Pass | `pnpm typecheck` (6 packages: docx-core, xlsx-core, vue-extend, vue-docx, vue-xlsx, +root) exits 0 — no ripple. |
 | Circular deps | ✅ Pass | `madge --circular --extensions ts packages/docx-core/src/editor/helpers/index.ts` → "No circular dependency found!" (37 files processed). Intra-helper import graph is acyclic. |
 | Import paths | ✅ Pass | All relative (`./` intra-helper, `../../engine/*` / `../../viewer/*` cross-layer). Zero `@extend-ai/*` package refs in source. |

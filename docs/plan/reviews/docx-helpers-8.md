@@ -22,7 +22,7 @@ HEAD is `4326037`; working tree clean. Since review #7, **no new helpers source 
 
 Review #7 blocked on 14 missing modules. This cycle delivered **zero new helper source** (the only commit since #7 is `4326037`, which adds `docx-helpers-7.md` and touches no `packages/docx-core/` files). The deliverable surface is unchanged at 27 content modules. The blocking finding F1 therefore persists with no reduction: 14 of 40 planned modules remain absent, including the pagination-plan trio, pretext-build/measure, table-height, tracked-changes, and selection helpers that carry "必须复刻" alignment obligations (#22, #23, #32) and are prerequisites for the downstream `docx-composables` task (still a stub).
 
-Independently re-ran the full check matrix against the current tree: typecheck passes for `@extend-ai/docx-core`; build (tsup) succeeds; `madge --circular` reports no cycles (38 files processed); all imports relative with zero `@extend-ai/*` package refs and zero React imports; no residual stub/mock/fake/TODO/FIXME. The quality of what *is* delivered remains high and the dependency graph is clean, but the task is ~68% complete by file count (27 of 40) and the missing modules are on the critical path.
+Independently re-ran the full check matrix against the current tree: typecheck passes for `@arcships/docx-core`; build (tsup) succeeds; `madge --circular` reports no cycles (38 files processed); all imports relative with zero `@extend-ai/*` package refs and zero React imports; no residual stub/mock/fake/TODO/FIXME. The quality of what *is* delivered remains high and the dependency graph is clean, but the task is ~68% complete by file count (27 of 40) and the missing modules are on the critical path.
 
 **Conclusion: blocked** — F1 persists (14 of 40 modules missing); zero progress since #7.
 
@@ -97,8 +97,8 @@ Independently re-ran the full check matrix against the current tree: typecheck p
 | Check | Result | Detail |
 |---|---|---|
 | New source since #7 | ⚠️ none | `git log --oneline -- packages/docx-core/src/editor/helpers/` unchanged since `62dba91`; `git diff 62dba91..HEAD --stat -- packages/docx-core/src/editor/helpers/` is empty. The only commit since #7 (`4326037`) adds `docx-helpers-7.md`. HEAD `4326037`, working tree clean. |
-| Typecheck (docx-core) | ✅ Pass | `pnpm --filter @extend-ai/docx-core typecheck` exits 0. |
-| Build (docx-core) | ✅ Pass | `pnpm --filter @extend-ai/docx-core build` (tsup) succeeds — ESM + DTS. |
+| Typecheck (docx-core) | ✅ Pass | `pnpm --filter @arcships/docx-core typecheck` exits 0. |
+| Build (docx-core) | ✅ Pass | `pnpm --filter @arcships/docx-core build` (tsup) succeeds — ESM + DTS. |
 | Circular deps | ✅ Pass | `madge --circular --extensions ts packages/docx-core/src/editor/helpers/index.ts` → "No circular dependency found!" (38 files processed). Intra-helper import graph is acyclic. |
 | Import paths | ✅ Pass | All relative (`./` intra-helper, `../../engine/*` / `../../viewer/*` / `../../layout/*` cross-layer). Zero `@extend-ai/*` package refs in source; zero `react` imports. |
 | React-type cleanup | ✅ Pass | No `import * as React` / `from "react"` / `@extend-ai/*` in source. |

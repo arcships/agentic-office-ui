@@ -21,7 +21,7 @@ No new helpers source landed since review #3. The only task-scoped commit since 
 
 The blocking finding F1 from reviews #1–#3 is unchanged: 15 of 40 planned modules remain absent, including the pagination-plan trio, pretext-build/measure, table-height, line-height-table, tracked-changes/-gutter, selection-helpers/restore, section-manipulation, page-measurement, style-block-css, and xml-parsing-extra. Several of these carry "必须复刻" alignment obligations (#22 measurement-driven iteration, #23 pretext integration, #32 tracked-changes from-model) and are prerequisites for the downstream `docx-composables` task (still a stub — `vue-docx/src/` has no `composables/` directory).
 
-This review re-verified the full check matrix against the current tree: typecheck passes for `@extend-ai/docx-core` and the full 6-package workspace; `madge --circular` reports no cycles; imports are all relative with zero `@extend-ai/*` package refs in source; no React imports; no residual stub/mock/fake (the only `placeholder` hits are the legitimate form-field `placeholder` property and an explanatory code comment about upstream generator behavior). The one structural concern carried from earlier reviews — `paragraph-geometry.ts` at 1027 lines (27 over the ≤1000 hard constraint) — is also unchanged.
+This review re-verified the full check matrix against the current tree: typecheck passes for `@arcships/docx-core` and the full 6-package workspace; `madge --circular` reports no cycles; imports are all relative with zero `@extend-ai/*` package refs in source; no React imports; no residual stub/mock/fake (the only `placeholder` hits are the legitimate form-field `placeholder` property and an explanatory code comment about upstream generator behavior). The one structural concern carried from earlier reviews — `paragraph-geometry.ts` at 1027 lines (27 over the ≤1000 hard constraint) — is also unchanged.
 
 The quality of what *is* delivered remains high and the graph is clean, but the task is still ~65% complete by file count (26 of 40) and the missing modules are on the critical path. No progress was made on the blocking finding between review #3 and #4.
 
@@ -90,7 +90,7 @@ The quality of what *is* delivered remains high and the graph is clean, but the 
 | Check | Result | Detail |
 |---|---|---|
 | No new source since #3 | ✅ confirmed | `git log -- packages/docx-core/src/editor/helpers/` shows last source commit is `a909c27`; `7cf6675` touches only `docs/plan/reviews/docx-helpers-3.md`. Re-verification run against current HEAD `7cf6675`. |
-| Typecheck (docx-core) | ✅ Pass | `pnpm --filter @extend-ai/docx-core typecheck` exits 0. |
+| Typecheck (docx-core) | ✅ Pass | `pnpm --filter @arcships/docx-core typecheck` exits 0. |
 | Typecheck (full workspace) | ✅ Pass | `pnpm typecheck` (6 packages: docx-core, xlsx-core, vue-extend, vue-docx, vue-xlsx, +root) exits 0 — no ripple. |
 | Circular deps | ✅ Pass | `madge --circular --extensions ts packages/docx-core/src/editor/helpers/index.ts` → "No circular dependency found!". Intra-helper import graph (top hubs: constants×13, editor-types×10, paragraph-inspect×9) is acyclic. |
 | Import paths | ✅ Pass | All relative (`./` intra-helper, `../../engine/*` / `../../viewer/*` cross-layer). Zero `@extend-ai/*` package refs in source. |

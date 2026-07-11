@@ -4,7 +4,7 @@ import {
   toOfficeLoadError,
   type OfficeLoadError,
   type OfficeUrlPolicy,
-} from "@extend-ai/office-runtime"
+} from "@arcships/office-runtime"
 
 export type PdfSource =
   | { kind: "url"; url: string }

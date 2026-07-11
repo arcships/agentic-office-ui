@@ -114,7 +114,7 @@
 
 <script setup lang="ts">
 import { computed, ref, shallowRef } from "vue"
-import { PdfViewer, type PdfDiagnostic, type PdfLoadError, type PdfSource, type PdfUrlPolicy } from "@extend-ai/vue-extend"
+import { PdfViewer, type PdfDiagnostic, type PdfLoadError, type PdfSource, type PdfUrlPolicy } from "@arcships/vue-extend"
 
 const samples = [
   { file: "sample.pdf", label: "文本 PDF" },

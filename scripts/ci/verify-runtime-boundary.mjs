@@ -40,7 +40,7 @@ for (const packageName of publicPackages) {
   const candidates = [path.join(packageRoot, "package.json"), ...walk(path.join(packageRoot, "dist"))]
     .filter((file) => /(?:package\.json|\.(?:js|d\.ts))$/.test(file));
   for (const file of candidates) {
-    if (readFileSync(file, "utf8").includes("@extend-ai/office-runtime")) {
+    if (readFileSync(file, "utf8").includes("@arcships/office-runtime")) {
       privateReferenceFiles.push(path.relative(root, file));
     }
   }

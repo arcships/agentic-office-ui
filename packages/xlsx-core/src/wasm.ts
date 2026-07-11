@@ -50,7 +50,7 @@ function createLegacyDefaultWasmRuntime() {
     setSource(nextSource: XlsxWasmSource): void {
       if (modulePromise) {
         throw new Error(
-          "@extend-ai/xlsx-core: setWasmSource must be called before the default main-thread WASM module initializes",
+          "@arcships/xlsx-core: setWasmSource must be called before the default main-thread WASM module initializes",
         );
       }
       hasConfiguredSource = true;

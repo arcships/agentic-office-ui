@@ -1,7 +1,7 @@
 /** @jsxImportSource vue */
 import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 import { treemapBinary, treemapDice } from "d3-hierarchy";
-import type { XlsxChart, XlsxChartSeries } from "@extend-ai/xlsx-core";
+import type { XlsxChart, XlsxChartSeries } from "@arcships/xlsx-core";
 import { safeNumber, normalizeCategoryLabel, clamp, lightenColor } from "./chart-shared";
 import { chartSeriesColor, chartPointColor, getCategoryLabels } from "./chart-data";
 import type { ChartHierarchyDatum, ChartStage, BoxWhiskerStats } from "./chart-types";

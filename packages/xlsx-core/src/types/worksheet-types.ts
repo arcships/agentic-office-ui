@@ -133,6 +133,8 @@ export interface XlsxSheetData {
   hasVerticalMerges: boolean;
   maxHorizontalMergeEndCol: number;
   maxVerticalMergeEndRow: number;
+  /** Exact merged ranges used by Worker-backed viewers. */
+  mergedRegions?: XlsxCellRange[];
   minUsedCol: number;
   minUsedRow: number;
   maxUsedCol: number;
@@ -468,6 +470,10 @@ export interface XlsxRuntimeLike {
     showHiddenSheets?: boolean;
     skipXmlParsing?: boolean;
   }>;
+  readonly limits?: Readonly<{
+    maxInputBytes?: number;
+    maxConcurrentImageDecodes?: number;
+  }>;
   createWorkerClient(): unknown;
   dispose(): void;
 }
@@ -490,23 +496,38 @@ export interface XlsxUrlPolicy {
   fetch?: typeof fetch;
 }
 
-export type XlsxLoadErrorCode = "SOURCE_NOT_ALLOWED" | "FETCH_FAILED" | "INVALID_WORKBOOK" | "ABORTED";
+export type XlsxLoadErrorCode =
+  | "SOURCE_NOT_ALLOWED"
+  | "FETCH_FAILED"
+  | "INVALID_WORKBOOK"
+  | "LIMIT_EXCEEDED"
+  | "IMAGE_LIMIT_EXCEEDED"
+  | "INVALID_IMAGE"
+  | "IMAGE_DECODE_FAILED"
+  | "TIMEOUT"
+  | "WORKER_UNAVAILABLE"
+  | "ABORTED";
 
 export interface XlsxLoadError {
   code: XlsxLoadErrorCode;
   message: string;
   sourceKind: XlsxSourceKind;
   url?: string;
+  phase?: string;
+  limit?: string;
+  actual?: number;
+  allowed?: number;
 }
 
 export interface XlsxDiagnostic {
-  type: "load-start" | "load-deferred" | "load-resumed" | "load-success" | "load-error" | "load-cancelled" | "download";
+  type: "load-start" | "load-deferred" | "load-resumed" | "load-success" | "load-error" | "load-cancelled" | "download" | "worker-error" | "image-decode-error";
   requestId: number;
   /** Globally unique task identity supplied by the instance loading boundary. */
   taskId?: string;
   sourceKind?: XlsxSourceKind;
   url?: string;
   bytes?: number;
+  imageId?: string;
   error?: XlsxLoadError;
 }
 
@@ -554,6 +575,21 @@ export interface UseXlsxViewerControllerOptions {
    * @default 25 * 1024 * 1024
    */
   maxFileSizeBytes?: number;
+  /**
+   * Maximum number of undo and redo entries retained by this controller
+   * instance.
+   *
+   * @default 100
+   */
+  historyMaxEntries?: number;
+  /**
+   * Approximate byte budget for undo and redo entries retained by this
+   * controller instance. The newest oversized entry remains available by
+   * itself so the latest edit can still be undone.
+   *
+   * @default 32 * 1024 * 1024
+   */
+  historyMaxBytes?: number;
   /**
    * Disables workbook edits, paste, fill, undo/redo, and other mutation actions.
    *
@@ -667,8 +703,10 @@ export interface XlsxViewerController {
   isLoading: boolean;
   isChartsLoading: boolean;
   isWorkerBacked?: boolean;
+  maxConcurrentImageDecodes?: number;
   sourceState: XlsxSourceState;
   sourceError: XlsxLoadError | null;
+  reportImageDecodeError?: (imageId: string, message?: string) => void;
   images: XlsxImage[];
   moveChartBy: (id: string, deltaX: number, deltaY: number) => void;
   shapes: XlsxShape[];

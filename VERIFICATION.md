@@ -5,11 +5,11 @@
 ```
 D:\code\ui\vue-extend\
 ├── packages/
-│   ├── docx-core/          ← @extend-ai/docx-core    ✅ 已构建 (22KB types)
-│   ├── vue-docx/           ← @extend-ai/vue-docx     ✅ 源码完成
-│   ├── xlsx-core/          ← @extend-ai/xlsx-core    ✅ 已构建 (27KB types)
-│   ├── vue-xlsx/           ← @extend-ai/vue-xlsx     ✅ 源码完成
-│   └── vue-extend/         ← @extend-ai/vue-extend   ✅ 8个组件
+│   ├── docx-core/          ← @arcships/docx-core    ✅ 已构建 (22KB types)
+│   ├── vue-docx/           ← @arcships/vue-docx     ✅ 源码完成
+│   ├── xlsx-core/          ← @arcships/xlsx-core    ✅ 已构建 (27KB types)
+│   ├── vue-xlsx/           ← @arcships/vue-xlsx     ✅ 源码完成
+│   └── vue-extend/         ← @arcships/vue-extend   ✅ 8个组件
 ├── apps/
 │   └── demo/               ← 验证应用                ✅ 运行中 :5000
 ├── package.json
@@ -58,8 +58,8 @@ D:\code\ui\vue-extend\
 
 | 包 | 类型定义 | JS Bundle |
 |---|---|---|
-| `@extend-ai/docx-core` | 22.0 KB | 25.1 KB |
-| `@extend-ai/xlsx-core` | 27.1 KB | 4.0 KB |
+| `@arcships/docx-core` | 22.0 KB | 25.1 KB |
+| `@arcships/xlsx-core` | 27.1 KB | 4.0 KB |
 
 ## 源文件统计
 

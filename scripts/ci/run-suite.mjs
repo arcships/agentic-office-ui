@@ -23,9 +23,15 @@ function readGitHead() {
 
 const commit = readGitHead();
 const runId = process.env.CI_RUN_ID || timestamp();
+const evidenceSuite = {
+  matrix: "P4-MATRIX-01",
+  performance: "P3-PERF-BASELINE-01",
+  release: "BB-RELEASE",
+  stress: "BB-STRESS",
+}[suiteName] || "P1-CI-01";
 const evidenceRoot = path.resolve(
   process.env.CI_EVIDENCE_ROOT ||
-    path.join(root, "output", "acceptance", commit, "P1-CI-01", runId),
+    path.join(root, "output", "acceptance", commit, evidenceSuite, runId),
 );
 const suiteDir = path.join(evidenceRoot, suiteName || "unknown-suite");
 const prebuilt = process.env.CI_PREBUILT === "1";
@@ -51,8 +57,11 @@ const suites = {
       "--test",
       "--test-concurrency=1",
       "tests/unit/office-runtime.test.mjs",
+      "tests/unit/image-budget.test.mjs",
       "tests/unit/docx-core.test.mjs",
+      "tests/unit/docx-history-cache.test.mjs",
       "tests/unit/xlsx-core.test.mjs",
+      "packages/vue-xlsx/test/lazy-loading.mjs",
       "tests/unit/pdf-source.test.mjs",
       "tests/unit/core-purity.test.mjs",
     ]),
@@ -100,9 +109,25 @@ const suites = {
       "tests/component/xlsx-race.test.mjs",
       "tests/component/docx-render-parity.test.mjs",
       "tests/component/docx-edit-interactions.test.mjs",
+      "tests/component/docx-selection-input.test.mjs",
+      "tests/component/docx-thumbnail-panel.test.mjs",
+      "tests/component/docx-product-interactions.test.mjs",
+      "tests/component/docx-page-budget.test.mjs",
+      "tests/component/docx-history-budget.test.mjs",
+      "tests/component/xlsx-history-budget.test.mjs",
+      "tests/component/xlsx-grid-scroll.test.mjs",
+      "tests/component/image-decode-state.test.mjs",
     ]),
     command("docx-xlsx-component-smoke", process.execPath, [
       "scripts/ci/component-smoke.mjs",
+    ]),
+    command("p3-regression-baselines", process.execPath, [
+      "--test",
+      "--test-concurrency=1",
+      "tests/baseline/p3-cache-baseline.test.mjs",
+      "tests/baseline/p3-image-decode-baseline.test.mjs",
+      "tests/baseline/p3-worker-lifecycle-baseline.test.mjs",
+      "tests/baseline/p3-xlsx-performance-baseline.test.mjs",
     ]),
   ],
   blackbox: [
@@ -147,6 +172,14 @@ const suites = {
         BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-docx-editing"),
       },
     }),
+    command("formal-ux-parity", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/ux_parity.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-ux-parity"),
+      },
+    }),
     command("formal-security-workflows", process.execPath, [
       "scripts/ci/run-python.mjs",
       "tests/blackbox/security_workflows.py",
@@ -169,6 +202,55 @@ const suites = {
     ], {
       env: {
         BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-race-regression"),
+      },
+    }),
+  ],
+  stress: [
+    ...buildStep(),
+    command("formal-stress-workflows", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/stress_workflows.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-stress-workflows"),
+      },
+    }),
+    command("formal-worker-workflows", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/worker_workflows.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-worker-workflows"),
+      },
+    }),
+  ],
+  performance: [
+    ...buildStep(),
+    command("formal-scroll-range-regression", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/baseline/p3-xlsx-scroll-baseline.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-scroll-range-regression"),
+      },
+    }),
+    command("formal-performance-baseline", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/performance_baseline.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-performance-baseline"),
+      },
+    }),
+  ],
+  matrix: [
+    ...buildStep(),
+    command("compatibility-matrix", process.execPath, [
+      "scripts/ci/compatibility-matrix.mjs",
+    ], {
+      env: {
+        CI_PREBUILT: "1",
+        COMPATIBILITY_EVIDENCE_DIR: path.join(suiteDir, "compatibility-matrix"),
       },
     }),
   ],
@@ -210,6 +292,7 @@ const suites = {
     childSuite("unit", "test:unit"),
     childSuite("component", "test:component"),
     childSuite("blackbox", "test:blackbox"),
+    childSuite("stress", "test:stress"),
     childSuite("consumer", "test:consumer"),
     childSuite("docs", "test:docs"),
     command("failure-propagation", pnpm, ["ci:self-test"], {
@@ -218,7 +301,113 @@ const suites = {
     command("diff-check", "git", ["diff", "--check"]),
   ],
   release: [
-    command("p1-check", pnpm, ["check"]),
+    command("typecheck", pnpm, ["typecheck"]),
+    command("build", pnpm, ["-r", "build"]),
+    childSuite("unit", "test:unit"),
+    childSuite("component", "test:component"),
+    childSuite("blackbox", "test:blackbox"),
+    childSuite("stress", "test:stress"),
+    childSuite("performance", "test:performance"),
+    command("p4-reproducible-pack", process.execPath, [
+      "scripts/ci/p4-reproducible-pack.mjs",
+    ], {
+      env: {
+        P4_REPRO_EVIDENCE_DIR: path.join(suiteDir, "p4-reproducible-pack"),
+      },
+    }),
+    command("materialize-candidate-pack", process.execPath, [
+      "scripts/ci/prepare-release-artifact.mjs",
+      "materialize",
+    ], {
+      env: {
+        RELEASE_REPRODUCIBLE_SUMMARY: path.join(
+          suiteDir,
+          "p4-reproducible-pack",
+          "summary.json",
+        ),
+        RELEASE_PACK_MANIFEST: path.join(
+          evidenceRoot,
+          "candidate-source",
+          "real-tgz-manifests",
+          "summary.json",
+        ),
+      },
+    }),
+    command("consumer", process.execPath, [
+      "scripts/ci/pack-consumer.mjs",
+    ], {
+      env: {
+        PACK_MANIFEST_PATH: path.join(
+          evidenceRoot,
+          "candidate-source",
+          "real-tgz-manifests",
+          "summary.json",
+        ),
+        PACK_CONSUMER_EVIDENCE_DIR: path.join(
+          evidenceRoot,
+          "consumer",
+          "external-tgz-consumer",
+        ),
+      },
+    }),
+    command("matrix", process.execPath, [
+      "scripts/ci/compatibility-matrix.mjs",
+    ], {
+      env: {
+        CI_PREBUILT: "1",
+        COMPATIBILITY_MANIFEST_PATH: path.join(
+          evidenceRoot,
+          "candidate-source",
+          "real-tgz-manifests",
+          "summary.json",
+        ),
+        COMPATIBILITY_EVIDENCE_DIR: path.join(
+          evidenceRoot,
+          "matrix",
+          "compatibility-matrix",
+        ),
+      },
+    }),
+    childSuite("docs", "test:docs"),
+    command("p4-release-readiness", process.execPath, [
+      "--test",
+      "--test-concurrency=1",
+      "tests/baseline/p4-release-readiness-baseline.test.mjs",
+    ], {
+      env: {
+        P4_BASELINE_EVIDENCE_DIR: path.join(suiteDir, "p4-release-readiness"),
+        P4_REPRO_SUMMARY_PATH: path.join(
+          suiteDir,
+          "p4-reproducible-pack",
+          "summary.json",
+        ),
+      },
+    }),
+    command("prepare-release-artifact", process.execPath, [
+      "scripts/ci/prepare-release-artifact.mjs",
+    ], {
+      env: {
+        RELEASE_EVIDENCE_ROOT: evidenceRoot,
+        RELEASE_CANDIDATE_DIR: path.join(evidenceRoot, "candidate"),
+        RELEASE_PACK_MANIFEST: path.join(
+          evidenceRoot,
+          "candidate-source",
+          "real-tgz-manifests",
+          "summary.json",
+        ),
+        RELEASE_REPRODUCIBLE_SUMMARY: path.join(
+          suiteDir,
+          "p4-reproducible-pack",
+          "summary.json",
+        ),
+        RELEASE_READINESS_SUMMARY: path.join(
+          suiteDir,
+          "p4-release-readiness",
+          "summary.json",
+        ),
+      },
+    }),
+    command("diff-check", "git", ["diff", "--check"]),
   ],
 };
 

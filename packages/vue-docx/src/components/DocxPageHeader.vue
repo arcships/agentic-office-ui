@@ -49,7 +49,7 @@ import type {
   DocModel,
   DocxEditorController,
   HeaderSection,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import DocxParagraphHost from "./DocxParagraphHost.vue"
 import DocxTableHost from "./DocxTableHost.vue"
 

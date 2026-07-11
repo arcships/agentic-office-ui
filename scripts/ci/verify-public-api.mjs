@@ -208,10 +208,10 @@ for (const expected of contract.packages) {
   const declarationMaps = walk(path.join(packageDir, "dist"))
     .filter((file) => file.endsWith(".d.ts.map"));
   const leakPatterns = [
-    { id: "private-office-runtime", pattern: /@extend-ai\/office-runtime/ },
+    { id: "private-office-runtime", pattern: /@arcships\/office-runtime/ },
     { id: "workspace-absolute-path", pattern: new RegExp(escapeRegExp(root)) },
     { id: "user-absolute-path", pattern: /(?:file:\/\/|\/Users\/|\/home\/|[A-Za-z]:[\\/])/ },
-    { id: "source-deep-import", pattern: /@extend-ai\/[A-Za-z0-9_-]+\/(?:src|packages)\// },
+    { id: "source-deep-import", pattern: /@arcships\/[A-Za-z0-9_-]+\/(?:src|packages)\// },
   ];
   const declarationLeaks = [];
   for (const file of [...declarationFiles, ...declarationMaps]) {
@@ -302,7 +302,7 @@ let docxRuntimeCheck = {
   graph: { files: [], missing: [] },
 };
 if (!existsSync(runtimeEntry)) {
-  failures.push("@extend-ai/docx-core/runtime: built declaration entry is missing");
+  failures.push("@arcships/docx-core/runtime: built declaration entry is missing");
 } else {
   const runtimeText = readFileSync(runtimeEntry, "utf8");
   const runtimeExports = collectDeclarationExports(runtimeText);
@@ -314,13 +314,13 @@ if (!existsSync(runtimeEntry)) {
   );
   for (const [symbol, present] of Object.entries(docxRuntimeCheck.symbols)) {
     if (!present) {
-      failures.push(`@extend-ai/docx-core/runtime: public signature type ${symbol} is not exported`);
+      failures.push(`@arcships/docx-core/runtime: public signature type ${symbol} is not exported`);
     }
   }
   docxRuntimeCheck.graph = validateDeclarationGraph(runtimeEntry);
   for (const missing of docxRuntimeCheck.graph.missing) {
     failures.push(
-      `@extend-ai/docx-core/runtime: declaration ${missing.from} cannot resolve ${missing.specifier}`,
+      `@arcships/docx-core/runtime: declaration ${missing.from} cannot resolve ${missing.specifier}`,
     );
   }
 }
@@ -328,7 +328,7 @@ if (!existsSync(runtimeEntry)) {
 if (probe === "missing-export") {
   failures.push("probe: simulated missing public export target");
 } else if (probe === "private-type") {
-  failures.push("probe: simulated @extend-ai/office-runtime declaration leak");
+  failures.push("probe: simulated @arcships/office-runtime declaration leak");
 } else if (probe === "missing-deprecated") {
   failures.push("probe: simulated missing @deprecated declaration");
 } else if (probe === "runtime-type") {

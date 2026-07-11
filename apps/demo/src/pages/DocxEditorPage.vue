@@ -1,149 +1,60 @@
 <template>
   <div class="page" data-testid="docx-editor-page">
-    <h2>✏️ DOCX Editing Demo</h2>
-    <p class="desc">
-      Full-featured DOCX editor demo aligned with upstream playground (26 features):
-      font family/size, line spacing, text/highlight color, hyperlink, borders,
-      insert image/table, zoom, undo/redo, paragraph styles, lists, alignment,
-      theme toggle, import/export. Keyboard shortcuts: ⌘B/I/U for
-      bold/italic/underline, ⌘Z/⇧⌘Z for undo/redo, ⌘S for export.
-    </p>
-
-    <!-- Toolbar: external file import + status controls -->
-    <div class="controls control-panel">
-      <button data-testid="editor-import" @click="onImport" class="btn-primary">📂 Import .docx</button>
-      <button data-testid="editor-export" @click="editor.exportDocx()" class="btn-primary">💾 Export .docx</button>
-      <button data-testid="editor-new" @click="editor.newDocument()" class="btn-secondary">✨ New</button>
-
-      <span class="control-separator" />
-
-      <label class="toggle-label">
-        <input type="checkbox" :checked="showThumbnails" @change="showThumbnails = ($event.target as HTMLInputElement).checked" />
-        Thumbnails
-      </label>
-      <label class="toggle-label">
-        <input type="checkbox" :checked="showTrackedChanges" @change="toggleShowTrackedChanges" />
-        Track Changes
-      </label>
-      <label class="toggle-label">
-        <input type="checkbox" :checked="showComments" @change="toggleShowComments" />
-        Comments
-      </label>
-      <label class="toggle-label">
-        <input data-testid="editor-readonly" type="checkbox" :checked="isReadOnly" @change="isReadOnly = ($event.target as HTMLInputElement).checked" />
-        Read-only
-      </label>
-    </div>
-
-    <div class="editor-runtime-state">
-      <div data-testid="page-status" :data-state="pageState">Status: {{ pageState }}</div>
-      <div data-testid="loaded-file">Loaded: {{ editor.fileName }}</div>
-      <div
-        data-testid="editor-editable-state"
-        :data-state="isReadOnly ? 'readonly' : 'editable'"
-      >
-        Editing: {{ isReadOnly ? "off" : "on" }}
+    <header class="product-header">
+      <div>
+        <h2>DOCX 编辑器</h2>
+        <p class="desc">直接选择文字并编辑格式；支持撤销、缩放、缩略图、导入和导出。</p>
       </div>
-      <div
-        data-testid="editor-history-state"
-        :data-can-undo="String(editor.canUndo)"
-        :data-can-redo="String(editor.canRedo)"
-      >
-        History: undo={{ editor.canUndo }}, redo={{ editor.canRedo }}
+      <div class="controls control-panel product-actions">
+        <label class="toggle-label">
+          <input data-testid="editor-readonly" type="checkbox" :checked="isReadOnly" @change="isReadOnly = ($event.target as HTMLInputElement).checked" />
+          只读
+        </label>
       </div>
-      <p
-        v-if="editor.importError"
-        class="error"
-        data-testid="load-error"
-        :data-error-code="editorErrorCode"
-      >
-        {{ editorErrorCode }}: {{ editor.importError.message }}
-      </p>
-    </div>
+    </header>
 
-    <section class="acceptance-panel" aria-label="DOCX editing verification controls">
-      <div class="acceptance-actions">
-        <button data-testid="editor-test-format-range" class="btn-secondary" @click="formatAcceptanceRange">
-          Format middle range
-        </button>
-        <button data-testid="editor-test-insert-table" class="btn-secondary" @click="insertAcceptanceTable">
-          Insert and grow table
-        </button>
-        <button data-testid="editor-test-insert-image" class="btn-secondary" @click="insertAcceptanceImage">
-          Insert and position image
-        </button>
-      </div>
-      <pre
-        data-testid="editor-selection-snapshot"
-        class="acceptance-snapshot"
-      >{{ selectionSnapshot }}</pre>
-      <pre
-        data-testid="editor-model-snapshot"
-        class="acceptance-snapshot"
-      >{{ modelSnapshot }}</pre>
-    </section>
-
-    <!-- Editor -->
-    <div class="editor-container">
+    <div class="editor-container product-surface">
       <DocxEditorViewer
         v-if="editor"
         :editor="editor"
         :editable="!isReadOnly"
         :show-toolbar="true"
-        :show-thumbnails="showThumbnails"
-        style="height: 70vh;"
+        style="height: 76vh;"
       />
-      <div v-else class="empty">
-        <p>Editor initializing...</p>
-      </div>
+      <div v-else class="empty"><p>编辑器正在初始化……</p></div>
     </div>
 
-    <!-- Feature verification status -->
-    <div class="api-verify">
-      <h3>Feature Verification — 26 Items</h3>
-      <p class="api-note">
-        All features are provided by the DocxEditorViewer toolbar and composables.
-        Rows marked ✅ are implemented; ⚠️ are stub/placeholder.
+    <div class="editor-runtime-state verification-section">
+      <div data-testid="page-status" :data-state="pageState">状态：{{ pageState }}</div>
+      <div data-testid="loaded-file">文件：{{ editor.fileName }}</div>
+      <div data-testid="editor-editable-state" :data-state="isReadOnly ? 'readonly' : 'editable'">
+        编辑：{{ isReadOnly ? "关闭" : "开启" }}
+      </div>
+      <div data-testid="editor-history-state" :data-can-undo="String(editor.canUndo)" :data-can-redo="String(editor.canRedo)">
+        历史：撤销={{ editor.canUndo }}，重做={{ editor.canRedo }}
+      </div>
+      <p v-if="editor.importError" class="error" data-testid="load-error" :data-error-code="editorErrorCode">
+        {{ editorErrorCode }}: {{ editor.importError.message }}
       </p>
-      <table>
-        <thead><tr><th>#</th><th>Feature</th><th>Status</th></tr></thead>
-        <tbody>
-          <tr><td>1</td><td>Document theme (light/dark)</td><td class="pass">✅</td></tr>
-          <tr><td>2</td><td>App theme (light/dark/system)</td><td class="pass">✅</td></tr>
-          <tr><td>3</td><td>Undo / Redo</td><td class="pass">✅</td></tr>
-          <tr><td>4</td><td>Paragraph style select</td><td class="pass">✅</td></tr>
-          <tr><td>5</td><td>Font family (Calibri/Arial/TNR/Georgia/Helvetica/Courier)</td><td class="pass">✅</td></tr>
-          <tr><td>6</td><td>Font size (8–48pt)</td><td class="pass">✅</td></tr>
-          <tr><td>7</td><td>Line spacing (1/1.15/1.2/1.5/2/2.5/3)</td><td class="pass">✅</td></tr>
-          <tr><td>8</td><td>Bold / Italic / Underline / Strikethrough</td><td class="pass">✅</td></tr>
-          <tr><td>9</td><td>Superscript / Subscript</td><td class="pass">✅</td></tr>
-          <tr><td>10</td><td>Text color + highlight color</td><td class="pass">✅</td></tr>
-          <tr><td>11</td><td>Hyperlink edit / remove</td><td class="pass">✅</td></tr>
-          <tr><td>12</td><td>Alignment (Left/Center/Right/Justify)</td><td class="pass">✅</td></tr>
-          <tr><td>13</td><td>Bullet / Numbered lists</td><td class="pass">✅</td></tr>
-          <tr><td>14</td><td>Columns display</td><td class="warn">⚠️</td></tr>
-          <tr><td>15</td><td>Page thumbnails (virtual scroll)</td><td class="warn">⚠️</td></tr>
-          <tr><td>16</td><td>Borders (13 presets)</td><td class="pass">✅</td></tr>
-          <tr><td>17</td><td>Insert image</td><td class="pass">✅</td></tr>
-          <tr><td>18</td><td>Insert table</td><td class="pass">✅</td></tr>
-          <tr><td>19</td><td>Zoom (50–200%)</td><td class="pass">✅</td></tr>
-          <tr><td>20</td><td>Import .docx / .doc</td><td class="pass">✅</td></tr>
-          <tr><td>21</td><td>Export .docx</td><td class="pass">✅</td></tr>
-          <tr><td>22</td><td>Track changes toggle</td><td class="pass">✅</td></tr>
-          <tr><td>23</td><td>Comments toggle</td><td class="pass">✅</td></tr>
-          <tr><td>24</td><td>Read-only mode toggle</td><td class="pass">✅</td></tr>
-          <tr><td>25</td><td>Context menu (cut/copy/paste/table ops)</td><td class="warn">⚠️</td></tr>
-          <tr><td>26</td><td>Form field config (double-click dialog)</td><td class="warn">⚠️</td></tr>
-        </tbody>
-      </table>
     </div>
+
+    <details class="acceptance-panel" data-testid="editor-acceptance-panel">
+      <summary>自动化验收入口</summary>
+      <div class="acceptance-actions">
+        <button data-testid="editor-test-format-range" class="btn-secondary" @click="formatAcceptanceRange">格式化中间文字</button>
+        <button data-testid="editor-test-insert-table" class="btn-secondary" @click="insertAcceptanceTable">插入并扩展表格</button>
+        <button data-testid="editor-test-insert-image" class="btn-secondary" @click="insertAcceptanceImage">插入并定位图片</button>
+      </div>
+      <pre data-testid="editor-selection-snapshot" class="acceptance-snapshot">{{ selectionSnapshot }}</pre>
+      <pre data-testid="editor-model-snapshot" class="acceptance-snapshot">{{ modelSnapshot }}</pre>
+    </details>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref } from "vue"
-import { DocxEditorViewer, useDocxEditor, useDocxTrackChanges, useDocxComments } from "@extend-ai/vue-docx"
-import { createBlankDocumentModel, type DocModel } from "@extend-ai/docx-core"
+import { DocxEditorViewer, useDocxEditor } from "@arcships/vue-docx"
+import { createBlankDocumentModel, type DocModel } from "@arcships/docx-core"
 
 // ── Starter model ────────────────────────────────────────────────────
 const starterModel: DocModel = {
@@ -152,77 +63,106 @@ const starterModel: DocModel = {
     {
       type: "paragraph",
       style: { headingLevel: 1 },
-      children: [{ type: "text", text: "DOCX Editor Verification Document" }],
+      children: [{ type: "text", text: "Quarterly Planning Brief" }],
     },
     {
       type: "paragraph",
       children: [
-        { type: "text", text: "This document verifies the DOCX editor surface. " },
-        { type: "text", text: "Bold text", style: { bold: true } },
+        { type: "text", text: "The team is preparing the next quarter around " },
+        { type: "text", text: "customer retention", style: { bold: true } },
         { type: "text", text: ", " },
-        { type: "text", text: "italic text", style: { italic: true } },
+        { type: "text", text: "faster delivery", style: { italic: true } },
         { type: "text", text: ", " },
-        { type: "text", text: "underlined text", style: { underline: true } },
-        { type: "text", text: ", and mixed Chinese 中文 + English content." },
+        { type: "text", text: "clear ownership", style: { underline: true } },
+        { type: "text", text: ", and a smaller set of measurable goals." },
       ],
     },
     {
       type: "paragraph",
       children: [
-        { type: "text", text: "Try editing this paragraph: click and type. Use the toolbar to apply formatting, change headings, toggle lists, and switch themes. Keyboard shortcuts are enabled." },
+        { type: "text", text: "This paragraph is ready for editing. Select a phrase, apply a format, and keep writing without leaving the page." },
       ],
     },
     {
       type: "paragraph",
       style: { headingLevel: 2 },
-      children: [{ type: "text", text: "Features to Verify" }],
+      children: [{ type: "text", text: "Priorities" }],
     },
     {
       type: "paragraph",
       children: [
-        { type: "text", text: "1. Undo/Redo — press ⌘Z / ⇧⌘Z after editing" },
+        { type: "text", text: "1. Finalize the launch plan and assign owners." },
       ],
     },
     {
       type: "paragraph",
       children: [
-        { type: "text", text: "2. Heading styles — use the dropdown in toolbar" },
+        { type: "text", text: "2. Review customer feedback from the last quarter." },
       ],
     },
     {
       type: "paragraph",
       children: [
-        { type: "text", text: "3. Bold/Italic/Underline/Strikethrough — use toolbar buttons" },
+        { type: "text", text: "3. Confirm the budget, key risks, and delivery milestones." },
       ],
     },
     {
       type: "paragraph",
       children: [
-        { type: "text", text: "4. Superscript/Subscript — e.g. E=mc² or H₂O" },
+        { type: "text", text: "4. Share the approved brief with the project team." },
       ],
     },
     {
       type: "paragraph",
       children: [
-        { type: "text", text: "5. Alignment — Left/Center/Right/Justify" },
+        { type: "text", text: "团队备注：下周五前完成评审并同步风险。" },
       ],
     },
     {
       type: "paragraph",
-      children: [
-        { type: "text", text: "6. Lists — bullet and numbered lists" },
-      ],
+      style: { headingLevel: 2 },
+      children: [{ type: "text", text: "Ownership" }],
     },
     {
-      type: "paragraph",
-      children: [
-        { type: "text", text: "7. Theme toggle — 🌙/☀️ button in toolbar" },
-      ],
-    },
-    {
-      type: "paragraph",
-      children: [
-        { type: "text", text: "8. Import/Export — use buttons above or toolbar" },
+      type: "table",
+      style: { layout: "fixed", widthTwips: 7200, columnWidthsTwips: [2400, 2400, 2400] },
+      rows: [
+        {
+          type: "table-row",
+          cells: [
+            {
+              type: "table-cell",
+              style: { rowSpan: 2, backgroundColor: "#eff6ff", verticalAlign: "center" },
+              nodes: [{ type: "paragraph", children: [{ type: "text", text: "Launch readiness", style: { bold: true } }] }],
+            },
+            {
+              type: "table-cell",
+              nodes: [{ type: "paragraph", children: [{ type: "text", text: "Product" }] }],
+            },
+            {
+              type: "table-cell",
+              nodes: [{ type: "paragraph", children: [{ type: "text", text: "On track" }] }],
+            },
+          ],
+        },
+        {
+          type: "table-row",
+          cells: [
+            {
+              type: "table-cell",
+              style: { vMergeContinuation: true },
+              nodes: [{ type: "paragraph", children: [{ type: "text", text: "" }] }],
+            },
+            {
+              type: "table-cell",
+              nodes: [{ type: "paragraph", children: [{ type: "text", text: "Operations" }] }],
+            },
+            {
+              type: "table-cell",
+              nodes: [{ type: "paragraph", children: [{ type: "text", text: "Reviewing risks" }] }],
+            },
+          ],
+        },
       ],
     },
   ],
@@ -231,7 +171,7 @@ const starterModel: DocModel = {
 // ── Editor ───────────────────────────────────────────────────────────
 const editor = useDocxEditor({
   starterModel,
-  initialFileName: "verification-test.docx",
+  initialFileName: "quarterly-planning-brief.docx",
   initialDocumentTheme: "light",
 })
 
@@ -310,7 +250,7 @@ const selectionSnapshot = computed(() => JSON.stringify({
 
 function acceptanceParagraph(): { nodeIndex: number; text: string } | undefined {
   const nodeIndex = editor.model.nodes.findIndex((node) =>
-    node.type === "paragraph" && textOfParagraph(node).includes("Try editing this paragraph"))
+    node.type === "paragraph" && textOfParagraph(node).includes("This paragraph is ready for editing"))
   if (nodeIndex < 0) return undefined
   return { nodeIndex, text: textOfParagraph(editor.model.nodes[nodeIndex]) }
 }
@@ -353,6 +293,18 @@ async function insertAcceptanceImage(): Promise<void> {
   if (!target) return
   editor.selectParagraph(target.nodeIndex)
   await nextTick()
+  const imageOffset = 0
+  editor.setActiveTextRange({
+    start: {
+      location: { kind: "paragraph", nodeIndex: target.nodeIndex },
+      offset: imageOffset,
+    },
+    end: {
+      location: { kind: "paragraph", nodeIndex: target.nodeIndex },
+      offset: imageOffset,
+    },
+  })
+  await nextTick()
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="18"><rect width="32" height="18" fill="#2563eb"/></svg>'
   await editor.insertImageFile(new File([svg], "acceptance.svg", { type: "image/svg+xml" }))
   await nextTick()
@@ -362,42 +314,32 @@ async function insertAcceptanceImage(): Promise<void> {
   if (childIndex < 0) return
   const location = { kind: "paragraph" as const, nodeIndex: target.nodeIndex, childIndex }
   editor.setImageWrapMode(location, "square", {
-    xPx: 16,
-    yPx: 24,
+    xPx: 12,
+    yPx: 6,
     wrapType: "square",
+    wrapText: "bothSides",
+    distRPx: 12,
+    distBPx: 8,
   })
   await nextTick()
-  editor.moveFloatingImage(location, { xPx: 48, yPx: 64 })
+  editor.moveFloatingImage(location, { xPx: 12, yPx: 6 })
   await nextTick()
   editor.resizeImage(location, 160, 90)
 }
 
 // ── UI toggles ───────────────────────────────────────────────────────
-const showThumbnails = ref(false)
 const isReadOnly = ref(false)
-
-const { showTrackedChanges, toggleShowTrackedChanges } = useDocxTrackChanges(editor)
-const { showComments, toggleShowComments } = useDocxComments(editor)
-
-// ── File import ──────────────────────────────────────────────────────
-function onImport() {
-  const input = document.createElement("input")
-  input.type = "file"
-  input.accept = ".docx"
-  input.onchange = async () => {
-    const file = input.files?.[0]
-    if (file) {
-      await editor.importDocxFile(file)
-    }
-  }
-  input.click()
-}
 </script>
 
 <style scoped>
-.page { padding: 24px; max-width: 1200px; margin: 0 auto; width: 100%; min-width: 0; }
+.page { padding: 16px; max-width: 1440px; margin: 0 auto; width: 100%; min-width: 0; }
 h2 { margin-bottom: 4px; }
 .desc { color: var(--muted-foreground); margin-bottom: 16px; font-size: 14px; line-height: 1.5; }
+.product-header { display: flex; align-items: end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.product-header .desc { margin-bottom: 0; }
+.product-actions { margin-bottom: 0; }
+.product-surface { box-shadow: 0 10px 30px rgb(15 23 42 / 8%); }
+.verification-section { margin-top: 8px; }
 
 .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
 .control-separator { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
@@ -422,4 +364,8 @@ h2 { margin-bottom: 4px; }
 .api-note { color: var(--muted-foreground); border: 1px solid var(--border); background: var(--muted); border-radius: var(--radius); padding: 10px 12px; font-size: 13px; line-height: 1.5; margin: 0 0 16px; }
 .pass { color: #16a34a; font-weight: 600; }
 .warn { color: #b45309; font-weight: 600; }
+@media (max-width: 760px) {
+  .page { padding: 10px; }
+  .product-header { align-items: stretch; }
+}
 </style>

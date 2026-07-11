@@ -9,7 +9,7 @@ import {
   parseSectionPageNumberStart,
   type DocxEditorController,
   type DocxPageLayoutInfo,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 export interface UseDocxPageLayoutResult {
   layout: DocxPageLayoutInfo

@@ -3,12 +3,12 @@ import {
   createDocxRuntime,
   setWasmSource as setLegacyDocxWasmSource,
   type DocModel,
-} from "@extend-ai/docx-core";
+} from "@arcships/docx-core";
 import {
   cloneDocModel,
   layoutDocument,
   type DocModel as PureDocModel,
-} from "@extend-ai/docx-core/core";
+} from "@arcships/docx-core/core";
 import {
   DocxImportError,
   createDocxRuntime as createDocxRuntimeFromSubpath,
@@ -26,8 +26,8 @@ import {
   type DocxRuntimeLoader,
   type DocxSource,
   type DocxUrlPolicy,
-} from "@extend-ai/docx-core/runtime";
-import { bundledDocxWasmUrl as docxWasmFromSubpath } from "@extend-ai/docx-core/wasm-url";
+} from "@arcships/docx-core/runtime";
+import { bundledDocxWasmUrl as docxWasmFromSubpath } from "@arcships/docx-core/wasm-url";
 import {
   bundledXlsxWasmUrl,
   canUseConfiguredWasmSourceInWorker,
@@ -35,8 +35,8 @@ import {
   getSheetsWasmModule,
   setWasmSource as setLegacyXlsxWasmSource,
   type XlsxViewerController,
-} from "@extend-ai/xlsx-core";
-import { columnLabel, rangeToA1, type XlsxChart } from "@extend-ai/xlsx-core/core";
+} from "@arcships/xlsx-core";
+import { columnLabel, rangeToA1, type XlsxChart } from "@arcships/xlsx-core/core";
 import {
   XlsxRuntimeError,
   createXlsxRuntime,
@@ -45,8 +45,8 @@ import {
   type XlsxRuntimeDiagnostic,
   type XlsxRuntimeErrorCode,
   type XlsxRuntimeParseOptions,
-} from "@extend-ai/xlsx-core/runtime";
-import { bundledXlsxWasmUrl as xlsxWasmFromSubpath } from "@extend-ai/xlsx-core/wasm-url";
+} from "@arcships/xlsx-core/runtime";
+import { bundledXlsxWasmUrl as xlsxWasmFromSubpath } from "@arcships/xlsx-core/wasm-url";
 import {
   DocxContextMenu,
   DocxDragOverlay,
@@ -75,7 +75,7 @@ import {
   type DocxViewerThumbnails,
   type UseDocxEditorOptions,
   type UseDocxViewerThumbnailsOptions,
-} from "@extend-ai/vue-docx";
+} from "@arcships/vue-docx";
 import {
   MemoChartSvg,
   MemoSurfaceChartComposite,
@@ -95,7 +95,7 @@ import {
   type ChartSvgProps,
   type LegendItem,
   type XlsxDiagnostic,
-} from "@extend-ai/vue-xlsx";
+} from "@arcships/vue-xlsx";
 import {
   DEFAULT_PDF_MAX_FILE_SIZE,
   FileUpload,
@@ -110,7 +110,7 @@ import {
   type PdfRenderRuntime,
   type PdfRenderRuntimeConfig,
   type PdfSource,
-} from "@extend-ai/vue-extend";
+} from "@arcships/vue-extend";
 
 export const publicRuntimeExports = {
   bundledDocxWasmUrl,

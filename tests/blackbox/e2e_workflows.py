@@ -118,6 +118,11 @@ def docx_switch_and_recover(page: Page, attempt_dir: Path) -> dict[str, object]:
         "() => document.querySelector('[data-testid=\"loaded-file\"]')?.textContent?.includes('report-with-image.docx') && document.querySelector('[data-testid=\"page-status\"]')?.dataset.state === 'ready'",
         timeout=30_000,
     )
+    runtime_details = page.locator(
+        '[data-testid="docx-viewer-page"] details.runtime-details'
+    )
+    if runtime_details.get_attribute("open") is None:
+        runtime_details.locator("summary").click()
     diagnostics = page.locator('[data-testid="docx-diagnostics"]').inner_text()
     assert "worker-success" in diagnostics, diagnostics[-2_000:]
     page.screenshot(path=str(attempt_dir / "recovered-ready.png"), full_page=True)
@@ -211,6 +216,11 @@ def xlsx_workflow(page: Page, attempt_dir: Path) -> dict[str, object]:
         "() => document.querySelector('[data-testid=\"loaded-file\"]')?.textContent?.includes('sales-table.xlsx') && document.querySelector('[data-testid=\"page-status\"]')?.dataset.state === 'ready'",
         timeout=30_000,
     )
+    runtime_details = page.locator(
+        '[data-testid="xlsx-viewer-page"] details.runtime-details'
+    )
+    if runtime_details.get_attribute("open") is None:
+        runtime_details.locator("summary").click()
     with page.expect_download(timeout=30_000) as download_info:
         page.locator('[data-testid="xlsx-download-source"]').click()
     saved = save_download(download_info.value, attempt_dir / "downloads")

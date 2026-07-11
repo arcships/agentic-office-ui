@@ -12,6 +12,7 @@ import type {
   XlsxResolvedCellStyle,
   XlsxShape,
   XlsxSparkline,
+  XlsxTable,
   XlsxTableStyleDefinition,
   XlsxThemePalette,
 } from "../types";
@@ -77,6 +78,7 @@ export type WorkbookSheetState = {
   hasVerticalMerges: boolean;
   maxHorizontalMergeEndCol: number;
   maxVerticalMergeEndRow: number;
+  mergedRegions: XlsxCellRange[];
   maxContentCol: number;
   maxContentRow: number;
   minContentCol: number;
@@ -96,11 +98,15 @@ type ParseWorkbookStructureOptions = {
 };
 
 export type WorkbookTableMetadata = {
+  columns?: XlsxTable["columns"];
   displayName?: string;
+  end?: XlsxCellAddress;
   headerRowCount?: number;
   headerRowCellStyle?: string;
   name?: string;
   reference?: string;
+  start?: XlsxCellAddress;
+  styleInfo?: XlsxTable["styleInfo"];
   totalsRowCount?: number;
   totalsRowShown?: boolean;
 };
@@ -574,6 +580,11 @@ export function parseSheetState(
   const cachedFormulaValues: Record<string, string> = {};
   const conditionalFormatRules = parseConditionalFormatRules(document);
   const sparklines = parseSheetSparklines(document, options?.themePalette);
+  const mergedRegions = getLocalElements(document, "mergeCell")
+    .map((node) => parseA1RangeReference(node.getAttribute("ref") ?? ""))
+    .filter((range): range is XlsxCellRange => range !== null);
+  const hasHorizontalMerges = mergedRegions.some((range) => range.end.col > range.start.col);
+  const hasVerticalMerges = mergedRegions.some((range) => range.end.row > range.start.row);
   const sheetFormatNode = getLocalElements(document, "sheetFormatPr")[0] ?? null;
   const sheetViewNode = getLocalElements(document, "sheetView")[0] ?? null;
   const rowHeightOverridesPx: Record<number, number> = {};
@@ -687,10 +698,15 @@ export function parseSheetState(
     conditionalFormatRules,
     defaultColWidthPx: sheetColumnWidthToPixels(defaultColWidth, columnWidthCharacterWidthPx),
     defaultRowHeightPx: Math.max(MIN_ROW_HEIGHT_PX, Math.round(defaultRowHeight * 1.33)),
-    hasHorizontalMerges: false,
-    hasVerticalMerges: false,
-    maxHorizontalMergeEndCol: -1,
-    maxVerticalMergeEndRow: -1,
+    hasHorizontalMerges,
+    hasVerticalMerges,
+    maxHorizontalMergeEndCol: hasHorizontalMerges
+      ? Math.max(...mergedRegions.filter((range) => range.end.col > range.start.col).map((range) => range.end.col))
+      : -1,
+    maxVerticalMergeEndRow: hasVerticalMerges
+      ? Math.max(...mergedRegions.filter((range) => range.end.row > range.start.row).map((range) => range.end.row))
+      : -1,
+    mergedRegions,
     maxContentCol,
     maxContentRow,
     minContentCol: Number.isFinite(minContentCol) ? minContentCol : -1,
@@ -741,6 +757,117 @@ export function parseWorkbookSheets(archive: ArchiveEntries) {
   return sheets;
 }
 
+function parseWorkbookTableCount(value: string | null, fallback: number): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function parseWorkbookTableFlag(value: string | null, fallback = false): boolean {
+  if (value === null) return fallback;
+  return value === "1" || value.toLowerCase() === "true";
+}
+
+function parseSheetTableMetadata(
+  archive: ArchiveEntries,
+  sheetPath: string
+): WorkbookTableMetadata[] {
+  const sheetXml = readArchiveText(archive, sheetPath);
+  const sheetDocument = sheetXml ? parseXml(sheetXml) : null;
+  if (!sheetDocument) return [];
+
+  const relationships = parseRelationships(
+    archive,
+    relsPathForDocument(sheetPath),
+    sheetPath
+  );
+  const tables: WorkbookTableMetadata[] = [];
+  for (const tablePart of getLocalElements(sheetDocument, "tablePart")) {
+    const relationshipId = getRelationshipId(tablePart);
+    const relationship = relationshipId ? relationships.get(relationshipId) : undefined;
+    const tableXml = relationship ? readArchiveText(archive, relationship.target) : null;
+    const tableDocument = tableXml ? parseXml(tableXml) : null;
+    const tableNode = tableDocument
+      ? getLocalElements(tableDocument, "table")[0]
+      : undefined;
+    if (!tableNode) continue;
+
+    const reference = tableNode.getAttribute("ref") ?? "";
+    const range = parseA1RangeReference(reference);
+    if (!range) continue;
+    const columns = getLocalElements(tableNode, "tableColumn").map(
+      (column, columnIndex) => ({
+        id: parseWorkbookTableCount(column.getAttribute("id"), columnIndex + 1),
+        index: columnIndex,
+        name: column.getAttribute("name") ?? `Column ${columnIndex + 1}`,
+      })
+    );
+    const styleNode = getLocalElements(tableNode, "tableStyleInfo")[0];
+    const name = tableNode.getAttribute("name") ?? `Table${tables.length + 1}`;
+    tables.push({
+      columns,
+      displayName: tableNode.getAttribute("displayName") ?? name,
+      end: range.end,
+      headerRowCount: parseWorkbookTableCount(
+        tableNode.getAttribute("headerRowCount"),
+        1
+      ),
+      headerRowCellStyle: tableNode.getAttribute("headerRowCellStyle") ?? undefined,
+      name,
+      reference,
+      start: range.start,
+      styleInfo: styleNode
+        ? {
+            name: styleNode.getAttribute("name") ?? undefined,
+            showColumnStripes: parseWorkbookTableFlag(styleNode.getAttribute("showColumnStripes")),
+            showFirstColumn: parseWorkbookTableFlag(styleNode.getAttribute("showFirstColumn")),
+            showLastColumn: parseWorkbookTableFlag(styleNode.getAttribute("showLastColumn")),
+            showRowStripes: parseWorkbookTableFlag(styleNode.getAttribute("showRowStripes")),
+          }
+        : undefined,
+      totalsRowCount: parseWorkbookTableCount(
+        tableNode.getAttribute("totalsRowCount"),
+        0
+      ),
+      totalsRowShown: parseWorkbookTableFlag(
+        tableNode.getAttribute("totalsRowShown")
+      ),
+    });
+  }
+  return tables;
+}
+
+export function normalizeWorkbookTableMetadata(
+  metadata: readonly WorkbookTableMetadata[]
+): XlsxTable[] {
+  return metadata.flatMap((table, index) => {
+    const reference = table.reference ?? "";
+    const range = table.start && table.end
+      ? { start: table.start, end: table.end }
+      : parseA1RangeReference(reference);
+    if (!range) return [];
+    const columnCount = Math.max(1, range.end.col - range.start.col + 1);
+    return [{
+      columns: table.columns?.length
+        ? table.columns
+        : Array.from({ length: columnCount }, (_, columnIndex) => ({
+            id: columnIndex + 1,
+            index: columnIndex,
+            name: `Column ${columnIndex + 1}`,
+          })),
+      displayName: table.displayName ?? table.name ?? `Table ${index + 1}`,
+      end: range.end,
+      headerRowCount: table.headerRowCount ?? 1,
+      headerRowCellStyle: table.headerRowCellStyle,
+      name: table.name ?? `Table${index + 1}`,
+      reference,
+      start: range.start,
+      styleInfo: table.styleInfo,
+      totalsRowCount: table.totalsRowCount ?? 0,
+      totalsRowShown: table.totalsRowShown ?? false,
+    }];
+  });
+}
+
 // ── Workbook structure assets ──────────────────────────────────────────────
 
 export function parseWorkbookStructureAssetsFromArchive(
@@ -765,7 +892,9 @@ export function parseWorkbookStructureAssetsFromArchive(
       themePalette
     })),
     styleById,
-    tableMetadataByWorkbookSheetIndex: workbookSheets.map(() => [] as WorkbookTableMetadata[]),
+    tableMetadataByWorkbookSheetIndex: workbookSheets.map((sheet) =>
+      parseSheetTableMetadata(archive, sheet.path)
+    ),
     tableStyleByName,
     theme,
     themePalette,

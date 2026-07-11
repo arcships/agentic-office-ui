@@ -43,19 +43,19 @@ http://localhost:5000
 
 | 包 | 组件 / API | 浏览器验证项 |
 |---|---|---|
-| `@extend-ai/vue-docx` | `DocxViewer` | 空态、loading、真实 DOCX、段落、标题、表格、图片、滚动、样式 |
-| `@extend-ai/vue-docx` | `DocxEditorViewer` | toolbar 按钮、select、主题切换、contenteditable 输入 |
-| `@extend-ai/vue-docx` | DOCX composables | 页面状态、编辑器状态、分页、主题、评论、修订、样式 |
-| `@extend-ai/vue-xlsx` | `XlsxViewer` | workbook 加载、sheet tabs、cell selection、double click edit、zoom、undo/redo、download |
-| `@extend-ai/vue-xlsx` | `XlsxViewerProvider` | provider 注入 controller 的共享状态 |
-| `@extend-ai/vue-extend` | `PdfViewer` | engine loading、空态、PDF 渲染、页码、缩放、旋转、sidebar、下载 |
-| `@extend-ai/vue-extend` | `SignaturePad` | 画线、签名 dataURL、clear、isEmpty、尺寸 |
-| `@extend-ai/vue-extend` | `FileUpload` | click upload、accept 校验、错误提示、drag state、多文件、maxSize |
-| `@extend-ai/vue-extend` | `FileThumbnail` | PDF、DOCX、XLSX、image、unknown 文件样式 |
-| `@extend-ai/vue-extend` | `BoundingBoxCitations` | 多页框、置信度颜色、点击事件、空态 |
-| `@extend-ai/vue-extend` | `LayoutBlocks` | OCR 图片叠框、类型颜色、列表、点击事件、空态 |
-| `@extend-ai/vue-extend` | `Spinner` | 尺寸、颜色、动画、容器对齐 |
-| `@extend-ai/vue-extend` | `Tooltip` | hover/focus 显示、定位、长文本、边界 |
+| `@arcships/vue-docx` | `DocxViewer` | 空态、loading、真实 DOCX、段落、标题、表格、图片、滚动、样式 |
+| `@arcships/vue-docx` | `DocxEditorViewer` | toolbar 按钮、select、主题切换、contenteditable 输入 |
+| `@arcships/vue-docx` | DOCX composables | 页面状态、编辑器状态、分页、主题、评论、修订、样式 |
+| `@arcships/vue-xlsx` | `XlsxViewer` | workbook 加载、sheet tabs、cell selection、double click edit、zoom、undo/redo、download |
+| `@arcships/vue-xlsx` | `XlsxViewerProvider` | provider 注入 controller 的共享状态 |
+| `@arcships/vue-extend` | `PdfViewer` | engine loading、空态、PDF 渲染、页码、缩放、旋转、sidebar、下载 |
+| `@arcships/vue-extend` | `SignaturePad` | 画线、签名 dataURL、clear、isEmpty、尺寸 |
+| `@arcships/vue-extend` | `FileUpload` | click upload、accept 校验、错误提示、drag state、多文件、maxSize |
+| `@arcships/vue-extend` | `FileThumbnail` | PDF、DOCX、XLSX、image、unknown 文件样式 |
+| `@arcships/vue-extend` | `BoundingBoxCitations` | 多页框、置信度颜色、点击事件、空态 |
+| `@arcships/vue-extend` | `LayoutBlocks` | OCR 图片叠框、类型颜色、列表、点击事件、空态 |
+| `@arcships/vue-extend` | `Spinner` | 尺寸、颜色、动画、容器对齐 |
+| `@arcships/vue-extend` | `Tooltip` | hover/focus 显示、定位、长文本、边界 |
 
 ## 真实物料测试集
 

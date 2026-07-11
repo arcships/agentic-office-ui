@@ -93,7 +93,7 @@ export {
 
 // ---- Type re-exports ----
 
-export type { DocModel } from "@extend-ai/docx-core"
+export type { DocModel } from "@arcships/docx-core"
 export type {
   UseDocxEditorOptions,
   DocxEditorController,
@@ -152,7 +152,7 @@ export type {
   UseDocxPaginationResult,
   UseDocxParagraphStylesResult,
   UseDocxTrackChangesResult,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 /**
  * @deprecated Since 0.2.0. Use `UseDocxPageThumbnailsOptions` and
@@ -162,7 +162,7 @@ export type {
 export type {
   UseDocxViewerThumbnailsOptions,
   DocxViewerThumbnails,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 export type {
   UseDocxModelState,

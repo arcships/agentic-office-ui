@@ -3,7 +3,7 @@ import { feature as topojsonFeature } from "topojson-client";
 import countiesAlbers10m from "us-atlas/counties-albers-10m.json";
 import countries50m from "world-atlas/countries-50m.json";
 import type { FeatureCollection, Geometry } from "geojson";
-import type { XlsxChart, XlsxChartSeries } from "@extend-ai/xlsx-core";
+import type { XlsxChart, XlsxChartSeries } from "@arcships/xlsx-core";
 import { clamp, mixRgbColor, lightenColor, darkenColor, normalizeRendererHexColor, safeNumber } from "./chart-shared";
 import { chartPointColor } from "./chart-data";
 import { formatTickValue } from "./chart-axis";

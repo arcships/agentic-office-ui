@@ -2,8 +2,12 @@
 //
 // Extracted from useDocxEditor.ts.
 
-import { cloneEditorSelection, cloneTextRange } from "@extend-ai/docx-core"
+import {
+  cloneEditorSelection,
+  cloneTextRange,
+} from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
+import { trimHistoryEntriesToBudget } from "./history-budget"
 
 export function createEditorHistory(ctx: EditorCore) {
   function undo(): void {
@@ -11,9 +15,12 @@ export function createEditorHistory(ctx: EditorCore) {
     if (h.past.length === 0) return
 
     const previous = h.past[h.past.length - 1]
-    ctx.history.value = {
-      past: h.past.slice(0, -1),
-      future: [
+    const past = trimHistoryEntriesToBudget(h.past.slice(0, -1), {
+      ...ctx.historyBudget,
+      estimateBytes: ctx.estimateHistorySnapshotBytes,
+    })
+    const future = trimHistoryEntriesToBudget(
+      [
         {
           model: ctx.modelSnapshot.value,
           selection: cloneEditorSelection(ctx.selectionSnapshot.value),
@@ -21,6 +28,15 @@ export function createEditorHistory(ctx: EditorCore) {
         },
         ...h.future,
       ],
+      {
+        ...ctx.historyBudget,
+        newestAt: "start",
+        estimateBytes: ctx.estimateHistorySnapshotBytes,
+      }
+    )
+    ctx.history.value = {
+      past: past.entries,
+      future: future.entries,
     }
     const restoredSelection = cloneEditorSelection(previous.selection)
     const restoredRange = cloneTextRange(previous.activeTextRange)
@@ -46,8 +62,8 @@ export function createEditorHistory(ctx: EditorCore) {
     if (h.future.length === 0) return
 
     const next = h.future[0]
-    ctx.history.value = {
-      past: [
+    const past = trimHistoryEntriesToBudget(
+      [
         ...h.past,
         {
           model: ctx.modelSnapshot.value,
@@ -55,7 +71,19 @@ export function createEditorHistory(ctx: EditorCore) {
           activeTextRange: cloneTextRange(ctx.activeTextRangeSnapshot.value),
         },
       ],
-      future: h.future.slice(1),
+      {
+        ...ctx.historyBudget,
+        estimateBytes: ctx.estimateHistorySnapshotBytes,
+      }
+    )
+    const future = trimHistoryEntriesToBudget(h.future.slice(1), {
+      ...ctx.historyBudget,
+      newestAt: "start",
+      estimateBytes: ctx.estimateHistorySnapshotBytes,
+    })
+    ctx.history.value = {
+      past: past.entries,
+      future: future.entries,
     }
     const restoredSelection = cloneEditorSelection(next.selection)
     const restoredRange = cloneTextRange(next.activeTextRange)

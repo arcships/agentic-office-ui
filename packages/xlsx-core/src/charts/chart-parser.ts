@@ -26,6 +26,11 @@ import {
 } from "./chart-series";
 
 import {
+  parseChartCacheValues,
+  parseChartMultiLevelCacheValues,
+} from "./chart-cache";
+
+import {
   isElementNode,
   normalizeHexColor,
   resolveChartColorNode,
@@ -100,7 +105,18 @@ export function normalizeChartTitleForMatch(value: string | null | undefined) {
 }
 
 export function extractChartTitleFromXml(chartXml: string): string | null {
-  const match = chartXml.match(/<c:title\b[\s\S]*?<a:t>([\s\S]*?)<\/a:t>/i);
+  const document = parseXml(chartXml);
+  const chartNode = document?.documentElement
+    ? getFirstLocalDescendant(document.documentElement, "chart")
+    : null;
+  const titleNode = chartNode ? getFirstLocalChild(chartNode, "title") : null;
+  const text = titleNode
+    ? getLocalDescendants(titleNode, "t").map((node) => node.textContent ?? "").join("").trim()
+    : "";
+  if (text) {
+    return text;
+  }
+  const match = chartXml.match(/<(?:[\w-]+:)?title\b[\s\S]*?<(?:[\w-]+:)?t>([\s\S]*?)<\/(?:[\w-]+:)?t>/i);
   if (!match?.[1]) {
     return null;
   }
@@ -213,6 +229,85 @@ export function parseChartDataLabelsFromXml(labelsNode: Element | null): XlsxCha
     || labels.showValue !== undefined
   );
   return hasValue ? labels : null;
+}
+
+function readChartReferenceFromXml(
+  parentNode: Element | null,
+  mode: "category" | "value"
+): { formula?: string; values?: Array<number | string | null> } | undefined {
+  if (!parentNode) {
+    return undefined;
+  }
+  const formula = getFirstLocalDescendant(parentNode, "f")?.textContent?.trim() || undefined;
+  const values = parseChartCacheValues(parentNode, "strCache", mode)
+    ?? parseChartCacheValues(parentNode, "numCache", mode)
+    ?? parseChartMultiLevelCacheValues(parentNode, mode)
+    ?? undefined;
+  return formula || values ? { formula, values } : undefined;
+}
+
+function readChartSeriesNameFromXml(seriesNode: Element): string | undefined {
+  const titleNode = getFirstLocalChild(seriesNode, "tx");
+  const formula = getFirstLocalDescendant(titleNode, "f")?.textContent?.trim();
+  if (formula) {
+    return formula;
+  }
+  return getFirstLocalDescendant(titleNode, "v")?.textContent?.trim()
+    || getFirstLocalDescendant(titleNode, "t")?.textContent?.trim()
+    || undefined;
+}
+
+function buildClassicChartFallbackFromOrigin(
+  imageAssets: Pick<WorkbookImageAssets, "archive">,
+  origin: WorkbookChartOrigin,
+  chartIndex: number
+): Record<string, unknown> | null {
+  const chartXml = readArchiveText(imageAssets.archive, origin.chartPath);
+  if (!chartXml) {
+    return null;
+  }
+  const chartDocument = parseXml(chartXml);
+  const plotAreaNode = chartDocument?.documentElement
+    ? getFirstLocalDescendant(chartDocument.documentElement, "plotArea")
+    : null;
+  const chartTypeNode = findPrimaryChartTypeNode(plotAreaNode);
+  if (!chartTypeNode) {
+    return null;
+  }
+  const title = extractChartTitleFromXml(chartXml) ?? undefined;
+  const series = getLocalChildren(chartTypeNode, "ser").map((seriesNode) => ({
+    bubbleSize: readChartReferenceFromXml(getFirstLocalChild(seriesNode, "bubbleSize"), "value"),
+    categories: readChartReferenceFromXml(
+      getFirstLocalChild(seriesNode, "cat") ?? getFirstLocalChild(seriesNode, "xVal"),
+      "category"
+    ),
+    name: readChartSeriesNameFromXml(seriesNode),
+    values: readChartReferenceFromXml(
+      getFirstLocalChild(seriesNode, "val") ?? getFirstLocalChild(seriesNode, "yVal"),
+      "value"
+    ),
+  }));
+  return {
+    chartType: "ColumnClustered",
+    name: title ?? `Chart ${chartIndex + 1}`,
+    series,
+    title,
+  };
+}
+
+function buildClassicChartFallbacksFromXml(
+  imageAssets: Pick<WorkbookImageAssets, "archive" | "sheetOrigins">,
+  workbookSheetIndex: number
+): Array<Record<string, unknown>> {
+  const origins = collectChartOriginsForSheet(
+    imageAssets.archive,
+    imageAssets.sheetOrigins[workbookSheetIndex] ?? null
+  ).filter((origin) => origin.chartKind === "classic");
+
+  return origins.flatMap((origin, chartIndex) => {
+    const fallback = buildClassicChartFallbackFromOrigin(imageAssets, origin, chartIndex);
+    return fallback ? [fallback] : [];
+  });
 }
 
 function applyChartStyleFromXml(
@@ -808,6 +903,99 @@ function applyChartStyleFromXml(
   applyBuiltinChartDefaults(chart, themePalette);
 }
 
+function resolveChartsheetWorkbookOrderIndex(workbook: Workbook, chartsheetIndex: number) {
+  const sheetOrder = Array.isArray(workbook.sheetOrder)
+    ? workbook.sheetOrder as Array<Record<string, unknown>>
+    : [];
+  return sheetOrder.findIndex((entry) => (
+    entry.slotType === "chartsheet"
+    && entry.index === chartsheetIndex
+  ));
+}
+
+function buildChartsheetCharts(
+  workbook: Workbook,
+  rawChartsheet: unknown,
+  chartsheetIndex: number,
+  imageAssets: Pick<WorkbookImageAssets, "archive" | "sheetOrigins" | "themePalette"> | null
+) {
+  const chartsheet = rawChartsheet && typeof rawChartsheet === "object"
+    ? rawChartsheet as Record<string, unknown>
+    : {};
+  const workbookOrderIndex = resolveChartsheetWorkbookOrderIndex(workbook, chartsheetIndex);
+  const sheetOrigin = workbookOrderIndex >= 0
+    ? imageAssets?.sheetOrigins[workbookOrderIndex] ?? null
+    : null;
+  const origins = imageAssets && sheetOrigin
+    ? collectChartOriginsForSheet(imageAssets.archive, sheetOrigin)
+      .filter((origin) => origin.chartKind === "classic")
+    : [];
+  const fallbackSources = imageAssets
+    ? origins.flatMap((origin, chartIndex) => {
+      const fallback = buildClassicChartFallbackFromOrigin(imageAssets, origin, chartIndex);
+      return fallback ? [{ origin, raw: fallback }] : [];
+    })
+    : [];
+  const rawChart = chartsheet.chart && typeof chartsheet.chart === "object"
+    ? chartsheet.chart as Record<string, unknown>
+    : null;
+  const sources: Array<{ origin: WorkbookChartOrigin | null; raw: Record<string, unknown> }> = fallbackSources.length > 0
+    ? fallbackSources
+    : rawChart
+      ? [{ origin: null, raw: rawChart }]
+      : [];
+  const referenceSheetIndex = workbook.sheetCount > 0 ? 0 : -1;
+
+  const charts = sources.map(({ origin, raw }, chartIndex) => {
+    const chartId = `chartsheet-${chartsheetIndex}-chart-${chartIndex}`;
+    const rawChartType = typeof raw.chartType === "string" ? raw.chartType : "Unsupported";
+    const rawSeries = Array.isArray(raw.series) ? raw.series : [];
+    const chart: XlsxChart = {
+      anchor: normalizeChartAnchor(raw.anchor),
+      axes: Array.isArray(raw.axes)
+        ? raw.axes.map(normalizeChartAxis).filter((value): value is XlsxChartAxis => Boolean(value))
+        : [],
+      categoryAxis: normalizeChartAxis(raw.categoryAxis),
+      chartPath: origin?.chartPath ?? undefined,
+      chartType: rawChartType.startsWith("Unsupported") ? "Unsupported" : rawChartType,
+      dataLabels: normalizeChartDataLabels(raw.dataLabels),
+      editable: false,
+      id: chartId,
+      legend: normalizeLegend(raw.legend),
+      name: typeof raw.name === "string" ? raw.name : undefined,
+      raw,
+      series: referenceSheetIndex >= 0
+        ? rawSeries.map((entry, seriesIndex) => normalizeChartSeries(
+          workbook,
+          referenceSheetIndex,
+          chartId,
+          entry,
+          seriesIndex
+        ))
+        : [],
+      sheetIndex: -1,
+      title: typeof raw.title === "string" ? raw.title : undefined,
+      typeGroups: [],
+      valueAxis: normalizeChartAxis(raw.valueAxis),
+      workbookSheetIndex: -1,
+      zIndex: 200 + chartIndex,
+    };
+
+    if (imageAssets && chart.chartPath) {
+      applyChartStyleFromXml(chart, chart.chartPath, imageAssets.archive, imageAssets.themePalette);
+    } else {
+      applyBuiltinChartDefaults(chart, imageAssets?.themePalette ?? null);
+    }
+    return chart;
+  });
+
+  return {
+    chartPath: charts[0]?.chartPath,
+    charts,
+    workbookOrderIndex: workbookOrderIndex >= 0 ? workbookOrderIndex : undefined,
+  };
+}
+
 export function loadWorkbookChartAssets(
   workbook: Workbook,
   imageAssets: Pick<WorkbookImageAssets, "archive" | "sheetOrigins" | "themePalette"> | null,
@@ -816,7 +1004,14 @@ export function loadWorkbookChartAssets(
 ): WorkbookChartAssets {
   const chartsByWorkbookSheetIndex = Array.from({ length: workbook.sheetCount }, (_, workbookSheetIndex) => {
     const worksheet = workbook.getSheet(workbookSheetIndex);
-    const rawCharts = Array.isArray(worksheet.charts) ? worksheet.charts : [];
+    try {
+    const workbookCharts = Array.isArray(worksheet.charts) ? worksheet.charts : [];
+    const fallbackCharts = imageAssets
+      ? buildClassicChartFallbacksFromXml(imageAssets, workbookSheetIndex)
+      : [];
+    const rawCharts = workbookCharts.length >= fallbackCharts.length
+      ? workbookCharts
+      : [...workbookCharts, ...fallbackCharts.slice(workbookCharts.length)];
     const rawChartsEx = Array.isArray(worksheet.chartsEx) ? worksheet.chartsEx : [];
     const visibleSheetIndex = visibleSheetIndexByWorkbookSheetIndex.get(workbookSheetIndex) ?? workbookSheetIndex;
 
@@ -932,10 +1127,23 @@ export function loadWorkbookChartAssets(
     ));
 
     return [...classicCharts, ...modernCharts];
+    } finally {
+      worksheet.free();
+    }
   });
 
   const chartsheets = Array.isArray(workbook.chartsheets)
-    ? workbook.chartsheets.map((entry, index) => normalizeChartsheet(entry, index))
+    ? workbook.chartsheets.map((entry, index) => {
+      const normalized = normalizeChartsheet(entry, index);
+      const resolved = buildChartsheetCharts(workbook, entry, index, imageAssets);
+      return {
+        ...normalized,
+        chartIds: resolved.charts.map((chart) => chart.id),
+        chartPath: resolved.chartPath ?? normalized.chartPath,
+        charts: resolved.charts,
+        workbookSheetIndex: resolved.workbookOrderIndex ?? normalized.workbookSheetIndex,
+      };
+    })
     : [];
   const tabs = buildTabs(workbook, chartsheets, visibleSheetIndexByWorkbookSheetIndex, showHiddenSheets);
   const chartOriginsById = new Map<string, WorkbookChartOrigin>();
@@ -963,4 +1171,3 @@ export function loadWorkbookChartAssets(
     tabs
   };
 }
-

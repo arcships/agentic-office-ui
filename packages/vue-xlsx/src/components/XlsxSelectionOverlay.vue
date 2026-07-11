@@ -14,7 +14,7 @@
 
 <script setup lang="ts">
 import { computed, type CSSProperties } from "vue";
-import type { XlsxViewerController, XlsxCellAddress } from "@extend-ai/xlsx-core";
+import type { XlsxViewerController, XlsxCellAddress } from "@arcships/xlsx-core";
 
 const props = defineProps<{
   controller: XlsxViewerController;

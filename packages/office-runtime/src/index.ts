@@ -11,8 +11,34 @@ export type {
   OfficeLoadErrorInit,
   OfficeSourceKind,
 } from "./errors";
-export { assertOfficeInputBytes, snapshotOfficeLimits } from "./limits";
+export {
+  assertOfficeInputBytes,
+  resolveOfficeLimits,
+  snapshotOfficeLimits,
+} from "./limits";
 export type { OfficeLimits } from "./limits";
+export {
+  createOfficeImageBudget,
+  inspectOfficeImage,
+} from "./image-budget";
+export type {
+  OfficeImageBudget,
+  OfficeImageBudgetSnapshot,
+  OfficeImageFormat,
+  OfficeImageMetadata,
+} from "./image-budget";
+export {
+  inspectOfficeArchive,
+  validateOfficeArchive,
+  validateOfficeXmlEntry,
+} from "./archive-budget";
+export type {
+  OfficeArchiveEntry,
+  OfficeArchiveSummary,
+  OfficeArchiveValidationOptions,
+  OfficeArchiveValidationResult,
+  OfficeXmlEntrySummary,
+} from "./archive-budget";
 export { resolveOfficeUrl, snapshotOfficeUrlPolicy } from "./url-policy";
 export type {
   OfficeFetch,

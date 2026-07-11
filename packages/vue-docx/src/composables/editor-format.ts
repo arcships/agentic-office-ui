@@ -8,13 +8,13 @@ import type {
   TextRunNode,
   HeadingLevel,
   ParagraphAlignment,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import type {
   DocxBorderPreset,
   DocxEditorTransactionContext,
   DocxEditorTransactionPatch,
   DocxListType,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import {
   cloneDocModel,
   mutateParagraphTextStyleInRange,
@@ -28,7 +28,7 @@ import {
   applyParagraphBorderPresetForRangeEntry,
   paragraphRangePresetActive,
   paragraphRangeForMutate,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
 
 function typedKeys<T extends object>(obj: T): (keyof T)[] {
@@ -262,7 +262,7 @@ export function createEditorFormat(
             if (!lookup.paragraph) return undefined
             return { location, borders: lookup.paragraph.style?.borders as any }
           })
-          .filter((entry): entry is { location: import("@extend-ai/docx-core").ParagraphLocation; borders: any } => Boolean(entry))
+          .filter((entry): entry is { location: import("@arcships/docx-core").ParagraphLocation; borders: any } => Boolean(entry))
         if (paragraphsWithLocation.length === 0) return current
 
         const removePreset = preset !== "none" &&

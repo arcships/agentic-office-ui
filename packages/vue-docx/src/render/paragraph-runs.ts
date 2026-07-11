@@ -11,9 +11,9 @@ import type {
   FormFieldRunNode,
   NumberingDefinitionSet,
   ParagraphNumberingLabel,
-} from "@extend-ai/docx-core"
-import type { DocxDocumentTheme } from "@extend-ai/docx-core"
-import type { ParagraphTrackedInlineChange } from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
+import type { DocxDocumentTheme } from "@arcships/docx-core"
+import type { ParagraphTrackedInlineChange } from "@arcships/docx-core"
 import {
   paragraphUsesTabLeaders,
   paragraphAnchoredTabLayout,
@@ -42,7 +42,8 @@ import {
   tabLeaderStyle,
   formFieldDisplayValue,
   attachTextToPreviousCheckbox,
-} from "@extend-ai/docx-core"
+  shouldRenderWrappedFloatingImage,
+} from "@arcships/docx-core"
 import type { ImageRunRenderExtra } from "./paragraph-runs-image"
 import { renderImageRun } from "./paragraph-runs-image"
 import {
@@ -68,6 +69,11 @@ export interface ParagraphRunRenderOptions {
   paragraphOriginLeftPx?: number
   paragraphOriginTopPx?: number
   imageFilterSuffix?: string
+  onImageDecodeError?: ImageRunRenderExtra["onImageDecodeError"]
+  /** Floating body images are rendered by the editor interaction layer. */
+  skipFloatingImages?: boolean
+  /** Keep wrapped images in document flow while the interaction layer supplies controls. */
+  renderWrappedFloatingImages?: boolean
 }
 
 // ---- Main function ----
@@ -468,6 +474,14 @@ export function renderParagraphRuns(
     key: string,
     childIndex: number
   ): void => {
+    if (
+      options?.skipFloatingImages &&
+      child.floating &&
+      !(
+        options.renderWrappedFloatingImages &&
+        shouldRenderWrappedFloatingImage(child)
+      )
+    ) return
     const result = renderImageRun({
       paragraph,
       child,
@@ -483,6 +497,7 @@ export function renderParagraphRuns(
       headerFooterRegion: options?.headerFooterRegion,
       extra: {
         imageFilterSuffix: options?.imageFilterSuffix,
+        onImageDecodeError: options?.onImageDecodeError,
         sectionImageInteraction: options?.sectionImageInteraction as ImageRunRenderExtra["sectionImageInteraction"],
       },
     })
@@ -631,6 +646,7 @@ export function renderParagraphRuns(
         "span",
         {
           key: numberingKey,
+          "data-docx-numbering-label": "true",
           style: numberingMarkerStyle(
             paragraph,
             options?.numberingDefinitions,
@@ -645,6 +661,23 @@ export function renderParagraphRuns(
                 src: numberingLabel.imageSrc,
                 alt: "",
                 "aria-hidden": true,
+                loading: "lazy",
+                decoding: "async",
+                "data-image-state": "loading",
+                onLoad: (event: Event) => {
+                  const image = event.currentTarget as HTMLImageElement | null
+                  if (image) image.dataset.imageState = "ready"
+                },
+                onError: (event: Event) => {
+                  const image = event.currentTarget as HTMLImageElement | null
+                  if (image) image.dataset.imageState = "error"
+                  options?.onImageDecodeError?.({
+                    code: "IMAGE_DECODE_FAILED",
+                    phase: "image-decode",
+                    imageKey: numberingKey,
+                    message: "DOCX 编号图片无法解码。",
+                  })
+                },
                 style: {
                   display: "inline-block",
                   verticalAlign: "text-bottom",

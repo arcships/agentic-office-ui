@@ -225,7 +225,7 @@ Demo 页面 `DocxEditorPage.vue` 内嵌 self-assessment table，以下按上游 
 - `../engine/types`, `../engine/clone`, `../engine/wasm` 等
 - `../../viewer/section-layout`, `../../layout/pagination` 等
 - `../composables/useDocxEditor` 等
-- `@extend-ai/docx-core` 用于 vue-docx 引用 docx-core（正确的包间依赖）
+- `@arcships/docx-core` 用于 vue-docx 引用 docx-core（正确的包间依赖）
 - 零 `@extend-ai/react-docx-*` import 语句（仅注释中出现）
 
 ## 四、Stub/Mock 检查

@@ -8,7 +8,7 @@
 ## Checklist
 
 ### 1. Typecheck — PASS
-`pnpm --filter @extend-ai/docx-core typecheck` exits zero. No type errors.
+`pnpm --filter @arcships/docx-core typecheck` exits zero. No type errors.
 
 ### 2. File exists and is non-empty — PASS
 `xml-parsing.ts` exists at 489 lines with 16 exported functions + 2 exported interfaces (`XmlBalancedTagRange`, `RevisionTagRange`). `xml-parsing-extra.ts` has been removed entirely.

@@ -17,7 +17,7 @@ Upstream: `@extend-ai/react-docx` @ commit `6f70b92`
 ### P2 / non-blocking — viewer/index.ts omits 3 modules due to symbol collision
 
 - **Design ref:** [docx-migration-architecture.md](../docx-migration-architecture.md) §2.3 — viewer/index.ts is a barrel exporting all 15 modules.
-- **Code:** [viewer/index.ts](../../packages/docx-core/src/viewer/index.ts#L3-L7) — explicitly excludes `wasm-source`, `layout-snapshot`, and `pagination-breaks` from the barrel due to symbol collision with engine/ and layout/ barrels. Consumers must import these directly (e.g., `import { … } from "@extend-ai/docx-core/viewer/wasm-source"`).
+- **Code:** [viewer/index.ts](../../packages/docx-core/src/viewer/index.ts#L3-L7) — explicitly excludes `wasm-source`, `layout-snapshot`, and `pagination-breaks` from the barrel due to symbol collision with engine/ and layout/ barrels. Consumers must import these directly (e.g., `import { … } from "@arcships/docx-core/viewer/wasm-source"`).
 - **Detail:** The comment in index.ts documents the reason. These three files are still compiled and typechecked; only the barrel re-export path is missing. The excluded files are available to editor helpers that compose them internally.
 - **Impact:** Low. Consumers who need `LayoutSnapshot`, `collectTopLevelExplicitPageBreakStartNodeIndexes`, or wasm source functions must know the direct import path. Consider adding explicit re-exports under renamed identifiers in a future cleanup.
 
@@ -37,7 +37,7 @@ Upstream: `@extend-ai/react-docx` @ commit `6f70b92`
 | Line count ≤1000 | ✅ Pass | Max 941 (thumbnail-raster.ts), all under limit |
 | Upstream content parity | ✅ Pass | All upstream exports present: layoutTextWithPretextAroundExclusions, layoutItemsWithPretextAroundExclusions, resolveOffsetAtPoint, resolveCaretRectAtOffset, resolveSelectionRects, sliceLayoutToLineRange, importDocxBuffer (dual path), DocxThumbnailSurfaceCache, SerialIdleTaskQueue, renderDocxThumbnailSnapshotSurface, TIFF→PNG conversion, FNV-1a signing, DocumentLayoutMetrics, pagination break detection, page count reconciliation, etc. |
 | Import paths | ✅ Pass | All relative (`../engine/*` or `./*`). Zero `@extend-ai/` references in source code |
-| Typecheck | ✅ Pass | `pnpm --filter @extend-ai/docx-core typecheck` exits 0 with no errors |
+| Typecheck | ✅ Pass | `pnpm --filter @arcships/docx-core typecheck` exits 0 with no errors |
 | Stub/mock/fake | ✅ Pass | No stubs or mocks. "placeholder" in image-render.ts (EMF/WMF) is documented upstream behavior — `imageUsesPlaceholderFallback()` and `unsupportedImageFallbackLabel()` are intentional |
 | Circular dependencies | ✅ Pass | Linear internal deps: pretext-selection → pretext-layout, pretext-items-layout → pretext-layout, docx-import → wasm-source, layout-snapshot → pretext-layout + section-layout. No cycles |
 

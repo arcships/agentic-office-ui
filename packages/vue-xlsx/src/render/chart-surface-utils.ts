@@ -1,6 +1,6 @@
 /** @jsxImportSource vue */
 import { line as d3Line, curveCatmullRom, curveLinear } from "d3-shape";
-import type { XlsxChart } from "@extend-ai/xlsx-core";
+import type { XlsxChart } from "@arcships/xlsx-core";
 import { clamp, mixRgbColor, lightenColor, darkenColor, normalizeRendererHexColor, safeNumber } from "./chart-shared";
 import { getCategoryLabels } from "./chart-data";
 import { formatTickValue } from "./chart-axis";

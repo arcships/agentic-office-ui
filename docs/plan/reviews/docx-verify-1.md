@@ -55,11 +55,11 @@ pnpm typecheck  # 全项目
 
 | 包 | 结果 |
 |---|---|
-| @extend-ai/docx-core | ✅ pass |
-| @extend-ai/vue-docx | ✅ pass |
-| @extend-ai/vue-xlsx | ✅ pass |
-| @extend-ai/xlsx-core | ✅ pass |
-| @extend-ai/vue-extend | ✅ pass |
+| @arcships/docx-core | ✅ pass |
+| @arcships/vue-docx | ✅ pass |
+| @arcships/vue-xlsx | ✅ pass |
+| @arcships/xlsx-core | ✅ pass |
+| @arcships/vue-extend | ✅ pass |
 | apps/demo | ✅ pass |
 
 **结论：全项目 typecheck 零错误通过。**
@@ -80,7 +80,7 @@ grep -rn "from 'react'" packages/docx-core/src/ packages/vue-docx/src/
 ### 4.3 相对路径结构
 
 - docx-core 内部：使用正确相对路径（`../engine/types`, `../../viewer/section-layout`, `./constants` 等）
-- vue-docx → docx-core：使用包名引用 `@extend-ai/docx-core`
+- vue-docx → docx-core：使用包名引用 `@arcships/docx-core`
 
 **结论：import 路径全部正确，无 React 残留，无上游包引用泄漏。**
 

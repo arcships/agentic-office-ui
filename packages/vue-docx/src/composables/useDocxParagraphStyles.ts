@@ -3,7 +3,7 @@
 //
 // Thin wrapper around the editor controller's paragraph style state.
 
-import type { DocxEditorController, ParagraphStyleDefinition } from "@extend-ai/docx-core"
+import type { DocxEditorController, ParagraphStyleDefinition } from "@arcships/docx-core"
 
 export interface UseDocxParagraphStylesResult {
   paragraphStyles: ParagraphStyleDefinition[]

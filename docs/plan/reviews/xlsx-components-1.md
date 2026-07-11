@@ -9,7 +9,7 @@ Reviewed against: `docs/upstream-xlsx-feature-alignment.md` + tasks xlsx-003, xl
 ## 1. Typecheck
 
 ```bash
-pnpm --filter @extend-ai/vue-xlsx typecheck
+pnpm --filter @arcships/vue-xlsx typecheck
 ```
 
 ✅ **零错误**。`tsc --noEmit` 无任何输出。
@@ -92,9 +92,9 @@ pnpm --filter @extend-ai/vue-xlsx typecheck
 
 ## 3. Import 路径检查
 
-### 3.1 `@extend-ai/xlsx-core` 导入
+### 3.1 `@arcships/xlsx-core` 导入
 
-全部 22 处 `@extend-ai/xlsx-core` 导入已与 `packages/xlsx-core/src/index.ts` 导出逐一核对：
+全部 22 处 `@arcships/xlsx-core` 导入已与 `packages/xlsx-core/src/index.ts` 导出逐一核对：
 
 - 类型导入：`XlsxViewerController`、`XlsxCellAddress`、`XlsxCellRange`、`XlsxSheetData`、`XlsxChart`、`XlsxChartElementSelection`、`XlsxChartSeries`、`XlsxChartAxis`、`XlsxChartTypeGroup`、`XlsxImage`、`XlsxImageRect`、`XlsxImageAnchor`、`XlsxResolvedCellStyle`、`UseXlsxViewerControllerOptions` 等
 - 函数导入：`emuToPixels`、`resolveWorkbookColor`、`resolveWorkbookFillStyle`、`loadWorkbookChartAssets` 等

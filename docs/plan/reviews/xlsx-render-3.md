@@ -7,7 +7,7 @@ Depends-on: xlsx-composables-split ✅
 ## 1. Typecheck
 
 ```bash
-pnpm --filter @extend-ai/vue-xlsx typecheck
+pnpm --filter @arcships/vue-xlsx typecheck
 ```
 
 **Result: ✅ Zero errors.** TypeScript compilation passes cleanly. Build also passes.
@@ -61,7 +61,7 @@ render/
 
 **Result: ✅ All imports resolve correctly.**
 
-- `@extend-ai/xlsx-core` → workspace symlink ✅
+- `@arcships/xlsx-core` → workspace symlink ✅
 - `@dukelib/sheets-wasm` → external wasm package ✅
 - Vue (`vue`) → peer dependency ✅
 - d3-* (`d3-scale`, `d3-shape`, `d3-geo`, `d3-hierarchy`) → npm dependencies ✅

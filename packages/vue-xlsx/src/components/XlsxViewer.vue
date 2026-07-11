@@ -2,7 +2,7 @@
   <div
     class="xlsx-viewer"
     data-testid="xlsx-viewer"
-    :data-state="controller.isLoading ? 'loading' : controller.error ? 'error' : controller.activeSheet ? 'ready' : 'empty'"
+    :data-state="controller.isLoading ? 'loading' : controller.error ? 'error' : controller.activeSheet || controller.activeTab?.kind === 'chartsheet' ? 'ready' : 'empty'"
     :style="viewerStyle"
     @keydown="onKeydown"
     tabindex="0"
@@ -11,18 +11,21 @@
       v-if="showDefaultToolbar"
       :controller="controller"
       :is-dark="isDark ?? false"
+      :show-upload="showUpload"
+      @upload="emit('upload')"
     />
     <XlsxRibbon
       v-if="showRibbon"
       :controller="controller"
       :is-dark="isDark ?? false"
-      :read-only="controller.readOnly"
+      :read-only="effectiveReadOnly"
+      @update:read-only="onReadOnlyChange"
     />
     <XlsxFormulaBar
       v-if="showFormulaBar"
       :controller="controller"
       :is-dark="isDark ?? false"
-      :read-only="controller.readOnly"
+      :read-only="effectiveReadOnly"
     />
     <div class="xlsx-viewer__body">
       <div
@@ -44,6 +47,11 @@
           <span class="xlsx-viewer__error-text">{{ controller.error.message }}</span>
         </slot>
       </div>
+      <XlsxChartsheetSurface
+        v-else-if="controller.activeTab?.kind === 'chartsheet'"
+        :controller="controller"
+        :is-dark="isDark ?? false"
+      />
       <div
         v-else-if="!controller.activeSheet"
         class="xlsx-viewer__empty"
@@ -54,21 +62,27 @@
       </div>
       <template v-else>
         <XlsxGrid
+          ref="gridRef"
           :controller="controller"
           :get-cell-style="getCellStyle"
           :is-dark="isDark ?? false"
-          :read-only="controller.readOnly"
+          :read-only="effectiveReadOnly"
           :selection-color="selectionColor"
           :selection-fill-color="selectionFillColor"
           @cell-double-click="onCellDoubleClick"
+          @viewport-change="gridViewport = $event"
         />
         <XlsxChartOverlay
           :controller="controller"
           :is-dark="isDark ?? false"
+          :scroll-left="gridViewport.scrollLeft"
+          :scroll-top="gridViewport.scrollTop"
         />
         <XlsxImageLayer
           :controller="controller"
           :show-images="showImages ?? true"
+          :scroll-left="gridViewport.scrollLeft"
+          :scroll-top="gridViewport.scrollTop"
         />
         <XlsxSelectionOverlay
           :controller="controller"
@@ -76,20 +90,24 @@
           :selection-color="selectionColor"
           :selection-fill-color="selectionFillColor"
         />
-        <XlsxContextMenu :controller="controller" />
+        <XlsxContextMenu
+          :controller="controller"
+          :target-element="gridElement"
+        />
       </template>
     </div>
     <XlsxSheetTabs
       v-if="controller.tabs.length > 0"
       :controller="controller"
       :is-dark="isDark ?? false"
+      :read-only="effectiveReadOnly"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, type CSSProperties } from "vue";
-import type { XlsxViewerController, XlsxCellAddress } from "@extend-ai/xlsx-core";
+import { computed, ref, type ComponentPublicInstance, type CSSProperties } from "vue";
+import type { XlsxViewerController, XlsxCellAddress, XlsxCellStyleContext } from "@arcships/xlsx-core";
 import XlsxGrid from "./XlsxGrid.vue";
 import XlsxToolbar from "./XlsxToolbar.vue";
 import XlsxRibbon from "./XlsxRibbon.vue";
@@ -99,38 +117,54 @@ import XlsxChartOverlay from "./XlsxChartOverlay.vue";
 import XlsxImageLayer from "./XlsxImageLayer.vue";
 import XlsxSelectionOverlay from "./XlsxSelectionOverlay.vue";
 import XlsxContextMenu from "./XlsxContextMenu.vue";
+import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue";
 
 const props = withDefaults(
   defineProps<{
     controller: XlsxViewerController;
-    getCellStyle?: ((cell: XlsxCellAddress) => Partial<CSSProperties> | undefined) | null;
+    getCellStyle?: ((cell: XlsxCellAddress, context?: XlsxCellStyleContext) => Partial<CSSProperties> | undefined) | null;
     height?: string;
     isDark?: boolean | null;
     rounded?: boolean;
+    readOnly?: boolean;
     selectionColor?: string;
     selectionFillColor?: string;
     showDefaultToolbar?: boolean;
     showRibbon?: boolean;
     showFormulaBar?: boolean;
     showImages?: boolean;
+    showUpload?: boolean;
   }>(),
   {
     getCellStyle: null,
     height: "100%",
     isDark: false,
     rounded: true,
+    readOnly: false,
     selectionColor: undefined,
     selectionFillColor: undefined,
     showDefaultToolbar: true,
     showRibbon: true,
     showFormulaBar: true,
     showImages: true,
+    showUpload: false,
   }
 );
 
 const emit = defineEmits<{
   cellDoubleClick: [cell: XlsxCellAddress];
+  upload: [];
+  "update:readOnly": [value: boolean];
 }>();
+
+const effectiveReadOnly = computed(() => props.controller.readOnly || props.readOnly);
+
+const gridRef = ref<ComponentPublicInstance | null>(null);
+const gridViewport = ref({ scrollLeft: 0, scrollTop: 0 });
+const gridElement = computed<HTMLElement | null>(() => {
+  const element = gridRef.value?.$el;
+  return typeof HTMLElement !== "undefined" && element instanceof HTMLElement ? element : null;
+});
 
 const viewerStyle = computed<CSSProperties>(() => ({
   blockSize: props.height,
@@ -153,7 +187,7 @@ const viewerStyle = computed<CSSProperties>(() => ({
 }));
 
 function onKeydown(event: KeyboardEvent) {
-  if (!props.controller || props.controller.readOnly) return;
+  if (!props.controller || effectiveReadOnly.value) return;
 
   if ((event.ctrlKey || event.metaKey) && event.key === "z") {
     event.preventDefault();
@@ -169,6 +203,10 @@ function onKeydown(event: KeyboardEvent) {
 
 function onCellDoubleClick(cell: XlsxCellAddress) {
   emit("cellDoubleClick", cell);
+}
+
+function onReadOnlyChange(value: boolean) {
+  emit("update:readOnly", value);
 }
 </script>
 

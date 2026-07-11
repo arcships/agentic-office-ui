@@ -1,9 +1,31 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
+import { createRequire } from "node:module";
 
 const packageRoot = new URL("../../packages/office-runtime/", import.meta.url);
 const runtime = await import(new URL("dist/index.js", packageRoot).href);
+const requireFromRuntime = createRequire(new URL("package.json", packageRoot));
+const { strToU8, zipSync } = await import(
+  new URL(`file://${requireFromRuntime.resolve("fflate")}`).href
+);
+
+const DOCX_CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`;
+
+const XLSX_CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+</Types>`;
+
+function makeArchive(entries, contentTypes = DOCX_CONTENT_TYPES) {
+  return zipSync({
+    "[Content_Types].xml": strToU8(contentTypes),
+    ...Object.fromEntries(Object.entries(entries).map(([name, value]) => [name, strToU8(value)])),
+  });
+}
 
 function sourceFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -66,6 +88,176 @@ test("office-runtime is private, framework-free and has no UI DOM dependency", (
     assert.doesNotMatch(source, /(?:from\s+["']vue["']|\.vue["'])/);
     assert.doesNotMatch(source, /\b(?:window|document|HTMLElement|HTMLCanvasElement|ImageBitmap)\b/);
   }
+});
+
+test("archive budgets validate central metadata and actual streamed extraction at exact boundaries", () => {
+  const archive = makeArchive({
+    "word/document.xml": "<w:document xmlns:w=\"urn:w\"><w:body><w:p>ok</w:p></w:body></w:document>",
+  });
+  const inspected = runtime.inspectOfficeArchive(archive, {});
+  const exact = {
+    maxInputBytes: archive.byteLength,
+    maxArchiveEntries: inspected.entryCount,
+    maxUncompressedBytes: inspected.uncompressedBytes,
+    maxSingleEntryBytes: Math.max(...inspected.entries.map((entry) => entry.uncompressedBytes)),
+    maxCompressionRatio: inspected.maxCompressionRatio,
+    maxArchivePathLength: 1024,
+    maxXmlBytes: inspected.uncompressedBytes,
+    maxSingleXmlBytes: Math.max(...inspected.entries.map((entry) => entry.uncompressedBytes)),
+    maxXmlDepth: 8,
+    maxXmlAttributeBytes: 1024,
+    maxTextNodeBytes: 1024,
+    maxRelationships: 10,
+  };
+  const validated = runtime.validateOfficeArchive(archive, exact, { format: "docx" });
+  assert.equal(validated.entryCount, 2);
+  assert.equal(validated.uncompressedBytes, inspected.uncompressedBytes);
+
+  for (const [limit, value] of [
+    ["maxInputBytes", exact.maxInputBytes],
+    ["maxArchiveEntries", exact.maxArchiveEntries],
+    ["maxUncompressedBytes", exact.maxUncompressedBytes],
+    ["maxSingleEntryBytes", exact.maxSingleEntryBytes],
+    ["maxCompressionRatio", exact.maxCompressionRatio],
+  ]) {
+    assert.throws(
+      () => runtime.validateOfficeArchive(archive, { ...exact, [limit]: value - 1 }, { format: "docx" }),
+      (error) => error?.code === "LIMIT_EXCEEDED" && error?.limit === limit,
+    );
+  }
+});
+
+test("archive budgets reject unsafe paths, unsafe XML, wrong MIME and aggregate XLSX counts", () => {
+  const baseLimits = {
+    maxArchiveEntries: 20,
+    maxUncompressedBytes: 1024 * 1024,
+    maxSingleEntryBytes: 1024 * 1024,
+    maxCompressionRatio: 200,
+    maxArchivePathLength: 1024,
+    maxXmlBytes: 1024 * 1024,
+    maxSingleXmlBytes: 1024 * 1024,
+    maxXmlDepth: 20,
+    maxXmlAttributeBytes: 1024,
+    maxTextNodeBytes: 1024,
+    maxRelationships: 20,
+  };
+  assert.throws(
+    () => runtime.validateOfficeArchive(
+      makeArchive({ "../evil.xml": "<evil/>" }),
+      baseLimits,
+      { format: "docx" },
+    ),
+    (error) => error?.code === "INVALID_SOURCE" && error?.phase === "archive",
+  );
+  assert.throws(
+    () => runtime.validateOfficeArchive(
+      makeArchive({ "word/document.xml": "<!DOCTYPE x [<!ENTITY y 'boom'>]><x>&y;</x>" }),
+      baseLimits,
+      { format: "docx" },
+    ),
+    (error) => error?.code === "INVALID_SOURCE" && error?.phase === "xml",
+  );
+  assert.throws(
+    () => runtime.validateOfficeArchive(
+      makeArchive({ "word/document.xml": "<x/>" }, XLSX_CONTENT_TYPES),
+      baseLimits,
+      { format: "docx" },
+    ),
+    (error) => error?.code === "INVALID_SOURCE" && error?.phase === "archive",
+  );
+
+  const xlsx = makeArchive({
+    "xl/workbook.xml": "<workbook><sheets><sheet name=\"A\"/><sheet name=\"B\"/></sheets></workbook>",
+    "xl/sharedStrings.xml": "<sst><si><t>A</t></si><si><t>B</t></si></sst>",
+    "xl/worksheets/sheet1.xml": "<worksheet><sheetData><row r=\"1\"><c r=\"A1\"><f>1+1</f></c></row></sheetData></worksheet>",
+  }, XLSX_CONTENT_TYPES);
+  for (const [limit, allowed] of [
+    ["maxWorksheets", 1],
+    ["maxSharedStrings", 1],
+    ["maxFormulaCount", 0.5],
+  ]) {
+    assert.throws(
+      () => runtime.validateOfficeArchive(xlsx, { ...baseLimits, [limit]: allowed }, { format: "xlsx" }),
+      (error) => error?.code === "LIMIT_EXCEEDED" && error?.limit === limit,
+    );
+  }
+});
+
+test("XLSX archive budgets count elements by local name when namespace prefixes are present", () => {
+  const limits = {
+    maxArchiveEntries: 20,
+    maxUncompressedBytes: 1024 * 1024,
+    maxSingleEntryBytes: 1024 * 1024,
+    maxCompressionRatio: 200,
+    maxArchivePathLength: 1024,
+    maxXmlBytes: 1024 * 1024,
+    maxSingleXmlBytes: 1024 * 1024,
+    maxXmlDepth: 20,
+    maxXmlAttributeBytes: 1024,
+    maxTextNodeBytes: 1024,
+    maxRelationships: 10,
+    maxWorksheets: 10,
+    maxSharedStrings: 10,
+    maxFormulaCount: 10,
+    maxWorksheetRows: 10,
+    maxWorksheetColumns: 10,
+  };
+  const worksheetXml = `<x:worksheet xmlns:x="urn:x"><x:sheetData>
+    <x:row r="1"/><x:row r="2"/>
+    <x:row r="3"><x:c r="B3"><x:f>1</x:f></x:c><x:c r="C3"><x:f>2</x:f></x:c></x:row>
+  </x:sheetData></x:worksheet>`;
+  const xlsx = makeArchive({
+    "xl/workbook.xml": `<x:workbook xmlns:x="urn:x"><x:sheets><x:sheet/><x:sheet/></x:sheets></x:workbook>`,
+    "xl/sharedStrings.xml": `<x:sst xmlns:x="urn:x"><x:si/><x:si/></x:sst>`,
+    "xl/worksheets/sheet1.xml": worksheetXml,
+    "xl/_rels/workbook.xml.rels": `<r:Relationships xmlns:r="urn:r"><r:Relationship/><r:Relationship/></r:Relationships>`,
+  }, XLSX_CONTENT_TYPES);
+
+  const worksheet = runtime.validateOfficeXmlEntry(
+    "xl/worksheets/sheet1.xml",
+    new TextEncoder().encode(worksheetXml),
+    limits,
+  );
+  assert.deepEqual(worksheet, {
+    relationships: 0,
+    rows: 3,
+    maxRow: 3,
+    maxColumn: 3,
+    worksheets: 0,
+    sharedStrings: 0,
+    formulas: 2,
+  });
+  const validated = runtime.validateOfficeArchive(xlsx, limits, { format: "xlsx" });
+  assert.equal(validated.relationships, 2);
+  assert.equal(validated.worksheets, 2);
+  assert.equal(validated.sharedStrings, 2);
+  assert.equal(validated.formulas, 2);
+
+  for (const [limit, allowed] of [
+    ["maxRelationships", 1],
+    ["maxWorksheets", 1],
+    ["maxSharedStrings", 1],
+    ["maxFormulaCount", 1],
+    ["maxWorksheetRows", 2],
+    ["maxWorksheetColumns", 2],
+  ]) {
+    assert.throws(
+      () => runtime.validateOfficeArchive(xlsx, { ...limits, [limit]: allowed }, { format: "xlsx" }),
+      (error) => error?.code === "LIMIT_EXCEEDED" && error?.limit === limit,
+    );
+  }
+});
+
+test("archive validation observes an already-aborted signal before extraction", () => {
+  const controller = new AbortController();
+  controller.abort();
+  assert.throws(
+    () => runtime.validateOfficeArchive(makeArchive({ "word/document.xml": "<x/>" }), {}, {
+      format: "docx",
+      signal: controller.signal,
+    }),
+    (error) => error?.code === "ABORTED",
+  );
 });
 
 test("load context snapshots source, resources, limits and stable task identity", () => {

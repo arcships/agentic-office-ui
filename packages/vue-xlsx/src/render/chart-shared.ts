@@ -1,5 +1,5 @@
 /** @jsxImportSource vue */
-import type { XlsxChart } from "@extend-ai/xlsx-core";
+import type { XlsxChart } from "@arcships/xlsx-core";
 
 // ---- Color utilities ----
 

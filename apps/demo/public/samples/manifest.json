@@ -1,7 +1,7 @@
 [
   {
     "name": "charts-images.xlsx",
-    "bytes": 27571
+    "bytes": 29571
   },
   {
     "name": "chinese-mixed.docx",
@@ -64,12 +64,16 @@
     "bytes": 56892
   },
   {
+    "name": "review-comments.docx",
+    "bytes": 36099
+  },
+  {
     "name": "rotated-pages.pdf",
     "bytes": 2376
   },
   {
     "name": "sales-table.xlsx",
-    "bytes": 12421
+    "bytes": 13226
   },
   {
     "name": "sample.pdf",

@@ -12,10 +12,10 @@ import {
   walk,
 } from "./vue-test-renderer.mjs";
 
-const { DocxViewer } = await importFromDemo("@extend-ai/vue-docx");
-const { createBlankDocumentModel } = await importFromDemo("@extend-ai/docx-core");
-const { XlsxViewer, useXlsxViewerController } = await importFromDemo("@extend-ai/vue-xlsx");
-const { FileUpload, PdfViewer } = await importFromDemo("@extend-ai/vue-extend");
+const { DocxViewer } = await importFromDemo("@arcships/vue-docx");
+const { createBlankDocumentModel, wasmBuildDocModelFromBytes } = await importFromDemo("@arcships/docx-core");
+const { XlsxViewer, useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
+const { FileUpload, PdfViewer } = await importFromDemo("@arcships/vue-extend");
 
 // Vue's native v-model directive checks these browser constructors during an
 // update. The custom component renderer intentionally has no browser DOM.
@@ -158,6 +158,36 @@ test("DocxViewer exposes empty, loading, success and error states with public ev
   failed.app.unmount();
 });
 
+test("DocxViewer displays model-derived tracked changes and comments without an editor controller", async () => {
+  const file = readFileSync(new URL("../../apps/demo/public/samples/review-comments.docx", import.meta.url));
+  const bytes = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
+  const { model } = await wasmBuildDocModelFromBytes(bytes);
+  const mounted = await mount(DocxViewer, { model, fileName: "review-comments.docx" });
+  await vue.nextTick();
+
+  const viewer = findByTestId(mounted.root, "docx-viewer");
+  const trackedToggle = findByTestId(mounted.root, "docx-show-tracked-changes");
+  const commentToggle = findByTestId(mounted.root, "docx-show-comments");
+  assert.equal(viewer.props["data-show-tracked-changes"], "true");
+  assert.equal(viewer.props["data-show-comments"], "true");
+  assert.equal(trackedToggle.props.disabled, false);
+  assert.equal(commentToggle.props.disabled, false);
+  assert.equal(trackedToggle.props["aria-pressed"], true);
+  assert.equal(commentToggle.props["aria-pressed"], true);
+  assert.match(textContent(mounted.root), /Alex Reviewer/);
+  assert.match(textContent(mounted.root), /Morgan Editor/);
+  assert.match(textContent(mounted.root), /Priya Reviewer/);
+  assert.match(textContent(mounted.root), /Please confirm this report includes the service-level summary/);
+
+  commentToggle.props.onClick();
+  await vue.nextTick();
+  assert.equal(findByTestId(mounted.root, "docx-viewer").props["data-show-comments"], "false");
+  assert.doesNotMatch(textContent(mounted.root), /Please confirm this report includes the service-level summary/);
+  assert.match(textContent(mounted.root), /Alex Reviewer/);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
 test("DocxViewer aborts an active runtime load when unmounted", async () => {
   let observedSignal;
   let errorEvents = 0;
@@ -229,6 +259,48 @@ test("XlsxViewer renders loading, error and empty states and handles undo/redo s
   assert.equal(prevented, 2);
   assert.deepEqual(keyboard.warnings, []);
   keyboard.app.unmount();
+});
+
+test("XlsxViewer renders and selects a resolved chartsheet chart", async () => {
+  const selected = [];
+  const chart = {
+    anchor: {
+      kind: "absolute",
+      positionEmu: { x: 0, y: 0 },
+      sizeEmu: { cx: 6096000, cy: 3429000 },
+    },
+    axes: [],
+    chartType: "ColumnClustered",
+    editable: false,
+    id: "chartsheet-0-chart-0",
+    series: [],
+    sheetIndex: -1,
+    title: "Revenue by Quarter",
+    workbookSheetIndex: -1,
+    zIndex: 200,
+  };
+  const mounted = await mount(XlsxViewer, {
+    controller: xlsxController({
+      activeTab: { chartsheetIndex: 0, id: "chartsheet-0", index: 1, kind: "chartsheet", name: "Revenue Chart" },
+      charts: [chart],
+      isChartsLoading: false,
+      selectChart: (id) => selected.push(id),
+      selectedChartElement: null,
+      selectedChartId: null,
+    }),
+    showDefaultToolbar: false,
+    showFormulaBar: false,
+    showImages: false,
+    showRibbon: false,
+  });
+  assert.equal(findByTestId(mounted.root, "xlsx-viewer").props["data-state"], "ready");
+  assert.ok(findByTestId(mounted.root, "xlsx-chartsheet"));
+  const renderedChart = findByTestId(mounted.root, "xlsx-chartsheet-chart");
+  assert.ok(renderedChart, "已解析的 chartsheet 图表必须进入正式渲染容器");
+  renderedChart.props.onPointerdown();
+  assert.deepEqual(selected, [chart.id]);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
 });
 
 test("useXlsxViewerController owns and terminates its Worker on unmount", async (t) => {

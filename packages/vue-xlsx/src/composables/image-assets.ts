@@ -6,7 +6,7 @@ import {
   type XlsxFormControl,
   type XlsxImage,
   type XlsxShape
-} from "@extend-ai/xlsx-core";
+} from "@arcships/xlsx-core";
 import {
   DEFAULT_COL_WIDTH,
   DEFAULT_ROW_HEIGHT,
@@ -191,6 +191,17 @@ export function createWorksheetDirectImageSource(
   const objectUrl = URL.createObjectURL(new Blob([blobBuffer.buffer], { type: mimeType }));
   objectUrls.push(objectUrl);
   return objectUrl;
+}
+
+function revokeCreatedObjectUrls(objectUrls: string[]) {
+  const urls = objectUrls.splice(0, objectUrls.length);
+  for (const objectUrl of urls) {
+    try {
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      // Preserve the original asset construction error.
+    }
+  }
 }
 
 export function buildWorksheetDirectImageAnchor(
@@ -663,21 +674,28 @@ export function shouldSkipXmlParsingForWorkbook(bytes: Uint8Array, skipXmlParsin
 
 export function createBasicWorkbookAssets(workbook: Workbook): WorkbookImageAssets {
   const objectUrls: string[] = [];
-  return {
-    archive: {},
-    formControlsByWorkbookSheetIndex: Array.from({ length: workbook.sheetCount }, () => [] as XlsxFormControl[]),
-    imageOriginsById: new Map(),
-    imagesByWorkbookSheetIndex: collectWorksheetApiImages(workbook, objectUrls),
-    namedCellStyleByName: {},
-    objectUrls,
-    shapesByWorkbookSheetIndex: collectWorksheetApiShapes(workbook),
-    sheetOrigins: Array.from({ length: workbook.sheetCount }, () => null as WorkbookImageSheetOrigin | null),
-    sheetStatesByWorkbookSheetIndex: Array.from({ length: workbook.sheetCount }, () => null),
-    styleById: {},
-    tableMetadataByWorkbookSheetIndex: Array.from({ length: workbook.sheetCount }, () => []),
-    tableStyleByName: {},
-    themePalette: { colorsByIndex: {} }
-  };
+  try {
+    const imagesByWorkbookSheetIndex = collectWorksheetApiImages(workbook, objectUrls);
+    const shapesByWorkbookSheetIndex = collectWorksheetApiShapes(workbook);
+    return {
+      archive: {},
+      formControlsByWorkbookSheetIndex: Array.from({ length: workbook.sheetCount }, () => [] as XlsxFormControl[]),
+      imageOriginsById: new Map(),
+      imagesByWorkbookSheetIndex,
+      namedCellStyleByName: {},
+      objectUrls,
+      shapesByWorkbookSheetIndex,
+      sheetOrigins: Array.from({ length: workbook.sheetCount }, () => null as WorkbookImageSheetOrigin | null),
+      sheetStatesByWorkbookSheetIndex: Array.from({ length: workbook.sheetCount }, () => null),
+      styleById: {},
+      tableMetadataByWorkbookSheetIndex: Array.from({ length: workbook.sheetCount }, () => []),
+      tableStyleByName: {},
+      themePalette: { colorsByIndex: {} }
+    };
+  } catch (error) {
+    revokeCreatedObjectUrls(objectUrls);
+    throw error;
+  }
 }
 
 export function loadWorkbookImageAssets(bytes: Uint8Array, workbook: Workbook, skipXmlParsing = false) {
@@ -686,19 +704,23 @@ export function loadWorkbookImageAssets(bytes: Uint8Array, workbook: Workbook, s
   }
 
   const parsedAssets = parseWorkbookImageAssets(bytes);
-  const apiImagesByWorkbookSheetIndex = collectWorksheetApiImages(workbook, parsedAssets.objectUrls);
+  try {
+    const apiImagesByWorkbookSheetIndex = collectWorksheetApiImages(workbook, parsedAssets.objectUrls);
+    const imagesByWorkbookSheetIndex = Array.from(
+      { length: Math.max(workbook.sheetCount, parsedAssets.imagesByWorkbookSheetIndex.length, apiImagesByWorkbookSheetIndex.length) },
+      (_, index) => {
+        const parsedImages = parsedAssets.imagesByWorkbookSheetIndex[index] ?? [];
+        const apiImages = apiImagesByWorkbookSheetIndex[index] ?? [];
+        return mergeParsedAndApiImages(parsedImages, apiImages);
+      }
+    );
 
-  const imagesByWorkbookSheetIndex = Array.from(
-    { length: Math.max(workbook.sheetCount, parsedAssets.imagesByWorkbookSheetIndex.length, apiImagesByWorkbookSheetIndex.length) },
-    (_, index) => {
-      const parsedImages = parsedAssets.imagesByWorkbookSheetIndex[index] ?? [];
-      const apiImages = apiImagesByWorkbookSheetIndex[index] ?? [];
-      return mergeParsedAndApiImages(parsedImages, apiImages);
-    }
-  );
-
-  return {
-    ...parsedAssets,
-    imagesByWorkbookSheetIndex
-  };
+    return {
+      ...parsedAssets,
+      imagesByWorkbookSheetIndex
+    };
+  } catch (error) {
+    revokeCreatedObjectUrls(parsedAssets.objectUrls);
+    throw error;
+  }
 }

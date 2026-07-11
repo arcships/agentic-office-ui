@@ -40,7 +40,7 @@ depends-on: [xlsx-001]
 ## verification
 
 ```bash
-pnpm --filter @extend-ai/vue-xlsx typecheck
+pnpm --filter @arcships/vue-xlsx typecheck
 ```
 
 验证图表 SVG 生成逻辑可用（至少 bar/line/pie 三种类型）。

@@ -3,7 +3,7 @@
 // Extracted from useDocxEditor.ts. Provides the single-entry-point transaction
 // dispatcher and a convenience wrapper for model-only changes.
 
-import type { DocModel, DocxEditorTransactionContext, DocxEditorTransactionPatch } from "@extend-ai/docx-core"
+import type { DocModel, DocxEditorTransactionContext, DocxEditorTransactionPatch } from "@arcships/docx-core"
 import {
   cloneDocModel,
   cloneEditorSelection,
@@ -12,8 +12,9 @@ import {
   normalizeEditorCursorStateForModel,
   sameEditorSelection,
   sameTextRange,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
+import { trimHistoryEntriesToBudget } from "./history-budget"
 
 function hasOwn(obj: object, prop: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, prop)
@@ -67,15 +68,22 @@ export function createEditorTransaction(ctx: EditorCore) {
 
     // push history snapshot
     if (modelChanged && patch.pushHistory !== false) {
-      ctx.history.value = {
-        past: [
-          ...ctx.history.value.past.slice(-99),
+      const nextPast = trimHistoryEntriesToBudget(
+        [
+          ...ctx.history.value.past,
           {
             model: currentModel,
             selection: cloneEditorSelection(currentSelection),
             activeTextRange: cloneTextRange(currentRange),
           },
         ],
+        {
+          ...ctx.historyBudget,
+          estimateBytes: ctx.estimateHistorySnapshotBytes,
+        }
+      )
+      ctx.history.value = {
+        past: nextPast.entries,
         future: [],
       }
     }

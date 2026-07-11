@@ -1,6 +1,6 @@
 /** @jsxImportSource vue */
 import { symbol as d3Symbol, symbolCircle, symbolCross, symbolDiamond, symbolSquare, symbolStar, symbolTriangle } from "d3-shape";
-import type { XlsxChart } from "@extend-ai/xlsx-core";
+import type { XlsxChart } from "@arcships/xlsx-core";
 import { clamp, lightenColor, normalizeRendererHexColor, DEFAULT_CHART_TEXT_COLOR, buildChartFontFamily, truncateSvgText, resolveChartMutedTextColor } from "./chart-shared";
 import { chartSeriesColor } from "./chart-data";
 import type { ChartRendererPalette, ChartLayout, LegendItem } from "./chart-types";

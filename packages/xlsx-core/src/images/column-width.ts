@@ -14,6 +14,11 @@ import {
 } from "./image-parser";
 import type { WorkbookSheetState } from "./grid-render";
 
+type SheetAxisSizeState = Pick<
+  WorkbookSheetState,
+  "colWidthOverridesPx" | "defaultColWidthPx" | "rowHeightOverridesPx" | "defaultRowHeightPx"
+>;
+
 // ── Constants ───────────────────────────────────────────────────────────────
 
 export const MIN_COL_WIDTH_PX = 30;
@@ -21,7 +26,6 @@ export const MIN_ROW_HEIGHT_PX = 16;
 const DEFAULT_COL_WIDTH_EMU = 64 * EMU_PER_PIXEL;
 const DEFAULT_ROW_HEIGHT_EMU = 20 * EMU_PER_PIXEL;
 const DEFAULT_COLUMN_CHARACTER_WIDTH_PX = 7;
-const columnCharacterWidthCache = new Map<string, number>();
 
 // ── Gridline thickness ─────────────────────────────────────────────────────
 
@@ -47,11 +51,6 @@ export function measureColumnCharacterWidthPx(fontFamily?: string | null, fontSi
   const normalizedSizePt = typeof fontSizePt === "number" && Number.isFinite(fontSizePt) && fontSizePt > 0
     ? fontSizePt
     : 11;
-  const cacheKey = `${normalizedFamily}|${normalizedSizePt}`;
-  const cached = columnCharacterWidthCache.get(cacheKey);
-  if (cached !== undefined) {
-    return cached;
-  }
 
   const fontSizePx = normalizedSizePt * (96 / 72);
   const font = `${fontSizePx}px "${normalizedFamily}"`;
@@ -71,7 +70,6 @@ export function measureColumnCharacterWidthPx(fontFamily?: string | null, fontSi
     width = DEFAULT_COLUMN_CHARACTER_WIDTH_PX;
   }
 
-  columnCharacterWidthCache.set(cacheKey, width);
   return width;
 }
 
@@ -196,21 +194,21 @@ export function resolveWorksheetMergeMetadata(worksheet: DukeWorksheet) {
 
 // ── Sheet-level sizing ─────────────────────────────────────────────────────
 
-export function resolveSheetColumnWidthPx(sheetState: WorkbookSheetState | null, col: number) {
+export function resolveSheetColumnWidthPx(sheetState: SheetAxisSizeState | null, col: number) {
   if (col < 0) {
     return 0;
   }
   return sheetState?.colWidthOverridesPx[col] ?? sheetState?.defaultColWidthPx ?? emuToPixels(DEFAULT_COL_WIDTH_EMU);
 }
 
-export function resolveSheetRowHeightPx(sheetState: WorkbookSheetState | null, row: number) {
+export function resolveSheetRowHeightPx(sheetState: SheetAxisSizeState | null, row: number) {
   if (row < 0) {
     return 0;
   }
   return sheetState?.rowHeightOverridesPx[row] ?? sheetState?.defaultRowHeightPx ?? emuToPixels(DEFAULT_ROW_HEIGHT_EMU);
 }
 
-export function sumSheetColumnWidthsEmu(sheetState: WorkbookSheetState | null, beforeCol: number) {
+export function sumSheetColumnWidthsEmu(sheetState: SheetAxisSizeState | null, beforeCol: number) {
   let total = 0;
   for (let col = 0; col < beforeCol; col += 1) {
     total += pixelsToEmu(resolveSheetColumnWidthPx(sheetState, col));
@@ -218,7 +216,7 @@ export function sumSheetColumnWidthsEmu(sheetState: WorkbookSheetState | null, b
   return total;
 }
 
-export function sumSheetRowHeightsEmu(sheetState: WorkbookSheetState | null, beforeRow: number) {
+export function sumSheetRowHeightsEmu(sheetState: SheetAxisSizeState | null, beforeRow: number) {
   let total = 0;
   for (let row = 0; row < beforeRow; row += 1) {
     total += pixelsToEmu(resolveSheetRowHeightPx(sheetState, row));
@@ -228,7 +226,10 @@ export function sumSheetRowHeightsEmu(sheetState: WorkbookSheetState | null, bef
 
 // ── Anchor → absolute rect ─────────────────────────────────────────────────
 
-export function anchorToAbsoluteRect(anchor: XlsxImage["anchor"], sheetState: WorkbookSheetState | null): DrawingRectEmu {
+export function anchorToAbsoluteRect(
+  anchor: XlsxImage["anchor"],
+  sheetState: SheetAxisSizeState | null,
+): DrawingRectEmu {
   if (anchor.kind === "absolute") {
     return {
       cx: anchor.sizeEmu.cx,

@@ -51,7 +51,7 @@ Upstream: `@extend-ai/react-docx` commit `6f70b92`
 | # | 严重程度 | 阻塞 | 描述 | 设计文档位置 | 代码位置 |
 |---|---|---|---|---|---|
 | 11 | — | — | **import 路径**：canvas 层所有 import 均为相对路径（`../engine/types`、`../layout/layout-engine`、`../layout`、`./types`），无 `@extend-ai/react-docx-*` 包引用残留。grep 确认 docx-core/src 下仅注释和错误消息中含上游包名。 | — | `packages/docx-core/src/canvas/` |
-| 12 | — | — | **typecheck**：`pnpm --filter @extend-ai/docx-core typecheck`（`tsc --noEmit`）通过，零错误。 | — | — |
+| 12 | — | — | **typecheck**：`pnpm --filter @arcships/docx-core typecheck`（`tsc --noEmit`）通过，零错误。 | — | — |
 | 13 | — | — | **stub/mock/fake**：canvas 层两个文件均为完整实现，无 `TODO`、`FIXME`、`throw new Error("not implemented")` 等占位模式。 | — | `packages/docx-core/src/canvas/` |
 | 14 | — | — | **循环依赖**：canvas → layout → engine，单向无环。 | §5 依赖关系图 | — |
 | 15 | — | — | **docx-core/src/index.ts** barrel 导出：engine（`./engine`）、layout（`./layout`）、editor-ops（`./editor/editor-ops`）、canvas types（`./canvas/types`）、canvas layout-diagnostics（`./canvas/layout-diagnostics`）。路径正确，覆盖所有已实现模块。 | §2.6 | `packages/docx-core/src/index.ts` |

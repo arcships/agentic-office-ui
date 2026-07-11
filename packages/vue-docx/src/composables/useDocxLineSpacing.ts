@@ -3,7 +3,7 @@
 //
 // Thin wrapper around the editor controller's line-spacing state.
 
-import type { DocxEditorController, DocxLineSpacingInfo } from "@extend-ai/docx-core"
+import type { DocxEditorController, DocxLineSpacingInfo } from "@arcships/docx-core"
 
 export interface UseDocxLineSpacingResult {
   lineSpacing: DocxLineSpacingInfo

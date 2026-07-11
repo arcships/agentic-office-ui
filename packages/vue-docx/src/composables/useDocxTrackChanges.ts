@@ -8,7 +8,7 @@ import {
   type DocxEditorController,
   type DocxTextRangeLocation,
   type DocxTrackedChange,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 export interface UseDocxTrackChangesResult {
   trackedChanges: DocxTrackedChange[]

@@ -10,11 +10,11 @@
     "typecheck": "vue-tsc -p tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
-    "@extend-ai/docx-core": "workspace:*",
-    "@extend-ai/vue-docx": "workspace:*",
-    "@extend-ai/xlsx-core": "workspace:*",
-    "@extend-ai/vue-xlsx": "workspace:*",
-    "@extend-ai/vue-extend": "workspace:*",
+    "@arcships/docx-core": "workspace:*",
+    "@arcships/vue-docx": "workspace:*",
+    "@arcships/xlsx-core": "workspace:*",
+    "@arcships/vue-xlsx": "workspace:*",
+    "@arcships/vue-extend": "workspace:*",
     "vue": "^3.5.0",
     "vue-router": "^4.4.0"
   },

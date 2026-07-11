@@ -110,7 +110,7 @@ The barrel [index.ts](../../packages/docx-core/src/editor/helpers/index.ts) hone
 | Check | Result | Detail |
 |---|---|---|
 | Import paths | ✅ Pass | All relative (`../../engine/*`, `../../viewer/*`, `./*`). Zero `@extend-ai/react-docx-*` package references in source. |
-| Typecheck (docx-core) | ✅ Pass | `pnpm --filter @extend-ai/docx-core typecheck` exits 0. |
+| Typecheck (docx-core) | ✅ Pass | `pnpm --filter @arcships/docx-core typecheck` exits 0. |
 | Typecheck (full workspace) | ✅ Pass | `pnpm typecheck` (6 packages) exits 0 — no ripple errors in vue-docx/xlsx. |
 | Module boundaries | ✅ Pass | Helper-to-helper import graph is acyclic. Leaf modules (constants, editor-types, state, text-mutation, zoom-utils, default-model, dom-helpers, performance, cache-utils, ooxml-helpers) have no intra-helper deps; the field-helpers ↔ numbering ↔ text-mutation cluster and paragraph-geometry → {paragraph-inspect, synthetic-textbox} edges form a clean DAG. |
 | Real implementations | ✅ Pass | Spot-checked `buildParagraphNumberingLabels`, `mutateParagraphTextStyleInRange`, `runStyleToCss`, `defaultStarterModel`, paragraph-geometry predicates — all are genuine ports of upstream logic, not stubs (modulo F2/F3). |

@@ -8,7 +8,7 @@ import type {
   DocxBorderContext,
   DocxBorderPreset,
   DocxBorderPresetState,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 export interface UseDocxBordersResult {
   borderContext: DocxBorderContext

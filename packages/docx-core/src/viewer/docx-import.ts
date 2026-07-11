@@ -2,6 +2,17 @@ import type { DocModel } from "../engine/types";
 import type { OoxmlPackage } from "../engine/ooxml-core";
 import { initWasm } from "../engine/wasm";
 import {
+  OfficeLoadError,
+  validateOfficeArchive,
+} from "@arcships/office-runtime";
+import {
+  assertDocxModelBudget,
+  assertDocxParseTime,
+  resolveDocxRuntimeLimits,
+  type DocxRuntimeLimits,
+} from "../resource-limits";
+import { validateDocxImageAssets } from "../image-budget";
+import {
   canUseConfiguredWasmSourceInWorker,
   getConfiguredWorkerWasmSource,
   type WorkerWasmSource,
@@ -16,19 +27,40 @@ export type DocxImportErrorCode =
   | "SOURCE_NOT_ALLOWED"
   | "FETCH_FAILED"
   | "LIMIT_EXCEEDED"
+  | "IMAGE_LIMIT_EXCEEDED"
+  | "INVALID_IMAGE"
+  | "IMAGE_DECODE_FAILED"
   | "WORKER_UNAVAILABLE"
   | "WASM_LOAD_FAILED"
   | "PARSE_FAILED"
+  | "TIMEOUT"
   | "RUNTIME_DISPOSED";
 
 /** A stable, user-visible error shape for DOCX loading failures. */
 export class DocxImportError extends Error {
   readonly code: DocxImportErrorCode;
+  readonly phase?: string;
+  readonly limit?: string;
+  readonly actual?: number;
+  readonly allowed?: number;
 
-  constructor(code: DocxImportErrorCode, message: string) {
+  constructor(
+    code: DocxImportErrorCode,
+    message: string,
+    details: {
+      phase?: string;
+      limit?: string;
+      actual?: number;
+      allowed?: number;
+    } = {},
+  ) {
     super(message);
     this.name = "DocxImportError";
     this.code = code;
+    this.phase = details.phase;
+    this.limit = details.limit;
+    this.actual = details.actual;
+    this.allowed = details.allowed;
   }
 }
 
@@ -82,6 +114,8 @@ export interface DocxImportOptions {
    */
   allowMainThreadFallback?: boolean;
   mainThreadFallbackMaxBytes?: number;
+  /** Snapshot into this import call; runtime callers normally configure it once. */
+  limits?: DocxRuntimeLimits;
   onDiagnostic?: (event: DocxImportDiagnostic) => void;
   /** Supplied by an instance runtime; direct calls receive a unique id. */
   requestId?: string;
@@ -98,6 +132,7 @@ export interface DocxImportWorkerRequest {
   type: "import-docx";
   buffer: ArrayBuffer;
   wasmSource: WorkerWasmSource;
+  limits: Readonly<DocxRuntimeLimits>;
 }
 
 export interface DocxImportWorkerSuccessResponse {
@@ -116,6 +151,10 @@ export interface DocxImportWorkerErrorResponse {
     name?: string;
     message: string;
     stack?: string;
+    phase?: string;
+    limit?: string;
+    actual?: number;
+    allowed?: number;
   };
 }
 
@@ -159,6 +198,30 @@ function toDocxImportError(
     return error;
   }
 
+  if (error instanceof OfficeLoadError) {
+    const mappedCode: DocxImportErrorCode = error.code === "ABORTED"
+      ? "ABORTED"
+      : error.code === "TIMEOUT"
+        ? "TIMEOUT"
+      : error.code === "LIMIT_EXCEEDED"
+        ? "LIMIT_EXCEEDED"
+      : error.code === "IMAGE_LIMIT_EXCEEDED"
+        ? "IMAGE_LIMIT_EXCEEDED"
+      : error.code === "INVALID_IMAGE"
+        ? "INVALID_IMAGE"
+      : error.code === "IMAGE_DECODE_FAILED"
+        ? "IMAGE_DECODE_FAILED"
+        : "PARSE_FAILED";
+    const wrapped = new DocxImportError(mappedCode, error.message, {
+      phase: error.phase,
+      limit: error.limit,
+      actual: error.actual,
+      allowed: error.allowed,
+    });
+    (wrapped as Error & { cause?: unknown }).cause = error;
+    return wrapped;
+  }
+
   const message = error instanceof Error ? error.message : String(error);
   const wrapped = new DocxImportError(
     error instanceof Error ? classifyDocxImportErrorCode(error) : fallbackCode,
@@ -176,6 +239,12 @@ function errorFromWorkerResponse(
   const error = new DocxImportError(
     response.error.code ?? "PARSE_FAILED",
     response.error.message,
+    {
+      phase: response.error.phase,
+      limit: response.error.limit,
+      actual: response.error.actual,
+      allowed: response.error.allowed,
+    },
   );
   if (response.error.stack) {
     error.stack = response.error.stack;
@@ -224,14 +293,14 @@ function resolveWorkerWasmSource(options: DocxImportOptions): WorkerWasmSource {
 export function createBundledDocxWorker(): Worker {
   return new Worker(new URL("./docx-import-worker.js", import.meta.url), {
     type: "module",
-    name: "@extend-ai/docx-core-import",
+    name: "@arcships/docx-core-import",
   });
 }
 
 function createWorkerFromUrl(url: string): Worker {
   return new Worker(url, {
     type: "module",
-    name: "@extend-ai/docx-core-import",
+    name: "@arcships/docx-core-import",
   });
 }
 
@@ -241,6 +310,7 @@ async function importDocxOnMainThread(
   wasmSource: WorkerWasmSource | undefined,
   options: DocxImportOptions,
   requestId: string,
+  limits: Readonly<DocxRuntimeLimits>,
 ): Promise<DocxImportResult> {
   if (signal?.aborted) {
     throw createAbortError();
@@ -255,6 +325,7 @@ async function importDocxOnMainThread(
 
   const startedAt = performanceNow();
   try {
+    validateOfficeArchive(buffer, limits, { format: "docx", signal });
     const [{ parseDocx }, { buildDocModel }] = await Promise.all([
       import("../engine/ooxml-core"),
       import("../engine/doc-model"),
@@ -263,6 +334,7 @@ async function importDocxOnMainThread(
       await initWasm(wasmSource);
     }
     const pkg = await parseDocx(buffer);
+    validateDocxImageAssets(pkg, limits);
     const parsedAt = performanceNow();
     if (signal?.aborted) {
       throw createAbortError();
@@ -273,6 +345,8 @@ async function importDocxOnMainThread(
     if (signal?.aborted) {
       throw createAbortError();
     }
+    assertDocxModelBudget(model, limits);
+    assertDocxParseTime(finishedAt - startedAt, limits);
 
     const result: DocxImportResult = {
       package: pkg,
@@ -350,7 +424,14 @@ async function handleWorkerUnavailable(
     code: unavailable.code,
     message: unavailable.message,
   });
-  return importDocxOnMainThread(buffer, options.signal, wasmSource, options, requestId);
+  return importDocxOnMainThread(
+    buffer,
+    options.signal,
+    wasmSource,
+    options,
+    requestId,
+    resolveDocxRuntimeLimits(options.limits),
+  );
 }
 
 export async function importDocxBuffer(
@@ -358,6 +439,7 @@ export async function importDocxBuffer(
   options: DocxImportOptions = {},
 ): Promise<DocxImportResult> {
   const requestId = options.requestId ?? createRequestId();
+  const limits = resolveDocxRuntimeLimits(options.limits);
   if (options.signal?.aborted) {
     const error = createAbortError();
     reportDiagnostic(options, { type: "aborted", requestId, code: error.code });
@@ -371,7 +453,7 @@ export async function importDocxBuffer(
       source: "main-thread",
     });
     const wasmSource = options.wasmSource ?? getConfiguredWorkerWasmSource();
-    return importDocxOnMainThread(buffer, options.signal, wasmSource, options, requestId);
+    return importDocxOnMainThread(buffer, options.signal, wasmSource, options, requestId, limits);
   }
 
   let wasmSource: WorkerWasmSource;
@@ -422,8 +504,10 @@ export async function importDocxBuffer(
 
   return new Promise<DocxImportResult>((resolve, reject) => {
     let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     const cleanup = (): void => {
+      if (timeout !== undefined) clearTimeout(timeout);
       worker.removeEventListener("message", handleMessage);
       worker.removeEventListener("error", handleError);
       worker.removeEventListener("messageerror", handleMessageError);
@@ -463,6 +547,22 @@ export async function importDocxBuffer(
       });
       settle(() => reject(error));
     };
+
+    const timeoutMs = limits.maxParseMs;
+    if (timeoutMs !== undefined) {
+      timeout = setTimeout(() => {
+        rejectWorkerError(new DocxImportError(
+          "TIMEOUT",
+          `DOCX 解析耗时超过 ${timeoutMs} 毫秒。`,
+          {
+            phase: "parse",
+            limit: "maxParseMs",
+            actual: timeoutMs + 1,
+            allowed: timeoutMs,
+          },
+        ));
+      }, timeoutMs);
+    }
 
     const handleError = (event: ErrorEvent): void => {
       rejectWorkerError(
@@ -522,6 +622,7 @@ export async function importDocxBuffer(
         type: "import-docx",
         buffer,
         wasmSource,
+        limits,
       };
       const transfer = options.transferBuffer ? [buffer] : [];
       worker.postMessage(request, transfer);

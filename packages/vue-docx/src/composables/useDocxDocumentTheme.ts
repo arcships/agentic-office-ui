@@ -4,7 +4,7 @@
 // Thin wrapper around the editor controller's document-theme state.
 // Exposes theme getter/setter + toggle + dark-mode check.
 
-import type { DocxEditorController, DocxDocumentTheme } from "@extend-ai/docx-core"
+import type { DocxEditorController, DocxDocumentTheme } from "@arcships/docx-core"
 
 export interface UseDocxDocumentThemeResult {
   documentTheme: DocxDocumentTheme

@@ -4,6 +4,10 @@ import {
   type XlsxWorkerClientOptions,
 } from "../worker-client";
 import type { WorkerWasmSource } from "../wasm";
+import {
+  resolveXlsxRuntimeLimits,
+  type XlsxRuntimeLimits,
+} from "../resource-limits";
 
 export interface XlsxRuntimeParseOptions {
   showHiddenSheets?: boolean;
@@ -52,6 +56,8 @@ export interface XlsxRuntimeConfig {
   workerUrl?: string;
   createWorker?: () => Worker;
   parseOptions?: XlsxRuntimeParseOptions;
+  /** Per-instance input, archive, XML and parsing budgets. */
+  limits?: XlsxRuntimeLimits;
   onDiagnostic?: (event: XlsxRuntimeDiagnostic) => void;
 }
 
@@ -60,6 +66,7 @@ export interface XlsxRuntime {
   readonly wasmSource: WorkerWasmSource;
   readonly workerUrl?: string;
   readonly parseOptions: Readonly<XlsxRuntimeParseOptions>;
+  readonly limits: Readonly<XlsxRuntimeLimits>;
   createWorkerClient(): XlsxWorkerClient;
   dispose(): void;
 }
@@ -81,6 +88,7 @@ export function createXlsxRuntime(config: XlsxRuntimeConfig = {}): XlsxRuntime {
   const workerUrl = config.workerUrl ? String(config.workerUrl) : undefined;
   const createWorker = config.createWorker;
   const parseOptions = Object.freeze({ ...(config.parseOptions ?? {}) });
+  const limits = resolveXlsxRuntimeLimits(config.limits);
   const onDiagnostic = config.onDiagnostic;
   const clients = new Set<XlsxWorkerClient>();
   let disposed = false;
@@ -94,6 +102,7 @@ export function createXlsxRuntime(config: XlsxRuntimeConfig = {}): XlsxRuntime {
     wasmSource,
     workerUrl,
     parseOptions,
+    limits,
     createWorkerClient(): XlsxWorkerClient {
       if (disposed) {
         throw new XlsxRuntimeError(
@@ -107,6 +116,7 @@ export function createXlsxRuntime(config: XlsxRuntimeConfig = {}): XlsxRuntime {
         createWorker,
         workerUrl,
         wasmSource,
+        limits,
         useLegacyDefaultWasmSource: false,
         onDispose: () => {
           clients.delete(client);

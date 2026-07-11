@@ -5,7 +5,7 @@
 // Translates JSX to Vue h() calls.
 
 import { h, type VNode } from "vue"
-import type { ParagraphNode, TextRunNode } from "@extend-ai/docx-core"
+import type { ParagraphNode, TextRunNode } from "@arcships/docx-core"
 import {
   runStyleToCss,
   linkStyleToCss,
@@ -14,9 +14,9 @@ import {
   updateEstimatedLineWidthPxForText,
   resolveTabSpacerWidthPx,
   noteMarkerLabel,
-} from "@extend-ai/docx-core"
-import type { DocxDocumentTheme } from "@extend-ai/docx-core"
-import type { ParagraphTrackedInlineChange } from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
+import type { DocxDocumentTheme } from "@arcships/docx-core"
+import type { ParagraphTrackedInlineChange } from "@arcships/docx-core"
 
 export interface TextRunRenderContext {
   documentTheme: DocxDocumentTheme

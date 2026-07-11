@@ -5,13 +5,13 @@ import type {
   XlsxCellAddress,
   XlsxCellRange,
   XlsxClipboardData
-} from "@extend-ai/xlsx-core";
-import { resolveWorkbookColor, resolveWorkbookFillStyle } from "@extend-ai/xlsx-core";
+} from "@arcships/xlsx-core";
+import { resolveWorkbookColor, resolveWorkbookFillStyle } from "@arcships/xlsx-core";
 import { cellAddressToA1, normalizeRange, rangeToA1 } from "./selection";
 import { decodeHtmlEntities, escapeHtml, mapBorder, resolveInheritedCellStyle } from "./formatting";
 import { coerceUserEnteredValue } from "./internal";
 import type { XlsxControllerContext } from "./internal";
-import { XlsxSourceError } from "@extend-ai/xlsx-core";
+import { XlsxSourceError } from "@arcships/xlsx-core";
 
 export { INTERNAL_CLIPBOARD_MIME, escapeHtml };
 export type { ClipboardPayload, ClipboardMatrixCell, ClipboardMerge };
@@ -129,17 +129,21 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     }
 
     const calculated = worksheet.getCalculatedValueAt(cell.row, cell.col);
-    if (formula && cachedFormulaValue !== undefined && calculated.is_error) {
-      return cachedFormulaValue;
-    }
-    if (calculated.is_error) {
-      return calculated.asError() ?? "";
-    }
-    if (calculated.is_empty) {
-      return "";
-    }
+    try {
+      if (formula && cachedFormulaValue !== undefined && calculated.is_error) {
+        return cachedFormulaValue;
+      }
+      if (calculated.is_error) {
+        return calculated.asError() ?? "";
+      }
+      if (calculated.is_empty) {
+        return "";
+      }
 
-    return calculated.toString();
+      return calculated.toString();
+    } finally {
+      calculated.free();
+    }
   }
 
   function getCellFormula(cell?: XlsxCellAddress | null) {

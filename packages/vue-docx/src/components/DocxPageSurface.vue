@@ -103,10 +103,14 @@
 
     <!-- Tracked change / comment gutter -->
     <DocxTrackedChangeGutter
-      v-if="controller && showGutter"
+      v-if="showGutter"
       :page-index="pageIndex"
       :page-layout="pageLayout"
       :controller="controller"
+      :tracked-changes="trackedChanges"
+      :comments="comments"
+      :show-tracked-changes="trackedChangesEnabled"
+      :show-comments="commentsEnabled"
       :page-node-segments="pageNodeSegments"
     />
   </div>
@@ -116,18 +120,20 @@
 import { ref, computed, onMounted, onUnmounted, watch } from "vue"
 import type {
   DocModel,
+  DocxComment,
   DocxEditorController,
+  DocxTrackedChange,
   DocumentPageNodeSegment,
   FooterSection,
   HeaderSection,
   TableCellContentNode,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import {
   docModelThumbnailMetadataSignature,
   docNodeContentSignature,
   resolveDocumentLayout,
   pageMarginPaddingStyle,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import DocxPageHeader from "./DocxPageHeader.vue"
 import DocxPageFooter from "./DocxPageFooter.vue"
 import DocxPageBody from "./DocxPageBody"
@@ -156,6 +162,8 @@ interface DocxPageSurfaceProps {
   footerSection?: FooterSection
   trackedChangesEnabled?: boolean
   commentsEnabled?: boolean
+  trackedChanges?: readonly DocxTrackedChange[]
+  comments?: readonly DocxComment[]
   theme?: "light" | "dark"
 }
 

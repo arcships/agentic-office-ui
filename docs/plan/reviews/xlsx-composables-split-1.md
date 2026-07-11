@@ -83,7 +83,7 @@ $ wc -l packages/vue-xlsx/src/composables.ts
 为完整性记录：当前未拆分的 `composables.ts` 自身可编译。
 
 ```
-$ pnpm --filter @extend-ai/vue-xlsx typecheck
+$ pnpm --filter @arcships/vue-xlsx typecheck
 > tsc --noEmit
 （无输出，退出 0）
 ```
@@ -92,4 +92,4 @@ $ pnpm --filter @extend-ai/vue-xlsx typecheck
 
 ## 建议下一步
 
-重做 `xlsx-composables-split`：在 `task/xlsx-003` 机械改写的 `composables.ts` 基础上，按 §2.2 的 8 模块边界做物理拆分（状态/选区/编辑/图表/剪贴板/导航/格式化/controller），每文件 ≤1000 行，提供 `composables/index.ts` barrel，并确保 `pnpm --filter @extend-ai/vue-xlsx typecheck` 通过后再交付。注意依赖任务 `xlsx-core-charts-split`、`xlsx-core-images-split` 已完成（本分支可见 `packages/xlsx-core/src/charts/`、`images/`、`types/` 拆分目录），composables 拆分时需更新 import 至新的 barrel 路径（如 `@extend-ai/xlsx-core` 的 charts/images 子模块导出）。
+重做 `xlsx-composables-split`：在 `task/xlsx-003` 机械改写的 `composables.ts` 基础上，按 §2.2 的 8 模块边界做物理拆分（状态/选区/编辑/图表/剪贴板/导航/格式化/controller），每文件 ≤1000 行，提供 `composables/index.ts` barrel，并确保 `pnpm --filter @arcships/vue-xlsx typecheck` 通过后再交付。注意依赖任务 `xlsx-core-charts-split`、`xlsx-core-images-split` 已完成（本分支可见 `packages/xlsx-core/src/charts/`、`images/`、`types/` 拆分目录），composables 拆分时需更新 import 至新的 barrel 路径（如 `@arcships/xlsx-core` 的 charts/images 子模块导出）。

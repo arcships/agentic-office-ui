@@ -28,12 +28,24 @@ const manifestPath = path.resolve(
   process.env.PACK_MANIFEST_PATH || path.join(output, "..", "real-tgz-manifests", "summary.json"),
 );
 const template = path.join(root, "tests", "consumer", "template");
-const publicApiContract = JSON.parse(
-  readFileSync(path.join(root, "scripts", "ci", "public-api-contract.json"), "utf8"),
-);
+let publicApiContract;
 const consumerDir = mkdtempSync(path.join(os.tmpdir(), "agentic-office-tgz-consumer-"));
 const probe = process.env.PACK_CONSUMER_PROBE || "";
+const dependencyVersions = {
+  vue: process.env.PACK_CONSUMER_VUE_VERSION || "3.5.39",
+  vite: process.env.PACK_CONSUMER_VITE_VERSION || "6.4.3",
+  typescript: process.env.PACK_CONSUMER_TYPESCRIPT_VERSION || "5.9.3",
+  vueTsc: process.env.PACK_CONSUMER_VUE_TSC_VERSION || "3.3.6",
+  viteVuePlugin: process.env.PACK_CONSUMER_VITE_VUE_PLUGIN_VERSION || "5.2.4",
+};
+const browsers = (process.env.PACK_CONSUMER_BROWSERS || "chromium")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+const supportedBrowsers = new Set(["chromium", "firefox", "webkit"]);
 const logs = [];
+const browserResults = [];
+let resolvedDependencyVersions = null;
 let preview;
 let result = "FAIL";
 let failure;
@@ -41,18 +53,34 @@ let failure;
 rmSync(output, { recursive: true, force: true });
 mkdirSync(output, { recursive: true });
 
-function run(id, executable, args) {
+function run(id, executable, args, options = {}) {
   const commandResult = spawnSync(executable, args, {
     cwd: consumerDir,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
-  const log = `${commandResult.stdout || ""}${commandResult.stderr || ""}`;
+  const log = `${commandResult.stdout || ""}${commandResult.stderr || ""}${commandResult.error ? `\n${commandResult.error.stack || commandResult.error.message}` : ""}`;
   writeFileSync(path.join(output, `${id}.log`), log);
   logs.push({ id, command: [executable, ...args], exitCode: commandResult.status ?? 1 });
-  if (commandResult.status !== 0) {
+  if (commandResult.status !== 0 && !options.allowFailure) {
     throw new Error(`${id} exited ${commandResult.status}`);
   }
+  return commandResult;
+}
+
+function readJson(file, label) {
+  try {
+    return JSON.parse(readFileSync(file, "utf8"));
+  } catch (error) {
+    throw new Error(`${label} could not be read: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function installedVersion(packageName) {
+  return readJson(
+    path.join(consumerDir, "node_modules", ...packageName.split("/"), "package.json"),
+    `${packageName} package metadata`,
+  ).version;
 }
 
 function walk(directory) {
@@ -104,9 +132,51 @@ function waitForServer(url, child) {
 }
 
 try {
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  if (
+    browsers.length === 0 ||
+    new Set(browsers).size !== browsers.length ||
+    browsers.some((browser) => !supportedBrowsers.has(browser))
+  ) {
+    throw new Error(
+      `PACK_CONSUMER_BROWSERS must contain unique chromium, firefox, or webkit values; received ${JSON.stringify(browsers)}`,
+    );
+  }
+  publicApiContract = readJson(
+    path.join(root, "scripts", "ci", "public-api-contract.json"),
+    "public API contract",
+  );
+  const manifest = readJson(manifestPath, "real tgz manifest");
   if (manifest.result !== "PASS" || manifest.entries.length !== 5) {
     throw new Error("real tgz manifest preflight did not pass for five packages");
+  }
+  const expectedPackageNames = publicApiContract.packages
+    .map((entry) => entry.name)
+    .sort();
+  const manifestPackageNames = manifest.entries
+    .map((entry) => entry.package)
+    .sort();
+  if (JSON.stringify(manifestPackageNames) !== JSON.stringify(expectedPackageNames)) {
+    throw new Error(
+      `real tgz manifest package set differs from the five public packages: ${JSON.stringify({ expectedPackageNames, manifestPackageNames })}`,
+    );
+  }
+  const forbiddenTemplatePatterns = [
+    { label: "workspace dependency", pattern: /workspace:/ },
+    { label: "workspace source path", pattern: /(?:^|["'`])(?:\.\.\/)+(?:apps|packages)\//m },
+    { label: "package source deep import", pattern: /@arcships\/[^"'`\s]+\/src(?:\/|["'`])/ },
+    { label: "Vite source alias", pattern: /\balias\s*:/ },
+  ];
+  const forbiddenTemplateReferences = walk(template).flatMap((file) => {
+    if (!/\.(?:json|mjs|ts|vue)$/.test(file)) return [];
+    const source = readFileSync(file, "utf8");
+    return forbiddenTemplatePatterns
+      .filter(({ pattern }) => pattern.test(source))
+      .map(({ label }) => ({ file: path.relative(template, file), label }));
+  });
+  if (forbiddenTemplateReferences.length) {
+    throw new Error(
+      `consumer template contains workspace source access: ${JSON.stringify(forbiddenTemplateReferences)}`,
+    );
   }
   const tgzDir = path.dirname(manifestPath);
   const packageFiles = Object.fromEntries(
@@ -136,29 +206,53 @@ try {
       ...Object.fromEntries(
         Object.entries(packageFiles).map(([name, file]) => [name, `file:${file}`]),
       ),
-      vue: "3.5.39",
+      vue: dependencyVersions.vue,
     },
     devDependencies: {
-      "@vitejs/plugin-vue": "5.2.4",
-      typescript: "5.9.3",
-      vite: "6.4.3",
-      "vue-tsc": "3.3.6",
+      "@vitejs/plugin-vue": dependencyVersions.viteVuePlugin,
+      typescript: dependencyVersions.typescript,
+      vite: dependencyVersions.vite,
+      "vue-tsc": dependencyVersions.vueTsc,
     },
   };
   writeFileSync(path.join(consumerDir, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
   run("npm-install", "npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"]);
+  const npmLs = run("npm-ls", "npm", [
+    "ls",
+    "vue",
+    "vite",
+    "typescript",
+    "vue-tsc",
+    "@vitejs/plugin-vue",
+    "--all",
+    "--json",
+  ]);
+  readJson(path.join(consumerDir, "package.json"), "consumer package metadata");
+  resolvedDependencyVersions = {
+    vue: installedVersion("vue"),
+    vite: installedVersion("vite"),
+    typescript: installedVersion("typescript"),
+    vueTsc: installedVersion("vue-tsc"),
+    viteVuePlugin: installedVersion("@vitejs/plugin-vue"),
+  };
+  if (Object.keys(dependencyVersions).some((key) => resolvedDependencyVersions[key] !== dependencyVersions[key])) {
+    throw new Error(`resolved tool versions differ from requested versions: ${JSON.stringify({ dependencyVersions, resolvedDependencyVersions })}`);
+  }
+  writeFileSync(path.join(output, "npm-ls.json"), npmLs.stdout || "{}\n");
 
   const installChecks = [];
   const exportContractChecks = [];
   const realConsumerDir = realpathSync(consumerDir);
   for (const name of Object.keys(packageFiles)) {
     const installed = path.join(consumerDir, "node_modules", ...name.split("/"));
+    const installedExists = existsSync(installed);
     installChecks.push({
       package: name,
-      exists: existsSync(installed),
-      symlink: lstatSync(installed).isSymbolicLink(),
-      realPath: realpathSync(installed),
+      exists: installedExists,
+      symlink: installedExists ? lstatSync(installed).isSymbolicLink() : null,
+      realPath: installedExists ? realpathSync(installed) : null,
     });
+    if (!installedExists) continue;
     const expected = publicApiContract.packages.find((entry) => entry.name === name);
     if (!expected) throw new Error(`public API contract is missing ${name}`);
     const installedManifest = JSON.parse(readFileSync(path.join(installed, "package.json"), "utf8"));
@@ -171,7 +265,7 @@ try {
     );
     exportContractChecks.push({ package: name, exportMatches, targets, missingTargets });
   }
-  if (installChecks.some((item) => !item.exists || item.symlink || !item.realPath.startsWith(realConsumerDir))) {
+  if (installChecks.some((item) => !item.exists || item.symlink || !item.realPath.startsWith(`${realConsumerDir}${path.sep}`))) {
     throw new Error("external consumer contains a missing or linked workspace package");
   }
   if (exportContractChecks.some((item) => !item.exportMatches || item.missingTargets.length)) {
@@ -188,6 +282,11 @@ try {
     `${JSON.stringify({
       consumerDirectory: consumerDir,
       outsideWorkspace: !consumerDir.startsWith(root),
+      requestedDependencyVersions: dependencyVersions,
+      resolvedDependencyVersions,
+      expectedPackageNames,
+      manifestPackageNames,
+      forbiddenTemplateReferences,
       installChecks,
       exportContractChecks,
       publicFiles: walk(path.join(consumerDir, "public")).map((file) => path.relative(consumerDir, file)),
@@ -236,7 +335,7 @@ process.stdout.write(JSON.stringify({ status: "PASS", matrix }, null, 2));`,
   ]);
 
   if (probe === "missing-entry") {
-    rmSync(path.join(consumerDir, "node_modules", "@extend-ai", "vue-docx", "dist", "index.js"));
+    rmSync(path.join(consumerDir, "node_modules", "@arcships", "vue-docx", "dist", "index.js"));
   }
 
   run("typescript", "npm", ["run", "typecheck"]);
@@ -249,7 +348,7 @@ process.stdout.write(JSON.stringify({ status: "PASS", matrix }, null, 2));`,
   const expectedWasmResources = expectedResources.filter((item) => item.path.endsWith(".wasm"));
   const expectedWorkerResources = expectedResources.filter((item) => item.path.endsWith("worker.js"));
   const expectedPdfiumResource = expectedWasmResources.find(
-    (item) => item.package === "@extend-ai/vue-extend" && item.path === "dist/pdfium.wasm",
+    (item) => item.package === "@arcships/vue-extend" && item.path === "dist/pdfium.wasm",
   );
   if (
     expectedResources.length !== 5 ||
@@ -260,8 +359,23 @@ process.stdout.write(JSON.stringify({ status: "PASS", matrix }, null, 2));`,
   ) {
     throw new Error(`expected two Workers and three WASM files, including the PDFium tgz asset: ${JSON.stringify(expectedResources)}`);
   }
-  const expectedPath = path.join(output, "expected-tgz-resources.json");
-  writeFileSync(expectedPath, `${JSON.stringify(expectedResources, null, 2)}\n`);
+  const installedRuntimeFiles = expectedResources.map((item) => {
+    const file = path.join(consumerDir, "node_modules", ...item.package.split("/"), item.path);
+    return {
+      package: item.package,
+      path: item.path,
+      exists: existsSync(file),
+      expectedSha256: item.sha256,
+      sha256: existsSync(file) ? createHash("sha256").update(readFileSync(file)).digest("hex") : null,
+    };
+  });
+  if (installedRuntimeFiles.some((item) => !item.exists || item.sha256 !== item.expectedSha256)) {
+    throw new Error(`installed runtime resources do not match tgz hashes: ${JSON.stringify(installedRuntimeFiles)}`);
+  }
+  writeFileSync(
+    path.join(output, "installed-runtime-resources.json"),
+    `${JSON.stringify(installedRuntimeFiles, null, 2)}\n`,
+  );
 
   const builtRuntimeFiles = walk(path.join(consumerDir, "dist"))
     .filter((file) => file.endsWith(".wasm") || /worker.*\.js$/.test(path.basename(file)))
@@ -288,8 +402,16 @@ process.stdout.write(JSON.stringify({ status: "PASS", matrix }, null, 2));`,
     path.join(output, "built-runtime-resources.json"),
     `${JSON.stringify(builtRuntimeFiles, null, 2)}\n`,
   );
+  const expectedPath = path.join(output, "expected-tgz-resources.json");
+  writeFileSync(
+    expectedPath,
+    `${JSON.stringify({ expectedResources, builtRuntimeFiles, installedRuntimeFiles }, null, 2)}\n`,
+  );
 
-  const port = 4191;
+  const port = Number.parseInt(process.env.PACK_CONSUMER_PORT || "4191", 10);
+  if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
+    throw new Error(`PACK_CONSUMER_PORT must be an available user port; received ${process.env.PACK_CONSUMER_PORT}`);
+  }
   const previewLog = path.join(output, "preview.log");
   const previewHandle = await import("node:fs").then(({ openSync }) => openSync(previewLog, "w"));
   preview = spawn("npm", ["run", "preview", "--", "--host", "127.0.0.1", "--port", String(port)], {
@@ -299,14 +421,38 @@ process.stdout.write(JSON.stringify({ status: "PASS", matrix }, null, 2));`,
   });
   const baseUrl = `http://127.0.0.1:${port}`;
   await waitForServer(baseUrl, preview);
-  run("browser", process.execPath, [
-    path.join(root, "scripts", "ci", "run-python.mjs"),
-    path.join(root, "tests", "blackbox", "pack_consumer.py"),
-    baseUrl,
-    path.join(output, "browser"),
-    consumerDir,
-    expectedPath,
-  ]);
+  for (const browser of browsers) {
+    const evidenceName = browsers.length === 1 && browser === "chromium"
+      ? "browser"
+      : `browser-${browser}`;
+    const browserCommand = run(evidenceName, process.execPath, [
+      path.join(root, "scripts", "ci", "run-python.mjs"),
+      path.join(root, "tests", "blackbox", "pack_consumer.py"),
+      baseUrl,
+      path.join(output, evidenceName),
+      consumerDir,
+      expectedPath,
+      browser,
+    ], { allowFailure: true });
+    const resultPath = path.join(output, evidenceName, "result.json");
+    let browserResult;
+    try {
+      browserResult = readJson(resultPath, `${browser} browser result`);
+    } catch (error) {
+      browserResult = {
+        browserName: browser,
+        status: "FAIL",
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+    browserResults.push(browserResult);
+    if (browserCommand.status === 0 && browserResult.status !== "PASS") {
+      browserResult.error = browserResult.error || "browser command exited zero without PASS";
+    }
+  }
+  if (browserResults.some((item) => item.status !== "PASS")) {
+    throw new Error(`one or more browser checks did not pass: ${JSON.stringify(browserResults.map((item) => ({ browser: item.browserName, status: item.status })) )}`);
+  }
   result = "PASS";
 } catch (error) {
   failure = error instanceof Error ? error.stack || error.message : String(error);
@@ -322,6 +468,16 @@ process.stdout.write(JSON.stringify({ status: "PASS", matrix }, null, 2));`,
       suite: "P1-PACK-EXTERNAL-CONSUMER",
       result,
       probe: probe || null,
+      dependencyVersions,
+      resolvedDependencyVersions,
+      browsers,
+      browserResults: browserResults.map((item) => ({
+        browserName: item.browserName,
+        browser: item.browser || null,
+        browserSource: item.browserSource || null,
+        status: item.status,
+        attempts: item.attempts || [],
+      })),
       manifestPath,
       temporaryConsumer: cleanedPath,
       temporaryConsumerCleaned: !existsSync(cleanedPath),

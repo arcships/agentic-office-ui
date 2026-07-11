@@ -50,8 +50,8 @@ depends-on: []
 ## verification
 
 ```bash
-pnpm --filter @extend-ai/xlsx-core typecheck
-pnpm --filter @extend-ai/xlsx-core build
+pnpm --filter @arcships/xlsx-core typecheck
+pnpm --filter @arcships/xlsx-core build
 grep -r "React\." packages/xlsx-core/src/  # 应为空
 ```
 

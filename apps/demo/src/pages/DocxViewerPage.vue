@@ -1,78 +1,87 @@
 <template>
-  <div class="page">
-    <h2>📄 DOCX Viewer — Verification</h2>
-    <p class="desc">
-      使用公开 Runtime 配置验证真实 DOCX Worker、WASM、错误和恢复路径。
-    </p>
-
-    <div class="controls control-panel">
-      <label>
-        Sample DOCX
-        <select v-model="selectedSample" data-testid="docx-sample-select" @change="loadSelectedSample">
-          <option v-for="sample in samples" :key="sample.file" :value="sample.file">
-            {{ sample.label }}
-          </option>
-        </select>
-      </label>
-      <button data-testid="docx-load-sample" @click="loadSelectedSample">Load sample</button>
-      <input data-testid="docx-file-input" type="file" accept=".docx" @change="onFileChange" />
-    </div>
-
-    <fieldset class="runtime-config" data-testid="docx-runtime-config">
-      <legend>DOCX Runtime configuration</legend>
-      <label>
-        WASM URL
-        <input data-testid="docx-wasm-url" v-model="wasmUrl" type="url" />
-      </label>
-      <label>
-        Worker URL（留空使用包内 Worker）
-        <input data-testid="docx-worker-url" v-model="workerUrl" type="url" />
-      </label>
-      <label class="checkbox-label">
-        <input data-testid="docx-allow-main-thread-fallback" v-model="allowMainThreadFallback" type="checkbox" />
-        允许受字节上限约束的主线程回退
-      </label>
-      <label>
-        主线程回退上限（字节）
-        <input data-testid="docx-main-thread-fallback-max-bytes" v-model.number="mainThreadFallbackMaxBytes" min="0" type="number" />
-      </label>
-      <button data-testid="apply-docx-runtime" type="button" @click="applyRuntimeConfig">
-        Apply runtime configuration
-      </button>
-    </fieldset>
-
-    <div class="status-grid info-grid">
-      <div data-testid="page-status" :data-state="pageState">
-        <strong>Status:</strong> {{ pageState }}
+  <div class="page" data-testid="docx-viewer-page">
+    <header class="product-header">
+      <div>
+        <h2>DOCX 查看器</h2>
+        <p class="desc">打开文档后，可翻页、缩放、查看缩略图和下载原文件。</p>
       </div>
-      <div data-testid="loaded-file"><strong>Loaded:</strong> {{ displayName || "None" }}</div>
-      <div data-testid="docx-import-source"><strong>Source:</strong> {{ sourceKind }}</div>
-      <div><strong>Expected coverage:</strong> Worker, WASM, paragraphs, tables, images and recovery</div>
-    </div>
+      <div class="controls control-panel product-actions">
+        <label>
+          示例文档
+          <select v-model="selectedSample" data-testid="docx-sample-select" @change="loadSelectedSample">
+            <option v-for="sample in samples" :key="sample.file" :value="sample.file">
+              {{ sample.label }}
+            </option>
+          </select>
+        </label>
+        <button data-testid="docx-load-sample" @click="loadSelectedSample">打开示例</button>
+        <label class="checkbox-action">
+          <input v-model="showTrackedChanges" data-testid="docx-demo-show-tracked-changes" type="checkbox" />
+          显示修订
+        </label>
+        <label class="checkbox-action">
+          <input v-model="showComments" data-testid="docx-demo-show-comments" type="checkbox" />
+          显示批注
+        </label>
+        <label class="file-action">
+          打开本地文件
+          <input data-testid="docx-file-input" type="file" accept=".docx" @change="onFileChange" />
+        </label>
+      </div>
+    </header>
 
     <p v-if="error" class="error" data-testid="docx-page-error">
       {{ errorCode ? `${errorCode}: ` : "" }}{{ error }}
     </p>
 
-    <div class="viewer-container">
+    <div class="viewer-container product-surface">
       <DocxViewer
         v-if="fileBuffer"
         :key="viewerKey"
         :file="fileBuffer"
+        :file-name="displayName"
         :runtime="runtime"
+        v-model:show-tracked-changes="showTrackedChanges"
+        v-model:show-comments="showComments"
         :layout-options="{ pageWidth: 816, pageHeight: 1056 }"
-        style="height: 80vh; overflow: auto;"
+        style="height: 78vh;"
         @load-start="onViewerLoadStart"
         @load-success="onViewerLoadSuccess"
         @load-error="onViewerLoadError"
       />
       <div v-else class="empty">
-        <p>Load a DOCX sample or upload a .docx file to begin verification.</p>
+        <p>选择示例或打开本地 .docx 文件。</p>
       </div>
     </div>
 
-    <details class="diagnostics" open>
-      <summary>Runtime diagnostics</summary>
+    <div class="status-grid info-grid verification-section">
+      <div data-testid="page-status" :data-state="pageState"><strong>状态：</strong>{{ pageState }}</div>
+      <div data-testid="loaded-file"><strong>文件：</strong>{{ displayName || "未打开" }}</div>
+      <div data-testid="docx-import-source"><strong>执行位置：</strong>{{ sourceKind }}</div>
+    </div>
+
+    <details class="runtime-details" data-testid="docx-runtime-details">
+      <summary>运行配置与诊断</summary>
+      <fieldset class="runtime-config" data-testid="docx-runtime-config">
+        <legend>DOCX 运行配置</legend>
+        <label>
+          WASM 地址
+          <input data-testid="docx-wasm-url" v-model="wasmUrl" type="url" />
+        </label>
+        <label>
+          Worker 地址（留空使用包内 Worker）
+          <input data-testid="docx-worker-url" v-model="workerUrl" type="url" />
+        </label>
+        <label class="checkbox-label">
+          <input data-testid="docx-allow-main-thread-fallback" v-model="allowMainThreadFallback" type="checkbox" />
+          允许受字节上限约束的主线程回退
+        </label>
+        <label>
+          主线程回退上限（字节）
+          <input data-testid="docx-main-thread-fallback-max-bytes" v-model.number="mainThreadFallbackMaxBytes" min="0" type="number" />
+        </label>
+        <button data-testid="apply-docx-runtime" type="button" @click="applyRuntimeConfig">应用运行配置</button>
+      </fieldset>
       <pre data-testid="docx-diagnostics">{{ JSON.stringify(diagnostics, null, 2) }}</pre>
     </details>
   </div>
@@ -85,8 +94,8 @@ import {
   createDocxRuntime,
   type DocxImportDiagnostic,
   type DocxImportResult,
-} from "@extend-ai/docx-core"
-import { DocxViewer } from "@extend-ai/vue-docx"
+} from "@arcships/docx-core"
+import { DocxViewer } from "@arcships/vue-docx"
 
 const samples = [
   { file: "demo.docx", label: "Demo — master services agreement" },
@@ -94,6 +103,7 @@ const samples = [
   { file: "invoice-table.docx", label: "Invoice table — merged cells and totals" },
   { file: "report-with-image.docx", label: "Report with image and rich text" },
   { file: "chinese-mixed.docx", label: "Chinese + English mixed text" },
+  { file: "review-comments.docx", label: "Review — tracked changes and comments" },
   { file: "corrupted.docx", label: "Corrupted DOCX — negative test" },
 ]
 
@@ -119,6 +129,8 @@ const wasmUrl = ref(bundledDocxWasmUrl)
 const workerUrl = ref("")
 const allowMainThreadFallback = ref(false)
 const mainThreadFallbackMaxBytes = ref(0)
+const showTrackedChanges = ref(true)
+const showComments = ref(true)
 const diagnostics = ref<VisibleDiagnostic[]>([])
 let pageLoadSequence = 0
 let activePageLoad:
@@ -299,9 +311,18 @@ void loadSelectedSample()
 </script>
 
 <style scoped>
-.page { padding: 24px; max-width: 1200px; margin: 0 auto; width: 100%; min-width: 0; }
+.page { padding: 16px; max-width: 1440px; margin: 0 auto; width: 100%; min-width: 0; }
 h2 { margin-bottom: 4px; }
 .desc { color: var(--muted-foreground); margin-bottom: 16px; font-size: 14px; }
+.product-header { display: flex; align-items: end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.product-header .desc { margin-bottom: 0; }
+.product-actions { margin-bottom: 0; }
+.checkbox-action { align-items: center !important; flex-direction: row !important; white-space: nowrap; }
+.checkbox-action input { padding: 0; }
+.product-surface { box-shadow: 0 10px 30px rgb(15 23 42 / 8%); }
+.verification-section { margin-top: 8px; }
+.runtime-details { margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; color: var(--muted-foreground); }
+.runtime-details summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--foreground); }
 .controls, .runtime-config { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
 .controls label, .runtime-config label { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; font-size: 13px; color: var(--muted-foreground); }
 .controls button, .controls input, .controls select, .runtime-config button, .runtime-config input { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
@@ -316,4 +337,9 @@ h2 { margin-bottom: 4px; }
 .empty { display: flex; align-items: center; justify-content: center; height: 200px; color: var(--muted-foreground); }
 .diagnostics { margin-top: 24px; font-size: 13px; }
 .diagnostics pre { max-height: 280px; overflow: auto; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); white-space: pre-wrap; }
+@media (max-width: 760px) {
+  .page { padding: 10px; }
+  .product-header { align-items: stretch; }
+  .runtime-config input[type="url"] { min-width: min(280px, 76vw); }
+}
 </style>

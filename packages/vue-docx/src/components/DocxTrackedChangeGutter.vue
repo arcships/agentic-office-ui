@@ -53,32 +53,38 @@ import type {
   DocxTrackedChange,
   DocxComment,
   DocumentPageNodeSegment,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = defineProps<{
   pageIndex: number
   pageLayout: { pageWidthPx: number; pageHeightPx: number; marginsPx?: { top: number; bottom: number; left: number; right: number } }
-  controller: DocxEditorController
+  controller?: DocxEditorController
+  trackedChanges?: readonly DocxTrackedChange[]
+  comments?: readonly DocxComment[]
+  showTrackedChanges?: boolean
+  showComments?: boolean
   pageNodeSegments: DocumentPageNodeSegment[]
 }>()
 
 // ── Computed ───────────────────────────────────────────────────────
-const showChanges = computed(() => props.controller.showTrackedChanges)
-const showComments = computed(() => props.controller.showComments)
+const showChanges = computed(() => props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false)
+const showComments = computed(() => props.showComments ?? props.controller?.showComments ?? false)
 
 const pageNodeIndexes = computed(
   () => new Set(props.pageNodeSegments.map((segment) => segment.nodeIndex))
 )
 
 const trackedChanges = computed<DocxTrackedChange[]>(() => {
-  return props.controller.trackedChanges.filter((change) =>
+  const changes = props.trackedChanges ?? props.controller?.trackedChanges ?? []
+  return changes.filter((change) =>
     pageNodeIndexes.value.has(change.nodeIndex)
   )
 })
 
 const comments = computed<DocxComment[]>(() => {
-  return props.controller.comments.filter((comment) =>
+  const documentComments = props.comments ?? props.controller?.comments ?? []
+  return documentComments.filter((comment) =>
     pageNodeIndexes.value.has(comment.nodeIndex)
   )
 })
@@ -139,9 +145,15 @@ function formatDate(dateStr?: string): string {
 
 <style scoped>
 .docx-tracked-change-gutter {
-  padding: 8px 0;
-  border-top: 1px solid #e5e7eb;
-  margin-top: 8px;
+  box-sizing: border-box;
+  left: calc(100% + 16px);
+  max-height: calc(100% - 96px);
+  overflow: auto;
+  padding: 2px 4px 2px 0;
+  position: absolute;
+  top: 72px;
+  width: 240px;
+  z-index: 8;
 }
 .docx-gutter-section {
   margin-bottom: 12px;
@@ -203,5 +215,19 @@ function formatDate(dateStr?: string): string {
   color: #22c55e;
   font-size: 11px;
   margin-top: 4px;
+}
+
+@media (max-width: 1100px) {
+  .docx-tracked-change-gutter {
+    border-top: 1px solid #e5e7eb;
+    left: auto;
+    margin-top: 12px;
+    max-height: none;
+    overflow: visible;
+    padding: 8px 0;
+    position: static;
+    top: auto;
+    width: auto;
+  }
 }
 </style>

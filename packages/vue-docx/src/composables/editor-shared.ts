@@ -10,7 +10,7 @@ import type {
   TextRunNode,
   OoxmlPackage,
   ParagraphStyleDefinition,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import type {
   DocxDocumentTheme,
   DocxEditorSelection,
@@ -28,7 +28,7 @@ import type {
   DocxComment,
   DocxPaginationInfo,
   ParagraphLocation,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 export interface EditorCore {
   // ── core reactive refs ──────────────────────────────────────────
@@ -37,6 +37,8 @@ export interface EditorCore {
   activeTextRange: Ref<DocxTextRange | undefined>
   pendingRunStyle: Ref<TextRunNode["style"] | undefined>
   history: Ref<{ past: DocxHistorySnapshot[]; future: DocxHistorySnapshot[] }>
+  historyBudget: { maxEntries: number; maxBytes: number }
+  estimateHistorySnapshotBytes: (snapshot: DocxHistorySnapshot) => number
   status: Ref<string>
   selectedFormFieldLocation: Ref<DocxFormFieldLocation | undefined>
   documentLoadNonce: Ref<number>

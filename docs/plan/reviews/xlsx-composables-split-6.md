@@ -106,7 +106,7 @@ ls: No such file or directory   (useXlsxViewerController.ts)
 结构测试 `packages/vue-xlsx/test/structure.mjs` 从 `dist/index.js` 导入，构建的是 monolith（`src/index.ts:2` → `./composables` → monolith），测试通过仅证明 monolith 的 controller 方法表完整，不能证明拆分已生效：
 
 ```
-$ pnpm --filter @extend-ai/vue-xlsx build && node packages/vue-xlsx/test/structure.mjs
+$ pnpm --filter @arcships/vue-xlsx build && node packages/vue-xlsx/test/structure.mjs
 ... All structure checks passed.   # 验证的是 monolith，子模块是死代码
 ```
 
@@ -118,7 +118,7 @@ $ pnpm --filter @extend-ai/vue-xlsx build && node packages/vue-xlsx/test/structu
 - 代码位置：`packages/vue-xlsx/src/composables/*.ts`；`packages/vue-xlsx/src/composables.ts`
 
 ```
-$ pnpm --filter @extend-ai/vue-xlsx typecheck
+$ pnpm --filter @arcships/vue-xlsx typecheck
 > tsc --noEmit
 （exit 0，无输出）
 ```
@@ -255,11 +255,11 @@ $ ls packages/vue-xlsx/src/composables/index.ts packages/vue-xlsx/src/composable
 ls: No such file or directory   (index.ts)
 ls: No such file or directory   (useXlsxViewerController.ts)
 
-$ pnpm --filter @extend-ai/vue-xlsx typecheck
+$ pnpm --filter @arcships/vue-xlsx typecheck
 > tsc --noEmit
 （exit 0）
 
-$ pnpm --filter @extend-ai/vue-xlsx build && node packages/vue-xlsx/test/structure.mjs
+$ pnpm --filter @arcships/vue-xlsx build && node packages/vue-xlsx/test/structure.mjs
 ... All structure checks passed.   # 验证的是 monolith
 ```
 
@@ -284,4 +284,4 @@ review-5 的建议仍然适用，本次仅强调被忽略的部分：
 2. **补 controller 文件**（review-4/5 建议 2，未落实）：`composables/useXlsxViewerController.ts`，把 `useXlsxViewerController`（monolith:1899）及其 setup/return（monolith:4606-4723）移入，return 改为聚合各 `createXxxDomain(ctx)` 的产物。
 3. **补 barrel + 接线**（review-4/5 建议 3，未落实）：`composables/index.ts`，`src/index.ts` 从 `./composables`（解析到 barrel）导入。接入后 F3 死代码问题自然消除。
 4. 清理 monolith 侧的 F7 debug 日志（`composables.ts:3657,3672,3692`）。
-5. 验证：`pnpm --filter @extend-ai/vue-xlsx typecheck` + `build` 后运行 `packages/vue-xlsx/test/structure.mjs`（接入后需确认其从 `dist/index.js` 导入的 controller 方法表仍覆盖 requiredMethods）；grep 确认 monolith 内不再保留已迁出函数的本地副本、`grep -rn 'from "\./composables/' packages/vue-xlsx/src/` 有命中、`composables.ts` 行数 ≤1000 或消失。
+5. 验证：`pnpm --filter @arcships/vue-xlsx typecheck` + `build` 后运行 `packages/vue-xlsx/test/structure.mjs`（接入后需确认其从 `dist/index.js` 导入的 controller 方法表仍覆盖 requiredMethods）；grep 确认 monolith 内不再保留已迁出函数的本地副本、`grep -rn 'from "\./composables/' packages/vue-xlsx/src/` 有命中、`composables.ts` 行数 ≤1000 或消失。

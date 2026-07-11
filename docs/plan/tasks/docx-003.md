@@ -51,8 +51,8 @@ depends-on: [docx-002]
 ## verification
 
 ```bash
-pnpm --filter @extend-ai/vue-docx typecheck
-pnpm --filter @extend-ai/vue-docx build
+pnpm --filter @arcships/vue-docx typecheck
+pnpm --filter @arcships/vue-docx build
 ```
 
 结构测试：验证 controller 关键方法存在且可调用。

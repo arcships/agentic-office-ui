@@ -179,6 +179,13 @@ def wait_ready(page: Page, file_name: str, timeout: int = 30_000) -> None:
     )
 
 
+def open_details(page: Page, test_id: str) -> None:
+    details = page.locator(f'[data-testid="{test_id}"]')
+    details.wait_for(state="visible")
+    if details.get_attribute("open") is None:
+        details.locator("summary").click()
+
+
 def assert_race_evidence(evidence: BrowserEvidence, delayed_file: str) -> dict[str, object]:
     violations = evidence.violations()
     expected_aborts = [
@@ -271,6 +278,7 @@ def save_download(download: Download, attempt_dir: Path) -> dict[str, object]:
 def prepare_deferred_xlsx(page: Page, base_url: str) -> tuple[str, list[dict[str, str]]]:
     page.goto(f"{base_url}/#/xlsx-viewer", wait_until="domcontentloaded")
     wait_ready(page, "financial-model.xlsx")
+    open_details(page, "xlsx-runtime-details")
 
     page.locator('[data-testid="xlsx-read-only"]').check()
     wait_ready(page, "financial-model.xlsx")
@@ -300,6 +308,7 @@ def docx_slow_latest(page: Page, base_url: str, attempt_dir: Path) -> dict[str, 
     before = event_count(base_url, "delay-start", slow)
     page.goto(f"{base_url}/#/docx-viewer", wait_until="domcontentloaded")
     page.locator('[data-testid="docx-sample-select"]').wait_for(state="visible")
+    open_details(page, "docx-runtime-details")
     wait_for_event_count(base_url, "delay-start", slow, before)
     finished = event_count(base_url, "delay-finished", slow)
     page.locator('[data-testid="docx-sample-select"]').select_option("invoice-table.docx")
@@ -351,7 +360,7 @@ def docx_double_export(page: Page, base_url: str, attempt_dir: Path) -> dict[str
     downloads: list[Download] = []
     page.on("download", lambda download: downloads.append(download))
     page.goto(f"{base_url}/#/docx-editor", wait_until="domcontentloaded")
-    wait_ready(page, "verification-test.docx")
+    wait_ready(page, "quarterly-planning-brief.docx")
 
     dispatch = page.locator('[data-testid="editor-export"]').evaluate(
         """button => {
@@ -400,7 +409,7 @@ def docx_export_then_route(page: Page, base_url: str, attempt_dir: Path) -> dict
     downloads: list[Download] = []
     page.on("download", lambda download: downloads.append(download))
     page.goto(f"{base_url}/#/docx-editor", wait_until="domcontentloaded")
-    wait_ready(page, "verification-test.docx")
+    wait_ready(page, "quarterly-planning-brief.docx")
 
     dispatch = page.locator('[data-testid="editor-export"]').evaluate(
         """button => {
@@ -451,6 +460,7 @@ def xlsx_slow_latest(page: Page, base_url: str, attempt_dir: Path) -> dict[str, 
     before = event_count(base_url, "delay-start", slow)
     page.goto(f"{base_url}/#/xlsx-viewer", wait_until="domcontentloaded")
     page.locator('[data-testid="xlsx-sample-select"]').wait_for(state="visible")
+    open_details(page, "xlsx-runtime-details")
     wait_for_event_count(base_url, "delay-start", slow, before)
     finished = event_count(base_url, "delay-finished", slow)
     page.locator('[data-testid="xlsx-sample-select"]').select_option("sales-table.xlsx")
@@ -566,7 +576,7 @@ def xlsx_deferred_worker_unmount(page: Page, base_url: str, attempt_dir: Path) -
     diagnostics_before_route = public_diagnostics(page, "xlsx-diagnostics")
 
     page.evaluate("location.hash = '#/docx-editor'")
-    wait_ready(page, "verification-test.docx")
+    wait_ready(page, "quarterly-planning-brief.docx")
     page.wait_for_function(
         """() => window.__p1ResourceProbe.activeWorkers === 0 &&
           window.__p1ResourceProbe.activeObjectUrls === 0""",

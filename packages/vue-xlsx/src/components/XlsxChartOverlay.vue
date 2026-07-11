@@ -1,9 +1,15 @@
 <template>
-  <div class="xlsx-chart-overlay">
+  <div
+    class="xlsx-chart-overlay"
+    data-testid="xlsx-chart-overlay"
+    :data-state="controller.isChartsLoading ? 'loading' : 'ready'"
+    :data-chart-count="chartItems.length"
+  >
     <div
       v-for="item in chartItems"
       :key="item.chart.id"
       class="xlsx-chart-overlay__item"
+      data-testid="xlsx-chart-item"
       :class="{
         'xlsx-chart-overlay__item--selected': item.chart.id === selectedChartId,
       }"
@@ -34,14 +40,16 @@
 
 <script setup lang="ts">
 import { computed, type CSSProperties } from "vue";
-import type { XlsxViewerController, XlsxChart, XlsxChartElementSelection, XlsxImageRect, XlsxImageAnchor } from "@extend-ai/xlsx-core";
-import { emuToPixels } from "@extend-ai/xlsx-core";
-import { MemoChartSvg } from "../render";
-import type { ChartRendererPalette } from "../render";
+import type { XlsxViewerController, XlsxChart, XlsxChartElementSelection, XlsxImageRect, XlsxImageAnchor, XlsxSheetData } from "@arcships/xlsx-core";
+import { anchorToAbsoluteRect, emuToPixels } from "@arcships/xlsx-core";
+import { MemoChartSvg } from "../optional/lazy-renderers";
+import type { ChartRendererPalette } from "../render/chart-types";
 
 const props = defineProps<{
   controller: XlsxViewerController;
   isDark?: boolean;
+  scrollLeft?: number;
+  scrollTop?: number;
 }>();
 
 const selectedChartId = computed(() => props.controller.selectedChartId);
@@ -59,24 +67,27 @@ interface ChartItem {
   style: CSSProperties;
 }
 
-function resolveAnchorRect(anchor: XlsxImageAnchor): XlsxImageRect | null {
-  if (anchor.kind === "absolute") {
-    return {
-      left: emuToPixels(anchor.positionEmu.x),
-      top: emuToPixels(anchor.positionEmu.y),
-      width: emuToPixels(anchor.sizeEmu.cx),
-      height: emuToPixels(anchor.sizeEmu.cy),
-    };
-  }
-  if (anchor.kind === "one-cell") {
-    return {
-      left: emuToPixels(anchor.from.colOffsetEmu),
-      top: emuToPixels(anchor.from.rowOffsetEmu),
-      width: emuToPixels(anchor.sizeEmu.cx),
-      height: emuToPixels(anchor.sizeEmu.cy),
-    };
-  }
-  return null;
+function frozenExtent(sheet: XlsxSheetData | null, axis: "column" | "row", zoomScale: number): number {
+  if (!sheet?.freezePanes) return 0;
+  const limit = axis === "column" ? sheet.freezePanes.col : sheet.freezePanes.row;
+  const indices = axis === "column" ? sheet.visibleCols : sheet.visibleRows;
+  const sizes = axis === "column" ? sheet.colWidths : sheet.rowHeights;
+  const fallback = axis === "column" ? sheet.defaultColWidthPx : sheet.defaultRowHeightPx;
+  const zoom = Math.max(0.1, zoomScale / 100);
+  return indices.reduce((total, actualIndex, displayIndex) =>
+    actualIndex < limit ? total + (sizes[displayIndex] || fallback) * zoom : total,
+  0);
+}
+
+function resolveAnchorRect(anchor: XlsxImageAnchor, sheet: XlsxSheetData | null, zoomScale: number): XlsxImageRect {
+  const rect = anchorToAbsoluteRect(anchor, sheet);
+  const zoom = Math.max(0.1, zoomScale / 100);
+  return {
+    left: emuToPixels(rect.x) * zoom,
+    top: emuToPixels(rect.y) * zoom,
+    width: Math.max(1, emuToPixels(rect.cx) * zoom),
+    height: Math.max(1, emuToPixels(rect.cy) * zoom),
+  };
 }
 
 const chartItems = computed<ChartItem[]>(() => {
@@ -84,21 +95,18 @@ const chartItems = computed<ChartItem[]>(() => {
   return charts
     .filter((chart) => chart.anchor)
     .map((chart) => {
-      const rect = resolveAnchorRect(chart.anchor);
-      if (!rect) {
-        return {
-          chart,
-          rect: { left: 0, top: 0, width: 200, height: 200 },
-          style: { display: "none" } as CSSProperties,
-        };
-      }
+      const rect = resolveAnchorRect(chart.anchor, props.controller.activeSheet, props.controller.zoomScale);
       const isSelected = chart.id === selectedChartId.value;
+      const frozenWidth = frozenExtent(props.controller.activeSheet, "column", props.controller.zoomScale);
+      const frozenHeight = frozenExtent(props.controller.activeSheet, "row", props.controller.zoomScale);
+      const scrollX = rect.left < frozenWidth ? 0 : props.scrollLeft ?? 0;
+      const scrollY = rect.top < frozenHeight ? 0 : props.scrollTop ?? 0;
       return {
         chart,
         rect,
         style: {
-          left: `${rect.left + 48}px`,
-          top: `${rect.top + 24}px`,
+          left: `${rect.left + 48 - scrollX}px`,
+          top: `${rect.top + 24 - scrollY}px`,
           width: `${rect.width}px`,
           height: `${rect.height}px`,
           position: "absolute",

@@ -18,7 +18,7 @@ No helpers source has landed since `a909c27`. HEAD advanced to `552b7bf` (other 
 
 ## Summary
 
-No helpers source has landed since `a909c27` (review #3). This review independently re-ran the full check matrix against the current tree: typecheck passes for `@extend-ai/docx-core` and the full 6-package workspace; `madge --circular` reports no cycles (37 files processed); all imports relative with zero `@extend-ai/*` package refs; no React imports; no residual stub/mock/fake/TODO/FIXME. The blocking finding F1 is unchanged across six reviews — 15 of 40 planned modules remain absent, including the pagination-plan trio, pretext-build/measure, table-height, tracked-changes, and selection helpers that carry "必须复刻" alignment obligations (#22, #23, #32) and are prerequisites for the downstream `docx-composables` task (still a stub).
+No helpers source has landed since `a909c27` (review #3). This review independently re-ran the full check matrix against the current tree: typecheck passes for `@arcships/docx-core` and the full 6-package workspace; `madge --circular` reports no cycles (37 files processed); all imports relative with zero `@extend-ai/*` package refs; no React imports; no residual stub/mock/fake/TODO/FIXME. The blocking finding F1 is unchanged across six reviews — 15 of 40 planned modules remain absent, including the pagination-plan trio, pretext-build/measure, table-height, tracked-changes, and selection helpers that carry "必须复刻" alignment obligations (#22, #23, #32) and are prerequisites for the downstream `docx-composables` task (still a stub).
 
 The quality of what *is* delivered remains high and the dependency graph is clean, but the task is ~65% complete by file count (26 of 40) and the missing modules are on the critical path. No progress was made on the blocking finding across the last three review cycles (#4, #5, #6).
 
@@ -96,7 +96,7 @@ The quality of what *is* delivered remains high and the dependency graph is clea
 | Check | Result | Detail |
 |---|---|---|
 | No new source since #3 | ✅ confirmed | `git log --oneline -- packages/docx-core/src/editor/helpers/` shows last source commit is `a909c27`; no helpers commits in `a909c27..HEAD`. Re-verification run against current HEAD `552b7bf`, working tree clean. |
-| Typecheck (docx-core) | ✅ Pass | `pnpm --filter @extend-ai/docx-core typecheck` exits 0. |
+| Typecheck (docx-core) | ✅ Pass | `pnpm --filter @arcships/docx-core typecheck` exits 0. |
 | Typecheck (full workspace) | ✅ Pass | `pnpm typecheck` (6 packages: docx-core, xlsx-core, vue-extend, vue-docx, vue-xlsx) exits 0 — no ripple. |
 | Circular deps | ✅ Pass | `madge --circular --extensions ts packages/docx-core/src/editor/helpers/index.ts` → "No circular dependency found!" (37 files processed). Intra-helper import graph is acyclic. |
 | Import paths | ✅ Pass | All relative (`./` intra-helper, `../../engine/*` / `../../viewer/*` / `../../layout/*` cross-layer). Zero `@extend-ai/*` package refs in source. |

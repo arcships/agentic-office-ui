@@ -5,8 +5,8 @@
 // Parses a .docx ArrayBuffer into a DocModel via the docx-import pipeline.
 
 import { ref, watchEffect, onScopeDispose } from "vue"
-import { createDocxRuntime } from "@extend-ai/docx-core"
-import type { DocModel } from "@extend-ai/docx-core"
+import { createDocxRuntime } from "@arcships/docx-core"
+import type { DocModel } from "@arcships/docx-core"
 
 export interface UseDocxModelState {
   model?: DocModel

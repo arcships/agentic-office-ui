@@ -1,29 +1,23 @@
 import { createApp } from "vue"
 import { createRouter, createWebHashHistory } from "vue-router"
 import App from "./App.vue"
-import "@extend-ai/vue-docx/style.css"
-import "@extend-ai/vue-xlsx/style.css"
-import "@extend-ai/vue-extend/style.css"
-import HomePage from "./pages/HomePage.vue"
-import DocxViewerPage from "./pages/DocxViewerPage.vue"
-import DocxEditorPage from "./pages/DocxEditorPage.vue"
-import XlsxViewerPage from "./pages/XlsxViewerPage.vue"
-import PdfViewerPage from "./pages/PdfViewerPage.vue"
-import ComponentsPage from "./pages/ComponentsPage.vue"
-import RuntimeIsolationPage from "./pages/RuntimeIsolationPage.vue"
-import DocxParityPage from "./pages/DocxParityPage.vue"
+import "@arcships/vue-docx/style.css"
+import "@arcships/vue-xlsx/style.css"
+import "@arcships/vue-extend/style.css"
 
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: "/", component: HomePage },
-    { path: "/docx-viewer", component: DocxViewerPage },
-    { path: "/docx-editor", component: DocxEditorPage },
-    { path: "/xlsx-viewer", component: XlsxViewerPage },
-    { path: "/pdf-viewer", component: PdfViewerPage },
-    { path: "/components", component: ComponentsPage },
-    { path: "/runtime-isolation", component: RuntimeIsolationPage },
-    { path: "/docx-parity", component: DocxParityPage },
+    { path: "/", component: () => import("./pages/HomePage.vue") },
+    { path: "/docx-viewer", component: () => import("./pages/DocxViewerPage.vue") },
+    { path: "/docx-editor", component: () => import("./pages/DocxEditorPage.vue") },
+    { path: "/xlsx-viewer", component: () => import("./pages/XlsxViewerPage.vue") },
+    { path: "/pdf-viewer", component: () => import("./pages/PdfViewerPage.vue") },
+    { path: "/components", component: () => import("./pages/ComponentsPage.vue") },
+    { path: "/runtime-isolation", component: () => import("./pages/RuntimeIsolationPage.vue") },
+    { path: "/docx-parity", component: () => import("./pages/DocxParityPage.vue") },
+    { path: "/runtime-limits", component: () => import("./pages/RuntimeLimitsPage.vue") },
+    { path: "/runtime-worker", component: () => import("./pages/RuntimeWorkerPage.vue") },
   ],
 })
 

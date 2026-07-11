@@ -13,11 +13,26 @@ async function importFromDemo(specifier) {
 }
 
 const vue = await importFromDemo("vue");
-const { DocxViewer } = await importFromDemo("@extend-ai/vue-docx");
-const { XlsxViewer } = await importFromDemo("@extend-ai/vue-xlsx");
+const { DocxViewer } = await importFromDemo("@arcships/vue-docx");
+const { XlsxViewer } = await importFromDemo("@arcships/vue-xlsx");
 
 function createHostNode(type, text = "") {
-  return { type, text, props: {}, children: [], parent: null };
+  const listeners = new Map();
+  return {
+    type,
+    text,
+    props: {},
+    children: [],
+    parent: null,
+    addEventListener(event, listener) {
+      const entries = listeners.get(event) ?? new Set();
+      entries.add(listener);
+      listeners.set(event, entries);
+    },
+    removeEventListener(event, listener) {
+      listeners.get(event)?.delete(listener);
+    },
+  };
 }
 
 function insertHostNode(node, parent, anchor = null) {

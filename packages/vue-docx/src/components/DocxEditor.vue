@@ -4,28 +4,51 @@
     <DocxToolbar
       v-if="showToolbar"
       :controller="controller"
+      :zoom="zoomPercent"
+      :read-only="!editable"
+      :show-thumbnails="thumbnailPanelVisible"
+      :current-page="currentPage"
+      :total-pages="totalPages"
+      @update:zoom="zoomPercent = $event"
+      @toggle-thumbnails="thumbnailPanelVisible = !thumbnailPanelVisible"
+      @select-page="onSelectPage($event - 1)"
     />
 
     <!-- Editor body (thumbnails + viewer root) -->
     <div class="docx-editor-body">
       <!-- Thumbnail panel -->
       <DocxThumbnailPanel
-        v-if="showThumbnails"
+        v-if="thumbnailPanelVisible && !pageLimitError"
         :controller="controller"
         :current-page="currentPage"
         :total-pages="totalPages"
+        :show-toggle="false"
         @select-page="onSelectPage"
       />
 
       <!-- Viewer root (main scrollable area with page surfaces) -->
       <DocxDocumentSurface
+        v-if="!pageLimitError"
         ref="viewerRootRef"
         :model="renderedModel"
         :controller="controller"
         :editable="editable"
+        :zoom-scale="zoomPercent"
         @page-count-change="onPageCountChange"
         @visible-page-range="onVisiblePageRange"
       />
+      <div
+        v-else
+        class="docx-editor-limit-error"
+        data-testid="editor-load-error"
+        :data-error-code="pageLimitError.code"
+        :data-error-phase="pageLimitError.phase"
+        :data-error-limit="pageLimitError.limit"
+        :data-error-actual="pageLimitError.actual"
+        :data-error-allowed="pageLimitError.allowed"
+      >
+        {{ pageLimitError.message }}
+      </div>
     </div>
 
     <!-- Context menu -->
@@ -62,7 +85,9 @@ import { ref, computed, provide, watch, onMounted, onUnmounted } from "vue"
 import type {
   DocxEditorController,
   DocxContextMenuContext,
-} from "@extend-ai/docx-core"
+  DocxRuntime,
+} from "@arcships/docx-core"
+import { createDocxRuntime, DocxImportError } from "@arcships/docx-core"
 import { useDocxEditor } from "../composables/useDocxEditor"
 import DocxDocumentSurface from "./DocxDocumentSurface.vue"
 import DocxToolbar from "./DocxToolbar.vue"
@@ -75,14 +100,19 @@ const props = withDefaults(
   defineProps<{
     editor?: DocxEditorController
     file?: ArrayBuffer
-    model?: import("@extend-ai/docx-core").DocModel
+    model?: import("@arcships/docx-core").DocModel
     className?: string
     editable?: boolean
     showToolbar?: boolean
     showThumbnails?: boolean
+    runtime?: DocxRuntime
   }>(),
   { editable: true, showToolbar: true, showThumbnails: false }
 )
+
+const emit = defineEmits<{
+  (event: "load-error", error: Error): void
+}>()
 
 // ── Controller ─────────────────────────────────────────────────────
 const internalController = !props.editor
@@ -96,6 +126,14 @@ const renderedModel = computed(() =>
   !props.editor && !props.editable && props.model
     ? props.model
     : controller.model
+)
+const ownedLimitRuntime = createDocxRuntime()
+const effectiveRuntime = computed(() => props.runtime ?? ownedLimitRuntime)
+const pageLimitError = ref<DocxImportError | undefined>()
+
+watch(
+  () => [renderedModel.value, props.runtime] as const,
+  () => { pageLimitError.value = undefined },
 )
 
 // Provide controller to all child components
@@ -126,8 +164,30 @@ const viewerRootRef = ref<InstanceType<typeof DocxDocumentSurface> | undefined>(
 // ── Page tracking ──────────────────────────────────────────────────
 const currentPage = ref(1)
 const totalPages = ref(1)
+const zoomPercent = ref(100)
+const thumbnailPanelVisible = ref(props.showThumbnails)
+
+watch(() => props.showThumbnails, (visible) => { thumbnailPanelVisible.value = visible })
 
 function onPageCountChange(count: number): void {
+  const allowed = effectiveRuntime.value.limits?.maxDocxPages
+  if (allowed !== undefined && count > allowed) {
+    if (!pageLimitError.value) {
+      const normalized = new DocxImportError(
+        "LIMIT_EXCEEDED",
+        `DOCX 页数 ${count} 超过允许值 ${allowed}。`,
+        {
+          phase: "layout",
+          limit: "maxDocxPages",
+          actual: count,
+          allowed,
+        },
+      )
+      pageLimitError.value = normalized
+      emit("load-error", normalized)
+    }
+    return
+  }
   totalPages.value = count
   controller.syncPaginationInfo({ currentPage: currentPage.value, totalPages: count })
 }
@@ -229,6 +289,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   detachEditingListeners()
+  ownedLimitRuntime.dispose()
   isMounted = false
 })
 </script>
@@ -245,6 +306,14 @@ onUnmounted(() => {
   display: flex;
   flex: 1;
   overflow: hidden;
+}
+.docx-editor-limit-error {
+  align-items: center;
+  color: #b91c1c;
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  padding: 24px;
 }
 .docx-editor-statusbar {
   display: flex;

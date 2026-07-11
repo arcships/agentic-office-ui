@@ -128,7 +128,7 @@ Status: **blocked**
 
 | 检查项 | 结果 |
 |---|---|
-| composable → docx-core 使用 `@extend-ai/docx-core` (workspace 包名) | ✅ 正确 |
+| composable → docx-core 使用 `@arcships/docx-core` (workspace 包名) | ✅ 正确 |
 | composable 间引用使用相对路径 (`./page-surface-registry`) | ✅ 正确 |
 | 无绝对路径引用 | ✅ |
 
@@ -136,8 +136,8 @@ Status: **blocked**
 
 | 包 | 命令 | 结果 |
 |---|---|---|
-| `@extend-ai/docx-core` | `pnpm --filter @extend-ai/docx-core typecheck` | ✅ 通过 |
-| `@extend-ai/vue-docx` | `pnpm --filter @extend-ai/vue-docx typecheck` | ✅ 通过 |
+| `@arcships/docx-core` | `pnpm --filter @arcships/docx-core typecheck` | ✅ 通过 |
+| `@arcships/vue-docx` | `pnpm --filter @arcships/vue-docx typecheck` | ✅ 通过 |
 
 ## 六、存根/延期代码汇总
 

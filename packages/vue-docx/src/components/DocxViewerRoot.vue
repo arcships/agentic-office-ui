@@ -2,6 +2,7 @@
   <div
     ref="scrollContainerRef"
     class="docx-viewer-root"
+    :data-docx-page-count="pageCount"
     :style="rootStyle"
     @scroll.passive="onScroll"
     @dragover.prevent="onDragOver"
@@ -16,25 +17,29 @@
         :data-docx-page-index="entry.pageIndex"
         :style="pageWrapperStyle(entry)"
       >
-        <DocxPageSurface
-          :page-index="entry.pageIndex"
-          :page-layout="entry.pageLayout"
-          :page-node-segments="entry.pageNodeSegments"
-          :model="model"
-          :controller="controller"
-          :editable="editable"
-          :page-width-px="entry.pageWidthPx"
-          :page-content-width-px="entry.pageContentWidthPx"
-          :page-number="entry.pageNumber"
-          :total-pages="pageCount"
-          :page-number-format="entry.pageNumberFormat"
-          :header-section="entry.headerSection"
-          :footer-section="entry.footerSection"
-          :tracked-changes-enabled="trackedChangesEnabled"
-          :comments-enabled="commentsEnabled"
-          :theme="theme"
-          @measure="onPageMeasure(entry.pageIndex, $event)"
-        />
+        <div :style="pageContentStyle(entry)">
+          <DocxPageSurface
+            :page-index="entry.pageIndex"
+            :page-layout="entry.pageLayout"
+            :page-node-segments="entry.pageNodeSegments"
+            :model="model"
+            :controller="controller"
+            :editable="editable"
+            :page-width-px="entry.pageWidthPx"
+            :page-content-width-px="entry.pageContentWidthPx"
+            :page-number="entry.pageNumber"
+            :total-pages="pageCount"
+            :page-number-format="entry.pageNumberFormat"
+            :header-section="entry.headerSection"
+            :footer-section="entry.footerSection"
+            :tracked-changes-enabled="trackedChangesEnabled"
+            :comments-enabled="commentsEnabled"
+            :tracked-changes="trackedChanges"
+            :comments="comments"
+            :theme="theme"
+            @measure="onPageMeasure(entry.pageIndex, $event)"
+          />
+        </div>
       </div>
     </div>
   </div>
@@ -44,15 +49,19 @@
 import { ref, computed, onMounted, onUnmounted, watch } from "vue"
 import type {
   DocModel,
+  DocxComment,
   DocxDocumentTheme,
   DocxEditorController,
+  DocxTrackedChange,
   DocumentPageNodeSegment,
   FooterSection,
   HeaderSection,
   LayoutOptions,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import {
   buildLayoutSnapshot,
+  collectCommentsFromModel,
+  collectTrackedChangesFromModel,
   parseSectionLayout,
   parseSectionPageNumberFormat,
   parseSectionPageNumberStartOverride,
@@ -62,7 +71,7 @@ import {
   selectSectionVariantForPage,
   DEFAULT_DOC_PAGE_WIDTH,
   DEFAULT_DOC_PAGE_HEIGHT,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import DocxPageSurface from "./DocxPageSurface.vue"
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -77,6 +86,9 @@ export interface DocxViewerRootProps {
   editable?: boolean
   layoutOptions?: LayoutOptions
   theme?: DocxDocumentTheme
+  zoomScale?: number
+  showTrackedChanges?: boolean
+  showComments?: boolean
 }
 
 interface VisiblePageEntry {
@@ -100,7 +112,7 @@ interface PageMeasureEvent {
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
   defineProps<DocxViewerRootProps>(),
-  { editable: false }
+  { editable: false, zoomScale: 100 }
 )
 
 const emit = defineEmits<{
@@ -147,6 +159,7 @@ const paginationPlan = computed(() => {
 const pages = computed(() => paginationPlan.value.pages)
 const pageNodeSegments = computed(() => paginationPlan.value.pageNodeSegments)
 const pageCount = computed(() => pages.value.length)
+const zoomFactor = computed(() => Math.min(2, Math.max(0.5, props.zoomScale / 100)))
 
 watch(pageCount, (count) => emit("pageCountChange", count), { immediate: true })
 
@@ -213,8 +226,14 @@ const pagePresentations = computed(() => {
 
 // ── Theme / feature flags ──────────────────────────────────────────
 const theme = computed(() => props.theme ?? props.controller?.documentTheme ?? "light")
-const trackedChangesEnabled = computed(() => props.controller?.showTrackedChanges ?? false)
-const commentsEnabled = computed(() => props.controller?.showComments ?? false)
+const trackedChangesEnabled = computed(() => props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false)
+const commentsEnabled = computed(() => props.showComments ?? props.controller?.showComments ?? false)
+const trackedChanges = computed<readonly DocxTrackedChange[]>(() =>
+  props.controller?.trackedChanges ?? (trackedChangesEnabled.value ? collectTrackedChangesFromModel(props.model) : [])
+)
+const comments = computed<readonly DocxComment[]>(() =>
+  props.controller?.comments ?? (commentsEnabled.value ? collectCommentsFromModel(props.model) : [])
+)
 
 // ── Page heights ───────────────────────────────────────────────────
 function getPageHeight(pageIndex: number): number {
@@ -231,7 +250,7 @@ const pageOffsets = computed(() => {
   let offset = 0
   for (let i = 0; i < pageCount.value; i++) {
     offsets.push(offset)
-    offset += getPageHeight(i) + DOC_PAGE_BREAK_GAP
+    offset += getPageHeight(i) * zoomFactor.value + DOC_PAGE_BREAK_GAP
   }
   return offsets
 })
@@ -239,7 +258,7 @@ const pageOffsets = computed(() => {
 const totalHeightPx = computed(() => {
   if (pageCount.value === 0) return 0
   const lastOffset = pageOffsets.value[pageOffsets.value.length - 1]
-  return lastOffset + getPageHeight(pageCount.value - 1) + DOC_PAGE_BREAK_GAP
+  return lastOffset + getPageHeight(pageCount.value - 1) * zoomFactor.value + DOC_PAGE_BREAK_GAP
 })
 
 // ── Visible page calculation ───────────────────────────────────────
@@ -252,7 +271,7 @@ const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
   const entries: VisiblePageEntry[] = []
   for (let i = 0; i < pageCount.value; i++) {
     const pageTop = pageOffsets.value[i]
-    const pageHeight = getPageHeight(i)
+    const pageHeight = getPageHeight(i) * zoomFactor.value
     const pageBottom = pageTop + pageHeight
 
     if (pageBottom >= viewportStart && pageTop <= viewportEnd) {
@@ -287,14 +306,18 @@ const rootStyle = computed(() => ({
   width: "100%",
   minWidth: "0",
   overflowY: "auto" as const,
-  overflowX: "hidden" as const,
-  background: "#f3f4f6",
+  overflowX: "auto" as const,
+  background: theme.value === "dark" ? "#111827" : "#f4f4f5",
   padding: "24px 0",
   outline: isDragOver.value ? "3px dashed #2563eb" : "none",
 }))
 
 const spacerStyle = computed(() => ({
   height: `${Math.max(0, totalHeightPx.value)}px`,
+  minWidth: `${Math.max(
+    0,
+    ...pagePresentations.value.map((entry) => entry.pageLayout.pageWidthPx * zoomFactor.value + 48)
+  )}px`,
   position: "relative" as const,
   width: "100%",
 }))
@@ -305,6 +328,16 @@ function pageWrapperStyle(entry: VisiblePageEntry): Record<string, string | numb
     top: `${entry.topPx}px`,
     left: "50%",
     transform: "translateX(-50%)",
+    height: `${entry.heightPx}px`,
+    width: `${entry.pageWidthPx * zoomFactor.value}px`,
+  }
+}
+
+function pageContentStyle(entry: VisiblePageEntry): Record<string, string> {
+  return {
+    height: `${entry.pageLayout.pageHeightPx}px`,
+    transform: `scale(${zoomFactor.value})`,
+    transformOrigin: "left top",
     width: `${entry.pageWidthPx}px`,
   }
 }

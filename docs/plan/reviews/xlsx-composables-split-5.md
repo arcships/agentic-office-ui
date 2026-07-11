@@ -115,7 +115,7 @@ review-4 F4 的两处编译错误已修复：
 - `workbook-state.ts:27` 补齐了 `type XlsxThemePalette` 的 import。
 
 ```
-$ pnpm --filter @extend-ai/vue-xlsx typecheck
+$ pnpm --filter @arcships/vue-xlsx typecheck
 > tsc --noEmit
 （exit 0，无输出）
 ```
@@ -253,7 +253,7 @@ $ ls packages/vue-xlsx/src/composables/index.ts packages/vue-xlsx/src/composable
 ls: No such file or directory   (index.ts)
 ls: No such file or directory   (useXlsxViewerController.ts)
 
-$ pnpm --filter @extend-ai/vue-xlsx typecheck
+$ pnpm --filter @arcships/vue-xlsx typecheck
 > tsc --noEmit
 （exit 0）
 ```
@@ -278,4 +278,4 @@ review-4 的建议仍然适用，本次仅强调被忽略的部分：
 2. **补 controller 文件**（review-4 建议 2，未落实）：`composables/useXlsxViewerController.ts`，把 `useXlsxViewerController`（monolith:1899）及其 setup/return（monolith:4606-4723）移入，return 改为聚合各 `createXxxDomain(ctx)` 的产物。
 3. **补 barrel + 接线**（review-4 建议 3，未落实）：`composables/index.ts`，`src/index.ts` 从 `./composables`（解析到 barrel）导入。接入后 F3 死代码问题自然消除。
 4. 清理 F6（`navigation.ts` 的 barrel/上下文职责下沉）、F7（debug 日志）、F8（dead code）。
-5. 验证：`pnpm --filter @extend-ai/vue-xlsx typecheck` + `build` 后运行 `packages/vue-xlsx/test/structure.mjs`（注意：该测试目前从 `dist/index.js` 导入，构建的是 monolith，接入后需确认其仍覆盖 controller 方法表）；grep 确认 monolith 内不再保留已迁出函数的本地副本、`grep -rn 'from "\./composables/' packages/vue-xlsx/src/` 有命中。
+5. 验证：`pnpm --filter @arcships/vue-xlsx typecheck` + `build` 后运行 `packages/vue-xlsx/test/structure.mjs`（注意：该测试目前从 `dist/index.js` 导入，构建的是 monolith，接入后需确认其仍覆盖 controller 方法表）；grep 确认 monolith 内不再保留已迁出函数的本地副本、`grep -rn 'from "\./composables/' packages/vue-xlsx/src/` 有命中。

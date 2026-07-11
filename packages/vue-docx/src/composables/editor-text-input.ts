@@ -2,8 +2,8 @@
 //
 // Extracted from useDocxEditor.ts.
 
-import type { DocModel, ParagraphNode, TextRunNode } from "@extend-ai/docx-core"
-import type { DocxTextRange, ParagraphLocation } from "@extend-ai/docx-core"
+import type { DocModel, ParagraphNode, TextRunNode } from "@arcships/docx-core"
+import type { DocxTextRange, ParagraphLocation } from "@arcships/docx-core"
 import {
   cloneDocModel,
   updateParagraphText,
@@ -40,8 +40,8 @@ import {
   listPrefixLength,
   stripListPrefix,
   ORDERED_LIST_PREFIX_CAPTURE_PATTERN,
-} from "@extend-ai/docx-core"
-import type { DocxListType } from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
+import type { DocxListType } from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
 
 export function createEditorTextInput(

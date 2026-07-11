@@ -5,7 +5,7 @@ import type {
   XlsxViewerController,
   XlsxViewerThumbnails,
   XlsxCellRange,
-} from "@extend-ai/xlsx-core";
+} from "@arcships/xlsx-core";
 
 export interface UseXlsxViewerThumbnailsOptions {
   includeHeaders?: boolean;
@@ -75,8 +75,6 @@ export function useXlsxViewerThumbnails(
     const sheets = ctrl.sheets;
 
     return sheets.map((sheet, sheetIndex) => {
-      const worksheet = workbook?.getSheet(sheet.workbookSheetIndex) ?? null;
-
       const minRow = sheet.minUsedRow ?? 0;
       const maxRow = Math.max(sheet.maxUsedRow ?? -1, 0);
       const minCol = sheet.minUsedCol ?? 0;
@@ -84,32 +82,47 @@ export function useXlsxViewerThumbnails(
 
       const previewRows = Math.min(maxRow - minRow + 3, THUMBNAIL_MAX_ROWS);
       const previewCols = Math.min(maxCol - minCol + 3, THUMBNAIL_MAX_COLS);
+      const { cellValues, colWidths, rowHeights, totalColWidth, totalRowHeight } = (() => {
+        const worksheet = workbook?.getSheet(sheet.workbookSheetIndex) ?? null;
+        try {
+          const colWidths: number[] = [];
+          let totalColWidth = 0;
+          for (let c = 0; c < previewCols; c++) {
+            const actualCol = minCol + c;
+            const rawWidth = worksheet?.getColumnWidth(actualCol);
+            const width = rawWidth !== undefined && rawWidth !== null
+              ? Math.max(rawWidth, DEFAULT_COL_WIDTH / 2)
+              : DEFAULT_COL_WIDTH;
+            colWidths.push(width);
+            totalColWidth += width;
+          }
 
-      const colWidths: number[] = [];
-      let totalColWidth = 0;
-      for (let c = 0; c < previewCols; c++) {
-        const actualCol = minCol + c;
-        let w = DEFAULT_COL_WIDTH;
-        if (worksheet) {
-          const cw = worksheet.getColumnWidth(actualCol);
-          if (cw !== undefined && cw !== null) w = Math.max(cw, DEFAULT_COL_WIDTH / 2);
-        }
-        colWidths.push(w);
-        totalColWidth += w;
-      }
+          const rowHeights: number[] = [];
+          let totalRowHeight = 0;
+          for (let r = 0; r < previewRows; r++) {
+            const actualRow = minRow + r;
+            const rawHeight = worksheet?.getRowHeight(actualRow);
+            const height = rawHeight !== undefined && rawHeight !== null
+              ? Math.max(rawHeight, DEFAULT_ROW_HEIGHT / 1.5)
+              : DEFAULT_ROW_HEIGHT;
+            rowHeights.push(height);
+            totalRowHeight += height;
+          }
 
-      const rowHeights: number[] = [];
-      let totalRowHeight = 0;
-      for (let r = 0; r < previewRows; r++) {
-        const actualRow = minRow + r;
-        let h = DEFAULT_ROW_HEIGHT;
-        if (worksheet) {
-          const rh = worksheet.getRowHeight(actualRow);
-          if (rh !== undefined && rh !== null) h = Math.max(rh, DEFAULT_ROW_HEIGHT / 1.5);
+          const cellValues = Array.from({ length: previewRows }, (_, rowOffset) =>
+            Array.from({ length: previewCols }, (_, colOffset) => {
+              const formatted = worksheet?.getFormattedValueAt(
+                minRow + rowOffset,
+                minCol + colOffset
+              );
+              return formatted != null ? String(formatted) : "";
+            })
+          );
+          return { cellValues, colWidths, rowHeights, totalColWidth, totalRowHeight };
+        } finally {
+          worksheet?.free();
         }
-        rowHeights.push(h);
-        totalRowHeight += h;
-      }
+      })();
 
       const headerHeight = includeHeaders ? HEADER_HEIGHT : 0;
       const rowHeaderWidth = includeHeaders ? ROW_HEADER_WIDTH : 0;
@@ -200,22 +213,19 @@ export function useXlsxViewerThumbnails(
         context.font = "8px sans-serif";
         context.textAlign = "left";
         context.textBaseline = "top";
-        if (worksheet) {
-          let ry = headerHeight;
-          for (let r = 0; r < previewRows; r++) {
-            let cx = rowHeaderWidth;
-            for (let c = 0; c < previewCols; c++) {
-              const formatted = worksheet.getFormattedValueAt(minRow + r, minCol + c);
-              const value = formatted != null ? String(formatted) : "";
-              if (value) {
-                const maxW = colWidths[c] - 4;
-                const display = value.length > 15 ? value.slice(0, 14) + "…" : value;
-                context.fillText(display, cx + 2, ry + 2, maxW);
-              }
-              cx += colWidths[c];
+        let ry = headerHeight;
+        for (let r = 0; r < previewRows; r++) {
+          let cx = rowHeaderWidth;
+          for (let c = 0; c < previewCols; c++) {
+            const value = cellValues[r]?.[c] ?? "";
+            if (value) {
+              const maxW = colWidths[c] - 4;
+              const display = value.length > 15 ? value.slice(0, 14) + "…" : value;
+              context.fillText(display, cx + 2, ry + 2, maxW);
             }
-            ry += rowHeights[r];
+            cx += colWidths[c];
           }
+          ry += rowHeights[r];
         }
 
         return true;

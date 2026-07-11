@@ -3,8 +3,8 @@ import type {
   XlsxCellAddress,
   XlsxCellRange,
   XlsxCellStyleInput
-} from "@extend-ai/xlsx-core";
-import { loadWorkbookChartAssets } from "@extend-ai/xlsx-core";
+} from "@arcships/xlsx-core";
+import { loadWorkbookChartAssets } from "@arcships/xlsx-core";
 import { cellAddressToA1, normalizeRange, rangeContainsCell, rangeToA1 } from "./selection";
 import {
   applyCellMutationState,
@@ -281,8 +281,15 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
         if (sourceFormula) {
           worksheet.setFormula(cellAddressToA1(targetCell), sourceFormula);
         } else {
-          const sourceValue = normalizeCellValue(worksheet.getCellAt(sourceRow, sourceCol).toJs());
-          worksheet.setCell(cellAddressToA1(targetCell), sourceValue);
+          const sourceCellValue = worksheet.getCellAt(sourceRow, sourceCol);
+          try {
+            worksheet.setCell(
+              cellAddressToA1(targetCell),
+              normalizeCellValue(sourceCellValue.toJs())
+            );
+          } finally {
+            sourceCellValue.free();
+          }
         }
 
         if (sourceStyle && typeof sourceStyle === "object") {
@@ -376,7 +383,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
   function removeActiveSheet() {
     const activeSheetData = ctx.activeSheet.value;
-    if (ctx.readOnly.value || !ctx.workbook.value || !activeSheetData) {
+    if (ctx.readOnly.value || !ctx.workbook.value || !activeSheetData || ctx.sheets.value.length <= 1) {
       return;
     }
 

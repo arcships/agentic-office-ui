@@ -2,7 +2,7 @@
 // Extracted from the main function to keep paragraph-runs.ts under 1000 lines.
 // Upstream editor.tsx: 18175-18183, 18430-18516.
 
-import type { ParagraphNode } from "@extend-ai/docx-core"
+import type { ParagraphNode } from "@arcships/docx-core"
 
 export interface FieldResolutionContext {
   hasPageField: boolean

@@ -7,8 +7,8 @@ import {
   vue,
 } from "./vue-test-renderer.mjs";
 
-const { DocxEditor, useDocxEditor } = await importFromDemo("@extend-ai/vue-docx");
-const { createBlankDocumentModel } = await importFromDemo("@extend-ai/docx-core");
+const { DocxEditor, useDocxEditor } = await importFromDemo("@arcships/vue-docx");
+const { createBlankDocumentModel } = await importFromDemo("@arcships/docx-core");
 
 function paragraphText(node) {
   if (!node || node.type !== "paragraph") return "";

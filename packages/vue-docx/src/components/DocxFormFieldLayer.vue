@@ -64,10 +64,10 @@ import type {
   DocxFormFieldLocation,
   DocumentPageNodeSegment,
   FormFieldRunNode,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 import {
   getParagraphAtLocation,
-} from "@extend-ai/docx-core"
+} from "@arcships/docx-core"
 
 // ── Types ──────────────────────────────────────────────────────────
 interface FormFieldEntry {

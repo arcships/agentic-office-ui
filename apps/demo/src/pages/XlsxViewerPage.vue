@@ -1,9 +1,11 @@
 <template>
   <div class="page" data-testid="xlsx-viewer-page">
-    <h2>📊 XLSX Viewer — 安全验证页</h2>
-    <p class="desc">工作簿地址、来源规则、加载错误、下载和诊断均通过公开配置与控制器接口展示。</p>
-
-    <div class="controls control-panel">
+    <header class="product-header">
+      <div>
+        <h2>XLSX 工作簿</h2>
+        <p class="desc">查看和编辑单元格、公式、样式、图表与图片。</p>
+      </div>
+      <div class="controls control-panel product-actions">
       <label>
         示例工作簿
         <select v-model="selectedSample" data-testid="xlsx-sample-select" @change="loadSelectedSample">
@@ -11,59 +13,17 @@
         </select>
       </label>
       <button data-testid="xlsx-load-sample" @click="loadSelectedSample">加载示例</button>
-      <label>
-        本地 XLSX
-        <input data-testid="xlsx-file-input" type="file" accept=".xlsx,.xls" @change="onFileChange" />
-      </label>
       <label class="inline"><input v-model="readOnly" data-testid="xlsx-read-only" type="checkbox" /> 只读</label>
-      <label class="inline"><input v-model="useWorker" data-testid="xlsx-use-worker" type="checkbox" /> Worker</label>
-    </div>
-
-    <div class="policy-panel" data-testid="xlsx-runtime-config">
-      <h3>公开来源规则</h3>
-      <label>
-        XLSX 地址
-        <input v-model="remoteUrl" data-testid="xlsx-url-input" inputmode="url" @keydown.enter="loadUrl" />
-      </label>
-      <label>
-        baseUrl
-        <input v-model="baseUrl" data-testid="xlsx-policy-base-url" inputmode="url" />
-      </label>
-      <label>
-        允许协议（逗号分隔）
-        <input v-model="allowedProtocolsText" data-testid="xlsx-allowed-protocols" />
-      </label>
-      <label>
-        允许来源（逗号分隔）
-        <input v-model="allowedOriginsText" data-testid="xlsx-allowed-origins" />
-      </label>
-      <label class="checkbox-label">
-        <input v-model="allowHttpOnLocalhost" data-testid="xlsx-allow-localhost-http" type="checkbox" />
-        允许 localhost 的 HTTP
-      </label>
-      <label>
-        延迟解析阈值（字节，0 表示立即）
-        <input v-model.number="deferLoadingAboveBytes" data-testid="xlsx-defer-loading-above-bytes" min="0" type="number" />
-      </label>
-      <button data-testid="xlsx-apply-url" :disabled="!remoteUrl.trim()" @click="loadUrl">应用地址和规则</button>
-      <button data-testid="xlsx-continue-deferred" :disabled="!controller?.canLoadDeferred" @click="continueDeferredLoad">继续解析已验证文件</button>
-      <button data-testid="xlsx-download-source" :disabled="!controller?.canDownload" @click="downloadSource">下载已验证源文件</button>
-    </div>
-
-    <div class="status-grid info-grid">
-      <div><strong>状态：</strong><span data-testid="page-status" :data-state="pageState">{{ pageState }}</span></div>
-      <div><strong>已加载：</strong><span data-testid="loaded-file">{{ displayName || "无" }}</span></div>
-      <div><strong>来源：</strong>{{ sourceKind }}</div>
-      <div><strong>模式：</strong>{{ readOnly ? "只读" : "可编辑" }}</div>
-      <div><strong>Worker：</strong>{{ useWorker ? "开启" : "关闭" }}</div>
-    </div>
+      </div>
+    </header>
+    <input ref="fileInputRef" class="visually-hidden" data-testid="xlsx-file-input" type="file" accept=".xlsx,.xls" @change="onFileChange" />
 
     <div v-if="pageError" class="error" data-testid="load-error" :data-error-code="pageError.code">
       {{ pageError.code }}: {{ pageError.message }}
     </div>
 
     <div
-      class="viewer-container"
+      class="viewer-container product-surface"
       :class="{ 'viewer-container--drag-active': isDragActive }"
       @dragenter.prevent="onDragEnter"
       @dragover.prevent="onDragOver"
@@ -81,21 +41,46 @@
         :use-worker="useWorker"
         :url-policy="urlPolicy"
         :defer-loading-above-bytes="deferLoadingAboveBytes"
-        style="height: 70vh;"
+        style="height: 76vh;"
         @controller-ready="onControllerReady"
         @diagnostic="onDiagnostic"
+        @upload="openFilePicker"
+        @update:read-only="onReadOnlyChange"
       />
       <div v-else class="empty"><p>请选择工作簿、拖入本地文件或输入地址。</p></div>
     </div>
 
-    <div class="diagnostics" data-testid="xlsx-diagnostics" aria-live="polite">
-      <h3>公开诊断</h3>
-      <ol>
-        <li v-for="entry in diagnostics" :key="entry.id" :data-diagnostic-type="entry.type">
-          #{{ entry.requestId }} {{ entry.type }}<span v-if="entry.taskId"> · {{ entry.taskId }}</span><span v-if="entry.error?.code"> · {{ entry.error.code }}</span><span v-if="entry.bytes !== undefined"> · {{ entry.bytes }} bytes</span>
-        </li>
-      </ol>
+    <div class="status-grid info-grid verification-section">
+      <div><strong>状态：</strong><span data-testid="page-status" :data-state="pageState">{{ pageState }}</span></div>
+      <div><strong>文件：</strong><span data-testid="loaded-file">{{ displayName || "未打开" }}</span></div>
+      <div><strong>来源：</strong>{{ sourceKind }}</div>
+      <div><strong>模式：</strong>{{ readOnly ? "只读" : "可编辑" }}</div>
+      <div><strong>请求 Worker：</strong><span data-testid="xlsx-worker-requested">{{ useWorker ? "开启" : "关闭" }}</span></div>
+      <div><strong>实际执行：</strong><span data-testid="xlsx-worker-actual">{{ actualWorkerMode }}</span></div>
     </div>
+
+    <details class="runtime-details" data-testid="xlsx-runtime-details">
+      <summary>地址规则与运行诊断</summary>
+      <div class="policy-panel" data-testid="xlsx-runtime-config">
+        <label class="checkbox-label"><input v-model="useWorker" data-testid="xlsx-use-worker" type="checkbox" />使用 Worker</label>
+        <label>XLSX 地址 <input v-model="remoteUrl" data-testid="xlsx-url-input" inputmode="url" @keydown.enter="loadUrl" /></label>
+        <label>baseUrl <input v-model="baseUrl" data-testid="xlsx-policy-base-url" inputmode="url" /></label>
+        <label>允许协议 <input v-model="allowedProtocolsText" data-testid="xlsx-allowed-protocols" /></label>
+        <label>允许来源 <input v-model="allowedOriginsText" data-testid="xlsx-allowed-origins" /></label>
+        <label class="checkbox-label"><input v-model="allowHttpOnLocalhost" data-testid="xlsx-allow-localhost-http" type="checkbox" />允许 localhost 的 HTTP</label>
+        <label>延迟解析阈值（字节）<input v-model.number="deferLoadingAboveBytes" data-testid="xlsx-defer-loading-above-bytes" min="0" type="number" /></label>
+        <button data-testid="xlsx-apply-url" :disabled="!remoteUrl.trim()" @click="loadUrl">应用地址和规则</button>
+        <button data-testid="xlsx-continue-deferred" :disabled="!controller?.canLoadDeferred" @click="continueDeferredLoad">继续解析</button>
+        <button data-testid="xlsx-download-source" :disabled="!controller?.canDownload" @click="downloadSource">下载源文件</button>
+      </div>
+      <div class="diagnostics" data-testid="xlsx-diagnostics" aria-live="polite">
+        <ol>
+          <li v-for="entry in diagnostics" :key="entry.id" :data-diagnostic-type="entry.type">
+            #{{ entry.requestId }} {{ entry.type }}<span v-if="entry.taskId"> · {{ entry.taskId }}</span><span v-if="entry.error?.code"> · {{ entry.error.code }}</span><span v-if="entry.bytes !== undefined"> · {{ entry.bytes }} bytes</span>
+          </li>
+        </ol>
+      </div>
+    </details>
   </div>
 </template>
 
@@ -107,8 +92,8 @@ import {
   type XlsxDiagnostic,
   type XlsxLoadError,
   type XlsxUrlPolicy,
-} from "@extend-ai/vue-xlsx"
-import type { XlsxViewerController } from "@extend-ai/xlsx-core"
+} from "@arcships/vue-xlsx"
+import type { XlsxViewerController } from "@arcships/xlsx-core"
 
 const XlsxViewerWrapper = defineComponent({
   props: {
@@ -120,27 +105,35 @@ const XlsxViewerWrapper = defineComponent({
     deferLoadingAboveBytes: { type: Number, default: 0 },
     urlPolicy: { type: Object as PropType<XlsxUrlPolicy>, required: true },
   },
-  emits: ["controller-ready", "diagnostic"],
+  emits: ["controller-ready", "diagnostic", "update:readOnly", "upload"],
   setup(props, { emit }) {
     const controller: XlsxViewerController = useXlsxViewerController({
       file: props.file,
       src: props.src,
       fileName: props.fileName,
-      readOnly: props.readOnly,
+      get readOnly() { return props.readOnly },
       useWorker: props.useWorker,
       deferLoadingAboveBytes: props.deferLoadingAboveBytes,
       urlPolicy: props.urlPolicy,
       onDiagnostic: (diagnostic) => emit("diagnostic", diagnostic),
     })
     onMounted(() => emit("controller-ready", controller))
-    return () => h(XlsxViewer, { controller, showDefaultToolbar: true, style: { height: "100%" } })
+    return () => h(XlsxViewer, {
+      controller,
+      readOnly: props.readOnly,
+      showDefaultToolbar: true,
+      showUpload: true,
+      style: { height: "100%" },
+      onUpload: () => emit("upload"),
+      "onUpdate:readOnly": (value: boolean) => emit("update:readOnly", value),
+    })
   },
 })
 
 const samples = [
   { file: "financial-model.xlsx", label: "财务模型" },
   { file: "sales-table.xlsx", label: "销售表" },
-  { file: "charts-images.xlsx", label: "图表和图片" },
+  { file: "charts-images.xlsx", label: "图表、图片和合并单元格" },
   { file: "large-grid.xlsx", label: "大表格" },
   { file: "corrupted.xlsx", label: "损坏文件（失败用例）" },
 ]
@@ -152,6 +145,7 @@ const fileBuffer = ref<ArrayBuffer | null>(null)
 const displayName = ref("")
 const inputError = ref<XlsxLoadError | null>(null)
 const controller = shallowRef<XlsxViewerController | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 const readOnly = ref(false)
 const useWorker = ref(true)
 const sourceKind = ref("未选择")
@@ -183,7 +177,7 @@ const urlPolicy = computed<XlsxUrlPolicy>(() => ({
 
 const viewerKey = computed(() => {
   if (!src.value && !fileBuffer.value) return ""
-  return `${sourceKind.value}:${displayName.value}-${loadCounter.value}-${readOnly.value}-${useWorker.value}-${deferLoadingAboveBytes.value}`
+  return `${sourceKind.value}:${displayName.value}-${loadCounter.value}-${useWorker.value}-${deferLoadingAboveBytes.value}`
 })
 const pageState = computed(() => {
   if (inputError.value) return "error"
@@ -191,6 +185,13 @@ const pageState = computed(() => {
   return controller.value?.sourceState ?? "loading"
 })
 const pageError = computed<XlsxLoadError | null>(() => inputError.value ?? controller.value?.sourceError ?? null)
+const actualWorkerMode = computed(() => {
+  const current = controller.value
+  if (!current || current.sourceState === "idle") return "未初始化"
+  if (current.sourceState === "loading") return "加载中"
+  if (current.sourceState === "error") return "加载失败"
+  return current.isWorkerBacked ? "Worker" : "主线程"
+})
 
 function beginLoad(kind: string, name: string) {
   controller.value = null
@@ -259,8 +260,16 @@ function onFileChange(event: Event) {
   if (file) processFile(file)
 }
 
+function openFilePicker() {
+  fileInputRef.value?.click()
+}
+
 function onControllerReady(nextController: XlsxViewerController) {
   controller.value = nextController
+}
+
+function onReadOnlyChange(value: boolean) {
+  readOnly.value = value
 }
 
 function onDiagnostic(diagnostic: XlsxDiagnostic) {
@@ -307,9 +316,16 @@ loadSelectedSample()
 </script>
 
 <style scoped>
-.page { padding: 24px; max-width: 1200px; margin: 0 auto; width: 100%; min-width: 0; }
+.page { padding: 16px; max-width: 1440px; margin: 0 auto; width: 100%; min-width: 0; }
 h2 { margin-bottom: 4px; }
 .desc { color: var(--muted-foreground); margin-bottom: 16px; font-size: 14px; }
+.product-header { display: flex; align-items: end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.product-header .desc { margin-bottom: 0; }
+.product-actions { margin-bottom: 0; }
+.product-surface { box-shadow: 0 10px 30px rgb(15 23 42 / 8%); }
+.verification-section { margin-top: 8px; }
+.runtime-details { margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; color: var(--muted-foreground); }
+.runtime-details summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--foreground); }
 .controls, .policy-panel { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; margin-bottom: 12px; }
 .controls label, .policy-panel label { display: flex; gap: 6px; align-items: flex-start; flex-direction: column; font-size: 13px; color: var(--muted-foreground); }
 .controls label.inline, .policy-panel .checkbox-label { flex-direction: row; align-items: center; min-height: 36px; }
@@ -329,4 +345,9 @@ h2 { margin-bottom: 4px; }
 .diagnostics { margin-top: 24px; border-top: 1px solid var(--border); padding-top: 12px; font-size: 13px; }
 .diagnostics h3 { margin: 0 0 8px; }
 .diagnostics ol { margin: 0; padding-left: 20px; }
+.visually-hidden { position: fixed; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 760px) {
+  .page { padding: 10px; }
+  .product-header { align-items: stretch; }
+}
 </style>

@@ -7,7 +7,7 @@
 
 | # | Check | Result |
 |---|-------|--------|
-| 1 | Typecheck zero errors | ✅ `pnpm --filter @extend-ai/docx-core typecheck` — zero errors |
+| 1 | Typecheck zero errors | ✅ `pnpm --filter @arcships/docx-core typecheck` — zero errors |
 | 2 | File exists and non-empty | ✅ `pagination-plan-stabilize.ts` — 200 lines, 5 exports |
 | 3 | No React residuals | ✅ Only a migration-source comment mentioning `react-docx editor.tsx`; no React imports, hooks, JSX, or components |
 | 4 | No duplicated functions | ✅ All 5 exports (`stabilizeMeasuredPageContentHeights`, `documentPageNodeSegmentIdentityKey`, `documentPageNodeSegmentsIdentityKey`, `buildPaginationSectionMetrics`, `scaleMeasuredPageContentHeights`) are defined only in this module; imported by `page-measurement.ts` as the sole consumer |

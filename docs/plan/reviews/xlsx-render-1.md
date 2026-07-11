@@ -7,7 +7,7 @@ Depends-on: xlsx-composables-split ✅ (composables already split, 9 files, ~503
 ## 1. Typecheck
 
 ```bash
-pnpm --filter @extend-ai/vue-xlsx typecheck
+pnpm --filter @arcships/vue-xlsx typecheck
 ```
 
 **Result: ✅ Zero errors.** TypeScript compilation passes cleanly.
@@ -45,7 +45,7 @@ The hard constraint in section 4.3 allows surface-regl to exceed 1000 lines (Web
 
 **Result: ✅ All imports resolve correctly.**
 
-- `@extend-ai/xlsx-core` → workspace symlink at `packages/xlsx-core` ✅
+- `@arcships/xlsx-core` → workspace symlink at `packages/xlsx-core` ✅
 - `@dukelib/sheets-wasm` → external wasm package ✅
 - Vue, d3-* packages → standard npm dependencies ✅
 - Internal cross-imports (`./surface-regl`, `./chart-renderer`) → correct relative paths ✅

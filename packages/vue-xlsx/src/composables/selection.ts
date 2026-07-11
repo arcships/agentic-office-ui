@@ -4,7 +4,7 @@ import type {
   XlsxCellRange,
   XlsxDataValidation,
   XlsxFreezePanes
-} from "@extend-ai/xlsx-core";
+} from "@arcships/xlsx-core";
 
 export function columnLabel(col: number): string {
   let label = "";

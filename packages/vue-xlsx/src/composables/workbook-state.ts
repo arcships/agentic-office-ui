@@ -4,6 +4,7 @@ import {
   getSheetsWasmModule,
   loadWorkbookChartAssets,
   mergeWorkbookImageAssets,
+  normalizeWorkbookTableMetadata,
   pxToSheetColumnWidth,
   resolveContentSheetAxisPixels,
   resolveWorksheetDefaultColumnWidthPixels,
@@ -15,7 +16,9 @@ import {
   resolveSheetRowHeightPixels,
   revokeWorkbookImageAssets,
   safeCalculate,
+  trackXlsxWorkbookLifetime,
   tryRecalculate,
+  type XlsxCellRange,
   type XlsxConditionalFormatRule,
   type XlsxResolvedCellStyle,
   type XlsxSheetData,
@@ -25,9 +28,10 @@ import {
   type XlsxTableSortDirection,
   type XlsxTableStyleDefinition,
   type XlsxThemePalette,
+  type XlsxRuntimeLimits,
   type XlsxWorkbookTab
-} from "@extend-ai/xlsx-core";
-import type { UseXlsxViewerControllerOptions } from "@extend-ai/xlsx-core";
+} from "@arcships/xlsx-core";
+import type { UseXlsxViewerControllerOptions } from "@arcships/xlsx-core";
 import {
   DEFAULT_COL_WIDTH,
   DEFAULT_ROW_HEIGHT,
@@ -67,7 +71,7 @@ import { applyCellMutationState } from "./internal";
 import { loadWorkbookImageAssets } from "./image-assets";
 import { downloadArrayBuffer, downloadBytes, downloadText } from "./clipboard";
 import type { XlsxControllerContext } from "./internal";
-import { loadVerifiedXlsxSource } from "@extend-ai/xlsx-core";
+import { loadVerifiedXlsxSource } from "@arcships/xlsx-core";
 
 export {
   resolveDisplayFileName,
@@ -132,6 +136,7 @@ export function resolveSheetDisplayUsedRange(
     maxContentRow?: number;
     maxHorizontalMergeEndCol?: number;
     maxVerticalMergeEndRow?: number;
+    mergedRegions?: XlsxCellRange[];
     minContentCol?: number;
     minContentRow?: number;
   } | null
@@ -174,6 +179,7 @@ export function buildSheetList(
     hasVerticalMerges?: boolean;
     maxHorizontalMergeEndCol?: number;
     maxVerticalMergeEndRow?: number;
+    mergedRegions?: XlsxCellRange[];
     maxContentCol?: number;
     maxContentRow?: number;
     minContentCol?: number;
@@ -195,46 +201,96 @@ export function buildSheetList(
 
   for (let index = 0; index < workbook.sheetCount; index += 1) {
     const worksheet = workbook.getSheet(index);
-    const sheetState = sheetStatesByWorkbookSheetIndex?.[index] ?? null;
-    const mergeMetadata = resolveWorksheetMergeMetadata(worksheet);
-    const effectiveSheetState = {
-      ...sheetState,
-      ...mergeMetadata
-    };
-    const defaultColWidthPx = resolveWorksheetDefaultColumnWidthPixels(
-      worksheet,
-      sheetState?.columnWidthCharacterWidthPx,
-      sheetState?.defaultColWidthPx ?? DEFAULT_COL_WIDTH
-    );
-    const defaultRowHeightPx = resolveWorksheetDefaultRowHeightPixels(
-      worksheet,
-      sheetState?.defaultRowHeightPx ?? DEFAULT_ROW_HEIGHT
-    );
-    const visibility = normalizeWorksheetVisibility(worksheet.visibility);
-    if (!showHiddenSheets && visibility !== "visible") {
-      continue;
-    }
+    try {
+      const sheetState = sheetStatesByWorkbookSheetIndex?.[index] ?? null;
+      const mergeMetadata = resolveWorksheetMergeMetadata(worksheet);
+      const effectiveSheetState = { ...sheetState, ...mergeMetadata };
+      const defaultColWidthPx = resolveWorksheetDefaultColumnWidthPixels(
+        worksheet,
+        sheetState?.columnWidthCharacterWidthPx,
+        sheetState?.defaultColWidthPx ?? DEFAULT_COL_WIDTH
+      );
+      const defaultRowHeightPx = resolveWorksheetDefaultRowHeightPixels(
+        worksheet,
+        sheetState?.defaultRowHeightPx ?? DEFAULT_ROW_HEIGHT
+      );
+      const visibility = normalizeWorksheetVisibility(worksheet.visibility);
+      if (!showHiddenSheets && visibility !== "visible") continue;
 
-    const resolveColumnWidthPx = (col: number) => {
-      const width = worksheet.getColumnWidth(col);
-      if (width !== undefined && width !== null) {
-        return resolveSheetColumnWidthPixels(width, sheetState?.columnWidthCharacterWidthPx);
+      const usedRange = worksheet.usedRange() as [number, number, number, number] | null;
+      if (!usedRange) {
+        sheets.push({
+          cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
+          columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
+          colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
+          colStyleIds: sheetState?.colStyleIds ?? {},
+          conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
+          dataValidations: parseWorksheetDataValidations(worksheet),
+          defaultColWidthPx,
+          defaultRowHeightPx,
+          freezePanes: parseWorksheetFreezePanes(worksheet),
+          hasHorizontalMerges: mergeMetadata.hasHorizontalMerges,
+          hasVerticalMerges: mergeMetadata.hasVerticalMerges,
+          maxHorizontalMergeEndCol: mergeMetadata.maxHorizontalMergeEndCol,
+          maxVerticalMergeEndRow: mergeMetadata.maxVerticalMergeEndRow,
+          mergedRegions: sheetState?.mergedRegions ?? [],
+          hiddenCols: [],
+          hiddenRows: [],
+          minUsedCol: -1,
+          minUsedRow: -1,
+          maxUsedCol: -1,
+          maxUsedRow: -1,
+          name: worksheet.name,
+          visibility,
+          namedCellStyleByName: namedCellStyleByName ?? {},
+          rowCount: 0,
+          colCount: 0,
+          rowHeightOverridesPx: sheetState?.rowHeightOverridesPx ?? {},
+          rowStyleIds: sheetState?.rowStyleIds ?? {},
+          styleById: styleById ?? {},
+          sparklines: sheetState?.sparklines ?? [],
+          tableStyleByName: tableStyleByName ?? {},
+          visibleRows: [],
+          visibleCols: [],
+          colWidths: [],
+          rowHeights: [],
+          showGridLines: sheetState?.showGridLines ?? true,
+          themePalette: themePalette ?? { colorsByIndex: {} },
+          workbookSheetIndex: index,
+          zoomScale: resolveWorksheetZoomScale(worksheet, sheetState)
+        });
+        continue;
       }
 
-      return sheetState?.colWidthOverridesPx?.[col] ?? defaultColWidthPx;
-    };
+      const [minRow, minCol, maxRow, maxCol] = resolveSheetDisplayUsedRange(
+        usedRange,
+        effectiveSheetState
+      );
+      const hiddenRows = resolveWorksheetHiddenRows(worksheet, maxRow);
+      const hiddenCols = resolveWorksheetHiddenCols(worksheet, maxCol);
+      const hiddenRowSet = new Set(hiddenRows);
+      const hiddenColSet = new Set(hiddenCols);
+      const visibleRows = Array.from(
+        { length: maxRow + 1 },
+        (_, row) => row
+      ).filter((row) => !hiddenRowSet.has(row));
+      const visibleCols = Array.from(
+        { length: maxCol + 1 },
+        (_, col) => col
+      ).filter((col) => !hiddenColSet.has(col));
+      const rowHeights = visibleRows.map((row) => {
+        const height = worksheet.getRowHeight(row);
+        return height !== undefined && height !== null
+          ? Math.max(Math.round(height * 1.33), MIN_ROW_HEIGHT_PX)
+          : sheetState?.rowHeightOverridesPx?.[row] ?? defaultRowHeightPx;
+      });
+      const colWidths = visibleCols.map((col) => {
+        const width = worksheet.getColumnWidth(col);
+        return width !== undefined && width !== null
+          ? resolveSheetColumnWidthPixels(width, sheetState?.columnWidthCharacterWidthPx)
+          : sheetState?.colWidthOverridesPx?.[col] ?? defaultColWidthPx;
+      });
 
-    const resolveRowHeightPx = (row: number) => {
-      const height = worksheet.getRowHeight(row);
-      if (height !== undefined && height !== null) {
-        return Math.max(Math.round(height * 1.33), MIN_ROW_HEIGHT_PX);
-      }
-
-      return sheetState?.rowHeightOverridesPx?.[row] ?? defaultRowHeightPx;
-    };
-
-    const usedRange = worksheet.usedRange() as [number, number, number, number] | null;
-    if (!usedRange) {
       sheets.push({
         cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
         columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
@@ -249,143 +305,35 @@ export function buildSheetList(
         hasVerticalMerges: mergeMetadata.hasVerticalMerges,
         maxHorizontalMergeEndCol: mergeMetadata.maxHorizontalMergeEndCol,
         maxVerticalMergeEndRow: mergeMetadata.maxVerticalMergeEndRow,
-        hiddenCols: [],
-        hiddenRows: [],
-        minUsedCol: -1,
-        minUsedRow: -1,
-        maxUsedCol: -1,
-        maxUsedRow: -1,
+        mergedRegions: sheetState?.mergedRegions ?? [],
+        hiddenCols,
+        hiddenRows,
+        minUsedCol: minCol,
+        minUsedRow: minRow,
+        maxUsedCol: maxCol,
+        maxUsedRow: maxRow,
         name: worksheet.name,
         visibility,
         namedCellStyleByName: namedCellStyleByName ?? {},
-        rowCount: 0,
-        colCount: 0,
+        rowCount: visibleRows.length,
+        colCount: visibleCols.length,
         rowHeightOverridesPx: sheetState?.rowHeightOverridesPx ?? {},
         rowStyleIds: sheetState?.rowStyleIds ?? {},
+        showGridLines: sheetState?.showGridLines ?? true,
         styleById: styleById ?? {},
         sparklines: sheetState?.sparklines ?? [],
         tableStyleByName: tableStyleByName ?? {},
-        visibleRows: [],
-        visibleCols: [],
-        colWidths: [],
-        rowHeights: [],
-        showGridLines: sheetState?.showGridLines ?? true,
         themePalette: themePalette ?? { colorsByIndex: {} },
         workbookSheetIndex: index,
-        zoomScale: resolveWorksheetZoomScale(worksheet, sheetState)
+        zoomScale: resolveWorksheetZoomScale(worksheet, sheetState),
+        visibleRows,
+        visibleCols,
+        colWidths,
+        rowHeights
       });
-      continue;
+    } finally {
+      worksheet.free();
     }
-
-    const [minRow, minCol, maxRow, maxCol] = resolveSheetDisplayUsedRange(usedRange, effectiveSheetState);
-    let visibleRowsCache: number[] | null = null;
-    let visibleColsCache: number[] | null = null;
-    let rowHeightsCache: number[] | null = null;
-    let colWidthsCache: number[] | null = null;
-
-    const getVisibleRows = () => {
-      if (visibleRowsCache) {
-        return visibleRowsCache;
-      }
-
-      const nextVisibleRows: number[] = [];
-      for (let row = 0; row <= maxRow; row += 1) {
-        if (!worksheet.isRowHidden(row)) {
-          nextVisibleRows.push(row);
-        }
-      }
-
-      visibleRowsCache = nextVisibleRows;
-      return nextVisibleRows;
-    };
-
-    const getVisibleCols = () => {
-      if (visibleColsCache) {
-        return visibleColsCache;
-      }
-
-      const nextVisibleCols: number[] = [];
-      for (let col = 0; col <= maxCol; col += 1) {
-        if (!worksheet.isColumnHidden(col)) {
-          nextVisibleCols.push(col);
-        }
-      }
-
-      visibleColsCache = nextVisibleCols;
-      return nextVisibleCols;
-    };
-
-    const getRowHeights = () => {
-      if (rowHeightsCache) {
-        return rowHeightsCache;
-      }
-
-      rowHeightsCache = getVisibleRows().map(resolveRowHeightPx);
-      return rowHeightsCache;
-    };
-
-    const getColWidths = () => {
-      if (colWidthsCache) {
-        return colWidthsCache;
-      }
-
-      colWidthsCache = getVisibleCols().map(resolveColumnWidthPx);
-      return colWidthsCache;
-    };
-
-    const sheet: XlsxSheetData = {
-      cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
-      columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
-      colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
-      colStyleIds: sheetState?.colStyleIds ?? {},
-      conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
-      dataValidations: parseWorksheetDataValidations(worksheet),
-      defaultColWidthPx,
-      defaultRowHeightPx,
-      freezePanes: parseWorksheetFreezePanes(worksheet),
-      hasHorizontalMerges: mergeMetadata.hasHorizontalMerges,
-      hasVerticalMerges: mergeMetadata.hasVerticalMerges,
-      maxHorizontalMergeEndCol: mergeMetadata.maxHorizontalMergeEndCol,
-      maxVerticalMergeEndRow: mergeMetadata.maxVerticalMergeEndRow,
-      hiddenCols: resolveWorksheetHiddenCols(worksheet, maxCol),
-      hiddenRows: resolveWorksheetHiddenRows(worksheet, maxRow),
-      minUsedCol: minCol,
-      minUsedRow: minRow,
-      maxUsedCol: maxCol,
-      maxUsedRow: maxRow,
-      name: worksheet.name,
-      visibility,
-      namedCellStyleByName: namedCellStyleByName ?? {},
-      rowHeightOverridesPx: sheetState?.rowHeightOverridesPx ?? {},
-      rowStyleIds: sheetState?.rowStyleIds ?? {},
-      showGridLines: sheetState?.showGridLines ?? true,
-      styleById: styleById ?? {},
-      sparklines: sheetState?.sparklines ?? [],
-      tableStyleByName: tableStyleByName ?? {},
-      themePalette: themePalette ?? { colorsByIndex: {} },
-      workbookSheetIndex: index,
-      zoomScale: resolveWorksheetZoomScale(worksheet, sheetState),
-      get rowCount() {
-        return getVisibleRows().length;
-      },
-      get colCount() {
-        return getVisibleCols().length;
-      },
-      get visibleRows() {
-        return getVisibleRows();
-      },
-      get visibleCols() {
-        return getVisibleCols();
-      },
-      get colWidths() {
-        return getColWidths();
-      },
-      get rowHeights() {
-        return getRowHeights();
-      }
-    };
-
-    sheets.push(sheet);
   }
 
   return sheets;
@@ -481,7 +429,8 @@ export interface ResolvedWorkbookSource {
 
 export async function resolveWorkbookSource(
   { file, src, urlPolicy }: Pick<UseXlsxViewerControllerOptions, "file" | "src" | "urlPolicy">,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  limits?: Pick<XlsxRuntimeLimits, "maxInputBytes">
 ): Promise<ResolvedWorkbookSource> {
 
   if (signal?.aborted) {
@@ -491,7 +440,7 @@ export async function resolveWorkbookSource(
   if (file) {
     return { buffer: file, sourceKind: "file" };
   } else if (src) {
-    return loadVerifiedXlsxSource(src, urlPolicy, signal);
+    return loadVerifiedXlsxSource(src, urlPolicy, signal, limits);
   }
 
   throw new Error("Either `file` or `src` must be provided.");
@@ -500,9 +449,10 @@ export async function resolveWorkbookSource(
 /** Preserved public helper for callers that only need the loaded bytes. */
 export async function resolveWorkbookBuffer(
   options: Pick<UseXlsxViewerControllerOptions, "file" | "src" | "urlPolicy">,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  limits?: Pick<XlsxRuntimeLimits, "maxInputBytes">
 ): Promise<ArrayBuffer> {
-  return (await resolveWorkbookSource(options, signal)).buffer;
+  return (await resolveWorkbookSource(options, signal, limits)).buffer;
 }
 
 export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{
@@ -510,11 +460,18 @@ export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{
   workbook: Workbook;
 }> {
   const wasmModule = await getSheetsWasmModule();
-  const initialWorkbook = wasmModule.Workbook.fromBytes(new Uint8Array(buffer));
+  const initialWorkbook = trackXlsxWorkbookLifetime(
+    wasmModule.Workbook.fromBytes(new Uint8Array(buffer))
+  );
   let totalFormulas = 0;
 
   for (let index = 0; index < initialWorkbook.sheetCount; index += 1) {
-    totalFormulas += initialWorkbook.getSheet(index).formulaCount;
+    const worksheet = initialWorkbook.getSheet(index);
+    try {
+      totalFormulas += worksheet.formulaCount;
+    } finally {
+      worksheet.free();
+    }
   }
 
   const shouldAutoCalculate = totalFormulas <= FORMULA_COUNT_THRESHOLD;
@@ -523,7 +480,9 @@ export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{
   }
 
   const result = safeCalculate(initialWorkbook, {
-    reparse: () => wasmModule.Workbook.fromBytes(new Uint8Array(buffer))
+    reparse: () => trackXlsxWorkbookLifetime(
+      wasmModule.Workbook.fromBytes(new Uint8Array(buffer))
+    )
   });
   if (result.workbook !== initialWorkbook) {
     try {
@@ -545,11 +504,16 @@ export type { XlsxSheetVisibility };
 
 export function createHistoryDomain(ctx: XlsxControllerContext) {
   let historyRestoreToken = 0;
-  const tables = computed(() => { return (
-      ctx.isWorkerBacked.value
-        ? ctx.workerTablesByWorkbookSheetIndex.value[ctx.activeSheet.value?.workbookSheetIndex ?? -1] ?? []
-        : mapWorksheetTables(ctx.getActiveWorksheet())
-    ); })
+  const tables = computed(() => {
+    const workbookSheetIndex = ctx.activeSheet.value?.workbookSheetIndex ?? -1;
+    if (ctx.isWorkerBacked.value) {
+      return ctx.workerTablesByWorkbookSheetIndex.value[workbookSheetIndex] ?? [];
+    }
+    const parsed = ctx.imageAssetsRef.value?.tableMetadataByWorkbookSheetIndex[workbookSheetIndex];
+    return parsed?.length
+      ? normalizeWorkbookTableMetadata(parsed)
+      : mapWorksheetTables(ctx.getActiveWorksheet());
+  })
 
   function getCellSnapshotAsync(workbookSheetIndex: number, row: number, col: number, signal?: AbortSignal) {
     if (!ctx.isWorkerBacked.value) {
@@ -595,7 +559,9 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     try {
       const wasmModule = await getSheetsWasmModule();
       if (token !== historyRestoreToken || !ctx.isCurrentLoadRequest(loadRequestId)) return false;
-      nextWorkbook = wasmModule.Workbook.fromBytes(cloneBytes(entry.bytes));
+      nextWorkbook = trackXlsxWorkbookLifetime(
+        wasmModule.Workbook.fromBytes(cloneBytes(entry.bytes))
+      );
       nextImageAssets = loadWorkbookImageAssets(entry.bytes, nextWorkbook);
       const nextSheets = buildSheetList(
         nextWorkbook,
@@ -651,6 +617,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
           pushHistoryEntry(
             direction === "undo" ? ctx.redoStackRef.value : ctx.undoStackRef.value,
             currentSnapshot,
+            ctx.historyBudget,
           );
         }
         ctx.historyRevision.value = ctx.historyRevision.value + 1;
@@ -660,6 +627,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
         pushHistoryEntry(
           direction === "undo" ? ctx.undoStackRef.value : ctx.redoStackRef.value,
           entry,
+          ctx.historyBudget,
         );
         ctx.error.value = restoreError instanceof Error
           ? restoreError
@@ -681,19 +649,21 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     const targetState = direction === "undo" ? entry.before : entry.after;
 
     ctx.isApplyingHistoryRef.value = true;
-    applyCellMutationState(worksheet, entry.cell, targetState);
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    try {
+      applyCellMutationState(worksheet, entry.cell, targetState);
+      ctx.maybeRecalculateWorkbook(ctx.workbook.value);
+      ctx.refreshWorkbookState(ctx.workbook.value);
 
-    const nextActiveCell = direction === "undo" ? entry.activeCellBefore : entry.activeCellAfter;
-    const nextSelection = direction === "undo" ? entry.selectionBefore : entry.selectionAfter;
-    if (visibleSheetIndex >= 0) {
-      ctx.activeSheetIndex.value = visibleSheetIndex;
+      const nextActiveCell = direction === "undo" ? entry.activeCellBefore : entry.activeCellAfter;
+      const nextSelection = direction === "undo" ? entry.selectionBefore : entry.selectionAfter;
+      if (visibleSheetIndex >= 0) ctx.activeSheetIndex.value = visibleSheetIndex;
+      ctx.activeCell.value = nextActiveCell;
+      ctx.selection.value = nextSelection;
+      ctx.selectionAnchorRef.value = nextSelection ? normalizeRange(nextSelection).start : nextActiveCell;
+    } finally {
+      ctx.isApplyingHistoryRef.value = false;
+      worksheet.free();
     }
-    ctx.activeCell.value = nextActiveCell;
-    ctx.selection.value = nextSelection;
-    ctx.selectionAnchorRef.value = nextSelection ? normalizeRange(nextSelection).start : nextActiveCell;
-    ctx.isApplyingHistoryRef.value = false;
   }
 
   function applyRangeEditHistoryEntry(entry: RangeEditHistoryEntry, direction: "undo" | "redo") {
@@ -705,21 +675,23 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     const visibleSheetIndex = ctx.sheets.value.findIndex((sheet) => sheet.workbookSheetIndex === entry.sheetIndex);
 
     ctx.isApplyingHistoryRef.value = true;
-    for (const mutation of entry.mutations) {
-      applyCellMutationState(worksheet, mutation.cell, direction === "undo" ? mutation.before : mutation.after);
-    }
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    try {
+      for (const mutation of entry.mutations) {
+        applyCellMutationState(worksheet, mutation.cell, direction === "undo" ? mutation.before : mutation.after);
+      }
+      ctx.maybeRecalculateWorkbook(ctx.workbook.value);
+      ctx.refreshWorkbookState(ctx.workbook.value);
 
-    const nextActiveCell = direction === "undo" ? entry.activeCellBefore : entry.activeCellAfter;
-    const nextSelection = direction === "undo" ? entry.selectionBefore : entry.selectionAfter;
-    if (visibleSheetIndex >= 0) {
-      ctx.activeSheetIndex.value = visibleSheetIndex;
+      const nextActiveCell = direction === "undo" ? entry.activeCellBefore : entry.activeCellAfter;
+      const nextSelection = direction === "undo" ? entry.selectionBefore : entry.selectionAfter;
+      if (visibleSheetIndex >= 0) ctx.activeSheetIndex.value = visibleSheetIndex;
+      ctx.activeCell.value = nextActiveCell;
+      ctx.selection.value = nextSelection;
+      ctx.selectionAnchorRef.value = nextSelection ? normalizeRange(nextSelection).start : nextActiveCell;
+    } finally {
+      ctx.isApplyingHistoryRef.value = false;
+      worksheet.free();
     }
-    ctx.activeCell.value = nextActiveCell;
-    ctx.selection.value = nextSelection;
-    ctx.selectionAnchorRef.value = nextSelection ? normalizeRange(nextSelection).start : nextActiveCell;
-    ctx.isApplyingHistoryRef.value = false;
   }
 
   function sortTable(tableName: string, columnIndex: number, direction: XlsxTableSortDirection) {
@@ -752,23 +724,32 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     for (let row = dataStartRow; row <= dataEndRow; row += 1) {
       const cells: CellMutationState[] = [];
       for (let col = startCol; col <= endCol; col += 1) {
-        cells.push({
-          formula: worksheet.getFormulaAt(row, col) ?? null,
-          style: worksheet.getCellStyleAt(row, col),
-          value: worksheet.getCellAt(row, col).toJs()
-        });
+        const cellValue = worksheet.getCellAt(row, col);
+        try {
+          cells.push({
+            formula: worksheet.getFormulaAt(row, col) ?? null,
+            style: worksheet.getCellStyleAt(row, col),
+            value: cellValue.toJs()
+          });
+        } finally {
+          cellValue.free();
+        }
       }
 
       const calculated = worksheet.getCalculatedValueAt(row, sortCol);
       const formatted = decodeHtmlEntities(worksheet.getFormattedValueAt(row, sortCol) ?? "");
-      rows.push({
-        cells,
-        index: row,
-        sortBoolean: calculated.is_boolean ? calculated.asBoolean() : undefined,
-        sortEmpty: calculated.is_empty || formatted.length === 0,
-        sortNumber: calculated.is_number ? calculated.asNumber() : undefined,
-        sortText: calculated.is_text ? (calculated.asText() ?? formatted) : formatted
-      });
+      try {
+        rows.push({
+          cells,
+          index: row,
+          sortBoolean: calculated.is_boolean ? calculated.asBoolean() : undefined,
+          sortEmpty: calculated.is_empty || formatted.length === 0,
+          sortNumber: calculated.is_number ? calculated.asNumber() : undefined,
+          sortText: calculated.is_text ? (calculated.asText() ?? formatted) : formatted
+        });
+      } finally {
+        calculated.free();
+      }
     }
 
     const sortedRows = [...rows].sort((left, right) => {
@@ -930,7 +911,8 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     }
 
     ctx.recordHistoryBeforeMutation();
-    const worksheet = ctx.workbook.value.getSheet(ctx.activeSheet.value.workbookSheetIndex);
+    const worksheet = ctx.getActiveWorksheet();
+    if (!worksheet) return;
     worksheet.setColumnWidth(
       col,
       pxToSheetColumnWidth(resolveContentSheetAxisPixels(widthPx, ctx.activeSheet.value.showGridLines))
@@ -953,7 +935,8 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     }
 
     ctx.recordHistoryBeforeMutation();
-    const worksheet = ctx.workbook.value.getSheet(ctx.activeSheet.value.workbookSheetIndex);
+    const worksheet = ctx.getActiveWorksheet();
+    if (!worksheet) return;
     worksheet.setRowHeight(
       row,
       pxToSheetRowHeight(resolveContentSheetAxisPixels(heightPx, ctx.activeSheet.value.showGridLines))
@@ -972,14 +955,14 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     }
 
     if (entry.kind === "cell-edit") {
-      pushHistoryEntry(ctx.redoStackRef.value, entry);
+      pushHistoryEntry(ctx.redoStackRef.value, entry, ctx.historyBudget);
       ctx.historyRevision.value = ctx.historyRevision.value + 1;
       applyCellEditHistoryEntry(entry, "undo");
       return;
     }
 
     if (entry.kind === "range-edit") {
-      pushHistoryEntry(ctx.redoStackRef.value, entry);
+      pushHistoryEntry(ctx.redoStackRef.value, entry, ctx.historyBudget);
       ctx.historyRevision.value = ctx.historyRevision.value + 1;
       applyRangeEditHistoryEntry(entry, "undo");
       return;
@@ -1000,14 +983,14 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     }
 
     if (entry.kind === "cell-edit") {
-      pushHistoryEntry(ctx.undoStackRef.value, entry);
+      pushHistoryEntry(ctx.undoStackRef.value, entry, ctx.historyBudget);
       ctx.historyRevision.value = ctx.historyRevision.value + 1;
       applyCellEditHistoryEntry(entry, "redo");
       return;
     }
 
     if (entry.kind === "range-edit") {
-      pushHistoryEntry(ctx.undoStackRef.value, entry);
+      pushHistoryEntry(ctx.undoStackRef.value, entry, ctx.historyBudget);
       ctx.historyRevision.value = ctx.historyRevision.value + 1;
       applyRangeEditHistoryEntry(entry, "redo");
       return;

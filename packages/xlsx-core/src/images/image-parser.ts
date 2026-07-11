@@ -145,12 +145,16 @@ export function cloneBytes(bytes: Uint8Array) {
 // ── XML utilities ────────────────────────────────────────────────────────────
 
 export function parseXml(xml: string) {
-  const parser = new DOMParser();
-  const document = parser.parseFromString(xml, "application/xml");
-  if (document.querySelector("parsererror")) {
+  try {
+    const parser = new DOMParser();
+    const document = parser.parseFromString(xml, "application/xml");
+    if (document.getElementsByTagName("parsererror").length > 0) {
+      return null;
+    }
+    return document;
+  } catch {
     return null;
   }
-  return document;
 }
 
 export function serializeXml(document: XMLDocument) {

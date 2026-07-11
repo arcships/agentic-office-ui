@@ -4,14 +4,12 @@ import {
   createLatestTaskCoordinator,
   createOfficeTaskSequence,
   loadOfficeSource,
-  snapshotOfficeLimits,
   snapshotOfficeUrlPolicy,
   type LatestTaskCoordinator,
   type OfficeFetch,
-  type OfficeLimits,
   type OfficeSource,
   type OfficeUrlPolicy,
-} from "@extend-ai/office-runtime";
+} from "@arcships/office-runtime";
 import {
   DocxImportError,
   createBundledDocxWorker,
@@ -21,6 +19,10 @@ import {
   type DocxImportOptions,
   type DocxImportResult,
 } from "./viewer/docx-import";
+import {
+  resolveDocxRuntimeLimits,
+  type DocxRuntimeLimits,
+} from "./resource-limits";
 import { bundledDocxWasmUrl } from "./viewer/bundled-assets";
 import type { WorkerWasmSource } from "./viewer/wasm-source";
 
@@ -59,9 +61,7 @@ export interface DocxUrlPolicy {
   fetch?: typeof fetch;
 }
 
-export interface DocxRuntimeLimits {
-  maxInputBytes?: number;
-}
+export type { DocxRuntimeLimits } from "./resource-limits";
 
 export interface DocxRuntimeConfig {
   /** A URL or transferable binary used by both the main runtime and Worker. */
@@ -77,7 +77,7 @@ export interface DocxRuntimeConfig {
   mainThreadFallbackMaxBytes?: number;
   /** Per-instance source policy; URL loading is disabled when omitted. */
   urlPolicy?: DocxUrlPolicy;
-  /** Current shared input limit. Archive/model budgets are added by P3. */
+  /** Per-instance input, archive, XML, model and parsing budgets. */
   limits?: DocxRuntimeLimits;
   onDiagnostic?: (event: DocxImportDiagnostic) => void;
 }
@@ -93,6 +93,8 @@ export interface DocxRuntimeLoader {
 
 export interface DocxRuntime {
   readonly id: string;
+  /** Effective immutable limits after defaults and hard caps are applied. */
+  readonly limits: Readonly<DocxRuntimeLimits>;
   importDocxBuffer(
     buffer: ArrayBuffer,
     options?: Omit<DocxImportOptions, "requestId">,
@@ -132,6 +134,7 @@ function mapOfficeError(error: OfficeLoadError): DocxImportError {
     "WORKER_UNAVAILABLE",
     "WASM_LOAD_FAILED",
     "PARSE_FAILED",
+    "TIMEOUT",
     "RUNTIME_DISPOSED",
   ]);
   const code = error.code === "STALE_RESULT"
@@ -139,7 +142,12 @@ function mapOfficeError(error: OfficeLoadError): DocxImportError {
     : compatibleCodes.has(error.code as DocxImportErrorCode)
     ? error.code as DocxImportErrorCode
     : "PARSE_FAILED";
-  const mapped = new DocxImportError(code, error.message);
+  const mapped = new DocxImportError(code, error.message, {
+    phase: error.phase,
+    limit: error.limit,
+    actual: error.actual,
+    allowed: error.allowed,
+  });
   if (code === "ABORTED") mapped.name = "AbortError";
   (mapped as Error & { cause?: unknown }).cause = error;
   return mapped;
@@ -155,7 +163,7 @@ export function createDocxRuntime(config: DocxRuntimeConfig = {}): DocxRuntime {
   const taskSequence = createOfficeTaskSequence(id);
   const runtimeConfig = Object.freeze({
     ...config,
-    limits: snapshotOfficeLimits(config.limits),
+    limits: resolveDocxRuntimeLimits(config.limits),
     urlPolicy: snapshotOfficeUrlPolicy(asOfficePolicy(config.urlPolicy)),
   });
   const wasmSource = runtimeConfig.wasmSource ?? runtimeConfig.wasmUrl ?? bundledDocxWasmUrl;
@@ -163,7 +171,7 @@ export function createDocxRuntime(config: DocxRuntimeConfig = {}): DocxRuntime {
     runtimeConfig.workerUrl
       ? () => new Worker(runtimeConfig.workerUrl as string, {
         type: "module",
-        name: "@extend-ai/docx-core-import",
+        name: "@arcships/docx-core-import",
       })
       : createBundledDocxWorker
   );
@@ -192,6 +200,7 @@ export function createDocxRuntime(config: DocxRuntimeConfig = {}): DocxRuntime {
         options.allowMainThreadFallback ?? runtimeConfig.allowMainThreadFallback,
       mainThreadFallbackMaxBytes:
         options.mainThreadFallbackMaxBytes ?? runtimeConfig.mainThreadFallbackMaxBytes,
+      limits: runtimeConfig.limits,
       onDiagnostic: notify,
     });
   };
@@ -207,7 +216,7 @@ export function createDocxRuntime(config: DocxRuntimeConfig = {}): DocxRuntime {
     const officeSource = asOfficeSource(source);
     const task = coordinator.start(officeSource, {
       signal: options.signal,
-      limits: runtimeConfig.limits as OfficeLimits,
+      limits: runtimeConfig.limits,
       resources: {
         wasmUrl: typeof wasmSource === "string" ? wasmSource : undefined,
         workerUrl: options.workerUrl ?? runtimeConfig.workerUrl,
@@ -222,7 +231,7 @@ export function createDocxRuntime(config: DocxRuntimeConfig = {}): DocxRuntime {
           })()
         : (await loadOfficeSource(officeSource, {
             signal: task.signal,
-            limits: runtimeConfig.limits as OfficeLimits,
+            limits: runtimeConfig.limits,
             urlPolicy: runtimeConfig.urlPolicy,
           })).buffer;
       task.assertCurrent();
@@ -258,6 +267,7 @@ export function createDocxRuntime(config: DocxRuntimeConfig = {}): DocxRuntime {
 
   return {
     id,
+    limits: runtimeConfig.limits,
     importDocxBuffer: (buffer, options) => runOne(buffer, options),
     loadSource: (source, options) => runOne(source, options),
     createLoader(): DocxRuntimeLoader {

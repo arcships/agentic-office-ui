@@ -38,8 +38,8 @@ depends-on: [docx-003]
 ## verification
 
 ```bash
-pnpm --filter @extend-ai/vue-docx typecheck
-pnpm --filter @extend-ai/vue-docx build
+pnpm --filter @arcships/vue-docx typecheck
+pnpm --filter @arcships/vue-docx build
 ```
 
 浏览器验证：加载 .docx fixture，段落/表格/图片/标题/CJK 文本正确渲染。

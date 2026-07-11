@@ -2,8 +2,8 @@
 //
 // Extracted from useDocxEditor.ts.
 
-import type { DocModel } from "@extend-ai/docx-core"
-import { cloneDocModel, createDocxRuntime, serializeDocx } from "@extend-ai/docx-core"
+import type { DocModel } from "@arcships/docx-core"
+import { cloneDocModel, createDocxRuntime, serializeDocx } from "@arcships/docx-core"
 import { onScopeDispose, watch } from "vue"
 import type { EditorCore } from "./editor-shared"
 

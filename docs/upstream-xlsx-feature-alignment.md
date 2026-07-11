@@ -1,5 +1,8 @@
 # 上游 XLSX 功能对齐清单与迁移操作方案
 
+> [!WARNING]
+> **历史资料。** 本文保存 2026-07-06 的上游分析和最初迁移方案。文中的本地绝对路径、目标文件、行数和“必须复刻”均不是当前产品状态或发布承诺。当前实现与验收请从[文档索引](INDEX.md)进入。
+
 Date: 2026-07-06
 
 ## 目的
@@ -467,7 +470,7 @@ cp $UPSTREAM/wasm-url.d.ts       $CORE/wasm-url.d.ts
 cp $UPSTREAM/xlsx-worker.js      $CORE/xlsx-worker.js   # 如果存在预编译版本
 ```
 
-**验证**：`pnpm --filter @extend-ai/xlsx-core typecheck`（修 import 路径后应直接通过）。
+**验证**：`pnpm --filter @arcships/xlsx-core typecheck`（修 import 路径后应直接通过）。
 
 **需要的 import 路径调整**：
 - `xlsx-worker.ts` 依赖 `./images`、`./charts`、`./safe-calculate`、`./wasm`、`./types` — 已在同一目录
@@ -674,9 +677,9 @@ cp $UPSTREAM/index.ts $CORE/index.ts
 
 ```bash
 # 上游依赖
-pnpm --filter @extend-ai/xlsx-core add @dukelib/sheets-wasm fflate
-pnpm --filter @extend-ai/vue-xlsx add @tanstack/react-virtual d3-geo d3-hierarchy d3-scale d3-shape regl topojson-client us-atlas world-atlas
-pnpm --filter @extend-ai/vue-xlsx add -D @types/d3-geo @types/d3-hierarchy @types/d3-scale @types/d3-shape @types/geojson @types/topojson-client
+pnpm --filter @arcships/xlsx-core add @dukelib/sheets-wasm fflate
+pnpm --filter @arcships/vue-xlsx add @tanstack/react-virtual d3-geo d3-hierarchy d3-scale d3-shape regl topojson-client us-atlas world-atlas
+pnpm --filter @arcships/vue-xlsx add -D @types/d3-geo @types/d3-hierarchy @types/d3-scale @types/d3-shape @types/geojson @types/topojson-client
 ```
 
 注意：`@tanstack/react-virtual` 是 React 专用，Vue 等价是 `@tanstack/vue-virtual`。但如果只实现 canvas 模式（不使用 DOM virtualizer），可以不装。
@@ -693,11 +696,11 @@ pnpm --filter @extend-ai/vue-xlsx add -D @types/d3-geo @types/d3-hierarchy @type
 
 | Phase | 验证命令 |
 |---|---|
-| 1 | `pnpm --filter @extend-ai/xlsx-core typecheck` |
-| 2 | `pnpm --filter @extend-ai/xlsx-core typecheck` |
-| 3 | `pnpm --filter @extend-ai/vue-xlsx typecheck` + 手动检查 controller 方法行为 |
-| 4 | `pnpm --filter @extend-ai/vue-xlsx typecheck` + 图表渲染验证 |
-| 5 | `pnpm --filter @extend-ai/vue-xlsx typecheck` + surface chart 验证 |
+| 1 | `pnpm --filter @arcships/xlsx-core typecheck` |
+| 2 | `pnpm --filter @arcships/xlsx-core typecheck` |
+| 3 | `pnpm --filter @arcships/vue-xlsx typecheck` + 手动检查 controller 方法行为 |
+| 4 | `pnpm --filter @arcships/vue-xlsx typecheck` + 图表渲染验证 |
+| 5 | `pnpm --filter @arcships/vue-xlsx typecheck` + surface chart 验证 |
 | 6 | 浏览器验证 `http://localhost:5000/#/xlsx-viewer` |
 | 7 | `pnpm typecheck && pnpm build` |
 | 8 | `pnpm install` 无错误 |
@@ -976,7 +979,7 @@ export default defineConfig({
 
 ```ts
 // main.ts
-import { setWasmSource } from "@extend-ai/xlsx-core"
+import { setWasmSource } from "@arcships/xlsx-core"
 // wasm 文件放在 public/ 下，用绝对路径
 setWasmSource("/duke_sheets_wasm_bg.wasm")
 ```
@@ -1020,12 +1023,12 @@ import { useVirtualizer } from "@tanstack/vue-virtual"
 
 | Phase | 验证命令 | 预期结果 |
 |---|---|---|
-| 1. 直接复制 | `pnpm --filter @extend-ai/xlsx-core typecheck` | 零错误（修 import 路径后） |
-| 2. types 清理 | `pnpm --filter @extend-ai/xlsx-core typecheck` | 零 React 类型残留 |
-| 3. controller 改写 | `pnpm --filter @extend-ai/vue-xlsx typecheck` + `pnpm --filter @extend-ai/vue-xlsx build` | 零错误 |
-| 4. chart-renderer | `pnpm --filter @extend-ai/vue-xlsx typecheck` | 零错误 |
-| 5. surface-regl | `pnpm --filter @extend-ai/vue-xlsx typecheck` | 零错误 |
-| 6. XlsxViewer 重写 | `pnpm --filter @extend-ai/vue-xlsx build` | 构建通过 |
+| 1. 直接复制 | `pnpm --filter @arcships/xlsx-core typecheck` | 零错误（修 import 路径后） |
+| 2. types 清理 | `pnpm --filter @arcships/xlsx-core typecheck` | 零 React 类型残留 |
+| 3. controller 改写 | `pnpm --filter @arcships/vue-xlsx typecheck` + `pnpm --filter @arcships/vue-xlsx build` | 零错误 |
+| 4. chart-renderer | `pnpm --filter @arcships/vue-xlsx typecheck` | 零错误 |
+| 5. surface-regl | `pnpm --filter @arcships/vue-xlsx typecheck` | 零错误 |
+| 6. XlsxViewer 重写 | `pnpm --filter @arcships/vue-xlsx build` | 构建通过 |
 | 7. index 调整 | `pnpm typecheck && pnpm build` | 全 workspace 通过 |
 | 8. 依赖安装 | `pnpm install` | 无 peer warning |
 | 9. License | `git diff --check` | 无空白错误 |

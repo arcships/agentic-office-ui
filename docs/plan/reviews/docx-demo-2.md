@@ -245,7 +245,7 @@ Status: **PASS**
 
 - 零残留 `@extend-ai/react-docx` 绝对引用
 - 零 `React.` 运行时访问（仅在注释中出现，作为迁移记录标记）
-- 所有跨包引用使用 `@extend-ai/docx-core` 包名，包内引用使用相对路径
+- 所有跨包引用使用 `@arcships/docx-core` 包名，包内引用使用相对路径
 - 无过度深层相对路径 (`../../..` 及以上)
 
 ---
@@ -253,8 +253,8 @@ Status: **PASS**
 ## 五、typecheck 结果
 
 ```
-pnpm --filter @extend-ai/docx-core typecheck → tsc --noEmit ✅ 0 errors
-pnpm --filter @extend-ai/vue-docx typecheck    → tsc --noEmit ✅ 0 errors
+pnpm --filter @arcships/docx-core typecheck → tsc --noEmit ✅ 0 errors
+pnpm --filter @arcships/vue-docx typecheck    → tsc --noEmit ✅ 0 errors
 ```
 
 ---

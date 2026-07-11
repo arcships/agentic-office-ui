@@ -41,7 +41,7 @@
 因此，建议接受以下架构决定：
 
 1. 先暂停公开发布和大规模新增功能，优先消除正式运行、类型检查、URL 安全和发布包阻断。
-2. 新增一个很薄的工作区私有包 `@extend-ai/office-runtime`，只提供输入、URL 规则、资源上限、取消、请求编号、缓存和统一错误的实现，不负责解析 DOCX/XLSX，也不作为第六个公开发布包。
+2. 新增一个很薄的工作区私有包 `@arcships/office-runtime`，只提供输入、URL 规则、资源上限、取消、请求编号、缓存和统一错误的实现，不负责解析 DOCX/XLSX，也不作为第六个公开发布包。
 3. DOCX 和 XLSX 都改成实例化运行配置；WASM、Worker、限制和缓存属于实例，不能继续依赖模块级可变全局变量。
 4. Worker 默认是必须成功的执行路径。只有调用方明确允许、文件低于安全阈值并留下诊断记录时，才可以退回主线程。
 5. DOCX Viewer 与 Editor 共用同一页面渲染树；编辑器只额外提供选区、命令、浮层和输入事件。
@@ -86,7 +86,7 @@
 
 #### B1. DOCX 主线程和 Worker 使用两套 WASM 配置状态
 
-demo 从 `@extend-ai/docx-core` 根入口调用 `setWasmSource`，[main.ts 第 11～15 行](../apps/demo/src/main.ts#L11-L15)。根入口导出的同名函数来自 engine；它只更新 engine 模块中的 `overrideSource`，[engine/wasm.ts 第 14～29 行](../packages/docx-core/src/engine/wasm.ts#L14-L29)。
+demo 从 `@arcships/docx-core` 根入口调用 `setWasmSource`，[main.ts 第 11～15 行](../apps/demo/src/main.ts#L11-L15)。根入口导出的同名函数来自 engine；它只更新 engine 模块中的 `overrideSource`，[engine/wasm.ts 第 14～29 行](../packages/docx-core/src/engine/wasm.ts#L14-L29)。
 
 Worker 导入链路却从另一个 `viewer/wasm-source.ts` 读取 `configuredWorkerWasmSource`，[docx-import.ts 第 3～7 行](../packages/docx-core/src/viewer/docx-import.ts#L3-L7) 和 [第 223～231 行](../packages/docx-core/src/viewer/docx-import.ts#L223-L231)。只有调用 viewer 层自己的 `setWasmSource` 才会记录该值，[viewer/wasm-source.ts 第 44～67 行](../packages/docx-core/src/viewer/wasm-source.ts#L44-L67)。但 viewer barrel 又明确不导出这个模块，并建议使用一个包清单没有声明的深层路径，[viewer/index.ts 第 4～7 行](../packages/docx-core/src/viewer/index.ts#L4-L7)；实际包只导出根入口，[docx-core/package.json 第 5～13 行](../packages/docx-core/package.json#L5-L13)。
 
@@ -258,15 +258,15 @@ DocumentSession / WorkbookSession
 
 | 包 | 目标职责 | 不应继续承担 |
 |---|---|---|
-| `@extend-ai/office-runtime`（新增） | 输入类型、URL 规则、下载、资源预算、AbortSignal、请求编号、按字节缓存工具、统一错误和诊断字段 | 持有运行状态、DOCX/XLSX 解析、Vue 状态、页面渲染 |
-| `@extend-ai/docx-core` | DOCX Runtime、Worker、WASM 适配、OOXML 模型、布局、编辑命令、序列化 | Vue 组件、demo 状态、隐式模块全局配置；纯入口不直接依赖 DOM |
-| `@extend-ai/xlsx-core` | XLSX Runtime、Worker、WASM 适配、工作簿模型、公式/图表/图片数据、编辑命令、导出 | Vue 组件、静默主线程回退；纯入口不假设 Worker 一定有 DOMParser |
-| `@extend-ai/vue-docx` | session/controller 与 Vue 生命周期连接、唯一文档渲染面、只读和编辑交互 | 重复解析、第二套布局、直接修改核心模型 |
-| `@extend-ai/vue-xlsx` | controller、网格、选区、编辑交互、按需图表/地图/WebGL 渲染 | URL 安全和资源限制的私有副本、默认静态加载所有可选能力 |
-| `@extend-ai/vue-extend` | PDF、上传、签名、缩略图等通用 Vue 组件 | 用原始同源 iframe 代替受控 PDF 渲染、各组件自行制定 URL 规则 |
+| `@arcships/office-runtime`（新增） | 输入类型、URL 规则、下载、资源预算、AbortSignal、请求编号、按字节缓存工具、统一错误和诊断字段 | 持有运行状态、DOCX/XLSX 解析、Vue 状态、页面渲染 |
+| `@arcships/docx-core` | DOCX Runtime、Worker、WASM 适配、OOXML 模型、布局、编辑命令、序列化 | Vue 组件、demo 状态、隐式模块全局配置；纯入口不直接依赖 DOM |
+| `@arcships/xlsx-core` | XLSX Runtime、Worker、WASM 适配、工作簿模型、公式/图表/图片数据、编辑命令、导出 | Vue 组件、静默主线程回退；纯入口不假设 Worker 一定有 DOMParser |
+| `@arcships/vue-docx` | session/controller 与 Vue 生命周期连接、唯一文档渲染面、只读和编辑交互 | 重复解析、第二套布局、直接修改核心模型 |
+| `@arcships/vue-xlsx` | controller、网格、选区、编辑交互、按需图表/地图/WebGL 渲染 | URL 安全和资源限制的私有副本、默认静态加载所有可选能力 |
+| `@arcships/vue-extend` | PDF、上传、签名、缩略图等通用 Vue 组件 | 用原始同源 iframe 代替受控 PDF 渲染、各组件自行制定 URL 规则 |
 | `apps/demo` | 使用公开入口演示和承载黑盒页面 | 源码深层导入、硬编码“已通过”、替发布包提供缺失资源 |
 
-`@extend-ai/office-runtime` 在本轮确定为工作区私有包，`package.json` 使用 `"private": true`，不作为第六个发布包。任何公开包只要引用它，都必须把所需实现打入自己的 `dist`，且生成的 `.d.ts` 不能要求消费端安装这个私有包。五个现有公开包的发布和消费矩阵保持不变。将来若确有外部直接使用需求，应另开架构决定，不能在本轮中顺带公开。
+`@arcships/office-runtime` 在本轮确定为工作区私有包，`package.json` 使用 `"private": true`，不作为第六个发布包。任何公开包只要引用它，都必须把所需实现打入自己的 `dist`，且生成的 `.d.ts` 不能要求消费端安装这个私有包。五个现有公开包的发布和消费矩阵保持不变。将来若确有外部直接使用需求，应另开架构决定，不能在本轮中顺带公开。
 
 ### 7.2 建议目录
 
@@ -392,7 +392,7 @@ import {
   bundledDocxWasmUrl,
   createBundledDocxWorker,
   createDocxRuntime,
-} from "@extend-ai/docx-core/runtime"
+} from "@arcships/docx-core/runtime"
 
 const docxRuntime = createDocxRuntime({
   wasmSource: bundledDocxWasmUrl,
@@ -438,7 +438,7 @@ import {
   bundledXlsxWasmUrl,
   createBundledXlsxWorker,
   createXlsxRuntime,
-} from "@extend-ai/xlsx-core/runtime"
+} from "@arcships/xlsx-core/runtime"
 
 const xlsxRuntime = createXlsxRuntime({
   wasmSource: bundledXlsxWasmUrl,
@@ -714,7 +714,7 @@ Vue 包统一提供：
 - 必要时提供 `./advanced`，但不从根入口导出所有内部组件；
 - `sideEffects` 明确保留 CSS，不依赖消费端碰巧没有摇掉样式。
 
-文档和 demo 不再导入 `@extend-ai/vue-extend/dist/index.css` 这类内部路径，而统一导入 `@extend-ai/vue-extend/style.css`。
+文档和 demo 不再导入 `@arcships/vue-extend/dist/index.css` 这类内部路径，而统一导入 `@arcships/vue-extend/style.css`。
 
 ### 11.3 构建和发布流程
 
@@ -727,7 +727,7 @@ Vue 包统一提供：
 5. 导入 JS、类型和 `./style.css`，开发构建和正式构建都运行。
 6. 启动正式预览，确认 Worker/WASM 请求成功、Content-Type 合理、无 404，加载真实 DOCX/XLSX。
 7. 对压缩包内容设置允许清单：不得包含测试材料、源代码绝对路径、临时文件或无关大文件。
-8. 检查生成的 `.d.ts` 和运行时代码都不引用私有 `@extend-ai/office-runtime`；需要的实现已打包，公开类型已由对应公开包重新导出。
+8. 检查生成的 `.d.ts` 和运行时代码都不引用私有 `@arcships/office-runtime`；需要的实现已打包，公开类型已由对应公开包重新导出。
 
 是否提交 `dist` 到 Git 与是否发布 `dist` 是两件事。可以继续在 Git 中忽略 `dist`，但必须用 `files`、发布前构建和真实压缩包测试保证制品完整。
 

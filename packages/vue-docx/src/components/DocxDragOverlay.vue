@@ -18,7 +18,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue"
-import type { DocxEditorController } from "@extend-ai/docx-core"
+import type { DocxEditorController } from "@arcships/docx-core"
 
 // ── Props ──────────────────────────────────────────────────────────
 defineProps<{

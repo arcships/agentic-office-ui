@@ -8,7 +8,7 @@
     "rootDir": "..",
     "baseUrl": ".",
     "paths": {
-      "@extend-ai/xlsx-core": ["../xlsx-core/src/index.ts"]
+      "@arcships/xlsx-core": ["../xlsx-core/src/index.ts"]
     }
   }
 }

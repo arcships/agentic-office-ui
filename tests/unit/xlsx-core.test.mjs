@@ -7,11 +7,22 @@ import { pathToFileURL } from "node:url";
 const requireFromVueXlsx = createRequire(
   new URL("../../packages/vue-xlsx/package.json", import.meta.url),
 );
+const requireFromXlsxCore = createRequire(
+  new URL("../../packages/xlsx-core/package.json", import.meta.url),
+);
+const {
+  DOMParser: XmlDomParser,
+  Node: XmlNode,
+  XMLSerializer: XmlSerializer,
+} = requireFromXlsxCore("@xmldom/xmldom");
+globalThis.DOMParser ??= XmlDomParser;
+globalThis.Node ??= XmlNode;
+globalThis.XMLSerializer ??= XmlSerializer;
 const core = await import(
-  pathToFileURL(requireFromVueXlsx.resolve("@extend-ai/xlsx-core")).href
+  pathToFileURL(requireFromVueXlsx.resolve("@arcships/xlsx-core")).href
 );
 const runtimeEntry = await import(
-  pathToFileURL(requireFromVueXlsx.resolve("@extend-ai/xlsx-core/runtime")).href
+  pathToFileURL(requireFromVueXlsx.resolve("@arcships/xlsx-core/runtime")).href
 );
 const samples = new URL("../../apps/demo/public/samples/", import.meta.url);
 
@@ -20,7 +31,7 @@ function bytesFromFile(name) {
 }
 
 const wasmPath = requireFromVueXlsx.resolve(
-  "@extend-ai/xlsx-core/assets/duke_sheets_wasm_bg.wasm",
+  "@arcships/xlsx-core/assets/duke_sheets_wasm_bg.wasm",
 );
 const wasmBytes = readFileSync(wasmPath);
 core.setWasmSource(
@@ -131,6 +142,53 @@ test("XLSX parses a normal workbook fixture", () => {
   workbook.free();
 });
 
+test("XLSX structure parser exposes real table definitions for sorting", () => {
+  const assets = core.parseWorkbookStructureAssets(bytesFromFile("sales-table.xlsx"));
+  const tables = core.normalizeWorkbookTableMetadata(
+    assets.tableMetadataByWorkbookSheetIndex[0] ?? [],
+  );
+  assert.equal(tables.length, 1);
+  assert.equal(tables[0].name, "SalesRecords");
+  assert.equal(tables[0].reference, "A1:H181");
+  assert.deepEqual(tables[0].start, { row: 0, col: 0 });
+  assert.deepEqual(tables[0].end, { row: 180, col: 7 });
+  assert.deepEqual(tables[0].columns.map((column) => column.name), [
+    "Region", "Rep", "Product", "Month", "Units", "Unit Price", "Revenue", "Notes",
+  ]);
+});
+
+test("XLSX resolves a chartsheet drawing into a renderable chart", () => {
+  const bytes = bytesFromFile("charts-images.xlsx");
+  const structure = core.parseWorkbookStructureAssets(bytes);
+  assert.deepEqual(structure.sheetStatesByWorkbookSheetIndex[0]?.mergedRegions, [{
+    start: { row: 6, col: 0 },
+    end: { row: 7, col: 2 },
+  }]);
+  const workbook = wasm.Workbook.fromBytes(bytes);
+  try {
+    const imageAssets = core.parseWorkbookChartStyleAssets(bytes);
+    const assets = core.loadWorkbookChartAssets(
+      workbook,
+      imageAssets,
+      new Map([[0, 0]]),
+    );
+    assert.equal(assets.chartsheets.length, 1);
+    const chartsheet = assets.chartsheets[0];
+    assert.equal(chartsheet.name, "Revenue Chart");
+    assert.equal(chartsheet.chartPath, "xl/charts/chart2.xml");
+    assert.equal(chartsheet.charts?.length, 1);
+    const chart = chartsheet.charts[0];
+    assert.deepEqual(chartsheet.chartIds, [chart.id]);
+    assert.equal(chart.chartType, "ColumnClustered");
+    assert.equal(chart.title, "Revenue by Quarter");
+    assert.equal(chart.editable, false);
+    assert.deepEqual(chart.series[0].categories, ["Q1", "Q2", "Q3", "Q4"]);
+    assert.deepEqual(chart.series[0].values, [120000, 145000, 168000, 210000]);
+  } finally {
+    workbook.free();
+  }
+});
+
 test("XLSX rejects empty and corrupted input", () => {
   assert.throws(
     () => wasm.Workbook.fromBytes(new Uint8Array()),
@@ -234,7 +292,7 @@ test("XLSX Worker client does not post any pre-cancelled request", async () => {
   client.dispose();
 });
 
-test("XLSX Worker client cancels only one request and ignores its late response", async () => {
+test("XLSX Worker cancellation terminates the client and rejects every pending request", async () => {
   const worker = new ControlledXlsxWorker({ respond: false });
   const client = new core.XlsxWorkerClient({ createWorker: () => worker });
   const cancelledSignal = new ControlledAbortSignal();
@@ -247,13 +305,19 @@ test("XLSX Worker client cancels only one request and ignores its late response"
     cancelled,
     (error) => error?.name === "AbortError",
   );
+  const activeRejection = assert.rejects(
+    active,
+    (error) => error?.name === "AbortError",
+  );
 
   cancelledSignal.abort();
-  await cancelledRejection;
+  await Promise.all([cancelledRejection, activeRejection]);
   assert.equal(cancelledSignal.listenerCount, 0);
   assert.equal(cancelledSignal.removeCount, 1);
-  assert.equal(activeSignal.listenerCount, 1);
-  assert.equal(worker.terminated, false);
+  assert.equal(activeSignal.listenerCount, 0);
+  assert.equal(activeSignal.removeCount, 1);
+  assert.equal(worker.terminated, true);
+  assert.equal(worker.terminateCount, 1);
 
   worker.emit("message", {
     data: {
@@ -269,16 +333,10 @@ test("XLSX Worker client cancels only one request and ignores its late response"
       result: { displayValue: "active", formula: "active" },
     },
   });
-  assert.deepEqual(await active, { displayValue: "active", formula: "active" });
-  assert.equal(activeSignal.listenerCount, 0);
-  assert.equal(activeSignal.removeCount, 1);
-
-  const later = client.getRowsBatch(0, 0, 1);
-  const laterMessage = worker.messages[2];
-  worker.emit("message", {
-    data: { id: laterMessage.id, success: true, result: ["still-usable"] },
-  });
-  assert.deepEqual(await later, ["still-usable"]);
+  await assert.rejects(
+    client.getRowsBatch(0, 0, 1),
+    (error) => error?.name === "AbortError",
+  );
   client.dispose();
 });
 
@@ -304,7 +362,7 @@ test("XLSX Worker client cleans AbortSignal on success and response error", asyn
   assert.equal(errorSignal.addCount, 1);
   assert.equal(errorSignal.removeCount, 1);
   assert.equal(errorSignal.listenerCount, 0);
-  assert.equal(worker.terminated, false);
+  assert.equal(worker.terminated, true);
   client.dispose();
 });
 
@@ -323,18 +381,11 @@ test("XLSX Worker client cleans AbortSignal when postMessage throws", async () =
   assert.equal(signal.removeCount, 1);
   assert.equal(signal.listenerCount, 0);
   assert.equal(worker.messages.length, 0);
-  assert.equal(worker.terminated, false);
-
-  worker.throwOnPost = false;
-  const retry = client.loadWorkbook(new ArrayBuffer(4));
-  assert.equal(
-    worker.messages[0].payload.wasmSource,
-    "https://assets.example/retry.wasm",
+  assert.equal(worker.terminated, true);
+  await assert.rejects(
+    client.loadWorkbook(new ArrayBuffer(4)),
+    /postMessage failed/,
   );
-  worker.emit("message", {
-    data: { id: worker.messages[0].id, success: true, result: {} },
-  });
-  await retry;
   client.dispose();
 });
 
@@ -461,6 +512,95 @@ test("XLSX URL loading uses shared policy, controlled fetch and safe diagnostics
   assert.equal(JSON.stringify(result).includes("secret"), false);
 });
 
+test("XLSX URL loading rejects an oversized Content-Length before reading the body", async () => {
+  let arrayBufferCalls = 0;
+  let bodyCancelCalls = 0;
+  const policy = {
+    enabled: true,
+    baseUrl: "https://app.example/",
+    allowRelativeUrl: true,
+    allowedProtocols: ["https:"],
+    allowedOrigins: ["https://app.example"],
+    fetch: async (url) => ({
+      ok: true,
+      status: 200,
+      url,
+      headers: { get: (name) => name.toLowerCase() === "content-length" ? "8" : null },
+      body: { cancel: async () => { bodyCancelCalls += 1; } },
+      arrayBuffer: async () => {
+        arrayBufferCalls += 1;
+        return new ArrayBuffer(8);
+      },
+    }),
+  };
+
+  await assert.rejects(
+    core.loadVerifiedXlsxSource("book.xlsx", policy, undefined, { maxInputBytes: 4 }),
+    (error) => error?.name === "XlsxSourceError" &&
+      error?.code === "LIMIT_EXCEEDED" &&
+      error?.phase === "input" &&
+      error?.limit === "maxInputBytes" &&
+      error?.actual === 8 &&
+      error?.allowed === 4,
+  );
+  assert.equal(arrayBufferCalls, 0);
+  assert.equal(bodyCancelCalls, 1);
+});
+
+test("XLSX URL loading cancels a streaming response as soon as maxInputBytes is exceeded", async () => {
+  const chunks = [
+    new Uint8Array([0x50, 0x4b, 0x03, 0x04]),
+    new Uint8Array([1, 2, 3, 4]),
+    new Uint8Array([5, 6, 7, 8]),
+  ];
+  let reads = 0;
+  let cancelCalls = 0;
+  let releaseCalls = 0;
+  let fallbackArrayBufferCalls = 0;
+  const policy = {
+    enabled: true,
+    baseUrl: "https://app.example/",
+    allowRelativeUrl: true,
+    allowedProtocols: ["https:"],
+    allowedOrigins: ["https://app.example"],
+    fetch: async (url) => ({
+      ok: true,
+      status: 200,
+      url,
+      headers: { get: () => null },
+      body: {
+        getReader: () => ({
+          read: async () => {
+            const value = chunks[reads];
+            reads += 1;
+            return value ? { done: false, value } : { done: true, value: undefined };
+          },
+          cancel: async () => { cancelCalls += 1; },
+          releaseLock: () => { releaseCalls += 1; },
+        }),
+      },
+      arrayBuffer: async () => {
+        fallbackArrayBufferCalls += 1;
+        return new ArrayBuffer(0);
+      },
+    }),
+  };
+
+  await assert.rejects(
+    core.loadVerifiedXlsxSource("book.xlsx", policy, undefined, { maxInputBytes: 5 }),
+    (error) => error?.name === "XlsxSourceError" &&
+      error?.code === "LIMIT_EXCEEDED" &&
+      error?.phase === "input" &&
+      error?.limit === "maxInputBytes" &&
+      error?.actual === 8 &&
+      error?.allowed === 5,
+  );
+  assert.equal(reads, 2);
+  assert.equal(cancelCalls, 1);
+  assert.equal(releaseCalls, 1);
+  assert.equal(fallbackArrayBufferCalls, 0);
+});
+
 test("XLSX dangerous URL is rejected before fetch with the stable shared code", async () => {
   let requestCount = 0;
   const policy = {
@@ -487,6 +627,7 @@ test("XLSX runtimes isolate Worker and WASM configuration from legacy globals", 
   const configA = {
     wasmSource: "https://assets.example/a.wasm",
     parseOptions: { showHiddenSheets: true, skipXmlParsing: true },
+    limits: { maxArchiveEntries: 7, maxWorksheets: 3 },
     createWorker: () => {
       const worker = new ControlledXlsxWorker();
       workersA.push(worker);
@@ -504,6 +645,7 @@ test("XLSX runtimes isolate Worker and WASM configuration from legacy globals", 
   });
   configA.wasmSource = "https://mutated.invalid/a.wasm";
   configA.parseOptions.showHiddenSheets = false;
+  configA.limits.maxArchiveEntries = 1;
 
   const clientA = runtimeA.createWorkerClient();
   const clientB = runtimeB.createWorkerClient();
@@ -515,6 +657,9 @@ test("XLSX runtimes isolate Worker and WASM configuration from legacy globals", 
   assert.equal(workersA[0].messages[0].payload.wasmSource, "https://assets.example/a.wasm");
   assert.equal(workersB[0].messages[0].payload.wasmSource, "https://assets.example/b.wasm");
   assert.deepEqual(runtimeA.parseOptions, { showHiddenSheets: true, skipXmlParsing: true });
+  assert.equal(Object.isFrozen(runtimeA.limits), true);
+  assert.equal(runtimeA.limits.maxArchiveEntries, 7);
+  assert.equal(workersA[0].messages[0].payload.limits.maxWorksheets, 3);
   await clientA.parseCharts(new ArrayBuffer(4));
   assert.equal(workersA[0].messages[1].payload.wasmSource, undefined);
   assert.throws(
@@ -543,4 +688,65 @@ test("XLSX runtimes isolate Worker and WASM configuration from legacy globals", 
     format: "xlsx",
     runtimeId: runtimeA.id,
   });
+});
+
+test("XLSX Worker preserves structured budget errors", async () => {
+  const worker = new ControlledXlsxWorker({ respond: false });
+  const client = new core.XlsxWorkerClient({ createWorker: () => worker });
+  const pending = client.loadWorkbook(new ArrayBuffer(4));
+  worker.emit("message", {
+    data: {
+      id: worker.messages[0].id,
+      success: false,
+      error: {
+        code: "LIMIT_EXCEEDED",
+        message: "shared strings exceeded",
+        phase: "xml",
+        limit: "maxSharedStrings",
+        actual: 3,
+        allowed: 2,
+      },
+    },
+  });
+  await assert.rejects(
+    pending,
+    (error) => error instanceof core.XlsxWorkerError &&
+      error.code === "LIMIT_EXCEEDED" &&
+      error.phase === "xml" &&
+      error.limit === "maxSharedStrings" &&
+      error.actual === 3 &&
+      error.allowed === 2,
+  );
+  client.dispose();
+});
+
+test("XLSX Worker failures keep a stable public load error", () => {
+  const error = core.toXlsxLoadError(
+    new core.XlsxWorkerError("WORKER_FAILED", "worker initialization failed", {
+      phase: "parse",
+    }),
+    "file",
+  );
+  assert.deepEqual(error, {
+    code: "WORKER_UNAVAILABLE",
+    message: "worker initialization failed",
+    phase: "parse",
+    sourceKind: "file",
+  });
+});
+
+test("XLSX Worker timeout terminates the client for clean recovery", async () => {
+  const worker = new ControlledXlsxWorker({ respond: false });
+  const client = new core.XlsxWorkerClient({
+    createWorker: () => worker,
+    limits: { maxParseMs: 5 },
+  });
+  await assert.rejects(
+    client.loadWorkbook(new ArrayBuffer(4)),
+    (error) => error instanceof core.XlsxWorkerError &&
+      error.code === "TIMEOUT" &&
+      error.actual > error.allowed,
+  );
+  assert.equal(worker.terminated, true);
+  client.dispose();
 });

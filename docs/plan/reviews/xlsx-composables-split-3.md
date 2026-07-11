@@ -94,7 +94,7 @@ $ grep -rn "composables/" packages/vue-xlsx/src/   # 无输出
 - 代码位置：`packages/vue-xlsx/src/composables.ts`（monolith，可编译）；`packages/vue-xlsx/src/composables/*.ts`（孤立，无 import 关系，不构成可验证的模块图）
 
 ```
-$ pnpm --filter @extend-ai/vue-xlsx typecheck
+$ pnpm --filter @arcships/vue-xlsx typecheck
 > tsc --noEmit
 （无输出，退出 0）
 ```
@@ -133,7 +133,7 @@ $ git show --stat 03585c3 | tail -6
  packages/vue-xlsx/src/composables/selection.ts  | 170 +++
 （composables.ts 未出现在 diff）
 
-$ pnpm --filter @extend-ai/vue-xlsx typecheck          # monolith 可编译
+$ pnpm --filter @arcships/vue-xlsx typecheck          # monolith 可编译
 （无输出，退出 0）
 ```
 
@@ -150,5 +150,5 @@ review-3（HEAD `03585c3`）：`composables/` 新增 3 文件（`formatting.ts`/
 1. 按职责把 `composables.ts` 的代码**移出**到 8 模块（state/selection/editing/chart/clipboard/navigation/formatting/controller），monolith 改为从子模块 `import`，删除 monolith 内的重复实现，最终 `composables.ts` 应消失或仅剩极薄入口。
 2. 补 `composables/index.ts` barrel，`src/index.ts` 从 `./composables` 导入（当前已如此，接入后即生效）。
 3. 每文件 ≤1000 行（controller 若超 1000 需进一步按方法域拆，或参照 §4.4 接受 controller 聚合但其余模块独立）。
-4. 拆分后 `pnpm --filter @extend-ai/vue-xlsx typecheck` 必须通过，并运行 `packages/vue-xlsx/test/structure.mjs` 验证 controller 方法表完整。
-5. 依赖任务 `xlsx-core-charts-split`/`xlsx-core-images-split` 已完成，composables 从 `@extend-ai/xlsx-core` 统一入口导入即可（当前 monolith 已如此，拆分时保持）。
+4. 拆分后 `pnpm --filter @arcships/vue-xlsx typecheck` 必须通过，并运行 `packages/vue-xlsx/test/structure.mjs` 验证 controller 方法表完整。
+5. 依赖任务 `xlsx-core-charts-split`/`xlsx-core-images-split` 已完成，composables 从 `@arcships/xlsx-core` 统一入口导入即可（当前 monolith 已如此，拆分时保持）。

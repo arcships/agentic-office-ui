@@ -3,7 +3,7 @@
 //
 // Thin wrapper around the editor controller's pagination info.
 
-import type { DocxEditorController, DocxPaginationInfo } from "@extend-ai/docx-core"
+import type { DocxEditorController, DocxPaginationInfo } from "@arcships/docx-core"
 
 export interface UseDocxPaginationResult {
   pagination: DocxPaginationInfo

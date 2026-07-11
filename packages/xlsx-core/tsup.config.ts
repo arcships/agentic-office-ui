@@ -16,7 +16,7 @@ export default defineConfig([
     dts: true,
     clean: true,
     external: ["@dukelib/sheets-wasm"],
-    noExternal: ["@extend-ai/office-runtime"],
+    noExternal: ["@arcships/office-runtime", "@xmldom/xmldom"],
     skipNodeModulesBundle: true,
     onSuccess: () => {
       const require = createRequire(import.meta.url)

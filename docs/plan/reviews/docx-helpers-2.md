@@ -20,7 +20,7 @@ Batch 2 (`e24a049`) correctly resolves the two runtime-functional stubs flagged 
 - **F2 fixed** — `estimateTextAdvanceWidthPx` is now a real per-character advance-width estimator with cache + tab/space/CJK/digit heuristics in [drop-cap.ts:223](../../packages/docx-core/src/editor/helpers/drop-cap.ts#L223), imported by [synthetic-textbox.ts:21](../../packages/docx-core/src/editor/helpers/synthetic-textbox.ts#L21). Byte-equivalent to upstream editor.tsx:7747.
 - **F3 fixed** — `resolveParagraphFirstLineLeftTabStopsPx` is now the canonical implementation in [line-height.ts:423](../../packages/docx-core/src/editor/helpers/line-height.ts#L423) (filters `alignment !== "right"`, applies `firstLineOriginPx` offset via `resolveParagraphFirstLineOriginPx`), imported by [field-helpers.ts:12](../../packages/docx-core/src/editor/helpers/field-helpers.ts#L12). Matches upstream editor.tsx:9310.
 
-Batch 2 also delivers 5 genuinely new modules (`drop-cap`, `letterhead`, `line-height`, `header-footer`, `paragraph-tracked`), all real ports of upstream (spot-checked `resolveHeaderPaginationReservePx` against upstream line 2217 — faithful). 25 of 40 planned modules now exist (≈63% by file count, ~12198 of ~21200 lines ≈58%). typecheck passes for both `@extend-ai/docx-core` and the full 6-package workspace; no residual stub/mock/fake; no React-type leakage; cross-layer imports are relative and DAG-respecting (`../../engine/*`, `../../layout/*`, `../../viewer/*` only).
+Batch 2 also delivers 5 genuinely new modules (`drop-cap`, `letterhead`, `line-height`, `header-footer`, `paragraph-tracked`), all real ports of upstream (spot-checked `resolveHeaderPaginationReservePx` against upstream line 2217 — faithful). 25 of 40 planned modules now exist (≈63% by file count, ~12198 of ~21200 lines ≈58%). typecheck passes for both `@arcships/docx-core` and the full 6-package workspace; no residual stub/mock/fake; no React-type leakage; cross-layer imports are relative and DAG-respecting (`../../engine/*`, `../../layout/*`, `../../viewer/*` only).
 
 Two issues remain:
 
@@ -109,7 +109,7 @@ Two issues remain:
 |---|---|---|
 | F2 stub removed | ✅ Pass | `estimateTextAdvanceWidthPx` real impl in [drop-cap.ts:223](../../packages/docx-core/src/editor/helpers/drop-cap.ts#L223); `synthetic-textbox.ts` now imports it (`./drop-cap`), no `return 0` stub remains. |
 | F3 divergence fixed | ✅ Pass | `resolveParagraphFirstLineLeftTabStopsPx` canonical in [line-height.ts:423](../../packages/docx-core/src/editor/helpers/line-height.ts#L423) (filters `!== "right"`, applies `firstLineOriginPx`); `field-helpers.ts` imports it, local divergent copy removed. |
-| Typecheck (docx-core) | ✅ Pass | `pnpm --filter @extend-ai/docx-core typecheck` exits 0. |
+| Typecheck (docx-core) | ✅ Pass | `pnpm --filter @arcships/docx-core typecheck` exits 0. |
 | Typecheck (full workspace) | ✅ Pass | `pnpm typecheck` (6 packages) exits 0 — no ripple in vue-docx/xlsx. |
 | Residual stubs/mocks/fakes | ✅ Pass | Grep for `stub\|mock\|fake\|placeholder\|forward declaration\|not implemented` finds only legitimate uses (form-field `placeholder` property; a comment about generator "placeholder uniform grid"). No `return 0` / throw-not-implemented stubs. |
 | Import paths | ✅ Pass | All relative; zero `@extend-ai/*` package refs in source; cross-layer imports only to `../../engine/*`, `../../layout/*`, `../../viewer/*` (respects §5 DAG across layers). |
