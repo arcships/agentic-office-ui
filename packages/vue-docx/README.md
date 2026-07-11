@@ -47,4 +47,4 @@ import "@arcships/vue-docx/style.css"
 
 ## License
 
-MIT
+Apache-2.0

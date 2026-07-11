@@ -45,4 +45,4 @@ import "@arcships/vue-ui/style.css"
 
 ## License
 
-MIT
+Apache-2.0

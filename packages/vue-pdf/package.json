@@ -1,7 +1,7 @@
 {
   "name": "@arcships/vue-pdf",
   "version": "0.2.0",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "description": "Vue 3 PDF viewer component with PDFium-based rendering, search, thumbnails, and download",
   "keywords": ["vue", "vue3", "pdf", "viewer", "pdfium", "components"],
   "homepage": "https://github.com/arcships/agentic-office-ui#readme",

@@ -1,7 +1,7 @@
 {
   "name": "@arcships/vue-xlsx",
   "version": "0.2.0",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "description": "Vue 3 XLSX spreadsheet viewer with charts, maps, WebGL, and controller composables",
   "keywords": ["vue", "vue3", "xlsx", "excel", "spreadsheet", "charts", "map", "webgl"],
   "homepage": "https://github.com/arcships/agentic-office-ui#readme",

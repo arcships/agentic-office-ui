@@ -9,7 +9,7 @@ Vue 3 组件库 · DOCX / XLSX / PPTX / PDF 浏览器内查看与编辑
 [![CI](https://github.com/arcships/agentic-office-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/arcships/agentic-office-ui/actions/workflows/ci.yml)
 [![Release](https://github.com/arcships/agentic-office-ui/actions/workflows/release.yml/badge.svg)](https://github.com/arcships/agentic-office-ui/actions/workflows/release.yml)
 ![Vue](https://img.shields.io/badge/Vue-3.2%2B-42b883)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![License](https://img.shields.io/badge/license-Apache--2.0-blue)
 ![Status](https://img.shields.io/badge/status-candidate%200.2.0-orange)
 
 </div>

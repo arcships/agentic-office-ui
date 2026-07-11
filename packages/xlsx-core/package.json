@@ -1,7 +1,7 @@
 {
   "name": "@arcships/xlsx-core",
   "version": "0.2.0",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "description": "XLSX workbook model, formulas, charts, images, and instance runtime with Worker/WASM support",
   "keywords": ["xlsx", "excel", "spreadsheet", "workbook", "charts", "wasm", "worker"],
   "homepage": "https://github.com/arcships/agentic-office-ui#readme",

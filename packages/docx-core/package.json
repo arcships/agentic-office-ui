@@ -1,7 +1,7 @@
 {
   "name": "@arcships/docx-core",
   "version": "0.2.0",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "description": "DOCX document model, layout engine, editing commands, and instance runtime with Worker/WASM support",
   "keywords": ["docx", "word", "document", "viewer", "editor", "wasm", "worker"],
   "homepage": "https://github.com/arcships/agentic-office-ui#readme",

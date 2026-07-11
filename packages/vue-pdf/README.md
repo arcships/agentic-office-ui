@@ -46,4 +46,4 @@ const runtime = createPdfRenderRuntime({ pdfiumWasmUrl: bundledPdfiumWasmUrl })
 
 ## License
 
-MIT
+Apache-2.0

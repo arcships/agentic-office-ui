@@ -49,4 +49,4 @@ import "@arcships/vue-xlsx/webgl"
 
 ## License
 
-MIT
+Apache-2.0

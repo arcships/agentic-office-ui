@@ -2,7 +2,7 @@
   "name": "@arcships/vue-pptx",
   "version": "0.2.0",
   "private": true,
-  "license": "MIT",
+  "license": "Apache-2.0",
   "publishConfig": {
     "access": "public"
   },
