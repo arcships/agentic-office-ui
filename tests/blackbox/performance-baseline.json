@@ -5,6 +5,7 @@
   "scrollSeconds": 10,
   "maxRegressionPercent": 10,
   "maxRegressionAbsoluteMs": 10,
+  "cssRelativeBudgetFloorBytes": 500000,
   "browser": {
     "engine": "chromium",
     "version": "149.0.7827.55",

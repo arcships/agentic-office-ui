@@ -158,6 +158,39 @@ test("DocxTableHost renders vertical merges once and commits editable cell text"
   mounted.app.unmount();
 });
 
+test("DocxTableHost visibly highlights search matches inside table cells", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [{
+        nodes: [{ type: "paragraph", children: [{ type: "text", text: "Needle inside table" }] }],
+      }],
+    }],
+  };
+  const Harness = vue.defineComponent({
+    setup() {
+      return () => vue.h(DocxTableHost, {
+        table,
+        tableIndex: 0,
+        searchQuery: "needle",
+        searchActive: true,
+      });
+    },
+  });
+
+  const mounted = await mount(Harness);
+  const paragraph = walk(mounted.root).find((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true
+  );
+  assert.ok(paragraph);
+  assert.equal(paragraph.props["data-docx-search-match"], "true");
+  assert.equal(paragraph.props["data-docx-search-active"], "true");
+  assert.equal(paragraph.props.style.background, "#fde68a");
+  assert.equal(paragraph.props.style.boxShadow, "0 0 0 2px #f59e0b");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
 test("insertImageFile creates a visible floating square image with default dimensions", async () => {
   const mounted = await mountController(modelWithNodes([
     { type: "paragraph", children: [{ type: "text", text: "Image anchor" }] },

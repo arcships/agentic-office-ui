@@ -180,6 +180,14 @@ const suites = {
         BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-ux-parity"),
       },
     }),
+    command("formal-fidelity-content", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/fidelity_content.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-fidelity-content"),
+      },
+    }),
     command("formal-security-workflows", process.execPath, [
       "scripts/ci/run-python.mjs",
       "tests/blackbox/security_workflows.py",

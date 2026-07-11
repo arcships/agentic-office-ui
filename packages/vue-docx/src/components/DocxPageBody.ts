@@ -318,6 +318,8 @@ export default defineComponent({
                 pageNumber: props.pageNumber,
                 totalPages: props.totalPages,
                 pageNumberFormat: props.pageNumberFormat,
+                searchQuery: props.searchQuery,
+                searchActive: props.activeSearchNodeIndex === segment.nodeIndex,
               })
             )
           }

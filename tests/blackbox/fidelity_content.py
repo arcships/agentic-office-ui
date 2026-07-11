@@ -3,8 +3,14 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import signal
+import socket
+import subprocess
 import sys
+import time
+import urllib.request
 
+from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
 from browser_evidence import BrowserEvidence
@@ -15,7 +21,64 @@ OUTPUT = Path(os.environ.get(
     "BLACKBOX_EVIDENCE_DIR",
     ROOT / "output" / "acceptance" / "fidelity-content",
 )).resolve()
-BASE_URL = os.environ.get("BLACKBOX_BASE_URL", "http://127.0.0.1:4173")
+PORT = int(os.environ.get("CI_PREVIEW_PORT", "4173"))
+BASE_URL = os.environ.get("BLACKBOX_BASE_URL", f"http://127.0.0.1:{PORT}")
+MANAGE_PREVIEW = "BLACKBOX_BASE_URL" not in os.environ
+
+
+def port_in_use() -> bool:
+    with socket.socket() as sock:
+        return sock.connect_ex(("127.0.0.1", PORT)) == 0
+
+
+def wait_for_preview(process: subprocess.Popen[bytes]) -> None:
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(f"preview exited early with {process.returncode}")
+        try:
+            with urllib.request.urlopen(BASE_URL, timeout=1) as response:
+                if response.status == 200:
+                    return
+        except Exception:
+            time.sleep(0.2)
+    raise TimeoutError(f"preview did not become ready at {BASE_URL}")
+
+
+def stop_process(process: subprocess.Popen[bytes] | None) -> None:
+    if process is None or process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+        process.wait(timeout=5)
+    except Exception:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except Exception:
+            process.kill()
+
+
+def launch_browser(playwright):
+    failures: list[str] = []
+    try:
+        return playwright.chromium.launch(headless=True), "bundled-chromium"
+    except PlaywrightError as error:
+        failures.append(str(error))
+    for candidate in (
+        Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+        Path("/usr/bin/google-chrome"),
+        Path("/usr/bin/google-chrome-stable"),
+    ):
+        if not candidate.exists():
+            continue
+        try:
+            return (
+                playwright.chromium.launch(headless=True, executable_path=str(candidate)),
+                str(candidate),
+            )
+        except PlaywrightError as error:
+            failures.append(str(error))
+    raise RuntimeError("no Chromium executable could launch: " + " | ".join(failures))
 
 
 def expect(condition: bool, message: str) -> None:
@@ -45,8 +108,33 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
         expect(status not in {"", "0/0"}, f"全文搜索没有结果: {status}")
         expect(page.locator('[data-docx-search-match="true"]').count() > 0, "搜索结果没有高亮")
         page.screenshot(path=str(attempt_dir / "docx-notes-search.png"), full_page=True)
+
+        page.locator('[data-testid="docx-sample-select"]').select_option("invoice-table.docx")
+        page.locator('[data-testid="docx-load-sample"]').click()
+        table_paragraph = page.locator(
+            '[data-docx-table-cell-paragraph-host="true"]',
+            has_text="OCR document page processing",
+        )
+        table_paragraph.wait_for(timeout=30_000)
+        search.fill("OCR document page processing")
+        page.wait_for_function(
+            """() => document.querySelector('[data-testid="docx-search-status"]')?.textContent !== '0/0'""",
+            timeout=10_000,
+        )
+        table_search_status = page.locator('[data-testid="docx-search-status"]').inner_text()
+        expect(
+            table_paragraph.get_attribute("data-docx-search-match") == "true",
+            "表格内搜索结果没有高亮",
+        )
+        page.screenshot(path=str(attempt_dir / "docx-table-search.png"), full_page=True)
         evidence.assert_clean()
-        return {"status": "PASS", "footnoteText": footnote_text, "endnoteText": endnote_text, "searchStatus": status}
+        return {
+            "status": "PASS",
+            "footnoteText": footnote_text,
+            "endnoteText": endnote_text,
+            "searchStatus": status,
+            "tableSearchStatus": table_search_status,
+        }
     finally:
         evidence.save(attempt_dir)
         context.close()
@@ -103,33 +191,76 @@ def run_xlsx(browser, attempt_dir: Path) -> dict[str, object]:
 
 def main() -> int:
     OUTPUT.mkdir(parents=True, exist_ok=True)
+    if MANAGE_PREVIEW and port_in_use():
+        raise RuntimeError(f"port {PORT} is already in use")
+    preview_log = (OUTPUT / "preview.log").open("wb") if MANAGE_PREVIEW else None
+    preview = subprocess.Popen(
+        [
+            "pnpm",
+            "--filter",
+            "demo",
+            "preview",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(PORT),
+        ],
+        cwd=ROOT,
+        stdout=preview_log,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    ) if MANAGE_PREVIEW else None
     summary: dict[str, object] = {"baseUrl": BASE_URL, "cases": {}}
     failed = False
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        try:
-            for case_id, runner in (("DOCX-NOTES-SEARCH", run_docx), ("XLSX-RICH-CONTENT", run_xlsx)):
-                attempts = []
-                for attempt in (1, 2):
-                    attempt_dir = OUTPUT / case_id / f"attempt-{attempt}"
-                    attempt_dir.mkdir(parents=True, exist_ok=True)
-                    try:
-                        result = runner(browser, attempt_dir)
-                        attempts.append(result)
-                        break
-                    except Exception as error:
-                        attempts.append({"status": "FAIL", "error": str(error)})
-                status = "PASS" if attempts[0]["status"] == "PASS" else "FLAKY" if len(attempts) > 1 and attempts[-1]["status"] == "PASS" else "FAIL"
-                summary["cases"][case_id] = {"status": status, "attempts": attempts}
-                if status != "PASS":
-                    failed = True
-        finally:
-            browser.close()
-    summary["status"] = "FAIL" if failed else "PASS"
-    (OUTPUT / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps(summary, ensure_ascii=False, indent=2))
-    return 1 if failed else 0
+    try:
+        if preview is not None:
+            wait_for_preview(preview)
+        with sync_playwright() as playwright:
+            browser, browser_source = launch_browser(playwright)
+            summary["browser"] = browser.version
+            summary["browserSource"] = browser_source
+            try:
+                for case_id, runner in (("DOCX-NOTES-SEARCH", run_docx), ("XLSX-RICH-CONTENT", run_xlsx)):
+                    attempts = []
+                    for attempt in (1, 2):
+                        attempt_dir = OUTPUT / case_id / f"attempt-{attempt}"
+                        attempt_dir.mkdir(parents=True, exist_ok=True)
+                        try:
+                            result = runner(browser, attempt_dir)
+                            attempts.append(result)
+                            break
+                        except Exception as error:
+                            attempts.append({"status": "FAIL", "error": str(error)})
+                    status = "PASS" if attempts[0]["status"] == "PASS" else "FLAKY" if len(attempts) > 1 and attempts[-1]["status"] == "PASS" else "FAIL"
+                    summary["cases"][case_id] = {"status": status, "attempts": attempts}
+                    if status != "PASS":
+                        failed = True
+            finally:
+                browser.close()
+        summary["result"] = "FAIL" if failed else "PASS"
+        summary["status"] = summary["result"]
+        (OUTPUT / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+        return 1 if failed else 0
+    finally:
+        stop_process(preview)
+        if preview_log is not None:
+            preview_log.close()
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as error:
+        OUTPUT.mkdir(parents=True, exist_ok=True)
+        summary = {
+            "suite": "BB-FIDELITY-CONTENT",
+            "result": "BLOCKED",
+            "status": "BLOCKED",
+            "error": str(error),
+        }
+        (OUTPUT / "summary.json").write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(f"BLOCKED: {error}", file=sys.stderr)
+        sys.exit(2)

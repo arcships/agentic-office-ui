@@ -965,6 +965,7 @@ def verify_budget(config: dict[str, Any], aggregate: dict[str, dict[str, Any]]) 
     violations = []
     regression = float(config.get("maxRegressionPercent", 10))
     absolute_ms = float(config.get("maxRegressionAbsoluteMs", 0))
+    css_floor_bytes = float(config.get("cssRelativeBudgetFloorBytes", 0))
     for key, approved in config.get("metrics", {}).items():
         current = aggregate.get(key)
         if not current:
@@ -979,6 +980,8 @@ def verify_budget(config: dict[str, Any], aggregate: dict[str, dict[str, Any]]) 
             allowed = 0.0 if baseline == 0 else baseline * (1 + regression / 100)
             if baseline > 0 and key.endswith("Ms"):
                 allowed = max(allowed, baseline + absolute_ms)
+            if key.endswith(("cssGzipBytes", "cssRawBytes")):
+                allowed = max(allowed, css_floor_bytes)
             violated = float(current["median"]) > allowed
         if violated:
             violations.append(
