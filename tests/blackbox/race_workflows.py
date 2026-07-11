@@ -783,6 +783,11 @@ def main() -> int:
     (OUTPUT / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    if overall != "PASS":
+        failed_cases = [r for r in results if r["status"] != "PASS"]
+        print(f"BB-RACE FAIL: {len(failed_cases)} of {len(results)} cases failed", file=sys.stderr)
+        for case in failed_cases:
+            print(f"  {case['id']}: {case.get('failures', case.get('error', 'unknown'))}", file=sys.stderr)
     return 0 if overall == "PASS" else 1
 
 
