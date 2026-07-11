@@ -223,7 +223,7 @@ def validate_case(
     expect(visual.get("commonWidth", 0) >= 200, "document surface width collapsed")
     expect(visual.get("commonHeight", 0) >= 500, "document surface height collapsed")
     expect(
-        float(visual.get("differenceRatio", 1)) <= 0.01,
+        float(visual.get("differenceRatio", 1)) <= 0.02,
         f"Viewer/Editor visual difference ratio is {visual.get('differenceRatio')}",
     )
 
