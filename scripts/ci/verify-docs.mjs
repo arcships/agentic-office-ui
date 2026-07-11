@@ -141,7 +141,7 @@ check(
     "@arcships/xlsx-core/worker?worker&url",
     "@arcships/vue-docx/style.css",
     "@arcships/vue-xlsx/style.css",
-    "@arcships/vue-extend/style.css",
+    "@arcships/vue-pdf/style.css",
     "PDF_TOO_LARGE",
   ].every((term) => migration.includes(term)),
 );

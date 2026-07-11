@@ -80,7 +80,6 @@ export default defineConfig({
         "@embedpdf/plugin-zoom/vue",
         "@embedpdf/plugin-rotate/vue",
         "@embedpdf/plugin-interaction-manager/vue",
-        "signature_pad",
       ],
     },
   },

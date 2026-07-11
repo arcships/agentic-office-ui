@@ -28,12 +28,15 @@ importers:
       '@arcships/vue-docx':
         specifier: workspace:*
         version: link:../../packages/vue-docx
-      '@arcships/vue-extend':
+      '@arcships/vue-pdf':
         specifier: workspace:*
-        version: link:../../packages/vue-extend
+        version: link:../../packages/vue-pdf
       '@arcships/vue-pptx':
         specifier: workspace:*
         version: link:../../packages/vue-pptx
+      '@arcships/vue-ui':
+        specifier: workspace:*
+        version: link:../../packages/vue-ui
       '@arcships/vue-xlsx':
         specifier: workspace:*
         version: link:../../packages/vue-xlsx
@@ -152,8 +155,8 @@ importers:
         specifier: ^3.3.6
         version: 3.3.6(typescript@5.9.3)
 
-  packages/vue-extend:
-    dependencies:
+  packages/vue-pdf:
+    devDependencies:
       '@embedpdf/core':
         specifier: ^2.14.4
         version: 2.14.4(preact@10.29.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.4)(vue@3.5.39(typescript@5.9.3))
@@ -199,10 +202,6 @@ importers:
       '@embedpdf/plugin-zoom':
         specifier: ^2.14.4
         version: 2.14.4(@embedpdf/core@2.14.4(preact@10.29.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.4)(vue@3.5.39(typescript@5.9.3)))(@embedpdf/plugin-scroll@2.14.4(@embedpdf/core@2.14.4(preact@10.29.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.4)(vue@3.5.39(typescript@5.9.3)))(@embedpdf/plugin-viewport@2.14.4(@embedpdf/core@2.14.4(preact@10.29.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.4)(vue@3.5.39(typescript@5.9.3)))(preact@10.29.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.4)(vue@3.5.39(typescript@5.9.3)))(preact@10.29.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.4)(vue@3.5.39(typescript@5.9.3)))(@embedpdf/plugin-viewport@2.14.4(@embedpdf/core@2.14.4(preact@10.29.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.4)(vue@3.5.39(typescript@5.9.3)))(preact@10.29.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.4)(vue@3.5.39(typescript@5.9.3)))(preact@10.29.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.4)(vue@3.5.39(typescript@5.9.3))
-      signature_pad:
-        specifier: ^5.1.3
-        version: 5.1.3
-    devDependencies:
       '@vitejs/plugin-vue':
         specifier: ^5.0.0
         version: 5.2.4(vite@6.4.3(@types/node@22.20.1))(vue@3.5.39(typescript@5.9.3))
@@ -231,6 +230,31 @@ importers:
       '@vitejs/plugin-vue':
         specifier: ^5.0.0
         version: 5.2.4(vite@6.4.3(@types/node@22.20.1))(vue@3.5.39(typescript@5.9.3))
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(@types/node@22.20.1)
+      vue:
+        specifier: ^3.5.0
+        version: 3.5.39(typescript@5.9.3)
+      vue-tsc:
+        specifier: ^3.3.6
+        version: 3.3.6(typescript@5.9.3)
+
+  packages/vue-ui:
+    dependencies:
+      signature_pad:
+        specifier: ^5.1.3
+        version: 5.1.3
+    devDependencies:
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@6.4.3(@types/node@22.20.1))(vue@3.5.39(typescript@5.9.3))
+      tsup:
+        specifier: ^8.0.0
+        version: 8.5.1(postcss@8.5.16)(typescript@5.9.3)
       typescript:
         specifier: ^5.0.0
         version: 5.9.3

@@ -98,19 +98,21 @@ import {
 } from "@arcships/vue-xlsx";
 import {
   DEFAULT_PDF_MAX_FILE_SIZE,
-  FileUpload,
   PdfViewer,
   bundledPdfiumWasmUrl,
   createPdfRenderRuntime,
-  type FileUploadRejection,
-  type FileUploadRejectionCode,
   type PdfDiagnostic,
   type PdfLoadOptions,
   type PdfRenderDocument,
   type PdfRenderRuntime,
   type PdfRenderRuntimeConfig,
   type PdfSource,
-} from "@arcships/vue-extend";
+} from "@arcships/vue-pdf";
+import {
+  FileUpload,
+  type FileUploadRejection,
+  type FileUploadRejectionCode,
+} from "@arcships/vue-ui";
 
 export const publicRuntimeExports = {
   bundledDocxWasmUrl,

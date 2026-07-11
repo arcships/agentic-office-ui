@@ -33,13 +33,17 @@ All notable changes to the `@arcships` package family are documented in this fil
 - History, images, object URLs, and thumbnails bounded by entry count and bytes.
 - Stable style entry: `@arcships/vue-xlsx/style.css`.
 
-### @arcships/vue-extend
+### @arcships/vue-pdf
 
 - `PdfViewer` uses a controlled PDF engine to display real documents.
 - PDF Runtime, Worker, page image URLs, and tasks belong to specific instances; released on source switch or unmount.
 - Single public file-size rejection limit: `maxFileSize`, default `50 MiB`, host-adjustable. Returns `PDF_TOO_LARGE` with `actual` and `allowed`.
 - Public entry points: `./assets/pdfium.wasm` and `./style.css`.
+
+### @arcships/vue-ui
+
 - Upload, signature, thumbnail, citation, and layout components retain stable public events and error types.
+- Public entry point: `./style.css`.
 
 ## [0.1.0] - Initial workspace release
 

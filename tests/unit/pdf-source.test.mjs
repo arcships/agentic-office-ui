@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-const pdf = await import(new URL("../../packages/vue-extend/dist/index.js", import.meta.url).href);
+const pdf = await import(new URL("../../packages/vue-pdf/dist/index.js", import.meta.url).href);
 const fixture = readFileSync(new URL("../../apps/demo/public/samples/sample.pdf", import.meta.url));
 
 test("PDF URL loading shares controlled fetch and strips query secrets", async () => {

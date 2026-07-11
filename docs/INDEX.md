@@ -12,7 +12,7 @@
 | [end-to-end-blackbox-test-plan.md](end-to-end-blackbox-test-plan.md) | 用户侧黑盒用例、通过标准和发布暂停条件 |
 | [upstream-parity-gap-audit.md](upstream-parity-gap-audit.md) | DOCX/XLSX 与官方 Extend UI React 的固定基准、差异和收口状态 |
 | [testing/agent-execution-runbook.md](testing/agent-execution-runbook.md) | 正式构建、浏览器、真实压缩包和证据的执行步骤 |
-| [api/public-api-contract.md](api/public-api-contract.md) | 五个公开包的入口、类型、事件、错误、弃用和删除期限 |
+| [api/public-api-contract.md](api/public-api-contract.md) | 六个公开包的入口、类型、事件、错误、弃用和删除期限 |
 
 ## 格式扩展设计
 
@@ -45,7 +45,8 @@
 | `@arcships/vue-docx` | 提供可用的 `DocxViewer`、`DocxEditor`、组合函数和公开样式入口 | `0.2.0` 候选；不承诺与上游全部功能完全一致 |
 | `@arcships/xlsx-core` | 提供工作簿、公式、图表/图片数据、实例 Runtime，以及公开 Worker/WASM 入口 | `0.2.0` 候选；本会话 P4 自测通过，等待独立 `BB-RELEASE` |
 | `@arcships/vue-xlsx` | 提供 `XlsxViewer`、控制器、公开样式，以及按需图表/地图/WebGL 入口 | `0.2.0` 候选；六组合矩阵自测通过，等待独立复核 |
-| `@arcships/vue-extend` | 提供真实 PDF 查看、翻页、缩放、旋转、缩略图、搜索、下载和通用组件 | `0.2.0` 候选；PDF 默认仅有整份文件 `50 MiB` 上限 |
+| `@arcships/vue-pdf` | 提供真实 PDF 查看、翻页、缩放、旋转、缩略图、搜索和下载 | `0.2.0` 候选；PDF 默认仅有整份文件 `50 MiB` 上限 |
+| `@arcships/vue-ui` | 提供上传、签名、缩略图、引用框和版面等通用组件 | `0.2.0` 候选 |
 
 PPTX 开发包 `@arcships/pptx-core` 和 `@arcships/vue-pptx` 已包含静态预览和正式播放实现，但仍不属于以上 `0.2.0` 公开发布合同。一次解包会话、时间树、属性轨道、页面切换、Morph、媒体、导航、Vue 演示模式和全屏接口已进入包内；三浏览器、性能、内存、资源释放和工作区外压缩包消费已有固定验收记录。13 份正式素材和浏览器事件基准已经入库，公开发布前仍需独立兼容复核。
 
@@ -87,7 +88,8 @@ packages/docx-core/      DOCX 核心与 Runtime
 packages/vue-docx/       DOCX Vue 组件
 packages/xlsx-core/      XLSX 核心与 Runtime
 packages/vue-xlsx/       XLSX Vue 组件与按需渲染
-packages/vue-extend/     PDF 与通用 Vue 组件
+packages/vue-pdf/        PDF Vue 组件
+packages/vue-ui/         通用 Vue 组件
 packages/pptx-core/      PPTX 模型、静态预览和正式播放核心
 packages/vue-pptx/       PPTX Vue 浏览与演示组件
 apps/demo/               正式黑盒消费页

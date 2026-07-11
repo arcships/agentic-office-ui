@@ -77,7 +77,7 @@ import {
   type PdfLoadError,
   type PdfSource,
   type PdfUrlPolicy,
-} from "@arcships/vue-extend";
+} from "@arcships/vue-pdf";
 
 type LoadState = "loading" | "ready" | "error";
 const diagnostics = ref<unknown[]>([]);

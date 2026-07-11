@@ -167,8 +167,8 @@
       }
     },
     {
-      "directory": "packages/vue-extend",
-      "name": "@arcships/vue-extend",
+      "directory": "packages/vue-pdf",
+      "name": "@arcships/vue-pdf",
       "exports": {
         ".": {
           "types": "./dist/index.d.ts",
@@ -176,13 +176,29 @@
           "default": "./dist/index.js"
         },
         "./assets/pdfium.wasm": "./dist/pdfium.wasm",
-        "./style.css": "./dist/style.css",
-        "./dist/index.css": "./dist/style.css"
+        "./style.css": "./dist/style.css"
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 44,
-        "sha256": "58ad9204417f87ddf57985c108af5b835d0e285a4b4393906877b075f5e365f2"
+        "count": 24,
+        "sha256": "69964f9ccde7616a0603ea1dc75f2c5f1b4c551e57bb57d71ea33c1e4dfced98"
+      }
+    },
+    {
+      "directory": "packages/vue-ui",
+      "name": "@arcships/vue-ui",
+      "exports": {
+        ".": {
+          "types": "./dist/index.d.ts",
+          "import": "./dist/index.js",
+          "default": "./dist/index.js"
+        },
+        "./style.css": "./dist/style.css"
+      },
+      "deprecatedSymbols": [],
+      "rootDeclarationFingerprint": {
+        "count": 20,
+        "sha256": "94eaed551e8739a32aa054b07f885bae9e1d6cb700a66aaa2e55285f7de094ea"
       }
     }
   ],
@@ -227,10 +243,11 @@
     "@arcships/vue-xlsx/map",
     "@arcships/vue-xlsx/webgl",
     "@arcships/vue-xlsx/style.css",
-    "@arcships/vue-extend",
-    "@arcships/vue-extend/assets/pdfium.wasm",
-    "@arcships/vue-extend/style.css",
-    "@arcships/vue-extend/dist/index.css"
+    "@arcships/vue-pdf",
+    "@arcships/vue-pdf/assets/pdfium.wasm",
+    "@arcships/vue-pdf/style.css",
+    "@arcships/vue-ui",
+    "@arcships/vue-ui/style.css"
   ],
   "executableSpecifiers": [
     "@arcships/docx-core",
@@ -246,7 +263,8 @@
     "@arcships/vue-xlsx/chart",
     "@arcships/vue-xlsx/map",
     "@arcships/vue-xlsx/webgl",
-    "@arcships/vue-extend"
+    "@arcships/vue-pdf",
+    "@arcships/vue-ui"
   ],
   "deepImportRejections": {
     "@arcships/docx-core": [
@@ -289,14 +307,19 @@
       "@arcships/vue-xlsx/composables/useXlsxViewerController",
       "@arcships/vue-xlsx/render"
     ],
-    "@arcships/vue-extend": [
-      "@arcships/vue-extend/src/index.ts",
-      "@arcships/vue-extend/dist/index.js",
-      "@arcships/vue-extend/components/PdfViewer.vue",
-      "@arcships/vue-extend/assets/other.wasm",
-      "@arcships/vue-extend/pdf-url-policy",
-      "@arcships/vue-extend/types",
-      "@arcships/vue-extend/components/FileUpload.vue"
+    "@arcships/vue-pdf": [
+      "@arcships/vue-pdf/src/index.ts",
+      "@arcships/vue-pdf/dist/index.js",
+      "@arcships/vue-pdf/components/PdfViewer.vue",
+      "@arcships/vue-pdf/assets/other.wasm",
+      "@arcships/vue-pdf/pdf-url-policy",
+      "@arcships/vue-pdf/types"
+    ],
+    "@arcships/vue-ui": [
+      "@arcships/vue-ui/src/index.ts",
+      "@arcships/vue-ui/dist/index.js",
+      "@arcships/vue-ui/components/FileUpload.vue",
+      "@arcships/vue-ui/types"
     ]
   }
 }

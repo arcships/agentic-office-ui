@@ -10,7 +10,7 @@ const output = path.resolve(
     path.join(root, "output", "acceptance", "runtime-boundary"),
 );
 const runtimeRoot = path.join(root, "packages", "office-runtime");
-const publicPackages = ["docx-core", "xlsx-core", "vue-docx", "vue-xlsx", "vue-extend"];
+const publicPackages = ["docx-core", "xlsx-core", "vue-docx", "vue-xlsx", "vue-pdf", "vue-ui"];
 const failures = [];
 
 function walk(directory) {
@@ -23,7 +23,7 @@ function walk(directory) {
 const manifest = JSON.parse(readFileSync(path.join(runtimeRoot, "package.json"), "utf8"));
 if (manifest.private !== true) failures.push("office-runtime must be private");
 if (manifest.publishConfig !== undefined) failures.push("office-runtime must not define publishConfig");
-if (/vue|@vue|vue-extend|vue-docx|vue-xlsx/.test(JSON.stringify(manifest))) {
+if (/vue|@vue|vue-pdf|vue-ui|vue-docx|vue-xlsx/.test(JSON.stringify(manifest))) {
   failures.push("office-runtime manifest contains a Vue dependency");
 }
 

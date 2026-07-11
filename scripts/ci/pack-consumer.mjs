@@ -146,8 +146,8 @@ try {
     "public API contract",
   );
   const manifest = readJson(manifestPath, "real tgz manifest");
-  if (manifest.result !== "PASS" || manifest.entries.length !== 5) {
-    throw new Error("real tgz manifest preflight did not pass for five packages");
+  if (manifest.result !== "PASS" || manifest.entries.length !== 6) {
+    throw new Error("real tgz manifest preflight did not pass for six packages");
   }
   const expectedPackageNames = publicApiContract.packages
     .map((entry) => entry.name)
@@ -157,7 +157,7 @@ try {
     .sort();
   if (JSON.stringify(manifestPackageNames) !== JSON.stringify(expectedPackageNames)) {
     throw new Error(
-      `real tgz manifest package set differs from the five public packages: ${JSON.stringify({ expectedPackageNames, manifestPackageNames })}`,
+      `real tgz manifest package set differs from the six public packages: ${JSON.stringify({ expectedPackageNames, manifestPackageNames })}`,
     );
   }
   const forbiddenTemplatePatterns = [
@@ -348,7 +348,7 @@ process.stdout.write(JSON.stringify({ status: "PASS", matrix }, null, 2));`,
   const expectedWasmResources = expectedResources.filter((item) => item.path.endsWith(".wasm"));
   const expectedWorkerResources = expectedResources.filter((item) => item.path.endsWith("worker.js"));
   const expectedPdfiumResource = expectedWasmResources.find(
-    (item) => item.package === "@arcships/vue-extend" && item.path === "dist/pdfium.wasm",
+    (item) => item.package === "@arcships/vue-pdf" && item.path === "dist/pdfium.wasm",
   );
   if (
     expectedResources.length !== 5 ||

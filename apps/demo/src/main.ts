@@ -4,7 +4,8 @@ import App from "./App.vue"
 import "@arcships/vue-docx/style.css"
 import "@arcships/vue-xlsx/style.css"
 import "@arcships/vue-pptx/style.css"
-import "@arcships/vue-extend/style.css"
+import "@arcships/vue-pdf/style.css"
+import "@arcships/vue-ui/style.css"
 
 const router = createRouter({
   history: createWebHashHistory(),

@@ -78,7 +78,7 @@ export interface PdfRenderRuntime {
 }
 
 export interface PdfRenderRuntimeConfig {
-  /** Defaults to the PDFium WASM shipped by @arcships/vue-extend. */
+  /** Defaults to the PDFium WASM shipped by @arcships/vue-pdf. */
   wasmUrl?: string
   /** Bounds an engine operation, including initial Worker/WASM startup. */
   operationTimeoutMs?: number

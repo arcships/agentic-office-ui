@@ -17,7 +17,8 @@ const packageDirs = [
   "packages/xlsx-core",
   "packages/vue-docx",
   "packages/vue-xlsx",
-  "packages/vue-extend",
+  "packages/vue-pdf",
+  "packages/vue-ui",
 ];
 
 rmSync(output, { recursive: true, force: true });
@@ -78,7 +79,7 @@ for (const packageDir of packageDirs) {
     manifest.private !== true && manifest.publishConfig?.access === "public";
   const isVuePackage = manifest.name.startsWith("@arcships/vue-");
   const isCorePackage = /\/(docx|xlsx)-core$/.test(manifest.name);
-  const requiresWasm = isCorePackage || manifest.name === "@arcships/vue-extend";
+  const requiresWasm = isCorePackage || manifest.name === "@arcships/vue-pdf";
   const styleTarget = manifest.exports?.["./style.css"];
   const hasPublicStyle =
     !isVuePackage ||

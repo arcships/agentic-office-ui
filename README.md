@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-五个公开包的当前候选版本为 `0.2.0`，但**尚未发布**。仓库内的开发后自测不能替代候选发布复核；只有同一批真实压缩包完成 `BB-RELEASE`，并由全新会话独立复核后，才能给出发布结论。
+六个公开包的当前候选版本为 `0.2.0`，但**尚未发布**。仓库内的开发后自测不能替代候选发布复核；只有同一批真实压缩包完成 `BB-RELEASE`，并由全新会话独立复核后，才能给出发布结论。
 
 当前状态、设计约束和验收方法分别以以下文档为准：
 
@@ -24,9 +24,10 @@
 | `@arcships/vue-docx` | `DocxViewer`、`DocxEditor` 和 Vue 组合函数 |
 | `@arcships/xlsx-core` | XLSX 模型、公式、图片、图表、实例 Runtime、Worker 和 WASM 资源 |
 | `@arcships/vue-xlsx` | `XlsxViewer`、控制器，以及按需图表、地图和 WebGL 入口 |
-| `@arcships/vue-extend` | 可操作的 PDF 查看器，以及上传、签名、缩略图和版面组件 |
+| `@arcships/vue-pdf` | 可操作的 PDF 查看器 |
+| `@arcships/vue-ui` | 上传、签名、缩略图和版面组件 |
 
-`@arcships/office-runtime` 是工作区私有实现，不是第六个公开包，消费端不应安装或导入它。
+`@arcships/office-runtime` 是工作区私有实现，不是第七个公开包，消费端不应安装或导入它。
 
 PPTX 网页预览与播放正在独立开发：`@arcships/pptx-core` 和 `@arcships/vue-pptx` 已提供文件加载、浏览、搜索、缩放、动画、页面切换、媒体、演示控制和全屏接口，但尚未进入 `0.2.0` 公开包合同。开发与验收入口见 [PPTX 播放开发准备与入口](docs/pptx-development-guide.md)。
 
@@ -45,19 +46,20 @@ pnpm build
 ```bash
 pnpm add @arcships/docx-core@0.2.0 @arcships/vue-docx@0.2.0
 pnpm add @arcships/xlsx-core@0.2.0 @arcships/vue-xlsx@0.2.0
-pnpm add @arcships/vue-extend@0.2.0
+pnpm add @arcships/vue-pdf@0.2.0 @arcships/vue-ui@0.2.0
 ```
 
 不要混用 `0.1.x` 核心包和 `0.2.x` Vue 包，也不要从工作区源码或 demo 公共目录复制 Worker/WASM 来绕过包出口。
 
 ### 样式
 
-三个 Vue 包只使用公开样式入口：
+四个 Vue 包只使用公开样式入口：
 
 ```ts
 import "@arcships/vue-docx/style.css"
 import "@arcships/vue-xlsx/style.css"
-import "@arcships/vue-extend/style.css"
+import "@arcships/vue-pdf/style.css"
+import "@arcships/vue-ui/style.css"
 ```
 
 ### Worker 和 WASM

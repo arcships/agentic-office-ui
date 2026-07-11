@@ -15,7 +15,8 @@ import {
 const { DocxViewer } = await importFromDemo("@arcships/vue-docx");
 const { createBlankDocumentModel, wasmBuildDocModelFromBytes } = await importFromDemo("@arcships/docx-core");
 const { XlsxViewer, useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
-const { FileUpload, PdfViewer } = await importFromDemo("@arcships/vue-extend");
+const { PdfViewer } = await importFromDemo("@arcships/vue-pdf");
+const { FileUpload } = await importFromDemo("@arcships/vue-ui");
 
 // Vue's native v-model directive checks these browser constructors during an
 // update. The custom component renderer intentionally has no browser DOM.

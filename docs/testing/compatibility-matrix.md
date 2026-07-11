@@ -68,4 +68,4 @@
 - `@arcships/xlsx-core@0.2.0`：`b9a55937cc382df105f63855c753aed69e3bd7abe7d6d51edc8646874f2baf97`
 - `@arcships/vue-docx@0.2.0`：`3c21e915567753fdaf5857fe53313b19f85d1c6f64863ed932eece29f1dc4a46`
 - `@arcships/vue-xlsx@0.2.0`：`bad6c8ac5570134b61a2d1d72826e55484646d26deb96ecb3a07aceda98fa91b`
-- `@arcships/vue-extend@0.2.0`：`45eebffb31c8fefe7de852d91b45c1687c352423e5b910c3719391ff73d010b5`
+- `@arcships/vue-pdf@0.2.0`：`45eebffb31c8fefe7de852d91b45c1687c352423e5b910c3719391ff73d010b5`

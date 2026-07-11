@@ -124,7 +124,7 @@ import {
   type BoundingBoxField,
   type LayoutBlock,
   type ParsedOcrOutput,
-} from "@arcships/vue-extend"
+} from "@arcships/vue-ui"
 
 const sigRef = ref<InstanceType<typeof SignaturePad> | null>(null)
 const sig = ref<string | null>(null)

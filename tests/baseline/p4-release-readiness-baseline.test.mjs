@@ -20,7 +20,7 @@ const PACKAGE_DIRS = [
   "packages/xlsx-core",
   "packages/vue-docx",
   "packages/vue-xlsx",
-  "packages/vue-extend",
+  "packages/vue-pdf",
 ];
 const CONTRACT_PATH = path.join(ROOT, "scripts/ci/public-api-contract.json");
 const API_DOCUMENT_PATH = path.join(ROOT, "docs/api/public-api-contract.md");

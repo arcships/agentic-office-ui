@@ -41,7 +41,7 @@ OUTPUT = Path(
 ).resolve()
 PORT = int(os.environ.get("CI_PERF_PREVIEW_PORT", "4181"))
 BASE_URL = f"http://127.0.0.1:{PORT}"
-PACKAGE_NAMES = ("docx-core", "xlsx-core", "vue-docx", "vue-xlsx", "vue-extend")
+PACKAGE_NAMES = ("docx-core", "xlsx-core", "vue-docx", "vue-xlsx", "vue-pdf", "vue-ui")
 FIXTURE_NAMES = (
     "financial-model.xlsx",
     "sales-table.xlsx",

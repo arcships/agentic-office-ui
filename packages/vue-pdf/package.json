@@ -1,14 +1,14 @@
 {
-  "name": "@arcships/vue-extend",
+  "name": "@arcships/vue-pdf",
   "version": "0.2.0",
   "license": "MIT",
-  "description": "Vue 3 PDF viewer, signature pad, file upload, thumbnails, and layout components",
-  "keywords": ["vue", "vue3", "pdf", "viewer", "signature", "upload", "components"],
+  "description": "Vue 3 PDF viewer component with PDFium-based rendering, search, thumbnails, and download",
+  "keywords": ["vue", "vue3", "pdf", "viewer", "pdfium", "components"],
   "homepage": "https://github.com/eric8810/agentic-office-ui#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/eric8810/agentic-office-ui.git",
-    "directory": "packages/vue-extend"
+    "directory": "packages/vue-pdf"
   },
   "bugs": {
     "url": "https://github.com/eric8810/agentic-office-ui/issues"
@@ -33,8 +33,7 @@
       "default": "./dist/index.js"
     },
     "./assets/pdfium.wasm": "./dist/pdfium.wasm",
-    "./style.css": "./dist/style.css",
-    "./dist/index.css": "./dist/style.css"
+    "./style.css": "./dist/style.css"
   },
   "sideEffects": ["./dist/style.css"],
   "scripts": {
@@ -47,13 +46,6 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.0.0",
-    "vite": "^6.0.0",
-    "vue": "^3.5.0",
-    "vue-tsc": "^3.3.6"
-  },
-  "dependencies": {
     "@embedpdf/core": "^2.14.4",
     "@embedpdf/engines": "^2.14.4",
     "@embedpdf/models": "^2.14.4",
@@ -69,6 +61,10 @@
     "@embedpdf/plugin-tiling": "^2.14.4",
     "@embedpdf/plugin-viewport": "^2.14.4",
     "@embedpdf/plugin-zoom": "^2.14.4",
-    "signature_pad": "^5.1.3"
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0",
+    "vite": "^6.0.0",
+    "vue": "^3.5.0",
+    "vue-tsc": "^3.3.6"
   }
 }

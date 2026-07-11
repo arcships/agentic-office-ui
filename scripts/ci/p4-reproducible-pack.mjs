@@ -31,7 +31,8 @@ const packageDirectories = [
   "packages/xlsx-core",
   "packages/vue-docx",
   "packages/vue-xlsx",
-  "packages/vue-extend",
+  "packages/vue-pdf",
+  "packages/vue-ui",
 ];
 const generatedDirectoryNames = new Set(["node_modules", "dist", "output"]);
 

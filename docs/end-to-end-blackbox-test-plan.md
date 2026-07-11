@@ -323,7 +323,7 @@ pnpm install --frozen-lockfile
 pnpm build
 PACK_DIR="$(mktemp -d)/packs"
 mkdir -p "$PACK_DIR"
-for pkg in packages/docx-core packages/xlsx-core packages/vue-docx packages/vue-xlsx packages/vue-extend; do
+for pkg in packages/docx-core packages/xlsx-core packages/vue-docx packages/vue-xlsx packages/vue-pdf packages/vue-ui; do
   (cd "$pkg" && npm pack --json --pack-destination "$PACK_DIR")
 done
 find "$PACK_DIR" -maxdepth 1 -name '*.tgz' -print
@@ -337,7 +337,7 @@ find "$PACK_DIR" -maxdepth 1 -name '*.tgz' -print
 | PACK-001 | P0 | 从干净提交构建五个包并执行 `npm pack --json` | 每包包含声明的 JS、类型、CSS和必要资源；不包含测试材料和源码垃圾 | tarball 文件清单 |
 | PACK-002 | P0 | 创建最小 Vite+Vue 消费项目并安装五个 tgz | 安装、类型检查和生产构建成功 | lockfile、命令日志 |
 | PACK-003 | P0 | 消费项目只从公开入口加载 DOCX/XLSX/PDF | 页面可用，Worker/WASM 无 404，不能依赖仓库 public 目录 | 浏览器网络和截图 |
-| PACK-004 | P1 | 导入 `@arcships/vue-docx/style.css`、`@arcships/vue-xlsx/style.css`、`@arcships/vue-extend/style.css` | 所有样式入口受 `exports` 支持，组件有预期样式 | resolve 结果和截图 |
+| PACK-004 | P1 | 导入 `@arcships/vue-docx/style.css`、`@arcships/vue-xlsx/style.css`、`@arcships/vue-pdf/style.css` | 所有样式入口受 `exports` 支持，组件有预期样式 | resolve 结果和截图 |
 | PACK-005 | P1 | 在 TypeScript 消费项目使用主要公开类型 | 类型来自 tgz，未泄漏仓库内部路径 | `vue-tsc`/`tsc` 日志 |
 | PACK-006 | P1 | 检查 `exports` 允许和禁止子路径 | 文档中的入口可导入；未公开内部文件给出确定错误 | 导入矩阵 |
 | PACK-007 | P1 | 对 tgz 解包后检查 Worker/WASM 数量和校验值 | 每种资源只有一种交付策略，无重复二进制 | 清单、SHA-256、总字节 |
