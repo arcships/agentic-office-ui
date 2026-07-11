@@ -212,7 +212,7 @@ check(
   ),
 );
 const fixtures = JSON.parse(read("test-data/manifest.json"));
-check("fixture manifest has 20 entries", fixtures.entries?.length === 20, fixtures.entries?.length);
+check("fixture manifest has 21 entries", fixtures.entries?.length === 21, fixtures.entries?.length);
 check("fixture manifest excludes sensitive data", fixtures.containsSensitiveData === false);
 check(
   "consumer template has no source alias",

@@ -47,6 +47,8 @@
       :page-number-format="pageNumberFormat"
       :tracked-changes-enabled="trackedChangesEnabled"
       :comments-enabled="commentsEnabled"
+      :search-query="searchQuery"
+      :active-search-node-index="activeSearchNodeIndex"
     >
       <template v-if="hasHeader" #header>
         <DocxPageHeader
@@ -62,6 +64,22 @@
           :page-number-format="pageNumberFormat"
           :tracked-changes-enabled="trackedChangesEnabled"
           :comments-enabled="commentsEnabled"
+        />
+      </template>
+      <template v-if="footnotes.length" #footnotes>
+        <DocxNotesSection
+          kind="footnote"
+          :notes="footnotes"
+          :numbering-definitions="model.metadata.numberingDefinitions"
+          :theme="theme"
+        />
+      </template>
+      <template v-if="endnotes.length" #endnotes>
+        <DocxNotesSection
+          kind="endnote"
+          :notes="endnotes"
+          :numbering-definitions="model.metadata.numberingDefinitions"
+          :theme="theme"
         />
       </template>
       <template v-if="hasFooter" #footer>
@@ -123,6 +141,7 @@ import type {
   DocxComment,
   DocxEditorController,
   DocxTrackedChange,
+  DocumentNoteDefinition,
   DocumentPageNodeSegment,
   FooterSection,
   HeaderSection,
@@ -140,6 +159,7 @@ import DocxPageBody from "./DocxPageBody"
 import DocxImageLayer from "./DocxImageLayer.vue"
 import DocxFormFieldLayer from "./DocxFormFieldLayer.vue"
 import DocxTrackedChangeGutter from "./DocxTrackedChangeGutter.vue"
+import DocxNotesSection from "./DocxNotesSection.vue"
 import {
   ensureDocxViewerPageSurfaceRegistry,
   notifyDocxViewerPageSurfaceListeners,
@@ -164,6 +184,10 @@ interface DocxPageSurfaceProps {
   commentsEnabled?: boolean
   trackedChanges?: readonly DocxTrackedChange[]
   comments?: readonly DocxComment[]
+  footnotes?: DocumentNoteDefinition[]
+  endnotes?: DocumentNoteDefinition[]
+  searchQuery?: string
+  activeSearchNodeIndex?: number
   theme?: "light" | "dark"
 }
 
@@ -180,6 +204,9 @@ const props = withDefaults(
     editable: true,
     trackedChangesEnabled: false,
     commentsEnabled: false,
+    footnotes: () => [],
+    endnotes: () => [],
+    searchQuery: "",
     theme: "light" as const,
   }
 )

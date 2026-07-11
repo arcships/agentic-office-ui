@@ -9,6 +9,8 @@
     :zoom-scale="zoomScale"
     :show-tracked-changes="showTrackedChanges"
     :show-comments="showComments"
+    :search-query="searchQuery"
+    :active-search-node-index="activeSearchNodeIndex"
     @page-count-change="emit('pageCountChange', $event)"
     @visible-page-range="emit('visiblePageRange', $event)"
   />
@@ -34,6 +36,8 @@ withDefaults(
     zoomScale?: number
     showTrackedChanges?: boolean
     showComments?: boolean
+    searchQuery?: string
+    activeSearchNodeIndex?: number
   }>(),
   { editable: false, zoomScale: 100 }
 )
@@ -48,6 +52,9 @@ const viewerRootRef = ref<InstanceType<typeof DocxViewerRoot>>()
 defineExpose({
   scrollToPage(pageIndex: number): void {
     viewerRootRef.value?.scrollToPage(pageIndex)
+  },
+  scrollToNode(nodeIndex: number): void {
+    viewerRootRef.value?.scrollToNode(nodeIndex)
   },
   get scrollContainer() {
     return viewerRootRef.value?.scrollContainer

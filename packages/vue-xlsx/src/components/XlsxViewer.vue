@@ -84,6 +84,11 @@
           :scroll-left="gridViewport.scrollLeft"
           :scroll-top="gridViewport.scrollTop"
         />
+        <XlsxDrawingLayer
+          :controller="controller"
+          :scroll-left="gridViewport.scrollLeft"
+          :scroll-top="gridViewport.scrollTop"
+        />
         <XlsxSelectionOverlay
           :controller="controller"
           :get-cell-style="getCellStyle"
@@ -115,6 +120,7 @@ import XlsxFormulaBar from "./XlsxFormulaBar.vue";
 import XlsxSheetTabs from "./XlsxSheetTabs.vue";
 import XlsxChartOverlay from "./XlsxChartOverlay.vue";
 import XlsxImageLayer from "./XlsxImageLayer.vue";
+import XlsxDrawingLayer from "./XlsxDrawingLayer.vue";
 import XlsxSelectionOverlay from "./XlsxSelectionOverlay.vue";
 import XlsxContextMenu from "./XlsxContextMenu.vue";
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue";

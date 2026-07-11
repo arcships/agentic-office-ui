@@ -16,9 +16,9 @@
       "type": "xlsx",
       "category": "normal",
       "source": "synthetic-v1",
-      "expected": "parse workbook with charts and embedded images",
-      "bytes": 29462,
-      "sha256": "2ecadbb39feabbeebc7dc9e684550ad070f215d22eade21d556a630f58e89cbc"
+      "expected": "parse workbook with charts, images, rich cell visuals, shapes and controls",
+      "bytes": 32070,
+      "sha256": "d012d0bcaf13a461a21e676642403b76a6ec13799b3126f2f5d50203c400694b"
     },
     {
       "file": "chinese-mixed.docx",
@@ -155,6 +155,15 @@
       "expected": "parse and render an embedded image",
       "bytes": 56892,
       "sha256": "736d71d2aed7802e51ddea4aa7b8b2980ad4ebccce5ce4c9b69105e469f15c6d"
+    },
+    {
+      "file": "review-comments.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "render tracked changes, comments, footnotes, endnotes and document search",
+      "bytes": 36885,
+      "sha256": "9e8d1852f7cde12e83bd91d0452a2941fff5b4b55f901235d1ba5c22f1f60e09"
     },
     {
       "file": "rotated-pages.pdf",

@@ -14,6 +14,8 @@ from openpyxl import Workbook
 from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.drawing.image import Image as XlsxImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.comments import Comment
+from openpyxl.formatting.rule import ColorScaleRule, DataBarRule, IconSetRule
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table as XlsxTable, TableStyleInfo
 from PIL import Image, ImageDraw, ImageFont
@@ -256,6 +258,14 @@ def make_docx_review_comments(path: Path):
         '<w:ins w:id="2" w:author="Morgan Editor" w:date="2026-07-11T00:05:00Z">'
         '<w:r><w:t>two business days</w:t></w:r></w:ins><w:r><w:t>.</w:t></w:r></w:p>'
     )
+    comment_paragraph = comment_paragraph.replace(
+        "</w:p>",
+        '<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="1"/></w:r></w:p>',
+    )
+    revision_paragraph = revision_paragraph.replace(
+        "</w:p>",
+        '<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:endnoteReference w:id="1"/></w:r></w:p>',
+    )
     document_xml, comment_count = re.subn(
         r"<w:p\b[^>]*>(?:(?!</w:p>).)*?<w:t>COMMENT_TARGET</w:t>(?:(?!</w:p>).)*?</w:p>",
         comment_paragraph,
@@ -281,6 +291,18 @@ def make_docx_review_comments(path: Path):
         '</w:r></w:p></w:comment></w:comments>'
     )
     entries["word/comments.xml"] = comments_xml.encode("utf-8")
+    entries["word/footnotes.xml"] = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:footnote w:id="1"><w:p><w:r><w:t>脚注正文：服务级别摘要已经由审核人确认。</w:t></w:r></w:p></w:footnote>'
+        '</w:footnotes>'
+    ).encode("utf-8")
+    entries["word/endnotes.xml"] = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:endnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:endnote w:id="1"><w:p><w:r><w:t>尾注正文：响应时间变更将在下一版合同中生效。</w:t></w:r></w:p></w:endnote>'
+        '</w:endnotes>'
+    ).encode("utf-8")
 
     content_types = entries["[Content_Types].xml"].decode("utf-8")
     if "/word/comments.xml" not in content_types:
@@ -290,6 +312,12 @@ def make_docx_review_comments(path: Path):
             'ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/>'
             "</Types>",
         )
+    content_types = content_types.replace(
+        "</Types>",
+        '<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/>'
+        '<Override PartName="/word/endnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml"/>'
+        "</Types>",
+    )
     entries["[Content_Types].xml"] = content_types.encode("utf-8")
 
     relationships = entries["word/_rels/document.xml.rels"].decode("utf-8")
@@ -300,6 +328,12 @@ def make_docx_review_comments(path: Path):
             'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" '
             'Target="comments.xml"/></Relationships>',
         )
+    relationships = relationships.replace(
+        "</Relationships>",
+        '<Relationship Id="rIdReviewFootnotes" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>'
+        '<Relationship Id="rIdReviewEndnotes" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes" Target="endnotes.xml"/>'
+        "</Relationships>",
+    )
     entries["word/_rels/document.xml.rels"] = relationships.encode("utf-8")
 
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as target:
@@ -529,6 +563,15 @@ def make_charts_images(path: Path, image_path: Path):
     ws["A7"] = "Worker merged region — image and merge parity"
     ws["A7"].font = Font(bold=True, color="1C3A5E")
     ws["A7"].alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ws["A2"].hyperlink = "#Dashboard!A7"
+    ws["A2"].style = "Hyperlink"
+    ws["B2"].comment = Comment("该季度收入已通过财务复核。", "财务审核")
+    ws.conditional_formatting.add("B2:B5", ColorScaleRule(start_type="min", start_color="F8696B", mid_type="percentile", mid_value=50, mid_color="FFEB84", end_type="max", end_color="63BE7B"))
+    ws.conditional_formatting.add("C2:C5", DataBarRule(start_type="min", end_type="max", color="5B9BD5", showValue=True))
+    ws["D1"] = "趋势"
+    ws["D1"].font = Font(color="FFFFFF", bold=True)
+    ws["D3"], ws["D4"], ws["D5"] = 3, 2, 1
+    ws.conditional_formatting.add("D3:D5", IconSetRule("3TrafficLights1", "num", [1, 2, 3], showValue=True))
     ws.row_dimensions[7].height = 28
     ws.row_dimensions[8].height = 28
     chart = BarChart()
@@ -551,6 +594,72 @@ def make_charts_images(path: Path, image_path: Path):
     img.height = 320
     ws.add_image(img, "E18")
     wb.save(path)
+    inject_xlsx_fidelity_parts(path)
+
+
+def inject_xlsx_fidelity_parts(path: Path):
+    with zipfile.ZipFile(path, "r") as source:
+        entries = {name: source.read(name) for name in source.namelist()}
+
+    sheet_path = "xl/worksheets/sheet1.xml"
+    sheet_xml = entries[sheet_path].decode("utf-8")
+    sparkline_xml = (
+        '<extLst><ext uri="{05C60535-1F16-4fd2-B633-F4F36F0B64E0}">'
+        '<x14:sparklineGroups xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main" '
+        'xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">'
+        '<x14:sparklineGroup type="line" markers="1"><x14:colorSeries rgb="FF2563EB"/>'
+        '<x14:colorMarkers rgb="FFDC2626"/><x14:sparklines><x14:sparkline>'
+        '<xm:f>Dashboard!B2:B5</xm:f><xm:sqref>D2</xm:sqref>'
+        '</x14:sparkline></x14:sparklines></x14:sparklineGroup></x14:sparklineGroups>'
+        '</ext></extLst>'
+    )
+    control_xml = (
+        '<controls><control xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" shapeId="9001" name="发布前确认" r:id="rIdFidelityControl">'
+        '<controlPr><xdr:anchor xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>9</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>'
+        '<xdr:to><xdr:col>2</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>11</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to></xdr:anchor></controlPr>'
+        '</control></controls>'
+    )
+    sheet_xml = sheet_xml.replace("</worksheet>", sparkline_xml + control_xml + "</worksheet>")
+    entries[sheet_path] = sheet_xml.encode("utf-8")
+
+    rels_path = "xl/worksheets/_rels/sheet1.xml.rels"
+    rels_xml = entries[rels_path].decode("utf-8")
+    rels_xml = rels_xml.replace(
+        "</Relationships>",
+        '<Relationship Id="rIdFidelityControl" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/ctrlProp" Target="../ctrlProps/ctrlProp1.xml"/>'
+        "</Relationships>",
+    )
+    entries[rels_path] = rels_xml.encode("utf-8")
+    entries["xl/ctrlProps/ctrlProp1.xml"] = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<formControlPr xmlns="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main" objectType="CheckBox" checked="1" fmlaLink="Dashboard!$A$10"/>'
+    ).encode("utf-8")
+
+    drawing_path = "xl/drawings/drawing1.xml"
+    drawing_xml = entries[drawing_path].decode("utf-8")
+    shape_xml = (
+        '<xdr:twoCellAnchor xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:from><xdr:col>4</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>9</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>'
+        '<xdr:to><xdr:col>7</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>12</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>'
+        '<xdr:sp><xdr:nvSpPr><xdr:cNvPr id="9002" name="审批提醒" descr="只读形状展示"/><xdr:cNvSpPr/></xdr:nvSpPr>'
+        '<xdr:spPr><a:solidFill><a:srgbClr val="DBEAFE"/></a:solidFill><a:ln w="19050"><a:solidFill><a:srgbClr val="2563EB"/></a:solidFill></a:ln><a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom></xdr:spPr>'
+        '<xdr:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="zh-CN" sz="1200" b="1"/><a:t>审批提醒：请核对季度收入</a:t></a:r></a:p></xdr:txBody>'
+        '</xdr:sp><xdr:clientData/></xdr:twoCellAnchor>'
+    )
+    closing_tag = "</xdr:wsDr>" if "</xdr:wsDr>" in drawing_xml else "</wsDr>"
+    drawing_xml = drawing_xml.replace(closing_tag, shape_xml + closing_tag)
+    entries[drawing_path] = drawing_xml.encode("utf-8")
+
+    content_types = entries["[Content_Types].xml"].decode("utf-8")
+    content_types = content_types.replace(
+        "</Types>",
+        '<Override PartName="/xl/ctrlProps/ctrlProp1.xml" ContentType="application/vnd.ms-excel.controlproperties+xml"/>'
+        "</Types>",
+    )
+    entries["[Content_Types].xml"] = content_types.encode("utf-8")
+
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as target:
+        for name in sorted(entries):
+            target.writestr(name, entries[name])
 
 
 def make_large_grid(path: Path):

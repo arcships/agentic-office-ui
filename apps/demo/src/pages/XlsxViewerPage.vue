@@ -57,6 +57,12 @@
       <div><strong>模式：</strong>{{ readOnly ? "只读" : "可编辑" }}</div>
       <div><strong>请求 Worker：</strong><span data-testid="xlsx-worker-requested">{{ useWorker ? "开启" : "关闭" }}</span></div>
       <div><strong>实际执行：</strong><span data-testid="xlsx-worker-actual">{{ actualWorkerMode }}</span></div>
+      <div data-testid="xlsx-hyperlink-count"><strong>超链接：</strong>{{ controller?.activeSheet?.hyperlinks.length ?? 0 }}</div>
+      <div data-testid="xlsx-comment-count"><strong>批注：</strong>{{ controller?.activeSheet?.comments.length ?? 0 }}</div>
+      <div data-testid="xlsx-conditional-format-count"><strong>条件格式：</strong>{{ controller?.activeSheet?.conditionalFormatRules.length ?? 0 }}</div>
+      <div data-testid="xlsx-sparkline-count"><strong>迷你图：</strong>{{ controller?.activeSheet?.sparklines.length ?? 0 }}</div>
+      <div data-testid="xlsx-shape-count"><strong>形状：</strong>{{ controller?.shapes.length ?? 0 }}</div>
+      <div data-testid="xlsx-form-control-count"><strong>控件：</strong>{{ controller?.formControls.length ?? 0 }}</div>
     </div>
 
     <details class="runtime-details" data-testid="xlsx-runtime-details">
@@ -133,7 +139,7 @@ const XlsxViewerWrapper = defineComponent({
 const samples = [
   { file: "financial-model.xlsx", label: "财务模型" },
   { file: "sales-table.xlsx", label: "销售表" },
-  { file: "charts-images.xlsx", label: "图表、图片和合并单元格" },
+  { file: "charts-images.xlsx", label: "完整展示：图表、图片、条件格式、迷你图、超链接、批注、形状与控件" },
   { file: "large-grid.xlsx", label: "大表格" },
   { file: "corrupted.xlsx", label: "损坏文件（失败用例）" },
 ]

@@ -103,7 +103,7 @@ const samples = [
   { file: "invoice-table.docx", label: "Invoice table — merged cells and totals" },
   { file: "report-with-image.docx", label: "Report with image and rich text" },
   { file: "chinese-mixed.docx", label: "Chinese + English mixed text" },
-  { file: "review-comments.docx", label: "Review — tracked changes and comments" },
+  { file: "review-comments.docx", label: "Review — 修订、批注、脚注、尾注与搜索" },
   { file: "corrupted.docx", label: "Corrupted DOCX — negative test" },
 ]
 

@@ -21,6 +21,18 @@ export interface XlsxCellRange {
   start: XlsxCellAddress;
 }
 
+export interface XlsxCellHyperlink {
+  cell: XlsxCellAddress;
+  target: string;
+  tooltip?: string;
+}
+
+export interface XlsxCellComment {
+  author?: string;
+  cell: XlsxCellAddress;
+  text: string;
+}
+
 // ── Theme / styles ───────────────────────────────────────────────────────
 
 export interface XlsxResolvedCellStyle {
@@ -122,6 +134,8 @@ export interface XlsxSheetData {
   hiddenCols?: number[];
   hiddenRows?: number[];
   conditionalFormatRules: XlsxConditionalFormatRule[];
+  hyperlinks: XlsxCellHyperlink[];
+  comments: XlsxCellComment[];
   dataValidations: XlsxDataValidation[];
   name: string;
   visibility: XlsxSheetVisibility;

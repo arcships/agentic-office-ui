@@ -2,6 +2,8 @@ export type {
   // Cell addressing
   XlsxCellAddress,
   XlsxCellRange,
+  XlsxCellHyperlink,
+  XlsxCellComment,
   // Theme / styles
   XlsxResolvedCellStyle,
   XlsxTableStyleDefinition,

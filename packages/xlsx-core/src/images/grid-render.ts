@@ -7,6 +7,8 @@ import type {
   XlsxConditionalFormatValueObject,
   XlsxConditionalIconSetRule,
   XlsxCellRange,
+  XlsxCellHyperlink,
+  XlsxCellComment,
   XlsxFormControl,
   XlsxImage,
   XlsxResolvedCellStyle,
@@ -72,6 +74,8 @@ export type WorkbookSheetState = {
   colWidthOverridesPx: Record<number, number>;
   colStyleIds: Record<number, number>;
   conditionalFormatRules: XlsxConditionalFormatRule[];
+  hyperlinks: XlsxCellHyperlink[];
+  comments: XlsxCellComment[];
   defaultColWidthPx: number;
   defaultRowHeightPx: number;
   hasHorizontalMerges: boolean;
@@ -554,6 +558,46 @@ function parseConditionalFormatRules(document: Document) {
     .sort((left, right) => left.priority - right.priority);
 }
 
+function parseCellHyperlinks(archive: ArchiveEntries, path: string, document: Document): XlsxCellHyperlink[] {
+  const rawRelationships = new Map<string, string>();
+  const relsXml = readArchiveText(archive, relsPathForDocument(path));
+  const relsDocument = relsXml ? parseXml(relsXml) : null;
+  if (relsDocument) {
+    for (const node of getLocalElements(relsDocument, "Relationship")) {
+      const id = node.getAttribute("Id");
+      const target = node.getAttribute("Target");
+      if (id && target) rawRelationships.set(id, target);
+    }
+  }
+  const hyperlinks: XlsxCellHyperlink[] = [];
+  for (const node of getLocalElements(document, "hyperlink")) {
+    const cell = parseA1CellReference(node.getAttribute("ref")?.split(":")[0] ?? "");
+    const relationshipId = getRelationshipId(node);
+    const location = node.getAttribute("location");
+    const target = relationshipId ? rawRelationships.get(relationshipId) : location ? `#${location}` : undefined;
+    if (!cell || !target) continue;
+    hyperlinks.push({ cell, target, tooltip: node.getAttribute("tooltip") ?? undefined });
+  }
+  return hyperlinks;
+}
+
+function parseCellComments(archive: ArchiveEntries, path: string): XlsxCellComment[] {
+  const relationships = parseRelationships(archive, relsPathForDocument(path), path);
+  const commentsRelationship = [...relationships.values()].find((entry) => entry.type.endsWith("/comments"));
+  if (!commentsRelationship) return [];
+  const commentsXml = readArchiveText(archive, commentsRelationship.target);
+  const commentsDocument = commentsXml ? parseXml(commentsXml) : null;
+  if (!commentsDocument) return [];
+  const authors = getLocalElements(commentsDocument, "author").map((node) => node.textContent ?? "");
+  return getLocalElements(commentsDocument, "comment").flatMap((node) => {
+    const cell = parseA1CellReference(node.getAttribute("ref") ?? "");
+    if (!cell) return [];
+    const authorId = Number(node.getAttribute("authorId") ?? Number.NaN);
+    const text = getFirstChild(node, "text")?.textContent ?? "";
+    return [{ cell, text, author: Number.isFinite(authorId) ? authors[authorId] : undefined }];
+  });
+}
+
 // ── Sheet state parsing ────────────────────────────────────────────────────
 
 export function parseSheetState(
@@ -579,6 +623,8 @@ export function parseSheetState(
   const includeCachedFormulaValues = options?.includeCachedFormulaValues ?? true;
   const cachedFormulaValues: Record<string, string> = {};
   const conditionalFormatRules = parseConditionalFormatRules(document);
+  const hyperlinks = parseCellHyperlinks(archive, path, document);
+  const comments = parseCellComments(archive, path);
   const sparklines = parseSheetSparklines(document, options?.themePalette);
   const mergedRegions = getLocalElements(document, "mergeCell")
     .map((node) => parseA1RangeReference(node.getAttribute("ref") ?? ""))
@@ -696,6 +742,8 @@ export function parseSheetState(
     colWidthOverridesPx,
     colStyleIds,
     conditionalFormatRules,
+    hyperlinks,
+    comments,
     defaultColWidthPx: sheetColumnWidthToPixels(defaultColWidth, columnWidthCharacterWidthPx),
     defaultRowHeightPx: Math.max(MIN_ROW_HEIGHT_PX, Math.round(defaultRowHeight * 1.33)),
     hasHorizontalMerges,

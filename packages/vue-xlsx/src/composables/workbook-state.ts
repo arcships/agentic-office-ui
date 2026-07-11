@@ -19,6 +19,8 @@ import {
   trackXlsxWorkbookLifetime,
   tryRecalculate,
   type XlsxCellRange,
+  type XlsxCellHyperlink,
+  type XlsxCellComment,
   type XlsxConditionalFormatRule,
   type XlsxResolvedCellStyle,
   type XlsxSheetData,
@@ -173,6 +175,8 @@ export function buildSheetList(
     colWidthOverridesPx?: Record<number, number>;
     colStyleIds?: Record<number, number>;
     conditionalFormatRules?: XlsxConditionalFormatRule[];
+    hyperlinks?: XlsxCellHyperlink[];
+    comments?: XlsxCellComment[];
     defaultColWidthPx?: number;
     defaultRowHeightPx?: number;
     hasHorizontalMerges?: boolean;
@@ -225,6 +229,8 @@ export function buildSheetList(
           colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
           colStyleIds: sheetState?.colStyleIds ?? {},
           conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
+          hyperlinks: sheetState?.hyperlinks ?? [],
+          comments: sheetState?.comments ?? [],
           dataValidations: parseWorksheetDataValidations(worksheet),
           defaultColWidthPx,
           defaultRowHeightPx,
@@ -297,6 +303,8 @@ export function buildSheetList(
         colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
         colStyleIds: sheetState?.colStyleIds ?? {},
         conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
+        hyperlinks: sheetState?.hyperlinks ?? [],
+        comments: sheetState?.comments ?? [],
         dataValidations: parseWorksheetDataValidations(worksheet),
         defaultColWidthPx,
         defaultRowHeightPx,

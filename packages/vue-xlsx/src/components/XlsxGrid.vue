@@ -63,6 +63,15 @@
           @keydown.tab.stop.prevent="commitAndTab"
           @blur="commitEdit"
         />
+        <div
+          v-if="hoveredComment"
+          class="xlsx-grid__comment-popover"
+          data-testid="xlsx-comment-popover"
+          :style="hoveredComment.style"
+        >
+          <strong v-if="hoveredComment.author">{{ hoveredComment.author }}</strong>
+          <span>{{ hoveredComment.text }}</span>
+        </div>
       </div>
     </div>
   </div>
@@ -77,6 +86,10 @@ import {
   type XlsxCellAddress,
   type XlsxCellRange,
   type XlsxCellStyleContext,
+  type XlsxCellHyperlink,
+  type XlsxCellComment,
+  type XlsxConditionalFormatRule,
+  type XlsxSparkline,
   type XlsxResolvedCellStyle,
   type XlsxSheetData,
 } from "@arcships/xlsx-core";
@@ -122,6 +135,7 @@ const containerHeight = ref(0);
 
 const editingCell = ref<XlsxCellAddress | null>(null);
 const editingValue = ref("");
+const hoveredCell = ref<XlsxCellAddress | null>(null);
 const resizePreview = ref<{
   actualIndex: number;
   displayIndex: number;
@@ -152,9 +166,27 @@ const pendingWorkerBatches = new Map<string, AbortController>();
 let workerCacheSheetIndex: number | null = null;
 let paintedMergeRegions: GridMergeRegion[] = [];
 let paintedMergeAnchors = new Map<string, XlsxCellAddress>();
+let conditionalRuleStats = new Map<XlsxConditionalFormatRule, { min: number; max: number }>();
 
 // ── Computed from controller ──────────────────────────────────────────
 const activeSheet = computed(() => props.controller.activeSheet as XlsxSheetData | null);
+const hyperlinksByCell = computed(() => new Map((activeSheet.value?.hyperlinks ?? []).map((link) => [`${link.cell.row}:${link.cell.col}`, link])));
+const commentsByCell = computed(() => new Map((activeSheet.value?.comments ?? []).map((comment) => [`${comment.cell.row}:${comment.cell.col}`, comment])));
+const sparklinesByCell = computed(() => new Map((activeSheet.value?.sparklines ?? []).map((sparkline) => [`${sparkline.target.row}:${sparkline.target.col}`, sparkline])));
+const hoveredComment = computed(() => {
+  const cell = hoveredCell.value;
+  if (!cell) return null;
+  const comment = commentsByCell.value.get(`${cell.row}:${cell.col}`);
+  const display = getDisplayCell(cell);
+  if (!comment || !display) return null;
+  return {
+    ...comment,
+    style: {
+      left: `${ROW_HEADER_WIDTH + getColOffsetSum(display.col + 1) - scrollLeft.value + 6}px`,
+      top: `${HEADER_HEIGHT + getRowOffsetSum(display.row) - scrollTop.value + 4}px`,
+    } as CSSProperties,
+  };
+});
 const zoomScale = computed(() => props.controller.zoomScale);
 const activeCell = computed(() => props.controller.activeCell);
 const selection = computed(() => props.controller.selection);
@@ -551,6 +583,105 @@ function cssText(value: unknown): string | undefined {
   return typeof value === "string" || typeof value === "number" ? String(value) : undefined;
 }
 
+function cellInRange(cell: XlsxCellAddress, range: XlsxCellRange): boolean {
+  return cell.row >= Math.min(range.start.row, range.end.row)
+    && cell.row <= Math.max(range.start.row, range.end.row)
+    && cell.col >= Math.min(range.start.col, range.end.col)
+    && cell.col <= Math.max(range.start.col, range.end.col);
+}
+
+function conditionalRulesForCell(cell: XlsxCellAddress): XlsxConditionalFormatRule[] {
+  return (activeSheet.value?.conditionalFormatRules ?? []).filter((rule) => rule.ranges.some((range) => cellInRange(cell, range)));
+}
+
+function ruleStats(rule: XlsxConditionalFormatRule): { min: number; max: number } {
+  const cached = conditionalRuleStats.get(rule);
+  if (cached) return cached;
+  const sheet = activeSheet.value;
+  if (!sheet) return { min: 0, max: 0 };
+  const values: number[] = [];
+  for (const range of rule.ranges) {
+    const endRow = Math.min(range.end.row, Math.max(sheet.maxUsedRow, range.start.row));
+    const endCol = Math.min(range.end.col, Math.max(sheet.maxUsedCol, range.start.col));
+    for (let row = range.start.row; row <= endRow; row++) {
+      for (let col = range.start.col; col <= endCol; col++) {
+        const value = Number(getGridCellDisplayValue({ row, col }).replace(/[,％%]/g, ""));
+        if (Number.isFinite(value)) values.push(value);
+      }
+    }
+  }
+  const stats = values.length ? { min: Math.min(...values), max: Math.max(...values) } : { min: 0, max: 0 };
+  conditionalRuleStats.set(rule, stats);
+  return stats;
+}
+
+function colorRgb(value: Record<string, unknown> | undefined, fallback: string): [number, number, number] {
+  const resolved = resolveWorkbookColor(value, activeSheet.value?.themePalette) || fallback;
+  const hex = resolved.match(/^#?([0-9a-f]{6})$/i)?.[1];
+  if (!hex) return [37, 99, 235];
+  return [Number.parseInt(hex.slice(0, 2), 16), Number.parseInt(hex.slice(2, 4), 16), Number.parseInt(hex.slice(4, 6), 16)];
+}
+
+function mixColor(start: [number, number, number], end: [number, number, number], ratio: number): string {
+  const channel = (index: number) => Math.round(start[index] + (end[index] - start[index]) * ratio);
+  return `rgb(${channel(0)}, ${channel(1)}, ${channel(2)})`;
+}
+
+function conditionalVisual(cell: XlsxCellAddress, valueText: string) {
+  const rules = conditionalRulesForCell(cell);
+  if (!rules.length) return null;
+  const value = Number(valueText.replace(/[,％%]/g, ""));
+  if (!Number.isFinite(value)) return null;
+  const rule = rules[0];
+  const stats = ruleStats(rule);
+  const min = stats.min;
+  const max = stats.max;
+  const ratio = max === min ? 1 : Math.max(0, Math.min(1, (value - min) / (max - min)));
+  if (rule.kind === "dataBar") {
+    return { kind: rule.kind, ratio, color: resolveWorkbookColor(rule.color, activeSheet.value?.themePalette) || "#5b9bd5", showValue: rule.showValue !== false } as const;
+  }
+  if (rule.kind === "colorScale") {
+    const colors = rule.colors;
+    const low = colorRgb(colors[0], "#f8696b");
+    const middle = colorRgb(colors[Math.floor((colors.length - 1) / 2)], "#ffeb84");
+    const high = colorRgb(colors[colors.length - 1], "#63be7b");
+    const background = ratio <= .5 ? mixColor(low, middle, ratio * 2) : mixColor(middle, high, (ratio - .5) * 2);
+    return { kind: rule.kind, ratio, background, showValue: true } as const;
+  }
+  const symbols = rule.reverse ? ["▲", "●", "▼"] : ["▼", "●", "▲"];
+  return { kind: rule.kind, ratio, icon: symbols[Math.min(2, Math.floor(ratio * 3))], showValue: rule.showValue !== false } as const;
+}
+
+function drawSparkline(ctx: CanvasRenderingContext2D, sparkline: XlsxSparkline, x: number, y: number, width: number, height: number): void {
+  const values: number[] = [];
+  for (let row = sparkline.range.start.row; row <= sparkline.range.end.row; row++) {
+    for (let col = sparkline.range.start.col; col <= sparkline.range.end.col; col++) {
+      const value = Number(getGridCellDisplayValue({ row, col }).replace(/,/g, ""));
+      if (Number.isFinite(value)) values.push(value);
+    }
+  }
+  if (!values.length) return;
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 0);
+  const span = Math.max(1e-9, max - min);
+  const px = (index: number) => x + 4 + index * Math.max(1, (width - 8) / Math.max(1, values.length - 1));
+  const py = (value: number) => y + height - 4 - ((value - min) / span) * Math.max(1, height - 8);
+  ctx.save();
+  ctx.strokeStyle = sparkline.color || "#2563eb";
+  ctx.fillStyle = sparkline.color || "#2563eb";
+  ctx.lineWidth = 1.5;
+  if (sparkline.type === "column" || sparkline.type === "winLoss") {
+    const barWidth = Math.max(2, (width - 8) / values.length - 2);
+    values.forEach((value, index) => ctx.fillRect(px(index) - barWidth / 2, Math.min(py(value), py(0)), barWidth, Math.max(1, Math.abs(py(value) - py(0)))));
+  } else {
+    ctx.beginPath();
+    values.forEach((value, index) => index ? ctx.lineTo(px(index), py(value)) : ctx.moveTo(px(index), py(value)));
+    ctx.stroke();
+    if (sparkline.markers) values.forEach((value, index) => { ctx.beginPath(); ctx.arc(px(index), py(value), 2, 0, Math.PI * 2); ctx.fill(); });
+  }
+  ctx.restore();
+}
+
 function resolveCanvasCellStyle(
   cell: XlsxCellAddress,
   value: string,
@@ -597,8 +728,8 @@ function resolveCanvasCellStyle(
   const context: XlsxCellStyleContext = {
     cell,
     hasChartHighlight: false,
-    hasConditionalFormat: false,
-    hasHyperlink: false,
+    hasConditionalFormat: conditionalRulesForCell(cell).length > 0,
+    hasHyperlink: hyperlinksByCell.value.has(`${cell.row}:${cell.col}`),
     hasValidation: false,
     isMerged: merged,
     isTableHeader: tableHeader,
@@ -706,6 +837,7 @@ function paintBody() {
   const colRange = visibleColRange.value;
   const sheet = activeSheet.value;
   if (!sheet) return;
+  conditionalRuleStats = new Map();
 
   const widths = effectiveColWidths.value;
   const heights = effectiveRowHeights.value;
@@ -779,9 +911,18 @@ function paintBody() {
             : colStyleId !== undefined ? sheet.styleById[colStyleId] : undefined;
         }
         const style = resolveCanvasCellStyle(cell, value, workbookStyle);
+        const conditional = conditionalVisual(cell, value);
+        const hyperlink = hyperlinksByCell.value.get(`${cell.row}:${cell.col}`);
+        const comment = commentsByCell.value.get(`${cell.row}:${cell.col}`);
+        const sparkline = sparklinesByCell.value.get(`${cell.row}:${cell.col}`);
 
-        ctx.fillStyle = style.backgroundColor;
+        ctx.fillStyle = conditional?.kind === "colorScale" ? conditional.background : style.backgroundColor;
         ctx.fillRect(colX + 0.5, rowY + 0.5, Math.max(0, colW - 1), Math.max(0, rowHResolved - 1));
+        if (conditional?.kind === "dataBar") {
+          ctx.fillStyle = `${conditional.color}99`;
+          ctx.fillRect(colX + 3, rowY + 4, Math.max(2, (colW - 6) * conditional.ratio), Math.max(2, rowHResolved - 8));
+        }
+        if (sparkline) drawSparkline(ctx, sparkline, colX, rowY, colW, rowHResolved);
         if (merge && sheet.showGridLines !== false) {
           ctx.strokeStyle = gridColor;
           ctx.lineWidth = 1;
@@ -793,12 +934,12 @@ function paintBody() {
           ctx.fillRect(colX + 1, rowY + 1, Math.max(0, colW - 2), Math.max(0, rowHResolved - 2));
         }
 
-        if (value) {
+        if (value && !sparkline && (conditional?.kind !== "dataBar" || conditional.showValue)) {
           ctx.save();
           ctx.beginPath();
           ctx.rect(colX + 2, rowY + 1, Math.max(0, colW - 4), Math.max(0, rowHResolved - 2));
           ctx.clip();
-          ctx.fillStyle = style.color || textColor;
+          ctx.fillStyle = hyperlink ? "#2563eb" : style.color || textColor;
           ctx.font = `${style.fontStyle} ${style.fontWeight} ${Math.round(style.fontSizePx)}px ${JSON.stringify(style.fontFamily)}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
           ctx.textAlign = style.alignment;
           const padding = 5;
@@ -815,12 +956,12 @@ function paintBody() {
               ? rowY + (rowHResolved - blockHeight) / 2 + lineHeight * 0.8
               : rowY + rowHResolved - blockHeight + lineHeight * 0.8 - 2;
           lines.forEach((line, index) => ctx.fillText(line, textX, firstBaseline + index * lineHeight));
-          if (style.underline || style.strike) {
+          if (style.underline || style.strike || hyperlink) {
             const measured = Math.min(ctx.measureText(lines[0] ?? "").width, Math.max(0, colW - padding * 2));
             const startX = style.alignment === "right" ? textX - measured : style.alignment === "center" ? textX - measured / 2 : textX;
             ctx.strokeStyle = style.color;
             ctx.lineWidth = 1;
-            for (const offset of [style.underline ? 2 : null, style.strike ? -style.fontSizePx * 0.3 : null]) {
+            for (const offset of [style.underline || hyperlink ? 2 : null, style.strike ? -style.fontSizePx * 0.3 : null]) {
               if (offset === null) continue;
               ctx.beginPath();
               ctx.moveTo(startX, firstBaseline + offset);
@@ -829,6 +970,16 @@ function paintBody() {
             }
           }
           ctx.restore();
+        }
+        if (conditional?.kind === "iconSet") {
+          ctx.fillStyle = conditional.ratio < .34 ? "#dc2626" : conditional.ratio < .67 ? "#d97706" : "#16a34a";
+          ctx.font = `${Math.max(10, Math.min(15, rowHResolved - 6))}px sans-serif`;
+          ctx.textAlign = "right";
+          ctx.fillText(conditional.icon, colX + colW - 4, rowY + rowHResolved / 2 + 5);
+        }
+        if (comment) {
+          ctx.fillStyle = "#dc2626";
+          ctx.beginPath(); ctx.moveTo(colX + colW - 9, rowY + 1); ctx.lineTo(colX + colW - 1, rowY + 1); ctx.lineTo(colX + colW - 1, rowY + 9); ctx.closePath(); ctx.fill();
         }
 
         drawCellBorders(ctx, style, colX, rowY, colW, rowHResolved);
@@ -1229,10 +1380,11 @@ function onPointerMove(event: PointerEvent) {
     return;
   }
   const axisHit = hitTestAxis(event.clientX, event.clientY);
+  hoveredCell.value = axisHit ? null : hitTestCell(event.clientX, event.clientY);
   if (containerRef.value) {
     containerRef.value.style.cursor = axisHit?.resize
       ? axisHit.kind === "column" ? "col-resize" : "row-resize"
-      : axisHit ? "default" : "cell";
+      : axisHit ? "default" : hoveredCell.value && hyperlinksByCell.value.has(`${hoveredCell.value.row}:${hoveredCell.value.col}`) ? "pointer" : "cell";
   }
   if (!isSelecting.value || !selectionAnchor.value) return;
   const cell = hitTestCell(event.clientX, event.clientY);
@@ -1249,6 +1401,8 @@ function resolveAxisResizeRelease(
 }
 
 function onPointerUp(event?: PointerEvent) {
+  const clickedCell = event ? hitTestCell(event.clientX, event.clientY) : null;
+  const pressCell = selectionAnchor.value;
   const resizing = resizePreview.value;
   if (resizing) {
     const releaseAction = resolveAxisResizeRelease(resizing.moved, event?.type);
@@ -1266,12 +1420,41 @@ function onPointerUp(event?: PointerEvent) {
     containerRef.value.releasePointerCapture(event.pointerId);
   }
   schedulePaint();
+  if (clickedCell && pressCell && clickedCell.row === pressCell.row && clickedCell.col === pressCell.col) {
+    activateHyperlink(clickedCell);
+  }
 }
 
 function onPointerLeave(): void {
+  hoveredCell.value = null;
   if (!resizePreview.value && !isSelecting.value && containerRef.value) {
     containerRef.value.style.cursor = "cell";
   }
+}
+
+function activateHyperlink(cell: XlsxCellAddress): void {
+  const hyperlink = hyperlinksByCell.value.get(`${cell.row}:${cell.col}`) as XlsxCellHyperlink | undefined;
+  if (!hyperlink) return;
+  if (hyperlink.target.startsWith("#")) {
+    const reference = hyperlink.target.slice(1);
+    const [sheetPart, cellPart = sheetPart] = reference.split("!");
+    const sheetName = cellPart === sheetPart ? null : sheetPart.replace(/^'|'$/g, "").replace(/''/g, "'");
+    const match = /\$?([A-Z]+)\$?(\d+)/i.exec(cellPart);
+    if (!match) return;
+    if (sheetName) {
+      const sheetIndex = props.controller.sheets.findIndex((sheet) => sheet.name === sheetName);
+      if (sheetIndex >= 0) props.controller.setActiveSheetIndex(sheetIndex);
+    }
+    let col = 0;
+    for (const char of match[1].toUpperCase()) col = col * 26 + char.charCodeAt(0) - 64;
+    props.controller.selectCell({ row: Number(match[2]) - 1, col: col - 1 });
+    return;
+  }
+  try {
+    const url = new URL(hyperlink.target, globalThis.location?.href);
+    if (!["http:", "https:", "mailto:"].includes(url.protocol)) return;
+    globalThis.open?.(url.href, "_blank", "noopener,noreferrer");
+  } catch { /* invalid links stay inert */ }
 }
 
 function onDblClick(event: MouseEvent) {
@@ -1488,4 +1671,7 @@ onUnmounted(() => {
 .xlsx-grid__corner,
 .xlsx-grid__body { pointer-events: none; }
 .xlsx-grid__edit-input { box-sizing: border-box; pointer-events: auto; }
+.xlsx-grid__comment-popover { background: #fffbe6; border: 1px solid #eab308; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.18); color: #422006; display: flex; flex-direction: column; gap: 3px; max-width: 260px; min-width: 150px; padding: 8px 10px; pointer-events: none; position: absolute; white-space: pre-wrap; z-index: 30; }
+.xlsx-grid__comment-popover strong { font-size: 11px; }
+.xlsx-grid__comment-popover span { font-size: 12px; line-height: 1.4; }
 </style>

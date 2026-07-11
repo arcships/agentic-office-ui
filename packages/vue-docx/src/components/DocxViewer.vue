@@ -29,11 +29,17 @@
       :comment-count="viewerComments.length"
       :total-pages="totalPages"
       :zoom="zoomPercent"
+      :search-query="searchQuery"
+      :search-result-count="searchResults.length"
+      :search-result-index="searchResultIndex"
       @download="downloadFile"
       @select-page="selectPage"
       @toggle-sidebar="sidebarOpen = !sidebarOpen"
       @toggle-tracked-changes="toggleTrackedChanges"
       @toggle-comments="toggleComments"
+      @update:search-query="searchQuery = $event"
+      @search-next="selectSearchResult(1)"
+      @search-previous="selectSearchResult(-1)"
       @toggle-theme="toggleTheme"
       @update:zoom="zoomPercent = $event"
       @upload="uploadInputRef?.click()"
@@ -101,6 +107,8 @@
           :editable="false"
           :show-tracked-changes="effectiveShowTrackedChanges"
           :show-comments="effectiveShowComments"
+          :search-query="searchQuery"
+          :active-search-node-index="activeSearchNodeIndex"
           @page-count-change="onPageCountChange"
           @visible-page-range="onVisiblePageRange"
         />
@@ -111,8 +119,8 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue"
-import type { DocModel, DocxImportResult, DocxRuntime, DocxRuntimeLoader, LayoutOptions } from "@arcships/docx-core"
-import { collectCommentsFromModel, collectTrackedChangesFromModel, createDocxRuntime, DocxImportError } from "@arcships/docx-core"
+import type { DocModel, DocNode, DocxImportResult, DocxRuntime, DocxRuntimeLoader, LayoutOptions } from "@arcships/docx-core"
+import { collectCommentsFromModel, collectTrackedChangesFromModel, createDocxRuntime, DocxImportError, paragraphText } from "@arcships/docx-core"
 import DocxDocumentSurface from "./DocxDocumentSurface.vue"
 import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
 import DocxViewerToolbar from "./DocxViewerToolbar.vue"
@@ -175,6 +183,8 @@ const zoomPercent = ref(normalizeZoom(props.defaultZoom))
 const darkTheme = ref(props.isDark)
 const internalShowTrackedChanges = ref(props.defaultShowTrackedChanges)
 const internalShowComments = ref(props.defaultShowComments)
+const searchQuery = ref("")
+const searchResultIndex = ref(-1)
 
 const effectiveFile = computed(() => internalFile.value ?? props.file)
 const resolvedModel = computed(() => props.model ?? parsedModel.value)
@@ -184,6 +194,22 @@ const effectiveShowTrackedChanges = computed(() => props.showTrackedChanges ?? i
 const effectiveShowComments = computed(() => props.showComments ?? internalShowComments.value)
 const viewerTrackedChanges = computed(() => renderableModel.value ? collectTrackedChangesFromModel(renderableModel.value) : [])
 const viewerComments = computed(() => renderableModel.value ? collectCommentsFromModel(renderableModel.value) : [])
+const searchResults = computed(() => {
+  const query = searchQuery.value.trim().toLocaleLowerCase()
+  const model = renderableModel.value
+  if (!query || !model) return [] as Array<{ nodeIndex: number; offset: number }>
+  const matches: Array<{ nodeIndex: number; offset: number }> = []
+  model.nodes.forEach((node, nodeIndex) => {
+    const text = nodeText(node).toLocaleLowerCase()
+    let offset = 0
+    while ((offset = text.indexOf(query, offset)) >= 0) {
+      matches.push({ nodeIndex, offset })
+      offset += Math.max(1, query.length)
+    }
+  })
+  return matches
+})
+const activeSearchNodeIndex = computed(() => searchResults.value[searchResultIndex.value]?.nodeIndex)
 const viewerState = computed(() => {
   if (isLoading.value || pendingLoadResult.value) return "loading"
   if (error.value) return "error"
@@ -221,6 +247,22 @@ watch(() => props.defaultShowTrackedChanges, (value) => {
 watch(() => props.defaultShowComments, (value) => {
   if (props.showComments == null) internalShowComments.value = value
 })
+watch(searchResults, (results) => {
+  searchResultIndex.value = results.length ? 0 : -1
+  if (results[0]) documentSurfaceRef.value?.scrollToNode(results[0].nodeIndex)
+})
+
+function nodeText(node: DocNode): string {
+  if (node.type === "paragraph") return paragraphText(node)
+  return node.rows.flatMap((row) => row.cells.flatMap((cell) => cell.nodes.map(nodeText))).join("\n")
+}
+
+function selectSearchResult(direction: -1 | 1): void {
+  const results = searchResults.value
+  if (!results.length) return
+  searchResultIndex.value = (searchResultIndex.value + direction + results.length) % results.length
+  documentSurfaceRef.value?.scrollToNode(results[searchResultIndex.value].nodeIndex)
+}
 
 watch(
   () => [effectiveFile.value, props.runtime, props.model] as const,

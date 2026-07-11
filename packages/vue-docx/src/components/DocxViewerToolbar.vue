@@ -37,6 +37,21 @@
     </div>
 
     <div class="docx-viewer-toolbar__actions">
+      <div class="docx-viewer-toolbar__search" role="search">
+        <input
+          data-testid="docx-search-input"
+          type="search"
+          :value="searchQuery"
+          placeholder="搜索文档"
+          aria-label="搜索文档"
+          :disabled="disabled"
+          @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
+          @keydown.enter.prevent="onSearchEnter"
+        />
+        <span data-testid="docx-search-status">{{ searchResultCount ? `${searchResultIndex + 1}/${searchResultCount}` : searchQuery ? '0/0' : '' }}</span>
+        <button type="button" aria-label="上一个搜索结果" data-testid="docx-search-previous" :disabled="disabled || !searchResultCount" @click="emit('searchPrevious')">‹</button>
+        <button type="button" aria-label="下一个搜索结果" data-testid="docx-search-next" :disabled="disabled || !searchResultCount" @click="emit('searchNext')">›</button>
+      </div>
       <button
         type="button"
         class="docx-viewer-toolbar__icon-button"
@@ -170,6 +185,9 @@ const props = defineProps<{
   currentPage: number
   totalPages: number
   zoom: number
+  searchQuery: string
+  searchResultCount: number
+  searchResultIndex: number
 }>()
 
 const emit = defineEmits<{
@@ -181,6 +199,9 @@ const emit = defineEmits<{
   toggleComments: []
   selectPage: [page: number]
   "update:zoom": [zoom: number]
+  "update:searchQuery": [query: string]
+  searchNext: []
+  searchPrevious: []
 }>()
 
 const zoomOptions = [50, 75, 100, 125, 150, 175, 200]
@@ -221,6 +242,11 @@ function onZoomChange(event: Event): void {
   const value = Number((event.target as HTMLSelectElement).value)
   if (zoomOptions.includes(value)) emit("update:zoom", value)
 }
+
+function onSearchEnter(event: KeyboardEvent): void {
+  if (event.shiftKey) emit("searchPrevious")
+  else emit("searchNext")
+}
 </script>
 
 <style scoped>
@@ -244,6 +270,12 @@ function onZoomChange(event: Event): void {
 }
 .docx-viewer-toolbar__leading { gap: 10px; min-width: 0; }
 .docx-viewer-toolbar__actions { gap: 4px; }
+.docx-viewer-toolbar__search { align-items: center; display: flex; gap: 2px; margin-right: 4px; }
+.docx-viewer-toolbar__search input { background: #fff; border: 1px solid #d4d4d8; border-radius: 7px; color: #18181b; font: inherit; font-size: 12px; height: 32px; padding: 0 8px; width: 132px; }
+.docx-viewer-toolbar__search span { color: #71717a; font-size: 11px; min-width: 30px; text-align: center; }
+.docx-viewer-toolbar__search button { background: transparent; border: 1px solid transparent; border-radius: 5px; color: inherit; cursor: pointer; font-size: 20px; height: 28px; line-height: 20px; padding: 0; width: 24px; }
+.docx-viewer-toolbar__search button:hover:not(:disabled) { background: #f4f4f5; }
+.docx-viewer-toolbar__search button:disabled { opacity: .3; }
 .docx-viewer-toolbar__file {
   font-size: 13px;
   font-weight: 600;

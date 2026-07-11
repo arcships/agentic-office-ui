@@ -100,6 +100,8 @@ export type {
   XlsxCellNumberFormatInput,
   XlsxCellProtectionInput,
   XlsxCellRange,
+  XlsxCellHyperlink,
+  XlsxCellComment,
   XlsxCellStyleColorInput,
   XlsxCellStyleContext,
   XlsxCellStyleInput,

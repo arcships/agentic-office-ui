@@ -36,6 +36,10 @@
             :comments-enabled="commentsEnabled"
             :tracked-changes="trackedChanges"
             :comments="comments"
+            :footnotes="pageFootnotes(entry.pageIndex)"
+            :endnotes="pageEndnotes(entry.pageIndex)"
+            :search-query="searchQuery"
+            :active-search-node-index="activeSearchNodeIndex"
             :theme="theme"
             @measure="onPageMeasure(entry.pageIndex, $event)"
           />
@@ -53,6 +57,7 @@ import type {
   DocxDocumentTheme,
   DocxEditorController,
   DocxTrackedChange,
+  DocumentNoteDefinition,
   DocumentPageNodeSegment,
   FooterSection,
   HeaderSection,
@@ -68,6 +73,7 @@ import {
   resolveDocumentSectionsFromMetadata,
   resolveDocumentLayout,
   resolveSectionIndexForNodeIndex,
+  nodeReferencedNoteIds,
   selectSectionVariantForPage,
   DEFAULT_DOC_PAGE_WIDTH,
   DEFAULT_DOC_PAGE_HEIGHT,
@@ -89,6 +95,8 @@ export interface DocxViewerRootProps {
   zoomScale?: number
   showTrackedChanges?: boolean
   showComments?: boolean
+  searchQuery?: string
+  activeSearchNodeIndex?: number
 }
 
 interface VisiblePageEntry {
@@ -234,6 +242,28 @@ const trackedChanges = computed<readonly DocxTrackedChange[]>(() =>
 const comments = computed<readonly DocxComment[]>(() =>
   props.controller?.comments ?? (commentsEnabled.value ? collectCommentsFromModel(props.model) : [])
 )
+
+function notesForPage(pageIndex: number, kind: "footnote" | "endnote"): DocumentNoteDefinition[] {
+  const definitions = kind === "footnote"
+    ? props.model.metadata.footnotes ?? []
+    : props.model.metadata.endnotes ?? []
+  if (!definitions.length) return []
+  if (kind === "endnote") return pageIndex === pageCount.value - 1 ? definitions : []
+  const byId = new Map(definitions.map((note) => [note.id, note]))
+  const ids: number[] = []
+  const seen = new Set<number>()
+  for (const segment of pageNodeSegments.value[pageIndex] ?? []) {
+    const node = props.model.nodes[segment.nodeIndex]
+    if (!node) continue
+    for (const id of nodeReferencedNoteIds(node, kind, segment.tableRowRange, segment.paragraphLineRange)) {
+      if (!seen.has(id)) { seen.add(id); ids.push(id) }
+    }
+  }
+  return ids.map((id) => byId.get(id)).filter((note): note is DocumentNoteDefinition => Boolean(note))
+}
+
+function pageFootnotes(pageIndex: number): DocumentNoteDefinition[] { return notesForPage(pageIndex, "footnote") }
+function pageEndnotes(pageIndex: number): DocumentNoteDefinition[] { return notesForPage(pageIndex, "endnote") }
 
 // ── Page heights ───────────────────────────────────────────────────
 function getPageHeight(pageIndex: number): number {
@@ -442,6 +472,14 @@ defineExpose({
   scrollToPage(pageIndex: number): void {
     if (!scrollContainerRef.value || pageIndex < 0 || pageIndex >= pageCount.value)
       return
+    const targetTop = pageOffsets.value[pageIndex] ?? 0
+    scrollContainerRef.value.scrollTo({ top: targetTop, behavior: "smooth" })
+  },
+  scrollToNode(nodeIndex: number): void {
+    const pageIndex = pageNodeSegments.value.findIndex((segments) =>
+      segments.some((segment) => segment.nodeIndex === nodeIndex)
+    )
+    if (!scrollContainerRef.value || pageIndex < 0) return
     const targetTop = pageOffsets.value[pageIndex] ?? 0
     scrollContainerRef.value.scrollTo({ top: targetTop, behavior: "smooth" })
   },
