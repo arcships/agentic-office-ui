@@ -5,9 +5,12 @@
     "baseUrl": "../..",
     "paths": {
       "@arcships/docx-core": ["packages/docx-core/src/index.ts"],
+      "@arcships/pptx-core": ["packages/pptx-core/src/index.ts"],
+      "@arcships/pptx-core/browser": ["packages/pptx-core/src/browser.ts"],
       "@arcships/xlsx-core": ["packages/xlsx-core/src/index.ts"],
       "@arcships/xlsx-core/runtime": ["packages/xlsx-core/src/runtime.ts"],
       "@arcships/vue-docx": ["packages/vue-docx/src/index.ts"],
+      "@arcships/vue-pptx": ["packages/vue-pptx/src/index.ts"],
       "@arcships/vue-xlsx": ["packages/vue-xlsx/src/index.ts"],
       "@arcships/vue-extend": ["packages/vue-extend/src/index.ts"]
     }

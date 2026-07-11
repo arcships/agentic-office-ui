@@ -63,6 +63,7 @@ const suites = {
       "tests/unit/xlsx-core.test.mjs",
       "packages/vue-xlsx/test/lazy-loading.mjs",
       "tests/unit/pdf-source.test.mjs",
+      "tests/unit/pptx-core.test.mjs",
       "tests/unit/core-purity.test.mjs",
     ]),
     command("core-boundary", process.execPath, [
@@ -106,6 +107,7 @@ const suites = {
       "--test-concurrency=1",
       "tests/component/vue-component-behavior.test.mjs",
       "tests/component/vue-components.test.mjs",
+      "tests/component/pptx-preview.test.mjs",
       "tests/component/xlsx-race.test.mjs",
       "tests/component/docx-render-parity.test.mjs",
       "tests/component/docx-edit-interactions.test.mjs",

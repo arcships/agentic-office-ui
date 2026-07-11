@@ -1,0 +1,517 @@
+{
+  "schemaVersion": 1,
+  "fixture": "motion-straight.pptx",
+  "powerPointVersion": "16.110.3 (16.110.26070318)",
+  "focus": "第 7 页：直线路径到页面坐标的换算。",
+  "focusSlideIndex": 6,
+  "document": {
+    "slides": 12,
+    "objects": 38,
+    "nodes": 47,
+    "media": 2,
+    "hiddenSlides": [
+      8
+    ],
+    "actions": 4
+  },
+  "capability": {
+    "discovered": 33,
+    "strict": 29,
+    "approximate": 0,
+    "static": 4,
+    "unparsed": 0,
+    "features": [
+      {
+        "id": "effect:0:4",
+        "slideIndex": 0,
+        "objectKey": "ppt/slides/slide1.xml|slide|shape:2",
+        "feature": "fade-in",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "4"
+      },
+      {
+        "id": "effect:0:7",
+        "slideIndex": 0,
+        "objectKey": "ppt/slides/slide1.xml|slide|shape:4",
+        "feature": "fade-in",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "7"
+      },
+      {
+        "id": "transition:1",
+        "slideIndex": 1,
+        "feature": "transition:fade",
+        "disposition": "strict"
+      },
+      {
+        "id": "transition:2",
+        "slideIndex": 2,
+        "feature": "transition:push",
+        "disposition": "strict"
+      },
+      {
+        "id": "transition:3",
+        "slideIndex": 3,
+        "feature": "transition:wipe",
+        "disposition": "strict"
+      },
+      {
+        "id": "transition:4",
+        "slideIndex": 4,
+        "feature": "transition:morph",
+        "disposition": "static"
+      },
+      {
+        "id": "morph:4:explicit-name:ppt/slides/slide5.xml|slide|shape:2",
+        "slideIndex": 4,
+        "objectKey": "ppt/slides/slide5.xml|slide|shape:2",
+        "feature": "morph:explicit-name",
+        "disposition": "static",
+        "reason": "近似播放未开启，保留静态页面。"
+      },
+      {
+        "id": "effect:5:2",
+        "slideIndex": 5,
+        "objectKey": "ppt/slides/slide6.xml|slide|shape:5",
+        "feature": "media-command",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "2"
+      },
+      {
+        "id": "effect:5:5",
+        "slideIndex": 5,
+        "objectKey": "ppt/slides/slide6.xml|slide|shape:2",
+        "feature": "fade-in",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "5"
+      },
+      {
+        "id": "effect:5:8",
+        "slideIndex": 5,
+        "objectKey": "ppt/slides/slide6.xml|slide|shape:6",
+        "feature": "media-command",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "8"
+      },
+      {
+        "id": "media:5:rId2",
+        "slideIndex": 5,
+        "objectKey": "ppt/slides/slide6.xml|slide|shape:5",
+        "feature": "media:video",
+        "disposition": "strict",
+        "reason": null
+      },
+      {
+        "id": "media:5:rId3",
+        "slideIndex": 5,
+        "objectKey": "ppt/slides/slide6.xml|slide|shape:6",
+        "feature": "media:audio",
+        "disposition": "strict",
+        "reason": null
+      },
+      {
+        "id": "action:5:0",
+        "slideIndex": 5,
+        "objectKey": "ppt/slides/slide6.xml|slide|shape:5",
+        "feature": "action:unsupported",
+        "disposition": "static",
+        "reason": null
+      },
+      {
+        "id": "action:5:1",
+        "slideIndex": 5,
+        "objectKey": "ppt/slides/slide6.xml|slide|shape:6",
+        "feature": "action:unsupported",
+        "disposition": "static",
+        "reason": null
+      },
+      {
+        "id": "effect:6:2",
+        "slideIndex": 6,
+        "objectKey": "ppt/slides/slide7.xml|slide|shape:2",
+        "feature": "scale",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "2"
+      },
+      {
+        "id": "repeat:6:2",
+        "slideIndex": 6,
+        "objectKey": "ppt/slides/slide7.xml|slide|shape:2",
+        "feature": "repeat:finite",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "2"
+      },
+      {
+        "id": "auto-reverse:6:2",
+        "slideIndex": 6,
+        "objectKey": "ppt/slides/slide7.xml|slide|shape:2",
+        "feature": "auto-reverse",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "2"
+      },
+      {
+        "id": "effect:6:4",
+        "slideIndex": 6,
+        "objectKey": "ppt/slides/slide7.xml|slide|shape:4",
+        "feature": "motion-path",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "4"
+      },
+      {
+        "id": "effect:6:6",
+        "slideIndex": 6,
+        "objectKey": "ppt/slides/slide7.xml|slide|shape:3",
+        "feature": "emphasis",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "6"
+      },
+      {
+        "id": "auto-reverse:6:6",
+        "slideIndex": 6,
+        "objectKey": "ppt/slides/slide7.xml|slide|shape:3",
+        "feature": "auto-reverse",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "6"
+      },
+      {
+        "id": "effect:6:8",
+        "slideIndex": 6,
+        "objectKey": "ppt/slides/slide7.xml|slide|shape:4",
+        "feature": "rotate",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "8"
+      },
+      {
+        "id": "effect:6:10",
+        "slideIndex": 6,
+        "objectKey": "ppt/slides/slide7.xml|slide|shape:3",
+        "feature": "wipe",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "10"
+      },
+      {
+        "id": "effect:7:2",
+        "slideIndex": 7,
+        "objectKey": "ppt/slides/slide8.xml|slide|shape:2",
+        "feature": "scale",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "2"
+      },
+      {
+        "id": "repeat:7:2",
+        "slideIndex": 7,
+        "objectKey": "ppt/slides/slide8.xml|slide|shape:2",
+        "feature": "repeat:indefinite",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "2"
+      },
+      {
+        "id": "auto-reverse:7:2",
+        "slideIndex": 7,
+        "objectKey": "ppt/slides/slide8.xml|slide|shape:2",
+        "feature": "auto-reverse",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "2"
+      },
+      {
+        "id": "transition:7",
+        "slideIndex": 7,
+        "feature": "transition:cut",
+        "disposition": "strict"
+      },
+      {
+        "id": "action:9:0",
+        "slideIndex": 9,
+        "objectKey": "ppt/slides/slide10.xml|slide|shape:2",
+        "feature": "action:go-to-slide",
+        "disposition": "strict",
+        "reason": null
+      },
+      {
+        "id": "action:9:1",
+        "slideIndex": 9,
+        "objectKey": "ppt/slides/slide10.xml|slide|shape:4",
+        "feature": "action:open-url",
+        "disposition": "strict",
+        "reason": null
+      },
+      {
+        "id": "effect:10:2",
+        "slideIndex": 10,
+        "objectKey": "ppt/slides/slide11.xml|slide|shape:2",
+        "feature": "fade-in",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "2"
+      },
+      {
+        "id": "effect:10:4",
+        "slideIndex": 10,
+        "objectKey": "ppt/slides/slide11.xml|slide|shape:2",
+        "feature": "fade-out",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "4"
+      },
+      {
+        "id": "effect:11:3",
+        "slideIndex": 11,
+        "objectKey": "ppt/slides/slide12.xml|slide|shape:3",
+        "feature": "fade-in",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "3"
+      },
+      {
+        "id": "effect:11:6",
+        "slideIndex": 11,
+        "objectKey": "ppt/slides/slide12.xml|slide|shape:3",
+        "feature": "fade-in",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "6"
+      },
+      {
+        "id": "effect:11:9",
+        "slideIndex": 11,
+        "objectKey": "ppt/slides/slide12.xml|slide|shape:3",
+        "feature": "fade-in",
+        "disposition": "strict",
+        "reason": null,
+        "sourceNodeId": "9"
+      }
+    ]
+  },
+  "focusedSlide": {
+    "index": 6,
+    "hidden": false,
+    "transition": null,
+    "media": [],
+    "actions": [],
+    "morphFromPrevious": [],
+    "nodeCount": 11
+  },
+  "schedule": [
+    {
+      "key": "auto",
+      "durationMs": 2000,
+      "effects": [
+        {
+          "nodeId": "2",
+          "kind": "scale",
+          "targetObjectKey": "ppt/slides/slide7.xml|slide|shape:2",
+          "paragraphRange": null,
+          "triggerKey": "auto",
+          "triggerEvent": "with-previous",
+          "startMs": 0,
+          "endMs": 2000
+        },
+        {
+          "nodeId": "4",
+          "kind": "motion-path",
+          "targetObjectKey": "ppt/slides/slide7.xml|slide|shape:4",
+          "paragraphRange": null,
+          "triggerKey": "auto",
+          "triggerEvent": "with-previous",
+          "startMs": 0,
+          "endMs": 600
+        },
+        {
+          "nodeId": "6",
+          "kind": "emphasis",
+          "targetObjectKey": "ppt/slides/slide7.xml|slide|shape:3",
+          "paragraphRange": null,
+          "triggerKey": "auto",
+          "triggerEvent": "with-previous",
+          "startMs": 0,
+          "endMs": 1600
+        },
+        {
+          "nodeId": "8",
+          "kind": "rotate",
+          "targetObjectKey": "ppt/slides/slide7.xml|slide|shape:4",
+          "paragraphRange": null,
+          "triggerKey": "auto",
+          "triggerEvent": "with-previous",
+          "startMs": 0,
+          "endMs": 600
+        },
+        {
+          "nodeId": "10",
+          "kind": "wipe",
+          "targetObjectKey": "ppt/slides/slide7.xml|slide|shape:3",
+          "paragraphRange": null,
+          "triggerKey": "auto",
+          "triggerEvent": "with-previous",
+          "startMs": 0,
+          "endMs": 600
+        }
+      ]
+    }
+  ],
+  "eventSequence": [
+    {
+      "type": "effectstart",
+      "slideIndex": 6,
+      "nodeId": "2",
+      "objectKey": "ppt/slides/slide7.xml|slide|shape:2",
+      "boundary": null,
+      "from": null,
+      "to": null,
+      "reason": null,
+      "mediaId": null,
+      "actionKind": null,
+      "warningCode": null,
+      "errorCode": null
+    },
+    {
+      "type": "effectstart",
+      "slideIndex": 6,
+      "nodeId": "4",
+      "objectKey": "ppt/slides/slide7.xml|slide|shape:4",
+      "boundary": null,
+      "from": null,
+      "to": null,
+      "reason": null,
+      "mediaId": null,
+      "actionKind": null,
+      "warningCode": null,
+      "errorCode": null
+    },
+    {
+      "type": "effectstart",
+      "slideIndex": 6,
+      "nodeId": "6",
+      "objectKey": "ppt/slides/slide7.xml|slide|shape:3",
+      "boundary": null,
+      "from": null,
+      "to": null,
+      "reason": null,
+      "mediaId": null,
+      "actionKind": null,
+      "warningCode": null,
+      "errorCode": null
+    },
+    {
+      "type": "effectstart",
+      "slideIndex": 6,
+      "nodeId": "8",
+      "objectKey": "ppt/slides/slide7.xml|slide|shape:4",
+      "boundary": null,
+      "from": null,
+      "to": null,
+      "reason": null,
+      "mediaId": null,
+      "actionKind": null,
+      "warningCode": null,
+      "errorCode": null
+    },
+    {
+      "type": "effectstart",
+      "slideIndex": 6,
+      "nodeId": "10",
+      "objectKey": "ppt/slides/slide7.xml|slide|shape:3",
+      "boundary": null,
+      "from": null,
+      "to": null,
+      "reason": null,
+      "mediaId": null,
+      "actionKind": null,
+      "warningCode": null,
+      "errorCode": null
+    },
+    {
+      "type": "effectend",
+      "slideIndex": 6,
+      "nodeId": "4",
+      "objectKey": "ppt/slides/slide7.xml|slide|shape:4",
+      "boundary": null,
+      "from": null,
+      "to": null,
+      "reason": null,
+      "mediaId": null,
+      "actionKind": null,
+      "warningCode": null,
+      "errorCode": null
+    },
+    {
+      "type": "effectend",
+      "slideIndex": 6,
+      "nodeId": "8",
+      "objectKey": "ppt/slides/slide7.xml|slide|shape:4",
+      "boundary": null,
+      "from": null,
+      "to": null,
+      "reason": null,
+      "mediaId": null,
+      "actionKind": null,
+      "warningCode": null,
+      "errorCode": null
+    },
+    {
+      "type": "effectend",
+      "slideIndex": 6,
+      "nodeId": "10",
+      "objectKey": "ppt/slides/slide7.xml|slide|shape:3",
+      "boundary": null,
+      "from": null,
+      "to": null,
+      "reason": null,
+      "mediaId": null,
+      "actionKind": null,
+      "warningCode": null,
+      "errorCode": null
+    },
+    {
+      "type": "effectend",
+      "slideIndex": 6,
+      "nodeId": "6",
+      "objectKey": "ppt/slides/slide7.xml|slide|shape:3",
+      "boundary": null,
+      "from": null,
+      "to": null,
+      "reason": null,
+      "mediaId": null,
+      "actionKind": null,
+      "warningCode": null,
+      "errorCode": null
+    },
+    {
+      "type": "effectend",
+      "slideIndex": 6,
+      "nodeId": "2",
+      "objectKey": "ppt/slides/slide7.xml|slide|shape:2",
+      "boundary": null,
+      "from": null,
+      "to": null,
+      "reason": null,
+      "mediaId": null,
+      "actionKind": null,
+      "warningCode": null,
+      "errorCode": null
+    }
+  ],
+  "assertions": {
+    "clickBoundary": 0,
+    "effectStarts": 5,
+    "effectEnds": 5,
+    "stepChanges": 0,
+    "repeatFinalScale": "1"
+  }
+}

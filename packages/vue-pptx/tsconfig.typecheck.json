@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "rootDir": "..",
+    "baseUrl": ".",
+    "paths": {
+      "@arcships/pptx-core": ["../pptx-core/src/index.ts"],
+      "@arcships/pptx-core/browser": ["../pptx-core/src/browser.ts"]
+    }
+  }
+}

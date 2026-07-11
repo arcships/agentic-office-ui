@@ -6,7 +6,11 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./errors": "./src/errors.ts",
+    "./limits": "./src/limits.ts",
+    "./load-task": "./src/load-task.ts",
+    "./source": "./src/source.ts"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",

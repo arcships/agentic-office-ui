@@ -11,7 +11,9 @@
   },
   "dependencies": {
     "@arcships/docx-core": "workspace:*",
+    "@arcships/pptx-core": "workspace:*",
     "@arcships/vue-docx": "workspace:*",
+    "@arcships/vue-pptx": "workspace:*",
     "@arcships/xlsx-core": "workspace:*",
     "@arcships/vue-xlsx": "workspace:*",
     "@arcships/vue-extend": "workspace:*",

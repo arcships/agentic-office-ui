@@ -5,7 +5,13 @@ import vue from "@vitejs/plugin-vue"
 
 const workspaceRoot = path.resolve(__dirname, "../..")
 
-const workspaceSourceAliasIds = ["@arcships/docx-core", "@arcships/vue-docx"] as const
+const workspaceSourceAliasIds = [
+  "@arcships/docx-core",
+  "@arcships/pptx-core",
+  "@arcships/pptx-core/browser",
+  "@arcships/vue-docx",
+  "@arcships/vue-pptx",
+] as const
 const workspaceSourceAliases = [
   {
     find: /^@arcships\/docx-core$/,
@@ -14,6 +20,18 @@ const workspaceSourceAliases = [
   {
     find: /^@arcships\/vue-docx$/,
     replacement: path.resolve(workspaceRoot, "packages/vue-docx/src/index.ts"),
+  },
+  {
+    find: /^@arcships\/pptx-core\/browser$/,
+    replacement: path.resolve(workspaceRoot, "packages/pptx-core/src/browser.ts"),
+  },
+  {
+    find: /^@arcships\/pptx-core$/,
+    replacement: path.resolve(workspaceRoot, "packages/pptx-core/src/index.ts"),
+  },
+  {
+    find: /^@arcships\/vue-pptx$/,
+    replacement: path.resolve(workspaceRoot, "packages/vue-pptx/src/index.ts"),
   },
 ]
 

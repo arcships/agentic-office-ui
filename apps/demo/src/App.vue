@@ -7,6 +7,7 @@
         <router-link to="/docx-viewer">DOCX Viewer</router-link>
         <router-link to="/docx-editor">DOCX Editor</router-link>
         <router-link to="/xlsx-viewer">XLSX Viewer</router-link>
+        <router-link to="/pptx-viewer">PPTX Viewer</router-link>
         <router-link to="/pdf-viewer">PDF Viewer</router-link>
         <router-link to="/components">Components</router-link>
       </div>

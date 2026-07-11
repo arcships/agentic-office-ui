@@ -1,0 +1,52 @@
+diff --git a/dist/aiden0z-pptx-renderer.es.js b/dist/aiden0z-pptx-renderer.es.js
+index 20f36798d2dec5764eb57584c274a0c290f07ddc..2ea799296f1fe5262a1632faa452bc7ea6d24ea4 100644
+--- a/dist/aiden0z-pptx-renderer.es.js
++++ b/dist/aiden0z-pptx-renderer.es.js
+@@ -3414,6 +3414,7 @@ function Ec(t, n, e, o, s) {
+   })).filter((m) => m.visible).map((m) => m.index), h = d[0], u = d[d.length - 1], x = d.length === 1 ? d[0] : void 0;
+   for (const [m, b] of t.paragraphs.entries()) {
+     const M = document.createElement("div");
++    M.dataset.pptxParagraphIndex = String(m);
+     M.style.width = "100%", M.style.minWidth = "0px", M.style.maxWidth = "100%", M.style.boxSizing = "border-box", M.style.overflowWrap = "anywhere";
+     const L = b.level;
+     s != null && s.isVerticalText && (M.style.wordBreak = "keep-all");
+@@ -12076,22 +12077,32 @@ function up(t, n, e) {
+   }
+ }
+ function yo(t, n) {
++  let e;
+   switch (t.nodeType) {
+     case "shape":
+-      return ju(t, n);
++      e = ju(t, n);
++      break;
+     case "picture":
+-      return w0(t, n);
++      e = w0(t, n);
++      break;
+     case "table":
+-      return Af(t, n);
++      e = Af(t, n);
++      break;
+     case "group":
+-      return Bf(t, n, yo);
++      e = Bf(t, n, yo);
++      break;
+     case "chart":
+-      return hp(t, n);
++      e = hp(t, n);
++      break;
+     default: {
+-      const e = document.createElement("div");
+-      return e.style.position = "absolute", e.style.left = `${t.position.x}px`, e.style.top = `${t.position.y}px`, e.style.width = `${t.size.w}px`, e.style.height = `${t.size.h}px`, e;
++      e = document.createElement("div");
++      e.style.position = "absolute", e.style.left = `${t.position.x}px`, e.style.top = `${t.position.y}px`, e.style.width = `${t.size.w}px`, e.style.height = `${t.size.h}px`;
+     }
+   }
++  e.dataset.pptxNodeId = t.id;
++  e.dataset.pptxNodeType = t.nodeType;
++  e.dataset.pptxPartPath = n.partPath ?? n.slide.slidePath;
++  return e;
+ }
+ function fp(t) {
+   const n = document.createElement("div");

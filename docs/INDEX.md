@@ -18,7 +18,14 @@
 
 | 文档 | 用途 |
 |---|---|
-| [pptx-preview-playback-design.md](pptx-preview-playback-design.md) | PPTX 静态渲染底座、播放层、包边界、实施顺序和验收门槛；尚未实施，不属于 `0.2.0` |
+| [pptx-development-guide.md](pptx-development-guide.md) | PPTX 正式开发的目录边界、命令、补丁流程、素材规则和后续扩展入口 |
+| [pptx-playback-implementation-design.md](pptx-playback-implementation-design.md) | 当前正式实现入口：总体结构、包边界、对象身份、时间调度、属性轨道、切换和媒体设计 |
+| [pptx-playback-api-design.md](pptx-playback-api-design.md) | 第一版公开类型、文档会话、播放控制器和 Vue 组件接口 |
+| [pptx-playback-compatibility-and-acceptance.md](pptx-playback-compatibility-and-acceptance.md) | 严格、近似、静态和无法解析的范围，以及素材、误差、浏览器和发布门槛 |
+| [pptx-playback-acceptance-results.md](pptx-playback-acceptance-results.md) | 三浏览器、性能、内存、资源释放和工作区外压缩包消费的正式结果 |
+| [pptx-playback-roadmap.md](pptx-playback-roadmap.md) | 已执行的正式开发顺序、每阶段任务和通过条件 |
+| [pptx-playback-exploration-design.md](pptx-playback-exploration-design.md) | 已完成的三段播放探索及代码验证记录，作为正式设计的证据 |
+| [pptx-preview-playback-design.md](pptx-preview-playback-design.md) | 静态预览底座、早期选型和历史播放判断；冲突内容以正式实现设计为准 |
 
 ## 0.2.0 候选资料
 
@@ -39,6 +46,8 @@
 | `@arcships/xlsx-core` | 提供工作簿、公式、图表/图片数据、实例 Runtime，以及公开 Worker/WASM 入口 | `0.2.0` 候选；本会话 P4 自测通过，等待独立 `BB-RELEASE` |
 | `@arcships/vue-xlsx` | 提供 `XlsxViewer`、控制器、公开样式，以及按需图表/地图/WebGL 入口 | `0.2.0` 候选；六组合矩阵自测通过，等待独立复核 |
 | `@arcships/vue-extend` | 提供真实 PDF 查看、翻页、缩放、旋转、缩略图、搜索、下载和通用组件 | `0.2.0` 候选；PDF 默认仅有整份文件 `50 MiB` 上限 |
+
+PPTX 开发包 `@arcships/pptx-core` 和 `@arcships/vue-pptx` 已包含静态预览和正式播放实现，但仍不属于以上 `0.2.0` 公开发布合同。一次解包会话、时间树、属性轨道、页面切换、Morph、媒体、导航、Vue 演示模式和全屏接口已进入包内；三浏览器、性能、内存、资源释放和工作区外压缩包消费已有固定验收记录。13 份正式素材和浏览器事件基准已经入库，公开发布前仍需独立兼容复核。
 
 `@arcships/office-runtime` 仍是私有工作区包，不属于公开安装清单。
 
@@ -79,6 +88,8 @@ packages/vue-docx/       DOCX Vue 组件
 packages/xlsx-core/      XLSX 核心与 Runtime
 packages/vue-xlsx/       XLSX Vue 组件与按需渲染
 packages/vue-extend/     PDF 与通用 Vue 组件
+packages/pptx-core/      PPTX 模型、静态预览和正式播放核心
+packages/vue-pptx/       PPTX Vue 浏览与演示组件
 apps/demo/               正式黑盒消费页
 tests/                   单元、组件、黑盒和外部消费测试
 scripts/ci/              固定检查入口和证据编排

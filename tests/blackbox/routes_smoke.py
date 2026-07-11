@@ -30,6 +30,7 @@ ROUTES = [
     ("CI-ROUTE-DOCX-VIEWER", "/docx-viewer"),
     ("CI-ROUTE-DOCX-EDITOR", "/docx-editor"),
     ("CI-ROUTE-XLSX-VIEWER", "/xlsx-viewer"),
+    ("CI-ROUTE-PPTX-VIEWER", "/pptx-viewer"),
     ("CI-ROUTE-RUNTIME-ISOLATION", "/runtime-isolation"),
 ]
 READY_ROUTES = {"/docx-viewer", "/docx-editor", "/xlsx-viewer", "/runtime-isolation"}

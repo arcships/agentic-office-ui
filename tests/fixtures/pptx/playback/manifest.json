@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "file": "timing-click-with-after.pptx",
+      "status": "ready",
+      "source": "scripts/fixtures/generate-pptx-playback-fixtures.py -> Microsoft PowerPoint 16.110.3 (16.110.26070318) 另存为",
+      "license": "项目自有测试素材",
+      "sha256": "bb2e548991254ab4f18913993cfee07b300740dadfb8fcae7b548689caf6f18c",
+      "powerpointVersion": "16.110.3 (16.110.26070318)",
+      "baseline": "timing-click-with-after/expected-events.json",
+      "focusSlideIndex": 0
+    },
+    {
+      "file": "timing-delay-repeat-reverse.pptx",
+      "status": "ready",
+      "source": "scripts/fixtures/generate-pptx-playback-fixtures.py -> Microsoft PowerPoint 16.110.3 (16.110.26070318) 另存为",
+      "license": "项目自有测试素材",
+      "sha256": "0641756b630087d86cc5aeda51c5d94edd4e5903ae75579985f3a72bc910e645",
+      "powerpointVersion": "16.110.3 (16.110.26070318)",
+      "baseline": "timing-delay-repeat-reverse/expected-events.json",
+      "focusSlideIndex": 6
+    },
+    {
+      "file": "entrance-exit-fade.pptx",
+      "status": "ready",
+      "source": "scripts/fixtures/generate-pptx-playback-fixtures.py -> Microsoft PowerPoint 16.110.3 (16.110.26070318) 另存为",
+      "license": "项目自有测试素材",
+      "sha256": "ce67946850faaa80025c6b814af1e9c4c1d0071ba49760e1db6cdec753032c8f",
+      "powerpointVersion": "16.110.3 (16.110.26070318)",
+      "baseline": "entrance-exit-fade/expected-events.json",
+      "focusSlideIndex": 10
+    },
+    {
+      "file": "wipe-scale-rotate.pptx",
+      "status": "ready",
+      "source": "scripts/fixtures/generate-pptx-playback-fixtures.py -> Microsoft PowerPoint 16.110.3 (16.110.26070318) 另存为",
+      "license": "项目自有测试素材",
+      "sha256": "c36f74fb16f824437da4cc30d7c2683beaef22df00fc53343d24d15b9866c134",
+      "powerpointVersion": "16.110.3 (16.110.26070318)",
+      "baseline": "wipe-scale-rotate/expected-events.json",
+      "focusSlideIndex": 6
+    },
+    {
+      "file": "motion-straight.pptx",
+      "status": "ready",
+      "source": "scripts/fixtures/generate-pptx-playback-fixtures.py -> Microsoft PowerPoint 16.110.3 (16.110.26070318) 另存为",
+      "license": "项目自有测试素材",
+      "sha256": "bc0c689bc6766c3c4c26b6cf8f4d7ef2c18edcbbbb53cea7a24c615c32ca1948",
+      "powerpointVersion": "16.110.3 (16.110.26070318)",
+      "baseline": "motion-straight/expected-events.json",
+      "focusSlideIndex": 6
+    },
+    {
+      "file": "text-by-paragraph.pptx",
+      "status": "ready",
+      "source": "scripts/fixtures/generate-pptx-playback-fixtures.py -> Microsoft PowerPoint 16.110.3 (16.110.26070318) 另存为",
+      "license": "项目自有测试素材",
+      "sha256": "4abd97773118d17e9ff5f5a4a2c4d6cbb85f7279cb332e64d88e09cc41c0b14f",
+      "powerpointVersion": "16.110.3 (16.110.26070318)",
+      "baseline": "text-by-paragraph/expected-events.json",
+      "focusSlideIndex": 11
+    },
+    {
+      "file": "trigger-shape-click.pptx",
+      "status": "ready",
+      "source": "scripts/fixtures/generate-pptx-playback-fixtures.py -> Microsoft PowerPoint 16.110.3 (16.110.26070318) 另存为",
+      "license": "项目自有测试素材",
+      "sha256": "236d192655e2057a592f579779f5a9972d67427ca17bf097f45f404446181757",
+      "powerpointVersion": "16.110.3 (16.110.26070318)",
+      "baseline": "trigger-shape-click/expected-events.json",
+      "focusSlideIndex": 0
+    },
+    {
+      "file": "transition-cut-fade-push-wipe.pptx",
+      "status": "ready",
+      "source": "scripts/fixtures/generate-pptx-playback-fixtures.py -> Microsoft PowerPoint 16.110.3 (16.110.26070318) 另存为",
+      "license": "项目自有测试素材",
+      "sha256": "db0adbdcdc57c3c570f337501cbbc637a4e5a79ae700edd1711b6f7fab071715",
+      "powerpointVersion": "16.110.3 (16.110.26070318)",
+      "baseline": "transition-cut-fade-push-wipe/expected-events.json",
+      "focusSlideIndex": 1
+    },
+    {
+      "file": "media-audio-video.pptx",
+      "status": "ready",
+      "source": "scripts/fixtures/generate-pptx-playback-fixtures.py -> Microsoft PowerPoint 16.110.3 (16.110.26070318) 另存为",
+      "license": "项目自有测试素材",
+      "sha256": "66c6b93d62700aab35cbb3b6aceb9a866b9e7dcd675634d788d244d90e7cce21",
+      "powerpointVersion": "16.110.3 (16.110.26070318)",
+      "baseline": "media-audio-video/expected-events.json",
+      "focusSlideIndex": 5
+    },
+    {
+      "file": "media-bookmark.pptx",
+      "status": "ready",
+      "source": "scripts/fixtures/generate-pptx-playback-fixtures.py -> Microsoft PowerPoint 16.110.3 (16.110.26070318) 另存为",
+      "license": "项目自有测试素材",
+      "sha256": "5ac2e4132ac5136f151e175d54a2459e860d0dc25247da43a9bd9c51432edcdb",
+      "powerpointVersion": "16.110.3 (16.110.26070318)",
+      "baseline": "media-bookmark/expected-events.json",
+      "focusSlideIndex": 5
+    },
+    {
+      "file": "hidden-and-internal-link.pptx",
+      "status": "ready",
+      "source": "scripts/fixtures/generate-pptx-playback-fixtures.py -> Microsoft PowerPoint 16.110.3 (16.110.26070318) 另存为",
+      "license": "项目自有测试素材",
+      "sha256": "8e9b60be2345df04cd0cf0dacd113fb797b7d0d704be8224064e02b9940d76e9",
+      "powerpointVersion": "16.110.3 (16.110.26070318)",
+      "baseline": "hidden-and-internal-link/expected-events.json",
+      "focusSlideIndex": 9
+    },
+    {
+      "file": "overlap-same-property.pptx",
+      "status": "ready",
+      "source": "scripts/fixtures/generate-pptx-playback-fixtures.py -> Microsoft PowerPoint 16.110.3 (16.110.26070318) 另存为",
+      "license": "项目自有测试素材",
+      "sha256": "ef67620878327ee21caac318139cb8e6206c23bb560b8489d2613446272df9c6",
+      "powerpointVersion": "16.110.3 (16.110.26070318)",
+      "baseline": "overlap-same-property/expected-events.json",
+      "focusSlideIndex": 10
+    },
+    {
+      "file": "morph-explicit-name.pptx",
+      "status": "ready",
+      "source": "scripts/fixtures/generate-pptx-playback-fixtures.py -> Microsoft PowerPoint 16.110.3 (16.110.26070318) 另存为",
+      "license": "项目自有测试素材",
+      "sha256": "9afd18163b937c22ce371a41fa023e7ed852966a4cfad43d0dd207a99a0e6b21",
+      "powerpointVersion": "16.110.3 (16.110.26070318)",
+      "baseline": "morph-explicit-name/expected-events.json",
+      "focusSlideIndex": 3
+    }
+  ]
+}
