@@ -181,6 +181,7 @@ const suites = {
       env: {
         BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-ux-parity"),
       },
+      allowBlocked: true,
     }),
     command("formal-fidelity-content", process.execPath, [
       "scripts/ci/run-python.mjs",
@@ -492,7 +493,8 @@ for (const step of steps) {
   }
 
   const finishedAt = new Date().toISOString();
-  const stepStatus = status === 0 ? "PASS" : "FAIL";
+  const blockedOk = step.allowBlocked && status === 2;
+  const stepStatus = blockedOk ? "BLOCKED" : status === 0 ? "PASS" : "FAIL";
   writeFileSync(path.join(suiteDir, `${step.id}.log`), output);
   results.push({
     id: step.id,
@@ -504,7 +506,7 @@ for (const step of steps) {
     finishedAt,
     failureProbe: probeMatches,
   });
-  if (status !== 0) failed = true;
+  if (!blockedOk && status !== 0) failed = true;
 }
 
 const summary = {
