@@ -49,7 +49,7 @@ function omitLegacyPublicWasmCopies() {
 
 export default defineConfig({
   plugins: [vue(), omitLegacyPublicWasmCopies()],
-  server: { port: 5000 },
+  server: { port: 5173 },
   worker: {
     format: "es",
   },

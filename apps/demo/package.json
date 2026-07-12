@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --port 5000",
+    "dev": "vite --port 5173",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc -p tsconfig.typecheck.json --noEmit"

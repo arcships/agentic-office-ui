@@ -10,7 +10,7 @@ from playwright.sync_api import sync_playwright
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="验证真实 PPTX 能生成正式播放文档。")
-    parser.add_argument("--app-url", default="http://127.0.0.1:5000")
+    parser.add_argument("--app-url", default="http://127.0.0.1:5173")
     parser.add_argument("--sample-url", required=True)
     parser.add_argument("--initial-slide", type=int, default=0)
     parser.add_argument("--steps", type=int, default=0)

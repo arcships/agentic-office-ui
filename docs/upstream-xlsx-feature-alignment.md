@@ -701,7 +701,7 @@ pnpm --filter @arcships/vue-xlsx add -D @types/d3-geo @types/d3-hierarchy @types
 | 3 | `pnpm --filter @arcships/vue-xlsx typecheck` + 手动检查 controller 方法行为 |
 | 4 | `pnpm --filter @arcships/vue-xlsx typecheck` + 图表渲染验证 |
 | 5 | `pnpm --filter @arcships/vue-xlsx typecheck` + surface chart 验证 |
-| 6 | 浏览器验证 `http://localhost:5000/#/xlsx-viewer` |
+| 6 | 浏览器验证 `http://localhost:5173/#/xlsx-viewer` |
 | 7 | `pnpm typecheck && pnpm build` |
 | 8 | `pnpm install` 无错误 |
 | 9 | `git diff --check` |
@@ -948,7 +948,7 @@ import vue from "@vitejs/plugin-vue"
 
 export default defineConfig({
   plugins: [vue()],
-  server: { port: 5000 },
+  server: { port: 5173 },
   worker: {
     format: "es",  // Worker 用 ES module 格式（上游对齐）
   },

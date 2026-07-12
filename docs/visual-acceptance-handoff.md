@@ -92,18 +92,18 @@ pnpm dev
 Default browser URL:
 
 ```text
-http://localhost:5000
+http://localhost:5173
 ```
 
 Routes:
 
 ```text
-http://localhost:5000/#/
-http://localhost:5000/#/docx-viewer
-http://localhost:5000/#/docx-editor
-http://localhost:5000/#/xlsx-viewer
-http://localhost:5000/#/pdf-viewer
-http://localhost:5000/#/components
+http://localhost:5173/#/
+http://localhost:5173/#/docx-viewer
+http://localhost:5173/#/docx-editor
+http://localhost:5173/#/xlsx-viewer
+http://localhost:5173/#/pdf-viewer
+http://localhost:5173/#/components
 ```
 
 ### Upstream React DOCX playground

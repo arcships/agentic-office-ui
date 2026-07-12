@@ -41,6 +41,6 @@ depends-on: [docx-004, docx-005]
 ## verification
 
 浏览器验证：
-- `http://localhost:5000/#/docx-viewer`：fixture 切换 + 分页 + 渲染
-- `http://localhost:5000/#/docx-editor`：编辑 + 格式化 + 导出
+- `http://localhost:5173/#/docx-viewer`：fixture 切换 + 分页 + 渲染
+- `http://localhost:5173/#/docx-editor`：编辑 + 格式化 + 导出
 - 4 视口布局正常

@@ -11,7 +11,7 @@ D:\code\ui\vue-extend\
 │   ├── vue-xlsx/           ← @arcships/vue-xlsx     ✅ 源码完成
 │   └── vue-extend/         ← @arcships/vue-extend   ✅ 8个组件
 ├── apps/
-│   └── demo/               ← 验证应用                ✅ 运行中 :5000
+│   └── demo/               ← 验证应用                ✅ 运行中 :5173
 ├── package.json
 └── pnpm-workspace.yaml
 ```

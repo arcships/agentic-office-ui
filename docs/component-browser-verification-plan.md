@@ -25,7 +25,7 @@ pnpm dev
 浏览器入口：
 
 ```text
-http://localhost:5000
+http://localhost:5173
 ```
 
 路由清单：
@@ -103,7 +103,7 @@ http://localhost:5000
 ## 全局浏览器验证流程
 
 1. 启动 demo：`pnpm dev`。
-2. 打开 `http://localhost:5000`。
+2. 打开 `http://localhost:5173`。
 3. 检查首屏加载、标题、导航、首页卡片。
 4. 读取控制台与页面错误。
 5. 逐个点击 nav 与首页卡片进入每个路由。

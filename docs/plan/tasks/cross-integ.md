@@ -33,7 +33,7 @@ depends-on: [xlsx-005, docx-004, docx-005]
 
 ### X4: XlsxViewer → composables
 
-浏览器 `http://localhost:5000/#/xlsx-viewer`：
+浏览器 `http://localhost:5173/#/xlsx-viewer`：
 - 加载 welcome.xlsx → 单元格渲染（值来自 controller.getSheet）
 - 选中单元格 → controller.selectCell
 - 双击编辑 → controller.setSelectedCellValue
@@ -53,14 +53,14 @@ depends-on: [xlsx-005, docx-004, docx-005]
 
 ### X7: demo/XlsxViewerPage → vue-xlsx
 
-浏览器 `http://localhost:5000/#/xlsx-viewer`：
+浏览器 `http://localhost:5173/#/xlsx-viewer`：
 - fixture 切换正常（至少 3 个 fixture）
 - ribbon 功能可用
 通过标准：页面渲染 + 交互完整
 
 ### D6: DocxEditor → composables
 
-浏览器 `http://localhost:5000/#/docx-editor`：
+浏览器 `http://localhost:5173/#/docx-editor`：
 - 导入 .docx → controller.importDocxFile → 页面渲染
 - 编辑文本 → controller.commitParagraphText
 - 格式化 → controller.toggleBold/setFontFamily
@@ -69,7 +69,7 @@ depends-on: [xlsx-005, docx-004, docx-005]
 
 ### D7: DocxViewer → layout-engine
 
-浏览器 `http://localhost:5000/#/docx-viewer`：
+浏览器 `http://localhost:5173/#/docx-viewer`：
 - 加载 .docx → layoutDocument 分页 → 页面渲染
 通过标准：分页正确，段落/表格/图片可见
 
@@ -79,7 +79,7 @@ depends-on: [xlsx-005, docx-004, docx-005]
 
 ### D9: demo/DocxEditorPage → vue-docx
 
-浏览器 `http://localhost:5000/#/docx-editor`：
+浏览器 `http://localhost:5173/#/docx-editor`：
 - 页面渲染 + toolbar 交互
 通过标准：页面渲染 + 交互完整
 

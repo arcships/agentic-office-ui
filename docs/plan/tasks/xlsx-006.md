@@ -35,7 +35,7 @@ depends-on: [xlsx-005]
 
 ## verification
 
-浏览器验证 `http://localhost:5000/#/xlsx-viewer`：
+浏览器验证 `http://localhost:5173/#/xlsx-viewer`：
 - fixture 切换正常
 - 编辑/公式/合并/排序/导出可用
 - 4 视口（1440×900 / 1280×720 / 768×1024 / 390×844）布局正常

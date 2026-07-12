@@ -658,7 +658,7 @@ import vue from "@vitejs/plugin-vue"
 
 export default defineConfig({
   plugins: [vue()],
-  server: { port: 5000 },
+  server: { port: 5173 },
   worker: { format: "es" },
   // wasm: 放 public/ + setWasmSource("/docx_wasm_bg.wasm")
   // worker: Vite 原生支持 new URL("./docx-import-worker.ts", import.meta.url)
