@@ -176,7 +176,7 @@ interface PptxStageExpose {
 
 ```vue
 <script setup lang="ts">
-import { computed, useTemplateRef } from "vue"
+import { computed, ref } from "vue"
 import {
   PptxStage,
   usePptxDocument,
@@ -185,7 +185,7 @@ import {
 } from "@arcships/vue-pptx"
 
 const props = defineProps<{ file: File | ArrayBuffer | null }>()
-const stage = useTemplateRef<PptxStageExpose>("stage")
+const stage = ref<PptxStageExpose | null>(null)
 const element = computed(() => stage.value?.element ?? null)
 const document = usePptxDocument(element, { source: () => props.file })
 const playback = usePptxPlayback(document)

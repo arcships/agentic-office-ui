@@ -38,7 +38,7 @@ Vue 包不负责：
 
 ```vue
 <script setup lang="ts">
-import { computed, useTemplateRef } from "vue"
+import { computed, ref } from "vue"
 import {
   PptxStage,
   usePptxDocument,
@@ -49,7 +49,7 @@ import {
 import "@arcships/vue-pptx/style.css"
 
 const props = defineProps<{ source: PptxPreviewSource | null }>()
-const stage = useTemplateRef<PptxStageExpose>("stage")
+const stage = ref<PptxStageExpose | null>(null)
 const element = computed(() => stage.value?.element ?? null)
 const document = usePptxDocument(element, { source: () => props.source })
 const playback = usePptxPlayback(document)
@@ -72,3 +72,11 @@ async function onStageClick(event: MouseEvent) {
 - `usePptxDocument` 负责打开文件、普通翻页、缩放和销毁；
 - `usePptxPlayback` 负责动画步骤、播放状态和播放事件；
 - `PptxStage` 只提供渲染元素，也可以换成普通 `<div>`。
+
+## 文档
+
+- [PPTX 使用指南](https://github.com/arcships/agentic-office-ui/blob/master/docs/guide/pptx.md)
+- [组件手册](https://github.com/arcships/agentic-office-ui/blob/master/docs/components/README.md)
+- [PPTX 组合函数](https://github.com/arcships/agentic-office-ui/blob/master/docs/composables/pptx.md)
+- [自定义 PPTX 播放器](https://github.com/arcships/agentic-office-ui/blob/master/docs/custom-components/pptx.md)
+- [API 导航](https://github.com/arcships/agentic-office-ui/blob/master/docs/api/README.md)

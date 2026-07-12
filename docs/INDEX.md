@@ -1,9 +1,24 @@
 # 文档索引
 
+## 使用者文档
+
+| 文档 | 用途 |
+|---|---|
+| [guide/getting-started.md](guide/getting-started.md) | 选包、安装、样式、输入和生命周期 |
+| [guide/docx.md](guide/docx.md) | DOCX 查看、编辑和 Runtime |
+| [guide/xlsx.md](guide/xlsx.md) | XLSX 查看器、控制器和可选功能 |
+| [guide/pdf.md](guide/pdf.md) | PDF 来源、属性、事件和 Runtime |
+| [guide/pptx.md](guide/pptx.md) | PPTX 浏览、播放和自定义播放器 |
+| [components/README.md](components/README.md) | 推荐高层组件与基础 UI 组件 |
+| [api/README.md](api/README.md) | 组合函数、Runtime 和核心 API 导航 |
+| [composables/README.md](composables/README.md) | DOCX、XLSX 和 PPTX 组合函数手册 |
+| [custom-components/README.md](custom-components/README.md) | 自定义工具栏、状态区和播放器指南 |
+| [api/public-api-contract.md](api/public-api-contract.md) | 精确导出、错误码、弃用和兼容合同 |
+
 ## 当前执行入口
 
 > [!IMPORTANT]
-> `0.2.0` 已发布。当前候选版本是 `0.3.0`，八个公开包统一构建，新增 PPTX 静态预览与播放。
+> 八个公开包的最新版本为 `0.4.0`。PPTX 在 `0.3.0` 首次公开，`0.4.0` 增加最小组合接口和舞台组件。
 
 | 文档 | 用途 |
 |---|---|
@@ -32,25 +47,25 @@
 
 | 文档 | 用途 |
 |---|---|
-| [../RELEASE_NOTES.md](../RELEASE_NOTES.md) | `0.3.0` 候选和 `0.2.0` 发布记录 |
+| [../RELEASE_NOTES.md](../RELEASE_NOTES.md) | `0.4.0`、`0.3.0` 和 `0.2.0` 发布记录 |
 | [migration-0.3.md](migration-0.3.md) | 从 `0.2.0` 升级到 `0.3.0` 并接入 PPTX |
 | [migration-0.2.md](migration-0.2.md) | 从 `0.1.x` 升级到 `0.2.0` 的代码与资源迁移 |
 | [testing/compatibility-matrix.md](testing/compatibility-matrix.md) | Node、Vue、Vite、TypeScript 和三种浏览器的声明与待验证矩阵 |
 
 ## 当前包状态
 
-以下状态更新于 2026-07-12。`0.2.0` 已发布，表中版本为下一批候选。
+以下状态更新于 2026-07-12。八个公开包已经统一发布 `0.4.0`。
 
 | 包 | 当前能力 | 发布状态 |
 |---|---|---|
-| `@arcships/docx-core` | 提供模型、布局、编辑命令、实例 Runtime，以及公开 Worker/WASM 入口 | `0.3.0` 候选 |
-| `@arcships/vue-docx` | 提供 `DocxViewer`、`DocxEditor`、组合函数和公开样式入口 | `0.3.0` 候选 |
-| `@arcships/xlsx-core` | 提供工作簿、公式、图表/图片数据、实例 Runtime，以及公开 Worker/WASM 入口 | `0.3.0` 候选 |
-| `@arcships/vue-xlsx` | 提供 `XlsxViewer`、控制器、公开样式，以及按需图表/地图/WebGL 入口 | `0.3.0` 候选 |
-| `@arcships/vue-pdf` | 提供 PDF 查看、翻页、缩放、旋转、缩略图、搜索和下载 | `0.3.0` 候选 |
-| `@arcships/vue-ui` | 提供上传、签名、缩略图、引用框和版面等通用组件 | `0.3.0` 候选 |
-| `@arcships/pptx-core` | 提供 PPTX 静态预览、播放模型、文档会话和浏览器控制器 | `0.3.0` 首次公开候选 |
-| `@arcships/vue-pptx` | 提供 `PptxViewer` 浏览与演示模式以及公开样式 | `0.3.0` 首次公开候选 |
+| `@arcships/docx-core` | 提供模型、布局、编辑命令、实例 Runtime，以及公开 Worker/WASM 入口 | `0.4.0` 已发布 |
+| `@arcships/vue-docx` | 提供 `DocxViewer`、`DocxEditor`、组合函数和公开样式入口 | `0.4.0` 已发布 |
+| `@arcships/xlsx-core` | 提供工作簿、公式、图表/图片数据、实例 Runtime，以及公开 Worker/WASM 入口 | `0.4.0` 已发布 |
+| `@arcships/vue-xlsx` | 提供 `XlsxViewer`、控制器、公开样式，以及按需图表/地图/WebGL 入口 | `0.4.0` 已发布 |
+| `@arcships/vue-pdf` | 提供 PDF 查看、翻页、缩放、旋转、缩略图、搜索和下载 | `0.4.0` 已发布 |
+| `@arcships/vue-ui` | 提供上传、签名、缩略图、引用框和版面等通用组件 | `0.4.0` 已发布 |
+| `@arcships/pptx-core` | 提供 PPTX 静态预览、播放模型、文档会话和浏览器控制器 | `0.4.0` 已发布 |
+| `@arcships/vue-pptx` | 提供 `PptxViewer`、最小组合接口和公开样式 | `0.4.0` 已发布 |
 
 `@arcships/office-runtime` 仍是私有工作区包，不属于公开安装清单。
 

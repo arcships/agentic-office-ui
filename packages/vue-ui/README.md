@@ -41,6 +41,8 @@ import "@arcships/vue-ui/style.css"
 
 ## 文档
 
+- [组件手册](https://github.com/arcships/agentic-office-ui/blob/master/docs/components/README.md)
+- [开始使用](https://github.com/arcships/agentic-office-ui/blob/master/docs/guide/getting-started.md)
 - [公开接口合同](https://github.com/arcships/agentic-office-ui/blob/master/docs/api/public-api-contract.md)
 
 ## License

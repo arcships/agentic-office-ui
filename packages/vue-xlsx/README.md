@@ -44,6 +44,10 @@ import "@arcships/vue-xlsx/webgl"
 
 ## 文档
 
+- [XLSX 使用指南](https://github.com/arcships/agentic-office-ui/blob/master/docs/guide/xlsx.md)
+- [组件手册](https://github.com/arcships/agentic-office-ui/blob/master/docs/components/README.md)
+- [XLSX 组合函数](https://github.com/arcships/agentic-office-ui/blob/master/docs/composables/xlsx.md)
+- [自定义 XLSX 界面](https://github.com/arcships/agentic-office-ui/blob/master/docs/custom-components/xlsx.md)
 - [公开接口合同](https://github.com/arcships/agentic-office-ui/blob/master/docs/api/public-api-contract.md)
 - [迁移指南](https://github.com/arcships/agentic-office-ui/blob/master/docs/migration-0.2.md)
 

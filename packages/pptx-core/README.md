@@ -22,6 +22,12 @@ pnpm add @arcships/pptx-core@0.4.0
 
 本包不会宣称完整兼容 PowerPoint 全部动画。无法精确执行的内容会按能力报告标记为近似、静态或未解析。
 
+## 文档
+
+- [PPTX 使用指南](https://github.com/arcships/agentic-office-ui/blob/master/docs/guide/pptx.md)
+- [API 导航](https://github.com/arcships/agentic-office-ui/blob/master/docs/api/README.md)
+- [公开接口合同](https://github.com/arcships/agentic-office-ui/blob/master/docs/api/public-api-contract.md)
+
 ## 验证
 
 仓库根目录提供统一命令：

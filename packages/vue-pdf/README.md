@@ -42,6 +42,9 @@ const runtime = createPdfRenderRuntime({ pdfiumWasmUrl: bundledPdfiumWasmUrl })
 
 ## 文档
 
+- [PDF 使用指南](https://github.com/arcships/agentic-office-ui/blob/master/docs/guide/pdf.md)
+- [组件手册](https://github.com/arcships/agentic-office-ui/blob/master/docs/components/README.md)
+- [自定义 PDF 界面](https://github.com/arcships/agentic-office-ui/blob/master/docs/custom-components/pdf.md)
 - [公开接口合同](https://github.com/arcships/agentic-office-ui/blob/master/docs/api/public-api-contract.md)
 
 ## License

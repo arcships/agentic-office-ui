@@ -1,115 +1,145 @@
 <div align="center">
 
-<img src="docs/assets/banner.png" alt="Agentic Office UI" width="100%">
+<img src="docs/assets/banner.png" alt="Agentic Office UI：Vue 3 Office 文档组件库" width="100%">
 
 # Agentic Office UI
 
-Vue 3 组件库 · DOCX / XLSX / PPTX / PDF 浏览器内查看与编辑
+在浏览器中查看和编辑 DOCX、XLSX、PDF 与 PPTX
 
+[![npm version](https://img.shields.io/badge/npm-v0.4.0-cb3837)](https://www.npmjs.com/org/arcships)
 [![CI](https://github.com/arcships/agentic-office-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/arcships/agentic-office-ui/actions/workflows/ci.yml)
 [![Release](https://github.com/arcships/agentic-office-ui/actions/workflows/release.yml/badge.svg)](https://github.com/arcships/agentic-office-ui/actions/workflows/release.yml)
-![Vue](https://img.shields.io/badge/Vue-3.2%2B-42b883)
-![License](https://img.shields.io/badge/license-Apache--2.0-blue)
-![Status](https://img.shields.io/badge/status-candidate%200.4.0-orange)
+[![Vue](https://img.shields.io/badge/Vue-%3E%3D3.2.25%20%3C4-42b883)](https://vuejs.org/)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
+[开始使用](docs/guide/getting-started.md) · [组件手册](docs/components/README.md) · [组合函数](docs/composables/README.md) · [自定义组件](docs/custom-components/README.md) · [完整文档](docs/INDEX.md)
 
 </div>
 
-## 概述
+## 能做什么
 
-Agentic Office UI 提供一组面向 Vue 3 的 Office 文档组件，支持在浏览器中查看和编辑 DOCX、XLSX、PPTX 和 PDF。核心层使用 WASM + Worker 解析，Vue 层提供声明式组件和组合函数接口。
+| 格式 | 开箱即用 | 可组合能力 |
+|---|---|---|
+| DOCX | 查看、编辑、分页、缩略图、搜索、批注、修订、导入导出 | 文档模型、布局、编辑命令、Runtime、Worker/WASM |
+| XLSX | 工作表、公式、图表、图片、选区、编辑、撤销重做 | 控制器、Runtime、按需图表/地图/WebGL |
+| PDF | PDFium 渲染、翻页、缩放、旋转、缩略图、搜索、下载 | 来源规则、渲染 Runtime、诊断和错误 |
+| PPTX | 静态预览、缩略图、搜索、逐步动画、切换、媒体、全屏 | 文档会话、播放控制器、无界面组合函数 |
+
+这个项目既提供完整 Vue 组件，也保留不依赖 Vue 的核心包。你可以从一个查看器开始，也可以接管状态、工具栏和播放界面。
+
+## 30 秒开始
+
+安装需要的格式：
+
+```bash
+pnpm add @arcships/vue-docx @arcships/docx-core
+pnpm add @arcships/vue-xlsx @arcships/xlsx-core
+pnpm add @arcships/vue-pdf
+pnpm add @arcships/vue-pptx @arcships/pptx-core
+```
+
+使用组件并引入对应样式：
+
+```vue
+<script setup lang="ts">
+import { PptxViewer } from "@arcships/vue-pptx"
+import "@arcships/vue-pptx/style.css"
+
+defineProps<{ file: File | null }>()
+</script>
+
+<template>
+  <PptxViewer :source="file" mode="present" height="720px" />
+</template>
+```
+
+其他格式的使用方式：
+
+```vue
+<DocxViewer :file="docxBytes" />
+<XlsxViewer :controller="xlsxController" />
+<PdfViewer :source="pdfFile" />
+```
+
+完整安装、来源类型和资源说明见[开始使用](docs/guide/getting-started.md)。
+
+## 选择正确的入口
+
+| 你想做什么 | 使用什么 |
+|---|---|
+| 尽快显示一个文档 | `DocxViewer`、`XlsxViewer`、`PdfViewer`、`PptxViewer` |
+| 编辑 DOCX | `DocxEditor` 或 `useDocxEditor` |
+| 自定义 XLSX 工具栏 | `useXlsxViewerController` + `XlsxViewer` |
+| 自定义 PPTX 播放器 | `usePptxDocument` + `usePptxPlayback` + `PptxStage` |
+| 在非 Vue 代码中处理文档 | `docx-core`、`xlsx-core`、`pptx-core` |
+| 管理 Worker、WASM 和资源限制 | 对应格式的 Runtime |
 
 ## 公开包
 
-| 包 | 用途 |
+| 包 | 说明 |
 |---|---|
-| `@arcships/docx-core` | DOCX 模型、布局、命令、实例 Runtime、Worker/WASM |
-| `@arcships/vue-docx` | `DocxViewer`、`DocxEditor` 和组合函数 |
-| `@arcships/xlsx-core` | XLSX 模型、公式、图表、实例 Runtime、Worker/WASM |
-| `@arcships/vue-xlsx` | `XlsxViewer`、按需图表/地图/WebGL |
-| `@arcships/vue-pdf` | PDFium 引擎 PDF 查看器 |
-| `@arcships/vue-ui` | 签名、上传、缩略图、引用框、版面组件 |
-| `@arcships/pptx-core` | PPTX 预览、播放模型和浏览器控制器 |
-| `@arcships/vue-pptx` | `PptxViewer` 浏览与演示组件 |
+| [`@arcships/docx-core`](packages/docx-core/README.md) | DOCX 模型、布局、命令和 Runtime |
+| [`@arcships/vue-docx`](packages/vue-docx/README.md) | `DocxViewer`、`DocxEditor` 和组合函数 |
+| [`@arcships/xlsx-core`](packages/xlsx-core/README.md) | XLSX 模型、公式、图表和 Runtime |
+| [`@arcships/vue-xlsx`](packages/vue-xlsx/README.md) | `XlsxViewer` 和查看器控制器 |
+| [`@arcships/vue-pdf`](packages/vue-pdf/README.md) | PDFium 查看器与渲染 Runtime |
+| [`@arcships/pptx-core`](packages/pptx-core/README.md) | PPTX 预览、播放模型和浏览器控制器 |
+| [`@arcships/vue-pptx`](packages/vue-pptx/README.md) | `PptxViewer` 和最小播放组合能力 |
+| [`@arcships/vue-ui`](packages/vue-ui/README.md) | 上传、签名、缩略图、引用和基础组件 |
 
-## 快速开始
+八个包使用统一版本发布。相关 Vue 包和核心包建议保持相同版本。
+
+PPTX 两包从 `0.3.0` 开始公开，当前八个包的最新版本为 `0.4.0`。
+
+## 文档
+
+### 按格式
+
+- [DOCX 使用指南](docs/guide/docx.md)
+- [XLSX 使用指南](docs/guide/xlsx.md)
+- [PDF 使用指南](docs/guide/pdf.md)
+- [PPTX 使用指南](docs/guide/pptx.md)
+
+### 按问题
+
+- [组件属性、事件和选择建议](docs/components/README.md)
+- [组合函数和状态所有权](docs/composables/README.md)
+- [自定义工具栏与播放器](docs/custom-components/README.md)
+- [组合函数、Runtime 和核心入口](docs/api/README.md)
+- [公开入口、错误码和兼容期限](docs/api/public-api-contract.md)
+- [版本升级说明](docs/migration-0.3.md)
+- [浏览器兼容矩阵](docs/testing/compatibility-matrix.md)
+
+## 设计原则
+
+- 高层组件解决常见使用场景，核心包不依赖 Vue。
+- Worker、WASM 和渲染资源随 npm 包发布，不要求复制仓库文件。
+- 文件快速切换时只接受最新结果，组件卸载时释放自己持有的资源。
+- 错误和能力报告提供稳定代码，业务不需要解析界面文案。
+- 已公开的旧接口在整个 `0.x` 保持兼容，弃用项最早在 `1.0.0` 删除。
+
+## 本地开发
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm typecheck
 pnpm build
+pnpm test
 ```
 
-发布后按需安装：
+PPTX 专项验证：
 
 ```bash
-pnpm add @arcships/docx-core@0.4.0 @arcships/vue-docx@0.4.0
-pnpm add @arcships/xlsx-core@0.4.0 @arcships/vue-xlsx@0.4.0
-pnpm add @arcships/pptx-core@0.4.0 @arcships/vue-pptx@0.4.0
-pnpm add @arcships/vue-pdf@0.4.0 @arcships/vue-ui@0.4.0
+pnpm test:pptx
+pnpm test:pptx:headless
 ```
 
-Vue 包导入样式：
+## 浏览器要求
 
-```ts
-import "@arcships/vue-docx/style.css"
-import "@arcships/vue-xlsx/style.css"
-import "@arcships/vue-pdf/style.css"
-import "@arcships/vue-ui/style.css"
-import "@arcships/vue-pptx/style.css"
-```
+正式验证覆盖 Chromium、Firefox 和 WebKit。PDF、DOCX 和 XLSX 的部分能力依赖 Worker 与 WASM；严格内容安全策略需要允许对应的同源资源和 Worker。详细要求见各格式指南与[兼容矩阵](docs/testing/compatibility-matrix.md)。
 
-Worker 和 WASM 通过公开入口交给构建工具处理：
+PDF 支持翻页、缩放、搜索和下载。默认最大文件大小为 `50 MiB`，超过后返回稳定错误码 `PDF_TOO_LARGE`。
 
-```ts
-import docxWorkerUrl from "@arcships/docx-core/worker?worker&url"
-import docxWasmUrl from "@arcships/docx-core/assets/docx_wasm_bg.wasm?url"
-import { createDocxRuntime } from "@arcships/docx-core/runtime"
+## License
 
-const runtime = createDocxRuntime({ workerUrl: docxWorkerUrl, wasmUrl: docxWasmUrl })
-```
-
-## 当前状态
-
-八个公开包的 `0.3.0` 已发布。当前统一准备 `0.4.0`，为 Vue PPTX 增加最小组合接口和舞台组件；只有同一批真实压缩包完成构建、安装和浏览器验证后才进入发布。
-
-核心文档：
-
-- [目标架构](docs/architecture-review-and-target-design.md)
-- [稳定化路线图](docs/plan/stabilization-roadmap.md)
-- [黑盒验收方案](docs/end-to-end-blackbox-test-plan.md)
-- [Agent 执行手册](docs/testing/agent-execution-runbook.md)
-- [公开接口合同](docs/api/public-api-contract.md)
-- [完整文档索引](docs/INDEX.md)
-
-## PDF 行为
-
-`PdfViewer` 使用受控 PDF 引擎显示真实页面，支持查看、翻页、缩放、旋转、缩略图、搜索和下载。唯一的公开文件拒绝上限是整份文件体积 `maxFileSize`，默认 `50 MiB`，超过返回 `PDF_TOO_LARGE` 且不启动引擎。
-
-DOCX 和 XLSX 另有实例级输入、压缩包、XML、图片、模型、历史记录和运行时间限制。错误码与配置项以[公开接口合同](docs/api/public-api-contract.md)为准。
-
-## 验证命令
-
-```bash
-pnpm typecheck          # 全仓类型检查
-pnpm build              # 构建
-pnpm test:unit          # 单元测试
-pnpm test:component     # 组件测试
-pnpm test:blackbox      # 浏览器黑盒
-pnpm test:stress        # 压力测试
-pnpm test:performance   # 性能基线
-pnpm test:consumer      # 工作区外 .tgz 消费
-pnpm test:docs          # 文档契约
-pnpm check              # 仓库门禁
-```
-
-浏览器结论必须来自正式构建 preview。真实发布包结论必须来自工作区外安装的 `.tgz`。兼容范围见[兼容矩阵](docs/testing/compatibility-matrix.md)。
-
-## 版本资料
-
-- [0.2.0 候选发布说明](RELEASE_NOTES.md)
-- [从 0.1.x 迁移到 0.2.0](docs/migration-0.2.md)
-- [公开接口与弃用期限](docs/api/public-api-contract.md)
-
-## 上游归属
-
-本项目面向 Vue 实现，设计参考公开的 Extend UI / Extend AI React 包。原项目、包名、接口思路和设计方向属于 Extend 及其维护者。详细来源和同步规则见 [docs/upstream-extend-ui.md](docs/upstream-extend-ui.md)。
+[Apache 2.0](LICENSE)

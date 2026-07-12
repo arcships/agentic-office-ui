@@ -115,7 +115,7 @@ for (const obsolete of [
   check(`documentation removed obsolete text ${obsolete}`, !combined.includes(obsolete));
 }
 
-check("README records the released and candidate versions", readme.includes("0.2.0") && readme.includes("0.3.0"));
+check("README records the current and initial PPTX versions", readme.includes("0.3.0") && readme.includes("0.4.0"));
 check("release notes include the eight-package candidate", releaseNotes.includes("八个公开包") && releaseNotes.includes("0.3.0"));
 check("0.3 migration includes PPTX packages", migration03.includes("@arcships/pptx-core@0.3.0") && migration03.includes("@arcships/vue-pptx@0.3.0"));
 check(

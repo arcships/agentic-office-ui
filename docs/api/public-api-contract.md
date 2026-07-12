@@ -2,7 +2,7 @@
 
 本文登记 `@arcships/docx-core`、`@arcships/xlsx-core`、`@arcships/pptx-core`、`@arcships/vue-docx`、`@arcships/vue-xlsx`、`@arcships/vue-pptx`、`@arcships/vue-pdf` 和 `@arcships/vue-ui` 的公开入口、推荐用法、事件、错误与兼容期限。
 
-当前八个公开包的候选版本统一为 `0.3.0`。原有六包的 `0.2.0` 已发布，PPTX 两包从 `0.3.0` 开始公开。源码中的 `@deprecated Since 0.2.0` 继续生效；整个 `0.x` 保留旧入口，最早只能在 `1.0.0` 删除。
+当前八个公开包的最新版本统一为 `0.4.0`。PPTX 两包从 `0.3.0` 开始公开，`0.4.0` 增加 Vue PPTX 最小组合接口。源码中的 `@deprecated Since 0.2.0` 继续生效；整个 `0.x` 保留旧入口，最早只能在 `1.0.0` 删除。
 
 ## 1. 适用规则
 
@@ -164,7 +164,7 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 
 ### 3.8 `@arcships/vue-pptx`
 
-稳定入口为 `PptxViewer`、`PptxThumbnail` 和公开类型。`PptxViewer` 默认用于浏览，`mode="present"` 提供下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏。样式从 `@arcships/vue-pptx/style.css` 导入。
+稳定入口为 `PptxViewer`、`PptxThumbnail`、`PptxStage`、`usePptxDocument`、`usePptxPlayback` 和公开类型。`PptxViewer` 默认用于浏览，`mode="present"` 提供下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏。自定义界面使用两个组合函数和舞台组件。样式从 `@arcships/vue-pptx/style.css` 导入。
 
 ## 4. 公开事件和诊断
 

@@ -44,8 +44,10 @@ try {
 
 ## 文档
 
+- [DOCX 使用指南](https://github.com/arcships/agentic-office-ui/blob/master/docs/guide/docx.md)
+- [API 导航](https://github.com/arcships/agentic-office-ui/blob/master/docs/api/README.md)
 - [公开接口合同](https://github.com/arcships/agentic-office-ui/blob/master/docs/api/public-api-contract.md)
-- [0.2.0 候选发布说明](https://github.com/arcships/agentic-office-ui/blob/master/RELEASE_NOTES.md)
+- [发布说明](https://github.com/arcships/agentic-office-ui/blob/master/RELEASE_NOTES.md)
 - [迁移指南](https://github.com/arcships/agentic-office-ui/blob/master/docs/migration-0.2.md)
 
 ## License
