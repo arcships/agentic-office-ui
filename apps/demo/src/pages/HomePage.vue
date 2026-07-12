@@ -41,6 +41,7 @@ function onApiMapToggle(event: Event) {
 }
 
 const navItems = [
+  { path: "/docx-surface", title: "DOCX Surface", desc: "Minimal embeddable renderer — no toolbar, no thumbnails. Build your own controls around it.", status: "Ready", statusClass: "ready" },
   { path: "/docx-viewer", title: "DOCX Viewer", desc: "View .docx files with pagination and thumbnails", status: "Ready", statusClass: "ready" },
   { path: "/docx-editor", title: "DOCX Editor", desc: "Edit DOCX text, formatting, tables and positioned images with undo and redo", status: "Ready", statusClass: "ready" },
   { path: "/xlsx-viewer", title: "XLSX Viewer", desc: "View and edit workbooks with formulas, formatting, search, charts, tables and sheet tabs", status: "Ready", statusClass: "ready" },

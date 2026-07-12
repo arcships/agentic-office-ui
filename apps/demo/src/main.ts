@@ -11,6 +11,7 @@ const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: "/", component: () => import("./pages/HomePage.vue") },
+    { path: "/docx-surface", component: () => import("./pages/DocxSurfacePage.vue") },
     { path: "/docx-viewer", component: () => import("./pages/DocxViewerPage.vue") },
     { path: "/docx-editor", component: () => import("./pages/DocxEditorPage.vue") },
     { path: "/xlsx-viewer", component: () => import("./pages/XlsxViewerPage.vue") },
