@@ -26,15 +26,19 @@
           class="pdf-surface__page-img"
           draggable="false"
         />
-        <!-- Text spans for selection (transparent, positioned over the image) -->
-        <template v-if="pageSlots[pageIndex]?.url">
+        <!-- Text layer overlay for text selection -->
+        <div
+          v-if="pageSlots[pageIndex]?.url"
+          class="pdf-surface__text-layer"
+          :style="textLayerStyle(pageIndex)"
+        >
           <span
             v-for="(item, ti) in pageTextRects[pageIndex] ?? []"
             :key="ti"
             class="pdf-surface__text-span"
-            :style="{ position: 'absolute', left: item.x * zoom + 'px', top: item.y * zoom + 'px', width: item.width * zoom + 'px', height: item.height * zoom + 'px', color: 'transparent', fontSize: (item.height * zoom * 0.9).toFixed(1) + 'px', lineHeight: (item.height * zoom).toFixed(1) + 'px', whiteSpace: 'nowrap', userSelect: 'text', pointerEvents: 'none' }"
+            :style="textSpanStyle(item, zoom, pageIndex)"
           >{{ item.content }}</span>
-        </template>
+        </div>
         <div v-else class="pdf-surface__page-placeholder" />
       </div>
     </div>
@@ -48,7 +52,6 @@ import {
   createOfficeTaskSequence,
   type OfficeSource,
 } from "@arcships/office-runtime"
-import { stripPdfUnwantedMarkers } from "@embedpdf/models"
 import {
   DEFAULT_PDF_MAX_FILE_SIZE,
   loadVerifiedPdfSource,
@@ -256,14 +259,59 @@ async function fetchPageTextRects(
     const items = await rt.getPageTextRects(doc, pageIndex)
     if (parentSignal.aborted || gen !== renderGeneration || requestId !== latestRequestId) return
     pageTextRects[pageIndex] = items.map((item) => ({
-      content: stripPdfUnwantedMarkers(item.content).trim(),
+      content: item.content,
       x: item.x,
       y: item.y,
       width: item.width,
       height: item.height,
-    })).filter(item => item.content.length > 0)
+    }))
   } catch {
     // Text rects are optional — page is still viewable without them
+  }
+}
+
+function textLayerStyle(pageIndex: number): Record<string, string> {
+  const doc = renderDocument.value
+  if (!doc) return {}
+  const page = doc.pages[pageIndex]
+  if (!page) return {}
+  const quarterTurns = ((page.rotation + rotation.value) / 90) % 4
+  const w = (quarterTurns % 2 ? page.height : page.width) * zoom.value
+  const h = (quarterTurns % 2 ? page.width : page.height) * zoom.value
+  return {
+    position: "absolute",
+    top: "0",
+    left: "0",
+    width: `${w}px`,
+    height: `${h}px`,
+    overflow: "hidden",
+    pointerEvents: "none",
+  }
+}
+
+function textSpanStyle(
+  item: { x: number; y: number; width: number; height: number },
+  z: number,
+  pageIndex: number,
+): Record<string, string> {
+  const doc = renderDocument.value
+  const page = doc?.pages[pageIndex]
+  const quarterTurns = page ? ((page.rotation + rotation.value) / 90) % 4 : 0
+  return {
+    position: "absolute",
+    left: `${item.x * z}px`,
+    top: `${item.y * z}px`,
+    width: `${item.width * z}px`,
+    height: `${item.height * z}px`,
+    color: "transparent",
+    fontSize: `${(item.height * z * 0.9).toFixed(1)}px`,
+    lineHeight: `${item.height * z}px`,
+    whiteSpace: "nowrap",
+    userSelect: "text",
+    pointerEvents: "auto",
+    // Allow text interaction without blocking the image underneath
+    zIndex: "1",
+    ...(quarterTurns ? { transform: `rotate(${rotation.value}deg)`, transformOrigin: "left top" } : {}),
   }
 }
 
@@ -438,12 +486,18 @@ onBeforeUnmount(async () => {
   position: relative;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
+.pdf-surface__text-layer {
+  position: absolute; top: 0; left: 0;
+}
+.pdf-surface__text-span {
+  /* Text is transparent but selectable — selection shows the browser's default highlight */
+  background: transparent;
+}
 .pdf-surface__text-span::selection {
   background: rgba(59, 130, 246, 0.3);
   color: transparent;
 }
-.pdf-surface__page-img { display: block; user-select: none; }
-.pdf-surface__page-img::selection { background: transparent; }
+.pdf-surface__page-img { display: block; }
 .pdf-surface__page-loading,
 .pdf-surface__page-error,
 .pdf-surface__page-placeholder {
