@@ -32,7 +32,7 @@
             v-for="(item, ti) in pageTextRects[pageIndex] ?? []"
             :key="ti"
             class="pdf-surface__text-span"
-            :style="{ position: 'absolute', left: item.x * zoom + 'px', top: item.y * zoom + 'px', width: item.width * zoom + 'px', height: item.height * zoom + 'px', color: 'transparent', fontSize: (item.height * zoom * 0.9).toFixed(1) + 'px', lineHeight: (item.height * zoom).toFixed(1) + 'px', whiteSpace: 'nowrap', userSelect: 'text', pointerEvents: 'auto' }"
+            :style="{ position: 'absolute', left: item.x * zoom + 'px', top: item.y * zoom + 'px', width: item.width * zoom + 'px', height: item.height * zoom + 'px', color: 'transparent', fontSize: (item.height * zoom * 0.9).toFixed(1) + 'px', lineHeight: (item.height * zoom).toFixed(1) + 'px', whiteSpace: 'nowrap', userSelect: 'text', pointerEvents: 'none' }"
           >{{ item.content }}</span>
         </template>
         <div v-else class="pdf-surface__page-placeholder" />
