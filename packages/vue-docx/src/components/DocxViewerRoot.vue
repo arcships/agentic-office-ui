@@ -350,7 +350,7 @@ const rootStyle = computed(() => ({
   minWidth: "0",
   overflowY: "auto" as const,
   overflowX: "auto" as const,
-  background: theme.value === "dark" ? "#111827" : "#f4f4f5",
+  background: `var(--docx-surface-bg, ${theme.value === "dark" ? "#111827" : "#f4f4f5"})`,
   padding: "24px 0",
   outline: isDragOver.value ? "3px dashed #2563eb" : "none",
 }))

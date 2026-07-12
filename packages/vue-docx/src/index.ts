@@ -3,6 +3,26 @@
 export { default as DocxViewer } from "./components/DocxViewer.vue"
 export { default as DocxEditor } from "./components/DocxEditor.vue"
 /**
+ * Minimal embeddable DOCX renderer for third-party consumers.
+ *
+ * Renders the paged document surface with built-in annotation gutter
+ * (comments + tracked changes). No toolbar, thumbnails, file loading,
+ * or outer chrome — host owns all controls.
+ *
+ * @example
+ * ```vue
+ * <DocxDocumentSurface
+ *   :model="docModel"
+ *   :zoom-scale="120"
+ *   :show-comments="true"
+ *   @page-count-change="total = $event"
+ *   ref="surfaceRef"
+ * />
+ * ```
+ * // surfaceRef.value.scrollToPage(3)
+ */
+export { default as DocxDocumentSurface } from "./components/DocxDocumentSurface.vue"
+/**
  * @deprecated Since 0.2.0. Use `DocxEditor`. Kept throughout 0.x; earliest
  * removal is 1.0.0.
  */
