@@ -22,6 +22,8 @@ const PACKAGE_DIRS = [
   "packages/vue-xlsx",
   "packages/vue-pdf",
   "packages/vue-ui",
+  "packages/pptx-core",
+  "packages/vue-pptx",
 ];
 const CONTRACT_PATH = path.join(ROOT, "scripts/ci/public-api-contract.json");
 const API_DOCUMENT_PATH = path.join(ROOT, "docs/api/public-api-contract.md");
@@ -198,7 +200,7 @@ test("P4 release readiness baseline", () => {
       "P4-API-EXPORTS",
       exportChecks.every((entry) => entry.contractPresent && entry.exact && entry.currentTargetsPresent),
       exportChecks,
-      "在最终 P3 合并后刷新六包导出快照，并确保合同、package.json 与正式 dist 完全一致。",
+      "在最终合并后刷新八包导出快照，并确保合同、package.json 与正式 dist 完全一致。",
     );
 
     const versions = Object.fromEntries(
@@ -208,7 +210,7 @@ test("P4 release readiness baseline", () => {
       "P4-API-VERSION-CONSISTENCY",
       new Set(Object.values(versions)).size === 1,
       versions,
-      "六个公开包必须使用同一候选版本。",
+      "八个公开包必须使用同一候选版本。",
     );
     add(
       "P4-API-VERSION-POLICY",
@@ -221,9 +223,9 @@ test("P4 release readiness baseline", () => {
     );
     add(
       "P4-API-RELEASE-VERSION",
-      Object.values(versions).every((version) => version === "0.2.0"),
-      { planned: "0.2.0", actual: versions },
-      "在发布流程冻结候选制品前一次性把六包版本升级为已选定的 0.2.0；不得提前零散改版本。",
+      Object.values(versions).every((version) => version === "0.4.0"),
+      { planned: "0.4.0", actual: versions },
+      "在发布流程冻结候选制品前一次性把八包版本升级为已选定的 0.4.0；不得提前零散改版本。",
     );
 
     const privateManifest = JSON.parse(

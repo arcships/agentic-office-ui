@@ -1,6 +1,6 @@
 {
   "name": "@arcships/vue-xlsx",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "license": "Apache-2.0",
   "description": "Vue 3 XLSX spreadsheet viewer with charts, maps, WebGL, and controller composables",
   "keywords": ["vue", "vue3", "xlsx", "excel", "spreadsheet", "charts", "map", "webgl"],
@@ -57,7 +57,7 @@
   },
   "dependencies": {
     "@dukelib/sheets-wasm": "0.1.17",
-    "@arcships/xlsx-core": "^0.3.0",
+    "@arcships/xlsx-core": "^0.4.0",
     "d3-geo": "^3.1.1",
     "d3-hierarchy": "^3.1.2",
     "d3-scale": "^4.0.2",

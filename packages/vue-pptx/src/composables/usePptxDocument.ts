@@ -1,12 +1,12 @@
 import {
+  isRef,
   onScopeDispose,
   readonly,
   ref,
   shallowReadonly,
   shallowRef,
-  toValue,
   watch,
-  type MaybeRefOrGetter,
+  type Ref,
 } from "vue"
 import {
   PptxPreviewError,
@@ -41,6 +41,11 @@ interface PendingOpen {
 
 function resolveTarget(target: PptxStageTarget): HTMLElement | null {
   return typeof target === "function" ? target() : target.value
+}
+
+function resolveValue<T>(value: T | Readonly<Ref<T>> | (() => T)): T {
+  if (typeof value === "function") return (value as () => T)()
+  return isRef(value) ? value.value : value
 }
 
 function toPreviewError(reason: unknown): PptxPreviewError {
@@ -103,13 +108,19 @@ export function usePptxDocument(
     zoomPercentValue.value = 100
     stateValue.value = "loading"
 
-    const sessionOptions = toValue(internalOptions.session) ?? {}
+    const sessionOptions = internalOptions.session === undefined
+      ? {}
+      : resolveValue(internalOptions.session) ?? {}
     const factory = internalOptions.factory ?? createPptxDocumentSession
     const current = factory(element, sessionOptions)
     sessionValue.value = current
 
     try {
-      const initialSlide = Math.max(0, Math.trunc(toValue(internalOptions.initialSlide) ?? 0))
+      const initialSlide = Math.max(0, Math.trunc(
+        internalOptions.initialSlide === undefined
+          ? 0
+          : resolveValue(internalOptions.initialSlide) ?? 0,
+      ))
       const loaded = await current.open(source, {
         initialSlide,
         limits: sessionOptions.limits,
@@ -238,7 +249,7 @@ export function usePptxDocument(
   watch(
     [
       () => resolveTarget(target),
-      () => toValue(options.source as MaybeRefOrGetter<PptxPreviewSource | null | undefined>),
+      () => options.source === undefined ? undefined : resolveValue(options.source),
     ],
     ([element, source], [previousElement]) => {
       if (disposed) return

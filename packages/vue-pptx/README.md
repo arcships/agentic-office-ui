@@ -5,7 +5,7 @@
 本包提供静态浏览和 `mode="present"` 演示模式，从 `0.3.0` 起公开发布。演示模式使用 `@arcships/pptx-core/browser` 的文档会话和播放控制器，不自行解析动画。
 
 ```bash
-pnpm add @arcships/pptx-core@0.3.0 @arcships/vue-pptx@0.3.0
+pnpm add @arcships/pptx-core@0.4.0 @arcships/vue-pptx@0.4.0
 ```
 
 ```ts

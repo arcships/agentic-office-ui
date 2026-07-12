@@ -10,7 +10,7 @@ Vue 3 组件库 · DOCX / XLSX / PPTX / PDF 浏览器内查看与编辑
 [![Release](https://github.com/arcships/agentic-office-ui/actions/workflows/release.yml/badge.svg)](https://github.com/arcships/agentic-office-ui/actions/workflows/release.yml)
 ![Vue](https://img.shields.io/badge/Vue-3.2%2B-42b883)
 ![License](https://img.shields.io/badge/license-Apache--2.0-blue)
-![Status](https://img.shields.io/badge/status-candidate%200.3.0-orange)
+![Status](https://img.shields.io/badge/status-candidate%200.4.0-orange)
 
 </div>
 
@@ -42,10 +42,10 @@ pnpm build
 发布后按需安装：
 
 ```bash
-pnpm add @arcships/docx-core@0.3.0 @arcships/vue-docx@0.3.0
-pnpm add @arcships/xlsx-core@0.3.0 @arcships/vue-xlsx@0.3.0
-pnpm add @arcships/pptx-core@0.3.0 @arcships/vue-pptx@0.3.0
-pnpm add @arcships/vue-pdf@0.3.0 @arcships/vue-ui@0.3.0
+pnpm add @arcships/docx-core@0.4.0 @arcships/vue-docx@0.4.0
+pnpm add @arcships/xlsx-core@0.4.0 @arcships/vue-xlsx@0.4.0
+pnpm add @arcships/pptx-core@0.4.0 @arcships/vue-pptx@0.4.0
+pnpm add @arcships/vue-pdf@0.4.0 @arcships/vue-ui@0.4.0
 ```
 
 Vue 包导入样式：
@@ -70,7 +70,7 @@ const runtime = createDocxRuntime({ workerUrl: docxWorkerUrl, wasmUrl: docxWasmU
 
 ## 当前状态
 
-六个原有包的 `0.2.0` 已发布。当前八个公开包统一准备 `0.3.0`，新增 PPTX 静态预览与播放能力；只有同一批真实压缩包完成构建、安装和浏览器验证后才进入发布。
+八个公开包的 `0.3.0` 已发布。当前统一准备 `0.4.0`，为 Vue PPTX 增加最小组合接口和舞台组件；只有同一批真实压缩包完成构建、安装和浏览器验证后才进入发布。
 
 核心文档：
 

@@ -1,4 +1,12 @@
-import { computed, onScopeDispose, shallowReadonly, shallowRef, toValue, watch } from "vue"
+import {
+  computed,
+  isRef,
+  onScopeDispose,
+  shallowReadonly,
+  shallowRef,
+  watch,
+  type Ref,
+} from "vue"
 import {
   PptxPlaybackError,
   type PptxCapabilityReport,
@@ -15,6 +23,11 @@ import type {
   UsePptxPlaybackReturn,
 } from "../headless-types"
 import { getDocumentBinding, isDocumentSession } from "./internal"
+
+function resolveValue<T>(value: T | Readonly<Ref<T>> | (() => T)): T {
+  if (typeof value === "function") return (value as () => T)()
+  return isRef(value) ? value.value : value
+}
 
 export function usePptxPlayback(
   document: UsePptxDocumentReturn,
@@ -60,7 +73,10 @@ export function usePptxPlayback(
 
   function createController(): void {
     releaseController()
-    if (disposed || toValue(options.enabled) === false) return
+    if (
+      disposed
+      || (options.enabled !== undefined && resolveValue(options.enabled) === false)
+    ) return
     const session = binding.session.value
     if (!isDocumentSession(session) || document.state.value !== "ready") return
     const nextController = session.createPlaybackController({
@@ -89,7 +105,11 @@ export function usePptxPlayback(
   }
 
   watch(
-    [binding.session, document.state, () => toValue(options.enabled)],
+    [
+      binding.session,
+      document.state,
+      () => options.enabled === undefined ? true : resolveValue(options.enabled),
+    ],
     createController,
     { flush: "sync" },
   )

@@ -17,19 +17,20 @@ import type {
 } from "@arcships/pptx-core/browser"
 import type {
   ComputedRef,
-  MaybeRefOrGetter,
   Ref,
   ShallowRef,
 } from "vue"
+
+type ValueOrRefOrGetter<T> = T | Readonly<Ref<T>> | (() => T)
 
 export type PptxStageTarget =
   | Readonly<Ref<HTMLElement | null>>
   | (() => HTMLElement | null)
 
 export interface UsePptxDocumentOptions {
-  source?: MaybeRefOrGetter<PptxPreviewSource | null | undefined>
-  initialSlide?: MaybeRefOrGetter<number | undefined>
-  session?: MaybeRefOrGetter<PptxDocumentSessionOptions | undefined>
+  source?: ValueOrRefOrGetter<PptxPreviewSource | null | undefined>
+  initialSlide?: ValueOrRefOrGetter<number | undefined>
+  session?: ValueOrRefOrGetter<PptxDocumentSessionOptions | undefined>
 }
 
 export type PptxDocumentState =
@@ -59,7 +60,7 @@ export interface UsePptxDocumentReturn {
 }
 
 export interface UsePptxPlaybackOptions {
-  enabled?: MaybeRefOrGetter<boolean>
+  enabled?: ValueOrRefOrGetter<boolean>
   autoplay?: boolean
   skipHiddenSlides?: boolean
   approximation?: PptxApproximationPolicy
