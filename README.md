@@ -68,7 +68,7 @@ const runtime = createDocxRuntime({ workerUrl: docxWorkerUrl, wasmUrl: docxWasmU
 
 ## 当前状态
 
-六个公开包候选版本为 `0.2.0`，**尚未正式发布**。仓库内自测不替代候选发布复核；只有同一批真实压缩包完成 `BB-RELEASE` 并由全新会话独立复核后才能给出发布结论。
+六个公开包候选版本为 `0.2.0`，**尚未发布**。仓库内自测不替代候选发布复核；只有同一批真实压缩包完成 `BB-RELEASE` 并由全新会话独立复核后才能给出发布结论。
 
 核心文档：
 

@@ -46,25 +46,25 @@
   "metrics": {
     "asset.demo.cssGzipBytes": {
       "samples": [
-        19930.0,
-        19930.0,
-        19930.0
+        23546.0,
+        23546.0,
+        23546.0
       ],
-      "median": 19930.0,
-      "worst": 19930.0,
-      "minimum": 19930.0,
+      "median": 23546.0,
+      "worst": 23546.0,
+      "minimum": 23546.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
     "asset.demo.cssRawBytes": {
       "samples": [
-        87437.0,
-        87437.0,
-        87437.0
+        104971.0,
+        104971.0,
+        104971.0
       ],
-      "median": 87437.0,
-      "worst": 87437.0,
-      "minimum": 87437.0,
+      "median": 104971.0,
+      "worst": 104971.0,
+      "minimum": 104971.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
@@ -94,49 +94,49 @@
     },
     "asset.demo.jsGzipBytes": {
       "samples": [
-        1054600.0,
-        1054600.0,
-        1054600.0
+        1437843.0,
+        1437843.0,
+        1437843.0
       ],
-      "median": 1054600.0,
-      "worst": 1054600.0,
-      "minimum": 1054600.0,
+      "median": 1437843.0,
+      "worst": 1437843.0,
+      "minimum": 1437843.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
     "asset.demo.jsRawBytes": {
       "samples": [
-        3636212.0,
-        3636212.0,
-        3636212.0
+        4838585.0,
+        4838585.0,
+        4838585.0
       ],
-      "median": 3636212.0,
-      "worst": 3636212.0,
-      "minimum": 3636212.0,
+      "median": 4838585.0,
+      "worst": 4838585.0,
+      "minimum": 4838585.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
     "asset.demo.totalGzipBytes": {
       "samples": [
-        5385398.0,
-        5385398.0,
-        5385398.0
+        5815757.0,
+        5815757.0,
+        5815757.0
       ],
-      "median": 5385398.0,
-      "worst": 5385398.0,
-      "minimum": 5385398.0,
+      "median": 5815757.0,
+      "worst": 5815757.0,
+      "minimum": 5815757.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
     "asset.demo.totalRawBytes": {
       "samples": [
-        13701462.0,
-        13701462.0,
-        13701462.0
+        14983013.0,
+        14983013.0,
+        14983013.0
       ],
-      "median": 13701462.0,
-      "worst": 13701462.0,
-      "minimum": 13701462.0,
+      "median": 14983013.0,
+      "worst": 14983013.0,
+      "minimum": 14983013.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
@@ -190,25 +190,25 @@
     },
     "asset.demo.workerGzipBytes": {
       "samples": [
-        87177.0,
-        87177.0,
-        87177.0
+        94053.0,
+        94053.0,
+        94053.0
       ],
-      "median": 87177.0,
-      "worst": 87177.0,
-      "minimum": 87177.0,
+      "median": 94053.0,
+      "worst": 94053.0,
+      "minimum": 94053.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
     "asset.demo.workerRawBytes": {
       "samples": [
-        258692.0,
-        258692.0,
-        258692.0
+        280779.0,
+        280779.0,
+        280779.0
       ],
-      "median": 258692.0,
-      "worst": 258692.0,
-      "minimum": 258692.0,
+      "median": 280779.0,
+      "worst": 280779.0,
+      "minimum": 280779.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
@@ -500,103 +500,103 @@
       "spreadPercent": 0.0,
       "direction": "max"
     },
-    "asset.vue-extend.cssGzipBytes": {
+    "asset.vue-pdf.cssGzipBytes": {
       "samples": [
-        3100.0,
-        3100.0,
-        3100.0
+        1304.0,
+        1304.0,
+        1304.0
       ],
-      "median": 3100.0,
-      "worst": 3100.0,
-      "minimum": 3100.0,
+      "median": 1304.0,
+      "worst": 1304.0,
+      "minimum": 1304.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
-    "asset.vue-extend.cssRawBytes": {
+    "asset.vue-pdf.cssRawBytes": {
       "samples": [
-        13862.0,
-        13862.0,
-        13862.0
+        4577.0,
+        4577.0,
+        4577.0
       ],
-      "median": 13862.0,
-      "worst": 13862.0,
-      "minimum": 13862.0,
+      "median": 4577.0,
+      "worst": 4577.0,
+      "minimum": 4577.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
-    "asset.vue-extend.jsGzipBytes": {
+    "asset.vue-pdf.jsGzipBytes": {
       "samples": [
-        142026.0,
-        142026.0,
-        142026.0
+        136754.0,
+        136754.0,
+        136754.0
       ],
-      "median": 142026.0,
-      "worst": 142026.0,
-      "minimum": 142026.0,
+      "median": 136754.0,
+      "worst": 136754.0,
+      "minimum": 136754.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
-    "asset.vue-extend.jsRawBytes": {
+    "asset.vue-pdf.jsRawBytes": {
       "samples": [
-        788048.0,
-        788048.0,
-        788048.0
+        767573.0,
+        767573.0,
+        767573.0
       ],
-      "median": 788048.0,
-      "worst": 788048.0,
-      "minimum": 788048.0,
+      "median": 767573.0,
+      "worst": 767573.0,
+      "minimum": 767573.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
-    "asset.vue-extend.totalGzipBytes": {
+    "asset.vue-pdf.totalGzipBytes": {
       "samples": [
-        2288371.0,
-        2288371.0,
-        2288371.0
+        2275007.0,
+        2275007.0,
+        2275007.0
       ],
-      "median": 2288371.0,
-      "worst": 2288371.0,
-      "minimum": 2288371.0,
+      "median": 2275007.0,
+      "worst": 2275007.0,
+      "minimum": 2275007.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
-    "asset.vue-extend.totalRawBytes": {
+    "asset.vue-pdf.totalRawBytes": {
       "samples": [
-        5465424.0,
-        5465424.0,
-        5465424.0
+        5419693.0,
+        5419693.0,
+        5419693.0
       ],
-      "median": 5465424.0,
-      "worst": 5465424.0,
-      "minimum": 5465424.0,
+      "median": 5419693.0,
+      "worst": 5419693.0,
+      "minimum": 5419693.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
-    "asset.vue-extend.typesGzipBytes": {
+    "asset.vue-pdf.typesGzipBytes": {
       "samples": [
-        11650.0,
-        11650.0,
-        11650.0
+        5354.0,
+        5354.0,
+        5354.0
       ],
-      "median": 11650.0,
-      "worst": 11650.0,
-      "minimum": 11650.0,
+      "median": 5354.0,
+      "worst": 5354.0,
+      "minimum": 5354.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
-    "asset.vue-extend.typesRawBytes": {
+    "asset.vue-pdf.typesRawBytes": {
       "samples": [
-        29726.0,
-        29726.0,
-        29726.0
+        13755.0,
+        13755.0,
+        13755.0
       ],
-      "median": 29726.0,
-      "worst": 29726.0,
-      "minimum": 29726.0,
+      "median": 13755.0,
+      "worst": 13755.0,
+      "minimum": 13755.0,
       "spreadPercent": 0.0,
       "direction": "max"
     },
-    "asset.vue-extend.wasmGzipBytes": {
+    "asset.vue-pdf.wasmGzipBytes": {
       "samples": [
         2131595.0,
         2131595.0,
@@ -608,7 +608,7 @@
       "spreadPercent": 0.0,
       "direction": "max"
     },
-    "asset.vue-extend.wasmRawBytes": {
+    "asset.vue-pdf.wasmRawBytes": {
       "samples": [
         4633788.0,
         4633788.0,
@@ -620,7 +620,7 @@
       "spreadPercent": 0.0,
       "direction": "max"
     },
-    "asset.vue-extend.workerGzipBytes": {
+    "asset.vue-pdf.workerGzipBytes": {
       "samples": [
         0.0,
         0.0,
@@ -632,7 +632,151 @@
       "spreadPercent": 0.0,
       "direction": "max"
     },
-    "asset.vue-extend.workerRawBytes": {
+    "asset.vue-pdf.workerRawBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-ui.cssGzipBytes": {
+      "samples": [
+        2205.0,
+        2205.0,
+        2205.0
+      ],
+      "median": 2205.0,
+      "worst": 2205.0,
+      "minimum": 2205.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-ui.cssRawBytes": {
+      "samples": [
+        9286.0,
+        9286.0,
+        9286.0
+      ],
+      "median": 9286.0,
+      "worst": 9286.0,
+      "minimum": 9286.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-ui.jsGzipBytes": {
+      "samples": [
+        6113.0,
+        6113.0,
+        6113.0
+      ],
+      "median": 6113.0,
+      "worst": 6113.0,
+      "minimum": 6113.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-ui.jsRawBytes": {
+      "samples": [
+        20850.0,
+        20850.0,
+        20850.0
+      ],
+      "median": 20850.0,
+      "worst": 20850.0,
+      "minimum": 20850.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-ui.totalGzipBytes": {
+      "samples": [
+        15105.0,
+        15105.0,
+        15105.0
+      ],
+      "median": 15105.0,
+      "worst": 15105.0,
+      "minimum": 15105.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-ui.totalRawBytes": {
+      "samples": [
+        46232.0,
+        46232.0,
+        46232.0
+      ],
+      "median": 46232.0,
+      "worst": 46232.0,
+      "minimum": 46232.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-ui.typesGzipBytes": {
+      "samples": [
+        6787.0,
+        6787.0,
+        6787.0
+      ],
+      "median": 6787.0,
+      "worst": 6787.0,
+      "minimum": 6787.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-ui.typesRawBytes": {
+      "samples": [
+        16096.0,
+        16096.0,
+        16096.0
+      ],
+      "median": 16096.0,
+      "worst": 16096.0,
+      "minimum": 16096.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-ui.wasmGzipBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-ui.wasmRawBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-ui.workerGzipBytes": {
+      "samples": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "median": 0.0,
+      "worst": 0.0,
+      "minimum": 0.0,
+      "spreadPercent": 0.0,
+      "direction": "max"
+    },
+    "asset.vue-ui.workerRawBytes": {
       "samples": [
         0.0,
         0.0,

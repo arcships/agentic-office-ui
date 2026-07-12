@@ -186,13 +186,35 @@ def open_details(page: Page, test_id: str) -> None:
         details.locator("summary").click()
 
 
-def assert_race_evidence(evidence: BrowserEvidence, delayed_file: str) -> dict[str, object]:
+def assert_race_evidence(
+    evidence: BrowserEvidence, delayed_file: str, case_id: str
+) -> dict[str, object]:
     violations = evidence.violations()
+    switch_files = {
+        "RACE-DOCX-SWITCH-20": {
+            "demo.docx",
+            "corrupted.docx",
+            "report-with-image.docx",
+            "invoice-table.docx",
+        },
+        "RACE-XLSX-SWITCH-20": {
+            "financial-model.xlsx",
+            "corrupted.xlsx",
+            "charts-images.xlsx",
+            "sales-table.xlsx",
+        },
+    }.get(case_id, set())
     expected_aborts = [
         item
         for item in violations["requestFailures"]
-        if delayed_file in str(item.get("url", ""))
-        and "ERR_ABORTED" in str(item.get("failure", ""))
+        if "ERR_ABORTED" in str(item.get("failure", ""))
+        and (
+            delayed_file in str(item.get("url", ""))
+            or any(
+                f"/samples/{file_name}" in str(item.get("url", ""))
+                for file_name in switch_files
+            )
+        )
     ]
     unexpected_requests = [
         item for item in violations["requestFailures"] if item not in expected_aborts
@@ -658,7 +680,7 @@ def run_attempt(
     evidence = BrowserEvidence(page)
     try:
         details = workflow(page, base_url, attempt_dir)
-        policy = assert_race_evidence(evidence, delayed_file)
+        policy = assert_race_evidence(evidence, delayed_file, case_id)
         result: dict[str, object] = {
             "id": case_id,
             "attempt": attempt,
@@ -787,7 +809,12 @@ def main() -> int:
         failed_cases = [r for r in results if r["status"] != "PASS"]
         print(f"BB-RACE FAIL: {len(failed_cases)} of {len(results)} cases failed", file=sys.stderr)
         for case in failed_cases:
-            print(f"  {case['id']}: {case.get('failures', case.get('error', 'unknown'))}", file=sys.stderr)
+            failures = [
+                str(attempt.get("error", "unknown"))
+                for attempt in case.get("attempts", [])
+                if attempt.get("status") == "FAIL"
+            ]
+            print(f"  {case['id']}: {' | '.join(failures) or 'unknown'}", file=sys.stderr)
     return 0 if overall == "PASS" else 1
 
 

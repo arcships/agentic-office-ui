@@ -140,8 +140,21 @@ if (failures.length === 0) {
   } else {
     manifest = readJson(manifestPath, "candidate manifest");
   }
-  if (!manifest || manifest.result !== "PASS" || manifest.entries?.length !== 5) {
-    failures.push("five-package tgz manifest did not pass");
+  const publicApi = readJson(
+    path.join(root, "scripts", "ci", "public-api-contract.json"),
+    "public API contract",
+  );
+  const expectedPackages = publicApi?.packages?.map((entry) => entry.name).sort() ?? [];
+  const manifestPackages = manifest?.entries?.map((entry) => entry.package).sort() ?? [];
+  if (
+    !manifest ||
+    manifest.result !== "PASS" ||
+    expectedPackages.length === 0 ||
+    JSON.stringify(manifestPackages) !== JSON.stringify(expectedPackages)
+  ) {
+    failures.push(
+      `public-package tgz manifest did not pass: ${JSON.stringify({ expectedPackages, manifestPackages })}`,
+    );
   }
 }
 
