@@ -4,6 +4,7 @@
       <h1 class="nav-title">Vue Extend UI</h1>
       <div class="nav-links">
         <router-link to="/">Home</router-link>
+        <router-link to="/docx-surface">DOCX Surface</router-link>
         <router-link to="/docx-viewer">DOCX Viewer</router-link>
         <router-link to="/docx-editor">DOCX Editor</router-link>
         <router-link to="/xlsx-viewer">XLSX Viewer</router-link>

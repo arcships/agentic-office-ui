@@ -68,6 +68,7 @@ defineProps<{ file: File | null }>()
 | 你想做什么 | 使用什么 |
 |---|---|
 | 尽快显示一个文档 | `DocxViewer`、`XlsxViewer`、`PdfViewer`、`PptxViewer` |
+| 自建工具栏嵌入渲染区 | `DocxDocumentSurface`（仅分页渲染 + 批注 gutter） |
 | 编辑 DOCX | `DocxEditor` 或 `useDocxEditor` |
 | 自定义 XLSX 工具栏 | `useXlsxViewerController` + `XlsxViewer` |
 | 自定义 PPTX 播放器 | `usePptxDocument` + `usePptxPlayback` + `PptxStage` |
@@ -79,7 +80,7 @@ defineProps<{ file: File | null }>()
 | 包 | 说明 |
 |---|---|
 | [`@arcships/docx-core`](packages/docx-core/README.md) | DOCX 模型、布局、命令和 Runtime |
-| [`@arcships/vue-docx`](packages/vue-docx/README.md) | `DocxViewer`、`DocxEditor` 和组合函数 |
+| [`@arcships/vue-docx`](packages/vue-docx/README.md) | `DocxDocumentSurface`、`DocxViewer`、`DocxEditor` 和组合函数 |
 | [`@arcships/xlsx-core`](packages/xlsx-core/README.md) | XLSX 模型、公式、图表和 Runtime |
 | [`@arcships/vue-xlsx`](packages/vue-xlsx/README.md) | `XlsxViewer` 和查看器控制器 |
 | [`@arcships/vue-pdf`](packages/vue-pdf/README.md) | PDFium 查看器与渲染 Runtime |
