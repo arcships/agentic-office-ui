@@ -1,8 +1,21 @@
 {
   "name": "@arcships/pptx-core",
-  "version": "0.2.0",
-  "private": true,
+  "version": "0.3.0",
   "license": "Apache-2.0",
+  "description": "PPTX preview and playback model with browser document sessions and animation controls",
+  "keywords": ["pptx", "powerpoint", "presentation", "viewer", "playback", "animation"],
+  "homepage": "https://github.com/arcships/agentic-office-ui#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arcships/agentic-office-ui.git",
+    "directory": "packages/pptx-core"
+  },
+  "bugs": {
+    "url": "https://github.com/arcships/agentic-office-ui/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -32,10 +45,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@aiden0z/pptx-renderer": "1.2.4"
+    "echarts": "^6.0.0",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
-    "@arcships/office-runtime": "workspace:*",
+    "@aiden0z/pptx-renderer": "1.2.4",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0"
   }

@@ -116,13 +116,16 @@ importers:
 
   packages/pptx-core:
     dependencies:
+      echarts:
+        specifier: ^6.0.0
+        version: 6.1.0
+      jszip:
+        specifier: ^3.10.1
+        version: 3.10.1
+    devDependencies:
       '@aiden0z/pptx-renderer':
         specifier: 1.2.4
         version: 1.2.4(patch_hash=uv5oln54t4lyugxeoy5vksv6nm)
-    devDependencies:
-      '@arcships/office-runtime':
-        specifier: workspace:*
-        version: link:../office-runtime
       tsup:
         specifier: ^8.0.0
         version: 8.5.1(postcss@8.5.16)(typescript@5.9.3)
@@ -133,7 +136,7 @@ importers:
   packages/vue-docx:
     dependencies:
       '@arcships/docx-core':
-        specifier: ^0.2.0
+        specifier: ^0.3.0
         version: link:../docx-core
     devDependencies:
       '@vitejs/plugin-vue':
@@ -225,7 +228,7 @@ importers:
   packages/vue-pptx:
     dependencies:
       '@arcships/pptx-core':
-        specifier: ^0.2.0
+        specifier: ^0.3.0
         version: link:../pptx-core
     devDependencies:
       '@vitejs/plugin-vue':
@@ -272,7 +275,7 @@ importers:
   packages/vue-xlsx:
     dependencies:
       '@arcships/xlsx-core':
-        specifier: ^0.2.0
+        specifier: ^0.3.0
         version: link:../xlsx-core
       '@dukelib/sheets-wasm':
         specifier: 0.1.17

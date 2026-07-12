@@ -1,8 +1,17 @@
-# @arcships/vue-pptx 开发说明
+# @arcships/vue-pptx
 
 ## 当前状态
 
-本包提供静态浏览和 `mode="present"` 演示模式，但暂不属于公开发布包，因此 `package.json` 保持 `private: true`。演示模式使用 `@arcships/pptx-core/browser` 的文档会话和播放控制器，不自行解析动画。
+本包提供静态浏览和 `mode="present"` 演示模式，从 `0.3.0` 起公开发布。演示模式使用 `@arcships/pptx-core/browser` 的文档会话和播放控制器，不自行解析动画。
+
+```bash
+pnpm add @arcships/pptx-core@0.3.0 @arcships/vue-pptx@0.3.0
+```
+
+```ts
+import { PptxViewer } from "@arcships/vue-pptx"
+import "@arcships/vue-pptx/style.css"
+```
 
 ## 组件边界
 

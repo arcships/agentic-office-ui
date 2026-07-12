@@ -266,7 +266,7 @@ PACK_EVIDENCE_DIR=output/release-pack node scripts/ci/pack-manifests.mjs
 RELEASE_CI_CANDIDATE=1 node scripts/ci/prepare-release-artifact.mjs
 ```
 
-执行顺序不能调换：先完成构建，再从同一提交生成唯一六个 tgz，并把包清单、提交号、版本和哈希写入候选。候选上传后不得重新构建或重新运行 `npm pack` 替换文件。
+执行顺序不能调换：先完成构建，再从同一提交生成唯一八个 tgz，并把包清单、提交号、版本和哈希写入候选。候选上传后不得重新构建或重新运行 `npm pack` 替换文件。
 
 关键路径如下：
 
@@ -281,9 +281,9 @@ output/release-candidate/
   tgz/*.tgz
 ```
 
-验收人逐项核对：候选清单的提交号；六包统一版本；候选目录中的 tgz SHA-256/SHA-512；Worker/WASM 文件 SHA。`candidate/prepare-release-artifact.mjs verify candidate` 负责自动复核这些字段。
+验收人逐项核对：候选清单的提交号；八包统一版本；候选目录中的 tgz SHA-256/SHA-512；Worker/WASM 文件 SHA。`candidate/prepare-release-artifact.mjs verify candidate` 负责自动复核这些字段。
 
-发布流程只由 `v*` 标签触发。它先确认同一提交的 `master` CI 已成功，再下载 `release-candidate-<commit>` 制品并校验，不安装依赖、不构建、不重复测试。六包先进入本次运行专用的临时标签，全部完整后再提升正式标签；提升中途失败时脚本恢复已经改动的旧标签并返回非零。npm 不提供跨包事务，所以任何恢复失败都必须立即暂停发布并保留日志，不能报告成功。
+发布流程只由 `v*` 标签触发。它先确认同一提交的 `master` CI 已成功，再下载 `release-candidate-<commit>` 制品并校验，不安装依赖、不构建、不重复测试。八包先进入本次运行专用的临时标签，全部完整后再提升正式标签；提升中途失败时脚本恢复已经改动的旧标签并返回非零。npm 不提供跨包事务，所以任何恢复失败都必须立即暂停发布并保留日志，不能报告成功。
 
 `pnpm test:release` 保留为本地专项自测入口，不由 GitHub Release 调用，也不决定标签是否能够发布。
 
@@ -434,7 +434,7 @@ pnpm build
 PACK_ROOT="$(mktemp -d)"
 PACK_DIR="$PACK_ROOT/packs"
 mkdir -p "$PACK_DIR"
-for pkg in packages/docx-core packages/xlsx-core packages/vue-docx packages/vue-xlsx packages/vue-pdf packages/vue-ui; do
+for pkg in packages/docx-core packages/xlsx-core packages/vue-docx packages/vue-xlsx packages/vue-pdf packages/vue-ui packages/pptx-core packages/vue-pptx; do
   (cd "$pkg" && npm pack --json --pack-destination "$PACK_DIR")
 done
 

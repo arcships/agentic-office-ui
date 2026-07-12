@@ -1,8 +1,21 @@
 {
   "name": "@arcships/vue-pptx",
-  "version": "0.2.0",
-  "private": true,
+  "version": "0.3.0",
   "license": "Apache-2.0",
+  "description": "Vue 3 PPTX viewer with browse and presentation playback modes",
+  "keywords": ["vue", "vue3", "pptx", "powerpoint", "presentation", "viewer"],
+  "homepage": "https://github.com/arcships/agentic-office-ui#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arcships/agentic-office-ui.git",
+    "directory": "packages/vue-pptx"
+  },
+  "bugs": {
+    "url": "https://github.com/arcships/agentic-office-ui/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
   "publishConfig": {
     "access": "public"
   },
@@ -28,7 +41,7 @@
     "typecheck": "vue-tsc -p tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
-    "@arcships/pptx-core": "^0.2.0"
+    "@arcships/pptx-core": "^0.3.0"
   },
   "peerDependencies": {
     "vue": ">=3.2.25 <4"

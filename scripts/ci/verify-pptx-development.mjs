@@ -40,12 +40,13 @@ const corePackage = readJson("packages/pptx-core/package.json");
 const vuePackage = readJson("packages/vue-pptx/package.json");
 const labPackage = readJson("apps/pptx-playback-lab/package.json");
 
-check(corePackage.private === true, "@arcships/pptx-core 必须保持 private，直到完成正式发布验收。");
-check(vuePackage.private === true, "@arcships/vue-pptx 必须保持 private，直到完成正式发布验收。");
+check(corePackage.private !== true, "@arcships/pptx-core 必须允许公开发布。");
+check(vuePackage.private !== true, "@arcships/vue-pptx 必须允许公开发布。");
 check(labPackage.private === true, "pptx-playback-lab 必须保持 private。");
 check(
-  corePackage.dependencies?.["@aiden0z/pptx-renderer"] === "1.2.4",
-  "pptx-core 必须固定 @aiden0z/pptx-renderer@1.2.4。",
+  corePackage.devDependencies?.["@aiden0z/pptx-renderer"] === "1.2.4" &&
+    corePackage.dependencies?.["@aiden0z/pptx-renderer"] === undefined,
+  "pptx-core 必须把固定渲染器作为构建依赖，不能暴露为用户运行依赖。",
 );
 check(
   labPackage.dependencies?.["@aiden0z/pptx-renderer"] === "1.2.4",

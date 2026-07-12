@@ -1,8 +1,8 @@
-# 六个公开包的接口合同
+# 八个公开包的接口合同
 
-本文登记 `@arcships/docx-core`、`@arcships/xlsx-core`、`@arcships/vue-docx`、`@arcships/vue-xlsx`、`@arcships/vue-pdf` 和 `@arcships/vue-ui` 的公开入口、推荐用法、事件、错误与兼容期限。它用于约束 `0.2.0` 及后续版本的实现和发布检查。
+本文登记 `@arcships/docx-core`、`@arcships/xlsx-core`、`@arcships/pptx-core`、`@arcships/vue-docx`、`@arcships/vue-xlsx`、`@arcships/vue-pptx`、`@arcships/vue-pdf` 和 `@arcships/vue-ui` 的公开入口、推荐用法、事件、错误与兼容期限。
 
-当前六个公开包的候选版本统一为 `0.2.0`。源码中的 `@deprecated Since 0.2.0` 从该版本开始生效；整个 `0.x` 继续保留旧入口，最早只能在 `1.0.0` 删除。
+当前八个公开包的候选版本统一为 `0.3.0`。原有六包的 `0.2.0` 已发布，PPTX 两包从 `0.3.0` 开始公开。源码中的 `@deprecated Since 0.2.0` 继续生效；整个 `0.x` 保留旧入口，最早只能在 `1.0.0` 删除。
 
 ## 1. 适用规则
 
@@ -15,7 +15,7 @@
 
 ## 2. 精确导出路径
 
-下表与六个包当前 `package.json` 的 `exports` 一一对应。未列出的深层路径必须由 Node 返回 `ERR_PACKAGE_PATH_NOT_EXPORTED`。
+下表与八个包当前 `package.json` 的 `exports` 一一对应。未列出的深层路径必须由 Node 返回 `ERR_PACKAGE_PATH_NOT_EXPORTED`。
 
 | 包 | 公开路径 | 类型文件 | 运行文件或资源 |
 |---|---|---|---|
@@ -44,6 +44,11 @@
 |  | `./assets/pdfium.wasm` | 不适用 | `./dist/pdfium.wasm` |
 |  | `./style.css` | 不适用 | `./dist/style.css` |
 | `@arcships/vue-ui` | `.` | `./dist/index.d.ts` | `./dist/index.js` |
+|  | `./style.css` | 不适用 | `./dist/style.css` |
+| `@arcships/pptx-core` | `.` | `./dist/index.d.ts` | `./dist/index.js` |
+|  | `./browser` | `./dist/browser.d.ts` | `./dist/browser.js` |
+|  | `./package.json` | 不适用 | `./package.json` |
+| `@arcships/vue-pptx` | `.` | `./dist/index.d.ts` | `./dist/index.js` |
 |  | `./style.css` | 不适用 | `./dist/style.css` |
 
 Worker 和 WASM 必须来自安装后的真实包。消费项目不得从 demo 公共目录复制这些文件，也不得通过工作区源码别名绕过 `exports`。
@@ -151,6 +156,16 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 
 稳定入口为 `SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`，以及根入口导出的属性和 `FileUploadRejection` 类型。新代码使用 `@arcships/vue-ui/style.css`。
 
+### 3.7 `@arcships/pptx-core`
+
+根入口提供平台无关的播放类型、对象身份、能力报告、时间安排和属性轨道。浏览器中的文档会话、静态预览、播放解析和控制器从 `@arcships/pptx-core/browser` 导入。补丁后的渲染器代码已经包含在浏览器入口中，消费项目不安装 `@aiden0z/pptx-renderer`。
+
+无法精确执行的 PPTX 内容通过能力报告标记为近似、静态或未解析；公开说明不得宣称完整兼容 PowerPoint 全部动画。
+
+### 3.8 `@arcships/vue-pptx`
+
+稳定入口为 `PptxViewer`、`PptxThumbnail` 和公开类型。`PptxViewer` 默认用于浏览，`mode="present"` 提供下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏。样式从 `@arcships/vue-pptx/style.css` 导入。
+
 ## 4. 公开事件和诊断
 
 ### 4.1 DOCX
@@ -193,6 +208,10 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 
 `FileThumbnail`、`Spinner` 和 `Tooltip` 当前没有业务事件。文件拒绝使用 `files-rejected`；宿主不能解析界面文字推断原因。
 
+### 4.5 `vue-pptx`
+
+`PptxViewer` 提供 `load-start`、`load-success`、`load-error`、`slide-change`、`playback-ready`、`playback-state-change`、`step-change`、`playback-warning`、`capability`、`media-request`、`action` 和 `playback-error`。程序判断使用公开错误码和能力报告，不解析界面文案。
+
 ## 5. 公开错误
 
 | 包 | 类型 | 错误码 | 含义 |
@@ -216,6 +235,7 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 | `vue-xlsx` | `XlsxFileSizeLimitExceededError` | 类的公开字段 | 本地输入超过控制器允许的文件大小 |
 | `vue-pdf` | `PdfSourceError` / `PdfLoadErrorCode` | `SOURCE_NOT_ALLOWED`、`FETCH_FAILED`、`INVALID_PDF`、`PDF_TOO_LARGE`、`ABORTED` | 分别表示来源被拒绝、获取失败、PDF 无效、整份文件超过当前 `maxFileSize` 和取消；体积错误同时提供 `actual`、`allowed` |
 | `vue-ui` | `FileUploadRejection` / `FileUploadRejectionCode` | `FILE_TYPE_NOT_ACCEPTED`、`FILE_TOO_LARGE` | 文件类型不符合 `accept`，或文件超过 `maxSize` |
+| `pptx-core` / `vue-pptx` | `PptxPreviewError`、`PptxPlaybackError` | `ABORTED`、`STALE_RESULT`、`LIMIT_EXCEEDED`、`INVALID_SOURCE`、`PARSE_FAILED` 及播放错误码 | 加载、资源限制、解析、对象匹配、媒体和播放控制错误 |
 
 公开错误必须保留稳定的 `code`，界面文案可以改进但不能替代错误码。地址写入错误和诊断前必须脱敏。Worker、WASM 或解析失败不得静默转成成功；只有调用方明确开启且文件小于已配置上限时，DOCX 才能进行主线程回退，并必须发出 `main-thread-fallback` 诊断。
 
@@ -242,8 +262,8 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 
 每次改变公开接口或发布资源时至少检查：
 
-1. 从当前源码构建，并对六个公开包执行真实 `npm pack`。
-2. 在工作区外只安装生成的六个压缩包，不使用源码别名，不复制 demo 中的 Worker/WASM。
+1. 从当前源码构建，并对八个公开包执行真实 `npm pack`。
+2. 在工作区外只安装生成的八个压缩包，不使用源码别名，不复制 demo 中的 Worker/WASM。
 3. 检查本页列出的所有 `exports` 都能解析，未列出的代表性深层路径都被拒绝。
 4. 检查根入口、`./core`、`./runtime`、`./wasm-url`、四个 `style.css`、两个独立 Worker 资源、三个 WASM，以及 PDF 包内生成的 Worker 代码。
 5. 检查生成的 `.d.ts` 保留本页登记的 `@deprecated`，并且公开声明不引用私有 `@arcships/office-runtime` 或不受支持的深层路径。

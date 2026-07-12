@@ -24,6 +24,8 @@ const expectedPackages = [
   "@arcships/vue-xlsx",
   "@arcships/vue-pdf",
   "@arcships/vue-ui",
+  "@arcships/pptx-core",
+  "@arcships/vue-pptx",
 ];
 const requiredSuites = [
   "unit",
@@ -146,7 +148,7 @@ function materialize() {
 
   const packages = new Map(sourceRun.packages.map((entry) => [entry.package, entry]));
   if (packages.size !== expectedPackages.length || expectedPackages.some((name) => !packages.has(name))) {
-    fail("P4 reproducible pack run 1 does not contain the exact six public packages");
+    fail("P4 reproducible pack run 1 does not contain the exact public package set");
   }
   const entries = [];
   for (const packageName of expectedPackages) {
@@ -287,10 +289,10 @@ function prepare() {
 
   const byPackage = new Map(packSummary.entries.map((entry) => [entry.package, entry]));
   if (byPackage.size !== expectedPackages.length || expectedPackages.some((name) => !byPackage.has(name))) {
-    fail("consumer tgz manifest does not contain the exact six public packages");
+    fail("consumer tgz manifest does not contain the exact public package set");
   }
   const versions = new Set(packSummary.entries.map((entry) => entry.version));
-  if (versions.size !== 1) fail("the six public packages do not use one version");
+  if (versions.size !== 1) fail("the public packages do not use one version");
   const version = [...versions][0];
   if (typeof version !== "string" || !version) fail("candidate version is missing");
   assertTagMatchesVersion(version);

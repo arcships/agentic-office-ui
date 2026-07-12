@@ -48,6 +48,7 @@ const requiredFiles = [
   "docs/INDEX.md",
   "docs/api/public-api-contract.md",
   "docs/migration-0.2.md",
+  "docs/migration-0.3.md",
   "docs/testing/compatibility-matrix.md",
   "scripts/ci/compatibility-matrix.mjs",
   "scripts/ci/p4-reproducible-pack.mjs",
@@ -84,6 +85,7 @@ const readme = read("README.md");
 const index = read("docs/INDEX.md");
 const releaseNotes = read("RELEASE_NOTES.md");
 const migration = read("docs/migration-0.2.md");
+const migration03 = read("docs/migration-0.3.md");
 const compatibility = read("docs/testing/compatibility-matrix.md");
 const combined = `${plan}\n${runbook}`;
 for (const snippet of [
@@ -113,9 +115,9 @@ for (const obsolete of [
   check(`documentation removed obsolete text ${obsolete}`, !combined.includes(obsolete));
 }
 
-for (const [name, content] of Object.entries({ readme, releaseNotes, migration })) {
-  check(`${name} says 0.2.0 is not released`, content.includes("0.2.0") && content.includes("尚未发布"));
-}
+check("README records the released and candidate versions", readme.includes("0.2.0") && readme.includes("0.3.0"));
+check("release notes include the eight-package candidate", releaseNotes.includes("八个公开包") && releaseNotes.includes("0.3.0"));
+check("0.3 migration includes PPTX packages", migration03.includes("@arcships/pptx-core@0.3.0") && migration03.includes("@arcships/vue-pptx@0.3.0"));
 check(
   "README keeps PDF usable",
   ["翻页", "缩放", "搜索", "下载", "50 MiB", "PDF_TOO_LARGE"].every((term) => readme.includes(term)),
@@ -153,7 +155,7 @@ check(
 );
 check(
   "documentation index links candidate documents",
-  ["RELEASE_NOTES.md", "migration-0.2.md", "testing/compatibility-matrix.md"].every((term) =>
+  ["RELEASE_NOTES.md", "migration-0.2.md", "migration-0.3.md", "testing/compatibility-matrix.md"].every((term) =>
     index.includes(term),
   ),
 );
@@ -173,6 +175,7 @@ for (const file of [
   "RELEASE_NOTES.md",
   "docs/INDEX.md",
   "docs/migration-0.2.md",
+  "docs/migration-0.3.md",
   "docs/testing/compatibility-matrix.md",
 ]) {
   const content = read(file);

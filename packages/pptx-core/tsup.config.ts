@@ -8,7 +8,9 @@ export default defineConfig({
   format: ["esm"],
   dts: true,
   clean: true,
-  external: ["@aiden0z/pptx-renderer"],
-  noExternal: [/^@arcships\/office-runtime/u],
+  noExternal: [
+    /^@arcships\/office-runtime/u,
+    /^@aiden0z\/pptx-renderer$/u,
+  ],
   skipNodeModulesBundle: true,
 })

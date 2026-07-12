@@ -61,7 +61,7 @@ jobs:
           RELEASE_EXPECTED_TAG: ${{ github.ref_name }}
         run: node candidate/prepare-release-artifact.mjs verify candidate
 
-      - name: Publish the six packages and promote them to latest
+      - name: Publish the eight packages and promote them to latest
         env:
           RELEASE_EXPECTED_COMMIT: ${{ github.sha }}
           RELEASE_EXPECTED_TAG: ${{ github.ref_name }}

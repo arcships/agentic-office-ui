@@ -200,6 +200,45 @@
         "count": 20,
         "sha256": "94eaed551e8739a32aa054b07f885bae9e1d6cb700a66aaa2e55285f7de094ea"
       }
+    },
+    {
+      "directory": "packages/pptx-core",
+      "name": "@arcships/pptx-core",
+      "exports": {
+        ".": {
+          "types": "./dist/index.d.ts",
+          "import": "./dist/index.js",
+          "default": "./dist/index.js"
+        },
+        "./browser": {
+          "types": "./dist/browser.d.ts",
+          "import": "./dist/browser.js",
+          "default": "./dist/browser.js"
+        },
+        "./package.json": "./package.json"
+      },
+      "deprecatedSymbols": [],
+      "rootDeclarationFingerprint": {
+        "count": 55,
+        "sha256": "5b56d8800b4ce3c246eaab4b93d2bc6d277c77d0596a8350849805ea3624ffda"
+      }
+    },
+    {
+      "directory": "packages/vue-pptx",
+      "name": "@arcships/vue-pptx",
+      "exports": {
+        ".": {
+          "types": "./dist/index.d.ts",
+          "import": "./dist/index.js",
+          "default": "./dist/index.js"
+        },
+        "./style.css": "./dist/style.css"
+      },
+      "deprecatedSymbols": [],
+      "rootDeclarationFingerprint": {
+        "count": 32,
+        "sha256": "2c11abae40e71b5818aaf8961a5057b22805efb7eaea54132e0671b563d32a7a"
+      }
     }
   ],
   "docxRuntimeSymbols": [
@@ -247,7 +286,12 @@
     "@arcships/vue-pdf/assets/pdfium.wasm",
     "@arcships/vue-pdf/style.css",
     "@arcships/vue-ui",
-    "@arcships/vue-ui/style.css"
+    "@arcships/vue-ui/style.css",
+    "@arcships/pptx-core",
+    "@arcships/pptx-core/browser",
+    "@arcships/pptx-core/package.json",
+    "@arcships/vue-pptx",
+    "@arcships/vue-pptx/style.css"
   ],
   "executableSpecifiers": [
     "@arcships/docx-core",
@@ -264,7 +308,10 @@
     "@arcships/vue-xlsx/map",
     "@arcships/vue-xlsx/webgl",
     "@arcships/vue-pdf",
-    "@arcships/vue-ui"
+    "@arcships/vue-ui",
+    "@arcships/pptx-core",
+    "@arcships/pptx-core/browser",
+    "@arcships/vue-pptx"
   ],
   "deepImportRejections": {
     "@arcships/docx-core": [
@@ -320,6 +367,17 @@
       "@arcships/vue-ui/dist/index.js",
       "@arcships/vue-ui/components/FileUpload.vue",
       "@arcships/vue-ui/types"
+    ],
+    "@arcships/pptx-core": [
+      "@arcships/pptx-core/src/index.ts",
+      "@arcships/pptx-core/dist/browser.js",
+      "@arcships/pptx-core/playback",
+      "@arcships/pptx-core/browser/controller"
+    ],
+    "@arcships/vue-pptx": [
+      "@arcships/vue-pptx/src/index.ts",
+      "@arcships/vue-pptx/dist/index.js",
+      "@arcships/vue-pptx/components/PptxViewer.vue"
     ]
   }
 }

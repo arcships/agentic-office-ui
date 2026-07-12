@@ -10,7 +10,16 @@ const output = path.resolve(
     path.join(root, "output", "acceptance", "runtime-boundary"),
 );
 const runtimeRoot = path.join(root, "packages", "office-runtime");
-const publicPackages = ["docx-core", "xlsx-core", "vue-docx", "vue-xlsx", "vue-pdf", "vue-ui"];
+const publicPackages = [
+  "docx-core",
+  "xlsx-core",
+  "vue-docx",
+  "vue-xlsx",
+  "vue-pdf",
+  "vue-ui",
+  "pptx-core",
+  "vue-pptx",
+];
 const failures = [];
 
 function walk(directory) {

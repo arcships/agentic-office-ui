@@ -146,18 +146,18 @@ try {
     "public API contract",
   );
   const manifest = readJson(manifestPath, "real tgz manifest");
-  if (manifest.result !== "PASS" || manifest.entries.length !== 6) {
-    throw new Error("real tgz manifest preflight did not pass for six packages");
-  }
   const expectedPackageNames = publicApiContract.packages
     .map((entry) => entry.name)
     .sort();
+  if (manifest.result !== "PASS" || manifest.entries.length !== expectedPackageNames.length) {
+    throw new Error(`real tgz manifest preflight did not pass for ${expectedPackageNames.length} packages`);
+  }
   const manifestPackageNames = manifest.entries
     .map((entry) => entry.package)
     .sort();
   if (JSON.stringify(manifestPackageNames) !== JSON.stringify(expectedPackageNames)) {
     throw new Error(
-      `real tgz manifest package set differs from the six public packages: ${JSON.stringify({ expectedPackageNames, manifestPackageNames })}`,
+      `real tgz manifest package set differs from the public packages: ${JSON.stringify({ expectedPackageNames, manifestPackageNames })}`,
     );
   }
   const forbiddenTemplatePatterns = [
