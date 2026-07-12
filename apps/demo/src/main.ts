@@ -16,6 +16,7 @@ const router = createRouter({
     { path: "/docx-editor", component: () => import("./pages/DocxEditorPage.vue") },
     { path: "/xlsx-surface", component: () => import("./pages/XlsxSurfacePage.vue") },
     { path: "/xlsx-viewer", component: () => import("./pages/XlsxViewerPage.vue") },
+    { path: "/pptx-surface", component: () => import("./pages/PptxSurfacePage.vue") },
     { path: "/pptx-viewer", component: () => import("./pages/PptxViewerPage.vue") },
     { path: "/pptx-headless", component: () => import("./pages/PptxHeadlessPage.vue") },
     { path: "/pdf-viewer", component: () => import("./pages/PdfViewerPage.vue") },

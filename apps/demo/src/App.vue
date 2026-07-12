@@ -9,6 +9,7 @@
         <router-link to="/docx-editor">DOCX Editor</router-link>
         <router-link to="/xlsx-surface">XLSX Surface</router-link>
         <router-link to="/xlsx-viewer">XLSX Viewer</router-link>
+        <router-link to="/pptx-surface">PPTX Surface</router-link>
         <router-link to="/pptx-viewer">PPTX Viewer</router-link>
         <router-link to="/pptx-headless">PPTX 最小组合</router-link>
         <router-link to="/pdf-viewer">PDF Viewer</router-link>

@@ -86,7 +86,7 @@ defineProps<{ file: File | null }>()
 | [`@arcships/vue-xlsx`](packages/vue-xlsx/README.md) | `XlsxSheetSurface`、`XlsxViewer` 和查看器控制器 |
 | [`@arcships/vue-pdf`](packages/vue-pdf/README.md) | PDFium 查看器与渲染 Runtime |
 | [`@arcships/pptx-core`](packages/pptx-core/README.md) | PPTX 预览、播放模型和浏览器控制器 |
-| [`@arcships/vue-pptx`](packages/vue-pptx/README.md) | `PptxViewer` 和最小播放组合能力 |
+| [`@arcships/vue-pptx`](packages/vue-pptx/README.md) | `PptxStage`、`PptxViewer` 和最小播放组合能力 |
 | [`@arcships/vue-ui`](packages/vue-ui/README.md) | 上传、签名、缩略图、引用和基础组件 |
 
 八个包使用统一版本发布。相关 Vue 包和核心包建议保持相同版本。
