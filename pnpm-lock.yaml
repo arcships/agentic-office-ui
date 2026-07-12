@@ -136,7 +136,7 @@ importers:
   packages/vue-docx:
     dependencies:
       '@arcships/docx-core':
-        specifier: ^0.4.0
+        specifier: ^0.5.0
         version: link:../docx-core
     devDependencies:
       '@vitejs/plugin-vue':
@@ -228,7 +228,7 @@ importers:
   packages/vue-pptx:
     dependencies:
       '@arcships/pptx-core':
-        specifier: ^0.4.0
+        specifier: ^0.5.0
         version: link:../pptx-core
     devDependencies:
       '@vitejs/plugin-vue':
@@ -275,7 +275,7 @@ importers:
   packages/vue-xlsx:
     dependencies:
       '@arcships/xlsx-core':
-        specifier: ^0.4.0
+        specifier: ^0.5.0
         version: link:../xlsx-core
       '@dukelib/sheets-wasm':
         specifier: 0.1.17
