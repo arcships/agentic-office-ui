@@ -19,6 +19,7 @@ const router = createRouter({
     { path: "/pptx-surface", component: () => import("./pages/PptxSurfacePage.vue") },
     { path: "/pptx-viewer", component: () => import("./pages/PptxViewerPage.vue") },
     { path: "/pptx-headless", component: () => import("./pages/PptxHeadlessPage.vue") },
+    { path: "/pdf-surface", component: () => import("./pages/PdfSurfacePage.vue") },
     { path: "/pdf-viewer", component: () => import("./pages/PdfViewerPage.vue") },
     { path: "/components", component: () => import("./pages/ComponentsPage.vue") },
     { path: "/runtime-isolation", component: () => import("./pages/RuntimeIsolationPage.vue") },

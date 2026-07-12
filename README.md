@@ -72,6 +72,7 @@ defineProps<{ file: File | null }>()
 | 编辑 DOCX | `DocxEditor` 或 `useDocxEditor` |
 | 自定义 XLSX 工具栏 | `useXlsxViewerController` + `XlsxSheetSurface`（无内置 chrome） |
 | 自定义 XLSX 工具栏（全套） | `useXlsxViewerController` + `XlsxViewer` |
+| 自建 PDF 控制栏嵌入渲染 | `PdfSurface`（垂直滚动全部页面） |
 | 自定义 PPTX 播放器 | `usePptxDocument` + `usePptxPlayback` + `PptxStage` |
 | 在非 Vue 代码中处理文档 | `docx-core`、`xlsx-core`、`pptx-core` |
 | 管理 Worker、WASM 和资源限制 | 对应格式的 Runtime |

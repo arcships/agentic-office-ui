@@ -6,6 +6,22 @@
 
 // PDF viewer
 export { default as PdfViewer } from "./components/PdfViewer.vue"
+/**
+ * Minimal embeddable PDF renderer with vertical scroll through all pages.
+ * No toolbar, thumbnails panel, or search bar — host owns all controls.
+ * Renders every page as a stacked image in a scrollable container.
+ *
+ * @example
+ * ```vue
+ * <PdfSurface
+ *   ref="surfaceRef"
+ *   :source="{ kind: 'url', url: '/doc.pdf' }"
+ *   @document-load-success="pages = $event"
+ * />
+ * // surfaceRef.value.scrollToPage(3)
+ * ```
+ */
+export { default as PdfSurface } from "./components/PdfSurface.vue"
 export {
   DEFAULT_PDF_MAX_FILE_SIZE,
   PdfSourceError,

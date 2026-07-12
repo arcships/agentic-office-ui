@@ -12,6 +12,7 @@
         <router-link to="/pptx-surface">PPTX Surface</router-link>
         <router-link to="/pptx-viewer">PPTX Viewer</router-link>
         <router-link to="/pptx-headless">PPTX 最小组合</router-link>
+        <router-link to="/pdf-surface">PDF Surface</router-link>
         <router-link to="/pdf-viewer">PDF Viewer</router-link>
         <router-link to="/components">Components</router-link>
       </div>

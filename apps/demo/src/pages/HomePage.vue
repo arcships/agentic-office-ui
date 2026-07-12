@@ -49,6 +49,7 @@ const navItems = [
   { path: "/pptx-surface", title: "PPTX Surface", desc: "Minimal embeddable slide stage — PptxStage + usePptxDocument, host-owned controls.", status: "Ready", statusClass: "ready" },
   { path: "/pptx-viewer", title: "PPTX Viewer", desc: "View PPTX with browse/present modes, playback and search", status: "Ready", statusClass: "ready" },
   { path: "/pptx-headless", title: "PPTX 最小组合", desc: "组合文档、播放和舞台三个公开接口", status: "Ready", statusClass: "ready" },
+  { path: "/pdf-surface", title: "PDF Surface", desc: "Minimal embeddable PDF — all pages stacked vertically, host-owned zoom and scroll.", status: "Ready", statusClass: "ready" },
   { path: "/pdf-viewer", title: "PDF Viewer", desc: "View PDF with zoom, search, and thumbnails", status: "Ready", statusClass: "ready" },
   { path: "/components", title: "Components", desc: "Signature, FileUpload, BoundingBox, LayoutBlocks", status: "Ready", statusClass: "ready" },
   { path: "/runtime-limits", title: "Runtime Limits", desc: "Configure public DOCX/XLSX resource limits and inspect structured errors", status: "Ready", statusClass: "ready" },
