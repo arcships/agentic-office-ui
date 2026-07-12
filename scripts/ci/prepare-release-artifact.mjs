@@ -451,15 +451,55 @@ function runNpm(args, { allowMissing = false } = {}) {
 }
 
 function registryIntegrity(packageName, version) {
-  return runNpm(["view", `${packageName}@${version}`, "dist.integrity", "--json"], {
+  return runNpm(["view", `${packageName}@${version}`, "dist.integrity", "--json", "--prefer-online"], {
     allowMissing: true,
   });
 }
 
 function registryDistTags(packageName) {
-  return runNpm(["view", packageName, "dist-tags", "--json"], {
+  return runNpm(["view", packageName, "dist-tags", "--json", "--prefer-online"], {
     allowMissing: true,
   }) || {};
+}
+
+function publishArchive(args) {
+  const result = spawnSync("npm", args, {
+    encoding: "utf8",
+    stdio: "pipe",
+    maxBuffer: 8 * 1024 * 1024,
+  });
+  if (result.stdout) process.stdout.write(result.stdout);
+  if (result.stderr) process.stderr.write(result.stderr);
+  if (result.status === 0) return;
+  const output = `${result.stdout || ""}${result.stderr || ""}`;
+  if (/(?:EPUBLISHCONFLICT|cannot publish over|previously published|forbidden.*version)/i.test(output)) {
+    console.log("WAIT: npm accepted this version earlier but has not exposed it yet");
+    return;
+  }
+  fail(`npm ${args.join(" ")} exited ${result.status ?? 1}`);
+}
+
+function waitForPublishedArchives(archives) {
+  const deadline = Date.now() + 10 * 60 * 1000;
+  let pending = archives;
+  while (pending.length) {
+    const next = [];
+    for (const archive of pending) {
+      const existing = registryIntegrity(archive.package, archive.version);
+      if (existing === null) {
+        next.push(archive);
+      } else if (existing !== archive.integrity) {
+        fail(`${archive.package}@${archive.version} exists with different integrity`);
+      }
+    }
+    if (!next.length) return;
+    if (Date.now() >= deadline) {
+      fail(`npm registry did not expose: ${next.map((archive) => `${archive.package}@${archive.version}`).join(", ")}`);
+    }
+    console.log(`WAIT: npm registry is still indexing ${next.length} package(s)`);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10_000);
+    pending = next;
+  }
 }
 
 function publish(candidateDir) {
@@ -485,7 +525,7 @@ function publish(candidateDir) {
         stagingTag,
       ];
       if (useProvenance) publishArgs.push("--provenance");
-      runNpm(publishArgs);
+      publishArchive(publishArgs);
     } else if (existing !== archive.integrity) {
       fail(`${archive.package}@${archive.version} already exists with different integrity`);
     } else {
@@ -494,12 +534,7 @@ function publish(candidateDir) {
     }
   }
 
-  for (const archive of manifest.archives) {
-    const existing = registryIntegrity(archive.package, archive.version);
-    if (existing !== archive.integrity) {
-      fail(`${archive.package}@${archive.version} staging verification failed`);
-    }
-  }
+  waitForPublishedArchives(manifest.archives);
   const previousTargets = new Map(
     manifest.archives.map((archive) => [
       archive.package,
