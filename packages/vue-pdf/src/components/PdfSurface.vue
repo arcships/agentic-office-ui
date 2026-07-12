@@ -1,5 +1,5 @@
 <template>
-  <div ref="scrollRef" class="pdf-surface" data-testid="pdf-surface" @scroll.passive="onScroll">
+  <div ref="scrollRef" class="pdf-surface" data-testid="pdf-surface" @scroll.passive="onScroll" @contextmenu.prevent="onContextMenu">
     <div v-if="!effectiveSource" class="pdf-surface__empty">No PDF loaded</div>
     <div v-else-if="loading" class="pdf-surface__empty">Opening PDF…</div>
     <div v-else-if="loadError" class="pdf-surface__error" :data-error-code="loadError.code">
@@ -33,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, reactive, ref, watch } from "vue"
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
 import {
   createLatestTaskCoordinator,
   createOfficeTaskSequence,
@@ -72,6 +72,8 @@ const props = withDefaults(
     maxFileSize?: number
     className?: string
     defaultZoom?: number
+    /** When true, zoom auto-fits the widest page to container width. */
+    fitWidth?: boolean
   }>(),
   {
     maxFileSize: DEFAULT_PDF_MAX_FILE_SIZE,
@@ -83,6 +85,7 @@ const emit = defineEmits<{
   "document-load-success": [numPages: number]
   "document-load-error": [error: PdfLoadError]
   "visible-page-change": [pageIndex: number]
+  contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number }]
   diagnostic: [event: PdfDiagnostic]
 }>()
 
@@ -314,6 +317,36 @@ function onScroll(): void {
   }
   emit("visible-page-change", current)
 }
+
+function onContextMenu(event: MouseEvent): void {
+  const el = scrollRef.value
+  if (!el || !renderDocument.value) return
+  const clickY = event.clientY - el.getBoundingClientRect().top + el.scrollTop
+  let pageIndex = 0
+  for (let i = 0; i < renderDocument.value.pageCount; i++) {
+    const slot = el.querySelector(`[data-page-index="${i}"]`) as HTMLElement | null
+    if (!slot) continue
+    if (clickY >= slot.offsetTop && clickY < slot.offsetTop + slot.offsetHeight) {
+      pageIndex = i; break
+    }
+  }
+  emit("contextMenu", { pageIndex, clientX: event.clientX, clientY: event.clientY })
+}
+
+// ── fit-width zoom ───────────────────────────────────────────────────
+watch([scrollRef, () => props.fitWidth, renderDocument], ([el, fit, doc]) => {
+  if (!fit || !el || !doc) return
+  const observer = new ResizeObserver(() => {
+    const maxPageWidth = Math.max(
+      ...doc.pages.map((p) => (p.rotation / 90) % 2 ? p.height : p.width),
+      200,
+    )
+    const containerW = el.clientWidth - 32
+    zoom.value = Math.min(2, Math.max(0.25, containerW / maxPageWidth))
+  })
+  observer.observe(el)
+  return () => observer.disconnect()
+})
 
 // ── Expose ───────────────────────────────────────────────────────────
 function scrollToPage(pageIndex: number): void {

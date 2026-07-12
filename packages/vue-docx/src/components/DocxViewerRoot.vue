@@ -8,6 +8,7 @@
     @dragover.prevent="onDragOver"
     @dragleave="onDragLeave"
     @drop.prevent="onDrop"
+    @contextmenu.prevent="onContextMenu"
   >
     <div :style="spacerStyle">
       <div
@@ -99,6 +100,8 @@ export interface DocxViewerRootProps {
   layoutOptions?: LayoutOptions
   theme?: DocxDocumentTheme
   zoomScale?: number
+  /** When true, zoom auto-fits page width to container. Overrides zoomScale. */
+  fitWidth?: boolean
   showTrackedChanges?: boolean
   showComments?: boolean
   searchQuery?: string
@@ -132,12 +135,14 @@ const props = withDefaults(
 const emit = defineEmits<{
   pageCountChange: [count: number]
   visiblePageRange: [range: { startPageIndex: number; endPageIndex: number }]
+  contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number }]
 }>()
 
 // ── State ──────────────────────────────────────────────────────────
 const scrollContainerRef = ref<HTMLElement | undefined>()
 const scrollTop = ref(0)
 const viewportHeight = ref(800)
+const containerWidth = ref(800)
 
 // Track measured page heights (key: pageIndex, value: px)
 const measuredPageHeights = ref<Record<number, number>>({})
@@ -173,7 +178,22 @@ const paginationPlan = computed(() => {
 const pages = computed(() => paginationPlan.value.pages)
 const pageNodeSegments = computed(() => paginationPlan.value.pageNodeSegments)
 const pageCount = computed(() => pages.value.length)
-const zoomFactor = computed(() => Math.min(2, Math.max(0.5, props.zoomScale / 100)))
+const FIT_ZOOM_MIN = 0.25
+const FIT_ZOOM_MAX = 2
+const FIT_ZOOM_SIDE_PAD = 48
+
+const fitZoom = computed(() => {
+  if (!baseDocumentLayout.value) return 1
+  const pageWidth = baseDocumentLayout.value.pageWidthPx
+  if (!pageWidth || pageWidth <= 0) return 1
+  const available = Math.max(200, containerWidth.value - FIT_ZOOM_SIDE_PAD)
+  return Math.min(FIT_ZOOM_MAX, Math.max(FIT_ZOOM_MIN, available / pageWidth))
+})
+
+const zoomFactor = computed(() => {
+  if (props.fitWidth) return fitZoom.value
+  return Math.min(2, Math.max(0.5, props.zoomScale / 100))
+})
 
 watch(pageCount, (count) => emit("pageCountChange", count), { immediate: true })
 
@@ -449,6 +469,21 @@ async function onDrop(event: DragEvent): Promise<void> {
   }
 }
 
+// ── Context menu ─────────────────────────────────────────────────────
+function onContextMenu(event: MouseEvent): void {
+  const container = scrollContainerRef.value
+  if (!container) return
+  const clickY = event.clientY - container.getBoundingClientRect().top + container.scrollTop
+  // Find which page the click lands on
+  let pageIndex = 0
+  for (let i = 0; i < pageCount.value; i++) {
+    const top = pageOffsets.value[i]
+    const bottom = top + getPageHeight(i) * zoomFactor.value + DOC_PAGE_BREAK_GAP
+    if (clickY >= top && clickY < bottom) { pageIndex = i; break }
+  }
+  emit("contextMenu", { pageIndex, clientX: event.clientX, clientY: event.clientY })
+}
+
 function hasDocxFile(dataTransfer: DataTransfer): boolean {
   if (dataTransfer.types.includes("Files")) {
     for (let i = 0; i < dataTransfer.files.length; i++) {
@@ -463,6 +498,7 @@ onMounted(() => {
   if (scrollContainerRef.value) {
     const height = scrollContainerRef.value.clientHeight
     if (Number.isFinite(height) && height > 0) viewportHeight.value = height
+    containerWidth.value = scrollContainerRef.value.clientWidth
   }
   const ResizeObserverConstructor = globalThis.ResizeObserver
   if (typeof ResizeObserverConstructor !== "function") {
@@ -472,6 +508,7 @@ onMounted(() => {
   const observer = new ResizeObserverConstructor((entries) => {
     for (const entry of entries) {
       viewportHeight.value = entry.contentRect.height
+      containerWidth.value = entry.contentRect.width
     }
   })
   if (scrollContainerRef.value) {

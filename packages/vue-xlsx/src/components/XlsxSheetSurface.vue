@@ -3,6 +3,7 @@
     class="xlsx-sheet-surface"
     data-testid="xlsx-sheet-surface"
     @keydown="onKeydown"
+    @contextmenu.prevent="onContextMenu"
     tabindex="0"
   >
     <XlsxChartsheetSurface
@@ -94,6 +95,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   cellDoubleClick: [cell: XlsxCellAddress]
+  contextMenu: [ctx: { clientX: number; clientY: number; sheetName?: string }]
 }>()
 
 // ── State ────────────────────────────────────────────────────────────
@@ -106,6 +108,14 @@ const gridElement = computed<HTMLElement | null>(() => {
   const element = gridRef.value?.$el
   return typeof HTMLElement !== "undefined" && element instanceof HTMLElement ? element : null
 })
+
+function onContextMenu(event: MouseEvent): void {
+  emit("contextMenu", {
+    clientX: event.clientX,
+    clientY: event.clientY,
+    sheetName: props.controller.activeSheet?.name,
+  })
+}
 
 // ── Keyboard shortcuts ───────────────────────────────────────────────
 function onKeydown(event: KeyboardEvent) {
