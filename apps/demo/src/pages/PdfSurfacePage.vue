@@ -52,6 +52,7 @@
         @document-load-error="onLoadError"
         @visible-page-change="visiblePage = $event"
         @context-menu="onContextMenu"
+        @mouseup="onSelectionCheck"
       />
       <div v-else class="empty" data-testid="pdf-surface-empty">
         <p>选择一个 PDF 文件以查看垂直滚动渲染效果。</p>
@@ -62,6 +63,7 @@
       <div><strong>文件：</strong>{{ source ? "已加载" : "未选择" }}</div>
       <div><strong>页数：</strong>{{ numPages || "—" }}</div>
       <div><strong>当前页：</strong>{{ visiblePage + 1 }}</div>
+      <div><strong>选中：</strong>{{ selectionInfo }}</div>
       <div><strong>右键：</strong>{{ contextMenuInfo }}</div>
     </div>
   </div>
@@ -82,6 +84,7 @@ const loadCounter = ref(0)
 const fileInputRef = ref<HTMLInputElement>()
 const surfaceRef = ref<InstanceType<typeof PdfSurface>>()
 const contextMenuInfo = ref("—")
+const selectionInfo = ref("—")
 
 const surfaceKey = computed(() => `pdf-${loadCounter.value}`)
 
@@ -109,6 +112,12 @@ function setZoom(value: number): void {
 
 function onContextMenu(ctx: { pageIndex: number; clientX: number; clientY: number }): void {
   contextMenuInfo.value = `第 ${ctx.pageIndex + 1} 页`
+}
+
+function onSelectionCheck(): void {
+  const sel = window.getSelection()
+  if (!sel || sel.isCollapsed) { selectionInfo.value = "—"; return }
+  selectionInfo.value = `"${sel.toString().slice(0, 30)}"`
 }
 </script>
 

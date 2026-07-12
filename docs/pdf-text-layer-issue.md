@@ -1,6 +1,6 @@
 # PDF 文字选择层
 
-> 状态：待实现
+> 状态：✅ 已实现
 > 适用范围：`packages/vue-pdf`
 > 关联：PdfSurface、PdfViewer
 

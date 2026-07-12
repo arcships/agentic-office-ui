@@ -38,6 +38,7 @@ export type {
   PdfRenderRuntimeConfig,
   PdfRotation,
   PdfSearchHit,
+  PdfTextRectItem,
   PdfThumbnailRenderOptions,
 } from "./pdf/pdf-render-runtime"
 export type {

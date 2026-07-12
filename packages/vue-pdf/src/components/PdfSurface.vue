@@ -26,6 +26,19 @@
           class="pdf-surface__page-img"
           draggable="false"
         />
+        <!-- Text layer overlay for text selection -->
+        <div
+          v-if="pageSlots[pageIndex]?.url"
+          class="pdf-surface__text-layer"
+          :style="textLayerStyle(pageIndex)"
+        >
+          <span
+            v-for="(item, ti) in pageTextRects[pageIndex] ?? []"
+            :key="ti"
+            class="pdf-surface__text-span"
+            :style="textSpanStyle(item, zoom, pageIndex)"
+          >{{ item.content }}</span>
+        </div>
         <div v-else class="pdf-surface__page-placeholder" />
       </div>
     </div>
@@ -123,9 +136,11 @@ const pdfLoadCoordinator = createLatestTaskCoordinator(pdfTaskSequence)
 
 // ── Page slots ───────────────────────────────────────────────────────
 const pageSlots = reactive<Record<number, PageSlot>>({})
+const pageTextRects = reactive<Record<number, { content: string; x: number; y: number; width: number; height: number }[]>>({})
 
 function initPageSlots(): void {
   for (const key of Object.keys(pageSlots)) delete pageSlots[Number(key)]
+  for (const key of Object.keys(pageTextRects)) delete pageTextRects[Number(key)]
   if (!renderDocument.value) return
   for (let i = 0; i < renderDocument.value.pageCount; i++) {
     pageSlots[i] = { url: null, state: "pending" }
@@ -164,6 +179,7 @@ async function releaseDocument(): Promise<void> {
     if (slot.url) URL.revokeObjectURL(slot.url)
   }
   for (const key of Object.keys(pageSlots)) delete pageSlots[Number(key)]
+  for (const key of Object.keys(pageTextRects)) delete pageTextRects[Number(key)]
   const doc = renderDocument.value
   const rt = runtimeForDocument
   renderDocument.value = null
@@ -220,10 +236,82 @@ async function renderAllPages(requestId: number, parentSignal?: AbortSignal): Pr
       if (slot.url) URL.revokeObjectURL(slot.url)
       slot.url = url
       slot.state = "ready"
+      // Fetch text rects for selection overlay
+      fetchPageTextRects(i, rt, doc, gen, requestId, controller.signal)
     } catch (err) {
       if ((err as Error)?.name === "AbortError" || controller.signal.aborted) return
       slot.state = "error"
     }
+  }
+}
+
+// ── Text layer helpers ──────────────────────────────────────────────
+async function fetchPageTextRects(
+  pageIndex: number,
+  rt: PdfRenderRuntime,
+  doc: PdfRenderDocument,
+  gen: number,
+  requestId: number,
+  parentSignal: AbortSignal,
+): Promise<void> {
+  if (parentSignal.aborted || gen !== renderGeneration || requestId !== latestRequestId) return
+  try {
+    const items = await rt.getPageTextRects(doc, pageIndex)
+    if (parentSignal.aborted || gen !== renderGeneration || requestId !== latestRequestId) return
+    pageTextRects[pageIndex] = items.map((item) => ({
+      content: item.content,
+      x: item.x,
+      y: item.y,
+      width: item.width,
+      height: item.height,
+    }))
+  } catch {
+    // Text rects are optional — page is still viewable without them
+  }
+}
+
+function textLayerStyle(pageIndex: number): Record<string, string> {
+  const doc = renderDocument.value
+  if (!doc) return {}
+  const page = doc.pages[pageIndex]
+  if (!page) return {}
+  const quarterTurns = ((page.rotation + rotation.value) / 90) % 4
+  const w = (quarterTurns % 2 ? page.height : page.width) * zoom.value
+  const h = (quarterTurns % 2 ? page.width : page.height) * zoom.value
+  return {
+    position: "absolute",
+    top: "0",
+    left: "0",
+    width: `${w}px`,
+    height: `${h}px`,
+    overflow: "hidden",
+    pointerEvents: "none",
+  }
+}
+
+function textSpanStyle(
+  item: { x: number; y: number; width: number; height: number },
+  z: number,
+  pageIndex: number,
+): Record<string, string> {
+  const doc = renderDocument.value
+  const page = doc?.pages[pageIndex]
+  const quarterTurns = page ? ((page.rotation + rotation.value) / 90) % 4 : 0
+  return {
+    position: "absolute",
+    left: `${item.x * z}px`,
+    top: `${item.y * z}px`,
+    width: `${item.width * z}px`,
+    height: `${item.height * z}px`,
+    color: "transparent",
+    fontSize: `${(item.height * z * 0.9).toFixed(1)}px`,
+    lineHeight: `${item.height * z}px`,
+    whiteSpace: "nowrap",
+    userSelect: "text",
+    pointerEvents: "auto",
+    // Allow text interaction without blocking the image underneath
+    zIndex: "1",
+    ...(quarterTurns ? { transform: `rotate(${rotation.value}deg)`, transformOrigin: "left top" } : {}),
   }
 }
 
@@ -397,6 +485,17 @@ onBeforeUnmount(async () => {
 .pdf-surface__page-slot {
   position: relative;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+.pdf-surface__text-layer {
+  position: absolute; top: 0; left: 0;
+}
+.pdf-surface__text-span {
+  /* Text is transparent but selectable — selection shows the browser's default highlight */
+  background: transparent;
+}
+.pdf-surface__text-span::selection {
+  background: rgba(59, 130, 246, 0.3);
+  color: transparent;
 }
 .pdf-surface__page-img { display: block; }
 .pdf-surface__page-loading,
