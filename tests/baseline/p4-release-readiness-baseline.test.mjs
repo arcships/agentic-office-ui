@@ -415,19 +415,28 @@ test("P4 release readiness baseline", () => {
       "docs/testing/compatibility-matrix.md",
       "docs/compatibility-matrix.md",
     ].filter((file) => existsSync(path.join(ROOT, file)));
-    const ciText = workflowText;
+    const releaseSuiteText = readFileSync(path.join(ROOT, "scripts/ci/run-suite.mjs"), "utf8");
+    const compatibilityScriptText = readFileSync(
+      path.join(ROOT, "scripts/ci/compatibility-matrix.mjs"),
+      "utf8",
+    );
+    const releaseOwnsMatrix =
+      /command\("matrix"/.test(releaseSuiteText) &&
+      /scripts\/ci\/compatibility-matrix\.mjs/.test(releaseSuiteText);
     add(
       "P4-COMPATIBILITY-MATRIX",
       compatibilityFiles.length > 0 &&
-        /firefox/i.test(ciText) &&
-        /webkit/i.test(ciText) &&
-        /matrix:/i.test(ciText),
+        releaseOwnsMatrix &&
+        /chromium/i.test(compatibilityScriptText) &&
+        /firefox/i.test(compatibilityScriptText) &&
+        /webkit/i.test(compatibilityScriptText),
       {
         matrixDocuments: compatibilityFiles,
-        ciBrowsers: {
-          chromium: /chromium/i.test(ciText),
-          firefox: /firefox/i.test(ciText),
-          webkit: /webkit/i.test(ciText),
+        releaseOwnsMatrix,
+        releaseBrowsers: {
+          chromium: /chromium/i.test(compatibilityScriptText),
+          firefox: /firefox/i.test(compatibilityScriptText),
+          webkit: /webkit/i.test(compatibilityScriptText),
         },
       },
       "登记 Vue/Vite/TypeScript/Node/浏览器支持范围，并对每个声明组合运行安装、类型、构建和核心黑盒。",
