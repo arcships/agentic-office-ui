@@ -119,6 +119,8 @@ try {
 
 ### 3.3 `@arcships/vue-docx`
 
+DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注布局的目标合同见 [DOCX Viewer 受控文档面与分页修复设计](../docx-viewer-controlled-surface-and-pagination-fix.md)。该文档状态为“待实现”；实现完成并通过发布包消费验证前，本页当前 `0.4.0` 导出清单保持不变。
+
 稳定高层入口为：
 
 - 组件：`DocxViewer`、`DocxEditor`。
