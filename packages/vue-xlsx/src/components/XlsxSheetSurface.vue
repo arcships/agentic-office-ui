@@ -3,7 +3,7 @@
     class="xlsx-sheet-surface"
     data-testid="xlsx-sheet-surface"
     @keydown="onKeydown"
-    @contextmenu.prevent="onContextMenu"
+    @contextmenu="onContextMenu"
     tabindex="0"
   >
     <XlsxChartsheetSurface
@@ -95,7 +95,11 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   cellDoubleClick: [cell: XlsxCellAddress]
-  contextMenu: [ctx: { clientX: number; clientY: number; sheetName?: string }]
+  contextMenu: [ctx: {
+    clientX: number; clientY: number; sheetName?: string
+    selection?: { start: { row: number; col: number }; end: { row: number; col: number } }
+    activeCell?: { row: number; col: number }
+  }]
   selectionChange: [sel: { kind: string; range?: { start: { row: number; col: number }; end: { row: number; col: number } }; value?: string }]
   objectClick: [obj: { kind: "chart" | "image" | "shape"; id: string }]
 }>()
@@ -112,10 +116,14 @@ const gridElement = computed<HTMLElement | null>(() => {
 })
 
 function onContextMenu(event: MouseEvent): void {
+  const sel = props.controller.selection
+  const active = props.controller.activeCell
   emit("contextMenu", {
     clientX: event.clientX,
     clientY: event.clientY,
     sheetName: props.controller.activeSheet?.name,
+    selection: sel ? { start: { row: sel.start.row, col: sel.start.col }, end: { row: sel.end.row, col: sel.end.col } } : undefined,
+    activeCell: active ? { row: active.row, col: active.col } : undefined,
   })
 }
 

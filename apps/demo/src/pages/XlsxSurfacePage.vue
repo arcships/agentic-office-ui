@@ -162,13 +162,22 @@ function onCellDoubleClick() {
   // Host can listen for edit intent
 }
 
-function onContextMenu(ctx: { clientX: number; clientY: number; sheetName?: string }): void {
-  contextMenuInfo.value = `${ctx.sheetName ?? "sheet"} (${ctx.clientX}, ${ctx.clientY})`
+function onContextMenu(ctx: { clientX: number; clientY: number; sheetName?: string; selection?: Record<string, unknown> }): void {
+  const cell = ctx.selection ? `${String(ctx.selection)}` : ctx.sheetName ?? "sheet"
+  contextMenuInfo.value = `${cell}`
 }
 
-function onSelectionChange(sel: { kind: string; range?: Record<string, unknown> }): void {
+function onSelectionChange(sel: { kind: string; range?: { start: { row: number; col: number }; end: { row: number; col: number } }; value?: string }): void {
   if (sel.kind === "none") selectionInfo.value = "—"
-  else selectionInfo.value = `${sel.kind}`
+  else if (sel.range) selectionInfo.value = `${colLabel(sel.range.start.col)}${sel.range.start.row + 1}:${colLabel(sel.range.end.col)}${sel.range.end.row + 1}`
+  else selectionInfo.value = sel.kind
+}
+
+function colLabel(col: number): string {
+  let label = ""
+  let n = col
+  while (n >= 0) { label = String.fromCharCode(65 + (n % 26)) + label; n = Math.floor(n / 26) - 1 }
+  return label
 }
 
 void loadSelectedSample()

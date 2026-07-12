@@ -9,6 +9,7 @@
     @dragleave="onDragLeave"
     @drop.prevent="onDrop"
     @contextmenu.prevent="onContextMenu"
+    @mouseup="onMouseUp"
   >
     <div :style="spacerStyle">
       <div
@@ -136,6 +137,7 @@ const emit = defineEmits<{
   pageCountChange: [count: number]
   visiblePageRange: [range: { startPageIndex: number; endPageIndex: number }]
   contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number }]
+  selectionChange: [sel: { kind: string; text?: string; pageIndex?: number }]
 }>()
 
 // ── State ──────────────────────────────────────────────────────────
@@ -482,6 +484,28 @@ function onContextMenu(event: MouseEvent): void {
     if (clickY >= top && clickY < bottom) { pageIndex = i; break }
   }
   emit("contextMenu", { pageIndex, clientX: event.clientX, clientY: event.clientY })
+}
+
+// ── Selection tracking ───────────────────────────────────────────────
+function onMouseUp(): void {
+  const sel = window.getSelection()
+  if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+    emit("selectionChange", { kind: "none" })
+    return
+  }
+  const text = sel.toString().trim()
+  const container = scrollContainerRef.value
+  if (!container) { emit("selectionChange", { kind: "text", text }); return }
+  const range = sel.getRangeAt(0)
+  const rect = range.getBoundingClientRect()
+  const clickY = rect.top - container.getBoundingClientRect().top + container.scrollTop
+  let pageIndex = 0
+  for (let i = 0; i < pageCount.value; i++) {
+    const top = pageOffsets.value[i]
+    const bottom = top + getPageHeight(i) * zoomFactor.value + DOC_PAGE_BREAK_GAP
+    if (clickY >= top && clickY < bottom) { pageIndex = i; break }
+  }
+  emit("selectionChange", { kind: "text", text, pageIndex })
 }
 
 function hasDocxFile(dataTransfer: DataTransfer): boolean {

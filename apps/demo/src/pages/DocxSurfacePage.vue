@@ -190,9 +190,9 @@ function onContextMenu(ctx: { pageIndex: number; clientX: number; clientY: numbe
   contextMenuInfo.value = `第 ${ctx.pageIndex + 1} 页 (${ctx.clientX}, ${ctx.clientY})`
 }
 
-function onSelectionChange(sel: { kind: string; text?: string; nodeIndex?: number }): void {
+function onSelectionChange(sel: { kind: string; text?: string; nodeIndex?: number; pageIndex?: number }): void {
   if (sel.kind === "none") selectionInfo.value = "—"
-  else if (sel.kind === "text") selectionInfo.value = sel.text?.slice(0, 30) ?? "文字选中"
+  else if (sel.text) selectionInfo.value = `"${sel.text.slice(0, 30)}"${sel.pageIndex != null ? ` 第${sel.pageIndex + 1}页` : ""}`
   else selectionInfo.value = sel.kind
 }
 

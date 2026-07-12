@@ -15,11 +15,12 @@
     @page-count-change="emit('pageCountChange', $event)"
     @visible-page-range="emit('visiblePageRange', $event)"
     @context-menu="emit('contextMenu', $event)"
+    @selection-change="emit('selectionChange', $event)"
   />
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue"
+import { ref } from "vue"
 import type {
   DocModel,
   DocxDocumentTheme,
@@ -28,7 +29,7 @@ import type {
 } from "@arcships/docx-core"
 import DocxViewerRoot from "./DocxViewerRoot.vue"
 
-const props = withDefaults(
+withDefaults(
   defineProps<{
     model: DocModel
     controller?: DocxEditorController
@@ -66,13 +67,4 @@ defineExpose({
     return viewerRootRef.value?.scrollContainer
   },
 })
-
-watch(
-  () => props.controller?.selection,
-  (sel) => {
-    if (!sel) { emit("selectionChange", { kind: "none" }); return }
-    if (sel.kind === "paragraph") emit("selectionChange", { kind: "paragraph", nodeIndex: sel.nodeIndex })
-    else if (sel.kind === "table-cell") emit("selectionChange", { kind: "table-cell", nodeIndex: sel.tableIndex })
-  },
-)
 </script>
