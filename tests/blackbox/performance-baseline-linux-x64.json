@@ -1,0 +1,1472 @@
+{
+  "schemaVersion": 1,
+  "status": "approved",
+  "rounds": 3,
+  "scrollSeconds": 10,
+  "maxRegressionPercent": 10,
+  "maxRegressionAbsoluteMs": 10,
+  "cssRelativeBudgetFloorBytes": 500000,
+  "browser": {
+    "engine": "chromium",
+    "version": "149.0.7827.55",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "deviceScaleFactor": 1,
+    "locale": "zh-CN",
+    "timezone": "Asia/Shanghai"
+  },
+  "fixtures": {
+    "financial-model.xlsx": {
+      "bytes": 8129,
+      "sha256": "d42c4527a7a3235ae566d990c7760cc402576f37f4545c2d54b7d07ed4ea257d"
+    },
+    "sales-table.xlsx": {
+      "bytes": 13226,
+      "sha256": "9ba1564c45283d64879cb4d53bb1ae3af0c1478cd10c76268d1b0c2d729a0dfa"
+    },
+    "charts-images.xlsx": {
+      "bytes": 32070,
+      "sha256": "d012d0bcaf13a461a21e676642403b76a6ec13799b3126f2f5d50203c400694b"
+    },
+    "large-grid.xlsx": {
+      "bytes": 134402,
+      "sha256": "7d25999db907b88a47a9417c582169e3416bd4c3d02b8f897e1b9d41130fe2d2"
+    },
+    "corrupted.xlsx": {
+      "bytes": 680,
+      "sha256": "ad01e8e26ac9f42456a5ed9c4df5a68616ba2d889aaa9a64115f29b7ad22d7a2"
+    },
+    "sample.pdf": {
+      "bytes": 4652,
+      "sha256": "76e533d35599f1f2c7f92785bba4a111053ca9361913bb809e9c13aa6c262253"
+    }
+  },
+  "metrics": {
+    "asset.demo.cssGzipBytes": {
+      "samples": [
+        23546,
+        23546,
+        23546
+      ],
+      "median": 23546,
+      "worst": 23546,
+      "minimum": 23546,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.demo.cssRawBytes": {
+      "samples": [
+        104971,
+        104971,
+        104971
+      ],
+      "median": 104971,
+      "worst": 104971,
+      "minimum": 104971,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.demo.duplicateWasmCopies": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.demo.homeMainContainsXlsx": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.demo.jsGzipBytes": {
+      "samples": [
+        1437843,
+        1437843,
+        1437843
+      ],
+      "median": 1437843,
+      "worst": 1437843,
+      "minimum": 1437843,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.demo.jsRawBytes": {
+      "samples": [
+        4838585,
+        4838585,
+        4838585
+      ],
+      "median": 4838585,
+      "worst": 4838585,
+      "minimum": 4838585,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.demo.totalGzipBytes": {
+      "samples": [
+        5815757,
+        5815757,
+        5815757
+      ],
+      "median": 5815757,
+      "worst": 5815757,
+      "minimum": 5815757,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.demo.totalRawBytes": {
+      "samples": [
+        14983013,
+        14983013,
+        14983013
+      ],
+      "median": 14983013,
+      "worst": 14983013,
+      "minimum": 14983013,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.demo.typesGzipBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.demo.typesRawBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.demo.wasmGzipBytes": {
+      "samples": [
+        3856538,
+        3856538,
+        3856538
+      ],
+      "median": 3856538,
+      "worst": 3856538,
+      "minimum": 3856538,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.demo.wasmRawBytes": {
+      "samples": [
+        9183199,
+        9183199,
+        9183199
+      ],
+      "median": 9183199,
+      "worst": 9183199,
+      "minimum": 9183199,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.demo.workerGzipBytes": {
+      "samples": [
+        94053,
+        94053,
+        94053
+      ],
+      "median": 94053,
+      "worst": 94053,
+      "minimum": 94053,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.demo.workerRawBytes": {
+      "samples": [
+        280779,
+        280779,
+        280779
+      ],
+      "median": 280779,
+      "worst": 280779,
+      "minimum": 280779,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.docx-core.cssGzipBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.docx-core.cssRawBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.docx-core.jsGzipBytes": {
+      "samples": [
+        155417,
+        155417,
+        155417
+      ],
+      "median": 155417,
+      "worst": 155417,
+      "minimum": 155417,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.docx-core.jsRawBytes": {
+      "samples": [
+        775742,
+        775742,
+        775742
+      ],
+      "median": 775742,
+      "worst": 775742,
+      "minimum": 775742,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.docx-core.totalGzipBytes": {
+      "samples": [
+        618020,
+        618020,
+        618020
+      ],
+      "median": 618020,
+      "worst": 618020,
+      "minimum": 618020,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.docx-core.totalRawBytes": {
+      "samples": [
+        2055644,
+        2055644,
+        2055644
+      ],
+      "median": 2055644,
+      "worst": 2055644,
+      "minimum": 2055644,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.docx-core.typesGzipBytes": {
+      "samples": [
+        48025,
+        48025,
+        48025
+      ],
+      "median": 48025,
+      "worst": 48025,
+      "minimum": 48025,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.docx-core.typesRawBytes": {
+      "samples": [
+        210265,
+        210265,
+        210265
+      ],
+      "median": 210265,
+      "worst": 210265,
+      "minimum": 210265,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.docx-core.wasmGzipBytes": {
+      "samples": [
+        413551,
+        413551,
+        413551
+      ],
+      "median": 413551,
+      "worst": 413551,
+      "minimum": 413551,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.docx-core.wasmRawBytes": {
+      "samples": [
+        1066473,
+        1066473,
+        1066473
+      ],
+      "median": 1066473,
+      "worst": 1066473,
+      "minimum": 1066473,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.docx-core.workerGzipBytes": {
+      "samples": [
+        1027,
+        1027,
+        1027
+      ],
+      "median": 1027,
+      "worst": 1027,
+      "minimum": 1027,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.docx-core.workerRawBytes": {
+      "samples": [
+        3164,
+        3164,
+        3164
+      ],
+      "median": 3164,
+      "worst": 3164,
+      "minimum": 3164,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-docx.cssGzipBytes": {
+      "samples": [
+        4656,
+        4656,
+        4656
+      ],
+      "median": 4656,
+      "worst": 4656,
+      "minimum": 4656,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-docx.cssRawBytes": {
+      "samples": [
+        23347,
+        23347,
+        23347
+      ],
+      "median": 23347,
+      "worst": 23347,
+      "minimum": 23347,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-docx.jsGzipBytes": {
+      "samples": [
+        64692,
+        64692,
+        64692
+      ],
+      "median": 64692,
+      "worst": 64692,
+      "minimum": 64692,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-docx.jsRawBytes": {
+      "samples": [
+        279164,
+        279164,
+        279164
+      ],
+      "median": 279164,
+      "worst": 279164,
+      "minimum": 279164,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-docx.totalGzipBytes": {
+      "samples": [
+        94567,
+        94567,
+        94567
+      ],
+      "median": 94567,
+      "worst": 94567,
+      "minimum": 94567,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-docx.totalRawBytes": {
+      "samples": [
+        374868,
+        374868,
+        374868
+      ],
+      "median": 374868,
+      "worst": 374868,
+      "minimum": 374868,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-docx.typesGzipBytes": {
+      "samples": [
+        25219,
+        25219,
+        25219
+      ],
+      "median": 25219,
+      "worst": 25219,
+      "minimum": 25219,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-docx.typesRawBytes": {
+      "samples": [
+        72357,
+        72357,
+        72357
+      ],
+      "median": 72357,
+      "worst": 72357,
+      "minimum": 72357,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-docx.wasmGzipBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-docx.wasmRawBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-docx.workerGzipBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-docx.workerRawBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-pdf.cssGzipBytes": {
+      "samples": [
+        1304,
+        1304,
+        1304
+      ],
+      "median": 1304,
+      "worst": 1304,
+      "minimum": 1304,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-pdf.cssRawBytes": {
+      "samples": [
+        4577,
+        4577,
+        4577
+      ],
+      "median": 4577,
+      "worst": 4577,
+      "minimum": 4577,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-pdf.jsGzipBytes": {
+      "samples": [
+        136754,
+        136754,
+        136754
+      ],
+      "median": 136754,
+      "worst": 136754,
+      "minimum": 136754,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-pdf.jsRawBytes": {
+      "samples": [
+        767573,
+        767573,
+        767573
+      ],
+      "median": 767573,
+      "worst": 767573,
+      "minimum": 767573,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-pdf.totalGzipBytes": {
+      "samples": [
+        2275007,
+        2275007,
+        2275007
+      ],
+      "median": 2275007,
+      "worst": 2275007,
+      "minimum": 2275007,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-pdf.totalRawBytes": {
+      "samples": [
+        5419693,
+        5419693,
+        5419693
+      ],
+      "median": 5419693,
+      "worst": 5419693,
+      "minimum": 5419693,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-pdf.typesGzipBytes": {
+      "samples": [
+        5354,
+        5354,
+        5354
+      ],
+      "median": 5354,
+      "worst": 5354,
+      "minimum": 5354,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-pdf.typesRawBytes": {
+      "samples": [
+        13755,
+        13755,
+        13755
+      ],
+      "median": 13755,
+      "worst": 13755,
+      "minimum": 13755,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-pdf.wasmGzipBytes": {
+      "samples": [
+        2131595,
+        2131595,
+        2131595
+      ],
+      "median": 2131595,
+      "worst": 2131595,
+      "minimum": 2131595,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-pdf.wasmRawBytes": {
+      "samples": [
+        4633788,
+        4633788,
+        4633788
+      ],
+      "median": 4633788,
+      "worst": 4633788,
+      "minimum": 4633788,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-pdf.workerGzipBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-pdf.workerRawBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-ui.cssGzipBytes": {
+      "samples": [
+        2205,
+        2205,
+        2205
+      ],
+      "median": 2205,
+      "worst": 2205,
+      "minimum": 2205,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-ui.cssRawBytes": {
+      "samples": [
+        9286,
+        9286,
+        9286
+      ],
+      "median": 9286,
+      "worst": 9286,
+      "minimum": 9286,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-ui.jsGzipBytes": {
+      "samples": [
+        6113,
+        6113,
+        6113
+      ],
+      "median": 6113,
+      "worst": 6113,
+      "minimum": 6113,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-ui.jsRawBytes": {
+      "samples": [
+        20850,
+        20850,
+        20850
+      ],
+      "median": 20850,
+      "worst": 20850,
+      "minimum": 20850,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-ui.totalGzipBytes": {
+      "samples": [
+        15105,
+        15105,
+        15105
+      ],
+      "median": 15105,
+      "worst": 15105,
+      "minimum": 15105,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-ui.totalRawBytes": {
+      "samples": [
+        46232,
+        46232,
+        46232
+      ],
+      "median": 46232,
+      "worst": 46232,
+      "minimum": 46232,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-ui.typesGzipBytes": {
+      "samples": [
+        6787,
+        6787,
+        6787
+      ],
+      "median": 6787,
+      "worst": 6787,
+      "minimum": 6787,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-ui.typesRawBytes": {
+      "samples": [
+        16096,
+        16096,
+        16096
+      ],
+      "median": 16096,
+      "worst": 16096,
+      "minimum": 16096,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-ui.wasmGzipBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-ui.wasmRawBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-ui.workerGzipBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-ui.workerRawBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.cssGzipBytes": {
+      "samples": [
+        2980,
+        2980,
+        2980
+      ],
+      "median": 2980,
+      "worst": 2980,
+      "minimum": 2980,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.cssRawBytes": {
+      "samples": [
+        14737,
+        14737,
+        14737
+      ],
+      "median": 14737,
+      "worst": 14737,
+      "minimum": 14737,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.jsGzipBytes": {
+      "samples": [
+        596381,
+        596381,
+        596381
+      ],
+      "median": 596381,
+      "worst": 596381,
+      "minimum": 596381,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.jsRawBytes": {
+      "samples": [
+        1985724,
+        1985724,
+        1985724
+      ],
+      "median": 1985724,
+      "worst": 1985724,
+      "minimum": 1985724,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.totalGzipBytes": {
+      "samples": [
+        627152,
+        627152,
+        627152
+      ],
+      "median": 627152,
+      "worst": 627152,
+      "minimum": 627152,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.totalRawBytes": {
+      "samples": [
+        2099045,
+        2099045,
+        2099045
+      ],
+      "median": 2099045,
+      "worst": 2099045,
+      "minimum": 2099045,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.typesGzipBytes": {
+      "samples": [
+        27791,
+        27791,
+        27791
+      ],
+      "median": 27791,
+      "worst": 27791,
+      "minimum": 27791,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.typesRawBytes": {
+      "samples": [
+        98584,
+        98584,
+        98584
+      ],
+      "median": 98584,
+      "worst": 98584,
+      "minimum": 98584,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.wasmGzipBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.wasmRawBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.workerGzipBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.vue-xlsx.workerRawBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.cssGzipBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.cssRawBytes": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.jsGzipBytes": {
+      "samples": [
+        77649,
+        77649,
+        77649
+      ],
+      "median": 77649,
+      "worst": 77649,
+      "minimum": 77649,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.jsRawBytes": {
+      "samples": [
+        366664,
+        366664,
+        366664
+      ],
+      "median": 366664,
+      "worst": 366664,
+      "minimum": 366664,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.totalGzipBytes": {
+      "samples": [
+        1460998,
+        1460998,
+        1460998
+      ],
+      "median": 1460998,
+      "worst": 1460998,
+      "minimum": 1460998,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.totalRawBytes": {
+      "samples": [
+        4173587,
+        4173587,
+        4173587
+      ],
+      "median": 4173587,
+      "worst": 4173587,
+      "minimum": 4173587,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.typesGzipBytes": {
+      "samples": [
+        19278,
+        19278,
+        19278
+      ],
+      "median": 19278,
+      "worst": 19278,
+      "minimum": 19278,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.typesRawBytes": {
+      "samples": [
+        77527,
+        77527,
+        77527
+      ],
+      "median": 77527,
+      "worst": 77527,
+      "minimum": 77527,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.wasmGzipBytes": {
+      "samples": [
+        1311392,
+        1311392,
+        1311392
+      ],
+      "median": 1311392,
+      "worst": 1311392,
+      "minimum": 1311392,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.wasmRawBytes": {
+      "samples": [
+        3482938,
+        3482938,
+        3482938
+      ],
+      "median": 3482938,
+      "worst": 3482938,
+      "minimum": 3482938,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.workerGzipBytes": {
+      "samples": [
+        52679,
+        52679,
+        52679
+      ],
+      "median": 52679,
+      "worst": 52679,
+      "minimum": 52679,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "asset.xlsx-core.workerRawBytes": {
+      "samples": [
+        246458,
+        246458,
+        246458
+      ],
+      "median": 246458,
+      "worst": 246458,
+      "minimum": 246458,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.chart.lazyJsRequests": {
+      "samples": [
+        2,
+        2,
+        2
+      ],
+      "median": 2,
+      "worst": 2,
+      "minimum": 2,
+      "spreadPercent": 0,
+      "direction": "min"
+    },
+    "browser.home.transferBytes": {
+      "samples": [
+        56732,
+        56732,
+        56732
+      ],
+      "median": 56732,
+      "worst": 56732,
+      "minimum": 56732,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.interaction.selectMs": {
+      "samples": [
+        71.39999999996508,
+        68.60000000003492,
+        52.59999999997672
+      ],
+      "median": 68.60000000003492,
+      "worst": 71.39999999996508,
+      "minimum": 52.59999999997672,
+      "spreadPercent": 27.405247813380157,
+      "direction": "max"
+    },
+    "browser.interaction.tabCommitMs": {
+      "samples": [
+        54.5,
+        46.5,
+        45.699999999953434
+      ],
+      "median": 46.5,
+      "worst": 54.5,
+      "minimum": 45.699999999953434,
+      "spreadPercent": 18.92473118289584,
+      "direction": "max"
+    },
+    "browser.interaction.undoMs": {
+      "samples": [
+        47.20000000001164,
+        77.39999999996508,
+        69.20000000001164
+      ],
+      "median": 69.20000000001164,
+      "worst": 77.39999999996508,
+      "minimum": 47.20000000001164,
+      "spreadPercent": 43.641618497035196,
+      "direction": "max"
+    },
+    "browser.largeGrid.loadLongTaskCount": {
+      "samples": [
+        1,
+        1,
+        1
+      ],
+      "median": 1,
+      "worst": 1,
+      "minimum": 1,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.largeGrid.loadLongTaskWorstMs": {
+      "samples": [
+        1609,
+        1542,
+        1617
+      ],
+      "median": 1609,
+      "worst": 1617,
+      "minimum": 1542,
+      "spreadPercent": 4.661280298321939,
+      "direction": "max"
+    },
+    "browser.largeGrid.loadToOperableMs": {
+      "samples": [
+        1729.0999999999767,
+        1666.0999999999767,
+        1707.2999999999884
+      ],
+      "median": 1707.2999999999884,
+      "worst": 1729.0999999999767,
+      "minimum": 1666.0999999999767,
+      "spreadPercent": 3.6900369003690288,
+      "direction": "max"
+    },
+    "browser.memory.afterHomeHeapBytes": {
+      "samples": [
+        16630707,
+        16614727,
+        16625100
+      ],
+      "median": 16625100,
+      "worst": 16630707,
+      "minimum": 16614727,
+      "spreadPercent": 0.09611972258813481,
+      "direction": "max"
+    },
+    "browser.memory.afterHomeListenerDelta": {
+      "samples": [
+        165,
+        165,
+        165
+      ],
+      "median": 165,
+      "worst": 165,
+      "minimum": 165,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.memory.afterHomeListeners": {
+      "samples": [
+        198,
+        198,
+        198
+      ],
+      "median": 198,
+      "worst": 198,
+      "minimum": 198,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.memory.afterHomeLiveElementDelta": {
+      "samples": [
+        8,
+        8,
+        8
+      ],
+      "median": 8,
+      "worst": 8,
+      "minimum": 8,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.memory.afterHomeLiveTreeDelta": {
+      "samples": [
+        8,
+        8,
+        8
+      ],
+      "median": 8,
+      "worst": 8,
+      "minimum": 8,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.memory.afterHomeNodeDelta": {
+      "samples": [
+        1043,
+        1043,
+        1043
+      ],
+      "median": 1043,
+      "worst": 1043,
+      "minimum": 1043,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.memory.afterHomeNodes": {
+      "samples": [
+        1180,
+        1180,
+        1180
+      ],
+      "median": 1180,
+      "worst": 1180,
+      "minimum": 1180,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.memory.lifecycleListenerGrowth": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.memory.lifecycleNodeGrowth": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.memory.peakHeapBytes": {
+      "samples": [
+        48403766,
+        55893881,
+        48601167
+      ],
+      "median": 48601167,
+      "worst": 55893881,
+      "minimum": 48403766,
+      "spreadPercent": 15.411389195654499,
+      "direction": "max"
+    },
+    "browser.memory.peakListeners": {
+      "samples": [
+        444,
+        444,
+        444
+      ],
+      "median": 444,
+      "worst": 444,
+      "minimum": 444,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.memory.peakNodes": {
+      "samples": [
+        386996,
+        386996,
+        386996
+      ],
+      "median": 386996,
+      "worst": 386996,
+      "minimum": 386996,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.memory.retainedRatio": {
+      "samples": [
+        0.3435829146021407,
+        0.29725484619684933,
+        0.34207203296167765
+      ],
+      "median": 0.34207203296167765,
+      "worst": 0.3435829146021407,
+      "minimum": 0.29725484619684933,
+      "spreadPercent": 13.543366291649306,
+      "direction": "max"
+    },
+    "browser.resources.afterHomeActiveObjectUrls": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.resources.afterHomeActiveWorkers": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.scroll.canvasDimensionWrites": {
+      "samples": [
+        0,
+        0,
+        0
+      ],
+      "median": 0,
+      "worst": 0,
+      "minimum": 0,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.scroll.frameP95Ms": {
+      "samples": [
+        33.400000000000546,
+        33.400000000000546,
+        33.40000000000009
+      ],
+      "median": 33.400000000000546,
+      "worst": 33.400000000000546,
+      "minimum": 33.40000000000009,
+      "spreadPercent": 1.36151901463011e-12,
+      "direction": "max"
+    },
+    "browser.scroll.frameWorstMs": {
+      "samples": [
+        66.70000000000073,
+        50.100000000000364,
+        50.09999999999991
+      ],
+      "median": 50.100000000000364,
+      "worst": 66.70000000000073,
+      "minimum": 50.09999999999991,
+      "spreadPercent": 33.13373253493153,
+      "direction": "max"
+    },
+    "browser.scroll.longTaskCount": {
+      "samples": [
+        0,
+        1,
+        1
+      ],
+      "median": 1,
+      "worst": 1,
+      "minimum": 0,
+      "spreadPercent": 100,
+      "direction": "max"
+    },
+    "browser.scroll.longTaskWorstMs": {
+      "samples": [
+        0,
+        51,
+        51
+      ],
+      "median": 51,
+      "worst": 51,
+      "minimum": 0,
+      "spreadPercent": 100,
+      "direction": "max"
+    },
+    "browser.scroll.maxHorizontalPixels": {
+      "samples": [
+        2362,
+        2362,
+        2362
+      ],
+      "median": 2362,
+      "worst": 2362,
+      "minimum": 2362,
+      "spreadPercent": 0,
+      "direction": "min"
+    },
+    "browser.scroll.maxVerticalPixels": {
+      "samples": [
+        10544,
+        10544,
+        10544
+      ],
+      "median": 10544,
+      "worst": 10544,
+      "minimum": 10544,
+      "spreadPercent": 0,
+      "direction": "min"
+    },
+    "browser.xlsx.additionalTransferBytes": {
+      "samples": [
+        3617783,
+        3617783,
+        3617783
+      ],
+      "median": 3617783,
+      "worst": 3617783,
+      "minimum": 3617783,
+      "spreadPercent": 0,
+      "direction": "max"
+    },
+    "browser.xlsx.totalTransferBytes": {
+      "samples": [
+        3674515,
+        3674515,
+        3674515
+      ],
+      "median": 3674515,
+      "worst": 3674515,
+      "minimum": 3674515,
+      "spreadPercent": 0,
+      "direction": "max"
+    }
+  },
+  "baselineCommit": "968231f3d7c4351886c50bbaeb2e134bf2b94673",
+  "capturedBrowser": "149.0.7827.55",
+  "approvedEnvironment": {
+    "platform": "linux",
+    "machine": "x86_64",
+    "runner": "github-actions"
+  },
+  "approvedFromRun": "https://github.com/arcships/agentic-office-ui/actions/runs/29175755111"
+}

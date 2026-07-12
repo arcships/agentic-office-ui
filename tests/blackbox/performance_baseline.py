@@ -1040,6 +1040,21 @@ def main() -> int:
     args = parse_args()
     config_path = args.config.resolve()
     config = json.loads(config_path.read_text(encoding="utf-8"))
+    approved_environment = config.get("approvedEnvironment")
+    if approved_environment:
+        actual_environment = {
+            "platform": platform.system().lower(),
+            "machine": platform.machine().lower(),
+        }
+        expected_environment = {
+            "platform": str(approved_environment.get("platform", "")).lower(),
+            "machine": str(approved_environment.get("machine", "")).lower(),
+        }
+        if actual_environment != expected_environment:
+            raise RuntimeError(
+                "performance baseline environment mismatch: "
+                f"expected {expected_environment}, got {actual_environment}"
+            )
     rounds_count = args.rounds or int(config["rounds"])
     scroll_seconds = args.scroll_seconds or float(config["scrollSeconds"])
     if rounds_count < 1:
