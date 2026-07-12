@@ -100,7 +100,7 @@ type DeferredWorkbookLoad = {
 
 export function useXlsxViewerController(options: UseXlsxViewerControllerOptions): XlsxViewerController {
   const {
-    allowResizeInReadOnly = false,
+    allowResizeInReadOnly = true,
     createWorker,
     deferLoadingAboveBytes = DEFAULT_DEFER_LOADING_ABOVE_BYTES,
     file,
