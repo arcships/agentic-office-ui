@@ -85,7 +85,7 @@ const emit = defineEmits<{
   "document-load-success": [numPages: number]
   "document-load-error": [error: PdfLoadError]
   "visible-page-change": [pageIndex: number]
-  contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number }]
+  contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number }]
   selectionChange: [sel: { kind: string; text?: string; pageIndex?: number }]
   diagnostic: [event: PdfDiagnostic]
 }>()
@@ -322,7 +322,8 @@ function onScroll(): void {
 function onContextMenu(event: MouseEvent): void {
   const el = scrollRef.value
   if (!el || !renderDocument.value) return
-  const clickY = event.clientY - el.getBoundingClientRect().top + el.scrollTop
+  const rect = el.getBoundingClientRect()
+  const clickY = event.clientY - rect.top + el.scrollTop
   let pageIndex = 0
   for (let i = 0; i < renderDocument.value.pageCount; i++) {
     const slot = el.querySelector(`[data-page-index="${i}"]`) as HTMLElement | null
@@ -331,7 +332,13 @@ function onContextMenu(event: MouseEvent): void {
       pageIndex = i; break
     }
   }
-  emit("contextMenu", { pageIndex, clientX: event.clientX, clientY: event.clientY })
+  emit("contextMenu", {
+    pageIndex,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    containerX: event.clientX - rect.left,
+    containerY: event.clientY - rect.top,
+  })
 }
 
 // ── fit-width zoom ───────────────────────────────────────────────────

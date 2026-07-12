@@ -136,7 +136,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   pageCountChange: [count: number]
   visiblePageRange: [range: { startPageIndex: number; endPageIndex: number }]
-  contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number }]
+  contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number }]
   selectionChange: [sel: { kind: string; text?: string; pageIndex?: number }]
 }>()
 
@@ -475,15 +475,21 @@ async function onDrop(event: DragEvent): Promise<void> {
 function onContextMenu(event: MouseEvent): void {
   const container = scrollContainerRef.value
   if (!container) return
-  const clickY = event.clientY - container.getBoundingClientRect().top + container.scrollTop
-  // Find which page the click lands on
+  const rect = container.getBoundingClientRect()
+  const clickY = event.clientY - rect.top + container.scrollTop
   let pageIndex = 0
   for (let i = 0; i < pageCount.value; i++) {
     const top = pageOffsets.value[i]
     const bottom = top + getPageHeight(i) * zoomFactor.value + DOC_PAGE_BREAK_GAP
     if (clickY >= top && clickY < bottom) { pageIndex = i; break }
   }
-  emit("contextMenu", { pageIndex, clientX: event.clientX, clientY: event.clientY })
+  emit("contextMenu", {
+    pageIndex,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    containerX: event.clientX - rect.left,
+    containerY: event.clientY - rect.top,
+  })
 }
 
 // ── Selection tracking ───────────────────────────────────────────────

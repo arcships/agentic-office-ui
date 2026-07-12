@@ -96,7 +96,9 @@ const props = withDefaults(
 const emit = defineEmits<{
   cellDoubleClick: [cell: XlsxCellAddress]
   contextMenu: [ctx: {
-    clientX: number; clientY: number; sheetName?: string
+    clientX: number; clientY: number
+    containerX: number; containerY: number
+    sheetName?: string
     selection?: { start: { row: number; col: number }; end: { row: number; col: number } }
     activeCell?: { row: number; col: number }
   }]
@@ -118,9 +120,13 @@ const gridElement = computed<HTMLElement | null>(() => {
 function onContextMenu(event: MouseEvent): void {
   const sel = props.controller.selection
   const active = props.controller.activeCell
+  const container = event.currentTarget as HTMLElement
+  const rect = container.getBoundingClientRect()
   emit("contextMenu", {
     clientX: event.clientX,
     clientY: event.clientY,
+    containerX: event.clientX - rect.left,
+    containerY: event.clientY - rect.top,
     sheetName: props.controller.activeSheet?.name,
     selection: sel ? { start: { row: sel.start.row, col: sel.start.col }, end: { row: sel.end.row, col: sel.end.col } } : undefined,
     activeCell: active ? { row: active.row, col: active.col } : undefined,

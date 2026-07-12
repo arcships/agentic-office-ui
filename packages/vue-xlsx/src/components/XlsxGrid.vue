@@ -1324,6 +1324,10 @@ function selectAxisRange(axisHit: Pick<AxisHit, "actualIndex" | "kind">) {
 }
 
 function onPointerDown(event: PointerEvent) {
+  // Only left-click (button 0) should change selection.
+  // Right-click (button 2) must preserve the existing selection
+  // so the context menu operates on the intended range.
+  if (event.button !== 0) return
   const axisHit = hitTestAxis(event.clientX, event.clientY);
   if (axisHit?.resize && axisHit.kind !== "corner") {
     const z = Math.max(0.5, zoomScale.value / 100);

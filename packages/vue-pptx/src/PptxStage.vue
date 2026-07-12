@@ -8,13 +8,20 @@ import { ref } from "vue"
 const elementRef = ref<HTMLElement | null>(null)
 
 const emit = defineEmits<{
-  contextMenu: [ctx: { clientX: number; clientY: number }]
+  contextMenu: [ctx: { clientX: number; clientY: number; containerX: number; containerY: number }]
   selectionChange: [sel: { kind: string; slideIndex?: number }]
   objectClick: [obj: { objectKey: string }]
 }>()
 
 function onContextMenu(event: MouseEvent): void {
-  emit("contextMenu", { clientX: event.clientX, clientY: event.clientY })
+  const el = elementRef.value
+  const rect = el?.getBoundingClientRect()
+  emit("contextMenu", {
+    clientX: event.clientX,
+    clientY: event.clientY,
+    containerX: rect ? event.clientX - rect.left : 0,
+    containerY: rect ? event.clientY - rect.top : 0,
+  })
 }
 
 defineExpose({
