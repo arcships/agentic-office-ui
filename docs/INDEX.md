@@ -25,6 +25,7 @@
 | [architecture-review-and-target-design.md](architecture-review-and-target-design.md) | 目标架构、包边界、状态所有权和兼容约束 |
 | [docx-viewer-controlled-surface-and-pagination-fix.md](docx-viewer-controlled-surface-and-pagination-fix.md) | DOCX 受控文档面、分页切片、缩放测量、纸面主题和批注布局修复合同 |
 | [pdf-text-layer-issue.md](pdf-text-layer-issue.md) | PDF 文字选择层——从图片渲染升级为 text layer overlay |
+| [unified-surface-api-design.md](unified-surface-api-design.md) | 统一 Surface API 设计——四个 surface 组件的边界、样式、事件、expose 合同 |
 | [plan/stabilization-roadmap.md](plan/stabilization-roadmap.md) | 唯一任务顺序、依赖、状态和执行证据来源 |
 | [end-to-end-blackbox-test-plan.md](end-to-end-blackbox-test-plan.md) | 用户侧黑盒用例、通过标准和发布暂停条件 |
 | [upstream-parity-gap-audit.md](upstream-parity-gap-audit.md) | DOCX/XLSX 与官方 Extend UI React 的固定基准、差异和收口状态 |
