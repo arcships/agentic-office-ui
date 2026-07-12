@@ -9,6 +9,7 @@
 | [guide/xlsx.md](guide/xlsx.md) | XLSX 查看器、控制器和可选功能 |
 | [guide/pdf.md](guide/pdf.md) | PDF 来源、属性、事件和 Runtime |
 | [guide/pptx.md](guide/pptx.md) | PPTX 浏览、播放和自定义播放器 |
+| [guide/surface-migration-guide.md](guide/surface-migration-guide.md) | 接入 0.5.0 最小 Surface 组件指南 |
 | [components/README.md](components/README.md) | 推荐高层组件与基础 UI 组件 |
 | [api/README.md](api/README.md) | 组合函数、Runtime 和核心 API 导航 |
 | [composables/README.md](composables/README.md) | DOCX、XLSX 和 PPTX 组合函数手册 |
