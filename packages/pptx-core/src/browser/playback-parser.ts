@@ -317,11 +317,16 @@ function parseTimeNode(
   parentId?: string,
 ): string {
   const id = node.getAttribute("id") ?? `generated-${slideIndex}-${Object.keys(nodes).length}`
+  const container = ["seq", "par", "excl"].includes(node.parentElement?.localName ?? "")
+    ? node.parentElement as Element
+    : undefined
   const conditions = [
     ...parseConditionList(node, "stCondLst", "start", objectKeys),
     ...parseConditionList(node, "endCondLst", "end", objectKeys),
     ...parseConditionList(node, "prevCondLst", "previous", objectKeys),
     ...parseConditionList(node, "nextCondLst", "next", objectKeys),
+    ...(container ? parseConditionList(container, "prevCondLst", "previous", objectKeys) : []),
+    ...(container ? parseConditionList(container, "nextCondLst", "next", objectKeys) : []),
   ]
   const fallbackEvent = nodeTypeTrigger(node.getAttribute("nodeType") ?? undefined)
   if (fallbackEvent && !conditions.some((condition) => condition.event === fallbackEvent)) {

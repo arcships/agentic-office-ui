@@ -80,6 +80,26 @@ function executableTrigger(event: PptxTriggerEvent): boolean {
   ].includes(event)
 }
 
+function subtreeHasExplicitInteractiveTrigger(
+  slide: PptxPlaybackSlide,
+  nodeId: string,
+  visited = new Set<string>(),
+): boolean {
+  if (visited.has(nodeId)) return false
+  visited.add(nodeId)
+  const node = slide.nodes[nodeId]
+  if (!node) return false
+  const event = startCondition(node)?.event ?? nodeTypeEvent(node)
+  if (["on-click", "on-shape-click", "on-media-bookmark"].includes(event ?? "")) return true
+  if (node.effect) return false
+  return node.childIds.some((childId) => subtreeHasExplicitInteractiveTrigger(slide, childId, visited))
+}
+
+function isMainSequenceAdvancedByClick(node: PptxTimeNode): boolean {
+  return node.nodeType === "mainSeq"
+    && node.conditions.some((condition) => condition.source === "next" && condition.event === "on-next")
+}
+
 export function compilePptxSlideSchedule(slide: PptxPlaybackSlide): PptxSlideSchedule {
   if (!slide.rootNodeId || !slide.nodes[slide.rootNodeId]) {
     return Object.freeze({ groups: Object.freeze([]), clickBoundaryCount: 0, unsupportedNodeIds: Object.freeze([]) })
@@ -164,7 +184,25 @@ export function compilePptxSlideSchedule(slide: PptxPlaybackSlide): PptxSlideSch
         lastTrigger = triggerKey
       }
     }
-    for (const childId of node.childIds) visit(childId, context)
+    if (isMainSequenceAdvancedByClick(node)) {
+      for (const childId of node.childIds) {
+        const child = slide.nodes[childId]
+        const childEvent = child ? startCondition(child)?.event ?? nodeTypeEvent(child) : undefined
+        const followsPrevious = ["with-previous", "after-previous", "on-begin", "on-end"].includes(childEvent ?? "")
+        if (followsPrevious || subtreeHasExplicitInteractiveTrigger(slide, childId)) {
+          visit(childId, context)
+          continue
+        }
+        clickBoundary += 1
+        visit(childId, {
+          triggerKey: `click:${clickBoundary}`,
+          triggerEvent: "on-click",
+          clickBoundary,
+        })
+      }
+    } else {
+      for (const childId of node.childIds) visit(childId, context)
+    }
   }
 
   visit(slide.rootNodeId, { triggerKey: "auto", triggerEvent: "delay", clickBoundary: 0 })

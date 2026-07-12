@@ -58,7 +58,26 @@ def main() -> None:
         assert page.locator("[data-pptx-object-key]").count() > 0
         assert "精确" in page.locator(".pptx-viewer__capability").inner_text()
 
-        page.get_by_role("button", name="下一步").click()
+        stage = page.locator('[data-testid="pptx-stage"]')
+        stage_point = page.evaluate(
+            """() => {
+              const stage = document.querySelector('[data-testid="pptx-stage"]');
+              if (!stage) throw new Error('PPTX stage is missing');
+              const rect = stage.getBoundingClientRect();
+              for (const yRatio of [0.9, 0.75, 0.5, 0.25, 0.1]) {
+                for (const xRatio of [0.9, 0.75, 0.5, 0.25, 0.1]) {
+                  const x = rect.left + rect.width * xRatio;
+                  const y = rect.top + rect.height * yRatio;
+                  const target = document.elementFromPoint(x, y);
+                  if (target && stage.contains(target) && !target.closest('[data-pptx-object-key]')) {
+                    return { x, y };
+                  }
+                }
+              }
+              throw new Error('PPTX stage has no clickable background point');
+            }"""
+        )
+        page.mouse.click(stage_point["x"], stage_point["y"])
         page.wait_for_function(
             """() => {
               const viewer = document.querySelector('[data-testid="pptx-viewer"]')
@@ -67,6 +86,7 @@ def main() -> None:
             timeout=5_000,
         )
         first_boundary = int(viewer.get_attribute("data-click-boundary") or "0")
+        assert int(viewer.get_attribute("data-slide-index") or "0") == 0
         viewer.focus()
         page.keyboard.press("ArrowRight")
         page.wait_for_function(

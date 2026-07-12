@@ -71,8 +71,8 @@ def timing(target_id: str, trigger_id: str) -> etree._Element:
     <p:timing xmlns:p="{NS['p']}">
       <p:tnLst><p:par><p:cTn id="1" dur="indefinite" restart="never" nodeType="tmRoot">
         <p:childTnLst><p:seq><p:cTn id="2" dur="indefinite" nodeType="mainSeq"><p:childTnLst>
-          <p:par><p:cTn id="3" nodeType="clickEffect"><p:childTnLst>
-            <p:par><p:cTn id="4" presetID="10" presetClass="entr" nodeType="withEffect" fill="hold">
+          <p:par><p:cTn id="3" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>
+            <p:par><p:cTn id="4" presetID="10" presetClass="entr" nodeType="afterEffect" fill="hold">
               <p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>
                 <p:animEffect transition="in" filter="fade"><p:cBhvr><p:cTn id="5" dur="700"/>
                   <p:tgtEl><p:spTgt spid="{target_id}"/></p:tgtEl>
@@ -89,7 +89,10 @@ def timing(target_id: str, trigger_id: str) -> etree._Element:
               </p:cBhvr></p:animEffect></p:childTnLst>
             </p:cTn></p:par>
           </p:childTnLst></p:cTn></p:par>
-        </p:childTnLst></p:cTn></p:seq></p:childTnLst>
+        </p:childTnLst></p:cTn>
+          <p:prevCondLst><p:cond evt="onPrev" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:prevCondLst>
+          <p:nextCondLst><p:cond evt="onNext" delay="0"><p:tgtEl><p:sldTgt/></p:tgtEl></p:cond></p:nextCondLst>
+        </p:seq></p:childTnLst>
       </p:cTn></p:par></p:tnLst>
     </p:timing>
     """

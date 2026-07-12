@@ -208,6 +208,49 @@ test("PPTX time tree compiles click, with-previous and after-previous groups", (
   assert.equal(afterFirstClick[target]["scale-x"], 1);
 });
 
+test("PPTX main sequence onNext children become separate click steps", () => {
+  const target = "ppt/slides/slide1.xml|slide|shape:5";
+  const effect = (id) => timeNode(id, {
+    kind: "effect",
+    nodeType: "afterEffect",
+    durationMs: 400,
+    effect: { id, kind: "fade-in", targetObjectKey: target, presetClass: "entr", values: {} },
+  });
+  const slide = playbackSlide({
+    root: timeNode("root", { childIds: ["main"] }),
+    main: timeNode("main", {
+      nodeType: "mainSeq",
+      container: "sequence",
+      conditions: [{ source: "next", event: "on-next", delayMs: 0 }],
+      childIds: ["generated-step-1", "generated-step-2", "standard-wrapper"],
+    }),
+    "generated-step-1": timeNode("generated-step-1", {
+      conditions: [{ source: "start", event: "delay", delayMs: 0 }],
+      childIds: ["generated-effect-1"],
+    }),
+    "generated-effect-1": effect("generated-effect-1"),
+    "generated-step-2": timeNode("generated-step-2", {
+      conditions: [{ source: "start", event: "delay", delayMs: 0 }],
+      childIds: ["generated-effect-2"],
+    }),
+    "generated-effect-2": effect("generated-effect-2"),
+    "standard-wrapper": timeNode("standard-wrapper", { childIds: ["standard-click"] }),
+    "standard-click": timeNode("standard-click", {
+      nodeType: "clickEffect",
+      childIds: ["standard-effect"],
+    }),
+    "standard-effect": effect("standard-effect"),
+  });
+
+  const schedule = compilePptxSlideSchedule(slide);
+  assert.equal(schedule.clickBoundaryCount, 3);
+  assert.deepEqual(schedule.groups.map((group) => group.key), ["click:1", "click:2", "click:3"]);
+  assert.deepEqual(
+    schedule.groups.map((group) => group.effects.map((item) => item.nodeId)),
+    [["generated-effect-1"], ["generated-effect-2"], ["standard-effect"]],
+  );
+});
+
 test("PPTX property tracks resolve simultaneous writes by stable node order", () => {
   const target = "ppt/slides/slide1.xml|slide|shape:7";
   const slide = playbackSlide({
