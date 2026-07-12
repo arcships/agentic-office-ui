@@ -18,17 +18,6 @@ export interface PdfRenderPageInfo {
   rotation: PdfRotation
 }
 
-/** A text item with bounding box from a PDF page, for text layer overlay. */
-export interface PdfTextRectItem {
-  content: string
-  x: number
-  y: number
-  width: number
-  height: number
-  fontFamily: string
-  fontSize: number
-}
-
 export interface PdfRenderDocument {
   id: string
   pageCount: number
@@ -85,8 +74,6 @@ export interface PdfRenderRuntime {
     options?: { signal?: AbortSignal },
   ): Promise<readonly PdfSearchHit[]>
   closeDocument(document: PdfRenderDocument): Promise<void>
-  /** Returns text items with bounding boxes for overlay / selection. */
-  getPageTextRects(document: PdfRenderDocument, pageIndex: number): Promise<PdfTextRectItem[]>
   dispose(): Promise<void>
 }
 
@@ -357,32 +344,6 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
         height: rect.size.height,
       })),
     }))
-  }
-
-  async getPageTextRects(document: PdfRenderDocument, pageIndex: number): Promise<PdfTextRectItem[]> {
-    const nativeDocument = this.getNativeDocument(document)
-    const page = nativeDocument.pages[pageIndex]
-    if (!page) throw new Error(`PDF page ${pageIndex + 1} does not exist.`)
-    const task = this.getEngine().getPageTextRects(nativeDocument, page)
-    const rects = await runPdfTask(task, {
-      timeoutMs: this.operationTimeoutMs,
-      label: `PDF page ${pageIndex + 1} text rects`,
-    })
-    // Transform from PDF coords (bottom-left origin, Y-up) to CSS coords (top-left origin, Y-down)
-    const pageHeight = page.size.height
-    return rects.map((r) => {
-      const pdfY = r.rect.origin.y
-      const pdfH = r.rect.size.height
-      return {
-        content: r.content,
-        x: r.rect.origin.x,
-        y: pageHeight - pdfY - pdfH,
-        width: r.rect.size.width,
-        height: pdfH,
-        fontFamily: r.font.family,
-        fontSize: r.font.size,
-      }
-    })
   }
 
   async closeDocument(document: PdfRenderDocument): Promise<void> {
