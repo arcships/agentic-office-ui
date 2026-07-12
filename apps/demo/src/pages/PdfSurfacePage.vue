@@ -31,6 +31,12 @@
         <span class="zoom-value">{{ Math.round(zoom * 100) }}%</span>
         <button :disabled="!ready || zoom >= 2" @click="setZoom(zoom + 0.25)">+</button>
       </div>
+      <span class="sep" />
+
+      <label class="ctrl">
+        <input v-model="fitWidth" data-testid="pdf-surface-fit-width" type="checkbox" />
+        自适应
+      </label>
     </div>
 
     <div class="surface-container" data-testid="pdf-surface-container">
@@ -40,14 +46,23 @@
         :key="surfaceKey"
         :source="source"
         :default-zoom="1"
+        :fit-width="fitWidth"
         class="pdf-surface-embed"
         @document-load-success="onLoadSuccess"
         @document-load-error="onLoadError"
         @visible-page-change="visiblePage = $event"
+        @context-menu="onContextMenu"
       />
       <div v-else class="empty" data-testid="pdf-surface-empty">
         <p>选择一个 PDF 文件以查看垂直滚动渲染效果。</p>
       </div>
+    </div>
+
+    <div class="status-grid">
+      <div><strong>文件：</strong>{{ source ? "已加载" : "未选择" }}</div>
+      <div><strong>页数：</strong>{{ numPages || "—" }}</div>
+      <div><strong>当前页：</strong>{{ visiblePage + 1 }}</div>
+      <div><strong>右键：</strong>{{ contextMenuInfo }}</div>
     </div>
   </div>
 </template>
@@ -62,9 +77,11 @@ const numPages = ref(0)
 const visiblePage = ref(0)
 const ready = ref(false)
 const zoom = ref(1)
+const fitWidth = ref(false)
 const loadCounter = ref(0)
 const fileInputRef = ref<HTMLInputElement>()
 const surfaceRef = ref<InstanceType<typeof PdfSurface>>()
+const contextMenuInfo = ref("—")
 
 const surfaceKey = computed(() => `pdf-${loadCounter.value}`)
 
@@ -88,6 +105,10 @@ function onLoadError(error: PdfLoadError): void {
 function setZoom(value: number): void {
   zoom.value = Math.min(2, Math.max(0.5, value))
   if (surfaceRef.value) surfaceRef.value.zoom = zoom.value
+}
+
+function onContextMenu(ctx: { pageIndex: number; clientX: number; clientY: number }): void {
+  contextMenuInfo.value = `第 ${ctx.pageIndex + 1} 页`
 }
 </script>
 
@@ -117,4 +138,10 @@ h2 { margin-bottom: 4px; }
 }
 .pdf-surface-embed { height: 100%; }
 .empty { display: flex; align-items: center; justify-content: center; height: 200px; color: var(--muted-foreground); }
+
+.status-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;
+  padding: 12px; margin-top: 8px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--muted); font-size: 13px; flex-shrink: 0;
+}
 </style>

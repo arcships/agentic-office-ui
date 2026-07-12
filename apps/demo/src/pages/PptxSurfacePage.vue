@@ -43,6 +43,7 @@
         class="pptx-surface-stage"
         data-testid="pptx-surface-stage"
         @click="onStageClick"
+        @context-menu="onContextMenu"
       />
     </div>
   </div>
@@ -88,6 +89,10 @@ function onFileChange(event: Event): void {
 async function onStageClick(event: MouseEvent): Promise<void> {
   if (state.value !== "ready") return
   await playback.next()
+}
+
+function onContextMenu(ctx: { clientX: number; clientY: number }): void {
+  statusLabel.value = `右键菜单点击 (${ctx.clientX}, ${ctx.clientY})`
 }
 </script>
 

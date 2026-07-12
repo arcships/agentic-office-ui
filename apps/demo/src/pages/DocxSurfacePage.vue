@@ -51,6 +51,13 @@
       <span class="sep" />
 
       <label class="ctrl">
+        <input v-model="fitWidth" data-testid="docx-surface-fit-width" type="checkbox" />
+        自适应
+      </label>
+
+      <span class="sep" />
+
+      <label class="ctrl">
         <input v-model.trim="searchQuery" placeholder="搜索…" data-testid="docx-surface-search" />
       </label>
     </div>
@@ -67,11 +74,14 @@
         :show-tracked-changes="showTrackedChanges"
         :show-comments="showComments"
         :zoom-scale="zoom"
+        :fit-width="fitWidth"
         :search-query="searchQuery"
         :active-search-node-index="searchMatchNodeIndex"
         style="--docx-surface-bg: transparent; height: 72vh;"
         @page-count-change="onPageCountChange"
         @visible-page-range="onVisiblePageRange"
+        @context-menu="onContextMenu"
+        @selection-change="onSelectionChange"
       />
       <div v-else class="empty" data-testid="docx-surface-empty">
         <p>选择示例文档以查看最小嵌入组件的渲染效果。</p>
@@ -82,7 +92,8 @@
       <div><strong>文件：</strong>{{ displayName || "未打开" }}</div>
       <div><strong>页数：</strong>{{ totalPages }}</div>
       <div><strong>当前页：</strong>{{ currentPage + 1 }}</div>
-      <div><strong>执行位置：</strong>{{ sourceKind }}</div>
+      <div><strong>选中：</strong>{{ selectionInfo }}</div>
+      <div><strong>右键：</strong>{{ contextMenuInfo }}</div>
     </div>
   </div>
 </template>
@@ -119,11 +130,14 @@ const loadCounter = ref(0)
 const showTrackedChanges = ref(true)
 const showComments = ref(true)
 const zoom = ref(100)
+const fitWidth = ref(false)
 const searchQuery = ref("")
 
 const totalPages = ref(0)
 const currentPage = ref(0)
 const searchMatchNodeIndex = ref<number | undefined>()
+const selectionInfo = ref("—")
+const contextMenuInfo = ref("—")
 
 const surfaceRef = ref<InstanceType<typeof DocxDocumentSurface>>()
 const surfaceKey = computed(() => `${displayName.value}-${loadCounter.value}`)
@@ -170,6 +184,16 @@ function onVisiblePageRange(range: { startPageIndex: number; endPageIndex: numbe
   if (range.endPageIndex >= range.startPageIndex) {
     currentPage.value = range.startPageIndex
   }
+}
+
+function onContextMenu(ctx: { pageIndex: number; clientX: number; clientY: number }): void {
+  contextMenuInfo.value = `第 ${ctx.pageIndex + 1} 页 (${ctx.clientX}, ${ctx.clientY})`
+}
+
+function onSelectionChange(sel: { kind: string; text?: string; nodeIndex?: number }): void {
+  if (sel.kind === "none") selectionInfo.value = "—"
+  else if (sel.kind === "text") selectionInfo.value = sel.text?.slice(0, 30) ?? "文字选中"
+  else selectionInfo.value = sel.kind
 }
 
 // ── Teardown ─────────────────────────────────────────────────────────

@@ -45,10 +45,18 @@
         :file-name="displayName"
         :read-only="readOnly"
         @cellDoubleClick="onCellDoubleClick"
+        @contextMenu="onContextMenu"
+        @selectionChange="onSelectionChange"
       />
       <div v-else class="empty" data-testid="xlsx-surface-empty">
         <p>选择示例或打开本地 .xlsx 文件。</p>
       </div>
+    </div>
+
+    <div class="status-grid" data-testid="xlsx-surface-status">
+      <div><strong>文件：</strong>{{ displayName || "未打开" }}</div>
+      <div><strong>选中：</strong>{{ selectionInfo }}</div>
+      <div><strong>右键：</strong>{{ contextMenuInfo }}</div>
     </div>
   </div>
 </template>
@@ -69,7 +77,7 @@ const XlsxSurfaceHost = defineComponent({
     fileName: { type: String, default: "" },
     readOnly: { type: Boolean, default: false },
   },
-  emits: ["cellDoubleClick"],
+  emits: ["cellDoubleClick", "contextMenu", "selectionChange", "objectClick"],
   setup(props, { emit }) {
     const controller: XlsxViewerController = useXlsxViewerController({
       file: props.file ?? undefined,
@@ -84,6 +92,9 @@ const XlsxSurfaceHost = defineComponent({
             "read-only": props.readOnly,
             style: { flex: "1" },
             onCellDoubleClick: (cell: any) => emit("cellDoubleClick", cell),
+            onContextMenu: (ctx: any) => emit("contextMenu", ctx),
+            onSelectionChange: (sel: any) => emit("selectionChange", sel),
+            onObjectClick: (obj: any) => emit("objectClick", obj),
           })
         : null
   },
@@ -111,6 +122,9 @@ const surfaceKey = computed(() =>
     ? `${displayName.value}-${readOnly.value}-${loadCounter.value}`
     : "",
 )
+
+const selectionInfo = ref("—")
+const contextMenuInfo = ref("—")
 
 // ── Actions ──────────────────────────────────────────────────────────
 const fileInputRef = ref<HTMLInputElement>()
@@ -148,6 +162,15 @@ function onCellDoubleClick() {
   // Host can listen for edit intent
 }
 
+function onContextMenu(ctx: { clientX: number; clientY: number; sheetName?: string }): void {
+  contextMenuInfo.value = `${ctx.sheetName ?? "sheet"} (${ctx.clientX}, ${ctx.clientY})`
+}
+
+function onSelectionChange(sel: { kind: string; range?: Record<string, unknown> }): void {
+  if (sel.kind === "none") selectionInfo.value = "—"
+  else selectionInfo.value = `${sel.kind}`
+}
+
 void loadSelectedSample()
 </script>
 
@@ -183,4 +206,10 @@ h2 { margin-bottom: 4px; }
 }
 .empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted-foreground); }
 .error { color: #ef4444; font-size: 13px; margin-bottom: 8px; }
+
+.status-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;
+  padding: 12px; margin-top: 8px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--muted); font-size: 13px;
+}
 </style>
