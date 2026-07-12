@@ -1541,6 +1541,10 @@ function scrollToCell(cell: XlsxCellAddress) {
 }
 
 function onGridKeydown(event: KeyboardEvent) {
+  // When the inline edit input is active, let it consume all keys —
+  // do not re-enter edit mode and overwrite the editing value.
+  if (editingCell.value) return
+
   const active = activeCell.value;
   if (!active) return;
 
