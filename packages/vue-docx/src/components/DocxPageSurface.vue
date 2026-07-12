@@ -334,8 +334,10 @@ let resizeObserver: ResizeObserver | null = null
 
 function measurePage(): void {
   if (!pageSurfaceRef.value) return
-  const rect = pageSurfaceRef.value.getBoundingClientRect()
-  emit("measure", { heightPx: rect.height })
+  // offsetHeight is layout height, unaffected by ancestor CSS transforms.
+  // getBoundingClientRect().height would already include scale(zoomFactor),
+  // causing a double scale when the viewer multiplies by zoomFactor again.
+  emit("measure", { heightPx: pageSurfaceRef.value.offsetHeight })
 }
 
 onMounted(() => {

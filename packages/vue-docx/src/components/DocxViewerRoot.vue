@@ -84,6 +84,12 @@ import DocxPageSurface from "./DocxPageSurface.vue"
 const DOC_PAGE_BREAK_GAP = 28
 const PAGE_OVERSCAN = 2
 const SCROLL_MEASUREMENT_DEBOUNCE_MS = 80
+// Gutter (tracked changes / comments) sits beside the paper, inside the scaled
+// content. It must enter the horizontal footprint so the paper stays centered
+// and horizontal scroll can reach it.
+const GUTTER_GAP_PX = 16
+const GUTTER_WIDTH_PX = 240
+const PAGE_SIDE_PADDING = 48
 
 // ── Types ──────────────────────────────────────────────────────────
 export interface DocxViewerRootProps {
@@ -236,6 +242,13 @@ const pagePresentations = computed(() => {
 const theme = computed(() => props.theme ?? props.controller?.documentTheme ?? "light")
 const trackedChangesEnabled = computed(() => props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false)
 const commentsEnabled = computed(() => props.showComments ?? props.controller?.showComments ?? false)
+// Visual horizontal space the annotation gutter occupies at the current zoom.
+// 0 when annotations are hidden, so no space is reserved.
+const gutterVisualWidthPx = computed(() =>
+  (trackedChangesEnabled.value || commentsEnabled.value)
+    ? (GUTTER_GAP_PX + GUTTER_WIDTH_PX) * zoomFactor.value
+    : 0
+)
 const trackedChanges = computed<readonly DocxTrackedChange[]>(() =>
   props.controller?.trackedChanges ?? (trackedChangesEnabled.value ? collectTrackedChangesFromModel(props.model) : [])
 )
@@ -346,20 +359,24 @@ const spacerStyle = computed(() => ({
   height: `${Math.max(0, totalHeightPx.value)}px`,
   minWidth: `${Math.max(
     0,
-    ...pagePresentations.value.map((entry) => entry.pageLayout.pageWidthPx * zoomFactor.value + 48)
-  )}px`,
+    ...pagePresentations.value.map(
+      (entry) => entry.pageLayout.pageWidthPx * zoomFactor.value + gutterVisualWidthPx.value
+    )
+  ) + PAGE_SIDE_PADDING}px`,
   position: "relative" as const,
   width: "100%",
 }))
 
 function pageWrapperStyle(entry: VisiblePageEntry): Record<string, string | number> {
+  // Wrapper width covers paper + gutter so translateX(-50%) centers the whole
+  // footprint instead of just the paper (which would push the gutter off-right).
   return {
     position: "absolute",
     top: `${entry.topPx}px`,
     left: "50%",
     transform: "translateX(-50%)",
     height: `${entry.heightPx}px`,
-    width: `${entry.pageWidthPx * zoomFactor.value}px`,
+    width: `${entry.pageWidthPx * zoomFactor.value + gutterVisualWidthPx.value}px`,
   }
 }
 
