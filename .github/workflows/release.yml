@@ -14,7 +14,6 @@ jobs:
     name: Publish CI candidate
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: npm-release
     permissions:
       actions: read
       contents: read
