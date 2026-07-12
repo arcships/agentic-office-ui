@@ -190,19 +190,22 @@ def assert_race_evidence(
     evidence: BrowserEvidence, delayed_file: str, case_id: str
 ) -> dict[str, object]:
     violations = evidence.violations()
-    switch_files = {
+    case_cancelled_files = {
+        "RACE-DOCX-SLOW-LATEST": {"invoice-table.docx"},
         "RACE-DOCX-SWITCH-20": {
             "demo.docx",
             "corrupted.docx",
             "report-with-image.docx",
             "invoice-table.docx",
         },
+        "RACE-XLSX-SLOW-LATEST": {"sales-table.xlsx"},
         "RACE-XLSX-SWITCH-20": {
             "financial-model.xlsx",
             "corrupted.xlsx",
             "charts-images.xlsx",
             "sales-table.xlsx",
         },
+        "RACE-PDF-SLOW-LATEST": {"rotated-pages.pdf"},
     }.get(case_id, set())
     expected_aborts = [
         item
@@ -212,7 +215,7 @@ def assert_race_evidence(
             delayed_file in str(item.get("url", ""))
             or any(
                 f"/samples/{file_name}" in str(item.get("url", ""))
-                for file_name in switch_files
+                for file_name in case_cancelled_files
             )
         )
     ]
