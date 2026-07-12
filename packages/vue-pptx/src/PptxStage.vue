@@ -13,3 +13,9 @@ defineExpose({
   },
 })
 </script>
+
+<style scoped>
+.pptx-stage {
+  background: var(--pptx-surface-bg, transparent);
+}
+</style>

@@ -132,5 +132,6 @@ function onKeydown(event: KeyboardEvent) {
   min-width: 0;
   outline: none;
   position: relative;
+  background: var(--xlsx-surface-bg, #ffffff);
 }
 </style>

@@ -340,7 +340,7 @@ onBeforeUnmount(async () => {
   overflow-x: hidden;
   min-height: 0;
   min-width: 0;
-  background: #525659;
+  background: var(--pdf-surface-bg, #525659);
 }
 .pdf-surface__empty {
   display: flex; align-items: center; justify-content: center;
