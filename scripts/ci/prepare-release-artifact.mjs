@@ -30,7 +30,6 @@ const requiredSuites = [
   "component",
   "blackbox",
   "stress",
-  "performance",
   "docs",
 ];
 

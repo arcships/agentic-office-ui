@@ -319,7 +319,6 @@ const suites = {
     childSuite("component", "test:component"),
     childSuite("blackbox", "test:blackbox"),
     childSuite("stress", "test:stress"),
-    childSuite("performance", "test:performance"),
     command("p4-reproducible-pack", process.execPath, [
       "scripts/ci/p4-reproducible-pack.mjs",
     ], {

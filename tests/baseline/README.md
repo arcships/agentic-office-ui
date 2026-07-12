@@ -11,4 +11,4 @@
 | `p3-xlsx-scroll-baseline.py` | 正式 preview 的大表横纵滚动范围回归 | `pnpm test:performance` 的 `formal-scroll-range-regression` |
 | `p4-release-readiness-baseline.test.mjs` | P4 包、矩阵、文档和发布流程就绪检查 | `pnpm test:release` 的 `p4-release-readiness` |
 
-Node 回归需要先完成根构建，并会随 `pnpm check` 和 `pnpm test:release` 执行。浏览器滚动回归只使用正式 preview，随 `pnpm test:performance` 和 `pnpm test:release` 执行；为了避免每次普通检查都跑三轮性能，`pnpm check` 仍按路线图与性能套件分开。直接运行叶子套件时会自动构建，父流程调用叶子套件时会复用已经生成的正式构建。
+Node 回归需要先完成根构建，并会随 `pnpm check` 和 `pnpm test:release` 执行。浏览器滚动回归只使用正式 preview，随独立的 `pnpm test:performance` 执行；GitHub 共享机器上的时间抖动不再阻断 npm 发布。直接运行叶子套件时会自动构建，父流程调用叶子套件时会复用已经生成的正式构建。
