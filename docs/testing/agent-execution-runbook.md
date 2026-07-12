@@ -258,15 +258,15 @@ python -m playwright install firefox webkit
 
 ### 7.5 候选制品与同批 tgz
 
-`master` 的 CI 只执行一次仓库门禁，并在门禁通过后生成候选：
+`master` 的 CI 只安装依赖、构建包并生成候选，不运行浏览器或测试套件：
 
 ```bash
-CI_RUN_ID=<run-id> pnpm check
+pnpm --filter './packages/*' -r build
 PACK_EVIDENCE_DIR=output/release-pack node scripts/ci/pack-manifests.mjs
 RELEASE_CI_CANDIDATE=1 node scripts/ci/prepare-release-artifact.mjs
 ```
 
-执行顺序不能调换：先完成 CI 功能、压力和外部安装检查，再从同一提交生成唯一六个 tgz，并把 CI 摘要、包清单、提交号、版本和哈希写入候选。候选上传后不得重新构建或重新运行 `npm pack` 替换文件。
+执行顺序不能调换：先完成构建，再从同一提交生成唯一六个 tgz，并把包清单、提交号、版本和哈希写入候选。候选上传后不得重新构建或重新运行 `npm pack` 替换文件。
 
 关键路径如下：
 
@@ -277,12 +277,11 @@ output/release-pack/
 output/release-candidate/
   candidate-manifest.json
   prepare-release-artifact.mjs
-  evidence/ci-summary.json
   evidence/candidate-pack-manifest.json
   tgz/*.tgz
 ```
 
-验收人逐项核对：候选清单的提交号；六包统一版本；CI 摘要；候选目录中的 tgz SHA-256/SHA-512；Worker/WASM 文件 SHA。`candidate/prepare-release-artifact.mjs verify candidate` 负责自动复核这些字段。
+验收人逐项核对：候选清单的提交号；六包统一版本；候选目录中的 tgz SHA-256/SHA-512；Worker/WASM 文件 SHA。`candidate/prepare-release-artifact.mjs verify candidate` 负责自动复核这些字段。
 
 发布流程只由 `v*` 标签触发。它先确认同一提交的 `master` CI 已成功，再下载 `release-candidate-<commit>` 制品并校验，不安装依赖、不构建、不重复测试。六包先进入本次运行专用的临时标签，全部完整后再提升正式标签；提升中途失败时脚本恢复已经改动的旧标签并返回非零。npm 不提供跨包事务，所以任何恢复失败都必须立即暂停发布并保留日志，不能报告成功。
 

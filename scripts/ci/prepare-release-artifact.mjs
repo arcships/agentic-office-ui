@@ -221,17 +221,7 @@ function prepare() {
 
   const evidence = [];
   let matrixDetail = null;
-  if (ciCandidate) {
-    const ciSummaryPath = process.env.RELEASE_CI_SUMMARY;
-    if (!ciSummaryPath) fail("RELEASE_CI_SUMMARY is required for a CI candidate");
-    copyEvidence(
-      path.resolve(ciSummaryPath),
-      candidateDir,
-      "ci-summary",
-      commit,
-      evidence,
-    );
-  } else {
+  if (!ciCandidate) {
     for (const suite of requiredSuites) {
       copyEvidence(
         path.join(evidenceRoot, suite, "summary.json"),

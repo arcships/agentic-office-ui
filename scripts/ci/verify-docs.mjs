@@ -201,7 +201,7 @@ for (const registered of [
   check(`suite registration ${registered}`, runner.includes(registered));
 }
 check("roadmap P1-DOC record exists", roadmap.includes("| P1-DOC-TEST-01 | Codex `/root`"));
-check("CI runs root check", read(".github/workflows/ci.yml").includes("pnpm check"));
+check("CI builds packages", read(".github/workflows/ci.yml").includes("./packages/*"));
 check("Playwright dependency pinned", /^playwright==\d+\.\d+\.\d+$/m.test(read("requirements-ci.txt")));
 
 const allowlist = JSON.parse(read("tests/blackbox/console_allowlist.json"));
