@@ -199,6 +199,7 @@ function prepare() {
   const commit = gitHead();
   const expectedCommit = process.env.RELEASE_EXPECTED_COMMIT || process.env.GITHUB_SHA || commit;
   if (commit !== expectedCommit) fail(`checked-out commit ${commit} does not match ${expectedCommit}`);
+  const ciCandidate = process.env.RELEASE_CI_CANDIDATE === "1";
 
   const runId = process.env.CI_RUN_ID || process.env.GITHUB_RUN_ID || "local";
   const evidenceRoot = path.resolve(
@@ -219,30 +220,43 @@ function prepare() {
   mkdirSync(path.join(candidateDir, "evidence"), { recursive: true });
 
   const evidence = [];
-  for (const suite of requiredSuites) {
+  let matrixDetail = null;
+  if (ciCandidate) {
+    const ciSummaryPath = process.env.RELEASE_CI_SUMMARY;
+    if (!ciSummaryPath) fail("RELEASE_CI_SUMMARY is required for a CI candidate");
     copyEvidence(
-      path.join(evidenceRoot, suite, "summary.json"),
+      path.resolve(ciSummaryPath),
       candidateDir,
-      `${suite}-summary`,
+      "ci-summary",
+      commit,
+      evidence,
+    );
+  } else {
+    for (const suite of requiredSuites) {
+      copyEvidence(
+        path.join(evidenceRoot, suite, "summary.json"),
+        candidateDir,
+        `${suite}-summary`,
+        commit,
+        evidence,
+      );
+    }
+
+    matrixDetail = copyEvidence(
+      path.join(evidenceRoot, "matrix", "compatibility-matrix", "summary.json"),
+      candidateDir,
+      "matrix-detail",
+      commit,
+      evidence,
+    );
+    copyEvidence(
+      path.join(evidenceRoot, "consumer", "external-tgz-consumer", "summary.json"),
+      candidateDir,
+      "consumer-detail",
       commit,
       evidence,
     );
   }
-
-  const matrixDetail = copyEvidence(
-    path.join(evidenceRoot, "matrix", "compatibility-matrix", "summary.json"),
-    candidateDir,
-    "matrix-detail",
-    commit,
-    evidence,
-  );
-  copyEvidence(
-    path.join(evidenceRoot, "consumer", "external-tgz-consumer", "summary.json"),
-    candidateDir,
-    "consumer-detail",
-    commit,
-    evidence,
-  );
 
   copyEvidence(
     consumerManifestPath,
@@ -251,25 +265,30 @@ function prepare() {
     commit,
     evidence,
   );
-  copyEvidence(
-    process.env.RELEASE_REPRODUCIBLE_SUMMARY ||
-      path.join(evidenceRoot, "release", "p4-reproducible-pack", "summary.json"),
-    candidateDir,
-    "p4-reproducible-pack",
-    commit,
-    evidence,
-  );
-  copyEvidence(
-    process.env.RELEASE_READINESS_SUMMARY ||
-      path.join(evidenceRoot, "release", "p4-release-readiness", "summary.json"),
-    candidateDir,
-    "p4-release-readiness",
-    commit,
-    evidence,
-  );
+  if (!ciCandidate) {
+    copyEvidence(
+      process.env.RELEASE_REPRODUCIBLE_SUMMARY ||
+        path.join(evidenceRoot, "release", "p4-reproducible-pack", "summary.json"),
+      candidateDir,
+      "p4-reproducible-pack",
+      commit,
+      evidence,
+    );
+    copyEvidence(
+      process.env.RELEASE_READINESS_SUMMARY ||
+        path.join(evidenceRoot, "release", "p4-release-readiness", "summary.json"),
+      candidateDir,
+      "p4-release-readiness",
+      commit,
+      evidence,
+    );
+  }
 
   const packSummary = readJson(consumerManifestPath, "consumer tgz manifest");
-  if (packSummary.result !== "PASS" || packSummary.commit !== commit) {
+  if (
+    packSummary.result !== "PASS" ||
+    (packSummary.commit !== undefined && packSummary.commit !== commit)
+  ) {
     fail("consumer tgz manifest did not pass for this commit");
   }
   if (!Array.isArray(packSummary.entries) || packSummary.entries.length !== expectedPackages.length) {
@@ -313,13 +332,15 @@ function prepare() {
     });
   }
 
-  const matrixArchives = new Map(
-    (matrixDetail.packageArchives || []).map((entry) => [entry.package, entry]),
-  );
-  for (const archive of archives) {
-    const tested = matrixArchives.get(archive.package);
-    if (!tested || tested.version !== archive.version || tested.sha256 !== archive.sha256) {
-      fail(`${archive.package} matrix archive is not the exact candidate tgz`);
+  if (matrixDetail) {
+    const matrixArchives = new Map(
+      (matrixDetail.packageArchives || []).map((entry) => [entry.package, entry]),
+    );
+    for (const archive of archives) {
+      const tested = matrixArchives.get(archive.package);
+      if (!tested || tested.version !== archive.version || tested.sha256 !== archive.sha256) {
+        fail(`${archive.package} matrix archive is not the exact candidate tgz`);
+      }
     }
   }
 

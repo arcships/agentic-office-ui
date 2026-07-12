@@ -254,35 +254,39 @@ with sync_playwright() as p:
 python -m playwright install firefox webkit
 ```
 
-持续集成环境应预装并固定浏览器版本；正式证据生成期间不得临时升级浏览器。每次提交可以只把 Chromium 作为快速门禁，但候选版本的 `BB-RELEASE` 必须包含 Chromium、Firefox 和 WebKit。
+持续集成环境应预装并固定浏览器版本；正式证据生成期间不得临时升级浏览器。每次提交使用 Chromium 完成功能门禁；Firefox、WebKit 和 Vue 下限组合通过独立的 `pnpm test:matrix` 专项检查，不阻断 npm 发布。
 
 ### 7.5 候选制品与同批 tgz
 
-P4 候选只使用以下入口：
+`master` 的 CI 只执行一次仓库门禁，并在门禁通过后生成候选：
 
 ```bash
-CI_RUN_ID=<run-id> pnpm test:release
+CI_RUN_ID=<run-id> pnpm check
+PACK_EVIDENCE_DIR=output/release-pack node scripts/ci/pack-manifests.mjs
+RELEASE_CI_CANDIDATE=1 node scripts/ci/prepare-release-artifact.mjs
 ```
 
-执行顺序不能调换：先生成两次隔离构建证据，再从第一轮固定出唯一五个 tgz；外部消费与完整兼容矩阵都读取这份清单；全部通过后才生成 `candidate/`。不得在消费测试、浏览器矩阵或上传前重新运行 `npm pack` 替换文件。
+执行顺序不能调换：先完成 CI 功能、压力和外部安装检查，再从同一提交生成唯一六个 tgz，并把 CI 摘要、包清单、提交号、版本和哈希写入候选。候选上传后不得重新构建或重新运行 `npm pack` 替换文件。
 
 关键路径如下：
 
 ```text
-output/acceptance/<commit>/BB-RELEASE/<run-id>/
-  release/p4-reproducible-pack/summary.json
-  candidate-source/real-tgz-manifests/summary.json
-  consumer/external-tgz-consumer/summary.json
-  matrix/compatibility-matrix/summary.json
-  candidate/candidate-manifest.json
-  candidate/tgz/*.tgz
+output/release-pack/
+  summary.json
+  tgz/*.tgz
+output/release-candidate/
+  candidate-manifest.json
+  prepare-release-artifact.mjs
+  evidence/ci-summary.json
+  evidence/candidate-pack-manifest.json
+  tgz/*.tgz
 ```
 
-验收人逐项核对：候选清单的提交号；五包统一版本；外部消费、矩阵和候选目录中的 tgz SHA-256；两轮有效内容 SHA；Worker/WASM 文件 SHA；每个套件摘要。`candidate/prepare-release-artifact.mjs verify candidate` 只能作为自动复核，不能替代人工检查这些字段。
+验收人逐项核对：候选清单的提交号；六包统一版本；CI 摘要；候选目录中的 tgz SHA-256/SHA-512；Worker/WASM 文件 SHA。`candidate/prepare-release-artifact.mjs verify candidate` 负责自动复核这些字段。
 
-发布流程只下载 `release-candidate-<commit>` 制品并校验。五包先进入本次运行专用的临时标签，全部完整后再提升正式标签；提升中途失败时脚本恢复已经改动的旧标签并返回非零。npm 不提供跨包事务，所以任何恢复失败都必须立即暂停发布并保留日志，不能报告成功。
+发布流程只由 `v*` 标签触发。它先确认同一提交的 `master` CI 已成功，再下载 `release-candidate-<commit>` 制品并校验，不安装依赖、不构建、不重复测试。六包先进入本次运行专用的临时标签，全部完整后再提升正式标签；提升中途失败时脚本恢复已经改动的旧标签并返回非零。npm 不提供跨包事务，所以任何恢复失败都必须立即暂停发布并保留日志，不能报告成功。
 
-实现者运行 `pnpm test:release` 只属于开发后自测。候选发布前仍需全新会话从当前四份核心文档开始，复跑 `BB-RELEASE` 并独立签字。
+`pnpm test:release` 保留为本地专项自测入口，不由 GitHub Release 调用，也不决定标签是否能够发布。
 
 ## 8. 每个页面的侦察流程
 

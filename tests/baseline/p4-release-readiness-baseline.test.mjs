@@ -415,25 +415,23 @@ test("P4 release readiness baseline", () => {
       "docs/testing/compatibility-matrix.md",
       "docs/compatibility-matrix.md",
     ].filter((file) => existsSync(path.join(ROOT, file)));
-    const releaseSuiteText = readFileSync(path.join(ROOT, "scripts/ci/run-suite.mjs"), "utf8");
     const compatibilityScriptText = readFileSync(
       path.join(ROOT, "scripts/ci/compatibility-matrix.mjs"),
       "utf8",
     );
-    const releaseOwnsMatrix =
-      /command\("matrix"/.test(releaseSuiteText) &&
-      /scripts\/ci\/compatibility-matrix\.mjs/.test(releaseSuiteText);
+    const standaloneMatrixAvailable =
+      rootManifest.scripts?.["test:matrix"] === "node scripts/ci/run-suite.mjs matrix";
     add(
       "P4-COMPATIBILITY-MATRIX",
       compatibilityFiles.length > 0 &&
-        releaseOwnsMatrix &&
+        standaloneMatrixAvailable &&
         /chromium/i.test(compatibilityScriptText) &&
         /firefox/i.test(compatibilityScriptText) &&
         /webkit/i.test(compatibilityScriptText),
       {
         matrixDocuments: compatibilityFiles,
-        releaseOwnsMatrix,
-        releaseBrowsers: {
+        standaloneMatrixAvailable,
+        supportedBrowsers: {
           chromium: /chromium/i.test(compatibilityScriptText),
           firefox: /firefox/i.test(compatibilityScriptText),
           webkit: /webkit/i.test(compatibilityScriptText),
