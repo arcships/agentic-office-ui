@@ -86,6 +86,7 @@ const emit = defineEmits<{
   "document-load-error": [error: PdfLoadError]
   "visible-page-change": [pageIndex: number]
   contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number }]
+  selectionChange: [sel: { kind: string; text?: string; pageIndex?: number }]
   diagnostic: [event: PdfDiagnostic]
 }>()
 

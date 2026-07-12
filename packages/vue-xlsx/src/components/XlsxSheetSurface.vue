@@ -55,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, type ComponentPublicInstance, type CSSProperties } from "vue"
+import { computed, ref, watch, type ComponentPublicInstance, type CSSProperties } from "vue"
 import type { XlsxViewerController, XlsxCellAddress, XlsxCellStyleContext } from "@arcships/xlsx-core"
 import XlsxGrid from "./XlsxGrid.vue"
 import XlsxChartOverlay from "./XlsxChartOverlay.vue"
@@ -96,6 +96,8 @@ const props = withDefaults(
 const emit = defineEmits<{
   cellDoubleClick: [cell: XlsxCellAddress]
   contextMenu: [ctx: { clientX: number; clientY: number; sheetName?: string }]
+  selectionChange: [sel: { kind: string; range?: { start: { row: number; col: number }; end: { row: number; col: number } }; value?: string }]
+  objectClick: [obj: { kind: "chart" | "image" | "shape"; id: string }]
 }>()
 
 // ── State ────────────────────────────────────────────────────────────
@@ -130,6 +132,17 @@ function onKeydown(event: KeyboardEvent) {
     props.controller.redo()
   }
 }
+
+// ── Selection tracking ───────────────────────────────────────────────
+watch(
+  () => props.controller.selection,
+  (sel) => {
+    if (!sel) { emit("selectionChange", { kind: "none" }); return }
+    const range = { start: { row: sel.start.row, col: sel.start.col }, end: { row: sel.end.row, col: sel.end.col } }
+    emit("selectionChange", { kind: "range", range })
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>

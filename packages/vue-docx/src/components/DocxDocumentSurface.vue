@@ -19,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue"
+import { ref, watch } from "vue"
 import type {
   DocModel,
   DocxDocumentTheme,
@@ -28,7 +28,7 @@ import type {
 } from "@arcships/docx-core"
 import DocxViewerRoot from "./DocxViewerRoot.vue"
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     model: DocModel
     controller?: DocxEditorController
@@ -49,6 +49,8 @@ const emit = defineEmits<{
   pageCountChange: [count: number]
   visiblePageRange: [range: { startPageIndex: number; endPageIndex: number }]
   contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number }]
+  selectionChange: [sel: { kind: string; text?: string; nodeIndex?: number }]
+  objectClick: [obj: { kind: "image" | "table"; nodeIndex?: number }]
 }>()
 
 const viewerRootRef = ref<InstanceType<typeof DocxViewerRoot>>()
@@ -64,4 +66,13 @@ defineExpose({
     return viewerRootRef.value?.scrollContainer
   },
 })
+
+watch(
+  () => props.controller?.selection,
+  (sel) => {
+    if (!sel) { emit("selectionChange", { kind: "none" }); return }
+    if (sel.kind === "paragraph") emit("selectionChange", { kind: "paragraph", nodeIndex: sel.nodeIndex })
+    else if (sel.kind === "table-cell") emit("selectionChange", { kind: "table-cell", nodeIndex: sel.tableIndex })
+  },
+)
 </script>

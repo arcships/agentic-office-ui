@@ -9,6 +9,8 @@ const elementRef = ref<HTMLElement | null>(null)
 
 const emit = defineEmits<{
   contextMenu: [ctx: { clientX: number; clientY: number }]
+  selectionChange: [sel: { kind: string; slideIndex?: number }]
+  objectClick: [obj: { objectKey: string }]
 }>()
 
 function onContextMenu(event: MouseEvent): void {
