@@ -15,6 +15,7 @@
     "typecheck:pptx": "pnpm --filter=@arcships/pptx-core typecheck && pnpm --filter=@arcships/vue-pptx typecheck && pnpm --filter=pptx-playback-lab typecheck && pnpm --filter=demo typecheck",
     "test": "node scripts/ci/run-suite.mjs test",
     "test:pptx": "pnpm build:pptx && node scripts/ci/verify-pptx-development.mjs && node --test --test-concurrency=1 tests/unit/pptx-core.test.mjs tests/component/pptx-preview.test.mjs && node scripts/ci/verify-pptx-consumer.mjs",
+    "test:pptx:headless": "python3 scripts/ci/verify-pptx-headless-browser.py",
     "test:pptx:blackbox": "node scripts/ci/verify-pptx-playback-browser.mjs",
     "capture:pptx-baselines": "python3 scripts/fixtures/capture-pptx-formal-baselines.py",
     "test:unit": "node scripts/ci/run-suite.mjs unit",

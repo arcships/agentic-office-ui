@@ -5,6 +5,7 @@
 - 状态：第一版接口已实现；接口变更需同步更新本文
 - 日期：2026-07-11
 - 关联设计：[PPTX 播放正式实现设计](pptx-playback-implementation-design.md)
+- Vue 无界面补充：[PPTX 最小无界面 API 与原子组件设计](pptx-headless-api-design.md)
 
 本文固定第一版公开名称和职责。实现中可以拆分文件，但不得改变根入口纯净性、会话所有权和事件字段含义。
 

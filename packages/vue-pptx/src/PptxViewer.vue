@@ -71,11 +71,10 @@
         <div v-else-if="state === 'error'" class="pptx-viewer__message pptx-viewer__message--error" data-testid="pptx-error">
           <slot name="error" :error="error">{{ error?.message }}</slot>
         </div>
-        <div
+        <PptxStage
           ref="stageRef"
           class="pptx-viewer__stage"
           :aria-hidden="state !== 'ready'"
-          data-testid="pptx-stage"
           @click="onStageClick"
         />
       </main>
@@ -114,7 +113,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { computed, ref, watch } from "vue"
 import {
   PptxPlaybackError,
   PptxPreviewError,
@@ -129,7 +128,6 @@ import {
   createPptxPreviewSession,
   type PptxActionRequest,
   type PptxApproximationPolicy,
-  type PptxDocumentSession,
   type PptxDocumentSessionFactory,
   type PptxPlaybackController,
   type PptxPlaybackEvent,
@@ -138,6 +136,10 @@ import {
   type PptxPreviewSessionFactory,
   type PptxPreviewSource,
 } from "@arcships/pptx-core/browser"
+import type { UsePptxDocumentOptions, PptxStageExpose } from "./headless-types"
+import { usePptxDocument } from "./composables/usePptxDocument"
+import { usePptxPlayback } from "./composables/usePptxPlayback"
+import PptxStage from "./PptxStage.vue"
 import PptxThumbnail from "./PptxThumbnail.vue"
 
 const props = withDefaults(defineProps<{
@@ -198,27 +200,60 @@ const emit = defineEmits<{
 type ViewerState = "empty" | "loading" | "ready" | "error"
 
 const viewerRef = ref<HTMLElement | null>(null)
-const stageRef = ref<HTMLElement | null>(null)
-const state = ref<ViewerState>("empty")
-const error = ref<PptxPreviewError | null>(null)
-const document = ref<PptxPreviewDocument | null>(null)
-const activeIndex = ref(0)
-const zoom = ref(100)
+const stageRef = ref<PptxStageExpose | null>(null)
+const stageElement = computed(() => stageRef.value?.element ?? null)
+const isPresent = computed(() => props.mode === "present")
+
+const documentOptions = {
+  source: () => props.source,
+  initialSlide: () => props.initialSlide,
+  session: () => ({
+    fitMode: "contain" as const,
+    zoomPercent: 100,
+    limits: props.limits,
+    lazyMedia: true,
+    lazySlides: true,
+    approximation: props.approximation,
+    externalMedia: props.externalMedia,
+  }),
+  get factory() {
+    if (props.mode === "present") {
+      return props.documentSessionFactory ?? createPptxDocumentSession
+    }
+    return props.sessionFactory ?? createPptxPreviewSession
+  },
+} as UsePptxDocumentOptions
+
+const pptxDocument = usePptxDocument(stageElement, documentOptions)
+const {
+  activeIndex,
+  document,
+  error,
+  zoomPercent: zoom,
+} = pptxDocument
+
+const state = computed<ViewerState>(() => {
+  if (pptxDocument.state.value === "error") return "error"
+  if (pptxDocument.state.value === "ready") return "ready"
+  if (pptxDocument.state.value === "idle" || pptxDocument.state.value === "disposed") return "empty"
+  return "loading"
+})
+
+const playback = usePptxPlayback(pptxDocument, {
+  enabled: isPresent,
+  autoplay: props.autoplay,
+  skipHiddenSlides: !props.showHiddenSlides,
+  approximation: props.approximation,
+  onEvent: onPlaybackEvent,
+})
+const { capability, controller, snapshot: playbackSnapshot } = playback
+
 const searchQuery = ref("")
 const searchResults = ref<PptxSearchResult[]>([])
 const searchCursor = ref(-1)
 const loadGeneration = ref(0)
-const playbackSnapshot = ref<PptxPlaybackSnapshot | null>(null)
-const capability = ref<PptxCapabilityReport | null>(null)
-let session: PptxPreviewSession | null = null
-let documentSession: PptxDocumentSession | null = null
-let controller: PptxPlaybackController | null = null
-let unsubscribePlayback: (() => void) | null = null
-let loadId = 0
-let navigationId = 0
 
 const activeSlide = computed(() => document.value?.slides[activeIndex.value])
-const isPresent = computed(() => props.mode === "present")
 const canGoPrevious = computed(() => state.value === "ready" && activeIndex.value > 0)
 const canGoNext = computed(() =>
   state.value === "ready"
@@ -242,27 +277,9 @@ const playbackStatusText = computed(() => {
   return labels[playbackSnapshot.value?.status ?? "idle"] ?? "尚未开始"
 })
 
-function disposeController(): void {
-  unsubscribePlayback?.()
-  unsubscribePlayback = null
-  controller?.dispose()
-  controller = null
-  playbackSnapshot.value = null
-  capability.value = null
-}
-
-function disposeSession(): void {
-  disposeController()
-  session?.dispose()
-  session = null
-  documentSession = null
-  const stage = stageRef.value
-  if (stage && typeof stage.replaceChildren === "function") stage.replaceChildren()
-}
-
 function requireController(): PptxPlaybackController {
-  if (!controller) throw new PptxPlaybackError("PLAYBACK_NOT_READY", "PPTX 播放控制器尚未准备好。")
-  return controller
+  if (!controller.value) throw new PptxPlaybackError("PLAYBACK_NOT_READY", "PPTX 播放控制器尚未准备好。")
+  return controller.value
 }
 
 function toPlaybackError(reason: unknown): PptxPlaybackError {
@@ -285,18 +302,12 @@ async function invoke(command: () => void | Promise<void>): Promise<void> {
 
 function onPlaybackEvent(event: PptxPlaybackEvent): void {
   if (event.type === "statechange") {
-    playbackSnapshot.value = event.snapshot
-    activeIndex.value = event.snapshot.slideIndex
     emit("playbackStateChange", event.snapshot)
-  } else if (event.type === "slidechange") {
-    activeIndex.value = event.to
-    emit("slideChange", event.to)
   } else if (event.type === "stepchange") {
     emit("stepChange", event.slideIndex, event.boundary)
   } else if (event.type === "warning") {
     emit("playbackWarning", event.warning)
   } else if (event.type === "capability") {
-    capability.value = event.report
     emit("capability", event.report)
   } else if (event.type === "mediarequest") {
     emit("mediaRequest", event.mediaId)
@@ -308,12 +319,13 @@ function onPlaybackEvent(event: PptxPlaybackEvent): void {
 }
 
 function requireSession(): PptxPreviewSession {
+  const session = pptxDocument.getSession()
   if (!session) throw new PptxPreviewError("RENDER_FAILED", "PPTX 预览会话尚未准备好。")
   return session
 }
 
 function resetSearch(): void {
-  session?.clearSearchHighlights()
+  pptxDocument.getSession()?.clearSearchHighlights()
   searchResults.value = []
   searchCursor.value = -1
 }
@@ -323,141 +335,39 @@ function clearSearch(): void {
   resetSearch()
 }
 
-async function loadSource(source: PptxPreviewSource | null | undefined): Promise<void> {
-  const id = ++loadId
-  navigationId += 1
-  resetSearch()
-  disposeSession()
-  document.value = null
-  error.value = null
-  activeIndex.value = 0
-  zoom.value = 100
-  loadGeneration.value += 1
-
-  if (!source) {
-    state.value = "empty"
-    return
-  }
-  state.value = "loading"
-  emit("loadStart")
-  await nextTick()
-  const target = stageRef.value
-  if (!target || id !== loadId) return
-
-  let current: PptxPreviewSession
-  let currentDocumentSession: PptxDocumentSession | null = null
-  if (isPresent.value) {
-    currentDocumentSession = (props.documentSessionFactory ?? createPptxDocumentSession)(target, {
-      fitMode: "contain",
-      zoomPercent: 100,
-      limits: props.limits,
-      lazyMedia: true,
-      lazySlides: true,
-      approximation: props.approximation,
-      externalMedia: props.externalMedia,
-    })
-    current = currentDocumentSession
-  } else {
-    current = (props.sessionFactory ?? createPptxPreviewSession)(target, {
-      fitMode: "contain",
-      zoomPercent: 100,
-      limits: props.limits,
-      lazyMedia: true,
-      lazySlides: true,
-    })
-  }
-  if (currentDocumentSession) documentSession = currentDocumentSession
-  session = current
-  try {
-    const loaded = await current.open(source, {
-      initialSlide: props.initialSlide,
-      limits: props.limits,
-      lazyMedia: true,
-      lazySlides: true,
-    })
-    if (id !== loadId || session !== current) return
-    document.value = loaded
-    activeIndex.value = Math.min(Math.max(props.initialSlide, 0), Math.max(loaded.slides.length - 1, 0))
-    zoom.value = current.zoomPercent
-    state.value = "ready"
-    loadGeneration.value += 1
-    emit("loadSuccess", loaded)
-    emit("slideChange", activeIndex.value)
-    if (isPresent.value && currentDocumentSession && documentSession === currentDocumentSession) {
-      const nextController = currentDocumentSession.createPlaybackController({
-        initialSlide: activeIndex.value,
-        skipHiddenSlides: !props.showHiddenSlides,
-        autoplay: props.autoplay,
-        approximation: props.approximation,
-      })
-      controller = nextController
-      emit("playbackReady", nextController)
-      unsubscribePlayback = nextController.subscribe(onPlaybackEvent)
-    }
-  } catch (reason) {
-    if (id !== loadId || session !== current) return
-    const failure = reason instanceof PptxPreviewError
-      ? reason
-      : new PptxPreviewError("PARSE_FAILED", reason instanceof Error ? reason.message : "无法加载 PPTX。", reason)
-    if (failure.code === "ABORTED" || failure.code === "STALE_RESULT") return
-    error.value = failure
-    state.value = "error"
-    emit("loadError", failure)
-  }
-}
-
 async function goTo(index: number): Promise<void> {
-  if (isPresent.value && controller) {
-    const slides = document.value?.slides
-    if (!slides?.length) return
-    const target = Math.min(Math.max(Math.trunc(index), 0), slides.length - 1)
-    await controller.goToSlide(target, { includeHidden: props.showHiddenSlides })
-    return
-  }
-  const current = session
-  const slides = document.value?.slides
-  if (!current || !slides?.length) return
-  const target = Math.min(Math.max(Math.trunc(index), 0), slides.length - 1)
-  const id = ++navigationId
-  activeIndex.value = target
-  current.clearSearchHighlights()
-  try {
-    await current.renderSlide(target)
-    if (id !== navigationId || session !== current) return
-    emit("slideChange", target)
-  } catch (reason) {
-    if (id !== navigationId || session !== current) return
-    error.value = reason instanceof PptxPreviewError
-      ? reason
-      : new PptxPreviewError("RENDER_FAILED", "页面渲染失败。", reason)
-    state.value = "error"
+  if (isPresent.value) {
+    await playback.goToSlide(index, { includeHidden: props.showHiddenSlides })
+  } else {
+    pptxDocument.getSession()?.clearSearchHighlights()
+    await pptxDocument.goTo(index)
   }
 }
 
 async function next(): Promise<void> {
-  if (isPresent.value) await requireController().next()
-  else await goTo(activeIndex.value + 1)
+  if (isPresent.value) await playback.next()
+  else await pptxDocument.nextSlide()
 }
 
 async function previous(): Promise<void> {
-  if (isPresent.value) await requireController().previous()
-  else await goTo(activeIndex.value - 1)
+  if (isPresent.value) await playback.previous()
+  else await pptxDocument.previousSlide()
 }
 
 async function play(): Promise<void> {
-  await requireController().play()
+  await playback.play()
 }
 
 function pause(): void {
-  requireController().pause()
+  playback.pause()
 }
 
 async function resume(): Promise<void> {
-  await requireController().resume()
+  await playback.resume()
 }
 
 async function reset(): Promise<void> {
-  await requireController().reset()
+  await playback.reset()
 }
 
 async function goToSlide(index: number): Promise<void> {
@@ -465,7 +375,7 @@ async function goToSlide(index: number): Promise<void> {
 }
 
 async function resumeBlockedMedia(mediaId?: string): Promise<void> {
-  await requireController().resumeBlockedMedia(mediaId)
+  await playback.resumeBlockedMedia(mediaId)
 }
 
 function togglePlayback(): void {
@@ -516,13 +426,11 @@ async function onStageClick(event: MouseEvent): Promise<void> {
 }
 
 async function setZoom(value: number): Promise<void> {
-  const current = session
-  if (!current || state.value !== "ready") return
-  await current.setZoom(value)
-  if (session === current) zoom.value = current.zoomPercent
+  await pptxDocument.setZoom(value)
 }
 
 function runSearch(): void {
+  const session = pptxDocument.getSession()
   if (!session) return
   searchResults.value = session.searchText(searchQuery.value)
   searchCursor.value = searchResults.value.length ? 0 : -1
@@ -530,11 +438,11 @@ function runSearch(): void {
 }
 
 async function activateSearchResult(): Promise<void> {
-  const current = session
+  const current = pptxDocument.getSession()
   const result = searchResults.value[searchCursor.value]
   if (!current || !result) return
   await goTo(result.slideIndex)
-  if (session === current) await current.highlightSearchResult(result)
+  if (pptxDocument.getSession() === current) await current.highlightSearchResult(result)
 }
 
 async function moveSearch(direction: 1 | -1): Promise<void> {
@@ -575,26 +483,39 @@ function onKeydown(event: KeyboardEvent): void {
   }
 }
 
-watch([() => props.source, () => props.mode], ([source]) => {
-  void loadSource(source)
-})
-
 watch(() => props.initialSlide, (index) => {
   if (state.value === "ready") void goTo(index)
 })
 
-onMounted(() => {
-  void loadSource(props.source)
+watch(() => props.mode, () => {
+  resetSearch()
+  if (props.source) void pptxDocument.open(props.source).catch(() => undefined)
 })
 
-onBeforeUnmount(() => {
-  loadId += 1
-  navigationId += 1
-  disposeSession()
+watch(() => pptxDocument.state.value, (next, previous) => {
+  if (next === "loading") {
+    resetSearch()
+    loadGeneration.value += 1
+    emit("loadStart")
+  } else if (next === "error" && error.value) {
+    emit("loadError", error.value)
+  } else if (next === "ready" && previous !== "ready" && document.value) {
+    loadGeneration.value += 1
+    emit("loadSuccess", document.value)
+    emit("slideChange", activeIndex.value)
+  }
 })
+
+watch(activeIndex, (index, previous) => {
+  if (state.value === "ready" && index !== previous) emit("slideChange", index)
+})
+
+watch(controller, (nextController) => {
+  if (nextController) emit("playbackReady", nextController)
+}, { flush: "sync" })
 
 defineExpose({
-  getController: () => controller,
+  getController: () => controller.value,
   next,
   previous,
   play,

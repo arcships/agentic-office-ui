@@ -11,7 +11,12 @@ import {
   walk,
 } from "./vue-test-renderer.mjs";
 
-const { PptxViewer } = await importFromDemo("@arcships/vue-pptx");
+const {
+  PptxStage,
+  PptxViewer,
+  usePptxDocument,
+  usePptxPlayback,
+} = await importFromDemo("@arcships/vue-pptx");
 
 function deferred() {
   let resolve;
@@ -154,6 +159,45 @@ function createPlaybackSession({ document = documentWithSlides(3) } = {}) {
 function button(root, label) {
   return walk(root).find((node) => node.type === "button" && node.props?.["aria-label"] === label);
 }
+
+test("PptxStage and composables expose the minimal document and playback controls", async () => {
+  const playback = createPlaybackSession({ document: documentWithSlides(2) });
+  let documentApi;
+  let playbackApi;
+  let opening;
+  const Harness = vue.defineComponent({
+    setup() {
+      const stage = vue.ref(null);
+      const element = vue.computed(() => stage.value?.element ?? null);
+      documentApi = usePptxDocument(element, {
+        factory: () => playback.session,
+      });
+      playbackApi = usePptxPlayback(documentApi, { autoplay: false });
+      opening = documentApi.open(new Uint8Array([1, 2, 3]));
+      return () => vue.h(PptxStage, { ref: stage, class: "custom-stage", tabindex: 0 });
+    },
+  });
+
+  const mounted = await mount(Harness);
+  await opening;
+  await waitFor(() => documentApi.state.value === "ready", "headless PPTX document ready");
+  await waitFor(() => playbackApi.controller.value !== null, "headless PPTX playback ready");
+
+  const stage = findByTestId(mounted.root, "pptx-stage");
+  assert.match(stage.props.class, /pptx-stage/);
+  assert.match(stage.props.class, /custom-stage/);
+  assert.equal(documentApi.document.value.slides.length, 2);
+  assert.equal(documentApi.getSession(), playback.session);
+
+  await documentApi.goTo(1);
+  assert.equal(documentApi.activeIndex.value, 1);
+  await playbackApi.next();
+  assert.equal(playback.calls.next, 1);
+
+  mounted.app.unmount();
+  assert.equal(playback.calls.dispose, 1);
+  assert.deepEqual(mounted.warnings, []);
+});
 
 test("PptxViewer exposes loading, ready navigation, hidden-page marker and cleanup", async () => {
   const pending = deferred();

@@ -3,6 +3,19 @@ import "./style.css"
 
 export const PptxViewer = PptxViewerComponent
 export { default as PptxThumbnail } from "./PptxThumbnail.vue"
+export { default as PptxStage } from "./PptxStage.vue"
+export { usePptxDocument } from "./composables/usePptxDocument"
+export { usePptxPlayback } from "./composables/usePptxPlayback"
+
+export type {
+  PptxDocumentState,
+  PptxStageExpose,
+  PptxStageTarget,
+  UsePptxDocumentOptions,
+  UsePptxDocumentReturn,
+  UsePptxPlaybackOptions,
+  UsePptxPlaybackReturn,
+} from "./headless-types"
 
 export type {
   PptxCapabilityReport,

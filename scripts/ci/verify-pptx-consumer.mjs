@@ -96,8 +96,15 @@ try {
   }, null, 2))
   writeFileSync(path.join(consumer, "index.html"), "<main id=\"app\"></main><script type=\"module\" src=\"/src/main.ts\"></script>")
   writeFileSync(path.join(consumer, "src/main.ts"), `
-import { createApp, h } from "vue"
-import { PptxViewer } from "@arcships/vue-pptx"
+import { computed, createApp, defineComponent, h, ref } from "vue"
+import {
+  PptxStage,
+  PptxViewer,
+  usePptxDocument,
+  usePptxPlayback,
+  type PptxStageExpose,
+  type PptxPreviewSource,
+} from "@arcships/vue-pptx"
 import "@arcships/vue-pptx/style.css"
 import { createPptxDocumentSession, type PptxDocumentSession } from "@arcships/pptx-core/browser"
 
@@ -105,6 +112,20 @@ const factory: typeof createPptxDocumentSession = createPptxDocumentSession
 const sessionType: PptxDocumentSession | null = null
 void factory
 void sessionType
+const HeadlessConsumer = defineComponent({
+  props: { source: { required: true, type: Object } },
+  setup(props) {
+    const stage = ref<PptxStageExpose | null>(null)
+    const element = computed(() => stage.value?.element ?? null)
+    const document = usePptxDocument(element, {
+      source: () => props.source as PptxPreviewSource,
+    })
+    const playback = usePptxPlayback(document)
+    void playback
+    return () => h(PptxStage, { ref: stage })
+  },
+})
+void HeadlessConsumer
 async function main() {
   const source = await fetch("/sample.pptx").then((response) => response.arrayBuffer())
   createApp({

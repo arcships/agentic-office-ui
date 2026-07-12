@@ -21,6 +21,7 @@
 | [pptx-development-guide.md](pptx-development-guide.md) | PPTX 正式开发的目录边界、命令、补丁流程、素材规则和后续扩展入口 |
 | [pptx-playback-implementation-design.md](pptx-playback-implementation-design.md) | 当前正式实现入口：总体结构、包边界、对象身份、时间调度、属性轨道、切换和媒体设计 |
 | [pptx-playback-api-design.md](pptx-playback-api-design.md) | 第一版公开类型、文档会话、播放控制器和 Vue 组件接口 |
+| [pptx-headless-api-design.md](pptx-headless-api-design.md) | 两个最小 composable、`PptxStage`、状态所有权和兼容重构要求 |
 | [pptx-playback-compatibility-and-acceptance.md](pptx-playback-compatibility-and-acceptance.md) | 严格、近似、静态和无法解析的范围，以及素材、误差、浏览器和发布门槛 |
 | [pptx-playback-acceptance-results.md](pptx-playback-acceptance-results.md) | 三浏览器、性能、内存、资源释放和工作区外压缩包消费的正式结果 |
 | [pptx-playback-roadmap.md](pptx-playback-roadmap.md) | 已执行的正式开发顺序、每阶段任务和通过条件 |

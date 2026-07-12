@@ -69,6 +69,7 @@
 .pptx-viewer__sidebar { background: var(--pptx-panel); border-right: 1px solid var(--pptx-border); flex: 0 0 180px; overflow: auto; padding: 12px; }
 .pptx-viewer__stage-wrap { display: grid; flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; place-items: center; position: relative; }
 .pptx-viewer__stage { box-sizing: border-box; inline-size: min(100%, 1280px); min-height: 1px; padding: 24px; }
+.pptx-stage { box-sizing: border-box; min-height: 1px; }
 .pptx-viewer__stage[aria-hidden="true"] { visibility: hidden; }
 .pptx-viewer__message { inset: 0; align-items: center; color: var(--pptx-muted); display: flex; justify-content: center; position: absolute; z-index: 2; }
 .pptx-viewer__message--error { color: #b91c1c; padding: 24px; text-align: center; }
