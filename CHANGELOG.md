@@ -2,7 +2,56 @@
 
 All notable changes to the `@arcships` package family are documented in this file.
 
-## [0.2.0] - Unreleased (candidate)
+## [0.5.0] - 2026-07-13
+
+### Unified Surface Components
+
+- New `DocxDocumentSurface` (DOCX), `XlsxSheetSurface` (XLSX), `PdfSurface` (PDF) — minimal embeddable renderers for third-party use.
+- `PptxStage` (PPTX) already existed; usage documented.
+- Unified CSS variables `--xxx-surface-bg` for background color customization.
+- `fitWidth` prop on DOCX/PDF for container-width adaptive zoom.
+- Unified event model: `contextMenu`, `selectionChange`, `objectClick` across all four surfaces.
+- Container-relative coordinates (`containerX`/`containerY`) in all `contextMenu` events.
+
+### @arcships/vue-docx
+
+- `DocxDocumentSurface` exported as stable public component.
+- `fitWidth` prop: ResizeObserver-based auto zoom.
+- `contextMenu` event with page index + container coords.
+- `selectionChange` event via browser Selection API.
+- Fixed: double zoom scaling from `getBoundingClientRect` + `zoomFactor`.
+- Fixed: annotation gutter horizontal layout (replaced hardcoded 48px with actual 16+240px).
+
+### @arcships/vue-xlsx
+
+- `XlsxSheetSurface` exported as stable public component.
+- `selectionChange` event via `controller.selection` watch.
+- `contextMenu` event with cell address + sheet name + container coords.
+- Fixed: single-character edit bug (grid keydown re-entering edit mode).
+- Fixed: `allowResizeInReadOnly` default changed to `true`.
+- Fixed: right-click no longer cancels existing cell selection.
+
+### @arcships/vue-pptx
+
+- `PptxStage` added `--pptx-surface-bg` CSS variable.
+- `contextMenu`, `selectionChange`, `objectClick` event declarations.
+- HomePage now includes all three PPTX demo page cards.
+
+### @arcships/vue-pdf
+
+- `PdfSurface` with vertical scroll through all pages (replaces single-page navigation).
+- `fitWidth` prop: auto zoom based on widest page vs container.
+- `contextMenu` event with page index + container coords.
+- `--pdf-surface-bg` CSS variable.
+- Known limitation: text selection not available pending PDF engine CMap issues.
+
+### Demo
+
+- Four new surface demo pages: `/docx-surface`, `/xlsx-surface`, `/pptx-surface`, `/pdf-surface`.
+- Each demo shows host-owned toolbar, event listeners, and live status display.
+- Dev server port changed to 5173.
+
+## [0.4.0] - Unreleased (candidate)
 
 ### @arcships/docx-core
 

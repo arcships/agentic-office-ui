@@ -1,4 +1,66 @@
-# 0.4.0 候选发布说明
+# 0.5.0 发布说明
+
+发布日期：2026-07-13
+
+`0.5.0` 新增四格式统一 Surface 组件系列、统一事件模型、自适应缩放，以及多项 bug 修复。
+
+## 0.5.0 包版本
+
+- `@arcships/docx-core@0.5.0`
+- `@arcships/vue-docx@0.5.0`
+- `@arcships/xlsx-core@0.5.0`
+- `@arcships/vue-xlsx@0.5.0`
+- `@arcships/vue-pdf@0.5.0`
+- `@arcships/vue-ui@0.5.0`
+- `@arcships/pptx-core@0.5.0`
+- `@arcships/vue-pptx@0.5.0`
+
+## 新增 Surface 组件
+
+四个格式各有一个最小嵌入渲染面，供第三方项目自建 toolbar/控制栏：
+
+| 组件 | 格式 | 说明 |
+|---|---|---|
+| `DocxDocumentSurface` | DOCX | 分页文档面 + 批注 gutter，无 toolbar/缩略图 |
+| `XlsxSheetSurface` | XLSX | 网格 + 图表/图片/绘图/选区叠加层 + 右键菜单 |
+| `PptxStage` | PPTX | 幻灯片舞台（已有，文档补全） |
+| `PdfSurface` | PDF | 全部页面垂直堆叠滚动，无翻页切换 |
+
+## 统一 Surface API
+
+### 样式定制
+- 每个 surface 暴露 `--xxx-surface-bg` CSS 变量（背景色）
+- DOCX/PDF 支持 `fitWidth` prop：自适应容器宽度缩放
+
+### 统一事件
+- `contextMenu`：右键菜单触发，携带容器相对坐标 + 格式特有的定位信息（页码/cell 地址/sheet 名）
+- `selectionChange`：选中内容变化（DOCX/PDF 基于浏览器 Selection API，XLSX 基于 cell range）
+- `objectClick`：图片/图表/形状点击
+
+### 统一 expose
+- `scrollToPage(pageIndex)`：DOCX/PDF
+- `scrollContainer`：DOM 引用（DOCX）
+- `zoom` / `rotation`：读写（PDF）
+
+## Bug 修复
+
+- **DOCX**：修复缩放双重计算（`getBoundingClientRect` 已含 transform，上层又乘 zoomFactor）和批注 gutter 横向布局不足
+- **XLSX**：修复编辑模式下单字符键无法连续输入（grid 按键冒泡重复触发）、只读模式下默认允许行列缩放、右键不再取消已有选区
+- **PPTX**：无
+- **PDF**：新增垂直滚动模式，修复单页切换体验
+
+## PDF 文字选择层（已知限制）
+
+`@embedpdf` 引擎的 `getPageTextRects` 对 CID 字体 + 缺失 ToUnicode CMap 的中文 PDF 无法正确输出文字。详见 [pdf-text-layer-issue.md](docs/pdf-text-layer-issue.md)，`0.5.0` 不含此功能。
+
+## Demo 更新
+
+- 新增四格式 surface demo 页：`/docx-surface`、`/xlsx-surface`、`/pptx-surface`、`/pdf-surface`
+- 每个 demo 展示宿主自建 toolbar + surface 事件监听 + 状态栏实时反馈
+- Dev 端口调整为 5173
+- 新增统一 Surface API 设计文档：`docs/unified-surface-api-design.md`
+
+## 0.4.0 发布记录
 
 发布日期：待发布
 

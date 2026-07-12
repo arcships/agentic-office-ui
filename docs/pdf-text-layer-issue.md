@@ -1,6 +1,7 @@
 # PDF 文字选择层
 
-> 状态：待实现
+> 状态：已回退（`0.5.0` 不含此功能）
+> 回退原因：`@embedpdf` 引擎 `getPageTextRects` 对 CID 字体 + 缺失 ToUnicode CMap 的中文 PDF 输出可见乱码，无法通过字符清洗修复。
 > 适用范围：`packages/vue-pdf`
 > 关联：PdfSurface、PdfViewer
 

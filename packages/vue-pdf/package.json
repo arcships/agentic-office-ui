@@ -1,6 +1,6 @@
 {
   "name": "@arcships/vue-pdf",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "license": "Apache-2.0",
   "description": "Vue 3 PDF viewer component with PDFium-based rendering, search, thumbnails, and download",
   "keywords": ["vue", "vue3", "pdf", "viewer", "pdfium", "components"],
