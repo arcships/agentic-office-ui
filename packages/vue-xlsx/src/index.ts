@@ -51,3 +51,21 @@ export { default as XlsxSelectionOverlay } from "./components/XlsxSelectionOverl
 export { default as XlsxContextMenu } from "./components/XlsxContextMenu.vue"
 
 export const XlsxViewer = XlsxViewerComponent
+
+/**
+ * Minimal embeddable XLSX renderer for third-party consumers.
+ *
+ * Renders the sheet grid + chart/image/drawing/selection overlays + context
+ * menu + chart sheet surface. No toolbar, ribbon, formula bar, or sheet tabs
+ * — host owns all controls.
+ *
+ * @example
+ * ```vue
+ * <XlsxSheetSurface
+ *   :controller="ctrl"
+ *   :read-only="false"
+ *   @cell-double-click="onDoubleClick"
+ * />
+ * ```
+ */
+export { default as XlsxSheetSurface } from "./components/XlsxSheetSurface.vue"

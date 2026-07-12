@@ -70,7 +70,8 @@ defineProps<{ file: File | null }>()
 | 尽快显示一个文档 | `DocxViewer`、`XlsxViewer`、`PdfViewer`、`PptxViewer` |
 | 自建工具栏嵌入渲染区 | `DocxDocumentSurface`（仅分页渲染 + 批注 gutter） |
 | 编辑 DOCX | `DocxEditor` 或 `useDocxEditor` |
-| 自定义 XLSX 工具栏 | `useXlsxViewerController` + `XlsxViewer` |
+| 自定义 XLSX 工具栏 | `useXlsxViewerController` + `XlsxSheetSurface`（无内置 chrome） |
+| 自定义 XLSX 工具栏（全套） | `useXlsxViewerController` + `XlsxViewer` |
 | 自定义 PPTX 播放器 | `usePptxDocument` + `usePptxPlayback` + `PptxStage` |
 | 在非 Vue 代码中处理文档 | `docx-core`、`xlsx-core`、`pptx-core` |
 | 管理 Worker、WASM 和资源限制 | 对应格式的 Runtime |
@@ -82,7 +83,7 @@ defineProps<{ file: File | null }>()
 | [`@arcships/docx-core`](packages/docx-core/README.md) | DOCX 模型、布局、命令和 Runtime |
 | [`@arcships/vue-docx`](packages/vue-docx/README.md) | `DocxDocumentSurface`、`DocxViewer`、`DocxEditor` 和组合函数 |
 | [`@arcships/xlsx-core`](packages/xlsx-core/README.md) | XLSX 模型、公式、图表和 Runtime |
-| [`@arcships/vue-xlsx`](packages/vue-xlsx/README.md) | `XlsxViewer` 和查看器控制器 |
+| [`@arcships/vue-xlsx`](packages/vue-xlsx/README.md) | `XlsxSheetSurface`、`XlsxViewer` 和查看器控制器 |
 | [`@arcships/vue-pdf`](packages/vue-pdf/README.md) | PDFium 查看器与渲染 Runtime |
 | [`@arcships/pptx-core`](packages/pptx-core/README.md) | PPTX 预览、播放模型和浏览器控制器 |
 | [`@arcships/vue-pptx`](packages/vue-pptx/README.md) | `PptxViewer` 和最小播放组合能力 |
