@@ -183,8 +183,10 @@ Surface 组件不内置搜索 UI。搜索能力分布：
 | 格式 | 搜索入口 | 说明 |
 |---|---|---|
 | DOCX | Surface prop `searchQuery` + `activeSearchNodeIndex` | 传 prop 即可，surface 内部高亮命中节点 |
-| XLSX | `controller.findCell(query)` | 宿主调 API 获取匹配 cell，自行导航到目标位置 |
+| XLSX | 无公开搜索 API | 当前版本不提供搜索，宿主需自行实现（如遍历 cell 值匹配） |
 | PPTX | `session.searchText(query)` → `PptxSearchResult[]` | 宿主调 API，根据 `slideIndex` 自行 goTo 翻页 |
 | PDF | `runtime.search(doc, query)` → `PdfSearchHit[]` | 宿主调 API，根据 `pageIndex` 自行 scrollToPage |
+
+XLSX 搜索暂未提供公开 API；PPTX 和 PDF 的搜索为 composable/runtime 级 API，不通过 surface prop 透传。
 
 DOCX 之外的格式，宿主需要自己实现搜索输入框 + 结果列表 + 导航逻辑。
