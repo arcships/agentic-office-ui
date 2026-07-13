@@ -2,7 +2,7 @@
 
 本文登记 `@arcships/docx-core`、`@arcships/xlsx-core`、`@arcships/pptx-core`、`@arcships/vue-docx`、`@arcships/vue-xlsx`、`@arcships/vue-pptx`、`@arcships/vue-pdf` 和 `@arcships/vue-ui` 的公开入口、推荐用法、事件、错误与兼容期限。
 
-当前八个公开包的版本统一为 `0.5.3`。本版本扩展 Office 输入格式，并为四种 Surface 增加统一的受控 `zoom`、`enableGestureZoom` 和 `update:zoom` 合同。源码中的 `@deprecated Since 0.2.0` 继续生效；整个 `0.x` 保留旧入口，最早只能在 `1.0.0` 删除。
+当前八个公开包的版本统一为 `0.5.4`。本版本为四种 Surface 增加统一搜索与精确定位，并改进 PDF glyph 拖选和双击选词；公开搜索、选择和缩放合同保持向后兼容。源码中的 `@deprecated Since 0.2.0` 继续生效；整个 `0.x` 保留旧入口，最早只能在 `1.0.0` 删除。
 
 ## 1. 适用规则
 
@@ -119,7 +119,7 @@ try {
 
 ### 3.3 `@arcships/vue-docx`
 
-DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注布局的目标合同见 [DOCX Viewer 受控文档面与分页修复设计](../docx-viewer-controlled-surface-and-pagination-fix.md)。兼容性判断以本页当前 `0.5.3` 导出清单和对应实现状态为准。
+DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注布局的目标合同见 [DOCX Viewer 受控文档面与分页修复设计](../docx-viewer-controlled-surface-and-pagination-fix.md)。兼容性判断以本页当前 `0.5.4` 导出清单和对应实现状态为准。
 
 稳定高层入口为：
 

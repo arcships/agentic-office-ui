@@ -8,7 +8,8 @@
     "rootDir": "..",
     "baseUrl": ".",
     "paths": {
-      "@arcships/xlsx-core": ["../xlsx-core/src/index.ts"]
+      "@arcships/xlsx-core": ["../xlsx-core/src/index.ts"],
+      "@arcships/vue-ui": ["../vue-ui/src/index.ts"]
     }
   }
 }

@@ -19,6 +19,18 @@ const transformModule = await import(`data:text/javascript;base64,${Buffer.from(
     },
   }).outputText,
 ).toString("base64")}`);
+const selectionInteractionSource = readFileSync(
+  new URL("../../packages/vue-pdf/src/pdf/pdf-selection-interaction.ts", import.meta.url),
+  "utf8",
+);
+const selectionInteractionModule = await import(`data:text/javascript;base64,${Buffer.from(
+  typescript.transpileModule(selectionInteractionSource, {
+    compilerOptions: {
+      module: typescript.ModuleKind.ES2022,
+      target: typescript.ScriptTarget.ES2022,
+    },
+  }).outputText,
+).toString("base64")}`);
 
 test("PDF canonical transforms round-trip points and intrinsic search rects at every rotation", () => {
   const rotations = [0, 90, 180, 270];
@@ -60,6 +72,60 @@ test("PDF canonical transforms round-trip points and intrinsic search rects at e
       });
     }
   }
+});
+
+test("PDF selection snaps glyph gaps only within the containing text run", () => {
+  const geometry = {
+    runs: [
+      {
+        charStart: 10,
+        rect: { x: 0, y: 0, width: 40, height: 12 },
+        glyphs: [
+          { x: 0, y: 0, width: 8, height: 12, flags: 0 },
+          { x: 20, y: 0, width: 8, height: 12, flags: 0 },
+          { x: 29, y: 0, width: 8, height: 12, flags: 2 },
+        ],
+      },
+    ],
+  };
+
+  assert.equal(
+    selectionInteractionModule.nearestGlyphWithinContainingRun(geometry, { x: 17, y: 6 }),
+    11,
+  );
+  assert.equal(
+    selectionInteractionModule.nearestGlyphWithinContainingRun(geometry, { x: 45, y: 6 }),
+    -1,
+    "points outside every run must not snap across the page",
+  );
+});
+
+test("PDF word selection maps English, numeric and common Chinese segments to PDF character ranges", () => {
+  const { wordRangeFromCharacterTexts } = selectionInteractionModule;
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+
+  assert.deepEqual(
+    wordRangeFromCharacterTexts(20, 25, ["f", "o", "o", "-", "b", "a", "r"], segmenter),
+    { from: 24, to: 26 },
+  );
+  assert.deepEqual(
+    wordRangeFromCharacterTexts(30, 32, ["1", "2", "3", ".", "4", "5"], segmenter),
+    { from: 30, to: 35 },
+  );
+  assert.deepEqual(
+    wordRangeFromCharacterTexts(40, 42, ["你", "好", "世", "界"], segmenter),
+    { from: 42, to: 43 },
+  );
+});
+
+test("PDF word selection rounds UTF-16 boundaries outward to whole PDF characters", () => {
+  const segmenter = {
+    segment: () => [{ index: 1, segment: "𝟚", isWordLike: true }],
+  };
+  assert.deepEqual(
+    selectionInteractionModule.wordRangeFromCharacterTexts(50, 51, ["A", "𝟚", "B"], segmenter),
+    { from: 51, to: 51 },
+  );
 });
 
 test("PDF URL loading shares controlled fetch and strips query secrets", async () => {

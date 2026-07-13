@@ -15,7 +15,7 @@ import {
 const { DocxViewer } = await importFromDemo("@arcships/vue-docx");
 const { createBlankDocumentModel, wasmBuildDocModelFromBytes } = await importFromDemo("@arcships/docx-core");
 const { XlsxViewer, useXlsxSearch, useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
-const { PdfViewer } = await importFromDemo("@arcships/vue-pdf");
+const { PdfSurface, PdfViewer } = await importFromDemo("@arcships/vue-pdf");
 const { FileUpload } = await importFromDemo("@arcships/vue-ui");
 
 // Vue's native v-model directive checks these browser constructors during an
@@ -57,6 +57,8 @@ function xlsxController(overrides = {}) {
 function createPdfRuntime({
   pageCount = 3,
   onOpenDocument,
+  onGetPageTextGeometry,
+  onGetTextSlices,
   onRenderPage,
   onRenderThumbnail,
   onSearch,
@@ -64,6 +66,8 @@ function createPdfRuntime({
   const calls = {
     closeDocument: [],
     dispose: [],
+    getPageTextGeometry: [],
+    getTextSlices: [],
     openDocument: [],
     renderPage: [],
     renderThumbnail: [],
@@ -97,6 +101,18 @@ function createPdfRuntime({
         ? onRenderThumbnail(currentDocument, pageIndex, options)
         : new Blob([`thumbnail:${pageIndex}`], { type: "image/png" });
     },
+    async getPageTextGeometry(currentDocument, pageIndex, options = {}) {
+      calls.getPageTextGeometry.push({ document: currentDocument, options, pageIndex });
+      return onGetPageTextGeometry
+        ? onGetPageTextGeometry(currentDocument, pageIndex, options)
+        : { runs: [] };
+    },
+    async getTextSlices(currentDocument, slices, options = {}) {
+      calls.getTextSlices.push({ document: currentDocument, options, slices });
+      return onGetTextSlices
+        ? onGetTextSlices(currentDocument, slices, options)
+        : slices.map(() => "");
+    },
     async search(currentDocument, query, options = {}) {
       calls.search.push({ document: currentDocument, options, query });
       return onSearch ? onSearch(currentDocument, query, options) : [];
@@ -109,6 +125,47 @@ function createPdfRuntime({
     },
   };
   return { calls, document, runtime };
+}
+
+function pdfTextGeometry(text) {
+  return {
+    runs: [{
+      charStart: 0,
+      rect: { x: 0, y: 0, width: text.length * 10, height: 12 },
+      glyphs: Array.from(text, (character, index) => ({
+        x: index * 10,
+        y: 0,
+        width: 8,
+        height: 12,
+        flags: character === " " ? 1 : 0,
+      })),
+    }],
+  };
+}
+
+function preparePdfSurfaceInteraction(root) {
+  const surface = findByTestId(root, "pdf-surface");
+  const interaction = walk(root).find((node) => node.props?.class === "pdf-surface__interaction");
+  assert.ok(surface);
+  assert.ok(interaction);
+  const captures = new Set();
+  surface.focus = () => {};
+  interaction.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 800 });
+  interaction.setPointerCapture = (pointerId) => captures.add(pointerId);
+  interaction.hasPointerCapture = (pointerId) => captures.has(pointerId);
+  interaction.releasePointerCapture = (pointerId) => captures.delete(pointerId);
+  return interaction;
+}
+
+function pdfPointerEvent(interaction, { clientX, clientY = 6, pointerId = 1 }) {
+  return {
+    button: 0,
+    clientX,
+    clientY,
+    currentTarget: interaction,
+    isPrimary: true,
+    pointerId,
+  };
 }
 
 test("DocxViewer exposes empty, loading, success and error states with public events", async () => {
@@ -429,6 +486,88 @@ test("useXlsxViewerController owns and terminates its Worker on unmount", async 
   mounted.app.unmount();
   assert.equal(worker.terminated, true);
   assert.deepEqual(mounted.warnings, []);
+});
+
+test("PdfSurface finalizes a drag released before page geometry resolves", async () => {
+  const geometryGate = deferred();
+  const text = "abcd";
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => geometryGate.promise,
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      text.slice(slice.charIndex, slice.charIndex + slice.charCount)),
+  });
+  const selections = [];
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    onSelectionChange: (selection) => selections.push(selection),
+  });
+  await waitFor(
+    () => fake.calls.getPageTextGeometry.length === 1 &&
+      walk(mounted.root).some((node) => node.props?.class === "pdf-surface__interaction"),
+    "PDF selection layer and prefetched geometry request",
+  );
+  const interaction = preparePdfSurfaceInteraction(mounted.root);
+
+  interaction.props.onPointerdown(pdfPointerEvent(interaction, { clientX: 2 }));
+  interaction.props.onPointerup(pdfPointerEvent(interaction, { clientX: 38 }));
+  assert.equal(fake.calls.getPageTextGeometry.length, 1, "pointerdown reuses the prefetched request");
+
+  geometryGate.resolve(pdfTextGeometry(text));
+  await waitFor(() => selections.at(-1)?.kind === "text", "late PDF drag selection");
+  assert.equal(selections.at(-1).text, text);
+  assert.deepEqual(selections.at(-1).range, { pageIndex: 0, charIndex: 0, charCount: 4 });
+  mounted.app.unmount();
+});
+
+test("PdfSurface uses the native second click to select a Unicode word", async () => {
+  const text = "hello world";
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => pdfTextGeometry(text),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      text.slice(slice.charIndex, slice.charIndex + slice.charCount)),
+  });
+  const selections = [];
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    onSelectionChange: (selection) => selections.push(selection),
+  });
+  await waitFor(
+    () => fake.calls.getPageTextGeometry.length === 1 &&
+      walk(mounted.root).some((node) => node.props?.class === "pdf-surface__interaction"),
+    "PDF word selection layer",
+  );
+  const interaction = preparePdfSurfaceInteraction(mounted.root);
+  const point = { clientX: 65, pointerId: 1 };
+
+  interaction.props.onPointerdown(pdfPointerEvent(interaction, point));
+  interaction.props.onPointerup(pdfPointerEvent(interaction, point));
+  await interaction.props.onClick({
+    button: 0,
+    clientX: point.clientX,
+    clientY: 6,
+    currentTarget: interaction,
+    detail: 1,
+    preventDefault() {},
+  });
+  interaction.props.onPointerdown(pdfPointerEvent(interaction, { ...point, pointerId: 2 }));
+  interaction.props.onPointerup(pdfPointerEvent(interaction, { ...point, pointerId: 2 }));
+  await interaction.props.onClick({
+    button: 0,
+    clientX: point.clientX,
+    clientY: 6,
+    currentTarget: interaction,
+    detail: 2,
+    preventDefault() {},
+  });
+
+  await waitFor(() => selections.at(-1)?.kind === "text", "double-click PDF word selection");
+  assert.equal(selections.at(-1).text, "world");
+  assert.deepEqual(selections.at(-1).range, { pageIndex: 0, charIndex: 6, charCount: 5 });
+  mounted.app.unmount();
 });
 
 test("PdfViewer becomes ready only after the injected runtime opens and renders the PDF", async () => {

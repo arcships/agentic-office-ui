@@ -1,6 +1,6 @@
 {
   "name": "@arcships/vue-docx",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "license": "Apache-2.0",
   "description": "Vue 3 DOCX viewer and editor components with composable editor state",
   "keywords": ["vue", "vue3", "docx", "word", "viewer", "editor", "components"],

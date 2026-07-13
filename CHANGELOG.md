@@ -2,6 +2,27 @@
 
 All notable changes to the `@arcships` package family are documented in this file.
 
+## [0.5.4] - 2026-07-13
+
+### Surface search and result positioning
+
+- Added one shared search-session contract and `OfficeFindBar` for DOCX, XLSX, PPTX, and PDF surfaces, with default fuzzy matching, result counts, next/previous navigation, activation, and stale-task suppression.
+- Added precise DOCX text-range highlights, XLSX sheet/cell activation, PPTX shape-level activation, and PDF search rectangles using each format's stable semantic anchors.
+- Kept built-in viewers and host-owned Surface toolbars on the same search state instead of maintaining duplicate result lists.
+
+### PDF glyph selection
+
+- Replaced browser-reflowed transparent text spans with PDFium character indices, glyph geometry, and overlay rectangles for search, drag selection, and copy.
+- Added visible-page geometry prefetch with request deduplication, a drag threshold, retained down/up points while geometry loads, run-scoped glyph-gap snapping, animation-frame coalescing, and final pointer-up flushing.
+- Added native double-click word selection using coarse PDF boundaries, per-character text slices, an explicit PDF-index-to-UTF-16 map, and `Intl.Segmenter`.
+- Kept selection single-page and did not add OCR, sentence/line gestures, edge scrolling, touch handles, or new public selection APIs.
+
+### Validation and compatibility
+
+- Added unit coverage for coordinate transforms, run-scoped hit testing, English/numeric/Chinese word boundaries, and multi-code-unit mapping.
+- Added component coverage for drag completion after delayed geometry and native double-click selection, plus real Chromium interaction verification.
+- Kept existing public entry points and package relationships compatible with `0.5.3`.
+
 ## [0.5.3] - 2026-07-13
 
 ### Unified Surface gesture zoom

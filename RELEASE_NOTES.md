@@ -1,3 +1,50 @@
+# 0.5.4 发布说明
+
+发布日期：2026-07-13
+
+`0.5.4` 汇总了自 `v0.5.3` 以来的两批向后兼容改进：四种 Surface 统一搜索与精确定位，以及基于 PDFium glyph geometry 的 PDF 拖选和双击选词优化。
+
+## 功能变更
+
+### 四格式 Surface 搜索
+
+- DOCX、XLSX、PPTX、PDF Surface 共用搜索会话和 `OfficeFindBar`，默认执行模糊搜索，并统一提供结果计数、上一个、下一个、激活、滚动定位和可视高亮。
+- DOCX 使用模型文字范围精确高亮关键字，不再只定位整行或整块。
+- XLSX 切换到目标 Sheet、滚动并选中命中单元格；PPTX 复用文档会话定位到具体 shape；PDF 使用 Runtime 返回的字符范围和矩形。
+- 内置 Viewer 与宿主工具栏读取同一个搜索状态；快速连续查询和导航时，旧异步任务不能覆盖新结果或把视口拉回。
+
+### PDF 原生文字选择
+
+- PDF 搜索和选择不再依赖透明文字 `<span>` 或浏览器原生 Selection，而是统一使用 PDFium 字符索引、glyph geometry 和矩形覆盖层。
+- 页面打开及中心可见页变化时预取当前页和相邻页 geometry，同页请求自动去重；预取不再是首次拖选正确性的前提。
+- 拖选加入移动阈值、异步 geometry 期间的 down/latest point 保留、run 内字符间隙吸附、逐帧合并更新和 pointerup 最终坐标刷新。
+- 双击使用浏览器原生 click count；粗范围经单字符 slice、PDF charIndex 与 UTF-16 offset 映射及 `Intl.Segmenter` 收敛为词边界。
+- 选择仍限定在单页文字范围内；本版本没有增加 OCR、跨页选择、双击选句、三击选行、边缘自动滚动或触摸手柄。
+
+## 代码与验证
+
+- 私有 `@arcships/office-runtime` 提供共享搜索会话；`@arcships/vue-ui` 公开统一 Find Bar，各格式保留自己的稳定语义锚点。
+- PDF 搜索矩形、选择矩形和指针命中继续复用同一 canonical coordinate transform；没有新增第三方分词依赖或公开选择 API。
+- 新增坐标、run 内命中、英文/数字/固定中文词边界及多码元映射单元测试。
+- 新增 geometry 晚于 pointerup 返回和原生双击选词的组件测试，并通过真实 Chromium 拖选、双击和控制台检查。
+
+## 0.5.4 包版本
+
+- `@arcships/docx-core@0.5.4`
+- `@arcships/vue-docx@0.5.4`
+- `@arcships/xlsx-core@0.5.4`
+- `@arcships/vue-xlsx@0.5.4`
+- `@arcships/vue-pdf@0.5.4`
+- `@arcships/vue-ui@0.5.4`
+- `@arcships/pptx-core@0.5.4`
+- `@arcships/vue-pptx@0.5.4`
+
+## 兼容说明
+
+- 本版本没有删除公开入口；四格式既有加载、渲染、缩放和宿主组合方式保持兼容。
+- 搜索与选择能力只在文字或模型锚点可用时工作，不通过 OCR、字体替代或字符串猜测伪造结果。
+- `@arcships/office-runtime` 仍为私有工作区包，不进入公开安装清单，也不会作为公开包的运行依赖泄漏。
+
 # 0.5.3 发布说明
 
 发布日期：2026-07-13

@@ -1,6 +1,6 @@
 # Surface 搜索与 PDF 文字选择设计
 
-> 状态：首版实现完成并通过现有构建、单元、组件与浏览器门禁；扩展兼容性矩阵待持续补充
+> 状态：首版实现已提交（`cf0a408`）；PDF 拖选与双击选词优化已实现并通过单元、组件及 Chromium 交互验证，待 Firefox/WebKit 矩阵复验
 > 适用范围：`packages/vue-docx`、`packages/vue-xlsx`、`packages/vue-pptx`、`packages/vue-pdf`、`packages/vue-ui`
 > 取代：`pdf-text-layer-issue.md` 中的透明 `<span>` 文字层方案
 > 目标：让四种 Surface 都能搜索并定位结果，让 PDF 在原生文字可用时可靠选择和复制文字
@@ -34,6 +34,7 @@
 - 结果计数、上一个、下一个、激活、滚动定位和可视高亮。
 - Surface 模式和默认 Viewer 模式使用同一个搜索会话。
 - PDF 原生文字页的鼠标/触控板拖选、选区显示和文字复制。
+- PDF 可见页 geometry 预取、拖动阈值、字符间隙连续命中、逐帧更新和双击选词。
 - 搜索输入、空结果、加载状态、关闭和焦点恢复等必要界面交互。
 - 异步搜索与定位的竞态处理。
 
@@ -42,7 +43,7 @@
 以下能力没有得到需求确认，不进入本设计：
 
 - OCR、扫描件文字识别以及 OCR Provider。
-- PDF 跨页选择、双击选词、三击选行、边缘自动滚动、触屏拖拽手柄和永久高亮。
+- PDF 跨页选择、双击选句、三击选行、边缘自动滚动、触屏拖拽手柄和永久高亮。
 - 查找替换、正则、大小写开关和整词搜索。
 - XLSX 搜索范围切换，以及公式、批注等搜索字段选择。
 - 隐藏 Sheet、隐藏行列、隐藏幻灯片和播放模式的特殊搜索规则；首版沿用现有文档模型的可搜索内容，不在本设计新增产品语义。
@@ -402,13 +403,24 @@ PDFium 要求页面/设备坐标转换使用与渲染相同的起点、尺寸和
 
 PDF 搜索结果必须透传上游已有的 `charIndex/charCount`，不能根据 context 字符串反推字符位置。激活结果时先挂载并滚动到目标页，再滚动到当前命中矩形，而不是只切换页码。
 
-### 10.6 无可靠文字映射时的行为
+### 10.6 拖选与双击选词优化（已实现）
 
-字体渲染位置与 Unicode 映射是两个问题：统一 glyph geometry 可以解决视觉定位，但无法修复 PDF 文件缺失或错误的 ToUnicode。
+本轮只改善现有文字页的选择交互，不改变单页选择边界和公开 `PdfSelectionState`。
 
-- PDFium 无法返回文字或返回明确的 Unicode map error 时，该页搜索/选择必须报告文字不可用或映射错误。
-- 不通过字体 fallback、字符串清洗或 span 宽度调整伪造“已修复”。
-- 本期不调用 OCR；扫描页和无法可靠映射的页明确提示当前不能搜索或选择文字。
+#### 10.6.1 拖选
+
+- 文档打开和中心可见页变化后预取当前页及相邻页 geometry，并对同页请求去重；文档更换后旧请求不能写入新缓存。预取只降低延迟，不能成为正确性前提。
+- `pointerdown` 先同步保存 down/latest point，再异步读取 geometry。移动超过内部阈值才建立选区；未超过阈值的单击只清除选区。即使抬起时 geometry 尚未返回，也要用已保存的 down/up point 完成选区。
+- focus 优先使用 `glyphAt()`；未命中但仍位于文字 run 内时吸附到该 run 最近的非 empty glyph，离开文字 run 时保持最后 focus，避免跨行或跨栏跳选。
+- `pointermove` 每帧只处理最新位置，focus 改变时才调用 `rectsWithinSlice()`；`pointerup` 提交前同步处理最终位置。
+- 新手势、`pointercancel`、文档更换或卸载必须使旧异步任务和待执行 frame 失效。
+
+#### 10.6.2 双击选词
+
+- 使用浏览器 click count 识别双击，只实现选词，不自行定义双击时间。
+- `glyphAt()` 确定 PDF charIndex，`expandToWordBoundary()` 给出粗范围；对范围内字符按需读取单字符 slice，建立 PDF charIndex 与 UTF-16 offset 的映射，再用 `Intl.Segmenter` 得到词边界并映射回 glyph 范围。
+- 不能直接把 JS string offset 当作 PDF charIndex；代理对、组合字符或一个 glyph 对应多个 code unit 时，边界向外取整到完整 glyph。
+- 继续使用 `@embedpdf/plugin-selection` 根出口的公开纯函数，不深层导入内部 handler，不增加第三方分词依赖或新的公开 API。
 
 ## 11. 性能、错误与竞态
 
@@ -452,11 +464,20 @@ PDF 搜索结果必须透传上游已有的 `charIndex/charCount`，不能根据
 
 ### 12.5 PDF
 
+首版既有验收：
+
 - 在项目支持的 zoom 和 0/90/180/270 旋转下，搜索与选择矩形仍贴合目标 glyph。
 - 中英文、ligature、RTL、竖排、多栏和同页跨行选择使用 PDFium 的字符顺序和 geometry 验证。
 - 单页内正向和反向拖选得到相同的文字范围，复制文本与可视选区一致。
 - search geometry 和 selection geometry 都通过同一个 canonical transform。
-- 缺失或错误 ToUnicode、扫描页不会返回看似成功的错误文字。
+
+拖选与双击选词新增验收：
+
+- 使用可控延迟 geometry 的 fixture，在 down/move/up 都早于 geometry 返回时，最终范围仍使用原始 down point 和最后 up point。
+- 移动未超过阈值时不产生单字符选区；进入拖选后，字符间隙处连续推进且不跳到相邻行或栏。
+- 高频 pointermove 每帧最多提交一次，focus 不变时不重算，pointerup 不遗漏最终位置。
+- 双击英文单词、数字和固定中文词样本时，视觉范围与复制文字一致。
+- 复用已有 zoom/rotation fixture，并进入项目现有的 Chromium、Firefox、WebKit 矩阵。
 
 视觉定位使用固定 PDF/DOCX fixture 和截图或矩形断言；交互测试同时检查滚动位置、active anchor 和实际复制文本，不能只检查数组长度或 DOM 节点存在。
 
@@ -468,8 +489,9 @@ PDF 搜索结果必须透传上游已有的 `charIndex/charCount`，不能根据
 | 2. 接通已有搜索 | PPTX 会话下沉、XLSX `scrollToCell`、PDF 搜索 overlay | 三种格式可搜索、激活并滚动到结果 |
 | 3. DOCX 精确 range | 模型索引、DOM offset map、CSS Highlight + rect fallback | 同段多命中和表格结果可逐条精确高亮 |
 | 4. PDF 原生 glyph 选择 | Runtime geometry/text slice、统一 transform、基础指针状态机和复制 | zoom/rotation、单页跨行和反向拖选 fixture 通过 |
+| 5. PDF 选择交互优化 | geometry 预取、拖动阈值、run 内吸附、逐帧更新、双击选词 | 首拖不丢、单击不误选、拖选连续、双击词边界和三浏览器测试通过 |
 
-阶段 4 必须先完成坐标 transform 单元测试和带页面自身旋转的 PDF fixture。OCR、高级选择手势和高级搜索模式不在这些阶段内。
+阶段 4 必须先完成坐标 transform 单元测试和带页面自身旋转的 PDF fixture。阶段 5 只改善现有文字页交互，非目标仍以 2.3 节为准。
 
 ## 14. 外部研究验证
 
@@ -480,6 +502,9 @@ PDF 搜索结果必须透传上游已有的 `charIndex/charCount`，不能根据
 | PDF 按字符索引和字符框选择 | PDFium `FPDFText_CountChars/GetUnicode/GetCharBox/GetLooseCharBox/HasUnicodeMapError` | 可行；字符索引与 glyph 框是可靠锚点，错误 Unicode 不能由 UI 猜测修复 |
 | 坐标转换与渲染参数一致 | PDFium `FPDF_PageToDevice/FPDF_DeviceToPage` | 必须集中 transform，旧方案的二次 Y 翻转不可靠 |
 | geometry 矩形选区是成熟路径 | EmbedPDF Selection Plugin | 可复用现有 geometry、hit-test 和 range rect 纯函数，无需透明 span |
+| 拖选和双击事件语义 | W3C Pointer Events | 使用 pointer capture、浏览器 click count 和每帧最终位置；异步 geometry 期间由应用保留手势状态 |
+| 拖动阈值和选词已有上游先例 | 本地锁定 `@embedpdf/plugin-selection@2.14.4` | 复用公开纯函数并沿用交互语义，不深层导入内部 handler |
+| locale-sensitive 词边界 | ECMA-402 `Intl.Segmenter` 与 Unicode UAX #29 | 英文/数字路径成熟；中文等语言需要 locale tailoring 和固定 fixture，不能只按空格切词 |
 | DOCX 用 Range 高亮且不修改 DOM | W3C CSS Custom Highlight API | 适合跨 run Range |
 | CSS Highlight 不能是唯一实现 | WebKit 已公开 flex 与 `user-select:none` 相关缺陷 | 必须保留 rect fallback |
 | XLSX 搜索结果定位到单元格 | Microsoft Excel Find | 符合办公软件的网格定位语义 |
@@ -490,6 +515,10 @@ PDF 搜索结果必须透传上游已有的 `charIndex/charCount`，不能根据
 - [PDFium text API](https://pdfium.googlesource.com/pdfium/+/main/public/fpdf_text.h)
 - [PDFium page/device coordinate API](https://pdfium.googlesource.com/pdfium/+/main/public/fpdfview.h)
 - [EmbedPDF Vue Selection Plugin](https://www.embedpdf.com/docs/vue/headless/plugins/plugin-selection)
+- [EmbedPDF Selection Plugin 源码](https://github.com/embedpdf/embed-pdf-viewer/tree/main/packages/plugin-selection)
+- [W3C Pointer Events](https://www.w3.org/TR/pointerevents/)
+- [ECMA-402 Intl.Segmenter](https://tc39.es/ecma402/#sec-segmenter-objects)
+- [Unicode UAX #29：Text Segmentation](https://www.unicode.org/reports/tr29/)
 - [W3C CSS Custom Highlight API](https://www.w3.org/TR/css-highlight-api-1/)
 - [WebKit bug 307455：Custom Highlight 与 flex](https://bugs.webkit.org/show_bug.cgi?id=307455)
 - [WebKit bug 278455：Custom Highlight 与 user-select:none](https://bugs.webkit.org/show_bug.cgi?id=278455)
@@ -499,6 +528,7 @@ PDF 搜索结果必须透传上游已有的 `charIndex/charCount`，不能根据
 可靠性判断：
 
 - **高置信度**：统一搜索会话、XLSX 单元格定位、PPTX 能力下沉和 PDF glyph 矩形选择，都有当前代码或上游能力支撑。
+- **PDF 交互优化**：首拖、阈值、逐帧更新及英文/数字选词置信度高；中文词边界以固定 fixture 验收，不对语言学歧义作无限承诺。
 - **需要兼容层**：DOCX CSS Custom Highlight 的方向可靠，但 WebKit 缺陷决定了 rect fallback 必须保留。
 - **明确限制**：PDF glyph geometry 能解决定位错误，不能修复文件自身的错误 Unicode 映射；本期对此明确失败，不扩展到 OCR。
 - **明确否决**：透明 span/native Selection 会让浏览器重新排版 PDF 文字，无法同时保证坐标、字宽和字符映射。

@@ -160,13 +160,13 @@ importers:
 
   packages/vue-pdf:
     dependencies:
+      '@embedpdf/core':
+        specifier: ^2.14.4
+        version: 2.14.4(preact@10.29.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.4)(vue@3.5.39(typescript@5.9.3))
       '@embedpdf/models':
         specifier: ^2.14.4
         version: 2.14.4
     devDependencies:
-      '@embedpdf/core':
-        specifier: ^2.14.4
-        version: 2.14.4(preact@10.29.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.4)(vue@3.5.39(typescript@5.9.3))
       '@embedpdf/engines':
         specifier: ^2.14.4
         version: 2.14.4(preact@10.29.4)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(svelte@5.56.4)(vue@3.5.39(typescript@5.9.3))
@@ -312,7 +312,7 @@ importers:
         version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
     devDependencies:
       '@arcships/vue-ui':
-        specifier: workspace:*
+        specifier: ^0.5.4
         version: link:../vue-ui
       '@types/d3-geo':
         specifier: ^3.1.0
