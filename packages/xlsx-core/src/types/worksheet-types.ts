@@ -566,7 +566,9 @@ export interface UseXlsxViewerControllerOptions {
    */
   deferLoadingAboveBytes?: number;
   /**
-   * Local workbook bytes to load. Use either `file` or `src`.
+   * Local XLSX, XLS, XLSB, XLSM, XLTX, XLTM, or CSV bytes to load. Use either `file` or `src`.
+   * CSV byte sources must provide a `.csv` file name so the input format can
+   * be identified; UTF-8 and BOM-marked UTF-16 are supported.
    *
    * @example
    * ```tsx
@@ -575,7 +577,8 @@ export interface UseXlsxViewerControllerOptions {
    */
   file?: ArrayBuffer;
   /**
-   * Optional display and download name for the workbook.
+   * Optional display and download name for the workbook. Required for local
+   * CSV byte sources and must end in `.csv`.
    *
    * @example
    * ```tsx
@@ -631,7 +634,8 @@ export interface UseXlsxViewerControllerOptions {
    */
   skipXmlParsing?: boolean;
   /**
-   * Remote workbook URL to fetch and load. Use either `src` or `file`.
+   * Remote XLSX, XLS, XLSB, XLSM, XLTX, XLTM, or CSV URL to fetch and load. Use either `src` or `file`.
+   * CSV is detected from the final URL extension or response Content-Type.
    *
    * @example
    * ```tsx

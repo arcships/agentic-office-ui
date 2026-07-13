@@ -49,6 +49,7 @@ export interface XlsxArchiveEntry {
 
 /** Public archive summary returned before an XLSX workbook is parsed. */
 export interface XlsxArchiveValidationResult {
+  sourceFormat: "xlsx" | "xlsb" | "xlsm" | "xltx" | "xltm";
   entryCount: number;
   compressedBytes: number;
   uncompressedBytes: number;
@@ -153,6 +154,23 @@ export function isLegacyXlsBytes(input: ArrayBuffer | Uint8Array): boolean {
     && bytes[7] === 0xe1;
 }
 
+export function isBinaryXlsbBytes(input: ArrayBuffer | Uint8Array): boolean {
+  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  const marker = "xl/workbook.bin";
+  if (bytes.byteLength < marker.length) return false;
+  for (let offset = 0; offset <= bytes.byteLength - marker.length; offset += 1) {
+    let matched = true;
+    for (let index = 0; index < marker.length; index += 1) {
+      if (bytes[offset + index] !== marker.charCodeAt(index)) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return true;
+  }
+  return false;
+}
+
 export function validateXlsxArchive(
   input: ArrayBuffer | Uint8Array,
   limits?: XlsxRuntimeLimits,
@@ -170,5 +188,5 @@ export function validateXlsxArchive(
   }
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
   validateXlsxImageAssets(unzipSync(bytes), resolvedLimits);
-  return archiveResult;
+  return archiveResult as XlsxArchiveValidationResult;
 }

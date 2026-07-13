@@ -668,8 +668,24 @@ export function isLegacyXlsWorkbook(bytes: Uint8Array) {
     && bytes[7] === 0xe1;
 }
 
+function isBinaryXlsbWorkbook(bytes: Uint8Array) {
+  const marker = "xl/workbook.bin";
+  if (bytes.byteLength < marker.length) return false;
+  for (let offset = 0; offset <= bytes.byteLength - marker.length; offset += 1) {
+    let matched = true;
+    for (let index = 0; index < marker.length; index += 1) {
+      if (bytes[offset + index] !== marker.charCodeAt(index)) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return true;
+  }
+  return false;
+}
+
 export function shouldSkipXmlParsingForWorkbook(bytes: Uint8Array, skipXmlParsing = false) {
-  return skipXmlParsing || isLegacyXlsWorkbook(bytes);
+  return skipXmlParsing || isLegacyXlsWorkbook(bytes) || isBinaryXlsbWorkbook(bytes);
 }
 
 export function createBasicWorkbookAssets(workbook: Workbook): WorkbookImageAssets {

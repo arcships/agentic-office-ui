@@ -1,6 +1,6 @@
 # @arcships/vue-docx
 
-Vue 3 DOCX 查看与编辑组件。
+Vue 3 Word 文档组件。Viewer 支持 DOCX、DOCM、DOTX、DOTM 安全预览；Editor 的原格式编辑仍以 DOCX 为主，宏内容不会执行。
 
 ## 安装
 

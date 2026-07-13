@@ -9,7 +9,7 @@ import {
   waitFor,
 } from "./vue-test-renderer.mjs";
 
-const { setWasmSource } = await importFromDemo("@arcships/xlsx-core");
+const { getSheetsWasmModule, setWasmSource } = await importFromDemo("@arcships/xlsx-core");
 const { useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
 
 function workbookBuffer() {
@@ -72,6 +72,108 @@ async function countUndos(controller) {
 }
 
 configureWasm();
+
+test("XLSX controller opens local UTF-8 CSV as a single editable sheet", async () => {
+  const bytes = new TextEncoder().encode("name,amount,note\nAlice,12,\"hello, world\"\nBob,34,中文\n");
+  const csvBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  let controller;
+  const diagnostics = [];
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useXlsxViewerController({
+        file: csvBuffer,
+        fileName: "sales.csv",
+        onDiagnostic: (event) => diagnostics.push(event),
+        useWorker: false,
+      });
+      return () => vue.h("div", controller.sourceState);
+    },
+  });
+  const mounted = await mount(Harness);
+  try {
+    await waitFor(
+      () => controller.sourceState === "ready" || controller.error,
+      "CSV-backed XLSX controller",
+    );
+    assert.ifError(controller.error);
+    assert.equal(controller.displayFileName, "sales.csv");
+    assert.equal(controller.sheets.length, 1);
+    assert.equal(controller.getCellDisplayValue({ row: 0, col: 0 }), "name");
+    assert.equal(controller.getCellDisplayValue({ row: 1, col: 1 }), "12");
+    assert.equal(controller.getCellDisplayValue({ row: 1, col: 2 }), "hello, world");
+    assert.equal(controller.getCellDisplayValue({ row: 2, col: 2 }), "中文");
+    assert.deepEqual(diagnostics.map((event) => event.type), ["load-start", "load-success"]);
+    assert.equal(diagnostics[1].bytes, csvBuffer.byteLength);
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+test("XLSX controller opens XLSB through the basic workbook asset path", async () => {
+  const wasm = await getSheetsWasmModule();
+  const sourceWorkbook = wasm.Workbook.fromCsvString("name,amount\nAlice,12\n");
+  const bytes = sourceWorkbook.saveXlsbBytes();
+  sourceWorkbook.free();
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useXlsxViewerController({
+        file: buffer,
+        fileName: "sales.xlsb",
+        useWorker: false,
+      });
+      return () => vue.h("div", controller.sourceState);
+    },
+  });
+  const mounted = await mount(Harness);
+  try {
+    await waitFor(
+      () => controller.sourceState === "ready" || controller.error,
+      "XLSB-backed XLSX controller",
+    );
+    assert.ifError(controller.error);
+    assert.equal(controller.displayFileName, "sales.xlsb");
+    assert.equal(controller.sheets.length, 1);
+    assert.equal(controller.getCellDisplayValue({ row: 0, col: 0 }), "name");
+    assert.equal(controller.getCellDisplayValue({ row: 1, col: 0 }), "Alice");
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+test("deferred CSV loading waits for explicit resume before conversion", async () => {
+  const bytes = new TextEncoder().encode("name,amount\nAlice,12\n");
+  const csvBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useXlsxViewerController({
+        deferLoadingAboveBytes: 1,
+        file: csvBuffer,
+        fileName: "deferred.csv",
+        useWorker: false,
+      });
+      return () => vue.h("div", controller.sourceState);
+    },
+  });
+  const mounted = await mount(Harness);
+  try {
+    await waitFor(() => controller.isLoadDeferred, "deferred CSV state");
+    assert.equal(controller.sourceState, "loading");
+    assert.equal(controller.isLoading, false);
+    assert.equal(controller.activeSheet, null);
+    controller.continueDeferredLoad();
+    await waitFor(
+      () => controller.sourceState === "ready" || controller.error,
+      "resumed CSV controller",
+    );
+    assert.ifError(controller.error);
+    assert.equal(controller.getCellDisplayValue({ row: 1, col: 1 }), "12");
+  } finally {
+    mounted.app.unmount();
+  }
+});
 
 test("XLSX undo byte budgets belong to each controller instance", async () => {
   const low = await mountController({

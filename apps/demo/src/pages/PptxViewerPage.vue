@@ -2,7 +2,7 @@
   <div class="pptx-demo">
     <header class="pptx-demo__header">
       <div>
-        <h2>PPTX 网页预览与播放</h2>
+        <h2>PowerPoint 网页预览与播放</h2>
         <p>同一份文件可以切换浏览和演示模式，演示模式支持动画、媒体、键盘与全屏控制。</p>
       </div>
       <div class="pptx-demo__actions">
@@ -11,8 +11,8 @@
           <button type="button" :aria-pressed="mode === 'present'" data-testid="pptx-mode-present" @click="mode = 'present'">演示</button>
         </div>
         <label class="pptx-demo__upload">
-          <span>选择 PPTX</span>
-          <input data-testid="pptx-file-input" type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" @change="onFileChange" />
+          <span>选择 PowerPoint</span>
+          <input data-testid="pptx-file-input" type="file" accept=".pptx,.pptm,.ppsx,.ppsm,.potx,.potm,application/vnd.openxmlformats-officedocument.presentationml.presentation" @change="onFileChange" />
         </label>
       </div>
     </header>
@@ -43,13 +43,13 @@ import { PptxViewer } from "@arcships/vue-pptx"
 const source = ref<File | null>(null)
 const mode = ref<"browse" | "present">("browse")
 const fileName = ref("")
-const status = ref("请选择一个 PPTX 文件。")
+const status = ref("请选择一个 PowerPoint 文件。")
 
 function onFileChange(event: Event): void {
   const file = (event.target as HTMLInputElement).files?.[0] ?? null
   source.value = file
   fileName.value = file?.name ?? ""
-  if (!file) status.value = "请选择一个 PPTX 文件。"
+  if (!file) status.value = "请选择一个 PowerPoint 文件。"
 }
 </script>
 

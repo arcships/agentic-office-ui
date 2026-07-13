@@ -1,5 +1,7 @@
 # DOCX 使用指南
 
+`DocxViewer` 支持 `.docx`、`.docm`、`.dotx` 和 `.dotm`。宏文档和宏模板只用于安全预览，VBA 不会执行；模板按普通文档打开。`DocxEditor` 的原格式编辑和宏保留不在本次支持范围内。
+
 ## 查看文档
 
 ```vue
@@ -25,7 +27,7 @@ import "@arcships/vue-docx/style.css"
 
 | 属性 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `file` | `ArrayBuffer` | 无 | DOCX 字节 |
+| `file` | `ArrayBuffer` | 无 | DOCX、DOCM、DOTX 或 DOTM 字节 |
 | `model` | `DocModel` | 无 | 已解析文档模型 |
 | `runtime` | `DocxRuntime` | 组件创建 | 调用方持有的 Runtime |
 | `showToolbar` | `boolean` | `true` | 显示查看工具栏 |

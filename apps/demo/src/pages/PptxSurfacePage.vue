@@ -2,7 +2,7 @@
   <div class="page" data-testid="pptx-surface-page">
     <header class="page-header">
       <div>
-        <h2>PPTX Surface — 最小嵌入组件</h2>
+        <h2>PowerPoint Surface — 最小嵌入组件</h2>
         <p class="desc">
           垂直连续渲染全部幻灯片，无 Toolbar/Sidebar/搜索栏/播放控制。
           宿主通过 usePptxDocument 自行管理跳页与缩放；单页左右切换只用于播放模式。
@@ -12,7 +12,7 @@
 
     <div class="toolbar-zone">
       <label class="ctrl">
-        <input ref="fileInputRef" data-testid="pptx-surface-file-input" type="file" accept=".pptx" @change="onFileChange" />
+        <input ref="fileInputRef" data-testid="pptx-surface-file-input" type="file" accept=".pptx,.pptm,.ppsx,.ppsm,.potx,.potm" @change="onFileChange" />
         选择 PPTX
       </label>
 
@@ -82,7 +82,7 @@ const documentApi = usePptxDocument(stageElement, {
 const { activeIndex, zoomPercent, state } = documentApi
 
 // ── Status ───────────────────────────────────────────────────────────
-const statusLabel = ref("选择一个 PPTX 文件。")
+const statusLabel = ref("选择一个 PowerPoint 文件。")
 watch(state, (next) => {
   if (next === "waiting-for-stage") statusLabel.value = "等待舞台挂载…"
   else if (next === "loading") statusLabel.value = "加载中…"

@@ -7,6 +7,12 @@ import { pathToFileURL } from "node:url";
 const requireFromVueDocx = createRequire(
   new URL("../../packages/vue-docx/package.json", import.meta.url),
 );
+const requireFromDocxCore = createRequire(
+  new URL("../../packages/docx-core/package.json", import.meta.url),
+);
+const { strFromU8, strToU8, unzipSync, zipSync } = await import(
+  pathToFileURL(requireFromDocxCore.resolve("fflate")).href
+);
 const core = await import(
   pathToFileURL(requireFromVueDocx.resolve("@arcships/docx-core")).href
 );
@@ -17,6 +23,17 @@ const samples = new URL("../../apps/demo/public/samples/", import.meta.url);
 
 function arrayBufferFromFile(name) {
   const bytes = readFileSync(new URL(name, samples));
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+function withWordMainContentType(input, contentType) {
+  const archive = unzipSync(new Uint8Array(input));
+  const contentTypes = strFromU8(archive["[Content_Types].xml"]);
+  archive["[Content_Types].xml"] = strToU8(contentTypes.replace(
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+    contentType,
+  ));
+  const bytes = zipSync(archive);
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
@@ -117,6 +134,20 @@ test("DOCX parses a normal fixture and preserves content through roundtrip", asy
   const secondText = collectText(second.model).join(" ");
   assert.match(secondText, /INVOICE INV-2026-0705/);
   assert.equal(second.model.nodes.length, first.model.nodes.length);
+});
+
+test("DOCX importer accepts macro-enabled documents and Word templates as read-only inputs", async () => {
+  const source = arrayBufferFromFile("invoice-table.docx");
+  for (const [format, contentType] of [
+    ["docm", "application/vnd.ms-word.document.macroEnabled.main+xml"],
+    ["dotx", "application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml"],
+    ["dotm", "application/vnd.ms-word.template.macroEnabledTemplate.main+xml"],
+  ]) {
+    const result = await core.importDocxBuffer(withWordMainContentType(source, contentType), {
+      useWorker: false,
+    });
+    assert.ok(result.model.nodes.length > 0, `${format} should produce a document model`);
+  }
 });
 
 test("DOCX rejects empty and corrupted input with a stable parse error", async () => {

@@ -2,8 +2,8 @@
   <div class="page" data-testid="xlsx-viewer-page">
     <header class="product-header">
       <div>
-        <h2>XLSX 工作簿</h2>
-        <p class="desc">查看和编辑单元格、公式、样式、图表与图片。</p>
+        <h2>Excel/CSV 电子表格</h2>
+        <p class="desc">查看和编辑单元格；XLSX 还支持公式、样式、图表与图片。</p>
       </div>
       <div class="controls control-panel product-actions">
       <label>
@@ -16,7 +16,7 @@
       <label class="inline"><input v-model="readOnly" data-testid="xlsx-read-only" type="checkbox" /> 只读</label>
       </div>
     </header>
-    <input ref="fileInputRef" class="visually-hidden" data-testid="xlsx-file-input" type="file" accept=".xlsx,.xls" @change="onFileChange" />
+    <input ref="fileInputRef" class="visually-hidden" data-testid="xlsx-file-input" type="file" accept=".xlsx,.xls,.xlsb,.xlsm,.xltx,.xltm,.csv,text/csv" @change="onFileChange" />
 
     <div v-if="pageError" class="error" data-testid="load-error" :data-error-code="pageError.code">
       {{ pageError.code }}: {{ pageError.message }}
@@ -30,7 +30,7 @@
       @dragleave.prevent="onDragLeave"
       @drop.prevent="onDrop"
     >
-      <div v-if="isDragActive" class="drag-overlay"><span>放下 .xlsx 文件</span></div>
+      <div v-if="isDragActive" class="drag-overlay"><span>放下 Excel 或 CSV 文件</span></div>
       <XlsxViewerWrapper
         v-if="viewerKey"
         :key="viewerKey"
@@ -237,8 +237,8 @@ function loadUrl() {
 
 function processFile(file: File) {
   const requestId = invalidateFileRead()
-  if (!file.name.toLowerCase().match(/\.xlsx?$/)) {
-    inputError.value = { code: "INVALID_WORKBOOK", message: "请选择 .xlsx 或 .xls 文件。", sourceKind: "file" }
+  if (!file.name.toLowerCase().match(/\.(xlsx|xls|xlsb|xlsm|xltx|xltm|csv)$/)) {
+    inputError.value = { code: "INVALID_WORKBOOK", message: "请选择受支持的 Excel 或 CSV 文件。", sourceKind: "file" }
     return
   }
   beginLoad("本地文件", file.name)

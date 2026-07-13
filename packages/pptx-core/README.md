@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-本包提供 PPTX 纵向列表/单页静态预览、播放模型、文档会话、播放控制器、页面切换和受控媒体，从 `0.3.0` 起公开发布。实现范围和验收结果见 [实现设计](../../docs/pptx-playback-implementation-design.md) 与 [正式播放验收记录](../../docs/pptx-playback-acceptance-results.md)。
+本包提供 PPTX、PPTM、PPSX、PPSM、POTX、POTM 的纵向列表/单页静态预览、播放模型、文档会话、播放控制器、页面切换和受控媒体。宏内容不会执行。实现范围和验收结果见 [实现设计](../../docs/pptx-playback-implementation-design.md) 与 [正式播放验收记录](../../docs/pptx-playback-acceptance-results.md)。
 
 ```bash
 pnpm add @arcships/pptx-core@0.5.2

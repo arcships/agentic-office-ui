@@ -1,6 +1,6 @@
 # @arcships/docx-core
 
-DOCX 文档模型、布局引擎、编辑命令，以及带 Worker/WASM 支持的实例级 Runtime。
+DOCX、DOCM、DOTX、DOTM 文档模型与只读输入，布局引擎、DOCX 编辑命令，以及带 Worker/WASM 支持的实例级 Runtime。宏内容不会执行。
 
 ## 安装
 

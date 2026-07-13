@@ -12,6 +12,18 @@ export type {
   OfficeSourceKind,
 } from "./errors";
 export {
+  detectOoxmlSourceFormat,
+  detectSourceFormat,
+  isMacroEnabledOfficeFormat,
+} from "./source-format";
+export type {
+  DetectSourceFormatInput,
+  OfficeSourceFamily,
+  OfficeSourceFormat,
+  OoxmlSourceFormat,
+  SourceFormatDetection,
+} from "./source-format";
+export {
   assertOfficeInputBytes,
   resolveOfficeLimits,
   snapshotOfficeLimits,

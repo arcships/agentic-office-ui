@@ -431,12 +431,21 @@ export function resolveWorkbookTableBoolean(value: unknown) {
 export interface ResolvedWorkbookSource {
   buffer: ArrayBuffer;
   fileName?: string;
+  inputFormat: "csv" | "xlsb" | "workbook";
   resolvedUrl?: string;
   sourceKind: "file" | "url";
 }
 
+function isCsvSpreadsheetSource(fileName?: string): boolean {
+  return typeof fileName === "string" && /\.csv$/i.test(fileName.trim());
+}
+
+function isXlsbSpreadsheetSource(fileName?: string): boolean {
+  return typeof fileName === "string" && /\.xlsb$/i.test(fileName.trim());
+}
+
 export async function resolveWorkbookSource(
-  { file, src, urlPolicy }: Pick<UseXlsxViewerControllerOptions, "file" | "src" | "urlPolicy">,
+  { file, fileName, src, urlPolicy }: Pick<UseXlsxViewerControllerOptions, "file" | "fileName" | "src" | "urlPolicy">,
   signal?: AbortSignal,
   limits?: Pick<XlsxRuntimeLimits, "maxInputBytes">
 ): Promise<ResolvedWorkbookSource> {
@@ -446,7 +455,16 @@ export async function resolveWorkbookSource(
   }
 
   if (file) {
-    return { buffer: file, sourceKind: "file" };
+    return {
+      buffer: file,
+      ...(fileName ? { fileName } : {}),
+      inputFormat: isCsvSpreadsheetSource(fileName)
+        ? "csv"
+        : isXlsbSpreadsheetSource(fileName)
+          ? "xlsb"
+          : "workbook",
+      sourceKind: "file"
+    };
   } else if (src) {
     return loadVerifiedXlsxSource(src, urlPolicy, signal, limits);
   }
@@ -456,11 +474,69 @@ export async function resolveWorkbookSource(
 
 /** Preserved public helper for callers that only need the loaded bytes. */
 export async function resolveWorkbookBuffer(
-  options: Pick<UseXlsxViewerControllerOptions, "file" | "src" | "urlPolicy">,
+  options: Pick<UseXlsxViewerControllerOptions, "file" | "fileName" | "src" | "urlPolicy">,
   signal?: AbortSignal,
   limits?: Pick<XlsxRuntimeLimits, "maxInputBytes">
 ): Promise<ArrayBuffer> {
   return (await resolveWorkbookSource(options, signal, limits)).buffer;
+}
+
+function csvTextDecoder(buffer: ArrayBuffer): TextDecoder {
+  const bytes = new Uint8Array(buffer);
+  if (bytes.byteLength >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return new TextDecoder("utf-16le", { fatal: true });
+  }
+  if (bytes.byteLength >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return new TextDecoder("utf-16be", { fatal: true });
+  }
+  return new TextDecoder("utf-8", { fatal: true });
+}
+
+/** Converts a CSV source into canonical XLSX bytes for the existing parse pipeline. */
+export async function convertCsvBufferToXlsx(buffer: ArrayBuffer): Promise<ArrayBuffer> {
+  let csv: string;
+  try {
+    csv = csvTextDecoder(buffer).decode(buffer);
+  } catch (cause) {
+    throw new Error("CSV 必须使用 UTF-8，或带 BOM 的 UTF-16 编码。", { cause });
+  }
+
+  const wasmModule = await getSheetsWasmModule();
+  let csvWorkbook: Workbook | undefined;
+  try {
+    csvWorkbook = trackXlsxWorkbookLifetime(wasmModule.Workbook.fromCsvString(csv));
+    const bytes = csvWorkbook.saveXlsxBytes();
+    const output = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(output).set(bytes);
+    return output;
+  } catch (cause) {
+    throw new Error("无法解析 CSV 文件。", { cause });
+  } finally {
+    csvWorkbook?.free();
+  }
+}
+
+/** Converts XLSB into canonical XLSX bytes for the existing WASM pipeline. */
+export async function convertXlsbBufferToXlsx(buffer: ArrayBuffer): Promise<ArrayBuffer> {
+  try {
+    const XLSX = await import("xlsx");
+    const workbook = XLSX.read(buffer, {
+      type: "array",
+      cellDates: true,
+      cellStyles: true,
+    });
+    const bytes = XLSX.write(workbook, {
+      bookType: "xlsx",
+      type: "array",
+      compression: true,
+    }) as ArrayBuffer | Uint8Array;
+    if (bytes instanceof ArrayBuffer) return bytes;
+    const output = new ArrayBuffer(bytes.byteLength);
+    new Uint8Array(output).set(bytes);
+    return output;
+  } catch (cause) {
+    throw new Error("无法解析 XLSB 文件。", { cause });
+  }
 }
 
 export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{

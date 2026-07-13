@@ -12,6 +12,10 @@ import {
   OfficeLoadError,
 } from "@arcships/office-runtime/errors"
 import {
+  isMacroEnabledOfficeFormat,
+  validateOfficeArchive,
+} from "@arcships/office-runtime"
+import {
   createLatestTaskCoordinator,
   createOfficeTaskSequence,
 } from "@arcships/office-runtime/load-task"
@@ -269,6 +273,11 @@ export function createPptxDocumentSession(
           limits: task.context.limits,
         })
         task.assertCurrent()
+        const archiveValidation = validateOfficeArchive(resolved.buffer, task.context.limits, {
+          format: "pptx",
+          signal: task.signal,
+        })
+        task.assertCurrent()
         const lazyMedia = openOptions.lazyMedia ?? options.lazyMedia ?? true
         const files = lazyMedia
           ? await parseZipLazyMedia(resolved.buffer, toZipLimits(limits))
@@ -316,10 +325,18 @@ export function createPptxDocumentSession(
             number: index + 1,
             hidden: playbackDocument.slides[index]?.hidden ?? slide.hidden === true,
           }))),
-          warnings: Object.freeze([Object.freeze({
-            code: "NOTES_UNSUPPORTED" as const,
-            message: "当前静态底座尚未解析演讲者备注。",
-          })]),
+          warnings: Object.freeze([
+            Object.freeze({
+              code: "NOTES_UNSUPPORTED" as const,
+              message: "当前静态底座尚未解析演讲者备注。",
+            }),
+            ...(isMacroEnabledOfficeFormat(archiveValidation.sourceFormat)
+              ? [Object.freeze({
+                  code: "UNSUPPORTED_CONTENT" as const,
+                  message: "文件中的 VBA 宏已忽略且不会执行。",
+                })]
+              : []),
+          ]),
         })
         return currentDocument
       } catch (error) {

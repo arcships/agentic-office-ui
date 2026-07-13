@@ -2,6 +2,8 @@ import { Unzip, UnzipInflate } from "fflate";
 import { OfficeLoadError } from "./errors";
 import type { OfficeFormat } from "./errors";
 import type { OfficeLimits } from "./limits";
+import { detectOoxmlSourceFormat } from "./source-format";
+import type { OoxmlSourceFormat } from "./source-format";
 
 const END_OF_CENTRAL_DIRECTORY = 0x06054b50;
 const CENTRAL_DIRECTORY_ENTRY = 0x02014b50;
@@ -38,6 +40,7 @@ export interface OfficeArchiveValidationOptions {
 }
 
 export interface OfficeArchiveValidationResult extends OfficeArchiveSummary {
+  sourceFormat: OoxmlSourceFormat;
   xmlBytes: number;
   relationships: number;
   worksheets: number;
@@ -400,16 +403,6 @@ function isXmlEntry(name: string): boolean {
   return /(?:\.xml|\.rels)$/i.test(name) || name === "[Content_Types].xml";
 }
 
-function requiredMime(format: Exclude<OfficeFormat, "pdf">): RegExp {
-  return format === "docx"
-    ? new RegExp(
-        "application/vnd\\.openxmlformats-officedocument\\.wordprocessingml\\." +
-          "doc" + "ument\\.main\\+xml",
-        "i",
-      )
-    : /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet\.main\+xml/i;
-}
-
 export function validateOfficeArchive(
   input: ArrayBuffer | Uint8Array,
   limits: Readonly<OfficeLimits>,
@@ -506,11 +499,13 @@ export function validateOfficeArchive(
       throw invalidArchive("压缩包目录与实际文件路径不一致。");
     }
   }
-  if (!contentTypes || !requiredMime(options.format).test(contentTypes)) {
+  const detected = contentTypes ? detectOoxmlSourceFormat(contentTypes) : undefined;
+  if (!detected || detected.family !== options.format) {
     throw invalidArchive(`文件不是有效的 ${options.format.toUpperCase()} 文档。`);
   }
   return Object.freeze({
     ...central,
+    sourceFormat: detected.format as OoxmlSourceFormat,
     uncompressedBytes: totalUncompressed,
     xmlBytes: totalXmlBytes,
     relationships,

@@ -1,4 +1,4 @@
-export type OfficeFormat = "docx" | "xlsx" | "pdf";
+export type OfficeFormat = "docx" | "xlsx" | "pptx" | "pdf";
 
 export type OfficeSourceKind = "file" | "bytes" | "url";
 

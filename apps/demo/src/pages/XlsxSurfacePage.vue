@@ -2,7 +2,7 @@
   <div class="page" data-testid="xlsx-surface-page">
     <header class="page-header">
       <div>
-        <h2>XLSX Surface — 最小嵌入组件</h2>
+        <h2>Excel/CSV Surface — 最小嵌入组件</h2>
         <p class="desc">
           只负责渲染表格网格 + 图表/图片/绘图/选区叠加层 + 右键菜单，无 Toolbar / Ribbon / FormulaBar。
           宿主自行管理 SheetTabs、文件加载、只读切换。
@@ -29,7 +29,7 @@
       <span class="sep" />
 
       <label class="ctrl">
-        <input ref="fileInputRef" data-testid="xlsx-surface-file-input" type="file" accept=".xlsx,.xls" @change="onFileChange" />
+        <input ref="fileInputRef" data-testid="xlsx-surface-file-input" type="file" accept=".xlsx,.xls,.xlsb,.xlsm,.xltx,.xltm,.csv,text/csv" @change="onFileChange" />
         本地文件
       </label>
     </div>
@@ -49,7 +49,7 @@
         @selectionChange="onSelectionChange"
       />
       <div v-else class="empty" data-testid="xlsx-surface-empty">
-        <p>选择示例或打开本地 .xlsx 文件。</p>
+        <p>选择示例或打开本地 Excel、CSV 文件。</p>
       </div>
     </div>
 

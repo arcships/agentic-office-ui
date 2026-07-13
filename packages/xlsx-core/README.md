@@ -1,6 +1,6 @@
 # @arcships/xlsx-core
 
-XLSX 工作簿模型、公式、图表、图片，以及带 Worker/WASM 支持的实例级 Runtime。
+Excel（XLSX、XLS、XLSB、XLSM、XLTX、XLTM）和 CSV 工作簿输入、模型、公式、图表、图片，以及带 Worker/WASM 支持的实例级 Runtime。XLSB 由 Vue 接入层按需转换后进入现有工作簿管线；宏内容不会执行。
 
 ## 安装
 

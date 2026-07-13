@@ -1,5 +1,7 @@
 # PPTX 使用指南
 
+支持 `.pptx`、`.pptm`、`.ppsx`、`.ppsm`、`.potx` 和 `.potm`。宏内容不会执行；模板和放映文件复用现有浏览/演示模式，不模拟桌面 PowerPoint 的自动启动行为。
+
 ## 完整查看器
 
 ```vue
@@ -73,3 +75,5 @@ type PptxStageContextMenu = Position & (
 ## 兼容性说明
 
 无法精确执行的 PowerPoint 内容会报告为近似、静态或未解析。本库不会用静态显示冒充动画完全兼容。程序可以监听 `capability`、`playback-warning` 和 `playback-error`。
+
+宏格式加载后会通过文档 `warnings` 报告宏已忽略。

@@ -2,15 +2,15 @@
   <div class="pptx-headless-demo">
     <header class="pptx-headless-demo__header">
       <div>
-        <h2>PPTX 最小组合验证</h2>
+        <h2>PowerPoint 最小组合验证</h2>
         <p>本页不使用 PptxViewer，只组合文档、播放和舞台三个公开接口。</p>
       </div>
       <label class="pptx-headless-demo__upload">
-        <span>选择 PPTX</span>
+        <span>选择 PowerPoint</span>
         <input
           data-testid="pptx-headless-file"
           type="file"
-          accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+          accept=".pptx,.pptm,.ppsx,.ppsm,.potx,.potm,application/vnd.openxmlformats-officedocument.presentationml.presentation"
           @change="onFileChange"
         />
       </label>
@@ -97,7 +97,7 @@ const secondDocument = usePptxDocument(secondElement, { source })
 const secondPlayback = usePptxPlayback(secondDocument, { autoplay: false })
 const { activeIndex, state } = documentApi
 const { snapshot, status: playbackStatus } = playback
-const status = ref("请选择一个 PPTX 文件。")
+const status = ref("请选择一个 PowerPoint 文件。")
 
 watch(state, (next) => {
   if (next === "waiting-for-stage") status.value = "正在等待舞台挂载。"

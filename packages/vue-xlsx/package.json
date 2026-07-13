@@ -56,8 +56,8 @@
     "typecheck": "vue-tsc -p tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
-    "@dukelib/sheets-wasm": "0.1.17",
     "@arcships/xlsx-core": "^0.5.0",
+    "@dukelib/sheets-wasm": "0.1.17",
     "d3-geo": "^3.1.1",
     "d3-hierarchy": "^3.1.2",
     "d3-scale": "^4.0.2",
@@ -66,7 +66,8 @@
     "regl": "^2.1.1",
     "topojson-client": "^3.1.0",
     "us-atlas": "^3.0.1",
-    "world-atlas": "^2.0.2"
+    "world-atlas": "^2.0.2",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "peerDependencies": {
     "vue": ">=3.2.25 <4"

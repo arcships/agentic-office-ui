@@ -20,6 +20,24 @@ const XLSX_CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8"?>
   <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
 </Types>`;
 
+const OOXML_VARIANTS = [
+  ["xlsx", "xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml", "xl/workbook.xml"],
+  ["xlsx", "xlsb", "application/vnd.ms-excel.sheet.binary.macroEnabled.main", "xl/workbook.bin"],
+  ["xlsx", "xlsm", "application/vnd.ms-excel.sheet.macroEnabled.main+xml", "xl/workbook.xml"],
+  ["xlsx", "xltx", "application/vnd.openxmlformats-officedocument.spreadsheetml.template.main+xml", "xl/workbook.xml"],
+  ["xlsx", "xltm", "application/vnd.ms-excel.template.macroEnabled.main+xml", "xl/workbook.xml"],
+  ["docx", "docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml", "word/document.xml"],
+  ["docx", "docm", "application/vnd.ms-word.document.macroEnabled.main+xml", "word/document.xml"],
+  ["docx", "dotx", "application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml", "word/document.xml"],
+  ["docx", "dotm", "application/vnd.ms-word.template.macroEnabledTemplate.main+xml", "word/document.xml"],
+  ["pptx", "pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml", "ppt/presentation.xml"],
+  ["pptx", "pptm", "application/vnd.ms-powerpoint.presentation.macroEnabled.main+xml", "ppt/presentation.xml"],
+  ["pptx", "ppsx", "application/vnd.openxmlformats-officedocument.presentationml.slideshow.main+xml", "ppt/presentation.xml"],
+  ["pptx", "ppsm", "application/vnd.ms-powerpoint.slideshow.macroEnabled.main+xml", "ppt/presentation.xml"],
+  ["pptx", "potx", "application/vnd.openxmlformats-officedocument.presentationml.template.main+xml", "ppt/presentation.xml"],
+  ["pptx", "potm", "application/vnd.ms-powerpoint.template.macroEnabled.main+xml", "ppt/presentation.xml"],
+];
+
 function makeArchive(entries, contentTypes = DOCX_CONTENT_TYPES) {
   return zipSync({
     "[Content_Types].xml": strToU8(contentTypes),
@@ -181,6 +199,54 @@ test("archive budgets reject unsafe paths, unsafe XML, wrong MIME and aggregate 
       (error) => error?.code === "LIMIT_EXCEEDED" && error?.limit === limit,
     );
   }
+});
+
+test("source format detection and archive validation recognize supported OOXML families", () => {
+  for (const [family, format, contentType, mainPart] of OOXML_VARIANTS) {
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Override PartName="/${mainPart}" ContentType="${contentType}"/>
+      </Types>`;
+    const archive = makeArchive({ [mainPart]: "<root/>" }, contentTypes);
+    const detected = runtime.detectSourceFormat({
+      bytes: archive,
+      fileName: `sample.${format}`,
+      ooxmlContentTypes: contentTypes,
+    });
+    assert.equal(detected?.family, family);
+    assert.equal(detected?.format, format);
+    assert.equal(detected?.confidence, "high");
+
+    const validated = runtime.validateOfficeArchive(archive, {}, { format: family });
+    assert.equal(validated.sourceFormat, format);
+  }
+});
+
+test("source format detection uses signatures for PDF and legacy XLS", () => {
+  const pdf = runtime.detectSourceFormat({
+    bytes: new TextEncoder().encode("%PDF-1.7"),
+    fileName: "wrong.docx",
+  });
+  assert.deepEqual(
+    { family: pdf?.family, format: pdf?.format, confidence: pdf?.confidence },
+    { family: "pdf", format: "pdf", confidence: "high" },
+  );
+
+  const xls = runtime.detectSourceFormat({
+    bytes: Uint8Array.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]),
+    fileName: "legacy.xls",
+  });
+  assert.deepEqual(
+    { family: xls?.family, format: xls?.format, confidence: xls?.confidence },
+    { family: "xlsx", format: "xls", confidence: "medium" },
+  );
+});
+
+test("PPTX archive validation accepts the real playback fixture", () => {
+  const fixture = readFileSync(new URL("../fixtures/pptx/playback-controlled.pptx", import.meta.url));
+  const validated = runtime.validateOfficeArchive(fixture, {}, { format: "pptx" });
+  assert.equal(validated.sourceFormat, "pptx");
+  assert.ok(validated.entryCount > 0);
 });
 
 test("XLSX archive budgets count elements by local name when namespace prefixes are present", () => {

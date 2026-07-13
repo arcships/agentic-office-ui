@@ -1,6 +1,6 @@
 # @arcships/vue-xlsx
 
-Vue 3 电子表格查看器，含图表、地图、WebGL 和控制器组合函数。
+Vue 3 Excel（XLSX、XLS、XLSB、XLSM、XLTX、XLTM）和 CSV 电子表格查看器，含图表、地图、WebGL 和控制器组合函数。XLSB 转换器仅在对应输入时按需加载；宏内容不会执行。
 
 ## 安装
 

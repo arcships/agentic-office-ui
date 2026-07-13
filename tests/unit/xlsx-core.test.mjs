@@ -142,6 +142,22 @@ test("XLSX parses a normal workbook fixture", () => {
   workbook.free();
 });
 
+test("XLSB uses the workbook parser while skipping XLSX-only XML enrichment", () => {
+  const workbook = wasm.Workbook.fromCsvString("name,amount\nAlice,12\n");
+  try {
+    const bytes = workbook.saveXlsbBytes();
+    assert.equal(core.validateXlsxArchive(bytes).sourceFormat, "xlsb");
+    const parsed = wasm.Workbook.fromBytes(bytes);
+    try {
+      assert.equal(parsed.sheetCount, 1);
+    } finally {
+      parsed.free();
+    }
+  } finally {
+    workbook.free();
+  }
+});
+
 test("XLSX structure parser exposes real table definitions for sorting", () => {
   const assets = core.parseWorkbookStructureAssets(bytesFromFile("sales-table.xlsx"));
   const tables = core.normalizeWorkbookTableMetadata(
@@ -510,6 +526,65 @@ test("XLSX URL loading uses shared policy, controlled fetch and safe diagnostics
   assert.equal(calls[0].init.redirect, "error");
   assert.equal(calls[0].init.credentials, "omit");
   assert.equal(JSON.stringify(result).includes("secret"), false);
+
+  const macroResult = await core.loadVerifiedXlsxSource("report.xlsm", policy);
+  assert.equal(macroResult.fileName, "report.xlsm");
+  assert.equal(macroResult.inputFormat, "workbook");
+
+  const macroByMime = await core.loadVerifiedXlsxSource("download", {
+    ...policy,
+    fetch: async (url) => ({
+      ok: true,
+      status: 200,
+      url,
+      headers: {
+        get: (name) => name.toLowerCase() === "content-type"
+          ? "application/vnd.ms-excel.sheet.macroEnabled.12"
+          : null,
+      },
+      arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    }),
+  });
+  assert.equal(macroByMime.fileName, "download.xlsm");
+});
+
+test("spreadsheet URL loading accepts CSV by extension or response content type", async () => {
+  const csv = new TextEncoder().encode("name,amount\nAlice,12\nBob,34\n");
+  const csvBuffer = csv.buffer.slice(csv.byteOffset, csv.byteOffset + csv.byteLength);
+  const policy = {
+    enabled: true,
+    baseUrl: "https://app.example/viewer/",
+    allowRelativeUrl: true,
+    allowedProtocols: ["https:"],
+    allowedOrigins: ["https://app.example"],
+    fetch: async (url) => ({
+      ok: true,
+      status: 200,
+      url,
+      headers: {
+        get: (name) => name.toLowerCase() === "content-type" ? "text/csv; charset=utf-8" : null,
+      },
+      arrayBuffer: async () => csvBuffer,
+    }),
+  };
+
+  const byExtension = await core.loadVerifiedXlsxSource("sales.csv", {
+    ...policy,
+    fetch: async (url) => ({
+      ok: true,
+      status: 200,
+      url,
+      headers: { get: () => null },
+      arrayBuffer: async () => csvBuffer,
+    }),
+  });
+  assert.equal(byExtension.fileName, "sales.csv");
+  assert.equal(byExtension.inputFormat, "csv");
+
+  const byContentType = await core.loadVerifiedXlsxSource("download", policy);
+  assert.equal(byContentType.fileName, "download.csv");
+  assert.equal(byContentType.inputFormat, "csv");
+  assert.equal(byContentType.contentType, "text/csv; charset=utf-8");
 });
 
 test("XLSX URL loading rejects an oversized Content-Length before reading the body", async () => {

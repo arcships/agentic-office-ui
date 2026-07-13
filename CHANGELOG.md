@@ -4,8 +4,16 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.5.2] - 2026-07-13
 
+### @arcships/xlsx-core / @arcships/vue-xlsx
+
+- Added XLSB, XLSM, XLTX and XLTM input support; macro content is ignored and never executed.
+- Added CSV source detection for local `.csv` file names and remote `.csv` URLs or `text/csv` responses.
+- CSV input opens as one editable sheet while preserving the original source bytes for download and reusing XLSX validation, Worker, rendering, and export paths.
+- Added UTF-8 and BOM-marked UTF-16 decoding, plus CSV support to the XLSX Viewer and Surface demo upload controls.
+
 ### @arcships/vue-pptx
 
+- Added PPTM, PPSX, PPSM, POTX and POTM input support with package validation and ignored-macro warnings.
 - Changed browse and Surface rendering to a vertically scrollable, windowed slide list; present mode remains a single-slide playback stage.
 - Added runtime `selectionChange`, `objectClick`, and contextual `contextMenu` events with slide index, object key, and viewport/container coordinates.
 - Kept the visible slide, toolbar counter, search navigation, and host navigation synchronized while scrolling.
@@ -15,6 +23,10 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 - Added explicit `renderMode: "list" | "slide"` and list-rendering options to browser sessions.
 - Static preview sessions default to list mode; document/playback sessions default to slide mode.
+
+### @arcships/docx-core / @arcships/vue-docx
+
+- Added read-only DOCM, DOTX and DOTM input support; VBA is never executed and original-format macro editing is not implied.
 
 ## [0.5.1] - 2026-07-13
 

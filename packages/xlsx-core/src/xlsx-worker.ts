@@ -40,6 +40,7 @@ import type {
   XlsxWorkbookTab
 } from "./types";
 import {
+  isBinaryXlsbBytes,
   validateXlsxArchive,
   type XlsxRuntimeLimits,
 } from "./resource-limits";
@@ -75,7 +76,7 @@ function isLegacyXlsWorkbook(bytes: Uint8Array) {
 }
 
 function shouldSkipXmlParsingForWorkbook(bytes: Uint8Array, skipXmlParsing = false) {
-  return skipXmlParsing || isLegacyXlsWorkbook(bytes);
+  return skipXmlParsing || isLegacyXlsWorkbook(bytes) || isBinaryXlsbBytes(bytes);
 }
 
 function normalizeWorksheetVisibility(value: unknown): XlsxSheetVisibility {

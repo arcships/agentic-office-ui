@@ -63,6 +63,8 @@ import {
   resolveNextZoomScale,
   buildSheetList,
   buildVisibleSheetIndexMap,
+  convertCsvBufferToXlsx,
+  convertXlsbBufferToXlsx,
   resolveWorkbookSource,
   parseWorkbookBuffer,
   createHistoryDomain,
@@ -90,6 +92,11 @@ import { toXlsxLoadError } from "@arcships/xlsx-core";
 
 type DeferredWorkbookLoad = {
   buffer: ArrayBuffer;
+  inputFormat: "csv" | "xlsb" | "workbook";
+  csvConverted?: boolean;
+  xlsbConverted?: boolean;
+  /** Original source bytes retained for download and input-size diagnostics. */
+  sourceBuffer: ArrayBuffer;
   requestId: number;
   resolvedUrl?: string;
   sourceKind: "file" | "url";
@@ -578,11 +585,24 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   }
 
   async function executeWorkbookLoad(load: DeferredWorkbookLoad) {
-    const { buffer, requestId, resolvedUrl, sourceKind, task } = load;
+    const { requestId, resolvedUrl, sourceBuffer, sourceKind, task } = load;
     if (!isCurrentWorkbookLoad(load)) return;
-    if (maxFileSizeBytes > 0 && buffer.byteLength > maxFileSizeBytes) {
-      throw new XlsxFileSizeLimitExceededError(buffer.byteLength, maxFileSizeBytes);
+    if (maxFileSizeBytes > 0 && sourceBuffer.byteLength > maxFileSizeBytes) {
+      throw new XlsxFileSizeLimitExceededError(sourceBuffer.byteLength, maxFileSizeBytes);
     }
+    if (load.inputFormat === "csv" && !load.csvConverted) {
+      load.buffer = await convertCsvBufferToXlsx(sourceBuffer);
+      load.csvConverted = true;
+      if (!isCurrentWorkbookLoad(load)) return;
+    }
+    if (load.inputFormat === "xlsb" && !load.xlsbConverted) {
+      validateXlsxArchive(sourceBuffer, xlsxRuntime.limits, task.signal);
+      load.buffer = await convertXlsbBufferToXlsx(sourceBuffer);
+      load.xlsbConverted = true;
+      load.archiveValidated = false;
+      if (!isCurrentWorkbookLoad(load)) return;
+    }
+    const buffer = load.buffer;
     if (!load.archiveValidated) {
       validateXlsxArchive(buffer, xlsxRuntime.limits, task.signal);
       load.archiveValidated = true;
@@ -590,7 +610,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     const preflight = preflightWorkbookBuffer(buffer);
     if (preflight?.tooLarge) throw createWorkbookTooLargeError(preflight);
 
-    const willForceReadOnly = shouldForceReadOnlyForBuffer(buffer.byteLength);
+    const willForceReadOnly = shouldForceReadOnlyForBuffer(sourceBuffer.byteLength);
     forcedReadOnly.value = willForceReadOnly;
     const shouldUseWorkerForLoad = shouldUseWorkerForReadOnlyLoad(willForceReadOnly);
     const effectiveSkipXmlParsing = shouldSkipXmlParsingForWorkbook(new Uint8Array(buffer), skipXmlParsing);
@@ -625,7 +645,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
         workerTablesByWorkbookSheetIndex.value = snapshot.tablesByWorkbookSheetIndex;
         shouldAutoCalculate.value = false;
         isWorkerBacked.value = true;
-        sourceBufferRef.value = buffer.slice(0);
+        sourceBufferRef.value = sourceBuffer.slice(0);
         sortState.value = null;
         isChartsLoading.value = false;
         isLoading.value = false;
@@ -638,7 +658,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
           taskId: task.context.taskId,
           sourceKind,
           url: resolvedUrl,
-          bytes: buffer.byteLength,
+          bytes: sourceBuffer.byteLength,
         });
         return;
       } catch (workerError) {
@@ -672,7 +692,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       shouldAutoCalculate.value = nextParsedWorkbook.shouldAutoCalculate;
       workerTablesByWorkbookSheetIndex.value = [];
       isWorkerBacked.value = false;
-      sourceBufferRef.value = buffer.slice(0);
+      sourceBufferRef.value = sourceBuffer.slice(0);
       sortState.value = null;
       isLoading.value = false;
       sourceState.value = "ready";
@@ -684,7 +704,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
         taskId: task.context.taskId,
         sourceKind,
         url: resolvedUrl,
-        bytes: buffer.byteLength,
+        bytes: sourceBuffer.byteLength,
       });
     } finally {
       if (!committed) {
@@ -750,7 +770,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       taskId: load.task.context.taskId,
       sourceKind: load.sourceKind,
       url: load.resolvedUrl,
-      bytes: load.buffer.byteLength,
+      bytes: load.sourceBuffer.byteLength,
     });
     void executeWorkbookLoad(load)
       .catch((nextError: unknown) => handleWorkbookLoadFailure(load, nextError))
@@ -838,6 +858,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
 
     const activeLoad: DeferredWorkbookLoad = {
       buffer: new ArrayBuffer(0),
+      inputFormat: "workbook",
+      sourceBuffer: new ArrayBuffer(0),
       requestId,
       resolvedUrl: src,
       sourceKind,
@@ -847,30 +869,36 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     let handedToDeferredLoad = false;
 
     void resolveWorkbookSource(
-      { file, src, urlPolicy },
+      { file, fileName, src, urlPolicy },
       loadTask.signal,
       { maxInputBytes: sourceMaxInputBytes },
     )
       .then(async (resolvedSource) => {
-        const buffer = resolvedSource.buffer;
-        activeLoad.buffer = buffer;
+        const sourceBuffer = resolvedSource.buffer;
+        activeLoad.buffer = sourceBuffer;
+        activeLoad.inputFormat = resolvedSource.inputFormat;
+        activeLoad.sourceBuffer = sourceBuffer;
         activeLoad.resolvedUrl = resolvedSource.resolvedUrl;
         activeLoad.sourceKind = resolvedSource.sourceKind;
         if (!isCurrentWorkbookLoad(activeLoad)) return;
-        if (maxFileSizeBytes > 0 && buffer.byteLength > maxFileSizeBytes) {
-          throw new XlsxFileSizeLimitExceededError(buffer.byteLength, maxFileSizeBytes);
+        if (maxFileSizeBytes > 0 && sourceBuffer.byteLength > maxFileSizeBytes) {
+          throw new XlsxFileSizeLimitExceededError(sourceBuffer.byteLength, maxFileSizeBytes);
         }
-        validateXlsxArchive(buffer, xlsxRuntime.limits, loadTask.signal);
-        activeLoad.archiveValidated = true;
-        const preflight = preflightWorkbookBuffer(buffer);
-        if (preflight?.tooLarge) throw createWorkbookTooLargeError(preflight);
-        if (shouldDeferLoading && buffer.byteLength > deferLoadingAboveBytes) {
+        if (resolvedSource.inputFormat !== "csv") {
+          validateXlsxArchive(sourceBuffer, xlsxRuntime.limits, loadTask.signal);
+          activeLoad.archiveValidated = resolvedSource.inputFormat === "workbook";
+          if (resolvedSource.inputFormat === "workbook") {
+            const preflight = preflightWorkbookBuffer(sourceBuffer);
+            if (preflight?.tooLarge) throw createWorkbookTooLargeError(preflight);
+          }
+        }
+        if (shouldDeferLoading && sourceBuffer.byteLength > deferLoadingAboveBytes) {
           activeLoad.state = "deferred";
           handedToDeferredLoad = true;
           deferredLoadRef.value = activeLoad;
-          deferredBufferRef.value = buffer;
+          deferredBufferRef.value = sourceBuffer;
           deferredLoadRequestIdRef.value = requestId;
-          deferredLoadFileSize.value = buffer.byteLength;
+          deferredLoadFileSize.value = sourceBuffer.byteLength;
           replaceWorkbook(null);
           sheets.value = [];
           clearChartAssets();
@@ -882,7 +910,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
             taskId: loadTask.context.taskId,
             sourceKind: activeLoad.sourceKind,
             url: activeLoad.resolvedUrl,
-            bytes: buffer.byteLength,
+            bytes: sourceBuffer.byteLength,
           });
           return;
         }

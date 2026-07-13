@@ -10,7 +10,8 @@
     "./errors": "./src/errors.ts",
     "./limits": "./src/limits.ts",
     "./load-task": "./src/load-task.ts",
-    "./source": "./src/source.ts"
+    "./source": "./src/source.ts",
+    "./source-format": "./src/source-format.ts"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",

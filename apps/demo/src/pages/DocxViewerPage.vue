@@ -2,7 +2,7 @@
   <div class="page" data-testid="docx-viewer-page">
     <header class="product-header">
       <div>
-        <h2>DOCX 查看器</h2>
+        <h2>Word 文档查看器</h2>
         <p class="desc">打开文档后，可翻页、缩放、查看缩略图和下载原文件。</p>
       </div>
       <div class="controls control-panel product-actions">
@@ -25,7 +25,7 @@
         </label>
         <label class="file-action">
           打开本地文件
-          <input data-testid="docx-file-input" type="file" accept=".docx" @change="onFileChange" />
+          <input data-testid="docx-file-input" type="file" accept=".docx,.docm,.dotx,.dotm" @change="onFileChange" />
         </label>
       </div>
     </header>
@@ -50,7 +50,7 @@
         @load-error="onViewerLoadError"
       />
       <div v-else class="empty">
-        <p>选择示例或打开本地 .docx 文件。</p>
+        <p>选择示例或打开本地 Word 文档、模板文件。</p>
       </div>
     </div>
 
@@ -226,10 +226,10 @@ function onFileChange(event: Event): void {
   const file = input.files?.[0]
   if (!file) return
   const request = beginPageLoad("file", file.name)
-  if (!file.name.toLowerCase().endsWith(".docx")) {
+  if (!/\.(?:docx|docm|dotx|dotm)$/i.test(file.name)) {
     if (isCurrentPageLoad(request)) {
       activePageLoad = undefined
-      setError("Please select a .docx file", "PARSE_FAILED")
+      setError("Please select a supported Word document", "PARSE_FAILED")
       recordPageLoadDiagnostic("page-load-error", request)
     }
     return

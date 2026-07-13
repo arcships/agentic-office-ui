@@ -1,4 +1,5 @@
 import {
+  detectSourceFormat,
   OfficeLoadError,
   loadOfficeSource,
   resolveOfficeUrl,
@@ -18,7 +19,9 @@ import type {
 
 export interface ResolvedXlsxSource {
   buffer: ArrayBuffer;
+  contentType?: string;
   fileName: string;
+  inputFormat: "csv" | "xlsb" | "workbook";
   resolvedUrl: string;
   sourceKind: "url";
 }
@@ -289,23 +292,44 @@ function verifyWorkbookBytes(buffer: ArrayBuffer, url: string): void {
   if (!hasZipHeader && !hasLegacyXlsHeader) {
     throw new XlsxSourceError({
       code: "INVALID_WORKBOOK",
-      message: "来源不是可验证的 XLSX 文件。",
+      message: "来源不是可验证的 Excel 工作簿。",
       sourceKind: "url",
       url,
     });
   }
 }
 
-function fileNameFromUrl(rawUrl: string): string {
+export function isCsvSpreadsheetSource(fileName?: string, contentType?: string): boolean {
+  if (typeof fileName === "string" && /\.csv$/i.test(fileName.trim())) {
+    return true;
+  }
+
+  const mimeType = contentType?.split(";", 1)[0]?.trim().toLowerCase();
+  return mimeType === "text/csv"
+    || mimeType === "application/csv"
+    || mimeType === "text/comma-separated-values";
+}
+
+function fileNameFromUrl(
+  rawUrl: string,
+  inputFormat: ResolvedXlsxSource["inputFormat"],
+  workbookExtension = "xlsx",
+): string {
   const url = new URL(rawUrl);
-  const segment = url.pathname.split("/").filter(Boolean).pop() || "workbook.xlsx";
+  const defaultName = inputFormat === "csv" ? "workbook.csv" : "workbook.xlsx";
+  const segment = url.pathname.split("/").filter(Boolean).pop() || defaultName;
   let decoded = segment;
   try {
     decoded = decodeURIComponent(segment);
   } catch {
     // Keep the escaped segment as a safe display name.
   }
-  return /\.xlsx?$/i.test(decoded) ? decoded : `${decoded}.xlsx`;
+  if (inputFormat === "csv") {
+    return /\.csv$/i.test(decoded) ? decoded : `${decoded}.csv`;
+  }
+  return /\.(?:xlsx|xls|xlsb|xlsm|xltx|xltm)$/i.test(decoded)
+    ? decoded
+    : `${decoded}.${workbookExtension}`;
 }
 
 export function toXlsxLoadError(error: unknown, sourceKind: XlsxSourceKind, url?: string): XlsxLoadError {
@@ -374,10 +398,27 @@ export async function loadVerifiedXlsxSource(
       sourceKind: "url",
     }), "url", rawUrl);
   }
-  verifyWorkbookBytes(resolved.buffer, resolvedUrl);
+  const declaredFormat = detectSourceFormat({
+    fileName: resolved.fileName,
+    contentType: resolved.contentType,
+  });
+  const inputFormat = isCsvSpreadsheetSource(resolved.fileName, resolved.contentType)
+    ? "csv"
+    : declaredFormat?.family === "xlsx" && declaredFormat.format === "xlsb"
+      ? "xlsb"
+      : "workbook";
+  const workbookExtension = declaredFormat?.family === "xlsx"
+    && declaredFormat.format !== "csv"
+    ? declaredFormat.format
+    : "xlsx";
+  if (inputFormat !== "csv") {
+    verifyWorkbookBytes(resolved.buffer, resolvedUrl);
+  }
   return {
     buffer: resolved.buffer,
-    fileName: fileNameFromUrl(resolvedUrl),
+    ...(resolved.contentType ? { contentType: resolved.contentType } : {}),
+    fileName: fileNameFromUrl(resolvedUrl, inputFormat, workbookExtension),
+    inputFormat,
     resolvedUrl,
     sourceKind: "url",
   };

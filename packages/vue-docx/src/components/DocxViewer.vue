@@ -11,7 +11,7 @@
       ref="uploadInputRef"
       class="docx-viewer__file-input"
       type="file"
-      accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      accept=".docx,.docm,.dotx,.dotm,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-word.document.macroEnabled.12,application/vnd.openxmlformats-officedocument.wordprocessingml.template,application/vnd.ms-word.template.macroEnabled.12"
       @change="onUploadChange"
     />
 
@@ -82,7 +82,7 @@
             <strong>Unable to open this document</strong>
             <span v-if="errorCode(error)" class="docx-viewer-error-code">{{ errorCode(error) }}</span>
             <span>{{ error.message }}</span>
-            <button type="button" @click="uploadInputRef?.click()">Choose another DOCX</button>
+            <button type="button" @click="uploadInputRef?.click()">Choose another Word file</button>
           </div>
         </div>
 
@@ -93,7 +93,7 @@
           <div>
             <strong>No document open</strong>
             <span>{{ emptyState }}</span>
-            <button type="button" @click="uploadInputRef?.click()">Choose DOCX</button>
+            <button type="button" @click="uploadInputRef?.click()">Choose Word file</button>
           </div>
         </div>
 
@@ -362,8 +362,16 @@ async function onUploadChange(event: Event): Promise<void> {
 function downloadFile(): void {
   const bytes = effectiveFile.value
   if (!bytes) return
+  const extension = /\.([^.]+)$/.exec(displayFileName.value)?.[1]?.toLowerCase()
+  const mimeType = extension === "docm"
+    ? "application/vnd.ms-word.document.macroEnabled.12"
+    : extension === "dotx"
+      ? "application/vnd.openxmlformats-officedocument.wordprocessingml.template"
+      : extension === "dotm"
+        ? "application/vnd.ms-word.template.macroEnabled.12"
+        : "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   const url = URL.createObjectURL(new Blob([bytes], {
-    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    type: mimeType,
   }))
   const anchor = document.createElement("a")
   anchor.href = url
