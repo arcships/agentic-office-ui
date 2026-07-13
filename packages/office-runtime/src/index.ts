@@ -24,6 +24,14 @@ export type {
   SourceFormatDetection,
 } from "./source-format";
 export {
+  SURFACE_ZOOM_MAX,
+  SURFACE_ZOOM_MIN,
+  SURFACE_ZOOM_PRECISION,
+  clampSurfaceZoom,
+  nextSurfaceZoom,
+  normalizeWheelDelta,
+} from "./gesture-zoom";
+export {
   assertOfficeInputBytes,
   resolveOfficeLimits,
   snapshotOfficeLimits,

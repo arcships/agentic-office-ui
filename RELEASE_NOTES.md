@@ -1,3 +1,51 @@
+# 0.5.3 发布说明
+
+发布日期：2026-07-13
+
+`0.5.3` 汇总了自 `v0.5.2` 以来的两批向后兼容改进：扩展 Office 文件家族的安全预览范围，并为四种最小 Surface 增加统一受控缩放和手势缩放。
+
+## 功能变更
+
+### 统一 Surface 缩放
+
+- `DocxDocumentSurface`、`XlsxSheetSurface`、`PdfSurface`、`PptxStage` 统一支持 `zoom`、`enableGestureZoom` 和 `update:zoom`；倍率 `1` 表示 100%。
+- 传入受控 `zoom` 后支持 `Ctrl+wheel`、Electron/macOS trackpad pinch 和 WebKit gesture；普通滚轮保持原有滚动行为。
+- 四种格式统一使用 50%–200% 安全范围。旧 `zoomScale`、`defaultZoom` 和 PDF expose zoom 继续兼容。
+- DOCX、PDF、PPTX 缩放后保持指针下的页面或幻灯片；XLSX 保持指针下的单元格，并分别处理冻结行列和行列标题。
+- 内置 Viewer 与四个 Surface demo 已接入宿主持有的 zoom state；播放模式下的 PPTX 默认关闭手势缩放。
+
+### 文件格式扩展
+
+- XLSX View 新增 XLSB、XLSM、XLTX、XLTM，并完善本地/远程 CSV 识别以及 UTF-8、带 BOM UTF-16 解码。
+- DOCX View 新增 DOCM、DOTX、DOTM 的只读预览。
+- PPTX View 新增 PPTM、PPSX、PPSM、POTX、POTM，并对忽略宏给出 warning。
+- 宏、ActiveX 和脚本始终不执行；模板和放映文件复用现有预览链路。
+
+## 代码变更
+
+- 私有 `@arcships/office-runtime` 新增统一来源格式识别、OOXML 内容类型校验和框架无关的缩放边界/滚轮增量算法。
+- XLSB 转换器改为仅在对应输入时加载；CSV 与扩展格式复用现有 Worker、资源限制、渲染和导出路径。
+- 四个 Vue Surface 使用同一受控缩放合同，但各自保留格式专属锚点算法，避免在 file panel 外层分散格式分支。
+- PDF 页面 slot 在 bitmap 重绘期间保持稳定几何；PPTX renderer 与 Stage 共用显式 scroll container；XLSX Grid 暴露单元格锚点捕获与恢复。
+- 增加缩放边界、普通/缩放滚轮事件以及现有格式加载回归测试，并同步更新 demo、格式支持方案和 Surface 接入文档。
+
+## 0.5.3 包版本
+
+- `@arcships/docx-core@0.5.3`
+- `@arcships/vue-docx@0.5.3`
+- `@arcships/xlsx-core@0.5.3`
+- `@arcships/vue-xlsx@0.5.3`
+- `@arcships/vue-pdf@0.5.3`
+- `@arcships/vue-ui@0.5.3`
+- `@arcships/pptx-core@0.5.3`
+- `@arcships/vue-pptx@0.5.3`
+
+## 兼容说明
+
+- 本版本没有删除公开入口；未传 `zoom` 时，Surface 不接管手势并保持旧行为。
+- `zoom` 与旧缩放属性同时提供时，以受控 `zoom` 为准；`zoom` 与 `fitWidth` 同时提供时同样以 `zoom` 为准。
+- `@arcships/office-runtime` 仍为私有工作区包，不进入公开安装清单，也不会作为公开包的运行依赖泄漏。
+
 # 0.5.2 发布说明
 
 发布日期：2026-07-13

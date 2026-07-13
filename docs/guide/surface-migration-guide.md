@@ -1,14 +1,14 @@
-# 接入 0.5.2 最小 Surface 组件指南
+# 接入 0.5.3 最小 Surface 组件指南
 
-`@arcships/vue-docx@0.5.2` / `vue-xlsx@0.5.2` / `vue-pptx@0.5.2` / `vue-pdf@0.5.2`
+`@arcships/vue-docx@0.5.3` / `vue-xlsx@0.5.3` / `vue-pptx@0.5.3` / `vue-pdf@0.5.3`
 
 ## 升级
 
 ```bash
-pnpm add @arcships/vue-docx@0.5.2 @arcships/vue-xlsx@0.5.2 @arcships/vue-pptx@0.5.2 @arcships/vue-pdf@0.5.2
+pnpm add @arcships/vue-docx@0.5.3 @arcships/vue-xlsx@0.5.3 @arcships/vue-pptx@0.5.3 @arcships/vue-pdf@0.5.3
 ```
 
-版本号推到 `^0.5.2`。公开入口与 `0.5.1` 兼容；PPTX 普通浏览布局按本指南迁移为纵向连续页面。
+版本号推到 `^0.5.3`。公开入口与 `0.5.2` 兼容；新增格式与 Surface 手势缩放不要求迁移旧调用。
 
 ## 四种 Surface 组件
 
@@ -22,6 +22,20 @@ pnpm add @arcships/vue-docx@0.5.2 @arcships/vue-xlsx@0.5.2 @arcships/vue-pptx@0.
 | PDF 查看 | `<PdfViewer :src="url" />` | `<PdfSurface :source="source" />` |
 
 旧的 Viewer 组件全部保留。PPTX 的 `mode="browse"` 从 `0.5.2` 起改为纵向连续页面；`mode="present"` 仍保持单页播放。
+
+## 统一缩放
+
+四个 Surface 使用相同的受控倍率，宿主保留 toolbar 和产品状态：
+
+```vue
+<FormatSurface v-model:zoom="zoom" />
+```
+
+```ts
+const zoom = ref(1) // 100%，范围 0.5–2
+```
+
+传入 `zoom` 后，Surface 处理 `Ctrl+wheel`、trackpad pinch 和 WebKit gesture，并保持指针下的页面、幻灯片或单元格。普通 wheel 继续滚动。`enableGestureZoom` 默认为 `true`；未传 `zoom` 时不接管手势。受控 `zoom` 与 `fitWidth` 同时存在时以 `zoom` 为准。
 
 ## DOCX
 
@@ -59,7 +73,7 @@ async function open(file) {
 </template>
 ```
 
-**Props**：`model`（必填）、`zoomScale`、`fitWidth`、`showComments`、`showTrackedChanges`、`searchQuery`、`theme`
+**Props**：`model`（必填）、`zoom`、`enableGestureZoom`、兼容属性 `zoomScale`、`fitWidth`、`showComments`、`showTrackedChanges`、`searchQuery`、`theme`
 
 **事件**：`pageCountChange`、`visiblePageRange`、`contextMenu`（带 `pageIndex` + `containerX/Y`）、`selectionChange`（带选中文字 + 页码）
 
@@ -96,6 +110,8 @@ const controller = useXlsxViewerController({ file: buffer, fileName: 'a.xlsx' })
 **事件**：`contextMenu`（带 `selection` range + `activeCell` + `sheetName` + `containerX/Y`）、`selectionChange`（带 cell range）、`cellDoubleClick`
 
 **CSS 变量**：`--xlsx-surface-bg`
+
+**缩放**：`zoom`、`enableGestureZoom`、`update:zoom`；冻结行列和行列标题按轴保持单元格锚点。
 
 ## PPTX
 
@@ -150,6 +166,8 @@ function onContextMenu(context: PptxStageContextMenu) {}
 
 **CSS 变量**：`--pptx-surface-bg`
 
+**缩放**：`zoom`、`enableGestureZoom`、`update:zoom`；列表模式需要把同一个显式滚动容器传给 `PptxStage` 和 session。
+
 ## PDF
 
 ```vue
@@ -176,7 +194,7 @@ const source = { kind: 'url', url: '/doc.pdf' }
 </template>
 ```
 
-**Props**：`source`、`src`、`fitWidth`、`defaultZoom`
+**Props**：`source`、`src`、`zoom`、`enableGestureZoom`、`fitWidth`、`defaultZoom`
 
 **事件**：`documentLoadSuccess`、`documentLoadError`、`visiblePageChange`、`contextMenu`（带 `pageIndex` + `containerX/Y`）
 

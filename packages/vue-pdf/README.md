@@ -23,7 +23,7 @@ import "@arcships/vue-pdf/style.css"
 
 正常 PDF 支持查看、翻页、缩放、旋转、缩略图、搜索和下载。PDF 唯一的公开文件拒绝上限是整份文件体积 `maxFileSize`，默认 `50 MiB`，宿主可调整。
 
-`PdfSurface` 提供最小嵌入渲染：全部页面垂直堆叠滚动，无工具栏/缩略图/搜索栏。宿主通过 expose 控制 zoom 和 scrollToPage。
+`PdfSurface` 提供最小嵌入渲染：全部页面垂直堆叠滚动，无工具栏/缩略图/搜索栏。宿主可通过 `v-model:zoom` 接入 50%–200% 手势缩放，也可继续使用 expose zoom 和 scrollToPage。
 
 ## 事件
 

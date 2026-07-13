@@ -1,6 +1,6 @@
 {
   "name": "@arcships/xlsx-core",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "license": "Apache-2.0",
   "description": "XLSX workbook model, formulas, charts, images, and instance runtime with Worker/WASM support",
   "keywords": ["xlsx", "excel", "spreadsheet", "workbook", "charts", "wasm", "worker"],

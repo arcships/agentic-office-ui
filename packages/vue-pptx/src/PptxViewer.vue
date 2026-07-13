@@ -42,9 +42,9 @@
       </form>
 
       <div class="pptx-viewer__toolbar-group pptx-viewer__zoom">
-        <button type="button" :disabled="state !== 'ready' || zoom <= 25" aria-label="缩小" @click="void setZoom(zoom - 25)">−</button>
+        <button type="button" :disabled="state !== 'ready' || zoom <= 50" aria-label="缩小" @click="void setZoom(zoom - 25)">−</button>
         <button type="button" :disabled="state !== 'ready'" aria-label="恢复适合窗口" @click="void setZoom(100)">{{ zoom }}%</button>
-        <button type="button" :disabled="state !== 'ready' || zoom >= 400" aria-label="放大" @click="void setZoom(zoom + 25)">＋</button>
+        <button type="button" :disabled="state !== 'ready' || zoom >= 200" aria-label="放大" @click="void setZoom(zoom + 25)">＋</button>
       </div>
     </header>
 
@@ -61,7 +61,7 @@
         />
       </aside>
 
-      <main class="pptx-viewer__stage-wrap">
+      <main ref="stageScrollRef" class="pptx-viewer__stage-wrap">
         <div v-if="state === 'empty'" class="pptx-viewer__message" data-testid="pptx-empty">
           <slot name="empty">打开一个 PPTX 文件开始查看</slot>
         </div>
@@ -75,6 +75,10 @@
           ref="stageRef"
           class="pptx-viewer__stage"
           :aria-hidden="state !== 'ready'"
+          :zoom="zoom / 100"
+          :enable-gesture-zoom="!isPresent"
+          :scroll-container="stageScrollRef"
+          @update:zoom="void setZoom($event * 100)"
           @click="onStageClick"
         />
       </main>
@@ -200,6 +204,7 @@ const emit = defineEmits<{
 type ViewerState = "empty" | "loading" | "ready" | "error"
 
 const viewerRef = ref<HTMLElement | null>(null)
+const stageScrollRef = ref<HTMLElement | null>(null)
 const stageRef = ref<PptxStageExpose | null>(null)
 const stageElement = computed(() => stageRef.value?.element ?? null)
 const isPresent = computed(() => props.mode === "present")
@@ -210,6 +215,7 @@ const documentOptions = {
   session: () => ({
     fitMode: "contain" as const,
     zoomPercent: 100,
+    scrollContainer: stageScrollRef.value ?? undefined,
     renderMode: props.mode === "present" ? "slide" as const : "list" as const,
     listOptions: props.mode === "present" ? undefined : {
       windowed: true,
@@ -432,7 +438,7 @@ async function onStageClick(event: MouseEvent): Promise<void> {
 }
 
 async function setZoom(value: number): Promise<void> {
-  await pptxDocument.setZoom(value)
+  await pptxDocument.setZoom(Math.min(200, Math.max(50, value)))
 }
 
 function runSearch(): void {

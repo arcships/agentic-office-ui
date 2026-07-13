@@ -177,6 +177,7 @@ export function createPptxDocumentSession(
   const viewer = new PptxViewer(container, {
     fitMode: options.fitMode ?? "contain",
     zoomPercent: options.zoomPercent ?? 100,
+    scrollContainer: options.scrollContainer,
     zipLimits: toZipLimits(baseLimits),
     lazyMedia: options.lazyMedia ?? true,
     lazySlides: options.lazySlides ?? true,

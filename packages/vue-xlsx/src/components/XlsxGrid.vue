@@ -337,6 +337,99 @@ function getDisplayCell(cell: XlsxCellAddress): XlsxCellAddress | null {
   return { row, col };
 }
 
+type XlsxZoomAnchor = {
+  row?: number;
+  col?: number;
+  rowRatio: number;
+  colRatio: number;
+  clientX: number;
+  clientY: number;
+  scrollX: boolean;
+  scrollY: boolean;
+};
+
+function frozenPaneExtents(): { width: number; height: number } {
+  const sheet = activeSheet.value;
+  const freezeRow = sheet?.freezePanes?.row ?? 0;
+  const freezeCol = sheet?.freezePanes?.col ?? 0;
+  let width = 0;
+  let height = 0;
+  for (let index = 0; index < displayCols.value.length; index += 1) {
+    if ((displayCols.value[index] ?? 0) >= freezeCol) break;
+    width += effectiveColWidths.value[index] || 0;
+  }
+  for (let index = 0; index < displayRows.value.length; index += 1) {
+    if ((displayRows.value[index] ?? 0) >= freezeRow) break;
+    height += effectiveRowHeights.value[index] || 0;
+  }
+  return { width, height };
+}
+
+function captureZoomAnchor(clientX: number, clientY: number): XlsxZoomAnchor | null {
+  const container = containerRef.value;
+  if (!container) return null;
+  const rect = container.getBoundingClientRect();
+  const localX = clientX - rect.left;
+  const localY = clientY - rect.top;
+  const bodyX = localX - ROW_HEADER_WIDTH;
+  const bodyY = localY - HEADER_HEIGHT;
+  const frozen = frozenPaneExtents();
+  const scrollX = localX > ROW_HEADER_WIDTH && bodyX >= frozen.width;
+  const scrollY = localY > HEADER_HEIGHT && bodyY >= frozen.height;
+  if (!scrollX && !scrollY) return null;
+
+  const anchor: XlsxZoomAnchor = {
+    rowRatio: 0,
+    colRatio: 0,
+    clientX,
+    clientY,
+    scrollX,
+    scrollY,
+  };
+  if (scrollX) {
+    const contentX = Math.max(0, bodyX + container.scrollLeft);
+    const displayCol = findDisplayIndexAtOffset(colOffsets.value, contentX);
+    const col = displayCols.value[displayCol];
+    const width = effectiveColWidths.value[displayCol] || 1;
+    if (displayCol < 0 || col === undefined) return null;
+    anchor.col = col;
+    anchor.colRatio = (contentX - getColOffsetSum(displayCol)) / width;
+  }
+  if (scrollY) {
+    const contentY = Math.max(0, bodyY + container.scrollTop);
+    const displayRow = findDisplayIndexAtOffset(rowOffsets.value, contentY);
+    const row = displayRows.value[displayRow];
+    const height = effectiveRowHeights.value[displayRow] || 1;
+    if (displayRow < 0 || row === undefined) return null;
+    anchor.row = row;
+    anchor.rowRatio = (contentY - getRowOffsetSum(displayRow)) / height;
+  }
+  return anchor;
+}
+
+function restoreZoomAnchor(anchor: XlsxZoomAnchor): void {
+  const container = containerRef.value;
+  if (!container) return;
+  const rect = container.getBoundingClientRect();
+  if (anchor.scrollX && anchor.col !== undefined) {
+    const displayCol = sheetColToDisplayIndex.value.get(anchor.col);
+    if (displayCol !== undefined) {
+      const contentX = getColOffsetSum(displayCol)
+        + (effectiveColWidths.value[displayCol] || 0) * anchor.colRatio;
+      container.scrollLeft = contentX - (anchor.clientX - rect.left - ROW_HEADER_WIDTH);
+    }
+  }
+  if (anchor.scrollY && anchor.row !== undefined) {
+    const displayRow = sheetRowToDisplayIndex.value.get(anchor.row);
+    if (displayRow !== undefined) {
+      const contentY = getRowOffsetSum(displayRow)
+        + (effectiveRowHeights.value[displayRow] || 0) * anchor.rowRatio;
+      container.scrollTop = contentY - (anchor.clientY - rect.top - HEADER_HEIGHT);
+    }
+  }
+  schedulePaint();
+}
+
 function workerCellKey(sheetIndex: number, row: number, col: number) {
   return `${sheetIndex}:${row}:${col}`;
 }
@@ -1617,6 +1710,14 @@ const editInputStyle = computed<CSSProperties>(() => {
     color: props.isDark ? "#e4e4e7" : "#18181b",
     boxSizing: "border-box",
   };
+});
+
+defineExpose({
+  captureZoomAnchor,
+  restoreZoomAnchor,
+  get scrollContainer() {
+    return containerRef.value;
+  },
 });
 
 // ── Watchers ──────────────────────────────────────────────────────────

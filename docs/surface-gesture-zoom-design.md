@@ -1,6 +1,6 @@
 # Surface 手势缩放设计
 
-> 状态：待评审，未实现
+> 状态：Surface 已在 `0.5.3` 实现，DimCode 宿主待接入
 >
 > 范围：`DocxDocumentSurface`、`PdfSurface`、`PptxStage`、`XlsxSheetSurface` 和宿主 `OfficeFilePreview`
 

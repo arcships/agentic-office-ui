@@ -23,7 +23,7 @@ import "@arcships/vue-docx/style.css"
 
 ## 组件
 
-- `DocxDocumentSurface` — 最小嵌入渲染区（仅分页文档面 + 批注 gutter，宿主自建 toolbar）
+- `DocxDocumentSurface` — 最小嵌入渲染区（宿主可用 `v-model:zoom` 接入 50%–200% 手势缩放）
 - `DocxViewer` — 文档查看器
 - `DocxEditor` — 文档编辑器
 

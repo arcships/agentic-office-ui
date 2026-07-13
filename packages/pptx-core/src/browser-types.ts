@@ -36,6 +36,8 @@ export interface PptxPreviewSessionOptions {
   limits?: PptxPreviewLimits
   fitMode?: "contain" | "none"
   zoomPercent?: number
+  /** Explicit scroll owner used by list virtualization and Surface zoom anchoring. */
+  scrollContainer?: HTMLElement
   lazyMedia?: boolean
   lazySlides?: boolean
   /** Static previews use a vertical page list; presentation playback uses one slide. */

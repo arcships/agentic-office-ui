@@ -27,9 +27,9 @@
       <span class="sep" />
 
       <div class="ctrl">
-        <button :disabled="state !== 'ready'" @click="void documentApi.setZoom(Math.max(25, zoomPercent - 25))">−</button>
+        <button :disabled="state !== 'ready'" @click="void documentApi.setZoom(Math.max(50, zoomPercent - 25))">−</button>
         <span class="zoom-value">{{ zoomPercent }}%</span>
-        <button :disabled="state !== 'ready'" @click="void documentApi.setZoom(Math.min(400, zoomPercent + 25))">+</button>
+        <button :disabled="state !== 'ready'" @click="void documentApi.setZoom(Math.min(200, zoomPercent + 25))">+</button>
       </div>
 
       <span class="sep" />
@@ -37,9 +37,11 @@
       <span class="ctrl" data-testid="pptx-surface-status">{{ statusLabel }}</span>
     </div>
 
-    <div class="stage-container" :class="{ 'stage-container--dark': true }">
+    <div ref="stageContainer" class="stage-container" :class="{ 'stage-container--dark': true }">
       <PptxStage
         ref="stage"
+        v-model:zoom="surfaceZoom"
+        :scroll-container="stageContainer"
         class="pptx-surface-stage"
         data-testid="pptx-surface-stage"
         @context-menu="onContextMenu"
@@ -66,20 +68,26 @@ const source = ref<File | null>(null)
 const fileInputRef = ref<HTMLInputElement>()
 
 const stage = useTemplateRef<PptxStageExpose>("stage")
+const stageContainer = useTemplateRef<HTMLElement>("stageContainer")
 const stageElement = computed(() => stage.value?.element ?? null)
 const documentApi = usePptxDocument(stageElement, {
   source,
-  session: {
+  session: () => ({
     renderMode: "list",
+    scrollContainer: stageContainer.value ?? undefined,
     listOptions: {
       windowed: true,
       initialSlides: 4,
       overscanViewport: 1.5,
     },
-  },
+  }),
 })
 
 const { activeIndex, zoomPercent, state } = documentApi
+const surfaceZoom = computed({
+  get: () => zoomPercent.value / 100,
+  set: (value: number) => { void documentApi.setZoom(Math.round(value * 100)) },
+})
 
 // ── Status ───────────────────────────────────────────────────────────
 const statusLabel = ref("选择一个 PowerPoint 文件。")

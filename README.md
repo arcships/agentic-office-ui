@@ -6,7 +6,7 @@
 
 在浏览器中查看和编辑 DOCX、XLSX、PDF 与 PPTX
 
-[![npm version](https://img.shields.io/badge/npm-v0.5.2-cb3837)](https://www.npmjs.com/org/arcships)
+[![npm version](https://img.shields.io/badge/npm-v0.5.3-cb3837)](https://www.npmjs.com/org/arcships)
 [![CI](https://github.com/arcships/agentic-office-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/arcships/agentic-office-ui/actions/workflows/ci.yml)
 [![Release](https://github.com/arcships/agentic-office-ui/actions/workflows/release.yml/badge.svg)](https://github.com/arcships/agentic-office-ui/actions/workflows/release.yml)
 [![Vue](https://img.shields.io/badge/Vue-%3E%3D3.2.25%20%3C4-42b883)](https://vuejs.org/)
@@ -93,7 +93,7 @@ defineProps<{ file: File | null }>()
 
 八个包使用统一版本发布。相关 Vue 包和核心包建议保持相同版本。
 
-PPTX 两包从 `0.3.0` 开始公开，`0.4.0` 增加最小组合接口，当前八个包的版本为 `0.5.2`。
+PPTX 两包从 `0.3.0` 开始公开，`0.4.0` 增加最小组合接口，当前八个包的版本为 `0.5.3`。
 
 ## 文档
 

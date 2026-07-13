@@ -1,6 +1,6 @@
 {
   "name": "@arcships/vue-xlsx",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "license": "Apache-2.0",
   "description": "Vue 3 XLSX spreadsheet viewer with charts, maps, WebGL, and controller composables",
   "keywords": ["vue", "vue3", "xlsx", "excel", "spreadsheet", "charts", "map", "webgl"],

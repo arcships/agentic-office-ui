@@ -5,7 +5,7 @@
 本包支持 PPTX、PPTM、PPSX、PPSM、POTX、POTM 的静态浏览和 `mode="present"` 演示模式。默认静态浏览会像 PDF/DOCX 一样纵向连续展示所有幻灯片；演示模式使用单页舞台，左右键执行上/下一播放步骤，跨页由播放控制器完成。宏内容不会执行。
 
 ```bash
-pnpm add @arcships/pptx-core@0.5.2 @arcships/vue-pptx@0.5.2
+pnpm add @arcships/pptx-core@0.5.3 @arcships/vue-pptx@0.5.3
 ```
 
 ```ts
@@ -81,6 +81,8 @@ async function onStageClick(event: MouseEvent) {
 - `selection-change`：点击幻灯片时返回 `{ kind: "slide", slideIndex }`；
 - `object-click`：点击形状、图片或图表时返回 `{ kind: "object", slideIndex, objectKey }`；
 - `context-menu`：右键幻灯片或对象时返回判别联合；`kind: "slide"` 时没有 `objectKey`，`kind: "object"` 时必须包含 `objectKey`，两者都有页码以及视口/`PptxStage` 根元素坐标。
+
+传入 `v-model:zoom` 和显式 `scroll-container` 后，`PptxStage` 支持 50%–200% 的 `Ctrl+wheel` / pinch 缩放，并保持指针下的幻灯片位置。播放模式建议关闭 `enableGestureZoom`。
 
 ## 文档
 

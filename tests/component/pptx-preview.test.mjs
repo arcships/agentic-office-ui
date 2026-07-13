@@ -251,6 +251,37 @@ test("PptxStage emits complete slide, object and context-menu interactions", asy
   assert.deepEqual(mounted.warnings, []);
 });
 
+test("PptxStage only consumes controlled gesture zoom wheels", async () => {
+  const zooms = [];
+  const mounted = await mount(PptxStage, {
+    zoom: 1,
+    "onUpdate:zoom": (zoom) => zooms.push(zoom),
+  });
+  const stage = findByTestId(mounted.root, "pptx-stage");
+  let prevented = 0;
+  const wheel = (ctrlKey, deltaY) => stage.dispatchEvent({
+    type: "wheel",
+    ctrlKey,
+    deltaY,
+    deltaMode: 0,
+    clientX: 10,
+    clientY: 20,
+    preventDefault: () => { prevented += 1; },
+  });
+
+  wheel(false, -20);
+  assert.equal(prevented, 0);
+  assert.deepEqual(zooms, []);
+
+  wheel(true, -20);
+  assert.equal(prevented, 1);
+  assert.equal(zooms.length, 1);
+  assert.ok(zooms[0] > 1);
+
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
 test("PptxViewer exposes loading, ready navigation, hidden-page marker and cleanup", async () => {
   const pending = deferred();
   const { calls, session } = createSession({ open: () => pending.promise });

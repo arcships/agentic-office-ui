@@ -89,6 +89,7 @@ export interface UsePptxPlaybackReturn {
 
 export interface PptxStageExpose {
   readonly element: HTMLElement | null
+  readonly scrollContainer: HTMLElement | null
 }
 
 export interface PptxStageSelection {

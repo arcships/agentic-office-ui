@@ -28,6 +28,14 @@
 
       <span class="sep" />
 
+      <div class="ctrl">
+        <button :disabled="zoom <= 0.5" @click="zoom = Math.max(0.5, zoom - 0.25)">−</button>
+        <span class="zoom-value">{{ Math.round(zoom * 100) }}%</span>
+        <button :disabled="zoom >= 2" @click="zoom = Math.min(2, zoom + 0.25)">+</button>
+      </div>
+
+      <span class="sep" />
+
       <label class="ctrl">
         <input ref="fileInputRef" data-testid="xlsx-surface-file-input" type="file" accept=".xlsx,.xls,.xlsb,.xlsm,.xltx,.xltm,.csv,text/csv" @change="onFileChange" />
         本地文件
@@ -44,9 +52,11 @@
         :file="fileBuffer"
         :file-name="displayName"
         :read-only="readOnly"
+        :zoom="zoom"
         @cellDoubleClick="onCellDoubleClick"
         @contextMenu="onContextMenu"
         @selectionChange="onSelectionChange"
+        @update:zoom="zoom = $event"
       />
       <div v-else class="empty" data-testid="xlsx-surface-empty">
         <p>选择示例或打开本地 Excel、CSV 文件。</p>
@@ -76,8 +86,9 @@ const XlsxSurfaceHost = defineComponent({
     file: { type: Object as PropType<ArrayBuffer | null> },
     fileName: { type: String, default: "" },
     readOnly: { type: Boolean, default: false },
+    zoom: { type: Number, default: 1 },
   },
-  emits: ["cellDoubleClick", "contextMenu", "selectionChange", "objectClick"],
+  emits: ["cellDoubleClick", "contextMenu", "selectionChange", "objectClick", "update:zoom"],
   setup(props, { emit }) {
     const controller: XlsxViewerController = useXlsxViewerController({
       file: props.file ?? undefined,
@@ -90,11 +101,13 @@ const XlsxSurfaceHost = defineComponent({
         ? h(XlsxSheetSurface, {
             controller,
             "read-only": props.readOnly,
+            zoom: props.zoom,
             style: { flex: "1" },
             onCellDoubleClick: (cell: any) => emit("cellDoubleClick", cell),
             onContextMenu: (ctx: any) => emit("contextMenu", ctx),
             onSelectionChange: (sel: any) => emit("selectionChange", sel),
             onObjectClick: (obj: any) => emit("objectClick", obj),
+            "onUpdate:zoom": (value: number) => emit("update:zoom", value),
           })
         : null
   },
@@ -116,6 +129,7 @@ const displayName = ref("")
 const loading = ref(false)
 const error = ref<string | null>(null)
 const loadCounter = ref(0)
+const zoom = ref(1)
 
 const surfaceKey = computed(() =>
   fileBuffer.value
@@ -201,6 +215,8 @@ h2 { margin-bottom: 4px; }
   padding: 4px 10px; border: 1px solid var(--border); border-radius: 4px;
   background: var(--background); cursor: pointer; font-size: 13px;
 }
+.toolbar-zone button:disabled { opacity: .4; cursor: default; }
+.zoom-value { min-width: 48px; text-align: center; font-variant-numeric: tabular-nums; }
 .sep { width: 1px; height: 20px; background: var(--border); }
 
 .surface-container {

@@ -103,7 +103,7 @@
           :model="renderableModel"
           :layout-options="layoutOptions"
           :theme="darkTheme ? 'dark' : 'light'"
-          :zoom-scale="zoomPercent"
+          :zoom="zoomPercent / 100"
           :editable="false"
           :show-tracked-changes="effectiveShowTrackedChanges"
           :show-comments="effectiveShowComments"
@@ -111,6 +111,7 @@
           :active-search-node-index="activeSearchNodeIndex"
           @page-count-change="onPageCountChange"
           @visible-page-range="onVisiblePageRange"
+          @update:zoom="zoomPercent = Math.round($event * 100)"
         />
       </main>
     </div>

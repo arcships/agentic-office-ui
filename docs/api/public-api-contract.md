@@ -2,7 +2,7 @@
 
 本文登记 `@arcships/docx-core`、`@arcships/xlsx-core`、`@arcships/pptx-core`、`@arcships/vue-docx`、`@arcships/vue-xlsx`、`@arcships/vue-pptx`、`@arcships/vue-pdf` 和 `@arcships/vue-ui` 的公开入口、推荐用法、事件、错误与兼容期限。
 
-当前八个公开包的版本统一为 `0.5.2`。PPTX 两包从 `0.3.0` 开始公开，`0.4.0` 增加 Vue PPTX 最小组合接口，`0.5.2` 增加纵向 Surface 与完整交互事件。源码中的 `@deprecated Since 0.2.0` 继续生效；整个 `0.x` 保留旧入口，最早只能在 `1.0.0` 删除。
+当前八个公开包的版本统一为 `0.5.3`。本版本扩展 Office 输入格式，并为四种 Surface 增加统一的受控 `zoom`、`enableGestureZoom` 和 `update:zoom` 合同。源码中的 `@deprecated Since 0.2.0` 继续生效；整个 `0.x` 保留旧入口，最早只能在 `1.0.0` 删除。
 
 ## 1. 适用规则
 
@@ -119,7 +119,7 @@ try {
 
 ### 3.3 `@arcships/vue-docx`
 
-DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注布局的目标合同见 [DOCX Viewer 受控文档面与分页修复设计](../docx-viewer-controlled-surface-and-pagination-fix.md)。兼容性判断以本页当前 `0.5.2` 导出清单和对应实现状态为准。
+DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注布局的目标合同见 [DOCX Viewer 受控文档面与分页修复设计](../docx-viewer-controlled-surface-and-pagination-fix.md)。兼容性判断以本页当前 `0.5.3` 导出清单和对应实现状态为准。
 
 稳定高层入口为：
 
@@ -167,6 +167,12 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 ### 3.8 `@arcships/vue-pptx`
 
 稳定入口为 `PptxViewer`、`PptxThumbnail`、`PptxStage`、`usePptxDocument`、`usePptxPlayback`、`PptxStageSelection`、`PptxStageObjectClick`、`PptxStageContextMenu` 和其他公开类型。`PptxViewer` 默认纵向连续浏览；`mode="present"` 使用单页舞台并提供下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏。自定义静态 Surface 使用 `PptxStage` + `usePptxDocument(renderMode: "list")`，自定义播放器增加 `usePptxPlayback` 并使用 `renderMode: "slide"`。样式从 `@arcships/vue-pptx/style.css` 导入。
+
+### 3.9 统一 Surface 缩放
+
+`DocxDocumentSurface`、`XlsxSheetSurface`、`PdfSurface` 和 `PptxStage` 统一接受倍率 `zoom?: number`、`enableGestureZoom?: boolean`，并发出 `update:zoom`。传入 `zoom` 后，Surface 在 50%–200% 范围内处理 `Ctrl+wheel` 和支持的 pinch；普通 wheel 不被拦截。未传 `zoom` 时保持旧缩放接口和行为。
+
+`zoom` 与旧缩放属性或 `fitWidth` 同时存在时以受控 `zoom` 为准。宿主应使用 `v-model:zoom` 持有产品级百分比、toolbar 和切文件重置；页面、幻灯片或 XLSX 单元格锚点由各 Surface 自己恢复。
 
 ## 4. 公开事件和诊断
 

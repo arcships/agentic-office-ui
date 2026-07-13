@@ -11,6 +11,7 @@
         :key="`page-${pageIndex}`"
         class="pdf-surface__page-slot"
         :data-page-index="pageIndex"
+        :style="pageSlotStyle(pageIndex)"
       >
         <div v-if="pageSlots[pageIndex]?.state === 'loading'" class="pdf-surface__page-loading">
           Rendering page {{ pageIndex + 1 }}…
@@ -33,7 +34,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
+import { clampSurfaceZoom, nextSurfaceZoom } from "@arcships/office-runtime/gesture-zoom"
 import {
   createLatestTaskCoordinator,
   createOfficeTaskSequence,
@@ -71,13 +73,17 @@ const props = withDefaults(
     pdfiumWasmUrl?: string
     maxFileSize?: number
     className?: string
+    /** Controlled zoom factor. 1 = 100%. */
+    zoom?: number
     defaultZoom?: number
+    enableGestureZoom?: boolean
     /** When true, zoom auto-fits the widest page to container width. */
     fitWidth?: boolean
   }>(),
   {
     maxFileSize: DEFAULT_PDF_MAX_FILE_SIZE,
     defaultZoom: 1,
+    enableGestureZoom: true,
   },
 )
 
@@ -88,11 +94,20 @@ const emit = defineEmits<{
   contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number }]
   selectionChange: [sel: { kind: string; text?: string; pageIndex?: number }]
   diagnostic: [event: PdfDiagnostic]
+  "update:zoom": [zoom: number]
 }>()
 
 // ── Runtime & loading ────────────────────────────────────────────────
 const scrollRef = ref<HTMLElement | null>(null)
-const zoom = ref(Math.min(2, Math.max(0.5, props.defaultZoom)))
+const internalZoom = ref(clampSurfaceZoom(props.defaultZoom))
+const zoom = computed({
+  get: () => props.zoom === undefined ? internalZoom.value : clampSurfaceZoom(props.zoom),
+  set: (value: number) => {
+    const next = clampSurfaceZoom(value)
+    if (props.zoom === undefined) internalZoom.value = next
+    else emit("update:zoom", next)
+  },
+})
 const rotation = ref<PdfRotation>(0)
 const loading = ref(false)
 const loadError = ref<PdfLoadError | null>(null)
@@ -290,16 +305,34 @@ watch(effectiveSource, () => {
   void load()
 }, { immediate: true })
 
-// ── Page image style ─────────────────────────────────────────────────
-function pageImgStyle(pageIndex: number): Record<string, string> | undefined {
+// ── Page geometry ────────────────────────────────────────────────────
+function pageDisplaySize(pageIndex: number): { width: number; height: number } | undefined {
   const doc = renderDocument.value
   if (!doc) return undefined
   const page = doc.pages[pageIndex]
   if (!page) return undefined
   const quarterTurns = ((page.rotation + rotation.value) / 90) % 4
-  const width = (quarterTurns % 2 ? page.height : page.width) * zoom.value
   return {
-    width: `${Math.max(1, Math.round(width))}px`,
+    width: Math.max(1, Math.round((quarterTurns % 2 ? page.height : page.width) * zoom.value)),
+    height: Math.max(1, Math.round((quarterTurns % 2 ? page.width : page.height) * zoom.value)),
+  }
+}
+
+function pageSlotStyle(pageIndex: number): Record<string, string> | undefined {
+  const size = pageDisplaySize(pageIndex)
+  if (!size) return undefined
+  return {
+    width: `${size.width}px`,
+    height: `${size.height}px`,
+  }
+}
+
+function pageImgStyle(pageIndex: number): Record<string, string> | undefined {
+  const size = pageDisplaySize(pageIndex)
+  if (!size) return undefined
+  return {
+    width: `${size.width}px`,
+    height: `${size.height}px`,
     maxWidth: "100%",
     display: "block",
   }
@@ -341,19 +374,142 @@ function onContextMenu(event: MouseEvent): void {
   })
 }
 
+// ── Gesture zoom ─────────────────────────────────────────────────────
+type PageAnchor = {
+  pageIndex: number
+  xRatio: number
+  yRatio: number
+  clientX: number
+  clientY: number
+}
+type WebKitGestureEvent = Event & { clientX?: number; clientY?: number; scale?: number }
+
+let pendingAnchor: (PageAnchor & { requestedZoom: number; token: number }) | undefined
+let pendingZoom: number | undefined
+let gestureStartZoom = 1
+let gestureToken = 0
+let webkitGestureActive = false
+
+function controlledZoom(): number | undefined {
+  return typeof props.zoom === "number" && Number.isFinite(props.zoom)
+    ? clampSurfaceZoom(props.zoom)
+    : undefined
+}
+
+function captureZoomAnchor(clientX: number, clientY: number): PageAnchor | undefined {
+  if (typeof document === "undefined") return undefined
+  const page = document.elementFromPoint?.(clientX, clientY)
+    ?.closest<HTMLElement>("[data-page-index]")
+  const pageIndex = Number(page?.dataset.pageIndex)
+  if (!page || !Number.isInteger(pageIndex)) return undefined
+  const rect = page.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return undefined
+  return {
+    pageIndex,
+    xRatio: (clientX - rect.left) / rect.width,
+    yRatio: (clientY - rect.top) / rect.height,
+    clientX,
+    clientY,
+  }
+}
+
+async function restoreZoomAnchor(anchor: PageAnchor & { token: number }): Promise<void> {
+  await nextTick()
+  requestAnimationFrame(() => {
+    if (anchor.token !== gestureToken) return
+    const container = scrollRef.value
+    const page = container?.querySelector<HTMLElement>(`[data-page-index="${anchor.pageIndex}"]`)
+    if (!container || !page) return
+    const rect = page.getBoundingClientRect()
+    container.scrollLeft += rect.left + rect.width * anchor.xRatio - anchor.clientX
+    container.scrollTop += rect.top + rect.height * anchor.yRatio - anchor.clientY
+  })
+}
+
+function requestGestureZoom(nextZoom: number, clientX: number, clientY: number): void {
+  const current = controlledZoom()
+  if (current === undefined || nextZoom === (pendingZoom ?? current)) return
+  const token = ++gestureToken
+  const anchor = captureZoomAnchor(clientX, clientY)
+  pendingZoom = nextZoom
+  pendingAnchor = anchor ? { ...anchor, requestedZoom: nextZoom, token } : undefined
+  emit("update:zoom", nextZoom)
+}
+
+function onZoomWheel(event: WheelEvent): void {
+  const current = controlledZoom()
+  if (props.enableGestureZoom === false || current === undefined || !event.ctrlKey) return
+  event.preventDefault()
+  if (webkitGestureActive) return
+  requestGestureZoom(
+    nextSurfaceZoom(pendingZoom ?? current, event.deltaY, event.deltaMode),
+    event.clientX,
+    event.clientY,
+  )
+}
+
+function onGestureStart(event: Event): void {
+  const current = controlledZoom()
+  if (props.enableGestureZoom === false || current === undefined) return
+  event.preventDefault()
+  webkitGestureActive = true
+  gestureStartZoom = current
+  pendingZoom = current
+}
+
+function onGestureChange(event: WebKitGestureEvent): void {
+  if (!webkitGestureActive) return
+  event.preventDefault()
+  const rect = scrollRef.value?.getBoundingClientRect()
+  requestGestureZoom(
+    clampSurfaceZoom(gestureStartZoom * (event.scale ?? 1)),
+    event.clientX ?? (rect ? rect.left + rect.width / 2 : 0),
+    event.clientY ?? (rect ? rect.top + rect.height / 2 : 0),
+  )
+}
+
+function onGestureEnd(): void {
+  webkitGestureActive = false
+}
+
+watch(() => props.zoom, (next) => {
+  if (pendingAnchor && typeof next === "number" && clampSurfaceZoom(next) === pendingAnchor.requestedZoom) {
+    void restoreZoomAnchor(pendingAnchor)
+  } else if (pendingZoom !== undefined) {
+    gestureToken += 1
+  }
+  pendingAnchor = undefined
+  pendingZoom = undefined
+})
+
+watch(effectiveSource, () => {
+  gestureToken += 1
+  pendingAnchor = undefined
+  pendingZoom = undefined
+})
+
 // ── fit-width zoom ───────────────────────────────────────────────────
 watch([scrollRef, () => props.fitWidth, renderDocument], ([el, fit, doc]) => {
-  if (!fit || !el || !doc) return
+  if (!fit || props.zoom !== undefined || !el || !doc) return
   const observer = new ResizeObserver(() => {
     const maxPageWidth = Math.max(
       ...doc.pages.map((p) => (p.rotation / 90) % 2 ? p.height : p.width),
       200,
     )
     const containerW = el.clientWidth - 32
-    zoom.value = Math.min(2, Math.max(0.25, containerW / maxPageWidth))
+    zoom.value = clampSurfaceZoom(containerW / maxPageWidth)
   })
   observer.observe(el)
   return () => observer.disconnect()
+})
+
+onMounted(() => {
+  const element = scrollRef.value
+  if (!element) return
+  element.addEventListener("wheel", onZoomWheel, { passive: false })
+  element.addEventListener("gesturestart", onGestureStart, { passive: false })
+  element.addEventListener("gesturechange", onGestureChange as EventListener, { passive: false })
+  element.addEventListener("gestureend", onGestureEnd)
 })
 
 // ── Expose ───────────────────────────────────────────────────────────
@@ -376,6 +532,12 @@ defineExpose({ scrollToPage, zoom, rotation,
 
 onBeforeUnmount(async () => {
   unmounted = true
+  gestureToken += 1
+  const element = scrollRef.value
+  element?.removeEventListener("wheel", onZoomWheel)
+  element?.removeEventListener("gesturestart", onGestureStart)
+  element?.removeEventListener("gesturechange", onGestureChange as EventListener)
+  element?.removeEventListener("gestureend", onGestureEnd)
   cancelRender()
   await releaseDocument()
   if (ownedRuntime) await ownedRuntime.dispose()
@@ -386,7 +548,7 @@ onBeforeUnmount(async () => {
 .pdf-surface {
   flex: 1;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
   min-height: 0;
   min-width: 0;
   background: var(--pdf-surface-bg, #525659);
@@ -413,6 +575,7 @@ onBeforeUnmount(async () => {
   display: flex; align-items: center; justify-content: center;
   background: #fff; min-height: 200px; min-width: 200px;
   font-size: 12px; color: #6b7280;
+  box-sizing: border-box; width: 100%; height: 100%;
 }
 .pdf-surface__page-error { color: #ef4444; }
 </style>

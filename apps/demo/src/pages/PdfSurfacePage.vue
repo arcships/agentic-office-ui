@@ -45,13 +45,14 @@
         ref="surfaceRef"
         :key="surfaceKey"
         :source="source"
-        :default-zoom="1"
+        :zoom="fitWidth ? undefined : zoom"
         :fit-width="fitWidth"
         class="pdf-surface-embed"
         @document-load-success="onLoadSuccess"
         @document-load-error="onLoadError"
         @visible-page-change="visiblePage = $event"
         @context-menu="onContextMenu"
+        @update:zoom="zoom = $event"
       />
       <div v-else class="empty" data-testid="pdf-surface-empty">
         <p>选择一个 PDF 文件以查看垂直滚动渲染效果。</p>
@@ -104,7 +105,6 @@ function onLoadError(error: PdfLoadError): void {
 
 function setZoom(value: number): void {
   zoom.value = Math.min(2, Math.max(0.5, value))
-  if (surfaceRef.value) surfaceRef.value.zoom = zoom.value
 }
 
 function onContextMenu(ctx: { pageIndex: number; clientX: number; clientY: number }): void {

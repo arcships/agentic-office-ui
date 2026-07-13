@@ -32,7 +32,7 @@ import "@arcships/vue-xlsx/webgl"
 
 ## 组件与组合函数
 
-- `XlsxSheetSurface` — 最小嵌入渲染面（仅网格 + 叠加层 + 右键菜单，宿主自建 toolbar/ribbon/sheet tabs）
+- `XlsxSheetSurface` — 最小嵌入渲染面（支持宿主持有 zoom，并保持指针下的单元格和冻结轴）
 - `XlsxViewer` — 电子表格查看器
 - `useXlsxViewerController` — 控制器组合函数
 - `useXlsxViewerThumbnails` — 缩略图

@@ -33,9 +33,9 @@
       <span class="sep" />
 
       <div class="ctrl zoom-group">
-        <button :disabled="!ready" @click="zoomDown">−</button>
-        <span class="zoom-value">{{ zoom }}%</span>
-        <button :disabled="!ready" @click="zoomUp">+</button>
+        <button :disabled="!ready || fitWidth || zoom <= 0.5" @click="zoomDown">−</button>
+        <span class="zoom-value">{{ Math.round(zoom * 100) }}%</span>
+        <button :disabled="!ready || fitWidth || zoom >= 2" @click="zoomUp">+</button>
       </div>
 
       <span class="sep" />
@@ -73,7 +73,7 @@
         :layout-options="{ pageWidth: 816, pageHeight: 1056 }"
         :show-tracked-changes="showTrackedChanges"
         :show-comments="showComments"
-        :zoom-scale="zoom"
+        :zoom="fitWidth ? undefined : zoom"
         :fit-width="fitWidth"
         :search-query="searchQuery"
         :active-search-node-index="searchMatchNodeIndex"
@@ -82,6 +82,7 @@
         @visible-page-range="onVisiblePageRange"
         @context-menu="onContextMenu"
         @selection-change="onSelectionChange"
+        @update:zoom="zoom = $event"
       />
       <div v-else class="empty" data-testid="docx-surface-empty">
         <p>选择示例文档以查看最小嵌入组件的渲染效果。</p>
@@ -129,7 +130,7 @@ const loadCounter = ref(0)
 
 const showTrackedChanges = ref(true)
 const showComments = ref(true)
-const zoom = ref(100)
+const zoom = ref(1)
 const fitWidth = ref(false)
 const searchQuery = ref("")
 
@@ -171,8 +172,8 @@ async function loadSelectedSample(): Promise<void> {
   }
 }
 
-function zoomDown(): void { zoom.value = Math.max(50, zoom.value - 25) }
-function zoomUp(): void { zoom.value = Math.min(200, zoom.value + 25) }
+function zoomDown(): void { zoom.value = Math.max(0.5, zoom.value - 0.25) }
+function zoomUp(): void { zoom.value = Math.min(2, zoom.value + 0.25) }
 
 // ── Surface events ───────────────────────────────────────────────────
 function onPageCountChange(count: number): void {

@@ -108,6 +108,23 @@ test("office-runtime is private, framework-free and has no UI DOM dependency", (
   }
 });
 
+test("surface zoom math clamps the shared range and normalizes wheel deltas", () => {
+  assert.equal(runtime.clampSurfaceZoom(Number.NaN), 1);
+  assert.equal(runtime.clampSurfaceZoom(0.1), 0.5);
+  assert.equal(runtime.clampSurfaceZoom(4), 2);
+  assert.equal(runtime.clampSurfaceZoom(1.234), 1.23);
+
+  assert.equal(runtime.normalizeWheelDelta(2, 0), 2);
+  assert.equal(runtime.normalizeWheelDelta(2, 1), 32);
+  assert.equal(runtime.normalizeWheelDelta(2, 2), 1600);
+  assert.ok(runtime.nextSurfaceZoom(1, -20) > 1);
+  assert.ok(runtime.nextSurfaceZoom(1, 20) < 1);
+  assert.equal(runtime.nextSurfaceZoom(1, -0.1), 1.01);
+  assert.equal(runtime.nextSurfaceZoom(1, 0.1), 0.99);
+  assert.equal(runtime.nextSurfaceZoom(2, -100), 2);
+  assert.equal(runtime.nextSurfaceZoom(0.5, 100), 0.5);
+});
+
 test("archive budgets validate central metadata and actual streamed extraction at exact boundaries", () => {
   const archive = makeArchive({
     "word/document.xml": "<w:document xmlns:w=\"urn:w\"><w:body><w:p>ok</w:p></w:body></w:document>",

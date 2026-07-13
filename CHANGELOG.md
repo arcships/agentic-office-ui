@@ -2,7 +2,17 @@
 
 All notable changes to the `@arcships` package family are documented in this file.
 
-## [0.5.2] - 2026-07-13
+## [0.5.3] - 2026-07-13
+
+### Unified Surface gesture zoom
+
+- Added controlled `zoom` and `update:zoom` contracts to `DocxDocumentSurface`, `PdfSurface`, `PptxStage`, and `XlsxSheetSurface`; `1` means 100%.
+- Added `enableGestureZoom`, `Ctrl+wheel`, trackpad pinch, and WebKit gesture support without consuming ordinary wheel scrolling.
+- Unified the supported Surface range at 50%–200% and kept existing zoom APIs compatible when the controlled prop is absent.
+- Preserved the pointed page or slide during DOCX, PDF, and PPTX zoom; XLSX preserves the pointed cell and handles frozen rows, frozen columns, and headers per axis.
+- Updated built-in viewers and all four Surface demos to use host-owned zoom state.
+
+### Expanded Office input formats
 
 ### @arcships/xlsx-core / @arcships/vue-xlsx
 
@@ -14,6 +24,22 @@ All notable changes to the `@arcships` package family are documented in this fil
 ### @arcships/vue-pptx
 
 - Added PPTM, PPSX, PPSM, POTX and POTM input support with package validation and ignored-macro warnings.
+
+### @arcships/docx-core / @arcships/vue-docx
+
+- Added read-only DOCM, DOTX and DOTM input support; VBA is never executed and original-format macro editing is not implied.
+
+### Internal and compatibility changes
+
+- Added shared source-format detection and Surface zoom math to the private `@arcships/office-runtime` package; public packages continue to ship without a runtime dependency on that private package.
+- Added an explicit PPTX list scroll container so renderer virtualization and Surface anchor restoration use the same owner.
+- Kept PDF page slots geometrically stable while zoomed and exposed XLSX grid anchor capture/restoration to its Surface.
+- Added focused unit and component coverage for zoom bounds and wheel-event consumption, while retaining the existing release regression suites.
+
+## [0.5.2] - 2026-07-13
+
+### @arcships/vue-pptx
+
 - Changed browse and Surface rendering to a vertically scrollable, windowed slide list; present mode remains a single-slide playback stage.
 - Added runtime `selectionChange`, `objectClick`, and contextual `contextMenu` events with slide index, object key, and viewport/container coordinates.
 - Kept the visible slide, toolbar counter, search navigation, and host navigation synchronized while scrolling.
@@ -23,10 +49,6 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 - Added explicit `renderMode: "list" | "slide"` and list-rendering options to browser sessions.
 - Static preview sessions default to list mode; document/playback sessions default to slide mode.
-
-### @arcships/docx-core / @arcships/vue-docx
-
-- Added read-only DOCM, DOTX and DOTM input support; VBA is never executed and original-format macro editing is not implied.
 
 ## [0.5.1] - 2026-07-13
 
