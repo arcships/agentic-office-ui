@@ -177,6 +177,9 @@ export function createPptxDocumentSession(
     lazyMedia: options.lazyMedia ?? true,
     lazySlides: options.lazySlides ?? true,
     pdfjs: false,
+    onSlideChange(index) {
+      options.onSlideChange?.(index)
+    },
     onSlideRendered(index, element) {
       const slide = viewer.presentationData?.slides[index]
       if (slide) applyPptxObjectMarkers(element, slide.slidePath)
@@ -285,7 +288,20 @@ export function createPptxDocumentSession(
           Math.max(presentation.slides.length - 1, 0),
         )
         viewer.load(presentation)
-        await viewer.renderSlide(initialSlide)
+        if ((options.renderMode ?? "slide") === "list") {
+          await viewer.renderList({
+            windowed: options.listOptions?.windowed ?? true,
+            batchSize: options.listOptions?.batchSize,
+            initialSlides: options.listOptions?.initialSlides,
+            overscanViewport: options.listOptions?.overscanViewport,
+            showSlideLabels: options.listOptions?.showSlideLabels,
+          })
+          if (initialSlide > 0) {
+            await viewer.goToSlide(initialSlide, { behavior: "instant", block: "start" })
+          }
+        } else {
+          await viewer.renderSlide(initialSlide)
+        }
         task.assertCurrent()
 
         currentArchive = files
@@ -398,7 +414,10 @@ export function createPptxPreviewSession(
   container: HTMLElement,
   options: PptxPreviewSessionOptions = {},
 ): PptxPreviewSession {
-  return createPptxDocumentSession(container, options)
+  return createPptxDocumentSession(container, {
+    ...options,
+    renderMode: options.renderMode ?? "list",
+  })
 }
 
 export type {

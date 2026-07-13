@@ -4,8 +4,8 @@
       <div>
         <h2>PPTX Surface — 最小嵌入组件</h2>
         <p class="desc">
-          只负责渲染幻灯片舞台 + 点击交互，无 Toolbar/Sidebar/搜索栏/播放控制。
-          宿主通过 usePptxDocument + usePptxPlayback 自行管理导航、缩放、播放。
+          垂直连续渲染全部幻灯片，无 Toolbar/Sidebar/搜索栏/播放控制。
+          宿主通过 usePptxDocument 自行管理跳页与缩放；单页左右切换只用于播放模式。
         </p>
       </div>
     </header>
@@ -34,7 +34,7 @@
 
       <span class="sep" />
 
-      <span class="ctrl">{{ statusLabel }}</span>
+      <span class="ctrl" data-testid="pptx-surface-status">{{ statusLabel }}</span>
     </div>
 
     <div class="stage-container" :class="{ 'stage-container--dark': true }">
@@ -42,8 +42,9 @@
         ref="stage"
         class="pptx-surface-stage"
         data-testid="pptx-surface-stage"
-        @click="onStageClick"
         @context-menu="onContextMenu"
+        @object-click="onObjectClick"
+        @selection-change="onSelectionChange"
       />
     </div>
   </div>
@@ -54,8 +55,10 @@ import { computed, ref, useTemplateRef, watch } from "vue"
 import {
   PptxStage,
   usePptxDocument,
-  usePptxPlayback,
+  type PptxStageContextMenu,
   type PptxStageExpose,
+  type PptxStageObjectClick,
+  type PptxStageSelection,
 } from "@arcships/vue-pptx"
 
 // ── State ────────────────────────────────────────────────────────────
@@ -64,10 +67,16 @@ const fileInputRef = ref<HTMLInputElement>()
 
 const stage = useTemplateRef<PptxStageExpose>("stage")
 const stageElement = computed(() => stage.value?.element ?? null)
-const documentApi = usePptxDocument(stageElement, { source })
-
-const playback = usePptxPlayback(documentApi, {
-  autoplay: false,
+const documentApi = usePptxDocument(stageElement, {
+  source,
+  session: {
+    renderMode: "list",
+    listOptions: {
+      windowed: true,
+      initialSlides: 4,
+      overscanViewport: 1.5,
+    },
+  },
 })
 
 const { activeIndex, zoomPercent, state } = documentApi
@@ -86,13 +95,17 @@ function onFileChange(event: Event): void {
   source.value = (event.target as HTMLInputElement).files?.[0] ?? null
 }
 
-async function onStageClick(event: MouseEvent): Promise<void> {
-  if (state.value !== "ready") return
-  await playback.next()
+function onSelectionChange(selection: PptxStageSelection): void {
+  statusLabel.value = `已选中第 ${selection.slideIndex + 1} 页`
 }
 
-function onContextMenu(ctx: { clientX: number; clientY: number }): void {
-  statusLabel.value = `右键菜单点击 (${ctx.clientX}, ${ctx.clientY})`
+function onObjectClick(object: PptxStageObjectClick): void {
+  statusLabel.value = `第 ${object.slideIndex + 1} 页对象：${object.objectKey}`
+}
+
+function onContextMenu(ctx: PptxStageContextMenu): void {
+  const target = ctx.kind === "object" ? `对象 ${ctx.objectKey}` : "幻灯片"
+  statusLabel.value = `第 ${ctx.slideIndex + 1} 页${target}右键 (${ctx.clientX}, ${ctx.clientY})`
 }
 </script>
 
@@ -118,9 +131,8 @@ h2 { margin-bottom: 4px; }
 .sep { width: 1px; height: 20px; background: var(--border); }
 
 .stage-container {
-  flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
-  overflow: hidden;
+  flex: 1; min-height: 0; overflow: auto;
 }
 .stage-container--dark { background: #18181b; }
-.pptx-surface-stage { inline-size: min(100%, 1280px); max-block-size: 100%; }
+.pptx-surface-stage { box-sizing: border-box; inline-size: min(100%, 1280px); margin-inline: auto; padding: 24px; }
 </style>

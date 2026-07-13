@@ -319,6 +319,21 @@ export interface PptxPlaybackWarning {
 ```ts
 export type PptxApproximationPolicy = "off" | "safe"
 
+export interface PptxPreviewSessionOptions {
+  fitMode?: "contain" | "none"
+  zoomPercent?: number
+  renderMode?: "list" | "slide"
+  listOptions?: {
+    windowed?: boolean
+    batchSize?: number
+    initialSlides?: number
+    overscanViewport?: number
+    showSlideLabels?: boolean
+  }
+  onSlideChange?: (index: number) => void
+  // limits / lazyMedia / lazySlides 保持既有定义
+}
+
 export interface PptxDocumentSessionOptions extends PptxPreviewSessionOptions {
   approximation?: PptxApproximationPolicy
   externalMedia?: "disabled" | "allowed"
@@ -336,7 +351,7 @@ export function createPptxDocumentSession(
 ): PptxDocumentSession
 ```
 
-`createPptxPreviewSession()` 继续返回现有接口，并内部委托给同一个会话实现。它不自动创建播放控制器。
+`createPptxPreviewSession()` 继续返回现有接口，并内部委托给同一个会话实现。它默认使用 `renderMode: "list"`，纵向连续渲染并按可视区域挂载页面，不自动创建播放控制器。`createPptxDocumentSession()` 默认使用 `renderMode: "slide"`，供播放控制器使用。
 
 ### 4.2 播放控制器
 
@@ -461,16 +476,47 @@ interface PptxViewerEmits {
 
 现有 `loadStart`、`loadSuccess`、`loadError` 和 `slideChange` 不删除、不改名。
 
+`PptxViewer mode="browse"` 使用纵向连续列表；`mode="present"` 使用单页播放舞台。底层 `PptxStage` 同时公开：
+
+```ts
+interface PptxStageSelection {
+  kind: "slide"
+  slideIndex: number
+}
+
+interface PptxStageObjectClick {
+  kind: "object"
+  slideIndex: number
+  objectKey: string
+}
+
+interface PptxStageContextMenuPosition {
+  slideIndex: number
+  clientX: number
+  clientY: number
+  containerX: number
+  containerY: number
+}
+
+type PptxStageContextMenu = PptxStageContextMenuPosition & (
+  | { kind: "slide"; objectKey?: never }
+  | { kind: "object"; objectKey: string }
+)
+```
+
+对应事件名为 `selectionChange`、`objectClick` 和 `contextMenu`；Vue 模板中使用 `selection-change`、`object-click`、`context-menu`。
+
 ## 6. 兼容规则
 
 - 根入口继续通过现有纯净性测试；
 - 浏览器入口可以依赖第三方渲染器；
 - 现有静态预览调用不需要增加任何属性；
 - `mode` 默认 `browse`；
+- `browse` 默认纵向连续页面，`present` 保持单页播放；
 - `approximation` 默认 `off`；
 - `externalMedia` 默认 `disabled`；
 - 新事件只增加，不改变旧事件参数；
-- `PptxPreviewSession` 不增加必须实现的方法，测试替身无需立即实现播放接口。
+- `PptxPreviewSession` 不增加必须实现的方法；新增的列表/单页行为通过可选会话参数表达，测试替身无需实现播放接口。
 
 ## 7. 内部接口
 

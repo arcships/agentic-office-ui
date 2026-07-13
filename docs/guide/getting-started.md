@@ -11,6 +11,7 @@ Agentic Office UI 是一组 Vue 3 Office 文档组件。可以直接使用完整
 | 查看和操作 XLSX | `@arcships/vue-xlsx`、`@arcships/xlsx-core` | `XlsxViewer`、`useXlsxViewerController` |
 | 查看 PDF | `@arcships/vue-pdf` | `PdfViewer` |
 | 查看和播放 PPTX | `@arcships/vue-pptx`、`@arcships/pptx-core` | `PptxViewer` |
+| 自定义 PPTX 纵向浏览 | `@arcships/vue-pptx`、`@arcships/pptx-core` | `PptxStage` + `usePptxDocument` |
 | 自定义 PPTX 播放界面 | `@arcships/vue-pptx`、`@arcships/pptx-core` | `PptxStage` 和两个组合函数 |
 | 文件上传、签名等基础界面 | `@arcships/vue-ui` | 对应组件 |
 

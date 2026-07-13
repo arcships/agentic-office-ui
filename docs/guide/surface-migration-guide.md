@@ -1,14 +1,14 @@
-# 接入 0.5.0 最小 Surface 组件指南
+# 接入 0.5.2 最小 Surface 组件指南
 
-`@arcships/vue-docx@0.5.0` / `vue-xlsx@0.5.0` / `vue-pptx@0.5.0` / `vue-pdf@0.5.0`
+`@arcships/vue-docx@0.5.2` / `vue-xlsx@0.5.2` / `vue-pptx@0.5.2` / `vue-pdf@0.5.2`
 
 ## 升级
 
 ```bash
-pnpm add @arcships/vue-docx@0.5.0 @arcships/vue-xlsx@0.5.0 @arcships/vue-pptx@0.5.0 @arcships/vue-pdf@0.5.0
+pnpm add @arcships/vue-docx@0.5.2 @arcships/vue-xlsx@0.5.2 @arcships/vue-pptx@0.5.2 @arcships/vue-pdf@0.5.2
 ```
 
-版本号推到 `^0.5.0`，API 与 `0.4.0` 兼容。
+版本号推到 `^0.5.2`。公开入口与 `0.5.1` 兼容；PPTX 普通浏览布局按本指南迁移为纵向连续页面。
 
 ## 四种 Surface 组件
 
@@ -18,10 +18,10 @@ pnpm add @arcships/vue-docx@0.5.0 @arcships/vue-xlsx@0.5.0 @arcships/vue-pptx@0.
 |---|---|---|
 | DOCX 查看 | `<DocxViewer :file="buf" />` | `<DocxDocumentSurface :model="model" />` |
 | XLSX 查看 | `<XlsxViewer :controller="ctrl" />` | `<XlsxSheetSurface :controller="ctrl" />` |
-| PPTX 查看 | `<PptxViewer :source="file" />` | `<PptxStage />` + `usePptxDocument` |
+| PPTX 查看 | `<PptxViewer :source="file" />` | `<PptxStage />` + `usePptxDocument`，纵向连续页面 |
 | PDF 查看 | `<PdfViewer :src="url" />` | `<PdfSurface :source="source" />` |
 
-旧的 Viewer 组件全部保留，行为不变。
+旧的 Viewer 组件全部保留。PPTX 的 `mode="browse"` 从 `0.5.2` 起改为纵向连续页面；`mode="present"` 仍保持单页播放。
 
 ## DOCX
 
@@ -100,25 +100,53 @@ const controller = useXlsxViewerController({ file: buffer, fileName: 'a.xlsx' })
 ## PPTX
 
 ```vue
-<script setup>
-import { PptxStage, usePptxDocument, usePptxPlayback } from '@arcships/vue-pptx'
+<script setup lang="ts">
+import { ref } from 'vue'
+import {
+  PptxStage,
+  usePptxDocument,
+  type PptxPreviewSource,
+  type PptxStageContextMenu,
+  type PptxStageObjectClick,
+  type PptxStageExpose,
+  type PptxStageSelection,
+} from '@arcships/vue-pptx'
+import '@arcships/vue-pptx/style.css'
 
-const stageRef = useTemplateRef('stage')
-const doc = usePptxDocument(() => stageRef.value?.element, { source })
-const playback = usePptxPlayback(doc, { autoplay: false })
+const props = defineProps<{ source: PptxPreviewSource | null }>()
+const stage = ref<PptxStageExpose | null>(null)
+const doc = usePptxDocument(() => stage.value?.element, {
+  source: () => props.source,
+  session: {
+    renderMode: 'list',
+    listOptions: { windowed: true, initialSlides: 4 },
+  },
+})
+const { activeIndex, document } = doc
+
+function onSelection(selection: PptxStageSelection) {}
+function onObjectClick(object: PptxStageObjectClick) {}
+function onContextMenu(context: PptxStageContextMenu) {}
 </script>
 
 <template>
-  <PptxStage ref="stage" />
+  <PptxStage
+    ref="stage"
+    @selection-change="onSelection"
+    @object-click="onObjectClick"
+    @context-menu="onContextMenu"
+  />
   <button @click="doc.previousSlide()">上一页</button>
-  <span>{{ doc.activeIndex + 1 }} / {{ doc.document?.slides.length }}</span>
+  <span>{{ activeIndex + 1 }} / {{ document?.slides.length ?? 0 }}</span>
   <button @click="doc.nextSlide()">下一页</button>
 </template>
 ```
 
-**事件（Stage）**：`contextMenu`（带 `containerX/Y`）、`objectClick`
+**事件（Stage）**：`selectionChange`（带 `slideIndex`）、`objectClick`（带 `slideIndex` + `objectKey`）、`contextMenu`（`kind: 'slide'` 时无 `objectKey`，`kind: 'object'` 时 `objectKey` 必填；两者都带 `slideIndex` 和 `clientX/Y` + `containerX/Y`）
 
-**Composable**：`usePptxDocument` 返回 `state`、`document`、`activeIndex`、`goTo(n)`、`nextSlide()`、`previousSlide()`、`setZoom(n)`、`getSession()`
+**Composable**：`usePptxDocument` 返回 `state`、`document`、`activeIndex`、`goTo(n)`、`nextSlide()`、`previousSlide()`、`setZoom(n)`、`getSession()`。列表模式下跳页方法滚动到目标页，滚动也同步 `activeIndex`。
+
+**播放模式**：自定义播放器改用 `session: { renderMode: 'slide' }` 并增加 `usePptxPlayback`。不要在列表 Surface 上执行播放时间轴。
 
 **CSS 变量**：`--pptx-surface-bg`
 
@@ -171,6 +199,9 @@ const source = { kind: 'url', url: '/doc.pdf' }
   selection?: { start, end }   // XLSX cell range
   sheetName?: string           // XLSX
   activeCell?: { row, col }    // XLSX
+  // PPTX 另使用判别联合：
+  // { kind: 'slide', slideIndex, ...coords }
+  // { kind: 'object', slideIndex, objectKey, ...coords }
 }
 ```
 
@@ -184,9 +215,9 @@ Surface 组件不内置搜索 UI。搜索能力分布：
 |---|---|---|
 | DOCX | Surface prop `searchQuery` + `activeSearchNodeIndex` | 传 prop 即可，surface 内部高亮命中节点 |
 | XLSX | `controller.findCells(query)` → `XlsxCellAddress[]` | 遍历 used range，返回匹配 cell 地址列表 |
-| PPTX | `session.searchText(query)` → `PptxSearchResult[]` | 宿主调 API，根据 `slideIndex` 自行 goTo 翻页 |
+| PPTX | `session.searchText(query)` → `PptxSearchResult[]` | 宿主调 API，根据 `slideIndex` 调用 `goTo()` 滚动定位 |
 | PDF | `surfaceRef.search(query)` → `PdfSearchHit[]` | expose 方法，返回 pageIndex + rects |
 
-XLSX 搜索暂未提供公开 API；PPTX 和 PDF 的搜索为 composable/runtime 级 API，不通过 surface prop 透传。
+XLSX、PPTX 和 PDF 的搜索为 controller/composable/runtime 级 API，不通过 surface prop 透传。
 
 DOCX 之外的格式，宿主需要自己实现搜索输入框 + 结果列表 + 导航逻辑。

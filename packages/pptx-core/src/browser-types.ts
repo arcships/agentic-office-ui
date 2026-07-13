@@ -38,6 +38,16 @@ export interface PptxPreviewSessionOptions {
   zoomPercent?: number
   lazyMedia?: boolean
   lazySlides?: boolean
+  /** Static previews use a vertical page list; presentation playback uses one slide. */
+  renderMode?: "list" | "slide"
+  listOptions?: {
+    windowed?: boolean
+    batchSize?: number
+    initialSlides?: number
+    overscanViewport?: number
+    showSlideLabels?: boolean
+  }
+  onSlideChange?: (index: number) => void
 }
 
 export type PptxApproximationPolicy = "off" | "safe"

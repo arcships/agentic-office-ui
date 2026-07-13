@@ -2,6 +2,26 @@
 
 All notable changes to the `@arcships` package family are documented in this file.
 
+## [0.5.2] - 2026-07-13
+
+### @arcships/vue-pptx
+
+- Changed browse and Surface rendering to a vertically scrollable, windowed slide list; present mode remains a single-slide playback stage.
+- Added runtime `selectionChange`, `objectClick`, and contextual `contextMenu` events with slide index, object key, and viewport/container coordinates.
+- Kept the visible slide, toolbar counter, search navigation, and host navigation synchronized while scrolling.
+- Reserved left/right keyboard navigation for present mode and use up/down or PageUp/PageDown in browse mode.
+
+### @arcships/pptx-core
+
+- Added explicit `renderMode: "list" | "slide"` and list-rendering options to browser sessions.
+- Static preview sessions default to list mode; document/playback sessions default to slide mode.
+
+## [0.5.1] - 2026-07-13
+
+### Release
+
+- Bumped the eight public packages together for the search API release candidate.
+
 ## [0.5.0] - 2026-07-13
 
 ### Unified Surface Components
@@ -34,7 +54,7 @@ All notable changes to the `@arcships` package family are documented in this fil
 ### @arcships/vue-pptx
 
 - `PptxStage` added `--pptx-surface-bg` CSS variable.
-- `contextMenu`, `selectionChange`, `objectClick` event declarations.
+- `contextMenu`, `selectionChange`, `objectClick` event declarations; `0.5.2` completes their runtime behavior and structured payloads.
 - HomePage now includes all three PPTX demo page cards.
 
 ### @arcships/vue-pdf

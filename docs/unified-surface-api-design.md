@@ -1,6 +1,6 @@
 # Unified Surface API 设计
 
-> 状态：待实现
+> 状态：已实现；PPTX 纵向列表与完整交互事件在 `0.5.2` 收口
 > 适用范围：`DocxDocumentSurface`、`XlsxSheetSurface`、`PptxStage`、`PdfSurface`
 > 目标：四个 surface 组件对外统一暴露渲染边界、样式定制、自适应缩放、鼠标事件和选中状态
 
@@ -35,11 +35,11 @@ Surface 的根 DOM 元素 = 内容画布本身，无外层 chrome、无 border-r
 - **DOCX**：页面宽度 = `pageWidthPx`，zoom 映射到 `DocxViewerRoot.zoomScale`
 - **PDF**：最大页宽，zoom 映射到 `PdfSurface.zoom`
 - **XLSX**：不需要（网格本身就是滚动视口）
-- **PPTX**：不需要（单页，已有 contain 模式）
+- **PPTX**：没有独立 `fitWidth` prop；列表/单页渲染都使用会话 `fitMode: "contain"` 随容器宽度计算页面尺寸
 
 ### 2.4 滚动
 
-横向 + 纵向滚动由 surface 内置处理。DOCX/PdfSurface 纵向滚动全部内容，XLSX 横纵二维滚动。PPTX 不适用。
+横向 + 纵向滚动由 surface 内置处理。DOCX、PPTX 和 PdfSurface 纵向滚动全部内容，XLSX 横纵二维滚动。PPTX 只有 `renderMode: "slide"` 的播放舞台不滚动页面列表。
 
 ## 3. 统一事件模型
 
@@ -66,12 +66,18 @@ emit("contextMenu", {
 })
 
 // PPTX
-emit("contextMenu", {
-  kind: "slide" | "object",
-  objectKey?: string,
+type PptxStageContextMenu = {
+  slideIndex: number,
   clientX: number,
   clientY: number,
-})
+  containerX: number,
+  containerY: number,
+} & (
+  | { kind: "slide"; objectKey?: never }
+  | { kind: "object"; objectKey: string }
+)
+
+emit("contextMenu", context satisfies PptxStageContextMenu)
 
 // PDF
 emit("contextMenu", {
@@ -105,7 +111,7 @@ emit("selectionChange", {
   value?: string,
 })
 
-// PPTX — 不适用（单页幻灯片，无文本选中）
+// PPTX — 点击页面或对象时选择所在幻灯片
 emit("selectionChange", { kind: "slide", slideIndex: number })
 
 // PDF — 实现 text layer 后生效
@@ -127,8 +133,8 @@ emit("objectClick", { kind: "image", nodeIndex: number, imageKey?: string })
 // XLSX — 点击图表/图片/形状
 emit("objectClick", { kind: "chart" | "image" | "shape", id: string })
 
-// PPTX — 已有 onStageClick 透传 objectKey
-// 对齐命名: emit("objectClick", { kind: "object", objectKey: string })
+// PPTX
+emit("objectClick", { kind: "object", slideIndex: number, objectKey: string })
 
 // PDF — 不适用（图片嵌入页面不可独立点击）
 ```
@@ -151,13 +157,13 @@ emit("objectClick", { kind: "chart" | "image" | "shape", id: string })
 
 | 方法 | DOCX | XLSX | PPTX | PDF | 说明 |
 |---|---|---|---|---|---|
-| `scrollToPage(n)` | ✅ | — | — | ✅ | 滚动到指定页 |
+| `scrollToPage(n)` | ✅ | — | `usePptxDocument.goTo(n)` | ✅ | 滚动到指定页 |
 | `scrollToNode(n)` | ✅ | — | — | — | 滚动到指定节点 |
 | `zoom` | — | — | — | ✅ | 读写缩放 |
 | `rotation` | — | — | — | ✅ | 读写旋转 |
 | `scrollContainer` | ✅ | — | — | — | 滚动容器 DOM |
 
-PPTX 通过 `usePptxDocument` composable 暴露 `goTo` / `setZoom`，不走 expose。保持现状。
+PPTX 通过 `usePptxDocument` composable 暴露 `goTo` / `setZoom`，不走 expose。列表模式下 `goTo` 滚动定位页面，滚动产生的可见页变化同步回 `activeIndex`。
 
 ## 5. 实现顺序
 

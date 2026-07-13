@@ -6,7 +6,7 @@
       'pptx-viewer--dark': isDark,
       'pptx-viewer--present': isPresent,
     }"
-    :style="{ height }"
+    :style="{ height, maxHeight: height }"
     :data-state="state"
     :data-playback-status="playbackSnapshot?.status"
     :data-slide-index="activeIndex"
@@ -210,6 +210,12 @@ const documentOptions = {
   session: () => ({
     fitMode: "contain" as const,
     zoomPercent: 100,
+    renderMode: props.mode === "present" ? "slide" as const : "list" as const,
+    listOptions: props.mode === "present" ? undefined : {
+      windowed: true,
+      initialSlides: 4,
+      overscanViewport: 1.5,
+    },
     limits: props.limits,
     lazyMedia: true,
     lazySlides: true,
@@ -468,10 +474,10 @@ function onKeydown(event: KeyboardEvent): void {
   } else if (isPresent.value && event.key === "End") {
     event.preventDefault()
     void invoke(() => goToSlide(Math.max((document.value?.slides.length ?? 1) - 1, 0)))
-  } else if (event.key === "ArrowLeft" || event.key === "PageUp") {
+  } else if ((isPresent.value && event.key === "ArrowLeft") || event.key === "ArrowUp" || event.key === "PageUp") {
     event.preventDefault()
     void invoke(previous)
-  } else if (event.key === "ArrowRight" || event.key === "PageDown" || isPresent.value && event.key === " ") {
+  } else if ((isPresent.value && event.key === "ArrowRight") || event.key === "ArrowDown" || event.key === "PageDown" || isPresent.value && event.key === " ") {
     event.preventDefault()
     void invoke(next)
   } else if (!isPresent.value && (event.ctrlKey || event.metaKey) && (event.key === "+" || event.key === "=")) {

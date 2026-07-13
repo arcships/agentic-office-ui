@@ -13,7 +13,9 @@ import "@arcships/vue-pptx/style.css"
 </template>
 ```
 
-`mode="browse"` 用于预览、缩略图、搜索和普通翻页。`mode="present"` 用于逐步动画、媒体、页面切换和全屏。
+`mode="browse"` 像 PDF/DOCX 一样纵向连续展示全部幻灯片，并提供缩略图、搜索和滚动跳页。`mode="present"` 使用单页舞台；左右键执行上/下一播放步骤，只有当前页步骤结束后才由播放控制器跨页。
+
+浏览模式按可视区域挂载页面，滚动时同步当前页、工具栏页码和缩略图状态。上/下方向键与 PageUp/PageDown 用于纵向跳页；左/右方向键只在演示模式中执行上一步/下一步。
 
 常用属性：
 
@@ -37,7 +39,36 @@ import "@arcships/vue-pptx/style.css"
 
 `PptxStage`、`usePptxDocument` 和 `usePptxPlayback` 可以绕过完整工具栏。完整示例见 [vue-pptx README](../../packages/vue-pptx/README.md)。
 
-文档组合函数负责普通翻页，播放组合函数负责动画边界和演示跳页。演示模式中不要混用 `document.goTo()` 和 `playback.goToSlide()`，否则文档页面与播放状态可能不同步。
+普通纵向 Surface 使用 `session: { renderMode: "list" }`，由文档组合函数负责滚动跳页和缩放。播放器使用 `session: { renderMode: "slide" }`，由播放组合函数负责动画边界和演示跳页。演示模式中不要混用 `document.goTo()` 和 `playback.goToSlide()`，否则文档页面与播放状态可能不同步。
+
+## Surface 事件
+
+`PptxStage` 实际发出以下事件：
+
+```vue
+<PptxStage
+  @selection-change="onSelection"
+  @object-click="onObjectClick"
+  @context-menu="onContextMenu"
+/>
+```
+
+| 事件 | 参数 | 触发时机 |
+|---|---|---|
+| `selection-change` | `{ kind: "slide", slideIndex }` | 点击幻灯片页面或其中对象 |
+| `object-click` | `{ kind: "object", slideIndex, objectKey }` | 点击带稳定对象标识的形状、图片、图表等对象 |
+| `context-menu` | `PptxStageContextMenu` 判别联合 | 右键幻灯片或对象 |
+
+`context-menu` 的精确形式为：
+
+```ts
+type PptxStageContextMenu = Position & (
+  | { kind: "slide"; objectKey?: never }
+  | { kind: "object"; objectKey: string }
+)
+```
+
+其中 `Position` 包含 `slideIndex`、`clientX/Y` 和 `containerX/Y`；容器坐标相对 `PptxStage` 根元素，而不是宿主的外层滚动容器。`slideIndex` 从零开始。对象点击会先产生页面选中，再产生 `object-click`；右键只发 `context-menu`，其中已经包含页面和对象上下文。宿主决定是否显示菜单，不应解析 `objectKey` 的内部字符串格式。
 
 ## 兼容性说明
 

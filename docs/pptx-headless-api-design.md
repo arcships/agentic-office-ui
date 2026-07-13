@@ -12,7 +12,7 @@
 
 - `usePptxDocument`：打开文档和浏览页面；
 - `usePptxPlayback`：控制动画与播放；
-- `PptxStage`：提供渲染所需的 DOM 元素。
+- `PptxStage`：提供渲染所需的 DOM 元素，以及页面选中、对象点击和右键上下文事件。
 
 现有 `PptxThumbnail` 和 `PptxViewer` 保留。第一版不增加搜索、全屏、Provider、控制按钮组件、业务封装，也不增加新的解析和动画能力。
 
@@ -25,7 +25,8 @@ usePptxDocument
               └── 唯一 PptxPlaybackController
 
 PptxStage
-  └── 只提供 DOM，不保存文档和播放状态
+  ├── 提供 DOM，不保存文档和播放状态
+  └── 从渲染标记派生 selectionChange / objectClick / contextMenu
 ```
 
 `PptxViewer` 改用这三个公开能力，不再维护另一套会话、控制器和播放状态。
@@ -44,6 +45,9 @@ export type {
   UsePptxPlaybackOptions,
   UsePptxPlaybackReturn,
   PptxStageExpose,
+  PptxStageSelection,
+  PptxStageObjectClick,
+  PptxStageContextMenu,
 } from "./headless-types"
 ```
 
@@ -100,8 +104,9 @@ function usePptxDocument(
 
 - 舞台和来源都可用时自动打开文档；舞台尚未挂载时进入 `waiting-for-stage`；
 - 新来源或新舞台出现时，旧打开任务失效，旧会话销毁，只保留最新结果；
-- `goTo()`、`nextSlide()` 和 `previousSlide()` 只做普通翻页，不执行动画；
-- 页面编号从零开始，页面渲染成功后才更新 `activeIndex`；
+- `renderMode: "list"` 纵向连续展示全部页面，`goTo()`、`nextSlide()` 和 `previousSlide()` 滚动定位但不执行动画；
+- `renderMode: "slide"` 只渲染当前页，供播放控制器使用；
+- 页面编号从零开始，列表滚动或页面渲染成功后更新 `activeIndex`；
 - `close()` 关闭当前文档，之后仍可再次打开；
 - Vue 作用域销毁时自动调用 `dispose()`；
 - `getSession()` 只给高级功能使用，普通调用方使用上面的公开方法。
@@ -156,12 +161,36 @@ function usePptxPlayback(
 
 ## 6. `PptxStage`
 
-`PptxStage` 只提供渲染容器：
+`PptxStage` 提供渲染容器和统一 Surface 事件，但不持有文档状态：
 
 ```ts
 interface PptxStageExpose {
   readonly element: HTMLElement | null
 }
+
+interface PptxStageSelection {
+  kind: "slide"
+  slideIndex: number
+}
+
+interface PptxStageObjectClick {
+  kind: "object"
+  slideIndex: number
+  objectKey: string
+}
+
+interface PptxStageContextMenuPosition {
+  slideIndex: number
+  clientX: number
+  clientY: number
+  containerX: number
+  containerY: number
+}
+
+type PptxStageContextMenu = PptxStageContextMenuPosition & (
+  | { kind: "slide"; objectKey?: never }
+  | { kind: "object"; objectKey: string }
+)
 ```
 
 根元素包含基础类名和测试标记：
@@ -170,7 +199,7 @@ interface PptxStageExpose {
 <div class="pptx-stage" data-testid="pptx-stage" />
 ```
 
-组件把 `class`、`style`、无障碍属性和 DOM 事件透传到根元素，不自行定义加载状态、尺寸、点击行为或焦点行为。使用者也可以不用该组件，直接把普通 `<div>` 传给 `usePptxDocument`。
+组件把 `class`、`style`、无障碍属性和普通 DOM 事件透传到根元素，不自行定义加载状态、尺寸或焦点行为。点击页面时发出 `selection-change`；点击带 `data-pptx-object-key` 的对象时再发出 `object-click`；右键页面或对象时发出带目标与坐标的 `context-menu`。使用者可以不用该组件，直接把普通 `<div>` 传给 `usePptxDocument`，但这时需要自行实现上述事件派生。
 
 ## 7. 最小用法
 
@@ -187,7 +216,10 @@ import {
 const props = defineProps<{ file: File | ArrayBuffer | null }>()
 const stage = ref<PptxStageExpose | null>(null)
 const element = computed(() => stage.value?.element ?? null)
-const document = usePptxDocument(element, { source: () => props.file })
+const document = usePptxDocument(element, {
+  source: () => props.file,
+  session: { renderMode: "slide" },
+})
 const playback = usePptxPlayback(document)
 
 async function onClick(event: MouseEvent) {
@@ -211,7 +243,7 @@ async function onClick(event: MouseEvent) {
 `PptxViewer` 内部改为使用 `PptxStage`、`usePptxDocument` 和 `usePptxPlayback`，但以下内容保持不变：
 
 - 现有属性、事件和公开方法；
-- 默认浏览模式；
+- 默认浏览模式使用纵向连续页面；演示模式使用单页舞台；
 - 工具栏、缩略图、键盘、全屏和状态界面；
 - `pptx-viewer__stage` 类名；
 - `PptxThumbnail` 的行为。
@@ -244,10 +276,11 @@ packages/vue-pptx/src/
 ## 10. 验收条件
 
 - 普通 `<div>` 和 `PptxStage` 都能打开并显示 PPTX；
-- 浏览翻页、缩放、动画播放和对象点击可用；
+- 浏览滚动跳页、缩放、动画播放和对象点击可用；
+- `selection-change`、`object-click`、`context-menu` 的运行时参数与公开类型一致；
 - 快速换文件或换舞台只保留最新结果；
 - 卸载后没有旧控制器、媒体和对象地址残留；
-- `PptxViewer` 的公开接口和现有行为不变；
+- `PptxViewer` 的公开接口保持兼容；浏览布局在 `0.5.2` 明确改为纵向连续页面；
 - npm 压缩包安装后，完整组件和最小组合方式都能运行；
 - 使用“装修付款节奏与现金流规划.pptx”确认第一次点击执行动画，不直接换页。
 

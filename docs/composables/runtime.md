@@ -23,7 +23,7 @@ onBeforeUnmount(() => runtime.dispose())
 - DOCX：`@arcships/docx-core/runtime`
 - XLSX：`@arcships/xlsx-core/runtime`
 - PDF：`createPdfRenderRuntime` 从 `@arcships/vue-pdf` 导入
-- PPTX：浏览器会话从 `@arcships/pptx-core/browser` 创建，不另设 Runtime 名称
+- PPTX：浏览器会话从 `@arcships/pptx-core/browser` 创建，不另设 Runtime 名称；预览会话默认纵向 `list`，播放文档会话默认单页 `slide`
 
 ## 来源和错误
 

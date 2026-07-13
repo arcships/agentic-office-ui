@@ -199,13 +199,69 @@ test("PptxStage and composables expose the minimal document and playback control
   assert.deepEqual(mounted.warnings, []);
 });
 
+test("PptxStage emits complete slide, object and context-menu interactions", async () => {
+  const selections = [];
+  const objects = [];
+  const menus = [];
+  const mounted = await mount(PptxStage, {
+    onSelectionChange: (selection) => selections.push(selection),
+    onObjectClick: (object) => objects.push(object),
+    onContextMenu: (menu) => menus.push(menu),
+  });
+  const stage = findByTestId(mounted.root, "pptx-stage");
+  stage.getBoundingClientRect = () => ({ left: 10, top: 20 });
+  const slide = { dataset: { slideIndex: "2" } };
+  const object = { dataset: { pptxObjectKey: "slide-3/object-7" } };
+  const slideTarget = {
+    closest: (selector) => selector === "[data-slide-index]" ? slide : null,
+  };
+  const objectTarget = {
+    closest: (selector) => selector === "[data-slide-index]" ? slide : object,
+  };
+
+  stage.props.onClick({ target: slideTarget });
+  stage.props.onClick({ target: objectTarget });
+  stage.props.onContextmenu({
+    target: objectTarget,
+    clientX: 110,
+    clientY: 220,
+    preventDefault() {},
+  });
+
+  assert.deepEqual(selections, [
+    { kind: "slide", slideIndex: 2 },
+    { kind: "slide", slideIndex: 2 },
+  ]);
+  assert.deepEqual(objects, [{
+    kind: "object",
+    slideIndex: 2,
+    objectKey: "slide-3/object-7",
+  }]);
+  assert.deepEqual(menus, [{
+    kind: "object",
+    slideIndex: 2,
+    objectKey: "slide-3/object-7",
+    clientX: 110,
+    clientY: 220,
+    containerX: 100,
+    containerY: 200,
+  }]);
+
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
 test("PptxViewer exposes loading, ready navigation, hidden-page marker and cleanup", async () => {
   const pending = deferred();
   const { calls, session } = createSession({ open: () => pending.promise });
   const events = [];
+  let sessionOptions;
   const mounted = await mount(PptxViewer, {
     source: new Uint8Array([1, 2, 3]),
-    sessionFactory: () => session,
+    sessionFactory: (_element, options) => {
+      sessionOptions = options;
+      return session;
+    },
     showSearch: false,
     showSidebar: false,
     onLoadStart: () => events.push("start"),
@@ -221,11 +277,17 @@ test("PptxViewer exposes loading, ready navigation, hidden-page marker and clean
   );
   assert.match(textContent(findByTestId(mounted.root, "pptx-page-counter")), /1 \/ 3/);
   assert.deepEqual(events, ["start", ["success", 3], ["slide", 0]]);
+  assert.equal(sessionOptions.renderMode, "list");
+  assert.equal(sessionOptions.listOptions.windowed, true);
+
+  sessionOptions.onSlideChange(1);
+  await vue.nextTick();
+  assert.match(textContent(findByTestId(mounted.root, "pptx-page-counter")), /2 \/ 3/);
+  assert.match(textContent(mounted.root), /隐藏页/);
 
   button(mounted.root, "下一页").props.onClick();
-  await waitFor(() => calls.renderSlide.includes(1), "PPTX next slide");
-  assert.match(textContent(mounted.root), /隐藏页/);
-  assert.match(textContent(findByTestId(mounted.root, "pptx-page-counter")), /2 \/ 3/);
+  await waitFor(() => calls.renderSlide.includes(2), "PPTX next slide scroll");
+  assert.match(textContent(findByTestId(mounted.root, "pptx-page-counter")), /3 \/ 3/);
 
   button(mounted.root, "放大").props.onClick();
   await waitFor(() => calls.setZoom.includes(125), "PPTX zoom");
@@ -298,11 +360,15 @@ test("PptxViewer renders a load failure without a stale success", async () => {
 test("PptxViewer present mode wires playback controls and forwards playback events", async () => {
   const playback = createPlaybackSession();
   const events = [];
+  let sessionOptions;
   const mounted = await mount(PptxViewer, {
     source: new Uint8Array([7, 8, 9]),
     mode: "present",
     autoplay: false,
-    documentSessionFactory: () => playback.session,
+    documentSessionFactory: (_element, options) => {
+      sessionOptions = options;
+      return playback.session;
+    },
     onPlaybackReady: (controller) => events.push(["ready", controller === playback.controller]),
     onPlaybackStateChange: (snapshot) => events.push(["state", snapshot.status]),
     onStepChange: (slideIndex, boundary) => events.push(["step", slideIndex, boundary]),
@@ -318,6 +384,7 @@ test("PptxViewer present mode wires playback controls and forwards playback even
     "PPTX playback ready state",
   );
   assert.equal(playback.calls.createPlaybackController, 1);
+  assert.equal(sessionOptions.renderMode, "slide");
   assert.deepEqual(events.slice(0, 3), [
     ["ready", true],
     ["state", "ready"],

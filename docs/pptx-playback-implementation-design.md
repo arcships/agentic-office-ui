@@ -393,7 +393,8 @@ idle → ready → transitioning → running → waiting → ended
 
 现有 `PptxViewer` 默认保持 `browse` 模式。新增 `mode="present"` 后：
 
-- 只挂载当前页和切换需要的相邻页；
+- `browse` 纵向连续展示全部幻灯片并按可视区域挂载；
+- `present` 只挂载当前页和切换需要的相邻页；
 - 显示播放控制条；
 - 空格和右方向键调用 `next()`；
 - 左方向键调用 `previous()`；

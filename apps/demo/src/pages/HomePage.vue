@@ -46,7 +46,7 @@ const navItems = [
   { path: "/docx-editor", title: "DOCX Editor", desc: "Edit DOCX text, formatting, tables and positioned images with undo and redo", status: "Ready", statusClass: "ready" },
   { path: "/xlsx-surface", title: "XLSX Surface", desc: "Minimal embeddable grid — no toolbar, ribbon, or formula bar. Bring your own sheet tabs and controls.", status: "Ready", statusClass: "ready" },
   { path: "/xlsx-viewer", title: "XLSX Viewer", desc: "View and edit workbooks with formulas, formatting, search, charts, tables and sheet tabs", status: "Ready", statusClass: "ready" },
-  { path: "/pptx-surface", title: "PPTX Surface", desc: "Minimal embeddable slide stage — PptxStage + usePptxDocument, host-owned controls.", status: "Ready", statusClass: "ready" },
+  { path: "/pptx-surface", title: "PPTX Surface", desc: "Minimal embeddable surface — all slides stacked vertically, with host-owned controls.", status: "Ready", statusClass: "ready" },
   { path: "/pptx-viewer", title: "PPTX Viewer", desc: "View PPTX with browse/present modes, playback and search", status: "Ready", statusClass: "ready" },
   { path: "/pptx-headless", title: "PPTX 最小组合", desc: "组合文档、播放和舞台三个公开接口", status: "Ready", statusClass: "ready" },
   { path: "/pdf-surface", title: "PDF Surface", desc: "Minimal embeddable PDF — all pages stacked vertically, host-owned zoom and scroll.", status: "Ready", statusClass: "ready" },

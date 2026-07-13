@@ -223,9 +223,9 @@ test("P4 release readiness baseline", () => {
     );
     add(
       "P4-API-RELEASE-VERSION",
-      Object.values(versions).every((version) => version === "0.4.0"),
-      { planned: "0.4.0", actual: versions },
-      "在发布流程冻结候选制品前一次性把八包版本升级为已选定的 0.4.0；不得提前零散改版本。",
+      Object.values(versions).every((version) => version === "0.5.2"),
+      { planned: "0.5.2", actual: versions },
+      "在发布流程冻结候选制品前一次性把八包版本升级为已选定的 0.5.2；不得提前零散改版本。",
     );
 
     const privateManifest = JSON.parse(

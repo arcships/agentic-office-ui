@@ -90,3 +90,27 @@ export interface UsePptxPlaybackReturn {
 export interface PptxStageExpose {
   readonly element: HTMLElement | null
 }
+
+export interface PptxStageSelection {
+  kind: "slide"
+  slideIndex: number
+}
+
+export interface PptxStageObjectClick {
+  kind: "object"
+  slideIndex: number
+  objectKey: string
+}
+
+interface PptxStageContextMenuPosition {
+  slideIndex: number
+  clientX: number
+  clientY: number
+  containerX: number
+  containerY: number
+}
+
+export type PptxStageContextMenu = PptxStageContextMenuPosition & (
+  | { kind: "slide"; objectKey?: never }
+  | { kind: "object"; objectKey: string }
+)

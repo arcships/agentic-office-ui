@@ -12,8 +12,8 @@
 | `DocxEditor` | `@arcships/vue-docx` | DOCX 编辑、撤销重做和导入导出 | [DOCX](../guide/docx.md) |
 | `XlsxViewer` | `@arcships/vue-xlsx` | 工作表、图表、图片、公式和编辑界面 | [XLSX](../guide/xlsx.md) |
 | `PdfViewer` | `@arcships/vue-pdf` | PDFium 查看、搜索、缩略图、旋转和下载 | [PDF](../guide/pdf.md) |
-| `PptxViewer` | `@arcships/vue-pptx` | PPTX 浏览和演示播放 | [PPTX](../guide/pptx.md) |
-| `PptxStage` | `@arcships/vue-pptx` | 自定义播放器的渲染舞台 | [PPTX](../guide/pptx.md) |
+| `PptxViewer` | `@arcships/vue-pptx` | 纵向连续浏览 PPTX；演示模式使用单页播放 | [PPTX](../guide/pptx.md) |
+| `PptxStage` | `@arcships/vue-pptx` | 无 chrome 的纵向 Surface 或单页播放舞台；提供选中、对象点击和右键事件 | [PPTX](../guide/pptx.md) |
 | `PptxThumbnail` | `@arcships/vue-pptx` | 使用现有会话渲染单页缩略图 | [PPTX](../guide/pptx.md) |
 
 ## 基础组件
@@ -52,3 +52,15 @@
 - 必须引入对应包的 `style.css`。
 - 错误判断使用公开 `code`，不要依赖中文或英文错误文案。
 - 标记为 `@deprecated` 的低层组件在整个 `0.x` 保留，但不建议新项目继续使用。
+
+## PPTX Surface 事件
+
+`PptxStage` 的事件均使用 Vue 模板短横线名称：
+
+| 事件 | 参数 |
+|---|---|
+| `selection-change` | `{ kind: "slide", slideIndex }` |
+| `object-click` | `{ kind: "object", slideIndex, objectKey }` |
+| `context-menu` | `kind: "slide"` 时禁止 `objectKey`；`kind: "object"` 时必须包含 `objectKey`；两者都含 `slideIndex`、`clientX/Y`、`containerX/Y` |
+
+页面编号从零开始。`objectKey` 是渲染会话生成的稳定对象标识；宿主不应自行解析其字符串结构。

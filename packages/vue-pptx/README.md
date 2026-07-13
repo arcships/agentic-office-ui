@@ -2,10 +2,10 @@
 
 ## 当前状态
 
-本包提供静态浏览和 `mode="present"` 演示模式，从 `0.3.0` 起公开发布。演示模式使用 `@arcships/pptx-core/browser` 的文档会话和播放控制器，不自行解析动画。
+本包提供静态浏览和 `mode="present"` 演示模式。默认静态浏览会像 PDF/DOCX 一样纵向连续展示所有幻灯片；演示模式使用单页舞台，左右键执行上/下一播放步骤，跨页由播放控制器完成。演示模式使用 `@arcships/pptx-core/browser` 的文档会话和播放控制器，不自行解析动画。
 
 ```bash
-pnpm add @arcships/pptx-core@0.4.0 @arcships/vue-pptx@0.4.0
+pnpm add @arcships/pptx-core@0.5.2 @arcships/vue-pptx@0.5.2
 ```
 
 ```ts
@@ -30,7 +30,7 @@ Vue 包不负责：
 - 合并动画属性；
 - 保存独立于控制器的第二份播放状态。
 
-现有 `PptxViewer` 默认浏览行为保持兼容。传入 `mode="present"` 后可使用下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏；模板引用也暴露同一组公开方法。
+`PptxViewer` 默认以纵向连续页面浏览。传入 `mode="present"` 后切换为单页播放，并可使用下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏；模板引用也暴露同一组公开方法。
 
 ## 最小组合方式
 
@@ -51,7 +51,10 @@ import "@arcships/vue-pptx/style.css"
 const props = defineProps<{ source: PptxPreviewSource | null }>()
 const stage = ref<PptxStageExpose | null>(null)
 const element = computed(() => stage.value?.element ?? null)
-const document = usePptxDocument(element, { source: () => props.source })
+const document = usePptxDocument(element, {
+  source: () => props.source,
+  session: { renderMode: "slide" },
+})
 const playback = usePptxPlayback(document)
 
 async function onStageClick(event: MouseEvent) {
@@ -69,9 +72,15 @@ async function onStageClick(event: MouseEvent) {
 </template>
 ```
 
-- `usePptxDocument` 负责打开文件、普通翻页、缩放和销毁；
+- `usePptxDocument` 负责打开文件、滚动跳页、缩放和销毁；`renderMode: "list"` 用于纵向 surface，`renderMode: "slide"` 用于播放舞台；
 - `usePptxPlayback` 负责动画步骤、播放状态和播放事件；
-- `PptxStage` 只提供渲染元素，也可以换成普通 `<div>`。
+- `PptxStage` 不持有文档或播放状态，但会从渲染标记派生统一 Surface 事件；也可以换成普通 `<div>` 并自行处理这些事件。
+
+`PptxStage` 还提供完整的 surface 交互事件：
+
+- `selection-change`：点击幻灯片时返回 `{ kind: "slide", slideIndex }`；
+- `object-click`：点击形状、图片或图表时返回 `{ kind: "object", slideIndex, objectKey }`；
+- `context-menu`：右键幻灯片或对象时返回判别联合；`kind: "slide"` 时没有 `objectKey`，`kind: "object"` 时必须包含 `objectKey`，两者都有页码以及视口/`PptxStage` 根元素坐标。
 
 ## 文档
 

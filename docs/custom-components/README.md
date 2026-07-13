@@ -10,7 +10,7 @@
 - [自定义 DOCX 编辑界面](docx.md)
 - [自定义 XLSX 界面](xlsx.md)
 - [自定义 PDF 界面](pdf.md)
-- [自定义 PPTX 播放器](pptx.md)
+- [自定义 PPTX Surface 与播放器](pptx.md)
 
 ## 判断标准
 
@@ -18,6 +18,7 @@
 |---|---|
 | 换按钮、布局和状态文字 | 高层组件 + 控制器/属性 |
 | 隐藏官方工具栏 | 使用 `show*` 属性并增加外部按钮 |
-| 自己控制 PPTX 舞台 | `PptxStage` + 两个组合函数 |
+| 自建 PPTX 纵向浏览 Surface | `PptxStage` + `usePptxDocument`，配置 `renderMode: "list"` |
+| 自己控制 PPTX 播放舞台 | `PptxStage` + 两个组合函数，配置 `renderMode: "slide"` |
 | 自己解析 DOCX/XLSX/PDF | 对应 Runtime 或核心包 |
 | 直接导入 `src/` 或 `dist/` 深层文件 | 不支持 |

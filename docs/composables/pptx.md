@@ -7,7 +7,11 @@ const stage = ref<HTMLElement | null>(null)
 const document = usePptxDocument(stage, {
   source: () => file.value,
   initialSlide: 0,
-  session: { fitMode: "contain" },
+  session: {
+    fitMode: "contain",
+    renderMode: "list",
+    listOptions: { windowed: true },
+  },
 })
 ```
 
@@ -19,6 +23,8 @@ const document = usePptxDocument(stage, {
 - 高级逃生出口 `getSession()`。
 
 舞台尚未挂载时进入 `waiting-for-stage`。快速更换舞台或来源时销毁旧会话，只保留最新加载结果。
+
+`renderMode: "list"` 纵向连续渲染全部幻灯片，适合普通 Surface 浏览；`goTo()`、`nextSlide()` 和 `previousSlide()` 在该模式下滚动定位页面。`renderMode: "slide"` 只渲染当前页，供播放控制器使用。`PptxPreviewSession` 默认使用列表模式，`PptxDocumentSession` 默认使用单页模式；自定义组合时建议显式指定，避免把播放控制器接到列表 Surface。
 
 ## `usePptxPlayback`
 
@@ -33,6 +39,8 @@ const playback = usePptxPlayback(document, {
 ```
 
 它必须接收 `usePptxDocument` 的返回值，并为当前文档会话持有唯一播放控制器。公开状态包括 `controller`、`snapshot`、`status`、`capability`、`lastWarning` 和 `lastError`。
+
+播放用的文档组合函数应配置 `session: { renderMode: "slide" }`。只有单页舞台执行原文件动画和页面切换；列表模式用于静态浏览，不执行播放时间轴。
 
 公开方法包括 `next()`、`previous()`、`activateObject()`、`play()`、`pause()`、`resume()`、`reset()`、`goToSlide()` 和 `resumeBlockedMedia()`。
 
@@ -51,4 +59,4 @@ async function onStageClick(event: MouseEvent) {
 
 对象动作优先。只有对象没有处理点击时才执行普通下一步，否则一次点击可能同时触发对象动作和下一动画。
 
-演示过程中使用 `playback.goToSlide()`；`document.goTo()` 只用于没有播放控制器的浏览模式。不要混用两套翻页方法。
+演示过程中使用 `playback.goToSlide()`；`document.goTo()` 只用于没有播放控制器的纵向浏览模式。不要混用两套跳页方法。

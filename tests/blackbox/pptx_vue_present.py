@@ -33,6 +33,20 @@ def main() -> None:
         assert page.locator(".pptx-viewer__toolbar").count() == 1
         assert page.locator(".pptx-thumbnail").count() == 12
         assert page.locator(".pptx-thumbnail__hidden").count() == 1
+        browse_layout = page.evaluate(
+            """() => {
+              const stage = document.querySelector('[data-testid="pptx-stage"]')
+              const scroller = document.querySelector('.pptx-viewer__stage-wrap')
+              const slides = [...stage.querySelectorAll(':scope > [data-slide-index]')]
+              const tops = slides.map((slide) => slide.getBoundingClientRect().top)
+              return {
+                count: slides.length,
+                vertical: tops.every((top, index) => index === 0 || top > tops[index - 1]),
+                scrollable: scroller.scrollHeight > scroller.clientHeight,
+              }
+            }"""
+        )
+        assert browse_layout == {"count": 12, "vertical": True, "scrollable": True}
         search = page.get_by_role("search")
         search.get_by_role("searchbox").fill("单击动画")
         search.get_by_role("button", name="搜索").click()
@@ -123,6 +137,21 @@ def main() -> None:
         )
         assert page.locator(".pptx-viewer__playback-controls").count() == 0
         assert page.locator(".pptx-viewer__toolbar").count() == 1
+
+        page.goto(f"{args.app_url}/#/pptx-surface", wait_until="networkidle")
+        page.locator('[data-testid="pptx-surface-file-input"]').set_input_files(str(args.fixture.resolve()))
+        page.wait_for_function(
+            "() => document.querySelectorAll('[data-testid=\"pptx-surface-stage\"] > [data-slide-index]').length === 12",
+            timeout=30_000,
+        )
+        page.locator('[data-testid="pptx-surface-stage"] > [data-slide-index="1"]').dispatch_event("click")
+        assert "已选中第 2 页" in page.locator('[data-testid="pptx-surface-status"]').inner_text()
+        surface_object = page.locator('[data-testid="pptx-surface-stage"] [data-pptx-object-key]').first
+        surface_object.click(force=True)
+        assert "页对象：" in page.locator('[data-testid="pptx-surface-status"]').inner_text()
+        surface_object.click(button="right", force=True)
+        surface_context = page.locator('[data-testid="pptx-surface-status"]').inner_text()
+        assert "对象" in surface_context and "右键" in surface_context
         assert not console_errors, console_errors
         assert not page_errors, page_errors
 

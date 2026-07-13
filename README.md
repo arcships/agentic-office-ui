@@ -6,7 +6,7 @@
 
 在浏览器中查看和编辑 DOCX、XLSX、PDF 与 PPTX
 
-[![npm version](https://img.shields.io/badge/npm-v0.4.0-cb3837)](https://www.npmjs.com/org/arcships)
+[![npm version](https://img.shields.io/badge/npm-v0.5.2-cb3837)](https://www.npmjs.com/org/arcships)
 [![CI](https://github.com/arcships/agentic-office-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/arcships/agentic-office-ui/actions/workflows/ci.yml)
 [![Release](https://github.com/arcships/agentic-office-ui/actions/workflows/release.yml/badge.svg)](https://github.com/arcships/agentic-office-ui/actions/workflows/release.yml)
 [![Vue](https://img.shields.io/badge/Vue-%3E%3D3.2.25%20%3C4-42b883)](https://vuejs.org/)
@@ -23,7 +23,7 @@
 | DOCX | 查看、编辑、分页、缩略图、搜索、批注、修订、导入导出 | 文档模型、布局、编辑命令、Runtime、Worker/WASM |
 | XLSX | 工作表、公式、图表、图片、选区、编辑、撤销重做 | 控制器、Runtime、按需图表/地图/WebGL |
 | PDF | PDFium 渲染、翻页、缩放、旋转、缩略图、搜索、下载 | 来源规则、渲染 Runtime、诊断和错误 |
-| PPTX | 静态预览、缩略图、搜索、逐步动画、切换、媒体、全屏 | 文档会话、播放控制器、无界面组合函数 |
+| PPTX | 纵向连续预览、缩略图、搜索、逐步动画、切换、媒体、全屏 | 列表/单页文档会话、Surface 事件、播放控制器、无界面组合函数 |
 
 这个项目既提供完整 Vue 组件，也保留不依赖 Vue 的核心包。你可以从一个查看器开始，也可以接管状态、工具栏和播放界面。
 
@@ -73,6 +73,7 @@ defineProps<{ file: File | null }>()
 | 自定义 XLSX 工具栏 | `useXlsxViewerController` + `XlsxSheetSurface`（无内置 chrome） |
 | 自定义 XLSX 工具栏（全套） | `useXlsxViewerController` + `XlsxViewer` |
 | 自建 PDF 控制栏嵌入渲染 | `PdfSurface`（垂直滚动全部页面） |
+| 自建 PPTX 浏览 Surface | `PptxStage` + `usePptxDocument({ session: { renderMode: "list" } })`（垂直滚动全部幻灯片） |
 | 自定义 PPTX 播放器 | `usePptxDocument` + `usePptxPlayback` + `PptxStage` |
 | 在非 Vue 代码中处理文档 | `docx-core`、`xlsx-core`、`pptx-core` |
 | 管理 Worker、WASM 和资源限制 | 对应格式的 Runtime |
@@ -87,12 +88,12 @@ defineProps<{ file: File | null }>()
 | [`@arcships/vue-xlsx`](packages/vue-xlsx/README.md) | `XlsxSheetSurface`、`XlsxViewer` 和查看器控制器 |
 | [`@arcships/vue-pdf`](packages/vue-pdf/README.md) | PDFium 查看器与渲染 Runtime |
 | [`@arcships/pptx-core`](packages/pptx-core/README.md) | PPTX 预览、播放模型和浏览器控制器 |
-| [`@arcships/vue-pptx`](packages/vue-pptx/README.md) | `PptxStage`、`PptxViewer` 和最小播放组合能力 |
+| [`@arcships/vue-pptx`](packages/vue-pptx/README.md) | 纵向 `PptxStage` Surface、`PptxViewer`、统一交互事件和最小播放组合能力 |
 | [`@arcships/vue-ui`](packages/vue-ui/README.md) | 上传、签名、缩略图、引用和基础组件 |
 
 八个包使用统一版本发布。相关 Vue 包和核心包建议保持相同版本。
 
-PPTX 两包从 `0.3.0` 开始公开，当前八个包的最新版本为 `0.4.0`。
+PPTX 两包从 `0.3.0` 开始公开，`0.4.0` 增加最小组合接口，当前八个包的版本为 `0.5.2`。
 
 ## 文档
 

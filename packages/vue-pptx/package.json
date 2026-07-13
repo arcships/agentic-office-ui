@@ -1,6 +1,6 @@
 {
   "name": "@arcships/vue-pptx",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "license": "Apache-2.0",
   "description": "Vue 3 PPTX viewer with browse and presentation playback modes",
   "keywords": ["vue", "vue3", "pptx", "powerpoint", "presentation", "viewer"],

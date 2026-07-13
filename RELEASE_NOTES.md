@@ -1,3 +1,28 @@
+# 0.5.2 发布说明
+
+发布日期：2026-07-13
+
+`0.5.2` 统一了 PPTX 与 PDF/DOCX 的普通浏览体验，并把 `PptxStage` 的 Surface 交互事件从类型声明补全为可运行、可验证的公开行为。
+
+## PPTX Surface
+
+- `PptxViewer mode="browse"` 和最小 Surface 使用纵向连续页面；`mode="present"` 使用单页舞台，左右键执行上/下一播放步骤，跨页由播放控制器完成。
+- `PptxPreviewSession` 默认使用列表渲染；播放文档会话使用单页渲染。`renderMode: "list" | "slide"` 可显式选择，两种模式共用同一次解包结果。
+- 列表渲染支持窗口化挂载；滚动、跳页和缩放保持 `activeIndex` 同步。
+- `PptxStage` 实际发出 `selection-change`、`object-click` 和 `context-menu`：事件包含 `slideIndex`，对象事件包含稳定 `objectKey`，右键事件同时包含视口和容器坐标。
+- 浏览模式使用上/下方向键与 PageUp/PageDown；左/右方向键保留给播放模式。
+
+## 0.5.2 验证
+
+- 12 页正式组合素材在浏览态形成纵向可滚动页面，在播放态只挂载一个单页舞台。
+- 页面选中、对象点击和对象右键均通过组件测试与真实 Chromium 交互验证。
+
+## 0.5.1 发布记录
+
+发布日期：2026-07-13
+
+`0.5.1` 统一提升八个公开包的版本，承接 `0.5.0` 的 XLSX/PDF 搜索 API 交付与 npm 发布制品。
+
 # 0.5.0 发布说明
 
 发布日期：2026-07-13
@@ -23,7 +48,7 @@
 |---|---|---|
 | `DocxDocumentSurface` | DOCX | 分页文档面 + 批注 gutter，无 toolbar/缩略图 |
 | `XlsxSheetSurface` | XLSX | 网格 + 图表/图片/绘图/选区叠加层 + 右键菜单 |
-| `PptxStage` | PPTX | 幻灯片舞台（已有，文档补全） |
+| `PptxStage` | PPTX | 纵向连续幻灯片 Surface；播放时切换为单页舞台 |
 | `PdfSurface` | PDF | 全部页面垂直堆叠滚动，无翻页切换 |
 
 ## 统一 Surface API
@@ -33,8 +58,8 @@
 - DOCX/PDF 支持 `fitWidth` prop：自适应容器宽度缩放
 
 ### 统一事件
-- `contextMenu`：右键菜单触发，携带容器相对坐标 + 格式特有的定位信息（页码/cell 地址/sheet 名）
-- `selectionChange`：选中内容变化（DOCX/PDF 基于浏览器 Selection API，XLSX 基于 cell range）
+- `contextMenu`：右键菜单触发，携带容器相对坐标 + 格式特有的定位信息（页码/cell 地址/sheet 名/PPTX 对象）
+- `selectionChange`：选中内容变化（PPTX 返回幻灯片页码，DOCX/PDF 基于浏览器 Selection API，XLSX 基于 cell range）
 - `objectClick`：图片/图表/形状点击
 
 ### 统一 expose
@@ -46,7 +71,7 @@
 
 - **DOCX**：修复缩放双重计算（`getBoundingClientRect` 已含 transform，上层又乘 zoomFactor）和批注 gutter 横向布局不足
 - **XLSX**：修复编辑模式下单字符键无法连续输入（grid 按键冒泡重复触发）、只读模式下默认允许行列缩放、右键不再取消已有选区
-- **PPTX**：无
+- **PPTX**：普通浏览改为纵向连续页面；补齐页面选中、对象点击和上下文菜单运行时事件
 - **PDF**：新增垂直滚动模式，修复单页切换体验
 
 ## PDF 文字选择层（已知限制）

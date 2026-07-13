@@ -10,7 +10,7 @@
 | DOCX | 主题、样式、批注、修订等辅助组合函数 | 从编辑控制器派生局部能力 |
 | XLSX | `useXlsxViewerController` | 文件、工作表、选区、编辑和导出 |
 | XLSX | `useXlsxViewerThumbnails` | 从控制器生成工作表缩略图 |
-| PPTX | `usePptxDocument` | 文档加载、普通翻页和缩放 |
+| PPTX | `usePptxDocument` | 文档加载、纵向滚动跳页/单页跳转、缩放和会话生命周期 |
 | PPTX | `usePptxPlayback` | 动画步骤、播放状态和媒体 |
 
 - [DOCX 组合函数](docx.md)

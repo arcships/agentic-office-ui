@@ -1,6 +1,6 @@
 {
   "name": "@arcships/pptx-core",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "license": "Apache-2.0",
   "description": "PPTX preview and playback model with browser document sessions and animation controls",
   "keywords": ["pptx", "powerpoint", "presentation", "viewer", "playback", "animation"],

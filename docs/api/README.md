@@ -32,8 +32,8 @@ API 分为三层：
 ## PPTX
 
 - `@arcships/pptx-core`：平台无关类型、能力报告、时间安排和属性轨道。
-- `@arcships/pptx-core/browser`：预览会话、文档会话和播放控制器。
-- `@arcships/vue-pptx`：`usePptxDocument` 和 `usePptxPlayback`。
+- `@arcships/pptx-core/browser`：纵向列表/单页预览会话、文档会话和播放控制器。
+- `@arcships/vue-pptx`：`PptxViewer`、`PptxStage`、`usePptxDocument`、`usePptxPlayback` 以及 Surface 交互事件类型。
 - [PPTX 使用指南](../guide/pptx.md)
 
 ## 接口稳定性

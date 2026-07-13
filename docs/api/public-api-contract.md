@@ -2,7 +2,7 @@
 
 本文登记 `@arcships/docx-core`、`@arcships/xlsx-core`、`@arcships/pptx-core`、`@arcships/vue-docx`、`@arcships/vue-xlsx`、`@arcships/vue-pptx`、`@arcships/vue-pdf` 和 `@arcships/vue-ui` 的公开入口、推荐用法、事件、错误与兼容期限。
 
-当前八个公开包的最新版本统一为 `0.4.0`。PPTX 两包从 `0.3.0` 开始公开，`0.4.0` 增加 Vue PPTX 最小组合接口。源码中的 `@deprecated Since 0.2.0` 继续生效；整个 `0.x` 保留旧入口，最早只能在 `1.0.0` 删除。
+当前八个公开包的版本统一为 `0.5.2`。PPTX 两包从 `0.3.0` 开始公开，`0.4.0` 增加 Vue PPTX 最小组合接口，`0.5.2` 增加纵向 Surface 与完整交互事件。源码中的 `@deprecated Since 0.2.0` 继续生效；整个 `0.x` 保留旧入口，最早只能在 `1.0.0` 删除。
 
 ## 1. 适用规则
 
@@ -119,7 +119,7 @@ try {
 
 ### 3.3 `@arcships/vue-docx`
 
-DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注布局的目标合同见 [DOCX Viewer 受控文档面与分页修复设计](../docx-viewer-controlled-surface-and-pagination-fix.md)。该文档状态为“待实现”；实现完成并通过发布包消费验证前，本页当前 `0.4.0` 导出清单保持不变。
+DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注布局的目标合同见 [DOCX Viewer 受控文档面与分页修复设计](../docx-viewer-controlled-surface-and-pagination-fix.md)。兼容性判断以本页当前 `0.5.2` 导出清单和对应实现状态为准。
 
 稳定高层入口为：
 
@@ -160,13 +160,13 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 
 ### 3.7 `@arcships/pptx-core`
 
-根入口提供平台无关的播放类型、对象身份、能力报告、时间安排和属性轨道。浏览器中的文档会话、静态预览、播放解析和控制器从 `@arcships/pptx-core/browser` 导入。补丁后的渲染器代码已经包含在浏览器入口中，消费项目不安装 `@aiden0z/pptx-renderer`。
+根入口提供平台无关的播放类型、对象身份、能力报告、时间安排和属性轨道。浏览器中的文档会话、静态预览、播放解析和控制器从 `@arcships/pptx-core/browser` 导入。预览会话默认 `renderMode: "list"`，纵向连续展示页面；播放文档会话默认 `renderMode: "slide"`，只挂载当前页。调用方可通过 `PptxPreviewSessionOptions.renderMode` 和 `listOptions` 显式配置。补丁后的渲染器代码已经包含在浏览器入口中，消费项目不安装 `@aiden0z/pptx-renderer`。
 
 无法精确执行的 PPTX 内容通过能力报告标记为近似、静态或未解析；公开说明不得宣称完整兼容 PowerPoint 全部动画。
 
 ### 3.8 `@arcships/vue-pptx`
 
-稳定入口为 `PptxViewer`、`PptxThumbnail`、`PptxStage`、`usePptxDocument`、`usePptxPlayback` 和公开类型。`PptxViewer` 默认用于浏览，`mode="present"` 提供下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏。自定义界面使用两个组合函数和舞台组件。样式从 `@arcships/vue-pptx/style.css` 导入。
+稳定入口为 `PptxViewer`、`PptxThumbnail`、`PptxStage`、`usePptxDocument`、`usePptxPlayback`、`PptxStageSelection`、`PptxStageObjectClick`、`PptxStageContextMenu` 和其他公开类型。`PptxViewer` 默认纵向连续浏览；`mode="present"` 使用单页舞台并提供下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏。自定义静态 Surface 使用 `PptxStage` + `usePptxDocument(renderMode: "list")`，自定义播放器增加 `usePptxPlayback` 并使用 `renderMode: "slide"`。样式从 `@arcships/vue-pptx/style.css` 导入。
 
 ## 4. 公开事件和诊断
 
@@ -213,6 +213,16 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 ### 4.5 `vue-pptx`
 
 `PptxViewer` 提供 `load-start`、`load-success`、`load-error`、`slide-change`、`playback-ready`、`playback-state-change`、`step-change`、`playback-warning`、`capability`、`media-request`、`action` 和 `playback-error`。程序判断使用公开错误码和能力报告，不解析界面文案。
+
+`PptxStage` 提供：
+
+| 事件 | 参数 |
+|---|---|
+| `selection-change` | `PptxStageSelection`：`{ kind: "slide", slideIndex }` |
+| `object-click` | `PptxStageObjectClick`：`{ kind: "object", slideIndex, objectKey }` |
+| `context-menu` | `PptxStageContextMenu`：`kind`、`slideIndex`、可选 `objectKey`、`clientX/Y` 和 `containerX/Y` |
+
+`PptxStageContextMenu` 是判别联合：`kind: "slide"` 时 `objectKey` 不存在，`kind: "object"` 时 `objectKey` 必填。页面编号从零开始。普通对象点击先选择所在幻灯片，再发出对象事件；右键只发出上下文菜单事件。`objectKey` 是不透明稳定标识，调用方只能传回公开控制器，不依赖其内部编码。
 
 ## 5. 公开错误
 

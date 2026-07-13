@@ -25,6 +25,8 @@ import "@arcships/vue-pptx/style.css"
 
 `PptxViewer` 默认使用浏览模式。传入 `mode="present"` 后可使用下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏。
 
+> 当前 `0.5.2` 中，默认浏览模式已升级为纵向连续页面；`mode="present"` 仍为单页播放。自定义 Surface 和事件迁移见 [0.5.2 Surface 指南](guide/surface-migration-guide.md)。
+
 ## 核心入口
 
 平台无关的播放类型和时间安排从 `@arcships/pptx-core` 导入；文档会话、预览和播放控制器从 `@arcships/pptx-core/browser` 导入。

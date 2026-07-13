@@ -498,7 +498,7 @@ test("PPTX wipe and normalized straight motion paths interpolate in page coordin
   assert.equal(evaluatePptxTrack(y, 100), -270);
 });
 
-test("PPTX preview uses an explicit single archive parse before loading the renderer", () => {
+test("PPTX preview uses one archive parse and separates vertical browse from slide playback", () => {
   assert.equal(typeof createPptxDocumentSession, "function");
   assert.equal(typeof createPptxPreviewSession, "function");
   const source = readFileSync(
@@ -509,7 +509,9 @@ test("PPTX preview uses an explicit single archive parse before loading the rend
   assert.match(source, /buildPresentation\(files/);
   assert.match(source, /viewer\.load\(presentation\)/);
   assert.match(source, /parsePptxPlaybackDocument\(files, presentation/);
-  assert.match(source, /return createPptxDocumentSession\(container, options\)/);
+  assert.match(source, /viewer\.renderList\(/);
+  assert.match(source, /viewer\.renderSlide\(initialSlide\)/);
+  assert.match(source, /renderMode: options\.renderMode \?\? "list"/);
   assert.doesNotMatch(source, /viewer\.open\(/);
 
   const patch = readFileSync(

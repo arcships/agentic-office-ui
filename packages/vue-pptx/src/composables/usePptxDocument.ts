@@ -112,7 +112,18 @@ export function usePptxDocument(
       ? {}
       : resolveValue(internalOptions.session) ?? {}
     const factory = internalOptions.factory ?? createPptxDocumentSession
-    const current = factory(element, sessionOptions)
+    const current = factory(element, {
+      ...sessionOptions,
+      onSlideChange(index) {
+        sessionOptions.onSlideChange?.(index)
+        if (
+          currentGeneration === generation
+          && sessionValue.value === current
+        ) {
+          activeIndexValue.value = index
+        }
+      },
+    })
     sessionValue.value = current
 
     try {
