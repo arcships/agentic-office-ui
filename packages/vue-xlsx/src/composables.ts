@@ -1,6 +1,13 @@
 // Barrel — all public composable surface is in composables/.
 // Kept as a re-export to preserve the public import path for consumers.
 export { useXlsxViewerController } from "./composables/useXlsxViewerController";
+export { useXlsxSearch } from "./composables/useXlsxSearch";
+export type {
+  XlsxSearchMatch,
+  XlsxSearchState,
+  XlsxSearchStatus,
+  XlsxSurfaceSearch,
+} from "./composables/useXlsxSearch";
 export { XlsxFileSizeLimitExceededError } from "./composables/formatting";
 
 // Re-export domain helpers for direct consumers

@@ -57,9 +57,18 @@
 
       <span class="sep" />
 
-      <label class="ctrl">
-        <input v-model.trim="searchQuery" placeholder="搜索…" data-testid="docx-surface-search" />
-      </label>
+      <OfficeFindBar
+        :query="searchQuery"
+        :status="searchState.status"
+        :active-index="searchState.activeIndex"
+        :result-count="searchState.matches.length"
+        :disabled="!ready"
+        placeholder="搜索文档"
+        @update:query="searchQuery = $event"
+        @previous="void surfaceRef?.searchPrevious()"
+        @next="void surfaceRef?.searchNext()"
+        @close="closeSearch"
+      />
     </div>
 
     <p v-if="error" class="error" data-testid="docx-surface-error">{{ error }}</p>
@@ -75,13 +84,12 @@
         :show-comments="showComments"
         :zoom="fitWidth ? undefined : zoom"
         :fit-width="fitWidth"
-        :search-query="searchQuery"
-        :active-search-node-index="searchMatchNodeIndex"
         style="--docx-surface-bg: transparent; height: 72vh;"
         @page-count-change="onPageCountChange"
         @visible-page-range="onVisiblePageRange"
         @context-menu="onContextMenu"
         @selection-change="onSelectionChange"
+        @search-state-change="searchState = $event"
         @update:zoom="zoom = $event"
       />
       <div v-else class="empty" data-testid="docx-surface-empty">
@@ -100,14 +108,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, shallowRef } from "vue"
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue"
 import {
   bundledDocxWasmUrl,
   createDocxRuntime,
   type DocModel,
   type DocxImportResult,
 } from "@arcships/docx-core"
-import { DocxDocumentSurface } from "@arcships/vue-docx"
+import { DocxDocumentSurface, type DocxSearchState } from "@arcships/vue-docx"
+import { OfficeFindBar } from "@arcships/vue-ui"
 
 // ── Samples ──────────────────────────────────────────────────────────
 const samples = [
@@ -136,12 +145,39 @@ const searchQuery = ref("")
 
 const totalPages = ref(0)
 const currentPage = ref(0)
-const searchMatchNodeIndex = ref<number | undefined>()
+const searchState = shallowRef<DocxSearchState>({
+  status: "idle",
+  query: "",
+  matches: [],
+  activeIndex: -1,
+})
 const selectionInfo = ref("—")
 const contextMenuInfo = ref("—")
 
 const surfaceRef = ref<InstanceType<typeof DocxDocumentSurface>>()
 const surfaceKey = computed(() => `${displayName.value}-${loadCounter.value}`)
+
+watch(
+  [searchQuery, surfaceKey],
+  async ([query], _previous, onCleanup) => {
+    let current = true
+    onCleanup(() => { current = false })
+    await nextTick()
+    if (!current) return
+    const surface = surfaceRef.value
+    if (!surface) return
+    if (!query.trim()) {
+      surface.clearSearch()
+      return
+    }
+    void surface.search(query).catch((cause: unknown) => {
+      if (!(cause instanceof Error) || cause.name !== "AbortError") {
+        error.value = `Search failed: ${String(cause)}`
+      }
+    })
+  },
+  { flush: "post" },
+)
 
 // ── Runtime ──────────────────────────────────────────────────────────
 const runtime = shallowRef(createDocxRuntime({
@@ -174,6 +210,10 @@ async function loadSelectedSample(): Promise<void> {
 
 function zoomDown(): void { zoom.value = Math.max(0.5, zoom.value - 0.25) }
 function zoomUp(): void { zoom.value = Math.min(2, zoom.value + 0.25) }
+function closeSearch(): void {
+  searchQuery.value = ""
+  surfaceRef.value?.clearSearch()
+}
 
 // ── Surface events ───────────────────────────────────────────────────
 function onPageCountChange(count: number): void {

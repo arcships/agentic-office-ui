@@ -4,6 +4,7 @@ import type {
   PptxPlaybackWarning,
   PptxPreviewDocument,
   PptxPreviewError,
+  PptxSearchResult,
 } from "@arcships/pptx-core"
 import type {
   PptxApproximationPolicy,
@@ -41,6 +42,19 @@ export type PptxDocumentState =
   | "error"
   | "disposed"
 
+export type PptxSearchStatus = "idle" | "searching" | "ready" | "error"
+
+export interface PptxSearchState {
+  status: PptxSearchStatus
+  query: string
+  matches: readonly PptxSearchResult[]
+  activeIndex: number
+  error?: {
+    code: "SEARCH_FAILED" | "ACTIVATION_FAILED"
+    message: string
+  }
+}
+
 export interface UsePptxDocumentReturn {
   readonly state: Readonly<Ref<PptxDocumentState>>
   readonly error: Readonly<ShallowRef<PptxPreviewError | null>>
@@ -48,6 +62,7 @@ export interface UsePptxDocumentReturn {
   readonly capability: Readonly<ShallowRef<PptxCapabilityReport | null>>
   readonly activeIndex: Readonly<Ref<number>>
   readonly zoomPercent: Readonly<Ref<number>>
+  readonly searchState: Readonly<ShallowRef<PptxSearchState>>
 
   open(source: PptxPreviewSource): Promise<PptxPreviewDocument>
   close(): void
@@ -55,6 +70,12 @@ export interface UsePptxDocumentReturn {
   nextSlide(): Promise<void>
   previousSlide(): Promise<void>
   setZoom(percent: number): Promise<void>
+  search(query: string): Promise<PptxSearchState>
+  activateSearchMatch(index: number): Promise<void>
+  searchNext(): Promise<void>
+  searchPrevious(): Promise<void>
+  clearSearch(): void
+  getSearchState(): PptxSearchState
   getSession(): PptxDocumentSession | null
   dispose(): void
 }

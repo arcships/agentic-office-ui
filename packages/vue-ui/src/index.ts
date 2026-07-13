@@ -22,5 +22,6 @@ export { default as LayoutBlocks } from "./components/LayoutBlocks.vue"
 // Base UI
 export { default as Spinner } from "./components/Spinner.vue"
 export { default as Tooltip } from "./components/Tooltip.vue"
+export { default as OfficeFindBar } from "./components/OfficeFindBar.vue"
 
 export type * from "./types"

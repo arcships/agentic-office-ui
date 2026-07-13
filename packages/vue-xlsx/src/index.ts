@@ -2,6 +2,13 @@ import XlsxViewerComponent from "./components/XlsxViewer.vue"
 
 export { useXlsxViewerController } from "./composables"
 export { useXlsxViewerThumbnails } from "./composables/useXlsxViewerThumbnails"
+export { useXlsxSearch } from "./composables/useXlsxSearch"
+export type {
+  XlsxSearchMatch,
+  XlsxSearchState,
+  XlsxSearchStatus,
+  XlsxSurfaceSearch,
+} from "./composables/useXlsxSearch"
 export { XlsxFileSizeLimitExceededError } from "./composables"
 export type {
   XlsxDiagnostic,

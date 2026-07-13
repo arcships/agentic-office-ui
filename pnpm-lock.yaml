@@ -311,6 +311,9 @@ importers:
         specifier: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
         version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
     devDependencies:
+      '@arcships/vue-ui':
+        specifier: workspace:*
+        version: link:../vue-ui
       '@types/d3-geo':
         specifier: ^3.1.0
         version: 3.1.0

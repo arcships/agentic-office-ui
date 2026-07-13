@@ -35,34 +35,34 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></svg>
         </button>
         <div v-if="searchOpen" class="xlsx-toolbar__search-panel" data-testid="xlsx-search-panel">
-          <label>
-            <span>Search workbook</span>
-            <input
-              ref="searchInputRef"
-              v-model="searchQuery"
-              data-testid="xlsx-search-input"
-              placeholder="Find values"
-              @input="scheduleSearch"
-              @keydown.enter.prevent="selectRelativeResult(1)"
-              @keydown.esc.prevent="closeSearch"
-            />
-          </label>
-          <div class="xlsx-toolbar__search-summary">
-            <span>{{ searchStatus }}</span>
-            <div>
-              <button :disabled="results.length === 0" aria-label="Previous result" @click="selectRelativeResult(-1)">↑</button>
-              <button :disabled="results.length === 0" aria-label="Next result" @click="selectRelativeResult(1)">↓</button>
-            </div>
+          <OfficeFindBar
+            ref="findBarRef"
+            :query="searchQuery"
+            :status="searchState.status"
+            :active-index="searchState.activeIndex"
+            :result-count="results.length"
+            input-test-id="xlsx-search-input"
+            placeholder="Find values"
+            @update:query="onSearchQuery"
+            @previous="selectRelativeResult(-1)"
+            @next="selectRelativeResult(1)"
+            @close="closeSearch"
+          />
+          <div v-if="results.length" class="xlsx-toolbar__search-results">
+            <button
+              v-for="(result, index) in results"
+              :key="`${result.workbookSheetIndex}:${result.address}:${result.start}:${index}`"
+              type="button"
+              class="xlsx-toolbar__search-result"
+              :class="{ active: index === searchState.activeIndex }"
+              @click="selectResult(index)"
+            >
+              <strong>{{ result.sheetName }}!{{ result.address }}</strong>
+              <span>
+                {{ result.text.slice(0, result.start) }}<mark>{{ result.text.slice(result.start, result.end) }}</mark>{{ result.text.slice(result.end) }}
+              </span>
+            </button>
           </div>
-          <button
-            v-for="(result, index) in results.slice(0, 8)"
-            :key="`${result.workbookSheetIndex}:${result.cell.row}:${result.cell.col}`"
-            class="xlsx-toolbar__search-result"
-            :class="{ active: index === activeResultIndex }"
-            @click="selectResult(index)"
-          >
-            <strong>{{ result.sheetName }}!{{ result.address }}</strong><span>{{ result.value }}</span>
-          </button>
         </div>
       </div>
 
@@ -80,187 +80,75 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref } from "vue";
-import type { XlsxCellAddress, XlsxViewerController } from "@arcships/xlsx-core";
+import { computed, nextTick, ref, watch } from "vue";
+import type { XlsxViewerController } from "@arcships/xlsx-core";
+import { OfficeFindBar } from "@arcships/vue-ui";
+import { useXlsxSearch, type XlsxSurfaceSearch } from "../composables/useXlsxSearch";
 
 const props = defineProps<{
   controller: XlsxViewerController;
   isDark?: boolean;
+  search?: XlsxSurfaceSearch;
   showUpload?: boolean;
 }>();
 
 const emit = defineEmits<{
+  searchClose: [];
   upload: [];
 }>();
 
-interface SearchResult {
-  address: string;
-  cell: XlsxCellAddress;
-  sheetIndex: number;
-  sheetName: string;
-  value: string;
-  workbookSheetIndex: number;
-}
-
 const zoomPresets = [50, 75, 100, 125, 150, 200];
 const searchOpen = ref(false);
-const searchInputRef = ref<HTMLInputElement | null>(null);
+const findBarRef = ref<InstanceType<typeof OfficeFindBar> | null>(null);
 const searchQuery = ref("");
-const results = ref<SearchResult[]>([]);
-const activeResultIndex = ref(-1);
-const isSearching = ref(false);
-let searchTimer: ReturnType<typeof setTimeout> | null = null;
-let searchRequest = 0;
+const ownedSearch = useXlsxSearch(() => props.controller);
+const effectiveSearch = computed(() => props.search ?? ownedSearch);
+const searchState = computed(() => effectiveSearch.value.searchState.value);
+const results = computed(() => searchState.value.matches);
 
 const displayFileName = computed(() => props.controller.displayFileName);
 const zoomPercent = computed(() => Math.round(props.controller.zoomScale));
-const searchStatus = computed(() => {
-  if (isSearching.value) return "Searching…";
-  if (!searchQuery.value.trim()) return "Type to search";
-  if (!results.value.length) return "No results";
-  return `${Math.max(1, activeResultIndex.value + 1)} of ${results.value.length}`;
-});
-
-function cellAddress(cell: XlsxCellAddress): string {
-  let col = "";
-  let index = cell.col;
-  while (index >= 0) {
-    col = String.fromCharCode(65 + index % 26) + col;
-    index = Math.floor(index / 26) - 1;
-  }
-  return `${col}${cell.row + 1}`;
-}
-
 function onZoomChange(event: Event): void {
   const value = Number((event.target as HTMLSelectElement).value);
   if (Number.isFinite(value)) props.controller.setZoomScale(value);
 }
 
 function toggleSearch(): void {
-  searchOpen.value = !searchOpen.value;
-  if (searchOpen.value) void nextTick(() => searchInputRef.value?.focus());
+  if (searchOpen.value) closeSearch();
+  else openSearch();
+}
+
+function openSearch(): void {
+  searchOpen.value = true;
+  void nextTick(() => findBarRef.value?.focus());
 }
 
 function closeSearch(): void {
   searchOpen.value = false;
+  searchQuery.value = "";
+  effectiveSearch.value.clearSearch();
+  emit("searchClose");
 }
 
-function scheduleSearch(): void {
-  if (searchTimer) clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => { void runSearch(); }, 180);
-}
-
-async function runSearch(): Promise<void> {
-  const query = searchQuery.value.trim().toLocaleLowerCase();
-  const request = ++searchRequest;
-  results.value = [];
-  activeResultIndex.value = -1;
-  if (!query || !props.controller.sheets.length) return;
-  isSearching.value = true;
-  const matches: SearchResult[] = [];
-  try {
-    for (const [sheetIndex, sheet] of props.controller.sheets.entries()) {
-      if (matches.length >= 200) break;
-      if (props.controller.isWorkerBacked && props.controller.getRowsBatchAsync) {
-        const rowLimit = Math.max(0, sheet.maxUsedRow + 1);
-        for (let start = 0; start < rowLimit && matches.length < 200; start += 128) {
-          const rows = await props.controller.getRowsBatchAsync(sheet.workbookSheetIndex, start, 128);
-          if (request !== searchRequest) return;
-          for (const rowEntry of rows ?? []) {
-            if (!rowEntry || typeof rowEntry !== "object") continue;
-            const row = Number(Reflect.get(rowEntry, "index"));
-            const cells = Reflect.get(rowEntry, "cells");
-            if (!Number.isInteger(row) || !Array.isArray(cells)) continue;
-            for (const entry of cells) {
-              const col = Number(Reflect.get(entry, "col"));
-              const value = String(Reflect.get(entry, "value") ?? "");
-              const formula = String(Reflect.get(entry, "formula") ?? "");
-              if (Number.isInteger(col) && `${value}\n${formula}`.toLocaleLowerCase().includes(query)) {
-                const cell = { row, col };
-                matches.push({
-                  address: cellAddress(cell),
-                  cell,
-                  sheetIndex,
-                  sheetName: sheet.name,
-                  value: value || formula,
-                  workbookSheetIndex: sheet.workbookSheetIndex,
-                });
-                if (matches.length >= 200) break;
-              }
-            }
-          }
-        }
-        continue;
-      }
-
-      const worksheet = props.controller.workbook?.getSheet(sheet.workbookSheetIndex);
-      if (!worksheet) continue;
-      try {
-        const rows = sheet.visibleRows.filter((row) => row >= sheet.minUsedRow && row <= sheet.maxUsedRow);
-        const columns = sheet.visibleCols.filter((col) => col >= sheet.minUsedCol && col <= sheet.maxUsedCol);
-        for (const row of rows) {
-          for (const col of columns) {
-            const formatted = worksheet.getFormattedValueAt(row, col) ?? "";
-            const formula = worksheet.getFormulaAt(row, col) ?? "";
-            let value = formatted;
-            if (!value) {
-              const calculated = worksheet.getCalculatedValueAt(row, col);
-              try {
-                value = calculated.is_empty ? "" : calculated.toString();
-              } finally {
-                calculated.free();
-              }
-            }
-            if (`${value}\n${formula}`.toLocaleLowerCase().includes(query)) {
-              const cell = { row, col };
-              matches.push({
-                address: cellAddress(cell),
-                cell,
-                sheetIndex,
-                sheetName: sheet.name,
-                value: value || formula,
-                workbookSheetIndex: sheet.workbookSheetIndex,
-              });
-              if (matches.length >= 200) break;
-            }
-          }
-          if (matches.length >= 200) break;
-        }
-      } finally {
-        worksheet.free();
-      }
-    }
-    if (request !== searchRequest) return;
-    results.value = matches;
-    if (matches.length) selectResult(0);
-  } finally {
-    if (request === searchRequest) isSearching.value = false;
-  }
-}
-
-function selectResult(index: number): void {
-  const result = results.value[index];
-  if (!result) return;
-  activeResultIndex.value = index;
-  if (props.controller.activeSheetIndex !== result.sheetIndex) {
-    props.controller.setActiveSheetIndex(result.sheetIndex);
-  }
-  props.controller.selectCell(result.cell);
+function onSearchQuery(query: string): void {
+  searchQuery.value = query;
+  void effectiveSearch.value.search(query).catch(() => undefined);
 }
 
 function selectRelativeResult(direction: 1 | -1): void {
-  if (!results.value.length) {
-    void runSearch();
-    return;
-  }
-  const next = (activeResultIndex.value + direction + results.value.length) % results.value.length;
-  selectResult(next);
+  if (direction === 1) void effectiveSearch.value.searchNext().catch(() => undefined);
+  else void effectiveSearch.value.searchPrevious().catch(() => undefined);
 }
 
-onUnmounted(() => {
-  if (searchTimer) clearTimeout(searchTimer);
-  searchRequest += 1;
+function selectResult(index: number): void {
+  void effectiveSearch.value.activateSearchMatch(index).catch(() => undefined);
+}
+
+watch(() => searchState.value.query, (query) => {
+  if (query !== searchQuery.value.trim()) searchQuery.value = query;
 });
+
+defineExpose({ openSearch });
 </script>
 
 <style scoped>
@@ -346,11 +234,13 @@ onUnmounted(() => {
 .xlsx-toolbar__search-panel input { border: 1px solid #d4d4d8; border-radius: 7px; font: inherit; height: 34px; padding: 0 10px; }
 .xlsx-toolbar__search-summary { color: #71717a; font-size: 11px; justify-content: space-between; padding: 8px 0 5px; }
 .xlsx-toolbar__search-summary button { background: transparent; border: 1px solid #e4e4e7; cursor: pointer; height: 26px; width: 28px; }
+.xlsx-toolbar__search-results { max-height: 240px; overflow: auto; }
 .xlsx-toolbar__search-result { align-items: center; background: transparent; border: 0; border-radius: 6px; cursor: pointer; display: flex; font: inherit; gap: 8px; padding: 7px 8px; text-align: left; width: 100%; }
 .xlsx-toolbar__search-result:hover,
 .xlsx-toolbar__search-result.active { background: #f4f4f5; }
 .xlsx-toolbar__search-result strong { flex: 0 0 96px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .xlsx-toolbar__search-result span { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xlsx-toolbar__search-result mark { background: #fde047; color: inherit; padding: 0; }
 
 @media (max-width: 620px) {
   .xlsx-toolbar { align-items: stretch; flex-direction: column; gap: 5px; }

@@ -47,8 +47,6 @@
       :page-number-format="pageNumberFormat"
       :tracked-changes-enabled="trackedChangesEnabled"
       :comments-enabled="commentsEnabled"
-      :search-query="searchQuery"
-      :active-search-node-index="activeSearchNodeIndex"
     >
       <template v-if="hasHeader" #header>
         <DocxPageHeader
@@ -186,8 +184,6 @@ interface DocxPageSurfaceProps {
   comments?: readonly DocxComment[]
   footnotes?: DocumentNoteDefinition[]
   endnotes?: DocumentNoteDefinition[]
-  searchQuery?: string
-  activeSearchNodeIndex?: number
   theme?: "light" | "dark"
 }
 
@@ -206,7 +202,6 @@ const props = withDefaults(
     commentsEnabled: false,
     footnotes: () => [],
     endnotes: () => [],
-    searchQuery: "",
     theme: "light" as const,
   }
 )

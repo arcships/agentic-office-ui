@@ -86,6 +86,19 @@ def expect(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
+def active_docx_search_highlight(page, message: str) -> dict[str, float]:
+    highlight = page.locator(
+        ".docx-document-surface__search-highlight--active"
+    ).first
+    highlight.wait_for(state="visible", timeout=10_000)
+    box = highlight.bounding_box()
+    expect(
+        box is not None and box["width"] > 1 and box["height"] > 1,
+        message,
+    )
+    return box
+
+
 def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
     context = browser.new_context(viewport={"width": 1440, "height": 900}, locale="zh-CN")
     page = context.new_page()
@@ -106,7 +119,7 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
         page.locator('[data-testid="docx-search-status"]').wait_for()
         status = page.locator('[data-testid="docx-search-status"]').inner_text()
         expect(status not in {"", "0/0"}, f"全文搜索没有结果: {status}")
-        expect(page.locator('[data-docx-search-match="true"]').count() > 0, "搜索结果没有高亮")
+        search_highlight = active_docx_search_highlight(page, "搜索结果没有精确高亮")
         page.screenshot(path=str(attempt_dir / "docx-notes-search.png"), full_page=True)
 
         page.locator('[data-testid="docx-sample-select"]').select_option("invoice-table.docx")
@@ -122,9 +135,15 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
             timeout=10_000,
         )
         table_search_status = page.locator('[data-testid="docx-search-status"]').inner_text()
+        table_highlight = active_docx_search_highlight(page, "表格内搜索结果没有精确高亮")
+        table_box = table_paragraph.bounding_box()
         expect(
-            table_paragraph.get_attribute("data-docx-search-match") == "true",
-            "表格内搜索结果没有高亮",
+            table_box is not None
+            and table_highlight["x"] < table_box["x"] + table_box["width"]
+            and table_highlight["x"] + table_highlight["width"] > table_box["x"]
+            and table_highlight["y"] < table_box["y"] + table_box["height"]
+            and table_highlight["y"] + table_highlight["height"] > table_box["y"],
+            "表格搜索高亮没有覆盖目标段落",
         )
         page.screenshot(path=str(attempt_dir / "docx-table-search.png"), full_page=True)
         evidence.assert_clean()
@@ -134,6 +153,8 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
             "endnoteText": endnote_text,
             "searchStatus": status,
             "tableSearchStatus": table_search_status,
+            "searchHighlight": search_highlight,
+            "tableSearchHighlight": table_highlight,
         }
     finally:
         evidence.save(attempt_dir)

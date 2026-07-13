@@ -1715,6 +1715,7 @@ const editInputStyle = computed<CSSProperties>(() => {
 defineExpose({
   captureZoomAnchor,
   restoreZoomAnchor,
+  scrollToCell,
   get scrollContainer() {
     return containerRef.value;
   },

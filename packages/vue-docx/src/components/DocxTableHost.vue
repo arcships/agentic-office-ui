@@ -70,10 +70,8 @@
                 :data-docx-table-row-index="sourceRowIndex(ri)"
                 :data-docx-table-cell-index="ci"
                 :data-docx-paragraph-index="pi"
-                :data-docx-search-match="paragraphMatchesSearch(node) ? 'true' : undefined"
-                :data-docx-search-active="paragraphMatchesSearch(node) && searchActive ? 'true' : undefined"
                 :suppresscontenteditablewarning="editable && controller ? 'true' : undefined"
-                :style="cellParagraphStyle(node, paragraphMatchesSearch(node))"
+                :style="cellParagraphStyle(node)"
                 @input="onCellInput(tableIndex, sourceRowIndex(ri), ci, pi, $event)"
                 @focus="onCellFocus(tableIndex, sourceRowIndex(ri), ci, pi)"
                 @blur="onCellBlur(tableIndex, sourceRowIndex(ri), ci, pi)"
@@ -92,8 +90,6 @@
                 :page-number="pageNumber"
                 :total-pages="totalPages"
                 :page-number-format="pageNumberFormat"
-                :search-query="searchQuery"
-                :search-active="searchActive"
                 :within-header-footer="withinHeaderFooter"
                 :header-footer-region="headerFooterRegion"
               />
@@ -118,7 +114,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from "vue"
 import {
-  paragraphText,
   type DocxDocumentTheme,
   type DocxEditorController,
   type NumberingDefinitionSet,
@@ -161,16 +156,12 @@ const props = withDefaults(
     pageNumber?: number
     totalPages?: number
     pageNumberFormat?: string
-    searchQuery?: string
-    searchActive?: boolean
     withinHeaderFooter?: boolean
     headerFooterRegion?: "header" | "footer"
   }>(),
   {
     editable: false,
     documentTheme: "light" as DocxDocumentTheme,
-    searchQuery: "",
-    searchActive: false,
   }
 )
 
@@ -275,20 +266,13 @@ function cellStyle(cell: any): Record<string, any> {
   }
 }
 
-function paragraphMatchesSearch(para: ParagraphNode): boolean {
-  const query = props.searchQuery.trim().toLocaleLowerCase()
-  return Boolean(query) && paragraphText(para).toLocaleLowerCase().includes(query)
-}
-
-function cellParagraphStyle(para: ParagraphNode, searchMatch = false): Record<string, any> {
+function cellParagraphStyle(para: ParagraphNode): Record<string, any> {
   return {
     margin: "0",
     textAlign: para.style?.align,
     fontWeight: para.style?.headingLevel ? "700" : undefined,
     minHeight: "1em",
     outline: "none",
-    background: searchMatch ? (props.searchActive ? "#fde68a" : "#fef3c7") : undefined,
-    boxShadow: searchMatch && props.searchActive ? "0 0 0 2px #f59e0b" : undefined,
   }
 }
 

@@ -4,8 +4,8 @@
       <div>
         <h2>PDF Surface — 最小嵌入组件</h2>
         <p class="desc">
-          垂直滚动浏览全部页面，无 Toolbar / 缩略图 / 搜索栏 / 旋转。
-          宿主通过 expose 控制 zoom 和 scrollToPage。
+          垂直滚动浏览全部页面，Surface 内无 Toolbar / 缩略图 / 搜索栏 / 旋转。
+          下方宿主工具栏通过 expose 控制搜索、zoom 和 scrollToPage。
         </p>
       </div>
     </header>
@@ -37,6 +37,21 @@
         <input v-model="fitWidth" data-testid="pdf-surface-fit-width" type="checkbox" />
         自适应
       </label>
+
+      <span class="sep" />
+
+      <OfficeFindBar
+        :query="searchQuery"
+        :status="searchState.status"
+        :active-index="searchState.activeIndex"
+        :result-count="searchState.matches.length"
+        :disabled="!ready"
+        placeholder="搜索 PDF"
+        @update:query="onSearchQuery"
+        @previous="void surfaceRef?.searchPrevious()"
+        @next="void surfaceRef?.searchNext()"
+        @close="closeSearch"
+      />
     </div>
 
     <div class="surface-container" data-testid="pdf-surface-container">
@@ -52,6 +67,8 @@
         @document-load-error="onLoadError"
         @visible-page-change="visiblePage = $event"
         @context-menu="onContextMenu"
+        @selection-change="onSelectionChange"
+        @search-state-change="searchState = $event"
         @update:zoom="zoom = $event"
       />
       <div v-else class="empty" data-testid="pdf-surface-empty">
@@ -63,15 +80,17 @@
       <div><strong>文件：</strong>{{ source ? "已加载" : "未选择" }}</div>
       <div><strong>页数：</strong>{{ numPages || "—" }}</div>
       <div><strong>当前页：</strong>{{ visiblePage + 1 }}</div>
+      <div><strong>选中：</strong>{{ selectionInfo }}</div>
       <div><strong>右键：</strong>{{ contextMenuInfo }}</div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue"
-import type { PdfLoadError, PdfSource } from "@arcships/vue-pdf"
+import { computed, ref, shallowRef } from "vue"
+import type { PdfLoadError, PdfSearchState, PdfSelectionState, PdfSource } from "@arcships/vue-pdf"
 import { PdfSurface } from "@arcships/vue-pdf"
+import { OfficeFindBar } from "@arcships/vue-ui"
 
 const source = ref<PdfSource>()
 const numPages = ref(0)
@@ -83,6 +102,14 @@ const loadCounter = ref(0)
 const fileInputRef = ref<HTMLInputElement>()
 const surfaceRef = ref<InstanceType<typeof PdfSurface>>()
 const contextMenuInfo = ref("—")
+const selectionInfo = ref("—")
+const searchQuery = ref("")
+const searchState = shallowRef<PdfSearchState>({
+  status: "idle",
+  query: "",
+  matches: [],
+  activeIndex: -1,
+})
 
 const surfaceKey = computed(() => `pdf-${loadCounter.value}`)
 
@@ -105,6 +132,29 @@ function onLoadError(error: PdfLoadError): void {
 
 function setZoom(value: number): void {
   zoom.value = Math.min(2, Math.max(0.5, value))
+}
+
+function onSearchQuery(query: string): void {
+  searchQuery.value = query
+  const task = query.trim()
+    ? surfaceRef.value?.search(query)
+    : (surfaceRef.value?.clearSearch(), undefined)
+  void task?.catch((cause: unknown) => {
+    if (!(cause instanceof Error) || cause.name !== "AbortError") {
+      console.error("PDF search error:", cause)
+    }
+  })
+}
+
+function closeSearch(): void {
+  searchQuery.value = ""
+  surfaceRef.value?.clearSearch()
+}
+
+function onSelectionChange(selection: PdfSelectionState): void {
+  if (selection.kind === "none") selectionInfo.value = "—"
+  else if (selection.kind === "text") selectionInfo.value = selection.text.slice(0, 40)
+  else selectionInfo.value = selection.reason === "unicode-map" ? "文字映射不可用" : "没有可复制文字"
 }
 
 function onContextMenu(ctx: { pageIndex: number; clientX: number; clientY: number }): void {

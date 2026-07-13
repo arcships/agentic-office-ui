@@ -4,8 +4,8 @@
       <div>
         <h2>Excel/CSV Surface — 最小嵌入组件</h2>
         <p class="desc">
-          只负责渲染表格网格 + 图表/图片/绘图/选区叠加层 + 右键菜单，无 Toolbar / Ribbon / FormulaBar。
-          宿主自行管理 SheetTabs、文件加载、只读切换。
+          只负责渲染表格网格 + 图表/图片/绘图/选区叠加层 + 右键菜单，无内置 Toolbar / Ribbon / FormulaBar。
+          宿主自行管理搜索、SheetTabs、文件加载和只读切换。
         </p>
       </div>
     </header>
@@ -40,6 +40,21 @@
         <input ref="fileInputRef" data-testid="xlsx-surface-file-input" type="file" accept=".xlsx,.xls,.xlsb,.xlsm,.xltx,.xltm,.csv,text/csv" @change="onFileChange" />
         本地文件
       </label>
+
+      <span class="sep" />
+
+      <OfficeFindBar
+        :query="searchQuery"
+        :status="searchState.status"
+        :active-index="searchState.activeIndex"
+        :result-count="searchState.matches.length"
+        :disabled="!surfaceKey"
+        placeholder="搜索工作簿"
+        @update:query="onSearchQuery"
+        @previous="void surfaceHostRef?.searchPrevious()"
+        @next="void surfaceHostRef?.searchNext()"
+        @close="closeSearch"
+      />
     </div>
 
     <p v-if="error" class="error" data-testid="xlsx-surface-error">{{ error }}</p>
@@ -48,6 +63,7 @@
       <div v-if="loading" class="surface-overlay">加载中…</div>
       <XlsxSurfaceHost
         v-if="surfaceKey"
+        ref="surfaceHostRef"
         :key="surfaceKey"
         :file="fileBuffer"
         :file-name="displayName"
@@ -56,6 +72,7 @@
         @cellDoubleClick="onCellDoubleClick"
         @contextMenu="onContextMenu"
         @selectionChange="onSelectionChange"
+        @searchStateChange="searchState = $event"
         @update:zoom="zoom = $event"
       />
       <div v-else class="empty" data-testid="xlsx-surface-empty">
@@ -72,12 +89,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, ref, type PropType } from "vue"
+import { computed, defineComponent, h, ref, shallowRef, type PropType } from "vue"
 import type { XlsxViewerController } from "@arcships/xlsx-core"
 import {
   useXlsxViewerController,
   XlsxSheetSurface,
+  type XlsxSearchState,
 } from "@arcships/vue-xlsx"
+import { OfficeFindBar } from "@arcships/vue-ui"
 
 // ── Inline host component — creates a fresh controller per mount,
 // enabling file-switching via reactive key on the parent. ─────────────
@@ -88,17 +107,25 @@ const XlsxSurfaceHost = defineComponent({
     readOnly: { type: Boolean, default: false },
     zoom: { type: Number, default: 1 },
   },
-  emits: ["cellDoubleClick", "contextMenu", "selectionChange", "objectClick", "update:zoom"],
-  setup(props, { emit }) {
+  emits: ["cellDoubleClick", "contextMenu", "selectionChange", "objectClick", "searchStateChange", "update:zoom"],
+  setup(props, { emit, expose }) {
     const controller: XlsxViewerController = useXlsxViewerController({
       file: props.file ?? undefined,
       fileName: props.fileName,
       get readOnly() { return props.readOnly },
       onDiagnostic: () => {},
     })
+    const surface = ref<InstanceType<typeof XlsxSheetSurface>>()
+    expose({
+      search: (query: string) => surface.value?.search(query),
+      searchNext: () => surface.value?.searchNext(),
+      searchPrevious: () => surface.value?.searchPrevious(),
+      clearSearch: () => surface.value?.clearSearch(),
+    })
     return () =>
       controller.activeSheet
         ? h(XlsxSheetSurface, {
+            ref: surface,
             controller,
             "read-only": props.readOnly,
             zoom: props.zoom,
@@ -107,6 +134,7 @@ const XlsxSurfaceHost = defineComponent({
             onContextMenu: (ctx: any) => emit("contextMenu", ctx),
             onSelectionChange: (sel: any) => emit("selectionChange", sel),
             onObjectClick: (obj: any) => emit("objectClick", obj),
+            onSearchStateChange: (state: XlsxSearchState) => emit("searchStateChange", state),
             "onUpdate:zoom": (value: number) => emit("update:zoom", value),
           })
         : null
@@ -130,6 +158,21 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const loadCounter = ref(0)
 const zoom = ref(1)
+const searchQuery = ref("")
+const searchState = shallowRef<XlsxSearchState>({
+  status: "idle",
+  query: "",
+  matches: [],
+  activeIndex: -1,
+})
+
+interface XlsxSurfaceHostExpose {
+  search(query: string): Promise<XlsxSearchState> | undefined
+  searchNext(): Promise<void> | undefined
+  searchPrevious(): Promise<void> | undefined
+  clearSearch(): void
+}
+const surfaceHostRef = ref<XlsxSurfaceHostExpose>()
 
 const surfaceKey = computed(() =>
   fileBuffer.value
@@ -174,6 +217,23 @@ async function onFileChange(event: Event): Promise<void> {
 
 function onCellDoubleClick() {
   // Host can listen for edit intent
+}
+
+function onSearchQuery(query: string): void {
+  searchQuery.value = query
+  const task = query.trim()
+    ? surfaceHostRef.value?.search(query)
+    : (surfaceHostRef.value?.clearSearch(), undefined)
+  void task?.catch((cause: unknown) => {
+    if (!(cause instanceof Error) || cause.name !== "AbortError") {
+      error.value = `Search failed: ${String(cause)}`
+    }
+  })
+}
+
+function closeSearch(): void {
+  searchQuery.value = ""
+  surfaceHostRef.value?.clearSearch()
 }
 
 function onContextMenu(ctx: { clientX: number; clientY: number; sheetName?: string; selection?: Record<string, unknown> }): void {

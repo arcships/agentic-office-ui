@@ -14,7 +14,7 @@ import {
 
 const { DocxViewer } = await importFromDemo("@arcships/vue-docx");
 const { createBlankDocumentModel, wasmBuildDocModelFromBytes } = await importFromDemo("@arcships/docx-core");
-const { XlsxViewer, useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
+const { XlsxViewer, useXlsxSearch, useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
 const { PdfViewer } = await importFromDemo("@arcships/vue-pdf");
 const { FileUpload } = await importFromDemo("@arcships/vue-ui");
 
@@ -302,6 +302,61 @@ test("XlsxViewer renders and selects a resolved chartsheet chart", async () => {
   assert.deepEqual(selected, [chart.id]);
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
+});
+
+test("XLSX surface search returns exact value/formula ranges and activates a merged-cell anchor", async () => {
+  const activated = [];
+  const scrolled = [];
+  let worksheetFreeCount = 0;
+  const sheet = {
+    name: "Data",
+    workbookSheetIndex: 4,
+    minUsedRow: 2,
+    maxUsedRow: 2,
+    minUsedCol: 2,
+    maxUsedCol: 4,
+    visibleRows: [2],
+    visibleCols: [3, 4],
+    mergedRegions: [{ start: { row: 2, col: 2 }, end: { row: 2, col: 3 } }],
+  };
+  const worksheet = {
+    getFormattedValueAt: (_row, col) => col === 3 ? "Merged Needle Value" : "",
+    getFormulaAt: (_row, col) => col === 4 ? "=NEEDLE(1)" : "",
+    getCalculatedValueAt: () => ({ is_empty: true, toString: () => "", free() {} }),
+    free: () => { worksheetFreeCount += 1; },
+  };
+  const controller = {
+    activeSheetIndex: 0,
+    isWorkerBacked: false,
+    sheets: [sheet],
+    workbook: { getSheet: () => worksheet },
+    setActiveSheetIndex(index) { this.activeSheetIndex = index; },
+    selectCell: (cell) => activated.push(cell),
+  };
+
+  const scope = vue.effectScope();
+  let search;
+  scope.run(() => {
+    search = useXlsxSearch(() => controller, {
+      scrollToCell: (cell) => scrolled.push(cell),
+    });
+  });
+  const state = await search.search("needle");
+
+  assert.equal(state.status, "ready");
+  assert.equal(state.activeIndex, 0);
+  assert.equal(state.matches.length, 2);
+  assert.deepEqual(state.matches[0].cell, { row: 2, col: 2 });
+  assert.equal(state.matches[0].address, "C3");
+  assert.equal(state.matches[0].start, 7);
+  assert.equal(state.matches[0].end, 13);
+  assert.equal(state.matches[1].text, "=NEEDLE(1)");
+  assert.equal(state.matches[1].start, 1);
+  assert.equal(state.matches[1].end, 7);
+  assert.deepEqual(scrolled, [{ row: 2, col: 2 }]);
+  assert.deepEqual(activated, [{ row: 2, col: 2 }]);
+  assert.equal(worksheetFreeCount, 1);
+  scope.stop();
 });
 
 test("useXlsxViewerController owns and terminates its Worker on unmount", async (t) => {

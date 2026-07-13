@@ -1,9 +1,66 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { test } from "node:test";
 
 const pdf = await import(new URL("../../packages/vue-pdf/dist/index.js", import.meta.url).href);
 const fixture = readFileSync(new URL("../../apps/demo/public/samples/sample.pdf", import.meta.url));
+const requireFromPdf = createRequire(new URL("../../packages/vue-pdf/package.json", import.meta.url));
+const typescript = requireFromPdf("typescript");
+const transformSource = readFileSync(
+  new URL("../../packages/vue-pdf/src/pdf/pdf-coordinate-transform.ts", import.meta.url),
+  "utf8",
+);
+const transformModule = await import(`data:text/javascript;base64,${Buffer.from(
+  typescript.transpileModule(transformSource, {
+    compilerOptions: {
+      module: typescript.ModuleKind.ES2022,
+      target: typescript.ScriptTarget.ES2022,
+    },
+  }).outputText,
+).toString("base64")}`);
+
+test("PDF canonical transforms round-trip points and intrinsic search rects at every rotation", () => {
+  const rotations = [0, 90, 180, 270];
+  const scale = 1.75;
+  const canonicalPoint = { x: 145, y: 132 };
+  const canonicalRect = { x: 100, y: 120, width: 80, height: 24 };
+
+  for (const intrinsicRotation of rotations) {
+    const page = { index: 0, width: 600, height: 800, rotation: intrinsicRotation };
+    const intrinsicRect = transformModule.pdfCanonicalRectToDisplay(page, canonicalRect, 0, 1);
+    assert.deepEqual(
+      transformModule.pdfIntrinsicRectToCanonical(page, intrinsicRect),
+      canonicalRect,
+      `intrinsic ${intrinsicRotation}`,
+    );
+
+    for (const userRotation of rotations) {
+      const pointRect = transformModule.pdfCanonicalRectToDisplay(
+        page,
+        { ...canonicalPoint, width: 0, height: 0 },
+        userRotation,
+        scale,
+      );
+      assert.deepEqual(
+        transformModule.pdfDisplayPointToCanonical(
+          page,
+          { x: pointRect.x, y: pointRect.y },
+          userRotation,
+          scale,
+        ),
+        canonicalPoint,
+        `intrinsic ${intrinsicRotation}, user ${userRotation}`,
+      );
+      const size = transformModule.pdfDisplaySize(page, userRotation, scale);
+      const quarterTurns = ((intrinsicRotation + userRotation) / 90) % 4;
+      assert.deepEqual(size, {
+        width: (quarterTurns % 2 ? page.height : page.width) * scale,
+        height: (quarterTurns % 2 ? page.width : page.height) * scale,
+      });
+    }
+  }
+});
 
 test("PDF URL loading shares controlled fetch and strips query secrets", async () => {
   const calls = [];

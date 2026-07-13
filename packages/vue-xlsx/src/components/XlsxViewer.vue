@@ -1,5 +1,6 @@
 <template>
   <div
+    ref="viewerRef"
     class="xlsx-viewer"
     data-testid="xlsx-viewer"
     :data-state="controller.isLoading ? 'loading' : controller.error ? 'error' : controller.activeSheet || controller.activeTab?.kind === 'chartsheet' ? 'ready' : 'empty'"
@@ -9,9 +10,12 @@
   >
     <XlsxToolbar
       v-if="showDefaultToolbar"
+      ref="toolbarRef"
       :controller="controller"
       :is-dark="isDark ?? false"
+      :search="surfaceSearch"
       :show-upload="showUpload"
+      @search-close="viewerRef?.focus()"
       @upload="emit('upload')"
     />
     <XlsxRibbon
@@ -111,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, type ComponentPublicInstance, type CSSProperties } from "vue";
+import { computed, nextTick, ref, watch, type CSSProperties } from "vue";
 import type { XlsxViewerController, XlsxCellAddress, XlsxCellStyleContext } from "@arcships/xlsx-core";
 import XlsxGrid from "./XlsxGrid.vue";
 import XlsxToolbar from "./XlsxToolbar.vue";
@@ -124,6 +128,7 @@ import XlsxDrawingLayer from "./XlsxDrawingLayer.vue";
 import XlsxSelectionOverlay from "./XlsxSelectionOverlay.vue";
 import XlsxContextMenu from "./XlsxContextMenu.vue";
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue";
+import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch";
 
 const props = withDefaults(
   defineProps<{
@@ -161,16 +166,26 @@ const emit = defineEmits<{
   cellDoubleClick: [cell: XlsxCellAddress];
   upload: [];
   "update:readOnly": [value: boolean];
+  searchStateChange: [state: XlsxSearchState];
 }>();
 
 const effectiveReadOnly = computed(() => props.controller.readOnly || props.readOnly);
 
-const gridRef = ref<ComponentPublicInstance | null>(null);
+type GridInstance = InstanceType<typeof XlsxGrid>;
+const viewerRef = ref<HTMLElement | null>(null);
+const toolbarRef = ref<InstanceType<typeof XlsxToolbar> | null>(null);
+const gridRef = ref<GridInstance | null>(null);
 const gridViewport = ref({ scrollLeft: 0, scrollTop: 0 });
-const gridElement = computed<HTMLElement | null>(() => {
-  const element = gridRef.value?.$el;
-  return typeof HTMLElement !== "undefined" && element instanceof HTMLElement ? element : null;
-});
+const gridElement = computed<HTMLElement | null>(() => gridRef.value?.scrollContainer ?? null);
+const surfaceSearch = useXlsxSearch(
+  () => props.controller,
+  {
+    scrollToCell: async (cell) => {
+      await nextTick();
+      gridRef.value?.scrollToCell(cell);
+    },
+  },
+);
 
 const viewerStyle = computed<CSSProperties>(() => ({
   blockSize: props.height,
@@ -193,6 +208,16 @@ const viewerStyle = computed<CSSProperties>(() => ({
 }));
 
 function onKeydown(event: KeyboardEvent) {
+  if (
+    props.showDefaultToolbar
+    && (event.ctrlKey || event.metaKey)
+    && event.key.toLocaleLowerCase() === "f"
+  ) {
+    event.preventDefault();
+    toolbarRef.value?.openSearch();
+    return;
+  }
+
   if (!props.controller || effectiveReadOnly.value) return;
 
   if ((event.ctrlKey || event.metaKey) && event.key === "z") {
@@ -214,6 +239,23 @@ function onCellDoubleClick(cell: XlsxCellAddress) {
 function onReadOnlyChange(value: boolean) {
   emit("update:readOnly", value);
 }
+
+watch(surfaceSearch.searchState, (next) => {
+  emit("searchStateChange", next);
+}, { immediate: true });
+
+defineExpose({
+  search: surfaceSearch.search,
+  activateSearchMatch: surfaceSearch.activateSearchMatch,
+  searchNext: surfaceSearch.searchNext,
+  searchPrevious: surfaceSearch.searchPrevious,
+  clearSearch: surfaceSearch.clearSearch,
+  getSearchState: surfaceSearch.getSearchState,
+  scrollToCell: async (cell: XlsxCellAddress) => {
+    await nextTick();
+    gridRef.value?.scrollToCell(cell);
+  },
+});
 </script>
 
 <style scoped>

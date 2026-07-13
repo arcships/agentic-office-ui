@@ -9,6 +9,8 @@ export { usePptxPlayback } from "./composables/usePptxPlayback"
 
 export type {
   PptxDocumentState,
+  PptxSearchState,
+  PptxSearchStatus,
   PptxStageContextMenu,
   PptxStageExpose,
   PptxStageObjectClick,

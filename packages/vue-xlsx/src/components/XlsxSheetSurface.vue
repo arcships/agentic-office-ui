@@ -66,6 +66,7 @@ import XlsxDrawingLayer from "./XlsxDrawingLayer.vue"
 import XlsxSelectionOverlay from "./XlsxSelectionOverlay.vue"
 import XlsxContextMenu from "./XlsxContextMenu.vue"
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue"
+import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch"
 
 const props = withDefaults(
   defineProps<{
@@ -103,6 +104,7 @@ const emit = defineEmits<{
   selectionChange: [sel: { kind: string; range?: { start: { row: number; col: number }; end: { row: number; col: number } }; value?: string }]
   objectClick: [obj: { kind: "chart" | "image" | "shape"; id: string }]
   "update:zoom": [zoom: number]
+  searchStateChange: [state: XlsxSearchState]
 }>()
 
 type GridInstance = InstanceType<typeof XlsxGrid>
@@ -114,6 +116,15 @@ const gridRef = ref<GridInstance | null>(null)
 const gridViewport = ref({ scrollLeft: 0, scrollTop: 0 })
 const effectiveReadOnly = computed(() => props.controller.readOnly || props.readOnly)
 const gridElement = computed<HTMLElement | null>(() => gridRef.value?.scrollContainer ?? null)
+const surfaceSearch = useXlsxSearch(
+  () => props.controller,
+  {
+    scrollToCell: async (cell) => {
+      await nextTick()
+      gridRef.value?.scrollToCell(cell)
+    },
+  },
+)
 
 let pendingAnchor: { anchor: NonNullable<GridZoomAnchor>; requestedZoom: number; token: number } | undefined
 let pendingZoom: number | undefined
@@ -237,6 +248,10 @@ watch(
   { immediate: true },
 )
 
+watch(surfaceSearch.searchState, (next) => {
+  emit("searchStateChange", next)
+}, { immediate: true })
+
 onMounted(() => {
   const element = surfaceRef.value
   if (!element) return
@@ -253,6 +268,22 @@ onBeforeUnmount(() => {
   element?.removeEventListener("gesturestart", onGestureStart)
   element?.removeEventListener("gesturechange", onGestureChange as EventListener)
   element?.removeEventListener("gestureend", onGestureEnd)
+})
+
+defineExpose({
+  scrollToCell: async (cell: XlsxCellAddress) => {
+    await nextTick()
+    gridRef.value?.scrollToCell(cell)
+  },
+  search: surfaceSearch.search,
+  activateSearchMatch: surfaceSearch.activateSearchMatch,
+  searchNext: surfaceSearch.searchNext,
+  searchPrevious: surfaceSearch.searchPrevious,
+  clearSearch: surfaceSearch.clearSearch,
+  getSearchState: surfaceSearch.getSearchState,
+  get scrollContainer() {
+    return gridRef.value?.scrollContainer ?? null
+  },
 })
 </script>
 

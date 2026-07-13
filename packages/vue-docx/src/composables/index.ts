@@ -66,3 +66,5 @@ export type {
 // useDocxModel (standalone docx parser)
 export { useDocxModel } from "./useDocxModel"
 export type { UseDocxModelState } from "./useDocxModel"
+export { findDocxSearchMatches } from "./useDocxSearch"
+export type { DocxSearchMatch, DocxSearchState, DocxSearchStatus } from "./useDocxSearch"

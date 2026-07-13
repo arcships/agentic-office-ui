@@ -12,6 +12,7 @@ import {
 const {
   DocxTableHost,
   DocxToolbar,
+  findDocxSearchMatches,
   useDocxEditor,
 } = await importFromDemo("@arcships/vue-docx");
 const { createBlankDocumentModel } = await importFromDemo("@arcships/docx-core");
@@ -158,7 +159,7 @@ test("DocxTableHost renders vertical merges once and commits editable cell text"
   mounted.app.unmount();
 });
 
-test("DocxTableHost visibly highlights search matches inside table cells", async () => {
+test("DOCX surface search indexes an exact table-cell range without a block highlighter", async () => {
   const table = {
     type: "table",
     rows: [{
@@ -172,9 +173,32 @@ test("DocxTableHost visibly highlights search matches inside table cells", async
       return () => vue.h(DocxTableHost, {
         table,
         tableIndex: 0,
-        searchQuery: "needle",
-        searchActive: true,
       });
+    },
+  });
+
+  const matches = findDocxSearchMatches(modelWithNodes([table]), "needle");
+  assert.equal(matches.length, 1);
+  assert.deepEqual(matches[0].range, {
+    start: {
+      location: {
+        kind: "table-cell",
+        tableIndex: 0,
+        rowIndex: 0,
+        cellIndex: 0,
+        paragraphIndex: 0,
+      },
+      offset: 0,
+    },
+    end: {
+      location: {
+        kind: "table-cell",
+        tableIndex: 0,
+        rowIndex: 0,
+        cellIndex: 0,
+        paragraphIndex: 0,
+      },
+      offset: 6,
     },
   });
 
@@ -183,10 +207,8 @@ test("DocxTableHost visibly highlights search matches inside table cells", async
     node.props?.["data-docx-table-cell-paragraph-host"] === true
   );
   assert.ok(paragraph);
-  assert.equal(paragraph.props["data-docx-search-match"], "true");
-  assert.equal(paragraph.props["data-docx-search-active"], "true");
-  assert.equal(paragraph.props.style.background, "#fde68a");
-  assert.equal(paragraph.props.style.boxShadow, "0 0 0 2px #f59e0b");
+  assert.equal(paragraph.props["data-docx-search-match"], undefined);
+  assert.equal(paragraph.props["data-docx-search-active"], undefined);
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });

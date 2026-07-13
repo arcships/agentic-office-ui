@@ -90,6 +90,12 @@ export {
 } from "./composables"
 
 export { useDocxModel } from "./composables/useDocxModel"
+export {
+  findDocxSearchMatches,
+  type DocxSearchMatch,
+  type DocxSearchState,
+  type DocxSearchStatus,
+} from "./composables/useDocxSearch"
 
 export { useDocxPageThumbnails } from "./composables/useDocxPageThumbnails"
 /**

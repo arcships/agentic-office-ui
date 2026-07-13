@@ -39,14 +39,18 @@
     <div class="docx-viewer-toolbar__actions">
       <div class="docx-viewer-toolbar__search" role="search">
         <input
+          ref="searchInputRef"
           data-testid="docx-search-input"
           type="search"
           :value="searchQuery"
           placeholder="搜索文档"
           aria-label="搜索文档"
           :disabled="disabled"
-          @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
+          @input="onSearchInput"
+          @compositionstart="searchComposing = true"
+          @compositionend="onSearchCompositionEnd"
           @keydown.enter.prevent="onSearchEnter"
+          @keydown.esc.prevent="emit('searchClose')"
         />
         <span data-testid="docx-search-status">{{ searchResultCount ? `${searchResultIndex + 1}/${searchResultCount}` : searchQuery ? '0/0' : '' }}</span>
         <button type="button" aria-label="上一个搜索结果" data-testid="docx-search-previous" :disabled="disabled || !searchResultCount" @click="emit('searchPrevious')">‹</button>
@@ -202,10 +206,13 @@ const emit = defineEmits<{
   "update:searchQuery": [query: string]
   searchNext: []
   searchPrevious: []
+  searchClose: []
 }>()
 
 const zoomOptions = [50, 75, 100, 125, 150, 175, 200]
 const pageDraft = ref(String(props.currentPage || 1))
+const searchInputRef = ref<HTMLInputElement>()
+const searchComposing = ref(false)
 
 watch(
   () => props.currentPage,
@@ -225,6 +232,19 @@ function commitPage(): void {
   const page = Math.min(Math.max(parsed, 1), props.totalPages)
   pageDraft.value = String(page)
   emit("selectPage", page)
+}
+
+function searchValue(event: Event): string {
+  return (event.target as HTMLInputElement).value
+}
+
+function onSearchInput(event: Event): void {
+  if (!searchComposing.value) emit("update:searchQuery", searchValue(event))
+}
+
+function onSearchCompositionEnd(event: CompositionEvent): void {
+  searchComposing.value = false
+  emit("update:searchQuery", searchValue(event))
 }
 
 function nextZoom(direction: -1 | 1): number {
@@ -247,6 +267,10 @@ function onSearchEnter(event: KeyboardEvent): void {
   if (event.shiftKey) emit("searchPrevious")
   else emit("searchNext")
 }
+
+defineExpose({
+  focusSearch: () => searchInputRef.value?.focus(),
+})
 </script>
 
 <style scoped>

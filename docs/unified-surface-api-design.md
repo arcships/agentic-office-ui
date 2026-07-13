@@ -3,6 +3,9 @@
 > 状态：已实现；PPTX 纵向列表与完整交互事件在 `0.5.2` 收口
 > 适用范围：`DocxDocumentSurface`、`XlsxSheetSurface`、`PptxStage`、`PdfSurface`
 > 目标：四个 surface 组件对外统一暴露渲染边界、样式定制、自适应缩放、鼠标事件和选中状态
+> 搜索与 PDF 文字选择：见 [`surface-search-and-pdf-selection-design.md`](./surface-search-and-pdf-selection-design.md)
+
+> 2026-07-13 更新：本文继续负责 Surface 边界与通用交互命名。搜索状态机、格式命中锚点、Find Bar、精确定位和 PDF glyph 选择以新设计为准；PDF 不再等待透明 text layer，而改用字符几何 + overlay。
 
 ## 1. 设计原则
 
@@ -114,7 +117,7 @@ emit("selectionChange", {
 // PPTX — 点击页面或对象时选择所在幻灯片
 emit("selectionChange", { kind: "slide", slideIndex: number })
 
-// PDF — 实现 text layer 后生效
+// PDF — 实现 glyph geometry selection overlay 后生效
 emit("selectionChange", {
   kind: "text" | "none",
   text?: string,
@@ -152,13 +155,24 @@ emit("objectClick", { kind: "object", slideIndex: number, objectKey: string })
 | `documentLoadSuccess` | — | — | — | ✅ | 页数 |
 | `documentLoadError` | — | — | — | ✅ | PdfLoadError |
 | `cellDoubleClick` | — | ✅ | — | — | cell address |
+| `searchStateChange` | ✅ | ✅ | ✅ | ✅ | 格式化 search state；精确合同见搜索设计 |
+
+`searchStateChange` 是 2026-07-13 追加的目标合同，尚未包含在本文顶部“已实现”状态中。
 
 ## 4. 统一 expose
+
+下表原有 Surface 方法已实现；`scrollToCell` 和 `search*` / `getSearch*` 行是 2026-07-13 追加的目标合同，状态仍为待实现，详细 settle 语义以搜索设计为准。
 
 | 方法 | DOCX | XLSX | PPTX | PDF | 说明 |
 |---|---|---|---|---|---|
 | `scrollToPage(n)` | ✅ | — | `usePptxDocument.goTo(n)` | ✅ | 滚动到指定页 |
 | `scrollToNode(n)` | ✅ | — | — | — | 滚动到指定节点 |
+| `scrollToCell(cell)` | — | ✅ | — | — | 等待布局后把单元格滚入视口 |
+| `search(query, options)` | ✅ | ✅ | ✅ | ✅ | 执行当前文档会话搜索 |
+| `activateSearchMatch(n)` | ✅ | ✅ | ✅ | ✅ | 异步定位并高亮指定结果 |
+| `searchNext()` / `searchPrevious()` | ✅ | ✅ | ✅ | ✅ | 循环导航同一搜索会话 |
+| `clearSearch()` | ✅ | ✅ | ✅ | ✅ | 取消 pending 并清理高亮 |
+| `getSearchState()` / `getSearchCapabilities()` | ✅ | ✅ | ✅ | ✅ | 获取状态快照和格式能力 |
 | `zoom` | — | — | — | ✅ | 读写缩放 |
 | `rotation` | — | — | — | ✅ | 读写旋转 |
 | `scrollContainer` | ✅ | — | — | — | 滚动容器 DOM |

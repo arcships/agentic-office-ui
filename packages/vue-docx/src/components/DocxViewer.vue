@@ -1,11 +1,14 @@
 <template>
   <div
+    ref="viewerRef"
     class="docx-viewer"
     :class="[{ 'docx-viewer--dark': darkTheme }, className]"
     data-testid="docx-viewer"
     :data-state="viewerState"
     :data-show-tracked-changes="String(effectiveShowTrackedChanges)"
     :data-show-comments="String(effectiveShowComments)"
+    tabindex="0"
+    @keydown="onViewerKeydown"
   >
     <input
       ref="uploadInputRef"
@@ -17,6 +20,7 @@
 
     <DocxViewerToolbar
       v-if="showToolbar"
+      ref="toolbarRef"
       :can-download="Boolean(effectiveFile)"
       :current-page="currentPage"
       :disabled="isLoading || Boolean(error) || !renderableModel"
@@ -30,8 +34,8 @@
       :total-pages="totalPages"
       :zoom="zoomPercent"
       :search-query="searchQuery"
-      :search-result-count="searchResults.length"
-      :search-result-index="searchResultIndex"
+      :search-result-count="searchState.matches.length"
+      :search-result-index="searchState.activeIndex"
       @download="downloadFile"
       @select-page="selectPage"
       @toggle-sidebar="sidebarOpen = !sidebarOpen"
@@ -40,6 +44,7 @@
       @update:search-query="searchQuery = $event"
       @search-next="selectSearchResult(1)"
       @search-previous="selectSearchResult(-1)"
+      @search-close="closeSearch"
       @toggle-theme="toggleTheme"
       @update:zoom="zoomPercent = $event"
       @upload="uploadInputRef?.click()"
@@ -107,10 +112,9 @@
           :editable="false"
           :show-tracked-changes="effectiveShowTrackedChanges"
           :show-comments="effectiveShowComments"
-          :search-query="searchQuery"
-          :active-search-node-index="activeSearchNodeIndex"
           @page-count-change="onPageCountChange"
           @visible-page-range="onVisiblePageRange"
+          @search-state-change="onSearchStateChange"
           @update:zoom="zoomPercent = Math.round($event * 100)"
         />
       </main>
@@ -119,9 +123,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue"
-import type { DocModel, DocNode, DocxImportResult, DocxRuntime, DocxRuntimeLoader, LayoutOptions } from "@arcships/docx-core"
-import { collectCommentsFromModel, collectTrackedChangesFromModel, createDocxRuntime, DocxImportError, paragraphText } from "@arcships/docx-core"
+import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue"
+import type { DocModel, DocxImportResult, DocxRuntime, DocxRuntimeLoader, LayoutOptions } from "@arcships/docx-core"
+import { collectCommentsFromModel, collectTrackedChangesFromModel, createDocxRuntime, DocxImportError } from "@arcships/docx-core"
+import type { DocxSearchState } from "../composables/useDocxSearch"
 import DocxDocumentSurface from "./DocxDocumentSurface.vue"
 import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
 import DocxViewerToolbar from "./DocxViewerToolbar.vue"
@@ -166,6 +171,7 @@ const emit = defineEmits<{
   (event: "update:isDark", isDark: boolean): void
   (event: "update:showTrackedChanges", visible: boolean): void
   (event: "update:showComments", visible: boolean): void
+  (event: "searchStateChange", state: DocxSearchState): void
 }>()
 
 const isLoading = ref(false)
@@ -176,6 +182,8 @@ const pendingLoadResult = shallowRef<DocxImportResult | undefined>()
 const internalFile = ref<ArrayBuffer | undefined>()
 const internalFileName = ref("")
 const uploadInputRef = ref<HTMLInputElement>()
+const viewerRef = ref<HTMLElement>()
+const toolbarRef = ref<InstanceType<typeof DocxViewerToolbar>>()
 const documentSurfaceRef = ref<InstanceType<typeof DocxDocumentSurface>>()
 const currentPage = ref(1)
 const totalPages = ref(0)
@@ -185,7 +193,12 @@ const darkTheme = ref(props.isDark)
 const internalShowTrackedChanges = ref(props.defaultShowTrackedChanges)
 const internalShowComments = ref(props.defaultShowComments)
 const searchQuery = ref("")
-const searchResultIndex = ref(-1)
+const searchState = shallowRef<DocxSearchState>({
+  status: "idle",
+  query: "",
+  matches: [],
+  activeIndex: -1,
+})
 
 const effectiveFile = computed(() => internalFile.value ?? props.file)
 const resolvedModel = computed(() => props.model ?? parsedModel.value)
@@ -195,22 +208,6 @@ const effectiveShowTrackedChanges = computed(() => props.showTrackedChanges ?? i
 const effectiveShowComments = computed(() => props.showComments ?? internalShowComments.value)
 const viewerTrackedChanges = computed(() => renderableModel.value ? collectTrackedChangesFromModel(renderableModel.value) : [])
 const viewerComments = computed(() => renderableModel.value ? collectCommentsFromModel(renderableModel.value) : [])
-const searchResults = computed(() => {
-  const query = searchQuery.value.trim().toLocaleLowerCase()
-  const model = renderableModel.value
-  if (!query || !model) return [] as Array<{ nodeIndex: number; offset: number }>
-  const matches: Array<{ nodeIndex: number; offset: number }> = []
-  model.nodes.forEach((node, nodeIndex) => {
-    const text = nodeText(node).toLocaleLowerCase()
-    let offset = 0
-    while ((offset = text.indexOf(query, offset)) >= 0) {
-      matches.push({ nodeIndex, offset })
-      offset += Math.max(1, query.length)
-    }
-  })
-  return matches
-})
-const activeSearchNodeIndex = computed(() => searchResults.value[searchResultIndex.value]?.nodeIndex)
 const viewerState = computed(() => {
   if (isLoading.value || pendingLoadResult.value) return "loading"
   if (error.value) return "error"
@@ -248,21 +245,56 @@ watch(() => props.defaultShowTrackedChanges, (value) => {
 watch(() => props.defaultShowComments, (value) => {
   if (props.showComments == null) internalShowComments.value = value
 })
-watch(searchResults, (results) => {
-  searchResultIndex.value = results.length ? 0 : -1
-  if (results[0]) documentSurfaceRef.value?.scrollToNode(results[0].nodeIndex)
-})
 
-function nodeText(node: DocNode): string {
-  if (node.type === "paragraph") return paragraphText(node)
-  return node.rows.flatMap((row) => row.cells.flatMap((cell) => cell.nodes.map(nodeText))).join("\n")
+watch(
+  [searchQuery, renderableModel],
+  async ([query, model], _previous, onCleanup) => {
+    let current = true
+    onCleanup(() => { current = false })
+    await nextTick()
+    if (!current) return
+    const surface = documentSurfaceRef.value
+    if (!surface || !model) {
+      searchState.value = { status: "idle", query: "", matches: [], activeIndex: -1 }
+      return
+    }
+    if (!query.trim()) {
+      surface.clearSearch()
+      return
+    }
+    void surface.search(query).catch(ignoreReplacedSearch)
+  },
+  { flush: "post" },
+)
+
+function ignoreReplacedSearch(error: unknown): void {
+  if (error instanceof Error && error.name === "AbortError") return
+  // Non-abort failures are published by the surface through searchStateChange.
+}
+
+function onSearchStateChange(next: DocxSearchState): void {
+  searchState.value = next
+  emit("searchStateChange", next)
 }
 
 function selectSearchResult(direction: -1 | 1): void {
-  const results = searchResults.value
-  if (!results.length) return
-  searchResultIndex.value = (searchResultIndex.value + direction + results.length) % results.length
-  documentSurfaceRef.value?.scrollToNode(results[searchResultIndex.value].nodeIndex)
+  if (!searchState.value.matches.length) return
+  const task = direction > 0
+    ? documentSurfaceRef.value?.searchNext()
+    : documentSurfaceRef.value?.searchPrevious()
+  void task?.catch(ignoreReplacedSearch)
+}
+
+function onViewerKeydown(event: KeyboardEvent): void {
+  if (!props.showToolbar || !(event.ctrlKey || event.metaKey) || event.key.toLocaleLowerCase() !== "f") return
+  event.preventDefault()
+  toolbarRef.value?.focusSearch()
+}
+
+function closeSearch(): void {
+  searchQuery.value = ""
+  documentSurfaceRef.value?.clearSearch()
+  void nextTick(() => viewerRef.value?.focus())
 }
 
 watch(

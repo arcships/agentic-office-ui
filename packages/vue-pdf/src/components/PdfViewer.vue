@@ -52,6 +52,8 @@ const activePage = ref(1)
 const pageInput = ref("1")
 const showThumbnails = ref(true)
 const searchDraft = ref("")
+const viewerRef = ref<HTMLElement | null>(null)
+const searchInputRef = ref<HTMLInputElement | null>(null)
 const searchResult = ref("")
 const searchHits = ref<readonly PdfSearchHit[]>([])
 const searchHitIndex = ref(-1)
@@ -183,6 +185,25 @@ function resetSearch(): void {
   searchResult.value = ""
   searchHits.value = []
   searchHitIndex.value = -1
+}
+
+function clearSearchAndRestoreFocus(): void {
+  searchDraft.value = ""
+  searchGeneration++
+  searchAbort?.abort()
+  searchAbort = undefined
+  resetSearch()
+  viewerRef.value?.focus()
+}
+
+function onViewerKeydown(event: KeyboardEvent): void {
+  if (
+    !props.showToolbar
+    || !(event.ctrlKey || event.metaKey)
+    || event.key.toLocaleLowerCase() !== "f"
+  ) return
+  event.preventDefault()
+  searchInputRef.value?.focus()
 }
 
 async function releaseCurrentDocument(options: { closeDocument?: boolean } = {}): Promise<void> {
@@ -591,7 +612,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div :class="cn('pdf-viewer', props.className)" data-testid="pdf-viewer">
+  <div
+    ref="viewerRef"
+    :class="cn('pdf-viewer', props.className)"
+    data-testid="pdf-viewer"
+    tabindex="0"
+    @keydown="onViewerKeydown"
+  >
     <div v-if="props.showToolbar" data-testid="pdf-toolbar" class="pdf-toolbar">
       <button
         data-testid="pdf-sidebar-toggle"
@@ -626,7 +653,15 @@ onBeforeUnmount(() => {
       <button data-testid="pdf-zoom-in" type="button" :disabled="controlsDisabled || zoom >= zoomOptions[zoomOptions.length - 1]" aria-label="放大" @click="zoomIn">+</button>
       <button v-if="props.showRotateControls" data-testid="pdf-rotate" type="button" :disabled="controlsDisabled" aria-label="顺时针旋转" @click="rotateClockwise">⟳</button>
       <form class="pdf-search" role="search" @submit.prevent="submitSearch">
-        <input v-model="searchDraft" data-testid="pdf-search-input" :disabled="controlsDisabled" aria-label="搜索 PDF 文本" placeholder="搜索文本" />
+        <input
+          ref="searchInputRef"
+          v-model="searchDraft"
+          data-testid="pdf-search-input"
+          :disabled="controlsDisabled"
+          aria-label="搜索 PDF 文本"
+          placeholder="搜索文本"
+          @keydown.esc.prevent="clearSearchAndRestoreFocus"
+        />
         <button data-testid="pdf-search-submit" type="submit" :disabled="controlsDisabled || !searchDraft.trim()">搜索</button>
         <button data-testid="pdf-search-prev" type="button" :disabled="!searchHits.length" aria-label="上一个搜索结果" @click="moveSearch(-1)">↑</button>
         <button data-testid="pdf-search-next" type="button" :disabled="!searchHits.length" aria-label="下一个搜索结果" @click="moveSearch(1)">↓</button>

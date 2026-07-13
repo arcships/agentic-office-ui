@@ -40,8 +40,6 @@
             :comments="comments"
             :footnotes="pageFootnotes(entry.pageIndex)"
             :endnotes="pageEndnotes(entry.pageIndex)"
-            :search-query="searchQuery"
-            :active-search-node-index="activeSearchNodeIndex"
             :theme="theme"
             @measure="onPageMeasure(entry.pageIndex, $event)"
           />
@@ -105,8 +103,6 @@ export interface DocxViewerRootProps {
   fitWidth?: boolean
   showTrackedChanges?: boolean
   showComments?: boolean
-  searchQuery?: string
-  activeSearchNodeIndex?: number
 }
 
 interface VisiblePageEntry {
@@ -559,13 +555,16 @@ defineExpose({
     const targetTop = pageOffsets.value[pageIndex] ?? 0
     scrollContainerRef.value.scrollTo({ top: targetTop, behavior: "smooth" })
   },
-  scrollToNode(nodeIndex: number): void {
+  scrollToNode(nodeIndex: number, options?: ScrollToOptions): void {
     const pageIndex = pageNodeSegments.value.findIndex((segments) =>
       segments.some((segment) => segment.nodeIndex === nodeIndex)
     )
     if (!scrollContainerRef.value || pageIndex < 0) return
     const targetTop = pageOffsets.value[pageIndex] ?? 0
-    scrollContainerRef.value.scrollTo({ top: targetTop, behavior: "smooth" })
+    scrollContainerRef.value.scrollTo({
+      top: targetTop,
+      behavior: options?.behavior ?? "smooth",
+    })
   },
   get scrollContainer() {
     return scrollContainerRef.value

@@ -38,8 +38,12 @@ export type {
   PdfRenderRuntimeConfig,
   PdfRotation,
   PdfSearchHit,
+  PdfSearchState,
+  PdfSearchStatus,
+  PdfSelectionState,
   PdfThumbnailRenderOptions,
 } from "./pdf/pdf-render-runtime"
+export type { PageTextSlice, PdfPageGeometry } from "@embedpdf/models"
 export type {
   PdfDiagnostic,
   PdfLoadError,

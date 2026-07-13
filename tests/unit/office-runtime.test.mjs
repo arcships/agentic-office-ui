@@ -125,6 +125,69 @@ test("surface zoom math clamps the shared range and normalizes wheel deltas", ()
   assert.equal(runtime.nextSurfaceZoom(0.5, 100), 0.5);
 });
 
+test("surface search keeps only the latest query and activates its first match", async () => {
+  const searches = new Map();
+  const activations = [];
+  const session = runtime.createSurfaceSearchSession({
+    search(query, { signal }) {
+      return new Promise((resolve, reject) => {
+        const onAbort = () => {
+          const error = new Error("replaced");
+          error.name = "AbortError";
+          reject(error);
+        };
+        signal.addEventListener("abort", onAbort, { once: true });
+        searches.set(query, (matches) => {
+          signal.removeEventListener("abort", onAbort);
+          resolve(matches);
+        });
+      });
+    },
+    activate(match, index) {
+      activations.push([match, index]);
+    },
+  });
+
+  const stale = session.search("old");
+  const latest = session.search("new");
+  await assert.rejects(stale, (error) => error?.name === "AbortError");
+  searches.get("new")(["new:1", "new:2"]);
+
+  const state = await latest;
+  assert.equal(state.status, "ready");
+  assert.equal(state.query, "new");
+  assert.deepEqual(state.matches, ["new:1", "new:2"]);
+  assert.equal(state.activeIndex, 0);
+  assert.deepEqual(activations, [["new:1", 0]]);
+  session.dispose();
+});
+
+test("surface search navigation wraps and clear resets the public state", async () => {
+  const activations = [];
+  let clearCount = 0;
+  const session = runtime.createSurfaceSearchSession({
+    search: () => ["a", "b", "c"],
+    activate: (match, index) => activations.push([match, index]),
+    clear: () => { clearCount += 1; },
+  });
+
+  await session.search("x");
+  await session.searchPrevious();
+  assert.equal(session.getSearchState().activeIndex, 2);
+  await session.searchNext();
+  assert.equal(session.getSearchState().activeIndex, 0);
+  session.clearSearch();
+  assert.deepEqual(session.getSearchState(), {
+    status: "idle",
+    query: "",
+    matches: [],
+    activeIndex: -1,
+  });
+  assert.deepEqual(activations, [["a", 0], ["c", 2], ["a", 0]]);
+  assert.equal(clearCount, 1);
+  session.dispose();
+});
+
 test("archive budgets validate central metadata and actual streamed extraction at exact boundaries", () => {
   const archive = makeArchive({
     "word/document.xml": "<w:document xmlns:w=\"urn:w\"><w:body><w:p>ok</w:p></w:body></w:document>",

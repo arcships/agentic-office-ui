@@ -8,6 +8,9 @@
 >
 > 关联文档：[项目架构审查与目标设计](./architecture-review-and-target-design.md)、[公开 API 合同](./api/public-api-contract.md)、[稳定化整改路线图](./plan/stabilization-roadmap.md)
 
+> [!IMPORTANT]
+> 2026-07-13 搜索合同更新：本文提出但尚未实现的 `searchQuery`、`activeSearchMatchIndex`、搜索 update 事件及等待 prop 回传的搜索流程已撤回。搜索状态归属、精确 `DocxTextRange` 命中、事件和 expose 以 [`surface-search-and-pdf-selection-design.md`](./surface-search-and-pdf-selection-design.md) 为准；本文其余分页、主题、zoom/page/annotations 合同不受影响。
+
 ## 1. 目的
 
 修正 `DocxViewer` 当前的分页、缩放、纸面主题、批注栏布局和外部控制问题，并提供一个可由宿主自定义工具栏直接控制的稳定只读组件。

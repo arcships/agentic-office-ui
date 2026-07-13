@@ -4,9 +4,12 @@ import {
 import {
   PdfErrorCode,
   Rotation,
+  type PageTextSlice,
   type PdfDocumentObject,
   type PdfErrorReason,
+  type PdfPageGeometry,
 } from "@embedpdf/models"
+import { pdfIntrinsicRectToCanonical } from "./pdf-coordinate-transform"
 
 export type PdfRotation = 0 | 90 | 180 | 270
 
@@ -32,12 +35,42 @@ export interface PdfRenderRect {
 }
 
 export interface PdfSearchHit {
+  kind: "pdf-text"
   pageIndex: number
+  charIndex: number
+  charCount: number
   before: string
   match: string
   after: string
   rects: readonly PdfRenderRect[]
 }
+
+export type PdfSearchStatus = "idle" | "searching" | "ready" | "error"
+
+export interface PdfSearchState {
+  status: PdfSearchStatus
+  query: string
+  matches: readonly PdfSearchHit[]
+  activeIndex: number
+  error?: {
+    code: "SEARCH_FAILED" | "ACTIVATION_FAILED"
+    message: string
+  }
+}
+
+export type PdfSelectionState =
+  | { kind: "none" }
+  | {
+      kind: "text"
+      range: PageTextSlice
+      text: string
+      rects: readonly PdfRenderRect[]
+    }
+  | {
+      kind: "unavailable"
+      pageIndex: number
+      reason: "empty" | "unicode-map"
+    }
 
 export interface PdfPageRenderOptions {
   scale: number
@@ -73,6 +106,16 @@ export interface PdfRenderRuntime {
     query: string,
     options?: { signal?: AbortSignal },
   ): Promise<readonly PdfSearchHit[]>
+  getPageTextGeometry(
+    document: PdfRenderDocument,
+    pageIndex: number,
+    options?: { signal?: AbortSignal },
+  ): Promise<PdfPageGeometry>
+  getTextSlices(
+    document: PdfRenderDocument,
+    slices: readonly PageTextSlice[],
+    options?: { signal?: AbortSignal },
+  ): Promise<readonly string[]>
   closeDocument(document: PdfRenderDocument): Promise<void>
   dispose(): Promise<void>
 }
@@ -282,9 +325,10 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     const nativeDocument = this.getNativeDocument(document)
     const page = nativeDocument.pages[pageIndex]
     if (!page) throw new Error(`PDF page ${pageIndex + 1} does not exist.`)
+    const totalRotation = ((toDegrees(page.rotation) + options.rotation) % 360) as PdfRotation
     const task = this.getEngine().renderPage(nativeDocument, page, {
       scaleFactor: Math.max(0.1, options.scale),
-      rotation: asRotation(options.rotation),
+      rotation: asRotation(totalRotation),
       dpr: Math.max(1, options.dpr ?? 1),
       imageType: "image/png",
       withAnnotations: true,
@@ -332,18 +376,56 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
       timeoutMs: this.operationTimeoutMs,
       label: "PDF text search",
     })
-    return result.results.map((hit) => ({
-      pageIndex: hit.pageIndex,
-      before: hit.context.before,
-      match: hit.context.match,
-      after: hit.context.after,
-      rects: hit.rects.map((rect) => ({
-        x: rect.origin.x,
-        y: rect.origin.y,
-        width: rect.size.width,
-        height: rect.size.height,
-      })),
-    }))
+    return result.results.map((hit) => {
+      const page = document.pages[hit.pageIndex]
+      return {
+        kind: "pdf-text" as const,
+        pageIndex: hit.pageIndex,
+        charIndex: hit.charIndex,
+        charCount: hit.charCount,
+        before: hit.context.before,
+        match: hit.context.match,
+        after: hit.context.after,
+        rects: hit.rects.map((rect) => {
+          const normalized = {
+            x: rect.origin.x,
+            y: rect.origin.y,
+            width: rect.size.width,
+            height: rect.size.height,
+          }
+          return page ? pdfIntrinsicRectToCanonical(page, normalized) : normalized
+        }),
+      }
+    })
+  }
+
+  async getPageTextGeometry(
+    document: PdfRenderDocument,
+    pageIndex: number,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<PdfPageGeometry> {
+    const nativeDocument = this.getNativeDocument(document)
+    const page = nativeDocument.pages[pageIndex]
+    if (!page) throw new Error(`PDF page ${pageIndex + 1} does not exist.`)
+    return runPdfTask(this.getEngine().getPageGeometry(nativeDocument, page), {
+      signal: options.signal,
+      timeoutMs: this.operationTimeoutMs,
+      label: `PDF page ${pageIndex + 1} text geometry`,
+    })
+  }
+
+  async getTextSlices(
+    document: PdfRenderDocument,
+    slices: readonly PageTextSlice[],
+    options: { signal?: AbortSignal } = {},
+  ): Promise<readonly string[]> {
+    const nativeDocument = this.getNativeDocument(document)
+    if (!slices.length) return []
+    return runPdfTask(this.getEngine().getTextSlices(nativeDocument, [...slices]), {
+      signal: options.signal,
+      timeoutMs: this.operationTimeoutMs,
+      label: "PDF text extraction",
+    })
   }
 
   async closeDocument(document: PdfRenderDocument): Promise<void> {

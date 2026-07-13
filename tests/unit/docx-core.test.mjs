@@ -19,6 +19,9 @@ const core = await import(
 const runtimeEntry = await import(
   pathToFileURL(requireFromVueDocx.resolve("@arcships/docx-core/runtime")).href
 );
+const vueDocx = await import(
+  new URL("../../packages/vue-docx/dist/index.js", import.meta.url).href
+);
 const samples = new URL("../../apps/demo/public/samples/", import.meta.url);
 
 function arrayBufferFromFile(name) {
@@ -68,6 +71,62 @@ function workerResult(request, marker) {
     },
   };
 }
+
+test("DOCX surface search returns exact UTF-16 ranges for body and direct table paragraphs", () => {
+  const paragraph = (text) => ({
+    type: "paragraph",
+    children: [{ type: "text", text }],
+  });
+  const model = {
+    nodes: [
+      paragraph("Alpha alpha ALPHA"),
+      {
+        type: "table",
+        rows: [{
+          type: "table-row",
+          cells: [{
+            type: "table-cell",
+            nodes: [
+              paragraph("literal a.b and A.B"),
+              {
+                type: "table",
+                rows: [{
+                  type: "table-row",
+                  cells: [{ type: "table-cell", nodes: [paragraph("nested a.b")] }],
+                }],
+              },
+            ],
+          }],
+        }],
+      },
+    ],
+    metadata: {
+      sourceParts: 0,
+      warnings: [],
+      headerSections: [],
+      footerSections: [],
+      paragraphStyles: [],
+    },
+  };
+
+  const bodyMatches = vueDocx.findDocxSearchMatches(model, "alpha");
+  assert.deepEqual(
+    bodyMatches.map((match) => [match.range.start.offset, match.range.end.offset]),
+    [[0, 5], [6, 11], [12, 17]],
+  );
+  assert.deepEqual(bodyMatches[0].range.start.location, { kind: "paragraph", nodeIndex: 0 });
+
+  const tableMatches = vueDocx.findDocxSearchMatches(model, "a.b");
+  assert.equal(tableMatches.length, 2);
+  assert.deepEqual(tableMatches[0].range.start.location, {
+    kind: "table-cell",
+    tableIndex: 1,
+    rowIndex: 0,
+    cellIndex: 0,
+    paragraphIndex: 0,
+  });
+  assert.equal(tableMatches.every((match) => match.nodeIndex === 1), true);
+});
 
 class ControlledDocxWorker {
   constructor({ delay = 0, marker = "worker", respond = true } = {}) {

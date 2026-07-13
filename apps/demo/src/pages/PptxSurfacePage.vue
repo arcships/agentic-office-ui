@@ -4,8 +4,8 @@
       <div>
         <h2>PowerPoint Surface — 最小嵌入组件</h2>
         <p class="desc">
-          垂直连续渲染全部幻灯片，无 Toolbar/Sidebar/搜索栏/播放控制。
-          宿主通过 usePptxDocument 自行管理跳页与缩放；单页左右切换只用于播放模式。
+          垂直连续渲染全部幻灯片，Surface 内无 Toolbar/Sidebar/搜索栏/播放控制。
+          宿主通过 usePptxDocument 自行管理搜索、跳页与缩放；单页左右切换只用于播放模式。
         </p>
       </div>
     </header>
@@ -35,6 +35,21 @@
       <span class="sep" />
 
       <span class="ctrl" data-testid="pptx-surface-status">{{ statusLabel }}</span>
+
+      <span class="sep" />
+
+      <OfficeFindBar
+        :query="searchQuery"
+        :status="documentApi.searchState.value.status"
+        :active-index="documentApi.searchState.value.activeIndex"
+        :result-count="documentApi.searchState.value.matches.length"
+        :disabled="state !== 'ready'"
+        placeholder="搜索幻灯片"
+        @update:query="onSearchQuery"
+        @previous="void documentApi.searchPrevious()"
+        @next="void documentApi.searchNext()"
+        @close="closeSearch"
+      />
     </div>
 
     <div ref="stageContainer" class="stage-container" :class="{ 'stage-container--dark': true }">
@@ -62,10 +77,12 @@ import {
   type PptxStageObjectClick,
   type PptxStageSelection,
 } from "@arcships/vue-pptx"
+import { OfficeFindBar } from "@arcships/vue-ui"
 
 // ── State ────────────────────────────────────────────────────────────
 const source = ref<File | null>(null)
 const fileInputRef = ref<HTMLInputElement>()
+const searchQuery = ref("")
 
 const stage = useTemplateRef<PptxStageExpose>("stage")
 const stageContainer = useTemplateRef<HTMLElement>("stageContainer")
@@ -101,6 +118,23 @@ watch(state, (next) => {
 // ── Actions ──────────────────────────────────────────────────────────
 function onFileChange(event: Event): void {
   source.value = (event.target as HTMLInputElement).files?.[0] ?? null
+}
+
+function onSearchQuery(query: string): void {
+  searchQuery.value = query
+  const task = query.trim()
+    ? documentApi.search(query)
+    : (documentApi.clearSearch(), undefined)
+  void task?.catch((cause: unknown) => {
+    if (!(cause instanceof Error) || cause.name !== "AbortError") {
+      statusLabel.value = `搜索失败：${String(cause)}`
+    }
+  })
+}
+
+function closeSearch(): void {
+  searchQuery.value = ""
+  documentApi.clearSearch()
 }
 
 function onSelectionChange(selection: PptxStageSelection): void {

@@ -18,7 +18,6 @@ import {
   type VNode,
 } from "vue"
 import {
-  paragraphText,
   type DocxEditorController,
   type DocModel,
   type ParagraphNode,
@@ -80,8 +79,6 @@ export default defineComponent({
     },
     trackedChangesEnabled: { type: Boolean, default: false },
     commentsEnabled: { type: Boolean, default: false },
-    searchQuery: { type: String, default: "" },
-    activeSearchNodeIndex: { type: Number, required: false },
     pageNumber: { type: Number, required: true },
     totalPages: { type: Number, required: true },
     pageNumberFormat: { type: String, required: false },
@@ -283,14 +280,6 @@ export default defineComponent({
                 pageNumber: props.pageNumber,
                 totalPages: props.totalPages,
                 pageNumberFormat: props.pageNumberFormat,
-                "data-docx-search-match": props.searchQuery && paragraphText(node).toLocaleLowerCase().includes(props.searchQuery.toLocaleLowerCase()) ? "true" : undefined,
-                "data-docx-search-active": props.activeSearchNodeIndex === segment.nodeIndex ? "true" : undefined,
-                style: props.searchQuery && paragraphText(node).toLocaleLowerCase().includes(props.searchQuery.toLocaleLowerCase())
-                  ? {
-                      background: props.activeSearchNodeIndex === segment.nodeIndex ? "#fde68a" : "#fef3c7",
-                      boxShadow: props.activeSearchNodeIndex === segment.nodeIndex ? "0 0 0 2px #f59e0b" : undefined,
-                    }
-                  : undefined,
                 onTextInput: (nodeIndex: number, text: string) => {
                   props.controller?.commitParagraphText(nodeIndex, text)
                 },
@@ -318,8 +307,6 @@ export default defineComponent({
                 pageNumber: props.pageNumber,
                 totalPages: props.totalPages,
                 pageNumberFormat: props.pageNumberFormat,
-                searchQuery: props.searchQuery,
-                searchActive: props.activeSearchNodeIndex === segment.nodeIndex,
               })
             )
           }

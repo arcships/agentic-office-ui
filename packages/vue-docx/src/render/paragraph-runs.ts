@@ -420,6 +420,10 @@ export function renderParagraphRuns(
   ): void => {
     const textValue = textOverride ??
       (formFieldDisplayValue(child) || "\u00a0").replace(/\t/g, " ")
+    const formFieldAttributes = {
+      ...annotationAttributes,
+      "data-docx-form-field": "true",
+    }
 
     if (child.link) {
       const linkHref = child.link
@@ -429,7 +433,7 @@ export function renderParagraphRuns(
           "a",
           {
             key,
-            ...annotationAttributes,
+            ...formFieldAttributes,
             href: linkHref,
             target: isInternalLink ? undefined : "_blank",
             rel: isInternalLink ? undefined : "noreferrer noopener",
@@ -457,13 +461,13 @@ export function renderParagraphRuns(
     }
     if (textValue === "\t" && !useTabLeaderLayout && !useAnchoredTabLayout) {
       target.push(h("span", {
-        key, ...annotationAttributes,
+        key, ...formFieldAttributes,
         style: tabTextStyle(child.style, trackedStyle),
       }, "\u00a0"))
       return
     }
     target.push(h("span", {
-      key, ...annotationAttributes, style: trackedStyle,
+      key, ...formFieldAttributes, style: trackedStyle,
     }, textValue))
     trackTextAdvance(textValue, child.style)
   }

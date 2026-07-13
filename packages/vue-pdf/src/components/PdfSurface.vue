@@ -1,5 +1,14 @@
 <template>
-  <div ref="scrollRef" class="pdf-surface" data-testid="pdf-surface" @scroll.passive="onScroll" @contextmenu.prevent="onContextMenu">
+  <div
+    ref="scrollRef"
+    class="pdf-surface"
+    data-testid="pdf-surface"
+    tabindex="0"
+    @scroll.passive="onScroll"
+    @contextmenu.prevent="onContextMenu"
+    @copy="onCopy"
+    @keydown.esc="clearSelection"
+  >
     <div v-if="!effectiveSource" class="pdf-surface__empty">No PDF loaded</div>
     <div v-else-if="loading" class="pdf-surface__empty">Opening PDF…</div>
     <div v-else-if="loadError" class="pdf-surface__error" :data-error-code="loadError.code">
@@ -28,6 +37,30 @@
           draggable="false"
         />
         <div v-else class="pdf-surface__page-placeholder" />
+        <div class="pdf-surface__overlay" aria-hidden="true">
+          <div
+            v-for="entry in searchRectsForPage(pageIndex)"
+            :key="entry.key"
+            class="pdf-surface__search-hit"
+            :class="{ 'pdf-surface__search-hit--active': entry.active }"
+            :data-search-result-index="entry.resultIndex"
+            :style="displayRectStyle(pageIndex, entry.rect)"
+          />
+          <div
+            v-for="(rect, rectIndex) in selectionRectsForPage(pageIndex)"
+            :key="`selection-${rectIndex}`"
+            class="pdf-surface__selection-hit"
+            :style="displayRectStyle(pageIndex, rect)"
+          />
+        </div>
+        <div
+          class="pdf-surface__interaction"
+          aria-label="PDF page text selection layer"
+          @pointerdown="onSelectionPointerDown($event, pageIndex)"
+          @pointermove="onSelectionPointerMove($event, pageIndex)"
+          @pointerup="onSelectionPointerUp($event, pageIndex)"
+          @pointercancel="onSelectionPointerCancel($event)"
+        />
       </div>
     </div>
   </div>
@@ -35,10 +68,13 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue"
+import type { PageTextSlice, PdfPageGeometry, Position } from "@embedpdf/models"
+import { glyphAt, rectsWithinSlice } from "@embedpdf/plugin-selection"
 import { clampSurfaceZoom, nextSurfaceZoom } from "@arcships/office-runtime/gesture-zoom"
 import {
   createLatestTaskCoordinator,
   createOfficeTaskSequence,
+  createSurfaceSearchSession,
   type OfficeSource,
 } from "@arcships/office-runtime"
 import {
@@ -53,9 +89,18 @@ import {
 import {
   createPdfRenderRuntime,
   type PdfRenderDocument,
+  type PdfRenderRect,
   type PdfRenderRuntime,
   type PdfRotation,
+  type PdfSearchHit,
+  type PdfSearchState,
+  type PdfSelectionState,
 } from "../pdf/pdf-render-runtime"
+import {
+  pdfCanonicalRectToDisplay,
+  pdfDisplayPointToCanonical,
+  pdfDisplaySize,
+} from "../pdf/pdf-coordinate-transform"
 
 // ── Types ────────────────────────────────────────────────────────────
 interface PageSlot {
@@ -92,7 +137,8 @@ const emit = defineEmits<{
   "document-load-error": [error: PdfLoadError]
   "visible-page-change": [pageIndex: number]
   contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number }]
-  selectionChange: [sel: { kind: string; text?: string; pageIndex?: number }]
+  selectionChange: [selection: PdfSelectionState]
+  searchStateChange: [state: PdfSearchState]
   diagnostic: [event: PdfDiagnostic]
   "update:zoom": [zoom: number]
 }>()
@@ -127,6 +173,39 @@ let latestRequestId = 0
 let renderGeneration = 0
 let renderAbort: AbortController | undefined
 let unmounted = false
+
+const searchState = ref<PdfSearchState>({
+  status: "idle",
+  query: "",
+  matches: [],
+  activeIndex: -1,
+})
+const selectionState = ref<PdfSelectionState>({ kind: "none" })
+const selectionVisual = ref<{ pageIndex: number; rects: readonly PdfRenderRect[] } | null>(null)
+const geometryCache = new Map<number, PdfPageGeometry>()
+let selectionRequest = 0
+let selectionDrag: {
+  pageIndex: number
+  pointerId: number
+  anchor: number
+  focus: number
+} | null = null
+
+const surfaceSearch = createSurfaceSearchSession<PdfSearchHit>({
+  async search(query, { signal }) {
+    const doc = renderDocument.value
+    const rt = runtimeForDocument
+    if (!doc || !rt) return []
+    return rt.search(doc, query, { signal })
+  },
+  activate(match, index, { signal }) {
+    return activatePdfSearchHit(match, index, signal)
+  },
+})
+surfaceSearch.subscribe((next) => {
+  searchState.value = next
+  emit("searchStateChange", next)
+})
 
 const pdfRuntimeId = `pdf-surface-${
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
@@ -175,6 +254,9 @@ function cancelRender(): void {
 
 async function releaseDocument(): Promise<void> {
   cancelRender()
+  surfaceSearch.clearSearch()
+  clearSelection()
+  geometryCache.clear()
   for (const slot of Object.values(pageSlots)) {
     if (slot.url) URL.revokeObjectURL(slot.url)
   }
@@ -311,10 +393,10 @@ function pageDisplaySize(pageIndex: number): { width: number; height: number } |
   if (!doc) return undefined
   const page = doc.pages[pageIndex]
   if (!page) return undefined
-  const quarterTurns = ((page.rotation + rotation.value) / 90) % 4
+  const size = pdfDisplaySize(page, rotation.value, zoom.value)
   return {
-    width: Math.max(1, Math.round((quarterTurns % 2 ? page.height : page.width) * zoom.value)),
-    height: Math.max(1, Math.round((quarterTurns % 2 ? page.width : page.height) * zoom.value)),
+    width: Math.max(1, Math.round(size.width)),
+    height: Math.max(1, Math.round(size.height)),
   }
 }
 
@@ -336,6 +418,199 @@ function pageImgStyle(pageIndex: number): Record<string, string> | undefined {
     maxWidth: "100%",
     display: "block",
   }
+}
+
+function displayRect(pageIndex: number, rect: PdfRenderRect): PdfRenderRect {
+  const page = renderDocument.value?.pages[pageIndex]
+  if (!page) return rect
+  return pdfCanonicalRectToDisplay(page, rect, rotation.value, zoom.value)
+}
+
+function displayRectStyle(pageIndex: number, rect: PdfRenderRect): Record<string, string> {
+  const displayed = displayRect(pageIndex, rect)
+  return {
+    left: `${displayed.x}px`,
+    top: `${displayed.y}px`,
+    width: `${displayed.width}px`,
+    height: `${displayed.height}px`,
+  }
+}
+
+function searchRectsForPage(pageIndex: number): Array<{
+  key: string
+  resultIndex: number
+  active: boolean
+  rect: PdfRenderRect
+}> {
+  return searchState.value.matches.flatMap((match, resultIndex) =>
+    match.pageIndex === pageIndex
+      ? match.rects.map((rect, rectIndex) => ({
+          key: `${resultIndex}:${rectIndex}`,
+          resultIndex,
+          active: resultIndex === searchState.value.activeIndex,
+          rect,
+        }))
+      : [],
+  )
+}
+
+function selectionRectsForPage(pageIndex: number): readonly PdfRenderRect[] {
+  return selectionVisual.value?.pageIndex === pageIndex ? selectionVisual.value.rects : []
+}
+
+async function activatePdfSearchHit(
+  match: PdfSearchHit,
+  index: number,
+  signal: AbortSignal,
+): Promise<void> {
+  await nextTick()
+  if (signal.aborted) return
+  const container = scrollRef.value
+  const slot = container?.querySelector<HTMLElement>(`[data-page-index="${match.pageIndex}"]`)
+  if (!container || !slot) throw new Error(`PDF page ${match.pageIndex + 1} is not mounted.`)
+  const hit = slot.querySelector<HTMLElement>(`[data-search-result-index="${index}"]`)
+  ;(hit ?? slot).scrollIntoView({ behavior: "auto", block: "center", inline: "nearest" })
+}
+
+async function pageGeometry(pageIndex: number): Promise<PdfPageGeometry> {
+  const cached = geometryCache.get(pageIndex)
+  if (cached) return cached
+  const doc = renderDocument.value
+  const rt = runtimeForDocument
+  if (!doc || !rt) throw new Error("PDF document is not ready.")
+  const geometry = await rt.getPageTextGeometry(doc, pageIndex)
+  if (renderDocument.value === doc && runtimeForDocument === rt) geometryCache.set(pageIndex, geometry)
+  return geometry
+}
+
+function canonicalPoint(event: PointerEvent, pageIndex: number, layer: HTMLElement): Position | null {
+  const page = renderDocument.value?.pages[pageIndex]
+  if (!page) return null
+  const rect = layer.getBoundingClientRect()
+  return pdfDisplayPointToCanonical(
+    page,
+    { x: event.clientX - rect.left, y: event.clientY - rect.top },
+    rotation.value,
+    zoom.value,
+  )
+}
+
+function selectionRects(geometry: PdfPageGeometry, anchor: number, focus: number): PdfRenderRect[] {
+  const from = Math.min(anchor, focus)
+  const to = Math.max(anchor, focus)
+  return rectsWithinSlice(geometry, from, to).map((rect) => ({
+    x: rect.origin.x,
+    y: rect.origin.y,
+    width: rect.size.width,
+    height: rect.size.height,
+  }))
+}
+
+async function onSelectionPointerDown(event: PointerEvent, pageIndex: number): Promise<void> {
+  if (!event.isPrimary || event.button !== 0) return
+  const layer = event.currentTarget as HTMLElement
+  event.preventDefault()
+  scrollRef.value?.focus()
+  layer.setPointerCapture(event.pointerId)
+  clearSelection()
+  const request = ++selectionRequest
+  try {
+    const geometry = await pageGeometry(pageIndex)
+    if (request !== selectionRequest || !layer.hasPointerCapture(event.pointerId)) return
+    const point = canonicalPoint(event, pageIndex, layer)
+    const charIndex = point ? glyphAt(geometry, point) : -1
+    if (charIndex < 0) {
+      layer.releasePointerCapture(event.pointerId)
+      return
+    }
+    selectionDrag = { pageIndex, pointerId: event.pointerId, anchor: charIndex, focus: charIndex }
+    selectionVisual.value = { pageIndex, rects: selectionRects(geometry, charIndex, charIndex) }
+  } catch {
+    if (layer.hasPointerCapture(event.pointerId)) layer.releasePointerCapture(event.pointerId)
+  }
+}
+
+function onSelectionPointerMove(event: PointerEvent, pageIndex: number): void {
+  const drag = selectionDrag
+  const geometry = geometryCache.get(pageIndex)
+  if (!drag || drag.pointerId !== event.pointerId || drag.pageIndex !== pageIndex || !geometry) return
+  const point = canonicalPoint(event, pageIndex, event.currentTarget as HTMLElement)
+  const charIndex = point ? glyphAt(geometry, point) : -1
+  if (charIndex < 0 || charIndex === drag.focus) return
+  drag.focus = charIndex
+  selectionVisual.value = { pageIndex, rects: selectionRects(geometry, drag.anchor, drag.focus) }
+}
+
+async function onSelectionPointerUp(event: PointerEvent, pageIndex: number): Promise<void> {
+  const drag = selectionDrag
+  const layer = event.currentTarget as HTMLElement
+  if (!drag || drag.pointerId !== event.pointerId || drag.pageIndex !== pageIndex) return
+  selectionDrag = null
+  if (layer.hasPointerCapture(event.pointerId)) layer.releasePointerCapture(event.pointerId)
+  const doc = renderDocument.value
+  const rt = runtimeForDocument
+  if (!doc || !rt) return
+  const from = Math.min(drag.anchor, drag.focus)
+  const range: PageTextSlice = {
+    pageIndex,
+    charIndex: from,
+    charCount: Math.max(drag.anchor, drag.focus) - from + 1,
+  }
+  const request = ++selectionRequest
+  try {
+    const [text] = await rt.getTextSlices(doc, [range])
+    if (request !== selectionRequest || renderDocument.value !== doc || runtimeForDocument !== rt) return
+    if (!text) {
+      const unavailable: PdfSelectionState = { kind: "unavailable", pageIndex, reason: "empty" }
+      selectionState.value = unavailable
+      selectionVisual.value = null
+      emit("selectionChange", unavailable)
+      return
+    }
+    if (/[\u0000\ufffd\ufffe]/u.test(text)) {
+      const unavailable: PdfSelectionState = { kind: "unavailable", pageIndex, reason: "unicode-map" }
+      selectionState.value = unavailable
+      selectionVisual.value = null
+      emit("selectionChange", unavailable)
+      return
+    }
+    const next: PdfSelectionState = {
+      kind: "text",
+      range,
+      text,
+      rects: selectionVisual.value?.rects ?? [],
+    }
+    selectionState.value = next
+    emit("selectionChange", next)
+  } catch {
+    if (request !== selectionRequest) return
+    const unavailable: PdfSelectionState = { kind: "unavailable", pageIndex, reason: "empty" }
+    selectionState.value = unavailable
+    selectionVisual.value = null
+    emit("selectionChange", unavailable)
+  }
+}
+
+function onSelectionPointerCancel(event: PointerEvent): void {
+  if (selectionDrag?.pointerId !== event.pointerId) return
+  selectionDrag = null
+  clearSelection()
+}
+
+function clearSelection(): void {
+  selectionRequest += 1
+  selectionDrag = null
+  selectionVisual.value = null
+  if (selectionState.value.kind !== "none") {
+    selectionState.value = { kind: "none" }
+    emit("selectionChange", selectionState.value)
+  }
+}
+
+function onCopy(event: ClipboardEvent): void {
+  if (selectionState.value.kind !== "text" || !event.clipboardData) return
+  event.preventDefault()
+  event.clipboardData.setData("text/plain", selectionState.value.text)
 }
 
 // ── Scroll tracking ──────────────────────────────────────────────────
@@ -520,14 +795,18 @@ function scrollToPage(pageIndex: number): void {
   slot?.scrollIntoView({ behavior: "smooth", block: "start" })
 }
 
-defineExpose({ scrollToPage, zoom, rotation,
-
-  async search(query: string) {
-    const doc = renderDocument.value
-    const rt = runtimeForDocument
-    if (!doc || !rt || !query.trim()) return []
-    return rt.search(doc, query.trim())
-  },
+defineExpose({
+  scrollToPage,
+  zoom,
+  rotation,
+  search: (query: string): Promise<PdfSearchState> => surfaceSearch.search(query),
+  activateSearchMatch: surfaceSearch.activateSearchMatch,
+  searchNext: surfaceSearch.searchNext,
+  searchPrevious: surfaceSearch.searchPrevious,
+  clearSearch: surfaceSearch.clearSearch,
+  getSearchState: (): PdfSearchState => surfaceSearch.getSearchState(),
+  clearSelection,
+  getSelectionState: () => selectionState.value,
 })
 
 onBeforeUnmount(async () => {
@@ -539,6 +818,7 @@ onBeforeUnmount(async () => {
   element?.removeEventListener("gesturechange", onGestureChange as EventListener)
   element?.removeEventListener("gestureend", onGestureEnd)
   cancelRender()
+  surfaceSearch.dispose()
   await releaseDocument()
   if (ownedRuntime) await ownedRuntime.dispose()
 })
@@ -569,6 +849,21 @@ onBeforeUnmount(async () => {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 .pdf-surface__page-img { display: block; }
+.pdf-surface__overlay,
+.pdf-surface__interaction {
+  inset: 0;
+  position: absolute;
+}
+.pdf-surface__overlay { pointer-events: none; z-index: 2; }
+.pdf-surface__interaction { cursor: text; touch-action: pan-x pan-y; z-index: 3; }
+.pdf-surface__search-hit,
+.pdf-surface__selection-hit { box-sizing: border-box; position: absolute; }
+.pdf-surface__search-hit { background: rgba(250, 204, 21, .38); }
+.pdf-surface__search-hit--active {
+  background: rgba(245, 158, 11, .56);
+  outline: 2px solid rgba(180, 83, 9, .9);
+}
+.pdf-surface__selection-hit { background: rgba(37, 99, 235, .34); }
 .pdf-surface__page-loading,
 .pdf-surface__page-error,
 .pdf-surface__page-placeholder {

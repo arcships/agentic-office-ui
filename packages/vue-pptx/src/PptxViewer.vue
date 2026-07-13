@@ -27,11 +27,12 @@
 
       <form v-if="showSearch" class="pptx-viewer__search" role="search" @submit.prevent="runSearch">
         <input
+          ref="searchInputRef"
           v-model="searchQuery"
           type="search"
           placeholder="搜索幻灯片"
           aria-label="搜索幻灯片"
-          @keydown.esc="clearSearch"
+          @keydown.esc.prevent="closeSearch"
         />
         <button type="submit" :disabled="state !== 'ready' || !searchQuery.trim()">搜索</button>
         <span v-if="searchResults.length" class="pptx-viewer__search-count">
@@ -125,7 +126,6 @@ import {
   type PptxPlaybackWarning,
   type PptxPreviewDocument,
   type PptxPreviewLimits,
-  type PptxSearchResult,
 } from "@arcships/pptx-core"
 import {
   createPptxDocumentSession,
@@ -140,7 +140,7 @@ import {
   type PptxPreviewSessionFactory,
   type PptxPreviewSource,
 } from "@arcships/pptx-core/browser"
-import type { UsePptxDocumentOptions, PptxStageExpose } from "./headless-types"
+import type { PptxSearchState, UsePptxDocumentOptions, PptxStageExpose } from "./headless-types"
 import { usePptxDocument } from "./composables/usePptxDocument"
 import { usePptxPlayback } from "./composables/usePptxPlayback"
 import PptxStage from "./PptxStage.vue"
@@ -199,11 +199,13 @@ const emit = defineEmits<{
   mediaRequest: [mediaId: string]
   action: [action: PptxActionRequest]
   playbackError: [error: PptxPlaybackError]
+  searchStateChange: [state: PptxSearchState]
 }>()
 
 type ViewerState = "empty" | "loading" | "ready" | "error"
 
 const viewerRef = ref<HTMLElement | null>(null)
+const searchInputRef = ref<HTMLInputElement | null>(null)
 const stageScrollRef = ref<HTMLElement | null>(null)
 const stageRef = ref<PptxStageExpose | null>(null)
 const stageElement = computed(() => stageRef.value?.element ?? null)
@@ -261,8 +263,8 @@ const playback = usePptxPlayback(pptxDocument, {
 const { capability, controller, snapshot: playbackSnapshot } = playback
 
 const searchQuery = ref("")
-const searchResults = ref<PptxSearchResult[]>([])
-const searchCursor = ref(-1)
+const searchResults = computed(() => pptxDocument.searchState.value.matches)
+const searchCursor = computed(() => pptxDocument.searchState.value.activeIndex)
 const loadGeneration = ref(0)
 
 const activeSlide = computed(() => document.value?.slides[activeIndex.value])
@@ -337,14 +339,17 @@ function requireSession(): PptxPreviewSession {
 }
 
 function resetSearch(): void {
-  pptxDocument.getSession()?.clearSearchHighlights()
-  searchResults.value = []
-  searchCursor.value = -1
+  pptxDocument.clearSearch()
 }
 
 function clearSearch(): void {
   searchQuery.value = ""
   resetSearch()
+}
+
+function closeSearch(): void {
+  clearSearch()
+  viewerRef.value?.focus()
 }
 
 async function goTo(index: number): Promise<void> {
@@ -442,30 +447,27 @@ async function setZoom(value: number): Promise<void> {
 }
 
 function runSearch(): void {
-  const session = pptxDocument.getSession()
-  if (!session) return
-  searchResults.value = session.searchText(searchQuery.value)
-  searchCursor.value = searchResults.value.length ? 0 : -1
-  if (searchCursor.value >= 0) void activateSearchResult()
-}
-
-async function activateSearchResult(): Promise<void> {
-  const current = pptxDocument.getSession()
-  const result = searchResults.value[searchCursor.value]
-  if (!current || !result) return
-  await goTo(result.slideIndex)
-  if (pptxDocument.getSession() === current) await current.highlightSearchResult(result)
+  void pptxDocument.search(searchQuery.value).catch(() => undefined)
 }
 
 async function moveSearch(direction: 1 | -1): Promise<void> {
   if (!searchResults.value.length) return
-  searchCursor.value = (
-    searchCursor.value + direction + searchResults.value.length
-  ) % searchResults.value.length
-  await activateSearchResult()
+  if (direction === 1) await pptxDocument.searchNext()
+  else await pptxDocument.searchPrevious()
 }
 
 function onKeydown(event: KeyboardEvent): void {
+  if (
+    !isPresent.value
+    && props.showToolbar
+    && props.showSearch
+    && (event.ctrlKey || event.metaKey)
+    && event.key.toLocaleLowerCase() === "f"
+  ) {
+    event.preventDefault()
+    searchInputRef.value?.focus()
+    return
+  }
   const target = event.target
   if (
     (typeof HTMLInputElement !== "undefined" && target instanceof HTMLInputElement)
@@ -526,6 +528,10 @@ watch(controller, (nextController) => {
   if (nextController) emit("playbackReady", nextController)
 }, { flush: "sync" })
 
+watch(pptxDocument.searchState, (next) => {
+  emit("searchStateChange", next)
+}, { immediate: true })
+
 defineExpose({
   getController: () => controller.value,
   next,
@@ -535,6 +541,12 @@ defineExpose({
   resume,
   reset,
   goToSlide,
+  search: pptxDocument.search,
+  activateSearchMatch: pptxDocument.activateSearchMatch,
+  searchNext: pptxDocument.searchNext,
+  searchPrevious: pptxDocument.searchPrevious,
+  clearSearch,
+  getSearchState: pptxDocument.getSearchState,
   enterFullscreen,
   exitFullscreen,
 })

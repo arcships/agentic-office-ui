@@ -114,8 +114,8 @@
         "notifyDocxViewerPageSurfaceListeners"
       ],
       "rootDeclarationFingerprint": {
-        "count": 101,
-        "sha256": "11b8617a753fcad580c2a6b562e9a3f8676d181610c3d41103891c4b8bcc58d1"
+        "count": 105,
+        "sha256": "029a3c05f557c4d5575a1a1d25bd7eb33a906e13b417ebdc2d7ef341818262f2"
       }
     },
     {
@@ -162,8 +162,8 @@
         "XlsxContextMenu"
       ],
       "rootDeclarationFingerprint": {
-        "count": 26,
-        "sha256": "d518e09aec4347247d4677f4690058c3d62fb7e614f0cd321357abd8bc459b45"
+        "count": 31,
+        "sha256": "a1d0feee8609c8b3e1cf4e2e380e66158fa5c273daa1dcd85fa85262e888df45"
       }
     },
     {
@@ -180,8 +180,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 25,
-        "sha256": "3c7844e7b06856720d15aecfa068c10ee6a79d4242659947a8d83971d715b794"
+        "count": 30,
+        "sha256": "731b689de35ab09bdd028e76867f453a935bd175ab8c71d3f4b2f2e85394c36d"
       }
     },
     {
@@ -197,8 +197,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 20,
-        "sha256": "94eaed551e8739a32aa054b07f885bae9e1d6cb700a66aaa2e55285f7de094ea"
+        "count": 21,
+        "sha256": "4c368418791ee8ad0064e741a1f3d819860f6348495c007ad488a9c92f3cea75"
       }
     },
     {
@@ -236,8 +236,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 45,
-        "sha256": "3af8334d50649e779bf1f85301e8abcdb9032285786ab7eade480d960bceb4b5"
+        "count": 47,
+        "sha256": "7835fc52fae4a703a5c1cde536928cd886fcc7dfa166c8749fb2f8c2f7916f24"
       }
     }
   ],

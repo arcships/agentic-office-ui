@@ -12,7 +12,8 @@
     "./load-task": "./src/load-task.ts",
     "./source": "./src/source.ts",
     "./source-format": "./src/source-format.ts",
-    "./gesture-zoom": "./src/gesture-zoom.ts"
+    "./gesture-zoom": "./src/gesture-zoom.ts",
+    "./surface-search": "./src/surface-search.ts"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",

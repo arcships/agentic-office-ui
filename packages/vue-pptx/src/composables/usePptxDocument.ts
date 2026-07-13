@@ -12,7 +12,11 @@ import {
   PptxPreviewError,
   type PptxCapabilityReport,
   type PptxPreviewDocument,
+  type PptxSearchResult,
 } from "@arcships/pptx-core"
+import {
+  createSurfaceSearchSession,
+} from "@arcships/office-runtime"
 import {
   createPptxDocumentSession,
   type PptxDocumentSession,
@@ -23,6 +27,7 @@ import {
 } from "@arcships/pptx-core/browser"
 import type {
   PptxDocumentState,
+  PptxSearchState,
   PptxStageTarget,
   UsePptxDocumentOptions,
   UsePptxDocumentReturn,
@@ -70,13 +75,41 @@ export function usePptxDocument(
   const activeIndexValue = ref(0)
   const zoomPercentValue = ref(100)
   const sessionValue = shallowRef<PptxPreviewSession | null>(null)
+  const searchStateValue = shallowRef<PptxSearchState>({
+    status: "idle",
+    query: "",
+    matches: [],
+    activeIndex: -1,
+  })
   let latestSource: PptxPreviewSource | null = null
   let generation = 0
   let navigationGeneration = 0
   let disposed = false
   let pendingOpen: PendingOpen | null = null
 
+  const surfaceSearch = createSurfaceSearchSession<PptxSearchResult>({
+    search(query, { signal }) {
+      const current = sessionValue.value
+      if (!current || signal.aborted) return []
+      return current.searchText(query)
+    },
+    async activate(match, _index, { signal }) {
+      const current = sessionValue.value
+      if (!current) throw new PptxPreviewError("RENDER_FAILED", "PPTX 预览会话尚未准备好。")
+      await goTo(match.slideIndex)
+      if (signal.aborted || sessionValue.value !== current) return
+      await current.highlightSearchResult(match)
+    },
+    clear() {
+      sessionValue.value?.clearSearchHighlights()
+    },
+  })
+  surfaceSearch.subscribe((next) => {
+    searchStateValue.value = next
+  })
+
   function releaseSession(): void {
+    surfaceSearch.clearSearch()
     const current = sessionValue.value
     sessionValue.value = null
     current?.dispose()
@@ -228,6 +261,7 @@ export function usePptxDocument(
     pendingOpen?.reject(new PptxPreviewError("ABORTED", "PPTX 打开请求已经取消。"))
     pendingOpen = null
     releaseSession()
+    surfaceSearch.dispose()
     documentValue.value = null
     capabilityValue.value = null
     stateValue.value = "disposed"
@@ -240,12 +274,19 @@ export function usePptxDocument(
     capability: shallowReadonly(capabilityValue),
     activeIndex: readonly(activeIndexValue),
     zoomPercent: readonly(zoomPercentValue),
+    searchState: shallowReadonly(searchStateValue),
     open,
     close,
     goTo,
     nextSlide: () => goTo(activeIndexValue.value + 1),
     previousSlide: () => goTo(activeIndexValue.value - 1),
     setZoom,
+    search: (query) => surfaceSearch.search(query),
+    activateSearchMatch: (index) => surfaceSearch.activateSearchMatch(index),
+    searchNext: () => surfaceSearch.searchNext(),
+    searchPrevious: () => surfaceSearch.searchPrevious(),
+    clearSearch: () => surfaceSearch.clearSearch(),
+    getSearchState: () => surfaceSearch.getSearchState(),
     getSession: () => sessionValue.value as PptxDocumentSession | null,
     dispose,
   }
