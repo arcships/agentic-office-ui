@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/banner.png" alt="Agentic Office UI：面向 Office Agent 的 Vue 3 人机协同组件库" width="100%">
+<img src="docs/assets/banner-agent-collaboration.png" alt="Agentic Office UI：面向 Office Agent 的 Vue 3 人机协同组件库" width="100%">
 
 # Agentic Office UI
 
