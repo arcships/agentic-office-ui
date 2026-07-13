@@ -364,7 +364,15 @@ function scrollToPage(pageIndex: number): void {
   slot?.scrollIntoView({ behavior: "smooth", block: "start" })
 }
 
-defineExpose({ scrollToPage, zoom, rotation })
+defineExpose({ scrollToPage, zoom, rotation,
+
+  async search(query: string) {
+    const doc = renderDocument.value
+    const rt = runtimeForDocument
+    if (!doc || !rt || !query.trim()) return []
+    return rt.search(doc, query.trim())
+  },
+})
 
 onBeforeUnmount(async () => {
   unmounted = true

@@ -691,6 +691,7 @@ export interface XlsxViewerController {
   chartsheets: XlsxChartsheet[];
   exportCsv: () => void;
   exportXlsx: () => void;
+  findCells: (query: string) => XlsxCellAddress[];
   error: Error | null;
   file?: ArrayBuffer;
   fillSelection: (targetRange: XlsxCellRange) => void;
@@ -880,6 +881,7 @@ export interface XlsxViewerEditing {
   copySelectionToClipboard: () => Promise<boolean>;
   defineNamedRange: (name: string, range?: XlsxCellRange | null) => void;
   fillSelection: (targetRange: XlsxCellRange) => void;
+  findCells: (query: string) => XlsxCellAddress[];
   getClipboardData: () => XlsxClipboardData | null;
   getCellDisplayValue: (cell?: XlsxCellAddress | null) => string;
   getCellFormula: (cell?: XlsxCellAddress | null) => string;

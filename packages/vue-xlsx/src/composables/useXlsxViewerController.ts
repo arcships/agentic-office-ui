@@ -1080,6 +1080,26 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     getSheetShapes: chartImageDomain.getSheetShapes,
     file,
     getClipboardData: clipboardDomain.getClipboardData,
+    findCells: (query: string) => {
+      const sheet = activeSheet.value
+      if (!sheet || !query.trim()) return []
+      const q = query.trim().toLowerCase()
+      const results: XlsxCellAddress[] = []
+      const minRow = sheet.minUsedRow ?? 0
+      const maxRow = sheet.maxUsedRow ?? -1
+      const minCol = sheet.minUsedCol ?? 0
+      const maxCol = sheet.maxUsedCol ?? -1
+      for (let r = minRow; r <= maxRow; r++) {
+        for (let c = minCol; c <= maxCol; c++) {
+          const cell: XlsxCellAddress = { row: r, col: c }
+          const value = clipboardDomain.getCellDisplayValue(cell)
+          if (typeof value === "string" && value.toLowerCase().includes(q)) {
+            results.push(cell)
+          }
+        }
+      }
+      return results
+    },
     getCellDisplayValue: clipboardDomain.getCellDisplayValue,
     getCellFormula: clipboardDomain.getCellFormula,
     get getCellSnapshotAsync() { return isWorkerBacked.value ? historyDomain.getCellSnapshotAsync : undefined; },
