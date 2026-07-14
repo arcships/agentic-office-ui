@@ -4,6 +4,7 @@
     "noEmit": true,
     "baseUrl": "../..",
     "paths": {
+      "@arcships/office-interaction": ["packages/office-interaction/src/index.ts"],
       "@arcships/docx-core": ["packages/docx-core/src/index.ts"],
       "@arcships/pptx-core": ["packages/pptx-core/src/index.ts"],
       "@arcships/pptx-core/browser": ["packages/pptx-core/src/browser.ts"],

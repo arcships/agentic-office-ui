@@ -41,6 +41,7 @@
     "typecheck": "vue-tsc -p tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
+    "@arcships/office-interaction": "^0.5.4",
     "@arcships/pptx-core": "^0.5.0"
   },
   "peerDependencies": {

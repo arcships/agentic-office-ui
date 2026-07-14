@@ -23,7 +23,7 @@ import "@arcships/vue-docx/style.css"
 
 ## 组件
 
-- `DocxDocumentSurface` — 最小嵌入渲染区（宿主可用 `v-model:zoom` 接入 50%–200% 手势缩放）
+- `DocxDocumentSurface` — 最小嵌入渲染区（支持受控文字/页面/区域选择，以及宿主持有的 50%–200% 手势缩放）
 - `DocxViewer` — 文档查看器
 - `DocxEditor` — 文档编辑器
 
@@ -40,6 +40,8 @@ import "@arcships/vue-docx/style.css"
 | `load-start` | 无 |
 | `load-success` | `DocxImportResult` |
 | `load-error` | `Error`（可读 `code`） |
+
+`DocxDocumentSurface` 统一支持 `documentId`、`selectionMode`、`emitReferenceCandidates`，并发出 `referenceConfirm`、`regionDraftChange`、`selectionCancel`、`referenceResolve` 和 `referenceError`。组件 expose 可描述、解析和滚动到引用；组件不保存引用集合，也不调用 Agent。
 
 ## 文档
 

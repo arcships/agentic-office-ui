@@ -32,7 +32,7 @@ import "@arcships/vue-xlsx/webgl"
 
 ## 组件与组合函数
 
-- `XlsxSheetSurface` — 最小嵌入渲染面（支持宿主持有 zoom，并保持指针下的单元格和冻结轴）
+- `XlsxSheetSurface` — 最小嵌入渲染面（支持受控单元格/范围、行列/工作表对象与区域选择；宿主持有 zoom，并保持指针下的单元格和冻结轴）
 - `XlsxViewer` — 电子表格查看器
 - `useXlsxViewerController` — 控制器组合函数
 - `useXlsxViewerThumbnails` — 缩略图
@@ -42,6 +42,8 @@ import "@arcships/vue-xlsx/webgl"
 | 事件 | 参数 |
 |---|---|
 | `cellDoubleClick` | `XlsxCellAddress` |
+
+`XlsxSheetSurface` 统一支持 `documentId`、`selectionMode`、`emitReferenceCandidates`，并发出 `referenceConfirm`、`regionDraftChange`、`selectionCancel`、`referenceResolve` 和 `referenceError`。组件 expose 可描述、解析和滚动到引用；确认后的引用集合和 Agent 工作流由宿主负责。
 
 ## 文档
 

@@ -8,7 +8,8 @@
     "rootDir": "..",
     "baseUrl": ".",
     "paths": {
-      "@arcships/docx-core": ["../docx-core/src/index.ts"]
+      "@arcships/docx-core": ["../docx-core/src/index.ts"],
+      "@arcships/office-interaction": ["../office-interaction/src/index.ts"]
     }
   },
   "include": ["src", "../docx-core/src/**/*.d.ts"]

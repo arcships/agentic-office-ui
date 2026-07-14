@@ -22,6 +22,17 @@
       <span class="sep" />
 
       <label class="ctrl">
+        选择模式
+        <select v-model="selectionMode" data-testid="docx-reference-selection-mode">
+          <option value="content">文字</option>
+          <option value="object">对象 / 页面</option>
+          <option value="region">区域</option>
+        </select>
+      </label>
+
+      <span class="sep" />
+
+      <label class="ctrl">
         <input v-model="showTrackedChanges" data-testid="docx-surface-show-tracked-changes" type="checkbox" />
         修订
       </label>
@@ -84,6 +95,9 @@
         :show-comments="showComments"
         :zoom="fitWidth ? undefined : zoom"
         :fit-width="fitWidth"
+        document-id="demo-docx-document"
+        :selection-mode="selectionMode"
+        :emit-reference-candidates="selectionMode === 'object'"
         style="--docx-surface-bg: transparent; height: 72vh;"
         @page-count-change="onPageCountChange"
         @visible-page-range="onVisiblePageRange"
@@ -91,11 +105,30 @@
         @selection-change="onSelectionChange"
         @search-state-change="searchState = $event"
         @update:zoom="zoom = $event"
+        @reference-confirm="onReferenceConfirm"
+        @reference-resolve="resolveEvent = $event"
+        @reference-error="referenceError = $event.message"
       />
       <div v-else class="empty" data-testid="docx-surface-empty">
         <p>选择示例文档以查看最小嵌入组件的渲染效果。</p>
       </div>
     </div>
+
+    <section class="reference-panel" data-testid="docx-reference-panel">
+      <div class="reference-panel__header">
+        <div>
+          <strong>Agent 引用事件</strong>
+          <p>Surface 只发送精确引用；如何展示、拼装提示词或调用 Agent 由宿主决定。</p>
+        </div>
+        <button :disabled="!latestReference" data-testid="docx-reference-resolve" @click="resolveLatestReference">重新定位</button>
+        <button :disabled="!latestReference" data-testid="docx-reference-simulate-update" @click="simulateDocumentUpdate">模拟文件更新并解析</button>
+      </div>
+      <p v-if="referenceError" class="error">{{ referenceError }}</p>
+      <div class="reference-panel__json">
+        <div><span>referenceConfirm</span><pre>{{ referenceJson }}</pre></div>
+        <div><span>referenceResolve</span><pre>{{ resolveJson }}</pre></div>
+      </div>
+    </section>
 
     <div class="status-grid" data-testid="docx-surface-status">
       <div><strong>文件：</strong>{{ displayName || "未打开" }}</div>
@@ -115,7 +148,14 @@ import {
   type DocModel,
   type DocxImportResult,
 } from "@arcships/docx-core"
-import { DocxDocumentSurface, type DocxSearchState } from "@arcships/vue-docx"
+import {
+  DocxDocumentSurface,
+  type DocxSearchState,
+  type OfficeObjectReference,
+  type OfficeReferenceConfirmEvent,
+  type OfficeReferenceResolveEvent,
+  type OfficeSelectionMode,
+} from "@arcships/vue-docx"
 import { OfficeFindBar } from "@arcships/vue-ui"
 
 // ── Samples ──────────────────────────────────────────────────────────
@@ -153,6 +193,13 @@ const searchState = shallowRef<DocxSearchState>({
 })
 const selectionInfo = ref("—")
 const contextMenuInfo = ref("—")
+const selectionMode = ref<OfficeSelectionMode>("content")
+const latestReference = shallowRef<OfficeObjectReference | null>(null)
+const confirmEvent = shallowRef<OfficeReferenceConfirmEvent | null>(null)
+const resolveEvent = shallowRef<OfficeReferenceResolveEvent | null>(null)
+const referenceError = ref("")
+const referenceJson = computed(() => confirmEvent.value ? JSON.stringify(confirmEvent.value, null, 2) : "选择文字、页面或区域后，这里会显示可直接交给 Agent 的引用。")
+const resolveJson = computed(() => resolveEvent.value ? JSON.stringify(resolveEvent.value, null, 2) : "尚未重新解析。")
 
 const surfaceRef = ref<InstanceType<typeof DocxDocumentSurface>>()
 const surfaceKey = computed(() => `${displayName.value}-${loadCounter.value}`)
@@ -237,6 +284,32 @@ function onSelectionChange(sel: { kind: string; text?: string; nodeIndex?: numbe
   else selectionInfo.value = sel.kind
 }
 
+function onReferenceConfirm(event: OfficeReferenceConfirmEvent): void {
+  confirmEvent.value = event
+  latestReference.value = event.reference
+  resolveEvent.value = null
+  referenceError.value = ""
+}
+
+async function resolveLatestReference(): Promise<void> {
+  const reference = latestReference.value
+  if (!reference || !surfaceRef.value) return
+  referenceError.value = ""
+  try { await surfaceRef.value.resolveReference(reference) }
+  catch (cause) { referenceError.value = cause instanceof Error ? cause.message : String(cause) }
+}
+
+async function simulateDocumentUpdate(): Promise<void> {
+  const reference = latestReference.value
+  if (!reference) return
+  await loadSelectedSample()
+  await nextTick()
+  await nextTick()
+  if (!surfaceRef.value) return
+  try { await surfaceRef.value.resolveReference(reference) }
+  catch (cause) { referenceError.value = cause instanceof Error ? cause.message : String(cause) }
+}
+
 // ── Teardown ─────────────────────────────────────────────────────────
 onBeforeUnmount(() => {
   runtime.value.dispose()
@@ -284,4 +357,13 @@ h2 { margin-bottom: 4px; }
   padding: 12px; border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--muted); font-size: 13px;
 }
+
+.reference-panel { margin: 12px 0; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
+.reference-panel__header { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.reference-panel__header > div { flex: 1 1 360px; }
+.reference-panel__header p { color: var(--muted-foreground); font-size: 12px; margin: 4px 0 0; }
+.reference-panel__header button { padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--background); }
+.reference-panel__json { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 10px; margin-top: 12px; }
+.reference-panel__json span { color: var(--muted-foreground); font-size: 12px; }
+.reference-panel pre { background: #111827; color: #dbeafe; min-height: 150px; max-height: 360px; overflow: auto; padding: 10px; font: 11px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
 </style>

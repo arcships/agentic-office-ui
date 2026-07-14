@@ -1,3 +1,9 @@
+import type {
+  NormalizedRect,
+  OfficeObjectKind,
+  ReliabilityLevel,
+} from "@arcships/office-interaction"
+
 export interface SignaturePadProps {
   width?: number
   height?: number
@@ -81,5 +87,41 @@ export interface TooltipProps {
   side?: "top" | "bottom" | "left" | "right"
   align?: "start" | "center" | "end"
   delayMs?: number
+  className?: string
+}
+
+export type OfficeObjectOutlineState = "available" | "active" | "selected" | "invalid"
+
+/** One normalized visual fragment rendered inside a single Surface container. */
+export interface OfficeObjectOutline {
+  id: string
+  referenceId?: string
+  label: string
+  kind: OfficeObjectKind
+  rect: NormalizedRect
+  state?: OfficeObjectOutlineState
+  reliability?: ReliabilityLevel
+  disabled?: boolean
+}
+
+export interface OfficeObjectOutlineLayerProps {
+  items: readonly OfficeObjectOutline[]
+  activeId?: string
+  interactive?: boolean
+  ariaLabel?: string
+  className?: string
+}
+
+export interface OfficeOutlineConfirmOptions {
+  additiveRequested: boolean
+  penetrateRequested: boolean
+}
+
+export interface OfficeRegionSelectorProps {
+  modelValue?: NormalizedRect | null
+  disabled?: boolean
+  minSize?: number
+  keyboardStep?: number
+  ariaLabel?: string
   className?: string
 }

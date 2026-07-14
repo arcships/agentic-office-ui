@@ -24,6 +24,22 @@ pnpm add @arcships/pptx-core@0.5.4
 
 本包不会宣称完整兼容 PowerPoint 全部动画。无法精确执行的内容会按能力报告标记为近似、静态或未解析。
 
+## 对象引用适配
+
+根入口复用播放文档已经建立的 `slidePath + shapeId + source + groupPath` 身份，为幻灯片、形状、图片、表格、图表、组合对象和人工 slide 区域生成统一引用：
+
+```ts
+import {
+  createPptxObjectReferenceDraft,
+  resolvePptxReference,
+} from "@arcships/pptx-core"
+
+const draft = createPptxObjectReferenceDraft(context, slideIndex, objectKey)
+const result = resolvePptxReference(nextContext, { ...draft, referenceId })
+```
+
+跨修订优先使用 slide id 和 object key；原生 id 变化时，只有名称与对象类型形成唯一候选才会迁移，重复候选返回 `ambiguous`。本包不提供对象菜单、图层面板或 Agent 工作流。
+
 ## 文档
 
 - [PPTX 使用指南](https://github.com/arcships/agentic-office-ui/blob/master/docs/guide/pptx.md)

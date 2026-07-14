@@ -11,7 +11,7 @@ export default defineConfig({
       cssFileName: "style",
     },
     rollupOptions: {
-      external: ["vue", "@arcships/pptx-core", "@arcships/pptx-core/browser"],
+      external: ["vue", "@arcships/pptx-core", "@arcships/pptx-core/browser", "@arcships/office-interaction"],
     },
   },
 })

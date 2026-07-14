@@ -27,6 +27,7 @@ const output = path.resolve(
     path.join(root, "output", "acceptance", "p4-reproducible-pack"),
 );
 const packageDirectories = [
+  "packages/office-interaction",
   "packages/docx-core",
   "packages/xlsx-core",
   "packages/vue-docx",

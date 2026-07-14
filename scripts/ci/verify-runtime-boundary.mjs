@@ -11,6 +11,7 @@ const output = path.resolve(
 );
 const runtimeRoot = path.join(root, "packages", "office-runtime");
 const publicPackages = [
+  "office-interaction",
   "docx-core",
   "xlsx-core",
   "vue-docx",

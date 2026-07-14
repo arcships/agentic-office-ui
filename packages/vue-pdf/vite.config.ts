@@ -66,6 +66,7 @@ export default defineConfig({
       },
       external: [
         "vue",
+        "@arcships/office-interaction",
         "@embedpdf/core",
         "@embedpdf/core/vue",
         "@embedpdf/models",

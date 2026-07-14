@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const expectedPackages = [
+  "@arcships/office-interaction",
   "@arcships/docx-core",
   "@arcships/xlsx-core",
   "@arcships/vue-docx",

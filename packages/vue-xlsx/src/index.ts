@@ -1,5 +1,19 @@
 import XlsxViewerComponent from "./components/XlsxViewer.vue"
 
+export type {
+  OfficeDocumentRevision,
+  OfficeObjectReference,
+  OfficeReferenceCandidateChange,
+  OfficeReferenceConfirmEvent,
+  OfficeReferenceError,
+  OfficeReferenceResolveEvent,
+  OfficeReferenceSurfaceExposed,
+  OfficeReferenceSurfaceProps,
+  OfficeRegionDraftChange,
+  OfficeSelectionCancelEvent,
+  OfficeSelectionMode,
+} from "@arcships/office-interaction"
+
 export { useXlsxViewerController } from "./composables"
 export { useXlsxViewerThumbnails } from "./composables/useXlsxViewerThumbnails"
 export { useXlsxSearch } from "./composables/useXlsxSearch"

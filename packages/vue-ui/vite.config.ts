@@ -12,7 +12,7 @@ export default defineConfig({
             ? "[name][extname]"
             : "assets/[name]-[hash][extname]",
       },
-      external: ["vue", "signature_pad"],
+      external: ["vue", "signature_pad", "@arcships/office-interaction"],
     },
   },
 })

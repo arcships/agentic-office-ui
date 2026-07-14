@@ -1,5 +1,12 @@
 <template>
-  <div ref="surfaceRef" class="docx-document-surface">
+  <div
+    ref="surfaceRef"
+    class="docx-document-surface"
+    :data-selection-mode="selectionMode"
+    @pointermove="onReferencePointerMove"
+    @click="onReferenceClick"
+    @keydown.esc="onReferenceEscape"
+  >
     <DocxViewerRoot
       ref="viewerRootRef"
       :model="model"
@@ -11,10 +18,10 @@
       :fit-width="zoom === undefined ? fitWidth : false"
       :show-tracked-changes="showTrackedChanges"
       :show-comments="showComments"
-      @page-count-change="emit('pageCountChange', $event)"
+      @page-count-change="onPageCountChange"
       @visible-page-range="onVisiblePageRange"
       @context-menu="emit('contextMenu', $event)"
-      @selection-change="emit('selectionChange', $event)"
+      @selection-change="onRawSelectionChange"
     />
     <div class="docx-document-surface__search-layer" aria-hidden="true">
       <div
@@ -29,6 +36,19 @@
           height: `${highlight.height}px`,
         }"
       />
+    </div>
+    <div
+      v-if="selectionMode === 'region'"
+      class="docx-document-surface__region-layer"
+      aria-label="选择文档区域"
+      tabindex="0"
+      @pointerdown="onRegionPointerDown"
+      @pointermove="onRegionPointerMove"
+      @pointerup="onRegionPointerUp"
+      @pointercancel="onRegionPointerCancel"
+      @keydown.esc="onRegionKeyboardCancel"
+    >
+      <div v-if="regionFrame" class="docx-document-surface__region-frame" :style="regionFrame" />
     </div>
   </div>
 </template>
@@ -47,11 +67,32 @@ import type {
   LayoutOptions,
 } from "@arcships/docx-core"
 import {
+  createDocxPageReferenceDraft,
+  createDocxRegionReferenceDraft,
+  createDocxTextReferenceDraft,
+  describeDocxReference,
+  resolveDocxReference,
+  type DocxOfficeReference,
+  type DocxReferenceContext,
+} from "@arcships/docx-core"
+import {
+  confirmOfficeReferenceDraft,
+  createOfficeReferenceId,
+  type NormalizedRect,
+  type OfficeDocumentRevision,
+  type OfficeObjectReference,
+  type OfficeReferenceCandidatePreview,
+  type OfficeReferenceError,
+  type OfficeSelectionMode,
+  type ResolveReferenceResult,
+} from "@arcships/office-interaction"
+import {
   findDocxSearchMatches,
   type DocxSearchMatch,
   type DocxSearchState,
 } from "../composables/useDocxSearch"
 import DocxViewerRoot from "./DocxViewerRoot.vue"
+import { docxTextRangeFromDomSelection } from "../composables/editor-selection"
 
 const props = withDefaults(
   defineProps<{
@@ -68,8 +109,17 @@ const props = withDefaults(
     fitWidth?: boolean
     showTrackedChanges?: boolean
     showComments?: boolean
+    documentId?: string
+    selectionMode?: OfficeSelectionMode
+    emitReferenceCandidates?: boolean
   }>(),
-  { editable: false, zoomScale: 100, enableGestureZoom: true }
+  {
+    editable: false,
+    zoomScale: 100,
+    enableGestureZoom: true,
+    selectionMode: "content",
+    emitReferenceCandidates: false,
+  }
 )
 
 const emit = defineEmits<{
@@ -80,6 +130,13 @@ const emit = defineEmits<{
   objectClick: [obj: { kind: "image" | "table"; nodeIndex?: number }]
   searchStateChange: [state: DocxSearchState]
   "update:zoom": [zoom: number]
+  documentRevisionChange: [revision: OfficeDocumentRevision]
+  referenceCandidateChange: [change: { candidates: readonly OfficeReferenceCandidatePreview[]; activeCandidateId?: string }]
+  referenceConfirm: [event: ReturnType<typeof confirmOfficeReferenceDraft>]
+  regionDraftChange: [event: { phase: "start" | "change"; region: { space: "page"; pageIndex: number; rect: NormalizedRect } }]
+  selectionCancel: [event: { mode: OfficeSelectionMode; reason: "escape" | "pointer-cancel" | "programmatic" }]
+  referenceResolve: [event: { referenceId: string; result: ResolveReferenceResult }]
+  referenceError: [error: OfficeReferenceError]
 }>()
 
 const surfaceRef = ref<HTMLElement>()
@@ -87,6 +144,192 @@ const viewerRootRef = ref<InstanceType<typeof DocxViewerRoot>>()
 const effectiveZoomScale = computed(() =>
   props.zoom === undefined ? props.zoomScale : clampSurfaceZoom(props.zoom) * 100
 )
+const selectionMode = computed(() => props.selectionMode)
+const pageCount = ref(0)
+const revisionCounter = ref(0)
+const generatedDocumentId = `docx-surface-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`
+const documentRevision = computed<OfficeDocumentRevision & { format: "docx" }>(() => ({
+  format: "docx",
+  documentId: props.documentId?.trim() || generatedDocumentId,
+  revision: `${generatedDocumentId}:${revisionCounter.value}`,
+}))
+
+function referenceContext(): DocxReferenceContext {
+  return { revision: documentRevision.value, model: props.model, pageCount: pageCount.value || undefined }
+}
+
+function emitReferenceError(operation: OfficeReferenceError["operation"], code: OfficeReferenceError["code"], message: string, referenceId?: string): void {
+  emit("referenceError", { code, operation, format: "docx", recoverable: true, ...(referenceId ? { referenceId } : {}), message })
+}
+
+function confirmDraft(
+  draft: Parameters<typeof confirmOfficeReferenceDraft>[0],
+  trigger: "pointer" | "keyboard" | "touch" | "programmatic",
+  snapshot?: Parameters<typeof confirmOfficeReferenceDraft>[1]["snapshot"],
+  additiveRequested = false,
+): void {
+  try {
+    emit("referenceConfirm", confirmOfficeReferenceDraft(draft, {
+      referenceId: createOfficeReferenceId(),
+      trigger,
+      additiveRequested,
+      ...(snapshot ? { snapshot } : {}),
+    }))
+  } catch (reason) {
+    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to confirm DOCX reference.")
+  }
+}
+
+function onPageCountChange(count: number): void {
+  pageCount.value = count
+  emit("pageCountChange", count)
+}
+
+function onRawSelectionChange(selection: { kind: string; text?: string; pageIndex?: number }): void {
+  emit("selectionChange", selection)
+  if (selectionMode.value !== "content" || selection.kind !== "text" || !selection.text) return
+  const root = surfaceRef.value
+  const nativeSelection = root?.ownerDocument?.getSelection?.()
+  if (!root || !nativeSelection) return
+  const range = docxTextRangeFromDomSelection(nativeSelection, root)
+  if (!range) {
+    emitReferenceError("hit-test", "HIT_TEST_FAILED", "The DOCX text selection could not be mapped to the document model.")
+    return
+  }
+  try {
+    const draft = createDocxTextReferenceDraft(referenceContext(), range)
+    confirmDraft(draft, "pointer", {
+      label: selection.text.length > 80 ? `${selection.text.slice(0, 77)}…` : selection.text,
+      path: [
+        { kind: "document", label: "Document" },
+        ...(selection.pageIndex === undefined ? [] : [{ kind: "page" as const, label: `Page ${selection.pageIndex + 1}` }]),
+        { kind: "text-range", label: "Selected text" },
+      ],
+      content: { text: selection.text },
+    })
+  } catch (reason) {
+    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to create DOCX text reference.")
+  }
+}
+
+function pageAtPoint(clientX: number, clientY: number): HTMLElement | undefined {
+  const elements = surfaceRef.value?.ownerDocument?.elementsFromPoint?.(clientX, clientY) ?? []
+  for (const element of elements) {
+    const page = element.closest<HTMLElement>("[data-docx-page-index]")
+    if (page) return page
+  }
+  return undefined
+}
+
+function pageCandidate(pageIndex: number): OfficeReferenceCandidatePreview {
+  const draft = createDocxPageReferenceDraft(referenceContext(), pageIndex)
+  return {
+    candidateId: `docx:page:${pageIndex}`,
+    draft,
+    preview: {
+      label: `Page ${pageIndex + 1}`,
+      path: [{ kind: "document", label: "Document" }, { kind: "page", label: `Page ${pageIndex + 1}` }],
+    },
+    hit: "inside",
+    depth: 1,
+  }
+}
+
+function hitTest(point: { clientX: number; clientY: number }): readonly OfficeReferenceCandidatePreview[] {
+  try {
+    const page = pageAtPoint(point.clientX, point.clientY)
+    const pageIndex = Number(page?.dataset.docxPageIndex)
+    return Number.isSafeInteger(pageIndex) && pageIndex >= 0 ? [pageCandidate(pageIndex)] : []
+  } catch (reason) {
+    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : "DOCX hit test failed.")
+    return []
+  }
+}
+
+function onReferencePointerMove(event: PointerEvent): void {
+  if (selectionMode.value !== "object" || !props.emitReferenceCandidates) return
+  const candidates = hitTest(event)
+  emit("referenceCandidateChange", { candidates, ...(candidates[0] ? { activeCandidateId: candidates[0].candidateId } : {}) })
+}
+
+function onReferenceClick(event: MouseEvent): void {
+  if (selectionMode.value !== "object") return
+  const candidate = hitTest(event)[0]
+  if (candidate) confirmDraft(candidate.draft, event.detail === 0 ? "keyboard" : "pointer", candidate.preview, event.shiftKey)
+}
+
+function onReferenceEscape(): void {
+  if (selectionMode.value === "content") return
+  emit("selectionCancel", { mode: selectionMode.value, reason: "escape" })
+}
+
+type RegionGesture = { pageIndex: number; bounds: DOMRect; startX: number; startY: number; pointerId: number }
+const regionGesture = ref<RegionGesture | null>(null)
+const regionRect = ref<NormalizedRect | null>(null)
+const regionFrame = computed(() => {
+  const rect = regionRect.value
+  const gesture = regionGesture.value
+  const root = surfaceRef.value?.getBoundingClientRect()
+  return rect && gesture && root ? {
+    left: `${gesture.bounds.left - root.left + rect.x * gesture.bounds.width}px`,
+    top: `${gesture.bounds.top - root.top + rect.y * gesture.bounds.height}px`,
+    width: `${rect.width * gesture.bounds.width}px`,
+    height: `${rect.height * gesture.bounds.height}px`,
+  } : undefined
+})
+
+function clampUnit(value: number): number { return Math.max(0, Math.min(1, value)) }
+
+function normalizedRegionRect(gesture: RegionGesture, clientX: number, clientY: number): NormalizedRect {
+  const x1 = clampUnit((Math.min(gesture.startX, clientX) - gesture.bounds.left) / gesture.bounds.width)
+  const y1 = clampUnit((Math.min(gesture.startY, clientY) - gesture.bounds.top) / gesture.bounds.height)
+  const x2 = clampUnit((Math.max(gesture.startX, clientX) - gesture.bounds.left) / gesture.bounds.width)
+  const y2 = clampUnit((Math.max(gesture.startY, clientY) - gesture.bounds.top) / gesture.bounds.height)
+  return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 }
+}
+
+function onRegionPointerDown(event: PointerEvent): void {
+  if (event.button !== 0) return
+  const page = pageAtPoint(event.clientX, event.clientY)
+  const pageIndex = Number(page?.dataset.docxPageIndex)
+  const bounds = page?.getBoundingClientRect()
+  if (!bounds || bounds.width <= 0 || bounds.height <= 0 || !Number.isSafeInteger(pageIndex)) return
+  regionGesture.value = { pageIndex, bounds, startX: event.clientX, startY: event.clientY, pointerId: event.pointerId }
+  regionRect.value = { x: clampUnit((event.clientX - bounds.left) / bounds.width), y: clampUnit((event.clientY - bounds.top) / bounds.height), width: 0, height: 0 }
+  ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
+  emit("regionDraftChange", { phase: "start", region: { space: "page", pageIndex, rect: regionRect.value } })
+  event.preventDefault()
+}
+
+function onRegionPointerMove(event: PointerEvent): void {
+  const gesture = regionGesture.value
+  if (!gesture || gesture.pointerId !== event.pointerId) return
+  regionRect.value = normalizedRegionRect(gesture, event.clientX, event.clientY)
+  emit("regionDraftChange", { phase: "change", region: { space: "page", pageIndex: gesture.pageIndex, rect: regionRect.value } })
+}
+
+function finishRegion(event: PointerEvent, cancelled: boolean): void {
+  const gesture = regionGesture.value
+  if (!gesture || gesture.pointerId !== event.pointerId) return
+  const target = event.currentTarget as HTMLElement
+  if (target.hasPointerCapture?.(event.pointerId)) target.releasePointerCapture?.(event.pointerId)
+  const rect = regionRect.value
+  regionGesture.value = null
+  regionRect.value = null
+  if (cancelled || !rect || rect.width < 0.005 || rect.height < 0.005) {
+    emit("selectionCancel", { mode: "region", reason: cancelled ? "pointer-cancel" : "programmatic" })
+    return
+  }
+  confirmDraft(createDocxRegionReferenceDraft(referenceContext(), { space: "page", pageIndex: gesture.pageIndex, rect }), event.pointerType === "touch" ? "touch" : "pointer")
+}
+
+function onRegionPointerUp(event: PointerEvent): void { finishRegion(event, false) }
+function onRegionPointerCancel(event: PointerEvent): void { finishRegion(event, true) }
+function onRegionKeyboardCancel(): void {
+  regionGesture.value = null
+  regionRect.value = null
+  emit("selectionCancel", { mode: "region", reason: "escape" })
+}
 
 interface SearchHighlight {
   key: string
@@ -511,11 +754,15 @@ watch(() => props.zoom, (next) => {
 })
 
 watch(() => props.model, () => {
+  revisionCounter.value += 1
+  emit("documentRevisionChange", documentRevision.value)
   gestureToken += 1
   pendingAnchor = undefined
   pendingZoom = undefined
   surfaceSearch.clearSearch()
-})
+}, { immediate: true })
+
+watch(() => props.documentId, () => emit("documentRevisionChange", documentRevision.value))
 
 watch(
   () => [effectiveZoomScale.value, props.fitWidth, props.showTrackedChanges, props.showComments],
@@ -559,6 +806,34 @@ defineExpose({
   get scrollContainer() {
     return viewerRootRef.value?.scrollContainer
   },
+  getDocumentRevision: (): OfficeDocumentRevision => documentRevision.value,
+  hitTest,
+  async describeReference(reference: OfficeObjectReference, signal?: AbortSignal) {
+    if (signal?.aborted) throw new DOMException("DOCX reference description aborted.", "AbortError")
+    const descriptor = describeDocxReference(referenceContext(), reference)
+    if (!descriptor) throw new Error("DOCX reference is not resolvable in the current revision.")
+    return descriptor
+  },
+  async resolveReference(reference: OfficeObjectReference): Promise<ResolveReferenceResult> {
+    const result = resolveDocxReference(referenceContext(), reference)
+    emit("referenceResolve", { referenceId: reference.referenceId, result })
+    return result
+  },
+  async scrollToReference(reference: OfficeObjectReference): Promise<void> {
+    const result = resolveDocxReference(referenceContext(), reference)
+    if (result.status !== "exact" && result.status !== "relocated") return
+    const locator = (result.reference as DocxOfficeReference).locator
+    if (locator.type === "manual-region") viewerRootRef.value?.scrollToPage(locator.value.pageIndex)
+    else if (locator.value.kind === "page") viewerRootRef.value?.scrollToPage(locator.value.pageIndex)
+    else if (locator.value.kind === "text-range") {
+      const first = locator.value.start.path.find((segment) => segment.kind === "paragraph" || segment.kind === "node")
+      if (first) viewerRootRef.value?.scrollToNode(first.index, { behavior: "smooth" })
+    }
+  },
+  async captureReferencePreview(reference: OfficeObjectReference): Promise<Blob> {
+    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", "DOCX preview capture is not provided by the Surface; use the host's capture pipeline.", reference.referenceId)
+    throw new Error("DOCX reference preview capture is unsupported")
+  },
 })
 </script>
 
@@ -589,5 +864,21 @@ defineExpose({
 .docx-document-surface__search-highlight--active {
   background: rgb(245 158 11 / 58%);
   box-shadow: inset 0 0 0 1px rgb(180 83 9 / 76%);
+}
+
+.docx-document-surface__region-layer {
+  cursor: crosshair;
+  inset: 0;
+  position: absolute;
+  touch-action: none;
+  z-index: 30;
+}
+
+.docx-document-surface__region-frame {
+  background: rgb(37 99 235 / 0.08);
+  border: 2px solid #2563eb;
+  box-sizing: border-box;
+  pointer-events: none;
+  position: absolute;
 }
 </style>

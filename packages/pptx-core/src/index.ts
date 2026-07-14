@@ -50,6 +50,21 @@ export type {
 export type {
   PptxObjectKeyParts,
 } from "./playback/identity"
+export {
+  createPptxObjectReferenceDraft,
+  createPptxRegionReferenceDraft,
+  createPptxSlideReferenceDraft,
+  createPptxTextReferenceDraft,
+  describePptxReference,
+  pptxReferenceKindForObject,
+  resolvePptxReference,
+} from "./reference-adapter"
+export type {
+  PptxObjectReferenceOptions,
+  PptxOfficeReference,
+  PptxOfficeReferenceDraft,
+  PptxReferenceContext,
+} from "./reference-adapter"
 export type {
   PptxCapabilityReport,
   PptxEffectKind,

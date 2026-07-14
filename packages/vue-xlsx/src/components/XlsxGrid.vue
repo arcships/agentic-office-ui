@@ -636,6 +636,30 @@ function hitTestCell(clientX: number, clientY: number): XlsxCellAddress | null {
   return cell ? resolveMergeAnchor(cell) : null;
 }
 
+function hitTestSheetPoint(clientX: number, clientY: number): { row: number; col: number; xOffset: number; yOffset: number } | null {
+  const container = containerRef.value;
+  if (!container) return null;
+  const rect = container.getBoundingClientRect();
+  const x = clientX - rect.left + container.scrollLeft - ROW_HEADER_WIDTH;
+  const y = clientY - rect.top + container.scrollTop - HEADER_HEIGHT;
+  if (x < 0 || y < 0) return null;
+  const displayCol = findDisplayIndexAtOffset(colOffsets.value, x);
+  const displayRow = findDisplayIndexAtOffset(rowOffsets.value, y);
+  if (displayCol < 0 || displayRow < 0) return null;
+  const cell = getSheetCell(displayRow, displayCol);
+  if (!cell) return null;
+  const left = getColOffsetSum(displayCol);
+  const top = getRowOffsetSum(displayRow);
+  const width = Math.max(1, effectiveColWidths.value[displayCol] || DEFAULT_COL_WIDTH);
+  const height = Math.max(1, effectiveRowHeights.value[displayRow] || DEFAULT_ROW_HEIGHT);
+  return {
+    row: cell.row,
+    col: cell.col,
+    xOffset: Math.max(0, Math.min(1, (x - left) / width)),
+    yOffset: Math.max(0, Math.min(1, (y - top) / height)),
+  };
+}
+
 // ── Canvas painting ───────────────────────────────────────────────────
 function resizeCanvas(canvas: HTMLCanvasElement | null, width: number, height: number) {
   if (!canvas) return;
@@ -1716,6 +1740,9 @@ defineExpose({
   captureZoomAnchor,
   restoreZoomAnchor,
   scrollToCell,
+  hitTestCell,
+  hitTestAxis,
+  hitTestSheetPoint,
   get scrollContainer() {
     return containerRef.value;
   },

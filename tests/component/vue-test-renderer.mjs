@@ -49,6 +49,17 @@ function insertHostNode(node, parent, anchor = null) {
   else parent.children.splice(parent.children.indexOf(anchor), 0, node);
 }
 
+const teleportTargets = new Map();
+
+function resolveTeleportTarget(selector) {
+  let target = teleportTargets.get(selector);
+  if (!target) {
+    target = createHostNode(selector);
+    teleportTargets.set(selector, target);
+  }
+  return target;
+}
+
 const renderer = vue.createRenderer({
   patchProp(node, key, _previous, next) {
     if (next == null) {
@@ -92,6 +103,9 @@ const renderer = vue.createRenderer({
     if (!node.parent) return null;
     const index = node.parent.children.indexOf(node);
     return node.parent.children[index + 1] || null;
+  },
+  querySelector(selector) {
+    return resolveTeleportTarget(selector);
   },
   setScopeId() {},
   cloneNode(node) {

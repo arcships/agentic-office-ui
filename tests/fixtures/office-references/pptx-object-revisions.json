@@ -1,0 +1,51 @@
+{
+  "original": [
+    {
+      "slideId": "ppt/slides/slide1.xml",
+      "objects": [
+        { "shapeId": "2", "name": "Quarterly summary", "nodeType": "shape", "groupPath": [] },
+        { "shapeId": "10", "name": "Metrics group", "nodeType": "group", "groupPath": [] },
+        { "shapeId": "11", "name": "Revenue badge", "nodeType": "shape", "groupPath": ["10"] }
+      ]
+    },
+    {
+      "slideId": "ppt/slides/slide2.xml",
+      "objects": [
+        { "shapeId": "3", "name": "Closing image", "nodeType": "picture", "groupPath": [] }
+      ]
+    }
+  ],
+  "reordered": [
+    {
+      "slideId": "ppt/slides/slide2.xml",
+      "objects": [
+        { "shapeId": "3", "name": "Closing image", "nodeType": "picture", "groupPath": [] }
+      ]
+    },
+    {
+      "slideId": "ppt/slides/slide1.xml",
+      "objects": [
+        { "shapeId": "2", "name": "Quarterly summary", "nodeType": "shape", "groupPath": [] },
+        { "shapeId": "10", "name": "Metrics group", "nodeType": "group", "groupPath": [] },
+        { "shapeId": "11", "name": "Revenue badge", "nodeType": "shape", "groupPath": ["10"] }
+      ]
+    }
+  ],
+  "renumberedObject": [
+    {
+      "slideId": "ppt/slides/slide1.xml",
+      "objects": [
+        { "shapeId": "22", "name": "Quarterly summary", "nodeType": "shape", "groupPath": [] }
+      ]
+    }
+  ],
+  "ambiguousObject": [
+    {
+      "slideId": "ppt/slides/slide1.xml",
+      "objects": [
+        { "shapeId": "22", "name": "Quarterly summary", "nodeType": "shape", "groupPath": [] },
+        { "shapeId": "23", "name": "Quarterly summary", "nodeType": "shape", "groupPath": [] }
+      ]
+    }
+  ]
+}

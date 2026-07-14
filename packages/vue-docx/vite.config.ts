@@ -6,7 +6,7 @@ export default defineConfig({
   build: {
     lib: { entry: "src/index.ts", formats: ["es"], fileName: "index", cssFileName: "style" },
     rollupOptions: {
-      external: ["vue", "@arcships/docx-core"],
+      external: ["vue", "@arcships/docx-core", "@arcships/office-interaction"],
     },
   },
 })

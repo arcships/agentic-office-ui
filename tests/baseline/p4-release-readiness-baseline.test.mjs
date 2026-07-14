@@ -16,6 +16,7 @@ import test from "node:test";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const PACKAGE_DIRS = [
+  "packages/office-interaction",
   "packages/docx-core",
   "packages/xlsx-core",
   "packages/vue-docx",
@@ -200,7 +201,7 @@ test("P4 release readiness baseline", () => {
       "P4-API-EXPORTS",
       exportChecks.every((entry) => entry.contractPresent && entry.exact && entry.currentTargetsPresent),
       exportChecks,
-      "在最终合并后刷新八包导出快照，并确保合同、package.json 与正式 dist 完全一致。",
+      "在最终合并后刷新九包导出快照，并确保合同、package.json 与正式 dist 完全一致。",
     );
 
     const versions = Object.fromEntries(
@@ -210,7 +211,7 @@ test("P4 release readiness baseline", () => {
       "P4-API-VERSION-CONSISTENCY",
       new Set(Object.values(versions)).size === 1,
       versions,
-      "八个公开包必须使用同一候选版本。",
+      "九个公开包必须使用同一候选版本。",
     );
     add(
       "P4-API-VERSION-POLICY",
@@ -225,7 +226,7 @@ test("P4 release readiness baseline", () => {
       "P4-API-RELEASE-VERSION",
       Object.values(versions).every((version) => version === "0.5.4"),
       { planned: "0.5.4", actual: versions },
-      "在发布流程冻结候选制品前一次性把八包版本升级为已选定的 0.5.4；不得提前零散改版本。",
+      "在发布流程冻结候选制品前一次性把九包版本升级为已选定的 0.5.4；不得提前零散改版本。",
     );
 
     const privateManifest = JSON.parse(
@@ -331,7 +332,7 @@ test("P4 release readiness baseline", () => {
           fileDiff: entry.fileDiff,
         })),
       },
-      "隔离复制当前源码两次，冻结锁文件安装并正式构建六包；逐文件比较有效内容并保存差异。",
+      "隔离复制当前源码两次，冻结锁文件安装并正式构建九包；逐文件比较有效内容并保存差异。",
     );
 
     const archiveScans = runOne.map((packed) => {
@@ -360,7 +361,7 @@ test("P4 release readiness baseline", () => {
         packagedLicenseFiles:
           archiveScans.find((entry) => entry.package === manifest.name)?.licenseFiles || [],
       })),
-      "确认授权来源后，为六包补 license 字段和实际 LICENSE 文件，并验证进入 tgz。",
+      "确认授权来源后，为九包补 license 字段和实际 LICENSE 文件，并验证进入 tgz。",
     );
 
     writeFileSync(
@@ -384,7 +385,7 @@ test("P4 release readiness baseline", () => {
         stderr: publicApi.stderr.trim(),
         evidence: path.relative(ROOT, publicApiEvidence),
       },
-      "全部 P3 接口冻结后重建六包并刷新经人工确认的公开声明指纹；不能用自动接受变化代替复核。",
+      "全部 P3 接口冻结后重建九包并刷新经人工确认的公开声明指纹；不能用自动接受变化代替复核。",
     );
 
     const workflowFiles = walk(path.join(ROOT, ".github/workflows"));

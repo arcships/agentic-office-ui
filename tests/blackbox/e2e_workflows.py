@@ -162,6 +162,48 @@ def docx_edit_undo_export(page: Page, attempt_dir: Path) -> dict[str, object]:
     return {"original": original, "edited": marker, "download": saved}
 
 
+def docx_reference_roundtrip(page: Page, attempt_dir: Path) -> dict[str, object]:
+    page.goto(f"{BASE_URL}/#/docx-surface", wait_until="networkidle")
+    page.locator('[data-testid="docx-reference-selection-mode"]').wait_for(
+        state="visible", timeout=30_000
+    )
+    page.locator('[data-docx-page-index="0"]').wait_for(
+        state="visible", timeout=30_000
+    )
+    page.locator('[data-testid="docx-reference-selection-mode"]').select_option(
+        "object"
+    )
+    page.locator('[data-docx-page-index="0"]').click(position={"x": 120, "y": 120})
+    page.wait_for_function(
+        """() => document.querySelector('[data-testid="docx-reference-panel"] pre')?.textContent?.includes('"kind": "page"')""",
+        timeout=10_000,
+    )
+    confirm_text = page.locator(
+        '[data-testid="docx-reference-panel"] pre'
+    ).nth(0).inner_text()
+    confirm_event = json.loads(confirm_text)
+    assert confirm_event["reference"]["document"]["documentId"] == "demo-docx-document"
+    assert confirm_event["reference"]["source"] == "native"
+
+    page.locator('[data-testid="docx-reference-simulate-update"]').click()
+    page.wait_for_function(
+        """() => document.querySelectorAll('[data-testid="docx-reference-panel"] pre')[1]?.textContent?.includes('"status": "unsupported"')""",
+        timeout=30_000,
+    )
+    resolve_text = page.locator(
+        '[data-testid="docx-reference-panel"] pre'
+    ).nth(1).inner_text()
+    resolve_event = json.loads(resolve_text)
+    assert resolve_event["result"]["reasonCode"] == "docx.reflow-requires-reselection"
+    page.screenshot(path=str(attempt_dir / "reference-reload-result.png"), full_page=True)
+    return {
+        "referenceKind": confirm_event["reference"]["kind"],
+        "recognitionSource": confirm_event["reference"]["source"],
+        "reloadStatus": resolve_event["result"]["status"],
+        "reasonCode": resolve_event["result"]["reasonCode"],
+    }
+
+
 def xlsx_workflow(page: Page, attempt_dir: Path) -> dict[str, object]:
     navigate_ready(page, "/xlsx-viewer")
     page.wait_for_function(
@@ -240,6 +282,7 @@ def xlsx_workflow(page: Page, attempt_dir: Path) -> dict[str, object]:
 CASES: list[tuple[str, Callable[[Page, Path], dict[str, object]]]] = [
     ("E2E-DOCX-SWITCH-RECOVERY", docx_switch_and_recover),
     ("E2E-DOCX-EDIT-UNDO-EXPORT", docx_edit_undo_export),
+    ("E2E-DOCX-REFERENCE-ROUNDTRIP", docx_reference_roundtrip),
     ("E2E-XLSX-WORKFLOW", xlsx_workflow),
 ]
 

@@ -7,7 +7,7 @@
     @scroll.passive="onScroll"
     @contextmenu.prevent="onContextMenu"
     @copy="onCopy"
-    @keydown.esc="clearSelection"
+    @keydown.esc="onSurfaceEscape"
   >
     <div v-if="!effectiveSource" class="pdf-surface__empty">No PDF loaded</div>
     <div v-else-if="loading" class="pdf-surface__empty">Opening PDF…</div>
@@ -55,13 +55,22 @@
         </div>
         <div
           class="pdf-surface__interaction"
-          aria-label="PDF page text selection layer"
-          @pointerdown="onSelectionPointerDown($event, pageIndex)"
-          @pointermove="onSelectionPointerMove($event, pageIndex)"
-          @pointerup="onSelectionPointerUp($event, pageIndex)"
-          @pointercancel="onSelectionPointerCancel($event)"
-          @click="onSelectionClick($event, pageIndex)"
-        />
+          :data-selection-mode="selectionMode"
+          :aria-label="selectionMode === 'region' ? '选择 PDF 页面区域' : 'PDF page text selection layer'"
+          :tabindex="selectionMode === 'region' ? 0 : undefined"
+          @pointerdown="onSurfacePointerDown($event, pageIndex)"
+          @pointermove="onSurfacePointerMove($event, pageIndex)"
+          @pointerup="onSurfacePointerUp($event, pageIndex)"
+          @pointercancel="onSurfacePointerCancel($event)"
+          @click="onSurfaceClick($event, pageIndex)"
+          @keydown.esc="onRegionKeyboardCancel"
+        >
+          <div
+            v-if="selectionMode === 'region' && regionPageIndex === pageIndex && regionFrame"
+            class="pdf-surface__region-frame"
+            :style="regionFrame"
+          />
+        </div>
       </div>
     </div>
   </div>
@@ -106,6 +115,26 @@ import {
   nearestGlyphWithinContainingRun,
   wordRangeFromCharacterTexts,
 } from "../pdf/pdf-selection-interaction"
+import {
+  createPdfPageReferenceDraft,
+  createPdfRegionReferenceDraft,
+  createPdfTextReferenceDraft,
+  describePdfReference,
+  resolvePdfReference,
+  type PdfOfficeReference,
+  type PdfReferenceContext,
+} from "../pdf/pdf-reference-adapter"
+import {
+  confirmOfficeReferenceDraft,
+  createOfficeReferenceId,
+  type NormalizedRect,
+  type OfficeDocumentRevision,
+  type OfficeObjectReference,
+  type OfficeReferenceCandidatePreview,
+  type OfficeReferenceError,
+  type OfficeSelectionMode,
+  type ResolveReferenceResult,
+} from "@arcships/office-interaction"
 
 // ── Types ────────────────────────────────────────────────────────────
 interface PageSlot {
@@ -129,11 +158,16 @@ const props = withDefaults(
     enableGestureZoom?: boolean
     /** When true, zoom auto-fits the widest page to container width. */
     fitWidth?: boolean
+    documentId?: string
+    selectionMode?: OfficeSelectionMode
+    emitReferenceCandidates?: boolean
   }>(),
   {
     maxFileSize: DEFAULT_PDF_MAX_FILE_SIZE,
     defaultZoom: 1,
     enableGestureZoom: true,
+    selectionMode: "content",
+    emitReferenceCandidates: false,
   },
 )
 
@@ -146,6 +180,13 @@ const emit = defineEmits<{
   searchStateChange: [state: PdfSearchState]
   diagnostic: [event: PdfDiagnostic]
   "update:zoom": [zoom: number]
+  documentRevisionChange: [revision: OfficeDocumentRevision]
+  referenceCandidateChange: [change: { candidates: readonly OfficeReferenceCandidatePreview[]; activeCandidateId?: string }]
+  referenceConfirm: [event: ReturnType<typeof confirmOfficeReferenceDraft>]
+  regionDraftChange: [event: { phase: "start" | "change"; region: { space: "page"; pageIndex: number; rect: NormalizedRect } }]
+  selectionCancel: [event: { mode: OfficeSelectionMode; reason: "escape" | "pointer-cancel" | "programmatic" }]
+  referenceResolve: [event: { referenceId: string; result: ResolveReferenceResult }]
+  referenceError: [error: OfficeReferenceError]
 }>()
 
 // ── Runtime & loading ────────────────────────────────────────────────
@@ -164,6 +205,14 @@ const loading = ref(false)
 const loadError = ref<PdfLoadError | null>(null)
 const renderDocument = ref<PdfRenderDocument | null>(null)
 const verifiedBlob = ref<Blob | null>(null)
+const selectionMode = computed(() => props.selectionMode)
+const revisionCounter = ref(0)
+const generatedDocumentId = `pdf-surface-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`
+const documentRevision = computed<OfficeDocumentRevision & { format: "pdf" }>(() => ({
+  format: "pdf",
+  documentId: props.documentId?.trim() || generatedDocumentId,
+  revision: `${generatedDocumentId}:${revisionCounter.value}`,
+}))
 
 const effectiveSource = computed<PdfSource | undefined>(() => {
   if (props.source) return props.source
@@ -215,6 +264,134 @@ let selectionGesture: {
 } | null = null
 let selectionFrame: number | undefined
 let selectionClickCandidate = false
+
+function referenceContext(): PdfReferenceContext {
+  const document = renderDocument.value
+  const runtime = runtimeForDocument
+  if (!document || !runtime) throw new Error("PDF reference context is unavailable before the document loads.")
+  return { revision: documentRevision.value, document, runtime }
+}
+
+function emitReferenceError(operation: OfficeReferenceError["operation"], code: OfficeReferenceError["code"], message: string, referenceId?: string): void {
+  emit("referenceError", { code, operation, format: "pdf", recoverable: true, ...(referenceId ? { referenceId } : {}), message })
+}
+
+function confirmDraft(
+  draft: Parameters<typeof confirmOfficeReferenceDraft>[0],
+  trigger: "pointer" | "keyboard" | "touch" | "programmatic",
+  snapshot?: Parameters<typeof confirmOfficeReferenceDraft>[1]["snapshot"],
+  additiveRequested = false,
+): void {
+  try {
+    emit("referenceConfirm", confirmOfficeReferenceDraft(draft, { referenceId: createOfficeReferenceId(), trigger, additiveRequested, ...(snapshot ? { snapshot } : {}) }))
+  } catch (reason) {
+    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to confirm PDF reference.")
+  }
+}
+
+function pageCandidate(pageIndex: number): OfficeReferenceCandidatePreview {
+  const draft = createPdfPageReferenceDraft(referenceContext(), pageIndex)
+  return {
+    candidateId: `pdf:page:${pageIndex}`,
+    draft,
+    preview: { label: `Page ${pageIndex + 1}`, path: [{ kind: "document", label: "PDF" }, { kind: "page", label: `Page ${pageIndex + 1}` }] },
+    hit: "inside",
+    depth: 1,
+  }
+}
+
+function hitTest(point: { clientX: number; clientY: number }): readonly OfficeReferenceCandidatePreview[] {
+  try {
+    const element = scrollRef.value?.ownerDocument?.elementFromPoint?.(point.clientX, point.clientY)
+    const page = element?.closest<HTMLElement>("[data-page-index]")
+    const pageIndex = Number(page?.dataset.pageIndex)
+    return Number.isSafeInteger(pageIndex) && pageIndex >= 0 ? [pageCandidate(pageIndex)] : []
+  } catch (reason) {
+    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : "PDF hit test failed.")
+    return []
+  }
+}
+
+type RegionGesture = { pointerId: number; pageIndex: number; layer: HTMLElement; startX: number; startY: number }
+const regionGesture = ref<RegionGesture | null>(null)
+const regionRect = ref<NormalizedRect | null>(null)
+const regionPageIndex = ref<number | null>(null)
+const regionFrame = computed(() => regionRect.value ? {
+  left: `${regionRect.value.x * 100}%`, top: `${regionRect.value.y * 100}%`,
+  width: `${regionRect.value.width * 100}%`, height: `${regionRect.value.height * 100}%`,
+} : undefined)
+
+function clampUnit(value: number): number { return Math.max(0, Math.min(1, value)) }
+function pageRegionRect(gesture: RegionGesture, clientX: number, clientY: number): NormalizedRect {
+  const bounds = gesture.layer.getBoundingClientRect()
+  const x1 = clampUnit((Math.min(gesture.startX, clientX) - bounds.left) / bounds.width)
+  const y1 = clampUnit((Math.min(gesture.startY, clientY) - bounds.top) / bounds.height)
+  const x2 = clampUnit((Math.max(gesture.startX, clientX) - bounds.left) / bounds.width)
+  const y2 = clampUnit((Math.max(gesture.startY, clientY) - bounds.top) / bounds.height)
+  return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 }
+}
+
+function beginRegion(event: PointerEvent, pageIndex: number): void {
+  if (event.button !== 0) return
+  const layer = event.currentTarget as HTMLElement
+  regionGesture.value = { pointerId: event.pointerId, pageIndex, layer, startX: event.clientX, startY: event.clientY }
+  regionPageIndex.value = pageIndex
+  regionRect.value = { x: 0, y: 0, width: 0, height: 0 }
+  layer.setPointerCapture?.(event.pointerId)
+  emit("regionDraftChange", { phase: "start", region: { space: "page", pageIndex, rect: regionRect.value } })
+  event.preventDefault()
+}
+
+function updateRegion(event: PointerEvent): void {
+  const gesture = regionGesture.value
+  if (!gesture || gesture.pointerId !== event.pointerId) return
+  regionRect.value = pageRegionRect(gesture, event.clientX, event.clientY)
+  emit("regionDraftChange", { phase: "change", region: { space: "page", pageIndex: gesture.pageIndex, rect: regionRect.value } })
+}
+
+function finishRegion(event: PointerEvent, cancelled: boolean): void {
+  const gesture = regionGesture.value
+  if (!gesture || gesture.pointerId !== event.pointerId) return
+  if (gesture.layer.hasPointerCapture?.(event.pointerId)) gesture.layer.releasePointerCapture?.(event.pointerId)
+  const rect = regionRect.value
+  regionGesture.value = null
+  regionRect.value = null
+  regionPageIndex.value = null
+  if (cancelled || !rect || rect.width < 0.005 || rect.height < 0.005) {
+    emit("selectionCancel", { mode: "region", reason: cancelled ? "pointer-cancel" : "programmatic" })
+    return
+  }
+  confirmDraft(createPdfRegionReferenceDraft(referenceContext(), { space: "page", pageIndex: gesture.pageIndex, rect }), event.pointerType === "touch" ? "touch" : "pointer")
+}
+
+function onSurfacePointerDown(event: PointerEvent, pageIndex: number): void {
+  if (selectionMode.value === "content") onSelectionPointerDown(event, pageIndex)
+  else if (selectionMode.value === "region") beginRegion(event, pageIndex)
+}
+function onSurfacePointerMove(event: PointerEvent, pageIndex: number): void {
+  if (selectionMode.value === "content") onSelectionPointerMove(event, pageIndex)
+  else if (selectionMode.value === "region") updateRegion(event)
+  else if (props.emitReferenceCandidates) {
+    const candidates = [pageCandidate(pageIndex)]
+    emit("referenceCandidateChange", { candidates, activeCandidateId: candidates[0].candidateId })
+  }
+}
+function onSurfacePointerUp(event: PointerEvent, pageIndex: number): void {
+  if (selectionMode.value === "content") onSelectionPointerUp(event, pageIndex)
+  else if (selectionMode.value === "region") finishRegion(event, false)
+}
+function onSurfacePointerCancel(event: PointerEvent): void {
+  if (selectionMode.value === "content") onSelectionPointerCancel(event)
+  else if (selectionMode.value === "region") finishRegion(event, true)
+}
+function onSurfaceClick(event: MouseEvent, pageIndex: number): void {
+  if (selectionMode.value === "content") onSelectionClick(event, pageIndex)
+  else if (selectionMode.value === "object") confirmDraft(pageCandidate(pageIndex).draft, event.detail === 0 ? "keyboard" : "pointer", pageCandidate(pageIndex).preview, event.shiftKey)
+}
+function onRegionKeyboardCancel(): void {
+  regionGesture.value = null; regionRect.value = null; regionPageIndex.value = null
+  emit("selectionCancel", { mode: "region", reason: "escape" })
+}
 
 const surfaceSearch = createSurfaceSearchSession<PdfSearchHit>({
   async search(query, { signal }) {
@@ -384,6 +561,8 @@ async function load(): Promise<void> {
     if (openedDocument.pageCount <= 0) throw new Error("PDF document contains no pages.")
     runtimeForDocument = selectedRuntime
     renderDocument.value = openedDocument
+    revisionCounter.value += 1
+    emit("documentRevisionChange", documentRevision.value)
     verifiedBlob.value = verified.blob
     initPageSlots()
     emit("document-load-success", openedDocument.pageCount)
@@ -414,6 +593,8 @@ watch([zoom, rotation], () => {
 watch(effectiveSource, () => {
   void load()
 }, { immediate: true })
+
+watch(() => props.documentId, () => emit("documentRevisionChange", documentRevision.value))
 
 // ── Page geometry ────────────────────────────────────────────────────
 function pageDisplaySize(pageIndex: number): { width: number; height: number } | undefined {
@@ -682,6 +863,18 @@ async function commitSelectionRange(
     const next: PdfSelectionState = { kind: "text", range, text, rects }
     selectionState.value = next
     emit("selectionChange", next)
+    if (selectionMode.value === "content") {
+      try {
+        const draft = createPdfTextReferenceDraft(referenceContext(), next)
+        confirmDraft(draft, "pointer", {
+          label: text.length > 80 ? `${text.slice(0, 77)}…` : text,
+          path: [{ kind: "document", label: "PDF" }, { kind: "page", label: `Page ${pageIndex + 1}` }, { kind: "text-range", label: "Selected text" }],
+          content: { text },
+        })
+      } catch (reason) {
+        emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to create PDF text reference.")
+      }
+    }
   } catch {
     if (request === selectionRequest) setSelectionUnavailable(pageIndex)
   }
@@ -1033,6 +1226,11 @@ function scrollToPage(pageIndex: number): void {
   slot?.scrollIntoView({ behavior: "smooth", block: "start" })
 }
 
+function onSurfaceEscape(): void {
+  clearSelection()
+  if (selectionMode.value !== "content") emit("selectionCancel", { mode: selectionMode.value, reason: "escape" })
+}
+
 defineExpose({
   scrollToPage,
   zoom,
@@ -1045,6 +1243,29 @@ defineExpose({
   getSearchState: (): PdfSearchState => surfaceSearch.getSearchState(),
   clearSelection,
   getSelectionState: () => selectionState.value,
+  getDocumentRevision: (): OfficeDocumentRevision => documentRevision.value,
+  hitTest,
+  async describeReference(reference: OfficeObjectReference, signal?: AbortSignal) {
+    const descriptor = await describePdfReference(referenceContext(), reference, signal)
+    if (!descriptor) throw new Error("PDF reference is not resolvable in the current revision.")
+    return descriptor
+  },
+  async resolveReference(reference: OfficeObjectReference): Promise<ResolveReferenceResult> {
+    const result = await resolvePdfReference(referenceContext(), reference)
+    emit("referenceResolve", { referenceId: reference.referenceId, result })
+    return result
+  },
+  async scrollToReference(reference: OfficeObjectReference): Promise<void> {
+    const result = await resolvePdfReference(referenceContext(), reference)
+    if (result.status !== "exact" && result.status !== "relocated") return
+    const locator = (result.reference as PdfOfficeReference).locator
+    const pageIndex = locator.type === "manual-region" ? locator.value.pageIndex : locator.value.pageIndex
+    if (pageIndex !== undefined) scrollToPage(pageIndex)
+  },
+  async captureReferencePreview(reference: OfficeObjectReference): Promise<Blob> {
+    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", "PDF preview capture is not provided by the Surface; use the host's capture pipeline.", reference.referenceId)
+    throw new Error("PDF reference preview capture is unsupported")
+  },
 })
 
 onBeforeUnmount(async () => {
@@ -1094,6 +1315,15 @@ onBeforeUnmount(async () => {
 }
 .pdf-surface__overlay { pointer-events: none; z-index: 2; }
 .pdf-surface__interaction { cursor: text; touch-action: pan-x pan-y; z-index: 3; }
+.pdf-surface__interaction[data-selection-mode="object"] { cursor: pointer; }
+.pdf-surface__interaction[data-selection-mode="region"] { cursor: crosshair; touch-action: none; }
+.pdf-surface__region-frame {
+  background: rgb(37 99 235 / 0.08);
+  border: 2px solid #2563eb;
+  box-sizing: border-box;
+  pointer-events: none;
+  position: absolute;
+}
 .pdf-surface__search-hit,
 .pdf-surface__selection-hit { box-sizing: border-box; position: absolute; }
 .pdf-surface__search-hit { background: rgba(250, 204, 21, .38); }

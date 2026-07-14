@@ -1,0 +1,47 @@
+{
+  "name": "@arcships/office-interaction",
+  "version": "0.5.4",
+  "license": "Apache-2.0",
+  "description": "Framework-neutral Office object references, selector events, validation, and geometry utilities",
+  "keywords": ["office", "agent", "reference", "selection", "events", "typescript"],
+  "homepage": "https://github.com/arcships/agentic-office-ui#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/arcships/agentic-office-ui.git",
+    "directory": "packages/office-interaction"
+  },
+  "bugs": {
+    "url": "https://github.com/arcships/agentic-office-ui/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "prepack": "pnpm run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  }
+}

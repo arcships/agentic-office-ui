@@ -21,6 +21,7 @@ import type {
   Ref,
   ShallowRef,
 } from "vue"
+import type { OfficeReferenceSurfaceExposed } from "@arcships/office-interaction"
 
 type ValueOrRefOrGetter<T> = T | Readonly<Ref<T>> | (() => T)
 
@@ -108,7 +109,7 @@ export interface UsePptxPlaybackReturn {
   dispose(): void
 }
 
-export interface PptxStageExpose {
+export interface PptxStageExpose extends OfficeReferenceSurfaceExposed {
   readonly element: HTMLElement | null
   readonly scrollContainer: HTMLElement | null
 }

@@ -13,6 +13,7 @@ const output = path.resolve(
 );
 const tgzDir = path.join(output, "tgz");
 const packageDirs = [
+  "packages/office-interaction",
   "packages/docx-core",
   "packages/xlsx-core",
   "packages/vue-docx",

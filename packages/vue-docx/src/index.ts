@@ -1,5 +1,19 @@
 // ---- Components ----
 
+export type {
+  OfficeDocumentRevision,
+  OfficeObjectReference,
+  OfficeReferenceCandidateChange,
+  OfficeReferenceConfirmEvent,
+  OfficeReferenceError,
+  OfficeReferenceResolveEvent,
+  OfficeReferenceSurfaceExposed,
+  OfficeReferenceSurfaceProps,
+  OfficeRegionDraftChange,
+  OfficeSelectionCancelEvent,
+  OfficeSelectionMode,
+} from "@arcships/office-interaction"
+
 export { default as DocxViewer } from "./components/DocxViewer.vue"
 export { default as DocxEditor } from "./components/DocxEditor.vue"
 /**

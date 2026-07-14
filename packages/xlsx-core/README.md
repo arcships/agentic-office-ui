@@ -42,6 +42,22 @@ try {
 
 实例级限制覆盖输入字节、压缩包、XML、关系、图片、解析时间、工作表 XML、共享字符串、行列、工作表数量和公式数量。Worker 失败不会静默转主线程伪装成功。
 
+## 对象引用适配
+
+根入口可以把工作表、单元格、A1 范围、图表和人工 sheet 区域转换为 `@arcships/office-interaction` 引用，并在工作表重命名、重排或图表 id 变化后重新定位：
+
+```ts
+import {
+  createXlsxCellReferenceDraft,
+  resolveXlsxReference,
+} from "@arcships/xlsx-core"
+
+const draft = createXlsxCellReferenceDraft(context, sheet, { row: 4, col: 2 })
+const result = resolveXlsxReference(nextContext, { ...draft, referenceId })
+```
+
+`XlsxReferenceContext.sheets` 可直接由工作簿 tabs 整理而来。适配器只生成和解析引用；候选 UI、确认后的引用集合及 Agent 动作由使用方实现。
+
 ## 文档
 
 - [XLSX 使用指南](https://github.com/arcships/agentic-office-ui/blob/master/docs/guide/xlsx.md)

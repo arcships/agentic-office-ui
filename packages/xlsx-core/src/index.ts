@@ -191,3 +191,22 @@ export function columnLabel(col: number): string {
 export function rangeToA1(range: XlsxCellRange): string {
   return coreRangeToA1(range);
 }
+
+export {
+  createXlsxCellReferenceDraft,
+  createXlsxChartReferenceDraft,
+  createXlsxColumnReferenceDraft,
+  createXlsxRangeReferenceDraft,
+  createXlsxRegionReferenceDraft,
+  createXlsxRowReferenceDraft,
+  createXlsxWorksheetReferenceDraft,
+  describeXlsxReference,
+  resolveXlsxReference,
+} from "./reference-adapter";
+export type {
+  XlsxOfficeReference,
+  XlsxOfficeReferenceDraft,
+  XlsxReferenceCellSnapshot,
+  XlsxReferenceContext,
+  XlsxReferenceSheet,
+} from "./reference-adapter";

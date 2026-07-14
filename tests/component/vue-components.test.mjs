@@ -165,6 +165,8 @@ function pdfPointerEvent(interaction, { clientX, clientY = 6, pointerId = 1 }) {
     currentTarget: interaction,
     isPrimary: true,
     pointerId,
+    pointerType: "mouse",
+    preventDefault() {},
   };
 }
 
@@ -567,6 +569,65 @@ test("PdfSurface uses the native second click to select a Unicode word", async (
   await waitFor(() => selections.at(-1)?.kind === "text", "double-click PDF word selection");
   assert.equal(selections.at(-1).text, "world");
   assert.deepEqual(selections.at(-1).range, { pageIndex: 0, charIndex: 6, charCount: 5 });
+  mounted.app.unmount();
+});
+
+test("PdfSurface exposes the unified controlled object/region reference contract", async () => {
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => pdfTextGeometry("reference surface"),
+  });
+  const source = { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) };
+  const confirmations = [];
+  const resolutions = [];
+  let api;
+  let mode;
+  const Harness = vue.defineComponent({
+    setup() {
+      const surface = vue.ref(null);
+      mode = vue.ref("object");
+      vue.watch(surface, (value) => { api = value; }, { flush: "sync" });
+      return () => vue.h(PdfSurface, {
+        ref: surface,
+        source,
+        runtime: fake.runtime,
+        documentId: "reference.pdf",
+        selectionMode: mode.value,
+        emitReferenceCandidates: true,
+        onReferenceConfirm: (event) => confirmations.push(event),
+        onReferenceResolve: (event) => resolutions.push(event),
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(() => api && fake.calls.getPageTextGeometry.length === 1, "PDF unified reference surface");
+  let interaction = preparePdfSurfaceInteraction(mounted.root);
+
+  await interaction.props.onClick({
+    button: 0,
+    clientX: 20,
+    clientY: 20,
+    currentTarget: interaction,
+    detail: 1,
+    shiftKey: false,
+  });
+  assert.equal(confirmations.length, 1);
+  assert.equal(confirmations[0].reference.kind, "page");
+  assert.equal(confirmations[0].reference.document.documentId, "reference.pdf");
+  assert.equal(api.getDocumentRevision().format, "pdf");
+  const result = await api.resolveReference(confirmations[0].reference);
+  assert.equal(result.status, "exact");
+  assert.equal(resolutions.at(-1).referenceId, confirmations[0].reference.referenceId);
+
+  mode.value = "region";
+  await vue.nextTick();
+  interaction = preparePdfSurfaceInteraction(mounted.root);
+  interaction.props.onPointerdown(pdfPointerEvent(interaction, { clientX: 10, clientY: 10, pointerId: 7 }));
+  interaction.props.onPointermove(pdfPointerEvent(interaction, { clientX: 110, clientY: 210, pointerId: 7 }));
+  interaction.props.onPointerup(pdfPointerEvent(interaction, { clientX: 110, clientY: 210, pointerId: 7 }));
+  assert.equal(confirmations.at(-1).reference.kind, "region");
+  assert.equal(confirmations.at(-1).reference.locator.value.space, "page");
+  assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });
 

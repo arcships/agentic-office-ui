@@ -1,6 +1,20 @@
 import PptxViewerComponent from "./PptxViewer.vue"
 import "./style.css"
 
+export type {
+  OfficeDocumentRevision,
+  OfficeObjectReference,
+  OfficeReferenceCandidateChange,
+  OfficeReferenceConfirmEvent,
+  OfficeReferenceError,
+  OfficeReferenceResolveEvent,
+  OfficeReferenceSurfaceExposed,
+  OfficeReferenceSurfaceProps,
+  OfficeRegionDraftChange,
+  OfficeSelectionCancelEvent,
+  OfficeSelectionMode,
+} from "@arcships/office-interaction"
+
 export const PptxViewer = PptxViewerComponent
 export { default as PptxThumbnail } from "./PptxThumbnail.vue"
 export { default as PptxStage } from "./PptxStage.vue"

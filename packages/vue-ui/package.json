@@ -2,8 +2,8 @@
   "name": "@arcships/vue-ui",
   "version": "0.5.4",
   "license": "Apache-2.0",
-  "description": "Vue 3 UI components: signature pad, file upload, thumbnails, citations, and layout blocks",
-  "keywords": ["vue", "vue3", "ui", "components", "signature", "upload", "thumbnail"],
+  "description": "Vue 3 UI primitives for Office object outlines, region selection, uploads, and document workflows",
+  "keywords": ["vue", "vue3", "office", "agent", "selection", "reference", "ui", "components"],
   "homepage": "https://github.com/arcships/agentic-office-ui#readme",
   "repository": {
     "type": "git",
@@ -38,7 +38,7 @@
   "scripts": {
     "build": "vite build && vue-tsc --declaration --emitDeclarationOnly --outDir dist",
     "prepack": "pnpm run build",
-    "typecheck": "vue-tsc --noEmit"
+    "typecheck": "vue-tsc -p tsconfig.typecheck.json --noEmit"
   },
   "peerDependencies": {
     "vue": ">=3.2.25 <4"
@@ -52,6 +52,7 @@
     "vue-tsc": "^3.3.6"
   },
   "dependencies": {
+    "@arcships/office-interaction": "^0.5.4",
     "signature_pad": "^5.1.3"
   }
 }

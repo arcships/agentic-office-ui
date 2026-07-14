@@ -1,0 +1,6 @@
+{
+  "original": ["Alpha selected omega"],
+  "relocated": ["New. Alpha selected omega"],
+  "deleted": ["Alpha omega"],
+  "ambiguous": ["selected middle selected"]
+}

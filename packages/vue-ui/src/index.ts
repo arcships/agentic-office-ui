@@ -24,4 +24,8 @@ export { default as Spinner } from "./components/Spinner.vue"
 export { default as Tooltip } from "./components/Tooltip.vue"
 export { default as OfficeFindBar } from "./components/OfficeFindBar.vue"
 
+// Office selection primitives
+export { default as OfficeObjectOutlineLayer } from "./components/OfficeObjectOutlineLayer.vue"
+export { default as OfficeRegionSelector } from "./components/OfficeRegionSelector.vue"
+
 export type * from "./types"

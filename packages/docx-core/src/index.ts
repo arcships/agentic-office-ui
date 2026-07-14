@@ -50,3 +50,6 @@ export * from "./viewer";
 // Canvas layer (complete)
 export * from "./canvas/types";
 export * from "./canvas/layout-diagnostics";
+
+// Stable Office references created from the existing DOCX text-range model.
+export * from "./reference-adapter";

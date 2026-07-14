@@ -1,0 +1,10 @@
+{
+  "original": ["Before", "The quarterly revenue increased.", "After"],
+  "relocated": ["Inserted", "Before", "The quarterly revenue increased.", "After"],
+  "deleted": ["Inserted", "Before", "After"],
+  "ambiguous": [
+    "The quarterly revenue increased.",
+    "Divider",
+    "The quarterly revenue increased."
+  ]
+}

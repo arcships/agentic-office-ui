@@ -4,6 +4,20 @@
  * Vue 3 PDF viewer component with PDFium-based rendering.
  */
 
+export type {
+  OfficeDocumentRevision,
+  OfficeObjectReference,
+  OfficeReferenceCandidateChange,
+  OfficeReferenceConfirmEvent,
+  OfficeReferenceError,
+  OfficeReferenceResolveEvent,
+  OfficeReferenceSurfaceExposed,
+  OfficeReferenceSurfaceProps,
+  OfficeRegionDraftChange,
+  OfficeSelectionCancelEvent,
+  OfficeSelectionMode,
+} from "@arcships/office-interaction"
+
 // PDF viewer
 export { default as PdfViewer } from "./components/PdfViewer.vue"
 /**
@@ -29,6 +43,20 @@ export {
   toPdfLoadError,
 } from "./pdf-url-policy"
 export { bundledPdfiumWasmUrl, createPdfRenderRuntime } from "./pdf/pdf-render-runtime"
+export {
+  createPdfPageReferenceDraft,
+  createPdfRegionReferenceDraft,
+  createPdfTextReferenceDraft,
+  describePdfReference,
+  normalizePdfReferenceRect,
+  resolvePdfReference,
+} from "./pdf/pdf-reference-adapter"
+export type {
+  PdfOfficeReference,
+  PdfOfficeReferenceDraft,
+  PdfReferenceContext,
+  PdfTextReferenceSelection,
+} from "./pdf/pdf-reference-adapter"
 export type {
   PdfPageRenderOptions,
   PdfRenderDocument,

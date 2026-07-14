@@ -82,6 +82,8 @@ async function onStageClick(event: MouseEvent) {
 - `object-click`：点击形状、图片或图表时返回 `{ kind: "object", slideIndex, objectKey }`；
 - `context-menu`：右键幻灯片或对象时返回判别联合；`kind: "slide"` 时没有 `objectKey`，`kind: "object"` 时必须包含 `objectKey`，两者都有页码以及视口/`PptxStage` 根元素坐标。
 
+传入受控的 `selection-mode="content | object | region"` 后，`PptxStage` 会把对象内文字、幻灯片/可见对象点击和区域拖选转换为统一 `reference-confirm`，并提供候选、取消、revision、解析和错误事件。Stage 只读取渲染标记并发送事件，不持有引用集合、工具栏或 Agent 状态。
+
 传入 `v-model:zoom` 和显式 `scroll-container` 后，`PptxStage` 支持 50%–200% 的 `Ctrl+wheel` / pinch 缩放，并保持指针下的幻灯片位置。播放模式建议关闭 `enableGestureZoom`。
 
 ## 文档

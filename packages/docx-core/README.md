@@ -12,7 +12,7 @@ pnpm add @arcships/docx-core
 
 | 路径 | 用途 |
 |---|---|
-| `@arcships/docx-core` | 根入口：模型、布局、序列化、解析、编辑命令（0.x 兼容） |
+| `@arcships/docx-core` | 根入口：模型、布局、序列化、解析、编辑命令，以及 DOCX 基础引用适配 |
 | `@arcships/docx-core/core` | 平台无关的纯数据能力 |
 | `@arcships/docx-core/runtime` | `createDocxRuntime` 实例入口 |
 | `@arcships/docx-core/wasm-url` | 包自带的 `bundledDocxWasmUrl` |
@@ -41,6 +41,28 @@ try {
 ## 资源限制
 
 实例级限制覆盖输入字节、压缩包条目、解压字节、XML、关系、图片、模型节点、布局页数和解析时间。超限返回结构化错误（含 `actual` / `allowed`），默认值由 `DEFAULT_DOCX_RUNTIME_LIMITS` 给出。
+
+## 文字、页面与区域引用
+
+根入口可把编辑器已有的 `DocxTextRange`、页面或规范化页面区域转换为 `@arcships/office-interaction` 的统一引用草稿：
+
+```ts
+import {
+  createDocxTextReferenceDraft,
+  resolveDocxReference,
+} from "@arcships/docx-core"
+
+const context = {
+  revision: { format: "docx", documentId, revision },
+  model,
+  pageCount,
+} as const
+
+const draft = createDocxTextReferenceDraft(context, activeTextRange)
+const result = resolveDocxReference(context, { ...draft, referenceId })
+```
+
+同修订会验证模型路径和文字指纹；修订变化后，唯一文字引用可迁移，重复文字返回 `ambiguous`，删除返回 `not-found`。DOCX 页面和人工区域受重排版影响，跨修订不会仅凭页码自动恢复。适配器不保存引用集合，也不决定确认后的产品动作。
 
 ## 文档
 

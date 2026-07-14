@@ -1,0 +1,37 @@
+{
+  "original": {
+    "sheets": [
+      { "id": "sheet-data", "index": 0, "name": "Data", "workbookSheetIndex": 0 },
+      { "id": "sheet-notes", "index": 1, "name": "Notes", "workbookSheetIndex": 1 }
+    ],
+    "charts": [
+      { "id": "chart-revenue", "name": "Revenue", "chartType": "bar", "sheetIndex": 0, "workbookSheetIndex": 0, "zIndex": 3 }
+    ]
+  },
+  "reordered": {
+    "sheets": [
+      { "id": "sheet-notes", "index": 0, "name": "Notes", "workbookSheetIndex": 1 },
+      { "id": "sheet-data", "index": 1, "name": "Revenue Data", "workbookSheetIndex": 0 }
+    ],
+    "charts": [
+      { "id": "chart-revenue", "name": "Revenue", "chartType": "bar", "sheetIndex": 1, "workbookSheetIndex": 0, "zIndex": 3 }
+    ]
+  },
+  "renumberedChart": {
+    "sheets": [
+      { "id": "sheet-data", "index": 0, "name": "Data", "workbookSheetIndex": 0 }
+    ],
+    "charts": [
+      { "id": "chart-revenue-v2", "name": "Revenue", "chartType": "bar", "sheetIndex": 0, "workbookSheetIndex": 0, "zIndex": 3 }
+    ]
+  },
+  "ambiguousChart": {
+    "sheets": [
+      { "id": "sheet-data", "index": 0, "name": "Data", "workbookSheetIndex": 0 }
+    ],
+    "charts": [
+      { "id": "chart-a", "name": "Revenue", "chartType": "bar", "sheetIndex": 0, "workbookSheetIndex": 0, "zIndex": 3 },
+      { "id": "chart-b", "name": "Revenue", "chartType": "bar", "sheetIndex": 0, "workbookSheetIndex": 0, "zIndex": 4 }
+    ]
+  }
+}

@@ -1,6 +1,23 @@
 {
   "packages": [
     {
+      "directory": "packages/office-interaction",
+      "name": "@arcships/office-interaction",
+      "exports": {
+        ".": {
+          "types": "./dist/index.d.ts",
+          "import": "./dist/index.js",
+          "default": "./dist/index.js"
+        },
+        "./package.json": "./package.json"
+      },
+      "deprecatedSymbols": [],
+      "rootDeclarationFingerprint": {
+        "count": 105,
+        "sha256": "c8e7779a130bbbbf509df8d95572f7d18883a8cd885080bf252a049d93a106b8"
+      }
+    },
+    {
       "directory": "packages/docx-core",
       "name": "@arcships/docx-core",
       "exports": {
@@ -32,8 +49,8 @@
         "setWasmSource"
       ],
       "rootDeclarationFingerprint": {
-        "count": 1054,
-        "sha256": "50454a88f3a16a51232fe173b6e4ffe377fea5f75779f802da12f84344bbc456"
+        "count": 1063,
+        "sha256": "dc2986a0570ea62b402a32beb5e945e323533b38b340e10dbfaa0ed44244fb5b"
       }
     },
     {
@@ -71,8 +88,8 @@
         "getSheetsWasmModule"
       ],
       "rootDeclarationFingerprint": {
-        "count": 164,
-        "sha256": "fd3cfb68ae3553ace0bf56da042188cfaa6687a44a887bba645b8289d6a288bc"
+        "count": 178,
+        "sha256": "35835a78a9202f175a5dc306d3bb9c709c274f8687595c77792518e047dc78c9"
       }
     },
     {
@@ -114,8 +131,8 @@
         "notifyDocxViewerPageSurfaceListeners"
       ],
       "rootDeclarationFingerprint": {
-        "count": 105,
-        "sha256": "029a3c05f557c4d5575a1a1d25bd7eb33a906e13b417ebdc2d7ef341818262f2"
+        "count": 116,
+        "sha256": "b1d16eb37dbd2daefd48b1fb5e1731db7a3844f252d79ef9c33bb27cb54c173d"
       }
     },
     {
@@ -162,8 +179,8 @@
         "XlsxContextMenu"
       ],
       "rootDeclarationFingerprint": {
-        "count": 31,
-        "sha256": "a1d0feee8609c8b3e1cf4e2e380e66158fa5c273daa1dcd85fa85262e888df45"
+        "count": 42,
+        "sha256": "8bfbd2d48e74550b78dca7b47202cb89295f9ad523934bf883ede1447ce628d1"
       }
     },
     {
@@ -180,8 +197,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 30,
-        "sha256": "731b689de35ab09bdd028e76867f453a935bd175ab8c71d3f4b2f2e85394c36d"
+        "count": 51,
+        "sha256": "67536a977596204589b543344053887317251b2eedc74d0801e9c57159f59e6a"
       }
     },
     {
@@ -197,8 +214,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 21,
-        "sha256": "4c368418791ee8ad0064e741a1f3d819860f6348495c007ad488a9c92f3cea75"
+        "count": 28,
+        "sha256": "7dcd9837d49e5e39a991ac560d876523af2b2d38bc9e4d8e7e01d6c3e70abc8e"
       }
     },
     {
@@ -219,8 +236,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 55,
-        "sha256": "5b56d8800b4ce3c246eaab4b93d2bc6d277c77d0596a8350849805ea3624ffda"
+        "count": 66,
+        "sha256": "502dfefa6652ae3a8b0bac0df45f344fd027845d2d3da472aa474ec2457f0ab8"
       }
     },
     {
@@ -236,8 +253,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 47,
-        "sha256": "7835fc52fae4a703a5c1cde536928cd886fcc7dfa166c8749fb2f8c2f7916f24"
+        "count": 58,
+        "sha256": "ab232f701d0298b76fd52e963296619961cdb4e7902b207cef5c0e518ab3c9e1"
       }
     }
   ],
@@ -261,6 +278,8 @@
     "bundledDocxWasmUrl"
   ],
   "positiveSpecifiers": [
+    "@arcships/office-interaction",
+    "@arcships/office-interaction/package.json",
     "@arcships/docx-core",
     "@arcships/docx-core/core",
     "@arcships/docx-core/runtime",
@@ -294,6 +313,7 @@
     "@arcships/vue-pptx/style.css"
   ],
   "executableSpecifiers": [
+    "@arcships/office-interaction",
     "@arcships/docx-core",
     "@arcships/docx-core/core",
     "@arcships/docx-core/runtime",
@@ -314,6 +334,13 @@
     "@arcships/vue-pptx"
   ],
   "deepImportRejections": {
+    "@arcships/office-interaction": [
+      "@arcships/office-interaction/src/index.ts",
+      "@arcships/office-interaction/dist/index.js",
+      "@arcships/office-interaction/types",
+      "@arcships/office-interaction/validation",
+      "@arcships/office-interaction/selection"
+    ],
     "@arcships/docx-core": [
       "@arcships/docx-core/src/index.ts",
       "@arcships/docx-core/dist/index.js",
