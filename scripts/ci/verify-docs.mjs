@@ -41,6 +41,7 @@ for (const [name, value] of Object.entries(expectedScripts)) {
 
 const requiredFiles = [
   "README.md",
+  "README.zh-CN.md",
   "RELEASE_NOTES.md",
   "requirements-ci.txt",
   ".github/workflows/ci.yml",
@@ -82,6 +83,8 @@ const plan = read("docs/end-to-end-blackbox-test-plan.md");
 const runbook = read("docs/testing/agent-execution-runbook.md");
 const roadmap = read("docs/plan/stabilization-roadmap.md");
 const readme = read("README.md");
+const readmeZh = read("README.zh-CN.md");
+const bilingualReadme = `${readme}\n${readmeZh}`;
 const index = read("docs/INDEX.md");
 const releaseNotes = read("RELEASE_NOTES.md");
 const migration = read("docs/migration-0.2.md");
@@ -115,12 +118,29 @@ for (const obsolete of [
   check(`documentation removed obsolete text ${obsolete}`, !combined.includes(obsolete));
 }
 
-check("README records the current and initial PPTX versions", readme.includes("0.3.0") && readme.includes("0.4.0"));
+check("README records the current and initial PPTX versions", bilingualReadme.includes("0.3.0") && bilingualReadme.includes("0.4.0"));
+check(
+  "README language switch is reciprocal",
+  readme.includes("[简体中文](README.zh-CN.md)") && readmeZh.includes("[English](README.md)"),
+);
+check(
+  "bilingual README keeps the open-source reader path",
+  [
+    "Why this exists",
+    "Quick start",
+    "Scope and boundaries",
+    "Contributing",
+    "为什么需要这个库",
+    "快速开始",
+    "能力边界",
+    "参与贡献",
+  ].every((term) => bilingualReadme.includes(term)),
+);
 check("release notes include the eight-package candidate", releaseNotes.includes("八个公开包") && releaseNotes.includes("0.3.0"));
 check("0.3 migration includes PPTX packages", migration03.includes("@arcships/pptx-core@0.3.0") && migration03.includes("@arcships/vue-pptx@0.3.0"));
 check(
   "README keeps PDF usable",
-  ["翻页", "缩放", "搜索", "下载", "50 MiB", "PDF_TOO_LARGE"].every((term) => readme.includes(term)),
+  ["翻页", "缩放", "搜索", "下载", "50 MiB", "PDF_TOO_LARGE"].every((term) => bilingualReadme.includes(term)),
 );
 check(
   "release notes cover required migration facts",
@@ -172,6 +192,7 @@ check("historical notice docs/plan/README.md", read("docs/plan/README.md").inclu
 
 for (const file of [
   "README.md",
+  "README.zh-CN.md",
   "RELEASE_NOTES.md",
   "docs/INDEX.md",
   "docs/migration-0.2.md",
