@@ -1,6 +1,6 @@
 {
   "name": "@arcships/office-interaction",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "license": "Apache-2.0",
   "description": "Framework-neutral Office object references, selector events, validation, and geometry utilities",
   "keywords": ["office", "agent", "reference", "selection", "events", "typescript"],

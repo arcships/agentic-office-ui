@@ -82,7 +82,7 @@ importers:
   packages/docx-core:
     dependencies:
       '@arcships/office-interaction':
-        specifier: ^0.5.4
+        specifier: ^0.6.0
         version: link:../office-interaction
       '@chenglou/pretext':
         specifier: ^0.0.8
@@ -129,7 +129,7 @@ importers:
   packages/pptx-core:
     dependencies:
       '@arcships/office-interaction':
-        specifier: ^0.5.4
+        specifier: ^0.6.0
         version: link:../office-interaction
       echarts:
         specifier: ^6.0.0
@@ -151,10 +151,10 @@ importers:
   packages/vue-docx:
     dependencies:
       '@arcships/docx-core':
-        specifier: ^0.5.0
+        specifier: ^0.6.0
         version: link:../docx-core
       '@arcships/office-interaction':
-        specifier: ^0.5.4
+        specifier: ^0.6.0
         version: link:../office-interaction
     devDependencies:
       '@vitejs/plugin-vue':
@@ -179,7 +179,7 @@ importers:
   packages/vue-pdf:
     dependencies:
       '@arcships/office-interaction':
-        specifier: ^0.5.4
+        specifier: ^0.6.0
         version: link:../office-interaction
       '@embedpdf/core':
         specifier: ^2.14.4
@@ -249,10 +249,10 @@ importers:
   packages/vue-pptx:
     dependencies:
       '@arcships/office-interaction':
-        specifier: ^0.5.4
+        specifier: ^0.6.0
         version: link:../office-interaction
       '@arcships/pptx-core':
-        specifier: ^0.5.0
+        specifier: ^0.6.0
         version: link:../pptx-core
     devDependencies:
       '@vitejs/plugin-vue':
@@ -274,7 +274,7 @@ importers:
   packages/vue-ui:
     dependencies:
       '@arcships/office-interaction':
-        specifier: ^0.5.4
+        specifier: ^0.6.0
         version: link:../office-interaction
       signature_pad:
         specifier: ^5.1.3
@@ -302,10 +302,10 @@ importers:
   packages/vue-xlsx:
     dependencies:
       '@arcships/office-interaction':
-        specifier: ^0.5.4
+        specifier: ^0.6.0
         version: link:../office-interaction
       '@arcships/xlsx-core':
-        specifier: ^0.5.0
+        specifier: ^0.6.0
         version: link:../xlsx-core
       '@dukelib/sheets-wasm':
         specifier: 0.1.17
@@ -342,7 +342,7 @@ importers:
         version: https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz
     devDependencies:
       '@arcships/vue-ui':
-        specifier: ^0.5.4
+        specifier: ^0.6.0
         version: link:../vue-ui
       '@types/d3-geo':
         specifier: ^3.1.0
@@ -387,7 +387,7 @@ importers:
   packages/xlsx-core:
     dependencies:
       '@arcships/office-interaction':
-        specifier: ^0.5.4
+        specifier: ^0.6.0
         version: link:../office-interaction
       '@dukelib/sheets-wasm':
         specifier: 0.1.17

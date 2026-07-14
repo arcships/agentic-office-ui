@@ -5,7 +5,7 @@
 本包支持 PPTX、PPTM、PPSX、PPSM、POTX、POTM 的静态浏览和 `mode="present"` 演示模式。默认静态浏览会像 PDF/DOCX 一样纵向连续展示所有幻灯片；演示模式使用单页舞台，左右键执行上/下一播放步骤，跨页由播放控制器完成。宏内容不会执行。
 
 ```bash
-pnpm add @arcships/pptx-core@0.5.4 @arcships/vue-pptx@0.5.4
+pnpm add @arcships/pptx-core @arcships/vue-pptx
 ```
 
 ```ts

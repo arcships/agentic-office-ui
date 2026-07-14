@@ -1,6 +1,6 @@
 {
   "name": "@arcships/docx-core",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "license": "Apache-2.0",
   "description": "DOCX document model, layout engine, editing commands, and instance runtime with Worker/WASM support",
   "keywords": ["docx", "word", "document", "viewer", "editor", "wasm", "worker"],
@@ -62,7 +62,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@arcships/office-interaction": "^0.5.4",
+    "@arcships/office-interaction": "^0.6.0",
     "@chenglou/pretext": "^0.0.8",
     "fast-png": "^8.0.0",
     "fflate": "^0.8.2",

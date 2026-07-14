@@ -2,7 +2,7 @@
 
 本文登记 `@arcships/office-interaction`、`@arcships/docx-core`、`@arcships/xlsx-core`、`@arcships/pptx-core`、`@arcships/vue-docx`、`@arcships/vue-xlsx`、`@arcships/vue-pptx`、`@arcships/vue-pdf` 和 `@arcships/vue-ui` 的公开入口、推荐用法、事件、错误与兼容期限。
 
-当前九个公开包的版本统一为 `0.5.4`。`@arcships/office-interaction` 提供跨格式引用、选择事件、运行时校验和纯函数；DOCX、XLSX、PPTX 与 PDF 已接入阶段一格式适配器和统一 Surface 事件。已有公开搜索、原始选择、对象点击和缩放合同保持向后兼容。源码中的 `@deprecated Since 0.2.0` 继续生效；整个 `0.x` 保留旧入口，最早只能在 `1.0.0` 删除。
+当前九个公开包的源码候选版本统一为 `0.6.0`，npm 稳定版仍为 `0.5.4`。`@arcships/office-interaction` 提供跨格式引用、选择事件、运行时校验和纯函数；DOCX、XLSX、PPTX 与 PDF 已接入阶段一格式适配器和统一 Surface 事件。已有公开搜索、原始选择、对象点击和缩放合同保持向后兼容。源码中的 `@deprecated Since 0.2.0` 继续生效；整个 `0.x` 保留旧入口，最早只能在 `1.0.0` 删除。
 
 ## 1. 适用规则
 
@@ -123,7 +123,7 @@ try {
 
 ### 3.3 `@arcships/vue-docx`
 
-DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注布局的目标合同见 [DOCX Viewer 受控文档面与分页修复设计](../docx-viewer-controlled-surface-and-pagination-fix.md)。兼容性判断以本页当前 `0.5.4` 导出清单和对应实现状态为准。
+DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注布局的目标合同见 [DOCX Viewer 受控文档面与分页修复设计](../docx-viewer-controlled-surface-and-pagination-fix.md)。兼容性判断以本页当前 `0.6.0` 候选导出清单和对应实现状态为准。
 
 稳定高层入口为：
 

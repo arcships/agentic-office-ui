@@ -1,7 +1,7 @@
 <template>
   <div class="app">
     <nav class="nav">
-      <h1 class="nav-title">Vue Extend UI</h1>
+      <h1 class="nav-title">Agentic Office UI</h1>
       <div class="nav-links">
         <router-link to="/">Home</router-link>
         <router-link to="/docx-surface">DOCX Surface</router-link>

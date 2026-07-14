@@ -16,6 +16,17 @@
 | `PptxStage` | `@arcships/vue-pptx` | 无 chrome 的纵向 Surface 或单页播放舞台；提供选中、对象点击和右键事件 | [PPTX](../guide/pptx.md) |
 | `PptxThumbnail` | `@arcships/vue-pptx` | 使用现有会话渲染单页缩略图 | [PPTX](../guide/pptx.md) |
 
+## 最小 Surface
+
+| 组件 | 包 | 无界面能力 |
+|---|---|---|
+| `DocxDocumentSurface` | `@arcships/vue-docx` | DOCX 分页文档面、批注 gutter、搜索、选择与引用事件 |
+| `XlsxSheetSurface` | `@arcships/vue-xlsx` | XLSX 网格、对象层、搜索、选择与引用事件 |
+| `PdfSurface` | `@arcships/vue-pdf` | PDF 连续页面、搜索、glyph 文字选择与引用事件 |
+| `PptxStage` | `@arcships/vue-pptx` | PPTX 纵向或单页舞台、搜索、对象交互与引用事件 |
+
+四个 Surface 统一接受 `documentId`、受控 `selectionMode` 和候选事件开关。具体接入见[引用选择接入指南](../guide/reference-selection.md)。
+
 ## 基础组件
 
 ### Office 对象选择控件

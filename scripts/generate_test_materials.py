@@ -101,7 +101,7 @@ def add_header_footer(doc: Document, header: str):
     for section in doc.sections:
         section.header.paragraphs[0].text = header
         section.header.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        section.footer.paragraphs[0].text = "Confidential • Vue Extend UI browser verification"
+        section.footer.paragraphs[0].text = "Confidential • Agentic Office UI browser verification"
         section.footer.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
 
@@ -422,7 +422,7 @@ def make_pdf_sample(path: Path):
     for page in range(1, 5):
         story.append(Paragraph(f"Section {page}: Search Keyword ALPHA-{page}", styles["Heading1"]))
         for i in range(8):
-            story.append(Paragraph("Vue Extend UI PdfViewer should support search, zoom, page navigation, thumbnail rendering, and scrolling with a realistic text layer. " * 2, styles["BodyText"]))
+            story.append(Paragraph("Agentic Office UI PdfViewer should support search, zoom, page navigation, thumbnail rendering, and scrolling with a realistic text layer. " * 2, styles["BodyText"]))
         if page < 4:
             story.append(PageBreak())
     doc.build(story)

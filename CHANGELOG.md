@@ -2,6 +2,21 @@
 
 All notable changes to the `@arcships` package family are documented in this file.
 
+## [Unreleased]
+
+### Cross-format Office references
+
+- Prepare the nine public packages as the `0.6.0` candidate while keeping `0.5.4` as the published stable line.
+- Add the framework-neutral `@arcships/office-interaction` package with serializable references, runtime validation, candidate navigation, geometry helpers, and transient selection state.
+- Add stage-one reference adapters for DOCX, XLSX, PPTX, and PDF, including precise text, page or sheet regions, spreadsheet rows and columns, and stable PPTX objects.
+- Add one controlled reference-selection contract to all four minimal Surfaces without making them own the host's reference collection or Agent workflow.
+- Add optional object-outline and region-selection primitives, demo coverage, external package-consumer checks, and release-gate coverage.
+
+### Boundaries
+
+- Keep screenshot bitmap capture and annotation editing outside the built-in Surface implementation; unsupported capture rejects with a structured error.
+- Keep prompts, Agent calls, document mutation, multi-reference roles, and accept/reject workflows owned by the host application.
+
 ## [0.5.4] - 2026-07-13
 
 ### Surface search and result positioning

@@ -1,6 +1,6 @@
 {
   "name": "@arcships/vue-ui",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "license": "Apache-2.0",
   "description": "Vue 3 UI primitives for Office object outlines, region selection, uploads, and document workflows",
   "keywords": ["vue", "vue3", "office", "agent", "selection", "reference", "ui", "components"],
@@ -52,7 +52,7 @@
     "vue-tsc": "^3.3.6"
   },
   "dependencies": {
-    "@arcships/office-interaction": "^0.5.4",
+    "@arcships/office-interaction": "^0.6.0",
     "signature_pad": "^5.1.3"
   }
 }

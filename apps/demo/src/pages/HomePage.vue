@@ -1,7 +1,7 @@
 <template>
   <div class="home">
-    <h2>Vue Extend UI</h2>
-    <p class="subtitle">在 Vue 3 中查看和编辑 DOCX、XLSX 与 PDF 文件。</p>
+    <h2>Agentic Office UI</h2>
+    <p class="subtitle">在 Vue 3 中预览 Office 文件，把人的选择变成 Agent 可定位的引用。</p>
 
     <div class="grid">
       <div class="card" v-for="item in navItems" :key="item.path">
@@ -41,15 +41,15 @@ function onApiMapToggle(event: Event) {
 }
 
 const navItems = [
-  { path: "/docx-surface", title: "DOCX Surface", desc: "Minimal embeddable renderer — no toolbar, no thumbnails. Build your own controls around it.", status: "Ready", statusClass: "ready" },
+  { path: "/docx-surface", title: "DOCX Surface", desc: "最小分页文档面：宿主持有工具栏、选择模式与确认后的引用。", status: "Ready", statusClass: "ready" },
   { path: "/docx-viewer", title: "DOCX Viewer", desc: "View .docx files with pagination and thumbnails", status: "Ready", statusClass: "ready" },
   { path: "/docx-editor", title: "DOCX Editor", desc: "Edit DOCX text, formatting, tables and positioned images with undo and redo", status: "Ready", statusClass: "ready" },
-  { path: "/xlsx-surface", title: "XLSX Surface", desc: "Minimal embeddable grid — no toolbar, ribbon, or formula bar. Bring your own sheet tabs and controls.", status: "Ready", statusClass: "ready" },
+  { path: "/xlsx-surface", title: "XLSX Surface", desc: "最小工作表网格：选择单元格、范围、行列、图表或区域。", status: "Ready", statusClass: "ready" },
   { path: "/xlsx-viewer", title: "XLSX Viewer", desc: "View and edit workbooks with formulas, formatting, search, charts, tables and sheet tabs", status: "Ready", statusClass: "ready" },
-  { path: "/pptx-surface", title: "PPTX Surface", desc: "Minimal embeddable surface — all slides stacked vertically, with host-owned controls.", status: "Ready", statusClass: "ready" },
+  { path: "/pptx-surface", title: "PPTX Surface", desc: "纵向或单页舞台：选择幻灯片文字、可见对象、组合或区域。", status: "Ready", statusClass: "ready" },
   { path: "/pptx-viewer", title: "PPTX Viewer", desc: "View PPTX with browse/present modes, playback and search", status: "Ready", statusClass: "ready" },
   { path: "/pptx-headless", title: "PPTX 最小组合", desc: "组合文档、播放和舞台三个公开接口", status: "Ready", statusClass: "ready" },
-  { path: "/pdf-surface", title: "PDF Surface", desc: "Minimal embeddable PDF — all pages stacked vertically, host-owned zoom and scroll.", status: "Ready", statusClass: "ready" },
+  { path: "/pdf-surface", title: "PDF Surface", desc: "连续 PDF 页面：用字符几何选择文字，或引用页面与区域。", status: "Ready", statusClass: "ready" },
   { path: "/pdf-viewer", title: "PDF Viewer", desc: "View PDF with zoom, search, and thumbnails", status: "Ready", statusClass: "ready" },
   { path: "/components", title: "Components", desc: "Signature, FileUpload, BoundingBox, LayoutBlocks", status: "Ready", statusClass: "ready" },
   { path: "/runtime-limits", title: "Runtime Limits", desc: "Configure public DOCX/XLSX resource limits and inspect structured errors", status: "Ready", statusClass: "ready" },

@@ -16,6 +16,7 @@
 | [guide/xlsx.md](guide/xlsx.md) | XLSX 查看器、控制器和可选功能 |
 | [guide/pdf.md](guide/pdf.md) | PDF 来源、属性、事件和 Runtime |
 | [guide/pptx.md](guide/pptx.md) | PPTX 纵向浏览、Surface 事件、播放和自定义播放器 |
+| [guide/reference-selection.md](guide/reference-selection.md) | 四种 Surface 的统一选择模式、确认事件、expose 与宿主状态边界 |
 | [guide/surface-migration-guide.md](guide/surface-migration-guide.md) | 接入 0.5.3 最小 Surface 与手势缩放指南 |
 | [components/README.md](components/README.md) | 推荐高层组件与基础 UI 组件 |
 | [api/README.md](api/README.md) | 组合函数、Runtime 和核心 API 导航 |
@@ -26,7 +27,7 @@
 ## 当前执行入口
 
 > [!IMPORTANT]
-> 九个公开包的当前版本为 `0.5.4`。跨格式引用合同、通用选择状态、基础选择控件、四格式阶段一适配器和统一 Surface 选择事件已经落地；确认后的引用集合、意图界面和 Agent 工作流由宿主负责。
+> npm 稳定版仍为 `0.5.4`；九个公开包的当前源码候选版本为 `0.6.0`。跨格式引用合同、通用选择状态、基础选择控件、四格式阶段一适配器和统一 Surface 选择事件已经落地；确认后的引用集合、意图界面和 Agent 工作流由宿主负责。
 
 | 文档 | 用途 |
 |---|---|
@@ -67,19 +68,19 @@
 
 ## 当前包状态
 
-以下状态更新于 2026-07-14。九个公开包当前版本统一为 `0.5.4`。
+以下状态更新于 2026-07-14。九个公开包当前源码候选版本统一为 `0.6.0`，尚未替代 npm 稳定版 `0.5.4`。
 
-| 包 | 当前能力 | 发布状态 |
+| 包 | 当前能力 | 源码状态 |
 |---|---|---|
-| `@arcships/office-interaction` | 提供跨格式引用、确认/取消事件、运行时校验、稳定序列化、候选导航、键盘解释器、几何与临时选择 reducer | `0.5.4` |
-| `@arcships/docx-core` | 提供模型、布局、编辑命令、实例 Runtime、DOCX 基础引用适配，以及公开 Worker/WASM 入口 | `0.5.4` |
-| `@arcships/vue-docx` | 提供 `DocxViewer`、`DocxEditor`、组合函数和公开样式入口 | `0.5.4` |
-| `@arcships/xlsx-core` | 提供工作簿、公式、图表/图片数据、基础引用适配、实例 Runtime，以及公开 Worker/WASM 入口 | `0.5.4` |
-| `@arcships/vue-xlsx` | 提供 `XlsxViewer`、控制器、公开样式，以及按需图表/地图/WebGL 入口 | `0.5.4` |
-| `@arcships/vue-pdf` | 提供 PDF 查看、翻页、缩放、旋转、缩略图、搜索、glyph 文字选择和基础引用适配 | `0.5.4` |
-| `@arcships/vue-ui` | 提供对象轮廓与区域框选择原语，以及上传、签名、缩略图、Find Bar 和版面等通用组件 | `0.5.4` |
-| `@arcships/pptx-core` | 提供 PPTX 列表/单页预览、对象身份与基础引用适配、播放模型、文档会话和浏览器控制器 | `0.5.4` |
-| `@arcships/vue-pptx` | 提供纵向 `PptxViewer`、`PptxStage` Surface 事件、最小组合接口和公开样式 | `0.5.4` |
+| `@arcships/office-interaction` | 提供跨格式引用、确认/取消事件、运行时校验、稳定序列化、候选导航、键盘解释器、几何与临时选择 reducer | `0.6.0` 候选 |
+| `@arcships/docx-core` | 提供模型、布局、编辑命令、实例 Runtime、DOCX 基础引用适配，以及公开 Worker/WASM 入口 | `0.6.0` 候选 |
+| `@arcships/vue-docx` | 提供 `DocxViewer`、`DocxEditor`、组合函数和公开样式入口 | `0.6.0` 候选 |
+| `@arcships/xlsx-core` | 提供工作簿、公式、图表/图片数据、基础引用适配、实例 Runtime，以及公开 Worker/WASM 入口 | `0.6.0` 候选 |
+| `@arcships/vue-xlsx` | 提供 `XlsxViewer`、控制器、公开样式，以及按需图表/地图/WebGL 入口 | `0.6.0` 候选 |
+| `@arcships/vue-pdf` | 提供 PDF 查看、翻页、缩放、旋转、缩略图、搜索、glyph 文字选择和基础引用适配 | `0.6.0` 候选 |
+| `@arcships/vue-ui` | 提供对象轮廓与区域框选择原语，以及上传、签名、缩略图、Find Bar 和版面等通用组件 | `0.6.0` 候选 |
+| `@arcships/pptx-core` | 提供 PPTX 列表/单页预览、对象身份与基础引用适配、播放模型、文档会话和浏览器控制器 | `0.6.0` 候选 |
+| `@arcships/vue-pptx` | 提供纵向 `PptxViewer`、`PptxStage` Surface 事件、最小组合接口和公开样式 | `0.6.0` 候选 |
 
 `@arcships/office-runtime` 仍是私有工作区包，不属于公开安装清单。
 

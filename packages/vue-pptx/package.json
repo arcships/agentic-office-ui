@@ -1,6 +1,6 @@
 {
   "name": "@arcships/vue-pptx",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "license": "Apache-2.0",
   "description": "Vue 3 PPTX viewer with browse and presentation playback modes",
   "keywords": ["vue", "vue3", "pptx", "powerpoint", "presentation", "viewer"],
@@ -41,8 +41,8 @@
     "typecheck": "vue-tsc -p tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
-    "@arcships/office-interaction": "^0.5.4",
-    "@arcships/pptx-core": "^0.5.0"
+    "@arcships/office-interaction": "^0.6.0",
+    "@arcships/pptx-core": "^0.6.0"
   },
   "peerDependencies": {
     "vue": ">=3.2.25 <4"

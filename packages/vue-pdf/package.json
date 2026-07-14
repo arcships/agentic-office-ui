@@ -1,6 +1,6 @@
 {
   "name": "@arcships/vue-pdf",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "license": "Apache-2.0",
   "description": "Vue 3 PDF viewer component with PDFium-based rendering, search, thumbnails, and download",
   "keywords": ["vue", "vue3", "pdf", "viewer", "pdfium", "components"],
@@ -42,7 +42,7 @@
     "typecheck": "vue-tsc -p tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
-    "@arcships/office-interaction": "^0.5.4",
+    "@arcships/office-interaction": "^0.6.0",
     "@embedpdf/core": "^2.14.4",
     "@embedpdf/models": "^2.14.4"
   },

@@ -357,7 +357,7 @@ def click_demo_route(page: Page, href: str) -> None:
 
 def wait_home(page: Page) -> None:
     page.wait_for_function(
-        """() => [...document.querySelectorAll('h2')].some((heading) => heading.textContent?.trim() === 'Vue Extend UI')""",
+        """() => [...document.querySelectorAll('h2')].some((heading) => heading.textContent?.trim() === 'Agentic Office UI')""",
         timeout=10_000,
     )
 

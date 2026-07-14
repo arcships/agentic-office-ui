@@ -1,6 +1,6 @@
 {
   "name": "@arcships/vue-docx",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "license": "Apache-2.0",
   "description": "Vue 3 DOCX viewer and editor components with composable editor state",
   "keywords": ["vue", "vue3", "docx", "word", "viewer", "editor", "components"],
@@ -41,8 +41,8 @@
     "typecheck": "vue-tsc -p tsconfig.typecheck.json --noEmit"
   },
   "dependencies": {
-    "@arcships/docx-core": "^0.5.0",
-    "@arcships/office-interaction": "^0.5.4"
+    "@arcships/docx-core": "^0.6.0",
+    "@arcships/office-interaction": "^0.6.0"
   },
   "peerDependencies": {
     "vue": ">=3.2.25 <4"

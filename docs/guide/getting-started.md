@@ -13,6 +13,7 @@ Agentic Office UI 是一组 Vue 3 Office 文档组件。可以直接使用完整
 | 查看和播放 PPTX | `@arcships/vue-pptx`、`@arcships/pptx-core` | `PptxViewer` |
 | 自定义 PPTX 纵向浏览 | `@arcships/vue-pptx`、`@arcships/pptx-core` | `PptxStage` + `usePptxDocument` |
 | 自定义 PPTX 播放界面 | `@arcships/vue-pptx`、`@arcships/pptx-core` | `PptxStage` 和两个组合函数 |
+| 把选择转换成跨格式引用 | 对应格式包、`@arcships/office-interaction` | 四种最小 Surface 的统一选择事件 |
 | 文件上传、签名等基础界面 | `@arcships/vue-ui` | 对应组件 |
 
 ## 安装
@@ -28,6 +29,8 @@ pnpm add @arcships/vue-ui
 ```
 
 所有 Vue 包都需要 Vue 3。当前支持范围为 `>=3.2.25 <4`。
+
+`@arcships/office-interaction` 和统一 Surface 引用事件属于 `0.6.0` 源码候选；npm 稳定版 `0.5.4` 尚未包含它们。直接消费共享引用类型或纯函数时，应在 `0.6.0` 发布后把该包声明为直接依赖。
 
 ## 引入样式
 
@@ -80,6 +83,7 @@ async function onFileChange(event: Event) {
 - [XLSX 使用指南](xlsx.md)
 - [PDF 使用指南](pdf.md)
 - [PPTX 使用指南](pptx.md)
+- [引用选择接入指南](reference-selection.md)
 - [组件手册](../components/README.md)
 - [API 导航](../api/README.md)
 - [组合函数手册](../composables/README.md)

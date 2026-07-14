@@ -5,7 +5,7 @@
 本包提供 PPTX、PPTM、PPSX、PPSM、POTX、POTM 的纵向列表/单页静态预览、播放模型、文档会话、播放控制器、页面切换和受控媒体。宏内容不会执行。实现范围和验收结果见 [实现设计](../../docs/pptx-playback-implementation-design.md) 与 [正式播放验收记录](../../docs/pptx-playback-acceptance-results.md)。
 
 ```bash
-pnpm add @arcships/pptx-core@0.5.4
+pnpm add @arcships/pptx-core
 ```
 
 浏览器能力从 `@arcships/pptx-core/browser` 导入。补丁后的渲染器代码已经包含在浏览器入口中，使用方不需要安装或配置 `@aiden0z/pptx-renderer`；其普通运行依赖由 npm 自动安装。
