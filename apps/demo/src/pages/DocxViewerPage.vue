@@ -34,6 +34,36 @@
       {{ errorCode ? `${errorCode}: ` : "" }}{{ error }}
     </p>
 
+    <fieldset class="props-panel" data-testid="docx-props-panel">
+      <legend>组件 Props</legend>
+      <label class="checkbox-label">
+        <input v-model="showToolbar" data-testid="docx-prop-show-toolbar" type="checkbox" />
+        showToolbar
+      </label>
+      <label class="checkbox-label">
+        <input v-model="showUpload" data-testid="docx-prop-show-upload" type="checkbox" />
+        showUpload
+      </label>
+      <label class="checkbox-label">
+        <input v-model="showDownload" data-testid="docx-prop-show-download" type="checkbox" />
+        showDownload
+      </label>
+      <label class="checkbox-label">
+        <input v-model="defaultThumbnailsOpen" data-testid="docx-prop-default-thumbnails-open" type="checkbox" />
+        defaultThumbnailsOpen
+      </label>
+      <label class="checkbox-label">
+        <input v-model="isDark" data-testid="docx-prop-is-dark" type="checkbox" />
+        isDark
+      </label>
+      <label class="select-label">
+        defaultZoom
+        <select v-model.number="defaultZoom" data-testid="docx-prop-default-zoom">
+          <option v-for="zoom in zoomOptions" :key="zoom" :value="zoom">{{ zoom }}%</option>
+        </select>
+      </label>
+    </fieldset>
+
     <div class="viewer-container product-surface">
       <DocxViewer
         v-if="fileBuffer"
@@ -41,6 +71,12 @@
         :file="fileBuffer"
         :file-name="displayName"
         :runtime="runtime"
+        :show-toolbar="showToolbar"
+        :show-upload="showUpload"
+        :show-download="showDownload"
+        :default-thumbnails-open="defaultThumbnailsOpen"
+        :default-zoom="defaultZoom"
+        v-model:is-dark="isDark"
         v-model:show-tracked-changes="showTrackedChanges"
         v-model:show-comments="showComments"
         :layout-options="{ pageWidth: 816, pageHeight: 1056 }"
@@ -131,6 +167,13 @@ const allowMainThreadFallback = ref(false)
 const mainThreadFallbackMaxBytes = ref(0)
 const showTrackedChanges = ref(true)
 const showComments = ref(true)
+const showToolbar = ref(true)
+const showUpload = ref(true)
+const showDownload = ref(true)
+const defaultThumbnailsOpen = ref(false)
+const isDark = ref(false)
+const defaultZoom = ref(100)
+const zoomOptions = [50, 75, 100, 125, 150, 175, 200]
 const diagnostics = ref<VisibleDiagnostic[]>([])
 let pageLoadSequence = 0
 let activePageLoad:
@@ -203,7 +246,7 @@ function createPageRuntime() {
 }
 
 const runtime = shallowRef(createPageRuntime())
-const viewerKey = computed(() => `${displayName.value}-${loadCounter.value}`)
+const viewerKey = computed(() => `${displayName.value}-${loadCounter.value}-${String(defaultThumbnailsOpen.value)}`)
 
 function setError(message: string, code: string): void {
   error.value = message
@@ -331,6 +374,12 @@ h2 { margin-bottom: 4px; }
 .runtime-config input[type="url"] { min-width: 280px; }
 .runtime-config .checkbox-label { flex-direction: row; align-items: center; }
 .runtime-config .checkbox-label input { padding: 0; }
+.props-panel { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; padding: 12px 16px; margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); }
+.props-panel legend { padding: 0 6px; font-size: 13px; font-weight: 600; color: var(--muted-foreground); }
+.props-panel .checkbox-label { display: flex; flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: var(--foreground); white-space: nowrap; }
+.props-panel .checkbox-label input { padding: 0; }
+.props-panel .select-label { display: flex; flex-direction: row; align-items: center; gap: 8px; font-size: 13px; color: var(--foreground); }
+.props-panel select { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); }
 .error { color: #ef4444; font-size: 13px; }
 .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; padding: 12px; margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--muted); font-size: 13px; }
 .viewer-container { border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; margin-bottom: 24px; }
