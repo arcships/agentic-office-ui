@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url"
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const coreVersion = JSON.parse(readFileSync(path.join(root, "packages/pptx-core/package.json"), "utf8")).version
 const vueVersion = JSON.parse(readFileSync(path.join(root, "packages/vue-pptx/package.json"), "utf8")).version
+const interactionVersion = JSON.parse(readFileSync(path.join(root, "packages/office-interaction/package.json"), "utf8")).version
 const temporary = mkdtempSync(path.join(tmpdir(), "pptx-consumer-"))
 const packages = path.join(temporary, "packages")
 const consumer = path.join(temporary, "consumer")
@@ -57,8 +58,10 @@ async function waitForServer(url) {
 try {
   run("pnpm", ["pack", "--pack-destination", packages], path.join(root, "packages/pptx-core"))
   run("pnpm", ["pack", "--pack-destination", packages], path.join(root, "packages/vue-pptx"))
+  run("pnpm", ["pack", "--pack-destination", packages], path.join(root, "packages/office-interaction"))
   const core = path.join(packages, `arcships-pptx-core-${coreVersion}.tgz`)
   const vuePptx = path.join(packages, `arcships-vue-pptx-${vueVersion}.tgz`)
+  const interaction = path.join(packages, `arcships-office-interaction-${interactionVersion}.tgz`)
   const coreManifest = JSON.parse(run("tar", ["-xOf", core, "package/package.json"], root))
   const browserBundle = run("tar", ["-xOf", core, "package/dist/browser.js"], root)
   if (coreManifest.dependencies?.["@aiden0z/pptx-renderer"]) {
@@ -82,7 +85,12 @@ try {
       vue: "^3.5.0",
     },
     devDependencies: { typescript: "^5.0.0", vite: "^6.0.0" },
-    pnpm: { overrides: { "@arcships/pptx-core": `file:${core}` } },
+    pnpm: {
+      overrides: {
+        "@arcships/pptx-core": `file:${core}`,
+        "@arcships/office-interaction": `file:${interaction}`,
+      },
+    },
   }, null, 2))
   writeFileSync(path.join(consumer, "tsconfig.json"), JSON.stringify({
     compilerOptions: {

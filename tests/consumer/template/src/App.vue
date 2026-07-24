@@ -40,6 +40,19 @@
       <p data-testid="consumer-xlsx-value">{{ xlsxSelectedValue }}</p>
       <XlsxViewer v-model:read-only="xlsxReadOnly" :controller="xlsxController" height="480px" />
     </section>
+    <section data-testid="consumer-pptx">
+      <h2>PPTX</h2>
+      <p data-testid="consumer-pptx-state" :data-state="pptxState">{{ pptxState }}</p>
+      <p v-if="pptxError" data-testid="consumer-pptx-error">{{ pptxError }}</p>
+      <PptxViewer
+        v-if="pptxFile"
+        :source="pptxFile"
+        :autoplay="false"
+        height="480px"
+        @load-success="onPptxSuccess"
+        @load-error="onPptxError"
+      />
+    </section>
     <section data-testid="consumer-pdf">
       <h2>PDF</h2>
       <p data-testid="consumer-pdf-state" :data-state="pdfState">{{ pdfState }}</p>
@@ -71,6 +84,8 @@ import xlsxWorkerUrl from "@arcships/xlsx-core/worker?worker&url";
 import xlsxWasmUrl from "@arcships/xlsx-core/assets/duke_sheets_wasm_bg.wasm?url";
 import { DocxEditor, DocxViewer } from "@arcships/vue-docx";
 import { XlsxViewer, useXlsxViewerController, type XlsxDiagnostic } from "@arcships/vue-xlsx";
+import { PptxViewer } from "@arcships/vue-pptx";
+import type { PptxPreviewError } from "@arcships/pptx-core";
 import {
   DEFAULT_PDF_MAX_FILE_SIZE,
   PdfViewer,
@@ -88,6 +103,9 @@ const docxState = ref<LoadState>("loading");
 const docxSource = ref("pending");
 const pdfState = ref<LoadState>("loading");
 const pdfError = ref("");
+const pptxFile = shallowRef<ArrayBuffer>();
+const pptxState = ref<LoadState>("loading");
+const pptxError = ref("");
 const origin = globalThis.location.origin;
 
 function addDiagnostic(event: unknown) {
@@ -151,12 +169,14 @@ const overallState = computed<LoadState>(() => {
     docxState.value === "error" ||
     xlsxController.sourceState === "error" ||
     xlsxWorkerController.sourceState === "error" ||
+    pptxState.value === "error" ||
     pdfState.value === "error"
   ) return "error";
   if (
     docxState.value === "ready" &&
     xlsxController.sourceState === "ready" &&
     xlsxWorkerController.sourceState === "ready" &&
+    pptxState.value === "ready" &&
     pdfState.value === "ready"
   ) return "ready";
   return "loading";
@@ -171,6 +191,14 @@ onMounted(async () => {
     docxState.value = "error";
     addDiagnostic({ package: "docx", type: "fixture-error", message: String(error) });
   }
+  try {
+    const response = await fetch("/fixtures/playback-controlled.pptx");
+    if (!response.ok) throw new Error(`fixture request failed: ${response.status}`);
+    pptxFile.value = await response.arrayBuffer();
+  } catch (error) {
+    pptxState.value = "error";
+    addDiagnostic({ package: "pptx", type: "fixture-error", message: String(error) });
+  }
 });
 
 function onDocxSuccess(result: DocxImportResult) {
@@ -182,6 +210,16 @@ function onDocxSuccess(result: DocxImportResult) {
 function onDocxError(error: Error) {
   docxState.value = "error";
   addDiagnostic({ package: "docx", type: "load-error", message: error.message });
+}
+
+function onPptxSuccess() {
+  pptxState.value = "ready";
+}
+
+function onPptxError(error: PptxPreviewError) {
+  pptxState.value = "error";
+  pptxError.value = `${error.code}: ${error.message}`;
+  addDiagnostic({ package: "pptx", type: "load-error", message: error.message });
 }
 
 function onPdfSuccess() {

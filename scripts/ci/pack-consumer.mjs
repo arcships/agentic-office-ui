@@ -190,6 +190,10 @@ try {
       path.join(consumerDir, "public", "fixtures", file),
     );
   }
+  cpSync(
+    path.join(root, "tests", "fixtures", "pptx", "playback-controlled.pptx"),
+    path.join(consumerDir, "public", "fixtures", "playback-controlled.pptx"),
+  );
 
   const packageJson = {
     name: "agentic-office-tgz-consumer",

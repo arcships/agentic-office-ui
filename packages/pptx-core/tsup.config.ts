@@ -11,7 +11,6 @@ export default defineConfig({
   noExternal: [
     /^@arcships\/office-runtime/u,
     /^@aiden0z\/pptx-renderer$/u,
-    /^fflate$/u,
   ],
   skipNodeModulesBundle: true,
 })
