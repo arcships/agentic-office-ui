@@ -76,6 +76,15 @@ import {
   type PptxReferenceContext,
 } from "@arcships/pptx-core";
 import {
+  createPptxDocumentSession,
+  createPptxPreviewSession,
+  type PptxDocumentSession,
+  type PptxDocumentSessionOptions,
+  type PptxPreviewSession,
+  type PptxPreviewSessionOptions,
+  type PptxPreviewSource,
+} from "@arcships/pptx-core/browser";
+import {
   DocxContextMenu,
   DocxDragOverlay,
   DocxEditorViewer,
@@ -124,6 +133,12 @@ import {
   type LegendItem,
   type XlsxDiagnostic,
 } from "@arcships/vue-xlsx";
+import { MemoChartSvg as MemoChartSvgFromSubpath } from "@arcships/vue-xlsx/chart";
+import {
+  buildRegionMapLegendItems,
+  normalizeRegionMapKey,
+} from "@arcships/vue-xlsx/map";
+import { MemoSurfaceChartComposite as MemoSurfaceChartCompositeFromSubpath } from "@arcships/vue-xlsx/webgl";
 import {
   DEFAULT_PDF_MAX_FILE_SIZE,
   PdfViewer,
@@ -144,6 +159,17 @@ import {
   type PdfRenderRuntimeConfig,
   type PdfSource,
 } from "@arcships/vue-pdf";
+import {
+  PptxStage,
+  PptxThumbnail,
+  PptxViewer,
+  usePptxDocument,
+  usePptxPlayback,
+  type PptxPreviewDocument,
+  type PptxStageExpose,
+  type UsePptxDocumentReturn,
+  type UsePptxPlaybackReturn,
+} from "@arcships/vue-pptx";
 import {
   FileUpload,
   OfficeObjectOutlineLayer,
@@ -230,6 +256,17 @@ export const publicRuntimeExports = {
   describePptxReference,
   pptxReferenceKindForObject,
   resolvePptxReference,
+  createPptxDocumentSession,
+  createPptxPreviewSession,
+  PptxStage,
+  PptxThumbnail,
+  PptxViewer,
+  usePptxDocument,
+  usePptxPlayback,
+  MemoChartSvgFromSubpath,
+  buildRegionMapLegendItems,
+  normalizeRegionMapKey,
+  MemoSurfaceChartCompositeFromSubpath,
   FileUpload,
 };
 
@@ -297,6 +334,15 @@ export type PublicTypeExports = {
   pptxOfficeReferenceDraft: PptxOfficeReferenceDraft;
   pptxObjectReferenceOptions: PptxObjectReferenceOptions;
   pptxReferenceContext: PptxReferenceContext;
+  pptxDocumentSession: PptxDocumentSession;
+  pptxDocumentSessionOptions: PptxDocumentSessionOptions;
+  pptxPreviewSession: PptxPreviewSession;
+  pptxPreviewSessionOptions: PptxPreviewSessionOptions;
+  pptxPreviewSource: PptxPreviewSource;
+  pptxPreviewDocument: PptxPreviewDocument;
+  pptxStageExpose: PptxStageExpose;
+  pptxDocumentComposable: UsePptxDocumentReturn;
+  pptxPlaybackComposable: UsePptxPlaybackReturn;
   docxEditorOptions: UseDocxEditorOptions;
   xlsxDiagnostic: XlsxDiagnostic;
   pdfSource: PdfSource;
