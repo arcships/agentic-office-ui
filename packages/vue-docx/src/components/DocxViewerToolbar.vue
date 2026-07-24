@@ -145,6 +145,7 @@
         </svg>
       </button>
       <button
+        v-if="showUpload"
         type="button"
         class="docx-viewer-toolbar__icon-button"
         data-testid="docx-upload"
@@ -157,6 +158,7 @@
         </svg>
       </button>
       <button
+        v-if="showDownload"
         type="button"
         class="docx-viewer-toolbar__icon-button"
         data-testid="docx-download"
@@ -176,23 +178,28 @@
 <script setup lang="ts">
 import { ref, watch } from "vue"
 
-const props = defineProps<{
-  canDownload: boolean
-  disabled: boolean
-  fileName: string
-  isDark: boolean
-  sidebarOpen: boolean
-  showTrackedChanges: boolean
-  showComments: boolean
-  trackedChangeCount: number
-  commentCount: number
-  currentPage: number
-  totalPages: number
-  zoom: number
-  searchQuery: string
-  searchResultCount: number
-  searchResultIndex: number
-}>()
+const props = withDefaults(
+  defineProps<{
+    canDownload: boolean
+    disabled: boolean
+    fileName: string
+    isDark: boolean
+    sidebarOpen: boolean
+    showTrackedChanges: boolean
+    showComments: boolean
+    trackedChangeCount: number
+    commentCount: number
+    currentPage: number
+    totalPages: number
+    zoom: number
+    searchQuery: string
+    searchResultCount: number
+    searchResultIndex: number
+    showUpload?: boolean
+    showDownload?: boolean
+  }>(),
+  { showUpload: true, showDownload: true },
+)
 
 const emit = defineEmits<{
   download: []
