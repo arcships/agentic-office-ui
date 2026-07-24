@@ -27,6 +27,8 @@
       :file-name="displayFileName"
       :is-dark="darkTheme"
       :sidebar-open="sidebarOpen"
+      :show-upload="showUpload"
+      :show-download="showDownload"
       :show-tracked-changes="effectiveShowTrackedChanges"
       :show-comments="effectiveShowComments"
       :tracked-change-count="viewerTrackedChanges.length"
@@ -87,7 +89,7 @@
             <strong>Unable to open this document</strong>
             <span v-if="errorCode(error)" class="docx-viewer-error-code">{{ errorCode(error) }}</span>
             <span>{{ error.message }}</span>
-            <button type="button" @click="uploadInputRef?.click()">Choose another Word file</button>
+            <button v-if="showUpload" type="button" @click="uploadInputRef?.click()">Choose another Word file</button>
           </div>
         </div>
 
@@ -98,7 +100,7 @@
           <div>
             <strong>No document open</strong>
             <span>{{ emptyState }}</span>
-            <button type="button" @click="uploadInputRef?.click()">Choose Word file</button>
+            <button v-if="showUpload" type="button" @click="uploadInputRef?.click()">Choose Word file</button>
           </div>
         </div>
 
@@ -141,6 +143,8 @@ const props = withDefaults(
     runtime?: DocxRuntime
     fileName?: string
     showToolbar?: boolean
+    showUpload?: boolean
+    showDownload?: boolean
     defaultThumbnailsOpen?: boolean
     defaultZoom?: number
     isDark?: boolean
@@ -153,6 +157,8 @@ const props = withDefaults(
     emptyState: "Upload or provide a DOCX file to start.",
     fileName: "document.docx",
     showToolbar: true,
+    showUpload: true,
+    showDownload: true,
     defaultThumbnailsOpen: false,
     defaultZoom: 100,
     isDark: false,

@@ -218,6 +218,45 @@ test("DocxViewer exposes empty, loading, success and error states with public ev
   failed.app.unmount();
 });
 
+test("DocxViewer hides upload and download entry points through showUpload and showDownload", async () => {
+  const shown = await mount(DocxViewer, { emptyState: "DOCX empty" });
+  assert.ok(findByTestId(shown.root, "docx-upload"), "upload button visible by default");
+  assert.ok(findByTestId(shown.root, "docx-download"), "download button visible by default");
+  assert.match(textContent(shown.root), /Choose Word file/);
+  assert.deepEqual(shown.warnings, []);
+  shown.app.unmount();
+
+  const hidden = await mount(DocxViewer, {
+    emptyState: "DOCX empty",
+    showUpload: false,
+    showDownload: false,
+  });
+  assert.ok(findByTestId(hidden.root, "docx-viewer-toolbar"), "toolbar still renders");
+  assert.equal(findByTestId(hidden.root, "docx-upload"), undefined, "upload button hidden");
+  assert.equal(findByTestId(hidden.root, "docx-download"), undefined, "download button hidden");
+  assert.doesNotMatch(textContent(hidden.root), /Choose Word file/);
+  assert.deepEqual(hidden.warnings, []);
+  hidden.app.unmount();
+
+  const failure = new Error("broken DOCX");
+  failure.code = "PARSE_FAILED";
+  const failed = await mount(DocxViewer, {
+    file: new Uint8Array([9]).buffer,
+    showUpload: false,
+    runtime: {
+      createLoader: () => ({ load: async () => { throw failure; }, cancel() {}, dispose() {} }),
+    },
+  });
+  await waitFor(
+    () => findByTestId(failed.root, "docx-viewer")?.props["data-state"] === "error",
+    "DOCX error state",
+  );
+  assert.doesNotMatch(textContent(failed.root), /Choose another Word file/);
+  assert.ok(findByTestId(failed.root, "docx-download"), "download button retained when only upload is hidden");
+  assert.deepEqual(failed.warnings, []);
+  failed.app.unmount();
+});
+
 test("DocxViewer displays model-derived tracked changes and comments without an editor controller", async () => {
   const file = readFileSync(new URL("../../apps/demo/public/samples/review-comments.docx", import.meta.url));
   const bytes = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);

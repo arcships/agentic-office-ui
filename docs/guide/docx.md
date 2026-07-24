@@ -31,6 +31,8 @@ import "@arcships/vue-docx/style.css"
 | `model` | `DocModel` | 无 | 已解析文档模型 |
 | `runtime` | `DocxRuntime` | 组件创建 | 调用方持有的 Runtime |
 | `showToolbar` | `boolean` | `true` | 显示查看工具栏 |
+| `showUpload` | `boolean` | `true` | 上传入口，含工具栏按钮与空态、错误态的选择文件按钮 |
+| `showDownload` | `boolean` | `true` | 工具栏下载按钮 |
 | `defaultThumbnailsOpen` | `boolean` | `false` | 默认展开缩略图 |
 | `defaultZoom` | `number` | `100` | 初始缩放百分比 |
 | `isDark` | `boolean` | `false` | 深色界面 |
