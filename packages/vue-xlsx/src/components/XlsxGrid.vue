@@ -1147,8 +1147,14 @@ function paintFrozenPanes(
   const paintCell = (displayRow: number, displayCol: number, frozenY: boolean, frozenX: boolean) => {
     const cell = getSheetCell(displayRow, displayCol);
     if (!cell || paintedMergeAnchors.has(`${cell.row}:${cell.col}`)) return;
-    const width = effectiveColWidths.value[displayCol] || 0;
-    const height = effectiveRowHeights.value[displayRow] || 0;
+    const merge = mergeRegionAtAnchor(cell);
+    const mergeEnd = merge ? getDisplayCell(merge.end) : null;
+    const width = mergeEnd
+      ? getColOffsetSum(mergeEnd.col + 1) - getColOffsetSum(displayCol)
+      : effectiveColWidths.value[displayCol] || 0;
+    const height = mergeEnd
+      ? getRowOffsetSum(mergeEnd.row + 1) - getRowOffsetSum(displayRow)
+      : effectiveRowHeights.value[displayRow] || 0;
     const x = getColOffsetSum(displayCol) - (frozenX ? 0 : scrollLeft.value);
     const y = getRowOffsetSum(displayRow) - (frozenY ? 0 : scrollTop.value);
     const value = getGridCellDisplayValue(cell);
@@ -1164,7 +1170,7 @@ function paintFrozenPanes(
       ctx.lineWidth = 1;
       ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
     }
-    if (isCellInRange(cell, selection.value)) {
+    if (isCellInRange(cell, selection.value) || (merge && selection.value && rangesIntersect(merge, selection.value))) {
       ctx.fillStyle = selectionFill;
       ctx.fillRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
     }
