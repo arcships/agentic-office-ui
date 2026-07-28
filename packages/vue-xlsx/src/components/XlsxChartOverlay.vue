@@ -4,35 +4,44 @@
     data-testid="xlsx-chart-overlay"
     :data-state="controller.isChartsLoading ? 'loading' : 'ready'"
     :data-chart-count="chartItems.length"
+    :style="layerStyle"
   >
     <div
-      v-for="item in chartItems"
-      :key="item.chart.id"
-      class="xlsx-chart-overlay__item"
-      data-testid="xlsx-chart-item"
-      :class="{
-        'xlsx-chart-overlay__item--selected': item.chart.id === selectedChartId,
-      }"
-      :style="item.style"
-      @pointerdown.stop="onChartPointerDown(item.chart, $event)"
+      v-for="pane in panes"
+      :key="pane.key"
+      class="xlsx-chart-overlay__pane"
+      :data-grid-pane="pane.key"
+      :style="pane.style"
     >
-      <MemoChartSvg
-        v-if="item.chart.chartType !== 'Unsupported'"
-        :chart="item.chart"
-        :rect="item.rect"
-        :palette="chartPalette"
-        :selected-chart-element="
-          selectedChartId === item.chart.id ? controller.selectedChartElement : null
-        "
-        :on-chart-element-pointer-down="
-          selectedChartId === item.chart.id ? onChartElementPointerDown : undefined
-        "
-        :on-chart-element-double-click="
-          selectedChartId === item.chart.id ? onChartElementDoubleClick : undefined
-        "
-      />
-      <div v-else class="xlsx-chart-overlay__unsupported">
-        📊 不支持的图表类型
+      <div
+        v-for="item in pane.items"
+        :key="item.chart.id"
+        class="xlsx-chart-overlay__item"
+        data-testid="xlsx-chart-item"
+        :class="{
+          'xlsx-chart-overlay__item--selected': item.chart.id === selectedChartId,
+        }"
+        :style="item.style"
+        @pointerdown.stop="onChartPointerDown(item.chart, $event)"
+      >
+        <MemoChartSvg
+          v-if="item.chart.chartType !== 'Unsupported'"
+          :chart="item.chart"
+          :rect="item.rect"
+          :palette="chartPalette"
+          :selected-chart-element="
+            selectedChartId === item.chart.id ? controller.selectedChartElement : null
+          "
+          :on-chart-element-pointer-down="
+            selectedChartId === item.chart.id ? onChartElementPointerDown : undefined
+          "
+          :on-chart-element-double-click="
+            selectedChartId === item.chart.id ? onChartElementDoubleClick : undefined
+          "
+        />
+        <div v-else class="xlsx-chart-overlay__unsupported">
+          📊 不支持的图表类型
+        </div>
       </div>
     </div>
   </div>
@@ -40,9 +49,9 @@
 
 <script setup lang="ts">
 import { computed, type CSSProperties } from "vue";
-import type { XlsxViewerController, XlsxChart, XlsxChartElementSelection, XlsxImageRect, XlsxImageAnchor, XlsxSheetData } from "@arcships/xlsx-core";
-import { anchorToAbsoluteRect, emuToPixels } from "@arcships/xlsx-core";
+import type { XlsxViewerController, XlsxChart, XlsxChartElementSelection, XlsxImageRect } from "@arcships/xlsx-core";
 import { MemoChartSvg } from "../optional/lazy-renderers";
+import { createGridPaneLayout, gridBodyLayerStyle, resolveAnchorRect, type GridPaneKey } from "./grid-metrics";
 import type { ChartRendererPalette } from "../render/chart-types";
 
 const props = defineProps<{
@@ -52,6 +61,7 @@ const props = defineProps<{
   scrollTop?: number;
 }>();
 
+const layerStyle = gridBodyLayerStyle;
 const selectedChartId = computed(() => props.controller.selectedChartId);
 
 const chartPalette = computed<ChartRendererPalette>(() => ({
@@ -64,51 +74,31 @@ const chartPalette = computed<ChartRendererPalette>(() => ({
 interface ChartItem {
   chart: XlsxChart;
   rect: XlsxImageRect;
+  pane: GridPaneKey;
   style: CSSProperties;
 }
 
-function frozenExtent(sheet: XlsxSheetData | null, axis: "column" | "row", zoomScale: number): number {
-  if (!sheet?.freezePanes) return 0;
-  const limit = axis === "column" ? sheet.freezePanes.col : sheet.freezePanes.row;
-  const indices = axis === "column" ? sheet.visibleCols : sheet.visibleRows;
-  const sizes = axis === "column" ? sheet.colWidths : sheet.rowHeights;
-  const fallback = axis === "column" ? sheet.defaultColWidthPx : sheet.defaultRowHeightPx;
-  const zoom = Math.max(0.1, zoomScale / 100);
-  return indices.reduce((total, actualIndex, displayIndex) =>
-    actualIndex < limit ? total + (sizes[displayIndex] || fallback) * zoom : total,
-  0);
-}
-
-function resolveAnchorRect(anchor: XlsxImageAnchor, sheet: XlsxSheetData | null, zoomScale: number): XlsxImageRect {
-  const rect = anchorToAbsoluteRect(anchor, sheet);
-  const zoom = Math.max(0.1, zoomScale / 100);
-  return {
-    left: emuToPixels(rect.x) * zoom,
-    top: emuToPixels(rect.y) * zoom,
-    width: Math.max(1, emuToPixels(rect.cx) * zoom),
-    height: Math.max(1, emuToPixels(rect.cy) * zoom),
-  };
-}
+const paneLayout = computed(() => createGridPaneLayout(
+  props.controller.activeSheet,
+  props.controller.zoomScale,
+  props.scrollLeft ?? 0,
+  props.scrollTop ?? 0,
+));
 
 const chartItems = computed<ChartItem[]>(() => {
-  const charts = props.controller.charts as XlsxChart[];
-  return charts
+  const layout = paneLayout.value;
+  return (props.controller.charts as XlsxChart[])
     .filter((chart) => chart.anchor)
     .map((chart) => {
       const rect = resolveAnchorRect(chart.anchor, props.controller.activeSheet, props.controller.zoomScale);
       const isSelected = chart.id === selectedChartId.value;
-      const frozenWidth = frozenExtent(props.controller.activeSheet, "column", props.controller.zoomScale);
-      const frozenHeight = frozenExtent(props.controller.activeSheet, "row", props.controller.zoomScale);
-      const scrollX = rect.left < frozenWidth ? 0 : props.scrollLeft ?? 0;
-      const scrollY = rect.top < frozenHeight ? 0 : props.scrollTop ?? 0;
+      const placement = layout.place(rect);
       return {
         chart,
         rect,
+        pane: placement.pane,
         style: {
-          left: `${rect.left + 48 - scrollX}px`,
-          top: `${rect.top + 24 - scrollY}px`,
-          width: `${rect.width}px`,
-          height: `${rect.height}px`,
+          ...placement.style,
           position: "absolute",
           pointerEvents: "auto",
           cursor: "pointer",
@@ -119,6 +109,11 @@ const chartItems = computed<ChartItem[]>(() => {
       };
     });
 });
+
+const panes = computed(() => paneLayout.value.panes.map((pane) => ({
+  ...pane,
+  items: chartItems.value.filter((item) => item.pane === pane.key),
+})));
 
 function onChartPointerDown(chart: XlsxChart, _event: PointerEvent) {
   props.controller.selectChart(chart.id);
@@ -134,9 +129,14 @@ function onChartElementDoubleClick(selection: XlsxChartElementSelection, _event:
 </script>
 
 <style scoped>
+/* Geometry (inset past the headers) comes from `gridBodyLayerStyle`; each
+   freeze pane clips its own charts so a scrolled-away chart never paints over
+   frozen panes, the headers, or the host UI around the surface. */
 .xlsx-chart-overlay {
-  height: 100%; left: 0; pointer-events: none;
-  position: absolute; top: 0; width: 100%;
+  pointer-events: none; position: absolute;
+}
+.xlsx-chart-overlay__pane {
+  overflow: hidden; pointer-events: none; position: absolute;
 }
 .xlsx-chart-overlay__item { background: transparent; overflow: hidden; }
 .xlsx-chart-overlay__item--selected { box-shadow: 0 0 0 1px #2563eb; }

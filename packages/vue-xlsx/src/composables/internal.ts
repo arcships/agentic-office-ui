@@ -33,8 +33,10 @@ export const XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spr
 export const CSV_MIME_TYPE = "text/csv;charset=utf-8";
 export const MIN_COL_WIDTH_PX = 30;
 export const MIN_ROW_HEIGHT_PX = 16;
+// Must match the header strips painted by XlsxGrid; components/grid-metrics.ts
+// re-exports these for the view layer, so this is the single source of truth.
 export const GRID_HEADER_HEIGHT = 24;
-export const GRID_ROW_HEADER_WIDTH = 40;
+export const GRID_ROW_HEADER_WIDTH = 48;
 export const HISTORY_LIMIT = 100;
 export const DEFAULT_HISTORY_MAX_BYTES = 32 * 1024 * 1024;
 export const INTERNAL_CLIPBOARD_MIME = "application/x-react-xlsx-range+json";
