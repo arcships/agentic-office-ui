@@ -1,40 +1,48 @@
 <template>
-  <div class="xlsx-image-layer" data-testid="xlsx-image-layer">
+  <div class="xlsx-image-layer" data-testid="xlsx-image-layer" :style="layerStyle">
     <div
-      v-for="item in imageItems"
-      :key="item.image.id"
-      class="xlsx-image-layer__item"
-      data-testid="xlsx-image-item"
-      :class="{
-        'xlsx-image-layer__item--selected': item.image.id === selectedImageId,
-      }"
-      :style="item.style"
-      @pointerdown.stop="onImagePointerDown(item.image, $event)"
+      v-for="pane in panes"
+      :key="pane.key"
+      class="xlsx-image-layer__pane"
+      :data-grid-pane="pane.key"
+      :style="pane.style"
     >
-      <img
-        v-if="item.image.src && !failedImageIds.has(item.image.id) && permittedImageIds.has(item.image.id)"
-        :src="item.image.src"
-        :alt="item.image.name ?? 'image'"
-        class="xlsx-image-layer__img"
-        draggable="false"
-        decoding="async"
-        data-image-state="loading"
-        @load="onImageLoad(item.image, $event)"
-        @error="onImageError(item.image, $event)"
-      />
       <div
-        v-else
-        class="xlsx-image-layer__placeholder"
-        :data-image-state="failedImageIds.has(item.image.id) ? 'error' : 'queued'"
-      >🖼️</div>
+        v-for="item in pane.items"
+        :key="item.image.id"
+        class="xlsx-image-layer__item"
+        data-testid="xlsx-image-item"
+        :class="{
+          'xlsx-image-layer__item--selected': item.image.id === selectedImageId,
+        }"
+        :style="item.style"
+        @pointerdown.stop="onImagePointerDown(item.image, $event)"
+      >
+        <img
+          v-if="item.image.src && !failedImageIds.has(item.image.id) && permittedImageIds.has(item.image.id)"
+          :src="item.image.src"
+          :alt="item.image.name ?? 'image'"
+          class="xlsx-image-layer__img"
+          draggable="false"
+          decoding="async"
+          data-image-state="loading"
+          @load="onImageLoad(item.image, $event)"
+          @error="onImageError(item.image, $event)"
+        />
+        <div
+          v-else
+          class="xlsx-image-layer__placeholder"
+          :data-image-state="failedImageIds.has(item.image.id) ? 'error' : 'queued'"
+        >🖼️</div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch, type CSSProperties } from "vue";
-import type { XlsxViewerController, XlsxImage, XlsxImageAnchor, XlsxSheetData } from "@arcships/xlsx-core";
-import { anchorToAbsoluteRect, emuToPixels } from "@arcships/xlsx-core";
+import type { XlsxViewerController, XlsxImage } from "@arcships/xlsx-core";
+import { createGridPaneLayout, gridBodyLayerStyle, resolveAnchorRect, type GridPaneKey } from "./grid-metrics";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -43,6 +51,7 @@ const props = defineProps<{
   scrollTop?: number;
 }>();
 
+const layerStyle = gridBodyLayerStyle;
 const selectedImageId = computed(() => props.controller.selectedImageId);
 const failedImageIds = ref(new Set<string>());
 const permittedImageIds = ref(new Set<string>());
@@ -52,51 +61,32 @@ const knownSources = new Map<string, string>();
 
 interface ImageItem {
   image: XlsxImage;
+  pane: GridPaneKey;
   style: CSSProperties;
 }
 
-function frozenExtent(sheet: XlsxSheetData | null, axis: "column" | "row", zoomScale: number): number {
-  if (!sheet?.freezePanes) return 0;
-  const limit = axis === "column" ? sheet.freezePanes.col : sheet.freezePanes.row;
-  const indices = axis === "column" ? sheet.visibleCols : sheet.visibleRows;
-  const sizes = axis === "column" ? sheet.colWidths : sheet.rowHeights;
-  const fallback = axis === "column" ? sheet.defaultColWidthPx : sheet.defaultRowHeightPx;
-  const zoom = Math.max(0.1, zoomScale / 100);
-  return indices.reduce((total, actualIndex, displayIndex) =>
-    actualIndex < limit ? total + (sizes[displayIndex] || fallback) * zoom : total,
-  0);
-}
-
-function resolveAnchorRect(anchor: XlsxImageAnchor, sheet: XlsxSheetData | null, zoomScale: number) {
-  const rect = anchorToAbsoluteRect(anchor, sheet);
-  const zoom = Math.max(0.1, zoomScale / 100);
-  return {
-    left: emuToPixels(rect.x) * zoom,
-    top: emuToPixels(rect.y) * zoom,
-    width: Math.max(1, emuToPixels(rect.cx) * zoom),
-    height: Math.max(1, emuToPixels(rect.cy) * zoom),
-  };
-}
+const paneLayout = computed(() => createGridPaneLayout(
+  props.controller.activeSheet,
+  props.controller.zoomScale,
+  props.scrollLeft ?? 0,
+  props.scrollTop ?? 0,
+));
 
 const imageItems = computed<ImageItem[]>(() => {
   if (!props.showImages) return [];
+  const layout = paneLayout.value;
   const images = props.controller.images as XlsxImage[];
   return images
     .filter((img) => img.anchor)
     .map((image) => {
       const rect = resolveAnchorRect(image.anchor, props.controller.activeSheet, props.controller.zoomScale);
       const isSelected = image.id === selectedImageId.value;
-      const frozenWidth = frozenExtent(props.controller.activeSheet, "column", props.controller.zoomScale);
-      const frozenHeight = frozenExtent(props.controller.activeSheet, "row", props.controller.zoomScale);
-      const scrollX = rect.left < frozenWidth ? 0 : props.scrollLeft ?? 0;
-      const scrollY = rect.top < frozenHeight ? 0 : props.scrollTop ?? 0;
+      const placement = layout.place(rect);
       return {
         image,
+        pane: placement.pane,
         style: {
-          left: `${rect.left + 48 - scrollX}px`,
-          top: `${rect.top + 24 - scrollY}px`,
-          width: `${rect.width}px`,
-          height: `${rect.height}px`,
+          ...placement.style,
           position: "absolute",
           pointerEvents: "auto",
           cursor: "pointer",
@@ -107,6 +97,11 @@ const imageItems = computed<ImageItem[]>(() => {
       };
     });
 });
+
+const panes = computed(() => paneLayout.value.panes.map((pane) => ({
+  ...pane,
+  items: imageItems.value.filter((item) => item.pane === pane.key),
+})));
 
 function scheduleImageDecodes(): void {
   const visibleIds = new Set(imageItems.value.map((item) => item.image.id));
@@ -189,9 +184,14 @@ function onImagePointerDown(image: XlsxImage, _event: PointerEvent) {
 </script>
 
 <style scoped>
+/* Geometry (inset past the headers) comes from `gridBodyLayerStyle`; each
+   freeze pane clips its own images so a scrolled-away image never paints over
+   frozen panes, the headers, or the host UI around the surface. */
 .xlsx-image-layer {
-  height: 100%; left: 0; pointer-events: none;
-  position: absolute; top: 0; width: 100%;
+  pointer-events: none; position: absolute;
+}
+.xlsx-image-layer__pane {
+  overflow: hidden; pointer-events: none; position: absolute;
 }
 .xlsx-image-layer__item { background: transparent; overflow: hidden; }
 .xlsx-image-layer__item--selected { box-shadow: 0 0 0 2px #2563eb; }

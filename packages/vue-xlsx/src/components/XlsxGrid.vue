@@ -93,6 +93,7 @@ import {
   type XlsxResolvedCellStyle,
   type XlsxSheetData,
 } from "@arcships/xlsx-core";
+import { GRID_HEADER_HEIGHT_PX, GRID_ROW_HEADER_WIDTH_PX } from "./grid-metrics";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -111,8 +112,8 @@ const emit = defineEmits<{
 // ── Constants ──────────────────────────────────────────────────────────
 const DEFAULT_ROW_HEIGHT = 24;
 const DEFAULT_COL_WIDTH = 80;
-const HEADER_HEIGHT = 24;
-const ROW_HEADER_WIDTH = 48;
+const HEADER_HEIGHT = GRID_HEADER_HEIGHT_PX;
+const ROW_HEADER_WIDTH = GRID_ROW_HEADER_WIDTH_PX;
 const OVERSCAN = 240;
 const WORKER_ROW_BATCH_SIZE = 64;
 const MIN_DISPLAY_ROWS = 200;
