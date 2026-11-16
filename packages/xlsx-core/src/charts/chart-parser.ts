@@ -248,6 +248,9 @@ function readChartReferenceFromXml(
 
 function readChartSeriesNameFromXml(seriesNode: Element): string | undefined {
   const titleNode = getFirstLocalChild(seriesNode, "tx");
+  if (!titleNode) {
+    return undefined;
+  }
   const formula = getFirstLocalDescendant(titleNode, "f")?.textContent?.trim();
   if (formula) {
     return formula;
