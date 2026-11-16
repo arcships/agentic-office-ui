@@ -29,6 +29,7 @@ import {
   paragraphRangePresetActive,
   paragraphRangeForMutate,
 } from "@arcships/docx-core"
+import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { EditorCore } from "./editor-shared"
 
 function typedKeys<T extends object>(obj: T): (keyof T)[] {
@@ -128,6 +129,9 @@ export function createEditorFormat(
 
   // ── hyperlink ────────────────────────────────────────────────────
   const setLink = (link?: string): void => {
+    const removing = link === undefined || link === ""
+    const safeLink = removing ? undefined : sanitizeOfficeLink(link)
+    if (!removing && safeLink === undefined) return
     dispatch((txCtx) => {
       const rng = ctx.activeTextRangeSnapshot.value
       if (!rng) return undefined
@@ -149,8 +153,8 @@ export function createEditorFormat(
           const overlapStart = Math.max(safeStart, childStart)
           const overlapEnd = Math.min(safeEnd, childEnd)
           if (overlapStart < overlapEnd) {
-            if (link) {
-              child.link = link
+            if (safeLink) {
+              child.link = safeLink
             } else {
               delete child.link
             }

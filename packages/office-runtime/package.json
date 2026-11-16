@@ -13,6 +13,7 @@
     "./source": "./src/source.ts",
     "./source-format": "./src/source-format.ts",
     "./gesture-zoom": "./src/gesture-zoom.ts",
+    "./link-policy": "./src/link-policy.ts",
     "./surface-search": "./src/surface-search.ts"
   },
   "scripts": {

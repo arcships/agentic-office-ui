@@ -89,6 +89,40 @@ test("DocxDocumentSurface confirms page and touch-region references and resolves
   mounted.app.unmount()
 })
 
+test("DocxDocumentSurface region Escape emits one cancel and stops bubbling", async () => {
+  const cancels = []
+  const Harness = vue.defineComponent({
+    setup() {
+      return () => vue.h(DocxDocumentSurface, {
+        model: createBlankDocumentModel(),
+        documentId: "escape.docx",
+        selectionMode: "region",
+        onSelectionCancel: (event) => cancels.push(event),
+      })
+    },
+  })
+  const mounted = await mount(Harness)
+  const surface = walk(mounted.root).find((node) => node.props?.class === "docx-document-surface")
+  const layer = walk(mounted.root).find((node) => node.props?.class === "docx-document-surface__region-layer")
+  assert.ok(surface)
+  assert.ok(layer)
+  surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 920, height: 1240 })
+
+  let stopped = 0
+  layer.props.onKeydown({
+    key: "Escape",
+    preventDefault() {},
+    stopPropagation() { stopped += 1 },
+  })
+
+  assert.equal(cancels.length, 1)
+  assert.deepEqual(cancels[0], { mode: "region", reason: "escape" })
+  assert.equal(stopped, 1)
+  await vue.nextTick()
+  assert.deepEqual(mounted.warnings, [])
+  mounted.app.unmount()
+})
+
 function xlsxReferenceController() {
   const sheet = {
     name: "Sheet1",

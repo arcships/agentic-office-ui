@@ -60,6 +60,12 @@ export type {
   OfficeXmlEntrySummary,
 } from "./archive-budget";
 export { resolveOfficeUrl, snapshotOfficeUrlPolicy } from "./url-policy";
+export {
+  OFFICE_LINK_PROTOCOLS,
+  isSafeOfficeLink,
+  sanitizeOfficeLink,
+} from "./link-policy";
+export type { OfficeLinkProtocol } from "./link-policy";
 export type {
   OfficeFetch,
   OfficeFetchHeaders,

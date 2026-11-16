@@ -4,6 +4,7 @@
 // Translates JSX to Vue h() calls.
 
 import { h, type VNode } from "vue"
+import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { FormFieldRunNode } from "@arcships/docx-core"
 import {
   formFieldDisplayValue,
@@ -48,8 +49,9 @@ export function renderFormFieldRun(
     " "
   )
 
-  if (child.link) {
-    return renderLinkedFormField(child, key, textValue, ctx, annotationAttributes, trackedInlineChange)
+  const linkHref = child.link ? sanitizeOfficeLink(child.link) : undefined
+  if (linkHref) {
+    return renderLinkedFormField(child, linkHref, key, textValue, ctx, annotationAttributes, trackedInlineChange)
   }
 
   return renderPlainFormField(child, key, textValue, ctx, annotationAttributes, trackedInlineChange)
@@ -57,13 +59,13 @@ export function renderFormFieldRun(
 
 function renderLinkedFormField(
   child: FormFieldRunNode,
+  linkHref: string,
   key: string,
   textValue: string,
   ctx: FieldRunRenderContext,
   annotationAttributes: Record<string, string>,
   trackedInlineChange: ParagraphTrackedInlineChange | undefined
 ): FieldRunRenderResult {
-  const linkHref = child.link!
   const isInternalLink = linkHref.startsWith("#")
   const linkStyle = {
     ...trackedInlineStyle(

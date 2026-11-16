@@ -5,6 +5,7 @@
 // Translates JSX to Vue h() calls.
 
 import { h, type VNode } from "vue"
+import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { ParagraphNode, TextRunNode } from "@arcships/docx-core"
 import {
   runStyleToCss,
@@ -135,9 +136,11 @@ export function renderTextRun(
   }
 
   // Hyperlink
-  if (child.link) {
+  const linkHref = child.link ? sanitizeOfficeLink(child.link) : undefined
+  if (linkHref) {
     return renderHyperlinkRun(
       child,
+      linkHref,
       key,
       textOverride,
       ctx,
@@ -178,13 +181,13 @@ function buildTabStyle(
 
 function renderHyperlinkRun(
   child: TextRunNode,
+  linkHref: string,
   key: string,
   textOverride: string,
   ctx: TextRunRenderContext,
   annotationAttributes: Record<string, string>,
   trackedInlineChange: ParagraphTrackedInlineChange | undefined
 ): TextRunRenderResult {
-  const linkHref = child.link!
   const isInternalLink = linkHref.startsWith("#")
   const isToc = false // isTableOfContentsParagraph handled by caller
 

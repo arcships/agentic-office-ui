@@ -46,7 +46,7 @@
       @pointermove="onRegionPointerMove"
       @pointerup="onRegionPointerUp"
       @pointercancel="onRegionPointerCancel"
-      @keydown.esc="onRegionKeyboardCancel"
+      @keydown.esc.stop="onRegionKeyboardCancel"
     >
       <div v-if="regionFrame" class="docx-document-surface__region-frame" :style="regionFrame" />
     </div>
@@ -269,7 +269,7 @@ const regionRect = ref<NormalizedRect | null>(null)
 const regionFrame = computed(() => {
   const rect = regionRect.value
   const gesture = regionGesture.value
-  const root = surfaceRef.value?.getBoundingClientRect()
+  const root = rect && gesture ? surfaceRef.value?.getBoundingClientRect() : undefined
   return rect && gesture && root ? {
     left: `${gesture.bounds.left - root.left + rect.x * gesture.bounds.width}px`,
     top: `${gesture.bounds.top - root.top + rect.y * gesture.bounds.height}px`,
