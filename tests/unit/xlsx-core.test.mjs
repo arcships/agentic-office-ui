@@ -18,6 +18,8 @@ const {
 globalThis.DOMParser ??= XmlDomParser;
 globalThis.Node ??= XmlNode;
 globalThis.XMLSerializer ??= XmlSerializer;
+// Self-reference through this package's own exports: the tests always load the
+// build that belongs to this checkout, never a linked copy from elsewhere.
 const core = await import(
   pathToFileURL(requireFromXlsxCore.resolve("@arcships/xlsx-core")).href
 );
@@ -33,6 +35,7 @@ function bytesFromFile(name) {
   return new Uint8Array(readFileSync(new URL(name, samples)));
 }
 
+<<<<<<< HEAD
 const XML_PREFIX = String.raw`(?:[\w.-]+:)?`;
 const SERIES_XML_PATTERN = new RegExp(
   `<${XML_PREFIX}ser>([\\s\\S]*?)</${XML_PREFIX}ser>`,
@@ -71,7 +74,7 @@ function resolvePackagePart(relsPath, target) {
   return resolved.pathname.replace(/^\/+/, "");
 }
 
-const wasmPath = requireFromVueXlsx.resolve(
+const wasmPath = requireFromXlsxCore.resolve(
   "@arcships/xlsx-core/assets/duke_sheets_wasm_bg.wasm",
 );
 const wasmBytes = readFileSync(wasmPath);
@@ -468,12 +471,12 @@ test("XLSX Worker client does not post any pre-cancelled request", async () => {
   client.dispose();
 });
 
-test("XLSX Worker cancellation terminates the client and rejects every pending request", async () => {
+test("XLSX Worker cancellation of a parse terminates the client and rejects every pending request", async () => {
   const worker = new ControlledXlsxWorker({ respond: false });
   const client = new core.XlsxWorkerClient({ createWorker: () => worker });
   const cancelledSignal = new ControlledAbortSignal();
   const activeSignal = new ControlledAbortSignal();
-  const cancelled = client.getCellSnapshot(0, 0, 0, cancelledSignal);
+  const cancelled = client.loadWorkbook(new ArrayBuffer(4), false, false, cancelledSignal);
   const active = client.getCellSnapshot(0, 0, 1, activeSignal);
   const cancelledMessage = worker.messages[0];
   const activeMessage = worker.messages[1];
@@ -513,6 +516,112 @@ test("XLSX Worker cancellation terminates the client and rejects every pending r
     client.getRowsBatch(0, 0, 1),
     (error) => error?.name === "AbortError",
   );
+  client.dispose();
+});
+
+test("XLSX Worker aborting one interactive read keeps the worker and other requests alive", async () => {
+  const worker = new ControlledXlsxWorker({ respond: false });
+  const client = new core.XlsxWorkerClient({ createWorker: () => worker });
+  const abortedSignal = new ControlledAbortSignal();
+  const aborted = client.getRowsBatch(0, 0, 10, abortedSignal);
+  const active = client.getCellSnapshot(0, 0, 1);
+  const abortedMessage = worker.messages[0];
+  const activeMessage = worker.messages[1];
+
+  abortedSignal.abort();
+  await assert.rejects(aborted, (error) => error?.name === "AbortError");
+  assert.equal(worker.terminated, false, "aborting a read terminated the worker");
+  assert.equal(worker.terminateCount, 0);
+  assert.deepEqual(
+    worker.messages.at(-1),
+    { payload: { targetId: abortedMessage.id }, type: "cancel" },
+    "the worker was not told to drop the queued read",
+  );
+
+  worker.emit("message", {
+    data: {
+      id: activeMessage.id,
+      success: true,
+      result: { displayValue: "active", formula: "active" },
+    },
+  });
+  assert.equal((await active).displayValue, "active");
+
+  worker.emit("message", {
+    data: { id: abortedMessage.id, success: true, result: null },
+  });
+  const next = client.getRowsBatch(0, 0, 1);
+  const nextMessage = worker.messages.at(-1);
+  worker.emit("message", {
+    data: { id: nextMessage.id, success: true, result: ["row"] },
+  });
+  assert.deepEqual(await next, ["row"]);
+  client.dispose();
+});
+
+test("XLSX Worker parse timeout does not apply to interactive reads", async () => {
+  const worker = new ControlledXlsxWorker({ respond: false });
+  const client = new core.XlsxWorkerClient({
+    createWorker: () => worker,
+    limits: { maxParseMs: 5 },
+  });
+  let settled = false;
+  const read = client.getRowsBatch(0, 0, 10);
+  read.then(
+    () => { settled = true; },
+    () => { settled = true; },
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(settled, false, "the interactive read was timed out");
+  assert.equal(worker.terminated, false, "the parse budget terminated the worker for a read");
+
+  worker.emit("message", {
+    data: { id: worker.messages[0].id, success: true, result: ["row"] },
+  });
+  assert.deepEqual(await read, ["row"]);
+  client.dispose();
+});
+
+test("XLSX Worker client keeps the worker alive when a load is superseded", async () => {
+  const worker = new ControlledXlsxWorker({ respond: false });
+  const client = new core.XlsxWorkerClient({ createWorker: () => worker });
+  const superseded = client.loadWorkbook(new ArrayBuffer(4));
+  const current = client.loadWorkbook(new ArrayBuffer(4));
+  const supersededMessage = worker.messages[0];
+  const currentMessage = worker.messages[1];
+
+  worker.emit("message", {
+    data: {
+      id: supersededMessage.id,
+      success: false,
+      error: { code: "SUPERSEDED", message: "load superseded" },
+    },
+  });
+  await assert.rejects(
+    superseded,
+    (error) => error?.code === "SUPERSEDED" && error?.name === "XlsxWorkerError",
+  );
+  assert.equal(worker.terminated, false, "a superseded load terminated the worker");
+
+  worker.emit("message", {
+    data: {
+      id: currentMessage.id,
+      success: true,
+      result: {
+        chartsByWorkbookSheetIndex: [],
+        chartsheets: [],
+        formControlsByWorkbookSheetIndex: [],
+        imagesByWorkbookSheetIndex: [],
+        objectUrls: [],
+        shapesByWorkbookSheetIndex: [],
+        sheets: [],
+        tablesByWorkbookSheetIndex: [],
+        tabs: [],
+      },
+    },
+  });
+  assert.deepEqual((await current).sheets, []);
   client.dispose();
 });
 

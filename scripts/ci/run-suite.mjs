@@ -63,6 +63,7 @@ const suites = {
       "tests/unit/docx-reference-adapter.test.mjs",
       "tests/unit/docx-history-cache.test.mjs",
       "tests/unit/xlsx-core.test.mjs",
+      "tests/unit/xlsx-worker.test.mjs",
       "tests/unit/xlsx-reference-adapter.test.mjs",
       "packages/vue-xlsx/test/lazy-loading.mjs",
       "tests/unit/pdf-source.test.mjs",

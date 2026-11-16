@@ -150,7 +150,8 @@ export type XlsxWorkerErrorCode =
   | "LIMIT_EXCEEDED"
   | "TIMEOUT"
   | "INVALID_SOURCE"
-  | "WORKER_FAILED";
+  | "WORKER_FAILED"
+  | "SUPERSEDED";
 
 export class XlsxWorkerError extends Error {
   readonly code: XlsxWorkerErrorCode;
@@ -333,14 +334,25 @@ export class XlsxWorkerClient {
 
       const id = this.nextRequestId;
       this.nextRequestId += 1;
+      const isParseRequest = message.type === "load" || message.type === "parseCharts";
       let cleaned = false;
       let timeout: ReturnType<typeof setTimeout> | undefined;
       const handleAbort = () => {
-        if (!this.pendingRequests.has(id)) return;
-        // The Worker protocol has no per-request cancellation message. Keeping
-        // this Worker alive would let the expensive parse continue after the
-        // caller has cancelled it, so cancellation is terminal for the client.
-        this.close(createAbortError());
+        const pending = this.pendingRequests.get(id);
+        if (!pending) return;
+        this.pendingRequests.delete(id);
+        pending.cleanup();
+        pending.reject(createAbortError());
+        if (isParseRequest) {
+          // A running parse cannot be interrupted inside the Worker. Keeping
+          // this Worker alive would let the expensive parse continue after the
+          // caller has cancelled it, so parse cancellation stays terminal.
+          this.close(createAbortError());
+          return;
+        }
+        // Interactive reads are cheap and queued inside the Worker: cancel the
+        // queued slot and keep the Worker (and every other request) alive.
+        this.postCancelRequest(id);
       };
       const cleanup = () => {
         if (cleaned) return;
@@ -354,7 +366,9 @@ export class XlsxWorkerClient {
         resolve: resolve as (value: unknown) => void
       });
       signal?.addEventListener("abort", handleAbort, { once: true });
-      const timeoutMs = this.limits.maxParseMs;
+      // maxParseMs is a parse budget: interactive reads wait for the Worker
+      // queue instead of being killed by it.
+      const timeoutMs = isParseRequest ? this.limits.maxParseMs : undefined;
       if (timeoutMs !== undefined) {
         timeout = setTimeout(() => {
           if (!this.pendingRequests.has(id)) return;
@@ -378,6 +392,16 @@ export class XlsxWorkerClient {
         this.close(error instanceof Error ? error : new Error(String(error)));
       }
     });
+  }
+
+  private postCancelRequest(targetId: number) {
+    if (this.disposed) return;
+    try {
+      // Fire-and-forget: the Worker has no response for a cancelled slot.
+      this.worker.postMessage({ payload: { targetId }, type: "cancel" });
+    } catch {
+      // Cancellation is best-effort; the request is already rejected.
+    }
   }
 
   private resolveNextWasmSource(): WorkerWasmSource | undefined {
