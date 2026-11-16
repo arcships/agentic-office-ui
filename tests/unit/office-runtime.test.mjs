@@ -647,7 +647,7 @@ test("source loading uses controlled fetch and enforces the input byte limit", a
   assert.deepEqual([...new Uint8Array(loaded.buffer)], [...bytes]);
   assert.equal(loaded.sourceKind, "url");
   assert.equal(loaded.resolvedUrl, "https://app.example/viewer/book.xlsx");
-  assert.equal(calls[0].init.redirect, "error");
+  assert.equal(calls[0].init.redirect, "follow");
   assert.equal(calls[0].init.credentials, "omit");
 
   await assert.rejects(
@@ -657,6 +657,349 @@ test("source loading uses controlled fetch and enforces the input byte limit", a
     ),
     (error) => error?.code === "LIMIT_EXCEEDED" && error?.limit === "maxInputBytes",
   );
+});
+
+test("limit resolution keeps hard caps without defaults and rejects invalid values", () => {
+  const tightened = runtime.resolveOfficeLimits(
+    { maxInputBytes: 100, maxXmlDepth: 10 },
+    { maxInputBytes: 50, maxFormulaCount: 3 },
+    { maxInputBytes: 80, maxFormulaCount: 200, maxDocxPages: 500 },
+  );
+  assert.equal(tightened.maxInputBytes, 50);
+  assert.equal(tightened.maxXmlDepth, 10);
+  assert.equal(tightened.maxFormulaCount, 3);
+  assert.equal(tightened.maxDocxPages, 500);
+  assert.equal(Object.isFrozen(tightened), true);
+
+  const capped = runtime.resolveOfficeLimits(
+    { maxInputBytes: 100 },
+    { maxInputBytes: 500 },
+    { maxInputBytes: 80, maxArchiveEntries: 20 },
+  );
+  assert.equal(capped.maxInputBytes, 80);
+  assert.equal(capped.maxArchiveEntries, 20);
+
+  for (const invalid of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.throws(
+      () => runtime.resolveOfficeLimits(
+        { maxInputBytes: 10 },
+        { maxInputBytes: invalid },
+        { maxInputBytes: 20 },
+      ),
+      (error) => error?.name === "OfficeLoadError"
+        && error?.code === "INVALID_ARGUMENT"
+        && error?.phase === "config"
+        && error?.limit === "maxInputBytes",
+    );
+  }
+});
+
+test("non-positive maxInputBytes is a configuration error instead of an unlimited guard", async () => {
+  let fetches = 0;
+  const policy = {
+    enabled: true,
+    baseUrl: "https://app.example/viewer/",
+    allowRelativeUrl: true,
+    allowedProtocols: ["https:"],
+    allowedOrigins: ["https://app.example"],
+    fetch: async () => {
+      fetches += 1;
+      throw new Error("must not fetch");
+    },
+  };
+
+  for (const invalid of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    await assert.rejects(
+      runtime.loadOfficeSource(
+        { kind: "bytes", bytes: new ArrayBuffer(4) },
+        { limits: { maxInputBytes: invalid } },
+      ),
+      (error) => error?.code === "INVALID_ARGUMENT"
+        && error?.phase === "config"
+        && error?.limit === "maxInputBytes",
+    );
+    await assert.rejects(
+      runtime.loadOfficeSource(
+        { kind: "url", url: "book.xlsx" },
+        { urlPolicy: policy, limits: { maxInputBytes: invalid } },
+      ),
+      (error) => error?.code === "INVALID_ARGUMENT" && error?.limit === "maxInputBytes",
+    );
+  }
+  assert.equal(fetches, 0);
+});
+
+test("URL loading cancels a chunked response as soon as maxInputBytes is exceeded", async () => {
+  const chunks = [
+    new Uint8Array([0x50, 0x4b, 0x03, 0x04]),
+    new Uint8Array([1, 2, 3, 4]),
+    new Uint8Array([5, 6, 7, 8]),
+  ];
+  let reads = 0;
+  let cancelCalls = 0;
+  let releaseCalls = 0;
+  let arrayBufferCalls = 0;
+  const policy = {
+    enabled: true,
+    baseUrl: "https://app.example/viewer/",
+    allowRelativeUrl: true,
+    allowedProtocols: ["https:"],
+    allowedOrigins: ["https://app.example"],
+    fetch: async (url) => ({
+      ok: true,
+      status: 200,
+      url,
+      headers: { get: () => null },
+      body: {
+        getReader: () => ({
+          read: async () => {
+            const value = chunks[reads];
+            reads += 1;
+            return value ? { done: false, value } : { done: true };
+          },
+          cancel: async () => { cancelCalls += 1; },
+          releaseLock: () => { releaseCalls += 1; },
+        }),
+      },
+      arrayBuffer: async () => {
+        arrayBufferCalls += 1;
+        return new ArrayBuffer(0);
+      },
+    }),
+  };
+
+  await assert.rejects(
+    runtime.loadOfficeSource(
+      { kind: "url", url: "book.xlsx" },
+      { urlPolicy: policy, limits: { maxInputBytes: 5 } },
+    ),
+    (error) => error?.code === "LIMIT_EXCEEDED"
+      && error?.phase === "input"
+      && error?.limit === "maxInputBytes"
+      && error?.actual === 8
+      && error?.allowed === 5,
+  );
+  assert.equal(reads, 2);
+  assert.equal(cancelCalls, 1);
+  assert.equal(releaseCalls, 1);
+  assert.equal(arrayBufferCalls, 0);
+});
+
+test("URL loading assembles a chunked response that stays within maxInputBytes", async () => {
+  const chunks = [new Uint8Array([0x50, 0x4b]), new Uint8Array([0x03, 0x04])];
+  let reads = 0;
+  let cancelCalls = 0;
+  const policy = {
+    enabled: true,
+    baseUrl: "https://app.example/viewer/",
+    allowRelativeUrl: true,
+    allowedProtocols: ["https:"],
+    allowedOrigins: ["https://app.example"],
+    fetch: async (url) => ({
+      ok: true,
+      status: 200,
+      url,
+      headers: { get: () => null },
+      body: {
+        getReader: () => ({
+          read: async () => {
+            const value = chunks[reads];
+            reads += 1;
+            return value ? { done: false, value } : { done: true };
+          },
+          cancel: async () => { cancelCalls += 1; },
+          releaseLock: () => {},
+        }),
+      },
+      arrayBuffer: async () => { throw new Error("the stream must be preferred"); },
+    }),
+  };
+
+  const loaded = await runtime.loadOfficeSource(
+    { kind: "url", url: "book.xlsx" },
+    { urlPolicy: policy, limits: { maxInputBytes: 4 } },
+  );
+  assert.deepEqual([...new Uint8Array(loaded.buffer)], [0x50, 0x4b, 0x03, 0x04]);
+  assert.equal(reads, 3);
+  assert.equal(cancelCalls, 0);
+});
+
+test("URL loading rejects an oversized Content-Length before reading the stream", async () => {
+  let readerCalls = 0;
+  let cancelCalls = 0;
+  let arrayBufferCalls = 0;
+  const policy = {
+    enabled: true,
+    baseUrl: "https://app.example/viewer/",
+    allowRelativeUrl: true,
+    allowedProtocols: ["https:"],
+    allowedOrigins: ["https://app.example"],
+    fetch: async (url) => ({
+      ok: true,
+      status: 200,
+      url,
+      headers: { get: (name) => name.toLowerCase() === "content-length" ? "8" : null },
+      body: {
+        getReader: () => {
+          readerCalls += 1;
+          throw new Error("the body must not be read");
+        },
+        cancel: async () => { cancelCalls += 1; },
+      },
+      arrayBuffer: async () => {
+        arrayBufferCalls += 1;
+        return new ArrayBuffer(8);
+      },
+    }),
+  };
+
+  await assert.rejects(
+    runtime.loadOfficeSource(
+      { kind: "url", url: "book.xlsx" },
+      { urlPolicy: policy, limits: { maxInputBytes: 4 } },
+    ),
+    (error) => error?.code === "LIMIT_EXCEEDED" && error?.actual === 8 && error?.allowed === 4,
+  );
+  assert.equal(readerCalls, 0);
+  assert.equal(cancelCalls, 1);
+  assert.equal(arrayBufferCalls, 0);
+});
+
+test("URL loading still enforces maxInputBytes for fetchers that only expose arrayBuffer", async () => {
+  let reads = 0;
+  const policy = {
+    enabled: true,
+    baseUrl: "https://app.example/viewer/",
+    allowRelativeUrl: true,
+    allowedProtocols: ["https:"],
+    allowedOrigins: ["https://app.example"],
+    fetch: async (url) => ({
+      ok: true,
+      status: 200,
+      url,
+      headers: { get: () => null },
+      arrayBuffer: async () => {
+        reads += 1;
+        return new Uint8Array(8).buffer;
+      },
+    }),
+  };
+
+  await assert.rejects(
+    runtime.loadOfficeSource(
+      { kind: "url", url: "book.xlsx" },
+      { urlPolicy: policy, limits: { maxInputBytes: 5 } },
+    ),
+    (error) => error?.code === "LIMIT_EXCEEDED" && error?.actual === 8 && error?.allowed === 5,
+  );
+  assert.equal(reads, 1);
+});
+
+test("URL loading cancels the stream and reports ABORTED when cancelled mid-read", async () => {
+  const controller = new AbortController();
+  let reads = 0;
+  let cancelCalls = 0;
+  let releaseCalls = 0;
+  const policy = {
+    enabled: true,
+    baseUrl: "https://app.example/viewer/",
+    allowRelativeUrl: true,
+    allowedProtocols: ["https:"],
+    allowedOrigins: ["https://app.example"],
+    fetch: async (url) => ({
+      ok: true,
+      status: 200,
+      url,
+      headers: { get: () => null },
+      body: {
+        getReader: () => ({
+          read: async () => {
+            reads += 1;
+            if (reads === 1) return { done: false, value: new Uint8Array([0x50]) };
+            controller.abort();
+            return { done: false, value: new Uint8Array([0x4b]) };
+          },
+          cancel: async () => { cancelCalls += 1; },
+          releaseLock: () => { releaseCalls += 1; },
+        }),
+      },
+      arrayBuffer: async () => new ArrayBuffer(0),
+    }),
+  };
+
+  await assert.rejects(
+    runtime.loadOfficeSource(
+      { kind: "url", url: "book.xlsx" },
+      { urlPolicy: policy, signal: controller.signal, limits: { maxInputBytes: 10 } },
+    ),
+    (error) => error?.code === "ABORTED" && error?.phase === "read",
+  );
+  assert.equal(reads, 2);
+  assert.equal(cancelCalls, 1);
+  assert.equal(releaseCalls, 1);
+});
+
+test("URL loading follows same-origin redirects and revalidates the final address", async () => {
+  const calls = [];
+  const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
+  const policy = {
+    enabled: true,
+    baseUrl: "https://app.example/viewer/",
+    allowRelativeUrl: true,
+    allowedProtocols: ["https:"],
+    allowedOrigins: ["https://app.example"],
+    fetch: async (url, init) => {
+      calls.push({ url, init });
+      return {
+        ok: true,
+        status: 200,
+        url: "https://app.example/cdn/final.xlsx?token=secret",
+        headers: { get: () => null },
+        arrayBuffer: async () => bytes.buffer.slice(0),
+      };
+    },
+  };
+
+  const loaded = await runtime.loadOfficeSource(
+    { kind: "url", url: "book.xlsx" },
+    { urlPolicy: policy, limits: { maxInputBytes: 4 } },
+  );
+  assert.equal(calls[0].url, "https://app.example/viewer/book.xlsx");
+  assert.equal(calls[0].init.redirect, "follow");
+  assert.equal(loaded.resolvedUrl, "https://app.example/cdn/final.xlsx");
+  assert.equal(loaded.fileName, "final.xlsx");
+});
+
+test("URL loading rejects redirects whose final address violates the URL policy", async () => {
+  for (const finalUrl of ["https://other.example/final.xlsx", "http://app.example/final.xlsx"]) {
+    let reads = 0;
+    const policy = {
+      enabled: true,
+      baseUrl: "https://app.example/viewer/",
+      allowRelativeUrl: true,
+      allowedProtocols: ["https:"],
+      allowedOrigins: ["https://app.example"],
+      fetch: async () => ({
+        ok: true,
+        status: 200,
+        url: finalUrl,
+        headers: { get: () => null },
+        arrayBuffer: async () => {
+          reads += 1;
+          return new ArrayBuffer(4);
+        },
+      }),
+    };
+
+    await assert.rejects(
+      runtime.loadOfficeSource(
+        { kind: "url", url: "book.xlsx" },
+        { urlPolicy: policy, limits: { maxInputBytes: 4 } },
+      ),
+      (error) => error?.code === "SOURCE_NOT_ALLOWED" && error?.phase === "source",
+    );
+    assert.equal(reads, 0);
+  }
 });
 
 test("all formats receive the same stable abort error and safe diagnostics", () => {

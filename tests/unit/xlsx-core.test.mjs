@@ -523,7 +523,7 @@ test("XLSX URL loading uses shared policy, controlled fetch and safe diagnostics
   const result = await core.loadVerifiedXlsxSource("sales-table.xlsx?token=secret", policy);
   assert.equal(result.fileName, "sales-table.xlsx");
   assert.equal(result.resolvedUrl, "https://app.example/viewer/sales-table.xlsx");
-  assert.equal(calls[0].init.redirect, "error");
+  assert.equal(calls[0].init.redirect, "follow");
   assert.equal(calls[0].init.credentials, "omit");
   assert.equal(JSON.stringify(result).includes("secret"), false);
 

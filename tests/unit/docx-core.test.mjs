@@ -322,7 +322,7 @@ test("DOCX runtime loads URL sources through shared policy and one task identity
     const result = await runtime.loadSource({ kind: "url", url: "invoice-table.docx?token=secret" });
     assert.equal(result.model.nodes[0].id, "url-source");
     assert.equal(requests.length, 1);
-    assert.equal(requests[0].init.redirect, "error");
+    assert.equal(requests[0].init.redirect, "follow");
     assert.equal(requests[0].init.credentials, "omit");
     const taskIds = new Set(diagnostics.map((event) => event.requestId));
     assert.equal(taskIds.size, 1);

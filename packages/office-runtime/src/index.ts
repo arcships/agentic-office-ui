@@ -33,6 +33,7 @@ export {
 } from "./gesture-zoom";
 export {
   assertOfficeInputBytes,
+  resolveOfficeInputByteLimit,
   resolveOfficeLimits,
   snapshotOfficeLimits,
 } from "./limits";
@@ -62,6 +63,8 @@ export type {
 export { resolveOfficeUrl, snapshotOfficeUrlPolicy } from "./url-policy";
 export type {
   OfficeFetch,
+  OfficeFetchBody,
+  OfficeFetchBodyReader,
   OfficeFetchHeaders,
   OfficeFetchInit,
   OfficeFetchResponse,
