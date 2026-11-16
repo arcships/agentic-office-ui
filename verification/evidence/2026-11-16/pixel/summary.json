@@ -1,0 +1,34 @@
+{
+  "suite": "pixel-baseline",
+  "date": "2026-11-16",
+  "cases": {
+    "docx": {
+      "rmse": 23.85,
+      "diff_ratio": 0.1862,
+      "height": 1035,
+      "threshold": 0.3,
+      "ok": true
+    },
+    "pptx": {
+      "rmse": 4.95,
+      "diff_ratio": 0.0285,
+      "height": 600,
+      "threshold": 0.3,
+      "ok": true
+    },
+    "pdf": {
+      "rmse": 22.62,
+      "diff_ratio": 0.1813,
+      "height": 566,
+      "threshold": 0.2,
+      "ok": true
+    }
+  },
+  "thresholds": {
+    "docx": 0.3,
+    "pptx": 0.3,
+    "pdf": 0.2
+  },
+  "failures": [],
+  "verdict": "PASS"
+}
