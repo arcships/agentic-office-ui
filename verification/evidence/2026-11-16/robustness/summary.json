@@ -1,0 +1,91 @@
+{
+  "suite": "robustness",
+  "date": "2026-11-16",
+  "cases": [
+    {
+      "case": "corrupt-docx",
+      "elapsed_s": 6.58,
+      "state": {
+        "docxState": "error",
+        "pptxState": null,
+        "status": "状态：error",
+        "errorCode": "PARSE_FAILED",
+        "errorText": "Unable to open this documentPARSE_FAILED文件不是完整的 OOXML 压缩包：找不到目录结束记录。Choose another Word file",
+        "tabs": []
+      },
+      "page_errors": []
+    },
+    {
+      "case": "truncated-docx",
+      "elapsed_s": 6.54,
+      "state": {
+        "docxState": "error",
+        "pptxState": null,
+        "status": "状态：error",
+        "errorCode": "PARSE_FAILED",
+        "errorText": "Unable to open this documentPARSE_FAILED文件不是完整的 OOXML 压缩包：找不到目录结束记录。Choose another Word file",
+        "tabs": []
+      },
+      "page_errors": []
+    },
+    {
+      "case": "oversized-docx",
+      "elapsed_s": 6.54,
+      "state": {
+        "docxState": "error",
+        "pptxState": null,
+        "status": "状态：error",
+        "errorCode": "LIMIT_EXCEEDED",
+        "errorText": "Unable to open this documentLIMIT_EXCEEDED输入大小 31457284 字节超过允许值 26214400 字节。Choose another Word file",
+        "tabs": []
+      },
+      "page_errors": []
+    },
+    {
+      "case": "oversized-xlsx",
+      "elapsed_s": 6.5,
+      "state": {
+        "docxState": null,
+        "pptxState": null,
+        "status": "error",
+        "errorCode": "INVALID_WORKBOOK",
+        "errorText": "INVALID_WORKBOOK: 无法打开 XLSX 文件。",
+        "tabs": []
+      },
+      "page_errors": []
+    },
+    {
+      "case": "zip-bomb-xlsx",
+      "elapsed_s": 6.48,
+      "state": {
+        "docxState": null,
+        "pptxState": null,
+        "status": "error",
+        "errorCode": "LIMIT_EXCEEDED",
+        "errorText": "LIMIT_EXCEEDED: maxCompressionRatio 的实际值 1028.756365643156 超过允许值 100。",
+        "tabs": []
+      },
+      "page_errors": []
+    },
+    {
+      "case": "concurrent-xlsx",
+      "state": {
+        "docxState": null,
+        "pptxState": null,
+        "status": "ready",
+        "errorCode": null,
+        "errorText": null,
+        "tabs": [
+          "Validation"
+        ]
+      },
+      "page_errors": []
+    },
+    {
+      "case": "unmount-during-load",
+      "page_errors": []
+    }
+  ],
+  "failures": [],
+  "verdict": "PASS"
+}

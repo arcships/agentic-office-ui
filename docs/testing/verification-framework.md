@@ -136,4 +136,5 @@ uv run --with playwright python tests/blackbox/upstream_parity.py --strict
 - V2 回环：DOCX PASS；XLSX 导出丢 chart part，openpyxl 无法重开（#66，P0）。
 - V3 跨浏览器：Chromium+Firefox 通过；WebKit 因宿主库缺失 SKIP。
 - V4 像素基线：3 个用例 PASS（阈值 20–30%）。
-- 下一步：V5 鲁棒性。
+- V5 鲁棒性：7 个用例 PASS；zip 炸弹/超限/并发/卸载均按预期，XLSX 大文件先报解析错误待 #54 评估。
+- 下一步：V6 场景矩阵。
