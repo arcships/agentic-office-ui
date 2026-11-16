@@ -117,6 +117,58 @@ def docx_scenarios(browser) -> dict:
     return result
 
 
+def xlsx_zoom(browser) -> dict:
+    page = browser.new_page(viewport={"width": 1440, "height": 900})
+    load(page, "/#/xlsx-viewer", 'input[type="file"][accept*="xlsx"]', XLSX)
+    result = {}
+    select = page.locator('select[aria-label="Zoom level"]')
+    for level in ("200", "50"):
+        select.select_option(level)
+        page.wait_for_timeout(1000)
+        result[f"zoom_{level}"] = page.evaluate(
+            """() => { const c = document.querySelector('canvas.xlsx-grid__body');
+              return { value: document.querySelector('select[aria-label="Zoom level"]')?.value ?? null,
+                       canvas: c ? { w: c.width, h: c.height, cssW: Math.round(c.getBoundingClientRect().width) } : null }; }"""
+        )
+    select.select_option("100")
+    page.close()
+    return result
+
+
+def pptx_zoom(browser) -> dict:
+    page = browser.new_page(viewport={"width": 1440, "height": 900})
+    load(page, "/#/pptx-viewer", 'input[type="file"][accept*="pptx"]', PPTX)
+    page.wait_for_timeout(1000)
+    before = page.locator(".pptx-viewer__zoom button").nth(1).inner_text()
+    page.locator(".pptx-viewer__zoom button").nth(2).click()
+    page.locator(".pptx-viewer__zoom button").nth(2).click()
+    page.wait_for_timeout(800)
+    after = page.locator(".pptx-viewer__zoom button").nth(1).inner_text()
+    stage = page.evaluate("() => { const el = document.querySelector('[data-testid=\"pptx-viewer\"]'); return el ? { w: Math.round(el.getBoundingClientRect().width), h: Math.round(el.getBoundingClientRect().height) } : null }")
+    page.close()
+    return {"before": before, "after": after, "stage": stage}
+
+
+def docx_ime(browser) -> dict:
+    page = browser.new_page(viewport={"width": 1440, "height": 900})
+    page.goto(f"{LOCAL_URL}/#/docx-editor", wait_until="networkidle")
+    page.wait_for_selector('[contenteditable="true"]', timeout=30000)
+    page.wait_for_timeout(1200)
+    editable = page.locator('[contenteditable="true"]').first
+    editable.click()
+    page.keyboard.press("End")
+    before = page.locator('[contenteditable="true"]').count()
+    editable.dispatch_event("compositionstart")
+    page.keyboard.type("zhong")
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(300)
+    after_enter = page.locator('[contenteditable="true"]').count()
+    editable.dispatch_event("compositionend")
+    page.keyboard.press("Escape")
+    page.close()
+    return {"paragraphs_before": before, "paragraphs_after_enter": after_enter, "guard_held": before == after_enter}
+
+
 def xlsx_ime(browser) -> dict:
     page = browser.new_page(viewport={"width": 1440, "height": 900})
     load(page, "/#/xlsx-viewer", 'input[type="file"][accept*="xlsx"]', XLSX)
@@ -181,7 +233,10 @@ def main() -> int:
         )
         report["viewports"] = viewport_matrix(browser)
         report["docx"] = docx_scenarios(browser)
+        report["docx_ime"] = docx_ime(browser)
+        report["xlsx_zoom"] = xlsx_zoom(browser)
         report["xlsx_ime"] = xlsx_ime(browser)
+        report["pptx_zoom"] = pptx_zoom(browser)
         report["touch"] = touch_case(browser)
         browser.close()
 
