@@ -4,6 +4,7 @@ import type {
   XlsxImage,
   XlsxShape,
 } from "../types";
+import { CHART_EX_REL_TYPE, CHART_REL_TYPE } from "../charts/chart-series";
 import {
   type ArchiveEntries,
   CONTENT_TYPES_NS,
@@ -20,6 +21,7 @@ import {
   getFirstChild,
   getLocalElements,
   normalizeArchivePath,
+  parseRelationships,
   parseXml,
   readArchiveText,
   relativeArchivePath,
@@ -95,7 +97,7 @@ export function parseWorkbookChartStyleAssets(bytes: Uint8Array): import("./grid
   const sheetOrigins: Array<WorkbookImageSheetOrigin | null> = [];
 
   workbookSheets.forEach((sheet, workbookSheetIndex) => {
-    const sheetRelationships = parseRelationshipsWrapper(archive, relsPathForDocument(sheet.path), sheet.path);
+    const sheetRelationships = parseRelationships(archive, relsPathForDocument(sheet.path), sheet.path);
     const attachments: XlsxImageAttachment[] = [];
 
     for (const relationship of sheetRelationships.values()) {
@@ -126,9 +128,6 @@ export function parseWorkbookChartStyleAssets(bytes: Uint8Array): import("./grid
     themePalette
   };
 }
-
-import { parseRelationships } from "./image-parser";
-const parseRelationshipsWrapper = parseRelationships;
 
 type XlsxImageAttachment = {
   drawingPath: string;
@@ -452,6 +451,94 @@ function appendSheetDrawingReference(
   worksheet.appendChild(drawingNode);
 }
 
+const CHART_RELATIONSHIP_TYPES = new Set([CHART_REL_TYPE, CHART_EX_REL_TYPE]);
+
+// Copy a part plus every internal part reachable through its relationship file.
+function copyArchivePartWithDependencies(
+  targetArchive: ArchiveEntries,
+  sourceArchive: ArchiveEntries,
+  targetContentTypesDocument: XMLDocument,
+  originalContentTypesDocument: XMLDocument | null,
+  partPath: string,
+  copiedPartPaths: Set<string>
+) {
+  const normalizedPartPath = normalizeArchivePath(partPath);
+  if (!normalizedPartPath || copiedPartPaths.has(normalizedPartPath)) {
+    return;
+  }
+  copiedPartPaths.add(normalizedPartPath);
+
+  const partBytes = sourceArchive[normalizedPartPath];
+  if (!partBytes) {
+    return;
+  }
+
+  targetArchive[normalizedPartPath] = cloneBytes(partBytes);
+  mergeContentTypeForPath(targetContentTypesDocument, originalContentTypesDocument, normalizedPartPath);
+
+  const relsPath = relsPathForDocument(normalizedPartPath);
+  const relsBytes = sourceArchive[relsPath];
+  if (!relsBytes) {
+    return;
+  }
+
+  targetArchive[relsPath] = cloneBytes(relsBytes);
+  mergeContentTypeForPath(targetContentTypesDocument, originalContentTypesDocument, relsPath);
+
+  const relationships = parseRelationships(sourceArchive, relsPath, normalizedPartPath);
+  for (const relationship of relationships.values()) {
+    if (relationship.targetMode === "External" || relationship.target.startsWith("#")) {
+      continue;
+    }
+    copyArchivePartWithDependencies(
+      targetArchive,
+      sourceArchive,
+      targetContentTypesDocument,
+      originalContentTypesDocument,
+      relationship.target,
+      copiedPartPaths
+    );
+  }
+}
+
+function copyChartPartsForDrawing(
+  targetArchive: ArchiveEntries,
+  sourceArchive: ArchiveEntries,
+  targetContentTypesDocument: XMLDocument,
+  originalContentTypesDocument: XMLDocument | null,
+  attachment: XlsxImageAttachment,
+  copiedPartPaths: Set<string>
+) {
+  if (!attachment.drawingRelsPath) {
+    return;
+  }
+
+  // The workbook save path drops chart parts, so a re-injected drawing keeps
+  // chart r:ids whose targets are absent. Copy the referenced chart/chartEx
+  // parts (and their own dependencies) to keep every drawing rel resolvable.
+  const relationships = parseRelationships(
+    sourceArchive,
+    attachment.drawingRelsPath,
+    attachment.drawingPath
+  );
+  for (const relationship of relationships.values()) {
+    if (!CHART_RELATIONSHIP_TYPES.has(relationship.type)) {
+      continue;
+    }
+    if (relationship.targetMode === "External" || relationship.target.startsWith("#")) {
+      continue;
+    }
+    copyArchivePartWithDependencies(
+      targetArchive,
+      sourceArchive,
+      targetContentTypesDocument,
+      originalContentTypesDocument,
+      relationship.target,
+      copiedPartPaths
+    );
+  }
+}
+
 export function mergeWorkbookImageAssets(
   savedBytes: Uint8Array,
   sourceAssets: WorkbookImageAssets | null,
@@ -469,6 +556,8 @@ export function mergeWorkbookImageAssets(
     if (!targetContentTypesDocument) {
       return cloneBytes(savedBytes);
     }
+
+    const copiedPartPaths = new Set<string>();
 
     sheetOrigins.forEach((origin, workbookSheetIndex) => {
       if (!origin?.attachments.length) {
@@ -510,6 +599,15 @@ export function mergeWorkbookImageAssets(
             mergeContentTypeForPath(targetContentTypesDocument, originalContentTypesDocument, attachment.drawingRelsPath);
           }
         }
+
+        copyChartPartsForDrawing(
+          archive,
+          sourceAssets.archive,
+          targetContentTypesDocument,
+          originalContentTypesDocument,
+          attachment,
+          copiedPartPaths
+        );
 
         attachment.mediaPaths.forEach((mediaPath) => {
           const mediaBytes = sourceAssets.archive[mediaPath];
