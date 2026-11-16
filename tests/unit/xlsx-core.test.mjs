@@ -35,7 +35,6 @@ function bytesFromFile(name) {
   return new Uint8Array(readFileSync(new URL(name, samples)));
 }
 
-<<<<<<< HEAD
 const XML_PREFIX = String.raw`(?:[\w.-]+:)?`;
 const SERIES_XML_PATTERN = new RegExp(
   `<${XML_PREFIX}ser>([\\s\\S]*?)</${XML_PREFIX}ser>`,
