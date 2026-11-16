@@ -37,6 +37,18 @@ Chromium 155，本地 demo dist。
 
 390×844、`has_touch` 上下文：tap 后 6 页正常，无 pageerror；未验证双指捏合（#106）。
 
-## WebKit
+## 跨引擎场景（Chromium / Firefox / WebKit）
 
-本机二进制缺少 `libicu74` 等宿主库，启动失败，记录为 SKIP；需在 CI Ubuntu runner 补跑（#113/V3）。
+同一组场景在三个引擎上复跑：
+
+| 场景 | Chromium | Firefox | WebKitGTK |
+|---|---|---|---|
+| DOCX 缩放 200/50 | 3051 / 763 | 3051 / 763 | 3049 / 762 |
+| DOCX 暗色 | rgb(31,41,55) | 同 | 同 |
+| DOCX IME 守卫 | 15→15 | 15→15 | —（WebDriver 合成事件不可靠，未测） |
+| XLSX 缩放 200/50 | select 200/50，canvas 1358×476 | 同 | select 200/50，canvas 1350×945 |
+| PPTX 缩放 100→150 | ✅ | ✅ | ✅ |
+| PDF 页数 | 4 | 4 | 4 |
+
+打印媒体：Chromium/Firefox 已测（工具栏仍显示、仅挂载 1 页）；WebKitWebDriver 不支持媒体模拟，记录为工具限制。
+PDF/XLSX/PPTX 的暗色开关在 demo 中未暴露，记为产品缺口（#92）。

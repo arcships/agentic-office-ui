@@ -10,6 +10,11 @@ Chromium 155，本地 demo；临时构造 30 MB / 64 MB 压缩包等输入。
 | 30 MB 随机 `.xlsx` | error，6.5s | `INVALID_WORKBOOK`（先按 zip 解析失败，未先报大小） |
 | 64 MB 全零 `sheet1.xml` 的 zip 炸弹 | error，6.5s | `LIMIT_EXCEEDED: maxCompressionRatio 1028.76 > 100` |
 | 连续上传两个 XLSX | ready | 第二个文件获胜（仅 “Validation” tab） |
+| 畸形 PDF（随机字节） | error | `INVALID_PDF` |
+| 畸形 PPTX（随机字节） | state=error | — |
+| 截断 PPTX（4 KB） | state=error | — |
+| 畸形 CSV（二进制） | error | `INVALID_WORKBOOK` |
+| 两个标签页并发（DOCX + XLSX） | 两边 ready | — |
 | 加载中卸载 | 无 pageerror | — |
 
 观察：

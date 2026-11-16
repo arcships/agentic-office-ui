@@ -44,6 +44,16 @@ def make_files(tmp: Path) -> dict[str, Path]:
         fh.write(b"PK\x03\x04")
         fh.write(os.urandom(30 * 1024 * 1024))
 
+    files["malformed_pdf"] = tmp / "malformed.pdf"
+    files["malformed_pdf"].write_bytes(b"%PDF-1.7\n" + os.urandom(8192))
+    files["malformed_pptx"] = tmp / "malformed.pptx"
+    files["malformed_pptx"].write_bytes(b"PK\x03\x04" + os.urandom(8192))
+    deck = (ROOT / "test-data" / "corpus" / "pptx-deck-basic.pptx").read_bytes()
+    files["truncated_pptx"] = tmp / "truncated.pptx"
+    files["truncated_pptx"].write_bytes(deck[:4096])
+    files["malformed_csv"] = tmp / "malformed.csv"
+    files["malformed_csv"].write_bytes(bytes(range(256)) * 20)
+
     files["zip_bomb"] = tmp / "bomb.xlsx"
     with zipfile.ZipFile(files["zip_bomb"], "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("[Content_Types].xml", "<Types/>")
@@ -68,6 +78,9 @@ def read_state(page) -> dict:
             status: document.querySelector('[data-testid="page-status"]')?.textContent?.trim() ?? null,
             errorCode: err?.getAttribute('data-error-code') ?? null,
             errorText: err?.textContent?.trim().slice(0, 160) ?? null,
+            pdfError: document.querySelector('.pdf-surface__error')?.textContent?.trim().slice(0, 160) ?? null,
+            pdfEmpty: document.querySelector('.pdf-surface__empty')?.textContent?.trim().slice(0, 120) ?? null,
+            pdfSlots: document.querySelectorAll('.pdf-surface__page-slot').length,
             tabs: [...document.querySelectorAll('[data-testid="xlsx-sheet-tab"]')].map(t => t.textContent.trim()),
           }
         }"""
@@ -111,6 +124,10 @@ def main() -> int:
         report["cases"].append(run_case(browser, "oversized-docx", "/#/docx-viewer", 'input[type="file"][accept*="docx"]', files["oversized_docx"]))
         report["cases"].append(run_case(browser, "oversized-xlsx", "/#/xlsx-viewer", 'input[type="file"][accept*="xlsx"]', files["oversized_xlsx"]))
         report["cases"].append(run_case(browser, "zip-bomb-xlsx", "/#/xlsx-viewer", 'input[type="file"][accept*="xlsx"]', files["zip_bomb"]))
+        report["cases"].append(run_case(browser, "malformed-pdf", "/#/pdf-surface", 'input[type="file"][accept*="pdf"]', files["malformed_pdf"]))
+        report["cases"].append(run_case(browser, "malformed-pptx", "/#/pptx-viewer", 'input[type="file"][accept*="pptx"]', files["malformed_pptx"]))
+        report["cases"].append(run_case(browser, "truncated-pptx", "/#/pptx-viewer", 'input[type="file"][accept*="pptx"]', files["truncated_pptx"]))
+        report["cases"].append(run_case(browser, "malformed-csv", "/#/xlsx-viewer", 'input[type="file"][accept*="xlsx"]', files["malformed_csv"]))
 
         # concurrent loads: second file must win
         page = browser.new_page(viewport={"width": 1440, "height": 900})
@@ -125,6 +142,26 @@ def main() -> int:
         state = read_state(page)
         page.close()
         report["cases"].append({"case": "concurrent-xlsx", "state": state, "page_errors": errors[:5]})
+
+        # two tabs load different formats concurrently
+        page_a = browser.new_page(viewport={"width": 1440, "height": 900})
+        page_b = browser.new_page(viewport={"width": 1440, "height": 900})
+        errs_a: list[str] = []
+        errs_b: list[str] = []
+        page_a.on("pageerror", lambda exc: errs_a.append(str(exc)))
+        page_b.on("pageerror", lambda exc: errs_b.append(str(exc)))
+        page_a.goto(LOCAL_URL + "/#/docx-viewer", wait_until="networkidle")
+        page_b.goto(LOCAL_URL + "/#/xlsx-viewer", wait_until="networkidle")
+        page_a.wait_for_timeout(600)
+        page_b.wait_for_timeout(600)
+        upload(page_a, 'input[type="file"][accept*="docx"]', SAMPLES / "demo.docx")
+        upload(page_b, 'input[type="file"][accept*="xlsx"]', XLSX_OK)
+        page_a.wait_for_timeout(6000)
+        page_b.wait_for_timeout(6000)
+        state_a = read_state(page_a)
+        state_b = read_state(page_b)
+        page_a.close(); page_b.close()
+        report["cases"].append({"case": "two-tabs-concurrent", "state": {"a": state_a, "b": state_b}, "page_errors": errs_a + errs_b})
 
         # unmount during load
         page = browser.new_page(viewport={"width": 1440, "height": 900})
@@ -147,9 +184,11 @@ def main() -> int:
         state = case.get("state", {})
         if state.get("error"):
             report["failures"].append(f"{case['case']}: {state['error']}")
-        if case["case"] in {"corrupt-docx", "truncated-docx", "oversized-docx", "oversized-xlsx", "zip-bomb-xlsx"}:
-            if state.get("docxState") == "ready" or (state.get("status") or "").lower() == "ready":
+        if case["case"] in {"corrupt-docx", "truncated-docx", "oversized-docx", "oversized-xlsx", "zip-bomb-xlsx", "malformed-pdf", "malformed-pptx", "truncated-pptx"}:
+            if state.get("docxState") == "ready" or state.get("pptxState") == "ready" or (state.get("status") or "").lower() == "ready":
                 report["failures"].append(f"{case['case']}: invalid input reported ready")
+        if case["case"] in {"malformed-pdf"} and state.get("pdfSlots", 0) > 0:
+            report["failures"].append("malformed-pdf: rendered page slots")
     report["verdict"] = "FAIL" if report["failures"] else "PASS"
     if args.output:
         output = Path(args.output)

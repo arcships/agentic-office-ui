@@ -22,3 +22,9 @@
 结论：带图表的 XLSX 导出后是**结构性损坏的包**，Excel/openpyxl 无法打开。已回填 #66，建议列为 P0。
 
 证据：`roundtrip/roundtrip.xlsx`、`roundtrip/summary.json`。
+
+## 深度回环（新增）
+
+- **DOCX**：通过 demo 验收钩子插入表格 + 图片 + 格式化中间文字，导出后 python-docx 检查：2 张表、1 个 `word/media` part、1 个 `<w:drawing>`、2 个 bold run；LibreOffice 可打开。
+- **XLSX**：使用无图表的 `xlsx-validation.xlsx`，选中 A4（名称框确认）加粗 + 红色填充，导出后 openpyxl 读回 `bold=True`、`fill=FFFF0000`。
+- 结论：结构化内容与样式的导出链路在“无图表”路径下正常；图表路径仍是 #66 的 P0。证据：`roundtrip/deep.json`、`roundtrip/deep.docx`、`roundtrip/deep.xlsx`。

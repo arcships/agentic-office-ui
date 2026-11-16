@@ -131,9 +131,9 @@ uv run --with playwright python tests/blackbox/upstream_parity.py --strict
 - 143 个 open issue（65 bug、18 enhancement、2 product-gap、3 review、55 upstream-gap；新增 #152）。
 - L0–L2 完成：源码/API 对齐、16 个合成夹具 oracle、3 个上游双跑用例。
 - V1 真实文件：18 个 POI/PDFBox 文件，oracle PASS；viewer 16/18（#152）。
-- V2 回环：DOCX PASS；XLSX 导出丢 chart part，openpyxl 无法重开（#66，P0）。
+- V2 回环：DOCX 基础 + 深度（表格/图片/格式）PASS；XLSX 无图表样式回环 PASS，图表导出仍丢 part（#66，P0）。
 - V3 跨浏览器：Chromium、Firefox、系统 WebKitGTK 2.54.1（WebKitWebDriver）三引擎全部通过。
-- V4 像素基线：DOCX 18.6%、PPTX 2.9%、PDF 18.1%，均在阈值内。
-- V5 鲁棒性：7 个用例 PASS；zip 炸弹/超限/并发/卸载按预期。
+- V4 像素基线：DOCX/PPTX/PDF 各 2 页，差异比 2.2%–18.6%，SSIM 记录在案。
+- V5 鲁棒性：12 个用例 PASS（新增畸形 PDF/PPTX/CSV、双标签页并发）。
 - V6 场景矩阵：16 视口组合无溢出；打印/键盘/IME 缺口实机复现（#92/#116/#89）。
 - 结论：验证框架 V1–V6 完成；第二轮全量复跑失败项与第一轮完全一致（仅 #152、#66），无新类别。证据：`verification/evidence/2026-11-16/final-pass.md`。下一阶段进入修复（建议先 #66/#152/#25/#95）。

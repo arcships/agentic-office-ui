@@ -69,11 +69,24 @@ def compare(local: Path, oracle: Path, outdir: Path, name: str) -> dict:
     total = width * height
     mean = sum(i * count for i, count in enumerate(hist)) / total
     ratio = sum(count for i, count in enumerate(hist) if i > 32) / total
+    ssim = None
+    try:
+        import numpy as np
+
+        x = np.asarray(a, dtype=float)
+        y = np.asarray(b, dtype=float)
+        mu_x, mu_y = x.mean(), y.mean()
+        var_x, var_y = x.var(), y.var()
+        cov = ((x - mu_x) * (y - mu_y)).mean()
+        c1, c2 = (0.01 * 255) ** 2, (0.03 * 255) ** 2
+        ssim = round(float(((2 * mu_x * mu_y + c1) * (2 * cov + c2)) / ((mu_x**2 + mu_y**2 + c1) * (var_x + var_y + c2))), 4)
+    except Exception:  # noqa: BLE001
+        ssim = None
     outdir.mkdir(parents=True, exist_ok=True)
     a.save(outdir / f"{name}-local.png")
     b.save(outdir / f"{name}-oracle.png")
     diff.save(outdir / f"{name}-diff.png")
-    return {"rmse": round(mean, 2), "diff_ratio": round(ratio, 4), "height": height}
+    return {"rmse": round(mean, 2), "diff_ratio": round(ratio, 4), "ssim": ssim, "height": height}
 
 
 def main() -> int:
@@ -96,6 +109,7 @@ def main() -> int:
             "upload": 'input[type="file"][accept*="docx"]',
             "shot": "[data-docx-page-surface]",
             "wait": "[data-docx-page-count]",
+            "pages": [1, 2],
         },
         "pptx": {
             "file": ROOT / "test-data" / "corpus" / "pptx-deck-basic.pptx",
@@ -103,6 +117,7 @@ def main() -> int:
             "upload": 'input[type="file"][accept*="pptx"]',
             "shot": ".pptx-viewer__stage",
             "wait": '[data-testid="pptx-viewer"][data-state="ready"]',
+            "pages": [1, 2],
         },
         "pdf": {
             "file": ROOT / "test-data" / "corpus" / "pdf-rotated-90.pdf",
@@ -110,6 +125,7 @@ def main() -> int:
             "upload": 'input[type="file"][accept*="pdf"]',
             "shot": ".pdf-surface__page-img",
             "wait": ".pdf-surface__page-img",
+            "pages": [1, 2],
         },
     }
 
@@ -121,26 +137,42 @@ def main() -> int:
             args=["--no-sandbox", "--disable-gpu"],
         )
         for name, case in cases.items():
-            oracle = render_pdf_page(soffice, pdftoppm, case["file"], outdir / name)
-            if not oracle:
-                report["cases"][name] = {"error": "oracle render failed"}
-                report["failures"].append(f"{name}: oracle render failed")
-                continue
             page = browser.new_page(viewport={"width": 1440, "height": 900})
             page.goto(LOCAL_URL + case["route"], wait_until="networkidle")
             page.wait_for_timeout(800)
             page.locator(case["upload"]).first.set_input_files(str(case["file"]))
             page.wait_for_selector(case["wait"], timeout=30000)
             page.wait_for_timeout(5000)
-            local = outdir / name / "local.png"
-            page.locator(case["shot"]).first.screenshot(path=str(local))
+            for page_no in case["pages"]:
+                key = f"{name}-{page_no}"
+                oracle = render_pdf_page(soffice, pdftoppm, case["file"], outdir / key, page=page_no)
+                if not oracle:
+                    report["cases"][key] = {"error": "oracle render failed"}
+                    report["failures"].append(f"{key}: oracle render failed")
+                    continue
+                if name == "docx" and page_no > 1:
+                    page.fill('[data-testid="docx-page-current"]', str(page_no))
+                    page.keyboard.press("Enter")
+                    page.wait_for_timeout(1500)
+                if name == "pptx" and page_no > 1:
+                    for _ in range(page_no - 1):
+                        page.click('[aria-label="下一页"]')
+                        page.wait_for_timeout(1200)
+                if name in {"docx", "pdf"}:
+                    target = page.locator(case["shot"]).nth(page_no - 1)
+                    target.scroll_into_view_if_needed()
+                    page.wait_for_timeout(800)
+                else:
+                    target = page.locator(case["shot"]).first
+                local = outdir / key / "local.png"
+                target.screenshot(path=str(local))
+                metrics = compare(local, oracle, outdir / key, key)
+                metrics["threshold"] = THRESHOLDS[name]
+                metrics["ok"] = metrics["diff_ratio"] <= THRESHOLDS[name]
+                if not metrics["ok"]:
+                    report["failures"].append(f"{key}: diff_ratio {metrics['diff_ratio']} > {THRESHOLDS[name]}")
+                report["cases"][key] = metrics
             page.close()
-            metrics = compare(local, oracle, outdir / name, name)
-            metrics["threshold"] = THRESHOLDS[name]
-            metrics["ok"] = metrics["diff_ratio"] <= THRESHOLDS[name]
-            if not metrics["ok"]:
-                report["failures"].append(f"{name}: diff_ratio {metrics['diff_ratio']} > {THRESHOLDS[name]}")
-            report["cases"][name] = metrics
         browser.close()
     report["verdict"] = "FAIL" if report["failures"] else "PASS"
     if args.output:

@@ -2,23 +2,50 @@
   "suite": "pixel-baseline",
   "date": "2026-11-16",
   "cases": {
-    "docx": {
+    "docx-1": {
       "rmse": 23.85,
       "diff_ratio": 0.1862,
+      "ssim": 0.0692,
       "height": 1035,
       "threshold": 0.3,
       "ok": true
     },
-    "pptx": {
+    "docx-2": {
+      "rmse": 22.24,
+      "diff_ratio": 0.1777,
+      "ssim": 0.1089,
+      "height": 1035,
+      "threshold": 0.3,
+      "ok": true
+    },
+    "pptx-1": {
       "rmse": 4.95,
       "diff_ratio": 0.0285,
+      "ssim": 0.1299,
       "height": 600,
       "threshold": 0.3,
       "ok": true
     },
-    "pdf": {
+    "pptx-2": {
+      "rmse": 3.92,
+      "diff_ratio": 0.0223,
+      "ssim": 0.0637,
+      "height": 600,
+      "threshold": 0.3,
+      "ok": true
+    },
+    "pdf-1": {
       "rmse": 22.62,
       "diff_ratio": 0.1813,
+      "ssim": -0.0176,
+      "height": 566,
+      "threshold": 0.2,
+      "ok": true
+    },
+    "pdf-2": {
+      "rmse": 12.18,
+      "diff_ratio": 0.0999,
+      "ssim": 0.0296,
       "height": 566,
       "threshold": 0.2,
       "ok": true

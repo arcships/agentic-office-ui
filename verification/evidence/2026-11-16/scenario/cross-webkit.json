@@ -1,0 +1,40 @@
+{
+  "suite": "webkit-scenarios",
+  "browser": "2.54.1",
+  "cases": {
+    "docx": {
+      "pages": 6,
+      "height": 1524,
+      "zoom_200": 3049,
+      "zoom_50": 762,
+      "dark": "rgb(31, 41, 55)"
+    },
+    "xlsx": {
+      "zoom_200": {
+        "canvas": {
+          "w": 1350,
+          "h": 945
+        },
+        "value": "200"
+      },
+      "zoom_50": {
+        "canvas": {
+          "w": 1350,
+          "h": 945
+        },
+        "value": "50"
+      }
+    },
+    "pptx": {
+      "before": "100%",
+      "after": "150%"
+    },
+    "pdf": {
+      "slots": 4,
+      "images": 4
+    }
+  },
+  "failures": [],
+  "print": "not supported by WebDriver (Chromium/Firefox only)",
+  "verdict": "PASS"
+}
