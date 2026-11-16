@@ -11,6 +11,12 @@ import type {
   TextRunNode,
   TextStyle
 } from "../../engine/types";
+import {
+  cloneFormFieldRun,
+  cloneFormFieldWidget,
+  cloneImageRun,
+  cloneTextRun,
+} from "../../engine/clone";
 import type {
   DocxEditorSelection,
   DocxTextRange,
@@ -33,39 +39,9 @@ export function cloneTextStyle(
   return style ? { ...style } : undefined;
 }
 
-export function cloneFormFieldWidget(
-  widget?: FormFieldRunNode["widget"]
-): FormFieldRunNode["widget"] | undefined {
-  if (!widget) {
-    return undefined;
-  }
-
-  return {
-    name: widget.name,
-    enabled: widget.enabled,
-    calcOnExit: widget.calcOnExit,
-    text: widget.text
-      ? {
-          inputType: widget.text.inputType,
-          defaultText: widget.text.defaultText,
-          maxLength: widget.text.maxLength,
-          textFormat: widget.text.textFormat,
-        }
-      : undefined,
-    checkbox: widget.checkbox
-      ? {
-          defaultChecked: widget.checkbox.defaultChecked,
-          sizeMode: widget.checkbox.sizeMode,
-          sizePt: widget.checkbox.sizePt,
-        }
-      : undefined,
-    dropdown: widget.dropdown
-      ? {
-          defaultValue: widget.dropdown.defaultValue,
-        }
-      : undefined,
-  };
-}
+// Re-exported so helper imports and the root barrel keep resolving to the single
+// clone implementation in the engine layer.
+export { cloneFormFieldRun, cloneFormFieldWidget };
 
 export function mergeFormFieldWidgetPatch(
   current: FormFieldRunNode["widget"] | undefined,
@@ -117,30 +93,6 @@ export function mergeFormFieldWidgetPatch(
   };
 }
 
-export function cloneFormFieldRun(field: FormFieldRunNode): FormFieldRunNode {
-  return {
-    type: "form-field",
-    fieldType: field.fieldType,
-    sourceKind: field.sourceKind,
-    id: field.id,
-    tag: field.tag,
-    title: field.title,
-    placeholder: field.placeholder,
-    checked: field.checked,
-    value: field.value,
-    options: field.options?.map((option) => ({
-      displayText: option.displayText,
-      value: option.value,
-    })),
-    widget: cloneFormFieldWidget(field.widget),
-    checkedSymbol: field.checkedSymbol,
-    uncheckedSymbol: field.uncheckedSymbol,
-    style: cloneTextStyle(field.style),
-    link: field.link,
-    sourceXml: field.sourceXml,
-  };
-}
-
 export function textStylesEqual(
   a?: TextRunNode["style"],
   b?: TextRunNode["style"]
@@ -160,7 +112,8 @@ export function mergeAdjacentTextRuns(
       previous.type === "text" &&
       child.type === "text" &&
       textStylesEqual(previous.style, child.style) &&
-      previous.link === child.link
+      previous.link === child.link &&
+      noteReferencesEqual(previous.noteReference, child.noteReference)
     ) {
       previous.text += child.text;
       continue;
@@ -168,31 +121,45 @@ export function mergeAdjacentTextRuns(
 
     merged.push(
       child.type === "text"
-        ? {
-            type: "text",
-            text: child.text,
-            style: cloneTextStyle(child.style),
-            link: child.link,
-          }
+        ? cloneTextRun(child)
         : child.type === "form-field"
         ? cloneFormFieldRun(child)
-        : {
-            type: "image",
-            src: child.src,
-            alt: child.alt,
-            widthPx: child.widthPx,
-            heightPx: child.heightPx,
-            partName: child.partName,
-            contentType: child.contentType,
-            data: child.data ? new Uint8Array(child.data) : undefined,
-            floating: child.floating ? { ...child.floating } : undefined,
-            syntheticTextBox: child.syntheticTextBox,
-            textBoxText: child.textBoxText,
-          }
+        : cloneImageRun(child)
     );
   }
 
   return merged;
+}
+
+function noteReferencesEqual(
+  a?: TextRunNode["noteReference"],
+  b?: TextRunNode["noteReference"]
+): boolean {
+  if (!a || !b) {
+    return a === b;
+  }
+
+  return a.kind === b.kind && a.id === b.id;
+}
+
+/**
+ * Build one piece of a text run that was split by a range mutation. A note
+ * reference marks the end of the run it belongs to, so only the last piece may
+ * keep it — copying it onto every piece would duplicate the reference.
+ */
+function textRunPiece(
+  text: string,
+  style: TextRunNode["style"],
+  link: string | undefined,
+  noteReference: TextRunNode["noteReference"]
+): TextRunNode {
+  return {
+    type: "text",
+    text,
+    style,
+    link,
+    noteReference: noteReference ? { ...noteReference } : undefined,
+  };
 }
 
 export function paragraphHasOnlyTextRuns(paragraph: ParagraphNode): boolean {
@@ -479,19 +446,7 @@ export function mutateParagraphTextStyleInRange(
       if (child.type === "form-field") {
         nextChildren.push(cloneFormFieldRun(child));
       } else {
-        nextChildren.push({
-          type: "image",
-          src: child.src,
-          alt: child.alt,
-          widthPx: child.widthPx,
-          heightPx: child.heightPx,
-          partName: child.partName,
-          contentType: child.contentType,
-          data: child.data ? new Uint8Array(child.data) : undefined,
-          floating: child.floating ? { ...child.floating } : undefined,
-          syntheticTextBox: child.syntheticTextBox,
-          textBoxText: child.textBoxText,
-        });
+        nextChildren.push(cloneImageRun(child));
       }
       continue;
     }
@@ -502,46 +457,41 @@ export function mutateParagraphTextStyleInRange(
     cursor = runEnd;
 
     if (runEnd <= safeStart || runStart >= safeEnd || text.length === 0) {
-      nextChildren.push({
-        type: "text",
-        text,
-        style: cloneTextStyle(child.style),
-        link: child.link,
-      });
+      nextChildren.push(cloneTextRun(child));
       continue;
     }
 
     touched = true;
     const localStart = Math.max(0, safeStart - runStart);
     const localEnd = Math.min(text.length, safeEnd - runStart);
+    const pieces: TextRunNode[] = [];
 
     if (localStart > 0) {
-      nextChildren.push({
-        type: "text",
-        text: text.slice(0, localStart),
-        style: cloneTextStyle(child.style),
-        link: child.link,
-      });
+      pieces.push(textRunPiece(text.slice(0, localStart), cloneTextStyle(child.style), child.link, undefined));
     }
 
     const selectedText = text.slice(localStart, localEnd);
     if (selectedText.length > 0) {
-      nextChildren.push({
-        type: "text",
-        text: selectedText,
-        style: mutator(cloneTextStyle(child.style)),
-        link: child.link,
-      });
+      pieces.push(
+        textRunPiece(
+          selectedText,
+          mutator(cloneTextStyle(child.style)),
+          child.link,
+          undefined
+        )
+      );
     }
 
     if (localEnd < text.length) {
-      nextChildren.push({
-        type: "text",
-        text: text.slice(localEnd),
-        style: cloneTextStyle(child.style),
-        link: child.link,
-      });
+      pieces.push(textRunPiece(text.slice(localEnd), cloneTextStyle(child.style), child.link, undefined));
     }
+
+    const lastPiece = pieces[pieces.length - 1];
+    if (lastPiece && child.noteReference) {
+      lastPiece.noteReference = { ...child.noteReference };
+    }
+
+    nextChildren.push(...pieces);
   }
 
   if (!touched) {
@@ -573,19 +523,7 @@ export function mutateParagraphLinkInRange(
       if (child.type === "form-field") {
         nextChildren.push(cloneFormFieldRun(child));
       } else {
-        nextChildren.push({
-          type: "image",
-          src: child.src,
-          alt: child.alt,
-          widthPx: child.widthPx,
-          heightPx: child.heightPx,
-          partName: child.partName,
-          contentType: child.contentType,
-          data: child.data ? new Uint8Array(child.data) : undefined,
-          floating: child.floating ? { ...child.floating } : undefined,
-          syntheticTextBox: child.syntheticTextBox,
-          textBoxText: child.textBoxText,
-        });
+        nextChildren.push(cloneImageRun(child));
       }
       continue;
     }
@@ -596,46 +534,34 @@ export function mutateParagraphLinkInRange(
     cursor = runEnd;
 
     if (runEnd <= safeStart || runStart >= safeEnd || text.length === 0) {
-      nextChildren.push({
-        type: "text",
-        text,
-        style: cloneTextStyle(child.style),
-        link: child.link,
-      });
+      nextChildren.push(cloneTextRun(child));
       continue;
     }
 
     touched = true;
     const localStart = Math.max(0, safeStart - runStart);
     const localEnd = Math.min(text.length, safeEnd - runStart);
+    const pieces: TextRunNode[] = [];
 
     if (localStart > 0) {
-      nextChildren.push({
-        type: "text",
-        text: text.slice(0, localStart),
-        style: cloneTextStyle(child.style),
-        link: child.link,
-      });
+      pieces.push(textRunPiece(text.slice(0, localStart), cloneTextStyle(child.style), child.link, undefined));
     }
 
     const selectedText = text.slice(localStart, localEnd);
     if (selectedText.length > 0) {
-      nextChildren.push({
-        type: "text",
-        text: selectedText,
-        style: cloneTextStyle(child.style),
-        link,
-      });
+      pieces.push(textRunPiece(selectedText, cloneTextStyle(child.style), link, undefined));
     }
 
     if (localEnd < text.length) {
-      nextChildren.push({
-        type: "text",
-        text: text.slice(localEnd),
-        style: cloneTextStyle(child.style),
-        link: child.link,
-      });
+      pieces.push(textRunPiece(text.slice(localEnd), cloneTextStyle(child.style), child.link, undefined));
     }
+
+    const lastPiece = pieces[pieces.length - 1];
+    if (lastPiece && child.noteReference) {
+      lastPiece.noteReference = { ...child.noteReference };
+    }
+
+    nextChildren.push(...pieces);
   }
 
   if (!touched) {

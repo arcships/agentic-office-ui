@@ -1,23 +1,24 @@
 import type {
   DocModel,
   DocNode,
-  FooterSection,
-  HeaderSection,
+  FormFieldRunNode,
+  ImageRunNode,
   NumberingDefinitionSet,
   ParagraphBorderSet,
   ParagraphBorderStyle,
+  ParagraphChildNode,
   ParagraphIndent,
   ParagraphNode,
   ParagraphNumbering,
   ParagraphSpacing,
   ParagraphStyle,
-  ParagraphStyleDefinition,
   TableBorderSet,
   TableBorderStyle,
   TableBoxSpacing,
   TableCellContentNode,
   TableNode,
   TableStyle,
+  TextRunNode,
 } from "./types";
 
 function isParagraphCellContent(
@@ -102,6 +103,7 @@ function cloneParagraphStyle(
     spacing: cloneParagraphSpacing(style.spacing),
     indent: cloneParagraphIndent(style.indent),
     borders: cloneParagraphBorderSet(style.borders),
+    tabStops: style.tabStops?.map((tabStop) => ({ ...tabStop })),
     dropCap: style.dropCap
       ? {
           ...style.dropCap,
@@ -110,90 +112,99 @@ function cloneParagraphStyle(
   };
 }
 
-function cloneParagraph(paragraph: ParagraphNode): ParagraphNode {
+/** Clone a text run, keeping every run field (including note references). */
+export function cloneTextRun(run: TextRunNode): TextRunNode {
+  return {
+    ...run,
+    style: run.style ? { ...run.style } : undefined,
+    link: run.link,
+    noteReference: run.noteReference ? { ...run.noteReference } : undefined,
+  };
+}
+
+export function cloneFormFieldWidget(
+  widget?: FormFieldRunNode["widget"]
+): FormFieldRunNode["widget"] | undefined {
+  if (!widget) {
+    return undefined;
+  }
+
+  return {
+    name: widget.name,
+    enabled: widget.enabled,
+    calcOnExit: widget.calcOnExit,
+    text: widget.text
+      ? {
+          inputType: widget.text.inputType,
+          defaultText: widget.text.defaultText,
+          maxLength: widget.text.maxLength,
+          textFormat: widget.text.textFormat,
+        }
+      : undefined,
+    checkbox: widget.checkbox
+      ? {
+          defaultChecked: widget.checkbox.defaultChecked,
+          sizeMode: widget.checkbox.sizeMode,
+          sizePt: widget.checkbox.sizePt,
+        }
+      : undefined,
+    dropdown: widget.dropdown
+      ? {
+          defaultValue: widget.dropdown.defaultValue,
+        }
+      : undefined,
+  };
+}
+
+export function cloneFormFieldRun(run: FormFieldRunNode): FormFieldRunNode {
+  return {
+    ...run,
+    options: run.options?.map((option) => ({
+      displayText: option.displayText,
+      value: option.value,
+    })),
+    widget: cloneFormFieldWidget(run.widget),
+    style: run.style ? { ...run.style } : undefined,
+    link: run.link,
+    sourceXml: run.sourceXml,
+  };
+}
+
+/** Clone an image run, keeping crop/original XML and every other image field. */
+export function cloneImageRun(run: ImageRunNode): ImageRunNode {
+  return {
+    ...run,
+    data: run.data ? new Uint8Array(run.data) : undefined,
+    sourceXml: run.sourceXml,
+    crop: run.crop ? { ...run.crop } : undefined,
+    cssFilter: run.cssFilter,
+    cssOpacity: run.cssOpacity,
+    floating: run.floating ? { ...run.floating } : undefined,
+    syntheticTextBox: run.syntheticTextBox,
+    textBoxText: run.textBoxText,
+  };
+}
+
+/** Clone a single paragraph child, dispatching on its run type. */
+export function cloneParagraphChild(child: ParagraphChildNode): ParagraphChildNode {
+  if (child.type === "text") {
+    return cloneTextRun(child);
+  }
+
+  if (child.type === "form-field") {
+    return cloneFormFieldRun(child);
+  }
+
+  return cloneImageRun(child);
+}
+
+export function cloneParagraph(paragraph: ParagraphNode): ParagraphNode {
   return {
     type: "paragraph",
     style: cloneParagraphStyle(paragraph.style),
     paragraphMarkDeleted: paragraph.paragraphMarkDeleted,
     sourceXml: paragraph.sourceXml,
-    children: paragraph.children.map((child) => {
-      if (child.type === "text") {
-        return {
-          type: "text" as const,
-          text: child.text,
-          style: child.style ? { ...child.style } : undefined,
-          link: child.link,
-        };
-      }
-
-      if (child.type === "form-field") {
-        return {
-          type: "form-field" as const,
-          fieldType: child.fieldType,
-          sourceKind: child.sourceKind,
-          id: child.id,
-          tag: child.tag,
-          title: child.title,
-          placeholder: child.placeholder,
-          checked: child.checked,
-          value: child.value,
-          options: child.options?.map((option) => ({
-            displayText: option.displayText,
-            value: option.value,
-          })),
-          widget: child.widget
-            ? {
-                name: child.widget.name,
-                enabled: child.widget.enabled,
-                calcOnExit: child.widget.calcOnExit,
-                text: child.widget.text
-                  ? {
-                      inputType: child.widget.text.inputType,
-                      defaultText: child.widget.text.defaultText,
-                      maxLength: child.widget.text.maxLength,
-                      textFormat: child.widget.text.textFormat,
-                    }
-                  : undefined,
-                checkbox: child.widget.checkbox
-                  ? {
-                      defaultChecked: child.widget.checkbox.defaultChecked,
-                      sizeMode: child.widget.checkbox.sizeMode,
-                      sizePt: child.widget.checkbox.sizePt,
-                    }
-                  : undefined,
-                dropdown: child.widget.dropdown
-                  ? {
-                      defaultValue: child.widget.dropdown.defaultValue,
-                    }
-                  : undefined,
-              }
-            : undefined,
-          checkedSymbol: child.checkedSymbol,
-          uncheckedSymbol: child.uncheckedSymbol,
-          style: child.style ? { ...child.style } : undefined,
-          link: child.link,
-          sourceXml: child.sourceXml,
-        };
-      }
-
-      return {
-        type: "image" as const,
-        src: child.src,
-        alt: child.alt,
-        widthPx: child.widthPx,
-        heightPx: child.heightPx,
-        partName: child.partName,
-        contentType: child.contentType,
-        data: child.data ? new Uint8Array(child.data) : undefined,
-        sourceXml: child.sourceXml,
-        crop: child.crop ? { ...child.crop } : undefined,
-        cssFilter: child.cssFilter,
-        cssOpacity: child.cssOpacity,
-        floating: child.floating ? { ...child.floating } : undefined,
-        syntheticTextBox: child.syntheticTextBox,
-        textBoxText: child.textBoxText,
-      };
-    }),
+    children: paragraph.children.map(cloneParagraphChild),
   };
 }
 
@@ -302,7 +313,7 @@ function cloneTable(table: TableNode): TableNode {
   };
 }
 
-function cloneDocNode(node: DocNode): DocNode {
+export function cloneDocNode(node: DocNode): DocNode {
   return node.type === "paragraph" ? cloneParagraph(node) : cloneTable(node);
 }
 

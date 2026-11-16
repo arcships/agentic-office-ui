@@ -7,16 +7,26 @@ import type {
   DocModel,
   FormFieldRunNode,
   HeadingLevel,
-  ImageRunNode,
   ParagraphAlignment,
   ParagraphNode,
-  TableCellContentNode,
-  TableNode,
   ParagraphStyle,
   TextRunNode,
   TextStyle
 } from "../engine/types";
-import { cloneDocModel } from "../engine/clone";
+import {
+  cloneDocModel,
+  cloneFormFieldRun,
+  cloneImageRun,
+  cloneParagraph,
+  cloneParagraphChild,
+  cloneTextRun
+} from "../engine/clone";
+import {
+  cloneNodeForInsertion,
+  createSourceXmlIdentifierRegistry
+} from "./helpers/xml-identifiers";
+
+export { cloneParagraph };
 
 export interface InsertParagraphOptions {
   paragraphStyle?: ParagraphStyle;
@@ -71,101 +81,11 @@ function textRuns(paragraph: ParagraphNode): TextRunNode[] {
   return paragraph.children.filter((child): child is TextRunNode => child.type === "text");
 }
 
-function cloneTextRun(run: TextRunNode): TextRunNode {
-  return {
-    type: "text",
-    text: run.text,
-    style: run.style ? { ...run.style } : undefined,
-    link: run.link,
-    noteReference: run.noteReference ? { ...run.noteReference } : undefined
-  };
-}
-
 function noteReferencesEqual(left?: TextRunNode["noteReference"], right?: TextRunNode["noteReference"]): boolean {
   if (!left || !right) {
     return left === right;
   }
   return left.kind === right.kind && left.id === right.id;
-}
-
-function cloneFormFieldRun(run: FormFieldRunNode): FormFieldRunNode {
-  return {
-    type: "form-field",
-    fieldType: run.fieldType,
-    sourceKind: run.sourceKind,
-    id: run.id,
-    tag: run.tag,
-    title: run.title,
-    placeholder: run.placeholder,
-    checked: run.checked,
-    value: run.value,
-    options: run.options?.map((option) => ({
-      displayText: option.displayText,
-      value: option.value
-    })),
-    widget: run.widget
-      ? {
-          name: run.widget.name,
-          enabled: run.widget.enabled,
-          calcOnExit: run.widget.calcOnExit,
-          text: run.widget.text
-            ? {
-                inputType: run.widget.text.inputType,
-                defaultText: run.widget.text.defaultText,
-                maxLength: run.widget.text.maxLength,
-                textFormat: run.widget.text.textFormat
-              }
-            : undefined,
-          checkbox: run.widget.checkbox
-            ? {
-                defaultChecked: run.widget.checkbox.defaultChecked,
-                sizeMode: run.widget.checkbox.sizeMode,
-                sizePt: run.widget.checkbox.sizePt
-              }
-            : undefined,
-          dropdown: run.widget.dropdown
-            ? {
-                defaultValue: run.widget.dropdown.defaultValue
-              }
-            : undefined
-        }
-      : undefined,
-    checkedSymbol: run.checkedSymbol,
-    uncheckedSymbol: run.uncheckedSymbol,
-    style: run.style ? { ...run.style } : undefined,
-    link: run.link,
-    sourceXml: run.sourceXml
-  };
-}
-
-function cloneImageRun(run: ImageRunNode): ImageRunNode {
-  return {
-    type: "image",
-    src: run.src,
-    alt: run.alt,
-    widthPx: run.widthPx,
-    heightPx: run.heightPx,
-    partName: run.partName,
-    contentType: run.contentType,
-    data: run.data ? new Uint8Array(run.data) : undefined,
-    floating: run.floating ? { ...run.floating } : undefined,
-    syntheticTextBox: run.syntheticTextBox,
-    textBoxText: run.textBoxText
-  };
-}
-
-function cloneParagraphChildRun(
-  run: ParagraphNode["children"][number]
-): ParagraphNode["children"][number] {
-  if (run.type === "text") {
-    return cloneTextRun(run);
-  }
-
-  if (run.type === "form-field") {
-    return cloneFormFieldRun(run);
-  }
-
-  return cloneImageRun(run);
 }
 
 function cloneTextStyle(style?: TextStyle): TextStyle | undefined {
@@ -458,7 +378,7 @@ export function distributeTextAcrossParagraphChildren(
       }
 
       if (index < anchors.length) {
-        nextChildren.push(cloneParagraphChildRun(anchors[index]));
+        nextChildren.push(cloneParagraphChild(anchors[index]));
       }
     }
 
@@ -508,7 +428,7 @@ export function distributeTextAcrossParagraphChildren(
     }
 
     if (index < anchors.length) {
-      nextChildren.push(cloneParagraphChildRun(anchors[index]));
+      nextChildren.push(cloneParagraphChild(anchors[index]));
     }
   }
 
@@ -722,7 +642,7 @@ export function splitParagraphChildrenAtTextOffsets(
     }
 
     if (index < anchors.length) {
-      const anchor = cloneParagraphChildRun(anchors[index]);
+      const anchor = cloneParagraphChild(anchors[index]);
       const anchorOffset = anchorOffsets[index] ?? segmentEnd;
       if (anchorOffset <= safeStart) {
         beforeChildren.push(anchor);
@@ -753,15 +673,6 @@ export function splitParagraphChildrenAtTextOffsets(
   return {
     beforeChildren,
     afterChildren
-  };
-}
-
-export function cloneParagraph(paragraph: ParagraphNode): ParagraphNode {
-  return {
-    type: "paragraph",
-    style: paragraph.style ? { ...paragraph.style } : undefined,
-    sourceXml: paragraph.sourceXml,
-    children: paragraph.children.map(cloneParagraphChildRun)
   };
 }
 
@@ -800,7 +711,10 @@ export function duplicateParagraph(model: DocModel, index: number): DocModel {
     return next;
   }
 
-  next.nodes.splice(index + 1, 0, cloneParagraph(node));
+  // The copy must not reuse the original's XML identifiers (bookmarks,
+  // w14:paraId, wp:docPr ids) or the exported file binds them twice.
+  const registry = createSourceXmlIdentifierRegistry(next);
+  next.nodes.splice(index + 1, 0, cloneNodeForInsertion(node, registry));
   return next;
 }
 
