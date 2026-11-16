@@ -77,6 +77,38 @@
         }
       },
       "errors": []
+    },
+    "webkit-system": {
+      "browser": "2.54.1",
+      "driver": "WebKitWebDriver",
+      "cases": {
+        "docx": {
+          "firstPageHeight": 1524,
+          "pages": 6,
+          "state": "ready",
+          "screenshot": "verification/evidence/2026-11-16/cross-browser/webkit-docx.png",
+          "uploaded": true
+        },
+        "xlsx": {
+          "charts": 6,
+          "status": "ready",
+          "canvases": 4,
+          "screenshot": "verification/evidence/2026-11-16/cross-browser/webkit-xlsx.png",
+          "uploaded": true
+        },
+        "pdf": {
+          "slots": 4,
+          "images": 4,
+          "screenshot": "verification/evidence/2026-11-16/cross-browser/webkit-pdf.png",
+          "uploaded": true
+        },
+        "pptx": {
+          "state": "ready",
+          "thumbs": 5,
+          "screenshot": "verification/evidence/2026-11-16/cross-browser/webkit-pptx.png",
+          "uploaded": true
+        }
+      }
     }
   },
   "failures": [],

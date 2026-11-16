@@ -36,7 +36,7 @@ verify: <suite> <date> — <one-line result>
 | **L2** | 上游双跑 | React playground + 本地 demo + Playwright | 同文件页数/字数/卡片/图表/截图 | ✅ 3 个用例 |
 | **L3** | 真实文件语料 | 公开 DOCX/XLSX/PPTX/PDF + oracle + 双跑 | 未知组合、异常结构、真实字体 | ✅ v1（18 个文件，发现 #152） |
 | **L4** | 编辑→导出→重开回环 | 控制器脚本 + 文本/模型比较 | 数据丢失、schema 破坏、宏/格式丢失 | ✅ v1（DOCX PASS；XLSX 图表导出损坏 → #66） |
-| **L5** | 横向矩阵 | Chromium/Firefox/WebKit、4 视口、明暗、缩放、IME/触摸/打印 | 浏览器/场景差异 | ✅ V6：16 视口组合 + 场景；WebKit 环境阻塞 |
+| **L5** | 横向矩阵 | Chromium/Firefox/WebKit、4 视口、明暗、缩放、IME/触摸/打印 | 浏览器/场景差异 | ✅ 三引擎通过（系统 WebKitGTK 2.54.1）+ 16 视口场景 |
 | **L6** | 像素基线 | 截图 vs LibreOffice/pdftoppm，SSIM/容差 | 版式漂移、字体度量差异 | ✅ v1（DOCX 18.6%、PPTX 2.9%、PDF 18.1%） |
 
 鲁棒性（畸形包、zip 炸弹、超大文件、并发加载）作为 L4 的旁支，单独一套用例（V5）。
@@ -132,7 +132,7 @@ uv run --with playwright python tests/blackbox/upstream_parity.py --strict
 - L0–L2 完成：源码/API 对齐、16 个合成夹具 oracle、3 个上游双跑用例。
 - V1 真实文件：18 个 POI/PDFBox 文件，oracle PASS；viewer 16/18（#152）。
 - V2 回环：DOCX PASS；XLSX 导出丢 chart part，openpyxl 无法重开（#66，P0）。
-- V3 跨浏览器：Chromium+Firefox 通过；WebKit 因宿主库缺失 SKIP。
+- V3 跨浏览器：Chromium、Firefox、系统 WebKitGTK 2.54.1（WebKitWebDriver）三引擎全部通过。
 - V4 像素基线：DOCX 18.6%、PPTX 2.9%、PDF 18.1%，均在阈值内。
 - V5 鲁棒性：7 个用例 PASS；zip 炸弹/超限/并发/卸载按预期。
 - V6 场景矩阵：16 视口组合无溢出；打印/键盘/IME 缺口实机复现（#92/#116/#89）。

@@ -1,6 +1,6 @@
 # 跨浏览器（V3，2026-11-16）
 
-Chromium 155（系统）与 Playwright Firefox 159；WebKit 因宿主库缺失未能启动。
+Chromium 155（系统）、Playwright Firefox 159、**系统 WebKitGTK 2.54.1（WebKitWebDriver）**。
 
 | 用例 | Chromium | Firefox | 备注 |
 |---|---|---|---|
@@ -12,7 +12,15 @@ Chromium 155（系统）与 Playwright Firefox 159；WebKit 因宿主库缺失�
 - 控制台/页面错误：两个浏览器均 **0**。
 - 结论：两引擎行为一致；DOCX 的 6 页（而非 9 页）是共同缺陷，不是浏览器差异。
 
-## WebKit
+## WebKit（系统 WebKitGTK）
 
-- 二进制已下载，但启动失败：缺少 `libicu74`、`libbacktrace.so.0`、`libxml2.so.2`、`libjxl.so.0.8`；宿主为 Arch（ICU 78），无 sudo 安装 Ubuntu 兼容库。
-- 记录为 **SKIP（环境阻塞）**，不作为通过。后续可在 CI 的 Ubuntu runner 上补跑。
+Playwright 自带的 WebKit 需要 Ubuntu 兼容库，但 Omarchy/Arch 自带 `WebKitWebDriver`，直接走 W3C WebDriver：
+
+| 用例 | 结果 |
+|---|---|
+| DOCX `demo.docx` | ready，6 页，首页 1524px |
+| XLSX `xlsx-charts.xlsx` | ready，4 canvas，6 图表 |
+| PDF `pdf-rotated-90.pdf` | 4 slot / 4 图 |
+| PPTX `pptx-deck-basic.pptx` | ready，5 缩略图 |
+
+脚本：`tests/blackbox/webkit_webdriver.py`；结果 `cross-browser/webkit.json` + 4 张 `webkit-*.png`。WebKitGTK 2.54.1 与 Chromium/Firefox 结果一致。

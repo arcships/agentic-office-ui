@@ -55,7 +55,7 @@ uv run --with playwright python tests/blackbox/upstream_parity.py --strict
 | L2 上游双跑 | ✅ | `evidence/2026-11-16/upstream-parity/` |
 | V1 真实文件 | ✅ 18 个 | `evidence/2026-11-16/real-files/` |
 | V2 编辑回环 | ✅ DOCX；XLSX 导出损坏 #66 | `evidence/2026-11-16/roundtrip/` |
-| V3 跨浏览器 | 🟡 Chromium+Firefox；WebKit 环境阻塞 | `evidence/2026-11-16/cross-browser/` |
+| V3 跨浏览器 | ✅ Chromium+Firefox+系统 WebKitGTK | `evidence/2026-11-16/cross-browser/` |
 | V4 像素基线 | ✅ 3 用例 | `evidence/2026-11-16/pixel/` |
 | V5 鲁棒性 | ✅ 7 用例 | `evidence/2026-11-16/robustness/` |
 | V6 场景矩阵 | ✅ 16 视口组合 + 场景 | `evidence/2026-11-16/scenario/` |
