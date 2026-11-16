@@ -60,6 +60,7 @@ const suites = {
       "tests/unit/office-interaction.test.mjs",
       "tests/unit/image-budget.test.mjs",
       "tests/unit/docx-core.test.mjs",
+      "tests/unit/docx-model-preservation.test.mjs",
       "tests/unit/docx-reference-adapter.test.mjs",
       "tests/unit/docx-history-cache.test.mjs",
       "tests/unit/xlsx-core.test.mjs",

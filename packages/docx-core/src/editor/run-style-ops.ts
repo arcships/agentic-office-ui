@@ -5,9 +5,9 @@ import type {
   DocModel,
   FormFieldRunNode,
   HeadingLevel,
-  ImageRunNode,
   ParagraphAlignment,
   ParagraphNode,
+  TableNode,
   TextRunNode,
   TextStyle,
 } from "../engine/types";
@@ -21,32 +21,73 @@ import {
   cloneFormFieldRun,
   cloneTextStyle,
 } from "./helpers/text-mutation";
+import {
+  cloneNodeForInsertion,
+  createSourceXmlIdentifierRegistry,
+} from "./helpers/xml-identifiers";
 
-function mutateParagraphTextRuns(model: DocModel, transform: (run: TextRunNode) => void): void {
-  for (const node of model.nodes) {
-    if (node.type === "paragraph") {
-      for (const child of node.children) {
-        if (child.type === "text") {
-          transform(child);
-        }
-      }
-      node.sourceXml = undefined;
+/** Returns true when the transform actually changed the run. */
+type TextRunTransform = (run: TextRunNode) => boolean;
+
+// `sourceXml` is what the exporter re-emits, so it is only invalidated for the
+// nodes that really changed — a global find/replace that matches nothing must
+// not strip bookmarks, comment ranges, revision markup or drawing ids.
+function applyTextRunTransformToParagraph(
+  paragraph: ParagraphNode,
+  transform: TextRunTransform
+): boolean {
+  let changed = false;
+
+  for (const child of paragraph.children) {
+    if (child.type !== "text") {
       continue;
     }
 
-      for (const row of node.rows) {
-      for (const cell of row.cells) {
-        for (const paragraph of cell.nodes.filter((child): child is ParagraphNode => child.type === "paragraph")) {
-          for (const child of paragraph.children) {
-            if (child.type === "text") {
-              transform(child);
-            }
-          }
-          paragraph.sourceXml = undefined;
+    if (transform(child)) {
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    paragraph.sourceXml = undefined;
+  }
+
+  return changed;
+}
+
+function applyTextRunTransformToTable(table: TableNode, transform: TextRunTransform): boolean {
+  let changed = false;
+
+  for (const row of table.rows) {
+    for (const cell of row.cells) {
+      for (const node of cell.nodes) {
+        if (
+          node.type === "paragraph" &&
+          applyTextRunTransformToParagraph(node, transform)
+        ) {
+          changed = true;
         }
       }
     }
-    node.sourceXml = undefined;
+  }
+
+  // The table's own XML wraps its cells, so it is stale as soon as one of them
+  // changed — but not otherwise.
+  if (changed) {
+    table.sourceXml = undefined;
+  }
+
+  return changed;
+}
+
+function mutateParagraphTextRuns(model: DocModel, transform: TextRunTransform): void {
+  for (const node of model.nodes) {
+    if (node.type === "paragraph") {
+      applyTextRunTransformToParagraph(node, transform);
+      continue;
+    }
+
+    applyTextRunTransformToTable(node, transform);
   }
 }
 
@@ -54,7 +95,13 @@ export function replaceText(model: DocModel, searchValue: string | RegExp, repla
   const next = cloneDocModel(model);
 
   mutateParagraphTextRuns(next, (run) => {
-    run.text = run.text.replace(searchValue, replacement);
+    const replaced = run.text.replace(searchValue, replacement);
+    if (replaced === run.text) {
+      return false;
+    }
+
+    run.text = replaced;
+    return true;
   });
 
   return next;
@@ -181,7 +228,10 @@ export function copyParagraphs(model: DocModel, startIndex: number, endIndex = s
 export function pasteParagraphs(model: DocModel, index: number, paragraphs: ParagraphNode[]): DocModel {
   const next = cloneDocModel(model);
   const safeIndex = Math.max(0, Math.min(index, next.nodes.length));
-  const copies = paragraphs.map(cloneParagraph);
+  // Pasted paragraphs may come from this model or another document: give each
+  // copy fresh XML identifiers instead of duplicating bookmarks/paraId/docPr ids.
+  const registry = createSourceXmlIdentifierRegistry(next);
+  const copies = paragraphs.map((paragraph) => cloneNodeForInsertion(paragraph, registry));
   next.nodes.splice(safeIndex, 0, ...copies);
   return next;
 }
@@ -198,7 +248,8 @@ export function serializeParagraphsForClipboard(paragraphs: ParagraphNode[]): st
               type: "text" as const,
               text: run.text,
               style: run.style ?? undefined,
-              link: run.link
+              link: run.link,
+              noteReference: run.noteReference ?? undefined
             }
           : run.type === "form-field"
             ? cloneFormFieldRun(run)
@@ -211,6 +262,10 @@ export function serializeParagraphsForClipboard(paragraphs: ParagraphNode[]): st
               partName: run.partName,
               contentType: run.contentType,
               data: run.data ? Array.from(run.data) : undefined,
+              sourceXml: run.sourceXml,
+              crop: run.crop ? { ...run.crop } : undefined,
+              cssFilter: run.cssFilter,
+              cssOpacity: run.cssOpacity,
               floating: run.floating ? { ...run.floating } : undefined,
               syntheticTextBox: run.syntheticTextBox,
               textBoxText: run.textBoxText
@@ -249,7 +304,13 @@ export function parseParagraphsFromClipboard(input: string): ParagraphNode[] | u
             type: "text",
             text: run.text,
             style: run.style ? { ...run.style } : undefined,
-            link: typeof run.link === "string" ? run.link : undefined
+            link: typeof run.link === "string" ? run.link : undefined,
+            noteReference:
+              run.noteReference &&
+              (run.noteReference.kind === "footnote" || run.noteReference.kind === "endnote") &&
+              Number.isFinite(run.noteReference.id)
+                ? { kind: run.noteReference.kind, id: run.noteReference.id }
+                : undefined
           });
           continue;
         }
@@ -264,6 +325,10 @@ export function parseParagraphsFromClipboard(input: string): ParagraphNode[] | u
             partName: run.partName,
             contentType: run.contentType,
             data: Array.isArray(run.data) ? new Uint8Array(run.data) : undefined,
+            sourceXml: typeof run.sourceXml === "string" ? run.sourceXml : undefined,
+            crop: run.crop && typeof run.crop === "object" ? { ...run.crop } : undefined,
+            cssFilter: typeof run.cssFilter === "string" ? run.cssFilter : undefined,
+            cssOpacity: typeof run.cssOpacity === "number" ? run.cssOpacity : undefined,
             floating: run.floating && typeof run.floating === "object" ? { ...run.floating } : undefined,
             syntheticTextBox: Boolean(run.syntheticTextBox),
             textBoxText:
