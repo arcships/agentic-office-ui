@@ -1,0 +1,211 @@
+{
+  "suite": "scenario-matrix",
+  "date": "2026-11-16",
+  "issues": {
+    "keyboard": 116,
+    "print": 92,
+    "dark": 92,
+    "ime": 89,
+    "touch": 106
+  },
+  "viewports": [
+    {
+      "viewport": "1440x900",
+      "viewer": "docx",
+      "scrollWidth": 1440,
+      "innerWidth": 1440,
+      "mainHeight": 1061,
+      "state": "ready",
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "1440x900",
+      "viewer": "xlsx",
+      "scrollWidth": 1440,
+      "innerWidth": 1440,
+      "mainHeight": 956,
+      "state": null,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "1440x900",
+      "viewer": "pdf",
+      "scrollWidth": 1440,
+      "innerWidth": 1440,
+      "mainHeight": 851,
+      "state": null,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "1440x900",
+      "viewer": "pptx",
+      "scrollWidth": 1440,
+      "innerWidth": 1440,
+      "mainHeight": 872,
+      "state": "ready",
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "1280x720",
+      "viewer": "docx",
+      "scrollWidth": 1280,
+      "innerWidth": 1280,
+      "mainHeight": 921,
+      "state": "ready",
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "1280x720",
+      "viewer": "xlsx",
+      "scrollWidth": 1280,
+      "innerWidth": 1280,
+      "mainHeight": 846,
+      "state": null,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "1280x720",
+      "viewer": "pdf",
+      "scrollWidth": 1280,
+      "innerWidth": 1280,
+      "mainHeight": 660,
+      "state": null,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "1280x720",
+      "viewer": "pptx",
+      "scrollWidth": 1280,
+      "innerWidth": 1280,
+      "mainHeight": 692,
+      "state": "ready",
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "768x1024",
+      "viewer": "docx",
+      "scrollWidth": 768,
+      "innerWidth": 768,
+      "mainHeight": 1340,
+      "state": "ready",
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "768x1024",
+      "viewer": "xlsx",
+      "scrollWidth": 768,
+      "innerWidth": 768,
+      "mainHeight": 1179,
+      "state": null,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "768x1024",
+      "viewer": "pdf",
+      "scrollWidth": 768,
+      "innerWidth": 768,
+      "mainHeight": 964,
+      "state": null,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "768x1024",
+      "viewer": "pptx",
+      "scrollWidth": 768,
+      "innerWidth": 768,
+      "mainHeight": 1015,
+      "state": "ready",
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "390x844",
+      "viewer": "docx",
+      "scrollWidth": 390,
+      "innerWidth": 390,
+      "mainHeight": 1328,
+      "state": "ready",
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "390x844",
+      "viewer": "xlsx",
+      "scrollWidth": 390,
+      "innerWidth": 390,
+      "mainHeight": 1319,
+      "state": null,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "390x844",
+      "viewer": "pdf",
+      "scrollWidth": 390,
+      "innerWidth": 390,
+      "mainHeight": 784,
+      "state": null,
+      "overflow": false,
+      "errors": []
+    },
+    {
+      "viewport": "390x844",
+      "viewer": "pptx",
+      "scrollWidth": 390,
+      "innerWidth": 390,
+      "mainHeight": 869,
+      "state": "ready",
+      "overflow": false,
+      "errors": []
+    }
+  ],
+  "docx": {
+    "baseline": {
+      "pages": 6,
+      "height": 1525,
+      "bg": "rgb(255, 255, 255)"
+    },
+    "zoom_200": {
+      "height": 3051,
+      "cardTop": 0
+    },
+    "zoom_50": {
+      "height": 763,
+      "cardTop": 0
+    },
+    "dark": {
+      "bg": "rgb(31, 41, 55)",
+      "color": "rgb(249, 250, 251)"
+    },
+    "print": {
+      "toolbarDisplay": "flex",
+      "mountedPages": 1
+    },
+    "keyboard": {
+      "before": 0,
+      "after": 0
+    }
+  },
+  "xlsx_ime": {
+    "editor_opened": true,
+    "editor_after_enter_during_composition": 0,
+    "editor_closed_on_composition_enter": true
+  },
+  "touch": {
+    "pages": 6,
+    "page_errors": []
+  },
+  "failures": [],
+  "verdict": "PASS"
+}
