@@ -31,7 +31,7 @@ const controller = useXlsxViewerController({
 - 计算和导出：`recalculate()`、`exportXlsx()`、`exportCsv()`、`download()`；
 - 图表和图片：选择、移动、缩放和读取对象。
 
-URL 来源必须同时提供 `src` 和 `urlPolicy`。大文件可以通过 `deferLoadingAboveBytes` 延迟，并在用户确认后调用 `continueDeferredLoad()`。
+URL 来源必须同时提供 `src` 和 `urlPolicy`。大文件可以通过 `deferLoadingAboveBytes` 延迟，并在用户确认后调用 `continueDeferredLoad()`；用户放弃时调用 `cancelDeferredLoad()`，控制器会释放缓存的源字节并回到空状态。
 
 控制器会销毁自己创建的 Runtime、Worker、工作簿和资源。传入 `runtime` 时，Runtime 仍由调用方负责。
 

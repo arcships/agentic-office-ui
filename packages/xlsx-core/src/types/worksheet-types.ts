@@ -682,6 +682,13 @@ export interface XlsxViewerController {
   canUndo: boolean;
   canZoomIn: boolean;
   canZoomOut: boolean;
+  /**
+   * Abandons a deferred load and returns the viewer to its empty state.
+   *
+   * Ignored when no load is deferred; the pending source bytes are released
+   * without parsing.
+   */
+  cancelDeferredLoad: () => void;
   clearSelectedCells: () => void;
   clearSelection: () => void;
   continueDeferredLoad: () => void;

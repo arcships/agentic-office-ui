@@ -91,6 +91,10 @@ export function createNavigationDomain(ctx: XlsxControllerContext) {
     ctx.continueDeferredWorkbookLoad();
   }
 
+  function cancelDeferredLoad() {
+    ctx.cancelDeferredWorkbookLoad();
+  }
+
   return {
     setActiveSheetIndex,
     setActiveTabIndex,
@@ -98,6 +102,7 @@ export function createNavigationDomain(ctx: XlsxControllerContext) {
     resetZoom,
     zoomIn,
     zoomOut,
-    continueDeferredLoad
+    continueDeferredLoad,
+    cancelDeferredLoad
   };
 }

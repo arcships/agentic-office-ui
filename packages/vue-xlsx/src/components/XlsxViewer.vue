@@ -3,7 +3,7 @@
     ref="viewerRef"
     class="xlsx-viewer"
     data-testid="xlsx-viewer"
-    :data-state="controller.isLoading ? 'loading' : controller.error ? 'error' : controller.activeSheet || controller.activeTab?.kind === 'chartsheet' ? 'ready' : 'empty'"
+    :data-state="controller.isLoading ? 'loading' : controller.error ? 'error' : controller.isLoadDeferred ? 'deferred' : controller.activeSheet || controller.activeTab?.kind === 'chartsheet' ? 'ready' : 'empty'"
     :style="viewerStyle"
     @keydown="onKeydown"
     tabindex="0"
@@ -56,6 +56,58 @@
         :controller="controller"
         :is-dark="isDark ?? false"
       />
+      <div
+        v-else-if="controller.isLoadDeferred"
+        class="xlsx-viewer__deferred"
+        data-testid="xlsx-deferred-load"
+      >
+        <slot
+          name="deferredLoad"
+          :file-name="deferredLoadFileName"
+          :bytes="deferredLoadBytes"
+          :size-label="deferredLoadSizeLabel"
+          :resume="onDeferredResume"
+          :cancel="onDeferredCancel"
+        >
+          <div
+            class="xlsx-viewer__deferred-card"
+            :class="{ 'xlsx-viewer__deferred-card--dark': isDark }"
+          >
+            <div class="xlsx-viewer__deferred-title">文件较大，已延迟解析</div>
+            <div
+              class="xlsx-viewer__deferred-file"
+              data-testid="xlsx-deferred-file-name"
+            >
+              {{ deferredLoadFileName }}
+            </div>
+            <div
+              class="xlsx-viewer__deferred-size"
+              data-testid="xlsx-deferred-size"
+            >
+              文件大小 {{ deferredLoadSizeLabel }}，继续解析会占用更多内存。
+            </div>
+            <div class="xlsx-viewer__deferred-actions">
+              <button
+                type="button"
+                class="xlsx-viewer__deferred-button xlsx-viewer__deferred-button--primary"
+                data-testid="xlsx-deferred-continue"
+                :disabled="controller.canLoadDeferred === false"
+                @click="onDeferredResume"
+              >
+                继续解析
+              </button>
+              <button
+                type="button"
+                class="xlsx-viewer__deferred-button"
+                data-testid="xlsx-deferred-cancel"
+                @click="onDeferredCancel"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </slot>
+      </div>
       <div
         v-else-if="!controller.activeSheet"
         class="xlsx-viewer__empty"
@@ -128,6 +180,7 @@ import XlsxDrawingLayer from "./XlsxDrawingLayer.vue";
 import XlsxSelectionOverlay from "./XlsxSelectionOverlay.vue";
 import XlsxContextMenu from "./XlsxContextMenu.vue";
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue";
+import { formatBinaryBytes } from "../composables/formatting";
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch";
 
 const props = withDefaults(
@@ -167,9 +220,42 @@ const emit = defineEmits<{
   upload: [];
   "update:readOnly": [value: boolean];
   searchStateChange: [state: XlsxSearchState];
+  "load-deferred": [payload: XlsxDeferredLoadPayload];
+  "deferred-resumed": [payload: XlsxDeferredLoadPayload];
+  "deferred-cancel": [payload: XlsxDeferredLoadPayload];
 }>();
 
+type XlsxDeferredLoadPayload = { fileName: string; bytes: number };
+
 const effectiveReadOnly = computed(() => props.controller.readOnly || props.readOnly);
+
+const deferredLoadBytes = computed(() => props.controller.deferredLoadFileSize ?? 0);
+const deferredLoadSizeLabel = computed(() => formatBinaryBytes(deferredLoadBytes.value));
+const deferredLoadFileName = computed(() => props.controller.displayFileName?.trim() || "未命名工作簿");
+const deferredLoadPayload = computed<XlsxDeferredLoadPayload>(() => ({
+  fileName: deferredLoadFileName.value,
+  bytes: deferredLoadBytes.value,
+}));
+
+function onDeferredResume() {
+  if (!props.controller.isLoadDeferred) return;
+  emit("deferred-resumed", deferredLoadPayload.value);
+  props.controller.continueDeferredLoad();
+}
+
+function onDeferredCancel() {
+  if (!props.controller.isLoadDeferred) return;
+  emit("deferred-cancel", deferredLoadPayload.value);
+  props.controller.cancelDeferredLoad?.();
+}
+
+watch(
+  () => props.controller.isLoadDeferred,
+  (deferred) => {
+    if (deferred) emit("load-deferred", deferredLoadPayload.value);
+  },
+  { immediate: true },
+);
 
 type GridInstance = InstanceType<typeof XlsxGrid>;
 const viewerRef = ref<HTMLElement | null>(null);
@@ -285,5 +371,101 @@ defineExpose({
 .xlsx-viewer__error-text,
 .xlsx-viewer__empty-text {
   opacity: 0.6;
+}
+
+.xlsx-viewer__deferred {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+  min-width: 0;
+  padding: 24px;
+}
+
+.xlsx-viewer__deferred-card {
+  background: #ffffff;
+  border: 1px solid #d4d4d8;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 420px;
+  padding: 20px;
+  text-align: center;
+  width: 100%;
+}
+
+.xlsx-viewer__deferred-card--dark {
+  background: #27272a;
+  border-color: #3f3f46;
+}
+
+.xlsx-viewer__deferred-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.xlsx-viewer__deferred-file {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xlsx-viewer__deferred-size {
+  color: #71717a;
+  line-height: 1.5;
+}
+
+.xlsx-viewer__deferred-card--dark .xlsx-viewer__deferred-size {
+  color: #a1a1aa;
+}
+
+.xlsx-viewer__deferred-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 4px;
+}
+
+.xlsx-viewer__deferred-button {
+  background: transparent;
+  border: 1px solid #d4d4d8;
+  border-radius: 7px;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 7px 16px;
+}
+
+.xlsx-viewer__deferred-card--dark .xlsx-viewer__deferred-button {
+  border-color: #52525b;
+}
+
+.xlsx-viewer__deferred-button:hover:not(:disabled) {
+  background: rgba(113, 113, 122, 0.12);
+}
+
+.xlsx-viewer__deferred-button--primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.xlsx-viewer__deferred-button--primary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.xlsx-viewer__deferred-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.xlsx-viewer__deferred-button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 </style>

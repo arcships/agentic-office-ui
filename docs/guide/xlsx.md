@@ -40,7 +40,7 @@ const controller = useXlsxViewerController({
 | `showUpload` | `boolean` | `false` | 上传入口 |
 | `getCellStyle` | `function` | 无 | 按单元格补充样式 |
 
-事件包括 `cellDoubleClick`、`upload` 和 `update:readOnly`。
+事件包括 `cellDoubleClick`、`upload`、`update:readOnly`、`load-deferred`、`deferred-resumed` 和 `deferred-cancel`。
 
 图表、地图和 WebGL 是按需入口：
 
@@ -51,6 +51,33 @@ import "@arcships/vue-xlsx/webgl"
 ```
 
 不使用这些功能时，不需要加载相应的大型实现。旧的网格、工具栏和浮层组件只为兼容保留，新代码从 `XlsxViewer` 和控制器开始。
+
+## 延迟解析
+
+控制器配置了 `deferLoadingAboveBytes` 且文件超过阈值时，不会立即解析工作簿。`XlsxViewer` 会直接渲染一个内置提示卡片，显示文件名和大小，并提供“继续解析”和“取消”两个动作；宿主不需要再额外实现加载入口。
+
+行为：
+
+- “继续解析”调用 `controller.continueDeferredLoad()`，事件 `deferred-resumed` 在调用前触发；
+- “取消”调用 `controller.cancelDeferredLoad()`，释放缓存的源文件字节并回到空查看器，事件 `deferred-cancel` 在调用前触发；
+- 进入延迟状态时组件触发 `load-deferred`，事件参数为 `{ fileName, bytes }`；
+- 根元素暴露 `data-state="deferred"`，便于宿主和端到端测试识别。
+
+如需替换默认卡片，使用 `deferredLoad` 插槽：
+
+```vue
+<XlsxViewer :controller="controller">
+  <template #deferredLoad="{ fileName, bytes, sizeLabel, resume, cancel }">
+    <div>
+      <p>{{ fileName }}（{{ sizeLabel }}）较大，是否继续解析？</p>
+      <button type="button" @click="resume">继续解析</button>
+      <button type="button" @click="cancel">取消</button>
+    </div>
+  </template>
+</XlsxViewer>
+```
+
+插槽属性：`fileName`、`bytes`、`sizeLabel`，以及 `resume`、`cancel` 两个动作函数。
 
 ## CSV 输入
 
