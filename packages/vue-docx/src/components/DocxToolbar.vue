@@ -341,6 +341,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
+import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { DocxEditorController, DocxBorderPreset, HeadingLevel } from "@arcships/docx-core"
 
 const props = defineProps<{
@@ -462,7 +463,13 @@ function onLinkClick(): void {
     return
   }
   const url = window.prompt("Enter URL:", "https://")
-  if (url) props.controller.setLink(url)
+  if (!url) return
+  const safeUrl = sanitizeOfficeLink(url)
+  if (!safeUrl) {
+    window.alert("Only http, https, mailto, internal #fragment, and relative links are allowed.")
+    return
+  }
+  props.controller.setLink(safeUrl)
 }
 
 function onLineSpacingChange(event: Event): void {

@@ -5,6 +5,7 @@
 // app mutates their DOM references and breaks the next live update.
 
 import { Comment, Fragment, Text, type VNode } from "vue"
+import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 
 const BOOLEAN_ATTRIBUTES = new Set([
   "allowfullscreen",
@@ -95,12 +96,19 @@ function renderStaticString(value: unknown): string {
     return renderStaticString(value.children)
   }
 
-  const attributes = staticAttributeString(value.props as Record<string, unknown> | null)
+  const attributes = staticAttributeString(
+    value.props as Record<string, unknown> | null,
+    value.type
+  )
   return `<${value.type}${attributes}>${renderStaticString(value.children)}</${value.type}>`
 }
 
-function staticAttributeString(props: Record<string, unknown> | null): string {
+function staticAttributeString(
+  props: Record<string, unknown> | null,
+  tagName?: string
+): string {
   if (!props) return ""
+  const isLink = tagName?.toLowerCase() === "a"
   const attributes: string[] = []
   for (const [key, value] of Object.entries(props)) {
     if (
@@ -119,6 +127,11 @@ function staticAttributeString(props: Record<string, unknown> | null): string {
     if (key === "style") {
       const style = staticStyleString(value)
       if (style) attributes.push(`style="${escapeHtml(style)}"`)
+      continue
+    }
+    if (key === "href" && isLink) {
+      const href = sanitizeOfficeLink(value)
+      if (href !== undefined) attributes.push(`href="${escapeHtml(href)}"`)
       continue
     }
     const name = key === "className" ? "class" : normalizeAttributeName(key)
@@ -227,6 +240,12 @@ function applyStaticProps(
     }
 
     if (value === null || value === undefined) continue
+
+    if (key === "href" && element.tagName.toLowerCase() === "a") {
+      const href = sanitizeOfficeLink(value)
+      if (href !== undefined) element.setAttribute("href", href)
+      continue
+    }
 
     const attributeName = normalizeAttributeName(key)
     if (value === true) {

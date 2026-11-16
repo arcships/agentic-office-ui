@@ -619,6 +619,43 @@ test("URL policy rejects dangerous sources before fetch and strips secrets", asy
   );
 });
 
+test("link policy accepts safe hrefs and rejects executable schemes", () => {
+  for (const target of [
+    "https://example.com/path?q=1#frag",
+    "http://example.com/path",
+    "HTTPS://example.com/path",
+    "mailto:person@example.com",
+    "#bookmark",
+    "/relative/path",
+    "./relative/path",
+    "relative/path?q=1",
+    "//example.com/path",
+  ]) {
+    assert.equal(runtime.sanitizeOfficeLink(target), target);
+    assert.equal(runtime.isSafeOfficeLink(target), true);
+  }
+
+  for (const target of [
+    "javascript:alert(1)",
+    "JaVaScRiPt:alert(1)",
+    " javascript:alert(1)",
+    "java\nscript:alert(1)",
+    "java\tscript:alert(1)",
+    "data:text/html,<script>alert(1)</script>",
+    "vbscript:msgbox(1)",
+    "file:///etc/passwd",
+    "tel:+10000000000",
+    "https://",
+    "mailto:",
+    "",
+  ]) {
+    assert.equal(runtime.sanitizeOfficeLink(target), undefined);
+    assert.equal(runtime.isSafeOfficeLink(target), false);
+  }
+
+  assert.deepEqual([...runtime.OFFICE_LINK_PROTOCOLS], ["http:", "https:", "mailto:"]);
+});
+
 test("source loading uses controlled fetch and enforces the input byte limit", async () => {
   const calls = [];
   const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);

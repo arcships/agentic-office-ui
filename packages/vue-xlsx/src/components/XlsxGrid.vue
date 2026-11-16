@@ -93,6 +93,7 @@ import {
   type XlsxResolvedCellStyle,
   type XlsxSheetData,
 } from "@arcships/xlsx-core";
+import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy";
 import { GRID_HEADER_HEIGHT_PX, GRID_ROW_HEADER_WIDTH_PX } from "./grid-metrics";
 
 const props = defineProps<{
@@ -1578,8 +1579,10 @@ function activateHyperlink(cell: XlsxCellAddress): void {
     props.controller.selectCell({ row: Number(match[2]) - 1, col: col - 1 });
     return;
   }
+  const target = sanitizeOfficeLink(hyperlink.target);
+  if (!target) return;
   try {
-    const url = new URL(hyperlink.target, globalThis.location?.href);
+    const url = new URL(target, globalThis.location?.href);
     if (!["http:", "https:", "mailto:"].includes(url.protocol)) return;
     globalThis.open?.(url.href, "_blank", "noopener,noreferrer");
   } catch { /* invalid links stay inert */ }

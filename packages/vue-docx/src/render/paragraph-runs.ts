@@ -5,6 +5,7 @@
 // run rendering via type-specific sub-modules.
 
 import { h, type VNode } from "vue"
+import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type {
   ParagraphNode,
   TextRunNode,
@@ -425,16 +426,16 @@ export function renderParagraphRuns(
       "data-docx-form-field": "true",
     }
 
-    if (child.link) {
-      const linkHref = child.link
-      const isInternalLink = linkHref.startsWith("#")
+    const linkedHref = child.link ? sanitizeOfficeLink(child.link) : undefined
+    if (linkedHref) {
+      const isInternalLink = linkedHref.startsWith("#")
       target.push(
         h(
           "a",
           {
             key,
             ...formFieldAttributes,
-            href: linkHref,
+            href: linkedHref,
             target: isInternalLink ? undefined : "_blank",
             rel: isInternalLink ? undefined : "noreferrer noopener",
             onMouseDown(event: MouseEvent) {
@@ -444,7 +445,7 @@ export function renderParagraphRuns(
             onClick(event: MouseEvent) {
               if (!isInternalLink || !onInternalLinkClick) return
               event.preventDefault(); event.stopPropagation()
-              onInternalLinkClick(linkHref.slice(1))
+              onInternalLinkClick(linkedHref.slice(1))
             },
             style: trackedLinkStyle(child.style, trackedInlineChange),
           },
@@ -553,8 +554,8 @@ export function renderParagraphRuns(
     }
 
     // Hyperlink
-    if (child.link) {
-      const linkHref = child.link
+    const linkHref = child.link ? sanitizeOfficeLink(child.link) : undefined
+    if (linkHref) {
       const isInternalLink = linkHref.startsWith("#")
       target.push(
         h("a", {
