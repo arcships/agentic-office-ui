@@ -24,6 +24,9 @@ const core = await import(
 const runtimeEntry = await import(
   pathToFileURL(requireFromXlsxCore.resolve("@arcships/xlsx-core/runtime")).href
 );
+const { unzipSync, strFromU8 } = await import(
+  pathToFileURL(requireFromXlsxCore.resolve("fflate")).href
+);
 const samples = new URL("../../apps/demo/public/samples/", import.meta.url);
 
 function bytesFromFile(name) {
@@ -52,7 +55,23 @@ function bytesWithoutFirstChartSeriesTitle(name, chartPath = "xl/charts/chart1.x
   return zipSync(archive);
 }
 
-const wasmPath = requireFromXlsxCore.resolve(
+function resolvePackagePart(relsPath, target) {
+  if (target.startsWith("/")) {
+    return target.slice(1);
+  }
+
+  const ownerPath = relsPath === "_rels/.rels"
+    ? ""
+    : relsPath.replace(/\/_rels\/([^/]+)\.rels$/, "/$1");
+  const baseDir = ownerPath.split("/").slice(0, -1).join("/");
+  const resolved = new URL(
+    target,
+    `https://xlsx.invalid/${baseDir ? `${baseDir}/` : ""}`,
+  );
+  return resolved.pathname.replace(/^\/+/, "");
+}
+
+const wasmPath = requireFromVueXlsx.resolve(
   "@arcships/xlsx-core/assets/duke_sheets_wasm_bg.wasm",
 );
 const wasmBytes = readFileSync(wasmPath);
@@ -292,6 +311,102 @@ test("XLSX roundtrip preserves values, formula, calculation and cell style", () 
 
   reloaded.free();
   workbook.free();
+});
+
+test("XLSX export keeps chart parts, chart relationships and chart edits", () => {
+  const bytes = bytesFromFile("charts-images.xlsx");
+  const workbook = wasm.Workbook.fromBytes(bytes);
+  const imageAssets = core.parseWorkbookImageAssets(bytes);
+  const chartAssets = core.loadWorkbookChartAssets(
+    workbook,
+    imageAssets,
+    new Map([[0, 0]]),
+  );
+  const chart = chartAssets.chartsByWorkbookSheetIndex[0]?.[0];
+  assert.ok(chart, "fixture must expose an editable worksheet chart");
+  assert.equal(chart.chartPath, "xl/charts/chart1.xml");
+  assert.equal(
+    core.updateWorkbookChartDefinition(imageAssets, chartAssets, chart.id, {
+      title: "Exported chart title",
+    }),
+    true,
+  );
+
+  const sheet = workbook.getSheetByName("Dashboard");
+  sheet.setCell("A1", "Edited cell");
+  const merged = core.mergeWorkbookImageAssets(
+    workbook.saveXlsxBytes(),
+    imageAssets,
+    imageAssets.sheetOrigins,
+  );
+  workbook.free();
+
+  const archive = unzipSync(merged);
+  assert.ok(archive["xl/charts/chart1.xml"], "worksheet chart part must be exported");
+  assert.ok(archive["xl/charts/chart2.xml"], "chartsheet chart part must be exported");
+  assert.ok(archive["xl/drawings/drawing1.xml"]);
+  assert.ok(archive["xl/drawings/_rels/drawing1.xml.rels"]);
+  assert.ok(archive["xl/media/image1.png"]);
+  assert.match(
+    strFromU8(archive["xl/charts/chart1.xml"]),
+    /Exported chart title/,
+  );
+
+  const contentTypes = strFromU8(archive["[Content_Types].xml"]);
+  for (const chartPath of ["/xl/charts/chart1.xml", "/xl/charts/chart2.xml"]) {
+    assert.ok(
+      contentTypes.includes(`PartName="${chartPath}"`),
+      `${chartPath} must have a content type override`,
+    );
+  }
+  assert.match(
+    contentTypes,
+    /ContentType="application\/vnd\.openxmlformats-officedocument\.drawingml\.chart\+xml"/,
+  );
+
+  for (const [relsPath, data] of Object.entries(archive)) {
+    if (!relsPath.endsWith(".rels")) continue;
+    const relsXml = strFromU8(data);
+    for (const match of relsXml.matchAll(/<Relationship\b([^>]*)\/?>/g)) {
+      const attributes = match[1];
+      if (/TargetMode="External"/.test(attributes)) continue;
+      const target = /Target="([^"]*)"/.exec(attributes)?.[1];
+      if (!target || target.startsWith("#")) continue;
+      const resolved = resolvePackagePart(relsPath, target);
+      assert.ok(
+        archive[resolved],
+        `${relsPath} target ${target} must resolve to ${resolved}`,
+      );
+    }
+  }
+
+  const drawingRels = strFromU8(archive["xl/drawings/_rels/drawing1.xml.rels"]);
+  const chartTarget = /Type="[^"]*\/chart"[^>]*Target="([^"]*)"/.exec(drawingRels)?.[1];
+  assert.equal(
+    resolvePackagePart("xl/drawings/_rels/drawing1.xml.rels", chartTarget ?? ""),
+    "xl/charts/chart1.xml",
+  );
+
+  const reloaded = wasm.Workbook.fromBytes(merged);
+  try {
+    assert.equal(
+      reloaded.getSheetByName("Dashboard").getCell("A1").toString(),
+      "Edited cell",
+    );
+    const reloadedAssets = core.parseWorkbookImageAssets(merged);
+    const reloadedCharts = core.loadWorkbookChartAssets(
+      reloaded,
+      reloadedAssets,
+      new Map([[0, 0]]),
+    );
+    assert.equal(
+      reloadedCharts.chartsByWorkbookSheetIndex[0]?.[0]?.title,
+      "Exported chart title",
+    );
+    assert.equal(reloadedCharts.chartsheets[0]?.chartPath, "xl/charts/chart2.xml");
+  } finally {
+    reloaded.free();
+  }
 });
 
 test("XLSX Worker client matches out-of-order responses to their requests", async () => {

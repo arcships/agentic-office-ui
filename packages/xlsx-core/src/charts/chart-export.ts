@@ -665,7 +665,9 @@ export function setChartTitle(chartNode: Element, value: string | undefined) {
   t.textContent = value;
   r.appendChild(t);
   p.appendChild(r);
-  rich.append(bodyPr, lstStyle, p);
+  rich.appendChild(bodyPr);
+  rich.appendChild(lstStyle);
+  rich.appendChild(p);
   tx.appendChild(rich);
   titleNode.appendChild(tx);
 }
