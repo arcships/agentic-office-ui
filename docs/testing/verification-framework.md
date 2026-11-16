@@ -35,7 +35,7 @@ verify: <suite> <date> — <one-line result>
 | **L1** | 夹具合法性与 oracle | `soffice` → PDF、`pdfinfo`、`verify_review_corpus.py` | 页数基线、夹具有效性、损坏夹具修复 | ✅ v1（5 个夹具） |
 | **L2** | 上游双跑 | React playground + 本地 demo + Playwright | 同文件页数/字数/卡片/图表/截图 | ✅ 3 个用例 |
 | **L3** | 真实文件语料 | 公开 DOCX/XLSX/PPTX/PDF + oracle + 双跑 | 未知组合、异常结构、真实字体 | ✅ v1（18 个文件，发现 #152） |
-| **L4** | 编辑→导出→重开回环 | 控制器脚本 + 文本/模型比较 | 数据丢失、schema 破坏、宏/格式丢失 | 🔜 V2 |
+| **L4** | 编辑→导出→重开回环 | 控制器脚本 + 文本/模型比较 | 数据丢失、schema 破坏、宏/格式丢失 | ✅ v1（DOCX PASS；XLSX 图表导出损坏 → #66） |
 | **L5** | 横向矩阵 | Chromium/Firefox/WebKit、4 视口、明暗、缩放、IME/触摸/打印 | 浏览器/场景差异 | 🔜 V3/V6 |
 | **L6** | 像素基线 | 截图 vs LibreOffice/pdftoppm，SSIM/容差 | 版式漂移、字体度量差异 | 🔜 V4 |
 
@@ -133,4 +133,5 @@ uv run --with playwright python tests/blackbox/upstream_parity.py --strict
 - L2：3 个用例 PASS（`demo.docx`、`docx-comments.docx`、`xlsx-charts.xlsx`）。
 - 本轮修复：`docx-comments.docx` 的页眉评论导致 LibreOffice 拒载；已改为正文/表格评论并补全 footnotes 注册。
 - V1 真实文件：18 个 POI/PDFBox 文件，oracle PASS；viewer 16/18，两个 XLSX 因图表系列缺 `<c:tx>` 崩溃（#152）。
-- 下一步：V2 编辑→导出→重开回环。
+- V2 回环：DOCX PASS；XLSX 导出丢 chart part，openpyxl 无法重开（#66，P0）。
+- 下一步：V3 跨浏览器。
