@@ -158,6 +158,63 @@ def combined_text(structure: dict[str, object]) -> str:
     return " ".join(str(page.get("text", "")) for page in pages)
 
 
+def collect_page_geometry(page) -> list[dict[str, object]]:
+    """Measure every mounted page box in both Viewers.
+
+    A page surface must stay exactly one paper tall even when the paragraph
+    estimator assigns more content than fits; the extra content is clipped
+    instead of growing the wrapper into the next page.
+    """
+    geometry = page.evaluate(
+        """async () => {
+          const samples = [];
+          for (const side of ['parity-viewer', 'parity-editor']) {
+            const root = document.querySelector(
+              `[data-testid="${side}"] .docx-viewer-root`
+            );
+            if (!root) continue;
+            const max = Math.max(0, root.scrollHeight - root.clientHeight);
+            const seen = new Map();
+            for (let step = 0; step <= 20; step += 1) {
+              root.scrollTop = Math.round(max * step / 20);
+              root.dispatchEvent(new Event('scroll'));
+              await new Promise((resolve) => requestAnimationFrame(
+                () => requestAnimationFrame(resolve)
+              ));
+              for (const wrapper of root.querySelectorAll(
+                '[data-docx-page-wrapper="true"]'
+              )) {
+                const surface = wrapper.querySelector(
+                  '[data-docx-page-surface="true"]'
+                );
+                const body = surface?.querySelector('[data-docx-page-body="true"]');
+                if (!surface || !body) continue;
+                const index = Number(wrapper.dataset.docxPageIndex);
+                seen.set(`${side}:${index}`, {
+                  side,
+                  pageIndex: index,
+                  paperHeightPx: Number(surface.dataset.docxPagePaperHeight),
+                  wrapperHeightPx: wrapper.offsetHeight,
+                  surfaceHeightPx: surface.offsetHeight,
+                  surfaceOverflow: getComputedStyle(surface).overflow,
+                  bodyHeightPx: body.offsetHeight,
+                  bodyScrollHeightPx: body.scrollHeight,
+                  clippedPx: Math.max(0, body.scrollHeight - body.clientHeight),
+                });
+              }
+            }
+            root.scrollTop = 0;
+            root.dispatchEvent(new Event('scroll'));
+            samples.push(...seen.values());
+          }
+          return samples.sort((left, right) =>
+            left.side.localeCompare(right.side) || left.pageIndex - right.pageIndex
+          );
+        }"""
+    )
+    return geometry
+
+
 def collect_legal_page_samples(page, attempt_dir: Path, page_count: int) -> list[dict[str, object]]:
     scroll_root = page.locator('[data-testid="parity-editor"] .docx-viewer-root')
     if scroll_root.count() == 0 or page_count <= 0:
@@ -204,6 +261,7 @@ def validate_case(
     editor: dict[str, object],
     diff: dict[str, object],
     legal_samples: list[dict[str, object]],
+    geometry: list[dict[str, object]],
     visual: dict[str, object],
     evidence: BrowserEvidence,
 ) -> list[str]:
@@ -227,8 +285,32 @@ def validate_case(
         f"Viewer/Editor visual difference ratio is {visual.get('differenceRatio')}",
     )
 
+    expect(len(geometry) > 0, "no page geometry was measured")
+    for item in geometry:
+        label = f"{item.get('side')} page {item.get('pageIndex')}"
+        paper_height = float(item.get("paperHeightPx") or 0)
+        expect(paper_height > 0, f"{label} has no paper height")
+        surface_height = float(item.get("surfaceHeightPx") or 0)
+        expect(
+            abs(surface_height - paper_height) <= 1,
+            f"{label} surface height {surface_height} does not match paper height {paper_height}",
+        )
+        wrapper_height = float(item.get("wrapperHeightPx") or 0)
+        expect(
+            abs(wrapper_height - paper_height) <= 1,
+            f"{label} wrapper height {wrapper_height} does not match paper height {paper_height}",
+        )
+        expect(
+            item.get("surfaceOverflow") == "hidden",
+            f"{label} surface overflow is {item.get('surfaceOverflow')}",
+        )
+
     file_name = case["file"]
     if file_name == "legal-contract.docx":
+        expect(
+            any(int(item.get("clippedPx") or 0) > 0 for item in geometry),
+            "legal fixture did not exercise clipped pagination overflow",
+        )
         viewer_pages = viewer.get("pages", [])
         editor_pages = editor.get("pages", [])
         expect(len(viewer_pages) >= 3, f"Viewer rendered only {len(viewer_pages)} legal pages")
@@ -303,6 +385,10 @@ def run_attempt(browser, case: dict[str, str], attempt: int) -> dict[str, object
                 f"parity page did not become ready: {page.get_by_test_id('load-error').inner_text()}"
             )
 
+        geometry = collect_page_geometry(page)
+        write_json(attempt_dir / "page-geometry.json", geometry)
+        page.wait_for_timeout(150)
+
         viewer = json.loads(page.get_by_test_id("viewer-structure").text_content() or "")
         editor = json.loads(page.get_by_test_id("editor-structure").text_content() or "")
         diff = json.loads(page.get_by_test_id("parity-diff").text_content() or "")
@@ -328,7 +414,7 @@ def run_attempt(browser, case: dict[str, str], attempt: int) -> dict[str, object
         page.get_by_test_id("parity-editor").screenshot(path=str(attempt_dir / "editor.png"))
         page.screenshot(path=str(attempt_dir / "full.png"), full_page=True)
         failures = validate_case(
-            case, viewer, editor, diff, legal_samples, visual, evidence
+            case, viewer, editor, diff, legal_samples, geometry, visual, evidence
         )
         result: dict[str, object] = {
             "id": case["id"],

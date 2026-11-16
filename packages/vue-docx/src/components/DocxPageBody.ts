@@ -330,8 +330,12 @@ export default defineComponent({
             isolation: "isolate",
             display: "flex",
             flexDirection: "column",
+            // Shrink the column to the page body box, then clip at that box.
+            // Its children opt out of shrinking (see DocxPageSurface styles)
+            // so overflowing paragraphs are clipped instead of compressed.
+            flex: "0 1 auto",
             minHeight: "0px",
-            overflow: "visible",
+            overflow: "hidden",
             color: props.theme === "dark" ? "#f9fafb" : "#111827",
           },
         },

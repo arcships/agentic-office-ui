@@ -217,17 +217,10 @@ function formatDate(dateStr?: string): string {
   margin-top: 4px;
 }
 
-@media (max-width: 1100px) {
-  .docx-tracked-change-gutter {
-    border-top: 1px solid #e5e7eb;
-    left: auto;
-    margin-top: 12px;
-    max-height: none;
-    overflow: visible;
-    padding: 8px 0;
-    position: static;
-    top: auto;
-    width: auto;
-  }
-}
+/*
+ * Keep the gutter beside the paper at every viewport width. The page frame is
+ * exactly one paper tall and clips the page surface, so flowing the gutter
+ * below the paper would overlap the next page; DocxViewerRoot reserves the
+ * horizontal space for this gutter instead.
+ */
 </style>
