@@ -92,6 +92,23 @@ function typedKeys<T extends object>(obj: T): (keyof T)[] {
   return Object.keys(obj) as (keyof T)[]
 }
 
+function sameTextRangeLocation(
+  left: DocxTextRangeLocation | undefined,
+  right: DocxTextRangeLocation | undefined
+): boolean {
+  if (!left || !right) return left === right
+  if (left.kind === "paragraph" && right.kind === "paragraph") {
+    return left.nodeIndex === right.nodeIndex
+  }
+  if (left.kind === "table-cell" && right.kind === "table-cell") {
+    return left.tableIndex === right.tableIndex &&
+      left.rowIndex === right.rowIndex &&
+      left.cellIndex === right.cellIndex &&
+      left.paragraphIndex === right.paragraphIndex
+  }
+  return false
+}
+
 // ── useDocxEditor ──────────────────────────────────────────────────
 
 export function useDocxEditor(
@@ -155,6 +172,10 @@ export function useDocxEditor(
   const selectionSessionKind = ref<DocxSelectionSessionKind>("idle")
   let selectionSessionTimeout: ReturnType<typeof setTimeout> | null = null
   const selectionSessionKindInternal = shallowRef<DocxSelectionSessionKind>("idle")
+  const textDraftFlushers = new Set<() => void>()
+  const flushTextDrafts = (): void => {
+    for (const flusher of [...textDraftFlushers]) flusher()
+  }
 
   // --- refs (mutable snapshots for synchronous access in callbacks) ---
   let modelSnapshot = model.value
@@ -468,6 +489,7 @@ export function useDocxEditor(
     loadedEmbeddedFontFaces: { get value() { return loadedEmbeddedFontFaces }, set value(v) { loadedEmbeddedFontFaces = v } },
     activeImportAbortController: { get value() { return activeImportAbortController }, set value(v) { activeImportAbortController = v } },
     pendingExportModelTransformer: { get value() { return pendingExportModelTransformer }, set value(v) { pendingExportModelTransformer = v } },
+    flushTextDrafts,
     starterTemplate,
 
     // computed
@@ -545,6 +567,15 @@ export function useDocxEditor(
   const syncPaginationInfo = (pagination: DocxPaginationInfo): void => {
     paginationInfo.value = pagination
   }
+  const registerTextDraftFlusher = (flusher: () => void): (() => void) => {
+    textDraftFlushers.add(flusher)
+    return () => { textDraftFlushers.delete(flusher) }
+  }
+  const clearPendingRunStyle = (): void => {
+    if (pendingRunStyleSnapshot === undefined && pendingRunStyle.value === undefined) return
+    pendingRunStyleSnapshot = undefined
+    pendingRunStyle.value = undefined
+  }
 
   // Browser-originated ranges are already reflected in the DOM. Keep the
   // synchronous snapshot current without issuing a DOM restore request that
@@ -556,16 +587,36 @@ export function useDocxEditor(
       range
     ).activeTextRange
     if (sameTextRange(activeTextRangeSnapshot, nextRange)) return
+    const previousRange = activeTextRangeSnapshot
+    const nextIsCollapsed = Boolean(
+      nextRange &&
+      sameTextRangeLocation(nextRange.start.location, nextRange.end.location) &&
+      nextRange.start.offset === nextRange.end.offset
+    )
+    const locationChanged =
+      !sameTextRangeLocation(previousRange?.start.location, nextRange?.start.location) ||
+      !sameTextRangeLocation(previousRange?.end.location, nextRange?.end.location)
+    const collapsedCaretMoved = Boolean(
+      previousRange &&
+      nextIsCollapsed &&
+      (
+        !sameTextRangeLocation(previousRange.start.location, nextRange?.start.location) ||
+        previousRange.start.offset !== nextRange?.start.offset
+      )
+    )
+    if (locationChanged || collapsedCaretMoved) clearPendingRunStyle()
     activeTextRangeSnapshot = cloneTextRange(nextRange)
     activeTextRange.value = nextRange
   }
   const selectParagraph = (nodeIndex: number): void => {
+    clearPendingRunStyle()
     dispatchEditorTransaction(() => ({
       selection: { kind: "paragraph", nodeIndex },
       activeTextRange: undefined,
     }))
   }
   const selectTableCell = (tableIndex: number, rowIndex: number, cellIndex: number): void => {
+    clearPendingRunStyle()
     dispatchEditorTransaction(() => ({
       selection: { kind: "table-cell", tableIndex, rowIndex, cellIndex },
       activeTextRange: undefined,
@@ -612,6 +663,8 @@ export function useDocxEditor(
     get canUndo() { return canUndo.value },
     get canRedo() { return canRedo.value },
     registerPendingExportModelTransformer: ie.registerPendingExportModelTransformer,
+    registerTextDraftFlusher,
+    flushTextDrafts,
     setStatus,
     setDocumentTheme: setDocumentThemeFn,
     setShowTrackedChanges: setShowTrackedChangesFn,

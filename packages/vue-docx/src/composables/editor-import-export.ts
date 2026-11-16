@@ -181,6 +181,9 @@ export function createEditorImportExport(ctx: EditorCore) {
 
   // ── exportDocx ───────────────────────────────────────────────────
   const exportDocx = (): void => {
+    // contentEditable hosts buffer keystrokes in local drafts; commit them
+    // before reading the model so Ctrl+S never drops the last edit.
+    ctx.flushTextDrafts()
     invalidateExport()
 
     let exportModel: DocModel

@@ -143,6 +143,10 @@ export interface DocxEditorController {
   registerPendingExportModelTransformer: (
     transformer?: (model: DocModel) => DocModel
   ) => void;
+  /** Register a synchronous text-draft flusher (mounted text hosts). */
+  registerTextDraftFlusher: (flusher: () => void) => () => void;
+  /** Commit any live contentEditable drafts into the model. */
+  flushTextDrafts: () => void;
   setStatus: (value: string | ((prev: string) => string)) => void;
   setDocumentTheme: (theme: DocxDocumentTheme) => void;
   setShowTrackedChanges: (showTrackedChanges: boolean) => void;

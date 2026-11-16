@@ -70,6 +70,7 @@ export interface EditorCore {
   loadedEmbeddedFontFaces: { value: FontFace[] }
   activeImportAbortController: { value: AbortController | undefined }
   pendingExportModelTransformer: { value: ((model: DocModel) => DocModel) | undefined }
+  flushTextDrafts: () => void
   starterTemplate: DocModel
 
   // ── computed refs (pre-computed in useDocxEditor, read by sub-modules) ─

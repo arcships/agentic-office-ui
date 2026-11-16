@@ -16,6 +16,9 @@ import {
   firstParagraphLocationInDocument,
   normalizeRangeBoundaryParagraphOffset,
   updateParagraphTextAtLocation,
+  updateTableCellText,
+  updateTableCellParagraphText,
+  updateSectionParagraphTextAtLocation,
   paragraphRangeForMutate,
   fullyCoveredTableNodeIndexesForRange,
   adjustLocationAfterRemovedNodeIndexes,
@@ -44,13 +47,41 @@ import {
 import type { DocxListType } from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
 
+function commonPrefixLength(left: string, right: string): number {
+  const limit = Math.min(left.length, right.length)
+  let index = 0
+  while (index < limit && left[index] === right[index]) index += 1
+  return index
+}
+
 export function createEditorTextInput(
   ctx: EditorCore,
   applyChange: (updater: (current: DocModel) => DocModel, successStatus?: string) => void,
 ) {
+  // Resolve the style of text inserted by a commit: inherit the run style at
+  // the insertion point and overlay a pending caret style (Ctrl+B before
+  // typing), instead of dropping run formatting or discarding the pending run.
+  const insertedStyleForTextChange = (
+    paragraph: ParagraphNode, previousText: string, nextText: string
+  ): TextRunNode["style"] | undefined => {
+    const pending = cloneTextStyle(ctx.pendingRunStyleSnapshot.value)
+    if (!pending || Object.keys(pending).length === 0) return undefined
+    const baseStyle =
+      firstTextStyleAtOffset(paragraph, commonPrefixLength(previousText, nextText), true) ??
+      firstRunStyle(paragraph)
+    return cloneTextStyle({ ...(baseStyle ?? {}), ...pending })
+  }
+
   // ── commitParagraphText ──────────────────────────────────────────
   const commitParagraphText = (nodeIndex: number, text: string): void => {
-    applyChange((current) => updateParagraphText(current, nodeIndex, text))
+    applyChange((current) => {
+      const paragraph = current.nodes[nodeIndex]
+      if (!paragraph || paragraph.type !== "paragraph") return current
+      const previousText = paragraphText(paragraph)
+      if (previousText === text) return current
+      const insertedStyle = insertedStyleForTextChange(paragraph, previousText, text)
+      return updateParagraphText(current, nodeIndex, text, { insertedStyle })
+    })
   }
 
   // ── commitTableCellText ──────────────────────────────────────────
@@ -58,26 +89,18 @@ export function createEditorTextInput(
     tableIndex: number, rowIndex: number, cellIndex: number, text: string
   ): void => {
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
-      const node = nextModel.nodes[tableIndex]
+      const node = current.nodes[tableIndex]
       if (!node || node.type !== "table") return current
       const cell = node.rows[rowIndex]?.cells[cellIndex]
       if (!cell) return current
-      const para = cell.nodes[0]
-      if (!para || para.type !== "paragraph") {
-        const newPara: ParagraphNode = {
-          type: "paragraph",
-          children: [{ type: "text", text, style: {} }],
-        }
-        if (cell.nodes.length > 0) {
-          cell.nodes[0] = newPara
-        } else {
-          cell.nodes.push(newPara)
-        }
-        return nextModel
-      }
-      para.children = [{ type: "text", text, style: {} }]
-      return nextModel
+      const currentText = cell.nodes
+        .filter((child): child is ParagraphNode => child.type === "paragraph")
+        .map((paragraph) => paragraphText(paragraph))
+        .join("\n")
+      if (currentText === text) return current
+      // Diff per paragraph so run styles, images and form fields survive, and
+      // the paragraph/table sourceXml caches are invalidated for export.
+      return updateTableCellText(current, tableIndex, rowIndex, cellIndex, text)
     })
   }
 
@@ -86,15 +109,18 @@ export function createEditorTextInput(
     tableIndex: number, rowIndex: number, cellIndex: number, paragraphIndex: number, text: string
   ): void => {
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
-      const node = nextModel.nodes[tableIndex]
+      const node = current.nodes[tableIndex]
       if (!node || node.type !== "table") return current
       const cell = node.rows[rowIndex]?.cells[cellIndex]
-      if (!cell) return current
-      const para = cell.nodes[paragraphIndex]
-      if (!para || para.type !== "paragraph") return current
-      para.children = [{ type: "text", text, style: {} }]
-      return nextModel
+      const paragraph = cell?.nodes
+        .filter((child): child is ParagraphNode => child.type === "paragraph")[paragraphIndex]
+      if (!cell || !paragraph) return current
+      const previousText = paragraphText(paragraph)
+      if (previousText === text) return current
+      const insertedStyle = insertedStyleForTextChange(paragraph, previousText, text)
+      return updateTableCellParagraphText(
+        current, tableIndex, rowIndex, cellIndex, paragraphIndex, text, { insertedStyle }
+      )
     })
   }
 
@@ -103,19 +129,9 @@ export function createEditorTextInput(
     location: { region: "header" | "footer"; partName: string; nodeIndex: number },
     text: string
   ): void => {
-    applyChange((current) => {
-      const nextModel = cloneDocModel(current)
-      const sections =
-        location.region === "header"
-          ? nextModel.metadata.headerSections
-          : nextModel.metadata.footerSections
-      const section = sections.find((s) => s.partName === location.partName)
-      if (!section) return current
-      const node = section.nodes[location.nodeIndex]
-      if (!node || node.type !== "paragraph") return current
-      node.children = [{ type: "text", text, style: {} }]
-      return nextModel
-    })
+    applyChange((current) =>
+      updateSectionParagraphTextAtLocation(current, location, text)
+    )
   }
 
   // ── appendParagraph ──────────────────────────────────────────────

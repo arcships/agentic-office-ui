@@ -22,6 +22,8 @@ import {
   getParagraphAtLocation,
   normalizeTextRange,
   compareTextRangeBoundaries,
+  sameParagraphLocation,
+  paragraphText,
   cloneParagraphStyle,
   tableBorderPresetState,
   applyTableBorderPreset,
@@ -41,61 +43,79 @@ export function createEditorFormat(
   applyChange: (updater: (current: DocModel) => DocModel, successStatus?: string) => void,
 ) {
   // ── applySelectedStyleChange ─────────────────────────────────────
+  function mergeRunStylePatch(
+    current: TextRunNode["style"] | undefined,
+    patch: Partial<TextRunNode["style"]>,
+    replace?: Partial<TextRunNode["style"]>
+  ): TextRunNode["style"] {
+    const next = { ...(current ?? {}), ...patch }
+    if (replace) {
+      typedKeys(replace).forEach((k) => {
+        if (replace[k] === undefined) {
+          delete (next as Record<string, unknown>)[k as string]
+        } else {
+          (next as Record<string, unknown>)[k as string] = replace[k]
+        }
+      })
+    }
+    return next
+  }
+
   function applySelectedStyleChange(
     patch: Partial<TextRunNode["style"]>,
     replace?: Partial<TextRunNode["style"]>
   ): void {
-    const modelToUse = ctx.modelSnapshot.value
     const rng = ctx.activeTextRangeSnapshot.value
-    const sp = getParagraphAtLocation(
-      modelToUse,
-      resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, rng)
-    ).paragraph
+    const normalizedRange = rng ? normalizeTextRange(rng) : undefined
+    const hasExpandedRange = Boolean(
+      normalizedRange && compareTextRangeBoundaries(normalizedRange.start, normalizedRange.end) < 0
+    )
 
-    if (!rng || !sp) {
-      // collapsed selection: mutate pendingRunStyle
-      dispatch((txCtx) => {
-        const nextPending = {
-          ...(txCtx.pendingRunStyle ?? {}),
-          ...patch,
-        }
-        if (replace) {
-          typedKeys(replace).forEach((k) => {
-            if (replace[k] === undefined) {
-              delete nextPending[k]
-            } else {
-              (nextPending as Record<string, unknown>)[k as string] = replace[k]
-            }
-          })
-        }
-        return { pendingRunStyle: nextPending }
-      })
+    if (!normalizedRange || !hasExpandedRange) {
+      // Collapsed caret (or no range): remember the style for the next typed
+      // run. This must not clone the model or push an empty undo entry.
+      dispatch((txCtx) => ({
+        pendingRunStyle: mergeRunStylePatch(txCtx.pendingRunStyle, patch, replace),
+      }))
       return
     }
 
     dispatch((txCtx) => {
       const nextModel = cloneDocModel(txCtx.model)
-      const { paragraph: para } = getParagraphAtLocation(
+      const rangeParagraphs = paragraphRangeForMutate(
         nextModel,
-        resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, rng)
+        normalizedRange.start.location,
+        normalizedRange.end.location
       )
-      if (!para) return undefined
+      let touched = false
 
-      mutateParagraphTextStyleInRange(para, rng.start.offset, rng.end.offset, (currentStyle) => {
-        const next = { ...currentStyle, ...patch }
-        if (replace) {
-          typedKeys(replace).forEach((k) => {
-            if (replace[k] === undefined) {
-              delete (next as Record<string, unknown>)[k as string]
-            } else {
-              (next as Record<string, unknown>)[k as string] = replace[k]
-            }
-          })
-        }
-        return next
-      })
+      for (const { location } of rangeParagraphs) {
+        const { paragraph: para, tableNode } = getParagraphAtLocation(nextModel, location)
+        if (!para) continue
 
-      return { model: nextModel }
+        const length = paragraphText(para).length
+        const isStart = sameParagraphLocation(location, normalizedRange.start.location)
+        const isEnd = sameParagraphLocation(location, normalizedRange.end.location)
+        const startOffset = Math.max(0, Math.min(
+          isStart ? normalizedRange.start.offset : 0,
+          length
+        ))
+        const endOffset = Math.max(0, Math.min(
+          isEnd ? normalizedRange.end.offset : length,
+          length
+        ))
+
+        if (!mutateParagraphTextStyleInRange(para, startOffset, endOffset, (currentStyle) =>
+          mergeRunStylePatch(currentStyle, patch, replace)
+        )) continue
+
+        touched = true
+        para.sourceXml = undefined
+        if (tableNode) tableNode.sourceXml = undefined
+      }
+
+      if (!touched) return undefined
+      return { model: nextModel, pendingRunStyle: undefined }
     })
   }
 

@@ -145,8 +145,15 @@ export function createEditorImage(
     // cannot silently move the image into another paragraph or table cell.
     const insertionSelection = cloneEditorSelection(ctx.selectionSnapshot.value)
     const insertionRange = cloneTextRange(ctx.activeTextRangeSnapshot.value)
+    const documentLoadNonce = ctx.documentLoadNonce.value
 
     const bytes = new Uint8Array(await file.arrayBuffer())
+    if (documentLoadNonce !== ctx.documentLoadNonce.value) {
+      // A different document was loaded while the file bytes were in flight;
+      // the captured node indexes no longer identify the user's target.
+      ctx.status.value = "Image insertion cancelled: document changed"
+      return
+    }
     const src = `data:${file.type};base64,${toBase64(bytes)}`
 
     applyChange((current) => {

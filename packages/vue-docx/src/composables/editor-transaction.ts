@@ -88,16 +88,27 @@ export function createEditorTransaction(ctx: EditorCore) {
       }
     }
 
-    if (modelChanged) ctx.model.value = nextModel
+    if (modelChanged) {
+      ctx.model.value = nextModel
+      // Keep the synchronous snapshot in step so a batch of commits (for
+      // example flushing every dirty draft before export) builds on the
+      // previous commit instead of the last rendered model.
+      ctx.modelSnapshot.value = nextModel
+    }
     if (selectionChanged) {
       ctx.suppressSelectionReset.value = true
       ctx.selection.value = cloneEditorSelection(nextSelection)
+      ctx.selectionSnapshot.value = cloneEditorSelection(nextSelection)
     }
     if (rangeChanged) {
       ctx.suppressSelectionReset.value = true
       ctx.activeTextRange.value = cloneTextRange(nextRange)
+      ctx.activeTextRangeSnapshot.value = cloneTextRange(nextRange)
     }
-    if (pendingRunStyleChanged) ctx.pendingRunStyle.value = nextPendingRunStyle
+    if (pendingRunStyleChanged) {
+      ctx.pendingRunStyle.value = nextPendingRunStyle
+      ctx.pendingRunStyleSnapshot.value = cloneTextStyle(nextPendingRunStyle)
+    }
 
     // DOM selection restore
     const localSessionActive =

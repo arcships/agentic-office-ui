@@ -5,9 +5,10 @@ import {
   importFromDemo,
   mount,
   vue,
+  walk,
 } from "./vue-test-renderer.mjs";
 
-const { DocxEditor, useDocxEditor } = await importFromDemo("@arcships/vue-docx");
+const { DocxEditor, DocxImageLayer, useDocxEditor } = await importFromDemo("@arcships/vue-docx");
 const { createBlankDocumentModel } = await importFromDemo("@arcships/docx-core");
 
 function paragraphText(node) {
@@ -255,6 +256,178 @@ test("text and format commands keep inputs immutable and undo/redo restore selec
 
   mounted.app.unmount();
   assert.deepEqual(mounted.warnings, []);
+});
+
+test("character formatting applies to every paragraph in a cross-paragraph selection", async () => {
+  const source = deepFreeze(starterModel([
+    { type: "paragraph", sourceXml: "<w:p id=\"p0\"/>", children: [{ type: "text", text: "alpha" }] },
+    { type: "paragraph", sourceXml: "<w:p id=\"p1\"/>", children: [{ type: "text", text: "beta" }] },
+  ]));
+  const mounted = await mountController(source);
+  const { controller } = mounted;
+
+  controller.selectParagraph(0);
+  await vue.nextTick();
+  controller.setActiveTextRange({
+    start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
+    end: { location: { kind: "paragraph", nodeIndex: 1 }, offset: 2 },
+  });
+  await vue.nextTick();
+
+  controller.toggleBold();
+  await vue.nextTick();
+
+  const boldText = (node) => node.children
+    .filter((child) => child.type === "text" && child.style?.bold)
+    .map((child) => child.text)
+    .join("");
+  assert.equal(boldText(controller.model.nodes[0]), "pha", "tail of the first paragraph must be bold");
+  assert.equal(boldText(controller.model.nodes[1]), "be", "head of the last paragraph must be bold");
+  assert.equal(paragraphText(controller.model.nodes[0]), "alpha");
+  assert.equal(paragraphText(controller.model.nodes[1]), "beta");
+  assert.equal(controller.model.nodes[0].sourceXml, undefined);
+  assert.equal(controller.model.nodes[1].sourceXml, undefined);
+  assert.equal(controller.canUndo, true);
+
+  controller.undo();
+  await vue.nextTick();
+  assert.equal(boldText(controller.model.nodes[0]), "");
+  assert.equal(boldText(controller.model.nodes[1]), "");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("collapsed caret formatting stays pending, adds no undo entry, and styles the next typed run", async () => {
+  const source = deepFreeze(starterModel([
+    {
+      type: "paragraph",
+      sourceXml: "<w:p id=\"pending\"/>",
+      children: [{ type: "text", text: "abcdef", style: { fontSizePt: 11 } }],
+    },
+  ]));
+  const mounted = await mountController(source);
+  const { controller } = mounted;
+
+  controller.selectParagraph(0);
+  await vue.nextTick();
+  controller.setActiveTextRange({
+    start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
+    end: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
+  });
+  await vue.nextTick();
+
+  const beforeModel = controller.model;
+  controller.toggleBold();
+  await vue.nextTick();
+  assert.strictEqual(controller.model, beforeModel, "a caret style change must not clone the model");
+  assert.equal(controller.canUndo, false, "a caret style change must not add an empty undo entry");
+  assert.equal(controller.pendingRunStyle?.bold, true);
+
+  controller.commitParagraphText(0, "abXcdef");
+  await vue.nextTick();
+  assert.equal(paragraphText(controller.model.nodes[0]), "abXcdef");
+  const runs = controller.model.nodes[0].children.filter((child) => child.type === "text");
+  const inserted = runs.find((run) => run.text === "X");
+  assert.ok(inserted, "typed text should produce a run");
+  assert.equal(inserted.style?.bold, true, "the pending bold style must style the typed run");
+  assert.equal(inserted.style?.fontSizePt, 11, "the typed run must inherit the surrounding run style");
+  assert.equal(runs.filter((run) => run.text === "ab").every((run) => !run.style?.bold), true);
+  assert.equal(runs.filter((run) => run.text === "cdef").every((run) => !run.style?.bold), true);
+
+  controller.selectParagraph(0);
+  await vue.nextTick();
+  assert.equal(controller.pendingRunStyle, undefined, "moving the caret must drop the pending style");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("floating image drag and resize convert screen pixels to page coordinates at 50% zoom", async (t) => {
+  const originalDocument = globalThis.document;
+  const listeners = new Map();
+  globalThis.document = {
+    addEventListener(type, listener) {
+      const entries = listeners.get(type) ?? new Set();
+      entries.add(listener);
+      listeners.set(type, entries);
+    },
+    removeEventListener(type, listener) {
+      listeners.get(type)?.delete(listener);
+    },
+  };
+  t.after(() => {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  });
+  const dispatchDocument = (type, event) => {
+    for (const listener of listeners.get(type) ?? []) listener(event);
+  };
+
+  const source = deepFreeze(starterModel([
+    {
+      type: "paragraph",
+      children: [
+        { type: "text", text: "anchor" },
+        {
+          type: "image",
+          src: "data:image/svg+xml;base64,PHN2Zy8+",
+          alt: "drag-image",
+          widthPx: 100,
+          heightPx: 60,
+          floating: { xPx: 20, yPx: 30, wrapType: "square", behindDocument: false, zIndex: 1 },
+        },
+      ],
+    },
+  ]));
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: source });
+      return () => vue.h(DocxImageLayer, {
+        pageIndex: 0,
+        pageWidthPx: 816,
+        pageHeightPx: 1056,
+        controller,
+        pageNodeSegments: [{ nodeIndex: 0 }],
+        editable: true,
+        zoomFactor: 0.5,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  const floatingImage = walk(mounted.root).find(
+    (node) => node.props?.["data-testid"] === "docx-floating-image"
+  );
+  assert.ok(floatingImage, "floating image should render");
+
+  floatingImage.props.onMousedown({ preventDefault() {}, clientX: 100, clientY: 100 });
+  dispatchDocument("mousemove", { type: "mousemove", clientX: 150, clientY: 120 });
+  dispatchDocument("mouseup", { type: "mouseup", clientX: 150, clientY: 120 });
+  await vue.nextTick();
+  const dragged = controller.model.nodes[0].children[1];
+  assert.deepEqual(
+    { xPx: dragged.floating.xPx, yPx: dragged.floating.yPx },
+    { xPx: 120, yPx: 70 },
+    "a 50px pointer delta at 50% zoom must move the image 100 page pixels",
+  );
+
+  const resizeHandle = walk(mounted.root).find(
+    (node) => String(node.props?.class ?? "").includes("docx-image-resize-handle--se")
+  );
+  assert.ok(resizeHandle, "selected image should render the south-east resize handle");
+  resizeHandle.props.onMousedown({
+    preventDefault() {},
+    stopPropagation() {},
+    clientX: 100,
+    clientY: 100,
+  });
+  dispatchDocument("mousemove", { type: "mousemove", clientX: 150, clientY: 125 });
+  dispatchDocument("mouseup", { type: "mouseup", clientX: 150, clientY: 125 });
+  await vue.nextTick();
+  const resized = controller.model.nodes[0].children[1];
+  assert.equal(resized.widthPx, 200, "50px horizontal pointer delta must add 100 page pixels");
+  assert.equal(resized.heightPx, 110, "25px vertical pointer delta must add 50 page pixels");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
 });
 
 test("image and table public operations commit real model transactions and history", async () => {

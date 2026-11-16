@@ -28,6 +28,11 @@ function hasClass(node, className) {
   return String(node?.props?.class || "").split(/\s+/).includes(className);
 }
 
+function paragraphText(node) {
+  if (!node || node.type !== "paragraph") return "";
+  return node.children.map((child) => child.type === "text" ? child.text : "").join("");
+}
+
 async function mountController(model) {
   let controller;
   const Harness = vue.defineComponent({
@@ -159,6 +164,143 @@ test("DocxTableHost renders vertical merges once and commits editable cell text"
   mounted.app.unmount();
 });
 
+test("table cell blur commits each paragraph without duplicating text or dropping run styles", async () => {
+  const table = {
+    type: "table",
+    sourceXml: "<w:tbl/>",
+    rows: [{
+      cells: [{
+        nodes: [
+          {
+            type: "paragraph",
+            sourceXml: "<w:p first/>",
+            children: [{ type: "text", text: "first", style: { bold: true } }],
+          },
+          {
+            type: "paragraph",
+            sourceXml: "<w:p second/>",
+            children: [{ type: "text", text: "second", style: { italic: true } }],
+          },
+        ],
+      }],
+    }],
+  };
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([table]) });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[0],
+        tableIndex: 0,
+        editable: true,
+        controller,
+      });
+    },
+  });
+
+  const mounted = await mount(Harness);
+  const cellParagraphs = walk(mounted.root).filter((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true
+  );
+  assert.equal(cellParagraphs.length, 2);
+
+  cellParagraphs[0].props.onInput({ target: { textContent: "first edited" } });
+  cellParagraphs[1].props.onInput({ target: { textContent: "second edited" } });
+  cellParagraphs[0].props.onBlur({ target: { textContent: "first edited" } });
+  await vue.nextTick();
+  cellParagraphs[1].props.onBlur({ target: { textContent: "second edited" } });
+  await vue.nextTick();
+
+  const committed = controller.model.nodes[0];
+  assert.equal(committed.type, "table");
+  const paragraphs = committed.rows[0].cells[0].nodes;
+  assert.deepEqual(paragraphs.map(paragraphText), ["first edited", "second edited"]);
+  assert.deepEqual(paragraphs[0].children[0].style, { bold: true });
+  assert.deepEqual(paragraphs[1].children[0].style, { italic: true });
+  assert.equal(paragraphs[0].sourceXml, undefined);
+  assert.equal(paragraphs[1].sourceXml, undefined);
+  assert.equal(committed.sourceXml, undefined, "table XML must be rebuilt after a cell edit");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("flushing cell drafts commits every dirty paragraph in one model chain", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [{
+        nodes: [
+          { type: "paragraph", children: [{ type: "text", text: "first" }] },
+          { type: "paragraph", children: [{ type: "text", text: "second" }] },
+        ],
+      }],
+    }],
+  };
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([table]) });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[0],
+        tableIndex: 0,
+        editable: true,
+        controller,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  const cellParagraphs = walk(mounted.root).filter((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true
+  );
+
+  cellParagraphs[0].props.onInput({ target: { textContent: "first edited" } });
+  cellParagraphs[1].props.onInput({ target: { textContent: "second edited" } });
+  controller.flushTextDrafts();
+  await vue.nextTick();
+
+  const paragraphs = controller.model.nodes[0].rows[0].cells[0].nodes;
+  assert.deepEqual(paragraphs.map(paragraphText), ["first edited", "second edited"]);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("whole-cell commit diffs multiline text, keeps run styles, and clears source XML", async () => {
+  const table = {
+    type: "table",
+    sourceXml: "<w:tbl/>",
+    rows: [{
+      cells: [{
+        nodes: [
+          {
+            type: "paragraph",
+            sourceXml: "<w:p first/>",
+            children: [{ type: "text", text: "one", style: { bold: true } }],
+          },
+          {
+            type: "paragraph",
+            sourceXml: "<w:p second/>",
+            children: [{ type: "text", text: "two", style: { underline: true } }],
+          },
+        ],
+      }],
+    }],
+  };
+  const mounted = await mountController(modelWithNodes([table]));
+  mounted.controller.commitTableCellText(0, 0, 0, "one edited\ntwo edited");
+  await vue.nextTick();
+
+  const committed = mounted.controller.model.nodes[0];
+  const paragraphs = committed.rows[0].cells[0].nodes;
+  assert.deepEqual(paragraphs.map(paragraphText), ["one edited", "two edited"]);
+  assert.deepEqual(paragraphs[0].children[0].style, { bold: true });
+  assert.deepEqual(paragraphs[1].children[0].style, { underline: true });
+  assert.equal(paragraphs[0].sourceXml, undefined);
+  assert.equal(paragraphs[1].sourceXml, undefined);
+  assert.equal(committed.sourceXml, undefined);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
 test("DOCX surface search indexes an exact table-cell range without a block highlighter", async () => {
   const table = {
     type: "table",
@@ -270,6 +412,46 @@ test("insertImageFile creates a visible floating square image with default dimen
     zIndex: 1,
   });
   assert.equal(mounted.controller.status, "Inserted image: diagram.png");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("insertImageFile drops the insertion when the document changes while reading the file", async () => {
+  const mounted = await mountController(modelWithNodes([
+    { type: "paragraph", children: [{ type: "text", text: "Image anchor" }] },
+  ]));
+  mounted.controller.selectParagraph(0);
+  await vue.nextTick();
+  mounted.controller.setActiveTextRange({
+    start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 6 },
+    end: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 6 },
+  });
+  await vue.nextTick();
+
+  const file = new File([new Uint8Array([137, 80, 78, 71])], "late.png", { type: "image/png" });
+  let releaseFileRead;
+  Object.defineProperty(file, "arrayBuffer", {
+    configurable: true,
+    value: () => new Promise((resolve) => {
+      releaseFileRead = () => resolve(new Uint8Array([137, 80, 78, 71]).buffer);
+    }),
+  });
+
+  const insertion = mounted.controller.insertImageFile(file);
+  await Promise.resolve();
+  mounted.controller.newDocument();
+  releaseFileRead();
+  await insertion;
+  await vue.nextTick();
+
+  assert.equal(
+    mounted.controller.model.nodes.some((node) =>
+      node.type === "paragraph" && node.children.some((child) => child.type === "image")
+    ),
+    false,
+    "a document loaded during the file read must not receive the image",
+  );
+  assert.equal(mounted.controller.status, "Image insertion cancelled: document changed");
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });

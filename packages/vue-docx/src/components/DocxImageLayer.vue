@@ -105,8 +105,9 @@ const props = withDefaults(
     controller: DocxEditorController
     pageNodeSegments: DocumentPageNodeSegment[]
     editable?: boolean
+    zoomFactor?: number
   }>(),
-  { editable: false }
+  { editable: false, zoomFactor: 1 }
 )
 
 // ── State ──────────────────────────────────────────────────────────
@@ -183,6 +184,13 @@ const resizeHandles = [
   { position: "se", style: { bottom: "-4px", right: "-4px", cursor: "se-resize" } },
 ]
 
+// Pointer deltas are screen pixels; the page content is CSS-scaled by the
+// viewer. Convert them back to page coordinates before mutating the model.
+const pointerScale = computed(() => {
+  const factor = props.zoomFactor
+  return Number.isFinite(factor) && factor > 0 ? factor : 1
+})
+
 // ── Style helpers ──────────────────────────────────────────────────
 function imageContainerStyle(image: FloatingImageEntry): Record<string, string> {
   void layoutRevision.value
@@ -210,8 +218,9 @@ function wrappedImageBox(
   image: FloatingImageEntry
 ): { left: number; top: number; width: number; height: number } | undefined {
   const layer = imageLayerEl.value
-  const surface = layer?.closest<HTMLElement>("[data-docx-page-surface='true']")
-  if (!surface) return undefined
+  if (!layer || typeof layer.closest !== "function") return undefined
+  const surface = layer.closest<HTMLElement>("[data-docx-page-surface='true']")
+  if (!surface || typeof surface.querySelector !== "function") return undefined
   const paragraph = surface.querySelector<HTMLElement>(
     `[data-docx-paragraph-node-index="${image.nodeIndex}"]`
   )
@@ -303,10 +312,11 @@ function setWrapMode(image: FloatingImageEntry, mode: DocxImageWrapMode): void {
 }
 
 function updatePointerPreview(event: MouseEvent): void {
+  const scale = pointerScale.value
   if (draggingImage.value) {
     const image = draggingImage.value
-    const xPx = Math.round(dragStartPosX.value + event.clientX - dragStartX.value)
-    const yPx = Math.round(dragStartPosY.value + event.clientY - dragStartY.value)
+    const xPx = Math.round(dragStartPosX.value + (event.clientX - dragStartX.value) / scale)
+    const yPx = Math.round(dragStartPosY.value + (event.clientY - dragStartY.value) / scale)
     dragPreview.value = {
       key: image.key,
       xPx: Math.max(-image.widthPx + 16, Math.min(props.pageWidthPx - 16, xPx)),
@@ -316,8 +326,8 @@ function updatePointerPreview(event: MouseEvent): void {
 
   if (resizingImage.value) {
     const image = resizingImage.value
-    const dx = event.clientX - resizeStartPos.value.x
-    const dy = event.clientY - resizeStartPos.value.y
+    const dx = (event.clientX - resizeStartPos.value.x) / scale
+    const dy = (event.clientY - resizeStartPos.value.y) / scale
     const widthDelta = resizePosition.value.includes("w") ? -dx : dx
     const heightDelta = resizePosition.value.includes("n") ? -dy : dy
     resizePreview.value = {
