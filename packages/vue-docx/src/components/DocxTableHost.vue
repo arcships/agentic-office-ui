@@ -74,7 +74,7 @@
                 :style="cellParagraphStyle(node)"
                 @input="onCellInput(tableIndex, sourceRowIndex(ri), ci, pi, $event)"
                 @focus="onCellFocus(tableIndex, sourceRowIndex(ri), ci, pi)"
-                @blur="onCellBlur(tableIndex, sourceRowIndex(ri), ci, pi)"
+                @blur="onCellBlur(tableIndex, sourceRowIndex(ri), ci, pi, $event)"
                 v-html="cellParagraphHtml(node, sourceRowIndex(ri), ci, pi)"
               />
               <DocxTableHost
@@ -112,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from "vue"
+import { ref, computed, watch, onBeforeUnmount, onMounted, onUnmounted } from "vue"
 import {
   type DocxDocumentTheme,
   type DocxEditorController,
@@ -120,6 +120,7 @@ import {
   type ParagraphNode,
   type TableNode,
   type TableRowRange,
+  paragraphText,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
 import { renderStaticHtml } from "../render/static-html"
@@ -182,6 +183,89 @@ const resizeStartWidths = ref<number[]>([])
 const localColumnWidths = ref<number[] | null>(null)
 let activeColumnMouseMove: ((event: MouseEvent) => void) | undefined
 let activeColumnMouseUp: (() => void) | undefined
+
+// Cell text drafts. Each editable cell paragraph keeps its uncommitted DOM
+// text here until blur, export, or unmount; committing the whole cell's
+// textContent would duplicate every paragraph into the first one.
+interface CellDraftEntry {
+  text: string
+  baseText: string
+  documentLoadNonce: number
+}
+const cellDrafts = new Map<string, CellDraftEntry>()
+let unregisterDraftFlusher: (() => void) | undefined
+
+function cellDraftKey(rowIndex: number, cellIndex: number, paragraphIndex: number): string {
+  return `${rowIndex}:${cellIndex}:${paragraphIndex}`
+}
+
+function parseCellDraftKey(
+  key: string
+): { rowIndex: number; cellIndex: number; paragraphIndex: number } | undefined {
+  const [row, cell, paragraph] = key.split(":").map((value) => Number(value))
+  if (!Number.isInteger(row) || !Number.isInteger(cell) || !Number.isInteger(paragraph)) {
+    return undefined
+  }
+  return { rowIndex: row, cellIndex: cell, paragraphIndex: paragraph }
+}
+
+function cellParagraphAt(
+  rowIndex: number, cellIndex: number, paragraphIndex: number
+): ParagraphNode | undefined {
+  const modelTable = props.controller?.model.nodes[props.tableIndex]
+  const table = modelTable?.type === "table" ? modelTable : props.table
+  const cell = table.rows[rowIndex]?.cells[cellIndex]
+  if (!cell) return undefined
+  return cell.nodes.filter((node): node is ParagraphNode => node.type === "paragraph")[paragraphIndex]
+}
+
+function readCellParagraphDomText(root: HTMLElement): string {
+  if (!root) return ""
+  if (!root.childNodes) return root.textContent ?? ""
+
+  function readNode(node: Node): string {
+    const element = node as Element
+    if (element.matches?.("[data-docx-numbering-label='true']")) return ""
+    if (element.matches?.("[data-docx-image-child-index]")) return ""
+    if (element.tagName?.toLowerCase() === "br") return "\n"
+    if (node.nodeType === 3) return node.textContent ?? ""
+    return Array.from(node.childNodes ?? []).map(readNode).join("")
+  }
+
+  return readNode(root as unknown as Node)
+}
+
+function commitCellParagraph(
+  rowIndex: number, cellIndex: number, paragraphIndex: number, text: string
+): void {
+  const controller = props.controller
+  if (!controller) return
+  const paragraph = cellParagraphAt(rowIndex, cellIndex, paragraphIndex)
+  if (!paragraph || paragraphText(paragraph) === text) return
+  controller.commitTableCellParagraphTextRecursive(
+    props.tableIndex, rowIndex, cellIndex, paragraphIndex, text
+  )
+}
+
+function flushCellDrafts(): void {
+  const controller = props.controller
+  if (!controller) return
+  for (const [key, draft] of [...cellDrafts.entries()]) {
+    const parsed = parseCellDraftKey(key)
+    cellDrafts.delete(key)
+    if (!parsed) continue
+    const paragraph = cellParagraphAt(parsed.rowIndex, parsed.cellIndex, parsed.paragraphIndex)
+    if (
+      !paragraph ||
+      draft.documentLoadNonce !== controller.documentLoadNonce ||
+      paragraphText(paragraph) !== draft.baseText ||
+      paragraphText(paragraph) === draft.text
+    ) continue
+    controller.commitTableCellParagraphTextRecursive(
+      props.tableIndex, parsed.rowIndex, parsed.cellIndex, parsed.paragraphIndex, draft.text
+    )
+  }
+}
 
 // ── Computed ───────────────────────────────────────────────────────
 const isReadOnly = computed(
@@ -332,7 +416,17 @@ function onCellInput(
 ): void {
   if (!props.editable || !props.controller || isReadOnly.value) return
   const target = event.target as HTMLElement
-  const text = target.textContent ?? ""
+  const text = readCellParagraphDomText(target)
+  const key = cellDraftKey(rowIndex, cellIndex, paragraphIndex)
+  const existing = cellDrafts.get(key)
+  const paragraph = cellParagraphAt(rowIndex, cellIndex, paragraphIndex)
+  if (paragraph) {
+    cellDrafts.set(key, {
+      text,
+      baseText: existing?.baseText ?? paragraphText(paragraph),
+      documentLoadNonce: existing?.documentLoadNonce ?? props.controller.documentLoadNonce,
+    })
+  }
   emit("cellInput", tableIndex, rowIndex, cellIndex, paragraphIndex, text)
 }
 
@@ -351,17 +445,25 @@ function onCellBlur(
   tableIndex: number,
   rowIndex: number,
   cellIndex: number,
-  _paragraphIndex: number
+  paragraphIndex: number,
+  event?: Event
 ): void {
   if (!props.editable || !props.controller || isReadOnly.value) return
-  // Commit cell text
-  const cellEl = tableEl.value?.querySelector(
-    `[data-docx-table-cell="true"][data-docx-table-row-index="${rowIndex}"][data-docx-table-cell-index="${cellIndex}"]`
+  const key = cellDraftKey(rowIndex, cellIndex, paragraphIndex)
+  const draft = cellDrafts.get(key)
+  cellDrafts.delete(key)
+  if (draft && draft.documentLoadNonce !== props.controller.documentLoadNonce) return
+
+  const target = event?.target as HTMLElement | undefined
+  const element = target ?? tableEl.value?.querySelector<HTMLElement>(
+    `[data-docx-table-cell-paragraph-host="true"]` +
+    `[data-docx-table-row-index="${rowIndex}"]` +
+    `[data-docx-table-cell-index="${cellIndex}"]` +
+    `[data-docx-paragraph-index="${paragraphIndex}"]`
   )
-  if (cellEl) {
-    const text = cellEl.textContent ?? ""
-    props.controller.commitTableCellText(tableIndex, rowIndex, cellIndex, text)
-  }
+  const text = element ? readCellParagraphDomText(element) : draft?.text
+  if (text === undefined) return
+  commitCellParagraph(rowIndex, cellIndex, paragraphIndex, text)
 }
 
 function onColumnResizeStart(boundaryIndex: number, event: MouseEvent): void {
@@ -432,7 +534,19 @@ watch([() => props.editable, isReadOnly], ([editable, readOnly]) => {
   if (!editable || readOnly) cleanupColumnResize(false)
 })
 
-onUnmounted(() => cleanupColumnResize(false))
+onMounted(() => {
+  unregisterDraftFlusher = props.controller?.registerTextDraftFlusher(flushCellDrafts)
+})
+
+onBeforeUnmount(() => {
+  flushCellDrafts()
+})
+
+onUnmounted(() => {
+  unregisterDraftFlusher?.()
+  unregisterDraftFlusher = undefined
+  cleanupColumnResize(false)
+})
 </script>
 
 <style scoped>

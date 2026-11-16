@@ -107,6 +107,7 @@
       :controller="controller"
       :page-node-segments="pageNodeSegments"
       :editable="editable"
+      :zoom-factor="zoomFactor"
     />
 
     <!-- Form field layer -->
@@ -171,6 +172,7 @@ interface DocxPageSurfaceProps {
   model: DocModel
   controller?: DocxEditorController
   editable?: boolean
+  zoomFactor?: number
   pageWidthPx: number
   pageContentWidthPx: number
   pageNumber: number
@@ -198,6 +200,7 @@ const props = withDefaults(
   defineProps<DocxPageSurfaceProps>(),
   {
     editable: true,
+    zoomFactor: 1,
     trackedChangesEnabled: false,
     commentsEnabled: false,
     footnotes: () => [],

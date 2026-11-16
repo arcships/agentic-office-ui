@@ -9,7 +9,7 @@ import {
   walk,
 } from "./vue-test-renderer.mjs";
 
-const { DocxEditor, useDocxEditor } = await importFromDemo("@arcships/vue-docx");
+const { DocxEditor, DocxParagraphHost, useDocxEditor } = await importFromDemo("@arcships/vue-docx");
 const { createBlankDocumentModel } = await importFromDemo("@arcships/docx-core");
 
 function paragraphText(node) {
@@ -586,4 +586,62 @@ test("composition text is committed on blur after compositionend", async (t) => 
 
   assert.equal(paragraphText(mounted.controller.model.nodes[0]), "输入完成");
   assert.deepEqual(mounted.warnings, []);
+});
+
+test("export commits every live paragraph draft before reading the model", async (t) => {
+  const mounted = await mountEditableDocument(t, ["start", "second"]);
+  const [paragraph, secondParagraph] = paragraphHosts(mounted.root);
+  setHostDomText(paragraph, "start edited", mounted.dom.document);
+  eventHandler(paragraph, "input")({});
+  setHostDomText(secondParagraph, "second edited", mounted.dom.document);
+  eventHandler(secondParagraph, "input")({});
+  assert.equal(paragraphText(mounted.controller.model.nodes[0]), "start");
+  assert.equal(paragraphText(mounted.controller.model.nodes[1]), "second");
+
+  let exportedModel;
+  mounted.controller.registerPendingExportModelTransformer((model) => {
+    exportedModel = model;
+    return model;
+  });
+  mounted.controller.exportDocx();
+
+  assert.ok(exportedModel, "export must receive the flushed model");
+  assert.equal(paragraphText(exportedModel.nodes[0]), "start edited");
+  assert.equal(paragraphText(exportedModel.nodes[1]), "second edited");
+  await vue.nextTick();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("unmount commits a live paragraph draft instead of dropping it", async (t) => {
+  const dom = installDomEnvironment(t);
+  const show = vue.ref(true);
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: starterModel(["start"]) });
+      return () => show.value
+        ? vue.h(DocxParagraphHost, {
+            paragraph: controller.model.nodes[0],
+            paragraphIndex: 0,
+            editable: true,
+            controller,
+            onTextInput: (nodeIndex, text) => controller.commitParagraphText(nodeIndex, text),
+          })
+        : null;
+    },
+  });
+  const mounted = await mount(Harness);
+  const host = walk(mounted.root).find(
+    (node) => node.props?.["data-testid"] === "editor-paragraph"
+  );
+  assert.ok(host, "paragraph host should render");
+  setHostDomText(host, "start edited", dom.document);
+  eventHandler(host, "input")({});
+  assert.equal(paragraphText(controller.model.nodes[0]), "start");
+
+  show.value = false;
+  await vue.nextTick();
+  assert.equal(paragraphText(controller.model.nodes[0]), "start edited");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
 });

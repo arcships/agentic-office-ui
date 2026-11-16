@@ -30,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onUnmounted } from "vue"
+import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted, onUnmounted } from "vue"
 import type {
   DocxEditorController,
   DocxTextRange,
@@ -92,6 +92,9 @@ const paragraphEl = ref<HTMLElement | undefined>()
 const draftText = ref<string | null>(null)
 const draftDirty = ref(false)
 const isComposing = ref(false)
+let draftBaseText: string | undefined
+let draftDocumentNonce: number | undefined
+let unregisterDraftFlusher: (() => void) | undefined
 
 // ── Computed ───────────────────────────────────────────────────────
 const isActiveParagraph = computed(() => {
@@ -150,6 +153,8 @@ const displayHtml = computed(() => {
 function readCurrentDomText(): string {
   const root = paragraphEl.value
   if (!root) return ""
+  // Test renderers (and some host shims) expose only textContent.
+  if (!root.childNodes) return root.textContent ?? ""
 
   function readNode(node: Node): string {
     const element = node as Element
@@ -166,6 +171,10 @@ function readCurrentDomText(): string {
 function syncDraftFromDom(): void {
   if (!props.editable || !paragraphEl.value) return
   const domText = readCurrentDomText()
+  if (draftText.value === null) {
+    draftBaseText = paragraphText(props.paragraph)
+    draftDocumentNonce = props.controller?.documentLoadNonce
+  }
   draftText.value = domText
   draftDirty.value = domText !== paragraphText(props.paragraph)
 }
@@ -173,16 +182,40 @@ function syncDraftFromDom(): void {
 function clearDraft(): void {
   draftText.value = null
   draftDirty.value = false
+  draftBaseText = undefined
+  draftDocumentNonce = undefined
 }
 
-function commitDraft(): void {
+function commitDraft(requireUnchangedBase = false): void {
   if (draftText.value === null || !draftDirty.value) {
     clearDraft()
     return
   }
+  if (requireUnchangedBase) {
+    const controller = props.controller
+    const currentParagraph = controller?.model.nodes[props.paragraphIndex]
+    if (
+      !controller ||
+      draftDocumentNonce !== controller.documentLoadNonce ||
+      !currentParagraph ||
+      currentParagraph.type !== "paragraph" ||
+      paragraphText(currentParagraph) !== (draftBaseText ?? paragraphText(props.paragraph))
+    ) {
+      // The document changed under the draft (import/new document/external
+      // edit). Dropping the stale draft is safer than writing it elsewhere.
+      clearDraft()
+      return
+    }
+  }
   const text = draftText.value
   clearDraft()
   emit("textInput", props.paragraphIndex, text)
+}
+
+function flushDraft(): void {
+  if (!props.controller) return
+  if (props.editable) syncDraftFromDom()
+  commitDraft(true)
 }
 
 // ── Event handlers ─────────────────────────────────────────────────
@@ -376,7 +409,7 @@ function onFocus(): void {
 function onBlur(): void {
   if (!props.editable) return
   syncDraftFromDom()
-  commitDraft()
+  commitDraft(true)
   emit("blur", props.paragraphIndex)
 }
 
@@ -412,8 +445,18 @@ watch(
   }
 )
 
+onMounted(() => {
+  unregisterDraftFlusher = props.controller?.registerTextDraftFlusher(flushDraft)
+})
+
+onBeforeUnmount(() => {
+  flushDraft()
+})
+
 onUnmounted(() => {
   if (isComposing.value) props.controller?.clearSelectionSession("composition")
+  unregisterDraftFlusher?.()
+  unregisterDraftFlusher = undefined
 })
 
 // ── Expose ─────────────────────────────────────────────────────────
@@ -423,6 +466,8 @@ defineExpose({
   restoreDraft(text: string) {
     draftText.value = text
     draftDirty.value = text !== paragraphText(props.paragraph)
+    draftBaseText = paragraphText(props.paragraph)
+    draftDocumentNonce = props.controller?.documentLoadNonce
   },
 })
 </script>

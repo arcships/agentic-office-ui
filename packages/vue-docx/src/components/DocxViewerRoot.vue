@@ -27,6 +27,7 @@
             :model="model"
             :controller="controller"
             :editable="editable"
+            :zoom-factor="zoomFactor"
             :page-width-px="entry.pageWidthPx"
             :page-content-width-px="entry.pageContentWidthPx"
             :page-number="entry.pageNumber"
