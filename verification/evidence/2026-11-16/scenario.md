@@ -21,10 +21,17 @@ Chromium 155，本地 demo dist。
 | 打印媒体 | 工具栏仍 `display:flex`，仅挂载 1 页 | **#92 无打印样式** |
 | PageDown | `scrollTop` 0 → 0 | **#116 无翻页快捷键** |
 
-## XLSX IME
+## XLSX / PPTX 缩放
 
-- 单击单元格后进入编辑，`compositionstart` → 输入 → `Enter`：**编辑器关闭（提交）**，即输入法选字回车会提交半成品；
-- 与 #89 一致（代码无 `composition` 守卫）。
+| 场景 | 观测 | 关联 |
+|---|---|---|
+| XLSX 200% / 50% | select 值正确变化；canvas 内部分辨率保持 1358×476（仅显示缩放，未重绘像素） | 视觉缩放未量化 |
+| PPTX 100% → 150% | 两次“＋”后按钮显示 150%，舞台 1392×710 | 正常 |
+
+## IME
+
+- **DOCX**：编辑器内 `compositionstart` → 输入 → `Enter`，段落数 15 → 15，**守卫生效**（`isComposing` 拦截）。
+- **XLSX**：单元格编辑中 `compositionstart` → 输入 → `Enter`，**编辑器关闭（提交）**，即输入法选字回车会提交半成品；与 #89 一致（无 `composition` 守卫）。
 
 ## 触摸
 

@@ -1,0 +1,84 @@
+{
+  "suite": "cross-browser",
+  "date": "2026-11-16",
+  "browsers": {
+    "chromium": {
+      "cases": {
+        "docx": {
+          "state": "ready",
+          "pages": 6,
+          "firstPageHeight": 1525,
+          "bodyHeight": 7021,
+          "console_errors": []
+        },
+        "xlsx": {
+          "status": "ready",
+          "error": null,
+          "canvases": 4,
+          "charts": 6,
+          "tabs": [
+            "Data"
+          ],
+          "console_errors": []
+        },
+        "pdf": {
+          "slots": 4,
+          "images": 4,
+          "first": {
+            "w": 595,
+            "h": 842
+          },
+          "errors": [],
+          "console_errors": []
+        },
+        "pptx": {
+          "state": "ready",
+          "thumbs": 5,
+          "counter": "1 / 5",
+          "console_errors": []
+        }
+      },
+      "errors": []
+    },
+    "firefox": {
+      "cases": {
+        "docx": {
+          "state": "ready",
+          "pages": 6,
+          "firstPageHeight": 1526,
+          "bodyHeight": 7022,
+          "console_errors": []
+        },
+        "xlsx": {
+          "status": "ready",
+          "error": null,
+          "canvases": 4,
+          "charts": 6,
+          "tabs": [
+            "Data"
+          ],
+          "console_errors": []
+        },
+        "pdf": {
+          "slots": 4,
+          "images": 4,
+          "first": {
+            "w": 595,
+            "h": 842
+          },
+          "errors": [],
+          "console_errors": []
+        },
+        "pptx": {
+          "state": "ready",
+          "thumbs": 5,
+          "counter": "1 / 5",
+          "console_errors": []
+        }
+      },
+      "errors": []
+    }
+  },
+  "failures": [],
+  "verdict": "PASS"
+}

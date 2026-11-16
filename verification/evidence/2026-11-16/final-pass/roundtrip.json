@@ -1,0 +1,33 @@
+{
+  "suite": "roundtrip",
+  "date": "2026-11-16",
+  "marker": "ROUNDTRIP-1794820976",
+  "cases": {
+    "docx": {
+      "export_bytes": 4119,
+      "marker": "ROUNDTRIP-1794820976",
+      "marker_found": true,
+      "libreoffice_valid": true,
+      "errors": []
+    },
+    "xlsx": {
+      "status_before_export": "ready",
+      "export_bytes": 5751,
+      "marker": "ROUNDTRIP-1794820976",
+      "cell_a2": null,
+      "marker_found": false,
+      "sheets": [],
+      "charts_after_export": 0,
+      "chart_parts_after_export": 0,
+      "has_chart_drawing": true,
+      "reopen_error": "KeyError: \"There is no item named 'xl/charts/chart1.xml' in the archive\"",
+      "errors": []
+    }
+  },
+  "failures": [
+    "xlsx: cell value missing after export",
+    "xlsx: exported package cannot be reopened (KeyError: \"There is no item named 'xl/charts/chart1.xml' in the archive\")",
+    "xlsx: chart parts missing after export (see #66)"
+  ],
+  "verdict": "FAIL"
+}

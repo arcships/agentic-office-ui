@@ -59,5 +59,6 @@ uv run --with playwright python tests/blackbox/upstream_parity.py --strict
 | V4 像素基线 | ✅ 3 用例 | `evidence/2026-11-16/pixel/` |
 | V5 鲁棒性 | ✅ 7 用例 | `evidence/2026-11-16/robustness/` |
 | V6 场景矩阵 | ✅ 16 视口组合 + 场景 | `evidence/2026-11-16/scenario/` |
+| 第二轮全量 | ✅ 稳定，无新类别 | `evidence/2026-11-16/final-pass.md` |
 
 本轮新发现（已提 issue）：#152（图表系列缺 `<c:tx>` 导致整包无法加载）；#66 补充导出丢 chart part 的实测证据。

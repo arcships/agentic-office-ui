@@ -1,0 +1,42 @@
+{
+  "suite": "office-oracle",
+  "oracle": "LibreOffice 26.8.1.1",
+  "cases": {
+    "docx_demo": {
+      "file": "apps/demo/public/samples/demo.docx",
+      "oracle_pages": 9,
+      "expected_pages": 9,
+      "local_pages": 6,
+      "gap": 3
+    },
+    "docx_comments": {
+      "file": "test-data/corpus/docx-comments.docx",
+      "oracle_pages": 1,
+      "expected_pages": 1,
+      "local_pages": 1,
+      "gap": 0
+    },
+    "docx_merged_table": {
+      "file": "test-data/corpus/docx-merged-table.docx",
+      "oracle_pages": 1,
+      "expected_pages": 1,
+      "local_pages": 1,
+      "gap": 0
+    },
+    "xlsx_charts": {
+      "file": "test-data/corpus/xlsx-charts.xlsx",
+      "oracle_pages": 4,
+      "expected_pages": 4,
+      "local_pages": null
+    },
+    "pptx_deck": {
+      "file": "test-data/corpus/pptx-deck-basic.pptx",
+      "oracle_pages": 5,
+      "expected_pages": 5,
+      "local_pages": 5,
+      "gap": 0
+    }
+  },
+  "failures": [],
+  "verdict": "PASS"
+}

@@ -197,10 +197,41 @@
       "after": 0
     }
   },
+  "docx_ime": {
+    "paragraphs_before": 15,
+    "paragraphs_after_enter": 15,
+    "guard_held": true
+  },
+  "xlsx_zoom": {
+    "zoom_200": {
+      "value": "200",
+      "canvas": {
+        "w": 1358,
+        "h": 476,
+        "cssW": 1358
+      }
+    },
+    "zoom_50": {
+      "value": "50",
+      "canvas": {
+        "w": 1358,
+        "h": 476,
+        "cssW": 1358
+      }
+    }
+  },
   "xlsx_ime": {
     "editor_opened": true,
     "editor_after_enter_during_composition": 0,
     "editor_closed_on_composition_enter": true
+  },
+  "pptx_zoom": {
+    "before": "100%",
+    "after": "150%",
+    "stage": {
+      "w": 1392,
+      "h": 710
+    }
   },
   "touch": {
     "pages": 6,

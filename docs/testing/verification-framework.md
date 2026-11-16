@@ -136,4 +136,4 @@ uv run --with playwright python tests/blackbox/upstream_parity.py --strict
 - V4 像素基线：DOCX 18.6%、PPTX 2.9%、PDF 18.1%，均在阈值内。
 - V5 鲁棒性：7 个用例 PASS；zip 炸弹/超限/并发/卸载按预期。
 - V6 场景矩阵：16 视口组合无溢出；打印/键盘/IME 缺口实机复现（#92/#116/#89）。
-- 结论：验证框架 V1–V6 完成；下一阶段进入修复（建议先 #66/#152/#25/#95）。
+- 结论：验证框架 V1–V6 完成；第二轮全量复跑失败项与第一轮完全一致（仅 #152、#66），无新类别。证据：`verification/evidence/2026-11-16/final-pass.md`。下一阶段进入修复（建议先 #66/#152/#25/#95）。
