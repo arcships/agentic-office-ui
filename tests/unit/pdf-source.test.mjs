@@ -152,7 +152,7 @@ test("PDF URL loading shares controlled fetch and strips query secrets", async (
   );
   assert.equal(result.fileName, "sample.pdf");
   assert.equal(result.resolvedUrl, "https://app.example/viewer/sample.pdf");
-  assert.equal(calls[0].init.redirect, "error");
+  assert.equal(calls[0].init.redirect, "follow");
   assert.equal(calls[0].init.credentials, "omit");
   assert.equal(JSON.stringify(result).includes("secret"), false);
 });
