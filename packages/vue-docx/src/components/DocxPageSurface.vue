@@ -1,123 +1,130 @@
 <template>
-  <div
-    ref="pageSurfaceRef"
-    data-docx-page-surface="true"
-    class="docx-page-surface"
-    :style="surfaceStyle"
-    @click="onSurfaceClick"
-  >
-    <!-- Cover layer (full-page background images) -->
+  <div class="docx-page-frame" :style="frameStyle">
     <div
-      v-if="coverEntries.length > 0"
-      data-docx-page-cover-layer="true"
-      class="docx-page-cover-layer"
+      ref="pageSurfaceRef"
+      data-docx-page-surface="true"
+      :data-docx-page-paper-height="pageLayout.pageHeightPx"
+      class="docx-page-surface"
+      :style="surfaceStyle"
+      @click="onSurfaceClick"
     >
-      <img
-        v-for="cover of coverEntries"
-        :key="cover.key"
-        :src="cover.src"
-        alt=""
-        aria-hidden="true"
-        draggable="false"
-        class="docx-page-cover-image"
-        :style="cover.style"
+      <!-- Cover layer (full-page background images) -->
+      <div
+        v-if="coverEntries.length > 0"
+        data-docx-page-cover-layer="true"
+        class="docx-page-cover-layer"
+      >
+        <img
+          v-for="cover of coverEntries"
+          :key="cover.key"
+          :src="cover.src"
+          alt=""
+          aria-hidden="true"
+          draggable="false"
+          class="docx-page-cover-image"
+          :style="cover.style"
+        />
+      </div>
+
+      <!-- Border overlay -->
+      <div
+        v-if="borderStyle"
+        data-docx-page-border-overlay="true"
+        class="docx-page-border-overlay"
+        :style="borderStyle"
+      />
+
+      <!-- Body -->
+      <DocxPageBody
+        :page-index="pageIndex"
+        :page-node-segments="pageNodeSegments"
+        :page-layout="pageLayout"
+        :page-content-width-px="pageContentWidthPx"
+        :model="model"
+        :controller="controller"
+        :editable="editable"
+        :theme="theme"
+        :page-number="pageNumber"
+        :total-pages="totalPages"
+        :page-number-format="pageNumberFormat"
+        :tracked-changes-enabled="trackedChangesEnabled"
+        :comments-enabled="commentsEnabled"
+      >
+        <template v-if="hasHeader" #header>
+          <DocxPageHeader
+            :page-index="pageIndex"
+            :section="headerSection"
+            :page-layout="pageLayout"
+            :page-content-width-px="pageContentWidthPx"
+            :theme="theme"
+            :model="model"
+            :controller="controller"
+            :page-number="pageNumber"
+            :total-pages="totalPages"
+            :page-number-format="pageNumberFormat"
+            :tracked-changes-enabled="trackedChangesEnabled"
+            :comments-enabled="commentsEnabled"
+          />
+        </template>
+        <template v-if="footnotes.length" #footnotes>
+          <DocxNotesSection
+            kind="footnote"
+            :notes="footnotes"
+            :numbering-definitions="model.metadata.numberingDefinitions"
+            :theme="theme"
+          />
+        </template>
+        <template v-if="endnotes.length" #endnotes>
+          <DocxNotesSection
+            kind="endnote"
+            :notes="endnotes"
+            :numbering-definitions="model.metadata.numberingDefinitions"
+            :theme="theme"
+          />
+        </template>
+        <template v-if="hasFooter" #footer>
+          <DocxPageFooter
+            :page-index="pageIndex"
+            :section="footerSection"
+            :page-layout="pageLayout"
+            :page-content-width-px="pageContentWidthPx"
+            :theme="theme"
+            :model="model"
+            :controller="controller"
+            :page-number="pageNumber"
+            :total-pages="totalPages"
+            :page-number-format="pageNumberFormat"
+            :tracked-changes-enabled="trackedChangesEnabled"
+            :comments-enabled="commentsEnabled"
+          />
+        </template>
+      </DocxPageBody>
+
+      <!-- Floating image layer -->
+      <DocxImageLayer
+        v-if="editable && controller"
+        :page-index="pageIndex"
+        :page-width-px="pageWidthPx"
+        :page-height-px="pageLayout.pageHeightPx"
+        :controller="controller"
+        :page-node-segments="pageNodeSegments"
+        :editable="editable"
+      />
+
+      <!-- Form field layer -->
+      <DocxFormFieldLayer
+        v-if="editable && controller && hasFormFields"
+        :page-index="pageIndex"
+        :controller="controller"
+        :page-node-segments="pageNodeSegments"
       />
     </div>
 
-    <!-- Border overlay -->
-    <div
-      v-if="borderStyle"
-      data-docx-page-border-overlay="true"
-      class="docx-page-border-overlay"
-      :style="borderStyle"
-    />
-
-    <!-- Body -->
-    <DocxPageBody
-      :page-index="pageIndex"
-      :page-node-segments="pageNodeSegments"
-      :page-layout="pageLayout"
-      :page-content-width-px="pageContentWidthPx"
-      :model="model"
-      :controller="controller"
-      :editable="editable"
-      :theme="theme"
-      :page-number="pageNumber"
-      :total-pages="totalPages"
-      :page-number-format="pageNumberFormat"
-      :tracked-changes-enabled="trackedChangesEnabled"
-      :comments-enabled="commentsEnabled"
-    >
-      <template v-if="hasHeader" #header>
-        <DocxPageHeader
-          :page-index="pageIndex"
-          :section="headerSection"
-          :page-layout="pageLayout"
-          :page-content-width-px="pageContentWidthPx"
-          :theme="theme"
-          :model="model"
-          :controller="controller"
-          :page-number="pageNumber"
-          :total-pages="totalPages"
-          :page-number-format="pageNumberFormat"
-          :tracked-changes-enabled="trackedChangesEnabled"
-          :comments-enabled="commentsEnabled"
-        />
-      </template>
-      <template v-if="footnotes.length" #footnotes>
-        <DocxNotesSection
-          kind="footnote"
-          :notes="footnotes"
-          :numbering-definitions="model.metadata.numberingDefinitions"
-          :theme="theme"
-        />
-      </template>
-      <template v-if="endnotes.length" #endnotes>
-        <DocxNotesSection
-          kind="endnote"
-          :notes="endnotes"
-          :numbering-definitions="model.metadata.numberingDefinitions"
-          :theme="theme"
-        />
-      </template>
-      <template v-if="hasFooter" #footer>
-        <DocxPageFooter
-          :page-index="pageIndex"
-          :section="footerSection"
-          :page-layout="pageLayout"
-          :page-content-width-px="pageContentWidthPx"
-          :theme="theme"
-          :model="model"
-          :controller="controller"
-          :page-number="pageNumber"
-          :total-pages="totalPages"
-          :page-number-format="pageNumberFormat"
-          :tracked-changes-enabled="trackedChangesEnabled"
-          :comments-enabled="commentsEnabled"
-        />
-      </template>
-    </DocxPageBody>
-
-    <!-- Floating image layer -->
-    <DocxImageLayer
-      v-if="editable && controller"
-      :page-index="pageIndex"
-      :page-width-px="pageWidthPx"
-      :page-height-px="pageLayout.pageHeightPx"
-      :controller="controller"
-      :page-node-segments="pageNodeSegments"
-      :editable="editable"
-    />
-
-    <!-- Form field layer -->
-    <DocxFormFieldLayer
-      v-if="editable && controller && hasFormFields"
-      :page-index="pageIndex"
-      :controller="controller"
-      :page-node-segments="pageNodeSegments"
-    />
-
-    <!-- Tracked change / comment gutter -->
+    <!--
+      Tracked change / comment gutter lives beside the paper, so it must stay
+      outside the clipped page surface or it would disappear when annotations
+      are enabled.
+    -->
     <DocxTrackedChangeGutter
       v-if="showGutter"
       :page-index="pageIndex"
@@ -304,15 +311,30 @@ const borderStyle = computed<Record<string, string> | undefined>(() => {
   return undefined
 })
 
+const frameStyle = computed(() => ({
+  position: "relative" as const,
+  width: `${props.pageWidthPx}px`,
+  height: `${props.pageLayout.pageHeightPx}px`,
+  flex: "0 0 auto" as const,
+}))
+
+// A page is exactly one paper tall: any content pagination mis-assigned to it
+// is clipped at the paper edge instead of growing the box into the next page.
+//
+// TODO(#95 / #25 / #47): clipping is the rendering safety net, not the fix for
+// content assignment. Pagination must still move overflowing paragraphs to the
+// following page; until it does, clipped content is intentionally hidden.
 const surfaceStyle = computed(() => ({
   width: `${props.pageWidthPx}px`,
-  minHeight: `${props.pageLayout.pageHeightPx}px`,
+  height: `${props.pageLayout.pageHeightPx}px`,
+  overflow: "hidden" as const,
   backgroundColor: props.theme === "dark" ? "#1f2937" : "#ffffff",
   color: props.theme === "dark" ? "#f9fafb" : "#111827",
   position: "relative" as const,
   boxSizing: "border-box" as const,
-  border: "1px solid #d4d4d4",
-  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.08)",
+  // Draw the paper outline inside the box so the content area keeps exactly
+  // the page size pagination lays out (border-box height minus margins).
+  boxShadow: "inset 0 0 0 1px #d4d4d4, 0 8px 24px rgba(0, 0, 0, 0.08)",
   ...pageMarginPaddingStyle(props.pageLayout.marginsPx ?? { top: 72, bottom: 72, left: 72, right: 72 }),
 }))
 
@@ -332,7 +354,11 @@ function measurePage(): void {
   // offsetHeight is layout height, unaffected by ancestor CSS transforms.
   // getBoundingClientRect().height would already include scale(zoomFactor),
   // causing a double scale when the viewer multiplies by zoomFactor again.
-  emit("measure", { heightPx: pageSurfaceRef.value.offsetHeight })
+  // The surface has a fixed paper height, so this measurement stays stable
+  // even when the page body has clipped overflowing content.
+  const measuredHeight = pageSurfaceRef.value.offsetHeight
+  const heightPx = measuredHeight > 0 ? measuredHeight : props.pageLayout.pageHeightPx
+  emit("measure", { heightPx })
 }
 
 onMounted(() => {
@@ -374,6 +400,14 @@ watch(
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+}
+/*
+ * The page body shrinks to the content area and clips mispaginated content.
+ * Its direct children must keep their natural height so overflow is clipped at
+ * the body edge instead of compressing paragraphs on top of each other.
+ */
+.docx-page-surface :deep(.docx-page-body > *) {
+  flex-shrink: 0;
 }
 .docx-page-cover-layer {
   position: absolute;
