@@ -25,7 +25,7 @@ const controller = useXlsxViewerController({
 
 常用命令：
 
-- 单元格：`setCellValue()`、`setCellFormula()`、`setCellStyle()`、清除、复制、粘贴和填充；
+- 单元格：`setCellValue()`、`setCellFormula()`、`setCellStyle()`、按 `=` 前缀区分公式和值的 `commitCellInput()`、清除、复制、粘贴和填充；
 - 结构：合并、调整行列、增删工作表和切换标签；
 - 历史：`undo()`、`redo()`；
 - 计算和导出：`recalculate()`、`exportXlsx()`、`exportCsv()`、`download()`；

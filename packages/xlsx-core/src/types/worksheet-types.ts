@@ -684,6 +684,22 @@ export interface XlsxViewerController {
   canZoomOut: boolean;
   clearSelectedCells: () => void;
   clearSelection: () => void;
+  /**
+   * Commits user-entered text to a cell in the active worksheet.
+   *
+   * Text that starts with `=` is written as a formula through
+   * `setCellFormula`; any other text is written as a value through
+   * `setCellValue`, so editing a formula cell never replaces the formula with
+   * the value it displays. Text that already matches the cell's formula or
+   * coerced value is dropped without touching the workbook or undo history.
+   *
+   * Inline cell editing and the formula bar both commit through this method.
+   *
+   * @param cell Zero-based row and column address in the active worksheet.
+   * @param text Text entered by the user, for example `"=SUM(A1:A3)"` or `"42"`.
+   * @returns `true` when the cell was written.
+   */
+  commitCellInput: (cell: XlsxCellAddress, text: string) => boolean;
   continueDeferredLoad: () => void;
   copySelectionToClipboard: () => Promise<boolean>;
   defaultZoomScale: number;
@@ -882,6 +898,19 @@ export interface XlsxViewerEditing {
   canRedo: boolean;
   canUndo: boolean;
   clearSelectedCells: () => void;
+  /**
+   * Commits user-entered text to a cell in the active worksheet.
+   *
+   * Text that starts with `=` is written as a formula, anything else as a
+   * value, so an edited formula cell keeps its formula. Text that already
+   * matches the cell's formula or coerced value is dropped without touching
+   * the workbook or undo history.
+   *
+   * @param cell Zero-based row and column address in the active worksheet.
+   * @param text Text entered by the user, for example `"=SUM(A1:A3)"` or `"42"`.
+   * @returns `true` when the cell was written.
+   */
+  commitCellInput: (cell: XlsxCellAddress, text: string) => boolean;
   copySelectionToClipboard: () => Promise<boolean>;
   defineNamedRange: (name: string, range?: XlsxCellRange | null) => void;
   fillSelection: (targetRange: XlsxCellRange) => void;

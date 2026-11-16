@@ -1585,18 +1585,24 @@ function activateHyperlink(cell: XlsxCellAddress): void {
   } catch { /* invalid links stay inert */ }
 }
 
+function getCellInputValue(cell: XlsxCellAddress): string {
+  // Seed the inline editor with the formula so editing a formula cell and
+  // committing it again cannot replace the formula with its displayed value.
+  return props.controller.getCellFormula(cell) || props.controller.getCellDisplayValue(cell);
+}
+
 function onDblClick(event: MouseEvent) {
   const cell = hitTestCell(event.clientX, event.clientY);
   if (!cell || props.readOnly) return;
   editingCell.value = cell;
-  editingValue.value = props.controller.getCellDisplayValue(cell);
+  editingValue.value = getCellInputValue(cell);
   emit("cellDoubleClick", cell);
   nextTick(() => { editInputRef.value?.focus(); editInputRef.value?.select(); });
 }
 
 function commitEdit() {
   if (!editingCell.value) return;
-  props.controller.setCellValue(editingCell.value, editingValue.value);
+  props.controller.commitCellInput(editingCell.value, editingValue.value);
   editingCell.value = null;
   editingValue.value = "";
   void nextTick(() => containerRef.value?.focus());
@@ -1610,12 +1616,12 @@ function cancelEdit() {
 
 function commitAndTab() {
   if (!editingCell.value) return;
-  props.controller.setCellValue(editingCell.value, editingValue.value);
+  props.controller.commitCellInput(editingCell.value, editingValue.value);
   const nextCell = getAdjacentCell(editingCell.value, 0, 1);
   if (!nextCell) return;
   props.controller.selectCell(nextCell);
   editingCell.value = nextCell;
-  editingValue.value = props.controller.getCellDisplayValue(nextCell);
+  editingValue.value = getCellInputValue(nextCell);
 }
 
 function getAdjacentCell(cell: XlsxCellAddress, rowDelta: number, colDelta: number): XlsxCellAddress | null {
@@ -1645,7 +1651,7 @@ function moveCell(rowDelta: number, colDelta: number, extend: boolean) {
 
 function startEdit(cell: XlsxCellAddress) {
   editingCell.value = cell;
-  editingValue.value = props.controller.getCellDisplayValue(cell);
+  editingValue.value = getCellInputValue(cell);
   nextTick(() => editInputRef.value?.focus());
 }
 
