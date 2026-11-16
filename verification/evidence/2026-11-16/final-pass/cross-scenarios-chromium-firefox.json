@@ -1,0 +1,138 @@
+{
+  "suite": "cross-browser-scenarios",
+  "date": "2026-11-16",
+  "browsers": {
+    "chromium": {
+      "docx": {
+        "baseline": {
+          "pages": 6,
+          "height": 1525,
+          "bg": "rgb(255, 255, 255)"
+        },
+        "zoom_200": 3051,
+        "zoom_50": 763,
+        "dark": "rgb(31, 41, 55)",
+        "print": {
+          "toolbar": "flex",
+          "mounted": 1
+        },
+        "keyboard": {
+          "before": 0,
+          "after": 0
+        },
+        "page_errors": []
+      },
+      "xlsx": {
+        "zoom_200": {
+          "value": "200",
+          "canvas": {
+            "w": 1358,
+            "h": 476
+          }
+        },
+        "zoom_50": {
+          "value": "50",
+          "canvas": {
+            "w": 1358,
+            "h": 476
+          }
+        },
+        "print": {
+          "toolbar": "flex",
+          "grid": 4
+        },
+        "page_errors": []
+      },
+      "pptx": {
+        "zoom": {
+          "before": "100%",
+          "after": "150%"
+        },
+        "print": {
+          "toolbar": "flex",
+          "slides": 5
+        },
+        "page_errors": []
+      },
+      "pdf": {
+        "print": {
+          "surfaces": 4,
+          "bodyOverflow": "hidden auto"
+        },
+        "page_errors": []
+      },
+      "docx_ime": {
+        "before": 15,
+        "after": 15,
+        "guard_held": true
+      }
+    },
+    "firefox": {
+      "docx": {
+        "baseline": {
+          "pages": 6,
+          "height": 1526,
+          "bg": "rgb(255, 255, 255)"
+        },
+        "zoom_200": 3051,
+        "zoom_50": 763,
+        "dark": "rgb(31, 41, 55)",
+        "print": {
+          "toolbar": "flex",
+          "mounted": 1
+        },
+        "keyboard": {
+          "before": 0,
+          "after": 0
+        },
+        "page_errors": []
+      },
+      "xlsx": {
+        "zoom_200": {
+          "value": "200",
+          "canvas": {
+            "w": 1358,
+            "h": 476
+          }
+        },
+        "zoom_50": {
+          "value": "50",
+          "canvas": {
+            "w": 1358,
+            "h": 476
+          }
+        },
+        "print": {
+          "toolbar": "flex",
+          "grid": 4
+        },
+        "page_errors": []
+      },
+      "pptx": {
+        "zoom": {
+          "before": "100%",
+          "after": "150%"
+        },
+        "print": {
+          "toolbar": "flex",
+          "slides": 5
+        },
+        "page_errors": []
+      },
+      "pdf": {
+        "print": {
+          "surfaces": 4,
+          "bodyOverflow": "hidden auto"
+        },
+        "page_errors": []
+      },
+      "docx_ime": {
+        "before": 15,
+        "after": 15,
+        "guard_held": true
+      }
+    }
+  },
+  "failures": [],
+  "verdict": "PASS"
+}

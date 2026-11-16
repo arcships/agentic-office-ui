@@ -1,0 +1,31 @@
+{
+  "suite": "roundtrip-deep",
+  "date": "2026-11-16",
+  "cases": {
+    "docx": {
+      "before_export": {
+        "images": 1,
+        "tables": 2
+      },
+      "tables": 2,
+      "media_parts": 1,
+      "drawings": 1,
+      "bold_runs": 2,
+      "libreoffice_valid": true,
+      "export_bytes": 6900
+    },
+    "xlsx": {
+      "before_export": {
+        "boldPressed": "true",
+        "fill": "#ff0000",
+        "address": "A4"
+      },
+      "bold": true,
+      "fill": "FFFF0000",
+      "reopen_error": null,
+      "export_bytes": 4558
+    }
+  },
+  "failures": [],
+  "verdict": "PASS"
+}

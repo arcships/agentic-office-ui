@@ -41,6 +41,20 @@ uv run --with playwright --with pillow python tests/blackbox/pixel_baseline.py
 uv run --with playwright python tests/blackbox/scenario_matrix.py
 ```
 
+## 补齐轮（同日）
+
+针对首轮矩阵的稀疏区补了四块：
+
+1. **跨引擎场景**：Chromium/Firefox 跑 DOCX 缩放/暗色/打印/PageDown/IME、XLSX/PPTX 缩放与打印、PDF 打印；WebKitGTK 跑 DOCX 缩放/暗色、XLSX/PPTX 缩放、PDF 页数。三引擎数值一致；WebKit 不支持 WebDriver 打印模拟。
+2. **深度回环**：DOCX 插入表格 + 图片 + 格式化后导出，2 表/1 media/1 drawing/2 bold 均保留且 LibreOffice 可开；XLSX 无图表工作簿的 bold + 红色填充导出后读回一致。
+3. **鲁棒性扩展**：新增畸形 PDF/PPTX、截断 PPTX、畸形 CSV、双标签页并发，共 12 用例 PASS。
+4. **像素扩展**：DOCX/PPTX/PDF 各 2 页，差异比 2.2%–18.6%，并记录 SSIM（整页位移导致偏低，阈值仍用差异像素比）。
+
+仍属限制而非缺口：
+- 评论 CRUD 回环无法测（产品尚无创建 API，见 #96）；
+- WebKitWebDriver 无打印媒体模拟；
+- worker 崩溃重启由单元 `P3-WORKER-01` 覆盖，浏览器侧未重复。
+
 ## 结论
 
 验证框架计划全部完成：L0–L6 每层都有可重复脚本、基线/阈值与证据；V1–V6 的两轮结果稳定；已知失败均可归入既有 issue（#152、#66），没有未归类的新类别。后续进入修复阶段。

@@ -60,5 +60,6 @@ uv run --with playwright python tests/blackbox/upstream_parity.py --strict
 | V5 鲁棒性 | ✅ 7 用例 | `evidence/2026-11-16/robustness/` |
 | V6 场景矩阵 | ✅ 16 视口组合 + 场景 | `evidence/2026-11-16/scenario/` |
 | 第二轮全量 | ✅ 稳定，无新类别 | `evidence/2026-11-16/final-pass.md` |
+| 补齐轮 | ✅ 跨引擎场景、深度回环、12 项鲁棒性、6 页像素 | `evidence/2026-11-16/final-pass/` |
 
 本轮新发现（已提 issue）：#152（图表系列缺 `<c:tx>` 导致整包无法加载）；#66 补充导出丢 chart part 的实测证据。
