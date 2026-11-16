@@ -1,0 +1,25 @@
+{
+  "captured": "2026-11-16",
+  "environment": "Chromium 155, upstream react-docx@28a3bd9 / react-xlsx@6277fe7",
+  "docx_demo": {
+    "upstream_pages": 9,
+    "local_pages": 6
+  },
+  "docx_comments": {
+    "upstream_pages": 1,
+    "local_pages": 1,
+    "upstream_cards": 0,
+    "local_cards": 3
+  },
+  "xlsx_charts": {
+    "local_charts": 6,
+    "titles": [
+      "Bar",
+      "Line",
+      "Pie",
+      "Area",
+      "Radar",
+      "Scatter"
+    ]
+  }
+}

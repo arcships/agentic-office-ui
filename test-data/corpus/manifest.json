@@ -1,0 +1,188 @@
+{
+  "version": 1,
+  "generator": "scripts/fixtures/generate_review_corpus.py",
+  "entries": [
+    {
+      "file": "docx-merged-table.docx",
+      "format": "docx",
+      "bytes": 36929,
+      "features": [
+        "vmerge",
+        "gridspan",
+        "multi-paragraph-cell",
+        "nested-table"
+      ],
+      "note": "vertical/horizontal merges, multi-paragraph cells, nested table"
+    },
+    {
+      "file": "docx-mixed-orientation.docx",
+      "format": "docx",
+      "bytes": 36714,
+      "features": [
+        "sections",
+        "landscape",
+        "portrait"
+      ],
+      "note": "portrait section followed by a landscape section"
+    },
+    {
+      "file": "docx-two-columns.docx",
+      "format": "docx",
+      "bytes": 36667,
+      "features": [
+        "columns"
+      ],
+      "note": "two-column section"
+    },
+    {
+      "file": "docx-comments.docx",
+      "format": "docx",
+      "bytes": 38518,
+      "features": [
+        "comments",
+        "multiple-comments",
+        "table-comment",
+        "header-comment",
+        "footnote"
+      ],
+      "note": "two comments on one paragraph, table-cell comment, header comment, footnote"
+    },
+    {
+      "file": "docx-large-table.docx",
+      "format": "docx",
+      "bytes": 38258,
+      "features": [
+        "table",
+        "pagination-stress"
+      ],
+      "note": "120-row table with a header row"
+    },
+    {
+      "file": "xlsx-charts.xlsx",
+      "format": "xlsx",
+      "bytes": 9611,
+      "features": [
+        "bar",
+        "line",
+        "pie",
+        "area",
+        "radar",
+        "scatter"
+      ],
+      "note": "six chart families on one sheet"
+    },
+    {
+      "file": "xlsx-conditional-formats.xlsx",
+      "format": "xlsx",
+      "bytes": 5413,
+      "features": [
+        "data-bar",
+        "color-scale",
+        "icon-set",
+        "cfvo-num",
+        "cfvo-percentile",
+        "negative-values"
+      ],
+      "note": "data bars with numeric bounds, colour scale with percentile mid, 4-icon set"
+    },
+    {
+      "file": "xlsx-validation.xlsx",
+      "format": "xlsx",
+      "bytes": 5039,
+      "features": [
+        "data-validation-list",
+        "data-validation-number"
+      ],
+      "note": "list and numeric validations with error messages"
+    },
+    {
+      "file": "xlsx-frozen-hidden.xlsx",
+      "format": "xlsx",
+      "bytes": 5222,
+      "features": [
+        "freeze-rows-and-columns",
+        "hidden-row",
+        "hidden-column",
+        "merge",
+        "date1904"
+      ],
+      "note": "freeze B3, hidden row 3 and column D, merged A1:C1, 1904 epoch"
+    },
+    {
+      "file": "xlsx-large-20k.xlsx",
+      "format": "xlsx",
+      "bytes": 638331,
+      "features": [
+        "large",
+        "formulas",
+        "20000-rows"
+      ],
+      "note": "20k rows with formulas"
+    },
+    {
+      "file": "xlsx-number-formats.xlsx",
+      "format": "xlsx",
+      "bytes": 5044,
+      "features": [
+        "date",
+        "currency",
+        "percent",
+        "text",
+        "custom-format"
+      ],
+      "note": "representative number formats including a [Red] section"
+    },
+    {
+      "file": "pdf-rotated-90.pdf",
+      "format": "pdf",
+      "bytes": 4199,
+      "features": [
+        "rotation-90"
+      ],
+      "note": "pages carry /Rotate 90"
+    },
+    {
+      "file": "pdf-image-only.pdf",
+      "format": "pdf",
+      "bytes": 122868,
+      "features": [
+        "image-only",
+        "scanned"
+      ],
+      "note": "no text layer at all"
+    },
+    {
+      "file": "pdf-encrypted.pdf",
+      "format": "pdf",
+      "bytes": 4530,
+      "features": [
+        "encrypted",
+        "password"
+      ],
+      "note": "password: secret"
+    },
+    {
+      "file": "pdf-300-pages.pdf",
+      "format": "pdf",
+      "bytes": 70257,
+      "features": [
+        "large",
+        "300-pages"
+      ],
+      "note": "300 copies of page 1"
+    },
+    {
+      "file": "pptx-deck-basic.pptx",
+      "format": "pptx",
+      "bytes": 42736,
+      "features": [
+        "placeholders",
+        "bullets",
+        "table",
+        "chart",
+        "notes"
+      ],
+      "note": "four slides: title, bullets, table, chart + notes"
+    }
+  ]
+}

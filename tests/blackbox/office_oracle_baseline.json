@@ -1,0 +1,31 @@
+{
+  "captured": "2026-11-16",
+  "oracle": "LibreOffice 26.8.1.1",
+  "fixtures": {
+    "docx_demo": {
+      "file": "apps/demo/public/samples/demo.docx",
+      "pages": 9,
+      "local_pages": 6
+    },
+    "docx_comments": {
+      "file": "test-data/corpus/docx-comments.docx",
+      "pages": 1,
+      "local_pages": 1
+    },
+    "docx_merged_table": {
+      "file": "test-data/corpus/docx-merged-table.docx",
+      "pages": 1,
+      "local_pages": 1
+    },
+    "xlsx_charts": {
+      "file": "test-data/corpus/xlsx-charts.xlsx",
+      "pages": 4,
+      "local_pages": null
+    },
+    "pptx_deck": {
+      "file": "test-data/corpus/pptx-deck-basic.pptx",
+      "pages": 5,
+      "local_pages": 5
+    }
+  }
+}

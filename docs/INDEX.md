@@ -91,6 +91,8 @@
 | 文档 | 用途 |
 |---|---|
 | [testing/performance-baseline.md](testing/performance-baseline.md) | 已批准的性能环境、数值和比较规则 |
+| [testing/verification-framework.md](testing/verification-framework.md) | 验证分层（L0–L6）、证据规范、收口标准与路线图 |
+| [testing/upstream-parity.md](testing/upstream-parity.md) | 上游 Extend playground 与本地 demo 的同文件双跑对比与基线 |
 | [visual-acceptance-handoff.md](visual-acceptance-handoff.md) | 历史视觉口径和专项补充，不替代当前黑盒方案 |
 | [shadcn-components-browser-acceptance.md](shadcn-components-browser-acceptance.md) | 通用组件的专项浏览器检查 |
 | [component-browser-verification-plan.md](component-browser-verification-plan.md) | 组件浏览器验证补充计划 |
