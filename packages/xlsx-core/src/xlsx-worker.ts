@@ -168,6 +168,17 @@ type WorkerErrorResponse = {
 
 type WorkerResponse = WorkerSuccessResponse | WorkerErrorResponse;
 
+/**
+ * A load that lost to a newer load. It never commits module state and only
+ * releases the workbook it created itself.
+ */
+class SupersededLoadError extends Error {
+  constructor() {
+    super("XLSX Worker 加载请求已被更新的加载请求取代。");
+    this.name = "SupersededLoadError";
+  }
+}
+
 let workbook: Workbook | null = null;
 let chartsByWorkbookSheetIndex: XlsxChart[][] = [];
 let chartsheets: XlsxChartsheet[] = [];
@@ -719,9 +730,14 @@ async function loadWorkbook(
   skipXmlParsing = false,
   showHiddenSheets = false,
   limits?: XlsxRuntimeLimits,
+  isSuperseded: () => boolean = () => false,
 ) {
   validateXlsxArchive(buffer, limits);
   const wasmModule = await getSheetsWasmModule();
+  if (isSuperseded()) {
+    // Nothing has been created yet, so there is nothing to release.
+    throw new SupersededLoadError();
+  }
   const bytes = new Uint8Array(buffer);
   const effectiveSkipXmlParsing = shouldSkipXmlParsingForWorkbook(bytes, skipXmlParsing);
   let activeWorkbook = trackXlsxWorkbookLifetime(wasmModule.Workbook.fromBytes(bytes));
@@ -746,20 +762,20 @@ async function loadWorkbook(
   }
 
   const nextWorkbook = activeWorkbook;
-  const imageAssets = effectiveSkipXmlParsing || !canParseXmlInWorker()
-    ? null
-    : parseWorkbookImageAssets(bytes, limits);
-  const structureAssets = imageAssets ?? (
-    effectiveSkipXmlParsing || !canParseXmlInWorker()
-      ? null
-      : parseWorkbookStructureAssets(bytes, { includeCachedFormulaValues: true })
-  );
-  const sheetLayoutStates = structureAssets ? undefined : parseWorkerSheetLayoutAssets(bytes, nextWorkbook.sheetCount);
-  const previousWorkbook = workbook;
-  workbook = nextWorkbook;
+  let imageAssets: ReturnType<typeof parseWorkbookImageAssets> | null = null;
+  let committed = false;
   try {
-    sheets = buildSheetList(nextWorkbook, structureAssets, sheetLayoutStates, showHiddenSheets);
-    tablesByWorkbookSheetIndex = Array.from(
+    imageAssets = effectiveSkipXmlParsing || !canParseXmlInWorker()
+      ? null
+      : parseWorkbookImageAssets(bytes, limits);
+    const structureAssets = imageAssets ?? (
+      effectiveSkipXmlParsing || !canParseXmlInWorker()
+        ? null
+        : parseWorkbookStructureAssets(bytes, { includeCachedFormulaValues: true })
+    );
+    const sheetLayoutStates = structureAssets ? undefined : parseWorkerSheetLayoutAssets(bytes, nextWorkbook.sheetCount);
+    const nextSheets = buildSheetList(nextWorkbook, structureAssets, sheetLayoutStates, showHiddenSheets);
+    const nextTablesByWorkbookSheetIndex = Array.from(
       { length: nextWorkbook.sheetCount },
       (_, workbookSheetIndex) => {
         const parsedTables = structureAssets?.tableMetadataByWorkbookSheetIndex[workbookSheetIndex];
@@ -768,7 +784,7 @@ async function loadWorkbook(
           : mapWorksheetTables(nextWorkbook.getSheet(workbookSheetIndex));
       }
     );
-    const visibleSheetIndexByWorkbookSheetIndex = new Map(sheets.map((sheet, index) => [sheet.workbookSheetIndex, index]));
+    const visibleSheetIndexByWorkbookSheetIndex = new Map(nextSheets.map((sheet, index) => [sheet.workbookSheetIndex, index]));
     const chartStyleAssets = effectiveSkipXmlParsing || !canParseXmlInWorker()
       ? null
       : parseWorkbookChartStyleAssets(bytes);
@@ -778,9 +794,21 @@ async function loadWorkbook(
       visibleSheetIndexByWorkbookSheetIndex,
       showHiddenSheets
     );
+
+    if (isSuperseded()) {
+      // A newer load won. The catch below releases only the workbook and object
+      // URLs created by this request; current module state stays untouched.
+      throw new SupersededLoadError();
+    }
+
+    const previousWorkbook = workbook;
+    workbook = nextWorkbook;
+    sheets = nextSheets;
+    tablesByWorkbookSheetIndex = nextTablesByWorkbookSheetIndex;
     chartsByWorkbookSheetIndex = chartAssets.chartsByWorkbookSheetIndex;
     chartsheets = chartAssets.chartsheets;
     tabs = chartAssets.tabs;
+    committed = true;
     if (previousWorkbook && previousWorkbook !== nextWorkbook) {
       try { previousWorkbook.free(); } catch { /* previous workbook is never reused */ }
     }
@@ -796,9 +824,10 @@ async function loadWorkbook(
       tabs
     };
   } catch (error) {
-    workbook = previousWorkbook;
-    revokeWorkbookImageAssets(imageAssets);
-    try { nextWorkbook.free(); } catch { /* failed load is discarded */ }
+    if (!committed) {
+      revokeWorkbookImageAssets(imageAssets);
+      try { nextWorkbook.free(); } catch { /* failed load is discarded */ }
+    }
     throw error;
   }
 }
@@ -859,23 +888,71 @@ function respond(message: WorkerResponse) {
   self.postMessage(message);
 }
 
-async function handleMessage(message: WorkerRequest) {
+/**
+ * Worker message shapes handled outside the serial queue.
+ *
+ * `cancel` marks a queued interactive read as abandoned; it never produces a
+ * response because the client already rejected that request.
+ */
+type WorkerCancelRequest = {
+  payload: {
+    targetId: number;
+  };
+  type: "cancel";
+};
+
+type WorkerJobResult = WorkerSuccessResponse["result"];
+
+type WorkerJob = {
+  id: number;
+  type: WorkerRequest["type"];
+  run: (isSuperseded: () => boolean) => WorkerJobResult | Promise<WorkerJobResult>;
+};
+
+function createErrorResponse(id: number, error: unknown): WorkerErrorResponse {
+  const officeError = error instanceof OfficeLoadError ? error : undefined;
+  return {
+    error: {
+      code: error instanceof SupersededLoadError
+        ? "SUPERSEDED"
+        : officeError?.code === "LIMIT_EXCEEDED"
+          ? "LIMIT_EXCEEDED"
+          : officeError?.code === "TIMEOUT"
+            ? "TIMEOUT"
+            : officeError?.code === "INVALID_SOURCE"
+              ? "INVALID_SOURCE"
+              : "WORKER_FAILED",
+      message: error instanceof Error ? error.message : "Worker request failed.",
+      ...(officeError?.phase ? { phase: officeError.phase } : {}),
+      ...(officeError?.limit ? { limit: officeError.limit } : {}),
+      ...(officeError?.actual !== undefined ? { actual: officeError.actual } : {}),
+      ...(officeError?.allowed !== undefined ? { allowed: officeError.allowed } : {}),
+    },
+    id,
+    success: false
+  };
+}
+
+function postErrorResponse(id: number, error: unknown) {
+  try {
+    respond(createErrorResponse(id, error));
+  } catch {
+    // One failed response must not stall the serial queue.
+  }
+}
+
+function executeRequest(message: WorkerRequest, isSuperseded: () => boolean): WorkerJobResult | Promise<WorkerJobResult> {
   switch (message.type) {
     case "load": {
-      if (message.payload.wasmSource !== undefined) {
-        setWasmSource(message.payload.wasmSource);
-      }
       return loadWorkbook(
         message.payload.buffer,
         message.payload.skipXmlParsing,
         message.payload.showHiddenSheets,
         message.payload.limits,
+        isSuperseded,
       );
     }
     case "parseCharts": {
-      if (message.payload.wasmSource !== undefined) {
-        setWasmSource(message.payload.wasmSource);
-      }
       return parseCharts(
         message.payload.buffer,
         message.payload.skipXmlParsing,
@@ -928,35 +1005,92 @@ async function handleMessage(message: WorkerRequest) {
   }
 }
 
-self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
+// Every request runs through one serial queue. Only one job touches the
+// workbook/sheets/charts module state at a time, and interactive reads wait
+// behind the load they were requested after.
+const pendingJobs: WorkerJob[] = [];
+let latestLoadRequestId = 0;
+let isProcessingJobs = false;
+
+function dropQueuedLoads() {
+  for (let index = pendingJobs.length - 1; index >= 0; index -= 1) {
+    const job = pendingJobs[index];
+    if (job?.type !== "load") continue;
+    pendingJobs.splice(index, 1);
+    postErrorResponse(job.id, new SupersededLoadError());
+  }
+}
+
+function enqueueJob(message: WorkerRequest) {
+  if (message.type === "load") {
+    latestLoadRequestId = message.id;
+    // The newest load wins: loads that never started are settled as superseded
+    // instead of parsing a workbook that is already obsolete.
+    dropQueuedLoads();
+  }
+  pendingJobs.push({
+    id: message.id,
+    run: (isSuperseded) => executeRequest(message, isSuperseded),
+    type: message.type,
+  });
+  void drainJobQueue();
+}
+
+function cancelQueuedJob(targetId: number) {
+  const index = pendingJobs.findIndex((job) => job.id === targetId);
+  if (index >= 0) {
+    pendingJobs.splice(index, 1);
+  }
+}
+
+async function drainJobQueue() {
+  if (isProcessingJobs) return;
+  isProcessingJobs = true;
+  try {
+    while (pendingJobs.length > 0) {
+      const job = pendingJobs.shift();
+      if (!job) break;
+      const isSuperseded = () => job.type === "load" && job.id !== latestLoadRequestId;
+      try {
+        const result = await job.run(isSuperseded);
+        try {
+          respond({
+            id: job.id,
+            result,
+            success: true
+          });
+        } catch {
+          // One failed response must not stall the serial queue.
+        }
+      } catch (error) {
+        postErrorResponse(job.id, error);
+      }
+    }
+  } finally {
+    isProcessingJobs = false;
+  }
+}
+
+function applyRequestWasmSource(message: WorkerRequest) {
+  if (message.type !== "load" && message.type !== "parseCharts") return;
+  if (message.payload.wasmSource === undefined) return;
+  setWasmSource(message.payload.wasmSource);
+}
+
+self.addEventListener("message", (event: MessageEvent<WorkerRequest | WorkerCancelRequest>) => {
   const message = event.data;
-  void handleMessage(message)
-    .then((result) => {
-      respond({
-        id: message.id,
-        result,
-        success: true
-      });
-    })
-    .catch((error: unknown) => {
-      const officeError = error instanceof OfficeLoadError ? error : undefined;
-      respond({
-        error: {
-          code: officeError?.code === "LIMIT_EXCEEDED"
-            ? "LIMIT_EXCEEDED"
-            : officeError?.code === "TIMEOUT"
-              ? "TIMEOUT"
-              : officeError?.code === "INVALID_SOURCE"
-                ? "INVALID_SOURCE"
-                : "WORKER_FAILED",
-          message: error instanceof Error ? error.message : "Worker request failed.",
-          ...(officeError?.phase ? { phase: officeError.phase } : {}),
-          ...(officeError?.limit ? { limit: officeError.limit } : {}),
-          ...(officeError?.actual !== undefined ? { actual: officeError.actual } : {}),
-          ...(officeError?.allowed !== undefined ? { allowed: officeError.allowed } : {}),
-        },
-        id: message.id,
-        success: false
-      } satisfies WorkerErrorResponse);
-    });
+  if (!message || typeof message.type !== "string") {
+    return;
+  }
+  if (message.type === "cancel") {
+    cancelQueuedJob(message.payload.targetId);
+    return;
+  }
+  try {
+    applyRequestWasmSource(message);
+  } catch (error) {
+    postErrorResponse(message.id, error);
+    return;
+  }
+  enqueueJob(message);
 });

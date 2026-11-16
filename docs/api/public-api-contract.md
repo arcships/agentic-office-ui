@@ -289,7 +289,7 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 |  |  | `TIMEOUT` | 解析超过实例配置的时间上限 |
 |  |  | `RUNTIME_DISPOSED` | 已销毁的实例被再次使用 |
 | `xlsx-core` / `vue-xlsx` | `XlsxLoadError` / `XlsxLoadErrorCode` | `SOURCE_NOT_ALLOWED`、`FETCH_FAILED`、`INVALID_WORKBOOK`、`LIMIT_EXCEEDED`、`IMAGE_LIMIT_EXCEEDED`、`INVALID_IMAGE`、`IMAGE_DECODE_FAILED`、`TIMEOUT`、`WORKER_UNAVAILABLE`、`ABORTED` | 分别表示来源、获取、格式、资源、图片、超时、Worker 和取消错误；资源错误可含 `phase`、`limit`、`actual`、`allowed` |
-| `xlsx-core` | `XlsxWorkerError` / `XlsxWorkerErrorCode` | `LIMIT_EXCEEDED`、`TIMEOUT`、`INVALID_SOURCE`、`WORKER_FAILED` | Worker 内资源超限、超时、输入无效或执行失败；失败的 Worker 会被终止，不会静默转主线程 |
+| `xlsx-core` | `XlsxWorkerError` / `XlsxWorkerErrorCode` | `LIMIT_EXCEEDED`、`TIMEOUT`、`INVALID_SOURCE`、`WORKER_FAILED`、`SUPERSEDED` | Worker 内资源超限、超时、输入无效或执行失败，或加载被更新的一次加载取代；资源、输入和串行队列导致的失败会终止该 Worker、不静默转主线程，`SUPERSEDED` 只拒绝被取代的加载 |
 | `xlsx-core/runtime` | `XlsxRuntimeError` / `XlsxRuntimeErrorCode` | `RUNTIME_DISPOSED` | 已销毁的 XLSX Runtime 被再次使用；错误同时保留 `format: "xlsx"` 和 `runtimeId` |
 | `vue-xlsx` | `XlsxFileSizeLimitExceededError` | 类的公开字段 | 本地输入超过控制器允许的文件大小 |
 | `vue-pdf` | `PdfSourceError` / `PdfLoadErrorCode` | `SOURCE_NOT_ALLOWED`、`FETCH_FAILED`、`INVALID_PDF`、`PDF_TOO_LARGE`、`ABORTED` | 分别表示来源被拒绝、获取失败、PDF 无效、整份文件超过当前 `maxFileSize` 和取消；体积错误同时提供 `actual`、`allowed` |
