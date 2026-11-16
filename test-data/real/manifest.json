@@ -1,0 +1,228 @@
+{
+  "collected": "2026-11-16",
+  "sources": [
+    {
+      "repo": "apache/poi",
+      "ref": "trunk",
+      "license": "Apache-2.0"
+    },
+    {
+      "repo": "apache/pdfbox",
+      "ref": "trunk",
+      "license": "Apache-2.0"
+    }
+  ],
+  "fixtures": [
+    {
+      "file": "pdfbox-PDFBOX-2984-rotations.pdf",
+      "format": "pdf",
+      "bytes": 3244,
+      "sha256": "7d8a182b2d8ef95d75bb610159289959bee9c26746413d0c01b10bb65f27cce7",
+      "features": [
+        "rotation-90-180-270",
+        "6-pages"
+      ],
+      "source": "apache/pdfbox",
+      "oracle_pages": 6
+    },
+    {
+      "file": "pdfbox-PDFBOX-3038-001033-p2.pdf",
+      "format": "pdf",
+      "bytes": 56750,
+      "sha256": "f4489abfd221fea0520e00fa9e769e1844c875f67aa130c0243acf6f1e4379e9",
+      "features": [
+        "text-layer"
+      ],
+      "source": "apache/pdfbox",
+      "oracle_pages": 1
+    },
+    {
+      "file": "pdfbox-PDFBOX-3044-010197-p5-ligatures.pdf",
+      "format": "pdf",
+      "bytes": 24624,
+      "sha256": "79f6d8bf755e3d39409f50b62b7de3b0e3592ba2b6904fd60e06e340554cc7b5",
+      "features": [
+        "ligatures",
+        "text-layer"
+      ],
+      "source": "apache/pdfbox",
+      "oracle_pages": 1
+    },
+    {
+      "file": "poi-docx-51921-Word-Crash067.docx",
+      "format": "docx",
+      "bytes": 20006,
+      "sha256": "422e62dfe18243e8bfbb4504be91075cde9318c11d479b70132972aebbb3b107",
+      "features": [
+        "crash-regression"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 1,
+      "expect": "loads-with-repair-or-error"
+    },
+    {
+      "file": "poi-docx-57312.docx",
+      "format": "docx",
+      "bytes": 21702,
+      "sha256": "f80b3c4f3885e0284d8017fec93818b4ec5366f9486ad97b8ddd47ab68a330c5",
+      "features": [
+        "headers"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 1
+    },
+    {
+      "file": "poi-docx-58067.docx",
+      "format": "docx",
+      "bytes": 28709,
+      "sha256": "719b5076b736e6208be4b10fd268e9e3b7e0029c819d485d53ca14700fc98fc5",
+      "features": [
+        "tracked-changes"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 1
+    },
+    {
+      "file": "poi-docx-59378.docx",
+      "format": "docx",
+      "bytes": 26063,
+      "sha256": "9829d202db7fc9d86399552ea7e92fbb415444c9242303c8142026b73034776a",
+      "features": [
+        "headers"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 1
+    },
+    {
+      "file": "poi-docx-60316.docx",
+      "format": "docx",
+      "bytes": 48142,
+      "sha256": "0bfd17f6ccbf1d410278fcd9141c6007b521ebb0cba53276eddb52bdd16c4769",
+      "features": [
+        "textbox",
+        "content-controls",
+        "headers"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 1
+    },
+    {
+      "file": "poi-docx-61470.docx",
+      "format": "docx",
+      "bytes": 12523,
+      "sha256": "abda850b3685027eef32a4c583b2b5f7f20f243026d8c453cdb3315348ed6ff0",
+      "features": [
+        "minimal"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 1
+    },
+    {
+      "file": "poi-pptx-45545_Comment.pptx",
+      "format": "pptx",
+      "bytes": 308394,
+      "sha256": "0295a51f63150e3ee680154d07dab88062ba2306030b790561f85436f3ded7c8",
+      "features": [
+        "comments",
+        "notes",
+        "media",
+        "11-slides"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 11
+    },
+    {
+      "file": "poi-pptx-54542_cropped_bitmap.pptx",
+      "format": "pptx",
+      "bytes": 100030,
+      "sha256": "fa219615dae3cd01f62e8449f7b477bebadd53d3cfba3348ada6377098d8c65e",
+      "features": [
+        "image-crop"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 1
+    },
+    {
+      "file": "poi-pptx-EmbeddedVideo.pptx",
+      "format": "pptx",
+      "bytes": 201418,
+      "sha256": "7940e3b1a339db11f00b65399a2fe77e0e85a5da3a30ac8d6c8a0a77527b2ab2",
+      "features": [
+        "video"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 1
+    },
+    {
+      "file": "poi-pptx-SmartArt.pptx",
+      "format": "pptx",
+      "bytes": 41382,
+      "sha256": "b97e4c6d2ee1dd4094f50f9043820610268dd452d7717c537f5456636adcc353",
+      "features": [
+        "smartart"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 1
+    },
+    {
+      "file": "poi-xlsx-123233_charts.xlsx",
+      "format": "xlsx",
+      "bytes": 12957,
+      "sha256": "47e9e8dea87494d17dbacce9aa3a9ec31cb2b26b288de05ca95c0a4622ca7f80",
+      "features": [
+        "named-charts",
+        "merged-cells",
+        "5-sheets"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 2
+    },
+    {
+      "file": "poi-xlsx-45540_classic_Header.xlsx",
+      "format": "xlsx",
+      "bytes": 40213,
+      "sha256": "f1096655276b5cb2301c830f190017499b4e5a6aefb113cff434868b85178e7a",
+      "features": [
+        "print-headers",
+        "7-sheets"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 12
+    },
+    {
+      "file": "poi-xlsx-45544.xlsx",
+      "format": "xlsx",
+      "bytes": 43042,
+      "sha256": "a6ed1a727f7b741128565512d4b55d9cb74b52efec391109d783ece5dcbe81d8",
+      "features": [
+        "comments",
+        "7-sheets"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 11
+    },
+    {
+      "file": "poi-xlsx-46535.xlsx",
+      "format": "xlsx",
+      "bytes": 313321,
+      "sha256": "3aefff05aa9eab15b18ecfac53d0dd733eae82f7655139422db562a19e412324",
+      "features": [
+        "merged-cells",
+        "47-print-pages"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 47
+    },
+    {
+      "file": "poi-xlsx-47668.xlsx",
+      "format": "xlsx",
+      "bytes": 118687,
+      "sha256": "41c504cc8fe4eebab5cbd9dfd4521661d043a5ebdfe212ded3134fbef808e3c4",
+      "features": [
+        "image"
+      ],
+      "source": "apache/poi",
+      "oracle_pages": 4
+    }
+  ]
+}

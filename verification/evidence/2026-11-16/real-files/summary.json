@@ -1,0 +1,411 @@
+{
+  "suite": "real-files",
+  "date": "2026-11-16",
+  "manifest": "test-data/real/manifest.json",
+  "fixtures": 18,
+  "oracle": {
+    "pdfbox-PDFBOX-2984-rotations.pdf": {
+      "format": "pdf",
+      "pages": 6,
+      "expected": 6,
+      "ok": true
+    },
+    "pdfbox-PDFBOX-3038-001033-p2.pdf": {
+      "format": "pdf",
+      "pages": 1,
+      "expected": 1,
+      "ok": true
+    },
+    "pdfbox-PDFBOX-3044-010197-p5-ligatures.pdf": {
+      "format": "pdf",
+      "pages": 1,
+      "expected": 1,
+      "ok": true
+    },
+    "poi-docx-51921-Word-Crash067.docx": {
+      "format": "docx",
+      "pages": 1,
+      "expected": 1,
+      "ok": true
+    },
+    "poi-docx-57312.docx": {
+      "format": "docx",
+      "pages": 1,
+      "expected": 1,
+      "ok": true
+    },
+    "poi-docx-58067.docx": {
+      "format": "docx",
+      "pages": 1,
+      "expected": 1,
+      "ok": true
+    },
+    "poi-docx-59378.docx": {
+      "format": "docx",
+      "pages": 1,
+      "expected": 1,
+      "ok": true
+    },
+    "poi-docx-60316.docx": {
+      "format": "docx",
+      "pages": 1,
+      "expected": 1,
+      "ok": true
+    },
+    "poi-docx-61470.docx": {
+      "format": "docx",
+      "pages": 1,
+      "expected": 1,
+      "ok": true
+    },
+    "poi-pptx-45545_Comment.pptx": {
+      "format": "pptx",
+      "pages": 11,
+      "expected": 11,
+      "ok": true
+    },
+    "poi-pptx-54542_cropped_bitmap.pptx": {
+      "format": "pptx",
+      "pages": 1,
+      "expected": 1,
+      "ok": true
+    },
+    "poi-pptx-EmbeddedVideo.pptx": {
+      "format": "pptx",
+      "pages": 1,
+      "expected": 1,
+      "ok": true
+    },
+    "poi-pptx-SmartArt.pptx": {
+      "format": "pptx",
+      "pages": 1,
+      "expected": 1,
+      "ok": true
+    },
+    "poi-xlsx-123233_charts.xlsx": {
+      "format": "xlsx",
+      "pages": 2,
+      "expected": 2,
+      "ok": true
+    },
+    "poi-xlsx-45540_classic_Header.xlsx": {
+      "format": "xlsx",
+      "pages": 12,
+      "expected": 12,
+      "ok": true
+    },
+    "poi-xlsx-45544.xlsx": {
+      "format": "xlsx",
+      "pages": 11,
+      "expected": 11,
+      "ok": true
+    },
+    "poi-xlsx-46535.xlsx": {
+      "format": "xlsx",
+      "pages": 47,
+      "expected": 47,
+      "ok": true
+    },
+    "poi-xlsx-47668.xlsx": {
+      "format": "xlsx",
+      "pages": 4,
+      "expected": 4,
+      "ok": true
+    }
+  },
+  "viewer": {
+    "pdfbox-PDFBOX-2984-rotations.pdf": {
+      "state": {
+        "viewerState": null,
+        "status": null,
+        "pageCount": null,
+        "firstPageHeight": 0,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 0,
+        "pdfSlots": 6,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components PDF Su"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    },
+    "pdfbox-PDFBOX-3038-001033-p2.pdf": {
+      "state": {
+        "viewerState": null,
+        "status": null,
+        "pageCount": null,
+        "firstPageHeight": 0,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 0,
+        "pdfSlots": 1,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components PDF Su"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    },
+    "pdfbox-PDFBOX-3044-010197-p5-ligatures.pdf": {
+      "state": {
+        "viewerState": null,
+        "status": null,
+        "pageCount": null,
+        "firstPageHeight": 0,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 0,
+        "pdfSlots": 1,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components PDF Su"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    },
+    "poi-docx-51921-Word-Crash067.docx": {
+      "state": {
+        "viewerState": "ready",
+        "status": "状态：ready",
+        "pageCount": "1",
+        "firstPageHeight": 1122,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 0,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components Word 文"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": true
+    },
+    "poi-docx-57312.docx": {
+      "state": {
+        "viewerState": "ready",
+        "status": "状态：ready",
+        "pageCount": "1",
+        "firstPageHeight": 1123,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 0,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components Word 文"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    },
+    "poi-docx-58067.docx": {
+      "state": {
+        "viewerState": "ready",
+        "status": "状态：ready",
+        "pageCount": "1",
+        "firstPageHeight": 1123,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 0,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components Word 文"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    },
+    "poi-docx-59378.docx": {
+      "state": {
+        "viewerState": "ready",
+        "status": "状态：ready",
+        "pageCount": "1",
+        "firstPageHeight": 1123,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 0,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components Word 文"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    },
+    "poi-docx-60316.docx": {
+      "state": {
+        "viewerState": "ready",
+        "status": "状态：ready",
+        "pageCount": "1",
+        "firstPageHeight": 1384,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 0,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components Word 文"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    },
+    "poi-docx-61470.docx": {
+      "state": {
+        "viewerState": "ready",
+        "status": "状态：ready",
+        "pageCount": "1",
+        "firstPageHeight": 1056,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 0,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components Word 文"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    },
+    "poi-pptx-45545_Comment.pptx": {
+      "state": {
+        "viewerState": "ready",
+        "status": null,
+        "pageCount": null,
+        "firstPageHeight": 0,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 11,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components PowerP"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    },
+    "poi-pptx-54542_cropped_bitmap.pptx": {
+      "state": {
+        "viewerState": "ready",
+        "status": null,
+        "pageCount": null,
+        "firstPageHeight": 0,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 1,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components PowerP"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    },
+    "poi-pptx-EmbeddedVideo.pptx": {
+      "state": {
+        "viewerState": "ready",
+        "status": null,
+        "pageCount": null,
+        "firstPageHeight": 0,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 1,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components PowerP"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    },
+    "poi-pptx-SmartArt.pptx": {
+      "state": {
+        "viewerState": "ready",
+        "status": null,
+        "pageCount": null,
+        "firstPageHeight": 0,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 1,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components PowerP"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    },
+    "poi-xlsx-123233_charts.xlsx": {
+      "state": {
+        "viewerState": null,
+        "status": "ready",
+        "pageCount": null,
+        "firstPageHeight": 0,
+        "sheetTabs": 1,
+        "charts": 0,
+        "thumbnails": 0,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components Excel/"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    },
+    "poi-xlsx-45540_classic_Header.xlsx": {
+      "state": {
+        "viewerState": null,
+        "status": "error",
+        "pageCount": null,
+        "firstPageHeight": 0,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 0,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components Excel/"
+      },
+      "errors": [],
+      "load_error": "status=error",
+      "expected_failure": false
+    },
+    "poi-xlsx-45544.xlsx": {
+      "state": {
+        "viewerState": null,
+        "status": "error",
+        "pageCount": null,
+        "firstPageHeight": 0,
+        "sheetTabs": 0,
+        "charts": 0,
+        "thumbnails": 0,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components Excel/"
+      },
+      "errors": [],
+      "load_error": "status=error",
+      "expected_failure": false
+    },
+    "poi-xlsx-46535.xlsx": {
+      "state": {
+        "viewerState": null,
+        "status": "ready",
+        "pageCount": null,
+        "firstPageHeight": 0,
+        "sheetTabs": 2,
+        "charts": 0,
+        "thumbnails": 0,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components Excel/"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    },
+    "poi-xlsx-47668.xlsx": {
+      "state": {
+        "viewerState": null,
+        "status": "ready",
+        "pageCount": null,
+        "firstPageHeight": 0,
+        "sheetTabs": 3,
+        "charts": 0,
+        "thumbnails": 0,
+        "pdfSlots": 0,
+        "bodyText": "Agentic Office UI Home DOCX Surface DOCX Viewer DOCX Editor XLSX Surface XLSX Viewer PPTX Surface PPTX Viewer PPTX 最小组合 PDF Surface PDF Viewer Components Excel/"
+      },
+      "errors": [],
+      "load_error": null,
+      "expected_failure": false
+    }
+  },
+  "failures": [
+    "poi-xlsx-45540_classic_Header.xlsx: status=error",
+    "poi-xlsx-45544.xlsx: status=error"
+  ],
+  "verdict": "FAIL"
+}
