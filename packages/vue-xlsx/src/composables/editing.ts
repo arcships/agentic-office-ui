@@ -142,6 +142,53 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     ctx.recordCellEditHistory(cell, before, after);
   }
 
+  function readCellRawValue(cell: XlsxCellAddress) {
+    const worksheet = ctx.getActiveWorksheet();
+    if (!worksheet) {
+      return null;
+    }
+
+    const cellValue = worksheet.getCellAt(cell.row, cell.col);
+    try {
+      return normalizeCellValue(cellValue.toJs());
+    } finally {
+      cellValue.free();
+    }
+  }
+
+  /**
+   * Commits user-entered text as either a formula or a value.
+   *
+   * Inline editing and the formula bar both feed raw user text in here, so a
+   * cell that holds `=SUM(A1:B1)` keeps its formula unless the user actually
+   * types a value. Text that already matches the cell's formula or coerced
+   * value is dropped without touching the workbook or the undo history.
+   */
+  function commitCellInput(cell: XlsxCellAddress, input: string) {
+    const worksheet = ctx.getActiveWorksheet();
+    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value) {
+      return false;
+    }
+
+    const text = input ?? "";
+    const trimmedText = text.trim();
+    if (trimmedText.length > 1 && trimmedText.startsWith("=")) {
+      if ((worksheet.getFormulaAt(cell.row, cell.col) ?? "") === trimmedText) {
+        return false;
+      }
+
+      setCellFormula(cell, trimmedText);
+      return true;
+    }
+
+    if (Object.is(coerceUserEnteredValue(text), readCellRawValue(cell))) {
+      return false;
+    }
+
+    setCellValue(cell, text);
+    return true;
+  }
+
   function setCellStyle(cell: XlsxCellAddress, style: XlsxCellStyleInput) {
     const worksheet = ctx.getActiveWorksheet();
     if (ctx.readOnly.value || !worksheet || !ctx.workbook.value) {
@@ -189,8 +236,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       return false;
     }
 
-    setCellFormula(ctx.activeCell.value, formula);
-    return true;
+    return commitCellInput(ctx.activeCell.value, formula);
   }
 
   function setSelectedCellStyle(style: XlsxCellStyleInput) {
@@ -442,6 +488,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     setCellValue,
     setCellFormula,
     setCellStyle,
+    commitCellInput,
     setSelectedCellValue,
     setSelectedCellFormula,
     setSelectedFormula,

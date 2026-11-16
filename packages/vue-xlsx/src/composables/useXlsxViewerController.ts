@@ -1166,6 +1166,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     setCellFormula: editingDomain.setCellFormula,
     setCellStyle: editingDomain.setCellStyle,
     setCellValue: editingDomain.setCellValue,
+    commitCellInput: editingDomain.commitCellInput,
     setRangeStyle: editingDomain.setRangeStyle,
     setSelectedFormula: editingDomain.setSelectedFormula,
     setZoomScale: navigationDomain.setZoomScale,
