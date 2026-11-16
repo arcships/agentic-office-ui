@@ -780,6 +780,42 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       });
   }
 
+  function cancelDeferredWorkbookLoad() {
+    const load = deferredLoadRef.value;
+    if (!load || load.state !== "deferred" || !isCurrentWorkbookLoad(load)) return;
+    load.state = "settled";
+    clearDeferredLoad(load);
+    replaceWorkbook(null);
+    sheets.value = [];
+    clearChartAssets();
+    workerTablesByWorkbookSheetIndex.value = [];
+    clearImageAssets();
+    error.value = null;
+    isLoading.value = false;
+    isWorkerBacked.value = false;
+    sourceState.value = "idle";
+    sourceError.value = null;
+    sourceBufferRef.value = null;
+    activeSheetIndex.value = 0;
+    activeTabIndex.value = 0;
+    activeCell.value = null;
+    selection.value = null;
+    selectedChartId.value = null;
+    selectedChartElement.value = null;
+    selectedImageId.value = null;
+    selectionAnchorRef.value = null;
+    sortState.value = null;
+    reportDiagnostic({
+      type: "load-cancelled",
+      requestId: load.requestId,
+      taskId: load.task.context.taskId,
+      sourceKind: load.sourceKind,
+      url: load.resolvedUrl,
+      bytes: load.sourceBuffer.byteLength,
+    });
+    load.task.finish();
+  }
+
   // ═══════════════════════════════════════════════════════════════════
   // Lifecycle
   // ═══════════════════════════════════════════════════════════════════
@@ -973,7 +1009,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     getActiveWorksheet: getInternalActiveWorksheet,
     setChartAssets, setImageAssets, clearImageAssets, clearChartAssets,
     getWorkerClient, disposeWorkerClient, replaceWorkbook, disposeWorkbook, discardWorkbookLoadResult,
-    isCurrentLoadRequest, getCurrentLoadRequestId, continueDeferredWorkbookLoad,
+    isCurrentLoadRequest, getCurrentLoadRequestId, continueDeferredWorkbookLoad, cancelDeferredWorkbookLoad,
     startChartDisplayHydration, loadWorkbookOnMainThread,
     hasIncompleteWorkerChartSnapshot,
     ensureChartAssetsHydrated,
@@ -1087,6 +1123,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     clearSelectedImage: chartImageDomain.clearSelectedImage,
     clearSelection: editingDomain.clearSelection,
     continueDeferredLoad: navigationDomain.continueDeferredLoad,
+    cancelDeferredLoad: navigationDomain.cancelDeferredLoad,
     copySelectionToClipboard: clipboardDomain.copySelectionToClipboard,
     get defaultZoomScale() { return defaultZoomScale.value; },
     get deferredLoadFileSize() { return deferredLoadFileSize.value; },

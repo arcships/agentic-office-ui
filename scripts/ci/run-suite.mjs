@@ -117,6 +117,7 @@ const suites = {
       "tests/component/office-reference-surfaces.test.mjs",
       "tests/component/pptx-preview.test.mjs",
       "tests/component/xlsx-race.test.mjs",
+      "tests/component/xlsx-deferred-load.test.mjs",
       "tests/component/docx-render-parity.test.mjs",
       "tests/component/docx-edit-interactions.test.mjs",
       "tests/component/docx-selection-input.test.mjs",

@@ -417,6 +417,8 @@ export interface XlsxControllerContext {
   getCurrentLoadRequestId: () => number;
   /** Resumes the one instance-owned deferred load; repeated calls are ignored. */
   continueDeferredWorkbookLoad: () => void;
+  /** Abandons the one instance-owned deferred load; repeated calls are ignored. */
+  cancelDeferredWorkbookLoad: () => void;
   startChartDisplayHydration: (buffer: ArrayBuffer, targetWorkbook: Workbook, targetSheets: XlsxSheetData[]) => void;
   loadWorkbookOnMainThread: (buffer: ArrayBuffer) => Promise<{ imageAssets: WorkbookImageAssets; parsedWorkbook: { shouldAutoCalculate: boolean; workbook: Workbook } }>;
   hasIncompleteWorkerChartSnapshot: (snapshot: { chartsByWorkbookSheetIndex: XlsxChart[][] }) => boolean;
