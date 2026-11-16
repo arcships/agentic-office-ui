@@ -45,3 +45,19 @@ uv run --with playwright python tests/blackbox/upstream_parity.py --strict
 - 只改 `tests/`、`scripts/fixtures/`、`test-data/`、`docs/`、`verification/`；不改 `packages/` 或 `apps/demo/src`。
 - 证据命名 `<YYYY-MM-DD>/<suite>/`，每个 case 记录夹具哈希、环境版本、上游/本地指标与 issue 归属。
 - 真实文件只提交哈希与结果，不提交可能含敏感信息的原文。
+
+## 进度（V1–V6）
+
+| 阶段 | 状态 | 证据 |
+|---|---|---|
+| L0 静态/源码/API | ✅ | #76 / 源码仓核对 |
+| L1 夹具 + oracle | ✅ | `evidence/2026-11-16/office-oracle/` |
+| L2 上游双跑 | ✅ | `evidence/2026-11-16/upstream-parity/` |
+| V1 真实文件 | ✅ 18 个 | `evidence/2026-11-16/real-files/` |
+| V2 编辑回环 | ✅ DOCX；XLSX 导出损坏 #66 | `evidence/2026-11-16/roundtrip/` |
+| V3 跨浏览器 | 🟡 Chromium+Firefox；WebKit 环境阻塞 | `evidence/2026-11-16/cross-browser/` |
+| V4 像素基线 | ✅ 3 用例 | `evidence/2026-11-16/pixel/` |
+| V5 鲁棒性 | ✅ 7 用例 | `evidence/2026-11-16/robustness/` |
+| V6 场景矩阵 | ✅ 16 视口组合 + 场景 | `evidence/2026-11-16/scenario/` |
+
+本轮新发现（已提 issue）：#152（图表系列缺 `<c:tx>` 导致整包无法加载）；#66 补充导出丢 chart part 的实测证据。

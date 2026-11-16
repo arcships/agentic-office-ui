@@ -128,14 +128,12 @@ uv run --with playwright python tests/blackbox/upstream_parity.py --strict
 
 ## 9. 当前状态（2026-11-16）
 
-- 142 个 open issue（65 bug、18 enhancement、2 product-gap、3 review、54 upstream-gap）。
-- L1：16 个合成夹具，oracle PASS；`demo.docx` 记录 **9 页 vs 本地 6 页（gap 3）**。
-- L2：3 个用例 PASS（`demo.docx`、`docx-comments.docx`、`xlsx-charts.xlsx`）。
-- 本轮修复：`docx-comments.docx` 的页眉评论导致 LibreOffice 拒载；已改为正文/表格评论并补全 footnotes 注册。
-- V1 真实文件：18 个 POI/PDFBox 文件，oracle PASS；viewer 16/18，两个 XLSX 因图表系列缺 `<c:tx>` 崩溃（#152）。
+- 143 个 open issue（65 bug、18 enhancement、2 product-gap、3 review、55 upstream-gap；新增 #152）。
+- L0–L2 完成：源码/API 对齐、16 个合成夹具 oracle、3 个上游双跑用例。
+- V1 真实文件：18 个 POI/PDFBox 文件，oracle PASS；viewer 16/18（#152）。
 - V2 回环：DOCX PASS；XLSX 导出丢 chart part，openpyxl 无法重开（#66，P0）。
 - V3 跨浏览器：Chromium+Firefox 通过；WebKit 因宿主库缺失 SKIP。
-- V4 像素基线：3 个用例 PASS（阈值 20–30%）。
-- V5 鲁棒性：7 个用例 PASS；zip 炸弹/超限/并发/卸载均按预期，XLSX 大文件先报解析错误待 #54 评估。
-- V6 场景矩阵：16 视口组合无溢出；DOCX 缩放/暗色正常；打印无样式（#92）、PageDown 无效（#116）、IME 回车提交（#89）均实机复现。
-- V1–V6 验证框架与验证完成（WebKit 为已记录的环境阻塞）。
+- V4 像素基线：DOCX 18.6%、PPTX 2.9%、PDF 18.1%，均在阈值内。
+- V5 鲁棒性：7 个用例 PASS；zip 炸弹/超限/并发/卸载按预期。
+- V6 场景矩阵：16 视口组合无溢出；打印/键盘/IME 缺口实机复现（#92/#116/#89）。
+- 结论：验证框架 V1–V6 完成；下一阶段进入修复（建议先 #66/#152/#25/#95）。
