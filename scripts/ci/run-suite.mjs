@@ -68,6 +68,7 @@ const suites = {
       "tests/unit/xlsx-reference-adapter.test.mjs",
       "packages/vue-xlsx/test/lazy-loading.mjs",
       "tests/unit/pdf-source.test.mjs",
+      "tests/unit/pdf-render-runtime.test.mjs",
       "tests/unit/pdf-reference-adapter.test.mjs",
       "tests/unit/pptx-core.test.mjs",
       "tests/unit/pptx-reference-adapter.test.mjs",

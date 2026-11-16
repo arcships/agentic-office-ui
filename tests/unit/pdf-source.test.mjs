@@ -157,6 +157,67 @@ test("PDF URL loading shares controlled fetch and strips query secrets", async (
   assert.equal(JSON.stringify(result).includes("secret"), false);
 });
 
+test("PDF URL loading accepts CDN octet-stream and missing Content-Type when the magic is valid", async () => {
+  for (const contentType of ["application/octet-stream", "binary/octet-stream", undefined]) {
+    const result = await pdf.loadVerifiedPdfSource(
+      { kind: "url", url: "https://files.example/sample.pdf" },
+      {
+        enabled: true,
+        baseUrl: "https://files.example/",
+        allowedProtocols: ["https:"],
+        allowedOrigins: ["https://files.example"],
+        fetch: async (url) => ({
+          ok: true,
+          status: 200,
+          url,
+          headers: { get: (name) => name.toLowerCase() === "content-type" ? contentType ?? null : null },
+          arrayBuffer: async () => fixture.buffer.slice(fixture.byteOffset, fixture.byteOffset + fixture.byteLength),
+        }),
+      },
+    );
+    assert.equal(result.fileName, "sample.pdf");
+    assert.deepEqual(result.bytes.slice(0, 5), new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]));
+  }
+});
+
+test("PDF URL loading still rejects an explicitly non-PDF Content-Type", async () => {
+  await assert.rejects(
+    pdf.loadVerifiedPdfSource(
+      { kind: "url", url: "https://files.example/sample.pdf" },
+      {
+        enabled: true,
+        baseUrl: "https://files.example/",
+        allowedProtocols: ["https:"],
+        allowedOrigins: ["https://files.example"],
+        fetch: async (url) => ({
+          ok: true,
+          status: 200,
+          url,
+          headers: { get: (name) => name.toLowerCase() === "content-type" ? "text/plain" : null },
+          arrayBuffer: async () => fixture.buffer.slice(fixture.byteOffset, fixture.byteOffset + fixture.byteLength),
+        }),
+      },
+    ),
+    (error) => error?.code === "INVALID_PDF",
+  );
+});
+
+test("PDF Blob loading accepts octet-stream only when the bytes carry the PDF magic", async () => {
+  const valid = await pdf.loadVerifiedPdfSource({
+    kind: "blob",
+    blob: new Blob([fixture], { type: "application/octet-stream" }),
+  });
+  assert.equal(valid.fileName, "document.pdf");
+
+  await assert.rejects(
+    pdf.loadVerifiedPdfSource({
+      kind: "blob",
+      blob: new Blob([new TextEncoder().encode("not a pdf")], { type: "application/octet-stream" }),
+    }),
+    (error) => error?.code === "INVALID_PDF",
+  );
+});
+
 test("PDF dangerous URL is rejected before fetch with the stable shared code", async () => {
   let requestCount = 0;
   await assert.rejects(

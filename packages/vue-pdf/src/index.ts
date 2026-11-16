@@ -44,6 +44,13 @@ export {
 } from "./pdf-url-policy"
 export { bundledPdfiumWasmUrl, createPdfRenderRuntime } from "./pdf/pdf-render-runtime"
 export {
+  DEFAULT_PDF_MAX_RENDER_PIXELS,
+  MAX_PDF_RENDER_DPR,
+  MAX_PDF_RENDER_SCALE,
+  PdfRenderError,
+  resolvePdfPageRenderParameters,
+} from "./pdf/pdf-render-runtime"
+export {
   createPdfPageReferenceDraft,
   createPdfRegionReferenceDraft,
   createPdfTextReferenceDraft,
@@ -58,8 +65,13 @@ export type {
   PdfTextReferenceSelection,
 } from "./pdf/pdf-reference-adapter"
 export type {
+  PdfOpenDocumentOptions,
   PdfPageRenderOptions,
+  PdfPageRenderParameters,
+  PdfPasswordHandler,
+  PdfPasswordRequest,
   PdfRenderDocument,
+  PdfRenderErrorCode,
   PdfRenderPageInfo,
   PdfRenderRect,
   PdfRenderRuntime,

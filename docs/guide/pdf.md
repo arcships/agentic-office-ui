@@ -27,11 +27,13 @@ import "@arcships/vue-pdf/style.css"
 | `runtime` | `PdfRenderRuntime` | 组件创建 | 调用方持有的 Runtime |
 | `pdfiumWasmUrl` | `string` | 包内资源 | 覆盖 PDFium WASM 地址 |
 | `maxFileSize` | `number` | 50 MiB | 最大 PDF 字节数 |
+| `password` | `string` | 无 | 加密 PDF 的初始密码 |
+| `onPassword` | `(request) => string \| Promise<string \| undefined>` | 无 | 需要密码时调用；返回 `undefined` 表示取消 |
 | `defaultZoom` | `number` | `1` | 初始缩放倍率，范围由组件约束 |
 | `showToolbar` | `boolean` | `true` | 工具栏 |
 | `showDownload` | `boolean` | `true` | 下载按钮 |
 | `showRotateControls` | `boolean` | `true` | 旋转按钮 |
 
-事件包括 `document-load-success`、`document-load-error`、`active-page-change` 和 `diagnostic`。错误处理使用 `PdfLoadError.code`，不要通过错误文案判断类型。
+事件包括 `document-load-success`、`document-load-error`、`active-page-change` 和 `diagnostic`。错误处理使用 `PdfLoadError.code`，不要通过错误文案判断类型。加密文档在无密码可用时返回 `ENCRYPTED`；`load-start` 诊断中的 URL 已去除查询串、片段和凭据。
 
-需要完全控制 Runtime 时，可以使用 `createPdfRenderRuntime()`。调用方传入的 Runtime 必须由调用方销毁。
+需要完全控制 Runtime 时，可以使用 `createPdfRenderRuntime()`。调用方传入的 Runtime 必须由调用方销毁。单页渲染会在进入 PDFium 前校验 `scale`、`dpr` 和旋转，并按 `maxRenderPixels`（默认 32 兆像素）拒绝超出预算的请求，避免一次渲染耗尽内存。

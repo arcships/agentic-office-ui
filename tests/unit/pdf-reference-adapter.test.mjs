@@ -15,6 +15,7 @@ function createContext(revision, pageTexts, pageOverrides = {}) {
     width: pageOverrides.width ?? 100,
     height: pageOverrides.height ?? 200,
     rotation: pageOverrides.rotation ?? 0,
+    ...(pageOverrides.contentHashes?.[index] ? { contentHash: pageOverrides.contentHashes[index] } : {}),
   }))
   const document = { id: `runtime-${revision}`, pageCount: pages.length, pages }
   return {
@@ -49,6 +50,9 @@ function createContext(revision, pageTexts, pageOverrides = {}) {
         })
         return hits
       },
+      ...(pageOverrides.getPageContentHash
+        ? { getPageContentHash: pageOverrides.getPageContentHash }
+        : {}),
     },
   }
 }
@@ -152,6 +156,51 @@ test("PDF page and region relocation requires an unchanged page signature", asyn
     ),
     { status: "unsupported", reasonCode: "pdf.page-signature-unavailable" },
   )
+})
+
+test("PDF page signatures include a text digest so same-size content replacement is not relocated", async () => {
+  const original = createContext("pdf-v1", ["alpha page text"], { contentHashes: ["hash-alpha"] })
+  const changed = createContext("pdf-v2", ["beta page text"], { contentHashes: ["hash-beta"] })
+  const unchanged = createContext("pdf-v3", ["alpha page text"], { contentHashes: ["hash-alpha"] })
+  const page = reference(pdf.createPdfPageReferenceDraft(original, 0), "ref-page-content")
+  const region = reference(pdf.createPdfRegionReferenceDraft(original, {
+    space: "page",
+    pageIndex: 0,
+    rect: { x: 0.1, y: 0.2, width: 0.4, height: 0.3 },
+  }), "ref-region-content")
+
+  assert.deepEqual(page.fingerprint.ancestorKeys, [
+    "pdf-page-v1:100:200:0",
+    "pdf-page-v1:100:200:0:text:hash-alpha",
+  ])
+  assert.equal((await pdf.resolvePdfReference(unchanged, page)).status, "relocated")
+  assert.deepEqual(
+    await pdf.resolvePdfReference(changed, page),
+    { status: "not-found", reasonCode: "pdf.page-signature-changed" },
+  )
+  assert.deepEqual(
+    await pdf.resolvePdfReference(changed, region),
+    { status: "not-found", reasonCode: "pdf.page-signature-changed" },
+  )
+})
+
+test("PDF page signatures lazily hash the current page through the runtime", async () => {
+  const original = createContext("pdf-v1", ["alpha page text"], { contentHashes: ["hash-alpha"] })
+  const page = reference(pdf.createPdfPageReferenceDraft(original, 0), "ref-page-lazy")
+  let requests = 0
+  const changed = createContext("pdf-v2", ["beta page text"], {
+    async getPageContentHash() {
+      requests += 1
+      return "hash-beta"
+    },
+  })
+
+  assert.deepEqual(
+    await pdf.resolvePdfReference(changed, page),
+    { status: "not-found", reasonCode: "pdf.page-signature-changed" },
+  )
+  assert.equal(requests, 1)
+  assert.equal(changed.document.pages[0].contentHash, "hash-beta")
 })
 
 test("PDF resolver forwards cancellation instead of turning it into document invalidation", async () => {

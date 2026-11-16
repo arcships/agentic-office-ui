@@ -869,6 +869,21 @@ test("PdfViewer rejects an oversized PDF before reading bytes or opening a runti
   assert.equal(fake.calls.dispose.length, 0);
 });
 
+test("PdfViewer forwards password credentials to the runtime open call", async () => {
+  const fake = createPdfRuntime();
+  const onPassword = async () => "resolved-password";
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    password: "initial-password",
+    onPassword,
+  });
+  await waitFor(() => fake.calls.openDocument.length === 1, "PDF runtime open with password options");
+  assert.equal(fake.calls.openDocument[0].options.password, "initial-password");
+  assert.equal(fake.calls.openDocument[0].options.onPassword, onPassword);
+  mounted.app.unmount();
+});
+
 test("FileUpload reports accepted and rejected files through public events", async () => {
   const acceptedEvents = [];
   const rejectedEvents = [];
@@ -900,6 +915,38 @@ test("FileUpload reports accepted and rejected files through public events", asy
   assert.match(textContent(mounted.root), /large\.docx.*size limit/);
   assert.equal(target.value, "");
   assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfViewer sanitizes load-start diagnostics instead of leaking query tokens", async () => {
+  const diagnostics = [];
+  const fetch = (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener(
+      "abort",
+      () => reject(new DOMException("Aborted", "AbortError")),
+      { once: true },
+    );
+  });
+  const fake = createPdfRuntime();
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "url", url: "https://files.example/report.pdf?token=secret#page=2" },
+    runtime: fake.runtime,
+    urlPolicy: {
+      allowedOrigins: ["https://files.example"],
+      allowedProtocols: ["https:"],
+      baseUrl: "https://files.example/",
+      fetch,
+    },
+    onDiagnostic: (event) => diagnostics.push(event),
+  });
+  await waitFor(
+    () => diagnostics.some((event) => event.type === "load-start"),
+    "PDF load-start diagnostic",
+  );
+  const loadStart = diagnostics.find((event) => event.type === "load-start");
+  assert.equal(loadStart.url, "https://files.example/report.pdf");
+  assert.equal(JSON.stringify(diagnostics).includes("secret"), false);
+  assert.equal(JSON.stringify(diagnostics).includes("page=2"), false);
   mounted.app.unmount();
 });
 
