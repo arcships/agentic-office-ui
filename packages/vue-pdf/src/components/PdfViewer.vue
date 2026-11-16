@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue"
 import {
   createLatestTaskCoordinator,
   createOfficeTaskSequence,
+  sanitizeOfficeUrl,
   type OfficeSource,
   type OfficeUrlPolicy,
 } from "@arcships/office-runtime"
@@ -30,6 +31,8 @@ const props = withDefaults(defineProps<PdfViewerProps>(), {
   runtime: undefined,
   pdfiumWasmUrl: undefined,
   maxFileSize: DEFAULT_PDF_MAX_FILE_SIZE,
+  password: undefined,
+  onPassword: undefined,
   fileName: undefined,
   defaultZoom: 1,
   className: "",
@@ -239,7 +242,11 @@ async function selectRuntime(): Promise<PdfRenderRuntime> {
   const wasmUrl = props.pdfiumWasmUrl?.trim() || undefined
   if (!ownedRuntime || ownedRuntimeWasmUrl !== wasmUrl) {
     if (ownedRuntime) await ownedRuntime.dispose()
-    ownedRuntime = createPdfRenderRuntime({ wasmUrl })
+    ownedRuntime = createPdfRenderRuntime({
+      wasmUrl,
+      password: props.password,
+      onPassword: props.onPassword,
+    })
     ownedRuntimeWasmUrl = wasmUrl
   }
   return ownedRuntime
@@ -524,7 +531,7 @@ async function load(): Promise<void> {
   emitDiagnostic({
     type: "load-start",
     sourceKind: source.kind,
-    url: source.kind === "url" ? source.url : undefined,
+    url: source.kind === "url" ? sanitizeOfficeUrl(source.url) : undefined,
   })
   let openedDocument: PdfRenderDocument | undefined
   let selectedRuntime: PdfRenderRuntime | undefined
@@ -540,7 +547,11 @@ async function load(): Promise<void> {
       verified.bytes.byteOffset,
       verified.bytes.byteOffset + verified.bytes.byteLength,
     ) as ArrayBuffer
-    openedDocument = await selectedRuntime.openDocument(content, { signal: task.signal })
+    openedDocument = await selectedRuntime.openDocument(content, {
+      signal: task.signal,
+      password: props.password,
+      onPassword: props.onPassword,
+    })
     task.assertCurrent()
     if (openedDocument.pageCount <= 0) throw new Error("PDF document contains no pages.")
     runtimeForDocument = selectedRuntime

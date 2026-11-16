@@ -33,6 +33,7 @@ export type PdfLoadErrorCode =
   | "FETCH_FAILED"
   | "INVALID_PDF"
   | "PDF_TOO_LARGE"
+  | "ENCRYPTED"
   | "ABORTED"
 
 export interface PdfLoadError {
@@ -134,6 +135,7 @@ function pdfMessage(code: PdfLoadErrorCode, actual?: number, allowed?: number): 
     case "FETCH_FAILED": return "无法获取 PDF 文件。"
     case "PDF_TOO_LARGE": return `PDF 文件大小 ${actual ?? "未知"} 字节超过允许值 ${allowed ?? "未知"} 字节。`
     case "ABORTED": return "PDF 加载已取消。"
+    case "ENCRYPTED": return "PDF 文档已加密，需要密码。"
     default: return "来源不是可验证的 PDF 文件。"
   }
 }
@@ -186,11 +188,30 @@ function verifyPdfBytes(bytes: Uint8Array, sourceKind: PdfSource["kind"], url?: 
   }
 }
 
-function verifyPdfMime(contentType: string | undefined, sourceKind: PdfSource["kind"], url?: string): void {
+/**
+ * CDNs and object stores commonly serve PDF bytes as application/octet-stream
+ * or with no Content-Type at all. Only reject an explicitly wrong media type;
+ * the %PDF- magic check below remains the authority for the actual bytes.
+ */
+const ACCEPTED_PDF_CONTENT_TYPES = new Set([
+  "application/pdf",
+  "application/x-pdf",
+  "application/octet-stream",
+  "binary/octet-stream",
+])
+
+function isAcceptedPdfContentType(contentType: string | undefined): boolean {
   const mime = contentType?.split(";", 1)[0]?.trim().toLowerCase()
-  if (mime !== "application/pdf") {
-    throw new PdfSourceError({ code: "INVALID_PDF", message: "来源响应不是 application/pdf。", sourceKind, url })
-  }
+  return !mime || ACCEPTED_PDF_CONTENT_TYPES.has(mime)
+}
+
+function verifyPdfMime(contentType: string | undefined, sourceKind: PdfSource["kind"], url?: string): void {
+  if (isAcceptedPdfContentType(contentType)) return
+  throw new PdfSourceError({ code: "INVALID_PDF", message: "来源响应不是 PDF 文件类型。", sourceKind, url })
+}
+
+function isEncryptedPdfError(error: unknown): boolean {
+  return !!error && typeof error === "object" && (error as { code?: unknown }).code === "ENCRYPTED"
 }
 
 function fileNameFromUrl(rawUrl: string): string {
@@ -214,6 +235,14 @@ function fileNameFromBlob(source: Extract<PdfSource, { kind: "blob" }>): string 
 
 export function toPdfLoadError(error: unknown, sourceKind: PdfSource["kind"], url?: string): PdfLoadError {
   if (error instanceof PdfSourceError) return error.toJSON()
+  if (isEncryptedPdfError(error)) {
+    return new PdfSourceError({
+      code: "ENCRYPTED",
+      message: pdfMessage("ENCRYPTED"),
+      sourceKind,
+      ...(url ? { url } : {}),
+    }, { cause: error }).toJSON()
+  }
   return fromOfficeError(error, sourceKind, url).toJSON()
 }
 
@@ -251,8 +280,8 @@ export async function loadVerifiedPdfSource(
     const sourceKind = source.kind
     if (sourceKind === "blob") {
       const mime = source.blob.type.trim().toLowerCase()
-      if (mime && mime !== "application/pdf") {
-        throw new PdfSourceError({ code: "INVALID_PDF", message: "文件不是 application/pdf。", sourceKind })
+      if (mime && !isAcceptedPdfContentType(mime)) {
+        throw new PdfSourceError({ code: "INVALID_PDF", message: "文件不是 PDF 文件类型。", sourceKind })
       }
     } else {
       verifyPdfMime(resolved.contentType, sourceKind, resolved.resolvedUrl)

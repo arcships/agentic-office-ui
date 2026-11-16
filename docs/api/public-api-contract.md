@@ -152,7 +152,7 @@ DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注
 
 ### 3.5 `@arcships/vue-pdf`
 
-稳定入口为 `PdfViewer`，以及根入口导出的属性、PDF 来源、诊断和错误类型。PDF 查看器默认创建自己专用的 `PdfRenderRuntime`，也可由宿主通过 `runtime` 属性注入实例；`pdfiumWasmUrl` 可覆盖包内默认资源地址。`createPdfRenderRuntime`、`bundledPdfiumWasmUrl`、`PdfRenderRuntimeConfig` 和页面、搜索、渲染类型是公开的实例配置入口。`DEFAULT_PDF_MAX_FILE_SIZE`、`PdfLoadOptions.maxFileSize` 和 `PdfViewer.maxFileSize` 是公开的整份文件体积配置入口。新代码使用 `@arcships/vue-pdf/style.css`。
+稳定入口为 `PdfViewer`，以及根入口导出的属性、PDF 来源、诊断和错误类型。PDF 查看器默认创建自己专用的 `PdfRenderRuntime`，也可由宿主通过 `runtime` 属性注入实例；`pdfiumWasmUrl` 可覆盖包内默认资源地址。`createPdfRenderRuntime`、`bundledPdfiumWasmUrl`、`PdfRenderRuntimeConfig` 和页面、搜索、渲染类型是公开的实例配置入口。`DEFAULT_PDF_MAX_FILE_SIZE`、`PdfLoadOptions.maxFileSize` 和 `PdfViewer.maxFileSize` 是公开的整份文件体积配置入口；`DEFAULT_PDF_MAX_RENDER_PIXELS`、`PdfRenderRuntimeConfig.maxRenderPixels` 和 `PdfRenderError.code` 约束单页渲染预算。`password` 与 `onPassword` 为加密 PDF 提供密码通道。新代码使用 `@arcships/vue-pdf/style.css`。
 
 根入口还提供 `createPdfTextReferenceDraft`、`createPdfPageReferenceDraft`、`createPdfRegionReferenceDraft`、`resolvePdfReference`、`describePdfReference` 和 `normalizePdfReferenceRect`。解析器通过调用方传入的 Runtime 与当前 `PdfRenderDocument` 验证字符范围或重新搜索，不上传正文，也不管理确认后的产品状态。
 
@@ -292,7 +292,7 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 | `xlsx-core` | `XlsxWorkerError` / `XlsxWorkerErrorCode` | `LIMIT_EXCEEDED`、`TIMEOUT`、`INVALID_SOURCE`、`WORKER_FAILED` | Worker 内资源超限、超时、输入无效或执行失败；失败的 Worker 会被终止，不会静默转主线程 |
 | `xlsx-core/runtime` | `XlsxRuntimeError` / `XlsxRuntimeErrorCode` | `RUNTIME_DISPOSED` | 已销毁的 XLSX Runtime 被再次使用；错误同时保留 `format: "xlsx"` 和 `runtimeId` |
 | `vue-xlsx` | `XlsxFileSizeLimitExceededError` | 类的公开字段 | 本地输入超过控制器允许的文件大小 |
-| `vue-pdf` | `PdfSourceError` / `PdfLoadErrorCode` | `SOURCE_NOT_ALLOWED`、`FETCH_FAILED`、`INVALID_PDF`、`PDF_TOO_LARGE`、`ABORTED` | 分别表示来源被拒绝、获取失败、PDF 无效、整份文件超过当前 `maxFileSize` 和取消；体积错误同时提供 `actual`、`allowed` |
+| `vue-pdf` | `PdfSourceError` / `PdfLoadErrorCode` | `SOURCE_NOT_ALLOWED`、`FETCH_FAILED`、`INVALID_PDF`、`PDF_TOO_LARGE`、`ENCRYPTED`、`ABORTED` | 分别表示来源被拒绝、获取失败、PDF 无效、整份文件超过当前 `maxFileSize`、文档需要密码和取消；体积错误同时提供 `actual`、`allowed` |
 | `vue-ui` | `FileUploadRejection` / `FileUploadRejectionCode` | `FILE_TYPE_NOT_ACCEPTED`、`FILE_TOO_LARGE` | 文件类型不符合 `accept`，或文件超过 `maxSize` |
 | `pptx-core` / `vue-pptx` | `PptxPreviewError`、`PptxPlaybackError` | `ABORTED`、`STALE_RESULT`、`LIMIT_EXCEEDED`、`INVALID_SOURCE`、`PARSE_FAILED` 及播放错误码 | 加载、资源限制、解析、对象匹配、媒体和播放控制错误 |
 

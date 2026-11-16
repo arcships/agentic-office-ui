@@ -1,5 +1,5 @@
 import type { PdfSource, PdfUrlPolicy } from "./pdf-url-policy"
-import type { PdfRenderRuntime } from "./pdf/pdf-render-runtime"
+import type { PdfPasswordHandler, PdfRenderRuntime } from "./pdf/pdf-render-runtime"
 
 export interface PdfViewerProps {
   src?: string
@@ -13,6 +13,10 @@ export interface PdfViewerProps {
   pdfiumWasmUrl?: string
   /** Maximum accepted PDF source size in bytes. Defaults to 50 MiB. */
   maxFileSize?: number
+  /** Password for encrypted PDF documents. */
+  password?: string
+  /** Invoked when an encrypted PDF needs a password. */
+  onPassword?: PdfPasswordHandler
   fileName?: string
   defaultZoom?: number
   className?: string

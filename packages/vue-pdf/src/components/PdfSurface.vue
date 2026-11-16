@@ -98,6 +98,7 @@ import {
 } from "../pdf-url-policy"
 import {
   createPdfRenderRuntime,
+  type PdfPasswordHandler,
   type PdfRenderDocument,
   type PdfRenderRect,
   type PdfRenderRuntime,
@@ -151,6 +152,8 @@ const props = withDefaults(
     runtime?: PdfRenderRuntime
     pdfiumWasmUrl?: string
     maxFileSize?: number
+    password?: string
+    onPassword?: PdfPasswordHandler
     className?: string
     /** Controlled zoom factor. 1 = 100%. */
     zoom?: number
@@ -272,6 +275,22 @@ function referenceContext(): PdfReferenceContext {
   return { revision: documentRevision.value, document, runtime }
 }
 
+function ensurePageContentHash(pageIndex: number): Promise<void> | undefined {
+  const document = renderDocument.value
+  const runtime = runtimeForDocument
+  if (!document || !runtime || pageIndex < 0 || pageIndex >= document.pageCount) return undefined
+  const page = document.pages[pageIndex]
+  if (!page || page.contentHash) return undefined
+  if (typeof runtime.getPageContentHash !== "function") return undefined
+  return runtime.getPageContentHash(document, pageIndex)
+    .then(() => undefined)
+    .catch(() => {
+      // A content digest is optional metadata; fall back to the geometry-only
+      // page signature when text extraction is unavailable.
+      return undefined
+    })
+}
+
 function emitReferenceError(operation: OfficeReferenceError["operation"], code: OfficeReferenceError["code"], message: string, referenceId?: string): void {
   emit("referenceError", { code, operation, format: "pdf", recoverable: true, ...(referenceId ? { referenceId } : {}), message })
 }
@@ -361,7 +380,15 @@ function finishRegion(event: PointerEvent, cancelled: boolean): void {
     emit("selectionCancel", { mode: "region", reason: cancelled ? "pointer-cancel" : "programmatic" })
     return
   }
-  confirmDraft(createPdfRegionReferenceDraft(referenceContext(), { space: "page", pageIndex: gesture.pageIndex, rect }), event.pointerType === "touch" ? "touch" : "pointer")
+  const context = referenceContext()
+  const pending = ensurePageContentHash(gesture.pageIndex)
+  const trigger = event.pointerType === "touch" ? "touch" : "pointer"
+  const confirmRegion = () => {
+    if (renderDocument.value?.id !== context.document.id) return
+    confirmDraft(createPdfRegionReferenceDraft(context, { space: "page", pageIndex: gesture.pageIndex, rect }), trigger)
+  }
+  if (pending) void pending.then(confirmRegion)
+  else confirmRegion()
 }
 
 function onSurfacePointerDown(event: PointerEvent, pageIndex: number): void {
@@ -386,7 +413,19 @@ function onSurfacePointerCancel(event: PointerEvent): void {
 }
 function onSurfaceClick(event: MouseEvent, pageIndex: number): void {
   if (selectionMode.value === "content") onSelectionClick(event, pageIndex)
-  else if (selectionMode.value === "object") confirmDraft(pageCandidate(pageIndex).draft, event.detail === 0 ? "keyboard" : "pointer", pageCandidate(pageIndex).preview, event.shiftKey)
+  else if (selectionMode.value === "object") {
+    const context = referenceContext()
+    const trigger = event.detail === 0 ? "keyboard" : "pointer"
+    const additive = event.shiftKey
+    const confirmPage = () => {
+      if (renderDocument.value?.id !== context.document.id) return
+      const candidate = pageCandidate(pageIndex)
+      confirmDraft(candidate.draft, trigger, candidate.preview, additive)
+    }
+    const pending = ensurePageContentHash(pageIndex)
+    if (pending) void pending.then(confirmPage)
+    else confirmPage()
+  }
 }
 function onRegionKeyboardCancel(): void {
   regionGesture.value = null; regionRect.value = null; regionPageIndex.value = null
@@ -442,7 +481,11 @@ async function selectRuntime(): Promise<PdfRenderRuntime> {
   const wasmUrl = props.pdfiumWasmUrl?.trim() || undefined
   if (!ownedRuntime || ownedRuntimeWasmUrl !== wasmUrl) {
     if (ownedRuntime) await ownedRuntime.dispose()
-    ownedRuntime = createPdfRenderRuntime({ wasmUrl })
+    ownedRuntime = createPdfRenderRuntime({
+      wasmUrl,
+      password: props.password,
+      onPassword: props.onPassword,
+    })
     ownedRuntimeWasmUrl = wasmUrl
   }
   return ownedRuntime
@@ -521,6 +564,7 @@ async function renderAllPages(requestId: number, parentSignal?: AbortSignal): Pr
       if (slot.url) URL.revokeObjectURL(slot.url)
       slot.url = url
       slot.state = "ready"
+      void ensurePageContentHash(i)
     } catch (err) {
       if ((err as Error)?.name === "AbortError" || controller.signal.aborted) return
       slot.state = "error"
@@ -556,7 +600,11 @@ async function load(): Promise<void> {
       verified.bytes.byteOffset,
       verified.bytes.byteOffset + verified.bytes.byteLength,
     ) as ArrayBuffer
-    openedDocument = await selectedRuntime.openDocument(content, { signal: task.signal })
+    openedDocument = await selectedRuntime.openDocument(content, {
+      signal: task.signal,
+      password: props.password,
+      onPassword: props.onPassword,
+    })
     task.assertCurrent()
     if (openedDocument.pageCount <= 0) throw new Error("PDF document contains no pages.")
     runtimeForDocument = selectedRuntime
@@ -865,7 +913,10 @@ async function commitSelectionRange(
     emit("selectionChange", next)
     if (selectionMode.value === "content") {
       try {
-        const draft = createPdfTextReferenceDraft(referenceContext(), next)
+        const context = referenceContext()
+        await ensurePageContentHash(pageIndex)
+        if (renderDocument.value?.id !== context.document.id) return
+        const draft = createPdfTextReferenceDraft(context, next)
         confirmDraft(draft, "pointer", {
           label: text.length > 80 ? `${text.slice(0, 77)}…` : text,
           path: [{ kind: "document", label: "PDF" }, { kind: "page", label: `Page ${pageIndex + 1}` }, { kind: "text-range", label: "Selected text" }],

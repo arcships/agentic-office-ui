@@ -21,7 +21,7 @@ import "@arcships/vue-pdf/style.css"
 </template>
 ```
 
-正常 PDF 支持查看、翻页、缩放、旋转、缩略图、搜索和下载。PDF 唯一的公开文件拒绝上限是整份文件体积 `maxFileSize`，默认 `50 MiB`，宿主可调整。
+正常 PDF 支持查看、翻页、缩放、旋转、缩略图、搜索和下载。PDF 唯一的公开文件拒绝上限是整份文件体积 `maxFileSize`，默认 `50 MiB`，宿主可调整。加密 PDF 可通过 `password` 或 `onPassword` 提供密码；无法取得密码时错误码为 `ENCRYPTED`。
 
 `PdfSurface` 提供最小嵌入渲染：全部页面垂直堆叠滚动，无工具栏/缩略图/搜索栏。宿主可通过 `v-model:zoom` 接入 50%–200% 手势缩放，也可继续使用 expose zoom 和 scrollToPage。
 
@@ -40,7 +40,7 @@ const draft = createPdfTextReferenceDraft(context, selection)
 const result = await resolvePdfReference(context, { ...draft, referenceId })
 ```
 
-字符范围在同修订内精确验证；修订变化后，唯一文字匹配返回 `relocated`，重复文字返回 `ambiguous`，删除返回 `not-found`。页面和人工区域只有在页序与尺寸/旋转签名未变时才迁移。
+字符范围在同修订内精确验证；修订变化后，唯一文字匹配返回 `relocated`，重复文字返回 `ambiguous`，删除返回 `not-found`。页面和人工区域只有在页序、尺寸/旋转以及可用的页面文字摘要均未变时才迁移；新引用会带上页面文字摘要，避免同尺寸换内容被误认为同一页。
 
 `PdfSurface` 接受受控的 `selectionMode="content | object | region"`：文字选择、页面点击和区域拖选都会发出统一 `referenceConfirm`，同时保留原始 `selectionChange`。宿主可通过 expose 的 `resolveReference()` 在文件更新后重新定位；确认后的引用集合和 Agent 工作流不由组件保存。
 
@@ -60,6 +60,8 @@ import { createPdfRenderRuntime, bundledPdfiumWasmUrl } from "@arcships/vue-pdf"
 
 const runtime = createPdfRenderRuntime({ pdfiumWasmUrl: bundledPdfiumWasmUrl })
 ```
+
+单页渲染在进入 PDFium 前校验 `scale`、`dpr` 和旋转，并按 `maxRenderPixels`（默认 32 兆像素）拒绝超预算请求。Runtime 不会修改全局 `URL.createObjectURL`；若宿主有严格 CSP，需要允许 Worker 使用 `blob:` 脚本。
 
 ## 文档
 

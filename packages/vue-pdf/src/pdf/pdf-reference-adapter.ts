@@ -18,6 +18,14 @@ import type {
   PdfRenderRuntime,
   PdfSearchHit,
 } from "./pdf-render-runtime"
+import {
+  fnv1a32,
+  isPdfPageContentSignature,
+  isPdfPageSignature,
+  pdfPageAncestorKeys,
+  pdfPageBaseSignature,
+  pdfPageContentSignature,
+} from "./pdf-page-signature"
 
 export type PdfOfficeReference = Extract<
   OfficeObjectReference,
@@ -32,7 +40,9 @@ export type PdfOfficeReferenceDraft = Extract<
 export interface PdfReferenceContext {
   revision: OfficeDocumentRevision & { format: "pdf" }
   document: PdfRenderDocument
-  runtime: Pick<PdfRenderRuntime, "getTextSlices" | "search">
+  runtime: Pick<PdfRenderRuntime, "getTextSlices" | "search"> & {
+    getPageContentHash?: PdfRenderRuntime["getPageContentHash"]
+  }
 }
 
 export interface PdfTextReferenceSelection {
@@ -82,15 +92,7 @@ function pdfTextReliability(text: string): OfficeObjectReliability {
 }
 
 function textContentHash(text: string): string {
-  let hash = 0x811c9dc5
-  for (let index = 0; index < text.length; index += 1) {
-    const code = text.charCodeAt(index)
-    hash ^= code & 0xff
-    hash = Math.imul(hash, 0x01000193)
-    hash ^= code >>> 8
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return `fnv1a32:${text.length}:${(hash >>> 0).toString(16).padStart(8, "0")}`
+  return fnv1a32(text)
 }
 
 function hasMatchingTextFingerprint(text: string, fingerprint?: OfficeObjectFingerprint): boolean {
@@ -129,12 +131,17 @@ function pageAt(context: PdfReferenceContext, pageIndex: number): PdfRenderPageI
   return Number.isSafeInteger(pageIndex) && pageIndex >= 0 ? context.document.pages[pageIndex] : undefined
 }
 
-function pageSignature(page: PdfRenderPageInfo): string {
-  return `pdf-page-v1:${page.width}:${page.height}:${page.rotation}`
-}
-
 function pageSignatureMatches(reference: PdfOfficeReference, page: PdfRenderPageInfo): boolean {
-  return reference.fingerprint?.ancestorKeys?.includes(pageSignature(page)) === true
+  const keys = reference.fingerprint?.ancestorKeys ?? []
+  const pageKeys = keys.filter(isPdfPageSignature)
+  if (!pageKeys.length) return false
+  if (!pageKeys.filter((key) => !isPdfPageContentSignature(key)).every((key) => key === pdfPageBaseSignature(page))) {
+    return false
+  }
+  const contentKeys = pageKeys.filter(isPdfPageContentSignature)
+  if (!contentKeys.length) return true
+  const current = pdfPageContentSignature(page)
+  return !!current && contentKeys.includes(current)
 }
 
 function assertPageRegion(region: Extract<ManualRegionLocator, { space: "page" }>, pageCount: number): void {
@@ -184,7 +191,7 @@ function textFingerprint(text: string, page: PdfRenderPageInfo): OfficeObjectFin
   return {
     ...(text.length <= TEXT_QUOTE_LIMIT ? { exactText: text } : {}),
     contentHash: textContentHash(text),
-    ancestorKeys: [pageSignature(page)],
+    ancestorKeys: pdfPageAncestorKeys(page),
   }
 }
 
@@ -237,7 +244,7 @@ export function createPdfPageReferenceDraft(
     kind: "page",
     source: "native",
     locator: { type: "format", format: "pdf", value: { kind: "page", pageIndex } },
-    fingerprint: { ancestorKeys: [pageSignature(page)] },
+    fingerprint: { ancestorKeys: pdfPageAncestorKeys(page) },
     reliability: copyReliability(PDF_PAGE_RELIABILITY),
   }
 }
@@ -255,7 +262,7 @@ export function createPdfRegionReferenceDraft(
     kind: "region",
     source: "manual",
     locator: { type: "manual-region", format: "pdf", value: region },
-    fingerprint: { ancestorKeys: [pageSignature(page)] },
+    fingerprint: { ancestorKeys: pdfPageAncestorKeys(page) },
     fallbackRegion: region,
     reliability: copyReliability(PDF_REGION_RELIABILITY),
   }
@@ -360,6 +367,26 @@ function throwIfAborted(signal?: AbortSignal): void {
   throw error
 }
 
+async function ensureCurrentPageContentHash(
+  context: PdfReferenceContext,
+  page: PdfRenderPageInfo,
+  reference: PdfOfficeReference,
+  signal?: AbortSignal,
+): Promise<void> {
+  const keys = reference.fingerprint?.ancestorKeys ?? []
+  if (!keys.some(isPdfPageContentSignature) || page.contentHash) return
+  const getPageContentHash = context.runtime.getPageContentHash
+  if (typeof getPageContentHash !== "function") return
+  try {
+    const hash = await getPageContentHash.call(context.runtime, context.document, page.index, { signal })
+    if (typeof hash === "string" && hash) page.contentHash = hash
+  } catch (error) {
+    throwIfAborted(signal)
+    if ((error as Error)?.name === "AbortError") throw error
+    throw error
+  }
+}
+
 async function readTextAtLocator(
   context: PdfReferenceContext,
   locator: Extract<PdfObjectLocator, { kind: "text-range" }>,
@@ -441,9 +468,10 @@ export async function resolvePdfReference(
     if (sameRevision(pdfReference.document, context.revision)) {
       return { status: "exact", reference: pdfReference, descriptor: simpleDescriptor(pdfReference) }
     }
-    if (!pdfReference.fingerprint?.ancestorKeys?.some((key) => key.startsWith("pdf-page-v1:"))) {
+    if (!pdfReference.fingerprint?.ancestorKeys?.some(isPdfPageSignature)) {
       return { status: "unsupported", reasonCode: "pdf.page-signature-unavailable" }
     }
+    await ensureCurrentPageContentHash(context, page, pdfReference, signal)
     if (!pageSignatureMatches(pdfReference, page)) {
       return { status: "not-found", reasonCode: "pdf.page-signature-changed" }
     }
