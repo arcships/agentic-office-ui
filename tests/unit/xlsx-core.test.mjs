@@ -4,11 +4,11 @@ import { createRequire } from "node:module";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
-const requireFromVueXlsx = createRequire(
-  new URL("../../packages/vue-xlsx/package.json", import.meta.url),
-);
 const requireFromXlsxCore = createRequire(
   new URL("../../packages/xlsx-core/package.json", import.meta.url),
+);
+const { strFromU8, strToU8, unzipSync, zipSync } = await import(
+  pathToFileURL(requireFromXlsxCore.resolve("fflate")).href
 );
 const {
   DOMParser: XmlDomParser,
@@ -19,10 +19,10 @@ globalThis.DOMParser ??= XmlDomParser;
 globalThis.Node ??= XmlNode;
 globalThis.XMLSerializer ??= XmlSerializer;
 const core = await import(
-  pathToFileURL(requireFromVueXlsx.resolve("@arcships/xlsx-core")).href
+  pathToFileURL(requireFromXlsxCore.resolve("@arcships/xlsx-core")).href
 );
 const runtimeEntry = await import(
-  pathToFileURL(requireFromVueXlsx.resolve("@arcships/xlsx-core/runtime")).href
+  pathToFileURL(requireFromXlsxCore.resolve("@arcships/xlsx-core/runtime")).href
 );
 const samples = new URL("../../apps/demo/public/samples/", import.meta.url);
 
@@ -30,7 +30,29 @@ function bytesFromFile(name) {
   return new Uint8Array(readFileSync(new URL(name, samples)));
 }
 
-const wasmPath = requireFromVueXlsx.resolve(
+const XML_PREFIX = String.raw`(?:[\w.-]+:)?`;
+const SERIES_XML_PATTERN = new RegExp(
+  `<${XML_PREFIX}ser>([\\s\\S]*?)</${XML_PREFIX}ser>`,
+);
+const SERIES_TITLE_XML_PATTERN = new RegExp(
+  `<${XML_PREFIX}tx>[\\s\\S]*?</${XML_PREFIX}tx>`,
+);
+
+function bytesWithoutFirstChartSeriesTitle(name, chartPath = "xl/charts/chart1.xml") {
+  const archive = unzipSync(bytesFromFile(name));
+  const chartXml = strFromU8(archive[chartPath]);
+  let removed = false;
+  const withoutTitle = chartXml.replace(SERIES_XML_PATTERN, (seriesXml) => {
+    const next = seriesXml.replace(SERIES_TITLE_XML_PATTERN, "");
+    removed = next !== seriesXml;
+    return next;
+  });
+  assert.equal(removed, true, "fixture chart series must contain a tx title");
+  archive[chartPath] = strToU8(withoutTitle);
+  return zipSync(archive);
+}
+
+const wasmPath = requireFromXlsxCore.resolve(
   "@arcships/xlsx-core/assets/duke_sheets_wasm_bg.wasm",
 );
 const wasmBytes = readFileSync(wasmPath);
@@ -198,6 +220,29 @@ test("XLSX resolves a chartsheet drawing into a renderable chart", () => {
     assert.equal(chart.chartType, "ColumnClustered");
     assert.equal(chart.title, "Revenue by Quarter");
     assert.equal(chart.editable, false);
+    assert.deepEqual(chart.series[0].categories, ["Q1", "Q2", "Q3", "Q4"]);
+    assert.deepEqual(chart.series[0].values, [120000, 145000, 168000, 210000]);
+  } finally {
+    workbook.free();
+  }
+});
+
+test("XLSX loads chart workbooks whose series have no tx title", () => {
+  const bytes = bytesWithoutFirstChartSeriesTitle("charts-images.xlsx");
+  const workbook = wasm.Workbook.fromBytes(bytes);
+  try {
+    const imageAssets = core.parseWorkbookChartStyleAssets(bytes);
+    const assets = core.loadWorkbookChartAssets(
+      workbook,
+      imageAssets,
+      new Map([[0, 0]]),
+    );
+    const charts = assets.chartsByWorkbookSheetIndex[0] ?? [];
+    assert.equal(charts.length, 1);
+    const chart = charts[0];
+    assert.equal(chart.chartType, "ColumnClustered");
+    assert.equal(chart.series.length, 1);
+    assert.equal(chart.series[0].name, undefined);
     assert.deepEqual(chart.series[0].categories, ["Q1", "Q2", "Q3", "Q4"]);
     assert.deepEqual(chart.series[0].values, [120000, 145000, 168000, 210000]);
   } finally {

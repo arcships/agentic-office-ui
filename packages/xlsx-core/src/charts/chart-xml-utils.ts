@@ -99,7 +99,10 @@ export function getFirstLocalChild(parent: ParentNode, localName: string) {
   return getLocalChildren(parent, localName)[0] ?? null;
 }
 
-export function getFirstLocalDescendant(parent: ParentNode, localName: string) {
+export function getFirstLocalDescendant(parent: ParentNode | null, localName: string) {
+  if (!parent) {
+    return null;
+  }
   return getLocalDescendants(parent, localName)[0] ?? null;
 }
 
