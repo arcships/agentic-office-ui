@@ -57,6 +57,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, watchEffect } from "vue"
+import { createTouchGestureTracker } from "@arcships/office-runtime/touch-gestures"
 import type {
   DocModel,
   DocxComment,
@@ -735,11 +736,11 @@ async function onDrop(event: DragEvent): Promise<void> {
 }
 
 // ── Context menu ─────────────────────────────────────────────────────
-function onContextMenu(event: MouseEvent): void {
+function emitContextMenuAt(clientX: number, clientY: number, target?: EventTarget | null): void {
   const container = scrollContainerRef.value
   if (!container) return
   const rect = container.getBoundingClientRect()
-  const clickY = event.clientY - rect.top + container.scrollTop
+  const clickY = clientY - rect.top + container.scrollTop
   let pageIndex = 0
   for (let i = 0; i < pageCount.value; i++) {
     const top = pageOffsets.value[i]
@@ -748,12 +749,29 @@ function onContextMenu(event: MouseEvent): void {
   }
   emit("contextMenu", {
     pageIndex,
-    clientX: event.clientX,
-    clientY: event.clientY,
-    containerX: event.clientX - rect.left,
-    containerY: event.clientY - rect.top,
-    target: event.target,
+    clientX,
+    clientY,
+    containerX: clientX - rect.left,
+    containerY: clientY - rect.top,
+    target,
   })
+}
+
+const touchGestures = createTouchGestureTracker({
+  onLongPress: (pointer) => emitContextMenuAt(pointer.clientX, pointer.clientY, pointer.target as EventTarget | null),
+})
+
+function onTouchPointerDown(event: PointerEvent): void { touchGestures.pointerDown(event) }
+function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMove(event) }
+function onTouchPointerUp(event: PointerEvent): void { touchGestures.pointerUp(event) }
+function onTouchPointerCancel(event: PointerEvent): void { touchGestures.pointerCancel(event) }
+
+function onContextMenu(event: MouseEvent): void {
+  if (touchGestures.shouldSuppressContextMenu(event.clientX, event.clientY)) {
+    event.preventDefault()
+    return
+  }
+  emitContextMenuAt(event.clientX, event.clientY, event.target)
 }
 
 // ── Selection tracking ───────────────────────────────────────────────
@@ -798,6 +816,10 @@ onMounted(() => {
     if (Number.isFinite(height) && height > 0) viewportHeight.value = height
     const width = scrollContainerRef.value.clientWidth
     if (Number.isFinite(width) && width > 0) containerWidth.value = width
+    scrollContainerRef.value.addEventListener("pointerdown", onTouchPointerDown, { passive: true })
+    scrollContainerRef.value.addEventListener("pointermove", onTouchPointerMove, { passive: true })
+    scrollContainerRef.value.addEventListener("pointerup", onTouchPointerUp)
+    scrollContainerRef.value.addEventListener("pointercancel", onTouchPointerCancel)
   }
   const ResizeObserverConstructor = globalThis.ResizeObserver
   if (typeof ResizeObserverConstructor !== "function") {
@@ -820,6 +842,12 @@ onUnmounted(() => {
   containerObserver?.disconnect()
   containerObserver = undefined
   if (scrollTimer !== null) clearTimeout(scrollTimer)
+  touchGestures.reset()
+  const container = scrollContainerRef.value
+  container?.removeEventListener("pointerdown", onTouchPointerDown)
+  container?.removeEventListener("pointermove", onTouchPointerMove)
+  container?.removeEventListener("pointerup", onTouchPointerUp)
+  container?.removeEventListener("pointercancel", onTouchPointerCancel)
 })
 
 // ── Expose ─────────────────────────────────────────────────────────
@@ -853,6 +881,7 @@ defineExpose({
   overflow-y: auto;
   overflow-x: hidden;
   background: #f3f4f6;
+  touch-action: pan-x pan-y;
 }
 
 @media print {

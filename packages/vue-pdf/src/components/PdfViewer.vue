@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures"
 import {
   createLatestTaskCoordinator,
   createOfficeTaskSequence,
@@ -353,6 +354,17 @@ function zoomOut(): void {
   applyZoom([...zoomOptions].reverse().find((value) => value < zoom.value))
 }
 
+const touchGestures = createTouchGestureTracker({
+  getZoom: () => zoom.value,
+  onZoom: (next) => { zoom.value = next },
+  onDoubleTap: () => { zoom.value = nextDoubleTapZoom(zoom.value) },
+})
+
+function onTouchPointerDown(event: PointerEvent): void { touchGestures.pointerDown(event) }
+function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMove(event) }
+function onTouchPointerUp(event: PointerEvent): void { touchGestures.pointerUp(event) }
+function onTouchPointerCancel(event: PointerEvent): void { touchGestures.pointerCancel(event) }
+
 function rotateClockwise(): void {
   const anchor = measureAnchor()
   const next = ((rotation.value + 90) % 360) as PdfRotation
@@ -688,12 +700,24 @@ watch([activePage, zoom, rotation, renderDpr], () => {
 
 onMounted(() => {
   stopDprWatch = watchDevicePixelRatio((next) => { renderDpr.value = next })
+  const element = frameRef.value
+  if (!element) return
+  element.addEventListener("pointerdown", onTouchPointerDown, { passive: true })
+  element.addEventListener("pointermove", onTouchPointerMove, { passive: true })
+  element.addEventListener("pointerup", onTouchPointerUp)
+  element.addEventListener("pointercancel", onTouchPointerCancel)
 })
 
 onBeforeUnmount(() => {
   unmounted = true
   stopDprWatch?.()
   stopDprWatch = undefined
+  touchGestures.reset()
+  const frame = frameRef.value
+  frame?.removeEventListener("pointerdown", onTouchPointerDown)
+  frame?.removeEventListener("pointermove", onTouchPointerMove)
+  frame?.removeEventListener("pointerup", onTouchPointerUp)
+  frame?.removeEventListener("pointercancel", onTouchPointerCancel)
   latestRequestId++
   latestTaskId = undefined
   pdfLoadCoordinator.dispose()
@@ -879,7 +903,7 @@ onBeforeUnmount(() => {
 .thumbnail img { display: block; max-width: 106px; max-height: 86px; object-fit: contain; border: 1px solid var(--pdf-control-border); background: var(--pdf-control-bg); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); filter: var(--pdf-page-filter); }
 .thumbnail-placeholder { display: grid; place-items: center; width: 74px; height: 84px; border: 1px solid var(--pdf-control-border); background: var(--pdf-control-bg); color: var(--pdf-muted); }
 .thumbnail.active { border-color: #2563eb; background: color-mix(in srgb, #2563eb 12%, var(--pdf-panel-bg)); color: var(--pdf-link); font-weight: 700; }
-.pdf-frame-wrap { flex: 1; min-width: 0; min-height: 0; overflow: auto; position: relative; padding: 24px; }
+.pdf-frame-wrap { flex: 1; min-width: 0; min-height: 0; overflow: auto; position: relative; padding: 24px; touch-action: pan-x pan-y; }
 .pdf-page-stage { display: flex; min-width: min-content; min-height: 100%; align-items: flex-start; justify-content: center; position: relative; }
 .pdf-page-render { width: fit-content; margin: 0 auto; }
 .pdf-page-image { display: block; max-width: none; height: auto; border: 0; background: var(--pdf-control-bg); box-shadow: var(--pdf-page-shadow); filter: var(--pdf-page-filter); }
@@ -909,6 +933,17 @@ onBeforeUnmount(() => {
     height: auto !important;
     filter: none !important;
     box-shadow: none !important;
+  }
+}
+
+@media (pointer: coarse) {
+  .pdf-toolbar button,
+  .pdf-toolbar select,
+  .pdf-toolbar input {
+    min-height: 44px;
+  }
+  .pdf-toolbar button {
+    min-width: 44px;
   }
 }
 </style>

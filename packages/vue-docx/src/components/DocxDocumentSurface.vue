@@ -57,6 +57,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue"
 import { clampSurfaceZoom, nextSurfaceZoom } from "@arcships/office-runtime/gesture-zoom"
+import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures"
 import {
   createSurfaceSearchSession,
 } from "@arcships/office-runtime"
@@ -1120,6 +1121,23 @@ function onGestureChange(event: WebKitGestureEvent): void {
   )
 }
 
+const touchGestures = createTouchGestureTracker({
+  isEnabled: () => selectionMode.value === "content" && !props.editable,
+  isDoubleTapEnabled: () => controlledZoom() !== undefined,
+  getZoom: controlledZoom,
+  onZoom: (zoom, center) => requestGestureZoom(zoom, center.clientX, center.clientY),
+  onDoubleTap: (pointer) => {
+    const current = controlledZoom()
+    if (current === undefined) return
+    requestGestureZoom(nextDoubleTapZoom(current), pointer.clientX, pointer.clientY)
+  },
+})
+
+function onTouchPointerDown(event: PointerEvent): void { touchGestures.pointerDown(event) }
+function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMove(event) }
+function onTouchPointerUp(event: PointerEvent): void { touchGestures.pointerUp(event) }
+function onTouchPointerCancel(event: PointerEvent): void { touchGestures.pointerCancel(event) }
+
 function attachGestureListeners(): void {
   cleanupGestureListeners?.()
   const element = viewerRootRef.value?.scrollContainer
@@ -1129,11 +1147,19 @@ function attachGestureListeners(): void {
   element.addEventListener("gesturestart", onGestureStart, { passive: false })
   element.addEventListener("gesturechange", onGestureChange as EventListener, { passive: false })
   element.addEventListener("gestureend", onGestureEnd)
+  element.addEventListener("pointerdown", onTouchPointerDown, { passive: true })
+  element.addEventListener("pointermove", onTouchPointerMove, { passive: true })
+  element.addEventListener("pointerup", onTouchPointerUp)
+  element.addEventListener("pointercancel", onTouchPointerCancel)
   cleanupGestureListeners = () => {
     element.removeEventListener("wheel", onWheel)
     element.removeEventListener("gesturestart", onGestureStart)
     element.removeEventListener("gesturechange", onGestureChange as EventListener)
     element.removeEventListener("gestureend", onGestureEnd)
+    element.removeEventListener("pointerdown", onTouchPointerDown)
+    element.removeEventListener("pointermove", onTouchPointerMove)
+    element.removeEventListener("pointerup", onTouchPointerUp)
+    element.removeEventListener("pointercancel", onTouchPointerCancel)
   }
 }
 
@@ -1179,6 +1205,7 @@ onBeforeUnmount(() => {
   gestureToken += 1
   cancelCandidateFrame()
   visiblePageWaiters.clear()
+  touchGestures.reset()
   cleanupGestureListeners?.()
   cleanupSearchScrollListener?.()
   cleanupSearchSubscription?.()

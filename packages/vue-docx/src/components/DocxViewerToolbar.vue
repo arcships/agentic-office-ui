@@ -405,4 +405,15 @@ defineExpose({
   .docx-viewer-toolbar__leading { justify-content: space-between; }
   .docx-viewer-toolbar__actions { overflow-x: auto; }
 }
+
+@media (pointer: coarse) {
+  .docx-viewer-toolbar__icon-button,
+  .docx-viewer-toolbar__zoom,
+  .docx-viewer-toolbar__page input,
+  .docx-viewer-toolbar__search input,
+  .docx-viewer-toolbar__search button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
 </style>

@@ -91,6 +91,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import type { PageTextSlice, PdfPageGeometry, Position } from "@embedpdf/models"
 import { expandToWordBoundary, glyphAt, rectsWithinSlice } from "@embedpdf/plugin-selection"
 import { clampSurfaceZoom, nextSurfaceZoom } from "@arcships/office-runtime/gesture-zoom"
+import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures"
 import {
   createLatestTaskCoordinator,
   createOfficeTaskSequence,
@@ -1672,20 +1673,28 @@ function flushScrollFrame(): void {
   }
 }
 
-function onContextMenu(event: MouseEvent): void {
+function emitContextMenuAt(clientX: number, clientY: number): void {
   const el = scrollRef.value
   if (!el || !renderDocument.value) return
   const rect = el.getBoundingClientRect()
-  const clickY = event.clientY - rect.top + el.scrollTop
+  const clickY = clientY - rect.top + el.scrollTop
   const { offsets, heights } = pageLayout()
   const pageIndex = pageIndexAtPosition(offsets, heights, clickY)
   emit("contextMenu", {
     pageIndex,
-    clientX: event.clientX,
-    clientY: event.clientY,
-    containerX: event.clientX - rect.left,
-    containerY: event.clientY - rect.top,
+    clientX,
+    clientY,
+    containerX: clientX - rect.left,
+    containerY: clientY - rect.top,
   })
+}
+
+function onContextMenu(event: MouseEvent): void {
+  if (touchGestures.shouldSuppressContextMenu(event.clientX, event.clientY)) {
+    event.preventDefault()
+    return
+  }
+  emitContextMenuAt(event.clientX, event.clientY)
 }
 
 // ── Gesture zoom ─────────────────────────────────────────────────────
@@ -1709,6 +1718,24 @@ function controlledZoom(): number | undefined {
     ? clampSurfaceZoom(props.zoom)
     : undefined
 }
+
+const touchGestures = createTouchGestureTracker({
+  isEnabled: () => selectionMode.value === "content",
+  isDoubleTapEnabled: () => controlledZoom() !== undefined,
+  getZoom: controlledZoom,
+  onZoom: (zoom, center) => requestGestureZoom(zoom, center.clientX, center.clientY),
+  onDoubleTap: (pointer) => {
+    const current = controlledZoom()
+    if (current === undefined) return
+    requestGestureZoom(nextDoubleTapZoom(current), pointer.clientX, pointer.clientY)
+  },
+  onLongPress: (pointer) => emitContextMenuAt(pointer.clientX, pointer.clientY),
+})
+
+function onTouchPointerDown(event: PointerEvent): void { touchGestures.pointerDown(event) }
+function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMove(event) }
+function onTouchPointerUp(event: PointerEvent): void { touchGestures.pointerUp(event) }
+function onTouchPointerCancel(event: PointerEvent): void { touchGestures.pointerCancel(event) }
 
 function captureZoomAnchor(clientX: number, clientY: number): PageAnchor | undefined {
   if (typeof document === "undefined") return undefined
@@ -1828,6 +1855,10 @@ onMounted(() => {
   element.addEventListener("gesturestart", onGestureStart, { passive: false })
   element.addEventListener("gesturechange", onGestureChange as EventListener, { passive: false })
   element.addEventListener("gestureend", onGestureEnd)
+  element.addEventListener("pointerdown", onTouchPointerDown, { passive: true })
+  element.addEventListener("pointermove", onTouchPointerMove, { passive: true })
+  element.addEventListener("pointerup", onTouchPointerUp)
+  element.addEventListener("pointercancel", onTouchPointerCancel)
   measureViewportHeight()
   stopDprWatch = watchDevicePixelRatio((next) => { renderDpr.value = next })
   const ResizeObserverConstructor = globalThis.ResizeObserver
@@ -1915,11 +1946,16 @@ onBeforeUnmount(async () => {
   }
   resizeObserver?.disconnect()
   resizeObserver = undefined
+  touchGestures.reset()
   const element = scrollRef.value
   element?.removeEventListener("wheel", onZoomWheel)
   element?.removeEventListener("gesturestart", onGestureStart)
   element?.removeEventListener("gesturechange", onGestureChange as EventListener)
   element?.removeEventListener("gestureend", onGestureEnd)
+  element?.removeEventListener("pointerdown", onTouchPointerDown)
+  element?.removeEventListener("pointermove", onTouchPointerMove)
+  element?.removeEventListener("pointerup", onTouchPointerUp)
+  element?.removeEventListener("pointercancel", onTouchPointerCancel)
   cancelRender()
   pdfLoadCoordinator.dispose()
   pdfTaskSequence.dispose()
@@ -1935,6 +1971,7 @@ onBeforeUnmount(async () => {
   overflow-y: auto;
   overflow-x: auto;
   min-height: 0;
+  touch-action: pan-x pan-y;
   min-width: 0;
   --pdf-surface-bg: #525659;
   --pdf-surface-page-filter: none;

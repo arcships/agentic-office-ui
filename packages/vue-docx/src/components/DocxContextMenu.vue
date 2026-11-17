@@ -3,7 +3,7 @@
     <div
       v-if="visible"
       class="docx-context-menu-backdrop"
-      @click="close"
+      @pointerdown="close"
       @contextmenu.prevent="close"
     />
     <div
@@ -581,6 +581,9 @@ function onMenuKeydown(event: KeyboardEvent): void {
 .docx-context-menu-color-btn:focus-visible {
   outline: 2px solid #3b82f6;
   outline-offset: 1px;
+}
+@media (pointer: coarse) {
+  .docx-context-menu-item { min-height: 44px; }
 }
 .docx-context-menu-item--active {
   background: #eff6ff;

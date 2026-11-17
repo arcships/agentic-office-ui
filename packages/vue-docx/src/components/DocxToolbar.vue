@@ -860,4 +860,14 @@ function onImport(): void {
   .docx-toolbar-action span { display: none; }
   .docx-toolbar-action { padding: 0; width: 32px; }
 }
+
+@media (pointer: coarse) {
+  .docx-toolbar-action,
+  .docx-toolbar-select,
+  .docx-toolbar-page-control input {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .docx-toolbar-toggle { min-height: 44px; }
+}
 </style>

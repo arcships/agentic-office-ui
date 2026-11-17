@@ -247,4 +247,18 @@ defineExpose({ openSearch });
   .xlsx-toolbar__filename { flex: 1; max-width: none; }
   .xlsx-toolbar__actions { justify-content: flex-end; overflow-x: auto; }
 }
+
+@media (pointer: coarse) {
+  .xlsx-toolbar__icon-button,
+  .xlsx-toolbar__zoom-select,
+  .xlsx-toolbar__search-panel input,
+  .xlsx-toolbar__search-summary button,
+  .xlsx-toolbar__search-result {
+    min-height: 44px;
+  }
+  .xlsx-toolbar__icon-button {
+    min-width: 44px;
+  }
+  .xlsx-toolbar__search-result { padding-block: 10px; }
+}
 </style>

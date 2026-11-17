@@ -327,4 +327,11 @@ onUnmounted(() => {
   stroke-width: 1.8;
   width: 16px;
 }
+
+@media (pointer: coarse) {
+  .xlsx-sheettabs button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
 </style>

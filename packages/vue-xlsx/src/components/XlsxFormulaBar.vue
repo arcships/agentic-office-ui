@@ -181,4 +181,12 @@ function onFormulaCompositionEnd() {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+@media (pointer: coarse) {
+  .xlsx-formula-bar button,
+  .xlsx-formula-bar input,
+  .xlsx-formula-bar select {
+    min-height: 44px;
+  }
+}
 </style>

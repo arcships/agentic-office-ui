@@ -49,7 +49,7 @@
       :message="liveStatusMessage"
       :busy="controller.isLoading"
     />
-    <div class="xlsx-viewer__body">
+    <div ref="bodyRef" class="xlsx-viewer__body">
       <div
         v-if="controller.isLoading"
         class="xlsx-viewer__loading"
@@ -170,8 +170,10 @@
           :selection-fill-color="selectionFillColor"
         />
         <XlsxContextMenu
+          ref="contextMenuRef"
           :controller="controller"
           :target-element="gridElement"
+          :suppress-context-menu="touchGestures.shouldSuppressContextMenu"
         />
       </template>
     </div>
@@ -185,7 +187,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, ref, watch, type CSSProperties } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from "vue";
+import { clampSurfaceZoom } from "@arcships/office-runtime/gesture-zoom";
+import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures";
 import type { XlsxViewerController, XlsxCellAddress, XlsxCellStyleContext } from "@arcships/xlsx-core";
 import XlsxGrid from "./XlsxGrid.vue";
 import XlsxToolbar from "./XlsxToolbar.vue";
@@ -217,6 +221,8 @@ const props = withDefaults(
     showFormulaBar?: boolean;
     showImages?: boolean;
     showUpload?: boolean;
+    /** Enables trackpad, pinch and double-tap zoom for the composite viewer. */
+    enableGestureZoom?: boolean;
   }>(),
   {
     getCellStyle: null,
@@ -231,6 +237,7 @@ const props = withDefaults(
     showFormulaBar: true,
     showImages: true,
     showUpload: false,
+    enableGestureZoom: true,
   }
 );
 
@@ -290,8 +297,10 @@ const liveStatusMessage = computed(() => {
 
 type GridInstance = InstanceType<typeof XlsxGrid>;
 const viewerRef = ref<HTMLElement | null>(null);
+const bodyRef = ref<HTMLElement | null>(null);
 const toolbarRef = ref<InstanceType<typeof XlsxToolbar> | null>(null);
 const gridRef = ref<GridInstance | null>(null);
+const contextMenuRef = ref<{ openAt(clientX: number, clientY: number, target?: unknown): boolean } | null>(null);
 const gridViewport = ref({ scrollLeft: 0, scrollTop: 0 });
 const gridElement = computed<HTMLElement | null>(() => gridRef.value?.scrollContainer ?? null);
 const surfaceSearch = useXlsxSearch(
@@ -357,6 +366,89 @@ function onReadOnlyChange(value: boolean) {
   emit("update:readOnly", value);
 }
 
+// ── Gesture zoom (composite viewer) ─────────────────────────────────
+type GridZoomAnchor = NonNullable<ReturnType<GridInstance["captureZoomAnchor"]>>;
+
+let pendingAnchor: { anchor: GridZoomAnchor; requestedZoom: number; token: number } | undefined;
+let pendingZoom: number | undefined;
+let gestureToken = 0;
+
+function currentZoom(): number {
+  return clampSurfaceZoom(props.controller.zoomScale / 100);
+}
+
+function requestViewerZoom(nextZoom: number, clientX: number, clientY: number): void {
+  if (props.enableGestureZoom === false) return;
+  const current = currentZoom();
+  const target = clampSurfaceZoom(nextZoom);
+  if (target === (pendingZoom ?? current)) return;
+  const token = ++gestureToken;
+  const anchor = gridRef.value?.captureZoomAnchor(clientX, clientY) ?? null;
+  pendingZoom = target;
+  pendingAnchor = anchor ? { anchor, requestedZoom: target, token } : undefined;
+  props.controller.setZoomScale(target * 100);
+}
+
+const touchGestures = createTouchGestureTracker({
+  isEnabled: () => props.enableGestureZoom !== false,
+  isDoubleTapEnabled: () => effectiveReadOnly.value,
+  getZoom: currentZoom,
+  onZoom: (zoom, center) => requestViewerZoom(zoom, center.clientX, center.clientY),
+  onDoubleTap: (pointer) => requestViewerZoom(nextDoubleTapZoom(currentZoom()), pointer.clientX, pointer.clientY),
+  onLongPress: (pointer) => {
+    contextMenuRef.value?.openAt(pointer.clientX, pointer.clientY, pointer.target);
+  },
+});
+
+function onTouchPointerDown(event: PointerEvent): void { touchGestures.pointerDown(event); }
+function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMove(event); }
+function onTouchPointerUp(event: PointerEvent): void { touchGestures.pointerUp(event); }
+function onTouchPointerCancel(event: PointerEvent): void { touchGestures.pointerCancel(event); }
+
+watch(() => props.controller.zoomScale, (value) => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return;
+  const normalized = clampSurfaceZoom(value / 100);
+  const restore = pendingAnchor?.requestedZoom === normalized ? pendingAnchor : undefined;
+  pendingAnchor = undefined;
+  pendingZoom = undefined;
+  if (!restore) {
+    gestureToken += 1;
+    return;
+  }
+  void nextTick().then(() => {
+    const apply = () => {
+      if (restore.token === gestureToken) gridRef.value?.restoreZoomAnchor(restore.anchor);
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(apply);
+    else apply();
+  });
+});
+
+watch(() => props.controller.activeTabIndex, () => {
+  gestureToken += 1;
+  pendingAnchor = undefined;
+  pendingZoom = undefined;
+});
+
+onMounted(() => {
+  const element = bodyRef.value;
+  if (!element) return;
+  element.addEventListener("pointerdown", onTouchPointerDown, { passive: true });
+  element.addEventListener("pointermove", onTouchPointerMove, { passive: true });
+  element.addEventListener("pointerup", onTouchPointerUp);
+  element.addEventListener("pointercancel", onTouchPointerCancel);
+});
+
+onBeforeUnmount(() => {
+  gestureToken += 1;
+  touchGestures.reset();
+  const element = bodyRef.value;
+  element?.removeEventListener("pointerdown", onTouchPointerDown);
+  element?.removeEventListener("pointermove", onTouchPointerMove);
+  element?.removeEventListener("pointerup", onTouchPointerUp);
+  element?.removeEventListener("pointercancel", onTouchPointerCancel);
+});
+
 watch(surfaceSearch.searchState, (next) => {
   emit("searchStateChange", next);
 }, { immediate: true });
@@ -388,6 +480,7 @@ defineExpose({
   min-height: 0;
   min-width: 0;
   position: relative;
+  touch-action: pan-x pan-y;
 }
 
 .xlsx-viewer__loading,
