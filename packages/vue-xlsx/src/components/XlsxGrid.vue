@@ -294,6 +294,8 @@ interface GridMergeRegion {
 const workerCellCache = new Map<number, GridCellSnapshot>();
 const loadedWorkerBatches = new Set<string>();
 const pendingWorkerBatches = new Map<string, AbortController>();
+// Cells referenced by `formula` cfvos that the Worker has already been asked for.
+const requestedConditionalFormulaCells = new Set<number>();
 let workerCacheSheetIndex: number | null = null;
 let paintedMergeRegions: GridMergeRegion[] = [];
 // Anchor -> owning region and anchor -> top-left cell, both keyed by `cellKey`
@@ -838,6 +840,7 @@ function resetWorkerRows(sheetIndex: number | null) {
   pendingWorkerBatches.clear();
   loadedWorkerBatches.clear();
   workerCellCache.clear();
+  requestedConditionalFormulaCells.clear();
   workerCacheSheetIndex = sheetIndex;
   workerRowsRevision.value += 1;
 }
@@ -1132,6 +1135,49 @@ function conditionalRangeValues(scope: ConditionalFormatScope, rule: XlsxConditi
   return collectConditionalFormatValues(conditionalRuleBounds(scope, rule), scope, getGridCellDisplayValue);
 }
 
+/**
+ * Hydrates a cell referenced by a `formula` cfvo that the Worker has not sent
+ * yet. The repaint that follows the snapshot rebuilds the rule environment with
+ * the resolved value; a failed request is not retried until the sheet changes.
+ */
+function requestConditionalFormulaCell(sheetIndex: number, cell: XlsxCellAddress): void {
+  const load = props.controller.getCellSnapshotAsync;
+  if (!load || !props.controller.isWorkerBacked) return;
+  const key = workerCellKey(sheetIndex, cell.row, cell.col);
+  if (requestedConditionalFormulaCells.has(key)) return;
+  requestedConditionalFormulaCells.add(key);
+  void load(sheetIndex, cell.row, cell.col)
+    .then((snapshot) => {
+      if (!snapshot || workerCacheSheetIndex !== sheetIndex) return;
+      workerCellCache.set(key, { value: asWorkerCellValue(snapshot.displayValue) });
+      workerRowsRevision.value += 1;
+      schedulePaint();
+    })
+    .catch(() => undefined);
+}
+
+/**
+ * Sync value for a `formula` cfvo. `null` marks an empty cell (Excel reads it as
+ * 0); `undefined` marks a value that is not available yet, and the cfvo then
+ * falls back to its automatic bound instead of inventing a number.
+ */
+function readConditionalCellValue(cell: XlsxCellAddress): number | null | undefined {
+  const sheet = activeSheet.value;
+  if (!sheet) return undefined;
+  if (props.controller.isWorkerBacked) {
+    const cached = workerCellCache.get(workerCellKey(sheet.workbookSheetIndex, cell.row, cell.col));
+    if (cached === undefined) {
+      requestConditionalFormulaCell(sheet.workbookSheetIndex, cell);
+      return undefined;
+    }
+    if (!cached.value.trim()) return null;
+    return parseDisplayedNumber(localizeFormattedNumber(cached.value, cached.style?.numberFormat, props.controller.locale));
+  }
+  const text = props.controller.getCellDisplayValue(cell);
+  if (!text.trim()) return null;
+  return parseDisplayedNumber(text);
+}
+
 function conditionalEnvironmentFor(rule: XlsxConditionalFormatRule): ConditionalEnvironment {
   const sheet = activeSheet.value;
   if (!sheet) return createConditionalEnvironment(rule, [], () => undefined);
@@ -1140,6 +1186,7 @@ function conditionalEnvironmentFor(rule: XlsxConditionalFormatRule): Conditional
     rule,
     conditionalRangeValues(scope, rule),
     (color) => resolveWorkbookColor(color, sheet.themePalette) ?? undefined,
+    readConditionalCellValue,
   ));
 }
 

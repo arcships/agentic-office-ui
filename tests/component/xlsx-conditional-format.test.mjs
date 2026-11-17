@@ -285,6 +285,52 @@ test("negative data bars grow left from the zero axis with their own colour", ()
   );
 });
 
+test("data bars honour border, axis and gradient settings", () => {
+  const plain = rulesOfKind("dataBar", 4);
+  const plainEnvironment = conditionalFormat.createConditionalEnvironment(
+    plain,
+    ruleValues(plain),
+    resolveColor,
+  );
+  assert.equal(plainEnvironment.dataBar.border, false, "bars are unbordered unless the rule asks");
+  assert.equal(plainEnvironment.dataBar.gradient, true, "Excel data bars default to a gradient");
+
+  const styled = clone(plain);
+  styled.axisColor = { rgb: "#aabbcc" };
+  styled.border = true;
+  styled.borderColor = { rgb: "#112233" };
+  styled.gradient = false;
+  styled.negativeBorderColor = { rgb: "#445566" };
+  styled.negativeFillColor = { rgb: "#778899" };
+  const environment = conditionalFormat.createConditionalEnvironment(
+    styled,
+    ruleValues(styled),
+    resolveColor,
+  );
+  assert.equal(environment.dataBar.axisColor, "#aabbcc");
+  assert.equal(environment.dataBar.border, true);
+  assert.equal(environment.dataBar.borderColor, "#112233");
+  assert.equal(environment.dataBar.gradient, false);
+  assert.equal(environment.dataBar.negativeBorderColor, "#445566");
+  assert.equal(environment.dataBar.negativeFillColor, "#778899");
+
+  styled.negativeBarBorderColorSameAsPositive = true;
+  const sameBorder = conditionalFormat.createConditionalEnvironment(
+    styled,
+    ruleValues(styled),
+    resolveColor,
+  );
+  assert.equal(
+    sameBorder.dataBar.negativeBorderColor,
+    sameBorder.dataBar.borderColor,
+    "negativeBarBorderColorSameAsPositive reuses the positive border colour",
+  );
+
+  assert.match(GRID_SOURCE, /if \(style\.gradient\)/, "the grid draws the gradient");
+  assert.match(GRID_SOURCE, /if \(style\.border\)/, "the grid draws the bar border");
+  assert.match(GRID_SOURCE, /style\.axisColor/, "the grid draws the zero axis");
+});
+
 test("icon sets use their cfvo thresholds and the parsed icon ids", () => {
   const corpusRule = rulesOfKind("iconSet", 3);
   const bValues = ruleValues(corpusRule);
@@ -415,50 +461,222 @@ test("colour scales interpolate between their cfvo stops", () => {
   );
 });
 
-test("formula cfvos use their literal or fall back to the automatic bound", () => {
-  const base = clone(rulesOfKind("dataBar", 1));
-  const literal = clone(base);
-  literal.cfvos = [{ type: "formula", value: "=20" }, { type: "num", value: 40 }];
-  const literalEnvironment = conditionalFormat.createConditionalEnvironment(
-    literal,
-    ruleValues(literal),
-    resolveColor,
-  );
-  assert.deepEqual(
-    { high: literalEnvironment.bounds.high, low: literalEnvironment.bounds.low },
-    { high: 40, low: 20 },
-    "a literal formula cfvo is a fixed bound",
-  );
+// Reads the corpus the way the grid does: display string in, number or `null`
+// (empty) out; `undefined` stands for a cell the renderer cannot read yet.
+function readCorpusCell(cell) {
+  const text = String(worksheet.getFormattedValueAt(cell.row, cell.col)).trim();
+  if (!text) return null;
+  const value = Number(text.replace(/[,％%]/g, ""));
+  return Number.isFinite(value) ? value : null;
+}
 
-  const reference = clone(base);
-  reference.cfvos = [{ type: "formula", value: "$B$1" }, { type: "num", value: 40 }];
-  const referenceEnvironment = conditionalFormat.createConditionalEnvironment(
+function withFormulaBounds(rule, formulas) {
+  const cloneRule = clone(rule);
+  cloneRule.cfvos = formulas.map((value) => ({ type: "formula", value }));
+  return cloneRule;
+}
+
+test("formula cfvos evaluate real workbook references", () => {
+  const base = rulesOfKind("dataBar", 1);
+  // B1 is outside the A1:A30 rule range: the threshold comes from another cell.
+  const reference = withFormulaBounds(base, ["=$B$1", "=100"]);
+  const environment = conditionalFormat.createConditionalEnvironment(
     reference,
     ruleValues(reference),
     resolveColor,
+    readCorpusCell,
   );
-  assert.equal(referenceEnvironment.bounds.low, 2, "unresolvable formulas fall back to the range min");
-  assert.equal(referenceEnvironment.bounds.lowAutomatic, true);
+  assert.deepEqual(
+    { high: environment.bounds.high, low: environment.bounds.low },
+    { high: 100, low: -2 },
+    "$B$1 (-2) is the evaluated low bound, not the literal text or the range min",
+  );
+  assert.equal(environment.bounds.lowAutomatic, false, "an evaluated formula is a fixed bound");
+  assertClose(
+    conditionalFormat.resolveConditionalRatio(20, environment.bounds),
+    22 / 102,
+    "the data bar scales from the evaluated formula bound",
+  );
+
+  const relative = withFormulaBounds(base, ["=B5", "=A30"]);
+  const relativeEnvironment = conditionalFormat.createConditionalEnvironment(
+    relative,
+    ruleValues(relative),
+    resolveColor,
+    readCorpusCell,
+  );
+  assert.deepEqual(
+    { high: relativeEnvironment.bounds.high, low: relativeEnvironment.bounds.low },
+    { high: 60, low: 2 },
+    "relative references resolve against the same sheet",
+  );
+
+  const iconRule = withFormulaBounds(rulesOfKind("iconSet", 3), ["=B1", "=B2", "=B3", "=B4"]);
+  iconRule.icons = [
+    { iconId: 0, iconSet: "4Arrows" },
+    { iconId: 1, iconSet: "4Arrows" },
+    { iconId: 2, iconSet: "4Arrows" },
+    { iconId: 3, iconSet: "4Arrows" },
+  ];
+  const iconEnvironment = conditionalFormat.createConditionalEnvironment(
+    iconRule,
+    ruleValues(iconRule),
+    resolveColor,
+    readCorpusCell,
+  );
+  assert.deepEqual(
+    iconEnvironment.iconThresholds,
+    [-2, -1, 0, 1],
+    "icon-set cfvo formulas feed the bucket thresholds",
+  );
+  assert.deepEqual(
+    [-3, -1, 0, 3].map((value) => conditionalFormat.resolveIconGeometry(iconEnvironment, value, 80, 24).bucket),
+    [0, 1, 2, 3],
+    "buckets follow the evaluated thresholds",
+  );
+
+  const scale = withFormulaBounds(rulesOfKind("colorScale", 2), ["=B1", "=B5", "=A30"]);
+  const scaleEnvironment = conditionalFormat.createConditionalEnvironment(
+    scale,
+    ruleValues(scale),
+    resolveColor,
+    readCorpusCell,
+  );
+  assertClose(scaleEnvironment.colorScale.stops[0], 0, "B1 (-2) is the low stop");
+  assertClose(scaleEnvironment.colorScale.stops[1], 4 / 62, "B5 (2) is the middle stop of -2…60");
+  assertClose(scaleEnvironment.colorScale.stops[2], 1, "A30 (60) is the high stop");
+  assert.equal(
+    conditionalFormat.resolveColorScaleFill(scaleEnvironment, 2),
+    "#ffeb84",
+    "the middle colour sits on the evaluated formula stop",
+  );
+
+  assert.match(
+    GRID_SOURCE,
+    /createConditionalEnvironment\([\s\S]{0,400}readConditionalCellValue,/,
+    "XlsxGrid hands the cfvo formula evaluator a cell reader",
+  );
+  assert.match(
+    GRID_SOURCE,
+    /requestConditionalFormulaCell\(sheet\.workbookSheetIndex, cell\)/,
+    "Worker-backed grids hydrate formula references they have not received yet",
+  );
 });
 
-test("parsed formula cfvos keep the formula text", async () => {
+test("formula cfvos support arithmetic, ranges and functions", () => {
+  const base = rulesOfKind("dataBar", 1);
+  const cases = [
+    ["=(B5*2)+10", 14],
+    ["=SUM(A1:A3)", 12],
+    ["=SUM(A1:A3)/2", 6],
+    ["=MAX($B$1:$B$5)", 2],
+    ["=MIN(B1:B5)", -2],
+    ["=AVERAGE(B1:B5)", 0],
+    ["=MEDIAN(A1:A5)", 6],
+    ["=COUNT(A1:A30)", 30],
+    ["=IF(B5>0,50,10)", 50],
+    ["=IF(B1>0,50,10)", 10],
+    ["=ABS(B1)", 2],
+    ["=ROUND(A1/3,2)", 0.67],
+    ["=PERCENTILE(A1:A30,0.5)", 31],
+    ["=A1^2", 4],
+    ["=50%*100", 50],
+  ];
+  for (const [formula, expected] of cases) {
+    assert.equal(
+      conditionalFormat.evaluateConditionalFormula(formula, readCorpusCell),
+      expected,
+      `${formula} evaluates to ${expected}`,
+    );
+    const rule = withFormulaBounds(base, [formula, "=100"]);
+    const environment = conditionalFormat.createConditionalEnvironment(
+      rule,
+      ruleValues(rule),
+      resolveColor,
+      readCorpusCell,
+    );
+    assertClose(
+      environment.bounds.low,
+      expected,
+      `${formula} becomes the cfvo bound`,
+    );
+  }
+});
+
+test("formula cfvos fall back to the automatic bound when unresolvable", () => {
+  const base = rulesOfKind("dataBar", 1);
+  const stats = conditionalFormat.createConditionalRuleStats(ruleValues(base));
+
+  assert.equal(
+    conditionalFormat.evaluateConditionalFormula("=B1"),
+    undefined,
+    "a reference without a cell reader cannot be evaluated",
+  );
+  assert.equal(
+    conditionalFormat.evaluateConditionalFormula("='Other Sheet'!A1", readCorpusCell),
+    undefined,
+    "cross-sheet references stay unsupported",
+  );
+  assert.equal(
+    conditionalFormat.evaluateConditionalFormula("=B1", () => undefined),
+    undefined,
+    "an unavailable cell fails instead of reading as zero",
+  );
+  assert.equal(
+    conditionalFormat.evaluateConditionalFormula("=B1", () => null),
+    0,
+    "an empty cell reads as zero like Excel",
+  );
+  assert.equal(
+    conditionalFormat.evaluateConditionalFormula("=IF(A1)", readCorpusCell),
+    undefined,
+    "a malformed formula reports no value instead of throwing",
+  );
+  assert.equal(
+    conditionalFormat.evaluateConditionalFormula("=MAX(A1:Z5000)", () => 1),
+    undefined,
+    "an over-budget range fails instead of evaluating as an empty aggregate",
+  );
+
+  const unavailable = withFormulaBounds(base, ["=B1", "=100"]);
+  const environment = conditionalFormat.createConditionalEnvironment(
+    unavailable,
+    ruleValues(unavailable),
+    resolveColor,
+    () => undefined,
+  );
+  assert.equal(environment.bounds.low, stats.min, "an unavailable formula keeps the range min");
+  assert.equal(environment.bounds.lowAutomatic, true);
+});
+
+test("parsed formula cfvos keep and evaluate their formula", async () => {
   const { unzipSync, zipSync } = requireFromVueXlsx("fflate");
   const files = unzipSync(corpusBytes);
   const sheetPath = "xl/worksheets/sheet1.xml";
   const sheetXml = Buffer.from(files[sheetPath]).toString("utf8");
+  // A real workbook rule whose data-bar bound is another cell.
   const formulaSheet = sheetXml.replace(
     '<cfvo type="num" val="0"/><cfvo type="num" val="100"/>',
-    '<cfvo type="formula" val="=25"/><cfvo type="num" val="100"/>',
+    '<cfvo type="formula" val="=$B$1"/><cfvo type="num" val="100"/>',
   );
   assert.notEqual(formulaSheet, sheetXml, "the corpus data bar cfvo was rewritten");
   files[sheetPath] = new TextEncoder().encode(formulaSheet);
 
   const assets = core.parseWorkbookStructureAssets(zipSync(files));
   const [dataBarRule] = assets.sheetStatesByWorkbookSheetIndex[0].conditionalFormatRules;
-  assert.deepEqual(dataBarRule.cfvos[0], { type: "formula", value: "=25" });
-  assert.equal(
-    formulaSheet.includes('type="formula"'),
-    true,
-    "the rewritten workbook still declares the formula cfvo",
+  assert.deepEqual(dataBarRule.cfvos[0], { type: "formula", value: "=$B$1" });
+
+  const environment = conditionalFormat.createConditionalEnvironment(
+    dataBarRule,
+    ruleValues(dataBarRule),
+    resolveColor,
+    readCorpusCell,
+  );
+  assert.equal(environment.bounds.low, -2, "the parsed formula is evaluated against B1");
+  assert.equal(environment.bounds.lowAutomatic, false);
+  assertClose(
+    conditionalFormat.resolveConditionalRatio(20, environment.bounds),
+    22 / 102,
+    "the parsed rule scales from the evaluated cell",
   );
 });
