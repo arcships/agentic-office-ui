@@ -83,7 +83,7 @@ const visible = ref(false);
 const position = ref({ x: 0, y: 0 });
 const sortTarget = ref<{ columnIndex: number; tableName: string } | null>(null);
 
-const isReadOnly = computed(() => props.controller.readOnly);
+const isReadOnly = computed(() => props.controller.isEditingLocked ?? props.controller.readOnly);
 const { notice: clipboardNotice, copySelection } = useClipboardCopyNotice(() => props.controller);
 
 const menuStyle = computed<CSSProperties>(() => ({

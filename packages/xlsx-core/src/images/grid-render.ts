@@ -9,6 +9,7 @@ import type {
   XlsxCellRange,
   XlsxCellHyperlink,
   XlsxCellComment,
+  XlsxDataValidation,
   XlsxFormControl,
   XlsxImage,
   XlsxResolvedCellStyle,
@@ -76,6 +77,7 @@ export type WorkbookSheetState = {
   conditionalFormatRules: XlsxConditionalFormatRule[];
   hyperlinks: XlsxCellHyperlink[];
   comments: XlsxCellComment[];
+  dataValidations?: XlsxDataValidation[];
   defaultColWidthPx: number;
   defaultRowHeightPx: number;
   hasHorizontalMerges: boolean;
@@ -238,6 +240,52 @@ function parseSqrefRanges(sqref: string | null | undefined): XlsxCellRange[] {
       const range = parseA1RangeReference(reference);
       return range ? [range] : [];
     });
+}
+
+// ── Data validation ────────────────────────────────────────────────────────
+
+function parseBooleanAttribute(node: Element, name: string, fallback: boolean): boolean {
+  const value = node.getAttribute(name);
+  if (value === null) {
+    return fallback;
+  }
+  return value !== "0" && value.toLocaleLowerCase() !== "false";
+}
+
+function parseSheetDataValidations(document: Document): XlsxDataValidation[] {
+  return getLocalElements(document, "dataValidation").flatMap((node) => {
+    if (node.namespaceURI && node.namespaceURI !== SPREADSHEET_NS) {
+      return [];
+    }
+    const ranges = parseSqrefRanges(node.getAttribute("sqref"));
+    const validationType = node.getAttribute("type");
+    if (!validationType || ranges.length === 0) {
+      return [];
+    }
+
+    const isList = validationType.toLocaleLowerCase() === "list";
+    const formula1 = getFirstChild(node, "formula1")?.textContent?.trim() || undefined;
+    const formula2 = getFirstChild(node, "formula2")?.textContent?.trim() || undefined;
+    return [{
+      allowBlank: node.hasAttribute("allowBlank")
+        ? parseBooleanAttribute(node, "allowBlank", true)
+        : undefined,
+      errorMessage: node.getAttribute("error") ?? undefined,
+      errorStyle: node.getAttribute("errorStyle") ?? "stop",
+      errorTitle: node.getAttribute("errorTitle") ?? undefined,
+      inputMessage: node.getAttribute("prompt") ?? undefined,
+      inputTitle: node.getAttribute("promptTitle") ?? undefined,
+      listSource: isList ? formula1 : undefined,
+      operator: node.getAttribute("operator") ?? undefined,
+      ranges,
+      showDropdown: isList ? !parseBooleanAttribute(node, "showDropDown", false) : undefined,
+      showErrorAlert: parseBooleanAttribute(node, "showErrorMessage", true),
+      showInputMessage: parseBooleanAttribute(node, "showInputMessage", false),
+      validationType,
+      value1: isList ? undefined : formula1,
+      value2: isList ? undefined : formula2,
+    } satisfies XlsxDataValidation];
+  });
 }
 
 function parseConditionalFormatValueObject(node: Element | null): XlsxConditionalFormatValueObject | null {
@@ -628,6 +676,7 @@ export function parseSheetState(
   const includeCachedFormulaValues = options?.includeCachedFormulaValues ?? true;
   const cachedFormulaValues: Record<string, string> = {};
   const conditionalFormatRules = parseConditionalFormatRules(document);
+  const dataValidations = parseSheetDataValidations(document);
   const hyperlinks = parseCellHyperlinks(archive, path, document);
   const comments = parseCellComments(archive, path);
   const sparklines = parseSheetSparklines(document, options?.themePalette);
@@ -747,6 +796,7 @@ export function parseSheetState(
     colWidthOverridesPx,
     colStyleIds,
     conditionalFormatRules,
+    dataValidations,
     hyperlinks,
     comments,
     defaultColWidthPx: sheetColumnWidthToPixels(defaultColWidth, columnWidthCharacterWidthPx),

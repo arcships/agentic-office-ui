@@ -72,6 +72,70 @@
           <strong v-if="hoveredComment.author">{{ hoveredComment.author }}</strong>
           <span>{{ hoveredComment.text }}</span>
         </div>
+        <div
+          v-if="validationHint"
+          class="xlsx-grid__validation-hint"
+          data-testid="xlsx-validation-hint"
+          :style="validationHint.style"
+        >
+          <strong v-if="validationHint.title">{{ validationHint.title }}</strong>
+          <span>{{ validationHint.message }}</span>
+        </div>
+        <button
+          v-if="validationDropdownTriggerStyle"
+          class="xlsx-grid__validation-trigger"
+          data-testid="xlsx-validation-dropdown-trigger"
+          :style="validationDropdownTriggerStyle"
+          type="button"
+          tabindex="-1"
+          aria-label="打开数据验证下拉列表"
+          @pointerdown.stop.prevent="openValidationDropdown"
+          @dblclick.stop.prevent
+        >
+          ▾
+        </button>
+        <div
+          v-if="validationDropdownOpen"
+          class="xlsx-grid__validation-dropdown"
+          data-testid="xlsx-validation-dropdown"
+          role="listbox"
+          :style="validationDropdownStyle"
+          @pointerdown.stop.prevent
+          @keydown.escape.stop.prevent="closeValidationDropdown"
+        >
+          <button
+            v-for="option in validationDropdownOptions"
+            :key="option"
+            class="xlsx-grid__validation-option"
+            data-testid="xlsx-validation-option"
+            type="button"
+            role="option"
+            @click.stop="chooseValidationOption(option)"
+          >
+            {{ option }}
+          </button>
+        </div>
+        <div
+          v-if="validationFeedbackView"
+          class="xlsx-grid__validation-alert"
+          :class="`xlsx-grid__validation-alert--${validationFeedbackView.kind}`"
+          data-testid="xlsx-validation-alert"
+          role="alert"
+          :style="validationFeedbackView.style"
+        >
+          <strong v-if="validationFeedbackView.title">{{ validationFeedbackView.title }}</strong>
+          <span>{{ validationFeedbackView.message }}</span>
+          <button
+            class="xlsx-grid__validation-dismiss"
+            data-testid="xlsx-validation-alert-dismiss"
+            type="button"
+            aria-label="关闭验证提示"
+            @pointerdown.stop.prevent
+            @click.stop="props.controller.dismissDataValidationFeedback()"
+          >
+            ×
+          </button>
+        </div>
       </div>
     </div>
     <XlsxClipboardNotice :message="clipboardNotice" />
@@ -90,6 +154,8 @@ import {
   type XlsxCellHyperlink,
   type XlsxCellComment,
   type XlsxConditionalFormatRule,
+  type XlsxDataValidation,
+  type XlsxDataValidationFeedback,
   type XlsxSparkline,
   type XlsxResolvedCellStyle,
   type XlsxSheetData,
@@ -123,6 +189,7 @@ import {
   resolveCanvasPixelRatio,
   resolveOverflowTextWidth,
 } from "./grid-paint";
+import { isDataValidationListDropdownVisible } from "../composables/validation";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -169,6 +236,7 @@ const editingValue = ref("");
 const isEditComposing = ref(false);
 let commitEditOnCompositionEnd = false;
 const hoveredCell = ref<XlsxCellAddress | null>(null);
+const validationDropdownOpen = ref(false);
 const resizePreview = ref<{
   actualIndex: number;
   displayIndex: number;
@@ -243,6 +311,69 @@ const zoomScale = computed(() => props.controller.zoomScale);
 const activeCell = computed(() => props.controller.activeCell);
 const selection = computed(() => props.controller.selection);
 const revision = computed(() => props.controller.revision);
+const editingLocked = computed(() => props.readOnly === true || props.controller.isEditingLocked === true);
+const activeValidation = computed<XlsxDataValidation | null>(() => {
+  if (editingLocked.value) return null;
+  return props.controller.getCellDataValidation?.(activeCell.value ?? null) ?? null;
+});
+const activeListValidation = computed(() => {
+  const validation = activeValidation.value;
+  return validation && isDataValidationListDropdownVisible(validation) ? validation : null;
+});
+const validationDropdownOptions = computed(() => {
+  const validation = activeListValidation.value;
+  return validation ? props.controller.getDataValidationListOptions?.(validation) ?? [] : [];
+});
+const validationHint = computed(() => {
+  const validation = activeValidation.value;
+  const cell = activeCell.value;
+  if (!validation || !cell || editingCell.value || validation.showInputMessage !== true || !validation.inputMessage?.trim()) return null;
+  const display = getDisplayCell(cell);
+  if (!display) return null;
+  return {
+    message: validation.inputMessage,
+    title: validation.inputTitle,
+    style: {
+      left: `${ROW_HEADER_WIDTH + getColOffsetSum(display.col) - scrollLeft.value}px`,
+      top: `${HEADER_HEIGHT + getRowOffsetSum(display.row) + (effectiveRowHeights.value[display.row] || DEFAULT_ROW_HEIGHT) - scrollTop.value + 4}px`,
+    } as CSSProperties,
+  };
+});
+const validationDropdownTriggerStyle = computed<CSSProperties | null>(() => {
+  if (!activeListValidation.value || validationDropdownOptions.value.length === 0 || editingCell.value) return null;
+  const cell = activeCell.value;
+  const display = cell ? getDisplayCell(cell) : null;
+  if (!display) return null;
+  const rowHeight = effectiveRowHeights.value[display.row] || DEFAULT_ROW_HEIGHT;
+  const colWidth = effectiveColWidths.value[display.col] || DEFAULT_COL_WIDTH;
+  return {
+    left: `${ROW_HEADER_WIDTH + getColOffsetSum(display.col) + colWidth - scrollLeft.value - 20}px`,
+    top: `${HEADER_HEIGHT + getRowOffsetSum(display.row) - scrollTop.value + Math.max(2, (rowHeight - 18) / 2)}px`,
+  };
+});
+const validationDropdownStyle = computed<CSSProperties>(() => {
+  const cell = activeCell.value;
+  const display = cell ? getDisplayCell(cell) : null;
+  if (!display) return {};
+  return {
+    left: `${ROW_HEADER_WIDTH + getColOffsetSum(display.col) - scrollLeft.value}px`,
+    minWidth: `${Math.max(120, effectiveColWidths.value[display.col] || DEFAULT_COL_WIDTH)}px`,
+    top: `${HEADER_HEIGHT + getRowOffsetSum(display.row) + (effectiveRowHeights.value[display.row] || DEFAULT_ROW_HEIGHT) - scrollTop.value}px`,
+  };
+});
+const validationFeedbackView = computed(() => {
+  const feedback = props.controller.dataValidationFeedback as XlsxDataValidationFeedback | null | undefined;
+  if (!feedback) return null;
+  const display = getDisplayCell(feedback.cell);
+  if (!display) return null;
+  return {
+    ...feedback,
+    style: {
+      left: `${ROW_HEADER_WIDTH + getColOffsetSum(display.col) - scrollLeft.value}px`,
+      top: `${HEADER_HEIGHT + getRowOffsetSum(display.row) + (effectiveRowHeights.value[display.row] || DEFAULT_ROW_HEIGHT) - scrollTop.value + 4}px`,
+    } as CSSProperties,
+  };
+});
 
 interface ConditionalFormatScope {
   maxUsedCol: number;
@@ -1965,9 +2096,33 @@ function getCellInputValue(cell: XlsxCellAddress): string {
   return props.controller.getCellFormula(cell) || props.controller.getCellDisplayValue(cell);
 }
 
+function openValidationDropdown() {
+  if (editingLocked.value || !activeListValidation.value || validationDropdownOptions.value.length === 0) return;
+  validationDropdownOpen.value = true;
+}
+
+function closeValidationDropdown() {
+  validationDropdownOpen.value = false;
+}
+
+function chooseValidationOption(option: string) {
+  const cell = activeCell.value;
+  validationDropdownOpen.value = false;
+  if (!cell || editingLocked.value) return;
+  props.controller.setCellValue(cell, option);
+  void nextTick(() => containerRef.value?.focus());
+}
+
 function onDblClick(event: MouseEvent) {
   const cell = hitTestCell(event.clientX, event.clientY);
-  if (!cell || props.readOnly) return;
+  if (!cell || props.readOnly || props.controller?.isEditingLocked === true) return;
+  const validation = props.controller?.getCellDataValidation?.(cell) ?? null;
+  if (validation && isDataValidationListDropdownVisible(validation)) {
+    props.controller?.selectCell?.(cell);
+    emit("cellDoubleClick", cell);
+    nextTick(openValidationDropdown);
+    return;
+  }
   editingCell.value = cell;
   editingValue.value = getCellInputValue(cell);
   emit("cellDoubleClick", cell);
@@ -2123,16 +2278,16 @@ function onGridKeydown(event: KeyboardEvent) {
     ArrowLeft: () => moveCell(0, -1, event.shiftKey),
     ArrowRight: () => moveCell(0, 1, event.shiftKey),
     Tab: () => { event.preventDefault(); moveCell(0, 1, false); },
-    Enter: () => { if (!props.readOnly) startEdit(active); },
-    Delete: () => { if (!props.readOnly) props.controller.clearSelectedCells(); },
-    Backspace: () => { if (!props.readOnly) props.controller.setCellValue(active, ""); },
-    F2: () => { if (!props.readOnly) startEdit(active); },
+    Enter: () => { if (!editingLocked.value) startEdit(active); },
+    Delete: () => { if (!editingLocked.value) props.controller.clearSelectedCells(); },
+    Backspace: () => { if (!editingLocked.value) props.controller.setCellValue(active, ""); },
+    F2: () => { if (!editingLocked.value) startEdit(active); },
   };
 
   const handler = handlers[event.key];
   if (handler) { event.preventDefault(); handler(); return; }
 
-  if (!props.readOnly && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+  if (!editingLocked.value && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
     editingCell.value = active;
     editingValue.value = event.key;
     nextTick(() => editInputRef.value?.focus());
@@ -2228,6 +2383,12 @@ watch(
   { flush: "post" },
 );
 
+watch(
+  () => [activeSheet.value?.name, activeCell.value?.row, activeCell.value?.col],
+  () => { validationDropdownOpen.value = false; },
+  { flush: "post" },
+);
+
 let resizeObs: ResizeObserver | null = null;
 let dprMediaQuery: MediaQueryList | null = null;
 let dprMediaListener: (() => void) | null = null;
@@ -2305,4 +2466,19 @@ onUnmounted(() => {
 .xlsx-grid__comment-popover { background: #fffbe6; border: 1px solid #eab308; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.18); color: #422006; display: flex; flex-direction: column; gap: 3px; max-width: 260px; min-width: 150px; padding: 8px 10px; pointer-events: none; position: absolute; white-space: pre-wrap; z-index: 30; }
 .xlsx-grid__comment-popover strong { font-size: 11px; }
 .xlsx-grid__comment-popover span { font-size: 12px; line-height: 1.4; }
+.xlsx-grid__validation-hint { background: #eff6ff; border: 1px solid #93c5fd; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.12); color: #1e3a8a; display: flex; flex-direction: column; gap: 3px; max-width: 260px; min-width: 140px; padding: 6px 9px; pointer-events: none; position: absolute; white-space: pre-wrap; z-index: 28; }
+.xlsx-grid__validation-hint strong { font-size: 11px; }
+.xlsx-grid__validation-hint span { font-size: 12px; line-height: 1.4; }
+.xlsx-grid__validation-trigger { align-items: center; background: #ffffff; border: 1px solid #94a3b8; border-radius: 3px; color: #334155; cursor: pointer; display: flex; font-size: 10px; height: 18px; justify-content: center; padding: 0; pointer-events: auto; position: absolute; width: 16px; z-index: 29; }
+.xlsx-grid__validation-trigger:hover { background: #e2e8f0; }
+.xlsx-grid__validation-dropdown { background: #ffffff; border: 1px solid #94a3b8; border-radius: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.18); display: flex; flex-direction: column; max-height: 220px; overflow-y: auto; padding: 3px; pointer-events: auto; position: absolute; z-index: 32; }
+.xlsx-grid__validation-option { background: transparent; border: 0; border-radius: 3px; color: #18181b; cursor: pointer; font: inherit; font-size: 12px; padding: 5px 8px; text-align: left; }
+.xlsx-grid__validation-option:hover { background: #dbeafe; }
+.xlsx-grid__validation-alert { align-items: flex-start; border: 1px solid #f87171; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.18); color: #7f1d1d; display: flex; flex-direction: column; gap: 3px; max-width: 300px; min-width: 170px; padding: 7px 24px 7px 10px; pointer-events: auto; position: absolute; white-space: pre-wrap; z-index: 34; }
+.xlsx-grid__validation-alert strong { font-size: 11px; }
+.xlsx-grid__validation-alert span { font-size: 12px; line-height: 1.45; }
+.xlsx-grid__validation-alert--error { background: #fef2f2; }
+.xlsx-grid__validation-alert--warning { background: #fffbeb; border-color: #fbbf24; color: #78350f; }
+.xlsx-grid__validation-alert--information { background: #eff6ff; border-color: #60a5fa; color: #1e3a8a; }
+.xlsx-grid__validation-dismiss { background: transparent; border: 0; color: inherit; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; position: absolute; right: 4px; top: 3px; }
 </style>

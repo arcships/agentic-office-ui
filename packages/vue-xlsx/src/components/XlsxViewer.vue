@@ -227,7 +227,7 @@ const emit = defineEmits<{
 
 type XlsxDeferredLoadPayload = { fileName: string; bytes: number };
 
-const effectiveReadOnly = computed(() => props.controller.readOnly || props.readOnly);
+const effectiveReadOnly = computed(() => props.readOnly || props.controller.isEditingLocked === true || props.controller.readOnly);
 
 const deferredLoadBytes = computed(() => props.controller.deferredLoadFileSize ?? 0);
 const deferredLoadSizeLabel = computed(() => formatBinaryBytes(deferredLoadBytes.value));

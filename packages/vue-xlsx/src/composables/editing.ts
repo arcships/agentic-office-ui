@@ -60,7 +60,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
   function clearSelectedCells() {
     const worksheet = ctx.getActiveWorksheet();
     const targetRange = ctx.selection.value ?? (ctx.activeCell.value ? { start: ctx.activeCell.value, end: ctx.activeCell.value } : null);
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value || !targetRange) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value || !targetRange) {
       return;
     }
 
@@ -98,9 +98,16 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
   function setCellValue(cell: XlsxCellAddress, value: string) {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
       return;
     }
+
+    const validationCheck = ctx.checkCellValue(cell, value);
+    if (!validationCheck.accepted) {
+      ctx.setValidationFeedback(validationCheck.feedback);
+      return;
+    }
+    ctx.setValidationFeedback(validationCheck.feedback);
 
     const before = ctx.captureCellMutationState(cell);
     if (!before) {
@@ -137,7 +144,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
   function setCellFormula(cell: XlsxCellAddress, formula: string) {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
       return;
     }
 
@@ -197,7 +204,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
    */
   function commitCellInput(cell: XlsxCellAddress, input: string) {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
       return false;
     }
 
@@ -222,7 +229,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
   function setCellStyle(cell: XlsxCellAddress, style: XlsxCellStyleInput) {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
       return;
     }
 
@@ -280,7 +287,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
   function setRangeStyle(range: XlsxCellRange, style: XlsxCellStyleInput) {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
       return;
     }
 
@@ -324,7 +331,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
   function fillSelection(targetRange: XlsxCellRange) {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value || !ctx.selection.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value || !ctx.selection.value) {
       return;
     }
 
@@ -399,7 +406,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
   function mergeSelection() {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.selection.value || !ctx.workbook.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.selection.value || !ctx.workbook.value) {
       return;
     }
 
@@ -410,7 +417,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
   function unmergeSelection() {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.selection.value || !ctx.workbook.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.selection.value || !ctx.workbook.value) {
       return;
     }
 
@@ -460,7 +467,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
   function removeActiveSheet() {
     const activeSheetData = ctx.activeSheet.value;
-    if (ctx.readOnly.value || !ctx.workbook.value || !activeSheetData || ctx.sheets.value.length <= 1) {
+    if (ctx.isEditingLocked.value || !ctx.workbook.value || !activeSheetData || ctx.sheets.value.length <= 1) {
       return;
     }
 

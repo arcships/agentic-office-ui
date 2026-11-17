@@ -6,6 +6,8 @@ import type {
   XlsxChart,
   XlsxChartElementSelection,
   XlsxChartsheet,
+  XlsxDataValidation,
+  XlsxDataValidationFeedback,
   XlsxFormControl,
   XlsxImage,
   XlsxShape,
@@ -27,6 +29,7 @@ import type {
 import { cellAddressToA1 } from "./selection";
 import { DEFAULT_CELL_STYLE_PATCH, coerceEnteredValue } from "./cell-input";
 import type { CellInputOptions } from "./cell-input";
+import type { XlsxDataValidationCheck } from "./validation";
 
 export const FORMULA_COUNT_THRESHOLD = 1000;
 export const DEFAULT_ROW_HEIGHT = 24;
@@ -375,6 +378,7 @@ export interface XlsxControllerContext {
   isWorkerBacked: Ref<boolean>;
   sortState: Ref<XlsxTableSortState | null>;
   forcedReadOnly: Ref<boolean>;
+  dataValidationFeedback: Ref<XlsxDataValidationFeedback | null>;
   deferredBufferRef: ShallowRef<ArrayBuffer | null>;
   /** Load generation that owns the currently deferred buffer. */
   deferredLoadRequestIdRef: ShallowRef<number | null>;
@@ -400,6 +404,8 @@ export interface XlsxControllerContext {
   canZoomIn: ComputedRef<boolean>;
   canZoomOut: ComputedRef<boolean>;
   readOnly: ComputedRef<boolean>;
+  isActiveSheetProtected: ComputedRef<boolean>;
+  isEditingLocked: ComputedRef<boolean>;
   canResizeReadOnly: ComputedRef<boolean>;
   displayFileName: ComputedRef<string>;
   visibleSheetIndexByWorkbookSheetIndex: ComputedRef<Map<number, number>>;
@@ -444,6 +450,11 @@ export interface XlsxControllerContext {
   shouldUseWorkerForReadOnlyLoad: (willForceReadOnly: boolean) => boolean;
   createSavedWorkbookBytes: (targetWorkbook: Workbook) => Uint8Array;
   captureCellMutationState: (cell: XlsxCellAddress) => CellMutationState | null;
+  checkCellValue: (cell: XlsxCellAddress, value: string) => XlsxDataValidationCheck;
+  getCellDataValidation: (cell?: XlsxCellAddress | null) => XlsxDataValidation | null;
+  getDataValidationListOptions: (validation: XlsxDataValidation) => string[];
+  setValidationFeedback: (feedback: XlsxDataValidationFeedback | null) => void;
+  dismissValidationFeedback: () => void;
   recordHistoryBeforeMutation: () => void;
   recordCellEditHistory: (cell: XlsxCellAddress, before: CellMutationState, after: CellMutationState) => void;
   recordRangeEditHistory: (mutations: RangeCellMutation[], selectionAfter: XlsxCellRange | null, activeCellAfter: XlsxCellAddress | null, before?: SelectionSnapshot) => void;

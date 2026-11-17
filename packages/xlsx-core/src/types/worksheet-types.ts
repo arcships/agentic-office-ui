@@ -111,13 +111,56 @@ export interface XlsxDataValidation {
   allowBlank?: boolean;
   errorMessage?: string;
   errorStyle?: string;
+  errorTitle?: string;
   inputMessage?: string;
+  inputTitle?: string;
   listSource?: string;
+  operator?: string;
   ranges: XlsxCellRange[];
   showDropdown?: boolean;
   showErrorAlert?: boolean;
   showInputMessage?: boolean;
   validationType: string;
+  value1?: string;
+  value2?: string;
+}
+
+/** Feedback produced when user input violates a data validation rule. */
+export interface XlsxDataValidationFeedback {
+  cell: XlsxCellAddress;
+  kind: "error" | "information" | "warning";
+  message: string;
+  title?: string;
+}
+
+export type XlsxSheetProtectionAction =
+  | "autoFilter"
+  | "deleteColumns"
+  | "deleteRows"
+  | "formatCells"
+  | "formatColumns"
+  | "formatRows"
+  | "insertColumns"
+  | "insertHyperlinks"
+  | "insertRows"
+  | "objects"
+  | "pivotTables"
+  | "scenarios"
+  | "selectLockedCells"
+  | "selectUnlockedCells"
+  | "sort";
+
+/**
+ * Sheet protection parsed from the worksheet `sheetProtection` record.
+ *
+ * `flags` mirrors the protection state reported by the workbook engine for
+ * each OOXML attribute. Treat `enabled` as the authoritative signal for
+ * read-only behaviour and read individual flags only when a host needs the
+ * finer-grained Excel permissions.
+ */
+export interface XlsxSheetProtection {
+  enabled: boolean;
+  flags: Partial<Record<XlsxSheetProtectionAction, boolean>>;
 }
 
 export interface XlsxFreezePanes {
@@ -141,6 +184,8 @@ export interface XlsxSheetData {
   dataValidations: XlsxDataValidation[];
   name: string;
   visibility: XlsxSheetVisibility;
+  /** Parsed sheet protection; `null` or omitted for unprotected sheets. */
+  protection?: XlsxSheetProtection | null;
   columnWidthCharacterWidthPx?: number;
   defaultColWidthPx: number;
   defaultRowHeightPx: number;
@@ -557,6 +602,16 @@ export interface UseXlsxViewerControllerOptions {
    */
   allowResizeInReadOnly?: boolean;
   /**
+   * Allows mutations on worksheets that declare OOXML sheet protection.
+   *
+   * By default a protected worksheet behaves like a read-only sheet while it
+   * is active. Set this to `true` when the host enforces protection itself or
+   * intentionally offers an unlock path.
+   *
+   * @default false
+   */
+  allowProtectedSheetEditing?: boolean;
+  /**
    * Defers loading until `continueDeferredLoad()` is called when the file is larger than this byte threshold.
    * Set to `0` to parse immediately.
    *
@@ -711,6 +766,8 @@ export interface XlsxViewerController {
   commitCellInput: (cell: XlsxCellAddress, text: string) => boolean;
   continueDeferredLoad: () => void;
   copySelectionToClipboard: () => Promise<boolean>;
+  dataValidationFeedback: XlsxDataValidationFeedback | null;
+  dismissDataValidationFeedback: () => void;
   defaultZoomScale: number;
   deferredLoadFileSize: number | null;
   defineNamedRange: (name: string, range?: XlsxCellRange | null) => void;
@@ -730,6 +787,8 @@ export interface XlsxViewerController {
   getChartById: (id: string) => XlsxChart | null;
   getChartSeriesFormula: (chartId: string, seriesIndex: number) => string;
   getChartsheetById: (id: string) => XlsxChartsheet | null;
+  getCellDataValidation: (cell?: XlsxCellAddress | null) => XlsxDataValidation | null;
+  getDataValidationListOptions: (validation: XlsxDataValidation) => string[];
   formControls: XlsxFormControl[];
   getSheetCharts: (sheetIndex?: number) => XlsxChart[];
   getSheetFormControls: (sheetIndex?: number) => XlsxFormControl[];
@@ -745,6 +804,8 @@ export interface XlsxViewerController {
   }>;
   isLoadDeferred: boolean;
   isLoading: boolean;
+  isActiveSheetProtected: boolean;
+  isEditingLocked: boolean;
   isChartsLoading: boolean;
   isWorkerBacked?: boolean;
   maxConcurrentImageDecodes?: number;

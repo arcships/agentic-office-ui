@@ -15,6 +15,8 @@ import type {
   XlsxChart,
   XlsxChartElementSelection,
   XlsxChartsheet,
+  XlsxDataValidation,
+  XlsxDataValidationFeedback,
   XlsxFormControl,
   XlsxImage,
   XlsxShape,
@@ -88,7 +90,13 @@ import {
   resolveDisplayFileName,
   sanitizeSavedWorkbookBytes
 } from "./formatting";
-import { cellAddressToA1, rangeToA1 } from "./selection";
+import { cellAddressToA1, parseA1RangeReference, rangeToA1 } from "./selection";
+import {
+  checkCellValueAgainstDataValidation,
+  findDataValidationForCell,
+  isSheetEditingLocked,
+  resolveDataValidationListOptions
+} from "./validation";
 import { toXlsxLoadError } from "@arcships/xlsx-core";
 
 type DeferredWorkbookLoad = {
@@ -108,6 +116,7 @@ type DeferredWorkbookLoad = {
 
 export function useXlsxViewerController(options: UseXlsxViewerControllerOptions): XlsxViewerController {
   const {
+    allowProtectedSheetEditing = false,
     allowResizeInReadOnly = true,
     createWorker,
     deferLoadingAboveBytes = DEFAULT_DEFER_LOADING_ABOVE_BYTES,
@@ -181,6 +190,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const isWorkerBacked = ref(false);
   const sortState = ref<XlsxTableSortState | null>(null);
   const forcedReadOnly = ref(false);
+  const dataValidationFeedback = ref<XlsxDataValidationFeedback | null>(null);
   const deferredBufferRef = shallowRef<ArrayBuffer | null>(null);
   const deferredLoadRequestIdRef = shallowRef<number | null>(null);
   const deferredLoadRef = shallowRef<DeferredWorkbookLoad | null>(null);
@@ -255,6 +265,13 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     const tab = activeTab.value;
     return tab?.kind === "sheet" ? sheets.value[tab.sheetIndex ?? -1] ?? null : null;
   });
+  const isActiveSheetProtected = computed(() => activeSheet.value?.protection?.enabled === true);
+  const isEditingLocked = computed(() => isSheetEditingLocked(
+    readOnly.value,
+    isActiveSheetProtected.value,
+    allowProtectedSheetEditing
+  ));
+  watch(() => activeSheet.value?.workbookSheetIndex, () => { dataValidationFeedback.value = null; });
   const activeZoomTabKey = computed(() => activeTab.value?.id ?? DEFAULT_ZOOM_TAB_KEY);
   const defaultZoomScale = computed(() => resolveDefaultZoomScale(activeTab.value, activeSheet.value));
   const zoomScale = computed(() => clampZoomScale(zoomScaleOverridesByTabId.value[activeZoomTabKey.value] ?? defaultZoomScale.value));
@@ -264,11 +281,11 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const canLoadDeferred = computed(() => !isLoading.value && isLoadDeferred.value);
   const canUndo = computed(() => {
     historyRevision.value;
-    return !readOnly.value && !isApplyingHistoryRef.value && undoStackRef.value.length > 0;
+    return !isEditingLocked.value && !isApplyingHistoryRef.value && undoStackRef.value.length > 0;
   });
   const canRedo = computed(() => {
     historyRevision.value;
-    return !readOnly.value && !isApplyingHistoryRef.value && redoStackRef.value.length > 0;
+    return !isEditingLocked.value && !isApplyingHistoryRef.value && redoStackRef.value.length > 0;
   });
   const visibleSheetIndexByWorkbookSheetIndex = computed(() => new Map(sheets.value.map((sheet, index) => [sheet.workbookSheetIndex, index])));
   const deferredMetadataCell = computed(() => activeCell.value);
@@ -563,6 +580,76 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     activeWorksheetHandle = { workbook: activeWorkbook, workbookSheetIndex, worksheet };
     return worksheet;
   }
+
+  function readValidationRangeValues(reference: string): string[] | null {
+    const activeWorkbook = workbook.value;
+    if (!activeWorkbook) return null;
+
+    const bangIndex = reference.lastIndexOf("!");
+    const rawSheetName = bangIndex >= 0 ? reference.slice(0, bangIndex) : null;
+    const rangeReference = (bangIndex >= 0 ? reference.slice(bangIndex + 1) : reference).replace(/\$/g, "");
+    const range = parseA1RangeReference(rangeReference);
+    if (!range) return null;
+
+    let worksheet: ReturnType<Workbook["getSheet"]> | null = null;
+    let ownsWorksheet = false;
+    if (rawSheetName) {
+      const sheetName = rawSheetName.replace(/^'|'$/g, "").replace(/''/g, "'");
+      try {
+        worksheet = activeWorkbook.getSheetByName(sheetName) ?? null;
+      } catch {
+        return null;
+      }
+      ownsWorksheet = true;
+    } else {
+      worksheet = getInternalActiveWorksheet();
+    }
+    if (!worksheet) return null;
+
+    try {
+      const values: string[] = [];
+      for (let row = range.start.row; row <= range.end.row; row += 1) {
+        for (let col = range.start.col; col <= range.end.col; col += 1) {
+          const value = worksheet.getFormattedValueAt(row, col);
+          if (value) values.push(value);
+        }
+      }
+      return values;
+    } catch {
+      return null;
+    } finally {
+      if (ownsWorksheet) {
+        try { worksheet.free(); } catch { /* best-effort cleanup */ }
+      }
+    }
+  }
+
+  function getCellDataValidation(cell?: XlsxCellAddress | null): XlsxDataValidation | null {
+    return findDataValidationForCell(activeSheet.value?.dataValidations, cell ?? activeCell.value);
+  }
+
+  function getDataValidationListOptions(validation: XlsxDataValidation): string[] {
+    return resolveDataValidationListOptions(validation, {
+      getNamedRange: (name) => workbook.value?.getNamedRange(name) ?? null,
+      readRangeValues: readValidationRangeValues
+    });
+  }
+
+  function checkCellValue(cell: XlsxCellAddress, value: string) {
+    return checkCellValueAgainstDataValidation(activeSheet.value, cell, value, {
+      getNamedRange: (name) => workbook.value?.getNamedRange(name) ?? null,
+      readRangeValues: readValidationRangeValues
+    });
+  }
+
+  function setValidationFeedback(feedback: XlsxDataValidationFeedback | null) {
+    dataValidationFeedback.value = feedback;
+  }
+
+  function dismissValidationFeedback() {
+    dataValidationFeedback.value = null;
+  }
+
   function maybeRecalculateWorkbook(targetWorkbook: Workbook) {
     if (!shouldAutoCalculate.value) return;
     const result = tryRecalculate(targetWorkbook);
@@ -1040,12 +1127,12 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     zoomScaleOverridesByTabId, activeCell, selection, selectedChartId, selectedChartElement,
     selectedImageId, revision, selectionAnchorRef, undoStackRef, redoStackRef, historyBudget,
     isApplyingHistoryRef, historyRevision, shouldAutoCalculate, workerCellSnapshotRevision,
-    isWorkerBacked, sortState, forcedReadOnly, deferredBufferRef, deferredLoadRequestIdRef, sourceBufferRef, deferredLoadFileSize,
+    isWorkerBacked, sortState, forcedReadOnly, dataValidationFeedback, deferredBufferRef, deferredLoadRequestIdRef, sourceBufferRef, deferredLoadFileSize,
     imageAssetsRef, chartAssetsRef, chartLoadRequestTokenRef, chartDisplayFallbackCleanupRef,
     sheetOriginsRef, workerClientRef, workerCellSnapshotCacheRef,
     activeTab, activeSheet, deferredMetadataCell, deferredMetadataSheet,
     activeZoomTabKey, defaultZoomScale, zoomScale, canZoomIn, canZoomOut,
-    readOnly, canResizeReadOnly, displayFileName, visibleSheetIndexByWorkbookSheetIndex,
+    readOnly, isActiveSheetProtected, isEditingLocked, canResizeReadOnly, displayFileName, visibleSheetIndexByWorkbookSheetIndex,
     refreshWorkbookState, maybeRecalculateWorkbook,
     switchToSheet, consumePreservedTabSwitch,
     getActiveWorksheet: getInternalActiveWorksheet,
@@ -1057,6 +1144,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     ensureChartAssetsHydrated,
     shouldForceReadOnlyForBuffer, shouldUseWorkerForReadOnlyLoad,
     createSavedWorkbookBytes, captureCellMutationState,
+    checkCellValue, getCellDataValidation, getDataValidationListOptions,
+    setValidationFeedback, dismissValidationFeedback,
     recordHistoryBeforeMutation, recordCellEditHistory, recordRangeEditHistory,
     selectedFormulaTarget,
     get setChartSeriesFormula() { return _setChartSeriesFormula; },
@@ -1209,6 +1298,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     },
     getCellDisplayValue: clipboardDomain.getCellDisplayValue,
     getCellFormula: clipboardDomain.getCellFormula,
+    getCellDataValidation,
+    getDataValidationListOptions,
     get getCellSnapshotAsync() { return isWorkerBacked.value ? historyDomain.getCellSnapshotAsync : undefined; },
     getActiveWorksheet() {
       if (!workbook.value || !activeSheet.value) return null;
@@ -1218,6 +1309,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get images() { return chartImageDomain.images.value; },
     get isLoadDeferred() { return isLoadDeferred.value; },
     get isLoading() { return isLoading.value; },
+    get isActiveSheetProtected() { return isActiveSheetProtected.value; },
+    get isEditingLocked() { return isEditingLocked.value; },
     get isChartsLoading() { return isChartsLoading.value; },
     get isWorkerBacked() { return isWorkerBacked.value; },
     get maxConcurrentImageDecodes() { return xlsxRuntime.limits?.maxConcurrentImageDecodes ?? 4; },
@@ -1234,6 +1327,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     pasteText: clipboardDomain.pasteText,
     removeActiveSheet: editingDomain.removeActiveSheet,
     get readOnly() { return readOnly.value; },
+    get dataValidationFeedback() { return dataValidationFeedback.value; },
+    dismissDataValidationFeedback: dismissValidationFeedback,
     recalculate: historyDomain.recalculate,
     redo: historyDomain.redo,
     resetZoom: navigationDomain.resetZoom,
