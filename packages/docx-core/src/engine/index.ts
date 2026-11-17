@@ -4,10 +4,14 @@
 // Document model types + clone + normalize (the contract layer)
 export * from "./types";
 // The granular run/paragraph clone helpers stay internal: editor code imports
-// them from "./clone". `cloneDocModel`, `cloneDocModelShallow` and
-// `cloneDocNode` are the document-copy contract (full clone vs copy-on-write).
+// them from "./clone". The document-copy contract is `cloneDocModel` (full
+// clone), `cloneDocModelShallow` (copy-on-write shell), `cloneDocNode` (single
+// node), `cloneDocModelNodes` (several top-level nodes) and
+// `cloneDocModelSectionLists` (header/footer sections).
 export {
   cloneDocModel,
+  cloneDocModelNodes,
+  cloneDocModelSectionLists,
   cloneDocModelShallow,
   cloneDocNode,
   cloneNumberingDefinitions,

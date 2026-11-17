@@ -188,6 +188,7 @@ export function createEditorImportExport(ctx: EditorCore) {
       })
       if (!isCurrentImport()) return
       primeCommentAnchors(parsedModel)
+      ctx.endTextCommitBurst()
       ctx.model.value = parsedModel
       ctx.cleanModel.value = parsedModel
       ctx.basePackage.value = parsedPkg

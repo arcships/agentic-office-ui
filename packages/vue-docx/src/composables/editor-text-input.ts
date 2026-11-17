@@ -5,7 +5,8 @@
 import type { DocModel, ParagraphNode, TableNode, TextRunNode } from "@arcships/docx-core"
 import type { DocxTextRange, ParagraphLocation } from "@arcships/docx-core"
 import {
-  cloneDocModel,
+  cloneDocModelNodes,
+  cloneDocModelShallow,
   parseEmbeddedTableRuntimeKey,
   updateParagraphText,
   normalizeTextRange,
@@ -51,7 +52,8 @@ import {
   ORDERED_LIST_PREFIX_CAPTURE_PATTERN,
 } from "@arcships/docx-core"
 import type { DocxListType } from "@arcships/docx-core"
-import type { EditorCore } from "./editor-shared"
+import type { ApplyModelChangeOptions, EditorCore } from "./editor-shared"
+import { cloneHostTableForRuntimeKey, topLevelNodeIndex } from "./editor-clone-helpers"
 
 function commonPrefixLength(left: string, right: string): number {
   const limit = Math.min(left.length, right.length)
@@ -62,7 +64,11 @@ function commonPrefixLength(left: string, right: string): number {
 
 export function createEditorTextInput(
   ctx: EditorCore,
-  applyChange: (updater: (current: DocModel) => DocModel, successStatus?: string) => void,
+  applyChange: (
+    updater: (current: DocModel) => DocModel,
+    successStatus?: string,
+    options?: ApplyModelChangeOptions,
+  ) => void,
 ) {
   // Resolve the style of text inserted by a commit: inherit the run style at
   // the insertion point and overlay a pending caret style (Ctrl+B before
@@ -175,48 +181,61 @@ export function createEditorTextInput(
 
   // ── commitParagraphText ──────────────────────────────────────────
   const commitParagraphText = (nodeIndex: number, text: string): void => {
-    applyChange((current) => {
-      const paragraph = current.nodes[nodeIndex]
-      if (!paragraph || paragraph.type !== "paragraph") return current
-      const previousText = paragraphText(paragraph)
-      if (previousText === text) return current
-      const insertedStyle = insertedStyleForTextChange(paragraph, previousText, text)
-      return updateParagraphText(current, nodeIndex, text, { insertedStyle })
-    })
+    applyChange(
+      (current) => {
+        const paragraph = current.nodes[nodeIndex]
+        if (!paragraph || paragraph.type !== "paragraph") return current
+        const previousText = paragraphText(paragraph)
+        if (previousText === text) return current
+        const insertedStyle = insertedStyleForTextChange(paragraph, previousText, text)
+        return updateParagraphText(current, nodeIndex, text, { insertedStyle })
+      },
+      undefined,
+      { textCommitKey: `paragraph:${nodeIndex}` },
+    )
   }
 
   // ── commitTableCellText ──────────────────────────────────────────
   const commitTableCellText = (
     tableIndex: number, rowIndex: number, cellIndex: number, text: string
   ): void => {
-    applyChange((current) => {
-      const node = current.nodes[tableIndex]
-      if (!node || node.type !== "table") return current
-      const cell = node.rows[rowIndex]?.cells[cellIndex]
-      if (!cell) return current
-      const currentText = cell.nodes
-        .filter((child): child is ParagraphNode => child.type === "paragraph")
-        .map((paragraph) => paragraphText(paragraph))
-        .join("\n")
-      if (currentText === text) return current
-      // Diff per paragraph so run styles, images and form fields survive, and
-      // the paragraph/table sourceXml caches are invalidated for export.
-      return updateTableCellText(current, tableIndex, rowIndex, cellIndex, text)
-    })
+    applyChange(
+      (current) => {
+        const node = current.nodes[tableIndex]
+        if (!node || node.type !== "table") return current
+        const cell = node.rows[rowIndex]?.cells[cellIndex]
+        if (!cell) return current
+        const currentText = cell.nodes
+          .filter((child): child is ParagraphNode => child.type === "paragraph")
+          .map((paragraph) => paragraphText(paragraph))
+          .join("\n")
+        if (currentText === text) return current
+        // Diff per paragraph so run styles, images and form fields survive, and
+        // the paragraph/table sourceXml caches are invalidated for export.
+        return updateTableCellText(current, tableIndex, rowIndex, cellIndex, text)
+      },
+      undefined,
+      { textCommitKey: `table-cell:${tableIndex}:${rowIndex}:${cellIndex}:0` },
+    )
   }
 
   // ── commitTableCellTextByRuntimeKey ──────────────────────────────
   const commitTableCellTextByRuntimeKey = (
     tableRuntimeKey: string, rowIndex: number, cellIndex: number, text: string
   ): void => {
-    applyChange((current) => {
-      const nextModel = cloneDocModel(current)
-      const node = resolveRuntimeKeyTable(nextModel, tableRuntimeKey, true)
-      if (!node) return current
-      return writeFirstTableCellText(node, rowIndex, cellIndex, text)
-        ? nextModel
-        : current
-    })
+    applyChange(
+      (current) => {
+        const nextModel = cloneHostTableForRuntimeKey(current, tableRuntimeKey)
+        if (!nextModel) return current
+        const node = resolveRuntimeKeyTable(nextModel, tableRuntimeKey, true)
+        if (!node) return current
+        return writeFirstTableCellText(node, rowIndex, cellIndex, text)
+          ? nextModel
+          : current
+      },
+      undefined,
+      { textCommitKey: `runtime-table:${tableRuntimeKey}:${rowIndex}:${cellIndex}:0` },
+    )
   }
 
   // ── commitTableCellParagraphTextByRuntimeKey ─────────────────────
@@ -228,33 +247,41 @@ export function createEditorTextInput(
     text: string
   ): void => {
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneHostTableForRuntimeKey(current, tableRuntimeKey)
+      if (!nextModel) return current
       return updateRuntimeKeyParagraph(
         nextModel, tableRuntimeKey, rowIndex, cellIndex, paragraphIndex, text
       )
         ? nextModel
         : current
-    })
+    },
+    undefined,
+    { textCommitKey: `runtime-table:${tableRuntimeKey}:${rowIndex}:${cellIndex}:${paragraphIndex}` },
+  )
   }
 
   // ── commitTableCellParagraphTextRecursive ────────────────────────
   const commitTableCellParagraphTextRecursive = (
     tableIndex: number, rowIndex: number, cellIndex: number, paragraphIndex: number, text: string
   ): void => {
-    applyChange((current) => {
-      const node = current.nodes[tableIndex]
-      if (!node || node.type !== "table") return current
-      const cell = node.rows[rowIndex]?.cells[cellIndex]
-      const paragraph = cell?.nodes
-        .filter((child): child is ParagraphNode => child.type === "paragraph")[paragraphIndex]
-      if (!cell || !paragraph) return current
-      const previousText = paragraphText(paragraph)
-      if (previousText === text) return current
-      const insertedStyle = insertedStyleForTextChange(paragraph, previousText, text)
-      return updateTableCellParagraphText(
-        current, tableIndex, rowIndex, cellIndex, paragraphIndex, text, { insertedStyle }
-      )
-    })
+    applyChange(
+      (current) => {
+        const node = current.nodes[tableIndex]
+        if (!node || node.type !== "table") return current
+        const cell = node.rows[rowIndex]?.cells[cellIndex]
+        const paragraph = cell?.nodes
+          .filter((child): child is ParagraphNode => child.type === "paragraph")[paragraphIndex]
+        if (!cell || !paragraph) return current
+        const previousText = paragraphText(paragraph)
+        if (previousText === text) return current
+        const insertedStyle = insertedStyleForTextChange(paragraph, previousText, text)
+        return updateTableCellParagraphText(
+          current, tableIndex, rowIndex, cellIndex, paragraphIndex, text, { insertedStyle }
+        )
+      },
+      undefined,
+      { textCommitKey: `table-cell:${tableIndex}:${rowIndex}:${cellIndex}:${paragraphIndex}` },
+    )
   }
 
   // ── commitSectionParagraphText ───────────────────────────────────
@@ -262,8 +289,13 @@ export function createEditorTextInput(
     location: { region: "header" | "footer"; partName: string; nodeIndex: number },
     text: string
   ): void => {
-    applyChange((current) =>
-      updateSectionParagraphTextAtLocation(current, location, text)
+    applyChange(
+      (current) => updateSectionParagraphTextAtLocation(current, location, text),
+      undefined,
+      {
+        textCommitKey:
+          `section:${location.region}:${location.partName}:${location.nodeIndex}`,
+      },
     )
   }
 
@@ -271,7 +303,7 @@ export function createEditorTextInput(
   const appendParagraph = (text?: string): number => {
     let nodeIndex = -1
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneDocModelShallow(current)
       const para: ParagraphNode = { type: "paragraph", children: [] }
       if (text) {
         para.children.push({ type: "text", text, style: {} })
@@ -315,7 +347,10 @@ export function createEditorTextInput(
 
     applyChange(
       (current) => {
-        let next = cloneDocModel(current)
+        let next = cloneDocModelNodes(current, [
+          topLevelNodeIndex(normalizedRange.start.location),
+          topLevelNodeIndex(normalizedRange.end.location),
+        ])
 
         const clearNumberingIfParagraphEmpty = (location: ParagraphLocation): void => {
           const { paragraph, tableNode } = getParagraphAtLocation(next, location)
@@ -684,7 +719,7 @@ export function createEditorTextInput(
     let splitResult: { paragraphIndex: number; caretOffset: number } | undefined
 
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const next = cloneDocModelNodes(current, [targetLocation.nodeIndex])
       const paragraphNode = next.nodes[targetLocation.nodeIndex]
       if (!paragraphNode || paragraphNode.type !== "paragraph") return current
 
@@ -773,7 +808,7 @@ export function createEditorTextInput(
     const normalizedEndOffset = Math.max(normalizedStartOffset, Math.round(endOffset ?? normalizedStartOffset))
 
     applyChange((current) => {
-      let next = cloneDocModel(current)
+      let next = cloneDocModelShallow(current)
       let paragraphNode = next.nodes[targetLocation.nodeIndex]
       if (!paragraphNode || paragraphNode.type !== "paragraph") return current
 

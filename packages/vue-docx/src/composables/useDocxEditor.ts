@@ -213,6 +213,11 @@ export function useDocxEditor(
     for (const flusher of [...textDraftFlushers]) flusher()
   }
 
+  // The transaction module owns the burst state; this holder lets the editor
+  // context (built first) expose a stable closer to every sub-module.
+  let endTextCommitBurstImpl: () => void = () => {}
+  const endTextCommitBurst = (): void => endTextCommitBurstImpl()
+
   // --- refs (mutable snapshots for synchronous access in callbacks) ---
   let modelSnapshot = model.value
   let selectionSnapshot = cloneEditorSelection(selection.value)
@@ -541,6 +546,7 @@ export function useDocxEditor(
     activeImportAbortController: { get value() { return activeImportAbortController }, set value(v) { activeImportAbortController = v } },
     pendingExportModelTransformer: { get value() { return pendingExportModelTransformer }, set value(v) { pendingExportModelTransformer = v } },
     flushTextDrafts,
+    endTextCommitBurst,
     activeFormFieldEditKey: { get value() { return activeFormFieldEditKey }, set value(v) { activeFormFieldEditKey = v } },
     starterTemplate,
 
@@ -569,7 +575,13 @@ export function useDocxEditor(
   // ═══════════════════════════════════════════════════════════════════
 
   // 1. editor-transaction (must be first — creates dispatch + applyChange)
-  const { dispatchEditorTransaction, applyModelChange } = createEditorTransaction(ctx)
+  const {
+    dispatchEditorTransaction,
+    applyModelChange,
+    endTextCommitBurst: endBurstInTransaction,
+    keepsTextCommitBurst,
+  } = createEditorTransaction(ctx)
+  endTextCommitBurstImpl = endBurstInTransaction
 
   // 2. editor-history
   const { undo, redo } = createEditorHistory(ctx)
@@ -705,6 +717,10 @@ export function useDocxEditor(
       )
     )
     if (locationChanged || collapsedCaretMoved) clearPendingRunStyle()
+    // A selection change ends the typing burst, except for the caret following
+    // the text that the burst just committed (which stays in the same
+    // paragraph/cell and is collapsed).
+    if (!keepsTextCommitBurst(nextRange)) endTextCommitBurst()
     activeTextRangeSnapshot = cloneTextRange(nextRange)
     activeTextRange.value = nextRange
   }
@@ -809,6 +825,7 @@ export function useDocxEditor(
     registerPendingExportModelTransformer: ie.registerPendingExportModelTransformer,
     registerTextDraftFlusher,
     flushTextDrafts,
+    endTextCommitBurst,
     setStatus,
     setDocumentTheme: setDocumentThemeFn,
     setShowTrackedChanges: setShowTrackedChangesFn,

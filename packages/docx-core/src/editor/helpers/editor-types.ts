@@ -182,6 +182,15 @@ export interface DocxEditorTransactionPatch {
   status?: string;
   clearSelectedFormField?: boolean;
   pushHistory?: boolean;
+  /**
+   * Coalesces consecutive text commits into one undo entry.
+   *
+   * A patch that carries the same key as the previous patch, with no
+   * intervening transaction, folds into the undo entry opened by the first
+   * commit of the burst. Selection changes, formatting/structural commands,
+   * undo/redo, a different key or `endTextCommitBurst()` close the burst.
+   */
+  textCommitKey?: string;
 }
 
 export type ParagraphLocation = DocxTextRangeLocation;

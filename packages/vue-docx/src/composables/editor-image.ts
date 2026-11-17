@@ -10,7 +10,7 @@ import type {
   DocxSectionImageLocation,
 } from "@arcships/docx-core"
 import {
-  cloneDocModel,
+  cloneDocModelNodes,
   cloneEditorSelection,
   cloneTextRange,
   paragraphText,
@@ -49,6 +49,11 @@ function locateImage(
   const image = paragraph?.children[location.childIndex]
   if (!paragraph || image?.type !== "image") return undefined
   return { image, paragraph, table }
+}
+
+/** Top-level node index that owns an image location. */
+function imageNodeIndex(location: DocxImageLocation): number {
+  return location.kind === "paragraph" ? location.nodeIndex : location.tableIndex
 }
 
 function invalidateImageSource(location: LocatedImage): void {
@@ -211,7 +216,7 @@ export function createEditorImage(
       return
     }
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const next = cloneDocModelNodes(current, [imageNodeIndex(location)])
       const located = locateImage(next, location)
       if (!located) return current
       update(located)
@@ -243,7 +248,10 @@ export function createEditorImage(
     const src = `data:${file.type};base64,${toBase64(bytes)}`
 
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const insertionNodeIndex = insertionSelection.kind === "paragraph"
+        ? insertionSelection.nodeIndex
+        : insertionSelection.tableIndex
+      const next = cloneDocModelNodes(current, [insertionNodeIndex])
       const selection = insertionSelection
 
       if (selection.kind === "paragraph") {
@@ -451,7 +459,7 @@ export function createEditorImage(
       return
     }
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const next = cloneDocModelNodes(current, [nodeIndex])
       const target = next.nodes[nodeIndex]
       if (target?.type !== "paragraph" || !target.style?.dropCap) return current
       target.style.dropCap = { ...target.style.dropCap, ...patch }
@@ -472,7 +480,7 @@ export function createEditorImage(
       return
     }
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const next = cloneDocModelNodes(current, [nodeIndex])
       const target = next.nodes[nodeIndex]
       if (target?.type !== "paragraph") return current
       const firstText = target.children.find((child) => child.type === "text" && child.text.length > 0)
@@ -495,7 +503,7 @@ export function createEditorImage(
       return
     }
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const next = cloneDocModelNodes(current, [nodeIndex])
       const target = next.nodes[nodeIndex]
       if (target?.type !== "paragraph") return current
       const firstText = target.children.find((child) => child.type === "text" && child.text.length > 0)
@@ -515,7 +523,10 @@ export function createEditorImage(
       return
     }
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const next = cloneDocModelNodes(current, [
+        imageNodeIndex(source),
+        target.kind === "paragraph" ? target.nodeIndex : target.tableIndex,
+      ])
       const from = locateImage(next, source)
       if (!from) return current
 

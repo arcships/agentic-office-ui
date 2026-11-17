@@ -16,7 +16,7 @@ import type {
   DocxListType,
 } from "@arcships/docx-core"
 import {
-  cloneDocModel,
+  cloneDocModelNodes,
   mutateParagraphTextStyleInRange,
   resolveSelectedParagraphLocation,
   getParagraphAtLocation,
@@ -34,6 +34,7 @@ import {
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { EditorCore } from "./editor-shared"
 import { selectedParagraphLocations } from "./editor-paragraph-range"
+import { topLevelNodeIndex } from "./editor-clone-helpers"
 
 function typedKeys<T extends object>(obj: T): (keyof T)[] {
   return Object.keys(obj) as (keyof T)[]
@@ -83,11 +84,14 @@ export function createEditorFormat(
     }
 
     dispatch((txCtx) => {
-      const nextModel = cloneDocModel(txCtx.model)
       const rangeParagraphs = paragraphRangeForMutate(
-        nextModel,
+        txCtx.model,
         normalizedRange.start.location,
         normalizedRange.end.location
+      )
+      const nextModel = cloneDocModelNodes(
+        txCtx.model,
+        rangeParagraphs.map((entry) => topLevelNodeIndex(entry.location))
       )
       let touched = false
 
@@ -156,7 +160,9 @@ export function createEditorFormat(
     dispatch((txCtx) => {
       const rng = ctx.activeTextRangeSnapshot.value
       if (!rng) return undefined
-      const nextModel = cloneDocModel(txCtx.model)
+      const nextModel = cloneDocModelNodes(txCtx.model, [
+        topLevelNodeIndex(resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, rng)),
+      ])
       const { paragraph: para } = getParagraphAtLocation(
         nextModel,
         resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, rng)
@@ -198,7 +204,10 @@ export function createEditorFormat(
         ctx.selectionSnapshot.value,
         ctx.activeTextRangeSnapshot.value
       )
-      const nextModel = cloneDocModel(txCtx.model)
+      const nextModel = cloneDocModelNodes(
+        txCtx.model,
+        locations.map(topLevelNodeIndex)
+      )
       let mutated = false
       for (const location of locations) {
         const { paragraph: para } = getParagraphAtLocation(nextModel, location)
@@ -218,7 +227,10 @@ export function createEditorFormat(
         ctx.selectionSnapshot.value,
         ctx.activeTextRangeSnapshot.value
       )
-      const nextModel = cloneDocModel(txCtx.model)
+      const nextModel = cloneDocModelNodes(
+        txCtx.model,
+        locations.map(topLevelNodeIndex)
+      )
       let mutated = false
       for (const location of locations) {
         const { paragraph: para } = getParagraphAtLocation(nextModel, location)
@@ -239,7 +251,10 @@ export function createEditorFormat(
         ctx.selectionSnapshot.value,
         ctx.activeTextRangeSnapshot.value
       )
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneDocModelNodes(
+        current,
+        locations.map(topLevelNodeIndex)
+      )
       const lineTwips = Math.max(1, Math.round(lineMultiple * 240))
       let mutated = false
       for (const location of locations) {
@@ -262,7 +277,10 @@ export function createEditorFormat(
         ctx.selectionSnapshot.value,
         ctx.activeTextRangeSnapshot.value
       )
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneDocModelNodes(
+        current,
+        locations.map(topLevelNodeIndex)
+      )
       let mutated = false
       for (const location of locations) {
         const { paragraph: para } = getParagraphAtLocation(nextModel, location)
@@ -295,7 +313,7 @@ export function createEditorFormat(
 
     applyChange((current) => {
       if (targetLocation.kind === "table-cell") {
-        const next = cloneDocModel(current)
+        const next = cloneDocModelNodes(current, [targetLocation.tableIndex])
         const tableNode = next.nodes[targetLocation.tableIndex]
         if (!tableNode || tableNode.type !== "table") return current
 
@@ -333,7 +351,10 @@ export function createEditorFormat(
 
         const removePreset = preset !== "none" &&
           paragraphRangePresetActive(preset, paragraphsWithLocation.map((e) => e.borders))
-        const next = cloneDocModel(current)
+        const next = cloneDocModelNodes(
+          current,
+          paragraphsWithLocation.map((entry) => topLevelNodeIndex(entry.location))
+        )
 
         for (let index = 0; index < paragraphsWithLocation.length; index += 1) {
           const target = paragraphsWithLocation[index]
@@ -356,8 +377,8 @@ export function createEditorFormat(
       }
 
       // Single paragraph — apply border directly
-      const next = cloneDocModel(current)
       const loc = resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, ctx.activeTextRangeSnapshot.value)
+      const next = cloneDocModelNodes(current, [topLevelNodeIndex(loc)])
       const { paragraph, tableNode } = getParagraphAtLocation(next, loc)
       if (!paragraph) return current
 

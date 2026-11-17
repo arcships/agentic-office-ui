@@ -1,7 +1,9 @@
 import type {
   DocModel,
   DocNode,
+  FooterSection,
   FormFieldRunNode,
+  HeaderSection,
   ImageRunNode,
   NumberingDefinitionSet,
   ParagraphBorderSet,
@@ -447,6 +449,80 @@ export function cloneDocModelShallow(model: DocModel): DocModel {
     nodes: [...model.nodes],
     metadata: { ...model.metadata }
   };
+}
+
+/**
+ * Copy-on-write model whose listed top-level nodes are fresh clones, ready to be
+ * mutated in place.
+ *
+ * Commands that touch several nodes (a range format change, a table-cell edit, an
+ * image moved between paragraphs) pass every touched node index here instead of
+ * cloning the whole document. Indexes may repeat and may be out of range; only
+ * existing nodes are copied.
+ */
+export function cloneDocModelNodes(
+  model: DocModel,
+  nodeIndexes: Iterable<number>
+): DocModel {
+  const next = cloneDocModelShallow(model);
+  const copied = new Set<number>();
+
+  for (const nodeIndex of nodeIndexes) {
+    if (copied.has(nodeIndex)) continue;
+    copied.add(nodeIndex);
+
+    const source = model.nodes[nodeIndex];
+    if (!source) continue;
+    next.nodes[nodeIndex] = cloneDocNode(source);
+  }
+
+  return next;
+}
+
+/**
+ * Copy-on-write model whose header or footer sections are fresh copies, plus
+ * those copies.
+ *
+ * Header/footer edits live in `metadata.headerSections`, in
+ * `metadata.sections[].headerSections` and in `metadata.footerSections` /
+ * `metadata.sections[].footerSections`. The returned model owns new arrays for
+ * every one of those lists, every section object is copied, and every section
+ * `nodes` array is copied so a caller can replace a node in it. Nodes that are
+ * not edited stay shared.
+ *
+ * Callers mutate the returned `sections` (whose `nodes` arrays belong to the
+ * returned model) instead of `model.metadata`.
+ */
+export function cloneDocModelSectionLists(
+  model: DocModel,
+  region: "header" | "footer"
+): { model: DocModel; sections: HeaderSection[] | FooterSection[] } {
+  const next = cloneDocModelShallow(model);
+  const key = region === "header" ? "headerSections" : "footerSections";
+  const collected: HeaderSection[] | FooterSection[] = [];
+
+  const copyList = <T extends HeaderSection | FooterSection>(
+    sections: T[] | undefined
+  ): T[] | undefined =>
+    sections?.map((section) => {
+      const copy = { ...section, nodes: [...section.nodes] } as T;
+      collected.push(copy);
+      return copy;
+    });
+
+  const topLevel = next.metadata[key];
+  if (topLevel) {
+    next.metadata[key] = copyList(topLevel) as typeof topLevel;
+  }
+
+  if (next.metadata.sections) {
+    next.metadata.sections = next.metadata.sections.map((section) => {
+      const list = section[key];
+      return list ? { ...section, [key]: copyList(list) } : section;
+    });
+  }
+
+  return { model: next, sections: collected };
 }
 
 export function cloneNumberingDefinitions(

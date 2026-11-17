@@ -59,6 +59,8 @@ export type {
 
 export {
   cloneDocModel,
+  cloneDocModelNodes,
+  cloneDocModelSectionLists,
   cloneDocModelShallow,
   cloneDocNode,
   cloneNumberingDefinitions,

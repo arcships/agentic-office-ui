@@ -155,6 +155,11 @@ export interface DocxEditorController {
   registerTextDraftFlusher: (flusher: () => void) => () => void;
   /** Commit any live contentEditable drafts into the model. */
   flushTextDrafts: () => void;
+  /**
+   * Close the current text-commit burst so the next keystroke opens a new undo
+   * entry. Called on blur; hosts can also call it at their own command boundary.
+   */
+  endTextCommitBurst: () => void;
   setStatus: (value: string | ((prev: string) => string)) => void;
   setDocumentTheme: (theme: DocxDocumentTheme) => void;
   setShowTrackedChanges: (showTrackedChanges: boolean) => void;
