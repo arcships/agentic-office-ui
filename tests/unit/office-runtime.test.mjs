@@ -188,6 +188,59 @@ test("surface search navigation wraps and clear resets the public state", async 
   session.dispose();
 });
 
+test("surface search resolves superseded activation with the latest state instead of rejecting", async () => {
+  let firstActivationStarted;
+  const activationStarted = new Promise((resolve) => { firstActivationStarted = resolve; });
+  const activations = [];
+  const session = runtime.createSurfaceSearchSession({
+    search: (query) => [query],
+    activate(match, index, { signal }) {
+      activations.push([match, index]);
+      if (activations.length > 1) return;
+      firstActivationStarted();
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => {
+          const error = new Error("activation replaced");
+          error.name = "AbortError";
+          reject(error);
+        }, { once: true });
+      });
+    },
+  });
+
+  const first = session.search("first");
+  await activationStarted;
+  const second = session.search("second");
+
+  const firstState = await first;
+  assert.notEqual(firstState, undefined, "superseded search must resolve with state");
+  assert.equal(firstState.status !== "error", true);
+  assert.equal(firstState.query, "second");
+
+  const secondState = await second;
+  assert.equal(secondState.status, "ready");
+  assert.deepEqual(secondState.matches, ["second"]);
+  assert.equal(secondState.activeIndex, 0);
+  assert.deepEqual(activations, [["first", 0], ["second", 0]]);
+  session.dispose();
+});
+
+test("surface search reports activation failure through state without rejecting the host", async () => {
+  const session = runtime.createSurfaceSearchSession({
+    search: () => ["virtualized"],
+    activate() { throw new Error("match page is not mounted"); },
+  });
+
+  const state = await session.search("virtualized");
+  assert.equal(state.status, "error");
+  assert.equal(state.query, "virtualized");
+  assert.deepEqual(state.matches, ["virtualized"]);
+  assert.equal(state.error.code, "ACTIVATION_FAILED");
+  assert.match(state.error.message, /not mounted/u);
+  assert.equal(session.getSearchState(), state);
+  session.dispose();
+});
+
 test("archive budgets validate central metadata and actual streamed extraction at exact boundaries", () => {
   const archive = makeArchive({
     "word/document.xml": "<w:document xmlns:w=\"urn:w\"><w:body><w:p>ok</w:p></w:body></w:document>",

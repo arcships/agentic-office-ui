@@ -55,6 +55,7 @@ import {
   type OfficeObjectReference,
   type OfficeReferenceCandidatePreview,
   type OfficeReferenceError,
+  type OfficeRegionDraftChange,
   type OfficeSelectionMode,
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
@@ -198,7 +199,7 @@ const emit = defineEmits<{
   documentRevisionChange: [revision: OfficeDocumentRevision]
   referenceCandidateChange: [change: { candidates: readonly OfficeReferenceCandidatePreview[]; activeCandidateId?: string }]
   referenceConfirm: [event: ReturnType<typeof confirmOfficeReferenceDraft>]
-  regionDraftChange: [event: { phase: "start" | "change"; region: { space: "slide"; slideIndex: number; rect: NormalizedRect } }]
+  regionDraftChange: [event: OfficeRegionDraftChange]
   selectionCancel: [event: { mode: OfficeSelectionMode; reason: "escape" | "pointer-cancel" | "programmatic" }]
   referenceResolve: [event: { referenceId: string; result: ResolveReferenceResult }]
   referenceError: [error: OfficeReferenceError]
@@ -511,9 +512,11 @@ function onRegionPointerDown(event: PointerEvent): void {
   const bounds = slide?.getBoundingClientRect()
   if (!bounds || bounds.width <= 0 || bounds.height <= 0 || !Number.isSafeInteger(slideIndex)) return
   regionGesture.value = { pointerId: event.pointerId, slideIndex, bounds, startX: event.clientX, startY: event.clientY }
-  regionRect.value = { x: clampUnit((event.clientX - bounds.left) / bounds.width), y: clampUnit((event.clientY - bounds.top) / bounds.height), width: 0, height: 0 }
+  const x = clampUnit((event.clientX - bounds.left) / bounds.width)
+  const y = clampUnit((event.clientY - bounds.top) / bounds.height)
+  regionRect.value = { x, y, width: 0, height: 0 }
   ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
-  emit("regionDraftChange", { phase: "start", region: { space: "slide", slideIndex, rect: regionRect.value } })
+  emit("regionDraftChange", { phase: "start", point: { space: "slide", slideIndex, x, y } })
   event.preventDefault()
 }
 

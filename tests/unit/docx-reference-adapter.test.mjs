@@ -148,3 +148,84 @@ test("DOCX page and manual region stay exact only within the same pagination rev
   })
   assert.equal(docx.resolveDocxReference(context("docx-v2", fixtures.original), region).status, "unsupported")
 })
+
+test("DOCX image, table and comment locators round-trip and relocate across structural revisions", () => {
+  const model = {
+    nodes: [
+      {
+        type: "paragraph",
+        children: [
+          { type: "text", text: "Before " },
+          { type: "image", alt: "Revenue chart", widthPx: 320, heightPx: 180 },
+        ],
+      },
+      {
+        type: "table",
+        rows: [{
+          cells: [{
+            type: "table-cell",
+            nodes: [{ type: "paragraph", children: [{ type: "text", text: "Cell value" }] }],
+          }],
+        }],
+      },
+    ],
+    metadata: {
+      ...originalContext.model.metadata,
+      comments: [{ id: 7, author: "Ada", text: "Please revise this sentence." }],
+    },
+  }
+  const richContext = { revision: originalContext.revision, model, pageCount: 2 }
+
+  const image = reference(docx.createDocxImageReferenceDraft(richContext, {
+    paragraph: { kind: "paragraph", nodeIndex: 0 },
+    childIndex: 1,
+  }), "ref-image")
+  assert.equal(image.kind, "image")
+  assert.deepEqual(image.locator.value.paragraphPath, [{ kind: "paragraph", index: 0 }])
+  assert.equal(image.locator.value.childIndex, 1)
+  const imageResult = docx.resolveDocxReference(richContext, image)
+  assert.equal(imageResult.status, "exact")
+  assert.equal(imageResult.descriptor.label, "Image: Revenue chart")
+
+  const table = reference(docx.createDocxTableReferenceDraft(richContext, 1), "ref-table")
+  assert.equal(table.kind, "table")
+  assert.deepEqual(table.locator.value.path, [{ kind: "table", index: 1 }])
+  assert.equal(docx.resolveDocxReference(richContext, table).status, "exact")
+
+  const comment = reference(docx.createDocxCommentReferenceDraft(richContext, {
+    commentId: "7",
+    anchor: { kind: "paragraph", nodeIndex: 0 },
+  }), "ref-comment")
+  assert.equal(comment.kind, "comment")
+  assert.deepEqual(comment.locator.value.anchorPath, [{ kind: "paragraph", index: 0 }])
+  assert.equal(docx.resolveDocxReference(richContext, comment).descriptor.content.text, "Please revise this sentence.")
+
+  const movedContext = { ...richContext, revision: { ...originalContext.revision, revision: "docx-v2" } }
+  for (const candidate of [image, table, comment]) {
+    const moved = docx.resolveDocxReference(movedContext, candidate)
+    assert.equal(moved.status, "relocated")
+    assert.equal(moved.reference.referenceId, candidate.referenceId)
+    assert.equal(moved.reference.document.revision, "docx-v2")
+    assert.deepEqual(moved.reasonCodes, ["docx.revision-changed", "docx.locator-stable"])
+  }
+
+  assert.throws(
+    () => docx.createDocxImageReferenceDraft(richContext, {
+      paragraph: { kind: "paragraph", nodeIndex: 0 },
+      childIndex: 0,
+    }),
+    /image child/u,
+  )
+  assert.throws(() => docx.createDocxTableReferenceDraft(richContext, 0), /table 0/u)
+  assert.throws(
+    () => docx.createDocxCommentReferenceDraft(richContext, { commentId: "99" }),
+    /comment 99/u,
+  )
+
+  const missingTable = structuredClone(table)
+  missingTable.locator.value.path[0].index = 0
+  assert.deepEqual(docx.resolveDocxReference(richContext, interaction.parseOfficeObjectReference(missingTable)), {
+    status: "not-found",
+    reasonCode: "docx.table-not-found",
+  })
+})

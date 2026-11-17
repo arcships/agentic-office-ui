@@ -91,6 +91,7 @@ import {
   type OfficeObjectReference,
   type OfficeReferenceCandidatePreview,
   type OfficeReferenceError,
+  type OfficeRegionDraftChange,
   type OfficeSelectionMode,
   type SheetRegionPoint,
   type ResolveReferenceResult,
@@ -149,7 +150,7 @@ const emit = defineEmits<{
   documentRevisionChange: [revision: OfficeDocumentRevision]
   referenceCandidateChange: [change: { candidates: readonly OfficeReferenceCandidatePreview[]; activeCandidateId?: string }]
   referenceConfirm: [event: ReturnType<typeof confirmOfficeReferenceDraft>]
-  regionDraftChange: [event: { phase: "start" | "change"; region: { space: "sheet"; sheetId: string; start: SheetRegionPoint; end: SheetRegionPoint } }]
+  regionDraftChange: [event: OfficeRegionDraftChange]
   selectionCancel: [event: { mode: OfficeSelectionMode; reason: "escape" | "pointer-cancel" | "programmatic" }]
   referenceResolve: [event: { referenceId: string; result: ResolveReferenceResult }]
   referenceError: [error: OfficeReferenceError]
@@ -312,7 +313,10 @@ function onRegionPointerDown(event: PointerEvent): void {
   regionDraft.value = orderedSheetRegion(sheet, start, { ...start, xOffset: Math.min(1, start.xOffset + 0.0001), yOffset: Math.min(1, start.yOffset + 0.0001) })
   regionVisual.value = { startX: event.clientX, startY: event.clientY, endX: event.clientX, endY: event.clientY }
   ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
-  emit("regionDraftChange", { phase: "start", region: regionDraft.value })
+  emit("regionDraftChange", {
+    phase: "start",
+    point: { space: "sheet", sheetId: regionDraft.value.sheetId, start },
+  })
   event.preventDefault()
 }
 

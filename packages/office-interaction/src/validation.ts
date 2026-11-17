@@ -12,6 +12,8 @@ import type {
   OfficeObjectReliability,
   OfficeReferenceConfirmEvent,
   OfficeReferenceSnapshot,
+  OfficeRegionDraftChange,
+  OfficeRegionDraftStart,
   PdfObjectLocator,
   PptxObjectKeyLocator,
   PptxObjectLocator,
@@ -708,6 +710,56 @@ export function safeParseOfficeReferenceConfirmEvent(value: unknown): OfficeSafe
 
 export function assertOfficeJsonValue(value: unknown): asserts value is import("./types").JsonValue {
   assertJsonTree(value)
+}
+
+function validateRegionDraftStart(value: unknown, path: string): OfficeRegionDraftStart {
+  const input = record(value, path)
+  if (input.space === "page") {
+    onlyKeys(input, ["space", "pageIndex", "x", "y"], path)
+    integer(input.pageIndex, `${path}.pageIndex`)
+    unit(input.x, `${path}.x`)
+    unit(input.y, `${path}.y`)
+  } else if (input.space === "slide") {
+    onlyKeys(input, ["space", "slideIndex", "x", "y"], path)
+    integer(input.slideIndex, `${path}.slideIndex`)
+    unit(input.x, `${path}.x`)
+    unit(input.y, `${path}.y`)
+  } else if (input.space === "sheet") {
+    onlyKeys(input, ["space", "sheetId", "start"], path)
+    stringValue(input.sheetId, `${path}.sheetId`, { max: 512 })
+    validateSheetPoint(input.start, `${path}.start`)
+  } else {
+    fail("INVALID_VALUE", `${path}.space`, "contains an unsupported coordinate space")
+  }
+  return input as unknown as OfficeRegionDraftStart
+}
+
+/**
+ * Region gestures emit a point on `start` and a positive-area normalized
+ * rectangle on `change`. This parser is the canonical validator for both
+ * phases, so consumers never have to guess whether a zero-area draft is legal.
+ */
+export function parseOfficeRegionDraftChange(value: unknown): OfficeRegionDraftChange {
+  assertJsonTree(value)
+  const input = record(value, "$regionDraft")
+  if (input.phase === "start") {
+    onlyKeys(input, ["phase", "point"], "$regionDraft")
+    validateRegionDraftStart(input.point, "$regionDraft.point")
+  } else if (input.phase === "change") {
+    onlyKeys(input, ["phase", "region"], "$regionDraft")
+    validateManualRegion(input.region, "$regionDraft.region")
+  } else {
+    fail("INVALID_VALUE", "$regionDraft.phase", "must be start or change")
+  }
+  return input as unknown as OfficeRegionDraftChange
+}
+
+export function safeParseOfficeRegionDraftChange(value: unknown): OfficeSafeParseResult<OfficeRegionDraftChange> {
+  try {
+    return { success: true, data: parseOfficeRegionDraftChange(value) }
+  } catch (error) {
+    return { success: false, error: normalizeValidationError(error, "$regionDraft") }
+  }
 }
 
 function normalizeValidationError(error: unknown, path: string): OfficeInteractionValidationError {

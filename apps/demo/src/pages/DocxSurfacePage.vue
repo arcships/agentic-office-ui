@@ -303,6 +303,18 @@ async function simulateDocumentUpdate(): Promise<void> {
   const reference = latestReference.value
   if (!reference) return
   await loadSelectedSample()
+  if (!model.value) return
+  // Simulate a real content update instead of only remounting the same bytes;
+  // stable content now keeps the same revision and would not require reselection.
+  const updated = model.value
+  model.value = {
+    ...updated,
+    nodes: [
+      ...updated.nodes,
+      { type: "paragraph", children: [{ type: "text", text: `Simulated update ${new Date().toISOString()}` }] },
+    ],
+    metadata: { ...updated.metadata },
+  }
   await nextTick()
   await nextTick()
   if (!surfaceRef.value) return
