@@ -6,7 +6,7 @@
  * format. Both menus now delegate keyboard handling to the helpers below:
  *
  * - the menu takes focus when it opens,
- * - arrow/home/end keys cycle through its items,
+ * - arrow, Home and End keys cycle through its items,
  * - Escape and Tab close it and return focus to the invoking surface.
  */
 
