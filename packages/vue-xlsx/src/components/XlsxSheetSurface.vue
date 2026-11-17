@@ -114,6 +114,7 @@ import XlsxContextMenu from "./XlsxContextMenu.vue"
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue"
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch"
 import { provideXlsxMessages } from "../i18n"
+import { formatOfficeMessage } from "@arcships/office-interaction"
 
 const props = withDefaults(
   defineProps<{
@@ -176,6 +177,11 @@ type WebKitGestureEvent = Event & { clientX?: number; clientY?: number; scale?: 
 
 const surfaceRef = ref<HTMLElement | null>(null)
 const m = provideXlsxMessages(() => props.locale, () => props.messages)
+const descriptor = (
+  key: keyof typeof m.value.common.descriptors,
+  values: Record<string, string | number> = {},
+) => formatOfficeMessage(m.value.common.descriptors[key], values)
+const confirmFailed = () => formatOfficeMessage(m.value.common.reference.confirmFailed, { format: "XLSX" })
 const gridRef = ref<GridInstance | null>(null)
 const contextMenuRef = ref<{ openAt(clientX: number, clientY: number, target?: unknown): boolean } | null>(null)
 const gridViewport = ref({ height: 0, scrollLeft: 0, scrollTop: 0, width: 0 })
@@ -236,12 +242,12 @@ function confirmDraft(
       referenceId: createOfficeReferenceId(), trigger, additiveRequested, ...(snapshot ? { snapshot } : {}),
     }))
   } catch (reason) {
-    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to confirm XLSX reference.")
+    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : confirmFailed())
   }
 }
 
 function worksheetPath(sheet: XlsxReferenceSheet) {
-  return [{ kind: "workbook" as const, label: "Workbook" }, { kind: "worksheet" as const, label: sheet.name }]
+  return [{ kind: "workbook" as const, label: descriptor("workbook") }, { kind: "worksheet" as const, label: sheet.name }]
 }
 
 function columnLabel(columnIndex: number): string {
@@ -280,7 +286,7 @@ function candidateForPoint(point: { clientX: number; clientY: number }): OfficeR
 
 function hitTest(point: { clientX: number; clientY: number }): readonly OfficeReferenceCandidatePreview[] {
   try { return candidateForPoint(point) } catch (reason) {
-    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : "XLSX hit test failed.")
+    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : formatOfficeMessage(m.value.common.reference.hitTestFailed, { format: "XLSX" }))
     return []
   }
 }
@@ -638,7 +644,7 @@ defineExpose({
     }
   },
   async captureReferencePreview(reference: OfficeObjectReference): Promise<Blob> {
-    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", "XLSX preview capture is not provided by the Surface; use the host's capture pipeline.", reference.referenceId)
+    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", formatOfficeMessage(m.value.common.reference.captureUnsupported, { format: "XLSX" }), reference.referenceId)
     throw new Error("XLSX reference preview capture is unsupported")
   },
 })

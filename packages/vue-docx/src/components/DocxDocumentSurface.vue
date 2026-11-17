@@ -105,6 +105,7 @@ import {
 } from "../composables/useDocxSearch"
 import DocxViewerRoot from "./DocxViewerRoot.vue"
 import { provideDocxMessages } from "../i18n"
+import { formatOfficeMessage } from "@arcships/office-interaction"
 import { docxTextRangeFromDomSelection } from "../composables/editor-selection"
 
 const props = withDefaults(
@@ -161,6 +162,11 @@ const emit = defineEmits<{
 
 const surfaceRef = ref<HTMLElement>()
 const m = provideDocxMessages(() => props.locale, () => props.messages)
+const descriptor = (
+  key: keyof typeof m.value.common.descriptors,
+  values: Record<string, string | number> = {},
+) => formatOfficeMessage(m.value.common.descriptors[key], values)
+const confirmFailed = () => formatOfficeMessage(m.value.common.reference.confirmFailed, { format: "DOCX" })
 const viewerRootRef = ref<InstanceType<typeof DocxViewerRoot>>()
 const effectiveZoomScale = computed(() =>
   props.zoom === undefined ? props.zoomScale : clampSurfaceZoom(props.zoom) * 100
@@ -221,7 +227,7 @@ function confirmDraft(
       ...(snapshot ? { snapshot } : {}),
     }))
   } catch (reason) {
-    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to confirm DOCX reference.")
+    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : confirmFailed())
   }
 }
 
@@ -248,14 +254,14 @@ function onRawSelectionChange(selection: { kind: string; text?: string; pageInde
     confirmDraft(draft, "pointer", {
       label: selection.text.length > 80 ? `${selection.text.slice(0, 77)}…` : selection.text,
       path: [
-        { kind: "document", label: "Document" },
-        ...(selection.pageIndex === undefined ? [] : [{ kind: "page" as const, label: `Page ${selection.pageIndex + 1}` }]),
+        { kind: "document", label: descriptor("document") },
+        ...(selection.pageIndex === undefined ? [] : [{ kind: "page" as const, label: descriptor("page", { number: selection.pageIndex + 1 }) }]),
         { kind: "text-range", label: m.value.common.selectedText },
       ],
       content: { text: selection.text },
     })
   } catch (reason) {
-    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to create DOCX text reference.")
+    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : formatOfficeMessage(m.value.common.reference.createFailed, { format: "DOCX" }))
   }
 }
 
@@ -317,8 +323,8 @@ function pageHitCandidate(pageIndex: number): OfficeHitCandidate {
     candidateId: `docx:page:${pageIndex}`,
     draft: createDocxPageReferenceDraft(referenceContext(), pageIndex),
     preview: {
-      label: `Page ${pageIndex + 1}`,
-      path: [{ kind: "document", label: "Document" }, { kind: "page", label: `Page ${pageIndex + 1}` }],
+      label: descriptor("page", { number: pageIndex + 1 }),
+      path: [{ kind: "document", label: descriptor("document") }, { kind: "page", label: descriptor("page", { number: pageIndex + 1 }) }],
     },
     hit: "inside",
     depth: 1,
@@ -336,7 +342,7 @@ function tableHitCandidate(element: Element): OfficeHitCandidate | undefined {
     draft: createDocxTableReferenceDraft(referenceContext(), tableIndex),
     preview: {
       label: `Table ${tableIndex + 1}`,
-      path: [{ kind: "document", label: "Document" }, { kind: "table", label: `Table ${tableIndex + 1}` }],
+      path: [{ kind: "document", label: descriptor("document") }, { kind: "table", label: descriptor("table", { number: tableIndex + 1 }) }],
     },
     hit: "direct",
     depth: 2,
@@ -357,10 +363,10 @@ function imageHitCandidate(element: Element): OfficeHitCandidate | undefined {
     candidateId: `docx:image:${key}:${childIndex}`,
     draft: createDocxImageReferenceDraft(referenceContext(), { paragraph, childIndex }),
     preview: {
-      label: "Image",
+      label: descriptor("image"),
       path: [
-        { kind: "document", label: "Document" },
-        { kind: "image", label: "Image" },
+        { kind: "document", label: descriptor("document") },
+        { kind: "image", label: descriptor("image") },
       ],
     },
     hit: "direct",
@@ -390,7 +396,7 @@ function commentHitCandidates(element: Element): readonly OfficeHitCandidate[] {
       draft: createDocxCommentReferenceDraft(referenceContext(), { commentId, ...(anchor ? { anchor } : {}) }),
       preview: {
         label,
-        path: [{ kind: "document", label: "Document" }, { kind: "comment", label }],
+        path: [{ kind: "document", label: descriptor("document") }, { kind: "comment", label }],
       },
       hit: "direct",
       depth: 3,
@@ -433,7 +439,7 @@ function hitTest(point: { clientX: number; clientY: number }): readonly OfficeRe
     }
     return rankOfficeHitCandidates(candidates).map(toOfficeReferenceCandidatePreview)
   } catch (reason) {
-    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : "DOCX hit test failed.")
+    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : formatOfficeMessage(m.value.common.reference.hitTestFailed, { format: "DOCX" }))
     return []
   }
 }
@@ -1244,7 +1250,7 @@ defineExpose({
   hitTest,
   async describeReference(reference: OfficeObjectReference, signal?: AbortSignal) {
     if (signal?.aborted) {
-      emitReferenceError("describe", "ABORTED", "DOCX reference description aborted.", reference.referenceId)
+      emitReferenceError("describe", "ABORTED", formatOfficeMessage(m.value.common.reference.describeAborted, { format: "DOCX" }), reference.referenceId)
       throw new DOMException("DOCX reference description aborted.", "AbortError")
     }
     const result = resolveDocxReference(referenceContext(), reference)
@@ -1296,7 +1302,7 @@ defineExpose({
       )
       throw new RangeError("DOCX reference preview capture limit exceeded")
     }
-    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", "DOCX preview capture is not provided by the Surface; use the host's capture pipeline.", reference.referenceId)
+    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", formatOfficeMessage(m.value.common.reference.captureUnsupported, { format: "DOCX" }), reference.referenceId)
     throw new Error("DOCX reference preview capture is unsupported")
   },
 })

@@ -10,6 +10,7 @@ import type {
   PdfObjectLocator,
   ResolveReferenceResult,
 } from "@arcships/office-interaction"
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction"
 import type { PageTextSlice } from "@embedpdf/models"
 import type {
   PdfRenderDocument,
@@ -316,14 +317,17 @@ function textDescriptor(
       }]
     : undefined
   const labelText = text.replace(/\s+/gu, " ").trim()
+  const messages = officeMessagesEn.common
   return {
     objectId: `pdf:text:${pageIndex}:${locator?.kind === "text-range" ? `${locator.charIndex}:${locator.charCount}` : "unknown"}`,
     draft: draftFromReference(reference),
-    label: labelText ? `Text: ${labelText.slice(0, 80)}` : "Text range",
+    label: labelText
+      ? formatOfficeMessage(messages.descriptors.textLabel, { text: labelText.slice(0, 80) })
+      : messages.descriptors.textRange,
     path: [
-      { kind: "document", label: "Document" },
-      { kind: "page", label: `Page ${pageIndex + 1}` },
-      { kind: "text-range", label: "Selected text" },
+      { kind: "document", label: messages.descriptors.document },
+      { kind: "page", label: formatOfficeMessage(messages.descriptors.page, { number: pageIndex + 1 }) },
+      { kind: "text-range", label: messages.selectedText },
     ],
     childrenState: "none",
     content: { text },
@@ -340,14 +344,17 @@ function simpleDescriptor(reference: PdfOfficeReference): OfficeObjectDescriptor
   const region = reference.locator.type === "manual-region" ? reference.locator.value : undefined
   const locator = reference.locator.type === "format" ? reference.locator.value : undefined
   const pageIndex = region?.pageIndex ?? (locator?.kind === "page" ? locator.pageIndex : 0)
+  const messages = officeMessagesEn.common
   return {
     objectId: region ? `pdf:region:${pageIndex}:${JSON.stringify(region.rect)}` : `pdf:page:${pageIndex}`,
     draft: draftFromReference(reference),
-    label: region ? `Region on page ${pageIndex + 1}` : `Page ${pageIndex + 1}`,
+    label: region
+      ? formatOfficeMessage(messages.descriptors.regionOnPage, { number: pageIndex + 1 })
+      : formatOfficeMessage(messages.descriptors.page, { number: pageIndex + 1 }),
     path: [
-      { kind: "document", label: "Document" },
-      { kind: "page", label: `Page ${pageIndex + 1}` },
-      ...(region ? [{ kind: "region" as const, label: "Selected region" }] : []),
+      { kind: "document", label: messages.descriptors.document },
+      { kind: "page", label: formatOfficeMessage(messages.descriptors.page, { number: pageIndex + 1 }) },
+      ...(region ? [{ kind: "region" as const, label: messages.descriptors.selectedRegion }] : []),
     ],
     childrenState: region ? "none" : "unknown",
     ...(region ? {

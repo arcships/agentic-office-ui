@@ -1,6 +1,7 @@
 import { defineComponent, onMounted, onUnmounted, ref, watchEffect, type VNode } from "vue";
 import createREGL from "regl";
 import type { XlsxChart } from "@arcships/xlsx-core";
+import { officeMessagesEn } from "@arcships/office-interaction";
 
 type SurfacePalette = {
   border: string;
@@ -931,6 +932,7 @@ export const MemoSurfaceChartComposite = /* @__PURE__ */ defineComponent({
     background: { type: String, required: true },
     borderColor: { type: String, required: true },
     chart: { type: Object as () => XlsxChart, required: true },
+    chartLabels: { type: Object as () => { ariaLabel: string; unsupportedType: string } | undefined, default: undefined },
     fontFamily: { type: String, required: true },
     layout: { type: Object as () => SurfaceLayout, required: true },
     onDoubleClick: { type: Function as unknown as () => ((event: MouseEvent) => void) | undefined, default: undefined },
@@ -1138,7 +1140,7 @@ export const MemoSurfaceChartComposite = /* @__PURE__ */ defineComponent({
 
       return (
         <div
-          aria-label={chart.title ?? chart.name ?? "Chart"}
+          aria-label={chart.title ?? chart.name ?? props.chartLabels?.ariaLabel ?? officeMessagesEn.xlsx.chart.ariaLabel}
           role="img"
           style={{
             background,

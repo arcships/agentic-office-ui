@@ -1,7 +1,8 @@
 /** @jsxImportSource vue */
-import { defineComponent } from "vue";
+import { computed, defineComponent } from "vue";
 import type { VNode } from "vue";
 import type { XlsxChart, XlsxChartElementSelection, XlsxImageRect } from "@arcships/xlsx-core";
+import { officeMessagesEn } from "@arcships/office-interaction";
 
 // Re-export all chart utilities from their dedicated modules
 export type { ChartRendererPalette, ChartSvgProps, LegendItem, PlotRect, ChartLayout, ChartLegendMetrics, BarRect, ChartElementDataOptions, ChartHierarchyDatum, ComboRenderableGroup, ChartStage, BoxWhiskerStats, SurfaceDomain, RegionMapFeature, SurfacePathPoint, SurfaceContourSegment } from "./chart-types";
@@ -195,10 +196,11 @@ export function renderChartPlot(
   palette: ChartRendererPalette,
   layout: ChartLayout,
   chartType: string,
-  selectedChartElement?: XlsxChartElementSelection | null
+  selectedChartElement?: XlsxChartElementSelection | null,
+  chartLabels?: { ariaLabel: string; unsupportedType: string },
 ) {
   if (isComboChart(chart)) {
-    return renderComboChart(chart, palette, layout, selectedChartElement) ?? renderUnsupported(chart, palette, layout, "Combo");
+    return renderComboChart(chart, palette, layout, selectedChartElement) ?? renderUnsupported(chart, palette, layout, "Combo", chartLabels?.unsupportedType);
   }
   if (
     chartType === "ColumnClustered"
@@ -265,13 +267,14 @@ export function renderChartPlot(
   if (chartType === "RegionMap") {
     return renderRegionMapChart(chart, palette, layout, selectedChartElement);
   }
-  return renderUnsupported(chart, palette, layout, chartType);
+  return renderUnsupported(chart, palette, layout, chartType, chartLabels?.unsupportedType);
 }
 
 export const MemoChartSvg = /* @__PURE__ */ defineComponent({
   name: "MemoChartSvg",
   props: {
     chart: { type: Object as () => XlsxChart, required: true },
+    chartLabels: { type: Object as () => { ariaLabel: string; unsupportedType: string } | undefined, default: undefined },
     onChartElementDoubleClick: { type: Function as unknown as () => ((selection: XlsxChartElementSelection, event: MouseEvent) => void) | undefined, default: undefined },
     onChartElementPointerDown: { type: Function as unknown as () => ((selection: XlsxChartElementSelection, event: PointerEvent) => void) | undefined, default: undefined },
     palette: { type: Object as () => ChartRendererPalette, required: true },
@@ -281,6 +284,7 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
   setup(props) {
     let memo: {
       chart: XlsxChart;
+      chartLabels: typeof props.chartLabels;
       onChartElementDoubleClick: typeof props.onChartElementDoubleClick;
       onChartElementPointerDown: typeof props.onChartElementPointerDown;
       palette: ChartRendererPalette;
@@ -290,6 +294,10 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
       vnode: VNode;
     } | null = null;
 
+    const labels = computed(() => props.chartLabels ?? {
+      ariaLabel: officeMessagesEn.xlsx.chart.ariaLabel,
+      unsupportedType: officeMessagesEn.xlsx.chart.unsupportedType,
+    });
     const renderContent = (): VNode => {
       const { chart, onChartElementDoubleClick, onChartElementPointerDown, palette, rect, selectedChartElement } = props;
       const renderChartType = normalizeRenderableChartType(chart);
@@ -332,6 +340,7 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
             background={background}
             borderColor={borderColor}
             chart={chart}
+        chartLabels={labels.value}
             fallback={renderSurfaceChart(chart, palette, layout, selectedChartElement)}
             fontFamily={fontFamily}
             layout={layout}
@@ -352,7 +361,7 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
 
       return (
         <svg
-          aria-label={chart.title ?? chart.name ?? "Chart"}
+          aria-label={chart.title ?? chart.name ?? labels.value.ariaLabel}
           onDblclick={handleDoubleClick}
           onPointerdown={handlePointerDown}
           role="img"
@@ -364,7 +373,7 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
             : <rect fill={background} height={layout.height} stroke={borderColor} stroke-width={1} width={layout.width} x={0} y={0} />}
           {renderTitle(chart, layout, palette)}
           {renderLegend(chart, layout, palette)}
-          {renderChartPlot(chart, palette, layout, renderChartType, selectedChartElement)}
+          {renderChartPlot(chart, palette, layout, renderChartType, selectedChartElement, labels.value)}
         </svg>
       );
     };
@@ -374,6 +383,7 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
       if (
         memo
         && memo.chart === chart
+        && memo.chartLabels === props.chartLabels
         && memo.onChartElementDoubleClick === onChartElementDoubleClick
         && memo.onChartElementPointerDown === onChartElementPointerDown
         && memo.palette === palette
@@ -389,6 +399,7 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
       const vnode = renderContent();
       memo = {
         chart,
+        chartLabels: props.chartLabels,
         onChartElementDoubleClick,
         onChartElementPointerDown,
         palette,

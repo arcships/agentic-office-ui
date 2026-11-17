@@ -676,7 +676,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
         nativeDocument = await runPdfTask(task, {
           signal: options.signal,
           timeoutMs: this.operationTimeoutMs,
-          label: "PDF Worker startup and document open",
+          label: officeMessagesEn.pdf.runtime.workerStartup,
         })
         break
       } catch (error) {
@@ -831,7 +831,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     const result = await runPdfTask(task, {
       signal: options.signal,
       timeoutMs: this.operationTimeoutMs,
-      label: "PDF text search",
+      label: officeMessagesEn.pdf.runtime.textSearch,
     })
     return result.results.map((hit) => {
       const page = document.pages[hit.pageIndex]
@@ -881,7 +881,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     return runPdfTask(this.getEngine().getTextSlices(nativeDocument, [...slices]), {
       signal: options.signal,
       timeoutMs: this.operationTimeoutMs,
-      label: "PDF text extraction",
+      label: officeMessagesEn.pdf.runtime.textExtraction,
     })
   }
 
@@ -1118,7 +1118,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     try {
       await runPdfTask(engine.closeDocument(nativeDocument), {
         timeoutMs: this.operationTimeoutMs,
-        label: "PDF document close",
+        label: officeMessagesEn.pdf.runtime.documentClose,
       })
     } catch {
       // dispose() still terminates the owning Worker if graceful close fails.
@@ -1138,7 +1138,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     try {
       await runPdfTask(engine.destroy(), {
         timeoutMs: Math.min(this.operationTimeoutMs, 5_000),
-        label: "PDF runtime destroy",
+        label: officeMessagesEn.pdf.runtime.runtimeDestroy,
       })
     } catch {
       // The runtime is already unusable and all local references are released.

@@ -30,6 +30,10 @@
         <MemoChartSvg
           v-if="item.chart.chartType !== 'Unsupported'"
           :chart="item.chart"
+          :chart-labels="{
+            ariaLabel: m.xlsx.chart.ariaLabel,
+            unsupportedType: m.xlsx.chart.unsupportedType,
+          }"
           :rect="item.rect"
           :palette="chartPalette"
           :selected-chart-element="

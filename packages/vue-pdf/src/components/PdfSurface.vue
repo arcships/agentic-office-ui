@@ -377,6 +377,11 @@ const emit = defineEmits<{
 // ── Runtime & loading ────────────────────────────────────────────────
 const scrollRef = ref<HTMLElement | null>(null)
 const m = providePdfMessages(() => props.locale, () => props.messages)
+const descriptor = (
+  key: keyof typeof m.value.common.descriptors,
+  values: Record<string, string | number> = {},
+) => formatOfficeMessage(m.value.common.descriptors[key], values)
+const confirmFailed = () => formatOfficeMessage(m.value.common.reference.confirmFailed, { format: "PDF" })
 const internalZoom = ref(clampSurfaceZoom(props.defaultZoom))
 const zoom = computed({
   get: () => props.zoom === undefined ? internalZoom.value : clampSurfaceZoom(props.zoom),
@@ -509,7 +514,7 @@ function confirmDraft(
   try {
     emit("referenceConfirm", confirmOfficeReferenceDraft(draft, { referenceId: createOfficeReferenceId(), trigger, additiveRequested, ...(snapshot ? { snapshot } : {}) }))
   } catch (reason) {
-    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to confirm PDF reference.")
+    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : confirmFailed())
   }
 }
 
@@ -518,7 +523,7 @@ function pageCandidate(pageIndex: number): OfficeReferenceCandidatePreview {
   return {
     candidateId: `pdf:page:${pageIndex}`,
     draft,
-    preview: { label: `Page ${pageIndex + 1}`, path: [{ kind: "document", label: "PDF" }, { kind: "page", label: `Page ${pageIndex + 1}` }] },
+    preview: { label: descriptor("page", { number: pageIndex + 1 }), path: [{ kind: "document", label: descriptor("pdf") }, { kind: "page", label: descriptor("page", { number: pageIndex + 1 }) }] },
     hit: "inside",
     depth: 1,
   }
@@ -531,7 +536,7 @@ function hitTest(point: { clientX: number; clientY: number }): readonly OfficeRe
     const pageIndex = Number(page?.dataset.pageIndex)
     return Number.isSafeInteger(pageIndex) && pageIndex >= 0 ? [pageCandidate(pageIndex)] : []
   } catch (reason) {
-    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : "PDF hit test failed.")
+    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : formatOfficeMessage(m.value.common.reference.hitTestFailed, { format: "PDF" }))
     return []
   }
 }
@@ -1918,11 +1923,11 @@ async function commitSelection(
         const draft = createPdfTextReferenceDraft(context, next)
         confirmDraft(draft, "pointer", {
           label: next.text.length > 80 ? `${next.text.slice(0, 77)}…` : next.text,
-          path: [{ kind: "document", label: "PDF" }, { kind: "page", label: `Page ${next.range.pageIndex + 1}` }, { kind: "text-range", label: m.value.common.selectedText }],
+          path: [{ kind: "document", label: descriptor("pdf") }, { kind: "page", label: descriptor("page", { number: next.range.pageIndex + 1 }) }, { kind: "text-range", label: m.value.common.selectedText }],
           content: { text: next.text },
         })
       } catch (reason) {
-        emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to create PDF text reference.")
+        emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : formatOfficeMessage(m.value.common.reference.createFailed, { format: "PDF" }))
       }
     }
   } catch {
@@ -2459,7 +2464,7 @@ defineExpose({
     if (pageIndex !== undefined) scrollToPage(pageIndex)
   },
   async captureReferencePreview(reference: OfficeObjectReference): Promise<Blob> {
-    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", "PDF preview capture is not provided by the Surface; use the host's capture pipeline.", reference.referenceId)
+    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", formatOfficeMessage(m.value.common.reference.captureUnsupported, { format: "PDF" }), reference.referenceId)
     throw new Error("PDF reference preview capture is unsupported")
   },
 })

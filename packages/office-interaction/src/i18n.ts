@@ -58,6 +58,37 @@ export interface OfficeCommonMessages {
   search: OfficeSearchMessages
   zoom: OfficeZoomMessages
   page: OfficePageMessages
+  reference: {
+    /** Template with a `{format}` placeholder. */
+    confirmFailed: string
+    /** Template with a `{format}` placeholder. */
+    createFailed: string
+    /** Template with a `{format}` placeholder. */
+    captureUnsupported: string
+    /** Template with a `{format}` placeholder. */
+    describeAborted: string
+    /** Template with a `{format}` placeholder. */
+    hitTestFailed: string
+  }
+  descriptors: {
+    document: string
+    /** Template with a `{number}` placeholder. */
+    page: string
+    image: string
+    /** Template with a `{number}` placeholder. */
+    table: string
+    workbook: string
+    presentation: string
+    /** Template with a `{number}` placeholder. */
+    slide: string
+    pdf: string
+    textRange: string
+    selectedRegion: string
+    /** Template with a `{number}` placeholder. */
+    regionOnPage: string
+    /** Template with a `{text}` placeholder. */
+    textLabel: string
+  }
 }
 
 export interface OfficeDocxMessages {
@@ -339,10 +370,30 @@ export interface OfficeDocxMessages {
     behindTitle: string
     frontTitle: string
     alt: string
+    wrapInline: string
+    wrapSquare: string
+    wrapTight: string
+    wrapThrough: string
+    wrapTopAndBottom: string
+    wrapBehind: string
+    wrapFront: string
+    moveWithText: string
+    fixPositionOnPage: string
+    editWrapBoundary: string
+    moreLayoutOptions: string
   }
   formField: {
     placeholder: string
     selectDate: string
+    errors: {
+      invalidValue: string
+      required: string
+      noOptions: string
+      chooseValue: string
+      invalidDate: string
+      /** Template with a `{max}` placeholder. */
+      maxLength: string
+    }
   }
   notes: {
     footnote: string
@@ -373,6 +424,10 @@ export interface OfficeDocxMessages {
     hideComments: string
     showComments: string
     comments: string
+    /** Template with a `{ordinal}` placeholder. */
+    commentMarker: string
+    /** Template with `{ordinal}` and `{author}` placeholders. */
+    commentMarkerWithAuthor: string
   }
   dragOverlay: {
     drop: string
@@ -469,6 +524,10 @@ export interface OfficeXlsxMessages {
     loadFailed: string
     unavailable: string
     noPayload: string
+    ariaLabel: string
+    /** Template with a `{type}` placeholder. */
+    unsupportedType: string
+    other: string
   }
   image: {
     alt: string
@@ -533,6 +592,19 @@ export interface OfficeXlsxMessages {
     xlsbParseFailed: string
     fileOrSrcRequired: string
     sheetNameInvalid: string
+  }
+  errors: {
+    sourceNotAllowed: string
+    fetchFailed: string
+    invalidWorkbook: string
+    limitExceeded: string
+    imageLimitExceeded: string
+    invalidImage: string
+    imageDecodeFailed: string
+    timeout: string
+    workerUnavailable: string
+    aborted: string
+    unknown: string
   }
 }
 
@@ -682,6 +754,11 @@ export interface OfficePdfMessages {
     cancelled: string
     /** Template with a `{label}` placeholder. */
     timedOut: string
+    workerStartup: string
+    textSearch: string
+    textExtraction: string
+    documentClose: string
+    runtimeDestroy: string
   }
 }
 
@@ -768,6 +845,27 @@ export const officeMessagesEn: OfficeMessages = {
       last: "Last page",
       of: "of",
       indicator: "Page {current} of {total}",
+    },
+    reference: {
+      confirmFailed: "Unable to confirm {format} reference.",
+      createFailed: "Unable to create {format} text reference.",
+      captureUnsupported: "{format} preview capture is not provided by the Surface; use the host's capture pipeline.",
+      describeAborted: "{format} reference description aborted.",
+      hitTestFailed: "{format} hit test failed.",
+    },
+    descriptors: {
+      document: "Document",
+      page: "Page {number}",
+      image: "Image",
+      table: "Table {number}",
+      workbook: "Workbook",
+      presentation: "Presentation",
+      slide: "Slide {number}",
+      pdf: "PDF",
+      textRange: "Text range",
+      selectedRegion: "Selected region",
+      regionOnPage: "Region on page {number}",
+      textLabel: "Text: {text}",
     },
   },
   docx: {
@@ -1023,10 +1121,29 @@ export const officeMessagesEn: OfficeMessages = {
       behindTitle: "Behind text",
       frontTitle: "In front of text",
       alt: "Image",
+      wrapInline: "In Line with Text",
+      wrapSquare: "Square",
+      wrapTight: "Tight",
+      wrapThrough: "Through",
+      wrapTopAndBottom: "Top and Bottom",
+      wrapBehind: "Behind Text",
+      wrapFront: "In Front of Text",
+      moveWithText: "Move with Text",
+      fixPositionOnPage: "Fix Position on Page",
+      editWrapBoundary: "Edit Wrap Boundary",
+      moreLayoutOptions: "More Layout Options...",
     },
     formField: {
       placeholder: "Enter text...",
       selectDate: "Select a date",
+      errors: {
+        invalidValue: "Invalid value.",
+        required: "This field is required.",
+        noOptions: "This dropdown has no options.",
+        chooseValue: "Choose a value from the list.",
+        invalidDate: "Enter a valid date.",
+        maxLength: "Use at most {max} characters.",
+      },
     },
     notes: {
       footnote: "Footnotes",
@@ -1057,6 +1174,8 @@ export const officeMessagesEn: OfficeMessages = {
       hideComments: "Hide comments",
       showComments: "Show comments",
       comments: "Comments",
+      commentMarker: "Comment {ordinal}",
+      commentMarkerWithAuthor: "Comment {ordinal} — {author}",
     },
     dragOverlay: {
       drop: "Drop DOCX file to import",
@@ -1151,6 +1270,9 @@ export const officeMessagesEn: OfficeMessages = {
       loadFailed: "Chart failed to load. Try again.",
       unavailable: "This chart type is not available yet.",
       noPayload: "This chart sheet does not expose an embedded chart payload.",
+      ariaLabel: "Chart",
+      unsupportedType: "Unsupported chart type: {type}",
+      other: "Other",
     },
     image: {
       alt: "Image",
@@ -1211,6 +1333,19 @@ export const officeMessagesEn: OfficeMessages = {
       xlsbParseFailed: "Unable to parse the XLSB file.",
       fileOrSrcRequired: "Either `file` or `src` must be provided.",
       sheetNameInvalid: "Worksheet names cannot contain these characters: \\ / : * ? [ ]",
+    },
+    errors: {
+      sourceNotAllowed: "The spreadsheet URL is outside the allowed policy.",
+      fetchFailed: "Unable to fetch the spreadsheet.",
+      invalidWorkbook: "The file is not a valid XLSX workbook.",
+      limitExceeded: "The spreadsheet exceeds the configured limit.",
+      imageLimitExceeded: "The workbook contains too many images.",
+      invalidImage: "The workbook contains an invalid image.",
+      imageDecodeFailed: "An image could not be decoded.",
+      timeout: "Loading the spreadsheet timed out.",
+      workerUnavailable: "The workbook worker is unavailable.",
+      aborted: "Loading the spreadsheet was cancelled.",
+      unknown: "Unable to load the spreadsheet.",
     },
   },
   pptx: {
@@ -1340,6 +1475,11 @@ export const officeMessagesEn: OfficeMessages = {
     runtime: {
       cancelled: "{label} cancelled",
       timedOut: "{label} timed out",
+      workerStartup: "PDF Worker startup and document open",
+      textSearch: "PDF text search",
+      textExtraction: "PDF text extraction",
+      documentClose: "PDF document close",
+      runtimeDestroy: "PDF runtime destroy",
     },
   },
   vueUi: {
@@ -1407,6 +1547,27 @@ export const officeMessagesZhCN: OfficeMessages = {
       last: "最后一页",
       of: "共",
       indicator: "第 {current} 页，共 {total} 页",
+    },
+    reference: {
+      confirmFailed: "无法确认 {format} 引用。",
+      createFailed: "无法创建 {format} 文本引用。",
+      captureUnsupported: "Surface 不提供 {format} 预览捕获；请使用宿主的捕获流程。",
+      describeAborted: "{format} 引用描述已中止。",
+      hitTestFailed: "{format} 命中测试失败。",
+    },
+    descriptors: {
+      document: "文档",
+      page: "第 {number} 页",
+      image: "图片",
+      table: "表格 {number}",
+      workbook: "工作簿",
+      presentation: "演示文稿",
+      slide: "第 {number} 张幻灯片",
+      pdf: "PDF",
+      textRange: "文本范围",
+      selectedRegion: "选定区域",
+      regionOnPage: "第 {number} 页上的区域",
+      textLabel: "文本：{text}",
     },
   },
   docx: {
@@ -1661,10 +1822,29 @@ export const officeMessagesZhCN: OfficeMessages = {
       behindTitle: "衬于文字下方",
       frontTitle: "浮于文字上方",
       alt: "图片",
+      wrapInline: "嵌入文字",
+      wrapSquare: "四周环绕",
+      wrapTight: "紧密环绕",
+      wrapThrough: "穿越环绕",
+      wrapTopAndBottom: "上下环绕",
+      wrapBehind: "衬于文字下方",
+      wrapFront: "浮于文字上方",
+      moveWithText: "随文字移动",
+      fixPositionOnPage: "固定在页面位置",
+      editWrapBoundary: "编辑环绕边界",
+      moreLayoutOptions: "更多布局选项…",
     },
     formField: {
       placeholder: "输入文本…",
       selectDate: "选择日期",
+      errors: {
+        invalidValue: "值无效。",
+        required: "此字段为必填项。",
+        noOptions: "此下拉框没有选项。",
+        chooseValue: "请从列表中选择一个值。",
+        invalidDate: "请输入有效的日期。",
+        maxLength: "最多使用 {max} 个字符。",
+      },
     },
     notes: {
       footnote: "脚注",
@@ -1695,6 +1875,8 @@ export const officeMessagesZhCN: OfficeMessages = {
       hideComments: "隐藏批注",
       showComments: "显示批注",
       comments: "批注",
+      commentMarker: "批注 {ordinal}",
+      commentMarkerWithAuthor: "批注 {ordinal} — {author}",
     },
     dragOverlay: {
       drop: "拖放 DOCX 文件以导入",
@@ -1789,6 +1971,9 @@ export const officeMessagesZhCN: OfficeMessages = {
       loadFailed: "图表加载失败，请重试。",
       unavailable: "此图表类型暂不可用。",
       noPayload: "此图表工作表未提供嵌入图表数据。",
+      ariaLabel: "图表",
+      unsupportedType: "不支持的图表类型：{type}",
+      other: "其他",
     },
     image: {
       alt: "图片",
@@ -1849,6 +2034,19 @@ export const officeMessagesZhCN: OfficeMessages = {
       xlsbParseFailed: "无法解析 XLSB 文件。",
       fileOrSrcRequired: "必须提供 `file` 或 `src`。",
       sheetNameInvalid: "工作表名称不能包含以下字符：\\ / : * ? [ ]",
+    },
+    errors: {
+      sourceNotAllowed: "电子表格地址不在允许范围内。",
+      fetchFailed: "无法获取电子表格。",
+      invalidWorkbook: "该文件不是有效的 XLSX 工作簿。",
+      limitExceeded: "电子表格超出配置的限制。",
+      imageLimitExceeded: "工作簿包含过多图片。",
+      invalidImage: "工作簿包含无效图片。",
+      imageDecodeFailed: "图片无法解码。",
+      timeout: "加载电子表格超时。",
+      workerUnavailable: "工作簿 Worker 不可用。",
+      aborted: "电子表格加载已取消。",
+      unknown: "无法加载电子表格。",
     },
   },
   pptx: {
@@ -1978,6 +2176,11 @@ export const officeMessagesZhCN: OfficeMessages = {
     runtime: {
       cancelled: "{label} 已取消",
       timedOut: "{label} 已超时",
+      workerStartup: "PDF Worker 启动和文档打开",
+      textSearch: "PDF 文本搜索",
+      textExtraction: "PDF 文本提取",
+      documentClose: "PDF 文档关闭",
+      runtimeDestroy: "PDF 运行时销毁",
     },
   },
   vueUi: {

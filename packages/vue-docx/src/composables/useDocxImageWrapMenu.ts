@@ -12,6 +12,26 @@ import {
   type DocxImageWrapState,
   type DocxImageWrapMenuOption,
 } from "@arcships/docx-core"
+import { officeMessagesEn } from "@arcships/office-interaction"
+import type { OfficeDocxMessages } from "@arcships/office-interaction"
+
+export type DocxImageWrapMessages = OfficeDocxMessages["image"]
+
+function wrapModeLabel(
+  mode: DocxImageWrapMode,
+  messages: DocxImageWrapMessages,
+): string {
+  switch (mode) {
+    case "inline": return messages.wrapInline
+    case "square": return messages.wrapSquare
+    case "tight": return messages.wrapTight
+    case "through": return messages.wrapThrough
+    case "topAndBottom": return messages.wrapTopAndBottom
+    case "behindText": return messages.wrapBehind
+    case "inFrontOfText": return messages.wrapFront
+    default: return mode
+  }
+}
 
 export interface UseDocxImageWrapMenuResult {
   state: DocxImageWrapState
@@ -24,7 +44,8 @@ export interface UseDocxImageWrapMenuResult {
 }
 
 export function useDocxImageWrapMenu(
-  menu: Pick<DocxContextMenuRenderProps, "context" | "runAction">
+  menu: Pick<DocxContextMenuRenderProps, "context" | "runAction">,
+  messages: DocxImageWrapMessages = officeMessagesEn.docx.image,
 ): UseDocxImageWrapMenuResult | undefined {
   const wrapState =
     menu.context.kind === "image"
@@ -50,21 +71,21 @@ export function useDocxImageWrapMenu(
     state: wrapState,
     wrapOptions: DOCX_IMAGE_WRAP_MODE_ACTIONS.map((action) => ({
       actionId: action.actionId,
-      label: action.label,
+      label: wrapModeLabel(action.mode, messages),
       checked: wrapState.mode === action.mode,
       onSelect: () => menu.runAction(action.actionId),
     })),
     positioningOptions: [
       {
         actionId: "image-move-with-text",
-        label: "Move with Text",
+        label: messages.moveWithText,
         checked: wrapState.moveWithText,
         disabled: wrapState.mode === "inline",
         onSelect: () => menu.runAction("image-move-with-text"),
       },
       {
         actionId: "image-fix-position-on-page",
-        label: "Fix Position on Page",
+        label: messages.fixPositionOnPage,
         checked: wrapState.fixedPositionOnPage,
         disabled: wrapState.mode === "inline",
         onSelect: () => menu.runAction("image-fix-position-on-page"),
@@ -72,14 +93,14 @@ export function useDocxImageWrapMenu(
     ],
     editWrapBoundaryOption: {
       actionId: "image-edit-wrap-boundary",
-      label: "Edit Wrap Boundary",
+      label: messages.editWrapBoundary,
       checked: false,
       disabled: true,
       onSelect: () => menu.runAction("image-edit-wrap-boundary"),
     },
     moreLayoutOptionsOption: {
       actionId: "image-more-layout-options",
-      label: "More Layout Options...",
+      label: messages.moreLayoutOptions,
       checked: false,
       disabled: true,
       onSelect: () => menu.runAction("image-more-layout-options"),

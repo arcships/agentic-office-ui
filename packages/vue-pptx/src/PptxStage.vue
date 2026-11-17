@@ -61,6 +61,7 @@ import {
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
+import { formatOfficeMessage } from "@arcships/office-interaction"
 import { providePptxMessages } from "./i18n"
 
 const props = withDefaults(defineProps<{
@@ -85,6 +86,11 @@ const props = withDefaults(defineProps<{
 
 const elementRef = ref<HTMLElement | null>(null)
 const m = providePptxMessages(() => props.locale, () => props.messages)
+const descriptor = (
+  key: keyof typeof m.value.common.descriptors,
+  values: Record<string, string | number> = {},
+) => formatOfficeMessage(m.value.common.descriptors[key], values)
+const confirmFailed = () => formatOfficeMessage(m.value.common.reference.confirmFailed, { format: "PPTX" })
 const hostRef = ref<HTMLElement | null>(null)
 const selectionMode = computed(() => props.selectionMode)
 const revisionCounter = ref(0)
@@ -195,7 +201,7 @@ function confirmDraft(
   try {
     emit("referenceConfirm", confirmOfficeReferenceDraft(draft, { referenceId: createOfficeReferenceId(), trigger, additiveRequested, ...(snapshot ? { snapshot } : {}) }))
   } catch (reason) {
-    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to confirm PPTX reference.")
+    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : confirmFailed())
   }
 }
 
@@ -281,7 +287,7 @@ function candidateForHit(hit: StageHit): OfficeReferenceCandidatePreview | undef
       draft,
       preview: {
         label,
-        path: [{ kind: "document", label: "Presentation" }, { kind: "slide", label: `Slide ${hit.slideIndex + 1}` }, { kind: draft.kind, label }],
+        path: [{ kind: "document", label: descriptor("presentation") }, { kind: "slide", label: descriptor("slide", { number: hit.slideIndex + 1 }) }, { kind: draft.kind, label }],
       },
       hit: "direct",
       depth: 2,
@@ -291,7 +297,7 @@ function candidateForHit(hit: StageHit): OfficeReferenceCandidatePreview | undef
   return {
     candidateId: `pptx:slide:${hit.slideIndex}`,
     draft,
-    preview: { label: `Slide ${hit.slideIndex + 1}`, path: [{ kind: "document", label: "Presentation" }, { kind: "slide", label: `Slide ${hit.slideIndex + 1}` }] },
+    preview: { label: descriptor("slide", { number: hit.slideIndex + 1 }), path: [{ kind: "document", label: descriptor("presentation") }, { kind: "slide", label: descriptor("slide", { number: hit.slideIndex + 1 }) }] },
     hit: "inside",
     depth: 1,
   }
@@ -311,7 +317,7 @@ function hitTest(point: { clientX: number; clientY: number }): readonly OfficeRe
     const slideCandidate = candidateForHit({ slideIndex })
     return slideCandidate ? [candidate, slideCandidate] : [candidate]
   } catch (reason) {
-    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : "PPTX hit test failed.")
+    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : formatOfficeMessage(m.value.common.reference.hitTestFailed, { format: "PPTX" }))
     return []
   }
 }
@@ -374,12 +380,12 @@ function onTextSelectionMouseUp(): void {
     const text = selection.toString()
     confirmDraft(draft, "pointer", {
       label: text.length > 80 ? `${text.slice(0, 77)}…` : text,
-      path: [{ kind: "document", label: "Presentation" }, { kind: "slide", label: `Slide ${slideIndex + 1}` }, { kind: "text-range", label: m.value.common.selectedText }],
+      path: [{ kind: "document", label: descriptor("presentation") }, { kind: "slide", label: descriptor("slide", { number: slideIndex + 1 }) }, { kind: "text-range", label: m.value.common.selectedText }],
       content: { text },
     })
     ignoreNextObjectClick = true
   } catch (reason) {
-    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to create PPTX text reference.")
+    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : formatOfficeMessage(m.value.common.reference.createFailed, { format: "PPTX" }))
   }
 }
 
@@ -683,7 +689,7 @@ defineExpose({
     slide?.scrollIntoView({ behavior: "smooth", block: "center" })
   },
   async captureReferencePreview(reference: OfficeObjectReference): Promise<Blob> {
-    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", "PPTX preview capture is not provided by the Stage; use the host's capture pipeline.", reference.referenceId)
+    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", formatOfficeMessage(m.value.common.reference.captureUnsupported, { format: "PPTX" }), reference.referenceId)
     throw new Error("PPTX reference preview capture is unsupported")
   },
 })
