@@ -6,10 +6,11 @@
       'pptx-viewer--dark': isDark,
       'pptx-viewer--present': isPresent,
     }"
-    :style="{ height, maxHeight: height }"
+    :style="rootStyle"
     :data-state="state"
     :data-playback-status="playbackSnapshot?.status"
     :data-slide-index="activeIndex"
+    :data-slide-error="slideFailure?.index"
     :data-click-boundary="playbackSnapshot?.clickBoundary"
     data-testid="pptx-viewer"
     tabindex="0"
@@ -17,11 +18,11 @@
   >
     <header v-if="showToolbar && !isPresent" class="pptx-viewer__toolbar">
       <div class="pptx-viewer__toolbar-group">
-        <button type="button" :disabled="!canGoPrevious" aria-label="上一页" @click="void goTo(activeIndex - 1)">‹</button>
+        <button type="button" :disabled="!canGoPrevious" aria-label="上一页" @click="run(() => goTo(activeIndex - 1))">‹</button>
         <span class="pptx-viewer__counter" data-testid="pptx-page-counter">
           {{ document ? `${activeIndex + 1} / ${document.slides.length}` : "0 / 0" }}
         </span>
-        <button type="button" :disabled="!canGoNext" aria-label="下一页" @click="void goTo(activeIndex + 1)">›</button>
+        <button type="button" :disabled="!canGoNext" aria-label="下一页" @click="run(() => goTo(activeIndex + 1))">›</button>
         <span v-if="activeSlide?.hidden" class="pptx-viewer__hidden-badge">隐藏页</span>
       </div>
 
@@ -38,16 +39,26 @@
         <span v-if="searchResults.length" class="pptx-viewer__search-count">
           {{ searchCursor + 1 }} / {{ searchResults.length }}
         </span>
-        <button v-if="searchResults.length" type="button" aria-label="上一个搜索结果" @click="void moveSearch(-1)">↑</button>
-        <button v-if="searchResults.length" type="button" aria-label="下一个搜索结果" @click="void moveSearch(1)">↓</button>
+        <button v-if="searchResults.length" type="button" aria-label="上一个搜索结果" @click="run(() => moveSearch(-1))">↑</button>
+        <button v-if="searchResults.length" type="button" aria-label="下一个搜索结果" @click="run(() => moveSearch(1))">↓</button>
       </form>
 
       <div class="pptx-viewer__toolbar-group pptx-viewer__zoom">
-        <button type="button" :disabled="state !== 'ready' || zoom <= 50" aria-label="缩小" @click="void setZoom(zoom - 25)">−</button>
-        <button type="button" :disabled="state !== 'ready'" aria-label="恢复适合窗口" @click="void setZoom(100)">{{ zoom }}%</button>
-        <button type="button" :disabled="state !== 'ready' || zoom >= 200" aria-label="放大" @click="void setZoom(zoom + 25)">＋</button>
+        <button type="button" :disabled="state !== 'ready' || zoom <= 50" aria-label="缩小" @click="run(() => setZoom(zoom - 25))">−</button>
+        <button type="button" :disabled="state !== 'ready'" aria-label="恢复适合窗口" @click="run(() => setZoom(100))">{{ zoom }}%</button>
+        <button type="button" :disabled="state !== 'ready' || zoom >= 200" aria-label="放大" @click="run(() => setZoom(zoom + 25))">＋</button>
       </div>
     </header>
+
+    <div v-if="warnings.length" class="pptx-viewer__warnings" role="status" data-testid="pptx-warnings">
+      <slot name="warnings" :warnings="warnings">
+        <p
+          v-for="warning in warnings"
+          :key="`${warning.code}:${warning.slideIndex ?? 'all'}`"
+          class="pptx-viewer__warning"
+        >{{ warning.message }}</p>
+      </slot>
+    </div>
 
     <div class="pptx-viewer__body">
       <aside v-if="showSidebar && !isPresent && document" class="pptx-viewer__sidebar" aria-label="幻灯片列表">
@@ -58,7 +69,7 @@
           :slide="slide"
           :active="slide.index === activeIndex"
           :width="thumbnailWidth"
-          @select="void goTo($event)"
+          @select="run(() => goTo($event))"
         />
       </aside>
 
@@ -66,21 +77,44 @@
         <div v-if="state === 'empty'" class="pptx-viewer__message" data-testid="pptx-empty">
           <slot name="empty">打开一个 PPTX 文件开始查看</slot>
         </div>
+        <div v-else-if="state === 'waiting'" class="pptx-viewer__message" data-testid="pptx-waiting">
+          <slot name="waiting">正在等待幻灯片舞台…</slot>
+        </div>
         <div v-else-if="state === 'loading'" class="pptx-viewer__message" data-testid="pptx-loading">
           <slot name="loading">正在加载 PPTX…</slot>
         </div>
+        <div v-else-if="state === 'cancelled'" class="pptx-viewer__message" data-testid="pptx-cancelled">
+          <slot name="cancelled" :error="error">{{ error?.message ?? "PPTX 加载已取消。" }}</slot>
+          <button type="button" data-testid="pptx-cancelled-retry" @click="run(reopen)">重新加载</button>
+        </div>
         <div v-else-if="state === 'error'" class="pptx-viewer__message pptx-viewer__message--error" data-testid="pptx-error">
           <slot name="error" :error="error">{{ error?.message }}</slot>
+          <button v-if="props.source" type="button" data-testid="pptx-error-retry" @click="run(reopen)">重试</button>
+        </div>
+        <div
+          v-if="slideFailure"
+          class="pptx-viewer__slide-error"
+          role="alert"
+          data-testid="pptx-slide-error"
+        >
+          <slot name="slide-error" :error="slideFailure.error" :index="slideFailure.index">
+            <span>第 {{ slideFailure.index + 1 }} 页渲染失败：{{ slideFailure.error.message }}</span>
+          </slot>
+          <span class="pptx-viewer__slide-error-actions">
+            <button type="button" data-testid="pptx-slide-retry" @click="run(retrySlide)">重试</button>
+            <button type="button" data-testid="pptx-slide-skip" @click="run(skipSlide)">跳过</button>
+          </span>
         </div>
         <PptxStage
           ref="stageRef"
           class="pptx-viewer__stage"
+          :style="stageStyle"
           :aria-hidden="state !== 'ready'"
           :zoom="zoom / 100"
           :enable-gesture-zoom="!isPresent"
           :scroll-container="stageScrollRef"
-          @update:zoom="void setZoom($event * 100)"
-          @click="onStageClick"
+          @update:zoom="run(() => setZoom($event * 100))"
+          @click="run(() => onStageClick($event))"
         />
       </main>
     </div>
@@ -118,7 +152,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue"
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import {
   PptxPlaybackError,
   PptxPreviewError,
@@ -126,6 +160,7 @@ import {
   type PptxPlaybackWarning,
   type PptxPreviewDocument,
   type PptxPreviewLimits,
+  type PptxPreviewWarning,
 } from "@arcships/pptx-core"
 import {
   createPptxDocumentSession,
@@ -158,12 +193,14 @@ const props = withDefaults(defineProps<{
   documentSessionFactory?: PptxDocumentSessionFactory
   externalMedia?: "disabled" | "allowed"
   sessionFactory?: PptxPreviewSessionFactory
+  openTimeoutMs?: number
   showCapabilityStatus?: boolean
   showHiddenSlides?: boolean
   showPlaybackControls?: boolean
   showSearch?: boolean
   showSidebar?: boolean
   showToolbar?: boolean
+  showWarnings?: boolean
   thumbnailWidth?: number
 }>(), {
   source: null,
@@ -177,12 +214,14 @@ const props = withDefaults(defineProps<{
   documentSessionFactory: undefined,
   externalMedia: "disabled",
   sessionFactory: undefined,
+  openTimeoutMs: 30_000,
   showCapabilityStatus: true,
   showHiddenSlides: false,
   showPlaybackControls: true,
   showSearch: true,
   showSidebar: true,
   showToolbar: true,
+  showWarnings: true,
   thumbnailWidth: 148,
 })
 
@@ -200,9 +239,11 @@ const emit = defineEmits<{
   action: [action: PptxActionRequest]
   playbackError: [error: PptxPlaybackError]
   searchStateChange: [state: PptxSearchState]
+  slideError: [error: PptxPreviewError, slideIndex: number]
+  documentError: [error: PptxPreviewError]
 }>()
 
-type ViewerState = "empty" | "loading" | "ready" | "error"
+type ViewerState = "empty" | "waiting" | "loading" | "ready" | "cancelled" | "error"
 
 const viewerRef = ref<HTMLElement | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
@@ -214,6 +255,7 @@ const isPresent = computed(() => props.mode === "present")
 const documentOptions = {
   source: () => props.source,
   initialSlide: () => props.initialSlide,
+  openTimeoutMs: () => props.openTimeoutMs,
   session: () => ({
     fitMode: "contain" as const,
     zoomPercent: 100,
@@ -247,16 +289,56 @@ const {
 } = pptxDocument
 
 const state = computed<ViewerState>(() => {
-  if (pptxDocument.state.value === "error") return "error"
-  if (pptxDocument.state.value === "ready") return "ready"
-  if (pptxDocument.state.value === "idle" || pptxDocument.state.value === "disposed") return "empty"
-  return "loading"
+  switch (pptxDocument.state.value) {
+    case "error": return "error"
+    case "ready": return "ready"
+    case "cancelled": return "cancelled"
+    case "waiting-for-stage": return "waiting"
+    case "loading": return "loading"
+    default: return "empty"
+  }
+})
+
+const warnings = computed<readonly PptxPreviewWarning[]>(() =>
+  props.showWarnings ? document.value?.warnings ?? [] : [])
+const slideFailure = computed(() => pptxDocument.slideError.value)
+
+const isFullscreen = ref(false)
+const rootStyle = computed(() =>
+  isFullscreen.value ? undefined : { height: props.height, maxHeight: props.height })
+
+const stageStyle = computed(() => {
+  const loaded = document.value
+  if (!isPresent.value || !loaded || !loaded.width || !loaded.height) return undefined
+  return {
+    "--pptx-slide-aspect": `${loaded.width} / ${loaded.height}`,
+    "--pptx-slide-ratio": String(Number((loaded.width / loaded.height).toFixed(4))),
+  }
+})
+
+function syncFullscreen(): void {
+  const active = globalThis.document?.fullscreenElement ?? null
+  const element = viewerRef.value
+  if (!active || !element) {
+    isFullscreen.value = false
+    return
+  }
+  isFullscreen.value = active === element
+    || (typeof active.contains === "function" && active.contains(element))
+}
+
+onMounted(() => {
+  globalThis.document?.addEventListener?.("fullscreenchange", syncFullscreen)
+})
+
+onBeforeUnmount(() => {
+  globalThis.document?.removeEventListener?.("fullscreenchange", syncFullscreen)
 })
 
 const playback = usePptxPlayback(pptxDocument, {
   enabled: isPresent,
   autoplay: props.autoplay,
-  skipHiddenSlides: !props.showHiddenSlides,
+  skipHiddenSlides: () => !props.showHiddenSlides,
   approximation: props.approximation,
   onEvent: onPlaybackEvent,
 })
@@ -314,6 +396,38 @@ async function invoke(command: () => void | Promise<void>): Promise<void> {
   }
 }
 
+function toDocumentError(reason: unknown): PptxPreviewError {
+  return reason instanceof PptxPreviewError
+    ? reason
+    : new PptxPreviewError(
+      "RENDER_FAILED",
+      reason instanceof Error ? reason.message : "PPTX 操作失败。",
+      reason,
+    )
+}
+
+function reportDocumentError(reason: unknown): void {
+  const failure = toDocumentError(reason)
+  // Superseded or aborted work is expected when the host switches files or
+  // modes; it is not a user-visible failure.
+  if (failure.code === "ABORTED" || failure.code === "STALE_RESULT") return
+  const currentSlideFailure = pptxDocument.slideError.value
+  if (currentSlideFailure && currentSlideFailure.error === failure) return
+  emit("documentError", failure)
+}
+
+/** Run a document command and surface its failure as an event instead of an unhandled rejection. */
+function run(command: () => Promise<unknown> | void): void {
+  try {
+    const result: Promise<unknown> | void = command()
+    if (result instanceof Promise) {
+      void result.catch(reportDocumentError)
+    }
+  } catch (reason) {
+    reportDocumentError(reason)
+  }
+}
+
 function onPlaybackEvent(event: PptxPlaybackEvent): void {
   if (event.type === "statechange") {
     emit("playbackStateChange", event.snapshot)
@@ -359,6 +473,30 @@ async function goTo(index: number): Promise<void> {
     pptxDocument.getSession()?.clearSearchHighlights()
     await pptxDocument.goTo(index)
   }
+}
+
+async function reopen(): Promise<void> {
+  const source = props.source
+  if (!source) return
+  await pptxDocument.open(source, { initialSlide: pptxDocument.activeIndex.value })
+}
+
+async function retrySlide(): Promise<void> {
+  const failure = pptxDocument.slideError.value
+  if (!failure) return
+  await goTo(failure.index)
+}
+
+async function skipSlide(): Promise<void> {
+  const failure = pptxDocument.slideError.value
+  const slides = document.value?.slides
+  if (!failure || !slides?.length) return
+  const nextIndex = failure.index + 1 < slides.length ? failure.index + 1 : failure.index - 1
+  if (nextIndex < 0 || nextIndex === failure.index) {
+    pptxDocument.clearSlideError()
+    return
+  }
+  await goTo(nextIndex)
 }
 
 async function next(): Promise<void> {
@@ -447,7 +585,7 @@ async function setZoom(value: number): Promise<void> {
 }
 
 function runSearch(): void {
-  void pptxDocument.search(searchQuery.value).catch(() => undefined)
+  run(() => pptxDocument.search(searchQuery.value))
 }
 
 async function moveSearch(direction: 1 | -1): Promise<void> {
@@ -490,20 +628,29 @@ function onKeydown(event: KeyboardEvent): void {
     void invoke(next)
   } else if (!isPresent.value && (event.ctrlKey || event.metaKey) && (event.key === "+" || event.key === "=")) {
     event.preventDefault()
-    void setZoom(zoom.value + 25)
+    run(() => setZoom(zoom.value + 25))
   } else if ((event.ctrlKey || event.metaKey) && event.key === "-") {
     event.preventDefault()
-    void setZoom(zoom.value - 25)
+    run(() => setZoom(zoom.value - 25))
   }
 }
 
 watch(() => props.initialSlide, (index) => {
-  if (state.value === "ready") void goTo(index)
+  if (state.value === "ready") run(() => goTo(index))
 })
 
 watch(() => props.mode, () => {
+  const source = props.source
+  const index = pptxDocument.activeIndex.value
   resetSearch()
-  if (props.source) void pptxDocument.open(props.source).catch(() => undefined)
+  if (!source) return
+  // Re-opening builds a new session for the other render mode, so carry the
+  // current slide across instead of dropping the viewer back to slide 1.
+  run(() => pptxDocument.open(source, { initialSlide: index }))
+})
+
+watch(() => pptxDocument.slideError.value, (failure) => {
+  if (failure) emit("slideError", failure.error, failure.index)
 })
 
 watch(() => pptxDocument.state.value, (next, previous) => {

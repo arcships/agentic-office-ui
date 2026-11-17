@@ -34,6 +34,15 @@
   background: #050505;
 }
 
+/* The inline height keeps the demo's "calc(100vh - 190px)" box in the page;
+   fullscreen must fill the screen instead of leaving black bars. */
+.pptx-viewer:fullscreen {
+  block-size: 100vh;
+  inline-size: 100vw;
+  max-block-size: none;
+  max-inline-size: none;
+}
+
 .pptx-viewer__toolbar {
   align-items: center;
   background: var(--pptx-panel);
@@ -73,19 +82,65 @@
 .pptx-viewer__stage[aria-hidden="true"] { visibility: hidden; }
 .pptx-viewer__message { inset: 0; align-items: center; color: var(--pptx-muted); display: flex; justify-content: center; position: absolute; z-index: 2; }
 .pptx-viewer__message--error { color: #b91c1c; padding: 24px; text-align: center; }
+.pptx-viewer__message > button { margin-inline-start: 8px; }
 
+.pptx-viewer__warnings {
+  background: color-mix(in srgb, #f59e0b 14%, var(--pptx-panel));
+  border-bottom: 1px solid var(--pptx-border);
+  color: var(--pptx-text);
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  font-size: 12px;
+  gap: 2px;
+  padding: 6px 10px;
+}
+
+.pptx-viewer__warning { margin: 0; }
+
+.pptx-viewer__slide-error {
+  align-items: center;
+  background: color-mix(in srgb, #f59e0b 22%, var(--pptx-panel));
+  border-bottom: 1px solid #f59e0b;
+  color: var(--pptx-text);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 8px;
+  inset-block-start: 0;
+  inset-inline: 0;
+  justify-content: space-between;
+  padding: 6px 10px;
+  position: absolute;
+  z-index: 3;
+}
+
+.pptx-viewer__slide-error-actions { display: flex; gap: 6px; }
+.pptx-viewer__slide-error button { background: var(--pptx-panel); border: 1px solid var(--pptx-border); border-radius: 6px; color: inherit; cursor: pointer; min-height: 26px; padding: 2px 8px; }
+
+/* Letterbox the presented slide instead of clipping it: --pptx-slide-aspect
+   and --pptx-slide-ratio are supplied by PptxViewer from the deck size. */
 .pptx-viewer--present .pptx-viewer__stage-wrap {
+  container-type: size;
   display: grid;
   overflow: hidden;
   place-items: center;
 }
 
 .pptx-viewer--present .pptx-viewer__stage {
+  aspect-ratio: var(--pptx-slide-aspect, 16 / 9);
+  block-size: auto;
   inline-size: 100%;
   max-block-size: 100%;
   max-inline-size: 100%;
   margin-inline: 0;
   padding: 0;
+}
+
+@supports (container-type: size) {
+  .pptx-viewer--present .pptx-viewer__stage {
+    inline-size: min(100%, calc(100cqh * var(--pptx-slide-ratio, 1.7778)));
+  }
 }
 
 .pptx-viewer__playback-controls {

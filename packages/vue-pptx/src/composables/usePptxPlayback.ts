@@ -29,6 +29,12 @@ function resolveValue<T>(value: T | Readonly<Ref<T>> | (() => T)): T {
   return isRef(value) ? value.value : value
 }
 
+function readSkipHiddenSlides(options: UsePptxPlaybackOptions): boolean | undefined {
+  return options.skipHiddenSlides === undefined
+    ? undefined
+    : resolveValue(options.skipHiddenSlides)
+}
+
 export function usePptxPlayback(
   document: UsePptxDocumentReturn,
   options: UsePptxPlaybackOptions = {},
@@ -81,7 +87,7 @@ export function usePptxPlayback(
     if (!isDocumentSession(session) || document.state.value !== "ready") return
     const nextController = session.createPlaybackController({
       initialSlide: document.activeIndex.value,
-      skipHiddenSlides: options.skipHiddenSlides,
+      skipHiddenSlides: readSkipHiddenSlides(options),
       autoplay: options.autoplay,
       approximation: options.approximation,
     })
@@ -109,6 +115,7 @@ export function usePptxPlayback(
       binding.session,
       document.state,
       () => options.enabled === undefined ? true : resolveValue(options.enabled),
+      () => readSkipHiddenSlides(options),
     ],
     createController,
     { flush: "sync" },

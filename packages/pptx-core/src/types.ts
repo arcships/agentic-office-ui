@@ -5,6 +5,7 @@ export type PptxPreviewErrorCode =
   | "PARSE_FAILED"
   | "RENDER_FAILED"
   | "STALE_RESULT"
+  | "TIMEOUT"
   | "UNSUPPORTED_CONTENT"
 
 export class PptxPreviewError extends Error {
