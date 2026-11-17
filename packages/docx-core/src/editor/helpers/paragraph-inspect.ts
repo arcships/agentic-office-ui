@@ -293,7 +293,7 @@ export function editableTextFromElement(element: HTMLElement): string {
   const clone = element.cloneNode(true) as HTMLElement;
   replaceTabLayoutMarkersWithTabText(clone);
   clone
-    .querySelectorAll("[data-docx-numbering-label='true']")
+    .querySelectorAll("[data-docx-numbering-label='true'], [data-docx-note-marker='true']")
     .forEach((label) => {
       label.remove();
     });

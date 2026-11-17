@@ -411,7 +411,7 @@ function selectorForLocation(location: DocxTextRangeLocation): string {
 
 function isExcludedTextElement(element: Element): boolean {
   return element.matches(
-    "[data-docx-numbering-label='true'], [data-docx-image-child-index], [data-docx-form-field='true'], [data-docx-tracked-change='deletion']",
+    "[data-docx-numbering-label='true'], [data-docx-note-marker='true'], [data-docx-image-child-index], [data-docx-form-field='true'], [data-docx-tracked-change='deletion']",
   )
 }
 

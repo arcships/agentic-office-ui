@@ -3,7 +3,7 @@
 // Provides the canonical Vue h()-based paragraph run renderer
 // and static HTML serialization for copy/export scenarios.
 
-export { renderParagraphRuns, type ParagraphRunRenderOptions } from "./paragraph-runs"
+export { renderParagraphRuns, type ParagraphRunRenderOptions, type NoteMarkerLabels } from "./paragraph-runs"
 export { renderStaticHtml } from "./static-html"
 
 // Sub-module exports for advanced consumers

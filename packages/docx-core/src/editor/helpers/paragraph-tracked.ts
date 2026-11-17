@@ -41,7 +41,8 @@ import {
   paragraphHasVisibleText,
   paragraphIsAbsoluteFloatingImageAnchorOnly
 } from "./paragraph-geometry";
-import { paragraphHasImage, tableCellParagraphsRecursively } from "./paragraph-inspect";
+import { paragraphHasImage } from "./paragraph-inspect";
+import { nodeNoteReferences, paragraphNoteReferences } from "./note-references";
 import { paragraphLetterheadSideFromIndent } from "./letterhead";
 import {
   parseSectionStartType,
@@ -468,6 +469,16 @@ export function paragraphReferencedNoteIds(
   paragraph: ParagraphNode,
   noteType: "footnote" | "endnote"
 ): number[] {
+  // The run model is authoritative: it survives paragraph edits that clear
+  // sourceXml. Only fall back to the source XML when the model carries no
+  // reference at all (hand-built models / older serialized snapshots).
+  const modelIds = paragraphNoteReferences(paragraph)
+    .filter((reference) => reference.kind === noteType)
+    .map((reference) => reference.id);
+  if (modelIds.length > 0) {
+    return modelIds;
+  }
+
   const sourceXml = paragraph.sourceXml ?? "";
   if (!sourceXml) {
     return [];
@@ -496,28 +507,9 @@ export function nodeReferencedNoteIds(
   tableRowRange?: TableRowRange,
   paragraphLineRange?: ParagraphLineRange
 ): number[] {
-  if (node.type === "paragraph") {
-    if (paragraphLineRange && paragraphLineRange.startLineIndex > 0) {
-      return [];
-    }
-    return paragraphReferencedNoteIds(node, noteType);
-  }
-
-  const references: number[] = [];
-  const startRowIndex = Math.max(0, tableRowRange?.startRowIndex ?? 0);
-  const endRowIndex = Math.min(
-    node.rows.length,
-    tableRowRange?.endRowIndex ?? node.rows.length
+  return nodeNoteReferences(node, noteType, tableRowRange, paragraphLineRange).map(
+    (reference) => reference.id
   );
-  for (let rowIndex = startRowIndex; rowIndex < endRowIndex; rowIndex += 1) {
-    const row = node.rows[rowIndex];
-    row?.cells.forEach((cell) => {
-      tableCellParagraphsRecursively(cell.nodes).forEach((paragraph) => {
-        references.push(...paragraphReferencedNoteIds(paragraph, noteType));
-      });
-    });
-  }
-  return references;
 }
 
 export function eventTargetIsInteractiveControl(

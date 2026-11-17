@@ -216,7 +216,9 @@ function installDomEnvironment(t) {
         return pieces.filter((piece) => !piece.removed).map((piece) => piece.text).join("");
       },
       querySelectorAll(selector) {
-        if (selector === "[data-docx-numbering-label='true']") {
+        // The production code queries a selector list that also excludes note
+        // markers; this fixture only builds numbering-label pieces.
+        if (selector.includes("[data-docx-numbering-label='true']")) {
           return pieces.filter((piece) => piece.numbered).map((piece) => ({
             remove() { piece.removed = true; },
           }));

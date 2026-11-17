@@ -39,8 +39,11 @@
             :comments-enabled="commentsEnabled"
             :tracked-changes="trackedChanges"
             :comments="comments"
-            :footnotes="pageFootnotes(entry.pageIndex)"
-            :endnotes="pageEndnotes(entry.pageIndex)"
+            :footnotes="entry.footnotes"
+            :endnotes="entry.endnotes"
+            :footnote-labels="entry.noteLabels.footnote"
+            :endnote-labels="entry.noteLabels.endnote"
+            :note-marker-labels="entry.noteLabels"
             :theme="theme"
             @measure="onPageMeasure(entry.pageIndex, $event)"
           />
@@ -60,12 +63,14 @@ import type {
   DocxTrackedChange,
   DocumentNoteDefinition,
   DocumentPageNodeSegment,
+  DocumentPageNotes,
   FooterSection,
   HeaderSection,
   LayoutOptions,
 } from "@arcships/docx-core"
 import {
   buildLayoutSnapshot,
+  buildDocumentPageNotes,
   collectCommentsFromModel,
   collectTrackedChangesFromModel,
   parseSectionLayout,
@@ -75,7 +80,6 @@ import {
   resolveDocumentSectionsFromMetadata,
   resolveDocumentLayout,
   resolveSectionIndexForNodeIndex,
-  nodeReferencedNoteIds,
   selectSectionVariantForPage,
   DEFAULT_DOC_PAGE_WIDTH,
   DEFAULT_DOC_PAGE_HEIGHT,
@@ -124,6 +128,9 @@ interface VisiblePageEntry {
   pageNumberFormat?: string
   headerSection?: HeaderSection
   footerSection?: FooterSection
+  footnotes: DocumentNoteDefinition[]
+  endnotes: DocumentNoteDefinition[]
+  noteLabels: { footnote: Map<number, string>; endnote: Map<number, string> }
 }
 
 interface PageMeasureEvent {
@@ -343,27 +350,33 @@ const comments = computed<readonly DocxComment[]>(() =>
 // while the comments gutter is hidden.
 watch(() => props.model, (model) => primeCommentAnchors(model), { immediate: true })
 
-function notesForPage(pageIndex: number, kind: "footnote" | "endnote"): DocumentNoteDefinition[] {
-  const definitions = kind === "footnote"
-    ? props.model.metadata.footnotes ?? []
-    : props.model.metadata.endnotes ?? []
-  if (!definitions.length) return []
-  if (kind === "endnote") return pageIndex === pageCount.value - 1 ? definitions : []
-  const byId = new Map(definitions.map((note) => [note.id, note]))
-  const ids: number[] = []
-  const seen = new Set<number>()
-  for (const segment of pageNodeSegments.value[pageIndex] ?? []) {
-    const node = props.model.nodes[segment.nodeIndex]
-    if (!node) continue
-    for (const id of nodeReferencedNoteIds(node, kind, segment.tableRowRange, segment.paragraphLineRange)) {
-      if (!seen.has(id)) { seen.add(id); ids.push(id) }
-    }
-  }
-  return ids.map((id) => byId.get(id)).filter((note): note is DocumentNoteDefinition => Boolean(note))
+// Notes are resolved from the run model, once per document: this is the single
+// source of truth shared by in-text markers and the note bodies at the page
+// bottom (see buildDocumentPageNotes).
+const EMPTY_PAGE_NOTES: DocumentPageNotes = {
+  footnotes: [],
+  endnotes: [],
+  footnoteNumbers: new Map(),
+  endnoteNumbers: new Map(),
+  footnoteLabels: new Map(),
+  endnoteLabels: new Map(),
 }
 
-function pageFootnotes(pageIndex: number): DocumentNoteDefinition[] { return notesForPage(pageIndex, "footnote") }
-function pageEndnotes(pageIndex: number): DocumentNoteDefinition[] { return notesForPage(pageIndex, "endnote") }
+const pageNotes = computed<DocumentPageNotes[]>(() =>
+  buildDocumentPageNotes(props.model, pageNodeSegments.value)
+)
+
+function notesForPage(pageIndex: number): DocumentPageNotes {
+  return pageNotes.value[pageIndex] ?? EMPTY_PAGE_NOTES
+}
+
+function pageFootnoteNotes(pageIndex: number): DocumentNoteDefinition[] {
+  return notesForPage(pageIndex).footnotes.map((entry) => entry.note)
+}
+
+function pageEndnoteNotes(pageIndex: number): DocumentNoteDefinition[] {
+  return notesForPage(pageIndex).endnotes.map((entry) => entry.note)
+}
 
 // ── Page heights ───────────────────────────────────────────────────
 function pageLayoutKey(pageIndex: number): string {
@@ -428,6 +441,12 @@ const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
         pageNumberFormat: pagePresentations.value[i]?.pageNumberFormat,
         headerSection: pagePresentations.value[i]?.headerSection,
         footerSection: pagePresentations.value[i]?.footerSection,
+        footnotes: pageFootnoteNotes(i),
+        endnotes: pageEndnoteNotes(i),
+        noteLabels: {
+          footnote: notesForPage(i).footnoteLabels,
+          endnote: notesForPage(i).endnoteLabels,
+        },
       })
     }
   }

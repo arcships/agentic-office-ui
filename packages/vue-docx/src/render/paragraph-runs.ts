@@ -75,6 +75,17 @@ export interface ParagraphRunRenderOptions {
   skipFloatingImages?: boolean
   /** Keep wrapped images in document flow while the interaction layer supplies controls. */
   renderWrappedFloatingImages?: boolean
+  /**
+   * Pre-formatted footnote/endnote marker labels keyed by the raw w:id, as
+   * resolved by `buildDocumentPageNotes`. Without them the marker falls back to
+   * the raw id, which is not the displayed note number.
+   */
+  noteMarkerLabels?: NoteMarkerLabels
+}
+
+export interface NoteMarkerLabels {
+  footnote?: Map<number, string>
+  endnote?: Map<number, string>
 }
 
 // ---- Main function ----
@@ -545,6 +556,7 @@ export function renderParagraphRuns(
     if (noteLabel) {
       target.push(h("span", {
         key, ...annotationAttributes,
+        "data-docx-note-marker": "true",
         style: { ...textStyle, verticalAlign: "super", fontSize: "0.75em" },
       }, noteLabel))
       trackTextAdvance(noteLabel, child.style)
@@ -637,6 +649,12 @@ export function renderParagraphRuns(
   const resolveNoteLabel = (child: TextRunNode): string | undefined => {
     if (!child.noteReference) return undefined
     const noteRef = child.noteReference
+    const supplied =
+      noteRef.kind === "footnote"
+        ? options?.noteMarkerLabels?.footnote
+        : options?.noteMarkerLabels?.endnote
+    const label = supplied?.get(noteRef.id)
+    if (label) return label
     const index =
       noteRef.kind === "footnote"
         ? safeNoteMarkerIndexes.footnote.get(noteRef.id)

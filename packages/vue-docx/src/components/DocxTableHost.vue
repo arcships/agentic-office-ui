@@ -99,6 +99,7 @@
                 :within-header-footer="withinHeaderFooter"
                 :header-footer-region="headerFooterRegion"
                 :max-available-width-px="cellContentWidthPx(cell)"
+                :note-marker-labels="noteMarkerLabels"
               />
             </template>
             </template>
@@ -182,6 +183,7 @@ const props = withDefaults(
     withinHeaderFooter?: boolean
     headerFooterRegion?: "header" | "footer"
     maxAvailableWidthPx?: number
+    noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
   }>(),
   {
     editable: false,
@@ -493,6 +495,7 @@ function cellParagraphHtml(
     withinHeaderFooter: props.withinHeaderFooter,
     headerFooterRegion: props.headerFooterRegion,
     pageNumberFormat: props.pageNumberFormat,
+    noteMarkerLabels: props.noteMarkerLabels,
   }
   const rendered = renderParagraphRuns(
     para,

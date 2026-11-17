@@ -74,6 +74,7 @@ const props = withDefaults(
     pageNumberFormat?: string
     withinHeaderFooter?: boolean
     headerFooterRegion?: "header" | "footer"
+    noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
   }>(),
   {
     editable: false,
@@ -131,6 +132,7 @@ const displayHtml = computed(() => {
     pageNumberFormat: props.pageNumberFormat,
     skipFloatingImages: props.editable,
     renderWrappedFloatingImages: props.editable,
+    noteMarkerLabels: props.noteMarkerLabels,
   }
 
   const vnodes = renderParagraphRuns(

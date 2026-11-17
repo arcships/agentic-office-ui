@@ -49,6 +49,7 @@
         :page-number-format="pageNumberFormat"
         :tracked-changes-enabled="trackedChangesEnabled"
         :comments-enabled="commentsEnabled"
+        :note-marker-labels="noteMarkerLabels"
       >
         <template v-if="hasHeader" #header>
           <DocxPageHeader
@@ -70,6 +71,7 @@
           <DocxNotesSection
             kind="footnote"
             :notes="footnotes"
+            :labels="footnoteLabels"
             :numbering-definitions="model.metadata.numberingDefinitions"
             :theme="theme"
           />
@@ -78,6 +80,7 @@
           <DocxNotesSection
             kind="endnote"
             :notes="endnotes"
+            :labels="endnoteLabels"
             :numbering-definitions="model.metadata.numberingDefinitions"
             :theme="theme"
           />
@@ -213,6 +216,10 @@ interface DocxPageSurfaceProps {
   comments?: readonly DocxComment[]
   footnotes?: DocumentNoteDefinition[]
   endnotes?: DocumentNoteDefinition[]
+  /** Note id → marker label, so note bodies match their in-text markers. */
+  footnoteLabels?: Map<number, string>
+  endnoteLabels?: Map<number, string>
+  noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
   theme?: "light" | "dark"
 }
 

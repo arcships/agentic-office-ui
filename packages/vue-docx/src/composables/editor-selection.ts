@@ -58,6 +58,8 @@ export function readDocxTextHostText(host: HTMLElement): string {
   function readNode(node: Node): string {
     const element = node as Element
     if (element.matches?.("[data-docx-numbering-label='true']")) return ""
+    // Footnote/endnote markers are display-only: their label is not paragraph text.
+    if (element.matches?.("[data-docx-note-marker='true']")) return ""
     if (element.matches?.("[data-docx-image-child-index]")) return ""
     if (element.tagName?.toLowerCase() === "br") return "\n"
     if (node.nodeType === 3) return node.textContent ?? ""
@@ -119,7 +121,7 @@ function locationForHost(host: SelectionHost): DocxTextRangeLocation | undefined
 
 function fragmentTextLength(fragment: DocumentFragment): number {
   fragment
-    .querySelectorAll?.("[data-docx-numbering-label='true']")
+    .querySelectorAll?.("[data-docx-numbering-label='true'], [data-docx-note-marker='true']")
     .forEach((label) => label.remove())
   fragment.querySelectorAll?.("br").forEach((lineBreak) => {
     lineBreak.replaceWith("\n")
@@ -204,7 +206,7 @@ function domPositionForTextOffset(
     for (let index = 0; index < children.length && !resolved; index += 1) {
       const child = children[index]
       const element = child as Element
-      if (element.matches?.("[data-docx-numbering-label='true']")) continue
+      if (element.matches?.("[data-docx-numbering-label='true'], [data-docx-note-marker='true']")) continue
       if (element.tagName?.toLowerCase() === "br") {
         if (safeTarget <= traversed) {
           resolved = { node: parent, offset: index }
