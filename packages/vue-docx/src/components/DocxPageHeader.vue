@@ -21,6 +21,11 @@
         :page-number="pageNumber"
         :total-pages="totalPages"
         :page-number-format="pageNumberFormat"
+        :section-pages="resolvedSectionPages"
+        :resolve-style-ref-field-value="effectiveStyleRefResolver"
+        :resolve-bookmark-field-value="effectiveBookmarkResolver"
+        :resolve-bookmark-page-number="effectiveBookmarkPageResolver"
+        :field-resolution-node-index="pageStartNodeIndex"
         :floating-page-origin-px="floatingPageOriginPx"
         :within-header-footer="true"
         header-footer-region="header"
@@ -39,6 +44,11 @@
         :page-number="pageNumber"
         :total-pages="totalPages"
         :page-number-format="pageNumberFormat"
+        :section-pages="resolvedSectionPages"
+        :resolve-style-ref-field-value="effectiveStyleRefResolver"
+        :resolve-bookmark-field-value="effectiveBookmarkResolver"
+        :resolve-bookmark-page-number="effectiveBookmarkPageResolver"
+        :model="model"
         :floating-page-origin-px="floatingPageOriginPx"
         :within-header-footer="true"
         header-footer-region="header"
@@ -58,6 +68,7 @@ import type {
 } from "@arcships/docx-core"
 import DocxParagraphHost from "./DocxParagraphHost.vue"
 import DocxTableHost from "./DocxTableHost.vue"
+import { createDocxFieldResolvers } from "../composables/docx-field-resolvers"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -78,6 +89,14 @@ const props = defineProps<{
   pageNumber: number
   totalPages: number
   pageNumberFormat?: string
+  sectionPages?: number
+  pageStartNodeIndex?: number
+  resolveStyleRefFieldValue?: (
+    target: string,
+    beforeNodeIndex?: number,
+  ) => string | undefined
+  resolveBookmarkFieldValue?: (target: string) => string | undefined
+  resolveBookmarkPageNumber?: (target: string) => number | undefined
   trackedChangesEnabled?: boolean
   commentsEnabled?: boolean
   /** Distance from the paper's top edge to the top of the header box. */
@@ -91,6 +110,25 @@ const resolvedHeaderDistancePx = computed(() => {
   if (Number.isFinite(fromLayout) && (fromLayout as number) >= 0) return Math.round(fromLayout as number)
   return Math.round(props.pageLayout.marginsPx?.top ?? 72)
 })
+
+const resolvedSectionPages = computed(() => props.sectionPages ?? props.totalPages)
+const modelFieldResolvers = computed(() => createDocxFieldResolvers(props.model))
+const effectiveStyleRefResolver = computed(
+  () =>
+    props.resolveStyleRefFieldValue ??
+    ((target: string, beforeNodeIndex?: number) =>
+      modelFieldResolvers.value.resolveStyleRefFieldValue(target, beforeNodeIndex)),
+)
+const effectiveBookmarkResolver = computed(
+  () =>
+    props.resolveBookmarkFieldValue ??
+    ((target: string) => modelFieldResolvers.value.resolveBookmarkFieldValue(target)),
+)
+const effectiveBookmarkPageResolver = computed(
+  () =>
+    props.resolveBookmarkPageNumber ??
+    ((target: string) => modelFieldResolvers.value.resolveBookmarkPageNumber(target)),
+)
 
 const headerStyle = computed(() => ({
   position: "absolute" as const,

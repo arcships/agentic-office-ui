@@ -182,8 +182,78 @@ export function paragraphUsesCenterRightTabLayout(paragraph: ParagraphNode): boo
 }
 
 export interface PageFieldValueToken {
-  kind: PageFieldKind;
+  kind: DocumentFieldKind;
+  instruction: string;
   rawText: string;
+}
+
+type DocumentFieldKind =
+  | PageFieldKind
+  | "DATE"
+  | "TIME"
+  | "REF"
+  | "PAGEREF"
+  | "IF"
+  | "UNSUPPORTED";
+
+const UNSUPPORTED_FIELD_KEYWORDS = new Set([
+  "AUTHOR",
+  "COMMENTS",
+  "COMPANY",
+  "CREATEDATE",
+  "DOCPROPERTY",
+  "EDITTIME",
+  "FILENAME",
+  "FILESIZE",
+  "FORMDROPDOWN",
+  "FORMCHECKBOX",
+  "FORMTEXT",
+  "KEYWORDS",
+  "MACRONAME",
+  "MERGEFIELD",
+  "NOTEREF",
+  "NUMCHARS",
+  "NUMWORDS",
+  "PRINTDATE",
+  "REVNUM",
+  "SAVEDATE",
+  "SUBJECT",
+  "TEMPLATE",
+  "TITLE",
+  "USERADDRESS",
+  "USERINITIALS",
+  "USERNAME",
+]);
+
+function instructionTextToDocumentFieldKind(
+  rawInstruction: string
+): DocumentFieldKind | undefined {
+  const keyword = decodeXmlText(rawInstruction)
+    .replace(/^\s*=+\s*/, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase()
+    .split(/\s+/, 1)[0] ?? "";
+  if (
+    keyword === "PAGE" ||
+    keyword === "NUMPAGES" ||
+    keyword === "SECTIONPAGES" ||
+    keyword === "DATE" ||
+    keyword === "TIME" ||
+    keyword === "REF" ||
+    keyword === "PAGEREF" ||
+    keyword === "IF"
+  ) {
+    return keyword;
+  }
+  if (UNSUPPORTED_FIELD_KEYWORDS.has(keyword)) {
+    return "UNSUPPORTED";
+  }
+  return undefined;
+}
+
+function normalizedFieldInstruction(rawInstruction: string): string {
+  return decodeXmlText(rawInstruction).replace(/\s+/g, " ").trim();
 }
 
 export interface StyleRefFieldValueToken {
@@ -237,7 +307,11 @@ export function paragraphPageFieldValueSequence(
   }
 
   const values: PageFieldValueToken[] = [];
-  const fieldStack: Array<{ kind?: PageFieldKind; inResult: boolean }> = [];
+  const fieldStack: Array<{
+    kind?: DocumentFieldKind;
+    instruction?: string;
+    inResult: boolean;
+  }> = [];
   const tokenPattern =
     /<w:fldSimple\b[^>]*\bw:instr="([^"]+)"[^>]*>[\s\S]*?<\/w:fldSimple>|<w:r\b[\s\S]*?<\/w:r>/gi;
 
@@ -248,16 +322,18 @@ export function paragraphPageFieldValueSequence(
     }
 
     if (/^<w:fldSimple\b/i.test(tokenXml)) {
-      const kind = instructionTextToPageFieldKind(tokenMatch[1] ?? "");
+      const kind = instructionTextToDocumentFieldKind(tokenMatch[1] ?? "");
       if (!kind) {
         continue;
       }
+      const instruction = normalizedFieldInstruction(tokenMatch[1] ?? "");
 
       for (const textMatch of tokenXml.matchAll(
         /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/gi
       )) {
         values.push({
           kind,
+          instruction,
           rawText: decodeXmlText(textMatch[1] ?? ""),
         });
       }
@@ -274,10 +350,13 @@ export function paragraphPageFieldValueSequence(
     for (const instructionMatch of tokenXml.matchAll(
       /<w:instrText\b[^>]*>([\s\S]*?)<\/w:instrText>/gi
     )) {
-      const kind = instructionTextToPageFieldKind(instructionMatch[1] ?? "");
+      const kind = instructionTextToDocumentFieldKind(
+        instructionMatch[1] ?? ""
+      );
       if (!kind || fieldStack.length === 0) {
         continue;
       }
+      const instruction = normalizedFieldInstruction(instructionMatch[1] ?? "");
 
       let assigned = false;
       for (
@@ -287,12 +366,14 @@ export function paragraphPageFieldValueSequence(
       ) {
         if (fieldStack[stackIndex].kind === undefined) {
           fieldStack[stackIndex].kind = kind;
+          fieldStack[stackIndex].instruction = instruction;
           assigned = true;
           break;
         }
       }
       if (!assigned) {
         fieldStack[fieldStack.length - 1].kind = kind;
+        fieldStack[fieldStack.length - 1].instruction = instruction;
       }
     }
 
@@ -312,7 +393,7 @@ export function paragraphPageFieldValueSequence(
       }
     }
 
-    const activeFieldKind = (() => {
+    const activeField = (() => {
       for (
         let stackIndex = fieldStack.length - 1;
         stackIndex >= 0;
@@ -320,18 +401,19 @@ export function paragraphPageFieldValueSequence(
       ) {
         const stackEntry = fieldStack[stackIndex];
         if (stackEntry.inResult && stackEntry.kind) {
-          return stackEntry.kind;
+          return stackEntry;
         }
       }
       return undefined;
     })();
 
-    if (activeFieldKind) {
+    if (activeField?.kind) {
       for (const textMatch of tokenXml.matchAll(
         /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/gi
       )) {
         values.push({
-          kind: activeFieldKind,
+          kind: activeField.kind,
+          instruction: activeField.instruction ?? "",
           rawText: decodeXmlText(textMatch[1] ?? ""),
         });
       }

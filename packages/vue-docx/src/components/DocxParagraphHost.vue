@@ -69,6 +69,14 @@ const props = withDefaults(
     pageNumber?: number
     totalPages?: number
     pageNumberFormat?: string
+    sectionPages?: number
+    resolveStyleRefFieldValue?: (
+      target: string,
+      beforeNodeIndex?: number,
+    ) => string | undefined
+    resolveBookmarkFieldValue?: (target: string) => string | undefined
+    resolveBookmarkPageNumber?: (target: string) => number | undefined
+    fieldResolutionNodeIndex?: number
     withinHeaderFooter?: boolean
     headerFooterRegion?: "header" | "footer"
     noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
@@ -181,6 +189,16 @@ const displayHtml = computed(() => {
     withinHeaderFooter: props.withinHeaderFooter,
     headerFooterRegion: props.headerFooterRegion,
     pageNumberFormat: props.pageNumberFormat,
+    sectionPages: props.sectionPages,
+    resolveStyleRefFieldValue: props.resolveStyleRefFieldValue
+      ? (target: string) =>
+          props.resolveStyleRefFieldValue?.(
+            target,
+            props.fieldResolutionNodeIndex,
+          )
+      : undefined,
+    resolveBookmarkFieldValue: props.resolveBookmarkFieldValue,
+    resolveBookmarkPageNumber: props.resolveBookmarkPageNumber,
     skipFloatingImages: props.editable,
     renderWrappedFloatingImages: props.editable,
     noteMarkerLabels: props.noteMarkerLabels,

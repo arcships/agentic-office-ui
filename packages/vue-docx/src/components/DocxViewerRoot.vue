@@ -34,6 +34,7 @@
             :page-content-width-px="entry.pageContentWidthPx"
             :page-number="entry.pageNumber"
             :total-pages="pageCount"
+            :section-pages="entry.sectionPages"
             :page-number-format="entry.pageNumberFormat"
             :header-section="entry.headerSection"
             :footer-section="entry.footerSection"
@@ -153,6 +154,7 @@ interface VisiblePageEntry {
   pageContentWidthPx: number
   pageNumber: number
   pageNumberFormat?: string
+  sectionPages: number
   headerSection?: HeaderSection
   footerSection?: FooterSection
   footnotes: DocumentNoteDefinition[]
@@ -424,6 +426,7 @@ const pagePresentations = computed(() => {
     nextPageNumber += 1
 
     return {
+      sectionIndex,
       pageLayout,
       pageNumber,
       pageNumberFormat: parseSectionPageNumberFormat(sectionPropertiesXml),
@@ -455,7 +458,16 @@ const pagePresentations = computed(() => {
   })
 })
 
-// ── Shared layout for thumbnail consumers ──────────────────────────
+const sectionPageCounts = computed(() => {
+  const counts = new Map<number, number>()
+  for (const presentation of pagePresentations.value) {
+    counts.set(
+      presentation.sectionIndex,
+      (counts.get(presentation.sectionIndex) ?? 0) + 1,
+    )
+  }
+  return counts
+})
 // The thumbnail rail reads the viewer's pagination result instead of running
 // its own buildLayoutSnapshot on every model change.
 if (props.controller) {
@@ -630,6 +642,10 @@ const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
         ),
         pageNumber: pagePresentations.value[i]?.pageNumber ?? i + 1,
         pageNumberFormat: pagePresentations.value[i]?.pageNumberFormat,
+        sectionPages:
+          sectionPageCounts.value.get(
+            pagePresentations.value[i]?.sectionIndex ?? 0,
+          ) ?? pageCount.value,
         headerSection: pagePresentations.value[i]?.headerSection,
         footerSection: pagePresentations.value[i]?.footerSection,
         footnotes: pageFootnoteNotes(i),

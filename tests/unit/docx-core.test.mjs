@@ -995,3 +995,54 @@ test("DOCX layout snapshot inherits header/footer pagination reserves", () => {
     snapshot.pages[0].contentBoxPx.height < baseline.pages[0].contentBoxPx.height,
   );
 });
+
+test("DOCX pagination reserves footnote and endnote height", () => {
+  const base = furnitureModel();
+  const noteReference = {
+    type: "paragraph",
+    children: [
+      { type: "text", text: "", noteReference: { kind: "footnote", id: 1 } },
+    ],
+    sourceXml: '<w:p><w:r><w:footnoteReference w:id="1"/></w:r></w:p>',
+  };
+  const noteNodes = Array.from({ length: 12 }, (_, index) =>
+    furnitureParagraph(`note body ${index}`),
+  );
+  const endnoteReference = {
+    type: "paragraph",
+    children: [
+      { type: "text", text: "", noteReference: { kind: "endnote", id: 2 } },
+    ],
+    sourceXml: '<w:p><w:r><w:endnoteReference w:id="2"/></w:r></w:p>',
+  };
+  const noteModel = {
+    ...base,
+    nodes: [
+      noteReference,
+      endnoteReference,
+      ...Array.from({ length: 79 }, (_, index) =>
+        furnitureParagraph(`body ${index}`),
+      ),
+    ],
+    metadata: {
+      ...base.metadata,
+      footnotes: [{ id: 1, text: "", nodes: noteNodes }],
+      endnotes: [{ id: 2, text: "", nodes: noteNodes }],
+    },
+  };
+
+  const reserved = core.buildLayoutSnapshot(noteModel, furnitureLayoutOptions);
+  const unreserved = core.buildLayoutSnapshot(noteModel, {
+    ...furnitureLayoutOptions,
+    reserveNoteHeight: false,
+  });
+
+  assert.ok(
+    reserved.pages.length > unreserved.pages.length,
+    "the note body height must move body content to the next page",
+  );
+  assert.ok(
+    reserved.pages[0].blocks.length < unreserved.pages[0].blocks.length,
+    "the page that owns the note must reserve the note body height",
+  );
+});

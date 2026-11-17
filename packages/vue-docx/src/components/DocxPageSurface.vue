@@ -58,6 +58,10 @@
         :page-number="pageNumber"
         :total-pages="totalPages"
         :page-number-format="pageNumberFormat"
+        :section-pages="resolvedSectionPages"
+        :resolve-style-ref-field-value="fieldResolvers.resolveStyleRefFieldValue"
+        :resolve-bookmark-field-value="fieldResolvers.resolveBookmarkFieldValue"
+        :resolve-bookmark-page-number="fieldResolvers.resolveBookmarkPageNumber"
         :tracked-changes-enabled="trackedChangesEnabled"
         :comments-enabled="commentsEnabled"
         :note-marker-labels="noteMarkerLabels"
@@ -101,6 +105,11 @@
           :page-number="pageNumber"
           :total-pages="totalPages"
           :page-number-format="pageNumberFormat"
+          :section-pages="resolvedSectionPages"
+          :page-start-node-index="pageStartNodeIndex"
+          :resolve-style-ref-field-value="fieldResolvers.resolveStyleRefFieldValue"
+          :resolve-bookmark-field-value="fieldResolvers.resolveBookmarkFieldValue"
+          :resolve-bookmark-page-number="fieldResolvers.resolveBookmarkPageNumber"
           :tracked-changes-enabled="trackedChangesEnabled"
           :comments-enabled="commentsEnabled"
           :header-distance-px="pageLayout.headerDistancePx"
@@ -119,6 +128,11 @@
           :page-number="pageNumber"
           :total-pages="totalPages"
           :page-number-format="pageNumberFormat"
+          :section-pages="resolvedSectionPages"
+          :page-start-node-index="pageStartNodeIndex"
+          :resolve-style-ref-field-value="fieldResolvers.resolveStyleRefFieldValue"
+          :resolve-bookmark-field-value="fieldResolvers.resolveBookmarkFieldValue"
+          :resolve-bookmark-page-number="fieldResolvers.resolveBookmarkPageNumber"
           :tracked-changes-enabled="trackedChangesEnabled"
           :comments-enabled="commentsEnabled"
           :footer-distance-px="pageLayout.footerDistancePx"
@@ -224,6 +238,7 @@ import DocxTrackedChangeGutter from "./DocxTrackedChangeGutter.vue"
 import DocxGutterAnchorMarkers from "./DocxGutterAnchorMarkers.vue"
 import DocxNotesSection from "./DocxNotesSection.vue"
 import { useDocxGutterLayout } from "../composables/gutter-layout"
+import { createDocxFieldResolvers } from "../composables/docx-field-resolvers"
 import {
   ensureDocxViewerPageSurfaceRegistry,
   notifyDocxViewerPageSurfaceListeners,
@@ -249,6 +264,7 @@ interface DocxPageSurfaceProps {
   pageContentWidthPx: number
   pageNumber: number
   totalPages: number
+  sectionPages?: number
   pageNumberFormat?: string
   headerSection?: HeaderSection
   footerSection?: FooterSection
@@ -373,6 +389,15 @@ function publishPageSurface(): void {
 // ── Computed ───────────────────────────────────────────────────────
 const hasHeader = computed(() => (props.headerSection?.nodes.length ?? 0) > 0)
 const hasFooter = computed(() => (props.footerSection?.nodes.length ?? 0) > 0)
+const resolvedSectionPages = computed(() => props.sectionPages ?? props.totalPages)
+const pageStartNodeIndex = computed(() => props.pageNodeSegments[0]?.nodeIndex)
+const fieldResolvers = computed(() =>
+  createDocxFieldResolvers(props.model, {
+    pageNumberByNodeIndex: new Map(
+      props.pageNodeSegments.map((segment) => [segment.nodeIndex, props.pageNumber]),
+    ),
+  }),
+)
 
 // Extra body padding needed when a tall header/footer grows past the nominal
 // margin. The helpers return the overlap beyond the margin, so the body area

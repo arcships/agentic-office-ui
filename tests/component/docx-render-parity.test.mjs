@@ -335,6 +335,14 @@ function furnitureParagraph(text) {
   return { type: "paragraph", children: [{ type: "text", text }] };
 }
 
+function simpleFieldParagraph(instruction, cachedText) {
+  return {
+    type: "paragraph",
+    children: [{ type: "text", text: cachedText }],
+    sourceXml: `<w:p><w:fldSimple w:instr="${instruction}"><w:r><w:t>${cachedText}</w:t></w:r></w:fldSimple></w:p>`,
+  };
+}
+
 function furnitureModel() {
   return {
     nodes: [],
@@ -374,6 +382,205 @@ test("DOCX PAGE fields render OOXML roman and letter numbering formats", async (
     } finally {
       mounted.app.unmount();
     }
+  }
+});
+
+test("DOCX dynamic fields re-evaluate at render time", async () => {
+  const now = new Date();
+  const expectedYear = String(now.getFullYear());
+  const expectedHour = String(now.getHours()).padStart(2, "0");
+  const cases = [
+    {
+      label: "SECTIONPAGES",
+      instruction: "SECTIONPAGES",
+      cached: "99",
+      expected: "2",
+      props: { sectionPages: 2, totalPages: 5 },
+    },
+    {
+      label: "DATE",
+      instruction: 'DATE \\@ &quot;yyyy&quot;',
+      cached: "1999",
+      expected: expectedYear,
+      props: {},
+    },
+    {
+      label: "TIME",
+      instruction: 'TIME \\@ &quot;HH&quot;',
+      cached: "03",
+      expected: expectedHour,
+      props: {},
+    },
+    {
+      label: "REF",
+      instruction: "REF chapterOne",
+      cached: "stale reference",
+      expected: "Chapter One",
+      props: {
+        resolveBookmarkFieldValue: (target) =>
+          target === "chapterOne" ? "Chapter One" : undefined,
+      },
+    },
+    {
+      label: "PAGEREF",
+      instruction: "PAGEREF chapterOne",
+      cached: "99",
+      expected: "3",
+      props: {
+        resolveBookmarkPageNumber: (target) =>
+          target === "chapterOne" ? 3 : undefined,
+      },
+    },
+    {
+      label: "IF",
+      instruction: 'IF 1 = 1 &quot;Yes&quot; &quot;No&quot;',
+      cached: "No",
+      expected: "Yes",
+      props: {},
+    },
+    {
+      label: "unsupported",
+      instruction: "AUTHOR",
+      cached: "Old Author",
+      expected: "[AUTHOR]",
+      props: {},
+    },
+  ];
+
+  for (const entry of cases) {
+    const mounted = await mount(DocxParagraphHost, {
+      paragraph: simpleFieldParagraph(entry.instruction, entry.cached),
+      paragraphIndex: 0,
+      documentTheme: "light",
+      pageNumber: 1,
+      totalPages: 5,
+      ...entry.props,
+    });
+    try {
+      assert.equal(nodeText(mounted.root), entry.expected, entry.label);
+    } finally {
+      mounted.app.unmount();
+    }
+  }
+});
+
+test("DOCX STYLEREF resolves heading text from the model", async () => {
+  const heading = {
+    type: "paragraph",
+    style: { styleId: "Heading1", styleName: "Heading 1" },
+    children: [{ type: "text", text: "Chapter One" }],
+  };
+  const headerParagraph = simpleFieldParagraph(
+    'STYLEREF &quot;Heading 1&quot;',
+    "Old heading",
+  );
+  const model = {
+    nodes: [heading],
+    metadata: {
+      sourceParts: 0,
+      warnings: [],
+      headerSections: [],
+      footerSections: [],
+      paragraphStyles: [],
+    },
+  };
+  const mounted = await mount(DocxPageSurface, {
+    pageIndex: 0,
+    pageLayout: {
+      pageWidthPx: 816,
+      pageHeightPx: 1056,
+      marginsPx: { top: 96, bottom: 96, left: 96, right: 96 },
+      headerDistancePx: 48,
+      footerDistancePx: 48,
+    },
+    pageNodeSegments: [{ nodeIndex: 0 }],
+    model,
+    editable: false,
+    pageWidthPx: 816,
+    pageContentWidthPx: 624,
+    pageNumber: 1,
+    totalPages: 1,
+    headerSection: {
+      partName: "header1.xml",
+      referenceType: "default",
+      nodes: [headerParagraph],
+    },
+  });
+
+  try {
+    const header = walk(mounted.root).find(
+      (node) =>
+        node.props?.["data-docx-page-header"] === true ||
+        node.props?.["data-docx-page-header"] === "true",
+    );
+    assert.ok(header, "header must render");
+    assert.equal(nodeText(header), "Chapter One");
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+test("DOCX REF/PAGEREF resolve bookmarks from the model", async () => {
+  const bookmark = {
+    type: "paragraph",
+    children: [{ type: "text", text: "Chapter One" }],
+    sourceXml:
+      '<w:p><w:bookmarkStart w:id="1" w:name="chapterOne"/><w:r><w:t>Chapter One</w:t></w:r><w:bookmarkEnd w:id="1"/></w:p>',
+  };
+  const model = {
+    nodes: [bookmark],
+    metadata: {
+      sourceParts: 0,
+      warnings: [],
+      headerSections: [],
+      footerSections: [],
+      paragraphStyles: [],
+    },
+  };
+  const mounted = await mount(DocxPageSurface, {
+    pageIndex: 0,
+    pageLayout: {
+      pageWidthPx: 816,
+      pageHeightPx: 1056,
+      marginsPx: { top: 96, bottom: 96, left: 96, right: 96 },
+      headerDistancePx: 48,
+      footerDistancePx: 48,
+    },
+    pageNodeSegments: [{ nodeIndex: 0 }],
+    model,
+    editable: false,
+    pageWidthPx: 816,
+    pageContentWidthPx: 624,
+    pageNumber: 1,
+    totalPages: 2,
+    headerSection: {
+      partName: "header1.xml",
+      referenceType: "default",
+      nodes: [
+        simpleFieldParagraph("REF chapterOne", "old reference"),
+        simpleFieldParagraph("PAGEREF chapterOne", "99"),
+      ],
+    },
+  });
+
+  try {
+    const header = walk(mounted.root).find(
+      (node) =>
+        node.props?.["data-docx-page-header"] === true ||
+        node.props?.["data-docx-page-header"] === "true",
+    );
+    assert.ok(header, "header must render");
+    const paragraphs = walk(header).filter(
+      (node) =>
+        node.props?.["data-docx-paragraph-host"] === true ||
+        node.props?.["data-docx-paragraph-host"] === "true",
+    );
+    assert.deepEqual(paragraphs.map((node) => nodeText(node)), [
+      "Chapter One",
+      "1",
+    ]);
+  } finally {
+    mounted.app.unmount();
   }
 });
 
