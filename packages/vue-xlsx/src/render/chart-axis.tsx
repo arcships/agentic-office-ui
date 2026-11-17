@@ -12,6 +12,8 @@ import {
   resolveSurfacePlotRect,
 } from "./chart-renderer";
 import type { ChartLayout, ChartRendererPalette, PlotRect } from "./chart-renderer";
+import type { ChartLabels } from "./chart-types";
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction";
 import { createChartAxisTickFormatter, formatDefaultTickValue } from "./chart-data";
 import { estimateSvgTextWidth } from "./chart-shared";
 
@@ -306,10 +308,13 @@ export function buildDateAxisTicks(
   return ticks;
 }
 
-export function renderSurfaceAxes(chart: XlsxChart, layout: ChartLayout) {
+export function renderSurfaceAxes(chart: XlsxChart, layout: ChartLayout, labels?: ChartLabels) {
   const plot = resolveSurfacePlotRect(chart, layout);
   const categories = getCategoryLabels(chart);
-  const seriesLabels = chart.series.map((series, index) => normalizeCategoryLabel(series.name) || `Q${index + 1}`);
+  const seriesLabels = chart.series.map((series, index) =>
+    normalizeCategoryLabel(series.name)
+    || formatOfficeMessage(labels?.surfaceSeries ?? officeMessagesEn.xlsx.chart.surfaceSeries, { number: index + 1 })
+  );
   const labelColor = resolveChartAxisTextColor(chart);
   const axisColor = chart.axisLineColor ?? chart.chartAreaBorderColor ?? "#888888";
   const rowCount = Math.max(1, seriesLabels.length);

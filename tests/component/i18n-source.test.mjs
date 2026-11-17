@@ -276,6 +276,7 @@ test("TypeScript status, label and error assignments use catalog keys", () => {
     if (!/[A-Za-z]/u.test(value)) return false
     if (/^[A-Z0-9_]+$/u.test(value)) return false
     if (/^[A-Z][A-Za-z0-9]*(?:Error|Type|Code)$/u.test(value)) return false
+    if (/(?:Calibri|Arial|Helvetica|Times|sans-serif|serif|monospace|system-ui)/u.test(value)) return false
     if (/^[a-z][A-Za-z0-9_.:/%-]*$/u.test(value)) return false
     return /\s/u.test(value) || /^[A-Z]/u.test(value)
   }
@@ -285,6 +286,7 @@ test("TypeScript status, label and error assignments use catalog keys", () => {
     /\b(?:status|message|label|ariaLabel|title)\s*:\s*(`[^`]*`|"[^"]*"|'[^']*')/gu,
     /\b(?:refuse|unsupported)\(\s*("[^"]*"|'[^']*')/gu,
     /\?\?\s*(`[^`]*`|"[^"]*"|'[^']*')/gu,
+    /\|\|\s*(`[^`]*`|"[^"]*"|'[^']*')/gu,
   ]
 
   for (const packageName of SCANNED_PACKAGES) {
@@ -416,6 +418,8 @@ test("the previously hard-coded strings now resolve through the catalog", () => 
     ["vue-docx", "src/components/DocxDocumentSurface.vue", "Table ${", "descriptor(\"table\""],
     ["vue-xlsx", "src/components/XlsxSheetSurface.vue", "Row ${", "descriptor(\"row\""],
     ["vue-xlsx", "src/components/XlsxSheetSurface.vue", "Column ${", "descriptor(\"column\""],
+    ["vue-xlsx", "src/render/chart-axis.tsx", "Q${", "surfaceSeries"],
+    ["vue-docx", "src/render/paragraph-runs-image.ts", "\"Missing image\"", "imageMissingText"],
     ["vue-pdf", "src/pdf/pdf-reference-adapter.ts", "label: \"Document\"", "resolveDescriptorLabels"],
     ["vue-docx", "src/composables/editor-image.ts", "Select an image file", "ctx.statusMessage(\"selectImageFile\")"],
     ["vue-docx", "src/composables/editor-table.ts", "Cannot delete the only table row", "refuse(\"cannotDeleteOnlyTableRow\")"],    ["vue-docx", "src/composables/editor-format.ts", "Unsupported: diagonal paragraph borders", "ctx.statusMessage(\"unsupportedDiagonalParagraphBorders\""],

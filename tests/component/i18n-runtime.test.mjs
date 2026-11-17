@@ -19,6 +19,7 @@ const {
   useDocxEditor,
   useDocxImageWrapMenu,
   useDocxViewerThumbnails,
+  renderParagraphRuns,
 } = await importFromDemo("@arcships/vue-docx")
 const {
   XlsxViewer,
@@ -280,6 +281,63 @@ function vnodeText(value, result = []) {
   return result
 }
 
+function flattenVNodes(value, result = []) {
+  if (Array.isArray(value)) {
+    for (const item of value) flattenVNodes(item, result)
+    return result
+  }
+  if (!value || typeof value !== "object") return result
+  result.push(value)
+  flattenVNodes(value.children, result)
+  return result
+}
+
+test("DOCX image alt and missing-image copy follow the active locale", () => {
+  for (const [locale, alt, missing] of [
+    ["en", "Image", "Missing image"],
+    ["zh-CN", "图片", "图片缺失"],
+  ]) {
+    const labels = message(locale).docx.image
+    const withImage = {
+      type: "paragraph",
+      children: [{ type: "image", src: "data:image/png;base64,AAAA", widthPx: 80, heightPx: 60 }],
+    }
+    const imageNodes = flattenVNodes(renderParagraphRuns(
+      withImage,
+      "p-image",
+      "light",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { imageAltText: labels.alt, imageMissingText: labels.missing },
+    ))
+    const image = imageNodes.find((node) => node.props?.alt !== undefined)
+    assert.ok(image, `${locale}: image renders`)
+    assert.equal(image.props.alt, alt)
+
+    const missingImage = {
+      type: "paragraph",
+      children: [{ type: "image", widthPx: 80, heightPx: 60 }],
+    }
+    const missingText = vnodeText(flattenVNodes(renderParagraphRuns(
+      missingImage,
+      "p-missing",
+      "light",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { imageAltText: labels.alt, imageMissingText: labels.missing },
+    ))).join(" ")
+    assert.match(missingText, new RegExp(missing, "u"))
+  }
+})
+
 test("XLSX chart aria, legend and unsupported copy localize", () => {
   for (const [locale, aria, legend, unsupported] of [
     ["en", "Chart", "Series 1", "Unsupported chart type: Mystery"],
@@ -322,6 +380,36 @@ test("descriptor mapping localizes Table, Row, Column and describeReference path
     assert.equal(localizeOfficeDescriptorLabel("Column A", messages), column)
     assert.equal(localizeOfficeDescriptorLabel("Page 4", messages), page)
     assert.equal(localizeOfficeDescriptorLabel("Workbook", messages), workbook)
+
+    const extra = locale === "en"
+      ? {
+        comment: "Comment",
+        commentBy: "Comment by Alex",
+        image: "Image",
+        chart: "Chart",
+        group: "Group 2",
+        shape: "Shape 7",
+        object: "Object 7",
+        slideRegion: "Region on slide 3",
+      }
+      : {
+        comment: "批注",
+        commentBy: "Alex 的批注",
+        image: "图片",
+        chart: "图表",
+        group: "组 2",
+        shape: "形状 7",
+        object: "对象 7",
+        slideRegion: "第 3 张幻灯片上的区域",
+      }
+    assert.equal(localizeOfficeDescriptorLabel("Comment", messages), extra.comment)
+    assert.equal(localizeOfficeDescriptorLabel("Comment by Alex", messages), extra.commentBy)
+    assert.equal(localizeOfficeDescriptorLabel("Image", messages), extra.image)
+    assert.equal(localizeOfficeDescriptorLabel("Chart", messages), extra.chart)
+    assert.equal(localizeOfficeDescriptorLabel("Group 2", messages), extra.group)
+    assert.equal(localizeOfficeDescriptorLabel("Shape 7", messages), extra.shape)
+    assert.equal(localizeOfficeDescriptorLabel("Object 7", messages), extra.object)
+    assert.equal(localizeOfficeDescriptorLabel("Region on slide 3", messages), extra.slideRegion)
 
     const descriptor = localizeOfficeObjectDescriptor({
       objectId: "xlsx:row:2",

@@ -322,3 +322,58 @@ test("PptxStage confirms rendered objects and slide regions without owning produ
   assert.deepEqual(mounted.warnings, [])
   mounted.app.unmount()
 })
+
+test("XlsxSheetSurface localizes describeReference and resolveReference descriptors", async (t) => {
+  const previousWindow = globalThis.window
+  const previousResizeObserver = globalThis.ResizeObserver
+  globalThis.window = { devicePixelRatio: 1, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, addEventListener() {}, removeEventListener() {} }
+  globalThis.ResizeObserver = class ResizeObserver { observe() {} disconnect() {} }
+  t.after(() => {
+    if (previousWindow === undefined) delete globalThis.window
+    else globalThis.window = previousWindow
+    if (previousResizeObserver === undefined) delete globalThis.ResizeObserver
+    else globalThis.ResizeObserver = previousResizeObserver
+  })
+
+  const confirmations = []
+  let api
+  const controller = xlsxReferenceController()
+  const Harness = vue.defineComponent({
+    setup() {
+      const surface = vue.ref(null)
+      vue.watch(surface, (value) => { api = value }, { flush: "sync" })
+      return () => vue.h(XlsxSheetSurface, {
+        ref: surface,
+        controller,
+        documentId: "surface.xlsx",
+        locale: "zh-CN",
+        selectionMode: "object",
+        emitReferenceCandidates: true,
+        onReferenceConfirm: (event) => confirmations.push(event),
+      })
+    },
+  })
+  const mounted = await mount(Harness)
+  const surface = findByTestId(mounted.root, "xlsx-sheet-surface")
+  const grid = findByTestId(mounted.root, "xlsx-grid")
+  grid.getBoundingClientRect = () => ({ left: 0, top: 0, width: 640, height: 480 })
+  grid.scrollLeft = 0
+  grid.scrollTop = 0
+  surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 640, height: 480 })
+
+  surface.props.onClick({ clientX: 10, clientY: 30, detail: 1, shiftKey: false })
+  const reference = confirmations.at(-1).reference
+  assert.equal(reference.kind, "row")
+
+  const described = await api.describeReference(reference)
+  assert.equal(described.path[0].label, "工作簿")
+  assert.ok(described.path.every((entry) => !/^(Workbook|Document|Page|Row|Column)$/u.test(entry.label)))
+
+  const resolved = await api.resolveReference(reference)
+  assert.equal(resolved.status, "exact")
+  assert.equal(resolved.descriptor.path[0].label, "工作簿")
+  assert.ok(resolved.descriptor.path.every((entry) => !/^(Workbook|Document|Page|Row|Column)$/u.test(entry.label)))
+
+  assert.deepEqual(mounted.warnings, [])
+  mounted.app.unmount()
+})

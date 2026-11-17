@@ -454,7 +454,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const baseName = name?.trim() || "Sheet";
+    const baseName = name?.trim() || officeMessagesEn.xlsx.sheetTabs.defaultName;
     if (/[\\/:*?\[\]]/.test(baseName)) {
       throw new Error(officeMessagesEn.xlsx.diagnostics.sheetNameInvalid);
     }
