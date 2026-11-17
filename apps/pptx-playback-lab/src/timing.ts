@@ -33,6 +33,8 @@ export interface LabBatch {
   effects: LabEffect[]
   trigger: LabEffect["trigger"]
   duration: number
+  /** 批次内存在无限重复时，批次不会自己结束，只能由下一次单击终止。 */
+  indefinite: boolean
 }
 
 export interface LabInteractiveSequence {
@@ -188,11 +190,15 @@ function descendantTimeAttribute(node: Element, name: string): string | null {
   return elements(node, "cTn").map((child) => localAttr(child, name)).find((value) => value !== null) ?? null
 }
 
-function parseRepeatCount(value: string | null): LabEffect["repeatCount"] {
+/**
+ * ECMA-376 §19.5.33：`repeatCount` 以千分位记录重复次数，1000 表示一次。
+ * 实验室与正式播放器必须使用同一种换算，否则同一页会出现两种播放时长。
+ */
+export function parseRepeatCount(value: string | null): LabEffect["repeatCount"] {
   if (!value) return null
   if (value === "indefinite") return "indefinite"
-  const count = Number(value)
-  return Number.isFinite(count) && count > 0 ? count : null
+  const thousandths = Number(value)
+  return Number.isFinite(thousandths) && thousandths > 0 ? thousandths / 1000 : null
 }
 
 function numberAttr(node: Element | undefined, name: string): number | null {
@@ -287,12 +293,16 @@ function parseEffect(cTn: Element, batchNode: Element): LabEffect {
   }
 }
 
-function effectiveDuration(effect: LabEffect): number {
-  const repeats = effect.repeatCount === "indefinite" ? 2 : effect.repeatCount ?? 1
+/**
+ * 无限重复的效果不会自己结束：批次时长取 `Infinity`，由下一次单击终止。
+ * 早期版本用 2 代替无限重复，导致“直到下一次单击”的强调动画自行播完并推进批次。
+ */
+export function effectiveDuration(effect: LabEffect): number {
+  const repeats = effect.repeatCount === "indefinite" ? Number.POSITIVE_INFINITY : effect.repeatCount ?? 1
   return effect.duration * repeats * (effect.autoReverse ? 2 : 1)
 }
 
-function scheduleBatch(index: number, effects: LabEffect[]): LabBatch {
+export function scheduleBatch(index: number, effects: LabEffect[]): LabBatch {
   let previousStart = 0
   let previousEnd = 0
   effects.forEach((effect, effectIndex) => {
@@ -311,6 +321,7 @@ function scheduleBatch(index: number, effects: LabEffect[]): LabBatch {
     effects,
     trigger: effects[0]?.trigger ?? "unknown",
     duration: Math.max(0, ...effects.map((effect) => effect.start + effectiveDuration(effect))),
+    indefinite: effects.some((effect) => !Number.isFinite(effectiveDuration(effect))),
   }
 }
 

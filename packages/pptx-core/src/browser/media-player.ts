@@ -1,3 +1,4 @@
+import { normalizeMediaCommand, pptxMediaLoopPolicy } from "../playback/media-command"
 import type { PptxObjectStateMap } from "../playback/track-compiler"
 import type { PptxMediaItem, PptxPlaybackSlide } from "../playback/types"
 
@@ -26,6 +27,7 @@ interface ControlledMedia {
   previousCommand?: string
   firedBookmarks: Set<string>
   previousTimeMs: number
+  appliedSeekMs?: number
   sourcePending: boolean
   sourceUrl?: string
   removeListeners(): void
@@ -56,14 +58,7 @@ function mediaHost(root: HTMLElement, item: PptxMediaItem): HTMLElement | undefi
 }
 
 function normalizedCommand(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined
-  const command = value.trim().toLowerCase().replace(/\s+/gu, "")
-  if (!command) return undefined
-  if (command.includes("togglepause")) return "toggle-pause"
-  if (command.includes("pause")) return "pause"
-  if (command.includes("stop")) return "stop"
-  if (command.includes("play")) return "play"
-  return command
+  return normalizeMediaCommand(value)
 }
 
 export function createPptxMediaPlayer(
@@ -125,7 +120,8 @@ export function createPptxMediaPlayer(
           host.replaceChildren(element)
           sourcePending = true
         }
-        element.loop = item.loop && item.trimEndMs === undefined
+        const loopPolicy = pptxMediaLoopPolicy(item)
+        element.loop = loopPolicy.nativeLoop
         element.volume = Math.max(0, Math.min(1, item.volume))
         if (item.trimStartMs !== undefined) {
           try { element.currentTime = item.trimStartMs / 1000 } catch { /* 元数据就绪后再由播放命令定位。 */ }
@@ -137,6 +133,12 @@ export function createPptxMediaPlayer(
           previousTimeMs: element.currentTime * 1000,
           sourcePending,
           removeListeners: () => undefined,
+        }
+        const restartAtTrimStart = () => {
+          const restartMs = loopPolicy.restartMs ?? 0
+          // 不在这里改写 previousTimeMs：下一帧的 timeupdate 会看到时间回退，重新计算书签是否已经触发。
+          try { element.currentTime = restartMs / 1000 } catch { /* 元数据未就绪时交给播放命令。 */ }
+          void play(entry)
         }
         const onTimeUpdate = () => {
           const currentMs = element.currentTime * 1000
@@ -158,11 +160,14 @@ export function createPptxMediaPlayer(
           entry.previousTimeMs = currentMs
           const endMs = playbackEndMs(entry)
           if (endMs !== undefined && currentMs >= endMs) {
-            if (item.loop) {
-              element.currentTime = (item.trimStartMs ?? 0) / 1000
-              void play(entry)
-            } else element.pause()
+            if (item.loop) restartAtTrimStart()
+            else element.pause()
           }
+        }
+        const onEnded = () => {
+          // 裁剪过的媒体关闭了原生 loop，播放到结尾后由这里回到裁剪起点。
+          if (!item.loop) return
+          restartAtTrimStart()
         }
         const onLoadedMetadata = () => {
           if (item.trimStartMs !== undefined && element.currentTime * 1000 < item.trimStartMs) {
@@ -172,9 +177,11 @@ export function createPptxMediaPlayer(
         }
         element.addEventListener("timeupdate", onTimeUpdate)
         element.addEventListener("loadedmetadata", onLoadedMetadata)
+        element.addEventListener("ended", onEnded)
         entry.removeListeners = () => {
           element.removeEventListener("timeupdate", onTimeUpdate)
           element.removeEventListener("loadedmetadata", onLoadedMetadata)
+          element.removeEventListener("ended", onEnded)
         }
         controlled.set(item.id, entry)
         const resolveSource = callbacks.resolveSource
@@ -207,7 +214,11 @@ export function createPptxMediaPlayer(
         const volume = values?.["media-volume"]
         if (typeof volume === "number") entry.element.volume = Math.max(0, Math.min(1, volume))
         const time = values?.["media-time"]
-        if (typeof time === "number" && Number.isFinite(time)) entry.element.currentTime = Math.max(0, time) / 1000
+        // `media-time` 每帧都会重新求值，只在请求值变化时定位一次，否则会不断把播放拉回起点。
+        if (typeof time === "number" && Number.isFinite(time) && time !== entry.appliedSeekMs) {
+          entry.appliedSeekMs = time
+          entry.element.currentTime = Math.max(0, time) / 1000
+        }
         const command = normalizedCommand(values?.["media-playback"])
         if (!command || command === entry.previousCommand) continue
         entry.previousCommand = command

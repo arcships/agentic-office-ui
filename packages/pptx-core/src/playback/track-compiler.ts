@@ -1,5 +1,7 @@
 import { compilePptxSlideSchedule, type PptxScheduledEffect, type PptxSlideSchedule, type PptxTriggerKey } from "./time-tree"
+import { isMediaPlayCommand, mediaSeekMs } from "./media-command"
 import type {
+  PptxMediaItem,
   PptxPlaybackEffect,
   PptxPlaybackSlide,
   PptxPropertyTrack,
@@ -286,9 +288,13 @@ function fragmentsForEffect(
       fragments = [fragment("clip-path", from, "inset(0 0 0 0)")]
       break
     }
-    case "media-command":
-      fragments = [fragment("media-playback", "stopped", effect.command ?? "play")]
+    case "media-command": {
+      const command = effect.command ?? "play"
+      fragments = [fragment("media-playback", "stopped", command)]
+      const seekMs = mediaSeekMs(effect.command)
+      if (seekMs !== undefined) fragments.push(fragment("media-time", seekMs, seekMs))
       break
+    }
     default:
       fragments = []
   }
@@ -298,6 +304,51 @@ function fragmentsForEffect(
 function trackKey(fragment: TrackFragment): string {
   const range = fragment.paragraphRange
   return `${fragment.objectKey}|${range ? `${range.start}:${range.end}` : "object"}|${fragment.property}`
+}
+
+function mediaFragment(
+  item: PptxMediaItem,
+  property: PptxTrackProperty,
+  from: PptxTrackValue,
+  to: PptxTrackValue,
+  order: number,
+): TrackFragment | undefined {
+  if (!item.objectKey) return undefined
+  return {
+    objectKey: item.objectKey,
+    property,
+    initialValue: from,
+    startMs: 0,
+    endMs: 0,
+    from,
+    to,
+    sourceNodeId: `media:${item.id}`,
+    order,
+    fill: "hold",
+  }
+}
+
+/**
+ * `p:cMediaNode` 自身的音量与自动播放在时间零就生效，不必等 `p:cmd`。
+ * 已经被媒体命令轨道覆盖的播放状态不重复生成，避免同一属性双写。
+ */
+function mediaFragments(
+  media: readonly PptxMediaItem[],
+  coveredPlaybackKeys: ReadonlySet<string>,
+): TrackFragment[] {
+  const result: TrackFragment[] = []
+  media.forEach((item, index) => {
+    const key = item.objectKey
+    if (!key) return
+    const base = 1_000_000 + index * 2
+    const volume = Math.max(0, Math.min(1, item.volume))
+    const volumeFragment = mediaFragment(item, "media-volume", volume, volume, base)
+    if (volumeFragment) result.push(volumeFragment)
+    if (!item.autoplay || coveredPlaybackKeys.has(key)) return
+    const playback = mediaFragment(item, "media-playback", "stopped", "play", base + 1)
+    if (playback) result.push(playback)
+  })
+  return result
 }
 
 function compileFragments(fragments: readonly TrackFragment[]): readonly PptxCompiledPropertyTrack[] {
@@ -373,6 +424,15 @@ export function compilePptxSlideTracks(
       compilableNodeIds.add(scheduled.nodeId)
     }
   }
+  const playbackCoveredKeys = new Set(
+    schedule.groups
+      .filter((group) => group.key === "auto")
+      .flatMap((group) => group.effects)
+      .filter((scheduled) => scheduled.effect.kind === "media-command")
+      .flatMap((scheduled) => scheduled.effect.targetObjectKey
+        ? [scheduled.effect.targetObjectKey]
+        : []),
+  )
   for (const scheduled of schedule.groups.flatMap((group) => group.effects)) {
     const effect = scheduled.effect
     const objectKey = effect.targetObjectKey
@@ -399,7 +459,10 @@ export function compilePptxSlideTracks(
   const frozenInitialState = Object.freeze(Object.fromEntries(
     Object.entries(preparedState).map(([key, value]) => [key, Object.freeze(value)]),
   ))
-  const groups = schedule.groups.map((group): PptxCompiledTriggerGroup => {
+  const mediaTracks = mediaFragments(slide.media, playbackCoveredKeys)
+  const compiledMediaTracks = compileFragments(mediaTracks)
+  const autoMediaTracks = compiledMediaTracks.filter((track) => track.property === "media-playback")
+  let groups = schedule.groups.map((group): PptxCompiledTriggerGroup => {
     const effects = group.effects.filter((effect) => compilableNodeIds.has(effect.nodeId))
     const durationMs = effects.some((effect) => effect.endMs === "indefinite")
       ? "indefinite" as const
@@ -417,6 +480,22 @@ export function compilePptxSlideTracks(
       effects: Object.freeze(effects),
     })
   })
+  if (compiledMediaTracks.length) {
+    if (groups.some((group) => group.key === "auto")) {
+      groups = groups.map((group) => group.key === "auto"
+        ? Object.freeze({ ...group, tracks: Object.freeze([...group.tracks, ...compiledMediaTracks]) })
+        : group)
+    } else if (autoMediaTracks.length) {
+      // 自动播放的媒体需要时间零就生效，因此建立只携带媒体轨道的自动组。
+      groups = [Object.freeze({
+        key: "auto" as const,
+        clickBoundary: 0,
+        durationMs: 0,
+        tracks: Object.freeze(compiledMediaTracks),
+        effects: Object.freeze([]),
+      }), ...groups]
+    }
+  }
   return Object.freeze({
     slideIndex: slide.index,
     schedule,

@@ -167,6 +167,7 @@ export interface PptxMediaItem {
   contentType?: string
   kind: "audio" | "video"
   embedded: boolean
+  autoplay: boolean
   trimStartMs?: number
   trimEndMs?: number
   loop: boolean

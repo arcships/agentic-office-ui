@@ -397,7 +397,8 @@ function runEffectOnTarget(effect: LabEffect, target: HTMLElement): void {
   } else {
     frames = [{ opacity: 0 }, { opacity: 1 }]
   }
-  const repeats = effect.repeatCount === "indefinite" ? 2 : effect.repeatCount ?? 1
+  // 无限重复交给浏览器动画：iterations 为 Infinity 时动画一直运行到下一次单击。
+  const repeats = effect.repeatCount === "indefinite" ? Number.POSITIVE_INFINITY : effect.repeatCount ?? 1
   const iterations = repeats * (effect.autoReverse ? 2 : 1)
   const easing = effect.deceleration >= 0.8 ? "ease-out" : effect.acceleration >= 0.8 ? "ease-in" : "ease"
   const animation = target.animate(frames, {
@@ -493,7 +494,12 @@ function runBatch(batch: LabBatch): void {
     groups.set(key, [...(groups.get(key) ?? []), effect])
   }
   for (const effects of groups.values()) {
-    schedule(() => runEffectGroup(effects), scaledMs(effects[0].start))
+    const start = effects[0].start
+    if (!Number.isFinite(start)) {
+      log(`INDEFINITE BLOCK target=${effects[0].targetId} 前一批次无限重复，本组不会开始`)
+      continue
+    }
+    schedule(() => runEffectGroup(effects), scaledMs(start))
   }
 }
 
@@ -511,6 +517,10 @@ async function nextEffect(): Promise<void> {
       runBatch(batch)
       batchIndex += 1
       updateSummary()
+      if (batch.indefinite) {
+        log(`INDEFINITE batch=${batch.index + 1} 等待下一次单击`)
+        return
+      }
       await waitFor(scaledMs(Math.max(20, batch.duration + 20)))
       if (id !== advanceId) return
     } while (batchIndex < timing.batches.length && timing.batches[batchIndex].trigger !== "onClick")
@@ -521,10 +531,16 @@ async function nextEffect(): Promise<void> {
 
 async function playSlide(): Promise<void> {
   resetSlide()
-  for (const batch of timing.batches) {
+  for (let index = 0; index < timing.batches.length; index += 1) {
+    const batch = timing.batches[index]
     runBatch(batch)
-    const wait = Math.max(250, batch.duration)
-    await waitFor(scaledMs(wait + 120))
+    batchIndex = index + 1
+    updateSummary()
+    if (batch.indefinite) {
+      log(`INDEFINITE batch=${index + 1} 播放本页在无限重复处停止，等待单击或“下一动画”`)
+      return
+    }
+    await waitFor(scaledMs(Math.max(250, batch.duration) + 120))
   }
   batchIndex = timing.batches.length
   updateSummary()
@@ -795,6 +811,10 @@ function inspectBuildTargets(): void {
 function scheduleAutoAdvance(): void {
   const delay = timing.transition?.advanceMs
   if (!autoAdvance.checked || delay === null || delay === undefined) return
+  if (timing.batches.some((batch) => batch.indefinite)) {
+    log("AUTO ADVANCE 页面包含无限重复，已停止自动换页")
+    return
+  }
   const timelineDelay = timing.batches.every((batch) => batch.trigger !== "onClick")
     ? timing.batches.reduce((total, batch) => total + batch.duration, 0)
     : 0

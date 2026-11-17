@@ -106,6 +106,163 @@ function restoreStyle(saved: SavedStyle): void {
   element.style.zIndex = saved.zIndex
 }
 
+export type PptxMorphGranularity = "object" | "word"
+
+/**
+ * Morph 的粒度来自 `<p:transition><p:morph option="..."/>`：`byWord`/`byChar` 逐词，
+ * 其余（包括 `byObject` 和缺失）按对象整体执行。
+ */
+export function pptxMorphGranularity(transition: PptxSlideTransition | undefined): PptxMorphGranularity {
+  const option = (transition?.option ?? "").trim().toLowerCase()
+  return option === "byword" || option === "bychar" ? "word" : "object"
+}
+
+/** 强匹配与中等匹配都能执行，但都要求唯一；弱匹配只用于调试报告。 */
+export function isPptxMorphMatchAnimatable(match: PptxMorphMatch): boolean {
+  return match.unique && (match.confidence === "strong" || match.confidence === "medium")
+}
+
+export interface PptxMorphWordPair {
+  from: number
+  to: number
+  text: string
+}
+
+export interface PptxMorphWordPoint {
+  left: number
+  top: number
+}
+
+/** 逐词 Morph 在某个进度上的位移：进度 0 时回到旧页位置，进度 1 时回到自己的位置。 */
+export function pptxMorphWordTranslate(
+  from: PptxMorphWordPoint,
+  to: PptxMorphWordPoint,
+  progress: number,
+): { x: number; y: number } {
+  const remaining = 1 - Math.max(0, Math.min(1, progress))
+  return {
+    x: (from.left - to.left) * remaining,
+    y: (from.top - to.top) * remaining,
+  }
+}
+
+/** 逐词 Morph 按词文本配对前后页文字，未在同侧重复使用的词才算一对。 */
+export function matchPptxMorphWords(fromText: string, toText: string): readonly PptxMorphWordPair[] {
+  const fromWords = fromText.match(/\S+/gu) ?? []
+  const toWords = toText.match(/\S+/gu) ?? []
+  const used = new Set<number>()
+  const pairs: PptxMorphWordPair[] = []
+  toWords.forEach((text, to) => {
+    const from = fromWords.findIndex((word, index) => !used.has(index) && word === text)
+    if (from < 0) return
+    used.add(from)
+    pairs.push({ from, to, text })
+  })
+  return Object.freeze(pairs)
+}
+
+interface WordSplit {
+  words: HTMLElement[]
+  restore(): void
+}
+
+/** `document.createTreeWalker` 的 SHOW_TEXT 位旗；避免在纯工具函数里依赖全局 NodeFilter。 */
+const SHOW_TEXT = 4
+
+/** 把元素内的每个词包成可变换的行内块，返回可撤销的拆分结果。 */
+function splitWords(element: HTMLElement): WordSplit | undefined {
+  const doc = element.ownerDocument
+  const walker = doc.createTreeWalker(element, SHOW_TEXT)
+  const textNodes: Text[] = []
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text
+    if (/\S/u.test(node.data)) textNodes.push(node)
+  }
+  if (textNodes.length === 0) return undefined
+  const records: Array<{ textNode: Text; generated: ChildNode[] }> = []
+  const words: HTMLElement[] = []
+  for (const textNode of textNodes) {
+    const fragment = doc.createDocumentFragment()
+    const generated: ChildNode[] = []
+    for (const part of textNode.data.split(/(\s+)/u)) {
+      if (!part) continue
+      if (/^\s+$/u.test(part)) {
+        const node = doc.createTextNode(part)
+        fragment.appendChild(node)
+        generated.push(node)
+        continue
+      }
+      const span = doc.createElement("span")
+      span.dataset.pptxMorphWord = ""
+      span.style.display = "inline-block"
+      span.textContent = part
+      fragment.appendChild(span)
+      generated.push(span)
+      words.push(span)
+    }
+    textNode.replaceWith(fragment)
+    records.push({ textNode, generated })
+  }
+  return {
+    words,
+    restore() {
+      for (const record of records) {
+        const first = record.generated[0]
+        if (first?.parentNode) first.parentNode.insertBefore(record.textNode, first)
+        for (const node of record.generated) node.remove()
+      }
+    },
+  }
+}
+
+interface WordMorphEntry {
+  element: HTMLElement
+  from: PptxMorphWordPoint
+  to: PptxMorphWordPoint
+}
+
+/** 逐词 Morph 的位移量：每个词从旧页同名词的位置回到新页自己的位置。 */
+function wordMorphEntries(
+  fromElement: HTMLElement | undefined,
+  toElement: HTMLElement,
+): { entries: WordMorphEntry[]; restore(): void } | undefined {
+  const toSplit = splitWords(toElement)
+  if (!toSplit) return undefined
+  const fromSplit = fromElement ? splitWords(fromElement) : undefined
+  if (!fromSplit) {
+    toSplit.restore()
+    return undefined
+  }
+  const pairs = matchPptxMorphWords(
+    fromSplit.words.map((word) => word.textContent ?? "").join(" "),
+    toSplit.words.map((word) => word.textContent ?? "").join(" "),
+  )
+  const entries = pairs.flatMap((pair): WordMorphEntry[] => {
+    const fromWord = fromSplit.words[pair.from]
+    const toWord = toSplit.words[pair.to]
+    if (!fromWord || !toWord) return []
+    const fromRect = fromWord.getBoundingClientRect()
+    const toRect = toWord.getBoundingClientRect()
+    return [{
+      element: toWord,
+      from: { left: fromRect.left, top: fromRect.top },
+      to: { left: toRect.left, top: toRect.top },
+    }]
+  })
+  if (entries.length === 0) {
+    toSplit.restore()
+    fromSplit.restore()
+    return undefined
+  }
+  return {
+    entries,
+    restore() {
+      toSplit.restore()
+      fromSplit.restore()
+    },
+  }
+}
+
 export function mountPptxTransition(
   root: HTMLElement,
   capture: PptxTransitionCapture | null,
@@ -132,17 +289,37 @@ export function mountPptxTransition(
   root.appendChild(outgoing)
 
   const incomingObjects = markedElements(incoming)
+  const outgoingObjects = markedElements(outgoing)
+  const granularity = pptxMorphGranularity(transition)
   const morphStyles: SavedStyle[] = []
-  const morphGeometry = morphMatches.flatMap((match) => {
-    const from = capture.objects.get(match.from)
-    const element = incomingObjects.get(match.to)
-    if (!from || !element || match.confidence !== "strong" || !match.unique) return []
-    const to = geometry(element)
-    const style = saveStyle(element)
-    morphStyles.push(style)
-    element.style.willChange = "translate, scale, opacity"
-    return [{ element, from, to }]
-  })
+  const morphGeometry: Array<{
+    element: HTMLElement
+    from: PptxCapturedObjectGeometry
+    to: PptxCapturedObjectGeometry
+  }> = []
+  const wordGeometry: WordMorphEntry[] = []
+  const wordRestores: Array<() => void> = []
+  if (transition.kind.toLowerCase() === "morph") {
+    for (const match of morphMatches) {
+      if (!isPptxMorphMatchAnimatable(match)) continue
+      const from = capture.objects.get(match.from)
+      const element = incomingObjects.get(match.to)
+      if (!from || !element) continue
+      const to = geometry(element)
+      if (granularity === "word") {
+        const wordMorph = wordMorphEntries(outgoingObjects.get(match.from), element)
+        if (wordMorph) {
+          wordGeometry.push(...wordMorph.entries)
+          wordRestores.push(wordMorph.restore)
+          continue
+        }
+      }
+      const style = saveStyle(element)
+      morphStyles.push(style)
+      element.style.willChange = "translate, scale, opacity"
+      morphGeometry.push({ element, from, to })
+    }
+  }
   let finished = false
 
   const apply = (positionMs: number) => {
@@ -169,12 +346,17 @@ export function mountPptxTransition(
         item.element.style.translate = `${(item.from.left - item.to.left) * (1 - progress)}px ${(item.from.top - item.to.top) * (1 - progress)}px`
         item.element.style.scale = `${1 + (scaleX - 1) * (1 - progress)} ${1 + (scaleY - 1) * (1 - progress)}`
       }
+      for (const word of wordGeometry) {
+        const offset = pptxMorphWordTranslate(word.from, word.to, progress)
+        word.element.style.translate = `${offset.x}px ${offset.y}px`
+      }
     }
   }
   const finish = () => {
     if (finished) return
     finished = true
     outgoing.remove()
+    for (const restore of wordRestores) restore()
     restoreStyle(incomingStyle)
     restoreStyle(outgoingStyle)
     for (const saved of morphStyles) restoreStyle(saved)
