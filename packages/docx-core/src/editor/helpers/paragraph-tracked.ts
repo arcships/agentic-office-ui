@@ -15,6 +15,7 @@ import type {
   DocModel,
   ParagraphNode
 } from "../../engine/types";
+import { paragraphSectionPropertiesXml } from "../../engine/section-break";
 import type {
   DocumentPageNodeSegment,
   ParagraphLineRange,
@@ -32,7 +33,6 @@ import {
   LAST_RENDERED_PAGE_BREAK_XML_PATTERN,
   PAGE_BREAK_BEFORE_XML_PATTERN,
   PAGE_BREAK_XML_PATTERN,
-  SECTION_PROPERTIES_XML_PATTERN,
   SECTION_TYPE_XML_PATTERN
 } from "./constants";
 import { clampNumber } from "./zoom-utils";
@@ -113,7 +113,7 @@ function paragraphHasExplicitPageBreak(paragraph: ParagraphNode): boolean {
       xml.match(PAGE_BREAK_BEFORE_XML_PATTERN)?.[0]
     ),
     sectionBreakStartsNewPage: (() => {
-      const sectionProperties = xml.match(SECTION_PROPERTIES_XML_PATTERN)?.[0];
+      const sectionProperties = paragraphSectionPropertiesXml(paragraph);
       if (!sectionProperties) {
         return false;
       }
@@ -243,26 +243,12 @@ function paragraphHasPageBreakBefore(paragraph: ParagraphNode): boolean {
 function sectionBreakAfterParagraphStartsNewPage(
   paragraph: ParagraphNode
 ): boolean {
-  const xml = paragraph.sourceXml ?? "";
-  if (!xml) {
+  const sectionProperties = paragraphSectionPropertiesXml(paragraph);
+  if (!sectionProperties) {
     return false;
   }
 
-  const cached = paragraphBreakFlagsBySourceXml.get(xml);
-  if (cached) {
-    return cached.sectionBreakStartsNewPage;
-  }
-
-  // `paragraphHasExplicitPageBreak` populates the shared cache with every
-  // break-related flag, including `sectionBreakStartsNewPage`. The cache
-  // read below has to happen unconditionally — a section break paragraph
-  // is allowed to start a new page (per ECMA-376 §2.6.22) even when it
-  // carries no explicit `<w:br w:type="page"/>` run, and an earlier
-  // version of this helper returned `false` in exactly that case.
-  paragraphHasExplicitPageBreak(paragraph);
-  return (
-    paragraphBreakFlagsBySourceXml.get(xml)?.sectionBreakStartsNewPage ?? false
-  );
+  return sectionBreakPropertiesStartNewPage(sectionProperties);
 }
 
 // --- Structural predicates ---
@@ -304,8 +290,7 @@ export function paragraphCollapsesIntoPreviousParagraph(
 export function paragraphIsStructuralSectionBreakSpacer(
   paragraph: ParagraphNode
 ): boolean {
-  const sourceXml = paragraph.sourceXml ?? "";
-  if (!sourceXml || !SECTION_PROPERTIES_XML_PATTERN.test(sourceXml)) {
+  if (!paragraphSectionPropertiesXml(paragraph)) {
     return false;
   }
 
@@ -610,7 +595,7 @@ export function paragraphHasVisibleBorder(paragraph: ParagraphNode): boolean {
 export function paragraphIsSectionBreakAnchorCarryover(
   paragraph: ParagraphNode
 ): boolean {
-  if (!paragraph.sourceXml?.includes("<w:sectPr")) {
+  if (!paragraphSectionPropertiesXml(paragraph)) {
     return false;
   }
 

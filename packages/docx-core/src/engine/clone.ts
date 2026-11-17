@@ -296,6 +296,9 @@ export function cloneParagraph(
     style: cloneParagraphStyle(paragraph.style),
     paragraphMarkDeleted: paragraph.paragraphMarkDeleted,
     sourceXml: paragraph.sourceXml,
+    sectionBreak: paragraph.sectionBreak
+      ? { ...paragraph.sectionBreak }
+      : undefined,
     children: paragraph.children.map((child) =>
       cloneParagraphChild(child, options)
     ),

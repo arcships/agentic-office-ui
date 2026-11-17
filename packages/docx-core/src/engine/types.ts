@@ -303,12 +303,30 @@ export interface ParagraphStyle {
   };
 }
 
+export type SectionBreakType =
+  | "nextPage"
+  | "continuous"
+  | "evenPage"
+  | "oddPage"
+  | "nextColumn";
+
+/**
+ * Section break carried by a paragraph (the paragraph that ends a section).
+ * The raw `<w:sectPr>` fragment keeps the complete section properties — page
+ * size, orientation, margins, header/footer references and `w:type` — so a
+ * model mutation that invalidates `sourceXml` cannot silently drop a section.
+ */
+export interface ParagraphSectionBreak {
+  sectionPropertiesXml: string;
+}
+
 export interface ParagraphNode {
   type: "paragraph";
   children: ParagraphChildNode[];
   style?: ParagraphStyle;
   paragraphMarkDeleted?: boolean;
   sourceXml?: string;
+  sectionBreak?: ParagraphSectionBreak;
 }
 
 export interface TableBoxSpacing {

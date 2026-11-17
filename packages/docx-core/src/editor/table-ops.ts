@@ -8,6 +8,7 @@ import type {
   TableNode,
 } from "../engine/types";
 import { cloneDocModelShallow, cloneDocNode } from "../engine/clone";
+import { invalidateParagraphSourceXml } from "../engine/section-break";
 import type { UpdateTextOptions } from "./paragraph-ops";
 import {
   distributeTextAcrossParagraphChildren,
@@ -60,7 +61,7 @@ export function updateTableCellText(
   paragraphs.forEach((paragraph, paragraphIndex) => {
     const paragraphText = incomingParagraphTexts[paragraphIndex] ?? "";
     paragraph.children = distributeTextAcrossParagraphChildren(paragraph, paragraphText, options);
-    paragraph.sourceXml = undefined;
+    invalidateParagraphSourceXml(paragraph);
   });
 
   if (incomingParagraphTexts.length > paragraphs.length) {
@@ -102,7 +103,7 @@ export function updateTableCellParagraphText(
   }
 
   paragraph.children = distributeTextAcrossParagraphChildren(paragraph, text, options);
-  paragraph.sourceXml = undefined;
+  invalidateParagraphSourceXml(paragraph);
   tableNode.sourceXml = undefined;
 
   return next;
@@ -147,7 +148,7 @@ export function updateTableCellParagraphTextRecursive(
         }
 
         node.children = distributeTextAcrossParagraphChildren(node, text, options);
-        node.sourceXml = undefined;
+        invalidateParagraphSourceXml(node);
         ancestorTables.forEach((ancestorTable) => {
           ancestorTable.sourceXml = undefined;
         });
