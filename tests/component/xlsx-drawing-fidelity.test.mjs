@@ -49,27 +49,35 @@ function image(id, xPx, yPx, overrides = {}) {
 }
 
 function imageController(overrides = {}) {
-  const calls = { move: [], resize: [], select: [] };
+  const calls = { delete: [], move: [], resize: [], select: [], shapeMove: [], shapeResize: [] };
   const controller = {
     activeSheet: sheetData(),
     charts: [],
     clearSelectedChart() {},
     clearSelectedImage() {},
+    clearSelectedShape() {},
+    deleteChart(id) { calls.delete.push(["chart", id]); },
+    deleteImage(id) { calls.delete.push(["image", id]); },
+    deleteShape(id) { calls.delete.push(["shape", id]); },
     formControls: [],
     images: [],
     isChartsLoading: false,
     maxConcurrentImageDecodes: 4,
     moveChartBy() {},
     moveImageBy(id, dx, dy) { calls.move.push([id, dx, dy]); },
+    moveShapeBy(id, dx, dy) { calls.shapeMove.push([id, dx, dy]); },
     readOnly: false,
     reportImageDecodeError() {},
     resizeChartBy() {},
     resizeImageBy(id, handle, dx, dy) { calls.resize.push([id, handle, dx, dy]); },
+    resizeShapeBy(id, handle, dx, dy) { calls.shapeResize.push([id, handle, dx, dy]); },
     selectedChartElement: null,
     selectedChartId: null,
     selectedImageId: null,
+    selectedShapeId: null,
     selectChart(id) { this.selectedChartId = id; },
     selectImage(id) { calls.select.push(id); this.selectedImageId = id; },
+    selectShape(id) { this.selectedShapeId = id; },
     setCellValue() {},
     shapes: [],
     zoomScale: 100,
@@ -400,5 +408,135 @@ test("radio controls sharing a linked cell clear their siblings", async () => {
     assert.deepEqual(controls.map((node) => node.props["data-control-checked"]), ["false", "true"]);
   } finally {
     mounted.app.unmount();
+  }
+});
+
+function shape(id, xPx, yPx, overrides = {}) {
+  return {
+    anchor: absoluteAnchor(xPx, yPx, 160, 80),
+    geometry: "rect",
+    id,
+    name: id,
+    paragraphs: [{ runs: [{ text: id }] }],
+    sheetIndex: 0,
+    workbookSheetIndex: 0,
+    zIndex: 4,
+    ...overrides,
+  };
+}
+
+test("Delete removes selected images, charts and shapes through the controller", async () => {
+  const imageSetup = imageController({ images: [image("photo", 100, 50)], selectedImageId: "photo" });
+  const imageMount = await mount(XlsxImageLayer, { controller: imageSetup.controller, showImages: true });
+  try {
+    const [item] = findItems(imageMount.root, "xlsx-image-item");
+    item.props.onKeydown({ key: "Delete", preventDefault() {}, stopPropagation() {} });
+    assert.deepEqual(imageSetup.calls.delete, [["image", "photo"]]);
+  } finally {
+    imageMount.app.unmount();
+  }
+
+  const chartSetup = imageController({
+    charts: [{ anchor: absoluteAnchor(100, 50, 200, 120), chartType: "Unsupported", id: "chart-1", series: [], sheetIndex: 0, workbookSheetIndex: 0 }],
+    selectedChartId: "chart-1",
+  });
+  const chartMount = await mount(XlsxChartOverlay, { controller: chartSetup.controller });
+  try {
+    const [item] = findItems(chartMount.root, "xlsx-chart-item");
+    item.props.onKeydown({ key: "Delete", preventDefault() {}, stopPropagation() {} });
+    assert.deepEqual(chartSetup.calls.delete, [["chart", "chart-1"]]);
+  } finally {
+    chartMount.app.unmount();
+  }
+
+  const shapeSetup = imageController({ selectedShapeId: "shape-1", shapes: [shape("shape-1", 100, 50)] });
+  const shapeMount = await mount(XlsxDrawingLayer, { controller: shapeSetup.controller });
+  try {
+    const [item] = findItems(shapeMount.root, "xlsx-shape");
+    item.props.onKeydown({ key: "Delete", preventDefault() {}, stopPropagation() {} });
+    assert.deepEqual(shapeSetup.calls.delete, [["shape", "shape-1"]]);
+  } finally {
+    shapeMount.app.unmount();
+  }
+});
+
+test("selected shapes drag, resize and nudge through the shape mutation APIs", async () => {
+  const { calls, controller } = imageController({
+    selectedShapeId: "shape-1",
+    shapes: [shape("shape-1", 100, 50)],
+  });
+  const windowMock = installWindowListeners();
+  const mounted = await mount(XlsxDrawingLayer, { controller });
+  try {
+    const [item] = findItems(mounted.root, "xlsx-shape");
+    item.props.onPointerdown(pointerEvent());
+    windowMock.listeners.get("pointermove")({ clientX: 130, clientY: 70, pointerId: 1 });
+    await vue.nextTick();
+    assert.equal(item.props.style.left, "130px");
+    assert.deepEqual(calls.shapeMove, [], "shape preview must not mutate the workbook");
+    windowMock.listeners.get("pointerup")({ clientX: 130, clientY: 70, pointerId: 1 });
+    assert.deepEqual(calls.shapeMove, [["shape-1", 30, 20]]);
+
+    const handles = findItems(item, "xlsx-shape-resize-handle");
+    assert.equal(handles.length, 8);
+    handles.find((node) => node.props["data-handle"] === "se")
+      .props.onPointerdown(pointerEvent({ clientX: 200, clientY: 120 }));
+    windowMock.listeners.get("pointermove")({ clientX: 225, clientY: 140, pointerId: 1 });
+    windowMock.listeners.get("pointerup")({ clientX: 225, clientY: 140, pointerId: 1 });
+    assert.deepEqual(calls.shapeResize, [["shape-1", "se", 25, 20]]);
+
+    item.props.onKeydown({ key: "ArrowLeft", shiftKey: false, preventDefault() {}, stopPropagation() {} });
+    assert.deepEqual(calls.shapeMove.at(-1), ["shape-1", -1, 0]);
+  } finally {
+    mounted.app.unmount();
+    windowMock.restore();
+  }
+});
+
+test("overlay layers cull anchored objects outside the visible viewport", async () => {
+  const imageSetup = imageController({ images: [image("visible", 0, 0), image("offscreen", 1200, 900)] });
+  const imageMount = await mount(XlsxImageLayer, {
+    controller: imageSetup.controller,
+    showImages: true,
+    viewportHeight: 150,
+    viewportWidth: 200,
+  });
+  try {
+    assert.deepEqual(
+      findItems(imageMount.root, "xlsx-image-item").map((node) => walk(node).find((child) => child.type === "img")?.props.alt),
+      ["visible"],
+    );
+  } finally {
+    imageMount.app.unmount();
+  }
+
+  const chartSetup = imageController({
+    charts: [
+      { anchor: absoluteAnchor(0, 0, 120, 80), chartType: "Unsupported", id: "chart-visible", series: [], sheetIndex: 0, workbookSheetIndex: 0 },
+      { anchor: absoluteAnchor(1500, 900, 120, 80), chartType: "Unsupported", id: "chart-offscreen", series: [], sheetIndex: 0, workbookSheetIndex: 0 },
+    ],
+  });
+  const chartMount = await mount(XlsxChartOverlay, {
+    controller: chartSetup.controller,
+    viewportHeight: 150,
+    viewportWidth: 200,
+  });
+  try {
+    assert.equal(findItems(chartMount.root, "xlsx-chart-item").length, 1);
+  } finally {
+    chartMount.app.unmount();
+  }
+
+  const shapeSetup = imageController({ shapes: [shape("shape-visible", 0, 0), shape("shape-offscreen", 1500, 900)] });
+  const shapeMount = await mount(XlsxDrawingLayer, {
+    controller: shapeSetup.controller,
+    viewportHeight: 150,
+    viewportWidth: 200,
+  });
+  try {
+    assert.equal(findItems(shapeMount.root, "xlsx-shape").length, 1);
+    assert.equal(findItems(shapeMount.root, "xlsx-shape")[0].props["data-shape-id"], "shape-visible");
+  } finally {
+    shapeMount.app.unmount();
   }
 });

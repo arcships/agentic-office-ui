@@ -364,6 +364,34 @@ export function anchorToAbsoluteRect(
   };
 }
 
+/**
+ * Content-space rect cache for anchored objects. Anchor objects survive scroll
+ * ticks, so geometry only needs recomputation when the sheet model or zoom
+ * changes. Returns the same rect instance for cache hits.
+ */
+export function createAnchoredRectCache() {
+  const cache = new WeakMap<object, { sheetState: SheetAxisSizeState | null; zoom: number; rect: XlsxImageRect }>();
+  return {
+    resolve(anchor: XlsxImage["anchor"], sheetState: SheetAxisSizeState | null, zoomScale: number): XlsxImageRect {
+      const scaleValue = zoomScale / 100;
+      const zoom = Number.isFinite(scaleValue) ? Math.max(0.1, scaleValue) : 1;
+      const cached = cache.get(anchor);
+      if (cached && cached.sheetState === sheetState && cached.zoom === zoom) {
+        return cached.rect;
+      }
+      const rect = anchorToAbsoluteRect(anchor, sheetState);
+      const resolved = {
+        height: Math.max(1, emuToPixels(rect.cy) * zoom),
+        left: emuToPixels(rect.x) * zoom,
+        top: emuToPixels(rect.y) * zoom,
+        width: Math.max(1, emuToPixels(rect.cx) * zoom),
+      };
+      cache.set(anchor, { rect: resolved, sheetState, zoom });
+      return resolved;
+    },
+  };
+}
+
 // ── Public column width / row height helpers ───────────────────────────────
 
 export function pxToSheetColumnWidth(widthPx: number) {

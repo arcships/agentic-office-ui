@@ -384,6 +384,7 @@ export interface XlsxControllerContext {
   selectedChartId: Ref<string | null>;
   selectedChartElement: Ref<XlsxChartElementSelection | null>;
   selectedImageId: Ref<string | null>;
+  selectedShapeId: Ref<string | null>;
   revision: Ref<number>;
   selectionAnchorRef: ShallowRef<XlsxCellAddress | null>;
   undoStackRef: ShallowRef<HistoryEntry[]>;

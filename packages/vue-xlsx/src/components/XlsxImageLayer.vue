@@ -71,6 +71,8 @@ const props = defineProps<{
   showImages?: boolean;
   scrollLeft?: number;
   scrollTop?: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
 }>();
 
 const layerStyle = gridBodyLayerStyle;
@@ -140,10 +142,13 @@ const imageItems = computed<ImageItem[]>(() => {
   const images = props.controller.images as XlsxImage[];
   return images
     .filter((img) => img.anchor)
-    .map((image) => {
+    .flatMap((image) => {
       const rect = resolveAnchorRect(image.anchor, props.controller.activeSheet, props.controller.zoomScale);
       const isSelected = image.id === selectedImageId.value;
       const placement = layout.place(rect);
+      if (!layout.isVisible(rect, placement.pane, props.viewportWidth ?? 0, props.viewportHeight ?? 0)) {
+        return [];
+      }
       const preview = interaction.previewFor(image.id);
       const style: CSSProperties = {
         ...placement.style,
@@ -161,7 +166,7 @@ const imageItems = computed<ImageItem[]>(() => {
         style.width = `${preview.width}px`;
         style.height = `${preview.height}px`;
       }
-      return { image, pane: placement.pane, rect, style } satisfies ImageItem;
+      return [{ image, pane: placement.pane, rect, style } satisfies ImageItem];
     });
 });
 
@@ -269,6 +274,12 @@ function onImageKeydown(image: XlsxImage, event: KeyboardEvent) {
     event.preventDefault();
     event.stopPropagation();
     props.controller.moveImageBy(image.id, delta[0] * step, delta[1] * step);
+    return;
+  }
+  if (event.key === "Delete" || event.key === "Backspace") {
+    event.preventDefault();
+    event.stopPropagation();
+    props.controller.deleteImage(image.id);
     return;
   }
   if (event.key === "Escape") {

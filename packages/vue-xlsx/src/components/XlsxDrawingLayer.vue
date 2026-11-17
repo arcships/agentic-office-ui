@@ -18,8 +18,16 @@
         :key="item.shape.id"
         class="xlsx-drawing-layer__shape"
         data-testid="xlsx-shape"
+        :data-shape-id="item.shape.id"
         :data-shape-geometry="item.shape.geometry"
+        tabindex="0"
+        :class="{
+          'xlsx-drawing-layer__shape--selected': item.shape.id === selectedShapeId,
+          'xlsx-drawing-layer__shape--gesture': interaction.isActive(item.shape.id),
+        }"
         :style="item.style"
+        @pointerdown.stop="onShapePointerDown(item, $event)"
+        @keydown="onShapeKeydown(item.shape, $event)"
       >
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           <ellipse v-if="/ellipse|oval/i.test(item.shape.geometry)" cx="50" cy="50" rx="48" ry="48" />
@@ -39,6 +47,21 @@
               :style="shapeRunStyle(run)"
             >{{ run.text }}</span>
           </p>
+        </div>
+        <div
+          v-if="item.shape.id === selectedShapeId"
+          class="xlsx-drawing-layer__handles"
+          data-testid="xlsx-shape-handles"
+        >
+          <div
+            v-for="handle in DRAWING_RESIZE_HANDLES"
+            :key="handle"
+            class="xlsx-drawing-layer__handle"
+            data-testid="xlsx-shape-resize-handle"
+            :data-handle="handle"
+            :style="handleStyle(handle)"
+            @pointerdown.stop="onShapeHandlePointerDown(item, handle, $event)"
+          />
         </div>
       </div>
       <div
@@ -72,18 +95,28 @@ import {
   parseA1CellReference,
   type XlsxFormControl,
   type XlsxImageAnchor,
+  type XlsxImageRect,
+  type XlsxImageResizeHandlePosition,
   type XlsxShape,
   type XlsxShapeParagraph,
   type XlsxShapeTextRun,
   type XlsxViewerController,
 } from "@arcships/xlsx-core"
 import { createGridPaneLayout, gridBodyLayerStyle, resolveAnchorRect, type GridPaneKey } from "./grid-metrics"
+import { DRAWING_RESIZE_HANDLES, drawingHandleStyle, useDrawingGestures } from "./drawing-interaction"
 import { useXlsxMessages } from "../i18n"
 
-const props = defineProps<{ controller: XlsxViewerController; scrollLeft?: number; scrollTop?: number }>()
+const props = defineProps<{
+  controller: XlsxViewerController
+  scrollLeft?: number
+  scrollTop?: number
+  viewportWidth?: number
+  viewportHeight?: number
+}>()
 
 const layerStyle = gridBodyLayerStyle
 const checkedOverrides = ref<Record<string, boolean>>({})
+const selectedShapeId = computed(() => props.controller.selectedShapeId)
 const m = useXlsxMessages()
 
 const paneLayout = computed(() => createGridPaneLayout(
@@ -93,11 +126,26 @@ const paneLayout = computed(() => createGridPaneLayout(
   props.scrollTop ?? 0,
 ))
 
-function itemPlacement(anchor: XlsxImageAnchor, zIndex: number, extra?: CSSProperties): { pane: GridPaneKey; style: CSSProperties } {
+const interaction = useDrawingGestures({
+  onSelect: (id) => props.controller.selectShape(id),
+  onMove: (id, deltaX, deltaY) => props.controller.moveShapeBy(id, deltaX, deltaY),
+  onResize: (id, handle, deltaX, deltaY) => props.controller.resizeShapeBy(id, handle, deltaX, deltaY),
+})
+
+function numericPx(value: string | number | undefined): number {
+  return typeof value === "number" ? value : Number.parseFloat(value ?? "0") || 0
+}
+
+function handleStyle(handle: XlsxImageResizeHandlePosition): CSSProperties {
+  return drawingHandleStyle(handle)
+}
+
+function itemPlacement(anchor: XlsxImageAnchor, zIndex: number, extra?: CSSProperties): { pane: GridPaneKey; rect: XlsxImageRect; style: CSSProperties } {
   const rect = resolveAnchorRect(anchor, props.controller.activeSheet, props.controller.zoomScale)
   const placement = paneLayout.value.place(rect)
   return {
     pane: placement.pane,
+    rect,
     style: { ...placement.style, zIndex: Math.max(0, zIndex), ...extra },
   }
 }
@@ -112,25 +160,91 @@ function shapeTransform(shape: XlsxShape): string | undefined {
 
 const shapeItems = computed(() => (props.controller.shapes as XlsxShape[])
   .filter((shape) => !shape.hidden)
-  .map((shape) => ({
-    shape,
-    ...itemPlacement(shape.anchor, shape.zIndex, {
+  .flatMap((shape) => {
+    const item = itemPlacement(shape.anchor, shape.zIndex, {
       "--shape-fill": shape.fill?.none ? "transparent" : shape.fill?.color || "#dbeafe",
       "--shape-stroke": shape.stroke?.none ? "transparent" : shape.stroke?.color || "#2563eb",
       "--shape-stroke-width": `${shape.stroke?.widthPx || 1}px`,
       transform: shapeTransform(shape),
-    } as CSSProperties),
-  })))
+    } as CSSProperties)
+    if (!paneLayout.value.isVisible(item.rect, item.pane, props.viewportWidth ?? 0, props.viewportHeight ?? 0)) {
+      return []
+    }
+    const isSelected = shape.id === selectedShapeId.value
+    const preview = interaction.previewFor(shape.id)
+    const style: CSSProperties = {
+      ...item.style,
+      cursor: isSelected ? "move" : "default",
+      outline: isSelected ? "2px solid #2563eb" : "none",
+      outlineOffset: "-1px",
+      pointerEvents: "auto",
+    }
+    if (preview) {
+      style.left = `${numericPx(item.style.left) + preview.left - item.rect.left}px`
+      style.top = `${numericPx(item.style.top) + preview.top - item.rect.top}px`
+      style.width = `${preview.width}px`
+      style.height = `${preview.height}px`
+    }
+    return [{ shape, pane: item.pane, rect: item.rect, style }]
+  }))
 
 const controlItems = computed(() => (props.controller.formControls as XlsxFormControl[])
   .filter((control) => !control.hidden)
-  .map((control) => ({ control, ...itemPlacement(control.anchor, control.zIndex) })))
+  .flatMap((control) => {
+    const item = itemPlacement(control.anchor, control.zIndex)
+    if (!paneLayout.value.isVisible(item.rect, item.pane, props.viewportWidth ?? 0, props.viewportHeight ?? 0)) {
+      return []
+    }
+    return [{ control, pane: item.pane, rect: item.rect, style: item.style }]
+  }))
 
 const panes = computed(() => paneLayout.value.panes.map((pane) => ({
   ...pane,
   shapes: shapeItems.value.filter((item) => item.pane === pane.key),
   controls: controlItems.value.filter((item) => item.pane === pane.key),
 })))
+
+function onShapePointerDown(item: { shape: XlsxShape; rect: XlsxImageRect }, event: PointerEvent) {
+  interaction.beginMove(item.shape.id, item.rect, event)
+}
+
+function onShapeHandlePointerDown(
+  item: { shape: XlsxShape; rect: XlsxImageRect },
+  handle: XlsxImageResizeHandlePosition,
+  event: PointerEvent,
+) {
+  interaction.beginResize(item.shape.id, item.rect, handle, event)
+}
+
+function onShapeKeydown(shape: XlsxShape, event: KeyboardEvent) {
+  if (props.controller.selectedShapeId !== shape.id) {
+    return
+  }
+  const step = event.shiftKey ? 10 : 1
+  const nudge: Record<string, [number, number]> = {
+    ArrowLeft: [-1, 0],
+    ArrowRight: [1, 0],
+    ArrowUp: [0, -1],
+    ArrowDown: [0, 1],
+  }
+  const delta = nudge[event.key]
+  if (delta) {
+    event.preventDefault()
+    event.stopPropagation()
+    props.controller.moveShapeBy(shape.id, delta[0] * step, delta[1] * step)
+    return
+  }
+  if (event.key === "Delete" || event.key === "Backspace") {
+    event.preventDefault()
+    event.stopPropagation()
+    props.controller.deleteShape(shape.id)
+    return
+  }
+  if (event.key === "Escape") {
+    event.stopPropagation()
+    props.controller.clearSelectedShape()
+  }
+}
 
 function shapeTextStyle(shape: XlsxShape): CSSProperties {
   const insets = shape.textBox?.insetPx
@@ -227,9 +341,10 @@ function controlLabel(kind: XlsxFormControl["kind"]): string { return ({ dropdow
 .xlsx-drawing-layer { pointer-events: none; position: absolute; isolation: isolate; z-index: 3; }
 .xlsx-drawing-layer__pane { overflow: hidden; pointer-events: none; position: absolute; }
 .xlsx-drawing-layer__shape {
-  box-sizing: border-box; overflow: visible; pointer-events: none; position: absolute;
+  box-sizing: border-box; overflow: visible; pointer-events: auto; position: absolute;
   transform-origin: center;
 }
+.xlsx-drawing-layer__shape--gesture { cursor: move; }
 .xlsx-drawing-layer__shape svg { fill: var(--shape-fill); height: 100%; left: 0; position: absolute; stroke: var(--shape-stroke); stroke-width: var(--shape-stroke-width); top: 0; width: 100%; }
 .xlsx-drawing-layer__text {
   box-sizing: border-box; display: flex; flex-direction: column;
@@ -244,4 +359,10 @@ function controlLabel(kind: XlsxFormControl["kind"]): string { return ({ dropdow
 .xlsx-drawing-layer__control button { background: transparent; border: 0; color: inherit; cursor: pointer; font: inherit; height: 100%; width: 100%; }
 .xlsx-drawing-layer__box, .xlsx-drawing-layer__radio { align-items: center; background: #fff; border: 1px solid #475569; display: inline-flex; flex: 0 0 14px; height: 14px; justify-content: center; }
 .xlsx-drawing-layer__radio { border-radius: 50%; font-size: 9px; }
+.xlsx-drawing-layer__handles { inset: 0; pointer-events: none; position: absolute; }
+.xlsx-drawing-layer__handle {
+  background: #ffffff; border: 1px solid #2563eb; box-sizing: border-box;
+  height: 8px; pointer-events: auto; position: absolute; width: 8px;
+  z-index: 1000000;
+}
 </style>

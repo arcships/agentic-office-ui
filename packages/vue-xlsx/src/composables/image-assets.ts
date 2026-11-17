@@ -695,12 +695,15 @@ export function createBasicWorkbookAssets(workbook: Workbook): WorkbookImageAsse
     const shapesByWorkbookSheetIndex = collectWorksheetApiShapes(workbook);
     return {
       archive: {},
+      formControlOriginsById: new Map(),
       formControlsByWorkbookSheetIndex: Array.from({ length: workbook.sheetCount }, () => [] as XlsxFormControl[]),
       imageOriginsById: new Map(),
       imagesByWorkbookSheetIndex,
       namedCellStyleByName: {},
       objectUrls,
+      shapeOriginsById: new Map(),
       shapesByWorkbookSheetIndex,
+      sheetPathsByWorkbookSheetIndex: [],
       sheetOrigins: Array.from({ length: workbook.sheetCount }, () => null as WorkbookImageSheetOrigin | null),
       sheetStatesByWorkbookSheetIndex: Array.from({ length: workbook.sheetCount }, () => null),
       styleById: {},

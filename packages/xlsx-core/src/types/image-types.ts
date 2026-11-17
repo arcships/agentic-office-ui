@@ -157,6 +157,7 @@ export type XlsxFormControlKind =
 export interface XlsxFormControl {
   anchor: XlsxImageAnchor;
   checked?: boolean;
+  editable?: boolean;
   fontFamily?: string;
   fontSizePt?: number;
   hidden?: boolean;
@@ -166,10 +167,23 @@ export interface XlsxFormControl {
   linkedCell?: string;
   name?: string;
   sheetIndex: number;
+  /** Worksheet `control@shapeId`, a stable identity in the sheet XML. */
+  shapeId?: number;
   textAlign?: "center" | "left" | "right";
   textColor?: string;
   workbookSheetIndex: number;
   zIndex: number;
+}
+
+/** Patch accepted by programmable form-control CRUD. */
+export interface XlsxFormControlInput {
+  anchor: XlsxImageAnchor;
+  checked?: boolean;
+  kind?: XlsxFormControlKind;
+  label?: string;
+  linkedCell?: string;
+  name?: string;
+  zIndex?: number;
 }
 
 // ── Image rect / resize ──────────────────────────────────────────────────

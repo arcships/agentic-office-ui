@@ -228,7 +228,7 @@ const m = useXlsxMessages();
 
 const emit = defineEmits<{
   cellDoubleClick: [cell: XlsxCellAddress];
-  viewportChange: [viewport: { scrollLeft: number; scrollTop: number }];
+  viewportChange: [viewport: { scrollLeft: number; scrollTop: number; width: number; height: number }];
 }>();
 
 const { notice: clipboardNotice, copySelection } = useClipboardCopyNotice(() => props.controller);
@@ -2008,7 +2008,12 @@ function schedulePaint() {
     if (!container) return;
     scrollTop.value = container.scrollTop;
     scrollLeft.value = container.scrollLeft;
-    emit("viewportChange", { scrollLeft: scrollLeft.value, scrollTop: scrollTop.value });
+    emit("viewportChange", {
+      height: Math.max(0, container.clientHeight - HEADER_HEIGHT),
+      scrollLeft: scrollLeft.value,
+      scrollTop: scrollTop.value,
+      width: Math.max(0, container.clientWidth - ROW_HEADER_WIDTH),
+    });
     paintGrid();
     hydrateVisibleWorkerRows();
   });
