@@ -582,7 +582,7 @@ export interface XlsxLoadError {
 }
 
 export interface XlsxDiagnostic {
-  type: "load-start" | "load-deferred" | "load-resumed" | "load-success" | "load-error" | "load-cancelled" | "download" | "worker-error" | "image-decode-error";
+  type: "load-start" | "load-deferred" | "load-resumed" | "load-success" | "load-error" | "load-cancelled" | "download" | "export-warning" | "worker-error" | "image-decode-error";
   requestId: number;
   /** Globally unique task identity supplied by the instance loading boundary. */
   taskId?: string;
@@ -590,6 +590,8 @@ export interface XlsxDiagnostic {
   url?: string;
   bytes?: number;
   imageId?: string;
+  /** Human-readable export warning, such as macro loss on .xlsm/.xltm sources. */
+  message?: string;
   error?: XlsxLoadError;
 }
 
@@ -828,6 +830,12 @@ export interface XlsxViewerController {
   isEditingLocked: boolean;
   isChartsLoading: boolean;
   isWorkerBacked?: boolean;
+  /**
+   * Warning raised by the most recent export, for example when an `.xlsm` or
+   * `.xltm` source is written as a macro-free `.xlsx`. Cleared when a new
+   * source starts loading.
+   */
+  lastExportWarning: string | null;
   /** Locale used for number and date formats that do not name one. */
   locale: string;
   maxConcurrentImageDecodes?: number;

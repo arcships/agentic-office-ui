@@ -374,15 +374,32 @@ test("XLSX export keeps chart parts, chart relationships and chart edits", () =>
   const archive = unzipSync(merged);
   assert.ok(archive["xl/charts/chart1.xml"], "worksheet chart part must be exported");
   assert.ok(archive["xl/charts/chart2.xml"], "chartsheet chart part must be exported");
-  assert.ok(archive["xl/drawings/drawing1.xml"]);
-  assert.ok(archive["xl/drawings/_rels/drawing1.xml.rels"]);
+  const drawingPath = Object.keys(archive).find(
+    (path) => /^xl\/drawings\/drawing[^/]+\.xml$/.test(path) && /drawingReactXlsx/.test(path),
+  );
+  assert.ok(drawingPath, "worksheet drawing part must be exported");
+  const drawingRelsPath = `xl/drawings/_rels/${drawingPath.split("/").pop()}.rels`;
+  assert.ok(archive[drawingRelsPath]);
   assert.ok(archive["xl/media/image1.png"]);
   assert.match(
     strFromU8(archive["xl/charts/chart1.xml"]),
     /Exported chart title/,
   );
+  const sheetXml = strFromU8(archive["xl/worksheets/sheet1.xml"]);
+  assert.equal(
+    (sheetXml.match(/<drawing\b/g) ?? []).length,
+    1,
+    "a worksheet may contain only one drawing element",
+  );
+  const sheetRels = strFromU8(archive["xl/worksheets/_rels/sheet1.xml.rels"]);
+  assert.equal(
+    (sheetRels.match(/Type="[^"]*\/drawing"/g) ?? []).length,
+    1,
+    "the worksheet must reference its merged drawing exactly once",
+  );
 
   const contentTypes = strFromU8(archive["[Content_Types].xml"]);
+  assert.ok(contentTypes.includes(`PartName="/${drawingPath}"`));
   for (const chartPath of ["/xl/charts/chart1.xml", "/xl/charts/chart2.xml"]) {
     assert.ok(
       contentTypes.includes(`PartName="${chartPath}"`),
@@ -410,10 +427,10 @@ test("XLSX export keeps chart parts, chart relationships and chart edits", () =>
     }
   }
 
-  const drawingRels = strFromU8(archive["xl/drawings/_rels/drawing1.xml.rels"]);
+  const drawingRels = strFromU8(archive[drawingRelsPath]);
   const chartTarget = /Type="[^"]*\/chart"[^>]*Target="([^"]*)"/.exec(drawingRels)?.[1];
   assert.equal(
-    resolvePackagePart("xl/drawings/_rels/drawing1.xml.rels", chartTarget ?? ""),
+    resolvePackagePart(drawingRelsPath, chartTarget ?? ""),
     "xl/charts/chart1.xml",
   );
 
@@ -436,6 +453,99 @@ test("XLSX export keeps chart parts, chart relationships and chart edits", () =>
     assert.equal(reloadedCharts.chartsheets[0]?.chartPath, "xl/charts/chart2.xml");
   } finally {
     reloaded.free();
+  }
+});
+
+test("XLSX export merges multiple source drawings into one worksheet drawing", () => {
+  const bytes = bytesFromFile("charts-images.xlsx");
+  const workbook = wasm.Workbook.fromBytes(bytes);
+  const imageAssets = core.parseWorkbookImageAssets(bytes);
+  const origin = imageAssets.sheetOrigins[0];
+  assert.ok(origin?.attachments.length);
+
+  const secondDrawingPath = "xl/drawings/drawingSecond.xml";
+  imageAssets.archive[secondDrawingPath] = strToU8(
+    '<wsDr xmlns="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing">'
+    + "<twoCellAnchor><from><col>0</col><colOff>0</colOff><row>0</row><rowOff>0</rowOff></from>"
+    + "<to><col>1</col><colOff>0</colOff><row>1</row><rowOff>0</rowOff></to>"
+    + "<sp><nvSpPr><cNvPr id=\"77\" name=\"Second object\"/><cNvSpPr/></nvSpPr><spPr/>"
+    + "<txBody><a:p xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><a:r><a:t>Second</a:t></a:r></a:p></txBody>"
+    + "</sp><clientData/></twoCellAnchor></wsDr>",
+  );
+  origin.attachments.push({
+    drawingPath: secondDrawingPath,
+    drawingRelsPath: null,
+    mediaPaths: [],
+  });
+
+  const merged = core.mergeWorkbookImageAssets(
+    workbook.saveXlsxBytes(),
+    imageAssets,
+    imageAssets.sheetOrigins,
+  );
+  workbook.free();
+
+  const archive = unzipSync(merged);
+  const sheetXml = strFromU8(archive["xl/worksheets/sheet1.xml"]);
+  assert.equal(
+    (sheetXml.match(/<drawing\b/g) ?? []).length,
+    1,
+    "multiple source drawings must still leave one drawing element",
+  );
+
+  const sheetRels = strFromU8(archive["xl/worksheets/_rels/sheet1.xml.rels"]);
+  assert.equal(
+    (sheetRels.match(/Type="[^"]*\/drawing"/g) ?? []).length,
+    1,
+    "multiple source drawings must still leave one drawing relationship",
+  );
+
+  const drawingPaths = Object.keys(archive).filter(
+    (path) => /^xl\/drawings\/drawing[^/]+\.xml$/.test(path) && /drawingReactXlsx/.test(path),
+  );
+  assert.equal(
+    drawingPaths.length,
+    2,
+    "one merged drawing is expected for the worksheet and one for the chartsheet",
+  );
+  const mergedDrawing = strFromU8(archive["xl/drawings/drawingReactXlsx1.xml"]);
+  assert.match(mergedDrawing, /Chart 1/);
+  assert.match(mergedDrawing, /Second object/);
+  assert.ok(archive["xl/charts/chart1.xml"]);
+});
+
+test("XLSX export inserts the merged drawing before later worksheet elements", () => {
+  const bytes = bytesFromFile("charts-images.xlsx");
+  const workbook = wasm.Workbook.fromBytes(bytes);
+  const imageAssets = core.parseWorkbookImageAssets(bytes);
+  const saved = workbook.saveXlsxBytes();
+  workbook.free();
+
+  const savedArchive = unzipSync(saved);
+  const sheetPath = "xl/worksheets/sheet1.xml";
+  const savedSheetXml = strFromU8(savedArchive[sheetPath]);
+  savedArchive[sheetPath] = strToU8(
+    savedSheetXml.replace(
+      "</worksheet>",
+      '<legacyDrawing r:id="rIdLegacy"/><controls/><tableParts count="0"/><extLst/></worksheet>',
+    ),
+  );
+
+  const merged = core.mergeWorkbookImageAssets(
+    zipSync(savedArchive),
+    imageAssets,
+    imageAssets.sheetOrigins,
+  );
+  const sheetXml = strFromU8(unzipSync(merged)[sheetPath]);
+  const drawingIndex = sheetXml.indexOf("<drawing");
+  assert.ok(drawingIndex >= 0);
+  for (const laterElement of ["<legacyDrawing", "<controls", "<tableParts", "<extLst"]) {
+    const laterIndex = sheetXml.indexOf(laterElement);
+    assert.ok(laterIndex >= 0, `${laterElement} must remain in the sheet`);
+    assert.ok(
+      drawingIndex < laterIndex,
+      "<drawing> must precede legacyDrawing, controls, tableParts and extLst",
+    );
   }
 });
 

@@ -6,6 +6,12 @@
         <path d="m9 11 6 6M15 11l-6 6" />
       </svg>
       <span class="xlsx-toolbar__filename" :title="displayFileName">{{ displayFileName }}</span>
+      <span
+        v-if="controller.lastExportWarning"
+        class="xlsx-toolbar__export-warning"
+        data-testid="xlsx-export-warning"
+        role="status"
+      >{{ controller.lastExportWarning }}</span>
     </div>
 
     <div class="xlsx-toolbar__actions">
@@ -187,6 +193,8 @@ defineExpose({ openSearch });
 }
 .xlsx-toolbar__file-icon { color: #15803d; flex: 0 0 auto; }
 .xlsx-toolbar__filename { font-size: 13px; font-weight: 600; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xlsx-toolbar__export-warning { color: #b45309; font-size: 11px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xlsx-toolbar--dark .xlsx-toolbar__export-warning { color: #fbbf24; }
 .xlsx-toolbar__icon-button {
   align-items: center;
   background: transparent;

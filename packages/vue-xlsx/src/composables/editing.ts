@@ -453,8 +453,12 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    ctx.recordHistoryBeforeMutation();
     const baseName = name?.trim() || "Sheet";
+    if (/[\\/:*?\[\]]/.test(baseName)) {
+      throw new Error("工作表名称不能包含以下字符：\\ / : * ? [ ]");
+    }
+
+    ctx.recordHistoryBeforeMutation();
     let candidate = baseName;
     let counter = 2;
     while (ctx.workbook.value.sheetIndex(candidate) !== undefined) {

@@ -239,6 +239,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const sortState = ref<XlsxTableSortState | null>(null);
   const forcedReadOnly = ref(false);
   const dataValidationFeedback = ref<XlsxDataValidationFeedback | null>(null);
+  const lastExportWarning = ref<string | null>(null);
   const deferredBufferRef = shallowRef<ArrayBuffer | null>(null);
   const deferredLoadRequestIdRef = shallowRef<number | null>(null);
   const deferredLoadRef = shallowRef<DeferredWorkbookLoad | null>(null);
@@ -279,6 +280,16 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     } catch {
       // Host diagnostics must not alter workbook loading.
     }
+  }
+  function setExportWarning(message: string | null) {
+    lastExportWarning.value = message;
+    if (!message) return;
+    reportDiagnostic({
+      type: "export-warning",
+      requestId: latestLoadRequestId,
+      sourceKind: src ? "url" : "file",
+      message,
+    });
   }
 
   function reportImageDecodeError(imageId: string, message = "XLSX 图片无法解码。") {
@@ -867,8 +878,15 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     if (!shouldAutoCalculate.value) return true;
     return recalculateWorkbookSafely(targetWorkbook).safeToRefresh;
   }
-  function createSavedWorkbookBytes(targetWorkbook: Workbook) {
-    return mergeWorkbookImageAssets(sanitizeSavedWorkbookBytes(targetWorkbook.saveXlsxBytes()), imageAssetsRef.value, sheetOriginsRef.value);
+  function createSavedWorkbookBytes(targetWorkbook: Workbook, reportSanitizationWarning = false) {
+    const sanitized = sanitizeSavedWorkbookBytes(targetWorkbook.saveXlsxBytes());
+    if (sanitized.error) {
+      console.warn("[xlsx] failed to sanitize saved workbook XML", sanitized.error);
+      if (reportSanitizationWarning) {
+        setExportWarning("导出前的 XML 转义修复失败，导出的工作簿可能包含双重转义。");
+      }
+    }
+    return mergeWorkbookImageAssets(sanitized.bytes, imageAssetsRef.value, sheetOriginsRef.value);
   }
   function captureCellMutationState(cell: XlsxCellAddress) {
     const worksheet = getInternalActiveWorksheet();
@@ -1227,6 +1245,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       replaceWorkbook(null); sheets.value = []; clearChartAssets();
       workerTablesByWorkbookSheetIndex.value = []; clearImageAssets();
       error.value = null; sourceState.value = "idle"; sourceError.value = null; isLoading.value = false; isWorkerBacked.value = false;
+      lastExportWarning.value = null;
       sourceBufferRef.value = null;
       activeSheetIndex.value = 0; activeTabIndex.value = 0;
       activeCell.value = null; selection.value = null;
@@ -1254,6 +1273,9 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       urlPolicy: urlPolicy as OfficeUrlPolicy | undefined,
     });
     isLoading.value = true; error.value = null; sourceState.value = "loading"; sourceError.value = null; clearImageAssets(); clearChartAssets();
+    lastExportWarning.value = null;
+    replaceWorkbook(null);
+    sheets.value = [];
     workerTablesByWorkbookSheetIndex.value = []; isWorkerBacked.value = false;
     deferredLoadRef.value = null; deferredBufferRef.value = null; deferredLoadRequestIdRef.value = null; sourceBufferRef.value = null; deferredLoadFileSize.value = null;
     activeSheetIndex.value = 0; activeTabIndex.value = 0;
@@ -1396,6 +1418,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     createSavedWorkbookBytes, captureCellMutationState,
     checkCellValue, getCellDataValidation, getDataValidationListOptions,
     setValidationFeedback, dismissValidationFeedback,
+    lastExportWarning, setExportWarning,
     recordHistoryBeforeMutation, recordCellEditHistory, recordRangeEditHistory,
     selectedFormulaTarget,
     get setChartSeriesFormula() { return _setChartSeriesFormula; },
@@ -1492,7 +1515,12 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     addSheet: editingDomain.addSheet,
     get canRedo() { return canRedo.value; },
     get canDownload() { return sourceState.value === "ready" && sourceBufferRef.value !== null; },
-    get canExport() { return Boolean(workbook.value); },
+    get canExport() {
+      return sourceState.value === "ready"
+        && !isLoading.value
+        && sourceBufferRef.value !== null
+        && workbook.value !== null;
+    },
     get canLoadDeferred() { return canLoadDeferred.value; },
     get calculationStatus() { return calculationStatus.value; },
     get canUndo() { return canUndo.value; },
@@ -1571,6 +1599,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get isEditingLocked() { return isEditingLocked.value; },
     get isChartsLoading() { return isChartsLoading.value; },
     get isWorkerBacked() { return isWorkerBacked.value; },
+    get lastExportWarning() { return lastExportWarning.value; },
     get maxConcurrentImageDecodes() { return xlsxRuntime.limits?.maxConcurrentImageDecodes ?? 4; },
     get sourceState() { return sourceState.value; },
     get sourceError() { return sourceError.value; },

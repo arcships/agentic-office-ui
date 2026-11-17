@@ -68,8 +68,7 @@ import {
   fileStem,
   pxToSheetRowHeight,
   preflightWorkbookBuffer,
-  resolveDisplayFileName,
-  sanitizeSavedWorkbookBytes
+  resolveDisplayFileName
 } from "./formatting";
 import { applyCellMutationState, resolveCellFallbackStyle } from "./internal";
 import { loadWorkbookImageAssets } from "./image-assets";
@@ -592,6 +591,54 @@ export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{
 
 export type { XlsxSheetVisibility };
 
+const MACRO_ENABLED_SPREADSHEET = /\.(xlsm|xltm)$/i;
+
+function macroLossWarning(fileName: string) {
+  return MACRO_ENABLED_SPREADSHEET.test(fileName.trim())
+    ? "源文件为启用宏的工作簿（.xlsm/.xltm），导出的 .xlsx 会丢失 VBA 宏。"
+    : null;
+}
+
+function escapeCsvField(value: string) {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+/** Serializes one worksheet the same way the WASM CSV writer does, for any sheet index. */
+export function saveWorksheetCsvString(worksheet: ReturnType<Workbook["getSheet"]>) {
+  const usedRange = worksheet.usedRange() as [number, number, number, number] | null;
+  if (!Array.isArray(usedRange) || usedRange.length !== 4) {
+    return "";
+  }
+
+  const [startRow, startCol, endRow, endCol] = usedRange;
+  const rows: string[] = [];
+  for (let row = startRow; row <= endRow; row += 1) {
+    const fields: string[] = [];
+    for (let col = startCol; col <= endCol; col += 1) {
+      const cell = worksheet.getCalculatedValueAt(row, col);
+      try {
+        if (cell.is_empty) {
+          fields.push("");
+        } else if (cell.is_error) {
+          fields.push(escapeCsvField(cell.asError() ?? "#ERROR!"));
+        } else if (cell.is_boolean) {
+          fields.push(cell.asBoolean() ? "TRUE" : "FALSE");
+        } else if (cell.is_number) {
+          const value = cell.asNumber();
+          fields.push(value === undefined ? "" : String(value));
+        } else {
+          fields.push(escapeCsvField(cell.asText() ?? ""));
+        }
+      } finally {
+        cell.free();
+      }
+    }
+    rows.push(fields.join(","));
+  }
+
+  return rows.length > 0 ? `${rows.join("\r\n")}\r\n` : "";
+}
+
 export function createHistoryDomain(ctx: XlsxControllerContext) {
   let historyRestoreToken = 0;
   const tables = computed(() => {
@@ -943,20 +990,30 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function exportXlsx() {
-    if (!ctx.workbook.value) {
+    const targetWorkbook = ctx.workbook.value;
+    if (!targetWorkbook || ctx.isLoading.value || ctx.sourceState.value !== "ready") {
       return;
     }
 
-    downloadBytes(ctx.createSavedWorkbookBytes(ctx.workbook.value), `${fileStem(ctx.displayFileName.value)}.xlsx`, XLSX_MIME_TYPE);
+    ctx.setExportWarning(macroLossWarning(ctx.displayFileName.value));
+    downloadBytes(ctx.createSavedWorkbookBytes(targetWorkbook, true), `${fileStem(ctx.displayFileName.value)}.xlsx`, XLSX_MIME_TYPE);
   }
 
   function exportCsv() {
-    if (!ctx.workbook.value) {
+    const targetWorkbook = ctx.workbook.value;
+    const activeSheet = ctx.activeSheet.value;
+    if (!targetWorkbook || !activeSheet || ctx.isLoading.value || ctx.sourceState.value !== "ready") {
       return;
     }
 
-    const activeSheetName = ctx.activeSheet.value?.name ?? "sheet";
-    downloadText(ctx.workbook.value.saveCsvString(), `${fileStem(ctx.displayFileName.value)}-${activeSheetName}.csv`, CSV_MIME_TYPE);
+    const worksheet = targetWorkbook.getSheet(activeSheet.workbookSheetIndex);
+    let csv = "";
+    try {
+      csv = saveWorksheetCsvString(worksheet);
+    } finally {
+      worksheet.free();
+    }
+    downloadText(csv, `${fileStem(ctx.displayFileName.value)}-${activeSheet.name}.csv`, CSV_MIME_TYPE);
   }
 
   function recalculate() {
