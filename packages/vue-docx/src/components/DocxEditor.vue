@@ -72,7 +72,7 @@
       :y="contextMenu.y.value"
       :text="contextMenu.text.value"
       :caret-offset="contextMenu.caretOffset.value"
-      @close="contextMenu.hide"
+      @close="contextMenu.hide()"
     />
 
     <!-- Drag overlay -->
