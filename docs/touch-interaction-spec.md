@@ -22,7 +22,8 @@ The same rules apply to tablets in both orientations and to touchscreen laptops
 | Tap | Unchanged. Selects text/cell/object exactly like a mouse click. |
 | Long press (`500 ms`, `10 px` tolerance) | Opens the surface context menu at the finger position. The native `contextmenu` that follows is suppressed for `1 s` within `24 px` so a menu never opens twice. |
 | Double tap (`320 ms`, `30 px`) | Toggles zoom: `100% → 200%`, any zoom above `100% → 100%`. Suppressed when zoom is not controlled, when the surface is editable, or on an editable spreadsheet (there double tap keeps entering cell edit mode). |
-| Pinch | Two-finger distance scales zoom between `50%` and `200%` around the midpoint between the fingers. Applies to pointer events (Android/Chrome/Windows), in addition to the existing WebKit `gesture*` events and `Ctrl+wheel`. |
+| Pinch | Two-finger distance scales zoom between `50%` and `200%` around the midpoint between the fingers. Applies to pointer events (Android/Chrome/Windows), in addition to the existing WebKit `gesture*` events and `Ctrl/Cmd+wheel`. |
+| `Ctrl/Cmd+wheel` | Zooms at the pointer position and keeps the anchored cell/page/slide under the cursor. Trackpad pinch reaches the same path as `ctrl+wheel`; the viewer calls `preventDefault()` so the browser page does not zoom. |
 | Pan | Native scrolling. Surfaces set `touch-action: pan-x pan-y` so one-finger pan and the browser's momentum scrolling keep working; custom pinch takes over multi-finger input. |
 | Pointer cancel | Any active long press, pinch or tap sequence is dropped without emitting selection or context-menu events. |
 
@@ -38,7 +39,7 @@ Mouse and trackpad behaviour is unchanged.
 | `PptxStage` | slide/object context menu | controlled `zoom` only, disabled while presenting | controlled `zoom` only, disabled while presenting | native |
 | `DocxDocumentSurface` / `DocxViewerRoot` | page context menu | read-only viewing mode | read-only viewing mode (editable documents keep native text selection) | native |
 | `XlsxSheetSurface` | cell context menu | read-only spreadsheets | controlled `zoom` only | native |
-| `XlsxViewer` | cell context menu | read-only spreadsheets | controller zoom scale | native |
+| `XlsxViewer` | cell context menu | read-only spreadsheets | `Ctrl/Cmd+wheel` or pinch with cell-anchor restore | native |
 
 ## Hit targets
 

@@ -90,6 +90,9 @@ test("composite XlsxViewer gains gesture zoom, long press and pointercancel reco
   assert.match(XLSX_VIEWER, /enableGestureZoom\?: boolean/);
   assert.match(XLSX_VIEWER, /isDoubleTapEnabled: \(\) => effectiveReadOnly\.value/);
   assert.match(XLSX_VIEWER, /function requestViewerZoom/);
+  assert.match(XLSX_VIEWER, /addEventListener\("wheel", onWheel, \{ passive: false \}\)/);
+  assert.match(XLSX_VIEWER, /nextSurfaceZoom\(pendingZoom \?\? currentZoom\(\), event\.deltaY, event\.deltaMode\)/);
+  assert.match(XLSX_VIEWER, /if \(!event\.ctrlKey && !event\.metaKey\) return;/);
   assert.match(XLSX_VIEWER, /captureZoomAnchor\(clientX, clientY\)/);
   assert.match(XLSX_VIEWER, /restoreZoomAnchor\(restore\.anchor\)/);
   assert.match(XLSX_VIEWER, /contextMenuRef\.value\?\.openAt\(pointer\.clientX, pointer\.clientY, pointer\.target\)/);
