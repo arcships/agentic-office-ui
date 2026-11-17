@@ -26,6 +26,7 @@ import "@arcships/vue-pptx/style.css"
 | `source` | `null` | `ArrayBuffer`、`Uint8Array` 或文件对象 |
 | `mode` | `browse` | 浏览或演示 |
 | `height` | `100%` | 组件高度 |
+| `minHeight` | 无 | 可选最小高度（数字按 px）；不传时组件不设置最小高度 |
 | `initialSlide` | `0` | 初始页，从零开始 |
 | `autoplay` | `true` | 演示模式自动执行非点击步骤 |
 | `showHiddenSlides` | `false` | 播放时包含隐藏页 |
@@ -38,7 +39,7 @@ import "@arcships/vue-pptx/style.css"
 | `externalMedia` | `disabled` | 是否允许外部媒体；设为 `allowed` 时仍需要 `externalMediaUrlPolicy` 放行 |
 | `externalMediaUrlPolicy` | `undefined` | 外部媒体的 URL 规则：`baseUrl`、`allowedProtocols`、`allowedOrigins` 等 |
 
-外部媒体默认禁用，只作为静态内容报告。只有同时设置 `externalMedia="allowed"` 和 `externalMediaUrlPolicy`，并且目标 URL 通过 `allowedProtocols` / `allowedOrigins` 校验时才真正加载；`javascript:`、`data:` 和未授权来源一律不加载，避免演示文稿自行发起跟踪请求。
+外部媒体默认禁用，只作为静态内容报告。只有同时设置 `externalMedia="allowed"` 和 `externalMediaUrlPolicy`，并且目标 URL 通过 `allowedProtocols` / `allowedOrigins` 校验时才真正加载；`javascript:`、`data:` 和未授权来源一律不加载，避免演示文稿自行发起跟踪请求。打印时 `@page` 尺寸取自幻灯片尺寸，工具栏、侧栏和播放控制条自动隐藏。
 
 `limits` 支持完整的归档预算：`maxInputBytes`、`maxArchiveEntries`、`maxSingleEntryBytes`、`maxUncompressedBytes`、`maxMediaBytes`、`maxCompressionRatio`、`maxArchivePathLength`、`maxXmlBytes`、`maxSingleXmlBytes`、`maxXmlDepth`、`maxXmlAttributeBytes`、`maxTextNodeBytes`、`maxRelationships` 和 `maxConcurrency`。宿主只能收紧默认值，不能放宽硬上限。
 

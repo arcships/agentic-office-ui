@@ -3,6 +3,7 @@
     ref="scrollRef"
     class="pdf-surface"
     :class="{ 'pdf-surface--dark': props.isDark }"
+    :style="minHeightStyle"
     data-testid="pdf-surface"
     tabindex="0"
     @scroll.passive="onScroll"
@@ -254,6 +255,8 @@ const props = withDefaults(
     documentId?: string
     selectionMode?: OfficeSelectionMode
     emitReferenceCandidates?: boolean
+    /** Optional minimum height; the surface itself does not impose one. */
+    minHeight?: string | number
     /** Dark viewer chrome and page surround. Defaults to false. */
     isDark?: boolean
     locale?: import("@arcships/office-interaction").OfficeLocale
@@ -265,6 +268,7 @@ const props = withDefaults(
     enableGestureZoom: true,
     selectionMode: "content",
     emitReferenceCandidates: false,
+    minHeight: undefined,
     isDark: false,
     locale: "en",
     messages: undefined,
@@ -337,11 +341,17 @@ const zoom = computed({
   },
 })
 const rotation = ref<PdfRotation>(0)
+const minHeightStyle = computed(() => {
+  const value = props.minHeight
+  if (value === undefined) return undefined
+  return { minHeight: typeof value === "number" ? `${value}px` : value }
+})
 /** Pixel ratio the current bitmaps were rendered at; re-renders on display change. */
 const renderDpr = ref(currentRenderDpr())
 const loading = ref(false)
 const loadError = ref<PdfLoadError | null>(null)
 const renderDocument = ref<PdfRenderDocument | null>(null)
+const printMode = ref(false)
 const verifiedBlob = ref<Blob | null>(null)
 const selectionMode = computed(() => props.selectionMode)
 const revisionCounter = ref(0)
@@ -364,6 +374,9 @@ let runtimeForDocument: PdfRenderRuntime | undefined
 let latestRequestId = 0
 let renderGeneration = 0
 let renderAbort: AbortController | undefined
+let printMediaQuery: MediaQueryList | undefined
+let printPageStyle: HTMLStyleElement | undefined
+let stopPrintDetection: (() => void) | undefined
 let unmounted = false
 let stopDprWatch: (() => void) | undefined
 
@@ -711,6 +724,9 @@ function scrollTopPx(): number {
 function currentRenderRange(): PdfPageRange {
   const doc = renderDocument.value
   if (!doc || doc.pageCount <= 0) return { first: 0, last: -1 }
+  // Print must rasterize every page: placeholders are not acceptable in the
+  // print snapshot, so print mode replaces the lazy viewport window entirely.
+  if (printMode.value) return { first: 0, last: doc.pageCount - 1 }
   const { offsets, heights } = pageLayout()
   return visiblePageRange(offsets, heights, {
     scrollTop: scrollTopPx(),
@@ -790,6 +806,80 @@ function cancelRender(): void {
   renderAbort?.abort()
   renderAbort = undefined
   cancelScheduledRender()
+}
+
+function syncPrintPageSize(): void {
+  if (typeof document === "undefined") return
+  const page = renderDocument.value?.pages[0]
+  if (!page || page.width <= 0 || page.height <= 0) {
+    printPageStyle?.remove()
+    printPageStyle = undefined
+    return
+  }
+  const quarterTurns = ((page.rotation + rotation.value) / 90) % 4
+  const width = quarterTurns % 2 ? page.height : page.width
+  const height = quarterTurns % 2 ? page.width : page.height
+  if (!printPageStyle) {
+    printPageStyle = document.createElement("style")
+    printPageStyle.dataset.officePrintPage = "pdf-surface"
+    document.head.append(printPageStyle)
+  }
+  printPageStyle.textContent = `@page { size: ${Math.round(width)}px ${Math.round(height)}px; margin: 0; }`
+}
+
+function setPrintMode(enabled: boolean): void {
+  if (printMode.value === enabled) {
+    if (enabled) scheduleVisibleRender(0)
+    return
+  }
+  printMode.value = enabled
+  if (enabled) scheduleVisibleRender(0)
+  else scheduleVisibleRender(0)
+}
+
+function onPrintMediaChange(event: MediaQueryListEvent): void {
+  setPrintMode(event.matches)
+}
+
+function onBeforePrint(): void {
+  setPrintMode(true)
+}
+
+function onAfterPrint(): void {
+  setPrintMode(false)
+}
+
+function setupPrintDetection(): void {
+  if (typeof window === "undefined") return
+  printMediaQuery = typeof window.matchMedia === "function" ? window.matchMedia("print") : undefined
+  if (printMediaQuery) {
+    if (typeof printMediaQuery.addEventListener === "function") {
+      printMediaQuery.addEventListener("change", onPrintMediaChange)
+    } else {
+      printMediaQuery.addListener?.(onPrintMediaChange)
+    }
+    if (printMediaQuery.matches) setPrintMode(true)
+  }
+  if (typeof window.addEventListener === "function") {
+    window.addEventListener("beforeprint", onBeforePrint)
+    window.addEventListener("afterprint", onAfterPrint)
+  }
+  stopPrintDetection = () => {
+    if (printMediaQuery) {
+      if (typeof printMediaQuery.removeEventListener === "function") {
+        printMediaQuery.removeEventListener("change", onPrintMediaChange)
+      } else {
+        printMediaQuery.removeListener?.(onPrintMediaChange)
+      }
+    }
+    printMediaQuery = undefined
+    if (typeof window.removeEventListener === "function") {
+      window.removeEventListener("beforeprint", onBeforePrint)
+      window.removeEventListener("afterprint", onAfterPrint)
+    }
+    printPageStyle?.remove()
+    printPageStyle = undefined
+  }
 }
 
 async function releaseDocument(): Promise<void> {
@@ -978,6 +1068,7 @@ watch([zoom, rotation, renderDpr], () => {
   invalidatePageLayout()
   scheduleVisibleRender(0)
 })
+watch([renderDocument, rotation], syncPrintPageSize, { immediate: true })
 
 watch(
   [effectiveSource, () => props.urlPolicy, () => props.maxFileSize, () => props.runtime, () => props.pdfiumWasmUrl],
@@ -2068,6 +2159,7 @@ watch([scrollRef, () => props.fitWidth, renderDocument, rotation], ([el, fit, do
 })
 
 onMounted(() => {
+  setupPrintDetection()
   const element = scrollRef.value
   if (!element) return
   element.addEventListener("wheel", onZoomWheel, { passive: false })
@@ -2156,6 +2248,8 @@ defineExpose({
 
 onBeforeUnmount(async () => {
   unmounted = true
+  stopPrintDetection?.()
+  stopPrintDetection = undefined
   latestRequestId += 1
   gestureToken += 1
   stopDprWatch?.()
@@ -2284,13 +2378,18 @@ onBeforeUnmount(async () => {
   .pdf-surface__interaction,
   .pdf-surface__overlay,
   .pdf-surface__empty,
-  .pdf-surface__error { display: none !important; }
+  .pdf-surface__error,
+  .pdf-surface__page-loading,
+  .pdf-surface__page-error,
+  .pdf-surface__page-placeholder { display: none !important; }
   .pdf-surface__pages { display: block !important; padding: 0 !important; }
   .pdf-surface__page-slot {
     break-after: page;
     box-shadow: none !important;
+    height: auto !important;
     margin: 0 auto;
     max-width: 100%;
+    width: 100% !important;
   }
   .pdf-surface__page-img {
     filter: none !important;

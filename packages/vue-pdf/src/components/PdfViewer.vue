@@ -56,6 +56,7 @@ const props = withDefaults(defineProps<PdfViewerProps>(), {
   showToolbar: true,
   showDownload: true,
   showRotateControls: true,
+  minHeight: undefined,
   isDark: false,
   locale: "en",
   messages: undefined,
@@ -101,11 +102,15 @@ const renderedPageNumber = ref(0)
 const renderedZoom = ref(1)
 const renderedRotation = ref<PdfRotation>(0)
 const thumbnailUrls = ref<Record<number, string>>({})
+const printPageUrls = ref<Record<number, string>>({})
+const printMode = ref(false)
 const selectionState = ref<PdfSelectionState>({ kind: "none" })
 const selectionRects = ref<readonly PdfRenderRect[]>([])
 
 /** Drag threshold before a single-page selection starts, in CSS px. */
 const PDF_VIEWER_SELECTION_DRAG_THRESHOLD_PX = 4
+/** Print pages are rasterized above 1x so the print snapshot stays sharp. */
+const PRINT_RENDER_SCALE = 1.5
 const selectionGeometries = new Map<number, PdfPageGeometry>()
 const selectionGeometryRequests = new Map<number, Promise<PdfPageGeometry>>()
 const characterTextCache = new Map<number, Map<number, string>>()
@@ -134,6 +139,11 @@ let thumbnailGeneration = 0
 let renderAbort: AbortController | undefined
 let searchAbort: AbortController | undefined
 let thumbnailAbort: AbortController | undefined
+let printAbort: AbortController | undefined
+let printGeneration = 0
+let printMediaQuery: MediaQueryList | undefined
+let printPageStyle: HTMLStyleElement | undefined
+let stopPrintDetection: (() => void) | undefined
 let runtimeForDocument: PdfRenderRuntime | undefined
 let ownedRuntime: PdfRenderRuntime | undefined
 let ownedRuntimeWasmUrl: string | undefined
@@ -169,6 +179,17 @@ const pageImageStyle = computed(() => {
   const quarterTurns = ((page.rotation + renderedRotation.value) / 90) % 4
   const width = (quarterTurns % 2 ? page.height : page.width) * renderedZoom.value
   return { width: `${Math.max(1, Math.round(width))}px` }
+})
+const printPageEntries = computed(() =>
+  Object.entries(printPageUrls.value)
+    .map(([page, url]) => ({ page: Number(page), url }))
+    .filter((entry) => Number.isFinite(entry.page) && Boolean(entry.url))
+    .sort((left, right) => left.page - right.page)
+)
+const viewerMinHeightStyle = computed(() => {
+  const value = props.minHeight
+  if (value === undefined) return undefined
+  return { minHeight: typeof value === "number" ? `${value}px` : value }
 })
 
 function cn(...classes: (string | undefined | null | false)[]): string {
@@ -509,6 +530,141 @@ function clearThumbnails(): void {
   thumbnailUrls.value = {}
 }
 
+function clearPrintPages(): void {
+  printGeneration++
+  printAbort?.abort()
+  printAbort = undefined
+  for (const url of Object.values(printPageUrls.value)) revokeObjectUrl(url)
+  printPageUrls.value = {}
+}
+
+// Print must include every page, so print mode replaces the lazy single-page
+// raster with a complete page cache before the print snapshot is taken.
+async function renderPrintPages(requestId: number): Promise<void> {
+  const document = renderDocument.value
+  const runtime = runtimeForDocument
+  if (!document || !runtime || !printMode.value) return
+  const generation = ++printGeneration
+  printAbort?.abort()
+  const controller = new AbortController()
+  printAbort = controller
+  for (let pageIndex = 0; pageIndex < document.pageCount; pageIndex++) {
+    if (
+      controller.signal.aborted ||
+      generation !== printGeneration ||
+      requestId !== latestRequestId ||
+      document.id !== renderDocument.value?.id
+    ) return
+    if (printPageUrls.value[pageIndex + 1]) continue
+    let url = ""
+    try {
+      const blob = await runtime.renderPage(document, pageIndex, {
+        scale: PRINT_RENDER_SCALE,
+        rotation: rotation.value,
+        dpr: 1,
+        signal: controller.signal,
+      })
+      if (
+        controller.signal.aborted ||
+        generation !== printGeneration ||
+        requestId !== latestRequestId ||
+        document.id !== renderDocument.value?.id
+      ) return
+      url = URL.createObjectURL(blob)
+      printPageUrls.value = { ...printPageUrls.value, [pageIndex + 1]: url }
+      url = ""
+    } catch (error) {
+      if (controller.signal.aborted || generation !== printGeneration || isAbortError(error)) return
+      // A failed page must not abort the rest of the print set.
+    } finally {
+      if (url) revokeObjectUrl(url)
+    }
+  }
+  if (printAbort === controller) printAbort = undefined
+}
+
+function setPrintMode(enabled: boolean): void {
+  if (printMode.value === enabled) {
+    if (enabled) void renderPrintPages(latestRequestId)
+    return
+  }
+  printMode.value = enabled
+  if (enabled) void renderPrintPages(latestRequestId)
+  else clearPrintPages()
+}
+
+function syncPrintPageSize(): void {
+  if (typeof document === "undefined") return
+  const page = renderDocument.value?.pages[0]
+  if (!page || page.width <= 0 || page.height <= 0) {
+    printPageStyle?.remove()
+    printPageStyle = undefined
+    return
+  }
+  const quarterTurns = ((page.rotation + rotation.value) / 90) % 4
+  const width = quarterTurns % 2 ? page.height : page.width
+  const height = quarterTurns % 2 ? page.width : page.height
+  if (!printPageStyle) {
+    printPageStyle = document.createElement("style")
+    printPageStyle.dataset.officePrintPage = "pdf"
+    document.head.append(printPageStyle)
+  }
+  printPageStyle.textContent = `@page { size: ${Math.round(width)}px ${Math.round(height)}px; margin: 0; }`
+}
+
+function onPrintMediaChange(event: MediaQueryListEvent): void {
+  setPrintMode(event.matches)
+}
+
+function onBeforePrint(): void {
+  setPrintMode(true)
+}
+
+function onAfterPrint(): void {
+  setPrintMode(false)
+}
+
+function setupPrintDetection(): void {
+  if (typeof window === "undefined") return
+  printMediaQuery = typeof window.matchMedia === "function" ? window.matchMedia("print") : undefined
+  if (printMediaQuery) {
+    if (typeof printMediaQuery.addEventListener === "function") {
+      printMediaQuery.addEventListener("change", onPrintMediaChange)
+    } else {
+      printMediaQuery.addListener?.(onPrintMediaChange)
+    }
+    if (printMediaQuery.matches) setPrintMode(true)
+  }
+  if (typeof window.addEventListener === "function") {
+    window.addEventListener("beforeprint", onBeforePrint)
+    window.addEventListener("afterprint", onAfterPrint)
+  }
+  stopPrintDetection = () => {
+    if (printMediaQuery) {
+      if (typeof printMediaQuery.removeEventListener === "function") {
+        printMediaQuery.removeEventListener("change", onPrintMediaChange)
+      } else {
+        printMediaQuery.removeListener?.(onPrintMediaChange)
+      }
+    }
+    printMediaQuery = undefined
+    if (typeof window.removeEventListener === "function") {
+      window.removeEventListener("beforeprint", onBeforePrint)
+      window.removeEventListener("afterprint", onAfterPrint)
+    }
+    printPageStyle?.remove()
+    printPageStyle = undefined
+    clearPrintPages()
+  }
+}
+
+async function printAllPages(): Promise<void> {
+  if (!renderDocument.value) return
+  printMode.value = true
+  await renderPrintPages(latestRequestId)
+  if (typeof window !== "undefined" && typeof window.print === "function") window.print()
+}
+
 function cancelRenderWork(): void {
   renderGeneration++
   renderAbort?.abort()
@@ -541,6 +697,11 @@ function onViewerKeydown(event: KeyboardEvent): void {
     clearSelection()
     return
   }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "p") {
+    event.preventDefault()
+    void printAllPages()
+    return
+  }
   if (
     !props.showToolbar
     || !(event.ctrlKey || event.metaKey)
@@ -559,6 +720,7 @@ async function releaseCurrentDocument(options: { closeDocument?: boolean } = {})
   pendingAnchor = undefined
   replacePageImage()
   clearThumbnails()
+  clearPrintPages()
   pageRenderState.value = "idle"
   pageRenderError.value = ""
   renderedPageNumber.value = 0
@@ -1008,6 +1170,7 @@ async function load(): Promise<void> {
       pageCount: openedDocument.pageCount,
     })
     void renderThumbnails(requestId)
+    if (printMode.value) void renderPrintPages(requestId)
   } catch (error) {
     if (openedDocument && selectedRuntime) {
       await selectedRuntime.closeDocument(openedDocument)
@@ -1043,8 +1206,15 @@ watch([activePage, zoom, rotation, renderDpr], () => {
   clearSelection()
   if (renderDocument.value && !isLoading.value) void renderCurrentPage(latestRequestId)
 })
+watch([zoom, rotation, renderDpr], () => {
+  if (!printMode.value) return
+  clearPrintPages()
+  void renderPrintPages(latestRequestId)
+})
+watch([renderDocument, rotation], syncPrintPageSize, { immediate: true })
 
 onMounted(() => {
+  setupPrintDetection()
   stopDprWatch = watchDevicePixelRatio((next) => { renderDpr.value = next })
   const element = frameRef.value
   if (!element) return
@@ -1056,6 +1226,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   unmounted = true
+  stopPrintDetection?.()
+  stopPrintDetection = undefined
   stopDprWatch?.()
   stopDprWatch = undefined
   touchGestures.reset()
@@ -1078,13 +1250,15 @@ defineExpose({
   setActivePage,
   clearSelection,
   getSelectionState: () => selectionState.value,
+  print: printAllPages,
 })
 </script>
 
 <template>
   <div
     ref="viewerRef"
-    :class="cn('pdf-viewer', props.isDark && 'pdf-viewer--dark', props.className)"
+    :class="cn('pdf-viewer', props.isDark && 'pdf-viewer--dark', printMode && 'pdf-viewer--print', props.className)"
+    :style="viewerMinHeightStyle"
     data-testid="pdf-viewer"
     tabindex="0"
     @keydown="onViewerKeydown"
@@ -1219,6 +1393,22 @@ defineExpose({
         </div>
       </main>
     </div>
+    <div
+      v-if="printPageEntries.length"
+      class="pdf-print-pages"
+      data-testid="pdf-print-pages"
+      aria-hidden="true"
+    >
+      <figure
+        v-for="entry in printPageEntries"
+        :key="entry.page"
+        class="pdf-print-page"
+        data-testid="pdf-print-page"
+        :data-page-number="entry.page"
+      >
+        <img :src="entry.url" :alt="formatOfficeMessage(m.pdf.viewer.pageAlt, { page: entry.page })" />
+      </figure>
+    </div>
     <div v-if="downloadError" class="download-error">{{ downloadError }}</div>
   </div>
 </template>
@@ -1283,6 +1473,7 @@ defineExpose({
 .page-error { min-height: 0; min-width: min(300px, 100%); border-radius: 8px; background: var(--pdf-control-bg); padding: 24px; box-shadow: 0 2px 8px rgb(0 0 0 / 12%); }
 .pdf-search-context { position: sticky; top: 0; z-index: 3; width: fit-content; max-width: min(720px, 90%); margin: 0 auto 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 1px solid var(--pdf-control-border); border-radius: 8px; background: var(--pdf-control-bg); color: var(--pdf-fg); font-size: 12px; padding: 6px 10px; }
 .pdf-search-context mark { background: #fde047; color: #111827; padding: 1px 2px; }
+.pdf-print-pages { display: none; }
 @container pdf-viewer (max-width: 760px) {
   .pdf-body { flex-direction: column; }
   .pdf-thumbnails { width: auto; flex-basis: auto; display: flex; gap: 8px; border-right: 0; border-bottom: 1px solid var(--pdf-border); }
@@ -1295,10 +1486,25 @@ defineExpose({
 @media print {
   .pdf-viewer { height: auto !important; min-height: 0 !important; overflow: visible !important; background: #fff !important; color: #000 !important; }
   .pdf-toolbar, .pdf-thumbnails, .pdf-status, .pdf-search-context, .download-error, .page-loading { display: none !important; }
+  .pdf-viewer--print .pdf-body { display: none !important; }
   .pdf-body { display: block !important; min-height: 0 !important; background: #fff !important; }
   .pdf-frame-wrap { overflow: visible !important; min-height: 0 !important; padding: 0 !important; }
   .pdf-page-stage { display: block !important; min-height: 0 !important; }
   .pdf-page-render { width: auto !important; margin: 0 auto; }
+  .pdf-print-pages { display: block !important; }
+  .pdf-print-page {
+    break-after: page;
+    margin: 0;
+    padding: 0;
+  }
+  .pdf-print-page:last-child { break-after: auto; }
+  .pdf-print-page img {
+    display: block;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    filter: none !important;
+  }
   .pdf-page-image {
     width: 100% !important;
     max-width: 100% !important;

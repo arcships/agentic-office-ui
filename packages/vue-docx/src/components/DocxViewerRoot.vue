@@ -219,6 +219,22 @@ const printMediaActive = ref(false)
 const beforePrintActive = ref(false)
 const isPrinting = computed(() => printMediaActive.value || beforePrintActive.value)
 let printMediaQuery: MediaQueryList | undefined
+let printPageStyle: HTMLStyleElement | undefined
+
+function syncPrintPageSize(widthPx?: number, heightPx?: number): void {
+  if (typeof document === "undefined") return
+  if (!Number.isFinite(widthPx) || !Number.isFinite(heightPx) || (widthPx ?? 0) <= 0 || (heightPx ?? 0) <= 0) {
+    printPageStyle?.remove()
+    printPageStyle = undefined
+    return
+  }
+  if (!printPageStyle) {
+    printPageStyle = document.createElement("style")
+    printPageStyle.dataset.officePrintPage = "docx"
+    document.head.append(printPageStyle)
+  }
+  printPageStyle.textContent = `@page { size: ${Math.round(widthPx!)}px ${Math.round(heightPx!)}px; margin: 0; }`
+}
 
 function onPrintMediaChange(event: MediaQueryListEvent): void {
   printMediaActive.value = event.matches
@@ -266,6 +282,10 @@ function setupPrintDetection(): () => void {
 
 // ── Pagination ─────────────────────────────────────────────────────
 const baseDocumentLayout = computed(() => resolveDocumentLayout(props.model))
+watchEffect(() => {
+  const layout = baseDocumentLayout.value
+  syncPrintPageSize(layout?.pageWidthPx, layout?.pageHeightPx)
+})
 const documentBackgroundColor = computed(() =>
   resolveDocumentBackgroundColor(props.model.metadata.documentBackgroundColor)
 )
@@ -1057,6 +1077,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopPrintDetection()
+  printPageStyle?.remove()
+  printPageStyle = undefined
   containerObserver?.disconnect()
   containerObserver = undefined
   if (scrollTimer !== null) clearTimeout(scrollTimer)

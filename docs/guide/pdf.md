@@ -33,9 +33,10 @@ import "@arcships/vue-pdf/style.css"
 | `showToolbar` | `boolean` | `true` | 工具栏 |
 | `showDownload` | `boolean` | `true` | 下载按钮 |
 | `showRotateControls` | `boolean` | `true` | 旋转按钮 |
+| `minHeight` | `string \| number` | 无 | 可选最小高度（数字按 px）；不传时组件不设置最小高度 |
 | `isDark` | `boolean` | `false` | 深色外壳与页面背景；页面位图默认反色，可用 `--pdf-dark-page-filter: none` 关闭 |
 
-`PdfSurface` 也接受 `isDark`。打印时工具栏、缩略图和状态层会自动隐藏，页面按打印宽度铺满。
+`PdfSurface` 也接受 `isDark` 和 `minHeight`。打印时工具栏、缩略图和状态层会自动隐藏，PDF 会在打印前一次性栅格化全部页面（而不是只打印当前页或占位符），并按文档首页尺寸设置 `@page`。
 
 事件包括 `document-load-success`、`document-load-error`、`active-page-change`、`selectionChange` 和 `diagnostic`。当前页支持拖选文字、双击选词、`Ctrl/Cmd+C` 复制和 `Escape` 清除；`clearSelection()` 与 `getSelectionState()` 通过组件实例暴露。错误处理使用 `PdfLoadError.code`，不要通过错误文案判断类型。加密文档在无密码可用时返回 `ENCRYPTED`；`load-start` 诊断中的 URL 已去除查询串、片段和凭据。
 
