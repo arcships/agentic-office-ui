@@ -44,7 +44,8 @@ const DEFAULT_LAYOUT_OPTIONS: Required<LayoutOptions> = {
   margin: 72,
   minLineHeight: 22,
   paragraphSpacing: 8,
-  tableCellPadding: 8
+  tableCellPadding: 8,
+  respectSectionLayout: true
 };
 
 export type LayoutSnapshotOptions = LayoutOptions;
@@ -200,27 +201,31 @@ function resolvedLayoutMetricsFromGeometry(
   };
 }
 
-function resolveSections(
+function resolveSectionsFromGeometry(
   model: DocModel,
-  layout: ResolvedLayoutMetrics
+  sectionGeometries: PaginationSectionGeometry[],
+  fallbackLayout: ResolvedLayoutMetrics,
+  respectSectionLayout: boolean
 ): ResolvedDocumentSection[] {
-  const sections = model.metadata.sections ?? [];
-  if (sections.length === 0) {
+  const hasExplicitSections = (model.metadata.sections ?? []).length > 0;
+  if (sectionGeometries.length === 0) {
     return [
       {
         index: 0,
         startNodeIndex: 0,
         synthetic: true,
-        layout
+        layout: fallbackLayout
       }
     ];
   }
 
-  return sections.map((section, index) => ({
+  return sectionGeometries.map((geometry, index) => ({
     index,
-    startNodeIndex: section.startNodeIndex,
-    synthetic: false,
-    layout
+    startNodeIndex: geometry.startNodeIndex,
+    synthetic: !hasExplicitSections,
+    layout: respectSectionLayout
+      ? resolvedLayoutMetricsFromGeometry(geometry)
+      : fallbackLayout
   }));
 }
 
@@ -254,12 +259,19 @@ export function resolveDocumentForLayout(
     }
   );
 
+  const sections = resolveSectionsFromGeometry(
+    model,
+    sectionGeometries,
+    layout,
+    normalizedOptions.respectSectionLayout
+  );
+
   return {
     source: "layout-engine-adapter",
     nodeCount: model.nodes.length,
     pageCountHint: model.metadata.documentPageCount,
     layout,
-    sections: resolveSections(model, layout),
+    sections,
     metadata: {
       sourceParts: model.metadata.sourceParts,
       warningCount: model.metadata.warnings.length,

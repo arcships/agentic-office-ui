@@ -9,7 +9,7 @@ import {
   paragraphAfterSpacingPx,
   paragraphBeforeSpacingPx,
   resolvePaginationSectionMetricsIndexForNodeIndex,
-  resolveParagraphBeforeSpacingPx
+  resolveParagraphConsumedHeightPx
 } from "./pagination";
 
 export function normalizedPositivePixelValue(value: number | undefined, fallback: number): number {
@@ -223,11 +223,8 @@ export function collectDocxEstimatedOverflowBreakStartNodeIndexes(
   );
 
   let pageConsumedHeightPx = 0;
-  let previousParagraphAfterPx = 0;
   let currentMetricsIndex = 0;
   let committedKeepNextChainEndNodeIndex = -1;
-  const suppressSpacingBeforeAfterPageBreak =
-    options?.suppressSpacingBeforeAfterPageBreak ?? false;
   let currentPageContentHeightPx =
     metricsBySection[0]?.pageContentHeightPx ?? fallbackMetrics.pageContentHeightPx;
 
@@ -241,7 +238,6 @@ export function collectDocxEstimatedOverflowBreakStartNodeIndexes(
 
     if (hardBreakStartNodeIndexes.has(nodeIndex)) {
       pageConsumedHeightPx = 0;
-      previousParagraphAfterPx = 0;
       currentPageContentHeightPx = nodeMetrics.pageContentHeightPx;
     }
 
@@ -258,21 +254,11 @@ export function collectDocxEstimatedOverflowBreakStartNodeIndexes(
         1
       )
     );
-    const nodeBeforeSpacingPx =
-      node.type === "paragraph"
-        ? resolveParagraphBeforeSpacingPx(
-            model,
-            nodeIndex,
-            node,
-            pageConsumedHeightPx,
-            suppressSpacingBeforeAfterPageBreak
-          )
-        : 0;
-    const collapsedMarginPx =
-      node.type === "paragraph" && pageConsumedHeightPx > 0
-        ? Math.min(previousParagraphAfterPx, nodeBeforeSpacingPx)
-        : 0;
-    const collapsedNodeHeightPx = Math.max(1, rawNodeHeightPx - collapsedMarginPx);
+    const collapsedNodeHeightPx = resolveParagraphConsumedHeightPx(
+      rawNodeHeightPx,
+      node.type === "paragraph" ? paragraphBeforeSpacingPx(node) : 0,
+      pageConsumedHeightPx <= 0
+    );
 
     let requiredHeightPx = collapsedNodeHeightPx;
     let keepNextChainEndNodeIndex = -1;
@@ -332,11 +318,9 @@ export function collectDocxEstimatedOverflowBreakStartNodeIndexes(
             1
           )
         );
-        const collapsedChainMarginPx = Math.min(
-          chainPreviousParagraphAfterPx,
-          paragraphBeforeSpacingPx(nextChainNode)
-        );
-        requiredHeightPx += Math.max(1, nextRawHeightPx - collapsedChainMarginPx);
+        // OOXML keeps both spacing values; no max()-style collapsing between
+        // paragraphs that share a page.
+        requiredHeightPx += Math.max(1, nextRawHeightPx);
         chainPreviousParagraphAfterPx = paragraphAfterSpacingPx(nextChainNode);
       }
       keepNextChainEndNodeIndex = chainCursor;
@@ -349,17 +333,13 @@ export function collectDocxEstimatedOverflowBreakStartNodeIndexes(
     ) {
       breaks.add(nodeIndex);
       pageConsumedHeightPx = 0;
-      previousParagraphAfterPx = 0;
       currentPageContentHeightPx = nodeMetrics.pageContentHeightPx;
     }
 
     if (pageConsumedHeightPx === 0 && keepNextChainEndNodeIndex > nodeIndex) {
       committedKeepNextChainEndNodeIndex = keepNextChainEndNodeIndex;
     }
-    const effectiveNodeHeightPx =
-      pageConsumedHeightPx > 0 ? collapsedNodeHeightPx : rawNodeHeightPx;
-    pageConsumedHeightPx += effectiveNodeHeightPx;
-    previousParagraphAfterPx = node.type === "paragraph" ? paragraphAfterSpacingPx(node) : 0;
+    pageConsumedHeightPx += collapsedNodeHeightPx;
   }
 
   for (const breakIndex of [...breaks]) {

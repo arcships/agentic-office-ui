@@ -11,6 +11,7 @@ import type {
   ParagraphNode,
   TableNode
 } from "../../engine/types";
+import { textMeasurementGeneration } from "../../viewer/font-metrics";
 import { XML_CACHE_MAX_ENTRIES } from "./constants";
 
 export const paragraphBreakFlagsBySourceXml = new Map<
@@ -95,8 +96,14 @@ export function heightEstimateCacheKeyPx(
     Number.isFinite(docGridLinePitchPx) && (docGridLinePitchPx as number) > 0
       ? Math.max(0, Math.round(docGridLinePitchPx as number))
       : 0;
+  // The generation prefix retires entries measured before a web font loaded,
+  // so a stale (typically narrower) estimate can never be reused.
+  const measurementGeneration = textMeasurementGeneration() + 1;
 
   return (
-    (widthKey + 2) * 10_000 + docGridKey * 2 + (disableDocGridSnap ? 1 : 0)
+    measurementGeneration * 1_000_000_000 +
+    (widthKey + 2) * 10_000 +
+    docGridKey * 2 +
+    (disableDocGridSnap ? 1 : 0)
   );
 }

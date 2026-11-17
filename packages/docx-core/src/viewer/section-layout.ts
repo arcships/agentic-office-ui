@@ -247,9 +247,12 @@ export function parseSectionPageBorders(
     : undefined;
 }
 
-export function parseSectionLayout(sectionPropertiesXml?: string): DocumentLayoutMetrics {
+export function parseSectionLayout(
+  sectionPropertiesXml?: string,
+  fallbackLayout: DocumentLayoutMetrics = DEFAULT_DOCUMENT_LAYOUT
+): DocumentLayoutMetrics {
   if (!sectionPropertiesXml) {
-    return DEFAULT_DOCUMENT_LAYOUT;
+    return fallbackLayout;
   }
 
   const pageSizeTag = sectionPropertiesXml.match(/<w:pgSz\b[^>]*>/i)?.[0];
@@ -257,26 +260,26 @@ export function parseSectionLayout(sectionPropertiesXml?: string): DocumentLayou
   const docGridTag = sectionPropertiesXml.match(/<w:docGrid\b[^>]*\/?>/i)?.[0];
 
   const rawPageWidthPx =
-    twipsToPixels(readTwipsAttribute(pageSizeTag, "w:w")) ?? DEFAULT_DOCUMENT_LAYOUT.pageWidthPx;
+    twipsToPixels(readTwipsAttribute(pageSizeTag, "w:w")) ?? fallbackLayout.pageWidthPx;
   const rawPageHeightPx =
-    twipsToPixels(readTwipsAttribute(pageSizeTag, "w:h")) ?? DEFAULT_DOCUMENT_LAYOUT.pageHeightPx;
+    twipsToPixels(readTwipsAttribute(pageSizeTag, "w:h")) ?? fallbackLayout.pageHeightPx;
   const pageSize = resolvePageSizeForOrientation({
     widthPx: rawPageWidthPx,
     heightPx: rawPageHeightPx,
     orientation: readStringAttribute(pageSizeTag, "w:orient"),
   });
   const topMarginPx =
-    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:top")) ?? DEFAULT_DOCUMENT_LAYOUT.marginsPx.top;
+    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:top")) ?? fallbackLayout.marginsPx.top;
   const rightMarginPx =
-    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:right")) ?? DEFAULT_DOCUMENT_LAYOUT.marginsPx.right;
+    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:right")) ?? fallbackLayout.marginsPx.right;
   const bottomMarginPx =
-    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:bottom")) ?? DEFAULT_DOCUMENT_LAYOUT.marginsPx.bottom;
+    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:bottom")) ?? fallbackLayout.marginsPx.bottom;
   const leftMarginPx =
-    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:left")) ?? DEFAULT_DOCUMENT_LAYOUT.marginsPx.left;
+    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:left")) ?? fallbackLayout.marginsPx.left;
   const headerDistancePx =
-    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:header")) ?? DEFAULT_DOCUMENT_LAYOUT.headerDistancePx;
+    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:header")) ?? fallbackLayout.headerDistancePx;
   const footerDistancePx =
-    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:footer")) ?? DEFAULT_DOCUMENT_LAYOUT.footerDistancePx;
+    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:footer")) ?? fallbackLayout.footerDistancePx;
   // Word only snaps lines to the document grid for explicit grid types.
   // A bare <w:docGrid w:linePitch="..."/> (type "default") stores the pitch
   // but applies no grid, and Word writes that boilerplate into most documents.
@@ -286,8 +289,8 @@ export function parseSectionLayout(sectionPropertiesXml?: string): DocumentLayou
     docGridType === "linesandchars" ||
     docGridType === "snaptochars"
       ? twipsToPixels(readTwipsAttribute(docGridTag, "w:linePitch")) ??
-        DEFAULT_DOCUMENT_LAYOUT.docGridLinePitchPx
-      : DEFAULT_DOCUMENT_LAYOUT.docGridLinePitchPx;
+        fallbackLayout.docGridLinePitchPx
+      : fallbackLayout.docGridLinePitchPx;
 
   return {
     pageWidthPx: pageSize.widthPx,

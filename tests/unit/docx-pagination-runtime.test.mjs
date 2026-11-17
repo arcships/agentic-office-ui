@@ -170,7 +170,9 @@ test("a next-page section break starts a new page and uses its own geometry", ()
     106,
     "per-section margins must reach the page that starts the section",
   );
-  assert.equal(legacy.length, 1);
+  // The estimator now honours section breaks and per-section geometry too
+  // (issue #24 item 6), so it also produces two pages here.
+  assert.equal(legacy.length, 2);
 });
 
 test("wrapped paragraph lines count toward page height, not one line each", () => {

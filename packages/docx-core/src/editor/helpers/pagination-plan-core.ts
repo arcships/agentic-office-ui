@@ -17,8 +17,8 @@ import type {
   TableNode,
 } from "../../engine/types";
 import {
-  paragraphHasLastRenderedPageBreak,
   paragraphHasPageBreakBefore,
+  paragraphStartsWithLastRenderedPageBreak,
 } from "../../layout/pagination";
 import type {
   DocumentPageNodeSegment,
@@ -519,26 +519,41 @@ function estimateRenderedPageSegmentHeightPx(
   }
 
   if (segment.tableRowRange) {
-    if (segment.tableRowSlice) {
-      return Math.max(
-        MIN_PARAGRAPH_LINE_HEIGHT_PX,
-        Math.round(segment.tableRowSlice.sliceHeightPx)
-      );
-    }
     const rowHeightsPx = estimateTableRowHeightsPx(
       node as TableNode,
       availableWidthPx,
       numberingDefinitions,
       docGridLinePitchPx
     );
+    const repeatHeaderRowCount = Math.max(
+      0,
+      Math.round(segment.tableRowRange.repeatHeaderRowCount ?? 0)
+    );
+    const repeatedHeaderHeightPx =
+      repeatHeaderRowCount > 0
+        ? sumEstimatedTableRowHeightsPx(
+            rowHeightsPx,
+            0,
+            repeatHeaderRowCount,
+            MIN_PARAGRAPH_LINE_HEIGHT_PX
+          )
+        : 0;
+    if (segment.tableRowSlice) {
+      return Math.max(
+        MIN_PARAGRAPH_LINE_HEIGHT_PX,
+        repeatedHeaderHeightPx +
+          Math.round(segment.tableRowSlice.sliceHeightPx)
+      );
+    }
     return Math.max(
       MIN_PARAGRAPH_LINE_HEIGHT_PX,
-      sumEstimatedTableRowHeightsPx(
-        rowHeightsPx,
-        segment.tableRowRange?.startRowIndex ?? 0,
-        segment.tableRowRange?.endRowIndex ?? 0,
-        MIN_PARAGRAPH_LINE_HEIGHT_PX
-      )
+      repeatedHeaderHeightPx +
+        sumEstimatedTableRowHeightsPx(
+          rowHeightsPx,
+          segment.tableRowRange.startRowIndex ?? 0,
+          segment.tableRowRange.endRowIndex ?? 0,
+          MIN_PARAGRAPH_LINE_HEIGHT_PX
+        )
     );
   }
 
@@ -929,7 +944,7 @@ export function buildDocumentPageNodeSegmentsFromLastRenderedPageBreakHints(
     }
 
     if (
-      paragraphHasLastRenderedPageBreak(node) ||
+      paragraphStartsWithLastRenderedPageBreak(node) ||
       paragraphHasPageBreakBefore(node)
     ) {
       pageStartNodeIndexes.push(nodeIndex);

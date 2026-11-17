@@ -59,6 +59,7 @@ import {
   paragraphAfterSpacingPx,
   paragraphBeforeSpacingPx,
   resolveDocumentSectionsFromMetadata,
+  resolveParagraphConsumedHeightPx,
   resolveSectionIndexForNodeIndex,
   type PaginationSectionMetrics
 } from "./pagination";
@@ -282,14 +283,9 @@ function paragraphSegmentHeightPx(params: {
   metrics: PaginationSectionMetrics;
   numberingDefinitions?: NumberingDefinitionSet;
   pageConsumedHeightPx: number;
-  previousParagraphAfterPx: number;
 }): { heightPx: number; afterSpacingPx: number } {
   const beforeSpacingPx = paragraphBeforeSpacingPx(params.paragraph);
   const afterSpacingPx = paragraphAfterSpacingPx(params.paragraph);
-  const collapsedMarginPx =
-    params.pageConsumedHeightPx > 0
-      ? Math.min(params.previousParagraphAfterPx, beforeSpacingPx)
-      : 0;
   const lineRange = params.segment.paragraphLineRange;
 
   if (lineRange) {
@@ -307,9 +303,10 @@ function paragraphSegmentHeightPx(params: {
       1,
       lineRange.endLineIndex - lineRange.startLineIndex
     );
+    // OOXML keeps both spacing values; only a page-top paragraph drops before.
     const topSpacingPx =
-      lineRange.startLineIndex === 0
-        ? Math.max(0, beforeSpacingPx - collapsedMarginPx)
+      lineRange.startLineIndex === 0 && params.pageConsumedHeightPx > 0
+        ? beforeSpacingPx
         : 0;
     const bottomSpacingPx =
       lineRange.endLineIndex >= lineRange.totalLineCount ? afterSpacingPx : 0;
@@ -333,7 +330,11 @@ function paragraphSegmentHeightPx(params: {
   );
 
   return {
-    heightPx: Math.max(1, rawHeightPx - collapsedMarginPx),
+    heightPx: resolveParagraphConsumedHeightPx(
+      rawHeightPx,
+      beforeSpacingPx,
+      params.pageConsumedHeightPx <= 0
+    ),
     afterSpacingPx
   };
 }
@@ -370,11 +371,26 @@ function tableSegmentHeightPx(params: {
   );
 
   let heightPx = 0;
-  for (let rowIndex = startRowIndex; rowIndex < endRowIndex; rowIndex += 1) {
+  const repeatHeaderRowCount = Math.max(
+    0,
+    Math.round(params.segment.tableRowRange?.repeatHeaderRowCount ?? 0)
+  );
+  for (let rowIndex = 0; rowIndex < repeatHeaderRowCount; rowIndex += 1) {
     heightPx += Math.max(
       DEFAULT_MIN_ROW_HEIGHT_PX,
       Math.round(rowHeightsPx[rowIndex] ?? DEFAULT_MIN_ROW_HEIGHT_PX)
     );
+  }
+  const rowSlice = params.segment.tableRowSlice;
+  if (rowSlice) {
+    heightPx += Math.round(rowSlice.sliceHeightPx);
+  } else {
+    for (let rowIndex = startRowIndex; rowIndex < endRowIndex; rowIndex += 1) {
+      heightPx += Math.max(
+        DEFAULT_MIN_ROW_HEIGHT_PX,
+        Math.round(rowHeightsPx[rowIndex] ?? DEFAULT_MIN_ROW_HEIGHT_PX)
+      );
+    }
   }
 
   return Math.max(DEFAULT_MIN_ROW_HEIGHT_PX, heightPx);
@@ -390,7 +406,6 @@ function projectPageBlocks(params: {
   const contentBox = params.geometry.contentBoxPx;
   const numberingDefinitions = params.model.metadata.numberingDefinitions;
   let pageConsumedHeightPx = 0;
-  let previousParagraphAfterPx = 0;
 
   for (const segment of params.pageSegments) {
     const node = params.model.nodes[segment.nodeIndex];
@@ -404,8 +419,7 @@ function projectPageBlocks(params: {
         paragraph: node,
         metrics: params.metrics,
         numberingDefinitions,
-        pageConsumedHeightPx,
-        previousParagraphAfterPx
+        pageConsumedHeightPx
       });
       blocks.push({
         kind: "paragraph",
@@ -419,7 +433,6 @@ function projectPageBlocks(params: {
         paragraphLineRange: segment.paragraphLineRange
       });
       pageConsumedHeightPx += height.heightPx;
-      previousParagraphAfterPx = height.afterSpacingPx;
       continue;
     }
 
@@ -441,7 +454,6 @@ function projectPageBlocks(params: {
       tableRowRange: segment.tableRowRange
     });
     pageConsumedHeightPx += heightPx;
-    previousParagraphAfterPx = 0;
   }
 
   return blocks;

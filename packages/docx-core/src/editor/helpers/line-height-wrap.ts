@@ -24,6 +24,7 @@ import {
 import {
   measurePretextPlainTextLineCount,
 } from "../../viewer/pretext-layout";
+import { textMeasurementGeneration } from "../../viewer/font-metrics";
 import {
   estimateParagraphLineHeightPx,
   measureTextWidthPx,
@@ -102,9 +103,12 @@ function estimateWrappedLineCountForParagraph(
     firstLineMaxWidthPx === maxLineWidthPx
       ? maxLineWidthPx
       : `${maxLineWidthPx}|${firstLineMaxWidthPx}`;
+  // Width keys are cached per paragraph; include the font-measurement
+  // generation so a line count measured before a web font loaded is retired.
+  const cacheKey = `${textMeasurementGeneration()}:${widthCacheKey}`;
   const cachedLineCount = cachedWrappedLineCountForParagraph(
     paragraph,
-    widthCacheKey
+    cacheKey
   );
   if (cachedLineCount !== undefined) {
     return cachedLineCount;
@@ -113,7 +117,7 @@ function estimateWrappedLineCountForParagraph(
   const rememberLineCount = (lineCount: number): number =>
     rememberWrappedLineCountForParagraph(
       paragraph,
-      widthCacheKey,
+      cacheKey,
       Math.max(1, Math.round(lineCount))
     );
   const tabStopsPx = resolveParagraphTabStopsPx(paragraph);
