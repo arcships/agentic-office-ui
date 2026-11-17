@@ -22,14 +22,12 @@ const {
 } = await importFromDemo("@arcships/vue-docx")
 const {
   XlsxViewer,
-  buildLayout,
-  getLegendItems,
-  renderChartPlot,
   resolveChartAriaLabel,
   checkCellValueAgainstDataValidation,
   localizeDataValidationFeedback,
   useClipboardCopyNotice,
 } = await importFromDemo("@arcships/vue-xlsx")
+const { getLegendItems, buildLayout, renderChartPlot } = await importFromDemo("@arcships/vue-xlsx/chart")
 const { PptxViewer, PptxStage } = await importFromDemo("@arcships/vue-pptx")
 const { localizePdfErrorMessage, PdfViewer } = await importFromDemo("@arcships/vue-pdf")
 const {

@@ -1,4 +1,5 @@
-export { MemoChartSvg } from "../render/chart-renderer";
+export { MemoChartSvg, buildLayout, renderChartPlot } from "../render/chart-renderer";
+export { getLegendItems } from "../render/chart-legend";
 export {
   excelSerialToDate,
   formatExcelDateSerial,

@@ -15,7 +15,6 @@ export type {
 } from "@arcships/office-interaction"
 
 export { useXlsxViewerController } from "./composables"
-export { renderChartPlot, getLegendItems, buildLayout } from "./render/chart-renderer"
 export { resolveChartAriaLabel } from "./render/chart-shared"
 export { localizeXlsxLoadError } from "./errors"
 export type { XlsxLoadErrorMessages } from "./errors"
