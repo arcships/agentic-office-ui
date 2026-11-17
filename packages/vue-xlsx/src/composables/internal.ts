@@ -436,6 +436,7 @@ export interface XlsxControllerContext {
   sortState: Ref<XlsxTableSortState | null>;
   forcedReadOnly: Ref<boolean>;
   dataValidationFeedback: Ref<XlsxDataValidationFeedback | null>;
+  lastExportWarning: Ref<string | null>;
   deferredBufferRef: ShallowRef<ArrayBuffer | null>;
   /** Load generation that owns the currently deferred buffer. */
   deferredLoadRequestIdRef: ShallowRef<number | null>;
@@ -515,13 +516,14 @@ export interface XlsxControllerContext {
   ensureChartAssetsHydrated: (targetWorkbook: Workbook | null, targetSheets: XlsxSheetData[]) => WorkbookChartAssets | null;
   shouldForceReadOnlyForBuffer: (bufferByteLength: number) => boolean;
   shouldUseWorkerForReadOnlyLoad: (willForceReadOnly: boolean) => boolean;
-  createSavedWorkbookBytes: (targetWorkbook: Workbook) => Uint8Array;
+  createSavedWorkbookBytes: (targetWorkbook: Workbook, reportSanitizationWarning?: boolean) => Uint8Array;
   captureCellMutationState: (cell: XlsxCellAddress) => CellMutationState | null;
   checkCellValue: (cell: XlsxCellAddress, value: string) => XlsxDataValidationCheck;
   getCellDataValidation: (cell?: XlsxCellAddress | null) => XlsxDataValidation | null;
   getDataValidationListOptions: (validation: XlsxDataValidation) => string[];
   setValidationFeedback: (feedback: XlsxDataValidationFeedback | null) => void;
   dismissValidationFeedback: () => void;
+  setExportWarning: (message: string | null) => void;
   recordHistoryBeforeMutation: () => void;
   recordCellEditHistory: (cell: XlsxCellAddress, before: CellMutationState, after: CellMutationState) => void;
   recordRangeEditHistory: (mutations: RangeCellMutation[], selectionAfter: XlsxCellRange | null, activeCellAfter: XlsxCellAddress | null, before?: SelectionSnapshot) => void;

@@ -55,6 +55,7 @@ export {
   resolveDisplayFileName,
   sanitizeSavedWorkbookBytes,
   type WorkbookPreflightResult,
+  type WorkbookSanitizationResult,
   type ZipEntryMetadata
 } from "./composables/formatting";
 

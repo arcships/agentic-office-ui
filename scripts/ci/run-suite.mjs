@@ -131,6 +131,10 @@ const suites = {
     command("xlsx-structure", process.execPath, [
       "packages/vue-xlsx/test/structure.mjs",
     ]),
+    command("xlsx-export-openpyxl", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/xlsx_export_openpyxl.py",
+    ]),
     command("fixture-manifest", process.execPath, [
       "scripts/ci/verify-fixtures.mjs",
     ], {
@@ -153,6 +157,7 @@ const suites = {
       "tests/component/docx-reference-surfaces.test.mjs",
       "tests/component/pptx-preview.test.mjs",
       "tests/component/xlsx-race.test.mjs",
+      "tests/component/xlsx-export.test.mjs",
       "tests/component/xlsx-deferred-load.test.mjs",
       "tests/component/docx-render-parity.test.mjs",
       "tests/component/docx-paragraph-formatting.test.mjs",
