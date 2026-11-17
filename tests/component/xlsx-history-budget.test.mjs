@@ -237,3 +237,105 @@ test("XLSX history keeps an oversized latest edit, caps count, and clears redo",
     countLimited.app.unmount();
   }
 });
+
+test("XLSX undo after a paste restores the pre-paste selection", async () => {
+  const mounted = await mountController();
+  const target = { col: 2, row: 2 };
+  const pastedRange = {
+    start: target,
+    end: { col: 3, row: 3 },
+  };
+  const pastedCells = [
+    { col: 2, row: 2 },
+    { col: 3, row: 2 },
+    { col: 2, row: 3 },
+    { col: 3, row: 3 },
+  ];
+  const originalValues = pastedCells.map((cell) =>
+    mounted.controller.getCellDisplayValue(cell),
+  );
+
+  try {
+    mounted.controller.selectCell(target);
+    assert.equal(mounted.controller.pasteText("a\tb\nc\td"), true);
+    await vue.nextTick();
+
+    assert.deepEqual(mounted.controller.selection, pastedRange);
+    assert.equal(mounted.controller.activeCellAddress, "C3");
+    assert.equal(mounted.controller.getCellDisplayValue(target), "a");
+    assert.equal(mounted.controller.getCellDisplayValue({ col: 3, row: 3 }), "d");
+
+    mounted.controller.undo();
+    await vue.nextTick();
+
+    assert.deepEqual(mounted.controller.selection, { start: target, end: target });
+    assert.equal(mounted.controller.activeCellAddress, "C3");
+    assert.deepEqual(
+      pastedCells.map((cell) => mounted.controller.getCellDisplayValue(cell)),
+      originalValues,
+    );
+
+    mounted.controller.redo();
+    await vue.nextTick();
+
+    assert.deepEqual(mounted.controller.selection, pastedRange);
+    assert.equal(mounted.controller.activeCellAddress, "C3");
+    assert.equal(mounted.controller.getCellDisplayValue(target), "a");
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+test("XLSX undo after a fill restores the pre-fill selection", async () => {
+  const mounted = await mountController();
+  const sourceRange = {
+    start: { col: 0, row: 0 },
+    end: { col: 1, row: 0 },
+  };
+  const filledRange = {
+    start: sourceRange.start,
+    end: { col: 1, row: 2 },
+  };
+  const sourceValues = [
+    mounted.controller.getCellDisplayValue({ col: 0, row: 0 }),
+    mounted.controller.getCellDisplayValue({ col: 1, row: 0 }),
+  ];
+  const filledCells = [
+    { col: 0, row: 1 },
+    { col: 1, row: 1 },
+    { col: 0, row: 2 },
+    { col: 1, row: 2 },
+  ];
+  const originalValues = filledCells.map((cell) =>
+    mounted.controller.getCellDisplayValue(cell),
+  );
+
+  try {
+    mounted.controller.selectRange(sourceRange);
+    mounted.controller.fillSelection(filledRange);
+    await vue.nextTick();
+
+    assert.deepEqual(mounted.controller.selection, filledRange);
+    assert.equal(mounted.controller.activeCellAddress, "B3");
+    assert.equal(mounted.controller.getCellDisplayValue({ col: 0, row: 1 }), sourceValues[0]);
+    assert.equal(mounted.controller.getCellDisplayValue({ col: 1, row: 2 }), sourceValues[1]);
+
+    mounted.controller.undo();
+    await vue.nextTick();
+
+    assert.deepEqual(mounted.controller.selection, sourceRange);
+    assert.equal(mounted.controller.activeCellAddress, "B1");
+    assert.deepEqual(
+      filledCells.map((cell) => mounted.controller.getCellDisplayValue(cell)),
+      originalValues,
+    );
+
+    mounted.controller.redo();
+    await vue.nextTick();
+
+    assert.deepEqual(mounted.controller.selection, filledRange);
+    assert.equal(mounted.controller.activeCellAddress, "B3");
+  } finally {
+    mounted.app.unmount();
+  }
+});

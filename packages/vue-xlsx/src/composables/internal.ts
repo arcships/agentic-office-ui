@@ -106,6 +106,11 @@ export type RangeCellMutation = {
   cell: XlsxCellAddress;
 };
 
+export type SelectionSnapshot = {
+  activeCell: XlsxCellAddress | null;
+  selection: XlsxCellRange | null;
+};
+
 export type RangeEditHistoryEntry = {
   kind: "range-edit";
   activeCellAfter: XlsxCellAddress | null;
@@ -427,7 +432,7 @@ export interface XlsxControllerContext {
   captureCellMutationState: (cell: XlsxCellAddress) => CellMutationState | null;
   recordHistoryBeforeMutation: () => void;
   recordCellEditHistory: (cell: XlsxCellAddress, before: CellMutationState, after: CellMutationState) => void;
-  recordRangeEditHistory: (mutations: RangeCellMutation[], selectionAfter: XlsxCellRange | null, activeCellAfter: XlsxCellAddress | null) => void;
+  recordRangeEditHistory: (mutations: RangeCellMutation[], selectionAfter: XlsxCellRange | null, activeCellAfter: XlsxCellAddress | null, before?: SelectionSnapshot) => void;
   setChartSeriesFormula: (chartId: string, seriesIndex: number, formula: string) => boolean;
   selectedFormulaTarget: ComputedRef<
     | { kind: "chartSeries"; chartId: string; seriesId: string; seriesIndex: number }

@@ -251,6 +251,10 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       return;
     }
 
+    const beforeSnapshot = {
+      activeCell: ctx.activeCell.value,
+      selection: ctx.selection.value
+    };
     const sourceRange = normalizeRange(ctx.selection.value);
     const nextRange = normalizeRange(targetRange);
     const sourceHeight = sourceRange.end.row - sourceRange.start.row + 1;
@@ -313,7 +317,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     ctx.selection.value = nextRange;
     ctx.activeCell.value = nextRange.end;
     ctx.selectionAnchorRef.value = nextRange.start;
-    ctx.recordRangeEditHistory(mutations, nextRange, nextRange.end);
+    ctx.recordRangeEditHistory(mutations, nextRange, nextRange.end, beforeSnapshot);
   }
 
   function mergeSelection() {

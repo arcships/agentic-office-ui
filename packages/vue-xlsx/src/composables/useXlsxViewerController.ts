@@ -55,6 +55,7 @@ import {
   type CellMutationState,
   type HistoryEntry,
   type RangeCellMutation,
+  type SelectionSnapshot,
   type SnapshotHistoryEntry
 } from "./internal";
 import {
@@ -569,11 +570,16 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     redoStackRef.value = [];
     historyRevision.value = historyRevision.value + 1;
   }
-  function recordRangeEditHistory(mutations: RangeCellMutation[], selectionAfter: XlsxCellRange | null, activeCellAfter: XlsxCellAddress | null) {
+  function recordRangeEditHistory(
+    mutations: RangeCellMutation[],
+    selectionAfter: XlsxCellRange | null,
+    activeCellAfter: XlsxCellAddress | null,
+    before?: SelectionSnapshot
+  ) {
     if (!activeSheet.value || isApplyingHistoryRef.value || mutations.length === 0) return;
     pushHistoryEntry(undoStackRef.value, {
-      kind: "range-edit", activeCellAfter, activeCellBefore: activeCell.value,
-      mutations, selectionAfter, selectionBefore: selection.value,
+      kind: "range-edit", activeCellAfter, activeCellBefore: before ? before.activeCell : activeCell.value,
+      mutations, selectionAfter, selectionBefore: before ? before.selection : selection.value,
       sheetIndex: activeSheet.value.workbookSheetIndex
     }, historyBudget);
     redoStackRef.value = [];
