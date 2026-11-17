@@ -1052,12 +1052,18 @@ function drawCellContent(
   state: CellPaintState,
 ): void {
   const { style, conditional, hyperlink, comment, sparkline, value } = state;
-  ctx.fillStyle = conditional?.kind === "colorScale" ? conditional.background : style.backgroundColor;
+  const conditionalBackground = conditional?.kind === "colorScale"
+    ? resolveColorScaleFill(conditional.environment, conditional.value)
+    : undefined;
+  ctx.fillStyle = conditionalBackground || style.backgroundColor;
   ctx.fillRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
   if (conditional?.kind === "dataBar") {
-    ctx.fillStyle = `${conditional.color}99`;
-    ctx.fillRect(x + 3, y + 4, Math.max(2, (width - 6) * conditional.ratio), Math.max(2, height - 8));
+    drawConditionalDataBar(ctx, conditional, x, y, width, height);
   }
+  const conditionalIcon = conditional?.kind === "iconSet"
+    ? resolveIconGeometry(conditional.environment, conditional.value, width, height)
+    : null;
+  const textAreaWidth = conditionalIcon?.textWidth ?? width;
   if (sparkline) drawSparkline(ctx, sparkline, x, y, width, height);
   if (state.gridLines) {
     ctx.strokeStyle = state.gridColor;
@@ -1073,18 +1079,18 @@ function drawCellContent(
   if (value && !sparkline && (conditional?.kind !== "dataBar" || conditional.showValue)) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(x + 2, y + 1, Math.max(0, width - 4), Math.max(0, height - 2));
+    ctx.rect(x + 2, y + 1, Math.max(0, textAreaWidth - 4), Math.max(0, height - 2));
     ctx.clip();
     ctx.fillStyle = hyperlink ? "#2563eb" : style.color || state.textColor;
     ctx.font = `${style.fontStyle} ${style.fontWeight} ${Math.round(style.fontSizePx)}px ${JSON.stringify(style.fontFamily)}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
     ctx.textAlign = style.alignment;
     const padding = 5;
     const textX = style.alignment === "right"
-      ? x + width - padding
-      : style.alignment === "center" ? x + width / 2 : x + padding;
+      ? x + textAreaWidth - padding
+      : style.alignment === "center" ? x + textAreaWidth / 2 : x + padding;
     const lineHeight = Math.max(12, style.fontSizePx * 1.25);
     const maxLines = style.wrap ? Math.max(1, Math.floor((height - 4) / lineHeight)) : 1;
-    const lines = wrapCellText(ctx, value, Math.max(0, width - padding * 2), maxLines);
+    const lines = wrapCellText(ctx, value, Math.max(0, textAreaWidth - padding * 2), maxLines);
     const blockHeight = lines.length * lineHeight;
     const firstBaseline = style.vertical === "top"
       ? y + 2 + lineHeight * 0.8
@@ -1093,7 +1099,7 @@ function drawCellContent(
         : y + height - blockHeight + lineHeight * 0.8 - 2;
     lines.forEach((line, index) => ctx.fillText(line, textX, firstBaseline + index * lineHeight));
     if (style.underline || style.strike || hyperlink) {
-      const measured = Math.min(ctx.measureText(lines[0] ?? "").width, Math.max(0, width - padding * 2));
+      const measured = Math.min(ctx.measureText(lines[0] ?? "").width, Math.max(0, textAreaWidth - padding * 2));
       const startX = style.alignment === "right" ? textX - measured : style.alignment === "center" ? textX - measured / 2 : textX;
       ctx.strokeStyle = style.color;
       ctx.lineWidth = 1;
@@ -1107,11 +1113,16 @@ function drawCellContent(
     }
     ctx.restore();
   }
-  if (conditional?.kind === "iconSet") {
-    ctx.fillStyle = conditional.ratio < .34 ? "#dc2626" : conditional.ratio < .67 ? "#d97706" : "#16a34a";
-    ctx.font = `${Math.max(10, Math.min(15, height - 6))}px sans-serif`;
-    ctx.textAlign = "right";
-    ctx.fillText(conditional.icon, x + width - 4, y + height / 2 + 5);
+  if (conditionalIcon) {
+    ctx.fillStyle = conditionalIcon.color;
+    ctx.font = `${conditionalIcon.size}px "Segoe UI Symbol", "Apple Symbols", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(
+      conditionalIcon.glyph,
+      x + conditionalIcon.iconX + conditionalIcon.size / 2,
+      y + height / 2,
+    );
   }
   if (comment) {
     ctx.fillStyle = "#dc2626";
@@ -1268,107 +1279,24 @@ function paintBody() {
         const colX = getColOffsetSum(c);
         const value = getGridCellDisplayValue(cell);
 
-        let workbookStyle = getWorkerCellStyle(cell);
-        if (!workbookStyle && worksheet) {
-          try {
-            workbookStyle = worksheet.getCellStyleAt(cell.row, cell.col) as XlsxResolvedCellStyle | undefined;
-          } catch {
-            workbookStyle = undefined;
-          }
-        }
-        if (!workbookStyle) {
-          const rowStyleId = sheet.rowStyleIds[cell.row];
-          const colStyleId = sheet.colStyleIds[cell.col];
-          workbookStyle = rowStyleId !== undefined
-            ? sheet.styleById[rowStyleId]
-            : colStyleId !== undefined ? sheet.styleById[colStyleId] : undefined;
-        }
-        const style = resolveCanvasCellStyle(cell, value, workbookStyle);
-        const conditional = conditionalVisual(cell, value);
-        const conditionalIcon = conditional?.kind === "iconSet"
-          ? resolveIconGeometry(conditional.environment, conditional.value, colW, rowHResolved)
-          : null;
-        const textAreaWidth = conditionalIcon?.textWidth ?? colW;
-        const hyperlink = hyperlinksByCell.value.get(`${cell.row}:${cell.col}`);
-        const comment = commentsByCell.value.get(`${cell.row}:${cell.col}`);
-        const sparkline = sparklinesByCell.value.get(`${cell.row}:${cell.col}`);
-
-        const conditionalBackground = conditional?.kind === "colorScale"
-          ? resolveColorScaleFill(conditional.environment, conditional.value)
-          : undefined;
-        ctx.fillStyle = conditionalBackground || style.backgroundColor;
-        ctx.fillRect(colX + 0.5, rowY + 0.5, Math.max(0, colW - 1), Math.max(0, rowHResolved - 1));
-        if (conditional?.kind === "dataBar") {
-          drawConditionalDataBar(ctx, conditional, colX, rowY, colW, rowHResolved);
-        }
-        if (sparkline) drawSparkline(ctx, sparkline, colX, rowY, colW, rowHResolved);
-        if (merge && sheet.showGridLines !== false) {
-          ctx.strokeStyle = gridColor;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(colX + 0.5, rowY + 0.5, Math.max(0, colW - 1), Math.max(0, rowHResolved - 1));
-        }
-
-        if (isCellInRange(cell, sel) || (merge && sel && rangesIntersect(merge, sel))) {
-          ctx.fillStyle = selFill;
-          ctx.fillRect(colX + 1, rowY + 1, Math.max(0, colW - 2), Math.max(0, rowHResolved - 2));
-        }
-
-        if (value && !sparkline && (conditional?.kind !== "dataBar" || conditional.showValue)) {
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(colX + 2, rowY + 1, Math.max(0, textAreaWidth - 4), Math.max(0, rowHResolved - 2));
-          ctx.clip();
-          ctx.fillStyle = hyperlink ? "#2563eb" : style.color || textColor;
-          ctx.font = `${style.fontStyle} ${style.fontWeight} ${Math.round(style.fontSizePx)}px ${JSON.stringify(style.fontFamily)}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-          ctx.textAlign = style.alignment;
-          const padding = 5;
-          const textX = style.alignment === "right"
-            ? colX + textAreaWidth - padding
-            : style.alignment === "center" ? colX + textAreaWidth / 2 : colX + padding;
-          const lineHeight = Math.max(12, style.fontSizePx * 1.25);
-          const maxLines = style.wrap ? Math.max(1, Math.floor((rowHResolved - 4) / lineHeight)) : 1;
-          const lines = wrapCellText(ctx, value, Math.max(0, textAreaWidth - padding * 2), maxLines);
-          const blockHeight = lines.length * lineHeight;
-          const firstBaseline = style.vertical === "top"
-            ? rowY + 2 + lineHeight * 0.8
-            : style.vertical === "middle"
-              ? rowY + (rowHResolved - blockHeight) / 2 + lineHeight * 0.8
-              : rowY + rowHResolved - blockHeight + lineHeight * 0.8 - 2;
-          lines.forEach((line, index) => ctx.fillText(line, textX, firstBaseline + index * lineHeight));
-          if (style.underline || style.strike || hyperlink) {
-            const measured = Math.min(ctx.measureText(lines[0] ?? "").width, Math.max(0, textAreaWidth - padding * 2));
-            const startX = style.alignment === "right" ? textX - measured : style.alignment === "center" ? textX - measured / 2 : textX;
-            ctx.strokeStyle = style.color;
-            ctx.lineWidth = 1;
-            for (const offset of [style.underline || hyperlink ? 2 : null, style.strike ? -style.fontSizePx * 0.3 : null]) {
-              if (offset === null) continue;
-              ctx.beginPath();
-              ctx.moveTo(startX, firstBaseline + offset);
-              ctx.lineTo(startX + measured, firstBaseline + offset);
-              ctx.stroke();
-            }
-          }
-          ctx.restore();
-        }
-        if (conditionalIcon) {
-          ctx.save();
-          ctx.fillStyle = conditionalIcon.color;
-          ctx.font = `${conditionalIcon.size}px "Segoe UI Symbol", "Apple Symbols", sans-serif`;
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(
-            conditionalIcon.glyph,
-            colX + conditionalIcon.iconX + conditionalIcon.size / 2,
-            rowY + rowHResolved / 2,
-          );
-          ctx.restore();
-        }
-        if (comment) {
-          ctx.fillStyle = "#dc2626";
-          ctx.beginPath(); ctx.moveTo(colX + colW - 9, rowY + 1); ctx.lineTo(colX + colW - 1, rowY + 1); ctx.lineTo(colX + colW - 1, rowY + 9); ctx.closePath(); ctx.fill();
-        }
-
-        drawCellBorders(ctx, style, colX, rowY, colW, rowHResolved);
+        const style = resolveCanvasCellStyle(
+          cell,
+          value,
+          resolveCellWorkbookStyle(cell, worksheet, sheet),
+        );
+        drawCellContent(ctx, colX, rowY, colW, rowHResolved, {
+          style,
+          conditional: conditionalVisual(cell, value),
+          comment: commentsByCell.value.get(`${cell.row}:${cell.col}`),
+          hyperlink: hyperlinksByCell.value.get(`${cell.row}:${cell.col}`),
+          sparkline: sparklinesByCell.value.get(`${cell.row}:${cell.col}`),
+          value,
+          gridLines: Boolean(merge) && sheet.showGridLines !== false,
+          selected: isCellInRange(cell, sel) || Boolean(merge && sel && rangesIntersect(merge, sel)),
+          selectionFill: selFill,
+          gridColor,
+          textColor,
+        });
 
       }
     }

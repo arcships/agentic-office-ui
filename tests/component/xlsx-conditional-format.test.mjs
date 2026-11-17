@@ -369,12 +369,12 @@ test("icon sets reserve space so the glyph never overlaps the value", () => {
   assert.match(GRID_SOURCE, /resolveIconGeometry\(conditional\.environment/);
   assert.match(
     GRID_SOURCE,
-    /ctx\.rect\(colX \+ 2, rowY \+ 1, Math\.max\(0, textAreaWidth - 4\)/,
+    /ctx\.rect\((?:colX|x) \+ 2, (?:rowY|y) \+ 1, Math\.max\(0, textAreaWidth - 4\)/,
     "the text clip uses the width left over by the icon",
   );
   assert.match(
     GRID_SOURCE,
-    /colX \+ textAreaWidth - padding/,
+    /(?:colX|x) \+ textAreaWidth - padding/,
     "right-aligned values stop before the icon",
   );
 });
