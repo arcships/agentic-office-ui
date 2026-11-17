@@ -72,6 +72,9 @@ All notable changes to the `@arcships` package family are documented in this fil
 - Add optional `PdfRenderRuntime.getPageAnnotations()` and `PdfRenderAnnotation`, exposing link, widget, and annotation rectangles in canonical page space with sanitized link targets and form-field identity.
 - Add an invisible hit layer to `PdfSurface` that emits `linkActivate` and `annotationActivate`; external links never navigate automatically, and a host `urlPolicy` blocks unapproved targets.
 - Stop the region interaction layer from bubbling Escape to the Surface handler so hosts receive one `selectionCancel` per key press.
+- Write AcroForm values end to end: `PdfRenderRuntime.setFormFieldValue()` maps text, checkbox and choice widgets through `resolvePdfFormFieldValue()`, and `PdfSurface` renders native controls that commit through the runtime, refresh the page bitmap and emit `formFieldChange`/`formFieldError`.
+- Edit annotation appearance through `PdfRenderRuntime.updateAnnotationAppearance()` (`contents`, `color`, `strokeColor`, `opacity`, `strokeWidth`) and `PdfSurface.updateAnnotationAppearance()`, which regenerates the appearance stream, refreshes the bitmap and emits `annotationChange`/`annotationError`.
+- Add single-page text selection to `PdfViewer`: drag selection, double-click word selection, clipboard copy, `Escape` clear, and a `selectionChange` event fed by the same canonical transform and glyph geometry as `PdfSurface`.
 
 ### DOCX tracked-change decisions (#41)
 

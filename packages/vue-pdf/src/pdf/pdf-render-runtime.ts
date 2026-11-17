@@ -2,9 +2,12 @@ import {
   createPdfiumEngine as createPdfiumWorkerEngine,
 } from "@embedpdf/engines/pdfium-worker-engine"
 import {
+  PdfAnnotationSubtype,
   PdfErrorCode,
   Rotation,
+  type FormFieldValue,
   type PageTextSlice,
+  type PdfAnnotationObject,
   type PdfDocumentObject,
   type PdfErrorReason,
   type PdfPageGeometry,
@@ -19,6 +22,9 @@ export type PdfRenderErrorCode =
   | "ENCRYPTED"
   | "INVALID_RENDER_OPTIONS"
   | "PAGE_TOO_LARGE"
+  | "INVALID_FIELD_VALUE"
+  | "ANNOTATION_NOT_FOUND"
+  | "ANNOTATION_NOT_WRITABLE"
 
 /** Stable error raised by the PDF render runtime before touching PDFium. */
 export class PdfRenderError extends Error {
@@ -149,10 +155,65 @@ export interface PdfRenderAnnotation {
   fieldName?: string
   /** Current form field value for widget annotations. */
   fieldValue?: string
+  /** Writable form field kind for widget annotations. */
+  fieldType?: PdfFormFieldType
+  /** Export value that identifies a checkbox or radio widget inside its group. */
+  exportValue?: string
+  /** True when the widget field is read-only or locked. */
+  readOnly?: boolean
+  /** Selectable options for combo, list and radio widgets. */
+  options?: readonly PdfFormFieldOption[]
   /** Annotation contents or subject, used for tooltips and notes. */
   contents?: string
+  /** Current fill or stroke color when the annotation exposes one. */
+  color?: string
+  /** Current opacity in the `0..1` range when the annotation exposes one. */
+  opacity?: number
   /** Raw annotation flags that affect interaction (`readOnly`, `noZoom`, ...). */
   flags?: readonly string[]
+}
+
+/** Writable AcroForm field kinds surfaced by `PdfRenderAnnotation`. */
+export type PdfFormFieldType =
+  | "text"
+  | "checkbox"
+  | "radio"
+  | "combobox"
+  | "listbox"
+  | "button"
+  | "signature"
+  | "unknown"
+
+export interface PdfFormFieldOption {
+  label: string
+  selected: boolean
+}
+
+/**
+ * Value accepted by `PdfRenderRuntime.setFormFieldValue`. Text fields take a
+ * string, checkboxes take a boolean, and radio/choice fields take either an
+ * option label or its zero-based index as a string.
+ */
+export type PdfFormFieldValue = string | boolean
+
+export interface PdfFormFieldDescriptor {
+  fieldType?: PdfFormFieldType
+  fieldValue?: string
+  options?: readonly PdfFormFieldOption[]
+}
+
+/** Appearance fields a host may update on an existing annotation. */
+export interface PdfAnnotationAppearancePatch {
+  /** Annotation contents / note text. */
+  contents?: string
+  /** Fill or stroke color as a `#rrggbb` string, depending on the annotation. */
+  color?: string
+  /** Opacity in the `0..1` range. */
+  opacity?: number
+  /** Border/stroke color for link, ink and shape annotations. */
+  strokeColor?: string
+  /** Border/stroke width in points. */
+  strokeWidth?: number
 }
 
 export interface PdfPageRenderOptions {
@@ -249,6 +310,64 @@ export function resolvePdfPageRenderParameters(
   return { scaleFactor: scale, rotation: totalRotation, dpr, pixelWidth, pixelHeight }
 }
 
+function normalizeCheckboxValue(value: PdfFormFieldValue): boolean {
+  if (typeof value === "boolean") return value
+  const normalized = value.trim().toLowerCase()
+  if (["true", "on", "1", "yes", "checked"].includes(normalized)) return true
+  if (["false", "off", "0", "no", "unchecked", ""].includes(normalized)) return false
+  throw new PdfRenderError("INVALID_FIELD_VALUE", `Checkbox value "${value}" is not a boolean.`)
+}
+
+function resolveChoiceIndex(
+  field: PdfFormFieldDescriptor,
+  value: string,
+): number {
+  const options = field.options ?? []
+  const labelIndex = options.findIndex((option) => option.label === value)
+  if (labelIndex >= 0) return labelIndex
+  const numeric = Number(value)
+  if (Number.isInteger(numeric) && numeric >= 0 && numeric < options.length) return numeric
+  throw new PdfRenderError(
+    "INVALID_FIELD_VALUE",
+    `Choice value "${value}" does not match any option (${options.length} available).`,
+  )
+}
+
+/**
+ * Translate a public form value into the PDFium form-field value for a widget.
+ * Invalid combinations fail before the engine is touched so callers get a
+ * stable error instead of a silently ignored write.
+ */
+export function resolvePdfFormFieldValue(
+  field: PdfFormFieldDescriptor,
+  value: PdfFormFieldValue,
+): FormFieldValue {
+  switch (field.fieldType) {
+    case "checkbox":
+      return { kind: "checked", checked: normalizeCheckboxValue(value) }
+    case "radio":
+    case "combobox":
+    case "listbox": {
+      if (typeof value !== "string") {
+        throw new PdfRenderError(
+          "INVALID_FIELD_VALUE",
+          `Field type ${field.fieldType} expects an option label or index.`,
+        )
+      }
+      const index = resolveChoiceIndex(field, value)
+      return { kind: "selection", index, isSelected: true }
+    }
+    case "text":
+    case "signature":
+    case "unknown":
+    case "button":
+    case undefined:
+      return { kind: "text", text: typeof value === "string" ? value : String(value) }
+    default:
+      return { kind: "text", text: typeof value === "string" ? value : String(value) }
+  }
+}
+
 export interface PdfThumbnailRenderOptions {
   scale?: number
   signal?: AbortSignal
@@ -305,6 +424,30 @@ export interface PdfRenderRuntime {
     pageIndex: number,
     options?: { signal?: AbortSignal },
   ): Promise<readonly PdfRenderAnnotation[]>
+  /**
+   * Write one AcroForm widget value and return the refreshed annotation.
+   *
+   * Runtime implementers that cannot write forms omit this method; the Surface
+   * then keeps widgets read-only instead of pretending the write succeeded.
+   */
+  setFormFieldValue?(
+    document: PdfRenderDocument,
+    pageIndex: number,
+    annotationId: string,
+    value: PdfFormFieldValue,
+    options?: { signal?: AbortSignal },
+  ): Promise<PdfRenderAnnotation>
+  /**
+   * Update an existing annotation's appearance (contents, color, opacity or
+   * stroke) and regenerate its appearance stream.
+   */
+  updateAnnotationAppearance?(
+    document: PdfRenderDocument,
+    pageIndex: number,
+    annotationId: string,
+    patch: PdfAnnotationAppearancePatch,
+    options?: { signal?: AbortSignal },
+  ): Promise<PdfRenderAnnotation>
   dispose(): Promise<void>
 }
 
@@ -437,6 +580,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
   private engine: PdfiumEngine | undefined
   private readonly documents = new Map<string, PdfDocumentObject>()
   private readonly contentHashRequests = new Map<string, Promise<string>>()
+  private readonly rawPageAnnotations = new Map<string, readonly PdfAnnotationObject[]>()
   private documentSequence = 0
   private disposed = false
 
@@ -703,21 +847,152 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     })
   }
 
-  async getPageAnnotations(
+  private annotationCacheKey(document: PdfRenderDocument, pageIndex: number): string {
+    return `${document.id}:${pageIndex}`
+  }
+
+  private async readRawPageAnnotations(
     document: PdfRenderDocument,
     pageIndex: number,
     options: { signal?: AbortSignal } = {},
-  ): Promise<readonly PdfRenderAnnotation[]> {
+  ): Promise<readonly PdfAnnotationObject[]> {
+    const key = this.annotationCacheKey(document, pageIndex)
+    const cached = this.rawPageAnnotations.get(key)
+    if (cached) return cached
     const nativeDocument = this.getNativeDocument(document)
     const page = nativeDocument.pages[pageIndex]
-    const renderPage = document.pages[pageIndex]
-    if (!page || !renderPage) throw new Error(`PDF page ${pageIndex + 1} does not exist.`)
+    if (!page) throw new Error(`PDF page ${pageIndex + 1} does not exist.`)
     const annotations = await runPdfTask(this.getEngine().getPageAnnotations(nativeDocument, page), {
       signal: options.signal,
       timeoutMs: this.operationTimeoutMs,
       label: `PDF page ${pageIndex + 1} annotation read`,
     })
+    if (this.documents.has(document.id)) this.rawPageAnnotations.set(key, annotations)
+    return annotations
+  }
+
+  private async refreshMappedPageAnnotations(
+    document: PdfRenderDocument,
+    pageIndex: number,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<readonly PdfRenderAnnotation[]> {
+    this.rawPageAnnotations.delete(this.annotationCacheKey(document, pageIndex))
+    const annotations = await this.readRawPageAnnotations(document, pageIndex, options)
+    const renderPage = document.pages[pageIndex]
+    if (!renderPage) throw new Error(`PDF page ${pageIndex + 1} does not exist.`)
     return mapPdfAnnotationObjects(annotations, renderPage)
+  }
+
+  private async writableAnnotation(
+    document: PdfRenderDocument,
+    pageIndex: number,
+    annotationId: string,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<PdfAnnotationObject> {
+    const annotations = await this.readRawPageAnnotations(document, pageIndex, options)
+    const annotation = annotations.find((candidate) => candidate.id === annotationId)
+    if (!annotation) {
+      throw new PdfRenderError(
+        "ANNOTATION_NOT_FOUND",
+        `PDF annotation ${annotationId} was not found on page ${pageIndex + 1}.`,
+      )
+    }
+    return annotation
+  }
+
+  async getPageAnnotations(
+    document: PdfRenderDocument,
+    pageIndex: number,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<readonly PdfRenderAnnotation[]> {
+    const renderPage = document.pages[pageIndex]
+    if (!renderPage) throw new Error(`PDF page ${pageIndex + 1} does not exist.`)
+    const annotations = await this.readRawPageAnnotations(document, pageIndex, options)
+    return mapPdfAnnotationObjects(annotations, renderPage)
+  }
+
+  async setFormFieldValue(
+    document: PdfRenderDocument,
+    pageIndex: number,
+    annotationId: string,
+    value: PdfFormFieldValue,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<PdfRenderAnnotation> {
+    const nativeDocument = this.getNativeDocument(document)
+    const page = nativeDocument.pages[pageIndex]
+    const renderPage = document.pages[pageIndex]
+    if (!page || !renderPage) throw new Error(`PDF page ${pageIndex + 1} does not exist.`)
+    const annotation = await this.writableAnnotation(document, pageIndex, annotationId, options)
+    if (annotation.type !== PdfAnnotationSubtype.WIDGET) {
+      throw new PdfRenderError(
+        "ANNOTATION_NOT_WRITABLE",
+        `PDF annotation ${annotationId} is not a form widget.`,
+      )
+    }
+    const mapped = mapPdfAnnotationObjects([annotation], renderPage)[0]
+    if (!mapped) {
+      throw new PdfRenderError("ANNOTATION_NOT_WRITABLE", `PDF annotation ${annotationId} is hidden.`)
+    }
+    const formValue = resolvePdfFormFieldValue(mapped, value)
+    await runPdfTask(this.getEngine().setFormFieldValue(nativeDocument, page, annotation, formValue), {
+      signal: options.signal,
+      timeoutMs: this.operationTimeoutMs,
+      label: `PDF page ${pageIndex + 1} form field write`,
+    })
+    const updated = await this.refreshMappedPageAnnotations(document, pageIndex, options)
+    const next = updated.find((candidate) => candidate.id === annotationId)
+    if (!next) throw new PdfRenderError("ANNOTATION_NOT_FOUND", `PDF annotation ${annotationId} disappeared after the write.`)
+    return next
+  }
+
+  async updateAnnotationAppearance(
+    document: PdfRenderDocument,
+    pageIndex: number,
+    annotationId: string,
+    patch: PdfAnnotationAppearancePatch,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<PdfRenderAnnotation> {
+    const nativeDocument = this.getNativeDocument(document)
+    const page = nativeDocument.pages[pageIndex]
+    const renderPage = document.pages[pageIndex]
+    if (!page || !renderPage) throw new Error(`PDF page ${pageIndex + 1} does not exist.`)
+    const annotation = await this.writableAnnotation(document, pageIndex, annotationId, options)
+    const target = annotation as PdfAnnotationObject & Record<string, unknown>
+    if (patch.opacity !== undefined) {
+      if (!Number.isFinite(patch.opacity) || patch.opacity < 0 || patch.opacity > 1) {
+        throw new PdfRenderError("INVALID_RENDER_OPTIONS", "Annotation opacity must be between 0 and 1.")
+      }
+      target.opacity = patch.opacity
+    }
+    if (patch.strokeWidth !== undefined) {
+      if (!Number.isFinite(patch.strokeWidth) || patch.strokeWidth < 0) {
+        throw new PdfRenderError("INVALID_RENDER_OPTIONS", "Annotation stroke width must be a non-negative number.")
+      }
+      if (!("strokeWidth" in target)) {
+        throw new PdfRenderError("ANNOTATION_NOT_WRITABLE", `PDF annotation ${annotationId} has no stroke width.`)
+      }
+      target.strokeWidth = patch.strokeWidth
+    }
+    for (const [field, value] of [["contents", patch.contents], ["color", patch.color], ["strokeColor", patch.strokeColor]] as const) {
+      if (value === undefined) continue
+      if (typeof value !== "string") {
+        throw new PdfRenderError("INVALID_RENDER_OPTIONS", `Annotation ${field} must be a string.`)
+      }
+      if (!(field in target) && !(field === "color" && "strokeColor" in target)) {
+        throw new PdfRenderError("ANNOTATION_NOT_WRITABLE", `PDF annotation ${annotationId} has no ${field}.`)
+      }
+      if (field === "color" && !("color" in target) && "strokeColor" in target) target.strokeColor = value
+      else target[field] = value
+    }
+    await runPdfTask(this.getEngine().updatePageAnnotation(nativeDocument, page, annotation, { regenerateAppearance: true }), {
+      signal: options.signal,
+      timeoutMs: this.operationTimeoutMs,
+      label: `PDF page ${pageIndex + 1} annotation update`,
+    })
+    const updated = await this.refreshMappedPageAnnotations(document, pageIndex, options)
+    const next = updated.find((candidate) => candidate.id === annotationId)
+    if (!next) throw new PdfRenderError("ANNOTATION_NOT_FOUND", `PDF annotation ${annotationId} disappeared after the update.`)
+    return next
   }
 
   async closeDocument(document: PdfRenderDocument): Promise<void> {
@@ -726,6 +1001,9 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     this.documents.delete(document.id)
     for (const key of this.contentHashRequests.keys()) {
       if (key.startsWith(`${document.id}:`)) this.contentHashRequests.delete(key)
+    }
+    for (const key of this.rawPageAnnotations.keys()) {
+      if (key.startsWith(`${document.id}:`)) this.rawPageAnnotations.delete(key)
     }
     const engine = this.engine
     if (!engine) return
@@ -744,6 +1022,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     this.disposed = true
     this.documents.clear()
     this.contentHashRequests.clear()
+    this.rawPageAnnotations.clear()
     const engine = this.engine
     this.engine = undefined
     if (!engine) return

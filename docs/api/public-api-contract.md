@@ -171,6 +171,10 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 
 文本选择可以跨页：`PdfSelectionState` 的 `text` 是完整选区文字（多页用 `\n` 连接），`range`/`rects` 仍描述第一页，`segments` 按文档顺序给出每页的 `PdfSelectionSegment`。多页选区只用于选择和复制；PDF 引用仍是单页文本范围。`PdfRenderRuntime.getPageAnnotations?` 是可选能力，返回 `PdfRenderAnnotation`（链接、表单控件和其他批注的规范化矩形、链接目标、字段名和批注文字）。`PdfSurface` 据此渲染不可见的链接/控件命中层，并在点击时发出 `linkActivate`（`url`、`targetPageIndex`、`blocked`）或 `annotationActivate`（`kind`、`fieldName`、`fieldValue`、`contents`）。链接只接受绝对 `http`、`https`、`mailto` 地址并去掉内嵌凭据；提供了 `urlPolicy` 时还会按该策略再次校验，未通过的链接以 `blocked: true` 上报而不会自动跳转。
 
+AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurface` 为文本、复选框、单选框、下拉框和列表框渲染原生控件，提交后调用 Runtime、刷新页面位图并发出 `formFieldChange`（失败为 `formFieldError`）。`resolvePdfFormFieldValue()` 把 `PdfFormFieldValue`（字符串或布尔值）转换成 PDFium 表单值：文本字段接受字符串，复选框接受布尔值，单选与选择字段接受选项标签或索引。只读字段仍显示控件但被禁用；无法写入的 Runtime 不渲染控件，避免出现看似可编辑但实际无效的输入框。
+
+批注外观编辑通过 `PdfRenderRuntime.updateAnnotationAppearance?()` 完成：`PdfAnnotationAppearancePatch` 支持 `contents`、`color`、`opacity`、`strokeColor` 和 `strokeWidth`，Runtime 重写批注并重新生成外观流，`PdfSurface.updateAnnotationAppearance(pageIndex, annotationId, patch)` 随后刷新页面位图并发出 `annotationChange`（失败为 `annotationError`）。`PdfAnnotationAppearancePatch`、`PdfFormFieldType`、`PdfFormFieldValue`、`PdfFormFieldOption` 和 `PdfFormFieldDescriptor` 是根入口类型。
+
 ### 3.6 `@arcships/vue-ui`
 
 稳定入口为 `OfficeObjectOutlineLayer`、`OfficeRegionSelector`、`SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`、`OfficeFindBar`、`OfficeLiveStatus`、`useOfficeMenuKeyboard` 和 `resolveOfficeMenuKeyCommand`，以及根入口导出的属性和事件类型。新代码使用 `@arcships/vue-ui/style.css`。
@@ -257,11 +261,14 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 | `PdfViewer` | `document-load-success` | 页数 |
 | `PdfViewer` | `document-load-error` | `PdfLoadError` |
 | `PdfViewer` | `active-page-change` | 当前页码，从 1 开始 |
+| `PdfViewer` | `selectionChange` | `PdfSelectionState`；当前页拖选、双击选词、复制和 `Escape` 清除共用同一状态 |
 | `PdfViewer` | `diagnostic` | `PdfDiagnostic`，加载类型为 `load-start`、`load-success`、`load-error`、`load-cancelled`；页面类型为 `render-start`、`render-success`、`render-error`；搜索类型为 `search-start`、`search-success`、`search-error`；另有 `object-url-revoked` 和 `download`。可读取 `runtimeId`、`taskId`、页码、页数、缩放、旋转、匹配数和结构化错误 |
 | `PdfSurface` | `selectionChange` | `PdfSelectionState`；多页选区通过 `segments` 给出每页范围 |
 | `PdfSurface` | `selectionCancel` | `{ mode, reason }`；区域层按一次 Escape 只发出一次 `escape` |
 | `PdfSurface` | `linkActivate` | 页码、`annotationId`、容器坐标，以及 `url`、`targetPageIndex`、`blocked` 中的可用项 |
 | `PdfSurface` | `annotationActivate` | 页码、`annotationId`、`kind`（`widget`/`annotation`）、容器坐标，以及 `fieldName`、`fieldValue`、`contents` |
+| `PdfSurface` | `formFieldChange`、`formFieldError` | 写入成功的 widget（含 `fieldName`、`fieldType`、`value`、完整 annotation）或失败原因 |
+| `PdfSurface` | `annotationChange`、`annotationError` | 更新后的批注与所用 `PdfAnnotationAppearancePatch`，或失败原因 |
 
 ### 4.4 `vue-ui`
 

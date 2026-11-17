@@ -81,6 +81,49 @@
             :style="regionFrame"
           />
         </div>
+        <div
+          v-if="selectionMode === 'content' && formWritesAvailable && formControlsForPage(pageIndex).length > 0"
+          class="pdf-surface__form-layer"
+          :data-form-page="pageIndex"
+        >
+          <template v-for="annotation in formControlsForPage(pageIndex)" :key="`form-${annotation.id}`">
+            <select
+              v-if="annotation.fieldType === 'combobox' || annotation.fieldType === 'listbox'"
+              class="pdf-surface__form-control pdf-surface__form-control--select"
+              :data-form-field-id="annotation.id"
+              :data-form-field-type="annotation.fieldType"
+              :aria-label="annotation.fieldName || annotation.id"
+              :disabled="annotation.readOnly"
+              :value="annotation.fieldValue ?? ''"
+              :style="displayRectStyle(pageIndex, annotation.rect)"
+              @change="onFormSelectChange($event, pageIndex, annotation)"
+              @keydown.stop
+            >
+              <option
+                v-for="option in annotation.options ?? []"
+                :key="option.label"
+                :value="option.label"
+                :selected="option.selected || option.label === annotation.fieldValue"
+              >{{ option.label }}</option>
+            </select>
+            <input
+              v-else
+              class="pdf-surface__form-control"
+              :class="`pdf-surface__form-control--${annotation.fieldType}`"
+              :data-form-field-id="annotation.id"
+              :data-form-field-type="annotation.fieldType"
+              :aria-label="annotation.fieldName || annotation.id"
+              :type="annotation.fieldType === 'text' ? 'text' : annotation.fieldType === 'radio' ? 'radio' : 'checkbox'"
+              :name="annotation.fieldName || annotation.id"
+              :checked="annotation.fieldType === 'text' ? undefined : isFormFieldChecked(annotation)"
+              :value="annotation.fieldType === 'text' ? annotation.fieldValue ?? '' : annotation.exportValue ?? annotation.fieldValue ?? 'on'"
+              :disabled="annotation.readOnly"
+              :style="displayRectStyle(pageIndex, annotation.rect)"
+              @change="annotation.fieldType === 'text' ? onFormTextChange($event, pageIndex, annotation) : onFormToggleChange($event, pageIndex, annotation)"
+              @keydown.stop
+            />
+          </template>
+        </div>
       </div>
     </div>
   </div>
@@ -110,6 +153,9 @@ import {
 } from "../pdf-url-policy"
 import {
   createPdfRenderRuntime,
+  type PdfAnnotationAppearancePatch,
+  type PdfFormFieldType,
+  type PdfFormFieldValue,
   type PdfPasswordHandler,
   type PdfRenderAnnotation,
   type PdfRenderDocument,
@@ -258,6 +304,22 @@ const emit = defineEmits<{
     fieldValue?: string
     contents?: string
   }]
+  formFieldChange: [event: {
+    pageIndex: number
+    annotationId: string
+    annotation: PdfRenderAnnotation
+    fieldName?: string
+    fieldType?: PdfFormFieldType
+    value?: string
+  }]
+  formFieldError: [event: { pageIndex: number; annotationId: string; message: string }]
+  annotationChange: [event: {
+    pageIndex: number
+    annotationId: string
+    annotation: PdfRenderAnnotation
+    patch: PdfAnnotationAppearancePatch
+  }]
+  annotationError: [event: { pageIndex: number; annotationId: string; message: string }]
   referenceResolve: [event: { referenceId: string; result: ResolveReferenceResult }]
   referenceError: [error: OfficeReferenceError]
 }>()
@@ -314,6 +376,7 @@ const searchState = ref<PdfSearchState>({
 const selectionState = ref<PdfSelectionState>({ kind: "none" })
 const selectionVisual = ref<{ ranges: readonly PageSelectionRects[] } | null>(null)
 const pageAnnotations = reactive<Record<number, readonly PdfRenderAnnotation[]>>({})
+const formWritesAvailable = ref(false)
 const annotationRequests = new Map<number, Promise<readonly PdfRenderAnnotation[]>>()
 const geometryCache = new Map<number, PdfPageGeometry>()
 const geometryRequests = new Map<number, Promise<PdfPageGeometry>>()
@@ -737,6 +800,7 @@ async function releaseDocument(): Promise<void> {
   geometryRequests.clear()
   characterTextCache.clear()
   annotationRequests.clear()
+  formWritesAvailable.value = false
   for (const key of Object.keys(pageAnnotations)) delete pageAnnotations[Number(key)]
   for (const slot of Object.values(pageSlots)) {
     if (slot.url) URL.revokeObjectURL(slot.url)
@@ -873,6 +937,7 @@ async function load(): Promise<void> {
     task.assertCurrent()
     if (openedDocument.pageCount <= 0) throw new Error(m.value.pdf.surface.noPdf)
     runtimeForDocument = selectedRuntime
+    formWritesAvailable.value = typeof selectedRuntime.setFormFieldValue === "function"
     renderDocument.value = openedDocument
     revisionCounter.value += 1
     emit("documentRevisionChange", documentRevision.value)
@@ -1034,6 +1099,153 @@ function prefetchPageAnnotations(centerPageIndex: number): void {
   const last = Math.min(doc.pageCount - 1, centerPageIndex + 1)
   for (let pageIndex = first; pageIndex <= last; pageIndex++) {
     if (!pageAnnotations[pageIndex]) void pageAnnotationsFor(pageIndex)
+  }
+}
+
+/** Widget kinds the Surface renders a native control for. */
+const FORM_CONTROL_FIELD_TYPES: ReadonlySet<PdfFormFieldType> = new Set<PdfFormFieldType>([
+  "text",
+  "checkbox",
+  "radio",
+  "combobox",
+  "listbox",
+])
+
+function formControlsForPage(pageIndex: number): readonly PdfRenderAnnotation[] {
+  return annotationHitsForPage(pageIndex).filter(
+    (annotation) => annotation.kind === "widget"
+      && annotation.fieldType !== undefined
+      && FORM_CONTROL_FIELD_TYPES.has(annotation.fieldType),
+  )
+}
+
+function isFormFieldChecked(annotation: PdfRenderAnnotation): boolean {
+  if (annotation.exportValue) return annotation.fieldValue === annotation.exportValue
+  return Boolean(annotation.fieldValue)
+}
+
+/** Replace one annotation in the page cache after a write. */
+function replacePageAnnotation(pageIndex: number, annotation: PdfRenderAnnotation): void {
+  const current = pageAnnotations[pageIndex] ?? []
+  pageAnnotations[pageIndex] = current.map((candidate) =>
+    candidate.id === annotation.id ? annotation : candidate,
+  )
+}
+
+/** Re-rasterize one page after its content changed, keeping the old bitmap visible. */
+function refreshPageBitmap(pageIndex: number): void {
+  const slot = pageSlots[pageIndex]
+  if (!slot) return
+  // The mounted bitmap stays until the replacement lands; an empty render key
+  // marks it stale so the next plan re-renders this page.
+  slot.renderKey = ""
+  scheduleVisibleRender(0)
+}
+
+function formEventValue(event: Event): string {
+  const target = event.target as { value?: unknown } | null
+  return typeof target?.value === "string" ? target.value : ""
+}
+
+function formEventChecked(event: Event): boolean {
+  const target = event.target as { checked?: unknown; value?: unknown } | null
+  if (typeof target?.checked === "boolean") return target.checked
+  return formEventValue(event) !== ""
+}
+
+async function commitFormFieldValue(
+  pageIndex: number,
+  annotation: PdfRenderAnnotation,
+  value: PdfFormFieldValue,
+): Promise<PdfRenderAnnotation | undefined> {
+  const doc = renderDocument.value
+  const rt = runtimeForDocument
+  if (!doc || !rt || typeof rt.setFormFieldValue !== "function") return undefined
+  try {
+    const updated = await rt.setFormFieldValue(doc, pageIndex, annotation.id, value)
+    if (renderDocument.value !== doc || runtimeForDocument !== rt) return undefined
+    replacePageAnnotation(pageIndex, updated)
+    refreshPageBitmap(pageIndex)
+    emit("formFieldChange", {
+      pageIndex,
+      annotationId: updated.id,
+      annotation: updated,
+      ...(updated.fieldName ? { fieldName: updated.fieldName } : {}),
+      ...(updated.fieldType ? { fieldType: updated.fieldType } : {}),
+      ...(updated.fieldValue !== undefined ? { value: updated.fieldValue } : {}),
+    })
+    return updated
+  } catch (reason) {
+    emit("formFieldError", {
+      pageIndex,
+      annotationId: annotation.id,
+      message: reason instanceof Error ? reason.message : String(reason),
+    })
+    throw reason
+  }
+}
+
+async function onFormTextChange(event: Event, pageIndex: number, annotation: PdfRenderAnnotation): Promise<void> {
+  try {
+    await commitFormFieldValue(pageIndex, annotation, formEventValue(event))
+  } catch {
+    // The failure was reported through `formFieldError`; keep the control editable.
+  }
+}
+
+async function onFormSelectChange(event: Event, pageIndex: number, annotation: PdfRenderAnnotation): Promise<void> {
+  try {
+    await commitFormFieldValue(pageIndex, annotation, formEventValue(event))
+  } catch {
+    // The failure was reported through `formFieldError`.
+  }
+}
+
+async function onFormToggleChange(event: Event, pageIndex: number, annotation: PdfRenderAnnotation): Promise<void> {
+  try {
+    await commitFormFieldValue(pageIndex, annotation, formEventChecked(event))
+  } catch {
+    // The failure was reported through `formFieldError`.
+  }
+}
+
+async function setFormFieldValue(
+  pageIndex: number,
+  annotationId: string,
+  value: PdfFormFieldValue,
+): Promise<PdfRenderAnnotation | undefined> {
+  const annotations = pageAnnotations[pageIndex] ?? await pageAnnotationsFor(pageIndex)
+  const annotation = annotations.find((candidate) => candidate.id === annotationId)
+  if (!annotation) {
+    throw new Error(`PDF annotation ${annotationId} is not loaded for page ${pageIndex + 1}.`)
+  }
+  return commitFormFieldValue(pageIndex, annotation, value)
+}
+
+async function updateAnnotationAppearance(
+  pageIndex: number,
+  annotationId: string,
+  patch: PdfAnnotationAppearancePatch,
+): Promise<PdfRenderAnnotation | undefined> {
+  const doc = renderDocument.value
+  const rt = runtimeForDocument
+  if (!doc || !rt || typeof rt.updateAnnotationAppearance !== "function") {
+    throw new Error("PDF runtime does not support annotation appearance updates.")
+  }
+  try {
+    const updated = await rt.updateAnnotationAppearance(doc, pageIndex, annotationId, patch)
+    if (renderDocument.value !== doc || runtimeForDocument !== rt) return undefined
+    replacePageAnnotation(pageIndex, updated)
+    refreshPageBitmap(pageIndex)
+    emit("annotationChange", { pageIndex, annotationId, annotation: updated, patch })
+    return updated
+  } catch (reason) {
+    emit("annotationError", {
+      pageIndex,
+      annotationId,
+      message: reason instanceof Error ? reason.message : String(reason),
+    })
+    throw reason
   }
 }
 
@@ -1914,6 +2126,9 @@ defineExpose({
   getSearchState: (): PdfSearchState => surfaceSearch.getSearchState(),
   clearSelection,
   getSelectionState: () => selectionState.value,
+  getPageAnnotations: (pageIndex: number): Promise<readonly PdfRenderAnnotation[]> => pageAnnotationsFor(pageIndex),
+  setFormFieldValue,
+  updateAnnotationAppearance,
   getDocumentRevision: (): OfficeDocumentRevision => documentRevision.value,
   hitTest,
   async describeReference(reference: OfficeObjectReference, signal?: AbortSignal) {
@@ -2033,6 +2248,24 @@ onBeforeUnmount(async () => {
 .pdf-surface__selection-hit { background: rgba(37, 99, 235, .34); }
 /* Invisible link/widget hit rectangles; the Surface hit-tests them on click. */
 .pdf-surface__annotation-hit { box-sizing: border-box; position: absolute; pointer-events: none; }
+/* Native AcroForm controls sit above the interaction layer so typing wins over text selection. */
+.pdf-surface__form-layer { inset: 0; position: absolute; z-index: 4; pointer-events: none; }
+.pdf-surface__form-control {
+  box-sizing: border-box;
+  margin: 0;
+  min-width: 0;
+  pointer-events: auto;
+  position: absolute;
+}
+.pdf-surface__form-control--text {
+  background: rgb(255 255 255 / 0.92);
+  border: 1px solid rgb(37 99 235 / 0.45);
+  border-radius: 2px;
+  color: #111827;
+  font: inherit;
+  padding: 0 2px;
+}
+.pdf-surface__form-control:disabled { opacity: 0.7; }
 .pdf-surface__page-loading,
 .pdf-surface__page-error,
 .pdf-surface__page-placeholder {

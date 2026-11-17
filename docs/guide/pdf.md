@@ -37,6 +37,6 @@ import "@arcships/vue-pdf/style.css"
 
 `PdfSurface` 也接受 `isDark`。打印时工具栏、缩略图和状态层会自动隐藏，页面按打印宽度铺满。
 
-事件包括 `document-load-success`、`document-load-error`、`active-page-change` 和 `diagnostic`。错误处理使用 `PdfLoadError.code`，不要通过错误文案判断类型。加密文档在无密码可用时返回 `ENCRYPTED`；`load-start` 诊断中的 URL 已去除查询串、片段和凭据。
+事件包括 `document-load-success`、`document-load-error`、`active-page-change`、`selectionChange` 和 `diagnostic`。当前页支持拖选文字、双击选词、`Ctrl/Cmd+C` 复制和 `Escape` 清除；`clearSelection()` 与 `getSelectionState()` 通过组件实例暴露。错误处理使用 `PdfLoadError.code`，不要通过错误文案判断类型。加密文档在无密码可用时返回 `ENCRYPTED`；`load-start` 诊断中的 URL 已去除查询串、片段和凭据。
 
 需要完全控制 Runtime 时，可以使用 `createPdfRenderRuntime()`。调用方传入的 Runtime 必须由调用方销毁。单页渲染会在进入 PDFium 前校验 `scale`、`dpr` 和旋转，并按 `maxRenderPixels`（默认 32 兆像素）拒绝超出预算的请求，避免一次渲染耗尽内存。
