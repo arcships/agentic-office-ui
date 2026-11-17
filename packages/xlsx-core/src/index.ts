@@ -4,6 +4,7 @@ export { bundledXlsxWasmUrl } from "./wasm-asset";
 
 export { safeCalculate, tryRecalculate } from "./safe-calculate";
 export type { SafeCalculateSkipReason, SafeCalculateResult, SafeCalculateOptions } from "./safe-calculate";
+export { normalizeTypedDateCells, parseIsoDateCell } from "./typed-dates";
 export { trackXlsxWorkbookLifetime } from "./workbook-lifetime";
 
 export { XlsxWorkerClient, XlsxWorkerError, createBundledXlsxWorker } from "./worker-client";
