@@ -97,6 +97,12 @@ export function trackedChangeKindLabel(kind: DocxTrackedChangeKind): string {
       return "Formatted";
     case "paragraph-format-change":
       return "Paragraph formatting";
+    case "table-format-change":
+      return "Table formatting";
+    case "row-format-change":
+      return "Row formatting";
+    case "cell-format-change":
+      return "Cell formatting";
     default:
       return kind;
   }
@@ -134,6 +140,9 @@ export function trackedChangeAccentColor(
       return palette.moveTo;
     case "format-change":
     case "paragraph-format-change":
+    case "table-format-change":
+    case "row-format-change":
+    case "cell-format-change":
       return palette.format;
     default:
       return palette.format;

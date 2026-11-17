@@ -29,6 +29,7 @@ import {
 } from "../../engine/comment-anchors";
 import type {
   DocxComment,
+  DocxInlineTrackedChangeKind,
   DocxTextRangeLocation,
   DocxTrackedChange,
   DocxTrackedChangeKind,
@@ -36,25 +37,31 @@ import type {
 } from "./editor-types";
 import {
   extractBalancedTagRanges,
+  extractTopLevelTagRanges,
   decodeXmlText,
   normalizeTrackedChangeSnippet,
   parseRunStyleFromRunXml,
   parseTrackedRunTokens,
   stripTextBoxContentFromRunXml,
   trackedChangeKindFromTagName,
-  type RevisionTagRange,
-  type XmlBalancedTagRange
+  type RevisionTagRange
 } from "./xml-parsing";
 import { xmlAttribute } from "./ooxml-helpers";
 import { setCacheEntry } from "./cache-utils";
-import {
-  firstTableCellAnchorLocation,
-  paragraphLocationKey
-} from "./text-mutation";
+import { paragraphLocationKey } from "./text-mutation";
 import {
   paragraphText,
   tableCellParagraphEntries
 } from "./paragraph-inspect";
+import {
+  collectParagraphVisibleUnits,
+  mapVisibleUnitsToParagraphChildren,
+  paragraphVisibleCursorBefore
+} from "./tracked-changes-inline";
+import {
+  resolveTableTrackedMarkup,
+  tableRevisionAnchorLocation
+} from "./tracked-changes-table";
 
 // ---------------------------------------------------------------------------
 // Paragraph tracked/comment markup types (upstream 382-409)
@@ -82,6 +89,8 @@ export interface ParagraphTrackedMarkup {
     number,
     ParagraphTrackedDeletionSegment[]
   >;
+  /** Inserted/deleted paragraph mark (no visible child of its own). */
+  paragraphMarkChange?: ParagraphTrackedInlineChange;
   changes: ParagraphTrackedInlineChange[];
 }
 
@@ -182,46 +191,18 @@ function summarizeParagraphFormattingChange(changeXml: string): string {
   );
 }
 
-function summarizeTableFormattingChange(
-  scope: "table" | "row" | "cell",
-  changeXml: string
-): string {
-  const features: string[] = [];
-  if (/<w:tblW\b|<w:tcW\b|<w:gridSpan\b/i.test(changeXml)) {
-    features.push("width");
+/**
+ * Deleted run text that has no model child (`w:delText`) — the renderer needs
+ * a synthetic struck-through segment for these.
+ */
+function deletedRunText(runXml: string): string | undefined {
+  const texts: string[] = [];
+  for (const match of runXml.matchAll(
+    /<w:delText\b[^>]*>([\s\S]*?)<\/w:delText>/gi
+  )) {
+    texts.push(decodeXmlText(match[1] ?? ""));
   }
-  if (/<w:tblLayout\b/i.test(changeXml)) {
-    features.push("layout");
-  }
-  if (/<w:tblInd\b|<w:ind\b/i.test(changeXml)) {
-    features.push("indent");
-  }
-  if (/<w:tblCellMar\b|<w:tcMar\b/i.test(changeXml)) {
-    features.push("margins");
-  }
-  if (/<w:(?:tblBorders|tcBorders|trBorders|pBdr)\b/i.test(changeXml)) {
-    features.push("borders");
-  }
-  if (/<w:trHeight\b/i.test(changeXml)) {
-    features.push("row height");
-  }
-  if (/<w:vAlign\b/i.test(changeXml)) {
-    features.push("vertical align");
-  }
-  if (/<w:jc\b/i.test(changeXml)) {
-    features.push("alignment");
-  }
-  if (/<w:shd\b/i.test(changeXml)) {
-    features.push("shading");
-  }
-
-  const prefix =
-    scope === "table"
-      ? "Table formatting"
-      : scope === "row"
-      ? "Row formatting"
-      : "Cell formatting";
-  return summarizeChangeFeatures(prefix, features, prefix);
+  return normalizeTrackedChangeSnippet(texts.join(""));
 }
 
 // ---------------------------------------------------------------------------
@@ -264,6 +245,11 @@ export function resolveParagraphTrackedMarkup(
     });
   }
 
+  // Map XML units to the model children the renderer actually walks. This is
+  // the single source of truth for the visible-child cursor used below.
+  const visibleUnits = collectParagraphVisibleUnits(sourceXml);
+  mapVisibleUnitsToParagraphChildren(visibleUnits, paragraph.children);
+
   const inlineChangeByVisibleChildIndex: Array<
     ParagraphTrackedInlineChange | undefined
   > = [];
@@ -274,7 +260,6 @@ export function resolveParagraphTrackedMarkup(
   const changes: ParagraphTrackedInlineChange[] = [];
   const changeByKey = new Map<string, ParagraphTrackedInlineChange>();
   let anonymousChangeCounter = 0;
-  let visibleChildIndex = 0;
 
   const getOrCreateChange = (
     kind: DocxTrackedChangeKind,
@@ -330,6 +315,61 @@ export function resolveParagraphTrackedMarkup(
     return next;
   };
 
+  const innermostRevisionAt = (
+    offset: number
+  ): RevisionTagRange | undefined =>
+    revisionRanges
+      .filter((range) => offset >= range.start && offset < range.end)
+      .sort(
+        (left, right) => left.end - left.start - (right.end - right.start)
+      )[0];
+
+  // Resolve revision snippets once, then annotate the mapped model children.
+  const snippetByRevision = new Map<RevisionTagRange, string | undefined>();
+  revisionRanges.forEach((revisionRange) => {
+    const revisionXml = sourceXml.slice(revisionRange.start, revisionRange.end);
+    const includeDeletedText =
+      revisionRange.kind === "deletion" || revisionRange.kind === "move-from";
+    const revisionTokens = parseTrackedRunTokens(
+      stripTextBoxContentFromRunXml(revisionXml),
+      includeDeletedText
+    );
+    const revisionText = normalizeTrackedChangeSnippet(
+      revisionTokens.map((token) => token.text).join("")
+    );
+    const hasImage = /<w:(?:drawing|pict)\b/i.test(revisionXml);
+    snippetByRevision.set(
+      revisionRange,
+      revisionText ?? (hasImage ? "[image]" : undefined)
+    );
+  });
+
+  revisionRanges.forEach((revisionRange) => {
+    const revisionSnippet = snippetByRevision.get(revisionRange);
+    if (!revisionSnippet) {
+      return;
+    }
+    const change = getOrCreateChange(
+      revisionRange.kind,
+      revisionRange.revisionId,
+      revisionRange.author,
+      revisionRange.date,
+      revisionSnippet
+    );
+    for (const unit of visibleUnits) {
+      if (unit.visibleChildIndex === undefined) {
+        continue;
+      }
+      if (unit.start < revisionRange.start || unit.start >= revisionRange.end) {
+        continue;
+      }
+      if (innermostRevisionAt(unit.start) !== revisionRange) {
+        continue;
+      }
+      inlineChangeByVisibleChildIndex[unit.visibleChildIndex] = change;
+    }
+  });
+
   const runPattern = /<w:r\b[\s\S]*?<\/w:r>/gi;
   for (const runMatch of sourceXml.matchAll(runPattern)) {
     const runXml = runMatch[0] ?? "";
@@ -338,15 +378,7 @@ export function resolveParagraphTrackedMarkup(
     }
 
     const runStart = runMatch.index ?? 0;
-    const runEnd = runStart + runXml.length;
-    const enclosingRevision = revisionRanges
-      .filter(
-        (revisionRange) =>
-          runStart >= revisionRange.start && runEnd <= revisionRange.end
-      )
-      .sort(
-        (left, right) => left.end - left.start - (right.end - right.start)
-      )[0];
+    const enclosingRevision = innermostRevisionAt(runStart);
 
     const revisionKind = enclosingRevision?.kind;
     const revisionId = enclosingRevision?.revisionId;
@@ -356,22 +388,15 @@ export function resolveParagraphTrackedMarkup(
       revisionKind === "deletion" || revisionKind === "move-from";
     const contentRunXml = stripTextBoxContentFromRunXml(runXml);
     const trackedRunStyle = parseRunStyleFromRunXml(contentRunXml);
-    const visibleTokens = parseTrackedRunTokens(contentRunXml, false);
-    const deletedTokens = parseTrackedRunTokens(contentRunXml, true);
-    const hasImage = /<w:(?:drawing|pict)\b/i.test(runXml);
-    const visibleChildCount =
-      visibleTokens.filter((token) => token.text.length > 0 || token.isNote)
-        .length + (hasImage ? 1 : 0);
-    const visibleText = normalizeTrackedChangeSnippet(
-      visibleTokens.map((token) => token.text).join("")
-    );
-    const deletedText = normalizeTrackedChangeSnippet(
-      deletedTokens.map((token) => token.text).join("")
-    );
 
     if (isDeletionLike) {
-      const deletionSnippet = deletedText ?? (hasImage ? "[image]" : undefined);
-      if (!deletionSnippet) {
+      // Deleted text with no model child (w:delText) is rendered as a synthetic
+      // struck-through segment at the mapped cursor. Deleted content that does
+      // have a model child (w:t) is styled inline via the revision pass above.
+      const deletedText = deletedRunText(
+        stripTextBoxContentFromRunXml(runXml)
+      );
+      if (!deletedText) {
         continue;
       }
       const change = getOrCreateChange(
@@ -379,18 +404,16 @@ export function resolveParagraphTrackedMarkup(
         revisionId,
         revisionAuthor,
         revisionDate,
-        deletionSnippet
+        deletedText
       );
-      if (deletedText) {
-        const segments =
-          deletedSegmentsByVisibleChildIndex.get(visibleChildIndex) ?? [];
-        segments.push({
-          text: deletedText,
-          change,
-          style: trackedRunStyle,
-        });
-        deletedSegmentsByVisibleChildIndex.set(visibleChildIndex, segments);
-      }
+      const cursor = paragraphVisibleCursorBefore(visibleUnits, runStart);
+      const segments = deletedSegmentsByVisibleChildIndex.get(cursor) ?? [];
+      segments.push({
+        text: deletedText,
+        change,
+        style: trackedRunStyle,
+      });
+      deletedSegmentsByVisibleChildIndex.set(cursor, segments);
       continue;
     }
 
@@ -415,28 +438,6 @@ export function resolveParagraphTrackedMarkup(
         formatSnippet
       );
     });
-
-    if (revisionKind === "insertion" || revisionKind === "move-to") {
-      const insertionSnippet =
-        visibleText ?? (hasImage ? "[image]" : undefined);
-      if (!insertionSnippet) {
-        visibleChildIndex += visibleChildCount;
-        continue;
-      }
-      const inlineChange = getOrCreateChange(
-        revisionKind,
-        revisionId,
-        revisionAuthor,
-        revisionDate,
-        insertionSnippet
-      );
-      for (let index = 0; index < visibleChildCount; index += 1) {
-        inlineChangeByVisibleChildIndex[visibleChildIndex + index] =
-          inlineChange;
-      }
-    }
-
-    visibleChildIndex += visibleChildCount;
   }
 
   const pPrChangeRanges = extractBalancedTagRanges(sourceXml, "w:pPrChange");
@@ -455,32 +456,53 @@ export function resolveParagraphTrackedMarkup(
     );
   });
 
-  // Some DOCX revisions wrap non-run content. Ensure every revision range is
-  // represented even if the run-based pass above does not emit it.
-  revisionRanges.forEach((revisionRange) => {
-    const revisionXml = sourceXml.slice(revisionRange.start, revisionRange.end);
-    const includeDeletedText =
-      revisionRange.kind === "deletion" || revisionRange.kind === "move-from";
-    const revisionTokens = parseTrackedRunTokens(
-      stripTextBoxContentFromRunXml(revisionXml),
-      includeDeletedText
+  // A paragraph mark revision lives in pPr/rPr and has no w:t/w:delText of its
+  // own, so it never reaches the run pass above.
+  let paragraphMarkChange: ParagraphTrackedInlineChange | undefined;
+  for (const pPrRange of extractTopLevelTagRanges(sourceXml, "w:pPr")) {
+    const pPrXml = sourceXml.slice(pPrRange.start, pPrRange.end);
+    const pPrChangeInnerRanges = extractBalancedTagRanges(
+      pPrXml,
+      "w:pPrChange"
     );
-    const revisionText = normalizeTrackedChangeSnippet(
-      revisionTokens.map((token) => token.text).join("")
-    );
-    const hasImage = /<w:(?:drawing|pict)\b/i.test(revisionXml);
-    const revisionSnippet = revisionText ?? (hasImage ? "[image]" : undefined);
-    if (!revisionSnippet) {
-      return;
+    for (const rPrRange of extractTopLevelTagRanges(pPrXml, "w:rPr")) {
+      if (
+        pPrChangeInnerRanges.some(
+          (changeRange) =>
+            rPrRange.start >= changeRange.start &&
+            rPrRange.end <= changeRange.end
+        )
+      ) {
+        continue;
+      }
+      const rPrXml = pPrXml.slice(rPrRange.start, rPrRange.end);
+      const markMatch = rPrXml.match(/<w:(ins|del)\b[^>]*\/?>/i);
+      if (!markMatch) {
+        continue;
+      }
+      const markTag = markMatch[0] ?? "";
+      const kind: DocxInlineTrackedChangeKind =
+        (markMatch[1] ?? "").toLowerCase() === "ins"
+          ? "insertion"
+          : "deletion";
+      paragraphMarkChange = getOrCreateChange(
+        kind,
+        xmlAttribute(markTag, "w:id"),
+        decodeXmlText(xmlAttribute(markTag, "w:author") ?? ""),
+        xmlAttribute(markTag, "w:date"),
+        "Paragraph mark"
+      );
     }
-    getOrCreateChange(
-      revisionRange.kind,
-      revisionRange.revisionId,
-      revisionRange.author,
-      revisionRange.date,
-      revisionSnippet
+  }
+  if (!paragraphMarkChange && paragraph.paragraphMarkDeleted === true) {
+    paragraphMarkChange = getOrCreateChange(
+      "deletion",
+      undefined,
+      undefined,
+      undefined,
+      "Paragraph mark"
     );
-  });
+  }
 
   const hasInlineChanges = inlineChangeByVisibleChildIndex.some(Boolean);
   const hasDeletedSegments = deletedSegmentsByVisibleChildIndex.size > 0;
@@ -492,6 +514,7 @@ export function resolveParagraphTrackedMarkup(
   const resolved: ParagraphTrackedMarkup = {
     inlineChangeByVisibleChildIndex,
     deletedSegmentsByVisibleChildIndex,
+    paragraphMarkChange,
     changes,
   };
   setCacheEntry(paragraphTrackedMarkupBySourceXml, sourceXml, resolved);
@@ -559,36 +582,28 @@ export function resolveParagraphCommentMarkup(
   }
 
   const commentIdsByVisibleChildIndex: Array<number[] | undefined> = [];
-  let visibleChildIndex = 0;
-  const runPattern = /<w:r\b[\s\S]*?<\/w:r>/gi;
-  for (const runMatch of sourceXml.matchAll(runPattern)) {
-    const runXml = runMatch[0] ?? "";
-    if (!runXml) {
-      continue;
+  const visibleUnits = collectParagraphVisibleUnits(sourceXml);
+  mapVisibleUnitsToParagraphChildren(visibleUnits, paragraph.children);
+  visibleUnits.forEach((unit) => {
+    if (unit.visibleChildIndex === undefined) {
+      return;
     }
-
-    const runStart = runMatch.index ?? 0;
-    const contentRunXml = stripTextBoxContentFromRunXml(runXml);
-    const visibleTokens = parseTrackedRunTokens(contentRunXml, false);
-    const hasImage = /<w:(?:drawing|pict)\b/i.test(runXml);
-    const visibleChildCount =
-      visibleTokens.filter((token) => token.text.length > 0 || token.isNote)
-        .length + (hasImage ? 1 : 0);
-    if (visibleChildCount === 0) {
-      continue;
-    }
-
     const activeCommentIds = ranges
-      .filter((range) => runStart >= range.start && runStart < range.end)
+      .filter((range) => unit.start >= range.start && unit.start < range.end)
       .map((range) => range.commentId);
-    if (activeCommentIds.length > 0) {
-      for (let index = 0; index < visibleChildCount; index += 1) {
-        commentIdsByVisibleChildIndex[visibleChildIndex + index] =
-          activeCommentIds;
+    if (activeCommentIds.length === 0) {
+      return;
+    }
+    const existing = commentIdsByVisibleChildIndex[unit.visibleChildIndex] ?? [];
+    for (const commentId of activeCommentIds) {
+      if (!existing.includes(commentId)) {
+        existing.push(commentId);
       }
     }
-    visibleChildIndex += visibleChildCount;
-  }
+    commentIdsByVisibleChildIndex[unit.visibleChildIndex] = existing.sort(
+      (left, right) => left - right
+    );
+  });
 
   if (commentIdsByVisibleChildIndex.length === 0) {
     setCacheEntry(paragraphCommentMarkupBySourceXml, sourceXml, null);
@@ -615,13 +630,8 @@ function collectTablePropertyTrackedChanges(
   text?: string;
   location: DocxTextRangeLocation;
 }> {
-  const sourceXml = table.sourceXml ?? "";
-  if (!sourceXml) {
-    return [];
-  }
-
-  const anchorLocation = firstTableCellAnchorLocation(table, tableIndex);
-  if (!anchorLocation) {
+  const markup = resolveTableTrackedMarkup(table);
+  if (!markup) {
     return [];
   }
 
@@ -633,68 +643,27 @@ function collectTablePropertyTrackedChanges(
     text?: string;
     location: DocxTextRangeLocation;
   }> = [];
-  const entryByKey = new Map<string, (typeof entries)[number]>();
 
-  const append = (
-    scope: "table" | "row" | "cell",
-    changeTag: XmlBalancedTagRange
-  ): void => {
-    const kind: DocxTrackedChangeKind = "paragraph-format-change";
-    const author =
-      decodeXmlText(xmlAttribute(changeTag.openTag, "w:author") ?? "") ||
-      undefined;
-    const date = xmlAttribute(changeTag.openTag, "w:date")?.trim() || undefined;
-    const revisionId =
-      xmlAttribute(changeTag.openTag, "w:id")?.trim() || undefined;
-    const changeXml = sourceXml.slice(changeTag.start, changeTag.end);
-    const text = summarizeTableFormattingChange(scope, changeXml);
-    const key = revisionId
-      ? `${scope}:${kind}:id:${revisionId}`
-      : `${scope}:${kind}:${author ?? ""}:${date ?? ""}:${text}`;
-    const existing = entryByKey.get(key);
-    if (existing) {
-      if (!existing.text && text) {
-        existing.text = text;
-      }
-      if (!existing.author && author) {
-        existing.author = author;
-      }
-      if (!existing.date && date) {
-        existing.date = date;
-      }
+  markup.revisions.forEach((revision) => {
+    const location = tableRevisionAnchorLocation(table, tableIndex, revision);
+    if (!location) {
       return;
     }
-
-    const stableId = revisionId
-      ? `${scope}-${kind}-${revisionId}`
-      : `${scope}-${kind}-${entryByKey.size}`;
-    const next = {
-      stableId,
-      kind,
-      author,
-      date,
-      text,
+    entries.push({
+      stableId: revision.stableId,
+      kind: revision.kind,
+      author: revision.author,
+      date: revision.date,
+      text: revision.text,
       location: {
-        kind: "table-cell" as const,
+        kind: "table-cell",
         tableIndex,
-        rowIndex: anchorLocation.rowIndex,
-        cellIndex: anchorLocation.cellIndex,
-        paragraphIndex: anchorLocation.paragraphIndex,
+        rowIndex: location.rowIndex,
+        cellIndex: location.cellIndex,
+        paragraphIndex: location.paragraphIndex,
       },
-    };
-    entries.push(next);
-    entryByKey.set(key, next);
-  };
-
-  extractBalancedTagRanges(sourceXml, "w:tblPrChange").forEach((range) =>
-    append("table", range)
-  );
-  extractBalancedTagRanges(sourceXml, "w:trPrChange").forEach((range) =>
-    append("row", range)
-  );
-  extractBalancedTagRanges(sourceXml, "w:tcPrChange").forEach((range) =>
-    append("cell", range)
-  );
+    });
+  });
 
   return entries;
 }

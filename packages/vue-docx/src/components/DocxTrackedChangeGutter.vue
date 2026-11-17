@@ -18,6 +18,8 @@
       :data-docx-gutter-card-index="entry.annotation.ordinal"
       :data-docx-gutter-anchor-y="entry.anchorY"
       :data-docx-gutter-card-top="entry.top"
+      :data-docx-tracked-change-kind="entry.annotation.trackedChange?.kind"
+      :data-docx-gutter-balloon="gutterBalloonFlag(entry)"
       role="button"
       tabindex="0"
       @click="emit('activate', entry.annotation.id)"
@@ -51,6 +53,7 @@ import {
   commentAccentColor,
   trackedChangeAccentColor,
   trackedChangeKindLabel,
+  trackedChangeUsesGutterBalloon,
   type DocxDocumentTheme,
   type PositionedGutterAnnotation,
 } from "@arcships/docx-core"
@@ -124,8 +127,15 @@ function cardClasses(entry: PositionedGutterAnnotation): string[] {
       case "deletion":
         classes.push("docx-gutter-card--deletion")
         break
+      case "move-from":
+      case "move-to":
+        classes.push("docx-gutter-card--move")
+        break
       case "format-change":
       case "paragraph-format-change":
+      case "table-format-change":
+      case "row-format-change":
+      case "cell-format-change":
         classes.push("docx-gutter-card--format")
         break
       default:
@@ -147,6 +157,15 @@ function cardTypeLabel(entry: PositionedGutterAnnotation): string {
 
   const change = entry.annotation.trackedChange
   return change ? trackedChangeKindLabel(change.kind) : "Annotation"
+}
+
+function gutterBalloonFlag(entry: PositionedGutterAnnotation): string | undefined {
+  const change = entry.annotation.trackedChange
+  return change
+    ? trackedChangeUsesGutterBalloon(change)
+      ? "true"
+      : "false"
+    : undefined
 }
 
 function authorOf(entry: PositionedGutterAnnotation): string {
@@ -273,6 +292,10 @@ watch(
 .docx-gutter-card--format {
   background: #eff6ff;
   border-left-color: #3b82f6;
+}
+.docx-gutter-card--move {
+  background: #f0fdf4;
+  border-left-color: #70ad47;
 }
 .docx-gutter-card--comment {
   background: #fffbeb;

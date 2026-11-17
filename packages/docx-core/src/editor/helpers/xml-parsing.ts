@@ -8,7 +8,7 @@ import type {
   TextRunNode
 } from "../../engine/types";
 import { xmlAttribute } from "./ooxml-helpers";
-import type { DocxTrackedChangeKind } from "./editor-types";
+import type { DocxInlineTrackedChangeKind } from "./editor-types";
 
 export function decodeXmlText(text: string): string {
   if (!text) {
@@ -96,11 +96,31 @@ export function extractBalancedTagRanges(
   return ranges;
 }
 
+/**
+ * Returns only balanced ranges that are not nested inside another range of the
+ * same tag. Tables, rows and paragraphs can contain nested structures of the
+ * same name; callers that index top-level containers (rendered rows, cells or
+ * paragraph properties) need the outer ranges only.
+ */
+export function extractTopLevelTagRanges(
+  xml: string,
+  tagName: string
+): XmlBalancedTagRange[] {
+  const ranges = extractBalancedTagRanges(xml, tagName);
+  return ranges.filter(
+    (range) =>
+      !ranges.some(
+        (other) =>
+          other !== range &&
+          other.start <= range.start &&
+          other.end >= range.end &&
+          (other.start < range.start || other.end > range.end)
+      )
+  );
+}
+
 export interface RevisionTagRange extends XmlBalancedTagRange {
-  kind: Exclude<
-    DocxTrackedChangeKind,
-    "format-change" | "paragraph-format-change"
-  >;
+  kind: DocxInlineTrackedChangeKind;
   revisionId?: string;
   author?: string;
   date?: string;
@@ -108,9 +128,7 @@ export interface RevisionTagRange extends XmlBalancedTagRange {
 
 export function trackedChangeKindFromTagName(
   tagName: string
-):
-  | Exclude<DocxTrackedChangeKind, "format-change" | "paragraph-format-change">
-  | undefined {
+): DocxInlineTrackedChangeKind | undefined {
   const normalized = tagName.trim().toLowerCase();
   switch (normalized) {
     case "w:ins":
