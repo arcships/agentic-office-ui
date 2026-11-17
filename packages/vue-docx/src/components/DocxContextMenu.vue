@@ -8,13 +8,22 @@
     />
     <div
       v-if="visible"
+      ref="menuRef"
       class="docx-context-menu"
+      role="menu"
+      aria-orientation="vertical"
+      aria-label="Editor context menu"
+      tabindex="-1"
       :style="menuStyle"
       @contextmenu.prevent
+      @keydown="onMenuKeydown"
     >
       <!-- Clipboard actions -->
       <button
         class="docx-context-menu-item"
+        type="button"
+        role="menuitem"
+        tabindex="-1"
         @click="onAction('cut')"
       >
         <span class="docx-context-menu-icon">✂</span>
@@ -23,6 +32,9 @@
       </button>
       <button
         class="docx-context-menu-item"
+        type="button"
+        role="menuitem"
+        tabindex="-1"
         @click="onAction('copy')"
       >
         <span class="docx-context-menu-icon">📋</span>
@@ -31,6 +43,9 @@
       </button>
       <button
         class="docx-context-menu-item"
+        type="button"
+        role="menuitem"
+        tabindex="-1"
         @click="onAction('paste')"
       >
         <span class="docx-context-menu-icon">📄</span>
@@ -38,11 +53,14 @@
         <span class="docx-context-menu-shortcut">⌘V</span>
       </button>
 
-      <div class="docx-context-menu-separator" />
+      <div class="docx-context-menu-separator" role="separator" />
 
       <!-- Text formatting -->
       <button
         class="docx-context-menu-item"
+        type="button"
+        role="menuitem"
+        tabindex="-1"
         :class="{ 'docx-context-menu-item--active': selectedRunStyle?.bold }"
         @click="onAction('bold')"
       >
@@ -52,6 +70,9 @@
       </button>
       <button
         class="docx-context-menu-item"
+        type="button"
+        role="menuitem"
+        tabindex="-1"
         :class="{ 'docx-context-menu-item--active': selectedRunStyle?.italic }"
         @click="onAction('italic')"
       >
@@ -61,6 +82,9 @@
       </button>
       <button
         class="docx-context-menu-item"
+        type="button"
+        role="menuitem"
+        tabindex="-1"
         :class="{ 'docx-context-menu-item--active': selectedRunStyle?.underline }"
         @click="onAction('underline')"
       >
@@ -70,6 +94,9 @@
       </button>
       <button
         class="docx-context-menu-item"
+        type="button"
+        role="menuitem"
+        tabindex="-1"
         :class="{ 'docx-context-menu-item--active': selectedRunStyle?.strike }"
         @click="onAction('strike')"
       >
@@ -77,21 +104,29 @@
         <span>Strikethrough</span>
       </button>
 
-      <div class="docx-context-menu-separator" />
+      <div class="docx-context-menu-separator" role="separator" />
 
       <!-- Highlight colors -->
-      <div class="docx-context-menu-section-title">Highlight</div>
+      <div class="docx-context-menu-section-title" role="presentation">Highlight</div>
       <div class="docx-context-menu-color-row">
         <button
           v-for="color of highlightColors"
           :key="color.value"
           class="docx-context-menu-color-btn"
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          :aria-label="color.label"
           :style="{ backgroundColor: color.css }"
           :title="color.label"
           @click="onAction('highlight', color.value)"
         />
         <button
           class="docx-context-menu-color-btn docx-context-menu-color-btn--none"
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          aria-label="No highlight"
           title="No highlight"
           @click="onAction('highlight', undefined)"
         >
@@ -100,52 +135,56 @@
       </div>
 
       <!-- Text colors -->
-      <div class="docx-context-menu-section-title">Text Color</div>
+      <div class="docx-context-menu-section-title" role="presentation">Text Color</div>
       <div class="docx-context-menu-color-row">
         <button
           v-for="color of textColors"
           :key="color.value"
           class="docx-context-menu-color-btn"
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          :aria-label="color.label"
           :style="{ backgroundColor: color.css }"
           :title="color.label"
           @click="onAction('textColor', color.value)"
         />
       </div>
 
-      <div class="docx-context-menu-separator" />
+      <div class="docx-context-menu-separator" role="separator" />
 
       <!-- Paragraph actions -->
-      <button class="docx-context-menu-item" @click="onAction('splitParagraph')">
+      <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('splitParagraph')">
         <span class="docx-context-menu-icon">↵</span>
         <span>Split Paragraph</span>
       </button>
-      <button class="docx-context-menu-item" @click="onAction('deleteParagraph')">
+      <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteParagraph')">
         <span class="docx-context-menu-icon docx-context-menu-icon--danger">🗑</span>
         <span class="docx-context-menu-item--danger">Delete Paragraph</span>
       </button>
 
       <template v-if="tableContext">
-        <div class="docx-context-menu-separator" />
-        <div class="docx-context-menu-section-title">Table</div>
-        <button class="docx-context-menu-item" @click="onAction('insertRowAbove')">
+        <div class="docx-context-menu-separator" role="separator" />
+        <div class="docx-context-menu-section-title" role="presentation">Table</div>
+        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertRowAbove')">
           Insert Row Above
         </button>
-        <button class="docx-context-menu-item" @click="onAction('insertRowBelow')">
+        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertRowBelow')">
           Insert Row Below
         </button>
-        <button class="docx-context-menu-item" @click="onAction('insertColumnLeft')">
+        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertColumnLeft')">
           Insert Column Left
         </button>
-        <button class="docx-context-menu-item" @click="onAction('insertColumnRight')">
+        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertColumnRight')">
           Insert Column Right
         </button>
-        <button class="docx-context-menu-item" @click="onAction('deleteRow')">
+        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteRow')">
           <span class="docx-context-menu-item--danger">Delete Row</span>
         </button>
-        <button class="docx-context-menu-item" @click="onAction('deleteColumn')">
+        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteColumn')">
           <span class="docx-context-menu-item--danger">Delete Column</span>
         </button>
-        <button class="docx-context-menu-item" @click="onAction('deleteTable')">
+        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteTable')">
           <span class="docx-context-menu-item--danger">Delete Table</span>
         </button>
       </template>
@@ -154,7 +193,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from "vue"
+import { ref, computed, nextTick, watch } from "vue"
 import type {
   DocxEditorController,
   DocxContextMenuContext,
@@ -179,6 +218,33 @@ const emit = defineEmits<{
   close: []
 }>()
 
+// ── Constants ──────────────────────────────────────────────────────
+const MENU_FALLBACK_WIDTH = 240
+const MENU_FALLBACK_HEIGHT = 420
+const MENU_VIEWPORT_GAP = 8
+
+// Lightweight element contract: satisfied by real DOM nodes and by the
+// non-DOM node objects used by the component test renderer.
+interface MenuNode {
+  children?: ArrayLike<MenuNode>
+  props?: Record<string, unknown>
+  getAttribute?: (name: string) => string | null
+  hasAttribute?: (name: string) => boolean
+  setAttribute?: (name: string, value: string) => void
+  focus?: (options?: { preventScroll?: boolean }) => void
+}
+
+// ── State ──────────────────────────────────────────────────────────
+const menuRef = ref<HTMLElement | undefined>()
+const menuWidth = ref(MENU_FALLBACK_WIDTH)
+const menuHeight = ref(MENU_FALLBACK_HEIGHT)
+const activeItemIndex = ref(-1)
+
+// ── Anchor ─────────────────────────────────────────────────────────
+// `x`/`y` are the editor's pointer wiring; `context.position` carries the same
+// point for consumers that open the menu themselves.
+const anchorX = computed(() => props.x ?? props.context?.position?.x ?? 0)
+const anchorY = computed(() => props.y ?? props.context?.position?.y ?? 0)
 // ── Computed ───────────────────────────────────────────────────────
 const visible = computed(() => !!props.context)
 
@@ -189,16 +255,19 @@ const tableContext = computed<DocxTableContextMenuContext | undefined>(() => (
 const selectedRunStyle = computed(() => props.controller.selectedRunStyle)
 
 const menuStyle = computed(() => {
-  // Adjust position to stay within viewport
-  let posX = props.x ?? 0
-  let posY = props.y ?? 0
+  // Clamp against the measured menu box so tall menus (the table section alone
+  // can exceed 20 items) never overflow the viewport.
+  let posX = anchorX.value
+  let posY = anchorY.value
   if (typeof window !== "undefined") {
     const w = window.innerWidth
     const h = window.innerHeight
-    const menuW = 240
-    const menuH = 420
-    if (posX + menuW > w) posX = Math.max(0, w - menuW - 8)
-    if (posY + menuH > h) posY = Math.max(0, h - menuH - 8)
+    if (posX + menuWidth.value + MENU_VIEWPORT_GAP > w) {
+      posX = Math.max(0, w - menuWidth.value - MENU_VIEWPORT_GAP)
+    }
+    if (posY + menuHeight.value + MENU_VIEWPORT_GAP > h) {
+      posY = Math.max(0, h - menuHeight.value - MENU_VIEWPORT_GAP)
+    }
   }
   return {
     position: "fixed" as const,
@@ -375,24 +444,84 @@ function close(): void {
   emit("close")
 }
 
-// Keyboard shortcut: Escape to close
-function onKeydown(event: KeyboardEvent): void {
-  if (event.key === "Escape" && visible.value) {
-    close()
+// ── Position + focus from context ──────────────────────────────────
+function collectMenuItems(): MenuNode[] {
+  const items: MenuNode[] = []
+  const visit = (node: MenuNode | undefined): void => {
+    if (!node?.children) return
+    for (const child of Array.from(node.children)) {
+      const role = child.getAttribute?.("role") ?? child.props?.role
+      const disabled =
+        child.hasAttribute?.("disabled") ?? Boolean(child.props?.disabled)
+      if (role === "menuitem" && !disabled) items.push(child)
+      visit(child)
+    }
   }
+  visit(menuRef.value as MenuNode | undefined)
+  return items
 }
 
-onMounted(() => {
-  if (typeof window !== "undefined") {
-    window.addEventListener("keydown", onKeydown)
-  }
-})
+function focusMenuItem(index: number): void {
+  const items = collectMenuItems()
+  if (items.length === 0) return
+  const nextIndex = ((index % items.length) + items.length) % items.length
+  activeItemIndex.value = nextIndex
+  items.forEach((item, itemIndex) => {
+    item.setAttribute?.("tabindex", itemIndex === nextIndex ? "0" : "-1")
+    if (itemIndex === nextIndex) item.focus?.({ preventScroll: true })
+  })
+}
 
-onUnmounted(() => {
-  if (typeof window !== "undefined") {
-    window.removeEventListener("keydown", onKeydown)
+function measureMenu(): void {
+  const menu = menuRef.value
+  if (!menu) return
+  if (menu.offsetWidth > 0) menuWidth.value = menu.offsetWidth
+  if (menu.offsetHeight > 0) menuHeight.value = menu.offsetHeight
+}
+
+watch(
+  () => props.context,
+  async (context) => {
+    if (!context) {
+      activeItemIndex.value = -1
+      return
+    }
+    menuWidth.value = MENU_FALLBACK_WIDTH
+    menuHeight.value = MENU_FALLBACK_HEIGHT
+    await nextTick()
+    measureMenu()
+    focusMenuItem(0)
+  },
+  { immediate: true }
+)
+
+// ── Keyboard ───────────────────────────────────────────────────────
+function onMenuKeydown(event: KeyboardEvent): void {
+  if (!visible.value) return
+  switch (event.key) {
+    case "Escape":
+      event.preventDefault()
+      event.stopPropagation()
+      close()
+      break
+    case "ArrowDown":
+      event.preventDefault()
+      focusMenuItem(activeItemIndex.value + 1)
+      break
+    case "ArrowUp":
+      event.preventDefault()
+      focusMenuItem(activeItemIndex.value < 0 ? -1 : activeItemIndex.value - 1)
+      break
+    case "Home":
+      event.preventDefault()
+      focusMenuItem(0)
+      break
+    case "End":
+      event.preventDefault()
+      focusMenuItem(-1)
+      break
   }
-})
+}
 </script>
 
 <style scoped>
@@ -403,6 +532,9 @@ onUnmounted(() => {
 }
 .docx-context-menu {
   min-width: 200px;
+  max-height: 100vh;
+  overflow-y: auto;
+  outline: none;
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
@@ -427,6 +559,11 @@ onUnmounted(() => {
 }
 .docx-context-menu-item:hover {
   background: #f3f4f6;
+}
+.docx-context-menu-item:focus-visible,
+.docx-context-menu-color-btn:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 1px;
 }
 .docx-context-menu-item--active {
   background: #eff6ff;

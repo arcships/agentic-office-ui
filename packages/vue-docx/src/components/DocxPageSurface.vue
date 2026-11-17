@@ -187,7 +187,6 @@ import type {
   DocumentPageBorders,
   FooterSection,
   HeaderSection,
-  TableCellContentNode,
 } from "@arcships/docx-core"
 import {
   buildPageGutterAnnotations,
@@ -219,6 +218,7 @@ import {
   ensureDocxViewerPageSurfaceRegistry,
   notifyDocxViewerPageSurfaceListeners,
 } from "../composables/page-surface-registry"
+import { collectPageFormFields } from "../composables/docx-form-fields"
 
 // ── Types ──────────────────────────────────────────────────────────
 interface DocxPageSurfaceProps {
@@ -381,28 +381,11 @@ const pageFurnitureReservePx = computed(() => {
   }
 })
 
-function nodesContainFormField(nodes: TableCellContentNode[]): boolean {
-  return nodes.some((node) => {
-    if (node.type === "paragraph") {
-      return node.children.some((child) => child.type === "form-field")
-    }
-    return node.rows.some((row) =>
-      row.cells.some((cell) => nodesContainFormField(cell.nodes))
-    )
-  })
-}
-
-const hasFormFields = computed(() =>
-  props.pageNodeSegments.some((segment) => {
-    const node = props.model.nodes[segment.nodeIndex]
-    if (!node) return false
-    if (node.type === "paragraph") {
-      return node.children.some((child) => child.type === "form-field")
-    }
-    return node.rows.some((row) =>
-      row.cells.some((cell) => nodesContainFormField(cell.nodes))
-    )
-  })
+// The layer and its mount gate share one collector: table-cell fields are
+// found recursively and a table split across pages only reports the fields in
+// the rows rendered on this page.
+const hasFormFields = computed(
+  () => collectPageFormFields(props.model, props.pageNodeSegments).length > 0
 )
 
 const showGutter = computed(

@@ -252,7 +252,9 @@ const contextMenu = {
   ) {
     this.x.value = x
     this.y.value = y
-    this.context.value = ctx
+    // The menu anchors on the context so custom renderers and standalone
+    // consumers see the same pointer position as the built-in menu.
+    this.context.value = { ...ctx, position: { x, y } }
     this.text.value = text
     this.caretOffset.value = caretOffset
     this.visible.value = true
