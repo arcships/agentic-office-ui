@@ -307,6 +307,7 @@ export default defineComponent({
                 pageNumber: props.pageNumber,
                 totalPages: props.totalPages,
                 pageNumberFormat: props.pageNumberFormat,
+                maxAvailableWidthPx: props.pageContentWidthPx,
               })
             )
           }

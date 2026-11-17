@@ -42,16 +42,10 @@ import {
   uniqueSortedPixelBoundaries,
 } from "./line-height-table";
 import {
-  clampTableWidthPx,
-  columnWidthsFromTableDefinition,
-  defaultColumnWidthsPx,
-  fitColumnWidthsToWidth,
   mergeTableSpacing,
-  normalizeColumnWidthsPx,
   resolveTableSpacingPaddingPx,
-  tableColumnCount,
 } from "./table-utils";
-import { resolveCollapsedTableHorizontalOuterBleedPx } from "./table-utils-extra";
+import { resolveTableRenderMetricsPx } from "./table-metrics";
 
 export function resolveTableRowSliceHeightOnSafeBoundaryPx(params: {
   table: TableNode;
@@ -88,38 +82,11 @@ export function resolveTableRowSliceHeightOnSafeBoundaryPx(params: {
     return Math.max(0, rowHeightPx - sliceStartPx);
   }
 
-  const columnCount = tableColumnCount(table);
-  const tableWidthPx = twipsToPixels(table.style?.widthTwips);
-  const rawTableColumnWidthsPx = (() => {
-    const definedWidthsTwips = columnWidthsFromTableDefinition(table, columnCount);
-    if (!definedWidthsTwips || definedWidthsTwips.length === 0) {
-      return defaultColumnWidthsPx(columnCount, tableWidthPx);
-    }
-    const widthsPx = definedWidthsTwips.map(
-      (widthTwips) => twipsToPixels(widthTwips) ?? 0
-    );
-    return normalizeColumnWidthsPx(widthsPx, columnCount, tableWidthPx, 1);
-  })();
-  const rawResolvedTableWidthPx =
-    tableWidthPx ??
-    rawTableColumnWidthsPx.reduce((sum, widthPx) => sum + widthPx, 0);
-  const collapsedHorizontalBorderBleedPx =
-    resolveCollapsedTableHorizontalOuterBleedPx(table, columnCount);
-  const maxTableWidthPx =
-    Number.isFinite(maxAvailableWidthPx) && (maxAvailableWidthPx as number) > 0
-      ? Math.max(
-          120,
-          (maxAvailableWidthPx as number) - collapsedHorizontalBorderBleedPx
-        )
-      : undefined;
-  const resolvedTableWidthPx = clampTableWidthPx(
-    rawResolvedTableWidthPx,
-    maxTableWidthPx
-  );
-  const tableColumnWidthsPx = fitColumnWidthsToWidth(
-    rawTableColumnWidthsPx,
-    resolvedTableWidthPx
-  );
+  const {
+    columnCount,
+    tableWidthPx: resolvedTableWidthPx,
+    columnWidthsPx: tableColumnWidthsPx,
+  } = resolveTableRenderMetricsPx(table, maxAvailableWidthPx);
   const applyWordTableDefaults = tableUsesWordLikeParagraphDefaults(table);
   const tableCellMarginTwips = table.style?.cellMarginTwips;
   const cellLayouts: TableCellSliceBoundaryLayout[] = [];
@@ -141,8 +108,9 @@ export function resolveTableRowSliceHeightOnSafeBoundaryPx(params: {
     const fallbackCellWidthPx =
       (resolvedTableWidthPx / Math.max(1, columnCount)) * colSpanValue;
     const cellRenderedWidthPx =
-      twipsToPixels(cell.style?.widthTwips) ??
-      (spannedWidthPx > 0 ? spannedWidthPx : fallbackCellWidthPx);
+      spannedWidthPx > 0
+        ? spannedWidthPx
+        : twipsToPixels(cell.style?.widthTwips) ?? fallbackCellWidthPx;
     const cellPaddingPx = resolveTableSpacingPaddingPx(
       mergeTableSpacing(tableCellMarginTwips, cell.style?.marginTwips)
     );

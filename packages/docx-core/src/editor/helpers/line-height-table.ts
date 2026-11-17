@@ -56,16 +56,10 @@ import {
 } from "./pretext-build";
 import { resolveParagraphDualWrappedTextLayout } from "./pretext-measure";
 import {
-  clampTableWidthPx,
-  columnWidthsFromTableDefinition,
-  defaultColumnWidthsPx,
-  fitColumnWidthsToWidth,
   mergeTableSpacing,
-  normalizeColumnWidthsPx,
   resolveTableSpacingPaddingPx,
-  tableColumnCount,
 } from "./table-utils";
-import { resolveCollapsedTableHorizontalOuterBleedPx } from "./table-utils-extra";
+import { resolveTableRenderMetricsPx } from "./table-metrics";
 import {
   paragraphIsEffectivelyEmpty,
   paragraphIsSectionBreakAnchorCarryover,
@@ -568,38 +562,11 @@ function computeTableCellDerivedRowHeightsPx(
   docGridLinePitchPx?: number
 ): number[] {
   const defaultCellMargin = table.style?.cellMarginTwips;
-  const columnCount = tableColumnCount(table);
-  const tableWidthPx = twipsToPixels(table.style?.widthTwips);
-  const rawTableColumnWidthsPx = (() => {
-    const definedWidthsTwips = columnWidthsFromTableDefinition(table, columnCount);
-    if (!definedWidthsTwips || definedWidthsTwips.length === 0) {
-      return defaultColumnWidthsPx(columnCount, tableWidthPx);
-    }
-    const widthsPx = definedWidthsTwips.map(
-      (widthTwips) => twipsToPixels(widthTwips) ?? 0
-    );
-    return normalizeColumnWidthsPx(widthsPx, columnCount, tableWidthPx, 1);
-  })();
-  const rawResolvedTableWidthPx =
-    tableWidthPx ??
-    rawTableColumnWidthsPx.reduce((sum, widthPx) => sum + widthPx, 0);
-  const collapsedHorizontalBorderBleedPx =
-    resolveCollapsedTableHorizontalOuterBleedPx(table, columnCount);
-  const maxTableWidthPx =
-    Number.isFinite(maxAvailableWidthPx) && (maxAvailableWidthPx as number) > 0
-      ? Math.max(
-          120,
-          (maxAvailableWidthPx as number) - collapsedHorizontalBorderBleedPx
-        )
-      : undefined;
-  const resolvedTableWidthPx = clampTableWidthPx(
-    rawResolvedTableWidthPx,
-    maxTableWidthPx
-  );
-  const tableColumnWidthsPx = fitColumnWidthsToWidth(
-    rawTableColumnWidthsPx,
-    resolvedTableWidthPx
-  );
+  const {
+    columnCount,
+    tableWidthPx: resolvedTableWidthPx,
+    columnWidthsPx: tableColumnWidthsPx,
+  } = resolveTableRenderMetricsPx(table, maxAvailableWidthPx);
   const applyWordTableDefaults = tableUsesWordLikeParagraphDefaults(table);
 
   return table.rows.map((row) => {
@@ -618,8 +585,11 @@ function computeTableCellDerivedRowHeightsPx(
         .reduce((sum, widthPx) => sum + widthPx, 0);
       const fallbackCellWidthPx =
         (resolvedTableWidthPx / Math.max(1, columnCount)) * columnSpan;
-      const cellWidthPx = spanWidthPx > 0 ? spanWidthPx : fallbackCellWidthPx;
-      const margin = cell.style?.marginTwips ?? defaultCellMargin;
+      const cellWidthPx =
+        spanWidthPx > 0
+          ? spanWidthPx
+          : twipsToPixels(cell.style?.widthTwips) ?? fallbackCellWidthPx;
+      const margin = mergeTableSpacing(defaultCellMargin, cell.style?.marginTwips);
       const resolvedPaddingPx = resolveTableSpacingPaddingPx(margin);
       const verticalPaddingPx = resolvedPaddingPx.top + resolvedPaddingPx.bottom;
       const horizontalPaddingPx =
@@ -643,6 +613,9 @@ function computeTableCellDerivedRowHeightsPx(
 
 // -- Table row height CSS --
 
+// `height` on a table row is a minimum in CSS, so an exact row would still grow
+// with its content and overflow the pagination estimate. Exact rows therefore
+// pin the height and clip; atLeast/auto rows keep growing from a minimum.
 export function resolveTableRowHeightCss(
   row: TableNode["rows"][number],
   rowHeightPx?: number
@@ -654,9 +627,9 @@ export function resolveTableRowHeightCss(
     Math.round(rowHeightPx as number)
   );
   if (row.style?.heightRule === "exact") {
-    return { height: `${resolvedHeightPx}px` };
+    return { height: `${resolvedHeightPx}px`, overflow: "hidden" };
   }
-  return { height: `${resolvedHeightPx}px` };
+  return { minHeight: `${resolvedHeightPx}px` };
 }
 
 // -- Table cell slice boundary layout --
