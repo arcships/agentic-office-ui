@@ -40,6 +40,7 @@
         :page-number-format="pageNumberFormat"
         :within-header-footer="true"
         header-footer-region="footer"
+        :max-available-width-px="pageContentWidthPx"
       />
     </template>
   </div>

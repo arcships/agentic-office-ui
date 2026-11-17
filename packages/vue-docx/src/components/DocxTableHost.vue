@@ -6,6 +6,7 @@
       'docx-table-host--editable': editable && !isReadOnly,
       'docx-table-host--active': isActiveTable,
     }"
+    :style="wrapperStyle"
     :data-docx-table-host="true"
     :data-docx-table-index="domTableIndex"
     :data-docx-table-runtime-key="tableRuntimeKey"
@@ -37,7 +38,7 @@
         <tr
           v-for="row of gridRows"
           :key="`row-${row.rowIndex}`"
-          :style="rowStyle(row.row, row.rowIndex)"
+          :style="rowStyle(row.row)"
         >
           <template
             v-for="cell of row.cells"
@@ -56,7 +57,7 @@
               'docx-table-cell--active': isCellActive(cell.rowIndex, cell.cellIndex),
               'docx-table-cell--merge-fallback': cell.continuationFallback,
             }"
-            :style="cellStyle(cell.cell)"
+            :style="cellStyle(cell)"
             @click.stop="onCellClick(cell.rowIndex, cell.cellIndex, $event)"
           >
             <template v-if="!cell.continuationFallback">
@@ -97,6 +98,7 @@
                 :page-number-format="pageNumberFormat"
                 :within-header-footer="withinHeaderFooter"
                 :header-footer-region="headerFooterRegion"
+                :max-available-width-px="cellContentWidthPx(cell)"
               />
             </template>
             </template>
@@ -120,19 +122,29 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount, onMounted, onUnmounted } from "vue"
 import {
+  mergeTableSpacing,
+  resolveTableCellBorderCss,
+  resolveTableCellDiagonalOverlayCss,
+  resolveTableRenderMetricsPx,
+  resolveTableRowHeightCss,
+  resolveTableSpacingPaddingPx,
+  tableSpacingPaddingStyle,
+  tableElementBorderStyle,
+  tableWrapperStyle,
+  twipsToPixels,
   type DocxDocumentTheme,
   type DocxEditorController,
   type DocxEditorSelection,
   type NumberingDefinitionSet,
   type ParagraphNode,
   type TableNode,
+  type TableRowNode,
   type TableRowRange,
   paragraphText,
-  tableColumnCount,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
 import { renderStaticHtml } from "../render/static-html"
-import { resolveTableGrid } from "./table-grid"
+import { resolveTableGrid, type TableGridCell } from "./table-grid"
 
 // ── Constants ──────────────────────────────────────────────────────
 const HIGHLIGHT_TO_CSS: Record<string, string> = {
@@ -169,6 +181,7 @@ const props = withDefaults(
     pageNumberFormat?: string
     withinHeaderFooter?: boolean
     headerFooterRegion?: "header" | "footer"
+    maxAvailableWidthPx?: number
   }>(),
   {
     editable: false,
@@ -336,17 +349,28 @@ const isActiveTable = computed(() => {
   return false
 })
 
-const columnCount = computed(() => tableColumnCount(props.table))
+const tableMetrics = computed(() =>
+  resolveTableRenderMetricsPx(props.table, props.maxAvailableWidthPx)
+)
+
+const columnCount = computed(() => tableMetrics.value.columnCount)
+
+const wrapperStyle = computed(() =>
+  tableWrapperStyle(props.table, twipsToPixels(props.table.style?.indentTwips) ?? 0)
+)
+
+const renderedTableWidthPx = computed(() => {
+  if (localColumnWidths.value && localColumnWidths.value.length === columnCount.value) {
+    return localColumnWidths.value.reduce((sum, width) => sum + width, 0)
+  }
+  return tableMetrics.value.tableWidthPx
+})
 
 const resolvedColumnWidths = computed(() => {
   if (localColumnWidths.value && localColumnWidths.value.length === columnCount.value) {
     return localColumnWidths.value
   }
-  const storedWidths = props.table.style?.columnWidthsTwips
-  if (storedWidths?.length === columnCount.value) {
-    return storedWidths.map((width) => Math.max(MIN_COLUMN_WIDTH, Math.round(width / 15)))
-  }
-  return Array.from({ length: columnCount.value }, () => DEFAULT_COLUMN_WIDTH)
+  return tableMetrics.value.columnWidthsPx.map((width) => Math.max(1, Math.round(width)))
 })
 
 const columnBoundaries = computed(() => {
@@ -373,27 +397,77 @@ const gridRows = computed(() =>
 )
 
 const tableStyle = computed(() => ({
-  width: "100%",
-  borderCollapse: "collapse" as const,
+  width: `${Math.max(1, Math.round(renderedTableWidthPx.value))}px`,
+  maxWidth: "100%",
   tableLayout: "fixed" as const,
+  ...tableElementBorderStyle(props.table),
 }))
 
 // ── Cell helpers ───────────────────────────────────────────────────
-function rowStyle(_row: any, _ri: number): Record<string, any> {
-  return {}
+function rowStyle(row: TableRowNode): Record<string, string | number | undefined> {
+  const style: Record<string, string | number | undefined> = {}
+  const explicitHeightPx = twipsToPixels(row.style?.heightTwips)
+  const heightCss = resolveTableRowHeightCss(row, explicitHeightPx)
+  if (heightCss) Object.assign(style, heightCss)
+  if (row.style?.backgroundColor) style.backgroundColor = row.style.backgroundColor
+  if (row.style?.cantSplit) style.breakInside = "avoid"
+  return style
 }
 
-function cellStyle(cell: any): Record<string, any> {
+// Border resolution needs the grid columns a cell covers, so a merged cell is
+// treated as one outer edge. The materialized grid already knows them.
+function cellStyle(cell: TableGridCell): Record<string, string | number | undefined> {
+  const startColumnIndex = cell.columnIndex
+  const endColumnIndex = Math.min(
+    Math.max(0, columnCount.value - 1),
+    cell.columnIndex + cell.colSpan - 1
+  )
+  const borders = resolveTableCellBorderCss(
+    props.table.style?.borders,
+    cell.cell.style?.borders,
+    cell.rowIndex,
+    props.table.rows.length,
+    startColumnIndex,
+    endColumnIndex,
+    columnCount.value
+  )
   return {
-    border: "1px solid #d1d5db",
-    padding: "8px",
-    verticalAlign: cell.style?.verticalAlign ?? "top",
+    ...borders,
+    ...tableSpacingPaddingStyle(
+      mergeTableSpacing(
+        props.table.style?.cellMarginTwips,
+        cell.cell.style?.marginTwips
+      )
+    ),
+    ...resolveTableCellDiagonalOverlayCss(
+      props.table.style?.borders,
+      cell.cell.style?.borders
+    ),
+    verticalAlign: cell.cell.style?.verticalAlign ?? "top",
     minWidth: "0",
-    backgroundColor: cell.style?.backgroundColor as string | undefined,
+    backgroundColor: cell.cell.style?.backgroundColor as string | undefined,
     wordWrap: "break-word",
     overflowWrap: "break-word",
     wordBreak: "break-word",
   }
+}
+
+// Width a nested table may occupy: the parent cell box minus its padding.
+function cellContentWidthPx(cell: TableGridCell): number | undefined {
+  const endColumnIndex = Math.min(
+    Math.max(0, columnCount.value - 1),
+    cell.columnIndex + cell.colSpan - 1
+  )
+  const padding = resolveTableSpacingPaddingPx(
+    mergeTableSpacing(
+      props.table.style?.cellMarginTwips,
+      cell.cell.style?.marginTwips
+    )
+  )
+  const spannedWidthPx = resolvedColumnWidths.value
+    .slice(cell.columnIndex, endColumnIndex + 1)
+    .reduce((sum, width) => sum + width, 0)
+  return Math.max(1, Math.round(spannedWidthPx - padding.left - padding.right))
 }
 
 function cellParagraphStyle(para: ParagraphNode): Record<string, any> {
@@ -665,13 +739,10 @@ onUnmounted(() => {
 }
 
 .docx-table-host-table {
-  width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
 }
 .docx-table-cell {
-  border: 1px solid #d1d5db;
-  padding: 8px;
   vertical-align: top;
   min-width: 0;
   word-wrap: break-word;

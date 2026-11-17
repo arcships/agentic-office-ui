@@ -27,6 +27,7 @@
 //   numbering.ts           — list numbering
 //   table-utils.ts         — table utilities (part 1)
 //   table-utils-extra.ts   — table utilities (part 2)
+//   table-metrics.ts       — shared table/column width metrics for render + pagination
 //   paragraph-toc.ts       — paragraph table-of-contents leaf (cycle-breaker)
 //   field-helpers.ts       — form-field helpers
 //   synthetic-textbox.ts   — synthetic textbox
@@ -74,6 +75,7 @@ export * from "./text-mutation";
 export * from "./numbering";
 export * from "./table-utils";
 export * from "./table-utils-extra";
+export * from "./table-metrics";
 export * from "./paragraph-toc";
 export * from "./field-helpers";
 export * from "./synthetic-textbox";
