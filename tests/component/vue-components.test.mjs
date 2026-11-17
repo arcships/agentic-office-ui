@@ -12,7 +12,7 @@ import {
   walk,
 } from "./vue-test-renderer.mjs";
 
-const { DocxViewer } = await importFromDemo("@arcships/vue-docx");
+const { DocxViewer, renderParagraphRuns } = await importFromDemo("@arcships/vue-docx");
 const { createBlankDocumentModel, wasmBuildDocModelFromBytes } = await importFromDemo("@arcships/docx-core");
 const { XlsxViewer, useXlsxSearch, useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
 const { PdfSurface, PdfViewer } = await importFromDemo("@arcships/vue-pdf");
@@ -285,6 +285,72 @@ test("DocxViewer displays model-derived tracked changes and comments without an 
   assert.match(textContent(mounted.root), /Alex Reviewer/);
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
+});
+
+function flattenVNodes(value, result = []) {
+  if (Array.isArray(value)) {
+    for (const item of value) flattenVNodes(item, result);
+    return result;
+  }
+  if (!value || typeof value !== "object") return result;
+  result.push(value);
+  flattenVNodes(value.children, result);
+  return result;
+}
+
+test("DOCX inline revisions render underlines for insertions and strikethrough for deletions", async () => {
+  const file = readFileSync(new URL("../../apps/demo/public/samples/review-comments.docx", import.meta.url));
+  const bytes = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
+  const { model } = await wasmBuildDocModelFromBytes(bytes);
+  const paragraph = model.nodes.find(
+    (node) => node.type === "paragraph"
+      && /<w:ins\b/.test(node.sourceXml ?? "")
+      && /<w:del\b/.test(node.sourceXml ?? ""),
+  );
+  assert.ok(paragraph, "fixture contains a paragraph with both an insertion and a deletion");
+
+  const vnodes = renderParagraphRuns(
+    paragraph,
+    "tracked-revision",
+    "light",
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { showTrackedChanges: true, trackedMarkupMode: "inline" },
+  );
+  const trackedSpans = flattenVNodes(vnodes).filter(
+    (node) => node.props?.["data-docx-tracked-change"],
+  );
+  const insertionSpan = trackedSpans.find(
+    (node) => node.props["data-docx-tracked-change"] === "insertion",
+  );
+  const deletionSpan = trackedSpans.find(
+    (node) => node.props["data-docx-tracked-change"] === "deletion",
+  );
+  assert.ok(insertionSpan, "insertion run is rendered");
+  assert.ok(deletionSpan, "deletion run is rendered");
+
+  const decorationTokens = (node) => new Set(
+    String(node.props.style?.textDecoration ?? "")
+      .split(/\s+/)
+      .filter(Boolean),
+  );
+  const insertionDecoration = decorationTokens(insertionSpan);
+  const deletionDecoration = decorationTokens(deletionSpan);
+  assert.ok(insertionDecoration.has("underline"), "insertions are underlined");
+  assert.equal(insertionDecoration.has("line-through"), false);
+  assert.equal(insertionDecoration.has("none"), false);
+  assert.ok(deletionDecoration.has("line-through"), "deletions are struck through");
+  assert.equal(deletionDecoration.has("underline"), false);
+  assert.equal(deletionDecoration.has("none"), false);
+  assert.notEqual(
+    insertionSpan.props.style.color,
+    deletionSpan.props.style.color,
+    "insertions and deletions use different colours",
+  );
 });
 
 test("DocxViewer aborts an active runtime load when unmounted", async () => {

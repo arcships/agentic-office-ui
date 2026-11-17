@@ -210,33 +210,44 @@ export function mergeTextDecorations(
   decoration: string
 ): string {
   const tokens = new Set<string>();
-  if (typeof baseDecoration === "string") {
-    baseDecoration
+  // `none` is exclusive in CSS: "none underline" is invalid and the whole
+  // declaration is dropped. Only emit it when no real decoration remains.
+  const addTokens = (value: unknown): void => {
+    if (typeof value !== "string") return;
+    value
       .split(/\s+/)
       .map((token) => token.trim())
-      .filter(Boolean)
+      .filter((token) => token && token !== "none")
       .forEach((token) => tokens.add(token));
-  }
+  };
 
-  decoration
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter(Boolean)
-    .forEach((token) => tokens.add(token));
+  addTokens(baseDecoration);
+  addTokens(decoration);
 
   return tokens.size > 0 ? Array.from(tokens).join(" ") : "none";
 }
 
 export function trackedInlineStyle(
   baseStyle: Record<string, string | number | undefined>,
-  change: ParagraphTrackedInlineChange | undefined
+  change: ParagraphTrackedInlineChange | undefined,
+  documentTheme: DocxDocumentTheme = "light"
 ): Record<string, string | number | undefined> {
   if (!change) {
     return baseStyle;
   }
 
   if (change.kind === "insertion" || change.kind === "move-to") {
-    const accentColor = change.kind === "move-to" ? "#70ad47" : "#dc2626";
+    // Insertions use a distinct green accent (the gutter already uses green
+    // for inserted content) plus an underline, so they remain readable
+    // without relying on colour alone. Deletions stay red and struck through.
+    const accentColor =
+      change.kind === "move-to"
+        ? documentTheme === "dark"
+          ? "#86efac"
+          : "#70ad47"
+        : documentTheme === "dark"
+        ? "#4ade80"
+        : "#15803d";
     return {
       ...baseStyle,
       color: accentColor,
@@ -244,6 +255,7 @@ export function trackedInlineStyle(
         baseStyle.textDecoration,
         "underline"
       ),
+      textDecorationColor: accentColor,
     };
   }
 
@@ -255,13 +267,15 @@ export function trackedDeletedStyle(
   baseRunStyle?: TextRunNode["style"] | FormFieldRunNode["style"]
 ): Record<string, string | number | undefined> {
   const baseStyle = runStyleToCss(baseRunStyle, documentTheme);
+  const accentColor = documentTheme === "dark" ? "#fca5a5" : "#b91c1c";
   return {
     ...baseStyle,
-    color: documentTheme === "dark" ? "#fca5a5" : "#b91c1c",
+    color: accentColor,
     textDecoration: mergeTextDecorations(
       baseStyle.textDecoration,
       "line-through"
     ),
+    textDecorationColor: accentColor,
     whiteSpace: baseStyle.whiteSpace ?? "pre-wrap",
     lineHeight: "inherit",
     opacity: 0.95,

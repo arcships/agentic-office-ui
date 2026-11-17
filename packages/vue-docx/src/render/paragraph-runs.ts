@@ -322,7 +322,8 @@ export function renderParagraphRuns(
   ): void => {
     const textStyle = trackedInlineStyle(
       runStyleToCss(style, documentTheme),
-      trackedInlineChange
+      trackedInlineChange,
+      documentTheme
     )
     const hasUnderline = Boolean(style?.underline)
     target.push(
@@ -355,7 +356,8 @@ export function renderParagraphRuns(
       return {
         ...trackedInlineStyle(
           linkStyleToCss(style, documentTheme),
-          trackedInlineChange
+          trackedInlineChange,
+          documentTheme
         ),
         ...currentCommentHighlightStyle(),
       }
@@ -370,7 +372,8 @@ export function renderParagraphRuns(
             : "inherit",
           textDecoration: "none",
         },
-        trackedInlineChange
+        trackedInlineChange,
+        documentTheme
       ),
       ...currentCommentHighlightStyle(),
     }
@@ -457,7 +460,11 @@ export function renderParagraphRuns(
     }
 
     const trackedStyle = {
-      ...trackedInlineStyle(runStyleToCss(child.style, documentTheme), trackedInlineChange),
+      ...trackedInlineStyle(
+        runStyleToCss(child.style, documentTheme),
+        trackedInlineChange,
+        documentTheme
+      ),
       ...currentCommentHighlightStyle(),
     }
     if (textValue === "\t" && !useTabLeaderLayout && !useAnchoredTabLayout) {
@@ -527,7 +534,8 @@ export function renderParagraphRuns(
     const textStyle = {
       ...trackedInlineStyle(
         runStyleToCss(child.style, documentTheme),
-        trackedInlineChange
+        trackedInlineChange,
+        documentTheme
       ),
       ...currentCommentHighlightStyle(),
     }
