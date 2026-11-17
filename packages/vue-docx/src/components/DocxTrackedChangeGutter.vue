@@ -2,6 +2,7 @@
   <div
     v-if="positioned.length > 0"
     class="docx-tracked-change-gutter"
+    data-docx-thumbnail-exclude="true"
     data-docx-annotation-gutter="true"
     :data-docx-gutter-card-count="positioned.length"
     :data-docx-gutter-zoom="zoomFactor"

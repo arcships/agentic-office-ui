@@ -15,6 +15,7 @@
     <div
       v-if="showColumnHandles"
       class="docx-table-column-handles"
+      data-docx-thumbnail-exclude="true"
     >
       <div
         v-for="(boundary, ci) of columnBoundaries"
@@ -121,6 +122,7 @@
     <div
       v-if="editable && !isReadOnly && !isNestedTable"
       class="docx-table-add-row"
+      data-docx-thumbnail-exclude="true"
       @click="onAddRow"
     >
       + Add row
@@ -388,7 +390,10 @@ const columnBoundaries = computed(() => {
 })
 
 const showColumnHandles = computed(
-  () => props.editable && !isReadOnly && !isNestedTable.value &&
+  () =>
+    props.editable &&
+    !isReadOnly.value &&
+    !isNestedTable.value &&
     (hovered.value || isActiveTable.value)
 )
 
