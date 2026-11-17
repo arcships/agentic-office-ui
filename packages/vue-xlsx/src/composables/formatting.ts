@@ -5,6 +5,7 @@ import {
   strToU8
 } from "fflate";
 import type {
+  XlsxCellNumberFormatInput,
   XlsxCellRange,
   XlsxResolvedCellStyle,
   XlsxSheetData
@@ -302,4 +303,33 @@ export function resolveInheritedCellStyle(sheet: XlsxSheetData | null | undefine
   }
 
   return null;
+}
+
+function readNumberFormat(style: unknown): XlsxCellNumberFormatInput | null {
+  if (!style || typeof style !== "object") {
+    return null;
+  }
+
+  const numberFormat = (style as Record<string, unknown>).numberFormat;
+  return numberFormat && typeof numberFormat === "object"
+    ? numberFormat as XlsxCellNumberFormatInput
+    : null;
+}
+
+/**
+ * Number format that applies to a cell. An explicit cell style wins; cells
+ * without one inherit the row/column style, exactly like Excel's fallback for
+ * cells that carry no `s` attribute.
+ */
+export function resolveEffectiveCellNumberFormat(
+  style: unknown,
+  sheet: XlsxSheetData | null | undefined,
+  row: number,
+  col: number
+): XlsxCellNumberFormatInput | null {
+  if (style && typeof style === "object") {
+    return readNumberFormat(style);
+  }
+
+  return readNumberFormat(resolveInheritedCellStyle(sheet, row, col));
 }

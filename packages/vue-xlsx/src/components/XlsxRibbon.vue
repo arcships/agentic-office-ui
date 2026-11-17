@@ -54,6 +54,7 @@
           <option value="currency">Currency</option>
           <option value="percent">Percent</option>
           <option value="date">Date</option>
+          <option value="text">Text</option>
         </select>
         <button class="xlsx-ribbon__text-button" title="Currency" aria-label="Currency" @click="applyStyle(numberFormats.currency)">$</button>
         <button class="xlsx-ribbon__text-button" title="Percent" aria-label="Percent" @click="applyStyle(numberFormats.percent)">%</button>
@@ -84,6 +85,7 @@ import {
   type XlsxResolvedCellStyle,
   type XlsxViewerController,
 } from "@arcships/xlsx-core";
+import { classifyNumberFormat } from "../composables/cell-input";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -152,13 +154,23 @@ const fontSizeValue = computed(() => typeof activeFont.value.size === "number" &
   ? activeFont.value.size
   : 11);
 const numberFormatValue = computed(() => {
-  const numberFormat = asRecord(activeCellStyle.value.numberFormat);
-  const format = String(numberFormat.formatString ?? "").toLowerCase();
-  if (format.includes("%")) return "percent";
-  if (/[$€£¥]/.test(format)) return "currency";
-  if (/[dmy]/.test(format)) return "date";
-  if (format && format !== "general") return "number";
-  return "general";
+  // Built-in formats may arrive as an id without a formatString (e.g. numFmtId
+  // 14), and colour sections such as `[Red]` must not read as date tokens.
+  switch (classifyNumberFormat(asRecord(activeCellStyle.value.numberFormat))) {
+    case "percent":
+      return "percent";
+    case "currency":
+      return "currency";
+    case "date":
+    case "time":
+      return "date";
+    case "text":
+      return "text";
+    case "general":
+      return "general";
+    default:
+      return "number";
+  }
 });
 const selectedTextColor = computed(() => resolveWorkbookColor(
   asRecord(activeFont.value.color),
@@ -178,6 +190,7 @@ const numberFormats = {
   currency: { numberFormat: { formatType: "custom" as const, formatString: "$#,##0.00" } },
   percent: { numberFormat: { formatType: "custom" as const, formatString: "0.00%" } },
   date: { numberFormat: { formatType: "custom" as const, formatString: "m/d/yyyy" } },
+  text: { numberFormat: { formatType: "custom" as const, formatString: "@" } },
 };
 
 function applyStyle(style: XlsxCellStyleInput): void {

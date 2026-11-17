@@ -8,8 +8,8 @@ import type {
 } from "@arcships/xlsx-core";
 import { resolveWorkbookColor, resolveWorkbookFillStyle } from "@arcships/xlsx-core";
 import { cellAddressToA1, normalizeRange, rangeToA1 } from "./selection";
-import { decodeHtmlEntities, escapeHtml, mapBorder, resolveInheritedCellStyle } from "./formatting";
-import { coerceUserEnteredValue } from "./internal";
+import { decodeHtmlEntities, escapeHtml, mapBorder, resolveEffectiveCellNumberFormat, resolveInheritedCellStyle } from "./formatting";
+import { DEFAULT_CELL_STYLE_PATCH, resolveCellInput } from "./cell-input";
 import type { XlsxControllerContext } from "./internal";
 import { XlsxSourceError } from "@arcships/xlsx-core";
 import {
@@ -195,13 +195,28 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
 
         const formula = worksheet.getFormulaAt(row, col) ?? null;
         const value = getCellDisplayValue({ row, col });
+        const rawCellValue = worksheet.getCellAt(row, col);
+        let rawValue: unknown = "";
+        try {
+          rawValue = rawCellValue.toJs();
+        } finally {
+          rawCellValue.free();
+        }
         const merge = worksheet.getMergeSpan(row, col) as
           | { colSpan?: number; rowSpan?: number }
           | null
           | undefined;
-        const rawStyle = (
-          worksheet.getCellStyleAt(row, col) as Record<string, unknown> | null | undefined
-        ) ?? resolveInheritedCellStyle(ctx.activeSheet.value, row, col);
+        const explicitStyle = worksheet.getCellStyleAt(row, col);
+        const inheritedStyle = explicitStyle
+          ? null
+          : resolveInheritedCellStyle(ctx.activeSheet.value, row, col);
+        // Carry the style so an internal paste keeps the number format. Cells
+        // without an explicit style inherit row/column formatting, so only the
+        // inherited number format is materialised instead of freezing the
+        // whole inherited style onto the pasted cell.
+        const carriedStyle = explicitStyle
+          ?? (inheritedStyle?.numberFormat ? { numberFormat: inheritedStyle.numberFormat } : null);
+        const rawStyle = (explicitStyle as Record<string, unknown> | null | undefined) ?? inheritedStyle;
         const cellStyles: string[] = [
           "padding:2px 4px",
           "white-space:pre-wrap",
@@ -271,7 +286,9 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
         payload.cells.push({
           colOffset: col - normalized.start.col,
           formula,
+          rawValue: rawValue === undefined ? "" : rawValue,
           rowOffset: row - normalized.start.row,
+          style: carriedStyle,
           value
         });
 
@@ -326,30 +343,33 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
         if (!before) {
           continue;
         }
-        if (rawValue.startsWith("=") && rawValue.length > 1) {
-          worksheet.setFormula(cellAddressToA1(nextCell), rawValue);
-          const after = ctx.captureCellMutationState(nextCell);
-          if (!after) {
-            continue;
-          }
-          mutations.push({
-            after,
-            before,
-            cell: nextCell
-          });
+        const input = resolveCellInput(rawValue, {
+          date1904: worksheet.date1904 === true,
+          numberFormat: resolveEffectiveCellNumberFormat(
+            worksheet.getCellStyleAt(nextCell.row, nextCell.col),
+            ctx.activeSheet.value,
+            nextCell.row,
+            nextCell.col
+          )
+        });
+        const address = cellAddressToA1(nextCell);
+        if (input.kind === "formula") {
+          worksheet.setFormula(address, input.formula);
         } else {
-          const nextValue = coerceUserEnteredValue(rawValue);
-          worksheet.setCell(cellAddressToA1(nextCell), nextValue);
-          const after = ctx.captureCellMutationState(nextCell);
-          if (!after) {
-            continue;
-          }
-          mutations.push({
-            after,
-            before,
-            cell: nextCell
-          });
+          worksheet.setCell(address, input.value);
         }
+        if (input.numberFormat) {
+          worksheet.setCellStyleAt(nextCell.row, nextCell.col, { numberFormat: input.numberFormat });
+        }
+        const after = ctx.captureCellMutationState(nextCell);
+        if (!after) {
+          continue;
+        }
+        mutations.push({
+          after,
+          before,
+          cell: nextCell
+        });
       }
     }
 
@@ -398,33 +418,52 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
         row: targetCell.row + cell.rowOffset
       };
       const before = hasMergeOperations ? null : ctx.captureCellMutationState(nextCell);
+      const address = cellAddressToA1(nextCell);
 
       if (cell.formula) {
-        worksheet.setFormula(cellAddressToA1(nextCell), cell.formula);
-        if (before) {
-          const after = ctx.captureCellMutationState(nextCell);
-          if (!after) {
-            continue;
-          }
-          mutations.push({
-            after,
-            before,
-            cell: nextCell
-          });
-        }
+        worksheet.setFormula(address, cell.formula);
+      } else if (cell.rawValue !== undefined) {
+        worksheet.setCell(address, cell.rawValue);
       } else {
-        worksheet.setCell(cellAddressToA1(nextCell), cell.value);
-        if (before) {
-          const after = ctx.captureCellMutationState(nextCell);
-          if (!after) {
-            continue;
-          }
-          mutations.push({
-            after,
-            before,
-            cell: nextCell
-          });
+        // Payloads written before the raw value was carried only hold the
+        // display string; coerce it like typed input instead of pasting text.
+        const input = resolveCellInput(typeof cell.value === "string" ? cell.value : "", {
+          date1904: worksheet.date1904 === true,
+          numberFormat: resolveEffectiveCellNumberFormat(
+            worksheet.getCellStyleAt(nextCell.row, nextCell.col),
+            ctx.activeSheet.value,
+            nextCell.row,
+            nextCell.col
+          )
+        });
+        if (input.kind === "formula") {
+          worksheet.setFormula(address, input.formula);
+        } else {
+          worksheet.setCell(address, input.value);
         }
+        if (input.numberFormat) {
+          worksheet.setCellStyleAt(nextCell.row, nextCell.col, { numberFormat: input.numberFormat });
+        }
+      }
+
+      if (cell.style !== undefined) {
+        worksheet.setCellStyleAt(
+          nextCell.row,
+          nextCell.col,
+          cell.style && typeof cell.style === "object" ? cell.style : DEFAULT_CELL_STYLE_PATCH
+        );
+      }
+
+      if (before) {
+        const after = ctx.captureCellMutationState(nextCell);
+        if (!after) {
+          continue;
+        }
+        mutations.push({
+          after,
+          before,
+          cell: nextCell
+        });
       }
     }
 
