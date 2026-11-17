@@ -1,9 +1,29 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { test } from "node:test";
 
 import { importFromDemo, mount, textContent, vue, walk, waitFor } from "./vue-test-renderer.mjs";
 
-const { XlsxChartOverlay, XlsxDrawingLayer, XlsxImageLayer } = await importFromDemo("@arcships/vue-xlsx");
+const requireFromCore = createRequire(
+  new URL("../../packages/xlsx-core/package.json", import.meta.url),
+);
+const {
+  DOMParser: XmlDomParser,
+  Node: XmlNode,
+  XMLSerializer: XmlSerializer,
+} = requireFromCore("@xmldom/xmldom");
+globalThis.DOMParser ??= XmlDomParser;
+globalThis.Node ??= XmlNode;
+globalThis.XMLSerializer ??= XmlSerializer;
+
+const { getSheetsWasmModule, setWasmSource } = await importFromDemo("@arcships/xlsx-core");
+const { XlsxChartOverlay, XlsxDrawingLayer, XlsxImageLayer, useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
+const wasmBytes = readFileSync(
+  new URL("../../packages/xlsx-core/dist/assets/duke_sheets_wasm_bg.wasm", import.meta.url),
+);
+setWasmSource(wasmBytes.buffer.slice(wasmBytes.byteOffset, wasmBytes.byteOffset + wasmBytes.byteLength));
+await getSheetsWasmModule();
 
 const PX_TO_EMU = 9525;
 
@@ -538,5 +558,83 @@ test("overlay layers cull anchored objects outside the visible viewport", async 
     assert.equal(findItems(shapeMount.root, "xlsx-shape")[0].props["data-shape-id"], "shape-visible");
   } finally {
     shapeMount.app.unmount();
+  }
+});
+
+async function mountDrawingController() {
+  const bytes = new Uint8Array(readFileSync(
+    new URL("../../apps/demo/public/samples/charts-images.xlsx", import.meta.url),
+  ));
+  let controller;
+  const Harness = vue.defineComponent({
+    name: "DrawingControllerHarness",
+    setup() {
+      controller = useXlsxViewerController({
+        file: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+        fileName: "charts-images.xlsx",
+        useWorker: false,
+      });
+      return () => vue.h("div", controller.sourceState);
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(
+    () => controller.sourceState === "ready" || controller.error,
+    "XLSX drawing controller to load",
+  );
+  assert.ifError(controller.error);
+  await waitFor(() => controller.images.length > 0, "fixture images to load");
+  await waitFor(() => controller.charts.length > 0, "fixture charts to load");
+  return { ...mounted, controller };
+}
+
+test("controller exposes delete, shape mutation and form-control CRUD for real workbooks", async () => {
+  const mounted = await mountDrawingController();
+  const { controller } = mounted;
+  try {
+    const image = controller.images[0];
+    const imageAnchorBefore = JSON.stringify(image.anchor);
+    controller.moveImageBy(image.id, 12, 8);
+    await vue.nextTick();
+    assert.notEqual(JSON.stringify(controller.getImageById(image.id).anchor), imageAnchorBefore);
+    assert.equal(controller.deleteImage(image.id), true);
+    assert.equal(controller.images.some((entry) => entry.id === image.id), false);
+
+    const shape = controller.shapes[0];
+    const shapeAnchorBefore = JSON.stringify(shape.anchor);
+    controller.moveShapeBy(shape.id, 10, 6);
+    await vue.nextTick();
+    assert.notEqual(JSON.stringify(controller.getShapeById(shape.id).anchor), shapeAnchorBefore);
+    controller.resizeShapeBy(shape.id, "se", 8, 4);
+    await vue.nextTick();
+    assert.equal(controller.deleteShape(shape.id), true);
+    assert.equal(controller.shapes.some((entry) => entry.id === shape.id), false);
+
+    const chart = controller.charts[0];
+    assert.equal(controller.deleteChart(chart.id), true);
+    assert.equal(controller.charts.some((entry) => entry.id === chart.id), false);
+
+    const added = controller.addFormControl({
+      anchor: {
+        kind: "absolute",
+        positionEmu: { x: 24 * PX_TO_EMU, y: 30 * PX_TO_EMU },
+        sizeEmu: { cx: 120 * PX_TO_EMU, cy: 24 * PX_TO_EMU },
+      },
+      checked: false,
+      kind: "checkbox",
+      label: "Controller checkbox",
+      linkedCell: "$E$2",
+      name: "Controller checkbox",
+    });
+    assert.ok(added);
+    assert.equal(controller.getFormControlById(added.id)?.linkedCell, "$E$2");
+    assert.equal(controller.updateFormControl(added.id, { checked: true, linkedCell: "$F$3" }), true);
+    await vue.nextTick();
+    assert.equal(controller.getFormControlById(added.id)?.checked, true);
+    assert.equal(controller.getFormControlById(added.id)?.linkedCell, "$F$3");
+    assert.equal(controller.removeFormControl(added.id), true);
+    assert.equal(controller.getFormControlById(added.id), null);
+  } finally {
+    mounted.app.unmount();
   }
 });
