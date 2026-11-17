@@ -83,6 +83,17 @@ function initialValue(
   return initialState[target]?.[property] ?? defaultValues[property]
 }
 
+function initialNumber(
+  initialState: PptxObjectStateMap,
+  objectKey: string,
+  property: PptxTrackProperty,
+  fallback: number,
+  paragraphRange?: { start: number; end: number },
+): number {
+  const value = initialValue(initialState, objectKey, property, paragraphRange)
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback
+}
+
 function numberValue(effect: PptxPlaybackEffect, name: string, fallback: number): number {
   const value = effect.values[name]
   return typeof value === "number" && Number.isFinite(value) ? value : fallback
@@ -168,12 +179,21 @@ function fragmentsForEffect(
   scheduled: PptxScheduledEffect,
   initialState: PptxObjectStateMap,
   node: PptxTimeNode,
+  /** State before entrance effects hide their targets, i.e. the element's static transform. */
+  baselineState: PptxObjectStateMap = initialState,
 ): TrackFragment[] {
   const effect = scheduled.effect
   const objectKey = effect.targetObjectKey
   if (!objectKey) return []
   const baseDuration = typeof node.durationMs === "number" ? node.durationMs : 0
   const baseEnd = scheduled.startMs + baseDuration
+  // Exit effects must hide the element once every repeat pass has finished.
+  const terminalEnd = scheduled.endMs === "indefinite" ? undefined : scheduled.endMs
+  const rotateBase = initialNumber(baselineState, objectKey, "rotate", 0, effect.paragraphRange)
+  const translateBaseX = initialNumber(baselineState, objectKey, "translate-x", 0, effect.paragraphRange)
+  const translateBaseY = initialNumber(baselineState, objectKey, "translate-y", 0, effect.paragraphRange)
+  const scaleBaseX = initialNumber(baselineState, objectKey, "scale-x", 1, effect.paragraphRange)
+  const scaleBaseY = initialNumber(baselineState, objectKey, "scale-y", 1, effect.paragraphRange)
   const fragment = (
     property: PptxTrackProperty,
     from: PptxTrackValue,
@@ -209,10 +229,12 @@ function fragmentsForEffect(
       ]
       break
     case "fade-out":
-      fragments = [
-        fragment("opacity", 1, 0),
-        fragment("display", true, false, baseEnd, baseEnd),
-      ]
+      fragments = terminalEnd === undefined
+        ? [fragment("opacity", 1, 0)]
+        : [
+            fragment("opacity", 1, 0),
+            fragment("display", true, false, terminalEnd, terminalEnd),
+          ]
       break
     case "scale":
       {
@@ -220,8 +242,16 @@ function fragmentsForEffect(
         const fromX = numberValue(effect, "scaleFromX", fallback)
         const fromY = numberValue(effect, "scaleFromY", fallback)
         fragments = [
-          fragment("scale-x", fromX, numberValue(effect, "scaleToX", fromX * numberValue(effect, "scaleByX", 1))),
-          fragment("scale-y", fromY, numberValue(effect, "scaleToY", fromY * numberValue(effect, "scaleByY", 1))),
+          fragment(
+            "scale-x",
+            scaleBaseX * fromX,
+            scaleBaseX * numberValue(effect, "scaleToX", fromX * numberValue(effect, "scaleByX", 1)),
+          ),
+          fragment(
+            "scale-y",
+            scaleBaseY * fromY,
+            scaleBaseY * numberValue(effect, "scaleToY", fromY * numberValue(effect, "scaleByY", 1)),
+          ),
         ]
       }
       break
@@ -234,11 +264,16 @@ function fragmentsForEffect(
       break
     }
     case "rotate":
-      fragments = [fragment("rotate", 0, numberValue(effect, "rotationBy", 0))]
+      fragments = [fragment("rotate", rotateBase, rotateBase + numberValue(effect, "rotationBy", 0))]
       break
     case "motion-path": {
       const end = motionEnd(effect)
-      fragments = end ? [fragment("translate-x", 0, end.x), fragment("translate-y", 0, end.y)] : []
+      fragments = end
+        ? [
+            fragment("translate-x", translateBaseX, translateBaseX + end.x),
+            fragment("translate-y", translateBaseY, translateBaseY + end.y),
+          ]
+        : []
       break
     }
     case "wipe": {
@@ -354,8 +389,10 @@ export function compilePptxSlideTracks(
       ? "inset(0 0 0 100%)"
       : "inset(0 100% 0 0)"
     else if (effect.kind === "scale") {
-      state["scale-x"] = numberValue(effect, "scaleFromX", 0)
-      state["scale-y"] = numberValue(effect, "scaleFromY", 0)
+      const baseX = typeof state["scale-x"] === "number" ? state["scale-x"] : 1
+      const baseY = typeof state["scale-y"] === "number" ? state["scale-y"] : 1
+      state["scale-x"] = baseX * numberValue(effect, "scaleFromX", 0)
+      state["scale-y"] = baseY * numberValue(effect, "scaleFromY", 0)
     }
     preparedState[target] = state
   }
@@ -375,6 +412,7 @@ export function compilePptxSlideTracks(
         effect,
         frozenInitialState,
         slide.nodes[effect.nodeId],
+        sourceState,
       ))),
       effects: Object.freeze(effects),
     })
@@ -425,18 +463,106 @@ function evaluateSegment(segment: PptxCompiledTrackSegment, positionMs: number):
   return progress >= 1 ? segment.to : segment.from
 }
 
+/**
+ * Transform channels are layered on top of the element's static transform, so behaviours
+ * that run on the same channel at the same time add up (PowerPoint's additive behaviour)
+ * instead of silently dropping the earlier one. Repeats of a single behaviour still
+ * replace each other, and every other property stays an absolute visual state that the
+ * last writer settles.
+ */
+const additiveProperties: ReadonlySet<PptxTrackProperty> = new Set<PptxTrackProperty>([
+  "translate-x",
+  "translate-y",
+  "rotate",
+  "scale-x",
+  "scale-y",
+])
+
+function laterSegment(
+  candidate: PptxCompiledTrackSegment,
+  current: PptxCompiledTrackSegment | undefined,
+): boolean {
+  return !current
+    || candidate.startMs > current.startMs
+    || candidate.startMs === current.startMs && candidate.order > current.order
+}
+
+interface BehaviourSegments {
+  /** Rest value the behaviour started from, which its repeats and reverse passes return to. */
+  first: PptxCompiledTrackSegment
+  /** Segment that currently drives the behaviour. */
+  latest: PptxCompiledTrackSegment
+}
+
+function evaluateAdditiveTrack(
+  initialValue: PptxTrackValue,
+  segments: readonly PptxCompiledTrackSegment[],
+  positionMs: number,
+): PptxTrackValue {
+  if (segments.length === 1) {
+    const segment = segments[0]
+    if (positionMs < segment.startMs) return initialValue
+    if (positionMs >= segment.endMs && segment.fill === "remove") return initialValue
+    const value = evaluateSegment(segment, positionMs)
+    if (
+      typeof value !== "number"
+      || typeof segment.from !== "number"
+      || typeof initialValue !== "number"
+    ) return value
+    return initialValue + value - segment.from
+  }
+  const behaviours = new Map<string, BehaviourSegments>()
+  for (const segment of segments) {
+    if (positionMs < segment.startMs) continue
+    if (positionMs >= segment.endMs && segment.fill === "remove") continue
+    const entry = behaviours.get(segment.sourceNodeId)
+    if (!entry) {
+      behaviours.set(segment.sourceNodeId, { first: segment, latest: segment })
+      continue
+    }
+    if (segment.startMs < entry.first.startMs) entry.first = segment
+    if (laterSegment(segment, entry.latest)) entry.latest = segment
+  }
+  let latest: PptxCompiledTrackSegment | undefined
+  for (const entry of behaviours.values()) {
+    if (laterSegment(entry.latest, latest)) latest = entry.latest
+  }
+  if (!latest) return initialValue
+  if (typeof initialValue !== "number") return evaluateSegment(latest, positionMs)
+  let total = initialValue
+  for (const entry of behaviours.values()) {
+    const value = evaluateSegment(entry.latest, positionMs)
+    if (typeof value !== "number" || typeof entry.first.from !== "number") {
+      return evaluateSegment(latest, positionMs)
+    }
+    total += value - entry.first.from
+  }
+  return total
+}
+
+function evaluateCompiledTrack(
+  property: PptxTrackProperty,
+  initialValue: PptxTrackValue,
+  segments: readonly PptxCompiledTrackSegment[],
+  positionMs: number,
+): PptxTrackValue {
+  if (additiveProperties.has(property)) return evaluateAdditiveTrack(initialValue, segments, positionMs)
+  let selected: PptxCompiledTrackSegment | undefined
+  for (const segment of segments) {
+    if (positionMs < segment.startMs) continue
+    if (positionMs >= segment.endMs && segment.fill === "remove") continue
+    if (laterSegment(segment, selected)) selected = segment
+  }
+  return selected ? evaluateSegment(selected, positionMs) : initialValue
+}
+
 export function evaluatePptxTrack(track: PptxPropertyTrack, positionMs: number): PptxTrackValue {
   if (track.repeatIndefinite && track.repeatPeriodMs && track.repeatStartMs !== undefined && positionMs >= track.repeatStartMs) {
     positionMs = track.repeatStartMs + (positionMs - track.repeatStartMs) % track.repeatPeriodMs
   }
   const segments = (track as Partial<PptxCompiledPropertyTrack>).segments
   if (segments?.length) {
-    const selected = segments.filter((segment) => {
-      if (positionMs < segment.startMs) return false
-      if (positionMs < segment.endMs) return true
-      return segment.fill !== "remove"
-    }).sort((left, right) => left.startMs - right.startMs || left.order - right.order).at(-1)
-    return selected ? evaluateSegment(selected, positionMs) : track.initialValue
+    return evaluateCompiledTrack(track.property, track.initialValue, segments, positionMs)
   }
   if (track.keyframes.length === 0 || positionMs < track.keyframes[0].timeMs) return track.initialValue
   let previous = track.keyframes[0]

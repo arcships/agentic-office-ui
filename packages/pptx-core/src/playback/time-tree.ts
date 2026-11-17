@@ -36,6 +36,8 @@ interface VisitContext {
   triggerKey?: PptxTriggerKey
   triggerEvent?: PptxTriggerEvent
   clickBoundary: number
+  /** Accumulated delay of the enclosing containers, in milliseconds. */
+  inheritedDelayMs: number
 }
 
 function startCondition(node: PptxTimeNode): PptxTimeCondition | undefined {
@@ -121,17 +123,23 @@ export function compilePptxSlideSchedule(slide: PptxPlaybackSlide): PptxSlideSch
     const condition = startCondition(node)
     const explicitEvent = condition?.event ?? nodeTypeEvent(node)
     const event = explicitEvent ?? inherited.triggerEvent ?? "delay"
+    const delay = Math.max(0, condition?.delayMs ?? node.delayMs)
     let context = inherited
     if (explicitEvent && !executableTrigger(explicitEvent) && !node.effect) {
       unsupported.add(node.id)
-      context = { triggerEvent: explicitEvent, clickBoundary: inherited.clickBoundary }
+      context = { ...inherited, triggerEvent: explicitEvent }
     } else if (explicitEvent === "on-click" && !node.effect) {
       clickBoundary += 1
-      context = { triggerKey: `click:${clickBoundary}`, triggerEvent: event, clickBoundary }
+      context = { ...inherited, triggerKey: `click:${clickBoundary}`, triggerEvent: event, clickBoundary }
     } else if ((explicitEvent === "on-shape-click" || explicitEvent === "on-media-bookmark") && !node.effect) {
       const key = triggerForCondition(condition, event, clickBoundary)
-      if (key) context = { triggerKey: key, triggerEvent: event, clickBoundary }
+      if (key) context = { ...inherited, triggerKey: key, triggerEvent: event }
       else unsupported.add(node.id)
+    }
+    // Children start after every enclosing container delay, not just their own.
+    const childContext: VisitContext = {
+      ...context,
+      inheritedDelayMs: inherited.inheritedDelayMs + delay,
     }
 
     if (node.effect) {
@@ -151,8 +159,7 @@ export function compilePptxSlideSchedule(slide: PptxPlaybackSlide): PptxSlideSch
         unsupported.add(node.id)
       } else {
         const previous = previousByTrigger.get(triggerKey)
-        const delay = Math.max(0, condition?.delayMs ?? node.delayMs)
-        let startMs = delay
+        let startMs = inherited.inheritedDelayMs + delay
         if (event === "with-previous" && previous) startMs = previous.startMs + delay
         else if (event === "after-previous" && previous) {
           startMs = previous.endMs === "indefinite" ? previous.startMs : previous.endMs + delay
@@ -190,22 +197,28 @@ export function compilePptxSlideSchedule(slide: PptxPlaybackSlide): PptxSlideSch
         const childEvent = child ? startCondition(child)?.event ?? nodeTypeEvent(child) : undefined
         const followsPrevious = ["with-previous", "after-previous", "on-begin", "on-end"].includes(childEvent ?? "")
         if (followsPrevious || subtreeHasExplicitInteractiveTrigger(slide, childId)) {
-          visit(childId, context)
+          visit(childId, childContext)
           continue
         }
         clickBoundary += 1
         visit(childId, {
+          ...childContext,
           triggerKey: `click:${clickBoundary}`,
           triggerEvent: "on-click",
           clickBoundary,
         })
       }
     } else {
-      for (const childId of node.childIds) visit(childId, context)
+      for (const childId of node.childIds) visit(childId, childContext)
     }
   }
 
-  visit(slide.rootNodeId, { triggerKey: "auto", triggerEvent: "delay", clickBoundary: 0 })
+  visit(slide.rootNodeId, {
+    triggerKey: "auto",
+    triggerEvent: "delay",
+    clickBoundary: 0,
+    inheritedDelayMs: 0,
+  })
   const groupMap = new Map<PptxTriggerKey, PptxScheduledEffect[]>()
   for (const effect of scheduled) {
     const group = groupMap.get(effect.triggerKey) ?? []
