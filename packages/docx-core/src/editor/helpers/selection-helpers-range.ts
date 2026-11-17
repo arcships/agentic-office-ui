@@ -184,12 +184,16 @@ export function cloneEditorSelection(
     };
   }
 
-  return {
+  const cloned: Extract<DocxEditorSelection, { kind: "table-cell" }> = {
     kind: "table-cell",
     tableIndex: selection.tableIndex,
     rowIndex: selection.rowIndex,
     cellIndex: selection.cellIndex,
   };
+  if (selection.tableRuntimeKey !== undefined) {
+    cloned.tableRuntimeKey = selection.tableRuntimeKey;
+  }
+  return cloned;
 }
 
 export function sameEditorSelection(
@@ -214,7 +218,8 @@ export function sameEditorSelection(
   return (
     a.tableIndex === tableSelection.tableIndex &&
     a.rowIndex === tableSelection.rowIndex &&
-    a.cellIndex === tableSelection.cellIndex
+    a.cellIndex === tableSelection.cellIndex &&
+    a.tableRuntimeKey === tableSelection.tableRuntimeKey
   );
 }
 
@@ -479,6 +484,19 @@ export function normalizeSelectionForModel(
   model: DocModel,
   selection: DocxEditorSelection
 ): DocxEditorSelection {
+  // Nested table cells live inside a cell of the host table. The host table
+  // cannot normalize inner row/cell coordinates, so preserve the runtime-key
+  // selection verbatim.
+  if (selection.kind === "table-cell" && selection.tableRuntimeKey) {
+    return {
+      kind: "table-cell",
+      tableIndex: selection.tableIndex,
+      rowIndex: selection.rowIndex,
+      cellIndex: selection.cellIndex,
+      tableRuntimeKey: selection.tableRuntimeKey,
+    };
+  }
+
   const normalizedParagraphLocation = normalizeParagraphLocationForModel(
     model,
     selectionFallbackParagraphLocation(selection)

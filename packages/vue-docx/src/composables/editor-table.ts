@@ -3,7 +3,7 @@
 // Extracted from useDocxEditor.ts.
 
 import type { DocModel } from "@arcships/docx-core"
-import { cloneDocModel } from "@arcships/docx-core"
+import { cloneDocModel, tableColumnCount } from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
 
 export function createEditorTable(
@@ -140,7 +140,7 @@ export function createEditorTable(
     }
 
     const table = ctx.modelSnapshot.value.nodes[tableIndex]
-    const columnCount = table?.type === "table" ? table.rows[0]?.cells.length ?? 0 : 0
+    const columnCount = table?.type === "table" ? tableColumnCount(table) : 0
     if (table?.type !== "table" || columnCount !== widthsPx.length) {
       unsupported("table column width target is unavailable")
       return

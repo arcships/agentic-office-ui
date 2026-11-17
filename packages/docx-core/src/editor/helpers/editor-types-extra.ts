@@ -247,6 +247,11 @@ export interface DocxEditorController {
     rowIndex: number,
     cellIndex: number
   ) => void;
+  selectTableCellByRuntimeKey: (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number
+  ) => void;
   clearTableCellContents: (
     tableIndex: number,
     cells: Array<{ rowIndex: number; cellIndex: number }>
@@ -285,6 +290,19 @@ export interface DocxEditorController {
     tableIndex: number,
     rowIndex: number,
     cellIndex: number,
+    text: string
+  ) => void;
+  commitTableCellTextByRuntimeKey: (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number,
+    text: string
+  ) => void;
+  commitTableCellParagraphTextByRuntimeKey: (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number,
+    paragraphIndex: number,
     text: string
   ) => void;
   commitTableCellParagraphTextRecursive: (
