@@ -146,6 +146,7 @@ const suites = {
       "tests/component/docx-product-interactions.test.mjs",
       "tests/component/docx-annotation-gutter.test.mjs",
       "tests/component/docx-table-presentation.test.mjs",
+      "tests/component/docx-file-handling.test.mjs",
       "tests/component/docx-page-budget.test.mjs",
       "tests/component/pdf-surface-lazy-render.test.mjs",
       "tests/component/docx-notes.test.mjs",

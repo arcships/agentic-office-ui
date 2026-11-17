@@ -14,7 +14,7 @@
       ref="uploadInputRef"
       class="docx-viewer__file-input"
       type="file"
-      accept=".docx,.docm,.dotx,.dotm,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-word.document.macroEnabled.12,application/vnd.openxmlformats-officedocument.wordprocessingml.template,application/vnd.ms-word.template.macroEnabled.12"
+      :accept="DOCX_FILE_ACCEPT"
       @change="onUploadChange"
     />
 
@@ -135,6 +135,11 @@ import {
   primeCommentAnchors,
 } from "@arcships/docx-core"
 import type { DocxSearchState } from "../composables/useDocxSearch"
+import {
+  DOCX_FILE_ACCEPT,
+  DOCX_UNSUPPORTED_FILE_MESSAGE,
+  isSupportedDocxFileName,
+} from "../composables/docx-file-types"
 import DocxDocumentSurface from "./DocxDocumentSurface.vue"
 import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
 import DocxViewerToolbar from "./DocxViewerToolbar.vue"
@@ -400,6 +405,13 @@ async function onUploadChange(event: Event): Promise<void> {
   const file = input.files?.[0]
   input.value = ""
   if (!file) return
+  if (!isSupportedDocxFileName(file.name)) {
+    internalFile.value = undefined
+    const unsupported = new Error(DOCX_UNSUPPORTED_FILE_MESSAGE)
+    error.value = unsupported
+    emit("load-error", unsupported)
+    return
+  }
   emit("file-selected", file)
   internalFileName.value = file.name
   internalFile.value = await file.arrayBuffer()

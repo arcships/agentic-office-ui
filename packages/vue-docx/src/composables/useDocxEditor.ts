@@ -149,7 +149,8 @@ export function useDocxEditor(
   const isDirty = computed(() => model.value !== cleanModel.value)
   const basePackage = ref<OoxmlPackage | undefined>(undefined)
   const documentLoadNonce = ref(0)
-  const fileName = ref(options.initialFileName ?? "(new document)")
+  const initialFileName = options.initialFileName ?? "(new document)"
+  const fileName = ref(initialFileName)
   const status = ref(options.initialStatus ?? "Ready")
   const importError = ref<Error | undefined>(undefined)
   const isImporting = ref(false)
@@ -495,7 +496,7 @@ export function useDocxEditor(
     // refs
     model, cleanModel, isDirty, selection, activeTextRange, pendingRunStyle, history, historyBudget,
     estimateHistorySnapshotBytes, status,
-    selectedFormFieldLocation, documentLoadNonce, fileName, importError,
+    selectedFormFieldLocation, documentLoadNonce, fileName, initialFileName, importError,
     isImporting, documentTheme, showTrackedChanges, showComments,
     paginationInfo, historyRestoreRequest, basePackage,
     selectionSessionKind, selectionSessionKindInternal, embeddedFontLoadNonce,
