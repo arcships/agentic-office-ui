@@ -330,7 +330,10 @@ export function resolveMeasureFont(
   const fontWeight = style?.bold ? "700" : "400";
   const fontSizePx = resolveMeasureFontSizePx(style, paragraphBaseFontPx);
   const fontFamily =
-    cssFontFamily(style?.fontFamily) ??
+    cssFontFamily(style?.fontFamily, {
+      eastAsia: style?.fontFamilyEastAsia,
+      complexScript: style?.fontFamilyComplexScript
+    }) ??
     cssFontFamily(DEFAULT_UNSPECIFIED_DOCX_FONT_FAMILY) ??
     '"Times New Roman", serif';
   return `${fontStyle} normal ${fontWeight} ${fontSizePx}px ${fontFamily}`;
@@ -349,7 +352,12 @@ export function measureTextWidthPx(
   const characterSpacingPx = Number.isFinite(style?.characterSpacingTwips)
     ? (style?.characterSpacingTwips as number) / TWIPS_PER_PIXEL
     : 0;
-  const cacheKey = `${font}\u0000${characterSpacingPx}\u0000${text}`;
+  const characterScale =
+    Number.isFinite(style?.characterScalePercent) &&
+    (style?.characterScalePercent as number) > 0
+      ? (style?.characterScalePercent as number) / 100
+      : 1;
+  const cacheKey = `${font}\u0000${characterSpacingPx}\u0000${characterScale}\u0000${text}`;
   const cached = textWidthByFontAndValue.get(cacheKey);
   if (cached !== undefined) {
     return cached;
@@ -379,6 +387,9 @@ export function measureTextWidthPx(
 
   if (characterSpacingPx !== 0 && text.length > 1) {
     measuredWidthPx += characterSpacingPx * Math.max(0, text.length - 1);
+  }
+  if (characterScale !== 1) {
+    measuredWidthPx *= characterScale;
   }
 
   setCacheEntry(textWidthByFontAndValue, cacheKey, measuredWidthPx);

@@ -36,7 +36,16 @@ declare const Buffer: {
 export function cloneTextStyle(
   style?: TextRunNode["style"]
 ): TextRunNode["style"] | undefined {
-  return style ? { ...style } : undefined;
+  if (!style) {
+    return undefined;
+  }
+
+  return {
+    ...style,
+    runBorder: style.runBorder ? { ...style.runBorder } : undefined,
+    textShadow: style.textShadow ? { ...style.textShadow } : undefined,
+    textOutline: style.textOutline ? { ...style.textOutline } : undefined
+  };
 }
 
 // Re-exported so helper imports and the root barrel keep resolving to the single

@@ -13,6 +13,11 @@ import type {
   TableNode,
   TableRowStyle
 } from "../../engine/types";
+import {
+  normalizeBorderType,
+  ooxmlBorderToCss,
+  ooxmlBorderWidthPx
+} from "../../engine/border-css";
 import { twipsToPixels, TWIPS_PER_PIXEL } from "../../viewer/section-layout";
 import {
   DEFAULT_TOOLBAR_BORDER_COLOR,
@@ -650,60 +655,18 @@ export function mergeTableSpacing(
 
 export type TableBorderSide = "top" | "right" | "bottom" | "left";
 
-export function normalizeBorderType(type: string | undefined): string | undefined {
-  if (!type) {
-    return undefined;
-  }
-
-  const normalized = type.trim().toLowerCase();
-  return normalized.length > 0 ? normalized : undefined;
-}
+export { normalizeBorderType };
 
 export function tableBorderToCss(
   border: TableBorderStyle | undefined
 ): string | undefined {
-  const type = normalizeBorderType(border?.type);
-  if (!type) {
-    return undefined;
-  }
-
-  if (type === "none" || type === "nil") {
-    return "none";
-  }
-
-  const cssStyle =
-    type === "double"
-      ? "double"
-      : type === "dashed" ||
-        type === "dashsmallgap" ||
-        type === "dotdash" ||
-        type === "dotdotdash"
-      ? "dashed"
-      : type === "dotted"
-      ? "dotted"
-      : "solid";
-  const sizeEighthPt = border?.sizeEighthPt;
-  const widthPx =
-    Number.isFinite(sizeEighthPt) && (sizeEighthPt as number) > 0
-      ? Math.max(0.5, Number(((sizeEighthPt as number) / 6).toFixed(2)))
-      : 1;
-  const color = border?.color ?? "#000000";
-
-  return `${widthPx}px ${cssStyle} ${color}`;
+  return ooxmlBorderToCss(border);
 }
 
 export function tableBorderStrokeWidthPx(
   border: TableBorderStyle | undefined
 ): number {
-  const type = normalizeBorderType(border?.type);
-  if (!type || type === "none" || type === "nil") {
-    return 0;
-  }
-
-  const sizeEighthPt = border?.sizeEighthPt;
-  return Number.isFinite(sizeEighthPt) && (sizeEighthPt as number) > 0
-    ? Math.max(0.5, Number(((sizeEighthPt as number) / 6).toFixed(2)))
-    : 1;
+  return ooxmlBorderWidthPx(border);
 }
 
 export function borderTypeVisible(type: string | undefined): boolean {

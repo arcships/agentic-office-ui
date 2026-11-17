@@ -42,6 +42,7 @@ import {
   compareTextRangeBoundaries,
   paragraphText,
   paragraphIsList,
+  paragraphTypographyStyle,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
 import { renderStaticHtml } from "../render/static-html"
@@ -114,7 +115,7 @@ const paragraphStyle = computed<Record<string, any>>(() => {
   return {
     margin: "0",
     minHeight: "1em",
-    textAlign: (style?.align as any) ?? undefined,
+    ...paragraphTypographyStyle(style),
     fontWeight: style?.headingLevel ? 700 : undefined,
     fontSize: style?.headingLevel
       ? HEADING_FONT_SIZES[style.headingLevel]

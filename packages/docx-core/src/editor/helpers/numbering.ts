@@ -7,6 +7,7 @@ import type {
   FormFieldRunNode,
   NumberingDefinitionSet,
   NumberingLevelDefinition,
+  ParagraphAlignment,
   ParagraphBorderSet,
   ParagraphBorderStyle,
   ParagraphIndent,
@@ -94,6 +95,187 @@ export interface ParagraphNumberingLabel {
   imageWidthPx?: number;
   imageHeightPx?: number;
   trailingText?: string;
+  /** OOXML `w:lvlJc` marker alignment. */
+  alignment?: ParagraphAlignment;
+}
+
+const CHINESE_DIGITS = [
+  "\u96f6",
+  "\u4e00",
+  "\u4e8c",
+  "\u4e09",
+  "\u56db",
+  "\u4e94",
+  "\u516d",
+  "\u4e03",
+  "\u516b",
+  "\u4e5d"
+];
+const CHINESE_LEGAL_DIGITS = [
+  "\u96f6",
+  "\u58f9",
+  "\u8d30",
+  "\u53c1",
+  "\u8086",
+  "\u4f0d",
+  "\u9646",
+  "\u67d2",
+  "\u634c",
+  "\u7396"
+];
+const CHINESE_UNITS = ["", "\u5341", "\u767e", "\u5343"];
+const CHINESE_LEGAL_UNITS = ["", "\u62fe", "\u4f70", "\u4edf"];
+const IDEOGRAPHIC_TRADITIONAL = [
+  "\u7532",
+  "\u4e59",
+  "\u4e19",
+  "\u4e01",
+  "\u620a",
+  "\u5df1",
+  "\u5e9a",
+  "\u8f9b",
+  "\u58ec",
+  "\u7678"
+];
+const IDEOGRAPHIC_ZODIAC = [
+  "\u5b50",
+  "\u4e11",
+  "\u5bc5",
+  "\u536f",
+  "\u8fb0",
+  "\u5df3",
+  "\u5348",
+  "\u672a",
+  "\u7533",
+  "\u9149",
+  "\u620c",
+  "\u4ea5"
+];
+
+function chineseSection(value: number, digits: string[], units: string[]): string {
+  let output = "";
+  let pendingZero = false;
+  for (let position = 3; position >= 0; position -= 1) {
+    const digit = Math.floor(value / 10 ** position) % 10;
+    if (digit === 0) {
+      if (output.length > 0) {
+        pendingZero = true;
+      }
+      continue;
+    }
+    if (pendingZero) {
+      output += digits[0];
+      pendingZero = false;
+    }
+    output += `${digits[digit]}${units[position]}`;
+  }
+  return output;
+}
+
+function numberToChinese(value: number, legal = false): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "";
+  }
+
+  const digits = legal ? CHINESE_LEGAL_DIGITS : CHINESE_DIGITS;
+  const units = legal ? CHINESE_LEGAL_UNITS : CHINESE_UNITS;
+  const safeValue = Math.floor(value);
+  if (safeValue < 10000) {
+    const text = chineseSection(safeValue, digits, units);
+    return legal ? text : text.replace(/^\u4e00\u5341/, "\u5341");
+  }
+
+  const high = Math.floor(safeValue / 10000);
+  const low = safeValue % 10000;
+  let output = `${numberToChinese(high, legal)}\u4e07`;
+  if (low > 0) {
+    if (low < 1000) {
+      output += digits[0];
+    }
+    output += chineseSection(low, digits, units);
+  }
+  return output;
+}
+
+function numberToEnglishWords(value: number): string {
+  const small = [
+    "zero",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "fourteen",
+    "fifteen",
+    "sixteen",
+    "seventeen",
+    "eighteen",
+    "nineteen"
+  ];
+  const tens = [
+    "",
+    "",
+    "twenty",
+    "thirty",
+    "forty",
+    "fifty",
+    "sixty",
+    "seventy",
+    "eighty",
+    "ninety"
+  ];
+  if (value < 20) {
+    return small[value];
+  }
+  if (value < 100) {
+    return `${tens[Math.floor(value / 10)]}${
+      value % 10 ? `-${small[value % 10]}` : ""
+    }`;
+  }
+  if (value < 1000) {
+    return `${small[Math.floor(value / 100)]} hundred${
+      value % 100 ? ` ${numberToEnglishWords(value % 100)}` : ""
+    }`;
+  }
+  return String(value);
+}
+
+function numberToOrdinal(value: number): string {
+  const modulo100 = value % 100;
+  if (modulo100 >= 11 && modulo100 <= 13) {
+    return `${value}th`;
+  }
+  switch (value % 10) {
+    case 1:
+      return `${value}st`;
+    case 2:
+      return `${value}nd`;
+    case 3:
+      return `${value}rd`;
+    default:
+      return `${value}th`;
+  }
+}
+
+function numberToEnclosed(base: number, value: number): string {
+  if (value < 1 || value > 20) {
+    return String(value);
+  }
+  return String.fromCodePoint(base + value - 1);
+}
+
+function numberToFullWidth(value: number): string {
+  return String(value).replace(/[0-9]/g, (digit) =>
+    String.fromCodePoint(0xff10 + Number(digit))
+  );
 }
 
 export function formatNumberingCounter(
@@ -107,6 +289,19 @@ export function formatNumberingCounter(
   switch ((format ?? "decimal").toLowerCase()) {
     case "decimal":
       return String(value);
+    case "decimalzero":
+      return String(value).padStart(2, "0");
+    case "decimalhalfwidth":
+      return String(value);
+    case "decimalfullwidth":
+      return numberToFullWidth(value);
+    case "decimalenclosedcircle":
+    case "decimalenclosedcirclechinese":
+      return numberToEnclosed(0x2460, value);
+    case "decimalenclosedparen":
+      return numberToEnclosed(0x2474, value);
+    case "decimalenclosedfullstop":
+      return numberToEnclosed(0x2488, value);
     case "upperroman":
       return numberToRoman(value);
     case "lowerroman":
@@ -116,9 +311,29 @@ export function formatNumberingCounter(
     case "lowerletter":
       return numberToLetters(value).toLowerCase();
     case "ordinal":
+      return numberToOrdinal(value);
     case "cardinaltext":
+      return numberToEnglishWords(value);
     case "ordinaltext":
-      return String(value);
+      return numberToEnglishWords(value);
+    case "chinesecounting":
+    case "chinesecountingthousand":
+    case "japanesecounting":
+    case "taiwanesecounting":
+    case "ideographdigital":
+      return numberToChinese(value);
+    case "chineselegalsimplified":
+    case "ideographlegaltraditional":
+      return numberToChinese(value, true);
+    case "ideographtraditional":
+      return IDEOGRAPHIC_TRADITIONAL[(value - 1) % IDEOGRAPHIC_TRADITIONAL.length];
+    case "ideographzodiac":
+      return IDEOGRAPHIC_ZODIAC[(value - 1) % IDEOGRAPHIC_ZODIAC.length];
+    case "hex":
+    case "upperhex":
+      return value.toString(16).toUpperCase();
+    case "lowerhex":
+      return value.toString(16);
     case "bullet":
       return "\u2022";
     case "none":
@@ -508,6 +723,8 @@ export function buildParagraphNumberingLabels(
       fontFamily: isBullet ? level?.bulletFontFamily : undefined,
       color: isBullet ? level?.bulletColor : undefined,
       style: numberingTextStyle ? { ...numberingTextStyle } : undefined,
+      alignment: level?.justification,
+      trailingText,
     });
   };
 

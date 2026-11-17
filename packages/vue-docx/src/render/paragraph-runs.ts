@@ -44,6 +44,7 @@ import {
   formFieldDisplayValue,
   attachTextToPreviousCheckbox,
   shouldRenderWrappedFloatingImage,
+  isJustifiedAlignment,
 } from "@arcships/docx-core"
 import type { ImageRunRenderExtra } from "./paragraph-runs-image"
 import { renderImageRun } from "./paragraph-runs-image"
@@ -635,7 +636,7 @@ export function renderParagraphRuns(
     spanAttributes?: Record<string, string>
   ): void => {
     const shouldControlSoftBreakStretch =
-      paragraph.style?.align === "justify" && text.includes("\n")
+      isJustifiedAlignment(paragraph.style?.align) && text.includes("\n")
     if (!shouldControlSoftBreakStretch) {
       target.push(h("span", { key: keySeed, ...spanAttributes, style }, text))
       trackTextAdvance(text, measureStyle)

@@ -1,5 +1,39 @@
-export type ParagraphAlignment = "left" | "center" | "right" | "justify";
+export type ParagraphAlignment =
+  | "left"
+  | "center"
+  | "right"
+  | "justify"
+  | "both"
+  | "distribute"
+  | "thaiDistribute"
+  | "low"
+  | "start"
+  | "end";
+export type ParagraphDirection = "ltr" | "rtl";
 export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+
+/** OOXML `w:u` underline variants (beyond a plain single line). */
+export type TextUnderlineStyle =
+  | "single"
+  | "words"
+  | "double"
+  | "thick"
+  | "dotted"
+  | "dottedHeavy"
+  | "dash"
+  | "dashedHeavy"
+  | "dashLong"
+  | "dashLongHeavy"
+  | "dotDash"
+  | "dashDotHeavy"
+  | "dotDotDash"
+  | "dashDotDotHeavy"
+  | "wave"
+  | "wavyHeavy"
+  | "wavyDouble";
+
+/** OOXML `w:strike` / `w:dstrike` strike-through variants. */
+export type TextStrikeStyle = "single" | "double";
 
 export interface TextRunBorderStyle {
   type: string;
@@ -10,19 +44,58 @@ export interface TextRunBorderStyle {
   shadow?: boolean;
 }
 
+export interface TextShadowStyle {
+  color?: string;
+  blurPt?: number;
+  offsetXPt?: number;
+  offsetYPt?: number;
+}
+
+export interface TextOutlineStyle {
+  color?: string;
+  widthPt?: number;
+}
+
+export interface DocxThemeFontSet {
+  ascii?: string;
+  eastAsia?: string;
+  complexScript?: string;
+}
+
+export interface DocxThemeFonts {
+  major?: DocxThemeFontSet;
+  minor?: DocxThemeFontSet;
+}
+
 export interface TextStyle {
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
+  /** OOXML underline variant; `underline` stays the boolean compatibility flag. */
+  underlineStyle?: TextUnderlineStyle;
   strike?: boolean;
+  /** OOXML strike variant; `strike` stays the boolean compatibility flag. */
+  strikeStyle?: TextStrikeStyle;
+  caps?: boolean;
+  smallCaps?: boolean;
   color?: string;
   highlight?: string;
   backgroundColor?: string;
   fontSizePt?: number;
+  /** Primary (ASCII / high-ANSI) font family. */
   fontFamily?: string;
+  /** East-Asian font family (`w:rFonts/@w:eastAsia`). */
+  fontFamilyEastAsia?: string;
+  /** Complex-script font family (`w:rFonts/@w:cs`). */
+  fontFamilyComplexScript?: string;
   characterSpacingTwips?: number;
+  /** OOXML `w:w` character scale, 1-600 (100 = normal). */
+  characterScalePercent?: number;
+  direction?: ParagraphDirection;
   verticalAlign?: "superscript" | "subscript";
   runBorder?: TextRunBorderStyle;
+  textShadow?: TextShadowStyle;
+  textOutline?: TextOutlineStyle;
 }
 
 export type NoteReferenceKind = "footnote" | "endnote";
@@ -202,6 +275,7 @@ export interface ParagraphTabStop {
 
 export interface ParagraphStyle {
   align?: ParagraphAlignment;
+  direction?: ParagraphDirection;
   headingLevel?: HeadingLevel;
   styleId?: string;
   styleName?: string;
@@ -350,6 +424,7 @@ export interface ParagraphStyleDefinition {
   basedOnId?: string;
   nextStyleId?: string;
   align?: ParagraphAlignment;
+  direction?: ParagraphDirection;
   headingLevel?: HeadingLevel;
   numbering?: ParagraphNumbering;
   spacing?: ParagraphSpacing;
@@ -374,6 +449,8 @@ export interface NumberingLevelDefinition {
   format?: string;
   text?: string;
   suffix?: "tab" | "space" | "nothing";
+  /** OOXML `w:lvlJc` label alignment. */
+  justification?: ParagraphAlignment;
   indent?: ParagraphIndent;
   runStyle?: TextStyle;
   bulletFontFamily?: string;
@@ -492,6 +569,7 @@ export interface DocModel {
     footerSections: FooterSection[];
     paragraphStyles: ParagraphStyleDefinition[];
     defaultParagraphStyleId?: string;
+    themeFonts?: DocxThemeFonts;
     numberingDefinitions?: NumberingDefinitionSet;
     compatibility?: DocumentCompatibilitySettings;
     footnotes?: DocumentNoteDefinition[];
