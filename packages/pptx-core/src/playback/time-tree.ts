@@ -1,6 +1,5 @@
 import type {
   PptxPlaybackEffect,
-  PptxPlaybackSlide,
   PptxTimeCondition,
   PptxTimeNode,
   PptxTriggerEvent,
@@ -81,7 +80,7 @@ function executableTrigger(event: PptxTriggerEvent): boolean {
 }
 
 function subtreeHasExplicitInteractiveTrigger(
-  slide: PptxPlaybackSlide,
+  slide: PptxSlideScheduleSource,
   nodeId: string,
   visited = new Set<string>(),
 ): boolean {
@@ -100,7 +99,12 @@ function isMainSequenceAdvancedByClick(node: PptxTimeNode): boolean {
     && node.conditions.some((condition) => condition.source === "next" && condition.event === "on-next")
 }
 
-export function compilePptxSlideSchedule(slide: PptxPlaybackSlide): PptxSlideSchedule {
+export interface PptxSlideScheduleSource {
+  rootNodeId?: string
+  nodes: Readonly<Record<string, PptxTimeNode>>
+}
+
+export function compilePptxSlideSchedule(slide: PptxSlideScheduleSource): PptxSlideSchedule {
   if (!slide.rootNodeId || !slide.nodes[slide.rootNodeId]) {
     return Object.freeze({ groups: Object.freeze([]), clickBoundaryCount: 0, unsupportedNodeIds: Object.freeze([]) })
   }

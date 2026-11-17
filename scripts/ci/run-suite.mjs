@@ -68,6 +68,7 @@ const suites = {
       "tests/unit/pdf-source.test.mjs",
       "tests/unit/pdf-reference-adapter.test.mjs",
       "tests/unit/pptx-core.test.mjs",
+      "tests/unit/pptx-media-transitions.test.mjs",
       "tests/unit/pptx-reference-adapter.test.mjs",
       "tests/unit/core-purity.test.mjs",
     ]),

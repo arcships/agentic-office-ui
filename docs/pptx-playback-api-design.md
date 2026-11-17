@@ -115,6 +115,8 @@ export interface PptxTimeNode {
 }
 ```
 
+`repeatCount` 是真实重复次数（`indefinite` 表示无限）：源文件里它是 ECMA-376 §19.5.33 的千分位记法（`1000` 为一次），解析时已经换算。
+
 节点使用编号引用，避免公开模型中递归对象过深，也便于 Worker 传输和序列化。
 
 ### 2.4 效果和属性轨道
@@ -210,6 +212,7 @@ export interface PptxMediaItem {
   contentType?: string
   kind: "audio" | "video"
   embedded: boolean
+  autoplay: boolean
   trimStartMs?: number
   trimEndMs?: number
   loop: boolean

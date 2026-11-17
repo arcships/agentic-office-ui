@@ -18,6 +18,8 @@ import type {
   PptxTriggerEvent,
 } from "../playback/types"
 import type { PptxApproximationPolicy } from "../browser-types"
+import { withAutoplayMedia } from "../playback/media-command"
+import { repeatCountNote, repeatCountValue } from "../playback/timing-values"
 
 export interface PptxPlaybackParserOptions {
   approximation?: PptxApproximationPolicy
@@ -354,10 +356,7 @@ function parseTimeNode(
     rawDuration = Math.max(0, ...behaviorDurations)
   }
   const rawRepeat = localAttr(node, "repeatCount")
-  const repeatRawNumber = Number(rawRepeat)
-  const repeatNumber = Number.isFinite(repeatRawNumber) && repeatRawNumber >= 1000
-    ? repeatRawNumber / 1000
-    : repeatRawNumber
+  const repeatNumber = repeatCountValue(rawRepeat)
   const timeNode: PptxTimeNode = Object.freeze({
     id,
     parentId,
@@ -374,7 +373,7 @@ function parseTimeNode(
     nodeType: node.getAttribute("nodeType") ?? undefined,
     delayMs: conditions.find((condition) => condition.source === "start")?.delayMs ?? 0,
     durationMs: rawDuration,
-    repeatCount: rawRepeat === "indefinite" ? "indefinite" : Number.isFinite(repeatNumber) && repeatNumber > 0 ? repeatNumber : undefined,
+    repeatCount: repeatNumber,
     autoReverse: localAttr(node, "autoRev") === "1",
     fill: ["hold", "remove", "freeze"].includes(localAttr(node, "fill") ?? "")
       ? localAttr(node, "fill") as "hold" | "remove" | "freeze"
@@ -419,17 +418,26 @@ function parseTimeNode(
           : disposition === "static" ? "第一版尚未批准该效果参数。" : undefined,
       sourceNodeId: id,
     }))
-    if (timeNode.repeatCount !== undefined) features.push(Object.freeze({
-      id: `repeat:${slideIndex}:${id}`,
-      slideIndex,
-      objectKey: effect.targetObjectKey,
-      feature: timeNode.repeatCount === "indefinite" ? "repeat:indefinite" : "repeat:finite",
-      disposition: disposition === "strict" && typeof timeNode.durationMs === "number" && timeNode.durationMs > 0
+    if (timeNode.repeatCount !== undefined) {
+      const repeatDisposition: PptxFeatureDisposition = disposition === "strict"
+        && typeof timeNode.durationMs === "number"
+        && timeNode.durationMs > 0
         ? "strict"
-        : "static",
-      reason: disposition === "strict" ? undefined : "基础效果本身未进入严格执行范围。",
-      sourceNodeId: id,
-    }))
+        : "static"
+      const encoding = timeNode.repeatCount === "indefinite"
+        ? undefined
+        : repeatCountNote(rawRepeat, timeNode.repeatCount)
+      features.push(Object.freeze({
+        id: `repeat:${slideIndex}:${id}`,
+        slideIndex,
+        objectKey: effect.targetObjectKey,
+        feature: timeNode.repeatCount === "indefinite" ? "repeat:indefinite" : "repeat:finite",
+        disposition: repeatDisposition,
+        reason: encoding
+          ?? (repeatDisposition === "strict" ? undefined : "基础效果本身未进入严格执行范围。"),
+        sourceNodeId: id,
+      }))
+    }
     if (timeNode.autoReverse) features.push(Object.freeze({
       id: `auto-reverse:${slideIndex}:${id}`,
       slideIndex,
@@ -513,6 +521,7 @@ function parseMedia(
             : sourcePath?.toLowerCase().endsWith(".wav") ? "audio/wav" : undefined,
       kind: node.localName === "videoFile" ? "video" : "audio",
       embedded: !external && sourcePath?.startsWith("ppt/") === true,
+      autoplay: false,
       trimStartMs: Number.isFinite(trimStart) && trim?.hasAttribute("st") ? trimStart : undefined,
       trimEndMs: Number.isFinite(trimEnd) && trim?.hasAttribute("end") ? trimEnd : undefined,
       loop: false,
@@ -546,8 +555,14 @@ function parseMedia(
     })
     const bookmarks = new Map(entry.bookmarks.map((bookmark) => [bookmark.name, bookmark]))
     for (const bookmark of discoveredBookmarks) bookmarks.set(bookmark.name, bookmark)
+    // `numSld` 表示媒体跨页继续播放，`nodeType` 为 withEffect/afterEffect 时它随页面自动开始。
+    const autoStartNodeType = localAttr(timing, "nodeType")
+    const autoStart = mediaNode.hasAttribute("numSld")
+      || autoStartNodeType === "withEffect"
+      || autoStartNodeType === "afterEffect"
     result.set(entry.relationId, Object.freeze({
       ...entry,
+      autoplay: entry.autoplay || autoStart,
       trimStartMs: attributeNumber(["trimSt", "st"]) ?? entry.trimStartMs,
       trimEndMs: attributeNumber(["trimEnd", "end"]) ?? entry.trimEndMs,
       loop: localAttr(timing, "repeatCount") === "indefinite" || mediaNode.getAttribute("loop") === "1",
@@ -670,7 +685,7 @@ function parseSlide(
     feature: `transition:${transition.kind}`,
     disposition: transitionDisposition(transition.kind, options.approximation ?? "off"),
   }))
-  const media = parseMedia(document, objectKeys, slide)
+  const media = withAutoplayMedia(parseMedia(document, objectKeys, slide), nodes, rootNodeId)
   for (const item of media) features.push(Object.freeze({
     id: `media:${slide.index}:${item.id}`,
     slideIndex: slide.index,
