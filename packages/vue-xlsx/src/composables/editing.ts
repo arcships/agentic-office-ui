@@ -6,6 +6,7 @@ import type {
 } from "@arcships/xlsx-core";
 import { loadWorkbookChartAssets } from "@arcships/xlsx-core";
 import { cellAddressToA1, normalizeRange, rangeContainsCell, rangeToA1 } from "./selection";
+import { shiftFormulaReferences } from "./formula-references";
 import {
   applyCellMutationState,
   cloneCellStyle,
@@ -382,7 +383,12 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
         const sourceStyle = cloneCellStyle(worksheet.getCellStyleAt(sourceRow, sourceCol));
 
         if (sourceFormula) {
-          worksheet.setFormula(cellAddressToA1(targetCell), sourceFormula);
+          // Fill tiles the source range, so each copy shifts its relative
+          // references by the distance from the cell it was copied from.
+          worksheet.setFormula(
+            cellAddressToA1(targetCell),
+            shiftFormulaReferences(sourceFormula, row - sourceRow, col - sourceCol)
+          );
         } else {
           const sourceCellValue = worksheet.getCellAt(sourceRow, sourceCol);
           try {

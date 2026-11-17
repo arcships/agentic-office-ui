@@ -554,7 +554,8 @@ export function localizeFormattedNumber(
   return `${prefix}${nextNumber}${suffix}`;
 }
 
-function isCellReferenceBoundary(text: string, start: number, end: number): boolean {
+/** True when `text[start..end)` is a standalone cell reference and not part of a name, function call, or sheet prefix. */
+export function isCellReferenceBoundary(text: string, start: number, end: number): boolean {
   const before = start > 0 ? text[start - 1] : "";
   const after = end < text.length ? text[end] : "";
   if (before && /[A-Za-z0-9_.$]/.test(before)) {
