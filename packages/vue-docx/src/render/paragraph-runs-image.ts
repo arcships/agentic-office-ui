@@ -4,6 +4,7 @@
 // Translates JSX to Vue h() calls.
 
 import { h, type VNode } from "vue"
+import { officeMessagesEn } from "@arcships/office-interaction"
 import type { ImageRunNode, ParagraphNode } from "@arcships/docx-core"
 import type { DocxSectionImageLocation } from "@arcships/docx-core"
 import {
@@ -410,7 +411,7 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
       code: "IMAGE_DECODE_FAILED",
       phase: "image-decode",
       imageKey: key,
-      message: "DOCX image could not be decoded.",
+      message: officeMessagesEn.docx.diagnostics.imageDecodeFailed,
     })
   }
 

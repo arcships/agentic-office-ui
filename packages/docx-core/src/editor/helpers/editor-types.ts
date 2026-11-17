@@ -355,6 +355,78 @@ export interface DocxEditorStatusMessages {
   /** Template with a `{count}` placeholder. */
   formattingCleared: string;
   formattingClearedOne: string;
+  /** Template with a `{feature}` placeholder. */
+  unsupportedFeature: string;
+  imageTargetUnavailable: string;
+  imageSizePositive: string;
+  resizeTargetUnavailable: string;
+  lockedImageAnchorResize: string;
+  imageOverlapDisabled: string;
+  syntheticTextBoxUnavailable: string;
+  imageMoveTargetUnavailable: string;
+  lockedImageAnchorMove: string;
+  sectionImageTargetUnavailable: string;
+  dropCapTargetUnavailable: string;
+  dropCapFontSizeTargetUnavailable: string;
+  dropCapTextTargetUnavailable: string;
+  imageMoveSourceUnavailable: string;
+  selectImageFile: string;
+  imageInsertionCancelled: string;
+  /** Template with a `{name}` placeholder. */
+  insertedImage: string;
+  /** Template with `{width}` and `{height}` placeholders. */
+  resizedImage: string;
+  updatedTextBox: string;
+  /** Template with a `{mode}` placeholder. */
+  imageWrapSet: string;
+  movedImage: string;
+  movedSectionImage: string;
+  movedDropCap: string;
+  /** Template with a `{size}` placeholder. */
+  dropCapFontSize: string;
+  updatedDropCapText: string;
+  tableColumnWidthPositive: string;
+  tableColumnWidthTargetUnavailable: string;
+  cannotInsertRowTableNotFound: string;
+  cannotInsertTableRow: string;
+  cannotInsertColumnTableNotFound: string;
+  cannotInsertTableColumn: string;
+  cannotDeleteRowTableNotFound: string;
+  cannotDeleteOnlyTableRow: string;
+  cannotDeleteColumnTableNotFound: string;
+  cannotDeleteOnlyTableColumn: string;
+  cannotDeleteTableColumn: string;
+  cannotDeleteTableNotFound: string;
+  cannotClearCellsTableNotFound: string;
+  cannotMergeCellsTableNotFound: string;
+  cannotMergeSingleCell: string;
+  cannotSplitCellTableNotFound: string;
+  cannotSplitCellNotMerged: string;
+  cannotMoveTableNotFound: string;
+  cannotMoveEmbeddedHostTableNotFound: string;
+  cannotMoveEmbeddedHostCellNotFound: string;
+  cannotMoveEmbeddedTableNotFound: string;
+  insertedTable: string;
+  /** Template with a `{direction}` placeholder. */
+  insertedTableRow: string;
+  /** Template with a `{direction}` placeholder. */
+  insertedTableColumn: string;
+  deletedTableRow: string;
+  deletedTableColumn: string;
+  deletedTable: string;
+  clearedTableCells: string;
+  resizedTableColumns: string;
+  mergedTableCells: string;
+  splitTableCell: string;
+  movedTable: string;
+  movedEmbeddedTable: string;
+  /** Template with a `{preset}` placeholder. */
+  unsupportedDiagonalTableCellBorders: string;
+  /** Template with a `{preset}` placeholder. */
+  unsupportedDiagonalParagraphBorders: string;
+  revisionLossOne: string;
+  /** Template with a `{count}` placeholder. */
+  revisionLossMany: string;
 }
 
 export interface UseDocxEditorOptions {

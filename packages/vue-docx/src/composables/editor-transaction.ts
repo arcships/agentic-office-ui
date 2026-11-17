@@ -26,10 +26,10 @@ function hasOwn(obj: object, prop: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, prop)
 }
 
-function revisionLossStatus(lostParagraphs: number): string {
+function revisionLossStatus(ctx: EditorCore, lostParagraphs: number): string {
   return lostParagraphs === 1
-    ? "Tracked changes in an edited paragraph were resolved with the edit"
-    : `Tracked changes in ${lostParagraphs} edited paragraphs were resolved with the edit`
+    ? ctx.statusMessage("revisionLossOne")
+    : ctx.statusMessage("revisionLossMany", { count: lostParagraphs })
 }
 
 export function createEditorTransaction(ctx: EditorCore) {
@@ -232,7 +232,7 @@ export function createEditorTransaction(ctx: EditorCore) {
     if (patch.status) {
       ctx.status.value = patch.status
     } else if (revisionLossParagraphCount > 0) {
-      ctx.status.value = revisionLossStatus(revisionLossParagraphCount)
+      ctx.status.value = revisionLossStatus(ctx, revisionLossParagraphCount)
     }
 
     return true

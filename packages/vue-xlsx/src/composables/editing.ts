@@ -5,6 +5,7 @@ import type {
   XlsxCellStyleInput
 } from "@arcships/xlsx-core";
 import { loadWorkbookChartAssets } from "@arcships/xlsx-core";
+import { officeMessagesEn } from "@arcships/office-interaction";
 import { cellAddressToA1, normalizeRange, rangeContainsCell, rangeToA1 } from "./selection";
 import { shiftFormulaReferences } from "./formula-references";
 import {
@@ -455,7 +456,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
     const baseName = name?.trim() || "Sheet";
     if (/[\\/:*?\[\]]/.test(baseName)) {
-      throw new Error("Worksheet names cannot contain these characters: \\ / : * ? [ ]");
+      throw new Error(officeMessagesEn.xlsx.diagnostics.sheetNameInvalid);
     }
 
     ctx.recordHistoryBeforeMutation();

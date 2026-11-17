@@ -5,6 +5,9 @@ import {
   type OfficeLoadError,
   type OfficeUrlPolicy,
 } from "@arcships/office-runtime"
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction"
+
+export type PdfLoadErrorMessages = typeof officeMessagesEn.pdf.errors
 
 export type PdfSource =
   | { kind: "url"; url: string }
@@ -136,20 +139,42 @@ function mapOfficeCode(error: OfficeLoadError): PdfLoadErrorCode {
 }
 
 function pdfMessage(code: PdfLoadErrorCode, actual?: number, allowed?: number): string {
+  const messages = officeMessagesEn.pdf.errors
   switch (code) {
-    case "SOURCE_NOT_ALLOWED": return "The PDF URL is outside the allowed policy."
-    case "FETCH_FAILED": return "Unable to fetch the PDF file."
-    case "PDF_TOO_LARGE": return `PDF file size ${actual ?? "unknown"} bytes exceeds the allowed maximum of ${allowed ?? "unknown"} bytes.`
-    case "ABORTED": return "PDF loading was cancelled."
-    case "ENCRYPTED": return "The PDF document is encrypted and requires a password."
-    default: return "The source is not a verified PDF file."
+    case "SOURCE_NOT_ALLOWED": return messages.sourceNotAllowed
+    case "FETCH_FAILED": return messages.fetchFailed
+    case "PDF_TOO_LARGE": return formatOfficeMessage(messages.tooLarge, {
+      actual: actual ?? messages.unknown,
+      allowed: allowed ?? messages.unknown,
+    })
+    case "ABORTED": return messages.aborted
+    case "ENCRYPTED": return messages.encrypted
+    default: return messages.invalidPdf
+  }
+}
+
+/** Resolve a PDF load error into localized copy for the active catalog. */
+export function localizePdfErrorMessage(
+  error: Pick<PdfLoadError, "code" | "actual" | "allowed">,
+  messages: PdfLoadErrorMessages,
+): string {
+  switch (error.code) {
+    case "SOURCE_NOT_ALLOWED": return messages.sourceNotAllowed
+    case "FETCH_FAILED": return messages.fetchFailed
+    case "PDF_TOO_LARGE": return formatOfficeMessage(messages.tooLarge, {
+      actual: error.actual ?? messages.unknown,
+      allowed: error.allowed ?? messages.unknown,
+    })
+    case "ABORTED": return messages.aborted
+    case "ENCRYPTED": return messages.encrypted
+    default: return messages.invalidPdf
   }
 }
 
 function fromOfficeError(error: unknown, sourceKind: PdfSource["kind"], url?: string): PdfSourceError {
   const officeError = toOfficeLoadError(error, {
     fallbackCode: "INVALID_SOURCE",
-    message: "Unable to open the PDF file.",
+    message: officeMessagesEn.pdf.errors.openFailed,
     format: "pdf",
     sourceKind: sourceKind === "blob" ? "file" : "url",
     url,
@@ -190,7 +215,7 @@ function verifyPdfBytes(bytes: Uint8Array, sourceKind: PdfSource["kind"], url?: 
     bytes[3] === 0x46 &&
     bytes[4] === 0x2d
   if (!isPdf) {
-    throw new PdfSourceError({ code: "INVALID_PDF", message: "The source is not a verified PDF file.", sourceKind, url })
+    throw new PdfSourceError({ code: "INVALID_PDF", message: officeMessagesEn.pdf.errors.invalidPdf, sourceKind, url })
   }
 }
 
@@ -213,7 +238,7 @@ function isAcceptedPdfContentType(contentType: string | undefined): boolean {
 
 function verifyPdfMime(contentType: string | undefined, sourceKind: PdfSource["kind"], url?: string): void {
   if (isAcceptedPdfContentType(contentType)) return
-  throw new PdfSourceError({ code: "INVALID_PDF", message: "The source response is not a PDF file type.", sourceKind, url })
+  throw new PdfSourceError({ code: "INVALID_PDF", message: officeMessagesEn.pdf.errors.invalidPdf, sourceKind, url })
 }
 
 function isEncryptedPdfError(error: unknown): boolean {
@@ -288,7 +313,7 @@ export async function loadVerifiedPdfSource(
     if (sourceKind === "blob") {
       const mime = source.blob.type.trim().toLowerCase()
       if (mime && !isAcceptedPdfContentType(mime)) {
-        throw new PdfSourceError({ code: "INVALID_PDF", message: "The file is not a PDF file type.", sourceKind })
+        throw new PdfSourceError({ code: "INVALID_PDF", message: officeMessagesEn.pdf.errors.invalidPdf, sourceKind })
       }
     } else {
       verifyPdfMime(resolved.contentType, sourceKind, resolved.resolvedUrl)

@@ -4,6 +4,7 @@
 
 import type {
   DocModel,
+  DocxEditorStatusMessages,
   DocxTableCellSelectionRange,
   ParagraphNode,
 } from "@arcships/docx-core"
@@ -118,12 +119,12 @@ export function createEditorTable(
     options?: ApplyModelChangeOptions
   ) => void,
 ) {
-  const unsupported = (feature: string): void => {
-    ctx.status.value = `Unsupported: ${feature}`
+  const unsupported = (key: keyof DocxEditorStatusMessages): void => {
+    ctx.status.value = ctx.statusMessage(key)
   }
 
-  const refuse = (reason: string): void => {
-    ctx.status.value = reason
+  const refuse = (key: keyof DocxEditorStatusMessages): void => {
+    ctx.status.value = ctx.statusMessage(key)
   }
 
   const selectMergedCell = (
@@ -227,7 +228,7 @@ export function createEditorTable(
       shiftSectionStartIndexesForInsertion(nextModel, location.nodeIndex + 1)
       shiftSectionStartIndexesForInsertion(nextModel, location.nodeIndex + 1)
       return nextModel
-    }, "Inserted table")
+    }, ctx.statusMessage("insertedTable"))
   }
 
   const insertTableRow = (
@@ -237,17 +238,17 @@ export function createEditorTable(
       const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
-        refuse("Cannot insert a row: table not found")
+        refuse("cannotInsertRowTableNotFound")
         return current
       }
       // `rowIndex` is the reference row; `direction` decides which side of it
       // the new row lands on.
       if (!insertTableRowOnGrid(node, rowIndex, direction)) {
-        refuse("Cannot insert a table row")
+        refuse("cannotInsertTableRow")
         return current
       }
       return nextModel
-    }, `Inserted table row ${direction}`)
+    }, ctx.statusMessage("insertedTableRow", { direction }))
   }
 
   const insertTableColumn = (
@@ -257,16 +258,16 @@ export function createEditorTable(
       const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
-        refuse("Cannot insert a column: table not found")
+        refuse("cannotInsertColumnTableNotFound")
         return current
       }
       // `cellIndex` is the reference cell; `direction` decides the side.
       if (!insertTableColumnOnGrid(node, cellIndex, direction, rowIndex)) {
-        refuse("Cannot insert a table column")
+        refuse("cannotInsertTableColumn")
         return current
       }
       return nextModel
-    }, `Inserted table column ${direction}`)
+    }, ctx.statusMessage("insertedTableColumn", { direction }))
   }
 
   const deleteTableRow = (tableIndex: number, rowIndex: number): void => {
@@ -274,15 +275,15 @@ export function createEditorTable(
       const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
-        refuse("Cannot delete a row: table not found")
+        refuse("cannotDeleteRowTableNotFound")
         return current
       }
       if (!deleteTableRowOnGrid(node, rowIndex)) {
-        refuse("Cannot delete the only table row")
+        refuse("cannotDeleteOnlyTableRow")
         return current
       }
       return nextModel
-    }, "Deleted table row")
+    }, ctx.statusMessage("deletedTableRow"))
   }
 
   const deleteTableColumn = (
@@ -292,26 +293,26 @@ export function createEditorTable(
       const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
-        refuse("Cannot delete a column: table not found")
+        refuse("cannotDeleteColumnTableNotFound")
         return current
       }
       if (tableColumnCount(node) <= 1) {
-        refuse("Cannot delete the only table column")
+        refuse("cannotDeleteOnlyTableColumn")
         return current
       }
       if (!deleteTableColumnOnGrid(node, cellIndex, rowIndex)) {
-        refuse("Cannot delete the table column")
+        refuse("cannotDeleteTableColumn")
         return current
       }
       return nextModel
-    }, "Deleted table column")
+    }, ctx.statusMessage("deletedTableColumn"))
   }
 
   const deleteTable = (tableIndex: number): void => {
     const currentNodes = ctx.modelSnapshot.value.nodes
     const node = currentNodes[tableIndex]
     if (!node || node.type !== "table") {
-      refuse("Cannot delete the table: table not found")
+      refuse("cannotDeleteTableNotFound")
       return
     }
 
@@ -330,7 +331,7 @@ export function createEditorTable(
       }
       shiftSectionStartIndexesForRemoval(nextModel, tableIndex)
       return nextModel
-    }, "Deleted table", {
+    }, ctx.statusMessage("deletedTable"), {
       selection: { kind: "paragraph", nodeIndex: fallbackNodeIndex },
       activeTextRange: undefined,
     })
@@ -343,7 +344,7 @@ export function createEditorTable(
       const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
-        refuse("Cannot clear cells: table not found")
+        refuse("cannotClearCellsTableNotFound")
         return current
       }
       for (const { rowIndex, cellIndex } of cells) {
@@ -354,7 +355,7 @@ export function createEditorTable(
       }
       node.sourceXml = undefined
       return nextModel
-    }, "Cleared table cells")
+    }, ctx.statusMessage("clearedTableCells"))
   }
 
   const setTableColumnWidths = (tableIndex: number, widthsPx: number[]): void => {
@@ -362,14 +363,14 @@ export function createEditorTable(
       widthsPx.length === 0 ||
       widthsPx.some((width) => !Number.isFinite(width) || width <= 0)
     ) {
-      unsupported("table column widths must be positive")
+      unsupported("tableColumnWidthPositive")
       return
     }
 
     const table = ctx.modelSnapshot.value.nodes[tableIndex]
     const columnCount = table?.type === "table" ? tableColumnCount(table) : 0
     if (table?.type !== "table" || columnCount !== widthsPx.length) {
-      unsupported("table column width target is unavailable")
+      unsupported("tableColumnWidthTargetUnavailable")
       return
     }
 
@@ -387,7 +388,7 @@ export function createEditorTable(
       }
       node.sourceXml = undefined
       return nextModel
-    }, "Resized table columns")
+    }, ctx.statusMessage("resizedTableColumns"))
   }
 
   const mergeTableCells = (
@@ -398,16 +399,16 @@ export function createEditorTable(
       const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
-        refuse("Cannot merge cells: table not found")
+        refuse("cannotMergeCellsTableNotFound")
         return current
       }
       merged = mergeTableCellsOnGrid(node, range)
       if (!merged) {
-        refuse("Cannot merge a single cell")
+        refuse("cannotMergeSingleCell")
         return current
       }
       return nextModel
-    }, "Merged table cells")
+    }, ctx.statusMessage("mergedTableCells"))
 
     if (merged) {
       selectMergedCell(tableIndex, merged)
@@ -422,16 +423,16 @@ export function createEditorTable(
       const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
-        refuse("Cannot split a cell: table not found")
+        refuse("cannotSplitCellTableNotFound")
         return current
       }
       split = splitTableCellOnGrid(node, rowIndex, cellIndex)
       if (!split) {
-        refuse("Cannot split a cell that is not merged")
+        refuse("cannotSplitCellNotMerged")
         return current
       }
       return nextModel
-    }, "Split table cell")
+    }, ctx.statusMessage("splitTableCell"))
 
     if (split) {
       selectMergedCell(tableIndex, split)
@@ -443,14 +444,14 @@ export function createEditorTable(
       const nextModel = cloneModelForSectionEdit(current)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
-        refuse("Cannot move the table: table not found")
+        refuse("cannotMoveTableNotFound")
         return current
       }
       if (!moveBodyNodeInModel(nextModel, tableIndex, targetNodeIndex)) {
         return current
       }
       return nextModel
-    }, "Moved table")
+    }, ctx.statusMessage("movedTable"))
   }
 
   const moveEmbeddedTableToBody = (
@@ -477,13 +478,13 @@ export function createEditorTable(
 
       const parentTable = nextModel.nodes[parentTableIndex]
       if (!parentTable || parentTable.type !== "table") {
-        refuse("Cannot move the embedded table: host table not found")
+        refuse("cannotMoveEmbeddedHostTableNotFound")
         return current
       }
 
       const parentCell = parentTable.rows[parentRowIndex]?.cells[parentCellIndex]
       if (!parentCell) {
-        refuse("Cannot move the embedded table: host cell not found")
+        refuse("cannotMoveEmbeddedHostCellNotFound")
         return current
       }
 
@@ -491,7 +492,7 @@ export function createEditorTable(
         const cellNodes = parentCell.nodes
         const nestedTable = cellNodes[nestedTableIndex]
         if (!nestedTable || nestedTable.type !== "table") {
-          refuse("Cannot move the embedded table: table not found")
+          refuse("cannotMoveEmbeddedTableNotFound")
           return current
         }
 
@@ -511,7 +512,7 @@ export function createEditorTable(
       }
 
       return nextModel
-    }, "Moved embedded table")
+    }, ctx.statusMessage("movedEmbeddedTable"))
   }
 
   return {

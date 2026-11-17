@@ -40,8 +40,10 @@ export {
   DEFAULT_PDF_MAX_FILE_SIZE,
   PdfSourceError,
   loadVerifiedPdfSource,
+  localizePdfErrorMessage,
   toPdfLoadError,
 } from "./pdf-url-policy"
+export type { PdfLoadErrorMessages } from "./pdf-url-policy"
 export { bundledPdfiumWasmUrl, createPdfRenderRuntime } from "./pdf/pdf-render-runtime"
 export {
   DEFAULT_PDF_MAX_RENDER_PIXELS,

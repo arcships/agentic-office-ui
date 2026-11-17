@@ -1,6 +1,7 @@
 import {
   createPdfiumEngine as createPdfiumWorkerEngine,
 } from "@embedpdf/engines/pdfium-worker-engine"
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction"
 import {
   PdfAnnotationSubtype,
   PdfErrorCode,
@@ -578,7 +579,7 @@ async function runPdfTask<T>(
 ): Promise<T> {
   const { signal, timeoutMs, label } = options
   if (signal?.aborted) {
-    task.abort({ code: PdfErrorCode.Cancelled, message: `${label} cancelled` })
+    task.abort({ code: PdfErrorCode.Cancelled, message: formatOfficeMessage(officeMessagesEn.pdf.runtime.cancelled, { label }) })
     throw createAbortError()
   }
 
@@ -586,13 +587,13 @@ async function runPdfTask<T>(
   let removeAbortListener: (() => void) | undefined
   const guard = new Promise<never>((_resolve, reject) => {
     const abort = () => {
-      task.abort({ code: PdfErrorCode.Cancelled, message: `${label} cancelled` })
+      task.abort({ code: PdfErrorCode.Cancelled, message: formatOfficeMessage(officeMessagesEn.pdf.runtime.cancelled, { label }) })
       reject(createAbortError())
     }
     signal?.addEventListener("abort", abort, { once: true })
     removeAbortListener = () => signal?.removeEventListener("abort", abort)
     timeout = setTimeout(() => {
-      task.abort({ code: PdfErrorCode.Cancelled, message: `${label} timed out` })
+      task.abort({ code: PdfErrorCode.Cancelled, message: formatOfficeMessage(officeMessagesEn.pdf.runtime.timedOut, { label }) })
       reject(new Error(`${label} timed out after ${timeoutMs} ms.`))
     }, timeoutMs)
   })
@@ -690,7 +691,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
           passwordAttempt += 1
           const nextPassword = await onPassword({
             attempt: passwordAttempt,
-            message: "PDF document is encrypted and requires a password.",
+            message: officeMessagesEn.pdf.errors.encrypted,
           })
           if (options.signal?.aborted || this.disposed) throw createAbortError()
           if (typeof nextPassword !== "string" || !nextPassword) {

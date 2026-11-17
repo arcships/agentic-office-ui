@@ -300,8 +300,8 @@ export function createEditorFormat(
     // Report them through the editor status instead of silently doing nothing.
     if (preset === "diagonal-down" || preset === "diagonal-up") {
       ctx.status.value = targetLocation.kind === "table-cell"
-        ? `Unsupported: diagonal table-cell borders (${preset})`
-        : `Unsupported: diagonal paragraph borders (${preset})`
+        ? ctx.statusMessage("unsupportedDiagonalTableCellBorders", { preset })
+        : ctx.statusMessage("unsupportedDiagonalParagraphBorders", { preset })
       return
     }
 

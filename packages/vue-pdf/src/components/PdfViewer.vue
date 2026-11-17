@@ -13,6 +13,7 @@ import {
 import {
   DEFAULT_PDF_MAX_FILE_SIZE,
   loadVerifiedPdfSource,
+  localizePdfErrorMessage,
   toPdfLoadError,
   type PdfDiagnostic,
   type PdfLoadError,
@@ -92,6 +93,9 @@ const searchResult = ref("")
 const searchHits = ref<readonly PdfSearchHit[]>([])
 const searchHitIndex = ref(-1)
 const loadError = ref<PdfLoadError | null>(null)
+const loadErrorMessage = computed(() => loadError.value
+  ? localizePdfErrorMessage(loadError.value, m.value.pdf.errors)
+  : "")
 const pageRenderError = ref("")
 const downloadError = ref("")
 const isLoading = ref(false)
@@ -1230,10 +1234,11 @@ async function load(): Promise<void> {
     }
     if (!task.isCurrent() || requestId !== latestRequestId || isAbortError(error)) return
     const normalized = toPdfLoadError(error, source.kind, source.kind === "url" ? source.url : undefined)
-    const pdfError: PdfLoadError = normalized.code === "INVALID_PDF" && !(error instanceof Error && /来源|文件不是|application\/pdf/.test(error.message))
-      ? { ...normalized, message: m.value.pdf.viewer.invalidPdf }
-      : normalized
-    loadError.value = pdfError
+    const localizedError = {
+      ...normalized,
+      message: localizePdfErrorMessage(normalized, m.value.pdf.errors),
+    }
+    loadError.value = localizedError
     pageRenderState.value = "error"
     replacePageImage()
     clearThumbnails()
@@ -1241,8 +1246,8 @@ async function load(): Promise<void> {
     numPages.value = 0
     renderDocument.value = null
     runtimeForDocument = undefined
-    emit("document-load-error", pdfError)
-    emitDiagnostic({ type: "load-error", sourceKind: source.kind, error: pdfError })
+    emit("document-load-error", localizedError)
+    emitDiagnostic({ type: "load-error", sourceKind: source.kind, error: localizedError })
   } finally {
     if (task.isCurrent() && requestId === latestRequestId) isLoading.value = false
     task.finish()
@@ -1372,7 +1377,7 @@ defineExpose({
     <div v-if="!effectiveSource" class="pdf-empty">{{ m.pdf.viewer.noPdf }}</div>
     <div v-else-if="isLoading && !renderDocument" class="pdf-empty">{{ m.pdf.viewer.opening }}</div>
     <div v-else-if="loadError" data-testid="load-error" class="pdf-error" :data-error-code="loadError.code">
-      {{ loadError.code }}: {{ loadError.message }}
+      {{ loadError.code }}: {{ loadErrorMessage }}
     </div>
     <div
       v-else-if="renderDocument"
