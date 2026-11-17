@@ -33,6 +33,9 @@ import "@arcships/vue-pdf/style.css"
 | `showToolbar` | `boolean` | `true` | 工具栏 |
 | `showDownload` | `boolean` | `true` | 下载按钮 |
 | `showRotateControls` | `boolean` | `true` | 旋转按钮 |
+| `isDark` | `boolean` | `false` | 深色外壳与页面背景；页面位图默认反色，可用 `--pdf-dark-page-filter: none` 关闭 |
+
+`PdfSurface` 也接受 `isDark`。打印时工具栏、缩略图和状态层会自动隐藏，页面按打印宽度铺满。
 
 事件包括 `document-load-success`、`document-load-error`、`active-page-change` 和 `diagnostic`。错误处理使用 `PdfLoadError.code`，不要通过错误文案判断类型。加密文档在无密码可用时返回 `ENCRYPTED`；`load-start` 诊断中的 URL 已去除查询串、片段和凭据。
 

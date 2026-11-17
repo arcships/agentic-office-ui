@@ -753,4 +753,17 @@ watch(
   pointer-events: none;
   z-index: 5;
 }
+
+@media print {
+  /* Paper must stay printable when the viewer is in dark mode. The inline
+     surface style carries the on-screen theme, so print needs !important. */
+  .docx-page-surface {
+    background: #fff !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    color: #000 !important;
+  }
+  .docx-page-border-overlay,
+  .docx-tracked-change-gutter { display: none !important; }
+}
 </style>

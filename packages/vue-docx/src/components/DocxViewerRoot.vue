@@ -178,6 +178,60 @@ const measuredPageHeights = ref<Record<number, { heightPx: number; layoutKey: st
 // Drag-over state for file drops
 const isDragOver = ref(false)
 
+// ── Print mode ─────────────────────────────────────────────────────
+// Printing must include every page, not only the virtualized window that is
+// currently mounted. `matchMedia("print")` covers browser print preview and
+// automated media emulation; beforeprint/afterprint cover browsers that do not
+// update the media query list.
+const printMediaActive = ref(false)
+const beforePrintActive = ref(false)
+const isPrinting = computed(() => printMediaActive.value || beforePrintActive.value)
+let printMediaQuery: MediaQueryList | undefined
+
+function onPrintMediaChange(event: MediaQueryListEvent): void {
+  printMediaActive.value = event.matches
+}
+
+function onBeforePrint(): void {
+  beforePrintActive.value = true
+}
+
+function onAfterPrint(): void {
+  beforePrintActive.value = false
+  printMediaActive.value = printMediaQuery?.matches ?? false
+}
+
+function setupPrintDetection(): () => void {
+  if (typeof window === "undefined") return () => {}
+  printMediaQuery = typeof window.matchMedia === "function" ? window.matchMedia("print") : undefined
+  if (printMediaQuery) {
+    printMediaActive.value = printMediaQuery.matches
+    if (typeof printMediaQuery.addEventListener === "function") {
+      printMediaQuery.addEventListener("change", onPrintMediaChange)
+    } else {
+      printMediaQuery.addListener?.(onPrintMediaChange)
+    }
+  }
+  if (typeof window.addEventListener === "function") {
+    window.addEventListener("beforeprint", onBeforePrint)
+    window.addEventListener("afterprint", onAfterPrint)
+  }
+  return () => {
+    if (printMediaQuery) {
+      if (typeof printMediaQuery.removeEventListener === "function") {
+        printMediaQuery.removeEventListener("change", onPrintMediaChange)
+      } else {
+        printMediaQuery.removeListener?.(onPrintMediaChange)
+      }
+    }
+    printMediaQuery = undefined
+    if (typeof window.removeEventListener === "function") {
+      window.removeEventListener("beforeprint", onBeforePrint)
+      window.removeEventListener("afterprint", onAfterPrint)
+    }
+  }
+}
+
 // ── Pagination ─────────────────────────────────────────────────────
 const baseDocumentLayout = computed(() => resolveDocumentLayout(props.model))
 const documentBackgroundColor = computed(() =>
@@ -363,7 +417,7 @@ const commentsEnabled = computed(
 // Visual horizontal space the annotation gutter occupies in screen px.
 // 0 when annotations are hidden, so no space is reserved. The pane counter-
 // scales, so this footprint does not follow the zoom factor.
-const gutterVisualWidthPx = computed(() => gutterScreenWidthPx.value)
+const gutterVisualWidthPx = computed(() => isPrinting.value ? 0 : gutterScreenWidthPx.value)
 const trackedChanges = computed<readonly DocxTrackedChange[]>(() => {
   // `showTrackedChanges` gates the collection even when a controller is
   // present: hidden revisions must not cost a model scan.
@@ -463,8 +517,12 @@ const totalHeightPx = computed(() => {
 const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
   if (pageCount.value === 0) return []
 
-  const viewportStart = Math.max(0, scrollTop.value - DOC_PAGE_BREAK_GAP * PAGE_OVERSCAN)
-  const viewportEnd = viewportStart + viewportHeight.value + DOC_PAGE_BREAK_GAP * PAGE_OVERSCAN * 2
+  const viewportStart = isPrinting.value
+    ? Number.NEGATIVE_INFINITY
+    : Math.max(0, scrollTop.value - DOC_PAGE_BREAK_GAP * PAGE_OVERSCAN)
+  const viewportEnd = isPrinting.value
+    ? Number.POSITIVE_INFINITY
+    : viewportStart + viewportHeight.value + DOC_PAGE_BREAK_GAP * PAGE_OVERSCAN * 2
 
   const entries: VisiblePageEntry[] = []
   for (let i = 0; i < pageCount.value; i++) {
@@ -506,30 +564,62 @@ const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
 })
 
 // ── Styles ─────────────────────────────────────────────────────────
-const rootStyle = computed(() => ({
-  flex: "1",
-  width: "100%",
-  minWidth: "0",
-  overflowY: "auto" as const,
-  overflowX: "auto" as const,
-  background: `var(--docx-surface-bg, ${theme.value === "dark" ? "#111827" : "#f4f4f5"})`,
-  padding: "24px 0",
-  outline: isDragOver.value ? "3px dashed #2563eb" : "none",
-}))
+const rootStyle = computed<Record<string, string>>(() => {
+  if (isPrinting.value) {
+    const printStyle: Record<string, string> = {
+      flex: "1",
+      width: "100%",
+      minWidth: "0",
+      overflow: "visible",
+      background: "#fff",
+      padding: "0",
+      outline: "none",
+    }
+    return printStyle
+  }
+  const screenStyle: Record<string, string> = {
+    flex: "1",
+    width: "100%",
+    minWidth: "0",
+    overflowY: "auto",
+    overflowX: "auto",
+    background: `var(--docx-surface-bg, ${theme.value === "dark" ? "#111827" : "#f4f4f5"})`,
+    padding: "24px 0",
+    outline: isDragOver.value ? "3px dashed #2563eb" : "none",
+  }
+  return screenStyle
+})
 
-const spacerStyle = computed(() => ({
-  height: `${Math.max(0, totalHeightPx.value)}px`,
-  minWidth: `${Math.max(
-    0,
-    ...pagePresentations.value.map(
-      (entry) => entry.pageLayout.pageWidthPx * zoomFactor.value + gutterVisualWidthPx.value
-    )
-  ) + PAGE_SIDE_PADDING}px`,
-  position: "relative" as const,
-  width: "100%",
-}))
+const spacerStyle = computed<Record<string, string>>(() => {
+  if (isPrinting.value) {
+    return { height: "auto", minWidth: "0", position: "static", width: "100%" }
+  }
+  return {
+    height: `${Math.max(0, totalHeightPx.value)}px`,
+    minWidth: `${Math.max(
+      0,
+      ...pagePresentations.value.map(
+        (entry) => entry.pageLayout.pageWidthPx * zoomFactor.value + gutterVisualWidthPx.value
+      )
+    ) + PAGE_SIDE_PADDING}px`,
+    position: "relative",
+    width: "100%",
+  }
+})
 
 function pageWrapperStyle(entry: VisiblePageEntry): Record<string, string | number> {
+  if (isPrinting.value) {
+    return {
+      position: "relative",
+      top: "0",
+      left: "0",
+      transform: "none",
+      height: `${entry.pageLayout.pageHeightPx}px`,
+      width: `${entry.pageWidthPx}px`,
+      margin: "0 auto",
+      breakAfter: entry.pageIndex < pageCount.value - 1 ? "page" : "auto",
+    }
+  }
   // Wrapper width covers paper + gutter so translateX(-50%) centers the whole
   // footprint instead of just the paper (which would push the gutter off-right).
   // Offsets are scroll-space values that include the container's top padding;
@@ -545,6 +635,14 @@ function pageWrapperStyle(entry: VisiblePageEntry): Record<string, string | numb
 }
 
 function pageContentStyle(entry: VisiblePageEntry): Record<string, string> {
+  if (isPrinting.value) {
+    return {
+      height: `${entry.pageLayout.pageHeightPx}px`,
+      transform: "none",
+      transformOrigin: "left top",
+      width: `${entry.pageWidthPx}px`,
+    }
+  }
   return {
     height: `${entry.pageLayout.pageHeightPx}px`,
     transform: `scale(${zoomFactor.value})`,
@@ -690,7 +788,11 @@ function hasDocxFile(dataTransfer: DataTransfer): boolean {
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────
+let containerObserver: ResizeObserver | undefined
+let stopPrintDetection: () => void = () => {}
+
 onMounted(() => {
+  stopPrintDetection = setupPrintDetection()
   if (scrollContainerRef.value) {
     const height = scrollContainerRef.value.clientHeight
     if (Number.isFinite(height) && height > 0) viewportHeight.value = height
@@ -702,20 +804,22 @@ onMounted(() => {
     updateVisibleRange()
     return
   }
-  const observer = new ResizeObserverConstructor((entries) => {
+  containerObserver = new ResizeObserverConstructor((entries) => {
     for (const entry of entries) {
       viewportHeight.value = entry.contentRect.height
       containerWidth.value = entry.contentRect.width
     }
   })
   if (scrollContainerRef.value) {
-    observer.observe(scrollContainerRef.value)
+    containerObserver.observe(scrollContainerRef.value)
   }
+})
 
-  onUnmounted(() => {
-    observer.disconnect()
-    if (scrollTimer !== null) clearTimeout(scrollTimer)
-  })
+onUnmounted(() => {
+  stopPrintDetection()
+  containerObserver?.disconnect()
+  containerObserver = undefined
+  if (scrollTimer !== null) clearTimeout(scrollTimer)
 })
 
 // ── Expose ─────────────────────────────────────────────────────────
@@ -749,5 +853,14 @@ defineExpose({
   overflow-y: auto;
   overflow-x: hidden;
   background: #f3f4f6;
+}
+
+@media print {
+  .docx-viewer-root {
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
 }
 </style>

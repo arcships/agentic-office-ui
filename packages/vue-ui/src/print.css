@@ -1,0 +1,74 @@
+/*
+ * Shared print baseline for every Office viewer.
+ *
+ * The viewer packages also ship scoped print rules so they work on their own.
+ * Importing `@arcships/vue-ui/style.css` gives an application one additional
+ * cross-viewer baseline: chrome is hidden and every viewer is allowed to grow
+ * with the printed page instead of being clipped by its on-screen height.
+ *
+ * Consumers that need colour-accurate dark pages can set
+ * `--pdf-dark-page-filter: none` on `PdfViewer` / `PdfSurface`.
+ */
+@media print {
+  .pdf-viewer,
+  .pdf-surface,
+  .docx-viewer,
+  .docx-editor-viewer,
+  .xlsx-viewer,
+  .pptx-viewer {
+    background: #fff !important;
+    color: #000 !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+
+  .pdf-toolbar,
+  .pdf-thumbnails,
+  .pdf-status,
+  .pdf-search-context,
+  .pdf-surface__interaction,
+  .pdf-surface__overlay,
+  .docx-viewer-toolbar,
+  .docx-thumbnail-panel,
+  .docx-toolbar-shell,
+  .docx-editor-statusbar,
+  .docx-context-menu-backdrop,
+  .docx-context-menu,
+  .docx-drag-overlay,
+  .xlsx-toolbar,
+  .xlsx-ribbon,
+  .xlsx-formula-bar,
+  .xlsx-sheet-tabs,
+  .xlsx-context-menu,
+  .pptx-viewer__toolbar,
+  .pptx-viewer__sidebar,
+  .pptx-viewer__playback-controls {
+    display: none !important;
+  }
+
+  .pdf-body,
+  .pdf-frame-wrap,
+  .pdf-page-stage,
+  .pdf-surface__pages,
+  .pdf-surface__page-slot,
+  .docx-viewer__body,
+  .docx-viewer__content,
+  .docx-editor-body,
+  .docx-viewer-root,
+  .xlsx-viewer__body,
+  .pptx-viewer__body,
+  .pptx-viewer__stage-wrap {
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  .pdf-page-image,
+  .pdf-surface__page-img {
+    filter: none !important;
+    height: auto !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+}

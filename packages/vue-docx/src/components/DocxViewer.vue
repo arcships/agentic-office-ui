@@ -63,6 +63,7 @@
         v-if="sidebarOpen && renderableModel"
         :model="renderableModel"
         :layout-options="layoutOptions"
+        :is-dark="darkTheme"
         :current-page="currentPage"
         :total-pages="totalPages"
         :show-toggle="false"
@@ -534,6 +535,7 @@ function errorNumber(value: Error, key: "actual" | "allowed"): number | undefine
   --docx-border: #e4e4e7;
   --docx-foreground: #18181b;
   --docx-toolbar-bg: #fff;
+  container: docx-shell / inline-size;
   background: #f4f4f5;
   border: 1px solid var(--docx-border);
   border-radius: 10px;
@@ -602,4 +604,22 @@ function errorNumber(value: Error, key: "actual" | "allowed"): number | undefine
   width: 24px;
 }
 @keyframes docx-viewer-spin { to { transform: rotate(360deg); } }
+
+@media print {
+  .docx-viewer {
+    background: #fff !important;
+    color: #000 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  .docx-viewer__file-input,
+  .docx-viewer-toolbar,
+  .docx-thumbnail-panel { display: none !important; }
+  .docx-viewer__body,
+  .docx-viewer__content { display: block !important; overflow: visible !important; }
+  .docx-viewer-state { min-height: 0 !important; padding: 0 !important; }
+}
 </style>

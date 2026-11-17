@@ -21,6 +21,7 @@ export default defineConfig({
         "vue",
         "@arcships/xlsx-core",
         "@arcships/office-interaction",
+        "@arcships/vue-ui",
         "d3-geo",
         "d3-hierarchy",
         "d3-scale",

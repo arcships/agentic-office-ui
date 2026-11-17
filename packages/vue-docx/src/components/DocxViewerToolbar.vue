@@ -394,13 +394,13 @@ defineExpose({
 }
 .docx-viewer-toolbar__separator { background: #e4e4e7; height: 18px; margin: 0 3px; width: 1px; }
 
-@media (max-width: 720px) {
+@container docx-shell (max-width: 720px) {
   .docx-viewer-toolbar { align-items: stretch; flex-direction: column; gap: 6px; }
   .docx-viewer-toolbar__actions { justify-content: flex-end; }
   .docx-viewer-toolbar__file { flex: 1; max-width: none; }
 }
 
-@media (max-width: 460px) {
+@container docx-shell (max-width: 460px) {
   .docx-viewer-toolbar__file { display: none; }
   .docx-viewer-toolbar__leading { justify-content: space-between; }
   .docx-viewer-toolbar__actions { overflow-x: auto; }
