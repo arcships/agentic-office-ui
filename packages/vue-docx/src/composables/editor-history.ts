@@ -13,6 +13,7 @@ export function createEditorHistory(ctx: EditorCore) {
   function undo(): void {
     const h = ctx.history.value
     if (h.past.length === 0) return
+    ctx.activeFormFieldEditKey.value = undefined
 
     const previous = h.past[h.past.length - 1]
     const past = trimHistoryEntriesToBudget(h.past.slice(0, -1), {
@@ -60,6 +61,7 @@ export function createEditorHistory(ctx: EditorCore) {
   function redo(): void {
     const h = ctx.history.value
     if (h.future.length === 0) return
+    ctx.activeFormFieldEditKey.value = undefined
 
     const next = h.future[0]
     const past = trimHistoryEntriesToBudget(

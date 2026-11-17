@@ -6,11 +6,13 @@ import {
   findByTestId,
   importFromDemo,
   mount,
+  textContent,
   vue,
   walk,
 } from "./vue-test-renderer.mjs";
 
 const {
+  DocxFormFieldLayer,
   DocxTableHost,
   DocxToolbar,
   findDocxSearchMatches,
@@ -636,6 +638,251 @@ test("DOCX nested tables use a unique runtime key and commit into the inner cell
     paragraphNodeText(innerTable.rows[0].cells[0].nodes[0]),
     "Inner A1 updated",
   );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+async function mountFormFieldLayer(nodes) {
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes(nodes) });
+      return () => vue.h(DocxFormFieldLayer, {
+        pageIndex: 0,
+        controller,
+        pageNodeSegments: [{ nodeIndex: 0 }],
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  return { ...mounted, get controller() { return controller; } };
+}
+
+function formFieldLocation(childIndex) {
+  return { kind: "paragraph", nodeIndex: 0, childIndex };
+}
+
+function countUndoSteps(controller) {
+  let steps = 0;
+  while (controller.canUndo && steps < 100) {
+    controller.undo();
+    steps += 1;
+  }
+  return steps;
+}
+
+test("date form fields render a date control and round-trip ISO values", async () => {
+  const mounted = await mountFormFieldLayer([
+    {
+      type: "paragraph",
+      children: [
+        {
+          type: "form-field",
+          fieldType: "date",
+          value: "2026-11-16",
+          widget: { text: { textFormat: "MMMM d, yyyy" } },
+        },
+      ],
+    },
+  ]);
+
+  const dateInput = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "date",
+  );
+  assert.ok(dateInput, "date fields must render a date control");
+  assert.equal(dateInput.props.value, "2026-11-16");
+
+  const display = walk(mounted.root).find((node) =>
+    String(node.props?.class || "").includes("docx-form-date-display")
+  );
+  assert.ok(display, "date fields must display their value");
+  assert.match(textContent(display), /November 16, 2026/);
+
+  dateInput.props.onInput({ target: { value: "2027-01-02" } });
+  await vue.nextTick();
+  assert.equal(mounted.controller.model.nodes[0].children[0].value, "2027-01-02");
+  assert.match(
+    textContent(
+      walk(mounted.root).find((node) =>
+        String(node.props?.class || "").includes("docx-form-date-display")
+      ),
+    ),
+    /January 2, 2027/,
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("form-field layer reports validation errors instead of writing bad values", async () => {
+  const mounted = await mountFormFieldLayer([
+    {
+      type: "paragraph",
+      children: [
+        { type: "form-field", fieldType: "text", widget: { text: { maxLength: 3 } } },
+      ],
+    },
+  ]);
+  const input = walk(mounted.root).find((node) => node.type === "input");
+  assert.ok(input);
+
+  input.props.onInput({ target: { value: "abcd" } });
+  await vue.nextTick();
+  assert.equal(mounted.controller.model.nodes[0].children[0].value, undefined);
+  const error = walk(mounted.root).find((node) =>
+    String(node.props?.class || "").includes("docx-form-error")
+  );
+  assert.ok(error, "the field must show its own error state");
+  assert.match(textContent(error), /at most 3 characters/);
+  assert.equal(input.props["aria-invalid"], "true");
+
+  input.props.onInput({ target: { value: "abc" } });
+  await vue.nextTick();
+  assert.equal(mounted.controller.model.nodes[0].children[0].value, "abc");
+  assert.equal(
+    walk(mounted.root).some((node) =>
+      String(node.props?.class || "").includes("docx-form-error")
+    ),
+    false,
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("form-field writes reject invalid values and normalize accepted ones", async () => {
+  const mounted = await mountController(modelWithNodes([
+    {
+      type: "paragraph",
+      children: [
+        { type: "form-field", fieldType: "text", widget: { text: { maxLength: 5 } } },
+        { type: "form-field", fieldType: "date" },
+        {
+          type: "form-field",
+          fieldType: "dropdown",
+          options: [
+            { displayText: "Alpha", value: "A" },
+            { displayText: "Beta", value: "B" },
+          ],
+        },
+      ],
+    },
+  ]));
+  const controller = mounted.controller;
+
+  assert.equal(controller.setFormFieldValue(formFieldLocation(0), "abcdef"), false);
+  assert.equal(controller.model.nodes[0].children[0].value, undefined);
+  assert.equal(controller.setFormFieldValue(formFieldLocation(0), "abcde"), true);
+  assert.equal(controller.model.nodes[0].children[0].value, "abcde");
+
+  assert.equal(controller.setFormFieldValue(formFieldLocation(1), "2026-02-30"), false);
+  assert.equal(controller.model.nodes[0].children[1].value, undefined);
+  assert.equal(controller.setFormFieldValue(formFieldLocation(1), "2026-11-16"), true);
+  assert.equal(controller.model.nodes[0].children[1].value, "2026-11-16");
+
+  assert.equal(controller.setFormFieldValue(formFieldLocation(2), "Gamma"), false);
+  assert.equal(controller.model.nodes[0].children[2].value, undefined);
+  assert.equal(controller.setFormFieldValue(formFieldLocation(2), "Alpha"), true);
+  assert.equal(controller.model.nodes[0].children[2].value, "A");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("typing in a form field keeps the selection and creates one undo step", async () => {
+  const mounted = await mountController(modelWithNodes([
+    {
+      type: "paragraph",
+      children: [{ type: "form-field", fieldType: "text" }],
+    },
+  ]));
+  const controller = mounted.controller;
+  const location = formFieldLocation(0);
+  controller.selectFormField(location);
+
+  const typed = ["2", "20", "202", "2026", "2026-", "2026-1", "2026-11", "2026-11-", "2026-11-1", "2026-11-16"];
+  for (const value of typed) {
+    assert.equal(controller.setFormFieldValue(location, value), true);
+    assert.deepEqual(controller.selectedFormField?.location, location);
+  }
+  controller.endFormFieldEdit(location);
+
+  assert.equal(countUndoSteps(controller), 1, "one editing session must create one undo entry");
+  assert.equal(controller.model.nodes[0].children[0].value, undefined);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("read-only toolbar keeps zoom outside the disabled fieldset", async () => {
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([
+        { type: "paragraph", children: [{ type: "text", text: "Read-only" }] },
+      ]) });
+      return () => vue.h(DocxToolbar, {
+        controller,
+        readOnly: true,
+        currentPage: 1,
+        totalPages: 1,
+      });
+    },
+  });
+  const toolbar = await mount(Harness);
+  const fieldset = walk(toolbar.root).find((node) => node.type === "fieldset");
+  const zoom = findByTestId(toolbar.root, "editor-zoom");
+  assert.ok(fieldset);
+  assert.equal(fieldset.props.disabled, true);
+  assert.ok(zoom, "zoom select should render");
+  let ancestor = zoom.parent;
+  while (ancestor) {
+    assert.notEqual(ancestor.type, "fieldset", "zoom must not be inside the read-only fieldset");
+    ancestor = ancestor.parent;
+  }
+  assert.equal(zoom.props.disabled, undefined);
+  assert.deepEqual(toolbar.warnings, []);
+  toolbar.app.unmount();
+});
+
+test("toolbar indent buttons change list depth and disable outside lists", async () => {
+  const listModel = modelWithNodes([
+    {
+      type: "paragraph",
+      style: { numbering: { numId: 1, ilvl: 0 } },
+      children: [{ type: "text", text: "Item" }],
+    },
+    {
+      type: "paragraph",
+      children: [{ type: "text", text: "Plain" }],
+    },
+  ]);
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: listModel });
+      return () => vue.h(DocxToolbar, { controller, currentPage: 1, totalPages: 1 });
+    },
+  });
+  const mounted = await mount(Harness);
+
+  let indent = findByTestId(mounted.root, "editor-indent");
+  let outdent = findByTestId(mounted.root, "editor-outdent");
+  assert.ok(indent);
+  assert.ok(outdent);
+  assert.notEqual(indent.props.disabled, true);
+  assert.equal(outdent.props.disabled, true);
+
+  indent.props.onClick();
+  await vue.nextTick();
+  assert.equal(controller.model.nodes[0].style.numbering.ilvl, 1);
+
+  outdent = findByTestId(mounted.root, "editor-outdent");
+  assert.notEqual(outdent.props.disabled, true);
+  outdent.props.onClick();
+  await vue.nextTick();
+  assert.equal(controller.model.nodes[0].style.numbering.ilvl, 0);
+
+  controller.selectParagraph(1);
+  await vue.nextTick();
+  indent = findByTestId(mounted.root, "editor-indent");
+  assert.equal(indent.props.disabled, true);
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });

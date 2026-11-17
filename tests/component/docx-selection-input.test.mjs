@@ -647,3 +647,44 @@ test("unmount commits a live paragraph draft instead of dropping it", async (t) 
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });
+
+test("Tab and Shift+Tab change the selected list item's level", async (t) => {
+  const mounted = await mountEditableDocument(t, ["Item"]);
+  let [paragraph] = paragraphHosts(mounted.root);
+  setHostDomText(paragraph, "Item", mounted.dom.document);
+
+  mounted.controller.toggleList("unordered");
+  await vue.nextTick();
+  assert.equal(mounted.controller.model.nodes[0].style.numbering.ilvl, 0);
+
+  paragraph = paragraphHosts(mounted.root)[0];
+  let prevented = false;
+  eventHandler(paragraph, "keydown")({
+    key: "Tab",
+    shiftKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    isComposing: false,
+    preventDefault() { prevented = true; },
+  });
+  await vue.nextTick();
+  assert.equal(prevented, true);
+  assert.equal(mounted.controller.model.nodes[0].style.numbering.ilvl, 1);
+
+  paragraph = paragraphHosts(mounted.root)[0];
+  prevented = false;
+  eventHandler(paragraph, "keydown")({
+    key: "Tab",
+    shiftKey: true,
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    isComposing: false,
+    preventDefault() { prevented = true; },
+  });
+  await vue.nextTick();
+  assert.equal(prevented, true);
+  assert.equal(mounted.controller.model.nodes[0].style.numbering.ilvl, 0);
+  assert.deepEqual(mounted.warnings, []);
+});

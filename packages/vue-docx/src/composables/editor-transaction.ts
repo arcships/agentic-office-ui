@@ -161,14 +161,15 @@ export function createEditorTransaction(ctx: EditorCore) {
     updater: (current: DocModel) => DocModel,
     successStatus?: string,
     options?: ApplyModelChangeOptions
-  ): void {
-    dispatchEditorTransaction((current) => {
+  ): boolean {
+    return dispatchEditorTransaction((current) => {
       const nextModel = updater(current.model)
       if (nextModel === current.model) return undefined
       const patch: DocxEditorTransactionPatch = {
         model: nextModel,
         status: successStatus,
-        clearSelectedFormField: true,
+        clearSelectedFormField: options?.clearSelectedFormField ?? true,
+        pushHistory: options?.pushHistory,
       }
       if (options && hasOwn(options, "selection")) {
         patch.selection = options.selection
