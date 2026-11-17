@@ -26,9 +26,6 @@ const core = await import(
 const runtimeEntry = await import(
   pathToFileURL(requireFromXlsxCore.resolve("@arcships/xlsx-core/runtime")).href
 );
-const { unzipSync, strFromU8 } = await import(
-  pathToFileURL(requireFromXlsxCore.resolve("fflate")).href
-);
 const samples = new URL("../../apps/demo/public/samples/", import.meta.url);
 
 function bytesFromFile(name) {
