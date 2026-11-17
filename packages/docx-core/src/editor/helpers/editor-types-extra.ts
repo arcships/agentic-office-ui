@@ -32,6 +32,7 @@ import type {
   DocxSectionParagraphLocation,
   DocxSelectedFormField,
   DocxSelectionSessionKind,
+  DocxTableCellSelectionRange,
   DocxTextRange,
   DocxTextRangeLocation,
   DocxTrackedChange,
@@ -292,6 +293,15 @@ export interface DocxEditorController {
     rowIndex?: number
   ) => void;
   deleteTable: (tableIndex: number) => void;
+  mergeTableCells: (
+    tableIndex: number,
+    range: DocxTableCellSelectionRange
+  ) => void;
+  splitTableCell: (
+    tableIndex: number,
+    rowIndex: number,
+    cellIndex: number
+  ) => void;
   moveTable: (tableIndex: number, targetNodeIndex: number) => void;
   moveEmbeddedTableToBody: (
     tableRuntimeKey: string,

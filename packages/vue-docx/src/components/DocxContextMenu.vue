@@ -323,7 +323,7 @@ async function onAction(action: string, value?: string): Promise<void> {
       if (tableContext.value) {
         ctrl.insertTableRow(
           tableContext.value.tableIndex,
-          tableContext.value.rowIndex + 1,
+          Math.max(0, tableContext.value.rowIndex),
           "below"
         )
       }
@@ -333,7 +333,8 @@ async function onAction(action: string, value?: string): Promise<void> {
         ctrl.insertTableColumn(
           tableContext.value.tableIndex,
           Math.max(0, tableContext.value.cellIndex),
-          "left"
+          "left",
+          tableContext.value.rowIndex
         )
       }
       break
@@ -341,8 +342,9 @@ async function onAction(action: string, value?: string): Promise<void> {
       if (tableContext.value) {
         ctrl.insertTableColumn(
           tableContext.value.tableIndex,
-          tableContext.value.cellIndex + 1,
-          "right"
+          Math.max(0, tableContext.value.cellIndex),
+          "right",
+          tableContext.value.rowIndex
         )
       }
       break
@@ -353,7 +355,11 @@ async function onAction(action: string, value?: string): Promise<void> {
       break
     case "deleteColumn":
       if (tableContext.value) {
-        ctrl.deleteTableColumn(tableContext.value.tableIndex, tableContext.value.cellIndex)
+        ctrl.deleteTableColumn(
+          tableContext.value.tableIndex,
+          tableContext.value.cellIndex,
+          tableContext.value.rowIndex
+        )
       }
       break
     case "deleteTable":

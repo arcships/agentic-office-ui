@@ -14,7 +14,7 @@ import {
   sameEditorSelection,
   sameTextRange,
 } from "@arcships/docx-core"
-import type { EditorCore } from "./editor-shared"
+import type { ApplyModelChangeOptions, EditorCore } from "./editor-shared"
 import { trimHistoryEntriesToBudget } from "./history-budget"
 
 function hasOwn(obj: object, prop: string): boolean {
@@ -157,11 +157,26 @@ export function createEditorTransaction(ctx: EditorCore) {
   }
 
   // ── applyModelChange ─────────────────────────────────────────────
-  function applyModelChange(updater: (current: DocModel) => DocModel, successStatus?: string): void {
+  function applyModelChange(
+    updater: (current: DocModel) => DocModel,
+    successStatus?: string,
+    options?: ApplyModelChangeOptions
+  ): void {
     dispatchEditorTransaction((current) => {
       const nextModel = updater(current.model)
       if (nextModel === current.model) return undefined
-      return { model: nextModel, status: successStatus, clearSelectedFormField: true }
+      const patch: DocxEditorTransactionPatch = {
+        model: nextModel,
+        status: successStatus,
+        clearSelectedFormField: true,
+      }
+      if (options && hasOwn(options, "selection")) {
+        patch.selection = options.selection
+      }
+      if (options && hasOwn(options, "activeTextRange")) {
+        patch.activeTextRange = options.activeTextRange
+      }
+      return patch
     })
   }
 

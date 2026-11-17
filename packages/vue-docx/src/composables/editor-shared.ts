@@ -30,6 +30,11 @@ import type {
   ParagraphLocation,
 } from "@arcships/docx-core"
 
+export interface ApplyModelChangeOptions {
+  selection?: DocxEditorSelection
+  activeTextRange?: DocxTextRange | undefined
+}
+
 export interface EditorCore {
   // ── core reactive refs ──────────────────────────────────────────
   model: Ref<DocModel>

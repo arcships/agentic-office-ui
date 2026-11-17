@@ -22,10 +22,16 @@ export function createEditorFormField(
       if (!para) return current
       const field = para.children[location.childIndex]
       if (!field || field.type !== "form-field" || field.fieldType !== "checkbox") return current
-      // toggle: updating the field value
-      const newValue = field.value === "1" ? "0" : "1"
-      // Apply the value change
-      field.value = newValue
+      const currentChecked =
+        typeof field.checked === "boolean"
+          ? field.checked
+          : field.value === "1" || field.widget?.checkbox?.defaultChecked === true
+      field.checked = !currentChecked
+      // Keep the legacy value in sync: exporters and form-field consumers read
+      // either representation, while the checkbox UI binds `checked`.
+      field.value = field.checked ? "1" : "0"
+      field.sourceXml = undefined
+      para.sourceXml = undefined
       return nextModel
     })
   }
@@ -38,6 +44,11 @@ export function createEditorFormField(
       const field = para.children[location.childIndex]
       if (!field || field.type !== "form-field") return current
       field.value = value
+      if (field.fieldType === "checkbox") {
+        field.checked = value === "1" || value.toLowerCase() === "true"
+      }
+      field.sourceXml = undefined
+      para.sourceXml = undefined
       return nextModel
     })
   }
