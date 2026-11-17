@@ -1327,3 +1327,152 @@ test("PdfViewer downloads verified bytes without reading the source again and re
   await waitFor(() => fake.calls.closeDocument.length === 1, "downloaded PDF close");
   assert.equal(fake.calls.dispose.length, 0);
 });
+
+test("PdfSurface finishes its load task and releases abort listeners across renders", async (t) => {
+  const liveAbortListeners = new Set();
+  const originalAdd = AbortSignal.prototype.addEventListener;
+  const originalRemove = AbortSignal.prototype.removeEventListener;
+  AbortSignal.prototype.addEventListener = function (type, listener, options) {
+    if (type === "abort") liveAbortListeners.add(listener);
+    return originalAdd.call(this, type, listener, options);
+  };
+  AbortSignal.prototype.removeEventListener = function (type, listener, options) {
+    if (type === "abort") liveAbortListeners.delete(listener);
+    return originalRemove.call(this, type, listener, options);
+  };
+  t.after(() => {
+    AbortSignal.prototype.addEventListener = originalAdd;
+    AbortSignal.prototype.removeEventListener = originalRemove;
+  });
+
+  const source = { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) };
+  const fake = createPdfRuntime({ pageCount: 2 });
+  const zoom = vue.ref(1);
+  let surfaceApi;
+  const Harness = vue.defineComponent({
+    setup() {
+      const surface = vue.ref(null);
+      vue.watch(surface, (value) => { surfaceApi = value; }, { flush: "sync" });
+      return () => vue.h(PdfSurface, { ref: surface, source, runtime: fake.runtime, zoom: zoom.value });
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(
+    () => surfaceApi && fake.calls.renderPage.length === 2,
+    "initial surface page renders",
+  );
+  await waitFor(() => liveAbortListeners.size === 0, "initial load task abort listener cleanup");
+
+  zoom.value = 2;
+  await vue.nextTick();
+  await waitFor(() => fake.calls.renderPage.length === 4, "zoomed surface page renders");
+  assert.equal(fake.calls.renderPage.at(-1).options.scale, 2);
+  await waitFor(() => liveAbortListeners.size === 0, "zoomed load task abort listener cleanup");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+  assert.equal(fake.calls.dispose.length, 0);
+});
+
+test("PdfSurface disposes its load coordinator so unmount aborts URL loading", async () => {
+  let observedSignal;
+  let errorEvents = 0;
+  const fake = createPdfRuntime();
+  const fetch = (_url, init) => {
+    observedSignal = init.signal;
+    return new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    });
+  };
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "url", url: "https://files.example/report.pdf" },
+    runtime: fake.runtime,
+    urlPolicy: {
+      allowedOrigins: ["https://files.example"],
+      allowedProtocols: ["https:"],
+      baseUrl: "https://files.example/",
+      fetch,
+    },
+    onDocumentLoadError: () => { errorEvents += 1; },
+  });
+  assert.equal(observedSignal.aborted, false);
+  mounted.app.unmount();
+  await waitFor(() => observedSignal.aborted, "surface URL abort on unmount");
+  assert.equal(errorEvents, 0, "unmount cancellation must not emit a stale load error");
+  assert.equal(fake.calls.openDocument.length, 0);
+  assert.equal(fake.calls.dispose.length, 0, "caller-owned runtime remains usable");
+});
+
+test("PdfSurface closes a document opened after unmount instead of adopting it", async () => {
+  const openGate = deferred();
+  const fake = createPdfRuntime({ onOpenDocument: () => openGate.promise });
+  const successes = [];
+  const errors = [];
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    onDocumentLoadSuccess: (count) => successes.push(count),
+    onDocumentLoadError: (error) => errors.push(error),
+  });
+  await waitFor(() => fake.calls.openDocument.length === 1, "surface document open");
+  mounted.app.unmount();
+  openGate.resolve(fake.document);
+  await waitFor(() => fake.calls.closeDocument.length === 1, "late surface document close");
+  assert.equal(fake.calls.closeDocument[0], fake.document);
+  assert.deepEqual(successes, []);
+  assert.deepEqual(errors, []);
+  assert.equal(fake.calls.renderPage.length, 0, "an unmounted surface must not render pages");
+});
+
+test("PdfSurface reloads when urlPolicy, maxFileSize or runtime changes", async () => {
+  const source = { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) };
+  const first = createPdfRuntime({ pageCount: 1 });
+  const second = createPdfRuntime({ pageCount: 1 });
+  const maxFileSize = vue.ref(1024 * 1024);
+  const runtime = vue.shallowRef(first.runtime);
+  const urlPolicy = vue.shallowRef({ allowedOrigins: ["https://files.example"] });
+  const successes = [];
+  const errors = [];
+  const Harness = vue.defineComponent({
+    setup() {
+      return () => vue.h(PdfSurface, {
+        source,
+        runtime: runtime.value,
+        maxFileSize: maxFileSize.value,
+        urlPolicy: urlPolicy.value,
+        onDocumentLoadSuccess: (count) => successes.push(count),
+        onDocumentLoadError: (error) => errors.push(error),
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(
+    () => first.calls.openDocument.length === 1 && first.calls.renderPage.length === 1,
+    "initial surface load",
+  );
+  assert.deepEqual(successes, [1]);
+
+  urlPolicy.value = { allowedOrigins: ["https://other.example"] };
+  await vue.nextTick();
+  await waitFor(() => first.calls.openDocument.length === 2, "urlPolicy surface reload");
+  assert.equal(first.calls.closeDocument.length, 1, "the previous document is closed before reloading");
+
+  maxFileSize.value = 4;
+  await waitFor(() => errors.length === 1, "maxFileSize surface reload");
+  assert.equal(errors[0].code, "PDF_TOO_LARGE");
+  assert.equal(first.calls.openDocument.length, 2, "an oversized reload never opens the source");
+  assert.equal(first.calls.closeDocument.length, 2);
+
+  maxFileSize.value = 1024 * 1024;
+  await waitFor(() => first.calls.openDocument.length === 3, "restored maxFileSize surface reload");
+
+  runtime.value = second.runtime;
+  await waitFor(() => second.calls.openDocument.length === 1, "runtime swap surface reload");
+  assert.equal(first.calls.closeDocument.length, 3, "the previous runtime document is closed on swap");
+  assert.equal(second.calls.closeDocument.length, 0);
+  assert.deepEqual(mounted.warnings, []);
+
+  mounted.app.unmount();
+  await waitFor(() => second.calls.closeDocument.length === 1, "runtime swap surface unmount close");
+  assert.equal(first.calls.dispose.length, 0, "caller-owned runtimes remain usable");
+  assert.equal(second.calls.dispose.length, 0);
+});
