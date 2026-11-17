@@ -31,6 +31,19 @@
       :is-dark="isDark ?? false"
       :read-only="effectiveReadOnly"
     />
+    <div
+      v-if="controller.calculationStatus"
+      class="xlsx-viewer__calculation-status"
+      data-testid="xlsx-calculation-status"
+      role="status"
+    >
+      <slot
+        name="calculation-status"
+        :status="controller.calculationStatus"
+      >
+        {{ controller.calculationStatus.message }}
+      </slot>
+    </div>
     <div class="xlsx-viewer__body">
       <div
         v-if="controller.isLoading"
@@ -365,6 +378,15 @@ defineExpose({
   display: flex;
   flex: 1;
   justify-content: center;
+}
+
+.xlsx-viewer__calculation-status {
+  background: rgba(245, 158, 11, 0.12);
+  border-block-end: 1px solid rgba(245, 158, 11, 0.35);
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 6px 12px;
 }
 
 .xlsx-viewer__loading-text,

@@ -1138,3 +1138,79 @@ test("XLSX Worker reports an uncloneable result as WORKER_FAILED instead of timi
     else globalThis.self = originalSelf;
   }
 });
+
+function fakeCalculationWorkbook({ formulas = [], sheetNames = ["Sheet1"], calculate }) {
+  return {
+    calculate,
+    getSheet(index) {
+      return {
+        formulaCells: (formulas[index] ?? []).map((formula) => ({ formula })),
+        free() {},
+      };
+    },
+    sheetCount: sheetNames.length,
+    sheetNames,
+  };
+}
+
+test("XLSX safeCalculate skips unresolved sheet references before calculating", () => {
+  let calculateCalls = 0;
+  const workbook = fakeCalculationWorkbook({
+    formulas: [["Missing!A1"]],
+    calculate() {
+      calculateCalls += 1;
+      throw new Error("should not calculate");
+    },
+  });
+
+  const result = core.safeCalculate(workbook);
+
+  assert.equal(result.calculated, false);
+  assert.equal(result.skipReason, "unresolved-sheet-refs");
+  assert.equal(result.workbook, workbook);
+  assert.equal(calculateCalls, 0);
+});
+
+test("XLSX safeCalculate reparses after a calculation trap", () => {
+  const trapped = fakeCalculationWorkbook({
+    formulas: [["SUM(A1:A2)"]],
+    calculate() {
+      throw new Error("wasm unreachable");
+    },
+  });
+  const reparsed = fakeCalculationWorkbook({
+    calculate() {},
+  });
+  let reparseCalls = 0;
+
+  const result = core.safeCalculate(trapped, {
+    reparse() {
+      reparseCalls += 1;
+      return reparsed;
+    },
+  });
+
+  assert.equal(result.calculated, false);
+  assert.equal(result.skipReason, "calculate-trapped");
+  assert.equal(result.workbook, reparsed);
+  assert.equal(reparseCalls, 1);
+});
+
+test("XLSX safeCalculate reports success without reparsing", () => {
+  const workbook = fakeCalculationWorkbook({
+    calculate() {},
+  });
+  let reparseCalls = 0;
+
+  const result = core.safeCalculate(workbook, {
+    reparse() {
+      reparseCalls += 1;
+      return workbook;
+    },
+  });
+
+  assert.equal(result.calculated, true);
+  assert.equal(result.skipReason, null);
+  assert.equal(result.workbook, workbook);
+  assert.equal(reparseCalls, 0);
+});

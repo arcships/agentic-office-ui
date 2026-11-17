@@ -38,6 +38,9 @@ import {
   loadWorkbookChartAssets,
   mergeWorkbookImageAssets,
   revokeWorkbookImageAssets,
+  safeCalculate,
+  trackXlsxWorkbookLifetime,
+  type SafeCalculateSkipReason,
   type WorkbookChartAssets,
   type WorkbookImageAssets,
   type WorkbookImageSheetOrigin
@@ -58,7 +61,9 @@ import {
   type HistoryEntry,
   type RangeCellMutation,
   type SelectionSnapshot,
-  type SnapshotHistoryEntry
+  type SnapshotHistoryEntry,
+  type XlsxCalculationOutcome,
+  type XlsxCalculationStatus
 } from "./internal";
 import {
   clampZoomScale,
@@ -70,8 +75,7 @@ import {
   convertXlsbBufferToXlsx,
   resolveWorkbookSource,
   parseWorkbookBuffer,
-  createHistoryDomain,
-  tryRecalculate
+  createHistoryDomain
 } from "./workbook-state";
 import { createEditingDomain } from "./editing";
 import { createClipboardDomain } from "./clipboard";
@@ -218,6 +222,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const isApplyingHistoryRef = shallowRef(false);
   const historyRevision = ref(0);
   const shouldAutoCalculate = ref(false);
+  const calculationStatus = ref<XlsxCalculationStatus | null>(null);
+  let autoCalculateDisabledByFailure = false;
   const workerCellSnapshotRevision = ref(0);
   const isWorkerBacked = ref(false);
   const sortState = ref<XlsxTableSortState | null>(null);
@@ -663,7 +669,6 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     activeWorksheetHandle = { workbook: activeWorkbook, workbookSheetIndex, worksheet };
     return worksheet;
   }
-
   function readValidationRangeValues(reference: string): string[] | null {
     const activeWorkbook = workbook.value;
     if (!activeWorkbook) return null;
@@ -733,10 +738,85 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     dataValidationFeedback.value = null;
   }
 
+  function hasFormulaCells(targetWorkbook: Workbook): boolean {
+    for (let index = 0; index < targetWorkbook.sheetCount; index += 1) {
+      let worksheet;
+      try {
+        worksheet = targetWorkbook.getSheet(index);
+      } catch {
+        continue;
+      }
+      try {
+        if (worksheet.formulaCount > 0) return true;
+      } finally {
+        worksheet.free();
+      }
+    }
+    return false;
+  }
+  function calculationMessage(reason: SafeCalculateSkipReason | "recovery-snapshot-unavailable"): string {
+    if (reason === "unresolved-sheet-refs") {
+      return "公式引用了不存在的工作表，当前显示缓存值。";
+    }
+    if (reason === "recovery-snapshot-unavailable") {
+      return "无法保存工作簿快照，已跳过公式重算以保护当前数据，当前显示缓存值。";
+    }
+    return "公式无法重新计算，当前显示缓存值。可手动重新计算重试。";
+  }
+  function noteCalculationResult(result: {
+    calculated: boolean;
+    skipReason: SafeCalculateSkipReason | "recovery-snapshot-unavailable" | null;
+  }) {
+    if (result.calculated) {
+      calculationStatus.value = null;
+      return;
+    }
+    if (!result.skipReason) return;
+    calculationStatus.value = {
+      reason: result.skipReason,
+      message: calculationMessage(result.skipReason)
+    };
+    shouldAutoCalculate.value = false;
+    autoCalculateDisabledByFailure = true;
+  }
+  function resumeAutoCalculate() {
+    if (!autoCalculateDisabledByFailure) return;
+    autoCalculateDisabledByFailure = false;
+    shouldAutoCalculate.value = true;
+  }
+  function recalculateWorkbookSafely(targetWorkbook: Workbook): XlsxCalculationOutcome {
+    const WorkbookConstructor = targetWorkbook.constructor as typeof Workbook;
+    let snapshot: Uint8Array | null = null;
+    if (hasFormulaCells(targetWorkbook)) {
+      try {
+        snapshot = createSavedWorkbookBytes(targetWorkbook);
+      } catch (error) {
+        console.warn("[xlsx] failed to snapshot workbook before recalculation", error);
+        noteCalculationResult({ calculated: false, skipReason: "recovery-snapshot-unavailable" });
+        return { calculated: false, safeToRefresh: true };
+      }
+    }
+
+    const result = safeCalculate(targetWorkbook, snapshot ? {
+      // The snapshot contains the mutation that triggered this recalculation,
+      // so rebuilding from it keeps the edit while replacing the trapped WASM
+      // instance with a readable one.
+      reparse: () => trackXlsxWorkbookLifetime(WorkbookConstructor.fromBytes(snapshot as Uint8Array))
+    } : {});
+    if (result.workbook !== targetWorkbook) {
+      replaceWorkbook(result.workbook);
+    }
+    noteCalculationResult({ calculated: result.calculated, skipReason: result.skipReason });
+    if (!result.calculated && result.skipReason === "calculate-trapped" && result.workbook === targetWorkbook) {
+      // The reparse itself failed; the trapped instance must never be read.
+      replaceWorkbook(null);
+      return { calculated: false, safeToRefresh: false };
+    }
+    return { calculated: result.calculated, safeToRefresh: true };
+  }
   function maybeRecalculateWorkbook(targetWorkbook: Workbook) {
-    if (!shouldAutoCalculate.value) return;
-    const result = tryRecalculate(targetWorkbook);
-    if (!result.calculated) shouldAutoCalculate.value = false;
+    if (!shouldAutoCalculate.value) return true;
+    return recalculateWorkbookSafely(targetWorkbook).safeToRefresh;
   }
   function createSavedWorkbookBytes(targetWorkbook: Workbook) {
     return mergeWorkbookImageAssets(sanitizeSavedWorkbookBytes(targetWorkbook.saveXlsxBytes()), imageAssetsRef.value, sheetOriginsRef.value);
@@ -862,6 +942,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
         chartAssetsRef.value = null;
         workerTablesByWorkbookSheetIndex.value = snapshot.tablesByWorkbookSheetIndex;
         shouldAutoCalculate.value = false;
+        calculationStatus.value = null;
+        autoCalculateDisabledByFailure = false;
         isWorkerBacked.value = true;
         sourceBufferRef.value = sourceBuffer;
         sortState.value = null;
@@ -924,6 +1006,11 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       sheets.value = nextSheets;
       startChartDisplayHydration(buffer, nextParsedWorkbook.workbook, nextSheets);
       shouldAutoCalculate.value = nextParsedWorkbook.shouldAutoCalculate;
+      autoCalculateDisabledByFailure = false;
+      noteCalculationResult({
+        calculated: nextParsedWorkbook.shouldAutoCalculate,
+        skipReason: nextParsedWorkbook.calculationSkipReason
+      });
       workerTablesByWorkbookSheetIndex.value = [];
       isWorkerBacked.value = false;
       sourceBufferRef.value = sourceBuffer;
@@ -972,6 +1059,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     workerTablesByWorkbookSheetIndex.value = [];
     clearImageAssets();
     shouldAutoCalculate.value = false;
+    calculationStatus.value = null;
+    autoCalculateDisabledByFailure = false;
     isWorkerBacked.value = false;
     sourceBufferRef.value = null;
     sortState.value = null;
@@ -1095,6 +1184,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       selectionAnchorRef.value = null;
       undoStackRef.value = []; redoStackRef.value = []; isApplyingHistoryRef.value = false; historyRevision.value = 0;
       shouldAutoCalculate.value = false;
+      calculationStatus.value = null;
+      autoCalculateDisabledByFailure = false;
       workerCellSnapshotCacheRef.value.clear(); workerCellSnapshotRevision.value = 0;
       sortState.value = null; zoomScaleOverridesByTabId.value = {}; revision.value = 0;
       return;
@@ -1121,6 +1212,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     selectionAnchorRef.value = null;
     undoStackRef.value = []; redoStackRef.value = []; isApplyingHistoryRef.value = false; historyRevision.value = 0;
     shouldAutoCalculate.value = false;
+    calculationStatus.value = null;
+    autoCalculateDisabledByFailure = false;
     workerCellSnapshotCacheRef.value.clear(); workerCellSnapshotRevision.value = 0;
     sortState.value = null; zoomScaleOverridesByTabId.value = {}; revision.value = 0;
     disposeWorkerClient();
@@ -1241,6 +1334,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     readOnly, isActiveSheetProtected, isEditingLocked, canResizeReadOnly, displayFileName, visibleSheetIndexByWorkbookSheetIndex,
     refreshWorkbookState, maybeRecalculateWorkbook,
     switchToSheet, consumePreservedTabSwitch,
+    recalculateWorkbookSafely, resumeAutoCalculate, calculationStatus, noteCalculationResult,
     getActiveWorksheet: getInternalActiveWorksheet,
     setChartAssets, setImageAssets, clearImageAssets, clearChartAssets,
     getWorkerClient, disposeWorkerClient, replaceWorkbook, disposeWorkbook, discardWorkbookLoadResult,
@@ -1350,6 +1444,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get canDownload() { return sourceState.value === "ready" && sourceBufferRef.value !== null; },
     get canExport() { return Boolean(workbook.value); },
     get canLoadDeferred() { return canLoadDeferred.value; },
+    get calculationStatus() { return calculationStatus.value; },
     get canUndo() { return canUndo.value; },
     get canZoomIn() { return canZoomIn.value; },
     get canZoomOut() { return canZoomOut.value; },

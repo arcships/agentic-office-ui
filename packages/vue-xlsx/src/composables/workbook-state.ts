@@ -18,7 +18,7 @@ import {
   revokeWorkbookImageAssets,
   safeCalculate,
   trackXlsxWorkbookLifetime,
-  tryRecalculate,
+  type SafeCalculateSkipReason,
   type XlsxCellRange,
   type XlsxCellHyperlink,
   type XlsxCellComment,
@@ -546,6 +546,7 @@ export async function convertXlsbBufferToXlsx(buffer: ArrayBuffer): Promise<Arra
 
 export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{
   shouldAutoCalculate: boolean;
+  calculationSkipReason: SafeCalculateSkipReason | null;
   workbook: Workbook;
 }> {
   const wasmModule = await getSheetsWasmModule();
@@ -566,7 +567,7 @@ export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{
 
   const shouldAutoCalculate = totalFormulas <= FORMULA_COUNT_THRESHOLD;
   if (!shouldAutoCalculate) {
-    return { shouldAutoCalculate, workbook: initialWorkbook };
+    return { shouldAutoCalculate, calculationSkipReason: null, workbook: initialWorkbook };
   }
 
   const result = safeCalculate(initialWorkbook, {
@@ -584,11 +585,10 @@ export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{
 
   return {
     shouldAutoCalculate: result.calculated,
+    calculationSkipReason: result.skipReason,
     workbook: result.workbook
   };
 }
-
-export { tryRecalculate };
 
 export type { XlsxSheetVisibility };
 
@@ -652,6 +652,26 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
       nextWorkbook = trackXlsxWorkbookLifetime(
         wasmModule.Workbook.fromBytes(cloneBytes(entry.bytes))
       );
+      const calculation = safeCalculate(nextWorkbook, {
+        reparse: () => trackXlsxWorkbookLifetime(
+          wasmModule.Workbook.fromBytes(cloneBytes(entry.bytes))
+        )
+      });
+      if (calculation.workbook !== nextWorkbook) {
+        try {
+          nextWorkbook.free();
+        } catch {
+          // A trapped WASM workbook may reject cleanup; it is never reused.
+        }
+        nextWorkbook = calculation.workbook;
+      }
+      ctx.noteCalculationResult({
+        calculated: calculation.calculated,
+        skipReason: calculation.skipReason
+      });
+      if (calculation.calculated) {
+        ctx.resumeAutoCalculate();
+      }
       nextImageAssets = loadWorkbookImageAssets(entry.bytes, nextWorkbook);
       const nextSheets = buildSheetList(
         nextWorkbook,
@@ -741,8 +761,9 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     ctx.isApplyingHistoryRef.value = true;
     try {
       applyCellMutationState(worksheet, entry.cell, targetState);
-      ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-      ctx.refreshWorkbookState(ctx.workbook.value);
+      if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+        ctx.refreshWorkbookState(ctx.workbook.value);
+      }
 
       const nextActiveCell = direction === "undo" ? entry.activeCellBefore : entry.activeCellAfter;
       const nextSelection = direction === "undo" ? entry.selectionBefore : entry.selectionAfter;
@@ -769,8 +790,9 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
       for (const mutation of entry.mutations) {
         applyCellMutationState(worksheet, mutation.cell, direction === "undo" ? mutation.before : mutation.after);
       }
-      ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-      ctx.refreshWorkbookState(ctx.workbook.value);
+      if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+        ctx.refreshWorkbookState(ctx.workbook.value);
+      }
 
       const nextActiveCell = direction === "undo" ? entry.activeCellBefore : entry.activeCellAfter;
       const nextSelection = direction === "undo" ? entry.selectionBefore : entry.selectionAfter;
@@ -896,8 +918,9 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
       }
     }
 
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
     ctx.sortState.value = { columnIndex, direction, tableName: targetTable.name };
     ctx.recordRangeEditHistory(mutations, ctx.selection.value, ctx.activeCell.value);
   }
@@ -926,19 +949,18 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function recalculate() {
-    if (!ctx.workbook.value) {
+    const targetWorkbook = ctx.workbook.value;
+    if (!targetWorkbook) {
       return;
     }
 
-    const result = tryRecalculate(ctx.workbook.value);
-    if (result.calculated) {
+    const outcome = ctx.recalculateWorkbookSafely(targetWorkbook);
+    if (outcome.calculated) {
+      ctx.resumeAutoCalculate();
+    }
+    if (outcome.safeToRefresh && ctx.workbook.value) {
       ctx.refreshWorkbookState(ctx.workbook.value);
-      return;
     }
-
-    // Trap poisons the Workbook pointer; skip refreshWorkbookState so we
-    // don't crash reading cells from it.
-    ctx.shouldAutoCalculate.value = false;
   }
 
   function applyReadOnlyResizeOverride(axis: "column" | "row", actualIndex: number, sizePx: number) {
