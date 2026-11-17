@@ -70,6 +70,7 @@ const suites = {
       "tests/unit/docx-page-appearance.test.mjs",
       "tests/unit/docx-reference-adapter.test.mjs",
       "tests/unit/docx-history-cache.test.mjs",
+      "tests/unit/docx-edit-structural-sharing.test.mjs",
       "tests/unit/docx-pagination-runtime.test.mjs",
       "tests/unit/xlsx-core.test.mjs",
       "tests/unit/xlsx-worker.test.mjs",

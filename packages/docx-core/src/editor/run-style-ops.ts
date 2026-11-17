@@ -11,7 +11,7 @@ import type {
   TextRunNode,
   TextStyle,
 } from "../engine/types";
-import { cloneDocModel } from "../engine/clone";
+import { cloneDocModel, cloneDocModelShallow, cloneDocNode } from "../engine/clone";
 import {
   cloneParagraph,
   ensureTextRun,
@@ -112,12 +112,14 @@ export function setParagraphHeading(
   nodeIndex: number,
   headingLevel?: HeadingLevel
 ): DocModel {
-  const next = cloneDocModel(model);
-  const paragraph = getParagraph(next, nodeIndex);
-  if (!paragraph) {
+  const next = cloneDocModelShallow(model);
+  const source = getParagraph(model, nodeIndex);
+  if (!source) {
     return next;
   }
 
+  const paragraph = cloneDocNode(source);
+  next.nodes[nodeIndex] = paragraph;
   paragraph.style = {
     ...(paragraph.style ?? {}),
     headingLevel
@@ -132,12 +134,14 @@ export function setParagraphAlignment(
   nodeIndex: number,
   align?: ParagraphAlignment
 ): DocModel {
-  const next = cloneDocModel(model);
-  const paragraph = getParagraph(next, nodeIndex);
-  if (!paragraph) {
+  const next = cloneDocModelShallow(model);
+  const source = getParagraph(model, nodeIndex);
+  if (!source) {
     return next;
   }
 
+  const paragraph = cloneDocNode(source);
+  next.nodes[nodeIndex] = paragraph;
   paragraph.style = {
     ...(paragraph.style ?? {}),
     align
@@ -153,12 +157,14 @@ export function applyRunStyle(
   runIndex: number,
   style: Partial<TextStyle>
 ): DocModel {
-  const next = cloneDocModel(model);
-  const paragraph = getParagraph(next, nodeIndex);
-  if (!paragraph) {
+  const next = cloneDocModelShallow(model);
+  const source = getParagraph(model, nodeIndex);
+  if (!source) {
     return next;
   }
 
+  const paragraph = cloneDocNode(source);
+  next.nodes[nodeIndex] = paragraph;
   const textRun = ensureTextRun(paragraph, runIndex);
   textRun.style = {
     ...(textRun.style ?? {}),
@@ -175,12 +181,14 @@ export function toggleRunStyleFlag(
   runIndex: number,
   key: "bold" | "italic" | "underline" | "strike"
 ): DocModel {
-  const next = cloneDocModel(model);
-  const paragraph = getParagraph(next, nodeIndex);
-  if (!paragraph) {
+  const next = cloneDocModelShallow(model);
+  const source = getParagraph(model, nodeIndex);
+  if (!source) {
     return next;
   }
 
+  const paragraph = cloneDocNode(source);
+  next.nodes[nodeIndex] = paragraph;
   const textRun = ensureTextRun(paragraph, runIndex);
   const current = Boolean(textRun.style?.[key]);
   textRun.style = {
@@ -226,7 +234,7 @@ export function copyParagraphs(model: DocModel, startIndex: number, endIndex = s
 }
 
 export function pasteParagraphs(model: DocModel, index: number, paragraphs: ParagraphNode[]): DocModel {
-  const next = cloneDocModel(model);
+  const next = cloneDocModelShallow(model);
   const safeIndex = Math.max(0, Math.min(index, next.nodes.length));
   // Pasted paragraphs may come from this model or another document: give each
   // copy fresh XML identifiers instead of duplicating bookmarks/paraId/docPr ids.

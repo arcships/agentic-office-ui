@@ -69,6 +69,8 @@ Worker 和 WASM 必须来自安装后的真实包。消费项目不得从 demo �
 
 根入口同时公开低层校验辅助项 `assertDocxModelBudget`、`assertDocxParseTime`、`validateDocxImageAssets` 和 `DocxImageBudgetSnapshot`，供自定义导入流程复用与内置 Runtime 相同的模型、耗时和图片规则。
 
+单节点编辑采用写时复制：`cloneDocModelShallow(model)` 只复制模型对象、`nodes` 数组和 `metadata` 对象，`cloneDocNode(node)` 深拷贝被编辑的顶层节点，二者与 `model` 共享未修改的节点、页眉页脚和图片 `data` 缓冲区。`cloneDocModel(model)` 继续完整拷贝文档图（包括图片字节），用于导入、标准化和长生命周期检查点。编辑路径共享的图片 `data` 只能读，调用方不得原地写入。（issue #37）
+
 推荐实例写法：
 
 ```ts

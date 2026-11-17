@@ -49,6 +49,37 @@ function normalizedPositiveInteger(value: number, fallback: number): number {
 }
 
 /**
+ * Per-entry byte estimate cache.
+ *
+ * A history entry is created once and then only read, so its serialized size is
+ * stable. Measuring it a single time turns the budget check into O(retained
+ * entries) pointer lookups instead of re-serializing the whole document for
+ * every retained entry on every push — the O(entries × document) work that made
+ * typing lag in long documents. Entries are weak keys, so snapshots evicted
+ * from history stay collectable.
+ */
+const historyEntryByteEstimates = new WeakMap<object, number>();
+
+/**
+ * Estimates retained bytes for one history entry, reusing the value computed
+ * the first time that entry object was measured.
+ */
+export function cachedHistoryEntryBytes(entry: unknown): number {
+  if (!entry || typeof entry !== "object") {
+    return estimateHistoryEntryBytes(entry);
+  }
+
+  const cached = historyEntryByteEstimates.get(entry);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const estimatedBytes = estimateHistoryEntryBytes(entry);
+  historyEntryByteEstimates.set(entry, estimatedBytes);
+  return estimatedBytes;
+}
+
+/**
  * Keeps one contiguous run of the most recent history. A newest entry larger
  * than the byte budget is retained by itself so the latest edit remains
  * undoable; older entries are then evicted.
@@ -59,7 +90,7 @@ export function trimHistoryEntriesToBudget<T>(
 ): HistoryBudgetResult<T> {
   const maxEntries = normalizedPositiveInteger(options.maxEntries, 1);
   const maxBytes = normalizedPositiveInteger(options.maxBytes, 1);
-  const estimate = options.estimateBytes ?? estimateHistoryEntryBytes;
+  const estimate = options.estimateBytes ?? cachedHistoryEntryBytes;
   const newestAt = options.newestAt ?? "end";
   const candidates = newestAt === "end" ? [...input].reverse() : [...input];
   const retained: T[] = [];

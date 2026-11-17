@@ -8,6 +8,7 @@ import type {
   TableNode,
   TextStyle
 } from "../engine/types";
+import { shareImageData } from "../engine/clone";
 
 export interface LayoutOptions {
   pageWidth?: number;
@@ -195,7 +196,7 @@ export function paragraphToLayout(
       widthPx: child.widthPx,
       heightPx: child.heightPx,
       contentType: child.contentType,
-      data: child.data ? new Uint8Array(child.data) : undefined,
+      data: shareImageData(child.data),
       floating: Boolean(child.floating)
     };
   });

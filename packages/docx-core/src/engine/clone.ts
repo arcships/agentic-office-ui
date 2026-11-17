@@ -26,6 +26,69 @@ import {
   setCachedDocumentCommentAnchor,
 } from "./comment-anchors";
 
+/**
+ * Returns the encoded image bytes without copying them.
+ *
+ * Package bytes are large (a long document can carry tens of megabytes of
+ * images) and the editor treats them as immutable: decoders only read from them
+ * and no edit command writes into a run buffer. Edits therefore alias the
+ * original buffer instead of duplicating it on every keystroke.
+ * Array-shaped payloads (legacy or JSON input) are still normalised into a
+ * `Uint8Array`.
+ */
+export function shareImageData(
+  data: ImageRunNode["data"]
+): ImageRunNode["data"] {
+  if (!data) {
+    return undefined;
+  }
+
+  return data instanceof Uint8Array
+    ? data
+    : new Uint8Array(data as unknown as ArrayLike<number>);
+}
+
+/**
+ * Returns encoded image bytes as an independent copy.
+ *
+ * `cloneDocModel` is the isolation boundary (import, normalise, checkpoints), so
+ * it keeps the historical "no shared mutable state" guarantee. Edit-path clones
+ * use {@link shareImageData} instead.
+ */
+export function copyImageData(
+  data: ImageRunNode["data"]
+): ImageRunNode["data"] {
+  if (!data) {
+    return undefined;
+  }
+
+  return data instanceof Uint8Array
+    ? new Uint8Array(data)
+    : Uint8Array.from(data as unknown as ArrayLike<number>);
+}
+
+/**
+ * Controls how a node clone treats encoded image payloads.
+ *
+ * Edit-path clones (`cloneDocNode`, `cloneParagraph`, ...) share bytes by
+ * default; `cloneDocModel` opts into copying so the full clone stays isolated.
+ */
+export interface DocCloneOptions {
+  shareImageBytes?: boolean;
+}
+
+const SHARE_IMAGE_BYTES: DocCloneOptions = { shareImageBytes: true };
+const COPY_IMAGE_BYTES: DocCloneOptions = { shareImageBytes: false };
+
+function cloneImageBytes(
+  data: ImageRunNode["data"],
+  options: DocCloneOptions
+): ImageRunNode["data"] {
+  return options.shareImageBytes === false
+    ? copyImageData(data)
+    : shareImageData(data);
+}
+
 function isParagraphCellContent(
   node: TableCellContentNode
 ): node is ParagraphNode {
@@ -39,15 +102,16 @@ function isTableCellContentTable(
 }
 
 function cloneTableCellContent(
-  nodes: TableCellContentNode[]
+  nodes: TableCellContentNode[],
+  options: DocCloneOptions
 ): TableCellContentNode[] {
   return nodes.map((node) => {
     if (isParagraphCellContent(node)) {
-      return cloneParagraph(node);
+      return cloneParagraph(node, options);
     }
 
     if (isTableCellContentTable(node)) {
-      return cloneTable(node);
+      return cloneTable(node, options);
     }
 
     return node;
@@ -176,10 +240,13 @@ export function cloneFormFieldRun(run: FormFieldRunNode): FormFieldRunNode {
 }
 
 /** Clone an image run, keeping crop/original XML and every other image field. */
-export function cloneImageRun(run: ImageRunNode): ImageRunNode {
+export function cloneImageRun(
+  run: ImageRunNode,
+  options: DocCloneOptions = SHARE_IMAGE_BYTES
+): ImageRunNode {
   return {
     ...run,
-    data: run.data ? new Uint8Array(run.data) : undefined,
+    data: cloneImageBytes(run.data, options),
     sourceXml: run.sourceXml,
     crop: run.crop ? { ...run.crop } : undefined,
     cssFilter: run.cssFilter,
@@ -191,7 +258,10 @@ export function cloneImageRun(run: ImageRunNode): ImageRunNode {
 }
 
 /** Clone a single paragraph child, dispatching on its run type. */
-export function cloneParagraphChild(child: ParagraphChildNode): ParagraphChildNode {
+export function cloneParagraphChild(
+  child: ParagraphChildNode,
+  options: DocCloneOptions = SHARE_IMAGE_BYTES
+): ParagraphChildNode {
   if (child.type === "text") {
     return cloneTextRun(child);
   }
@@ -200,16 +270,21 @@ export function cloneParagraphChild(child: ParagraphChildNode): ParagraphChildNo
     return cloneFormFieldRun(child);
   }
 
-  return cloneImageRun(child);
+  return cloneImageRun(child, options);
 }
 
-export function cloneParagraph(paragraph: ParagraphNode): ParagraphNode {
+export function cloneParagraph(
+  paragraph: ParagraphNode,
+  options: DocCloneOptions = SHARE_IMAGE_BYTES
+): ParagraphNode {
   return {
     type: "paragraph",
     style: cloneParagraphStyle(paragraph.style),
     paragraphMarkDeleted: paragraph.paragraphMarkDeleted,
     sourceXml: paragraph.sourceXml,
-    children: paragraph.children.map(cloneParagraphChild),
+    children: paragraph.children.map((child) =>
+      cloneParagraphChild(child, options)
+    ),
   };
 }
 
@@ -282,7 +357,10 @@ function cloneTableFloatingStyle(
   };
 }
 
-function cloneTable(table: TableNode): TableNode {
+function cloneTable(
+  table: TableNode,
+  options: DocCloneOptions = SHARE_IMAGE_BYTES
+): TableNode {
   return {
     type: "table",
     sourceXml: table.sourceXml,
@@ -312,14 +390,45 @@ function cloneTable(table: TableNode): TableNode {
               borders: cloneTableBorderSet(cell.style.borders),
             }
           : undefined,
-        nodes: cloneTableCellContent(cell.nodes),
+        nodes: cloneTableCellContent(cell.nodes, options),
       })),
     })),
   };
 }
 
-export function cloneDocNode(node: DocNode): DocNode {
-  return node.type === "paragraph" ? cloneParagraph(node) : cloneTable(node);
+/**
+ * Deep-clones one top-level document node. Image bytes are shared by default
+ * (see {@link shareImageData}); every other object in the node is copied.
+ * Pass `{ shareImageBytes: false }` for a fully isolated copy.
+ */
+export function cloneDocNode<T extends DocNode>(
+  node: T,
+  options: DocCloneOptions = SHARE_IMAGE_BYTES
+): T {
+  return (
+    node.type === "paragraph" ? cloneParagraph(node, options) : cloneTable(node, options)
+  ) as T;
+}
+
+/**
+ * Copy-on-write shell for the document model.
+ *
+ * Only the model object, its `nodes` array and the `metadata` object are
+ * copied. Nodes, header/footer sections, metadata arrays and image bytes are
+ * shared by reference with `model`, which keeps a single-node edit O(1) in the
+ * size of the document instead of O(document).
+ *
+ * Callers must never mutate a shared node: replace the touched top-level node
+ * with `cloneDocNode(model.nodes[index])` first, then mutate the clone. Use
+ * `cloneDocModel` when the whole graph is being rewritten (import, normalise,
+ * checkpoints that outlive the working model).
+ */
+export function cloneDocModelShallow(model: DocModel): DocModel {
+  return {
+    ...model,
+    nodes: [...model.nodes],
+    metadata: { ...model.metadata }
+  };
 }
 
 function cloneNumberingDefinitions(
@@ -359,9 +468,16 @@ function cloneNumberingDefinitions(
   };
 }
 
+/**
+ * Fully isolated copy of the document model: every node, paragraph style,
+ * numbering definition and metadata array is copied, and encoded image bytes are
+ * copied too. Use this for import, normalisation and checkpoints; edit commands
+ * use the cheaper `cloneDocModelShallow` + `cloneDocNode`. Undo history keeps
+ * model references and never calls this.
+ */
 export function cloneDocModel(model: DocModel): DocModel {
   return {
-    nodes: model.nodes.map(cloneDocNode),
+    nodes: model.nodes.map((node) => cloneDocNode(node, COPY_IMAGE_BYTES)),
     metadata: {
       sourceParts: model.metadata.sourceParts,
       warnings: [...model.metadata.warnings],
@@ -375,23 +491,27 @@ export function cloneDocModel(model: DocModel): DocModel {
         headerSections: (section.headerSections ?? []).map((headerSection) => ({
           partName: headerSection.partName,
           referenceType: headerSection.referenceType,
-          nodes: headerSection.nodes.map(cloneDocNode),
+          nodes: headerSection.nodes.map((node) =>
+            cloneDocNode(node, COPY_IMAGE_BYTES)
+          ),
         })),
         footerSections: (section.footerSections ?? []).map((footerSection) => ({
           partName: footerSection.partName,
           referenceType: footerSection.referenceType,
-          nodes: footerSection.nodes.map(cloneDocNode),
+          nodes: footerSection.nodes.map((node) =>
+            cloneDocNode(node, COPY_IMAGE_BYTES)
+          ),
         })),
       })),
       headerSections: (model.metadata.headerSections ?? []).map((section) => ({
         partName: section.partName,
         referenceType: section.referenceType,
-        nodes: section.nodes.map(cloneDocNode),
+        nodes: section.nodes.map((node) => cloneDocNode(node, COPY_IMAGE_BYTES)),
       })),
       footerSections: (model.metadata.footerSections ?? []).map((section) => ({
         partName: section.partName,
         referenceType: section.referenceType,
-        nodes: section.nodes.map(cloneDocNode),
+        nodes: section.nodes.map((node) => cloneDocNode(node, COPY_IMAGE_BYTES)),
       })),
       paragraphStyles: (model.metadata.paragraphStyles ?? []).map((style) => ({
         ...style,
@@ -410,11 +530,11 @@ export function cloneDocModel(model: DocModel): DocModel {
         : undefined,
       footnotes: model.metadata.footnotes?.map((note) => ({
         ...note,
-        nodes: note.nodes?.map(cloneDocNode),
+        nodes: note.nodes?.map((node) => cloneDocNode(node, COPY_IMAGE_BYTES)),
       })),
       endnotes: model.metadata.endnotes?.map((note) => ({
         ...note,
-        nodes: note.nodes?.map(cloneDocNode),
+        nodes: note.nodes?.map((node) => cloneDocNode(node, COPY_IMAGE_BYTES)),
       })),
       comments: model.metadata.comments?.map((comment) => {
         const cloned = { ...comment };
