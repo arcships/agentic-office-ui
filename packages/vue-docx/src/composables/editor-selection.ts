@@ -126,10 +126,14 @@ function locationForHost(host: SelectionHost): DocxTextRangeLocation | undefined
   return nodeIndex === undefined ? undefined : { kind: "paragraph", nodeIndex }
 }
 
+// Elements that are rendered in a text host but are not part of its text model
+// (`paragraphText`): list numbering labels, note markers and tracked change
+// deletions. Counting them shifts every caret/selection offset.
+export const PARAGRAPH_NON_TEXT_CONTENT_SELECTOR =
+  "[data-docx-numbering-label='true'],[data-docx-note-marker='true'],[data-docx-tracked-change='deletion']"
+
 function fragmentTextLength(fragment: DocumentFragment): number {
-  fragment
-    .querySelectorAll?.("[data-docx-numbering-label='true'], [data-docx-note-marker='true']")
-    .forEach((label) => label.remove())
+  fragment.querySelectorAll?.(PARAGRAPH_NON_TEXT_CONTENT_SELECTOR).forEach((element) => element.remove())
   fragment.querySelectorAll?.("br").forEach((lineBreak) => {
     lineBreak.replaceWith("\n")
   })
@@ -213,7 +217,7 @@ function domPositionForTextOffset(
     for (let index = 0; index < children.length && !resolved; index += 1) {
       const child = children[index]
       const element = child as Element
-      if (element.matches?.("[data-docx-numbering-label='true'], [data-docx-note-marker='true']")) continue
+      if (element.matches?.(PARAGRAPH_NON_TEXT_CONTENT_SELECTOR)) continue
       if (element.tagName?.toLowerCase() === "br") {
         if (safeTarget <= traversed) {
           resolved = { node: parent, offset: index }

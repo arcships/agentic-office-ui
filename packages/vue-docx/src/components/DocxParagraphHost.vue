@@ -153,6 +153,8 @@ function readCurrentDomText(): string {
   if (!root) return ""
   // Test renderers (and some host shims) expose only textContent.
   if (!root.childNodes) return root.textContent ?? ""
+  // The shared reader skips numbering labels, note markers and tracked-change
+  // deletion/move-from runs, which are rendered but are not paragraph text.
   return readDocxTextHostText(root)
 }
 

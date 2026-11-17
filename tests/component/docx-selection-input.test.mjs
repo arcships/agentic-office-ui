@@ -134,16 +134,20 @@ function installDomEnvironment(t) {
 
   function textLeaves(host) {
     const result = [];
-    function visit(node, withinNumberingLabel = false) {
-      const numbered = withinNumberingLabel || matchesSelector(
+    function visit(node, flags = {}) {
+      const numbered = flags.numbered || matchesSelector(
         node,
         "[data-docx-numbering-label='true']",
       );
+      const deleted = flags.deleted || matchesSelector(
+        node,
+        "[data-docx-tracked-change='deletion']",
+      );
       if (node?.nodeType === 3) {
-        result.push({ node, text: node.textContent ?? "", numbered });
+        result.push({ node, text: node.textContent ?? "", numbered, deleted });
         return;
       }
-      for (const child of node?.childNodes ?? []) visit(child, numbered);
+      for (const child of node?.childNodes ?? []) visit(child, { numbered, deleted });
     }
     visit(host);
     return result;
@@ -206,6 +210,7 @@ function installDomEnvironment(t) {
         pieces.push({
           text: leaf.text.slice(from - leafStart, to - leafStart),
           numbered: leaf.numbered,
+          deleted: leaf.deleted,
           removed: false,
         });
       }
@@ -216,14 +221,17 @@ function installDomEnvironment(t) {
         return pieces.filter((piece) => !piece.removed).map((piece) => piece.text).join("");
       },
       querySelectorAll(selector) {
-        // The production code queries a selector list that also excludes note
-        // markers; this fixture only builds numbering-label pieces.
-        if (selector.includes("[data-docx-numbering-label='true']")) {
-          return pieces.filter((piece) => piece.numbered).map((piece) => ({
-            remove() { piece.removed = true; },
-          }));
-        }
-        return [];
+        // Production queries one selector list (numbering labels, note markers,
+        // tracked deletions); this fixture only builds numbering-label and
+        // deletion pieces.
+        const parts = String(selector).split(",").map((part) => part.trim()).filter(Boolean);
+        const matchesPiece = (piece) => parts.some((part) => (
+          (part === "[data-docx-numbering-label='true']" && piece.numbered) ||
+          (part === "[data-docx-tracked-change='deletion']" && piece.deleted)
+        ));
+        return pieces.filter(matchesPiece).map((piece) => ({
+          remove() { piece.removed = true; },
+        }));
       },
     };
   }
@@ -399,6 +407,30 @@ function setHostDomText(host, text, documentObject, numberingLabel = "") {
   return contentText;
 }
 
+function setHostDomWithTrackedDeletion(host, before, deleted, after, documentObject) {
+  decorateElement(host, documentObject);
+  const textNode = (text, parent) => ({
+    nodeType: 3,
+    textContent: text,
+    childNodes: [],
+    parentElement: parent,
+    parentNode: parent,
+  });
+  const beforeNode = textNode(before, host);
+  const deletionSpan = {
+    type: "span",
+    props: { "data-docx-tracked-change": "deletion" },
+    childNodes: [],
+    parentElement: host,
+    parentNode: host,
+  };
+  decorateElement(deletionSpan, documentObject);
+  deletionSpan.childNodes = [textNode(deleted, deletionSpan)];
+  const afterNode = textNode(after, host);
+  host.childNodes = [beforeNode, deletionSpan, afterNode];
+  return { beforeNode, afterNode, deletionSpan };
+}
+
 function installRendererDom(mounted, documentObject) {
   for (const node of walk(mounted.root)) decorateElement(node, documentObject);
   const editorRoot = walk(mounted.root).find((node) => node.props?.["data-testid"] === "docx-editor");
@@ -465,6 +497,35 @@ test("real DOM Range updates activeTextRange and ignores the numbering label", a
   assert.deepEqual(mounted.controller.activeTextRange, {
     start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
     end: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 5 },
+  });
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("caret offsets skip tracked-change deletion text", async (t) => {
+  const mounted = await mountEditableDocument(t, ["abcdef"]);
+  const [paragraph] = paragraphHosts(mounted.root);
+  // The model text is "abcdef"; the deleted revision "XYZ" is rendered for
+  // review but is not part of the paragraph text.
+  const { afterNode } = setHostDomWithTrackedDeletion(
+    paragraph,
+    "ab",
+    "XYZ",
+    "cdef",
+    mounted.dom.document,
+  );
+  const pageBody = walk(mounted.root)
+    .find((node) => node.props?.["data-docx-page-body"] === "true");
+  assert.ok(pageBody, "page body should render");
+
+  eventHandler(pageBody, "pointerdown")({ target: paragraph });
+  // Click immediately after the deleted text: the caret sits at model offset 2.
+  mounted.dom.setSelection(afterNode, 0);
+  mounted.dom.dispatchDocument("selectionchange");
+  await vue.nextTick();
+
+  assert.deepEqual(mounted.controller.activeTextRange, {
+    start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
+    end: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
   });
   assert.deepEqual(mounted.warnings, []);
 });

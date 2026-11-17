@@ -2,7 +2,7 @@
 //
 // Extracted from useDocxEditor.ts.
 
-import type { DocModel } from "@arcships/docx-core"
+import type { DocModel, ParagraphNode } from "@arcships/docx-core"
 import type { DocxListType } from "@arcships/docx-core"
 import {
   cloneDocModel,
@@ -13,6 +13,7 @@ import {
   resolveSelectedParagraphLocation,
 } from "@arcships/docx-core"
 import type { ApplyModelChangeOptions, EditorCore } from "./editor-shared"
+import { selectedParagraphLocations } from "./editor-paragraph-range"
 
 export function createEditorList(
   ctx: EditorCore,
@@ -24,27 +25,45 @@ export function createEditorList(
 ) {
   const toggleList = (listType: DocxListType): void => {
     applyChange((current) => {
+      const locations = selectedParagraphLocations(
+        current,
+        ctx.selectionSnapshot.value,
+        ctx.activeTextRangeSnapshot.value
+      )
       const nextModel = cloneDocModel(current)
-      const loc = resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, ctx.activeTextRangeSnapshot.value)
-      const { paragraph: para } = getParagraphAtLocation(nextModel, loc)
-      if (!para) {
+      const paragraphs: ParagraphNode[] = []
+      for (const location of locations) {
+        const { paragraph } = getParagraphAtLocation(nextModel, location)
+        if (paragraph) paragraphs.push(paragraph)
+      }
+      if (paragraphs.length === 0) {
         ctx.status.value = "Cannot change the list: paragraph not found"
         return current
       }
-      if (!para.style) para.style = {}
-      const currentListType = paragraphListType(para, current.metadata.numberingDefinitions)
-      if (currentListType === listType) {
-        para.style.numbering = undefined
-        para.sourceXml = undefined
+
+      // Toggling a list type applies to the whole selection: it is removed only
+      // when every selected paragraph already carries that list type.
+      const removeList = paragraphs.every(
+        (para) => paragraphListType(para, current.metadata.numberingDefinitions) === listType
+      )
+      if (removeList) {
+        for (const para of paragraphs) {
+          if (!para.style) para.style = {}
+          para.style.numbering = undefined
+          para.sourceXml = undefined
+        }
         return nextModel
       }
 
       const numId = ensureListNumberingId(nextModel, listType)
-      para.style.numbering = {
-        numId,
-        ilvl: Math.max(0, para.style.numbering?.ilvl ?? 0),
+      for (const para of paragraphs) {
+        if (!para.style) para.style = {}
+        para.style.numbering = {
+          numId,
+          ilvl: Math.max(0, para.style.numbering?.ilvl ?? 0),
+        }
+        para.sourceXml = undefined
       }
-      para.sourceXml = undefined
       return nextModel
     }, listType === "unordered" ? "Applied bullet list" : "Applied numbered list")
   }

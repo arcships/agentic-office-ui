@@ -33,6 +33,7 @@ import {
 } from "@arcships/docx-core"
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { EditorCore } from "./editor-shared"
+import { selectedParagraphLocations } from "./editor-paragraph-range"
 
 function typedKeys<T extends object>(obj: T): (keyof T)[] {
   return Object.keys(obj) as (keyof T)[]
@@ -187,55 +188,90 @@ export function createEditorFormat(
   }
 
   // ── paragraph formatting ─────────────────────────────────────────
+  // Every paragraph-level command below mutates each paragraph of the active
+  // selection, so formatting a multi-paragraph selection is not anchored to
+  // the paragraph that owns the caret.
   const setHeading = (heading?: HeadingLevel): void => {
     dispatch((txCtx) => {
+      const locations = selectedParagraphLocations(
+        txCtx.model,
+        ctx.selectionSnapshot.value,
+        ctx.activeTextRangeSnapshot.value
+      )
       const nextModel = cloneDocModel(txCtx.model)
-      const loc = resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, ctx.activeTextRangeSnapshot.value)
-      const { paragraph: para } = getParagraphAtLocation(nextModel, loc)
-      if (!para) return undefined
-      if (!para.style) para.style = {}
-      para.style.headingLevel = heading
-      return { model: nextModel }
+      let mutated = false
+      for (const location of locations) {
+        const { paragraph: para } = getParagraphAtLocation(nextModel, location)
+        if (!para) continue
+        if (!para.style) para.style = {}
+        para.style.headingLevel = heading
+        mutated = true
+      }
+      return mutated ? { model: nextModel } : undefined
     })
   }
 
   const setParagraphStyle = (styleId?: string): void => {
     dispatch((txCtx) => {
+      const locations = selectedParagraphLocations(
+        txCtx.model,
+        ctx.selectionSnapshot.value,
+        ctx.activeTextRangeSnapshot.value
+      )
       const nextModel = cloneDocModel(txCtx.model)
-      const loc = resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, ctx.activeTextRangeSnapshot.value)
-      const { paragraph: para } = getParagraphAtLocation(nextModel, loc)
-      if (!para) return undefined
-      if (!para.style) para.style = {}
-      para.style.styleId = styleId
-      delete para.style.headingLevel
-      return { model: nextModel }
+      let mutated = false
+      for (const location of locations) {
+        const { paragraph: para } = getParagraphAtLocation(nextModel, location)
+        if (!para) continue
+        if (!para.style) para.style = {}
+        para.style.styleId = styleId
+        delete para.style.headingLevel
+        mutated = true
+      }
+      return mutated ? { model: nextModel } : undefined
     })
   }
 
   const setLineSpacing = (lineMultiple: number): void => {
     applyChange((current) => {
+      const locations = selectedParagraphLocations(
+        current,
+        ctx.selectionSnapshot.value,
+        ctx.activeTextRangeSnapshot.value
+      )
       const nextModel = cloneDocModel(current)
-      const loc = resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, ctx.activeTextRangeSnapshot.value)
-      const { paragraph: para } = getParagraphAtLocation(nextModel, loc)
-      if (!para) return current
-      if (!para.style) para.style = {}
-      if (!para.style.spacing) para.style.spacing = {}
       const lineTwips = Math.max(1, Math.round(lineMultiple * 240))
-      para.style.spacing.lineTwips = lineTwips
-      para.style.spacing.lineRule = "auto"
-      return nextModel
+      let mutated = false
+      for (const location of locations) {
+        const { paragraph: para } = getParagraphAtLocation(nextModel, location)
+        if (!para) continue
+        if (!para.style) para.style = {}
+        if (!para.style.spacing) para.style.spacing = {}
+        para.style.spacing.lineTwips = lineTwips
+        para.style.spacing.lineRule = "auto"
+        mutated = true
+      }
+      return mutated ? nextModel : current
     })
   }
 
   const setAlignment = (align?: ParagraphAlignment): void => {
     applyChange((current) => {
+      const locations = selectedParagraphLocations(
+        current,
+        ctx.selectionSnapshot.value,
+        ctx.activeTextRangeSnapshot.value
+      )
       const nextModel = cloneDocModel(current)
-      const loc = resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, ctx.activeTextRangeSnapshot.value)
-      const { paragraph: para } = getParagraphAtLocation(nextModel, loc)
-      if (!para) return current
-      if (!para.style) para.style = {}
-      para.style.align = align
-      return nextModel
+      let mutated = false
+      for (const location of locations) {
+        const { paragraph: para } = getParagraphAtLocation(nextModel, location)
+        if (!para) continue
+        if (!para.style) para.style = {}
+        para.style.align = align
+        mutated = true
+      }
+      return mutated ? nextModel : current
     })
   }
 
@@ -248,6 +284,15 @@ export function createEditorFormat(
       normalizedRange && compareTextRangeBoundaries(normalizedRange.start, normalizedRange.end) < 0
     )
 
+    // Diagonal presets have no rendered form for table cells or paragraphs yet.
+    // Report them through the editor status instead of silently doing nothing.
+    if (preset === "diagonal-down" || preset === "diagonal-up") {
+      ctx.status.value = targetLocation.kind === "table-cell"
+        ? `Unsupported: diagonal table-cell borders (${preset})`
+        : `Unsupported: diagonal paragraph borders (${preset})`
+      return
+    }
+
     applyChange((current) => {
       if (targetLocation.kind === "table-cell") {
         const next = cloneDocModel(current)
@@ -259,9 +304,6 @@ export function createEditorFormat(
 
         const presetState = tableBorderPresetState(tableNode.style?.borders, targetCell.style?.borders)
         const removePreset = preset !== "none" && presetState[preset]
-
-        // Diagonal borders are deferred to component integration
-        if (preset === "diagonal-down" || preset === "diagonal-up") return current
 
         const nextBorders = applyTableBorderPreset(tableNode.style?.borders, preset, removePreset)
         if (!nextBorders) return current
