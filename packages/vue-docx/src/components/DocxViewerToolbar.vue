@@ -22,13 +22,15 @@
       <div class="docx-viewer-toolbar__page" :aria-label="m.common.page.navigation">
         <span>{{ m.common.page.label }}</span>
         <input
+          ref="pageInputRef"
           v-model="pageDraft"
           data-testid="docx-page-current"
           :aria-label="m.common.page.current"
           inputmode="numeric"
           pattern="[0-9]*"
           :disabled="disabled || totalPages < 1"
-          @blur="commitPage"
+          @focus="onPageFocus"
+          @blur="onPageBlur"
           @keydown.enter.prevent="commitPage"
           @keydown.esc.prevent="resetPageDraft"
         />
@@ -244,13 +246,33 @@ const commentsTitle = computed(() => {
   return formatOfficeMessage(template, { count: props.commentCount })
 })
 const pageDraft = ref(String(props.currentPage || 1))
+const pageInputRef = ref<HTMLInputElement>()
+const pageInputFocused = ref(false)
 const searchInputRef = ref<HTMLInputElement>()
 const searchComposing = ref(false)
 
+function pageInputIsActive(): boolean {
+  if (pageInputFocused.value) return true
+  return typeof document !== "undefined" && pageInputRef.value === document.activeElement
+}
+
 watch(
   () => props.currentPage,
-  (page) => { pageDraft.value = String(page || 1) },
+  (page) => {
+    // Keep a focused draft intact while the user is typing a page number.
+    if (pageInputIsActive()) return
+    pageDraft.value = String(page || 1)
+  },
 )
+
+function onPageFocus(): void {
+  pageInputFocused.value = true
+}
+
+function onPageBlur(): void {
+  pageInputFocused.value = false
+  commitPage()
+}
 
 function resetPageDraft(): void {
   pageDraft.value = String(props.currentPage || 1)
