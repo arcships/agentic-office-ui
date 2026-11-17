@@ -288,3 +288,146 @@ test("multi-level chart categories keep every cache level", () => {
   assert.equal(chart.dataLabels?.numberFormat?.formatCode, "0.0%");
   assert.equal(chart.dataLabels?.showValue, true);
 });
+
+function createReferencedChart() {
+  const series = {
+    categories: ["cached-a", "cached-b"],
+    categoriesRef: { formula: "Sheet1!$A$2:$A$3" },
+    dataPoints: [],
+    id: "series-1",
+    name: "Series 1",
+    values: [1, 2],
+    valuesRef: { formula: "Sheet1!$B$2:$B$3" },
+  };
+  return chartOnly({
+    series: [series],
+    typeGroups: [{ chartType: "Line", series: [series] }],
+  });
+}
+
+function createValueSheet(initialValues) {
+  const values = { ...initialValues };
+  const sheet = {
+    free() {},
+    getCalculatedValueAt(row, col) {
+      return cell(values[`${row},${col}`] ?? "");
+    },
+    getFormattedValueAt(row, col) {
+      return cell(values[`${row},${col}`] ?? "");
+    },
+    isColumnHidden() {
+      return false;
+    },
+    isRowHidden() {
+      return false;
+    },
+    name: "Sheet1",
+  };
+  return {
+    set(row, col, value) {
+      values[`${row},${col}`] = value;
+    },
+    sheet,
+  };
+}
+
+test("chart data refreshes from an edited workbook model", () => {
+  const chart = createReferencedChart();
+  const { sheet, set } = createValueSheet({
+    "1,0": "A",
+    "1,1": 10,
+    "2,0": "B",
+    "2,1": 20,
+  });
+  const workbook = createWorkbook(sheet);
+
+  const first = core.refreshChartDataFromWorkbook(workbook, [[chart]], []);
+  assert.deepEqual(first.chartsByWorkbookSheetIndex[0][0].series[0].categories, ["A", "B"]);
+  assert.deepEqual(first.chartsByWorkbookSheetIndex[0][0].series[0].values, [10, 20]);
+  assert.deepEqual(first.chartsByWorkbookSheetIndex[0][0].typeGroups?.[0].series[0].values, [10, 20]);
+
+  set(1, 1, 30);
+  set(2, 1, 40);
+  const second = core.refreshChartDataFromWorkbook(workbook, [[chart]], []);
+  assert.deepEqual(second.chartsByWorkbookSheetIndex[0][0].series[0].values, [30, 40]);
+  assert.deepEqual(second.chartsByWorkbookSheetIndex[0][0].typeGroups?.[0].series[0].values, [30, 40]);
+});
+
+test("chartsheet charts refresh from the edited workbook model too", () => {
+  const chart = { ...createReferencedChart(), workbookSheetIndex: -1 };
+  const chartsheet = {
+    chartIds: [chart.id],
+    charts: [chart],
+    id: "chartsheet-0",
+    index: 0,
+    name: "Chart 1",
+  };
+  const { sheet, set } = createValueSheet({
+    "1,0": "A",
+    "1,1": 10,
+    "2,0": "B",
+    "2,1": 20,
+  });
+  const workbook = createWorkbook(sheet);
+
+  assert.deepEqual(
+    core.refreshChartDataFromWorkbook(workbook, [], [chartsheet]).chartsheets[0].charts?.[0].series[0].values,
+    [10, 20],
+  );
+  set(2, 1, 25);
+  const refreshed = core.refreshChartDataFromWorkbook(workbook, [], [chartsheet]).chartsheets[0];
+  assert.deepEqual(refreshed.charts?.[0].series[0].values, [10, 25]);
+  assert.deepEqual(refreshed.chartIds, [chart.id]);
+});
+
+function createRespondingWorker(result) {
+  const listeners = new Map();
+  const worker = {
+    addEventListener(type, listener) {
+      listeners.set(type, [...(listeners.get(type) ?? []), listener]);
+    },
+    removeEventListener(type, listener) {
+      listeners.set(type, (listeners.get(type) ?? []).filter((entry) => entry !== listener));
+    },
+    postMessage(message) {
+      this.lastMessage = message;
+      queueMicrotask(() => {
+        const currentResult = typeof result === "function" ? result() : result;
+        for (const listener of listeners.get("message") ?? []) {
+          listener({ data: { id: message.id, result: currentResult, success: true } });
+        }
+      });
+    },
+    terminate() {},
+  };
+  return worker;
+}
+
+test("worker client refreshes chart data without reparsing the source bytes", async () => {
+  const chart = createReferencedChart();
+  let values = [10, 20];
+  const worker = createRespondingWorker(() => ({
+    chartsByWorkbookSheetIndex: [[{
+      ...chart,
+      series: chart.series.map((series) => ({ ...series, values: [...values] })),
+    }]],
+    chartsheets: [],
+    tabs: [],
+  }));
+  const client = new core.XlsxWorkerClient({
+    createWorker: () => worker,
+    useLegacyDefaultWasmSource: false,
+  });
+  try {
+    const first = await client.refreshCharts(true);
+    assert.equal(worker.lastMessage?.type, "refreshCharts");
+    assert.equal(worker.lastMessage?.payload?.showHiddenSheets, true);
+    assert.deepEqual(first.chartsByWorkbookSheetIndex[0][0].series[0].values, [10, 20]);
+
+    values = [30, 40];
+    const second = await client.refreshCharts();
+    assert.deepEqual(second.chartsByWorkbookSheetIndex[0][0].series[0].values, [30, 40]);
+  } finally {
+    client.dispose();
+  }
+});

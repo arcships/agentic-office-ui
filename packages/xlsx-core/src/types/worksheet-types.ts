@@ -831,6 +831,17 @@ export interface XlsxViewerController {
   removeActiveSheet: () => void;
   readOnly: boolean;
   recalculate: () => void;
+  /**
+   * Re-resolves chart categories and values from the current workbook model.
+   *
+   * Main-thread mode refreshes from the live workbook. Worker-backed mode asks
+   * the Worker to refresh from its own edited workbook snapshot, so charts do
+   * not stay on the source file's cached chart XML values after an in-worker
+   * edit.
+   *
+   * @returns `false` when no workbook or Worker is available.
+   */
+  refreshChartData: () => Promise<boolean>;
   revision: number;
   resetZoom: () => void;
   resizeChartBy: (

@@ -40,6 +40,13 @@ type WorkerMessage =
     }
   | {
       id: number;
+      type: "refreshCharts";
+      payload: {
+        showHiddenSheets?: boolean;
+      };
+    }
+  | {
+      id: number;
       type: "getCellSnapshot";
       payload: {
         workbookSheetIndex: number;
@@ -298,6 +305,24 @@ export class XlsxWorkerClient {
       },
       type: "parseCharts"
     }, [workerBuffer], signal, wasmSource !== undefined);
+  }
+
+  refreshCharts(
+    showHiddenSheets = false,
+    signal?: AbortSignal
+  ) {
+    if (signal?.aborted) {
+      return Promise.reject(createAbortError());
+    }
+    return this.request<{
+      chartsByWorkbookSheetIndex: XlsxChart[][];
+      chartsheets: XlsxChartsheet[];
+      tabs: XlsxWorkbookTab[];
+    }>({
+      id: 0,
+      payload: { showHiddenSheets },
+      type: "refreshCharts"
+    }, [], signal);
   }
 
   getRowsBatch(

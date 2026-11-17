@@ -185,6 +185,26 @@ test("smooth series draw curves and marker symbols render their own shape", asyn
   }
 });
 
+test("3D line, area, and column charts render value data labels", async () => {
+  for (const chartType of ["Line", "Area", "ColumnClustered"]) {
+    const root = await renderChart(makeChart({
+      chartType,
+      dataLabels: { showValue: true },
+      is3d: true,
+      series: [{
+        categories: ["A", "B"],
+        dataPoints: [],
+        id: "series-1",
+        name: "Series 1",
+        values: [7, 13],
+      }],
+    }));
+    const labels = textNodes(root).map((node) => node.text);
+    assert.ok(labels.includes("7"), `${chartType} 3D renders the first value label`);
+    assert.ok(labels.includes("13"), `${chartType} 3D renders the second value label`);
+  }
+});
+
 test("combo charts sharing a value axis do not render a second axis", async () => {
   const makeCombo = (shared) => {
     const categoryAxis = { axisType: "category", id: 1, position: "b" };

@@ -616,6 +616,30 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     setChartAssets(loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, buildVisibleSheetIndexMap(nextSheets), showHiddenSheets));
     revision.value = revision.value + 1;
   }
+  async function refreshChartData() {
+    if (!isWorkerBacked.value) {
+      if (!workbook.value) return false;
+      refreshWorkbookState(workbook.value);
+      return true;
+    }
+    try {
+      const result = await getWorkerClient().refreshCharts(showHiddenSheets);
+      chartsByWorkbookSheetIndex.value = result.chartsByWorkbookSheetIndex;
+      chartsheets.value = result.chartsheets;
+      tabs.value = result.tabs;
+      revision.value = revision.value + 1;
+      return true;
+    } catch (error) {
+      reportDiagnostic({
+        type: "worker-error",
+        requestId: latestLoadRequestId,
+        sourceKind: src ? "url" : "file",
+        url: src,
+        error: toXlsxLoadError(error, src ? "url" : "file", src),
+      });
+      return false;
+    }
+  }
   // Set by switchToSheet(..., { preserveSelection: true }) and consumed by the
   // tab watcher, which otherwise resets sheet-scoped state on every tab change.
   // The marker expires with the flush that runs the watcher, so a switch that
@@ -1532,6 +1556,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get dataValidationFeedback() { return dataValidationFeedback.value; },
     dismissDataValidationFeedback: dismissValidationFeedback,
     recalculate: historyDomain.recalculate,
+    refreshChartData,
     redo: historyDomain.redo,
     resetZoom: navigationDomain.resetZoom,
     get revision() { return revision.value; },

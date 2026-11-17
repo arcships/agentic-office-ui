@@ -6,7 +6,7 @@ import {
 } from "@xmldom/xmldom";
 import { strFromU8, unzipSync } from "fflate";
 import { OfficeLoadError } from "@arcships/office-runtime";
-import { loadWorkbookChartAssets } from "./charts";
+import { loadWorkbookChartAssets, refreshChartDataFromWorkbook } from "./charts";
 import {
   parseWorkbookChartStyleAssets,
   parseWorkbookImageAssets,
@@ -107,6 +107,13 @@ type WorkerRequest =
         skipXmlParsing?: boolean;
         wasmSource?: WorkerWasmSource;
         limits: Readonly<XlsxRuntimeLimits>;
+      };
+    }
+  | {
+      id: number;
+      type: "refreshCharts";
+      payload: {
+        showHiddenSheets?: boolean;
       };
     }
   | {
@@ -1041,6 +1048,19 @@ function executeRequest(message: WorkerRequest, isSuperseded: () => boolean): Wo
         message.payload.showHiddenSheets,
         message.payload.limits,
       );
+    }
+    case "refreshCharts": {
+      if (!workbook) {
+        throw new Error("XLSX Worker 尚未加载工作簿，无法刷新图表数据。");
+      }
+      const refreshed = refreshChartDataFromWorkbook(workbook, chartsByWorkbookSheetIndex, chartsheets);
+      chartsByWorkbookSheetIndex = refreshed.chartsByWorkbookSheetIndex;
+      chartsheets = refreshed.chartsheets;
+      return {
+        chartsByWorkbookSheetIndex,
+        chartsheets,
+        tabs
+      };
     }
     case "getCellSnapshot": {
       if (!workbook) {

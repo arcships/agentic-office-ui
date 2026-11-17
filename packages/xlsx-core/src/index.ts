@@ -74,6 +74,7 @@ export {
   buildChartSeriesFormula,
   parseChartSeriesFormula,
   applyChartSeriesFormula,
+  refreshChartDataFromWorkbook,
   loadWorkbookChartAssets,
   updateWorkbookChartAnchor,
   updateWorkbookChartDefinition,
