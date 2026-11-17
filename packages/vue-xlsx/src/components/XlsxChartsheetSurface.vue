@@ -81,7 +81,7 @@ function onChartElementDoubleClick(selection: XlsxChartElementSelection): void {
   min-width: 0;
   padding: 16px;
 }
-.xlsx-chartsheet__chart { min-height: 360px; min-width: 0; overflow: hidden; position: relative; }
+.xlsx-chartsheet__chart { aspect-ratio: 16 / 9; min-height: 0; min-width: 0; overflow: hidden; position: relative; }
 .xlsx-chartsheet__chart :deep(svg) { height: 100%; max-height: 440px; width: 100%; }
 .xlsx-chartsheet__loading,
 .xlsx-chartsheet__empty {
@@ -90,7 +90,8 @@ function onChartElementDoubleClick(selection: XlsxChartElementSelection): void {
   display: flex;
   font-size: 13px;
   justify-content: center;
-  min-height: 320px;
+  min-height: 0;
+  padding: 24px;
   text-align: center;
 }
 </style>

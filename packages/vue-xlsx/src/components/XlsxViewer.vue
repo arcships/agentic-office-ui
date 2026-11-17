@@ -220,6 +220,8 @@ const props = withDefaults(
     controller: XlsxViewerController;
     getCellStyle?: ((cell: XlsxCellAddress, context?: XlsxCellStyleContext) => Partial<CSSProperties> | undefined) | null;
     height?: string;
+    /** Optional minimum height; the viewer itself does not impose one. */
+    minHeight?: string | number;
     isDark?: boolean | null;
     rounded?: boolean;
     readOnly?: boolean;
@@ -243,6 +245,7 @@ const props = withDefaults(
   {
     getCellStyle: null,
     height: "100%",
+    minHeight: undefined,
     isDark: false,
     rounded: true,
     readOnly: false,
@@ -350,7 +353,7 @@ const viewerStyle = computed<CSSProperties>(() => ({
   isolation: "isolate",
   maxHeight: "100%",
   maxWidth: "100%",
-  minHeight: "0px",
+  minHeight: typeof props.minHeight === "number" ? `${props.minHeight}px` : props.minHeight ?? "0px",
   minWidth: "0px",
   overflow: "hidden",
   position: "relative",
@@ -359,6 +362,46 @@ const viewerStyle = computed<CSSProperties>(() => ({
   color: props.isDark ? "#e4e4e7" : "#18181b",
   outline: "none",
 }));
+
+let printPageStyle: HTMLStyleElement | undefined;
+
+function syncPrintPageSize(): void {
+  const browserDocument = globalThis.document;
+  if (!browserDocument) return;
+  const sheet = props.controller.activeSheet;
+  if (!sheet || sheet.maxUsedCol < sheet.minUsedCol || sheet.maxUsedRow < sheet.minUsedRow) {
+    printPageStyle?.remove();
+    printPageStyle = undefined;
+    return;
+  }
+  let width = 0;
+  for (let column = sheet.minUsedCol; column <= sheet.maxUsedCol; column++) {
+    width += sheet.colWidths[column] ?? sheet.defaultColWidthPx;
+  }
+  let height = 0;
+  for (let row = sheet.minUsedRow; row <= sheet.maxUsedRow; row++) {
+    height += sheet.rowHeights[row] ?? sheet.defaultRowHeightPx;
+  }
+  if (width <= 0 || height <= 0) return;
+  if (!printPageStyle) {
+    printPageStyle = browserDocument.createElement("style");
+    printPageStyle.dataset.officePrintPage = "xlsx";
+    browserDocument.head.append(printPageStyle);
+  }
+  printPageStyle.textContent = `@page { size: ${Math.round(width)}px ${Math.round(height)}px; margin: 0; }`;
+}
+
+watch(
+  () => [
+    props.controller.activeSheet?.name,
+    props.controller.activeSheet?.minUsedCol,
+    props.controller.activeSheet?.maxUsedCol,
+    props.controller.activeSheet?.minUsedRow,
+    props.controller.activeSheet?.maxUsedRow,
+  ] as const,
+  syncPrintPageSize,
+  { immediate: true },
+);
 
 function onKeydown(event: KeyboardEvent) {
   if (
@@ -467,6 +510,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  printPageStyle?.remove();
+  printPageStyle = undefined;
   gestureToken += 1;
   touchGestures.reset();
   const element = bodyRef.value;

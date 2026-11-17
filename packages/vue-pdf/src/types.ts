@@ -24,6 +24,8 @@ export interface PdfViewerProps {
   showToolbar?: boolean
   showDownload?: boolean
   showRotateControls?: boolean
+  /** Optional minimum height; the viewer itself does not impose one. */
+  minHeight?: string | number
   /** Dark viewer chrome and page surround. Defaults to false. */
   isDark?: boolean
   locale?: OfficeLocale

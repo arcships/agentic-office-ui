@@ -3,6 +3,7 @@
     ref="editorRootRef"
     class="docx-editor-viewer"
     :class="[className, { 'docx-editor-viewer--dark': isDarkTheme }]"
+    :style="minHeightStyle"
     data-testid="docx-editor"
     @keydown="onKeydown"
   >
@@ -134,12 +135,14 @@ const props = withDefaults(
     showToolbar?: boolean
     showThumbnails?: boolean
     runtime?: DocxRuntime
+    /** Optional minimum height; the editor itself does not impose one. */
+    minHeight?: string | number
     /** Dark editor shell and document theme. Follows the controller theme when omitted. */
     isDark?: boolean
     locale?: OfficeLocale
     messages?: OfficeMessagesOverride
   }>(),
-  { editable: true, showToolbar: true, showThumbnails: false, isDark: false, locale: "en", messages: undefined }
+  { editable: true, showToolbar: true, showThumbnails: false, minHeight: undefined, isDark: false, locale: "en", messages: undefined }
 )
 
 const emit = defineEmits<{
@@ -158,6 +161,11 @@ const internalController = !props.editor
   : null
 const controller = props.editor ?? internalController!
 const isDarkTheme = computed(() => props.isDark || controller.documentTheme === "dark")
+const minHeightStyle = computed(() => {
+  const value = props.minHeight
+  if (value === undefined) return undefined
+  return { minHeight: typeof value === "number" ? `${value}px` : value }
+})
 watch(
   () => controller.documentTheme,
   (theme) => { emit("update:isDark", theme === "dark") },

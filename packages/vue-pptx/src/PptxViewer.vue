@@ -220,6 +220,8 @@ const props = withDefaults(defineProps<{
   source?: PptxPreviewSource | null
   mode?: "browse" | "present"
   height?: string
+  /** Optional minimum height; the viewer itself does not impose one. */
+  minHeight?: string | number
   initialSlide?: number
   isDark?: boolean
   limits?: PptxPreviewLimits
@@ -244,6 +246,7 @@ const props = withDefaults(defineProps<{
   source: null,
   mode: "browse",
   height: "100%",
+  minHeight: undefined,
   initialSlide: 0,
   isDark: false,
   limits: undefined,
@@ -366,8 +369,41 @@ const warnings = computed<readonly PptxPreviewWarning[]>(() =>
 const slideFailure = computed(() => pptxDocument.slideError.value)
 
 const isFullscreen = ref(false)
-const rootStyle = computed(() =>
-  isFullscreen.value ? undefined : { height: props.height, maxHeight: props.height })
+const printPageStyle = ref<HTMLStyleElement | undefined>()
+
+function toCssLength(value: string | number | undefined): string | undefined {
+  if (value === undefined) return undefined
+  return typeof value === "number" ? `${value}px` : value
+}
+
+const rootStyle = computed(() => {
+  if (isFullscreen.value) return undefined
+  const style: Record<string, string> = { height: props.height, maxHeight: props.height }
+  const minHeight = toCssLength(props.minHeight)
+  if (minHeight) style.minHeight = minHeight
+  return style
+})
+
+function syncPrintPageSize(width?: number, height?: number): void {
+  const browserDocument = globalThis.document
+  if (!browserDocument) return
+  if (!width || !height || width <= 0 || height <= 0) {
+    printPageStyle.value?.remove()
+    printPageStyle.value = undefined
+    return
+  }
+  if (!printPageStyle.value) {
+    const style = browserDocument.createElement("style")
+    style.dataset.officePrintPage = "pptx"
+    browserDocument.head.append(style)
+    printPageStyle.value = style
+  }
+  printPageStyle.value.textContent = `@page { size: ${Math.round(width)}px ${Math.round(height)}px; margin: 0; }`
+}
+
+watch([() => document.value?.width, () => document.value?.height], ([width, height]) => {
+  syncPrintPageSize(width, height)
+}, { immediate: true })
 
 const stageStyle = computed(() => {
   const loaded = document.value
@@ -394,6 +430,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  printPageStyle.value?.remove()
+  printPageStyle.value = undefined
   globalThis.document?.removeEventListener?.("fullscreenchange", syncFullscreen)
 })
 

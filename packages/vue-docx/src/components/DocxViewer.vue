@@ -3,6 +3,7 @@
     ref="viewerRef"
     class="docx-viewer"
     :class="[{ 'docx-viewer--dark': darkTheme }, className]"
+    :style="minHeightStyle"
     data-testid="docx-viewer"
     :data-state="viewerState"
     :data-show-tracked-changes="String(effectiveShowTrackedChanges)"
@@ -170,6 +171,8 @@ const props = withDefaults(
     showDownload?: boolean
     defaultThumbnailsOpen?: boolean
     defaultZoom?: number
+    /** Optional minimum height; the viewer itself does not impose one. */
+    minHeight?: string | number
     isDark?: boolean
     defaultShowTrackedChanges?: boolean
     defaultShowComments?: boolean
@@ -186,6 +189,7 @@ const props = withDefaults(
     showDownload: true,
     defaultThumbnailsOpen: false,
     defaultZoom: 100,
+    minHeight: undefined,
     isDark: false,
     defaultShowTrackedChanges: true,
     defaultShowComments: true,
@@ -224,6 +228,11 @@ const totalPages = ref(0)
 const sidebarOpen = ref(props.defaultThumbnailsOpen)
 const zoomPercent = ref(normalizeZoom(props.defaultZoom))
 const darkTheme = ref(props.isDark)
+const minHeightStyle = computed(() => {
+  const value = props.minHeight
+  if (value === undefined) return undefined
+  return { minHeight: typeof value === "number" ? `${value}px` : value }
+})
 const internalShowTrackedChanges = ref(props.defaultShowTrackedChanges)
 const internalShowComments = ref(props.defaultShowComments)
 const searchQuery = ref("")
@@ -553,7 +562,6 @@ function errorNumber(value: Error, key: "actual" | "allowed"): number | undefine
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 320px;
   min-width: 0;
   overflow: hidden;
   width: 100%;

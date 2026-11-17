@@ -32,6 +32,7 @@ const controller = useXlsxViewerController({
 |---|---|---|---|
 | `controller` | `XlsxViewerController` | 必填 | 查看器控制器 |
 | `height` | `string` | `100%` | 查看器高度 |
+| `minHeight` | `string \| number` | 无 | 可选最小高度（数字按 px）；不传时组件不设置最小高度 |
 | `readOnly` | `boolean` | `false` | 禁止编辑 |
 | `showDefaultToolbar` | `boolean` | `true` | 默认工具栏 |
 | `showRibbon` | `boolean` | `true` | 功能区 |
@@ -40,7 +41,7 @@ const controller = useXlsxViewerController({
 | `showUpload` | `boolean` | `false` | 上传入口 |
 | `getCellStyle` | `function` | 无 | 按单元格补充样式 |
 
-事件包括 `cellDoubleClick`、`upload`、`update:readOnly`、`load-deferred`、`deferred-resumed` 和 `deferred-cancel`。
+事件包括 `cellDoubleClick`、`upload`、`update:readOnly`、`load-deferred`、`deferred-resumed` 和 `deferred-cancel`。打印时 `@page` 尺寸取自活动工作表已用区域，图表工作表使用 16:9 的自适应高度。
 
 图表、地图和 WebGL 是按需入口：
 
