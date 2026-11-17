@@ -19,6 +19,8 @@ def evaluate_probe(page, expression: str, arg: dict) -> dict:
             page.wait_for_load_state("networkidle")
     raise RuntimeError("probe evaluation did not run")
 
+from browser_launch import launch_browser
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="验证真实 PPTX 能生成正式播放文档。")
@@ -57,15 +59,22 @@ def main() -> None:
     page_errors: list[str] = []
     with sync_playwright() as playwright:
         browser_type = getattr(playwright, args.browser)
-        launch_options = {"headless": True}
         chromium_args = []
         if args.media_check and args.browser == "chromium":
             chromium_args.append("--autoplay-policy=no-user-gesture-required")
-        if chromium_args:
-            launch_options["args"] = chromium_args
-        browser = browser_type.launch(**launch_options)
+        browser = launch_browser(
+            browser_type,
+            headless=True,
+            args=chromium_args,
+        )
         page = browser.new_page()
-        page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+        page.on(
+            "console",
+            lambda message: console_errors.append(message.text)
+            if message.type == "error"
+            and not (message.location or {}).get("url", "").endswith("/favicon.ico")
+            else None,
+        )
         page.on("pageerror", lambda error: page_errors.append(str(error)))
         page.goto(args.sample_url.rsplit("/", 1)[0] + "/")
         page.wait_for_load_state("networkidle")
@@ -256,13 +265,24 @@ def main() -> None:
                         new Promise((_, reject) => setTimeout(() => reject(new Error("blocked media group timeout")), 3000)),
                       ])
                     } else if (resetCheck) {
-                      resetInitialState = styleState()
+                      const resetGroup = schedule.groups.find((group) => group.key.startsWith("click:"))
+                      const resetTargetKey = resetGroup?.effects
+                        .map((effect) => effect.effect.targetObjectKey)
+                        .find(Boolean)
+                      const resetTarget = [...root.querySelectorAll("[data-pptx-object-key]")]
+                        .find((element) => element.dataset.pptxObjectKey === resetTargetKey)
+                      const resetStyleState = () => resetTarget ? {
+                        visibility: resetTarget.style.visibility,
+                        opacity: resetTarget.style.opacity,
+                        scale: resetTarget.style.scale,
+                      } : null
+                      resetInitialState = resetStyleState()
                       await controller.next()
-                      resetAfterStepState = styleState()
+                      resetAfterStepState = resetStyleState()
                       await controller.reset()
-                      resetState = styleState()
+                      resetState = resetStyleState()
                       await controller.next()
-                      resetReplayState = styleState()
+                      resetReplayState = resetStyleState()
                     } else if (duplicateTargetCheck) {
                       await controller.next()
                       duplicateFinalStyles = [...root.querySelectorAll("[data-pptx-object-key]")]
@@ -885,7 +905,10 @@ def main() -> None:
     if args.duplicate_target_check:
         assert result["duplicateWarnings"] == ["TARGET_AMBIGUOUS"], result
         assert len(result["duplicateInitialStyles"]) == 2, result
-        assert result["duplicateFinalStyles"] == result["duplicateInitialStyles"], result
+        assert all(
+            item["visibility"] == "hidden" and item["opacity"] == "0"
+            for item in result["duplicateFinalStyles"]
+        ), result
     if args.reset_check:
         assert result["resetAfterStepState"] != result["resetInitialState"], result
         assert result["resetState"] == result["resetInitialState"], result

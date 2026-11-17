@@ -94,6 +94,56 @@ test("superseded navigation commands reject with a cancelled error", async () =>
   }
 });
 
+test("successful navigation transitions from transitioning to ready", async () => {
+  const render = deferred();
+  const host = createHost(documentWithSlides(3), {
+    renderSlide() {
+      return render.promise;
+    },
+  });
+  const controller = createPptxPlaybackController(host, { autoplay: false });
+  const events = [];
+  controller.subscribe((event) => events.push(event));
+
+  try {
+    const navigation = controller.goToSlide(1);
+    assert.equal(controller.snapshot.status, "transitioning");
+    assert.equal(controller.snapshot.generation, 2);
+
+    render.resolve();
+    await navigation;
+
+    assert.equal(controller.snapshot.status, "ready");
+    assert.equal(controller.snapshot.slideIndex, 1);
+    const slidechange = events.find((event) => event.type === "slidechange");
+    assert.deepEqual(
+      { from: slidechange?.from, reason: slidechange?.reason, to: slidechange?.to },
+      { from: 0, reason: "direct", to: 1 },
+    );
+  } finally {
+    controller.dispose();
+  }
+});
+
+test("disposing rejects navigation commands that are still queued", async () => {
+  const render = deferred();
+  const host = createHost(documentWithSlides(3), {
+    renderSlide() {
+      return render.promise;
+    },
+  });
+  const controller = createPptxPlaybackController(host, { autoplay: false });
+
+  const running = controller.goToSlide(1);
+  const queued = controller.goToSlide(2);
+  controller.dispose();
+  render.resolve();
+
+  await assert.rejects(running, (error) => error.code === "PLAYBACK_DISPOSED");
+  await assert.rejects(queued, (error) => error.code === "PLAYBACK_DISPOSED");
+  assert.equal(controller.snapshot.status, "disposed");
+});
+
 test("a failed slide render restores the previous status and emits an error", async () => {
   let fail = true;
   const host = createHost(documentWithSlides(3), {

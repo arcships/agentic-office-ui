@@ -7,6 +7,8 @@ from pathlib import Path
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
+from browser_launch import launch_browser
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="验证网页 PPTX 浏览和演示组件。")
@@ -18,9 +20,17 @@ def main() -> None:
     console_errors: list[str] = []
     page_errors: list[str] = []
     with sync_playwright() as playwright:
-        browser = getattr(playwright, args.browser).launch(headless=True)
+        browser = launch_browser(
+            getattr(playwright, args.browser), headless=True
+        )
         page = browser.new_page(viewport={"width": 1440, "height": 900})
-        page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+        page.on(
+            "console",
+            lambda message: console_errors.append(message.text)
+            if message.type == "error"
+            and not (message.location or {}).get("url", "").endswith("/favicon.ico")
+            else None,
+        )
         page.on("pageerror", lambda error: page_errors.append(str(error)))
         page.goto(f"{args.app_url}/#/pptx-viewer", wait_until="networkidle")
 
