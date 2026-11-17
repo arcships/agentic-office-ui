@@ -171,7 +171,7 @@ function xlsxReferenceController() {
 test("XlsxSheetSurface confirms cell, row, column, worksheet and sheet-region references", async (t) => {
   const previousWindow = globalThis.window
   const previousResizeObserver = globalThis.ResizeObserver
-  globalThis.window = { devicePixelRatio: 1, requestAnimationFrame: () => 1, cancelAnimationFrame() {} }
+  globalThis.window = { devicePixelRatio: 1, requestAnimationFrame: () => 1, cancelAnimationFrame() {}, addEventListener() {}, removeEventListener() {} }
   globalThis.ResizeObserver = class ResizeObserver { observe() {} disconnect() {} }
   t.after(() => {
     if (previousWindow === undefined) delete globalThis.window
@@ -301,6 +301,7 @@ test("PptxStage confirms rendered objects and slide regions without owning produ
 
   stage.props.onPointermove({ clientX: 110, clientY: 120 })
   stage.props.onPointermove({ clientX: 111, clientY: 121 })
+  await new Promise((resolve) => setTimeout(resolve, 30))
   assert.equal(slideQueries, 1, "pointermove must reuse the revision-scoped rendered-object context")
   stage.props.onClick({ target: objectTarget, detail: 1, shiftKey: false })
   assert.equal(confirmations.at(-1).reference.kind, "shape")
