@@ -26,9 +26,12 @@ import {
   type PdfRotation,
   type PdfSearchHit,
   type PdfSelectionState,
+  type PdfPageTextLayer,
+  type PdfPageTextLayerGlyph,
 } from "../pdf/pdf-render-runtime"
 import {
   pdfCanonicalRectToDisplay,
+  pdfCanonicalToDisplayTransform,
   pdfDisplayPointToCanonical,
 } from "../pdf/pdf-coordinate-transform"
 import {
@@ -105,6 +108,8 @@ const thumbnailUrls = ref<Record<number, string>>({})
 const printPageUrls = ref<Record<number, string>>({})
 const printMode = ref(false)
 const selectionState = ref<PdfSelectionState>({ kind: "none" })
+const pageTextLayer = ref<PdfPageTextLayer | null>(null)
+let textLayerRequest = 0
 const selectionRects = ref<readonly PdfRenderRect[]>([])
 
 /** Drag threshold before a single-page selection starts, in CSS px. */
@@ -214,6 +219,51 @@ function selectionRectStyle(rect: PdfRenderRect): Record<string, string> {
     top: `${displayed.y}px`,
     width: `${displayed.width}px`,
     height: `${displayed.height}px`,
+  }
+}
+
+// ── Accessible text layer ────────────────────────────────────────────
+
+async function loadPageTextLayer(pageNumber: number): Promise<void> {
+  const document = renderDocument.value
+  const runtime = runtimeForDocument
+  const request = ++textLayerRequest
+  if (!document || !runtime || typeof runtime.getPageTextLayer !== "function") {
+    pageTextLayer.value = null
+    return
+  }
+  try {
+    const layer = await runtime.getPageTextLayer(document, pageNumber - 1)
+    if (request !== textLayerRequest || renderDocument.value !== document || runtimeForDocument !== runtime) return
+    pageTextLayer.value = layer
+  } catch {
+    if (request === textLayerRequest) pageTextLayer.value = null
+  }
+}
+
+const textLayerTransform = computed(() => {
+  const page = renderedPage.value
+  if (!page) return ""
+  return pdfCanonicalToDisplayTransform(page, renderedRotation.value, renderedZoom.value)
+})
+
+const textLayerStyle = computed<Record<string, string> | undefined>(() => {
+  const layer = pageTextLayer.value
+  if (!layer) return undefined
+  return {
+    width: `${layer.width}px`,
+    height: `${layer.height}px`,
+    transform: textLayerTransform.value,
+  }
+})
+
+function textGlyphStyle(glyph: PdfPageTextLayerGlyph): Record<string, string> {
+  return {
+    left: `${glyph.rect.x}px`,
+    top: `${glyph.rect.y}px`,
+    width: `${glyph.rect.width}px`,
+    height: `${glyph.rect.height}px`,
+    fontSize: `${glyph.rect.height}px`,
   }
 }
 
@@ -714,6 +764,8 @@ function onViewerKeydown(event: KeyboardEvent): void {
 async function releaseCurrentDocument(options: { closeDocument?: boolean } = {}): Promise<void> {
   cancelRenderWork()
   clearSelection()
+  textLayerRequest += 1
+  pageTextLayer.value = null
   selectionGeometries.clear()
   selectionGeometryRequests.clear()
   characterTextCache.clear()
@@ -961,6 +1013,7 @@ async function renderCurrentPage(
     renderedZoom.value = renderZoom
     renderedRotation.value = renderRotation
     pageRenderState.value = "rendered"
+    void loadPageTextLayer(pageNumber)
     void restoreAnchor(renderZoom, renderRotation)
     emitDiagnostic({
       type: "render-success",
@@ -1373,6 +1426,23 @@ defineExpose({
               :alt="formatOfficeMessage(m.pdf.viewer.pageAlt, { page: renderedPageNumber })"
             />
             <div
+              v-if="pageTextLayer"
+              class="pdf-viewer__text-layer"
+              data-testid="pdf-text-layer"
+              :data-text-transform="textLayerTransform"
+              :style="textLayerStyle"
+            >
+              <span
+                v-for="glyph in pageTextLayer.glyphs"
+                :key="`glyph-${glyph.charIndex}`"
+                class="pdf-viewer__text-glyph"
+                :class="{ 'pdf-viewer__text-glyph--unmapped': glyph.unmapped }"
+                :data-char-index="glyph.charIndex"
+                :aria-hidden="glyph.unmapped ? 'true' : undefined"
+                :style="textGlyphStyle(glyph)"
+              >{{ glyph.text }}</span>
+            </div>
+            <div
               class="pdf-viewer__selection-layer"
               data-testid="pdf-selection-layer"
               :aria-label="m.pdf.viewer.selectionLayer"
@@ -1466,7 +1536,19 @@ defineExpose({
 .pdf-frame-wrap { flex: 1; min-width: 0; min-height: 0; overflow: auto; position: relative; padding: 24px; touch-action: pan-x pan-y; }
 .pdf-page-stage { display: flex; min-width: min-content; min-height: 100%; align-items: flex-start; justify-content: center; position: relative; }
 .pdf-page-render { position: relative; width: fit-content; margin: 0 auto; }
-.pdf-viewer__selection-layer { inset: 0; position: absolute; cursor: text; touch-action: pan-x pan-y; }
+.pdf-viewer__text-layer { left: 0; position: absolute; top: 0; transform-origin: 0 0; pointer-events: none; user-select: text; z-index: 1; }
+.pdf-viewer__text-glyph {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  line-height: 1;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  user-select: text;
+  white-space: pre;
+}
+.pdf-viewer__text-glyph--unmapped { user-select: none; }
+.pdf-viewer__selection-layer { inset: 0; position: absolute; cursor: text; touch-action: pan-x pan-y; z-index: 2; }
 .pdf-viewer__selection-rect { background: rgba(37, 99, 235, .34); box-sizing: border-box; position: absolute; }
 .pdf-page-image { display: block; max-width: none; height: auto; border: 0; background: var(--pdf-control-bg); box-shadow: var(--pdf-page-shadow); filter: var(--pdf-page-filter); }
 .page-loading { position: absolute; z-index: 2; top: 12px; left: 50%; transform: translateX(-50%); border: 1px solid var(--pdf-control-border); border-radius: 999px; background: var(--pdf-control-bg); color: var(--pdf-link); padding: 5px 12px; font-size: 12px; white-space: nowrap; }

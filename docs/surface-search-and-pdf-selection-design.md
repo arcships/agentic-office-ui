@@ -1,6 +1,6 @@
 # Surface 搜索与 PDF 文字选择设计
 
-> 状态：首版实现已提交（`cf0a408`）；PDF 拖选与双击选词优化已实现并通过单元、组件及 Chromium 交互验证，待 Firefox/WebKit 矩阵复验；Issue #84 追加跨页选择、批注命中层和区域 Escape 去重（2026-11-17）
+> 状态：首版实现已提交（`cf0a408`）；PDF 拖选与双击选词优化已实现并通过单元、组件及 Chromium 交互验证，待 Firefox/WebKit 矩阵复验；Issue #84 追加跨页选择、批注命中层和区域 Escape 去重，并恢复可定位 DOM 文本层（2026-11-17）
 > 适用范围：`packages/vue-docx`、`packages/vue-xlsx`、`packages/vue-pptx`、`packages/vue-pdf`、`packages/vue-ui`
 > 取代：`pdf-text-layer-issue.md` 中的透明 `<span>` 文字层方案
 > 目标：让四种 Surface 都能搜索并定位结果，让 PDF 在原生文字可用时可靠选择和复制文字
@@ -577,11 +577,20 @@ Issue #84 指出 PDF 页面只有位图：选择限于单页、链接/表单/批
 - `PdfViewer` 在当前页位图上叠加选择层，复用与 Surface 相同的 canonical 坐标变换、glyph 命中、连续矩形和 `Intl.Segmenter` 选词；支持拖选、双击选词、`Ctrl/Cmd+C` 复制和 `Escape` 清除。
 - 选区随 `selectionChange` 发出 `PdfSelectionState`；`clearSelection()` 与 `getSelectionState()` 通过实例暴露。切页、缩放、旋转、重新加载和卸载会清除选区与 geometry 缓存。
 
-### 16.6 区域 Escape
+### 16.6 无障碍文本层
+
+- `PdfRenderRuntime.getPageTextLayer?()` 用一次 `getPageGeometry()` 加一次批量的单字符 `getTextSlices()` 返回 `PdfPageTextLayer`：每页 canonical 宽高和按 PDFium 阅读顺序排列的 `PdfPageTextLayerGlyph`（字符索引、文字、glyph box、`unmapped`）。结果按页缓存，关闭文档或写入表单值时失效。
+- `PdfSurface` 与 `PdfViewer` 为每个 glyph 渲染一个透明 `<span>`，位置宽高和字体大小直接取自 glyph box；文本层本身保持在 canonical 坐标系，由 `pdfCanonicalToDisplayTransform()` 给出的单个 CSS matrix 完成缩放与 0/90/180/270 旋转。span 不参与重排，因此不会累积字宽漂移。
+- 文本层不是 `aria-hidden`，屏幕阅读器、浏览器查找和 CJK 提取均能读取；`unmapped` glyph 标记 `aria-hidden="true"` 且不可选，写入剪贴板仍是 PDFium 字符索引提取的文字。
+- 文本层 `pointer-events: none`：指针拖选、跨页选择、链接/表单命中与区域选择仍由 interaction layer 处理，不因文本层改变行为。
+- 组件暴露 `getPageTextLayer` 数据入口；PDFium 映射失败时仍保留 `PdfSelectionState.unavailable` 的显式降级。
+
+### 16.7 区域 Escape
 
 区域层处理 Escape 时 `stopPropagation()` 并 `preventDefault()`，Surface 处理器同时忽略 `defaultPrevented` 的事件；一次按键只发出一次 `selectionCancel`。
 
-### 16.7 验收
+### 16.8 验收
 
 - 组件测试覆盖跨页拖选、跨页复制、区域 Escape 去重、链接/控件命中与事件转发、AcroForm 写入与页面刷新、批注外观更新，以及 `PdfViewer` 拖选、复制、Escape 和双击选词。
-- 单元测试覆盖 `resolvePdfFormFieldValue()` 的类型转换，以及 Runtime 在缓存引擎对象上写入表单和批注外观的错误分支。
+- 文本层测试覆盖 span 文本与阅读顺序、无映射 glyph 的 `aria-hidden`、缩放/旋转只改 CSS matrix 而不移动 span，以及文本层存在时选择与复制仍然工作。
+- 单元测试覆盖 `resolvePdfFormFieldValue()` 的类型转换、`getPageTextLayer()` 的分批提取/缓存/失效，以及 Runtime 在缓存引擎对象上写入表单和批注外观的错误分支。

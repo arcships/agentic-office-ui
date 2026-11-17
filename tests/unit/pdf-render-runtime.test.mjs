@@ -309,3 +309,74 @@ test("PDF runtime writes form values and annotation appearances through cached e
   assert.equal(runtime.rawPageAnnotations.size, 0, "closing the document drops the annotation cache");
   await runtime.dispose();
 });
+
+test("PDF runtime builds a positioned, cached text layer from geometry and per-glyph text", async () => {
+  const runtime = pdf.createPdfRenderRuntime({ runtimeId: "text-layer" });
+  const native = fakeNativeDocument("text-native");
+  runtime.documents.set(native.id, native);
+  const document = {
+    id: native.id,
+    pageCount: 1,
+    pages: [{ index: 0, width: 600, height: 800, rotation: 0 }],
+  };
+  const requestedSlices = [];
+  let widget = rawWidget();
+  runtime.engine = {
+    getPageGeometry() {
+      return {
+        abort() {},
+        async toPromise() {
+          return {
+            runs: [
+              {
+                charStart: 0,
+                rect: { x: 0, y: 0, width: 40, height: 12 },
+                glyphs: [
+                  { x: 0, y: 0, width: 10, height: 12, flags: 0 },
+                  { x: 10, y: 0, width: 0, height: 0, flags: 2 },
+                  { x: 20, y: 0, width: 10, height: 12, flags: 0 },
+                ],
+              },
+              {
+                charStart: 3,
+                rect: { x: 0, y: 20, width: 10, height: 12 },
+                glyphs: [{ x: 0, y: 20, width: 10, height: 12, flags: 0 }],
+              },
+            ],
+          };
+        },
+      };
+    },
+    getTextSlices(_doc, slices) {
+      requestedSlices.push(slices.map((slice) => slice.charIndex));
+      const texts = { 0: "你", 2: "a", 3: "\ufffd" };
+      return { abort() {}, async toPromise() { return slices.map((slice) => texts[slice.charIndex] ?? ""); } };
+    },
+    getPageAnnotations() {
+      return { abort() {}, async toPromise() { return [widget]; } };
+    },
+    setFormFieldValue() {
+      return { abort() {}, async toPromise() { return true; } };
+    },
+  };
+
+  const layer = await runtime.getPageTextLayer(document, 0);
+  assert.equal(layer.pageIndex, 0);
+  assert.equal(layer.width, 600);
+  assert.equal(layer.height, 800);
+  assert.deepEqual(layer.glyphs.map((glyph) => glyph.charIndex), [0, 2, 3]);
+  assert.deepEqual(layer.glyphs.map((glyph) => glyph.text), ["你", "a", "\ufffd"]);
+  assert.deepEqual(layer.glyphs[1].rect, { x: 20, y: 0, width: 10, height: 12 });
+  assert.equal(layer.glyphs[0].unmapped, false);
+  assert.equal(layer.glyphs[2].unmapped, true, "replacement characters are marked unmapped");
+  assert.deepEqual(requestedSlices, [[0, 2, 3]], "one batched text request per page");
+
+  assert.equal(await runtime.getPageTextLayer(document, 0), layer, "the text layer is cached per page");
+  assert.equal(requestedSlices.length, 1);
+
+  await runtime.setFormFieldValue(document, 0, "widget-name", "Ada");
+  assert.equal(runtime.pageTextLayers.size, 0, "a form write invalidates the page text layer");
+
+  await runtime.closeDocument(document);
+  await runtime.dispose();
+});

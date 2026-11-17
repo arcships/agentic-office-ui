@@ -39,6 +39,23 @@
           draggable="false"
         />
         <div v-else class="pdf-surface__page-placeholder" />
+        <div
+          v-if="textLayerFor(pageIndex)"
+          class="pdf-surface__text-layer"
+          :data-text-page="pageIndex"
+          :data-text-transform="textLayerTransform(pageIndex)"
+          :style="textLayerStyle(pageIndex)"
+        >
+          <span
+            v-for="glyph in textLayerFor(pageIndex)?.glyphs ?? []"
+            :key="`glyph-${glyph.charIndex}`"
+            class="pdf-surface__text-glyph"
+            :class="{ 'pdf-surface__text-glyph--unmapped': glyph.unmapped }"
+            :data-char-index="glyph.charIndex"
+            :aria-hidden="glyph.unmapped ? 'true' : undefined"
+            :style="textGlyphStyle(glyph)"
+          >{{ glyph.text }}</span>
+        </div>
         <div class="pdf-surface__overlay" aria-hidden="true">
           <div
             v-for="entry in searchRectsForPage(pageIndex)"
@@ -157,6 +174,8 @@ import {
   type PdfAnnotationAppearancePatch,
   type PdfFormFieldType,
   type PdfFormFieldValue,
+  type PdfPageTextLayer,
+  type PdfPageTextLayerGlyph,
   type PdfPasswordHandler,
   type PdfRenderAnnotation,
   type PdfRenderDocument,
@@ -170,6 +189,7 @@ import {
 } from "../pdf/pdf-render-runtime"
 import {
   pdfCanonicalRectToDisplay,
+  pdfCanonicalToDisplayTransform,
   pdfDisplayPointToCanonical,
   pdfDisplaySize,
 } from "../pdf/pdf-coordinate-transform"
@@ -414,8 +434,10 @@ const searchState = ref<PdfSearchState>({
 const selectionState = ref<PdfSelectionState>({ kind: "none" })
 const selectionVisual = ref<{ ranges: readonly PageSelectionRects[] } | null>(null)
 const pageAnnotations = reactive<Record<number, readonly PdfRenderAnnotation[]>>({})
+const textLayers = reactive<Record<number, PdfPageTextLayer>>({})
 const formWritesAvailable = ref(false)
 const annotationRequests = new Map<number, Promise<readonly PdfRenderAnnotation[]>>()
+const textLayerRequests = new Map<number, Promise<PdfPageTextLayer | undefined>>()
 const geometryCache = new Map<number, PdfPageGeometry>()
 const geometryRequests = new Map<number, Promise<PdfPageGeometry>>()
 const characterTextCache = new Map<number, Map<number, string>>()
@@ -973,6 +995,8 @@ async function releaseDocument(): Promise<void> {
   geometryRequests.clear()
   characterTextCache.clear()
   annotationRequests.clear()
+  textLayerRequests.clear()
+  for (const key of Object.keys(textLayers)) delete textLayers[Number(key)]
   formWritesAvailable.value = false
   for (const key of Object.keys(pageAnnotations)) delete pageAnnotations[Number(key)]
   for (const slot of Object.values(pageSlots)) {
@@ -1029,6 +1053,15 @@ async function renderVisiblePages(): Promise<void> {
   // pages that left it move into the byte-budgeted cache instead of vanishing.
   activatePageBitmaps(range)
   retirePageBitmaps(plan.release)
+  // Text layers follow the same window so a long document cannot accumulate
+  // glyph spans for every page ever visited; the runtime keeps the extracted
+  // data cached for when the page returns.
+  for (const key of Object.keys(textLayers)) {
+    const pageIndex = Number(key)
+    if (pageIndex >= range.first && pageIndex <= range.last) continue
+    delete textLayers[pageIndex]
+    textLayerRequests.delete(pageIndex)
+  }
 
   try {
     for (const pageIndex of plan.render) {
@@ -1129,6 +1162,7 @@ async function load(): Promise<void> {
     scheduleVisibleRender(0)
     prefetchPageGeometry(0)
     prefetchPageAnnotations(0)
+    prefetchPageTextLayer(0)
   } catch (cause) {
     if (openedDocument && selectedRuntime) {
       await selectedRuntime.closeDocument(openedDocument)
@@ -1278,7 +1312,6 @@ async function pageAnnotationsFor(pageIndex: number): Promise<readonly PdfRender
 function pageSupportsAnnotations(): boolean {
   return typeof runtimeForDocument?.getPageAnnotations === "function"
 }
-
 function prefetchPageAnnotations(centerPageIndex: number): void {
   const doc = renderDocument.value
   if (!doc || !pageSupportsAnnotations()) return
@@ -1287,6 +1320,85 @@ function prefetchPageAnnotations(centerPageIndex: number): void {
   for (let pageIndex = first; pageIndex <= last; pageIndex++) {
     if (!pageAnnotations[pageIndex]) void pageAnnotationsFor(pageIndex)
   }
+}
+
+// ── Accessible text layer ────────────────────────────────────────────
+// One transparent, selectable DOM span per PDFium glyph. Spans stay in canonical
+// page coordinates and the layer applies one CSS matrix for zoom/rotation, so the
+// browser never re-shapes text to place it and screen readers, browser find and
+// CJK extraction see the real characters instead of an aria-hidden bitmap.
+
+function textLayerFor(pageIndex: number): PdfPageTextLayer | undefined {
+  return textLayers[pageIndex]
+}
+
+function textLayerTransform(pageIndex: number): string {
+  const page = renderDocument.value?.pages[pageIndex]
+  if (!page) return ""
+  return pdfCanonicalToDisplayTransform(page, rotation.value, zoom.value)
+}
+
+function textLayerStyle(pageIndex: number): Record<string, string> | undefined {
+  const layer = textLayers[pageIndex]
+  if (!layer) return undefined
+  return {
+    width: `${layer.width}px`,
+    height: `${layer.height}px`,
+    transform: textLayerTransform(pageIndex),
+  }
+}
+
+function textGlyphStyle(glyph: PdfPageTextLayerGlyph): Record<string, string> {
+  return {
+    left: `${glyph.rect.x}px`,
+    top: `${glyph.rect.y}px`,
+    width: `${glyph.rect.width}px`,
+    height: `${glyph.rect.height}px`,
+    fontSize: `${glyph.rect.height}px`,
+  }
+}
+
+function pageSupportsTextLayer(): boolean {
+  return typeof runtimeForDocument?.getPageTextLayer === "function"
+}
+
+async function pageTextLayer(pageIndex: number): Promise<PdfPageTextLayer | undefined> {
+  const cached = textLayers[pageIndex]
+  if (cached) return cached
+  const pending = textLayerRequests.get(pageIndex)
+  if (pending) return pending
+  const doc = renderDocument.value
+  const rt = runtimeForDocument
+  if (!doc || !rt || !pageSupportsTextLayer()) return undefined
+  const read = rt.getPageTextLayer!.bind(rt)
+  let request: Promise<PdfPageTextLayer | undefined>
+  request = read(doc, pageIndex)
+    .then((layer) => {
+      if (renderDocument.value === doc && runtimeForDocument === rt) textLayers[pageIndex] = layer
+      return layer
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      if (textLayerRequests.get(pageIndex) === request) textLayerRequests.delete(pageIndex)
+    })
+  textLayerRequests.set(pageIndex, request)
+  return request
+}
+
+function prefetchPageTextLayer(centerPageIndex: number): void {
+  const doc = renderDocument.value
+  if (!doc || !pageSupportsTextLayer()) return
+  const first = Math.max(0, centerPageIndex - 1)
+  const last = Math.min(doc.pageCount - 1, centerPageIndex + 1)
+  for (let pageIndex = first; pageIndex <= last; pageIndex++) {
+    if (!textLayers[pageIndex]) void pageTextLayer(pageIndex)
+  }
+}
+
+function invalidatePageTextLayer(pageIndex: number): void {
+  delete textLayers[pageIndex]
+  textLayerRequests.delete(pageIndex)
+  if (pageSupportsTextLayer()) void pageTextLayer(pageIndex)
 }
 
 /** Widget kinds the Surface renders a native control for. */
@@ -1353,6 +1465,7 @@ async function commitFormFieldValue(
     if (renderDocument.value !== doc || runtimeForDocument !== rt) return undefined
     replacePageAnnotation(pageIndex, updated)
     refreshPageBitmap(pageIndex)
+    invalidatePageTextLayer(pageIndex)
     emit("formFieldChange", {
       pageIndex,
       annotationId: updated.id,
@@ -2073,6 +2186,7 @@ function flushScrollFrame(): void {
     emit("visible-page-change", pageIndex)
     prefetchPageGeometry(pageIndex)
     prefetchPageAnnotations(pageIndex)
+    prefetchPageTextLayer(pageIndex)
   }
   if (!pageRangeEquals(currentRenderRange(), renderedRange)) {
     scheduleVisibleRender(PDF_SCROLL_RENDER_DEBOUNCE_MS)
@@ -2412,6 +2526,28 @@ onBeforeUnmount(async () => {
 }
 .pdf-surface__page-img { display: block; filter: var(--pdf-surface-page-filter); }
 .pdf-surface--dark .pdf-surface__page-slot { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7); }
+/* Real DOM text over the bitmap: transparent, positioned per glyph and
+   transformed once per page; pointer events stay on the interaction layer. */
+.pdf-surface__text-layer {
+  left: 0;
+  position: absolute;
+  top: 0;
+  transform-origin: 0 0;
+  pointer-events: none;
+  user-select: text;
+  z-index: 1;
+}
+.pdf-surface__text-glyph {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  line-height: 1;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  user-select: text;
+  white-space: pre;
+}
+.pdf-surface__text-glyph--unmapped { user-select: none; }
 .pdf-surface__overlay,
 .pdf-surface__interaction {
   inset: 0;

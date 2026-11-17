@@ -17,6 +17,32 @@ export function pdfDisplaySize(
   }
 }
 
+/**
+ * CSS transform mapping canonical page coordinates onto the displayed page.
+ *
+ * A text layer keeps spans in canonical units (PDFium glyph boxes) and applies
+ * this matrix once per page, so zoom and rotation scale and rotate the text with
+ * the bitmap instead of re-positioning every span. The matrix mirrors
+ * `pdfCanonicalRectToDisplay` for all four quarter turns.
+ */
+export function pdfCanonicalToDisplayTransform(
+  page: PdfRenderPageInfo,
+  userRotation: PdfRotation,
+  scale: number,
+): string {
+  const quarterTurns = pdfQuarterTurns(page, userRotation)
+  if (quarterTurns === 1) {
+    return `matrix(0, ${scale}, ${-scale}, 0, ${page.height * scale}, 0)`
+  }
+  if (quarterTurns === 2) {
+    return `matrix(${-scale}, 0, 0, ${-scale}, ${page.width * scale}, ${page.height * scale})`
+  }
+  if (quarterTurns === 3) {
+    return `matrix(0, ${-scale}, ${scale}, 0, 0, ${page.width * scale})`
+  }
+  return `matrix(${scale}, 0, 0, ${scale}, 0, 0)`
+}
+
 export function pdfCanonicalRectToDisplay(
   page: PdfRenderPageInfo,
   rect: PdfRenderRect,

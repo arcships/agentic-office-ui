@@ -176,6 +176,8 @@ AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurfa
 
 批注外观编辑通过 `PdfRenderRuntime.updateAnnotationAppearance?()` 完成：`PdfAnnotationAppearancePatch` 支持 `contents`、`color`、`opacity`、`strokeColor` 和 `strokeWidth`，Runtime 重写批注并重新生成外观流，`PdfSurface.updateAnnotationAppearance(pageIndex, annotationId, patch)` 随后刷新页面位图并发出 `annotationChange`（失败为 `annotationError`）。`PdfAnnotationAppearancePatch`、`PdfFormFieldType`、`PdfFormFieldValue`、`PdfFormFieldOption` 和 `PdfFormFieldDescriptor` 是根入口类型。
 
+无障碍文本层通过 `PdfRenderRuntime.getPageTextLayer?()` 提供：`PdfPageTextLayer` 给出 canonical 页宽高和按 PDFium 阅读顺序排列的 `PdfPageTextLayerGlyph`（`charIndex`、`text`、glyph `rect`、`unmapped`）。`PdfSurface` 与 `PdfViewer` 为每个 glyph 渲染透明 `<span>`，位置来自 glyph box，并只用一个 CSS matrix 随缩放与 0/90/180/270 旋转变换；文本层不是 `aria-hidden`，屏幕阅读器、浏览器查找和 CJK 提取均可读取，`unmapped` glyph 标记 `aria-hidden` 且不可选。文本层 `pointer-events: none`，指针选择仍由自定义 interaction layer 处理，因此跨页选择、链接/表单命中与区域选择不变。`PdfPageTextLayer` 和 `PdfPageTextLayerGlyph` 是根入口类型。
+
 ### 3.6 `@arcships/vue-ui`
 
 稳定入口为 `OfficeObjectOutlineLayer`、`OfficeRegionSelector`、`SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`、`OfficeFindBar`、`OfficeLiveStatus`、`useOfficeMenuKeyboard` 和 `resolveOfficeMenuKeyCommand`，以及根入口导出的属性和事件类型。新代码使用 `@arcships/vue-ui/style.css`。
