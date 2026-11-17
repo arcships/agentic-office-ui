@@ -3,6 +3,7 @@ import { symbol as d3Symbol, symbolCircle, symbolCross, symbolDiamond, symbolSqu
 import type { XlsxChart, XlsxChartElementSelection, XlsxChartSeries, XlsxImageRect } from "@arcships/xlsx-core";
 import { chartSeriesColor, chartSeriesStrokeColor, chartPointColor, safeNumber, clamp, darkenColor, lightenColor, coerceLooseNumber, resolveRenderableSeriesValue, resolveChartTextColor, resolveChartAxisTextColor, resolveChartMutedTextColor, buildChartFontFamily, formatTickValue, formatPercentTickValue, chartElementDataProps, barChartElementDataProps, resolveChartElementTarget, resolveChartSelectionFromTarget, isSelectedChartSeries, isSelectedChartPoint, isSelectedChartPointOrSeries, renderSelectionRectHandles, renderSelectionPointHandles, normalizeRendererHexColor, toSvgNumber, normalizeChartMarkerSymbol, markerSymbolPath, normalizeLegendPosition, parseRgbColor, mixRgbColor, escapeCssFontFamilyToken, DEFAULT_CHART_FONT_STACK, DEFAULT_CHART_TEXT_COLOR, DEFAULT_CHART_MUTED_TEXT_COLOR, truncateSvgText, getCategoryLabels, normalizeCategoryLabel, estimateReferencePointCount, isHistogramLikeSeries, isHistogramLikeChart, resolve3dFrameOffsets, resolveAxisDomainWithChartOverrides, resolveAxisLogBase, resolveLogAxisDomain, createValueScale, resolveCategoryBandPadding, chartSeriesBarColors, buildNumericTickValues, buildNiceStep, resolveNumericAxisDomain, renderCartesianAxes, renderExtrudedRect, buildChartStages, resolveChartStageSubtotal, computeBoxWhiskerStats, resolveBoxWhiskerVisibility, resolveBoxWhiskerQuartileMethod, computePercentile, renderLineOrAreaChart3d, projectCartesian3dPoint, scaleProjectedVector, buildLinearSvgPath, buildRibbonSvgPath, renderRadialFrustum, sampleProjectedEllipseArc, isComboChart, getComboLegendSeries, findAxisForGroup, buildComboGroups, resolveStockRoleIndices, resolveStockPalette, normalizeBuiltinPieStyleId, getBuiltinPiePalette, resolvePiePointColor, selectPrimaryPieSeriesIndex, buildPieEntries, buildHierarchyData, resolveHierarchyNodeColor, resolveTreemapNodeColor, excelTreemapTile, normalizePieArc, resolvePieFrontSegments, pieEllipsePoint, buildPieOuterWallPath, isPieFrontFacingAngle, buildPieRadialWallPath, TWO_PI, normalizeRegionMapKey, resolveRegionMapFeature, resolveRegionMapBaseColor, resolveRegionMapDataColor, resolveRegionMapValueColors, resolveRegionMapColorStrings, resolveRegionMapLayoutProperties, resolveRegionMapFeatureSet, getRegionMapBaseFeatures, resolveRegionMapValueColorFromStops, resolveRegionMapValueColor, resolveRegionMapNoDataColor, resolveSurfaceBaseColor, normalizeBuiltinSurfaceStyleId, hasExplicitSurfaceBaseColor, buildMonochromeSurfacePalette, getBuiltinSurfacePalette, shouldPreferBuiltinSurfacePalette, getSurfaceBandCount, getSurfaceColorStops, resolveSurfaceBandPaletteColor, getSurfaceDomain, resolveSurfaceColor, resolveSurfaceBandColor, resolveSurfaceBandIndex, buildSurfaceSmoothPath, splitSurfacePointRuns, connectSurfaceContourSegments, getSurfaceWireframePalette, resolveSurfaceWireframeColor, resolveSurfacePlotRect, buildSurfaceLegendItems, isContourSurfaceChart, getLegendItems, buildLayout, normalizeRenderableChartType, renderSurfaceAxes, renderTitle, renderLegend, buildRegionMapLegendItems, buildStockLegendItems, excelSerialToDate, isLikelyDateFormatCode, formatExcelDateSerial, formatCategoryLabel } from "./chart-renderer";
 import type { ChartRendererPalette, ChartSvgProps, ChartLayout, LegendItem, BarRect, PlotRect, ChartStage, ChartHierarchyDatum, ComboRenderableGroup, BoxWhiskerStats, SurfaceDomain, RegionMapFeature, SurfacePathPoint, SurfaceContourSegment, ChartElementDataOptions } from "./chart-renderer";
+import { createChartAxisTickFormatter } from "./chart-data";
 
 
 export function renderScatterChart(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, smooth: boolean, selectedChartElement?: XlsxChartElementSelection | null) {
@@ -190,6 +191,8 @@ export function renderScatterChart(chart: XlsxChart, palette: ChartRendererPalet
   const yTicks = logYDomain?.ticks ?? buildNumericTickValues(minY, safeMaxY, yMajorUnit);
   const axisColor = chart.axisLineColor ?? chart.chartAreaBorderColor ?? palette.border;
   const labelColor = resolveChartAxisTextColor(chart);
+  const formatXTick = createChartAxisTickFormatter(chart.categoryAxis, chart);
+  const formatYTick = createChartAxisTickFormatter(chart.valueAxis, chart);
 
   const hasZeroX = minX <= 0 && safeMaxX >= 0;
   const hasZeroY = minY <= 0 && safeMaxY >= 0;
@@ -198,31 +201,35 @@ export function renderScatterChart(chart: XlsxChart, palette: ChartRendererPalet
     <g>
       {xTicks.map((tick) => (
         <g key={`scatter-x-${tick}`}>
-          <line
-            stroke={lightenColor(axisColor, 0.7)}
-            stroke-width={1}
-            x1={xScale(tick)}
-            x2={xScale(tick)}
-            y1={plot.top}
-            y2={plot.top + plot.height}
-          />
+          {chart.categoryAxis?.majorGridlines === true ? (
+            <line
+              stroke={lightenColor(axisColor, 0.7)}
+              stroke-width={1}
+              x1={xScale(tick)}
+              x2={xScale(tick)}
+              y1={plot.top}
+              y2={plot.top + plot.height}
+            />
+          ) : null}
           <text fill={labelColor} font-size={10} text-anchor="middle" x={xScale(tick)} y={plot.top + plot.height + 14}>
-            {formatTickValue(tick)}
+            {formatXTick(tick)}
           </text>
         </g>
       ))}
       {yTicks.map((tick) => (
         <g key={`scatter-y-${tick}`}>
-          <line
-            stroke={lightenColor(axisColor, 0.7)}
-            stroke-width={1}
-            x1={plot.left}
-            x2={plot.left + plot.width}
-            y1={yScale(tick)}
-            y2={yScale(tick)}
-          />
+          {chart.valueAxis?.majorGridlines === true ? (
+            <line
+              stroke={lightenColor(axisColor, 0.7)}
+              stroke-width={1}
+              x1={plot.left}
+              x2={plot.left + plot.width}
+              y1={yScale(tick)}
+              y2={yScale(tick)}
+            />
+          ) : null}
           <text fill={labelColor} font-size={10} text-anchor="end" x={plot.left - 6} y={yScale(tick) + 3}>
-            {formatTickValue(tick)}
+            {formatYTick(tick)}
           </text>
         </g>
       ))}
@@ -378,6 +385,8 @@ export function renderBubbleChart(chart: XlsxChart, palette: ChartRendererPalett
   const yTicks = yDomain.ticks;
   const axisColor = chart.axisLineColor ?? chart.chartAreaBorderColor ?? palette.border;
   const labelColor = resolveChartAxisTextColor(chart);
+  const formatXTick = createChartAxisTickFormatter(chart.categoryAxis, chart);
+  const formatYTick = createChartAxisTickFormatter(chart.valueAxis, chart);
   const isBubble3d = chart.bubble3d === true || chart.is3d === true;
   const labelsEnabled = Boolean(
     chart.dataLabels?.showCategoryName
@@ -394,31 +403,35 @@ export function renderBubbleChart(chart: XlsxChart, palette: ChartRendererPalett
     <g>
       {xTicks.map((tick) => (
         <g key={`bubble-x-${tick}`}>
-          <line
-            stroke={lightenColor(axisColor, 0.72)}
-            stroke-width={1}
-            x1={xScale(tick)}
-            x2={xScale(tick)}
-            y1={plot.top}
-            y2={plot.top + plot.height}
-          />
+          {chart.categoryAxis?.majorGridlines === true ? (
+            <line
+              stroke={lightenColor(axisColor, 0.72)}
+              stroke-width={1}
+              x1={xScale(tick)}
+              x2={xScale(tick)}
+              y1={plot.top}
+              y2={plot.top + plot.height}
+            />
+          ) : null}
           <text fill={labelColor} font-size={10} text-anchor="middle" x={xScale(tick)} y={plot.top + plot.height + 14}>
-            {formatTickValue(tick)}
+            {formatXTick(tick)}
           </text>
         </g>
       ))}
       {yTicks.map((tick) => (
         <g key={`bubble-y-${tick}`}>
-          <line
-            stroke={lightenColor(axisColor, 0.72)}
-            stroke-width={1}
-            x1={plot.left}
-            x2={plot.left + plot.width}
-            y1={yScale(tick)}
-            y2={yScale(tick)}
-          />
+          {chart.valueAxis?.majorGridlines === true ? (
+            <line
+              stroke={lightenColor(axisColor, 0.72)}
+              stroke-width={1}
+              x1={plot.left}
+              x2={plot.left + plot.width}
+              y1={yScale(tick)}
+              y2={yScale(tick)}
+            />
+          ) : null}
           <text fill={labelColor} font-size={10} text-anchor="end" x={plot.left - 6} y={yScale(tick) + 3}>
-            {formatTickValue(tick)}
+            {formatYTick(tick)}
           </text>
         </g>
       ))}

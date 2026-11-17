@@ -2,7 +2,7 @@
 import type { XlsxChart, XlsxChartElementSelection } from "@arcships/xlsx-core";
 import { clamp, lightenColor, darkenColor, resolveChartAxisTextColor } from "./chart-shared";
 import { chartElementDataProps, isSelectedChartPointOrSeries, renderSelectionPointHandles } from "./chart-element";
-import { chartSeriesColor, chartSeriesStrokeColor, normalizeChartMarkerSymbol } from "./chart-data";
+import { chartSeriesColor, chartSeriesStrokeColor, createChartAxisTickFormatter, normalizeChartMarkerSymbol } from "./chart-data";
 import { markerSymbolPath, toSvgNumber } from "./chart-svg-utils";
 import { resolveAxisDomainWithChartOverrides, formatTickValue } from "./chart-axis";
 import type { ChartRendererPalette, ChartLayout, BarRect } from "./chart-types";
@@ -454,6 +454,7 @@ export function renderLineOrAreaChart3d(
   const edgeColor = chart.axisLineColor ?? chart.chartAreaBorderColor ?? palette.border;
   const gridColor = lightenColor(edgeColor, 0.56);
   const labelColor = resolveChartAxisTextColor(chart);
+  const formatYAxisTick = createChartAxisTickFormatter(chart.valueAxis, chart);
   const boxEdges: Array<[number, number, boolean]> = [
     [0, 1, false], [1, 2, false], [2, 3, false], [3, 0, false],
     [4, 5, true], [5, 6, true], [6, 7, true], [7, 4, true],
@@ -697,7 +698,7 @@ export function renderLineOrAreaChart3d(
           x={point.x - 6}
           y={point.y + 3}
         >
-          {formatTickValue(tick)}
+          {formatYAxisTick(tick)}
         </text>
       ))}
       {xLabelPoints.map(({ label, point }, index) => (

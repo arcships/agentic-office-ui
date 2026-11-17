@@ -4,7 +4,7 @@ import type { VNode } from "vue";
 import type { XlsxChart, XlsxChartElementSelection, XlsxImageRect } from "@arcships/xlsx-core";
 
 // Re-export all chart utilities from their dedicated modules
-export type { ChartRendererPalette, ChartSvgProps, LegendItem, PlotRect, ChartLayout, BarRect, ChartElementDataOptions, ChartHierarchyDatum, ComboRenderableGroup, ChartStage, BoxWhiskerStats, SurfaceDomain, RegionMapFeature, SurfacePathPoint, SurfaceContourSegment } from "./chart-types";
+export type { ChartRendererPalette, ChartSvgProps, LegendItem, PlotRect, ChartLayout, ChartLegendMetrics, BarRect, ChartElementDataOptions, ChartHierarchyDatum, ComboRenderableGroup, ChartStage, BoxWhiskerStats, SurfaceDomain, RegionMapFeature, SurfacePathPoint, SurfaceContourSegment } from "./chart-types";
 
 export {
   chartElementDataProps,
@@ -36,7 +36,10 @@ export {
   safeNumber,
   normalizeLegendPosition,
   normalizeCategoryLabel,
-  truncateSvgText
+  estimateSvgCharacterWidth,
+  estimateSvgTextWidth,
+  truncateSvgText,
+  wrapSvgText
 } from "./chart-shared";
 
 export {
@@ -69,7 +72,11 @@ export {
   excelSerialToDate,
   formatExcelDateSerial,
   formatExcelSerial,
-  formatCategoryLabel
+  formatCategoryLabel,
+  parseExcelNumberFormat,
+  formatDefaultTickValue,
+  formatExcelNumberValue,
+  createChartAxisTickFormatter
 } from "./chart-data";
 
 export {
