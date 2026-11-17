@@ -11,14 +11,24 @@ const demoPort = Number(process.env.PPTX_DEMO_TEST_PORT ?? 5198)
 const demoUrl = `http://127.0.0.1:${demoPort}`
 const sampleUrl = `${appUrl}/@fs${root}/tests/fixtures/pptx/playback-controlled.pptx`
 const powerPointSavedSampleUrl = `${appUrl}/@fs${root}/tests/fixtures/pptx/playback/media-audio-video.pptx`
+const morphSampleUrl = `${appUrl}/@fs${root}/tests/fixtures/pptx/playback/morph-explicit-name.pptx`
 const server = spawn("pnpm", ["--filter=pptx-playback-lab", "dev", "--host", "127.0.0.1", "--port", String(port)], {
   cwd: root,
   stdio: ["ignore", "ignore", "inherit"],
+  detached: true,
 })
 const demoServer = spawn("pnpm", ["--filter=demo", "dev", "--host", "127.0.0.1", "--port", String(demoPort)], {
   cwd: root,
   stdio: ["ignore", "ignore", "inherit"],
+  detached: true,
 })
+
+function stopServer(child) {
+  if (!child.pid || child.exitCode !== null) return
+  try {
+    process.kill(-child.pid, "SIGINT")
+  } catch { /* 进程已退出。 */ }
+}
 
 async function waitForServer(url) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
@@ -76,14 +86,20 @@ try {
   run("chromium", ["--initial-slide", "0", "--reset-check"])
   run("chromium", ["--initial-slide", "5", "--media-block-check"])
   run("chromium", ["--initial-slide", "5", "--media-check", "--resource-check"], powerPointSavedSampleUrl)
+  run("chromium", ["--initial-slide", "4", "--morph-check", "--approximation", "safe"], morphSampleUrl)
   const memory = spawnSync("python3", [
     "tests/blackbox/pptx_memory.py",
     "--app-url", appUrl,
     "--sample-url", sampleUrl,
   ], { cwd: root, stdio: "inherit" })
   if (memory.status !== 0) throw new Error("PPTX 连续重播内存验收失败。")
-  console.log("PASS: PPTX 三浏览器网页演示、切换、重复、自动换页、Morph、媒体、书签、冲突裁决、逐段文字、正式素材、内存和资源释放验收通过。")
+  const baselines = spawnSync("python3", [
+    "scripts/fixtures/capture-pptx-formal-baselines.py",
+    "--check",
+  ], { cwd: root, stdio: "inherit" })
+  if (baselines.status !== 0) throw new Error("PPTX 浏览器事件基准校验失败。")
+  console.log("PASS: PPTX 三浏览器网页演示、切换、重复、自动换页、Morph、媒体、书签、冲突裁决、逐段文字、正式素材、基准复核、内存和资源释放验收通过。")
 } finally {
-  server.kill("SIGINT")
-  demoServer.kill("SIGINT")
+  stopServer(server)
+  stopServer(demoServer)
 }

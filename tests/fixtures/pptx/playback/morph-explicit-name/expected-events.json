@@ -69,7 +69,7 @@
         "objectKey": "ppt/slides/slide5.xml|slide|shape:2",
         "feature": "morph:explicit-name",
         "disposition": "approximate",
-        "reason": "使用显式名称进行强身份匹配。"
+        "reason": "使用显式名称进行强身份匹配，分数 1。"
       },
       {
         "id": "effect:5:2",

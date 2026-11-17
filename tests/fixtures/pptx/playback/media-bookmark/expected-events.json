@@ -517,7 +517,12 @@
       "trimEndMs": 1100,
       "loop": true,
       "volume": 0.7,
+      "autoplay": true,
       "nativeLoop": false
+    },
+    "mediaTracks": {
+      "media-playback": "play",
+      "media-volume": 0.7
     }
   }
 }

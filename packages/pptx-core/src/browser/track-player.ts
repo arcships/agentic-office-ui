@@ -290,13 +290,26 @@ function applyElementState(element: HTMLElement, state: Readonly<PptxObjectPrope
   if (typeof state["text-color"] === "string" && state["text-color"]) element.style.color = state["text-color"]
 }
 
+const paragraphRangeTarget = /#paragraph:(\d+)-(\d+)$/u
+
+/** 应用顺序：对象级 → 段落范围（从宽到窄）→ 单段，具体的状态后写。 */
+function targetOrder(target: string): number {
+  const match = paragraphRangeTarget.exec(target)
+  return match ? 1_000_000 - (Number(match[2]) - Number(match[1])) : -1
+}
+
 export function applyPptxObjectState(
   root: HTMLElement,
   state: PptxObjectStateMap,
   targets?: PptxTrackTargets,
 ): void {
   const index = currentTargets(root, targets)
-  for (const [target, values] of Object.entries(state)) {
+  const entries = Object.entries(state)
+  // 范围状态是聚合，不能盖掉已经按单段准备好的时间零状态。
+  const ordered = entries.some(([target]) => targetOrder(target) > 0)
+    ? [...entries].sort((left, right) => targetOrder(left[0]) - targetOrder(right[0]))
+    : entries
+  for (const [target, values] of ordered) {
     for (const element of index.elements.get(target) ?? []) applyElementState(element, values)
   }
 }
