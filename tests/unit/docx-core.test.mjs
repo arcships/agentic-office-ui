@@ -89,13 +89,16 @@ function findFirstImage(model) {
   return found;
 }
 
-function withWordMainContentType(input, contentType) {
+function withWordMainContentType(input, contentType, { vbaProject } = {}) {
   const archive = unzipSync(new Uint8Array(input));
   const contentTypes = strFromU8(archive["[Content_Types].xml"]);
   archive["[Content_Types].xml"] = strToU8(contentTypes.replace(
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
     contentType,
   ));
+  if (vbaProject !== undefined) {
+    archive["word/vbaProject.bin"] = vbaProject;
+  }
   const bytes = zipSync(archive);
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
@@ -275,6 +278,82 @@ test("DOCX rejects empty and corrupted input with a stable parse error", async (
       core.importDocxBuffer(input, { useWorker: false }),
       (error) => error?.name === "DocxImportError" && error?.code === "PARSE_FAILED",
     );
+  }
+});
+
+test("DOCX main-thread parsing enforces maxParseMs instead of returning a late result", async () => {
+  await assert.rejects(
+    core.importDocxBuffer(arrayBufferFromFile("invoice-table.docx"), {
+      useWorker: false,
+      limits: { maxParseMs: 1 },
+    }),
+    (error) => error?.name === "DocxImportError" &&
+      error?.code === "TIMEOUT" &&
+      error?.phase === "parse" &&
+      error?.limit === "maxParseMs" &&
+      error?.allowed === 1 &&
+      error?.actual > error?.allowed,
+  );
+});
+
+test("DOCX macro and template exports preserve content types and macro parts", async () => {
+  const source = arrayBufferFromFile("invoice-table.docx");
+  const macroBytes = new Uint8Array([0x4d, 0x5a, 0x90, 0x00, 0x03, 0x00, 0x00, 0x00]);
+  for (const [format, contentType, hasMacro] of [
+    ["docm", "application/vnd.ms-word.document.macroEnabled.main+xml", true],
+    ["dotx", "application/vnd.openxmlformats-officedocument.wordprocessingml.template.main+xml", false],
+    ["dotm", "application/vnd.ms-word.template.macroEnabledTemplate.main+xml", true],
+  ]) {
+    const input = withWordMainContentType(source, contentType, {
+      vbaProject: hasMacro ? macroBytes : undefined,
+    });
+    const { model, package: pkg } = await core.wasmBuildDocModelFromBytes(input);
+    const exported = await core.serializeDocx(model, core.wasmPackageToMaps(pkg));
+    const archive = unzipSync(new Uint8Array(exported));
+    assert.match(
+      strFromU8(archive["[Content_Types].xml"]),
+      new RegExp(contentType.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      `${format} export must keep its container content type`,
+    );
+    if (hasMacro) {
+      assert.deepEqual(
+        [...archive["word/vbaProject.bin"]],
+        [...macroBytes],
+        `${format} export must keep the macro part`,
+      );
+    } else {
+      assert.equal(archive["word/vbaProject.bin"], undefined);
+    }
+  }
+});
+
+test("DOCX edit and export roundtrip preserves styles, notes, comments and image bytes", async () => {
+  for (const sample of ["review-comments.docx", "report-with-image.docx"]) {
+    const first = await core.wasmBuildDocModelFromBytes(arrayBufferFromFile(sample));
+    const firstPackage = core.wasmPackageToMaps(first.package);
+    const images = [...firstPackage.binaryAssets].filter(([name]) => name.includes("/media/"));
+    const styleJson = JSON.stringify(first.model.metadata.paragraphStyles);
+    const commentCount = core.collectCommentsFromModel(first.model).length;
+    const trackedCount = core.collectTrackedChangesFromModel(first.model).length;
+    const footnoteCount = first.model.metadata.footnotes?.length ?? 0;
+    const endnoteCount = first.model.metadata.endnotes?.length ?? 0;
+
+    const edited = core.updateParagraphText(first.model, 0, "Roundtrip fidelity paragraph");
+    const exported = await core.serializeDocx(edited, firstPackage);
+    const second = await core.wasmBuildDocModelFromBytes(exported);
+    const secondPackage = core.wasmPackageToMaps(second.package);
+
+    assert.match(collectText(second.model).join(" "), /Roundtrip fidelity paragraph/, sample);
+    assert.equal(JSON.stringify(second.model.metadata.paragraphStyles), styleJson, sample);
+    assert.equal(core.collectCommentsFromModel(second.model).length, commentCount, sample);
+    assert.equal(core.collectTrackedChangesFromModel(second.model).length, trackedCount, sample);
+    assert.equal(second.model.metadata.footnotes?.length ?? 0, footnoteCount, sample);
+    assert.equal(second.model.metadata.endnotes?.length ?? 0, endnoteCount, sample);
+    for (const [name, bytes] of images) {
+      const reimported = secondPackage.binaryAssets.get(name);
+      assert.ok(reimported, `${sample}: ${name} must survive export`);
+      assert.deepEqual([...reimported], [...bytes], `${sample}: ${name} bytes must survive export`);
+    }
   }
 });
 

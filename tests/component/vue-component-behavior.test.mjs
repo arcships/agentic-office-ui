@@ -22,11 +22,11 @@ async function waitUntil(predicate, message, timeoutMs = 5_000) {
   throw new Error(`Timed out waiting for ${message}`);
 }
 
-async function mountEditorController() {
+async function mountEditorController(fileName = "race.docx") {
   let controller;
   const Harness = vue.defineComponent({
     setup() {
-      controller = useDocxEditor({ initialFileName: "race.docx" });
+      controller = useDocxEditor({ initialFileName: fileName });
       return () => vue.h("div", { "data-testid": "editor-harness" }, controller.status);
     },
   });
@@ -41,6 +41,8 @@ function installDownloadEnvironment(t, { clickError, documentAvailable = true } 
   const originalSetTimeout = globalThis.setTimeout;
   const originalClearTimeout = globalThis.clearTimeout;
   const actions = [];
+  const blobs = [];
+  const downloads = [];
   const exportTimers = new Set();
   let nextTimerId = 0;
 
@@ -55,6 +57,7 @@ function installDownloadEnvironment(t, { clickError, documentAvailable = true } 
           style: {},
           click() {
             actions.push("click");
+            downloads.push(this.download);
             if (clickError) throw clickError;
           },
           remove() {
@@ -67,7 +70,8 @@ function installDownloadEnvironment(t, { clickError, documentAvailable = true } 
     delete globalThis.document;
   }
 
-  URL.createObjectURL = () => {
+  URL.createObjectURL = (blob) => {
+    blobs.push(blob);
     actions.push("create-url");
     return "blob:docx-export-test";
   };
@@ -88,16 +92,20 @@ function installDownloadEnvironment(t, { clickError, documentAvailable = true } 
     return originalClearTimeout(handle);
   };
 
-  t.after(() => {
+  let restored = false;
+  const restore = () => {
+    if (restored) return;
+    restored = true;
     if (originalDocument === undefined) delete globalThis.document;
     else globalThis.document = originalDocument;
     URL.createObjectURL = originalCreateObjectURL;
     URL.revokeObjectURL = originalRevokeObjectURL;
     globalThis.setTimeout = originalSetTimeout;
     globalThis.clearTimeout = originalClearTimeout;
-  });
+  };
+  t.after(restore);
 
-  return { actions, exportTimers };
+  return { actions, blobs, downloads, exportTimers, restore };
 }
 
 function count(actions, value) {
@@ -138,7 +146,7 @@ test("DOCX model replacement and unmount invalidate pending exports", async (t) 
   await new Promise((resolve) => nativeSetTimeout(resolve, 50));
   assert.equal(count(modelEnvironment.actions, "create-url"), 0);
   assert.equal(count(modelEnvironment.actions, "click"), 0);
-  assert.notEqual(modelChanged.controller.status, "Exported DOCX");
+  assert.equal(modelChanged.controller.status, "Export cancelled: document changed");
   modelChanged.app.unmount();
 
   const unmounted = await mountEditorController();
@@ -152,6 +160,32 @@ test("DOCX model replacement and unmount invalidate pending exports", async (t) 
   );
   assert.deepEqual(modelChanged.warnings, []);
   assert.deepEqual(unmounted.warnings, []);
+});
+
+test("DOCX export keeps macro and template container names and MIME types", async (t) => {
+  for (const [inputName, expectedName, expectedType] of [
+    ["macro.docm", "macro-edited.docm", "application/vnd.ms-word.document.macroEnabled.12"],
+    ["template.dotx", "template-edited.dotx", "application/vnd.openxmlformats-officedocument.wordprocessingml.template"],
+    ["template.dotm", "template-edited.dotm", "application/vnd.ms-word.template.macroEnabled.12"],
+    ["legacy.doc", "edited.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  ]) {
+    const mounted = await mountEditorController(inputName);
+    const environment = installDownloadEnvironment(t);
+    try {
+      mounted.controller.exportDocx();
+      await waitUntil(
+        () => mounted.controller.status === "Exported DOCX",
+        `${inputName} export`,
+      );
+      assert.deepEqual(environment.downloads, [expectedName]);
+      assert.equal(environment.blobs.length, 1);
+      assert.equal(environment.blobs[0].type, expectedType.toLowerCase());
+      assert.deepEqual(mounted.warnings, []);
+    } finally {
+      mounted.app.unmount();
+      environment.restore();
+    }
+  }
 });
 
 test("DOCX export checks document before URL creation", async (t) => {

@@ -14,6 +14,7 @@ import type { EditorCore } from "./editor-shared"
 import {
   DOCX_UNSUPPORTED_FILE_MESSAGE,
   docxExportFileName,
+  docxExportMimeType,
   isSupportedDocxFileName,
 } from "./docx-file-types"
 
@@ -30,6 +31,7 @@ export function createEditorImportExport(ctx: EditorCore) {
     anchor?: HTMLAnchorElement
     objectUrl?: string
     cleanupTimer?: ReturnType<typeof setTimeout>
+    delivered: boolean
     cleaned: boolean
   }
 
@@ -93,9 +95,16 @@ export function createEditorImportExport(ctx: EditorCore) {
     }
   }
 
-  const invalidateExport = (): void => {
+  const invalidateExport = (reason?: "document-changed"): void => {
+    const task = activeExport
     activeExportToken = undefined
-    if (activeExport) cleanupExportTask(activeExport)
+    if (task) {
+      const wasPending = !task.delivered
+      cleanupExportTask(task)
+      if (reason === "document-changed" && wasPending) {
+        ctx.status.value = "Export cancelled: document changed"
+      }
+    }
   }
 
   const isCurrentExport = (task: ExportTask): boolean => (
@@ -107,9 +116,10 @@ export function createEditorImportExport(ctx: EditorCore) {
 
   // Editing commands replace the model object. Invalidate synchronously so an
   // export that is awaiting serialization cannot later download stale bytes.
+  // Tell the user why the export they requested produced no file.
   watch(
     [ctx.model, ctx.documentLoadNonce],
-    () => invalidateExport(),
+    () => invalidateExport("document-changed"),
     { flush: "sync" },
   )
 
@@ -237,10 +247,13 @@ export function createEditorImportExport(ctx: EditorCore) {
       token,
       documentLoadNonce: ctx.documentLoadNonce.value,
       model: exportModel,
+      delivered: false,
       cleaned: false,
     }
     const fileName = ctx.fileName.value
     const basePackage = ctx.basePackage.value
+    const exportFileName = docxExportFileName(fileName)
+    const exportMimeType = docxExportMimeType(fileName)
     activeExportToken = token
     activeExport = task
 
@@ -270,16 +283,17 @@ export function createEditorImportExport(ctx: EditorCore) {
         }
 
         const blob = new Blob([output], {
-          type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          type: exportMimeType,
         })
         task.anchor = anchor
         task.objectUrl = URL.createObjectURL(blob)
         anchor.href = task.objectUrl
-        anchor.download = docxExportFileName(fileName)
+        anchor.download = exportFileName
         anchor.style.display = "none"
         ownerDocument.body.append(anchor)
         task.cleanupTimer = setTimeout(() => cleanupExportTask(task), 1000)
         anchor.click()
+        task.delivered = true
 
         if (!isCurrentExport(task)) {
           cleanupExportTask(task)

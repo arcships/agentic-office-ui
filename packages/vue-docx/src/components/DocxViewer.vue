@@ -413,8 +413,32 @@ async function onUploadChange(event: Event): Promise<void> {
     return
   }
   emit("file-selected", file)
+
+  const allowed = loaderRuntime.limits?.maxInputBytes
+  if (allowed !== undefined && Number.isFinite(file.size) && file.size > allowed) {
+    const limitError = new DocxImportError(
+      "LIMIT_EXCEEDED",
+      `DOCX 文件大小 ${file.size} 字节超过允许值 ${allowed} 字节。`,
+      { phase: "input", limit: "maxInputBytes", actual: file.size, allowed },
+    )
+    error.value = limitError
+    emit("load-error", limitError)
+    return
+  }
+
+  let buffer: ArrayBuffer
+  try {
+    buffer = await file.arrayBuffer()
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause)
+    const readError = new Error(`Failed to read ${file.name}: ${message}`, { cause })
+    error.value = readError
+    emit("load-error", readError)
+    return
+  }
+
   internalFileName.value = file.name
-  internalFile.value = await file.arrayBuffer()
+  internalFile.value = buffer
 }
 
 function downloadFile(): void {
