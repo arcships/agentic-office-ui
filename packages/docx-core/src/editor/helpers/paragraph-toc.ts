@@ -48,7 +48,7 @@ export function isTableOfContentsParagraph(paragraph: ParagraphNode): boolean {
   );
 }
 
-export type PageFieldKind = "PAGE" | "NUMPAGES";
+export type PageFieldKind = "PAGE" | "NUMPAGES" | "SECTIONPAGES";
 
 export function instructionTextToPageFieldKind(
   rawInstruction: string
@@ -61,6 +61,9 @@ export function instructionTextToPageFieldKind(
     return undefined;
   }
 
+  if (/\bSECTIONPAGES\b/.test(normalized)) {
+    return "SECTIONPAGES";
+  }
   if (/\bNUMPAGES\b/.test(normalized)) {
     return "NUMPAGES";
   }

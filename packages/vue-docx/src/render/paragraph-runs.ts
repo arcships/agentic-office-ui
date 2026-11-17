@@ -67,7 +67,10 @@ export interface ParagraphRunRenderOptions {
   withinHeaderFooter?: boolean
   headerFooterRegion?: "header" | "footer"
   pageNumberFormat?: string
+  sectionPages?: number
   resolveStyleRefFieldValue?: (target: string) => string | undefined
+  resolveBookmarkFieldValue?: (target: string) => string | undefined
+  resolveBookmarkPageNumber?: (target: string) => number | undefined
   floatingAnchorOriginCorrectionXPx?: number
   sectionImageInteraction?: ImageRunRenderExtra["sectionImageInteraction"]
   paragraphOriginLeftPx?: number
@@ -155,8 +158,11 @@ export function renderParagraphRuns(
     styleRefFieldValueSequence: [],
     pageNumber,
     totalPages,
+    sectionPages: options?.sectionPages,
     pageNumberFormat: options?.pageNumberFormat,
     resolveStyleRefFieldValue: options?.resolveStyleRefFieldValue,
+    resolveBookmarkFieldValue: options?.resolveBookmarkFieldValue,
+    resolveBookmarkPageNumber: options?.resolveBookmarkPageNumber,
   }
   fieldCtx.pageFieldSequence = paragraphPageFieldSequence(paragraph)
   fieldCtx.pageFieldValueSequence = paragraphPageFieldValueSequence(paragraph)

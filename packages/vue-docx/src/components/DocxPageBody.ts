@@ -108,6 +108,21 @@ export default defineComponent({
     pageNumber: { type: Number, required: true },
     totalPages: { type: Number, required: true },
     pageNumberFormat: { type: String, required: false },
+    sectionPages: { type: Number, required: false },
+    resolveStyleRefFieldValue: {
+      type: Function as PropType<
+        (target: string, beforeNodeIndex?: number) => string | undefined
+      >,
+      required: false,
+    },
+    resolveBookmarkFieldValue: {
+      type: Function as PropType<(target: string) => string | undefined>,
+      required: false,
+    },
+    resolveBookmarkPageNumber: {
+      type: Function as PropType<(target: string) => number | undefined>,
+      required: false,
+    },
     noteMarkerLabels: {
       type: Object as PropType<{
         footnote?: Map<number, string>
@@ -373,6 +388,11 @@ export default defineComponent({
               pageNumber: props.pageNumber,
               totalPages: props.totalPages,
               pageNumberFormat: props.pageNumberFormat,
+              sectionPages: props.sectionPages,
+              resolveStyleRefFieldValue: props.resolveStyleRefFieldValue,
+              resolveBookmarkFieldValue: props.resolveBookmarkFieldValue,
+              resolveBookmarkPageNumber: props.resolveBookmarkPageNumber,
+              fieldResolutionNodeIndex: segment.nodeIndex,
               noteMarkerLabels: props.noteMarkerLabels,
               skipImageChildIndexes:
                 props.coverImageChildIndexesByNode?.[segment.nodeIndex],
@@ -408,6 +428,11 @@ export default defineComponent({
               pageNumber: props.pageNumber,
               totalPages: props.totalPages,
               pageNumberFormat: props.pageNumberFormat,
+              sectionPages: props.sectionPages,
+              resolveStyleRefFieldValue: props.resolveStyleRefFieldValue,
+              resolveBookmarkFieldValue: props.resolveBookmarkFieldValue,
+              resolveBookmarkPageNumber: props.resolveBookmarkPageNumber,
+              model: props.model,
               maxAvailableWidthPx:
                 (columnIndex !== undefined
                   ? props.columnLayout?.widthsPx?.[columnIndex]

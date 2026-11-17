@@ -108,6 +108,11 @@
                 :page-number="pageNumber"
                 :total-pages="totalPages"
                 :page-number-format="pageNumberFormat"
+                :section-pages="sectionPages"
+                :resolve-style-ref-field-value="resolveStyleRefFieldValue"
+                :resolve-bookmark-field-value="resolveBookmarkFieldValue"
+                :resolve-bookmark-page-number="resolveBookmarkPageNumber"
+                :model="model"
                 :within-header-footer="withinHeaderFooter"
                 :header-footer-region="headerFooterRegion"
                 :max-available-width-px="cellContentWidthPx(cell)"
@@ -148,6 +153,7 @@ import {
   tableWrapperStyle,
   twipsToPixels,
   type DocxFloatingPageOriginPx,
+  type DocModel,
   type DocxDocumentTheme,
   type DocxEditorController,
   type DocxEditorSelection,
@@ -206,6 +212,14 @@ const props = withDefaults(
     pageNumber?: number
     totalPages?: number
     pageNumberFormat?: string
+    sectionPages?: number
+    resolveStyleRefFieldValue?: (
+      target: string,
+      beforeNodeIndex?: number,
+    ) => string | undefined
+    resolveBookmarkFieldValue?: (target: string) => string | undefined
+    resolveBookmarkPageNumber?: (target: string) => number | undefined
+    model?: DocModel
     withinHeaderFooter?: boolean
     headerFooterRegion?: "header" | "footer"
     maxAvailableWidthPx?: number
@@ -625,6 +639,13 @@ function cellParagraphHtml(
     withinHeaderFooter: props.withinHeaderFooter,
     headerFooterRegion: props.headerFooterRegion,
     pageNumberFormat: props.pageNumberFormat,
+    sectionPages: props.sectionPages,
+    resolveStyleRefFieldValue: props.resolveStyleRefFieldValue
+      ? (target: string) =>
+          props.resolveStyleRefFieldValue?.(target, undefined)
+      : undefined,
+    resolveBookmarkFieldValue: props.resolveBookmarkFieldValue,
+    resolveBookmarkPageNumber: props.resolveBookmarkPageNumber,
     noteMarkerLabels: props.noteMarkerLabels,
     tableCellLayout: { widthPx: cellContentWidthPx(cell) },
   }
