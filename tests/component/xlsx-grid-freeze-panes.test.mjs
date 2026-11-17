@@ -233,7 +233,7 @@ test("XLSX frozen panes reuse the full cell renderer", () => {
   assert.match(frozen, /paneViewOffset\(getRowOffsetSum\(displayRow\), scrollTop\.value, frozenY\)/);
   assert.match(
     frozen,
-    /gridLines: sheet\.showGridLines !== false/,
+    /state\.gridLines = sheet\.showGridLines !== false/,
     "the frozen strips draw their own gridlines because the scrolled ones land elsewhere",
   );
   assert.doesNotMatch(

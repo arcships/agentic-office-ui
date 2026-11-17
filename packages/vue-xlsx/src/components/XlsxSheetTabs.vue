@@ -15,6 +15,7 @@
         v-for="(tab, index) in controller.tabs"
         :key="tab.id ?? index"
         class="xlsx-sheettabs__tab-wrapper"
+        @focusin="onTabFocus(index)"
         @mouseenter="onTabHover(index, $event)"
         @mouseleave="onTabLeave"
       >
@@ -100,7 +101,7 @@ const isReadOnly = computed(() => props.controller.isEditingLocked === true || p
 const m = useXlsxMessages();
 const canRemoveActiveSheet = computed(() => Boolean(props.controller.activeSheet) && props.controller.sheets.length > 1);
 
-const { thumbnails: thumbnailComputedRaw } = useXlsxViewerThumbnails(
+const { prefetchThumbnails, thumbnails: thumbnailComputedRaw } = useXlsxViewerThumbnails(
   () => props.controller,
   props.thumbnailOptions ?? { includeHeaders: true, resolution: { maxHeight: 132, maxWidth: 200 } },
 );
@@ -112,6 +113,45 @@ const thumbnailCanvasRefs = ref<Map<number, HTMLCanvasElement | null>>(new Map()
 const popupX = ref(0);
 const popupY = ref(0);
 let popupTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Prefetch tuning: one pending idle warm-up at most, for the hovered tab and
+// its immediate neighbours. Sweeping the pointer across the strip cancels the
+// previous task instead of queueing every tab, and no workspace is read until
+// something actually points at it.
+const THUMBNAIL_PREFETCH_RADIUS = 1;
+type IdleHandle = number | ReturnType<typeof setTimeout>;
+const idleHost = globalThis as {
+  cancelIdleCallback?: (handle: number) => void;
+  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+};
+let prefetchHandle: IdleHandle | null = null;
+
+function cancelScheduledPrefetch(): void {
+  if (prefetchHandle === null) return;
+  if (typeof prefetchHandle === "number" && idleHost.cancelIdleCallback) {
+    idleHost.cancelIdleCallback(prefetchHandle);
+  } else {
+    clearTimeout(prefetchHandle as ReturnType<typeof setTimeout>);
+  }
+  prefetchHandle = null;
+}
+
+function scheduleHoverPrefetch(index: number): void {
+  cancelScheduledPrefetch();
+  const tabCount = props.controller.tabs.length;
+  const sheetIndices: number[] = [];
+  for (let offset = -THUMBNAIL_PREFETCH_RADIUS; offset <= THUMBNAIL_PREFETCH_RADIUS; offset += 1) {
+    const candidate = index + offset;
+    if (candidate >= 0 && candidate < tabCount) sheetIndices.push(candidate);
+  }
+  const run = () => {
+    prefetchHandle = null;
+    prefetchThumbnails(sheetIndices);
+  };
+  prefetchHandle = typeof idleHost.requestIdleCallback === "function"
+    ? idleHost.requestIdleCallback(run, { timeout: 200 })
+    : setTimeout(run, 0);
+}
 
 const thumbnailPopupStyle = computed<CSSProperties>(() => ({
   left: `${popupX.value}px`,
@@ -134,6 +174,7 @@ function setThumbnailCanvas(index: number, el: unknown) {
 
 function onTabHover(index: number, event: MouseEvent) {
   if (popupTimer) clearTimeout(popupTimer);
+  scheduleHoverPrefetch(index);
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
   popupX.value = rect.left + rect.width / 2;
   popupY.value = rect.top;
@@ -148,7 +189,13 @@ function onTabHover(index: number, event: MouseEvent) {
   });
 }
 
+function onTabFocus(index: number) {
+  // Keyboard users reach the same preview; warm it without opening the popup.
+  scheduleHoverPrefetch(index);
+}
+
 function onTabLeave() {
+  cancelScheduledPrefetch();
   popupTimer = setTimeout(() => {
     hoveredTabIndex.value = null;
   }, 150);
@@ -213,6 +260,7 @@ function tabStyle(index: number): CSSProperties {
 }
 
 onUnmounted(() => {
+  cancelScheduledPrefetch();
   if (popupTimer) clearTimeout(popupTimer);
 });
 </script>

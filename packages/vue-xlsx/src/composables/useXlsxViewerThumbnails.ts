@@ -16,6 +16,8 @@ export interface UseXlsxViewerThumbnailsOptions {
 
 const THUMBNAIL_MAX_ROWS = 60;
 const THUMBNAIL_MAX_COLS = 26;
+/** Sheets warmed by one prefetch call; a hover asks for the tab and its neighbours. */
+const THUMBNAIL_PREFETCH_LIMIT = 3;
 const DEFAULT_ROW_HEIGHT = 24;
 const DEFAULT_COL_WIDTH = 80;
 const HEADER_HEIGHT = 24;
@@ -93,7 +95,7 @@ function createThumbnail(
   sheet: XlsxSheetData,
   sheetIndex: number,
   options: UseXlsxViewerThumbnailsOptions,
-): XlsxSheetThumbnail {
+): ThumbnailEntry {
   const includeHeaders = options.includeHeaders ?? true;
   const minRow = sheet.minUsedRow ?? 0;
   const maxRow = Math.max(sheet.maxUsedRow ?? -1, 0);
@@ -215,6 +217,12 @@ function createThumbnail(
     return cells.values;
   }
 
+  /** Loads whatever `paint` would load, without needing a canvas. */
+  function warm(): void {
+    ensureGeometry();
+    ensureCells();
+  }
+
   const paint = (canvas: HTMLCanvasElement | null): boolean => {
     if (!canvas) return false;
 
@@ -316,7 +324,7 @@ function createThumbnail(
     end: { col: minCol + previewCols - 1, row: minRow + previewRows - 1 },
   };
 
-  return {
+  const thumbnail: XlsxSheetThumbnail = {
     get aspectRatio() {
       const { sourceHeight, sourceWidth } = ensureGeometry();
       return sourceWidth / Math.max(1, sourceHeight);
@@ -339,6 +347,12 @@ function createThumbnail(
     },
     workbookSheetIndex: sheet.workbookSheetIndex,
   };
+  return { thumbnail, warm };
+}
+
+interface ThumbnailEntry {
+  thumbnail: XlsxSheetThumbnail;
+  warm: () => void;
 }
 
 export function useXlsxViewerThumbnails(
@@ -347,11 +361,38 @@ export function useXlsxViewerThumbnails(
 ): XlsxViewerThumbnails {
   const resolvedController = typeof controller === "function" ? controller : () => controller.value;
 
-  const thumbnails = computed<XlsxSheetThumbnail[]>(() =>
+  const thumbnailEntries = computed<ThumbnailEntry[]>(() =>
     resolvedController().sheets.map((sheet, sheetIndex) =>
       createThumbnail(() => resolvedController(), sheet, sheetIndex, options),
     ),
   );
+
+  const thumbnails = computed<XlsxSheetThumbnail[]>(() =>
+    thumbnailEntries.value.map((entry) => entry.thumbnail),
+  );
+
+  // Prefetch bookkeeping: at most `THUMBNAIL_PREFETCH_LIMIT` sheets per call,
+  // one warm-up per sheet per revision, unknown indices ignored.
+  const prefetchedSheets = new Set<number>();
+  let prefetchedRevision: number | null = null;
+
+  function prefetchThumbnails(sheetIndices: readonly number[]): void {
+    const revision = resolvedController().revision;
+    if (prefetchedRevision !== revision) {
+      prefetchedRevision = revision;
+      prefetchedSheets.clear();
+    }
+    const entries = thumbnailEntries.value;
+    let warmed = 0;
+    for (const sheetIndex of sheetIndices) {
+      if (warmed >= THUMBNAIL_PREFETCH_LIMIT) break;
+      if (!Number.isInteger(sheetIndex) || sheetIndex < 0 || sheetIndex >= entries.length) continue;
+      if (prefetchedSheets.has(sheetIndex)) continue;
+      prefetchedSheets.add(sheetIndex);
+      entries[sheetIndex].warm();
+      warmed += 1;
+    }
+  }
 
   function paintThumbnail(sheetIndex: number, canvas: HTMLCanvasElement | null): boolean {
     const t = thumbnails.value[sheetIndex];
@@ -361,6 +402,7 @@ export function useXlsxViewerThumbnails(
 
   return {
     paintThumbnail,
+    prefetchThumbnails,
     get thumbnails(): XlsxSheetThumbnail[] {
       return thumbnails.value;
     },

@@ -154,6 +154,7 @@ DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注
 - `XlsxDiagnostic`、`XlsxLoadError`、`XlsxLoadErrorCode`、`XlsxSourceKind`、`XlsxSourceState`、`XlsxUrlPolicy`。
 - 样式：`@arcships/vue-xlsx/style.css`。
 - 可选功能：`@arcships/vue-xlsx/chart`、`@arcships/vue-xlsx/map`、`@arcships/vue-xlsx/webgl`。根入口保留旧渲染名称的异步兼容外观；新代码可显式导入对应子入口。未使用功能时不会请求其实现分包。
+- 工作表缩略图：`useXlsxViewerThumbnails` 只在需要时读取单元格（首次悬停或显式预热），`prefetchThumbnails` 在空闲时预热指定工作表、按 `revision` 去重、单次最多 3 张，`paintThumbnail` 随后只绘制。
 - 历史记录：控制器选项 `historyMaxEntries` 和 `historyMaxBytes` 同时生效，默认最多 100 条、估算 32 MiB。
 - 图表数据：`refreshChartData()` 在主线程工作簿或 Worker 当前工作簿上重新解析图表分类和值，用于源单元格编辑后刷新绘图。
 

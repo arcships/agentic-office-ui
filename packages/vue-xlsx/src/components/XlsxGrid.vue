@@ -205,11 +205,13 @@ import {
 import { paneAxisContentOffset, paneViewOffset, resolvePaneContentPoint, resolvePaneOverlayRect, resolvePaneViewPoint, type PaneOverlayRect } from "./grid-pane-geometry";
 import {
   MAX_CANVAS_DIMENSION_PX,
+  cellKey,
   intersectsViewport,
   readDevicePixelRatio,
   resolveAxisResizeSize,
   resolveCanvasPixelRatio,
   resolveOverflowTextWidth,
+  sheetCellKey,
 } from "./grid-paint";
 import { isDataValidationListDropdownVisible } from "../composables/validation";
 import { localizeFormattedNumber, parseDisplayedNumber } from "../composables/cell-input";
@@ -289,12 +291,15 @@ interface GridMergeRegion {
   start: XlsxCellAddress;
 }
 
-const workerCellCache = new Map<string, GridCellSnapshot>();
+const workerCellCache = new Map<number, GridCellSnapshot>();
 const loadedWorkerBatches = new Set<string>();
 const pendingWorkerBatches = new Map<string, AbortController>();
 let workerCacheSheetIndex: number | null = null;
 let paintedMergeRegions: GridMergeRegion[] = [];
-let paintedMergeAnchors = new Map<string, XlsxCellAddress>();
+// Anchor -> owning region and anchor -> top-left cell, both keyed by `cellKey`
+// so the per-cell paint path is a map hit instead of a scan over every region.
+let paintedMergeAnchors = new Map<number, XlsxCellAddress>();
+let paintedMergeRegionsByAnchor = new Map<number, GridMergeRegion>();
 // Conditional-format work is data-sized: a rule range can cover the whole used
 // extent, so its rule order, per-cell bounds, sampled values and resolved
 // environment are cached per sheet revision instead of being rebuilt on every
@@ -346,13 +351,16 @@ const activeCellAria = computed(() => {
 const activeCellDescendantId = computed(() =>
   activeCellAria.value ? `${gridA11yId}-active-cell` : undefined,
 );
-const hyperlinksByCell = computed(() => new Map((activeSheet.value?.hyperlinks ?? []).map((link) => [`${link.cell.row}:${link.cell.col}`, link])));
-const commentsByCell = computed(() => new Map((activeSheet.value?.comments ?? []).map((comment) => [`${comment.cell.row}:${comment.cell.col}`, comment])));
-const sparklinesByCell = computed(() => new Map((activeSheet.value?.sparklines ?? []).map((sparkline) => [`${sparkline.target.row}:${sparkline.target.col}`, sparkline])));
+// Per-cell metadata is keyed by `cellKey` (one number) rather than a
+// `${row}:${col}` string, because the paint loop looks these up for every
+// visible cell on every frame.
+const hyperlinksByCell = computed(() => new Map((activeSheet.value?.hyperlinks ?? []).map((link) => [cellKey(link.cell.row, link.cell.col), link])));
+const commentsByCell = computed(() => new Map((activeSheet.value?.comments ?? []).map((comment) => [cellKey(comment.cell.row, comment.cell.col), comment])));
+const sparklinesByCell = computed(() => new Map((activeSheet.value?.sparklines ?? []).map((sparkline) => [cellKey(sparkline.target.row, sparkline.target.col), sparkline])));
 const hoveredComment = computed(() => {
   const cell = hoveredCell.value;
   if (!cell) return null;
-  const comment = commentsByCell.value.get(`${cell.row}:${cell.col}`);
+  const comment = commentsByCell.value.get(cellKey(cell.row, cell.col));
   const display = getDisplayCell(cell);
   if (!comment || !display) return null;
   const anchor = paneOverlayRect(cell, {
@@ -820,7 +828,9 @@ function restoreZoomAnchor(anchor: XlsxZoomAnchor): void {
 }
 
 function workerCellKey(sheetIndex: number, row: number, col: number) {
-  return `${sheetIndex}:${row}:${col}`;
+  // Numeric, for the same reason as `cellKey`: the paint loop reads one worker
+  // snapshot per visible cell per frame.
+  return sheetCellKey(sheetIndex, row, col);
 }
 
 function resetWorkerRows(sheetIndex: number | null) {
@@ -991,27 +1001,28 @@ function updatePaintedMergeRegions(rawRegions: unknown): void {
   const regions = Array.isArray(rawRegions)
     ? rawRegions.map(normalizeMergeRegion).filter((region): region is GridMergeRegion => region !== null)
     : [];
-  const anchors = new Map<string, XlsxCellAddress>();
+  const anchors = new Map<number, XlsxCellAddress>();
+  const regionsByAnchor = new Map<number, GridMergeRegion>();
   for (const region of regions) {
+    regionsByAnchor.set(cellKey(region.start.row, region.start.col), region);
     for (let row = region.start.row; row <= region.end.row; row += 1) {
       for (let col = region.start.col; col <= region.end.col; col += 1) {
         if (row === region.start.row && col === region.start.col) continue;
-        anchors.set(`${row}:${col}`, region.start);
+        anchors.set(cellKey(row, col), region.start);
       }
     }
   }
   paintedMergeRegions = regions;
   paintedMergeAnchors = anchors;
+  paintedMergeRegionsByAnchor = regionsByAnchor;
 }
 
 function resolveMergeAnchor(cell: XlsxCellAddress): XlsxCellAddress {
-  return paintedMergeAnchors.get(`${cell.row}:${cell.col}`) ?? cell;
+  return paintedMergeAnchors.get(cellKey(cell.row, cell.col)) ?? cell;
 }
 
 function mergeRegionAtAnchor(cell: XlsxCellAddress): GridMergeRegion | undefined {
-  return paintedMergeRegions.find((region) =>
-    region.start.row === cell.row && region.start.col === cell.col,
-  );
+  return paintedMergeRegionsByAnchor.get(cellKey(cell.row, cell.col));
 }
 
 function hitTestCell(clientX: number, clientY: number): XlsxCellAddress | null {
@@ -1092,15 +1103,27 @@ function conditionalRuleBounds(scope: ConditionalFormatScope, rule: XlsxConditio
   return conditionalRuleRanges.resolve(scope, rule, () => normalizeConditionalFormatRanges(rule.ranges ?? []));
 }
 
+// Scratch result for `conditionalRulesForCell`: the paint loop only reads
+// index 0 and never keeps the list, so a single reused array replaces one
+// `filter()` allocation per visible cell per frame.
+const conditionalCellRules: XlsxConditionalFormatRule[] = [];
+const NO_CONDITIONAL_RULES: XlsxConditionalFormatRule[] = [];
+
 function conditionalRulesForCell(cell: XlsxCellAddress): XlsxConditionalFormatRule[] {
   const sheet = activeSheet.value;
   const rules = sheet?.conditionalFormatRules ?? [];
-  if (!sheet || !rules.length) return [];
+  conditionalCellRules.length = 0;
+  if (!sheet || !rules.length) return NO_CONDITIONAL_RULES;
   const scope = currentConditionalFormatScope(sheet);
   // Sorted by rule priority once per revision: index 0 is the rule Excel would
   // apply first, and filtering preserves that order.
   const ordered = conditionalRuleOrder.resolve(scope, rules, () => orderConditionalRules(rules));
-  return ordered.filter((rule) => conditionalRuleBounds(scope, rule).some((range) => cellInNormalizedRange(cell, range)));
+  for (const rule of ordered) {
+    if (conditionalRuleBounds(scope, rule).some((range) => cellInNormalizedRange(cell, range))) {
+      conditionalCellRules.push(rule);
+    }
+  }
+  return conditionalCellRules;
 }
 
 function conditionalRangeValues(scope: ConditionalFormatScope, rule: XlsxConditionalFormatRule): number[] {
@@ -1210,10 +1233,18 @@ function drawSparkline(ctx: CanvasRenderingContext2D, sparkline: XlsxSparkline, 
   ctx.restore();
 }
 
-function resolveCanvasCellStyle(
+/**
+ * Fills a caller-owned style object. The paint loop styles every visible cell on
+ * every frame, so returning fresh objects (the previous `base` / `resolvedStyle`
+ * / `context` trio) was the largest remaining per-cell allocation; the default
+ * path, with no `getCellStyle` prop, now allocates nothing.
+ */
+function resolveCanvasCellStyleInto(
+  target: CanvasCellStyle,
   cell: XlsxCellAddress,
   value: string,
-  workbookStyle?: XlsxResolvedCellStyle,
+  workbookStyle: XlsxResolvedCellStyle | undefined,
+  tableHeaderCells: ReadonlySet<number>,
 ): CanvasCellStyle {
   const sheet = activeSheet.value;
   const font = asStyleRecord(workbookStyle?.font);
@@ -1221,72 +1252,98 @@ function resolveCanvasCellStyle(
   const alignment = asStyleRecord(workbookStyle?.alignment);
   const fillStyle = resolveWorkbookFillStyle(fill, sheet?.themePalette);
   const fontColor = resolveWorkbookColor(asStyleRecord(font?.color), sheet?.themePalette);
-  const merged = Boolean(mergeRegionAtAnchor(cell));
-  const tableHeader = props.controller.tables.some((table) =>
-    cell.row === table.start.row && cell.col >= table.start.col && cell.col <= table.end.col,
-  );
-  const base: CanvasCellStyle = {
-    alignment: alignment?.horizontal === "center" || alignment?.horizontal === "right"
-      ? alignment.horizontal
-      : "left",
-    backgroundColor: fillStyle.backgroundColor || (props.isDark ? "#18181b" : "#ffffff"),
-    border: asStyleRecord(workbookStyle?.border) as Record<string, Record<string, unknown>> | undefined,
-    color: fontColor || (props.isDark ? "#e4e4e7" : "#18181b"),
-    fontFamily: typeof font?.name === "string" && font.name.trim() ? font.name : "Segoe UI",
-    fontSizePx: Math.max(8, (typeof font?.size === "number" ? font.size * 4 / 3 : 12) * gridZoomFactor(zoomScale.value)),
-    fontStyle: font?.italic ? "italic" : "normal",
-    fontWeight: font?.bold ? "700" : "400",
-    strike: Boolean(font?.strikethrough),
-    underline: Boolean(font?.underline && font.underline !== "none"),
-    vertical: alignment?.vertical === "top" || alignment?.vertical === "center"
-      ? alignment.vertical === "center" ? "middle" : "top"
-      : "bottom",
-    wrap: Boolean(alignment?.wrapText),
-  };
-  const resolvedStyle: Record<string, string | number | undefined> = {
-    backgroundColor: base.backgroundColor,
-    color: base.color,
-    fontFamily: base.fontFamily,
-    fontSize: base.fontSizePx,
-    fontStyle: base.fontStyle,
-    fontWeight: base.fontWeight,
-    textAlign: base.alignment,
-    whiteSpace: base.wrap ? "pre-wrap" : "nowrap",
-  };
+  target.alignment = alignment?.horizontal === "center" || alignment?.horizontal === "right"
+    ? alignment.horizontal
+    : "left";
+  target.backgroundColor = fillStyle.backgroundColor || (props.isDark ? "#18181b" : "#ffffff");
+  target.border = asStyleRecord(workbookStyle?.border) as Record<string, Record<string, unknown>> | undefined;
+  target.color = fontColor || (props.isDark ? "#e4e4e7" : "#18181b");
+  target.fontFamily = typeof font?.name === "string" && font.name.trim() ? font.name : "Segoe UI";
+  target.fontSizePx = Math.max(8, (typeof font?.size === "number" ? font.size * 4 / 3 : 12) * gridZoomFactor(zoomScale.value));
+  target.fontStyle = font?.italic ? "italic" : "normal";
+  target.fontWeight = font?.bold ? "700" : "400";
+  target.strike = Boolean(font?.strikethrough);
+  target.underline = Boolean(font?.underline && font.underline !== "none");
+  target.vertical = alignment?.vertical === "top" || alignment?.vertical === "center"
+    ? alignment.vertical === "center" ? "middle" : "top"
+    : "bottom";
+  target.wrap = Boolean(alignment?.wrapText);
+  const getCellStyle = props.getCellStyle;
+  if (!getCellStyle) return target;
+  // Host styles need the full cell context, so this branch keeps allocating.
   const context: XlsxCellStyleContext = {
     cell,
     hasChartHighlight: false,
     hasConditionalFormat: conditionalRulesForCell(cell).length > 0,
-    hasHyperlink: hyperlinksByCell.value.has(`${cell.row}:${cell.col}`),
+    hasHyperlink: hyperlinksByCell.value.has(cellKey(cell.row, cell.col)),
     hasValidation: false,
-    isMerged: merged,
-    isTableHeader: tableHeader,
-    resolvedStyle,
+    isMerged: paintedMergeRegionsByAnchor.has(cellKey(cell.row, cell.col)),
+    isTableHeader: tableHeaderCells.has(cellKey(cell.row, cell.col)),
+    resolvedStyle: {
+      backgroundColor: target.backgroundColor,
+      color: target.color,
+      fontFamily: target.fontFamily,
+      fontSize: target.fontSizePx,
+      fontStyle: target.fontStyle,
+      fontWeight: target.fontWeight,
+      textAlign: target.alignment,
+      whiteSpace: target.wrap ? "pre-wrap" : "nowrap",
+    },
     sheetName: sheet?.name ?? "",
     value,
     workbookSheetIndex: sheet?.workbookSheetIndex ?? 0,
   };
-  const override = props.getCellStyle?.(cell, context) ?? undefined;
-  if (!override) return base;
+  const override = getCellStyle(cell, context) ?? undefined;
+  if (!override) return target;
   const background = cssText(override.backgroundColor ?? override.background);
   const color = cssText(override.color);
   const fontFamily = cssText(override.fontFamily);
   const fontSize = Number.parseFloat(cssText(override.fontSize) ?? "");
   const textAlign = cssText(override.textAlign);
   const verticalAlign = cssText(override.verticalAlign);
+  if (background) target.backgroundColor = background;
+  if (color) target.color = color;
+  if (fontFamily) target.fontFamily = fontFamily;
+  if (Number.isFinite(fontSize)) target.fontSizePx = fontSize;
+  if (override.fontStyle) target.fontStyle = String(override.fontStyle);
+  if (override.fontWeight) target.fontWeight = String(override.fontWeight);
+  if (textAlign === "center" || textAlign === "right" || textAlign === "left") target.alignment = textAlign;
+  if (verticalAlign === "top" || verticalAlign === "middle" || verticalAlign === "bottom") target.vertical = verticalAlign;
+  if (override.whiteSpace === "pre-wrap" || override.whiteSpace === "normal") target.wrap = true;
+  return target;
+}
+
+/** Style object reused for every cell painted in one frame. */
+function createCanvasCellStyleScratch(): CanvasCellStyle {
   return {
-    ...base,
-    ...(background ? { backgroundColor: background } : {}),
-    ...(color ? { color } : {}),
-    ...(fontFamily ? { fontFamily } : {}),
-    ...(Number.isFinite(fontSize) ? { fontSizePx: fontSize } : {}),
-    ...(override.fontStyle ? { fontStyle: String(override.fontStyle) } : {}),
-    ...(override.fontWeight ? { fontWeight: String(override.fontWeight) } : {}),
-    ...(textAlign === "center" || textAlign === "right" || textAlign === "left" ? { alignment: textAlign } : {}),
-    ...(verticalAlign === "top" || verticalAlign === "middle" || verticalAlign === "bottom" ? { vertical: verticalAlign } : {}),
-    ...(override.whiteSpace === "pre-wrap" || override.whiteSpace === "normal" ? { wrap: true } : {}),
+    alignment: "left",
+    backgroundColor: "#ffffff",
+    color: "#18181b",
+    fontFamily: "Segoe UI",
+    fontSizePx: 12,
+    fontStyle: "normal",
+    fontWeight: "400",
+    strike: false,
+    underline: false,
+    vertical: "bottom",
+    wrap: false,
   };
 }
+
+/** Table header cells of the active sheet, keyed by `cellKey`. */
+function collectTableHeaderCells(): ReadonlySet<number> {
+  const tables = props.controller.tables ?? [];
+  if (!tables.length) return EMPTY_CELL_KEYS;
+  const headers = new Set<number>();
+  for (const table of tables) {
+    for (let col = table.start.col; col <= table.end.col; col += 1) {
+      headers.add(cellKey(table.start.row, col));
+    }
+  }
+  return headers;
+}
+
+const EMPTY_CELL_KEYS: ReadonlySet<number> = new Set<number>();
 
 function borderWidth(style: unknown): number {
   if (style === "medium" || style === "mediumDashed" || style === "mediumDashDot" || style === "mediumDashDotDot") return 2;
@@ -1572,6 +1629,31 @@ interface OverflowTextTask {
   y: number;
 }
 
+/** Reusable per-frame paint state; deferred overflow tasks snapshot it. */
+function createCellPaintStateScratch(): CellPaintState {
+  return {
+    style: createCanvasCellStyleScratch(),
+    conditional: null,
+    comment: undefined,
+    hyperlink: undefined,
+    sparkline: undefined,
+    value: "",
+    gridLines: false,
+    selected: false,
+    selectionFill: "",
+    gridColor: "",
+    textColor: "",
+    overflowWidth: undefined,
+    skipText: false,
+  };
+}
+
+function snapshotConditionalVisual(
+  conditional: ReturnType<typeof conditionalVisual>,
+): ReturnType<typeof conditionalVisual> {
+  return conditional ? { ...conditional } as ReturnType<typeof conditionalVisual> : null;
+}
+
 function paintBody(worksheet: ActiveWorksheet | null) {
   const canvas = bodyCanvasRef.value;
   if (!canvas) return;
@@ -1598,7 +1680,7 @@ function paintBody(worksheet: ActiveWorksheet | null) {
   const selFill = props.selectionFillColor || (props.isDark ? "rgba(37, 99, 235, 0.15)" : "rgba(37, 99, 235, 0.08)");
   const selBorder = props.selectionColor || "#2563eb";
   const viewport = { bottom: scrollTop.value + bh, left: scrollLeft.value, right: scrollLeft.value + bw, top: scrollTop.value };
-  const paintedBodyCells = new Set<string>();
+  const paintedBodyCells = new Set<number>();
   const overflowTextTasks: OverflowTextTask[] = [];
 
   ctx.fillStyle = bgColor;
@@ -1639,6 +1721,14 @@ function paintBody(worksheet: ActiveWorksheet | null) {
   }
 
   const sel = selection.value;
+  const tableHeaderCells = props.getCellStyle ? collectTableHeaderCells() : EMPTY_CELL_KEYS;
+  // One state object and one style object for the whole frame. Rebuilding a
+  // 14-field `CellPaintState` plus the style trio per visible cell was the bulk
+  // of the allocation churn while scrolling; deferred overflow tasks snapshot
+  // the two objects they keep a reference to.
+  const paintState = createCellPaintStateScratch();
+  const styleScratch = createCanvasCellStyleScratch();
+  const overflowNeighbourWidths: number[] = [];
 
   // Excel lets left-aligned text spill into adjacent empty cells. Only the
   // scrolling pass allows it: frozen strips keep their pinned-cell clipping.
@@ -1654,24 +1744,24 @@ function paintBody(worksheet: ActiveWorksheet | null) {
     const cellWidth = widths[displayCol] || 0;
     if (merge || style.wrap || style.alignment !== "left" || conditional?.kind === "iconSet") return cellWidth;
     if (!value || sparkline || (conditional?.kind === "dataBar" && !conditional.showValue)) return cellWidth;
-    const neighbourWidths: number[] = [];
+    overflowNeighbourWidths.length = 0;
     for (let nextCol = displayCol + 1; nextCol < widths.length; nextCol += 1) {
       const neighbour = getSheetCell(displayRow, nextCol);
       if (!neighbour) break;
-      const neighbourKey = `${neighbour.row}:${neighbour.col}`;
-      if (paintedMergeAnchors.has(neighbourKey) || mergeRegionAtAnchor(neighbour)) break;
+      const neighbourKey = cellKey(neighbour.row, neighbour.col);
+      if (paintedMergeAnchors.has(neighbourKey) || paintedMergeRegionsByAnchor.has(neighbourKey)) break;
       if (commentsByCell.value.has(neighbourKey) || sparklinesByCell.value.has(neighbourKey)) break;
       if (getGridCellDisplayValue(neighbour)) break;
-      neighbourWidths.push(widths[nextCol] || 0);
+      overflowNeighbourWidths.push(widths[nextCol] || 0);
     }
-    return resolveOverflowTextWidth(cellWidth, neighbourWidths);
+    return resolveOverflowTextWidth(cellWidth, overflowNeighbourWidths);
   };
 
   const paintBodyCell = (displayRow: number, displayCol: number, knownCell?: XlsxCellAddress | null): void => {
-    const paintKey = `${displayRow}:${displayCol}`;
+    const paintKey = cellKey(displayRow, displayCol);
     if (paintedBodyCells.has(paintKey)) return;
     const cell = knownCell === undefined ? getSheetCell(displayRow, displayCol) : knownCell;
-    if (!cell || paintedMergeAnchors.has(`${cell.row}:${cell.col}`)) return;
+    if (!cell || paintedMergeAnchors.has(cellKey(cell.row, cell.col))) return;
     paintedBodyCells.add(paintKey);
 
     const merge = mergeRegionAtAnchor(cell);
@@ -1685,28 +1775,46 @@ function paintBody(worksheet: ActiveWorksheet | null) {
     const colX = getColOffsetSum(displayCol);
     const rowY = getRowOffsetSum(displayRow);
     const value = getGridCellDisplayValue(cell);
-    const style = resolveCanvasCellStyle(cell, value, resolveCellWorkbookStyle(cell, worksheet, sheet));
-    const conditional = conditionalVisual(cell, value);
-    const sparkline = sparklinesByCell.value.get(`${cell.row}:${cell.col}`);
-    const state: CellPaintState = {
-      style,
-      conditional,
-      comment: commentsByCell.value.get(`${cell.row}:${cell.col}`),
-      hyperlink: hyperlinksByCell.value.get(`${cell.row}:${cell.col}`),
-      sparkline,
+    const style = resolveCanvasCellStyleInto(
+      styleScratch,
+      cell,
       value,
-      gridLines: Boolean(merge) && sheet.showGridLines !== false,
-      selected: isCellInRange(cell, sel) || Boolean(merge && sel && rangesIntersect(merge, sel)),
-      selectionFill: selFill,
-      gridColor,
-      textColor,
-    };
+      resolveCellWorkbookStyle(cell, worksheet, sheet),
+      tableHeaderCells,
+    );
+    const conditional = conditionalVisual(cell, value);
+    const cellKeyValue = cellKey(cell.row, cell.col);
+    const sparkline = sparklinesByCell.value.get(cellKeyValue);
+    const state = paintState;
+    state.style = style;
+    state.conditional = conditional;
+    state.comment = commentsByCell.value.get(cellKeyValue);
+    state.hyperlink = hyperlinksByCell.value.get(cellKeyValue);
+    state.sparkline = sparkline;
+    state.value = value;
+    state.gridLines = Boolean(merge) && sheet.showGridLines !== false;
+    state.selected = isCellInRange(cell, sel) || Boolean(merge && sel && rangesIntersect(merge, sel));
+    state.selectionFill = selFill;
+    state.gridColor = gridColor;
+    state.textColor = textColor;
+    state.overflowWidth = undefined;
+    state.skipText = false;
     const overflowWidth = resolveBodyOverflowWidth(displayRow, displayCol, value, merge, style, conditional, sparkline);
     if (overflowWidth > colW) {
       // Paint the background now and defer the text until every neighbour has
       // been filled; otherwise the empty neighbour background erases the spill.
-      drawCellContent(ctx, colX, rowY, colW, rowHResolved, { ...state, overflowWidth, skipText: true });
-      overflowTextTasks.push({ height: rowHResolved, state: { ...state, overflowWidth }, width: colW, x: colX, y: rowY });
+      state.overflowWidth = overflowWidth;
+      state.skipText = true;
+      drawCellContent(ctx, colX, rowY, colW, rowHResolved, state);
+      // The task outlives this cell, so it owns a snapshot of the two objects
+      // the shared state points at.
+      overflowTextTasks.push({
+        height: rowHResolved,
+        state: { ...state, conditional: snapshotConditionalVisual(conditional), style: { ...style } },
+        width: colW,
+        x: colX,
+        y: rowY,
+      });
     } else {
       drawCellContent(ctx, colX, rowY, colW, rowHResolved, state);
     }
@@ -1779,9 +1887,13 @@ function paintFrozenPanes(
     (_, offset) => visibleColRange.value.start + offset,
   ).filter((index) => (displayCols.value[index] ?? 0) >= freezeCol);
 
+  const tableHeaderCells = props.getCellStyle ? collectTableHeaderCells() : EMPTY_CELL_KEYS;
+  const paintState = createCellPaintStateScratch();
+  const styleScratch = createCanvasCellStyleScratch();
+
   const paintCell = (displayRow: number, displayCol: number, frozenY: boolean, frozenX: boolean) => {
     const cell = getSheetCell(displayRow, displayCol);
-    if (!cell || paintedMergeAnchors.has(`${cell.row}:${cell.col}`)) return;
+    if (!cell || paintedMergeAnchors.has(cellKey(cell.row, cell.col))) return;
     const merge = mergeRegionAtAnchor(cell);
     const mergeEnd = merge ? getDisplayCell(merge.end) : null;
     const width = mergeEnd
@@ -1793,20 +1905,30 @@ function paintFrozenPanes(
     const x = paneViewOffset(getColOffsetSum(displayCol), scrollLeft.value, frozenX);
     const y = paneViewOffset(getRowOffsetSum(displayRow), scrollTop.value, frozenY);
     const value = getGridCellDisplayValue(cell);
-    drawCellContent(ctx, x, y, width, height, {
-      style: resolveCanvasCellStyle(cell, value, resolveCellWorkbookStyle(cell, worksheet, sheet)),
-      conditional: conditionalVisual(cell, value),
-      comment: commentsByCell.value.get(`${cell.row}:${cell.col}`),
-      hyperlink: hyperlinksByCell.value.get(`${cell.row}:${cell.col}`),
-      sparkline: sparklinesByCell.value.get(`${cell.row}:${cell.col}`),
+    const cellKeyValue = cellKey(cell.row, cell.col);
+    const style = resolveCanvasCellStyleInto(
+      styleScratch,
+      cell,
       value,
-      gridLines: sheet.showGridLines !== false,
-      selected: isCellInRange(cell, selection.value)
-        || Boolean(merge && selection.value && rangesIntersect(merge, selection.value)),
-      selectionFill,
-      gridColor,
-      textColor,
-    });
+      resolveCellWorkbookStyle(cell, worksheet, sheet),
+      tableHeaderCells,
+    );
+    const state = paintState;
+    state.style = style;
+    state.conditional = conditionalVisual(cell, value);
+    state.comment = commentsByCell.value.get(cellKeyValue);
+    state.hyperlink = hyperlinksByCell.value.get(cellKeyValue);
+    state.sparkline = sparklinesByCell.value.get(cellKeyValue);
+    state.value = value;
+    state.gridLines = sheet.showGridLines !== false;
+    state.selected = isCellInRange(cell, selection.value)
+      || Boolean(merge && selection.value && rangesIntersect(merge, selection.value));
+    state.selectionFill = selectionFill;
+    state.gridColor = gridColor;
+    state.textColor = textColor;
+    state.overflowWidth = undefined;
+    state.skipText = false;
+    drawCellContent(ctx, x, y, width, height, state);
   };
 
   if (frozenRows.length && visibleCols.length) {
@@ -2171,7 +2293,7 @@ function onPointerMove(event: PointerEvent) {
   if (containerRef.value) {
     containerRef.value.style.cursor = axisHit?.resize
       ? axisHit.kind === "column" ? "col-resize" : "row-resize"
-      : axisHit ? "default" : hoveredCell.value && hyperlinksByCell.value.has(`${hoveredCell.value.row}:${hoveredCell.value.col}`) ? "pointer" : "cell";
+      : axisHit ? "default" : hoveredCell.value && hyperlinksByCell.value.has(cellKey(hoveredCell.value.row, hoveredCell.value.col)) ? "pointer" : "cell";
   }
   if (!isSelecting.value || !selectionAnchor.value) return;
   const cell = hitTestCell(event.clientX, event.clientY);
@@ -2220,7 +2342,7 @@ function onPointerLeave(): void {
 }
 
 function activateHyperlink(cell: XlsxCellAddress): void {
-  const hyperlink = hyperlinksByCell.value.get(`${cell.row}:${cell.col}`) as XlsxCellHyperlink | undefined;
+  const hyperlink = hyperlinksByCell.value.get(cellKey(cell.row, cell.col)) as XlsxCellHyperlink | undefined;
   if (!hyperlink) return;
   if (hyperlink.target.startsWith("#")) {
     const reference = hyperlink.target.slice(1);

@@ -1227,6 +1227,13 @@ export interface XlsxSheetThumbnail {
 
 export interface XlsxViewerThumbnails {
   paintThumbnail: (sheetIndex: number, canvas: HTMLCanvasElement | null) => boolean;
+  /**
+   * Warms the preview data (geometry and cell values) for the given sheets so a
+   * later `paintThumbnail` only draws. Callers schedule this on idle, hovered
+   * tabs first; the composable dedupes per sheet revision, caps how many sheets
+   * one call warms and ignores unknown indices.
+   */
+  prefetchThumbnails: (sheetIndices: readonly number[]) => void;
   thumbnails: XlsxSheetThumbnail[];
 }
 
