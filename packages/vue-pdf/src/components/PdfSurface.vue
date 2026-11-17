@@ -14,7 +14,7 @@
     <div v-else-if="loadError" class="pdf-surface__error" :data-error-code="loadError.code">
       {{ loadError.code }}: {{ loadError.message }}
     </div>
-    <div v-else-if="renderDocument" class="pdf-surface__pages">
+    <div v-else-if="renderDocument" class="pdf-surface__pages" :style="pageStackStyle">
       <div
         v-for="pageIndex in Array.from({ length: renderDocument.pageCount }, (_, i) => i)"
         :key="`page-${pageIndex}`"
@@ -113,6 +113,17 @@ import {
   pdfDisplaySize,
 } from "../pdf/pdf-coordinate-transform"
 import {
+  DEFAULT_PAGE_OVERSCAN,
+  computePageOffsets,
+  pageIndexAtPosition,
+  pageRangeEquals,
+  planPageRenders,
+  visiblePageRange,
+  type PdfPageBitmapState,
+  type PdfPageRange,
+  type PdfPageSlotSnapshot,
+} from "../pdf/pdf-page-viewport"
+import {
   nearestGlyphWithinContainingRun,
   wordRangeFromCharacterTexts,
 } from "../pdf/pdf-selection-interaction"
@@ -140,7 +151,7 @@ import {
 // ── Types ────────────────────────────────────────────────────────────
 interface PageSlot {
   url: string | null
-  state: "pending" | "loading" | "ready" | "error"
+  state: PdfPageBitmapState
 }
 
 // ── Props ────────────────────────────────────────────────────────────
@@ -456,8 +467,33 @@ const pdfRuntimeId = `pdf-surface-${
 const pdfTaskSequence = createOfficeTaskSequence(pdfRuntimeId)
 const pdfLoadCoordinator = createLatestTaskCoordinator(pdfTaskSequence)
 
-// ── Page slots ───────────────────────────────────────────────────────
+// ── Page slots & viewport-driven rasterization ───────────────────────
+// Only the pages near the viewport keep a rasterized bitmap. Everything else
+// stays a correctly sized placeholder until scrolling reaches it, so zoom,
+// rotation and resize re-rasterize the visible window instead of every page.
+const PDF_PAGE_GAP_PX = 8
+const PDF_PAGES_PADDING_TOP_PX = 16
+const PDF_FALLBACK_PAGE_HEIGHT_PX = 200
+/** Pages kept rasterized above and below the viewport. */
+const PDF_PAGE_OVERSCAN = DEFAULT_PAGE_OVERSCAN
+/** Trailing debounce so a fast scroll rasterizes only where it stops. */
+const PDF_SCROLL_RENDER_DEBOUNCE_MS = 100
+/** Debounce so a resize drag re-measures and re-renders once, not every frame. */
+const PDF_RESIZE_RENDER_DEBOUNCE_MS = 120
+const pageStackStyle = {
+  gap: `${PDF_PAGE_GAP_PX}px`,
+  paddingTop: `${PDF_PAGES_PADDING_TOP_PX}px`,
+}
+
 const pageSlots = reactive<Record<number, PageSlot>>({})
+const viewportHeightPx = ref(0)
+let pageLayoutCache: { key: string; offsets: number[]; heights: number[] } | undefined
+let renderedRange: PdfPageRange = { first: 0, last: -1 }
+let visiblePageIndex = -1
+let renderTimer: ReturnType<typeof setTimeout> | undefined
+let resizeTimer: ReturnType<typeof setTimeout> | undefined
+let scrollFrame: number | undefined
+let resizeObserver: ResizeObserver | undefined
 
 function initPageSlots(): void {
   for (const key of Object.keys(pageSlots)) delete pageSlots[Number(key)]
@@ -465,6 +501,112 @@ function initPageSlots(): void {
   for (let i = 0; i < renderDocument.value.pageCount; i++) {
     pageSlots[i] = { url: null, state: "pending" }
   }
+  renderedRange = { first: 0, last: -1 }
+  visiblePageIndex = -1
+}
+
+/** Revoke every rasterized page but keep the slot records for the new layout. */
+function resetPageSlots(): void {
+  for (const slot of Object.values(pageSlots)) {
+    if (slot.url) URL.revokeObjectURL(slot.url)
+    slot.url = null
+    if (slot.state !== "pending") slot.state = "pending"
+  }
+  renderedRange = { first: 0, last: -1 }
+}
+
+function invalidatePageLayout(): void {
+  pageLayoutCache = undefined
+}
+
+function pageLayoutKey(): string {
+  const doc = renderDocument.value
+  if (!doc) return "none"
+  return `${doc.id}:${doc.pageCount}:${zoom.value}:${rotation.value}`
+}
+
+/**
+ * Cached page offsets for the current document / zoom / rotation.
+ *
+ * Slot widths and heights are inline styles and the stack gap/padding are part
+ * of this component's own layout, so offsets are derived arithmetically once
+ * per layout change instead of reading one DOM node per page on every scroll.
+ */
+function pageLayout(): { offsets: number[]; heights: number[] } {
+  const key = pageLayoutKey()
+  if (pageLayoutCache?.key === key) return pageLayoutCache
+  const pageCount = renderDocument.value?.pageCount ?? 0
+  const heights: number[] = []
+  for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+    heights.push(pageDisplaySize(pageIndex)?.height ?? PDF_FALLBACK_PAGE_HEIGHT_PX)
+  }
+  pageLayoutCache = {
+    key,
+    offsets: computePageOffsets(heights, {
+      gap: PDF_PAGE_GAP_PX,
+      paddingTop: PDF_PAGES_PADDING_TOP_PX,
+    }),
+    heights,
+  }
+  return pageLayoutCache
+}
+
+function measureViewportHeight(): void {
+  const height = scrollRef.value?.clientHeight
+  if (typeof height === "number" && Number.isFinite(height) && height > 0) viewportHeightPx.value = height
+}
+
+function scrollTopPx(): number {
+  const top = scrollRef.value?.scrollTop
+  return typeof top === "number" && Number.isFinite(top) ? Math.max(0, top) : 0
+}
+
+function currentRenderRange(): PdfPageRange {
+  const doc = renderDocument.value
+  if (!doc || doc.pageCount <= 0) return { first: 0, last: -1 }
+  const { offsets, heights } = pageLayout()
+  return visiblePageRange(offsets, heights, {
+    scrollTop: scrollTopPx(),
+    viewportHeight: viewportHeightPx.value,
+    overscanPages: PDF_PAGE_OVERSCAN,
+  })
+}
+
+/** Release the bitmaps of pages that left the render window. */
+function releasePageBitmaps(pageIndexes: Iterable<number>): void {
+  for (const pageIndex of pageIndexes) {
+    const slot = pageSlots[pageIndex]
+    if (!slot) continue
+    if (slot.url) {
+      URL.revokeObjectURL(slot.url)
+      slot.url = null
+    }
+    if (slot.state !== "pending") slot.state = "pending"
+  }
+}
+
+function pageSlotSnapshots(): readonly PdfPageSlotSnapshot[] {
+  const pageCount = renderDocument.value?.pageCount ?? 0
+  const snapshots: PdfPageSlotSnapshot[] = []
+  for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+    const slot = pageSlots[pageIndex]
+    snapshots.push({ state: slot?.state ?? "pending", hasBitmap: !!slot?.url })
+  }
+  return snapshots
+}
+
+function cancelScheduledRender(): void {
+  if (renderTimer === undefined) return
+  clearTimeout(renderTimer)
+  renderTimer = undefined
+}
+
+function scheduleVisibleRender(delay = PDF_SCROLL_RENDER_DEBOUNCE_MS): void {
+  cancelScheduledRender()
+  renderTimer = setTimeout(() => {
+    renderTimer = undefined
+    void renderVisiblePages()
+  }, delay)
 }
 
 // ── Runtime helpers ──────────────────────────────────────────────────
@@ -495,6 +637,7 @@ function cancelRender(): void {
   renderGeneration++
   renderAbort?.abort()
   renderAbort = undefined
+  cancelScheduledRender()
 }
 
 async function releaseDocument(): Promise<void> {
@@ -508,6 +651,9 @@ async function releaseDocument(): Promise<void> {
     if (slot.url) URL.revokeObjectURL(slot.url)
   }
   for (const key of Object.keys(pageSlots)) delete pageSlots[Number(key)]
+  invalidatePageLayout()
+  renderedRange = { first: 0, last: -1 }
+  visiblePageIndex = -1
   const doc = renderDocument.value
   const rt = runtimeForDocument
   renderDocument.value = null
@@ -537,38 +683,55 @@ function toOfficeSource(source: PdfSource): OfficeSource {
   }
 }
 
-// ── Render all pages sequentially ────────────────────────────────────
-async function renderAllPages(requestId: number, parentSignal?: AbortSignal): Promise<void> {
+// ── Render the pages near the viewport sequentially ──────────────────
+async function renderVisiblePages(): Promise<void> {
   const doc = renderDocument.value
   const rt = runtimeForDocument
   if (!doc || !rt) return
   const gen = ++renderGeneration
   renderAbort?.abort()
-  const { controller, unlink } = createLinkedAbort(parentSignal)
+  const { controller, unlink } = createLinkedAbort()
   renderAbort = controller
+  const range = currentRenderRange()
+  renderedRange = range
+  const plan = planPageRenders(pageSlotSnapshots(), range)
+  releasePageBitmaps(plan.release)
 
-  for (let i = 0; i < doc.pageCount; i++) {
-    if (controller.signal.aborted || gen !== renderGeneration || requestId !== latestRequestId) return
-    const slot = pageSlots[i]
-    if (!slot || slot.state === "ready") continue
-    slot.state = "loading"
-    try {
-      const blob = await rt.renderPage(doc, i, {
-        scale: zoom.value,
-        rotation: rotation.value,
-        dpr: typeof devicePixelRatio === "number" ? Math.min(2, Math.max(1, devicePixelRatio)) : 1,
-        signal: controller.signal,
-      })
-      if (controller.signal.aborted || gen !== renderGeneration || requestId !== latestRequestId) return
-      const url = URL.createObjectURL(blob)
-      if (slot.url) URL.revokeObjectURL(slot.url)
-      slot.url = url
-      slot.state = "ready"
-      void ensurePageContentHash(i)
-    } catch (err) {
-      if ((err as Error)?.name === "AbortError" || controller.signal.aborted) return
-      slot.state = "error"
+  try {
+    for (const pageIndex of plan.render) {
+      if (controller.signal.aborted || gen !== renderGeneration) return
+      if (renderDocument.value !== doc || runtimeForDocument !== rt) return
+      const slot = pageSlots[pageIndex]
+      if (!slot || slot.state === "ready") continue
+      slot.state = "loading"
+      try {
+        const blob = await rt.renderPage(doc, pageIndex, {
+          scale: zoom.value,
+          rotation: rotation.value,
+          dpr: typeof devicePixelRatio === "number" ? Math.min(2, Math.max(1, devicePixelRatio)) : 1,
+          signal: controller.signal,
+        })
+        if (controller.signal.aborted || gen !== renderGeneration) return
+        if (renderDocument.value !== doc || runtimeForDocument !== rt) return
+        if (pageSlots[pageIndex] !== slot) continue
+        const url = URL.createObjectURL(blob)
+        if (slot.url) URL.revokeObjectURL(slot.url)
+        slot.url = url
+        slot.state = "ready"
+        void ensurePageContentHash(pageIndex)
+      } catch (err) {
+        if ((err as Error)?.name === "AbortError" || controller.signal.aborted) return
+        if (gen === renderGeneration) slot.state = "error"
+      }
     }
+    // Scrolling during a render pass can move the window past the pages just
+    // rasterized; schedule one follow-up pass instead of leaving blanks.
+    if (!controller.signal.aborted && gen === renderGeneration) {
+      if (!pageRangeEquals(currentRenderRange(), renderedRange)) scheduleVisibleRender(0)
+    }
+  } finally {
+    unlink()
+    if (renderAbort === controller) renderAbort = undefined
   }
 }
 
@@ -615,7 +778,9 @@ async function load(): Promise<void> {
     initPageSlots()
     emit("document-load-success", openedDocument.pageCount)
     loading.value = false
-    void renderAllPages(requestId, task.signal)
+    invalidatePageLayout()
+    measureViewportHeight()
+    scheduleVisibleRender(0)
     prefetchPageGeometry(0)
   } catch (cause) {
     if (openedDocument && selectedRuntime) {
@@ -634,8 +799,11 @@ async function load(): Promise<void> {
 watch([zoom, rotation], () => {
   if (!renderDocument.value) return
   cancelRender()
-  initPageSlots()
-  void renderAllPages(latestRequestId)
+  // Every bitmap is stale at the new scale/rotation: drop them and rasterize
+  // only the pages the viewport shows instead of the whole document.
+  resetPageSlots()
+  invalidatePageLayout()
+  scheduleVisibleRender(0)
 })
 
 watch(effectiveSource, () => {
@@ -1096,17 +1264,44 @@ function onCopy(event: ClipboardEvent): void {
 
 // ── Scroll tracking ──────────────────────────────────────────────────
 function onScroll(): void {
-  const el = scrollRef.value
-  if (!el || !renderDocument.value) return
-  const center = el.scrollTop + el.clientHeight / 2
-  let current = 0
-  for (let i = 0; i < renderDocument.value.pageCount; i++) {
-    const slot = el.querySelector(`[data-page-index="${i}"]`) as HTMLElement | null
-    if (!slot) continue
-    if (slot.offsetTop <= center) current = i
+  if (!renderDocument.value) return
+  if (scrollFrame !== undefined) return
+  if (typeof requestAnimationFrame !== "function") {
+    flushScrollFrame()
+    return
   }
-  emit("visible-page-change", current)
-  prefetchPageGeometry(current)
+  scrollFrame = requestAnimationFrame(() => {
+    scrollFrame = undefined
+    flushScrollFrame()
+  })
+}
+
+function cancelScrollFrame(): void {
+  if (scrollFrame === undefined) return
+  if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(scrollFrame)
+  scrollFrame = undefined
+}
+
+function flushScrollFrame(): void {
+  const doc = renderDocument.value
+  if (!doc || !scrollRef.value) return
+  // A container without a ResizeObserver keeps its mount-time height; re-read it
+  // once there is no cached value instead of on every frame.
+  if (viewportHeightPx.value <= 0) measureViewportHeight()
+  const { offsets, heights } = pageLayout()
+  const pageIndex = pageIndexAtPosition(
+    offsets,
+    heights,
+    scrollTopPx() + viewportHeightPx.value / 2,
+  )
+  if (pageIndex !== visiblePageIndex) {
+    visiblePageIndex = pageIndex
+    emit("visible-page-change", pageIndex)
+    prefetchPageGeometry(pageIndex)
+  }
+  if (!pageRangeEquals(currentRenderRange(), renderedRange)) {
+    scheduleVisibleRender(PDF_SCROLL_RENDER_DEBOUNCE_MS)
+  }
 }
 
 function onContextMenu(event: MouseEvent): void {
@@ -1114,14 +1309,8 @@ function onContextMenu(event: MouseEvent): void {
   if (!el || !renderDocument.value) return
   const rect = el.getBoundingClientRect()
   const clickY = event.clientY - rect.top + el.scrollTop
-  let pageIndex = 0
-  for (let i = 0; i < renderDocument.value.pageCount; i++) {
-    const slot = el.querySelector(`[data-page-index="${i}"]`) as HTMLElement | null
-    if (!slot) continue
-    if (clickY >= slot.offsetTop && clickY < slot.offsetTop + slot.offsetHeight) {
-      pageIndex = i; break
-    }
-  }
+  const { offsets, heights } = pageLayout()
+  const pageIndex = pageIndexAtPosition(offsets, heights, clickY)
   emit("contextMenu", {
     pageIndex,
     clientX: event.clientX,
@@ -1267,7 +1456,23 @@ onMounted(() => {
   element.addEventListener("gesturestart", onGestureStart, { passive: false })
   element.addEventListener("gesturechange", onGestureChange as EventListener, { passive: false })
   element.addEventListener("gestureend", onGestureEnd)
+  measureViewportHeight()
+  const ResizeObserverConstructor = globalThis.ResizeObserver
+  if (typeof ResizeObserverConstructor === "function") {
+    resizeObserver = new ResizeObserverConstructor(() => onSurfaceResize())
+    resizeObserver.observe(element)
+  }
+  if (renderDocument.value) scheduleVisibleRender(0)
 })
+
+function onSurfaceResize(): void {
+  if (resizeTimer !== undefined) clearTimeout(resizeTimer)
+  resizeTimer = setTimeout(() => {
+    resizeTimer = undefined
+    measureViewportHeight()
+    scheduleVisibleRender(0)
+  }, PDF_RESIZE_RENDER_DEBOUNCE_MS)
+}
 
 // ── Expose ───────────────────────────────────────────────────────────
 function scrollToPage(pageIndex: number): void {
@@ -1275,6 +1480,9 @@ function scrollToPage(pageIndex: number): void {
   if (!el) return
   const slot = el.querySelector(`[data-page-index="${pageIndex}"]`) as HTMLElement | null
   slot?.scrollIntoView({ behavior: "smooth", block: "start" })
+  // Programmatic scrolling may not emit a scroll event (already at the target,
+  // reduced motion); rasterize whichever page ends up in the viewport anyway.
+  scheduleVisibleRender()
 }
 
 function onSurfaceEscape(): void {
@@ -1322,6 +1530,14 @@ defineExpose({
 onBeforeUnmount(async () => {
   unmounted = true
   gestureToken += 1
+  cancelScrollFrame()
+  cancelScheduledRender()
+  if (resizeTimer !== undefined) {
+    clearTimeout(resizeTimer)
+    resizeTimer = undefined
+  }
+  resizeObserver?.disconnect()
+  resizeObserver = undefined
   const element = scrollRef.value
   element?.removeEventListener("wheel", onZoomWheel)
   element?.removeEventListener("gesturestart", onGestureStart)
@@ -1352,7 +1568,9 @@ onBeforeUnmount(async () => {
 }
 .pdf-surface__pages {
   display: flex; flex-direction: column; align-items: center;
-  gap: 8px; padding: 16px 8px;
+  /* Vertical gap and top padding are bound inline from PDF_PAGE_GAP_PX /
+     PDF_PAGES_PADDING_TOP_PX so the cached page offsets cannot drift. */
+  padding: 0 8px 16px;
 }
 .pdf-surface__page-slot {
   position: relative;
