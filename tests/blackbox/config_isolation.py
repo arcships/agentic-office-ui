@@ -122,25 +122,45 @@ def run_attempt(browser, attempt: int) -> dict[str, object]:
         )
         diagnostics_a = json.loads(page.get_by_test_id("runtime-a-diagnostics").inner_text())
         diagnostics_b = json.loads(page.get_by_test_id("runtime-b-diagnostics").inner_text())
+        runtime_a_id = page.get_by_test_id("runtime-a").get_attribute("data-runtime-id")
+        runtime_b_id = page.get_by_test_id("runtime-b").get_attribute("data-runtime-id")
+        assert runtime_a_id and runtime_b_id, (runtime_a_id, runtime_b_id)
+        assert runtime_a_id != runtime_b_id, (runtime_a_id, runtime_b_id)
         runtime_ids_a = {item.get("runtimeId") for item in diagnostics_a if item.get("runtimeId")}
-        runtime_ids_b = {item.get("runtimeId") for item in diagnostics_b if item.get("runtimeId")}
-        assert len(runtime_ids_a) == 1, runtime_ids_a
-        assert len(runtime_ids_b) == 1, runtime_ids_b
-        assert runtime_ids_a.isdisjoint(runtime_ids_b), (runtime_ids_a, runtime_ids_b)
+        assert runtime_ids_a == {runtime_a_id}, (runtime_ids_a, runtime_a_id)
         assert all("runtime=alpha" in item.get("wasmUrl", "") for item in diagnostics_a if item.get("wasmUrl")), diagnostics_a
-        assert all("runtime=beta" in item.get("wasmUrl", "") for item in diagnostics_b if item.get("wasmUrl")), diagnostics_b
-        assert all(str(item.get("requestId", "")).startswith(next(iter(runtime_ids_a)) + ":") for item in diagnostics_a if item.get("requestId") and not str(item.get("requestId")).startswith("page:")), diagnostics_a
-        assert all(str(item.get("requestId", "")).startswith(next(iter(runtime_ids_b)) + ":") for item in diagnostics_b if item.get("requestId") and not str(item.get("requestId")).startswith("page:")), diagnostics_b
+        assert all(str(item.get("requestId", "")).startswith(runtime_a_id + ":") for item in diagnostics_a if item.get("requestId") and not str(item.get("requestId")).startswith("page:")), diagnostics_a
+
+        assert page.get_by_test_id("runtime-a-status").get_attribute("data-state") == "ready"
+        assert page.get_by_test_id("runtime-b-status").get_attribute("data-state") == "error"
+        assert page.get_by_test_id("runtime-b").get_attribute("data-demo-rejection") == "input-size"
+        sample_bytes = (ROOT / "apps/demo/public/samples/invoice-table.docx").stat().st_size
+        isolation_limit = int(page.get_by_test_id("runtime-b-input-limit").inner_text().split("=", 1)[1])
+        isolation_error = page.get_by_test_id("runtime-b-error")
+        error_details = {
+            "code": isolation_error.get_attribute("data-error-code"),
+            "phase": isolation_error.get_attribute("data-error-phase"),
+            "limit": isolation_error.get_attribute("data-error-limit"),
+            "actual": int(isolation_error.get_attribute("data-error-actual")),
+            "allowed": int(isolation_error.get_attribute("data-error-allowed")),
+        }
+        assert error_details["code"] == "LIMIT_EXCEEDED", error_details
+        assert error_details["phase"] == "input", error_details
+        assert error_details["limit"] == "maxInputBytes", error_details
+        assert error_details["allowed"] == isolation_limit < sample_bytes, (error_details, sample_bytes)
+        assert error_details["actual"] == sample_bytes, (error_details, sample_bytes)
+        # Runtime B never reached the Worker/WASM path: the input limit fired first.
+        assert not diagnostics_b, diagnostics_b
 
         wasm_responses = [
             item for item in evidence.events["responses"]
             if ".wasm?runtime=" in str(item.get("url", ""))
         ]
         assert any("runtime=alpha" in str(item["url"]) and item["status"] == 200 for item in wasm_responses), wasm_responses
-        assert any("runtime=beta" in str(item["url"]) and item["status"] == 200 for item in wasm_responses), wasm_responses
+        assert not any("runtime=beta" in str(item["url"]) for item in wasm_responses), wasm_responses
         assert all("application/wasm" in str(item["contentType"]) for item in wasm_responses), wasm_responses
         resources_ready = page.evaluate("() => ({ ...window.__p2ConfigResources })")
-        assert resources_ready["createdWorkers"] >= 2, resources_ready
+        assert resources_ready["createdWorkers"] >= 1, resources_ready
         assert resources_ready["activeWorkers"] == 0, resources_ready
 
         page.screenshot(path=str(attempt_dir / "two-runtimes-ready.png"), full_page=True)
@@ -154,7 +174,11 @@ def run_attempt(browser, attempt: int) -> dict[str, object]:
             "attempt": attempt,
             "status": "PASS",
             "runtimeIdsA": sorted(runtime_ids_a),
-            "runtimeIdsB": sorted(runtime_ids_b),
+            "runtimeIdB": runtime_b_id,
+            "isolationLimit": isolation_limit,
+            "isolationError": error_details,
+            "sampleBytes": sample_bytes,
+            "diagnosticsB": diagnostics_b,
             "wasmResponses": wasm_responses,
             "resourcesReady": resources_ready,
             "resourcesUnmounted": resources_unmounted,

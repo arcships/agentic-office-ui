@@ -139,6 +139,14 @@ def run_attempt(browser, case_id: str, button: str, expected_state: str, attempt
 
         error_code = page.get_by_test_id("worker-error-code").inner_text().strip()
         error_phase = page.get_by_test_id("worker-error-phase").inner_text().strip()
+        error_limit = page.get_by_test_id("worker-error-limit").inner_text().strip()
+        error_actual_text = page.get_by_test_id("worker-error-actual").inner_text().strip()
+        error_allowed_text = page.get_by_test_id("worker-error-allowed").inner_text().strip()
+        error_actual = int(error_actual_text) if error_actual_text else 0
+        error_allowed = int(error_allowed_text) if error_allowed_text else 0
+        configured_parse_limit = int(
+            page.get_by_test_id("worker-configured-parse-limit").inner_text().strip()
+        )
         terminated = int(page.get_by_test_id("worker-terminated-count").inner_text())
         recovered_sheets = int(page.get_by_test_id("worker-recovered-sheets").inner_text())
         heartbeat = int(page.get_by_test_id("worker-heartbeat-count").inner_text())
@@ -148,6 +156,10 @@ def run_attempt(browser, case_id: str, button: str, expected_state: str, attempt
         if case_id == "STRESS-005-TIMEOUT-RECOVERY":
             assert error_code == "TIMEOUT", error_code
             assert error_phase == "parse", error_phase
+            assert error_limit == "maxParseMs", error_limit
+            assert configured_parse_limit > 0, configured_parse_limit
+            assert error_allowed == configured_parse_limit, (error_allowed, configured_parse_limit)
+            assert error_actual > error_allowed, (error_actual, error_allowed)
             assert recovered_sheets > 0, recovered_sheets
             assert resources["created"] >= 2, resources
             assert any(
@@ -172,6 +184,10 @@ def run_attempt(browser, case_id: str, button: str, expected_state: str, attempt
             "state": expected_state,
             "errorCode": error_code,
             "errorPhase": error_phase,
+            "errorLimit": error_limit,
+            "errorActual": error_actual,
+            "errorAllowed": error_allowed,
+            "configuredParseLimit": configured_parse_limit,
             "terminatedCount": terminated,
             "recoveredSheets": recovered_sheets,
             "heartbeat": heartbeat,
