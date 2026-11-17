@@ -66,6 +66,7 @@ const suites = {
       "tests/unit/i18n.test.mjs",
       "tests/unit/image-budget.test.mjs",
       "tests/unit/docx-core.test.mjs",
+      "tests/unit/docx-form-field-required.test.mjs",
       "tests/unit/docx-model-preservation.test.mjs",
       "tests/unit/docx-notes.test.mjs",
       "tests/unit/docx-page-appearance.test.mjs",

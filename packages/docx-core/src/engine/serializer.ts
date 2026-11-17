@@ -9,12 +9,16 @@ import {
   applyPreservedSectionBreaksToDocumentXml,
   modelNeedsSectionBreakSerialization
 } from "./section-break-serialization";
+import {
+  applyFormFieldRequiredToDocumentXml,
+  modelNeedsFormFieldRequiredPatch
+} from "./form-field-serialization";
 import { mapsToWasmPackage, wasmModelToDocumentXml, wasmSerializeDocx } from "./wasm";
 
 /**
- * Both serialization patches rewrite the same document part, so they run in
- * order: preserved section breaks first (they live in `w:pPr`), then the
- * comment range markers derived from the model's character offsets.
+ * All serialization patches rewrite the same document part, so they run in
+ * order: preserved section breaks (they live in `w:pPr`), comment range
+ * markers derived from character offsets, then required form-field flags.
  */
 function patchDocumentXml(documentXml: string, model: DocModel): string {
   let patched = documentXml;
@@ -24,14 +28,19 @@ function patchDocumentXml(documentXml: string, model: DocModel): string {
   if (modelNeedsCommentRangeSerialization(model)) {
     patched = applyCommentRangesToDocumentXml(patched, model);
   }
+  if (modelNeedsFormFieldRequiredPatch(model)) {
+    patched = applyFormFieldRequiredToDocumentXml(patched, model);
+  }
   return patched;
 }
 
 function modelNeedsDocumentXmlPatch(model: DocModel): boolean {
   return (
     modelNeedsSectionBreakSerialization(model) ||
-    modelNeedsCommentRangeSerialization(model)
+    modelNeedsCommentRangeSerialization(model) ||
+    modelNeedsFormFieldRequiredPatch(model)
   );
+}
 }
 
 function patchPackageDocumentXml(

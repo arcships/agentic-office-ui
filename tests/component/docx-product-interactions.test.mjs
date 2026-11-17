@@ -810,6 +810,38 @@ test("typing in a form field keeps the selection and creates one undo step", asy
   mounted.app.unmount();
 });
 
+test("blurring a text field produces one undo step for the whole edit", async () => {
+  const mounted = await mountFormFieldLayer([
+    {
+      type: "paragraph",
+      children: [{ type: "form-field", fieldType: "text" }],
+    },
+  ]);
+  const input = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "text",
+  );
+  input.props.onFocus();
+
+  for (const value of ["2", "20", "202", "2026", "2026-", "2026-11", "2026-11-16"]) {
+    input.props.onInput({ target: { value } });
+    assert.deepEqual(
+      mounted.controller.selectedFormField?.location,
+      formFieldLocation(0),
+      "the field must stay selected while typing",
+    );
+  }
+  input.props.onBlur({ target: { value: "2026-11-16" } });
+  await vue.nextTick();
+
+  assert.equal(
+    countUndoSteps(mounted.controller),
+    1,
+    "blurring must close a single coalesced history entry",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
 test("read-only toolbar keeps zoom outside the disabled fieldset", async () => {
   let controller;
   const Harness = vue.defineComponent({
@@ -883,6 +915,118 @@ test("toolbar indent buttons change list depth and disable outside lists", async
   await vue.nextTick();
   indent = findByTestId(mounted.root, "editor-indent");
   assert.equal(indent.props.disabled, true);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("required text fields show an error on blur and block export", async () => {
+  const mounted = await mountFormFieldLayer([
+    {
+      type: "paragraph",
+      children: [
+        {
+          type: "form-field",
+          fieldType: "text",
+          required: true,
+          widget: { name: "Employee" },
+        },
+      ],
+    },
+  ]);
+  const wrapper = walk(mounted.root).find(
+    (node) => node.props?.["data-docx-form-field"] === true,
+  );
+  assert.equal(wrapper.props["data-docx-form-field-required"], "true");
+
+  let input = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "text",
+  );
+  assert.equal(input.props["aria-required"], "true");
+
+  input.props.onBlur({ target: { value: "" } });
+  await vue.nextTick();
+  let error = walk(mounted.root).find((node) =>
+    String(node.props?.class || "").includes("docx-form-error")
+  );
+  assert.ok(error, "required fields must show an error on blur");
+  assert.match(textContent(error), /This field is required/);
+  input = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "text",
+  );
+  assert.equal(input.props["aria-invalid"], "true");
+
+  mounted.controller.exportDocx();
+  assert.equal(
+    mounted.controller.status,
+    'Cannot export: required form field "Employee" is empty',
+  );
+  assert.deepEqual(mounted.controller.selectedFormField?.location, {
+    kind: "paragraph",
+    nodeIndex: 0,
+    childIndex: 0,
+  });
+
+  input.props.onInput({ target: { value: "Ada" } });
+  await vue.nextTick();
+  input = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "text",
+  );
+  input.props.onBlur({ target: { value: "Ada" } });
+  await vue.nextTick();
+  assert.equal(
+    walk(mounted.root).some((node) =>
+      String(node.props?.class || "").includes("docx-form-error")
+    ),
+    false,
+  );
+  assert.equal(
+    mounted.controller.model.nodes[0].children[0].required,
+    true,
+    "editing a form field must keep its required flag",
+  );
+
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("required checkboxes must be checked before they validate", async () => {
+  const mounted = await mountFormFieldLayer([
+    {
+      type: "paragraph",
+      children: [
+        { type: "form-field", fieldType: "checkbox", required: true, title: "Accept" },
+      ],
+    },
+  ]);
+  let checkbox = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "checkbox",
+  );
+  assert.equal(checkbox.props["aria-required"], "true");
+
+  checkbox.props.onBlur({ target: { checked: false } });
+  await vue.nextTick();
+  assert.match(
+    textContent(
+      walk(mounted.root).find((node) =>
+        String(node.props?.class || "").includes("docx-form-error")
+      ),
+    ),
+    /This field is required/,
+  );
+
+  checkbox.props.onChange();
+  await vue.nextTick();
+  checkbox = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "checkbox",
+  );
+  checkbox.props.onBlur({ target: { checked: true } });
+  await vue.nextTick();
+  assert.equal(
+    walk(mounted.root).some((node) =>
+      String(node.props?.class || "").includes("docx-form-error")
+    ),
+    false,
+  );
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });

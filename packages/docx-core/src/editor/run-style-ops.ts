@@ -503,6 +503,7 @@ export function parseParagraphsFromClipboard(input: string): ParagraphNode[] | u
             tag: typeof run.tag === "string" ? run.tag : undefined,
             title: typeof run.title === "string" ? run.title : undefined,
             placeholder: typeof run.placeholder === "string" ? run.placeholder : undefined,
+            required: typeof run.required === "boolean" ? run.required : undefined,
             checked: typeof run.checked === "boolean" ? run.checked : undefined,
             value: typeof run.value === "string" ? run.value : undefined,
             options: options && options.length > 0 ? options : undefined,

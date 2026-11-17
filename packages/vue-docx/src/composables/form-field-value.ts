@@ -14,6 +14,33 @@ export interface FormFieldValidationResult {
   error?: string
 }
 
+export interface FormFieldValidationOptions {
+  /** Reject empty required fields. Used on blur and before export. */
+  enforceRequired?: boolean
+}
+
+export const FORM_FIELD_REQUIRED_ERROR = "This field is required."
+
+/** Current model value, normalized for validation and export checks. */
+export function formFieldCurrentValue(field: FormFieldRunNode): string {
+  if (field.fieldType === "checkbox") {
+    const explicit = field.value?.trim().toLowerCase()
+    return field.checked === true || explicit === "1" || explicit === "true"
+      ? "1"
+      : "0"
+  }
+  return field.value ?? ""
+}
+
+/** True when a required field has no usable value yet. */
+export function isRequiredFormFieldEmpty(field: FormFieldRunNode): boolean {
+  if (field.required !== true) return false
+  if (field.fieldType === "checkbox") {
+    return formFieldCurrentValue(field) !== "1"
+  }
+  return formFieldCurrentValue(field).trim() === ""
+}
+
 interface DateParts {
   year: number
   month: number
@@ -273,9 +300,19 @@ function normalizeDropdownValue(
  */
 export function validateFormFieldValue(
   field: FormFieldRunNode,
-  rawValue: string
+  rawValue: string,
+  options: FormFieldValidationOptions = {}
 ): FormFieldValidationResult {
   const value = typeof rawValue === "string" ? rawValue : ""
+
+  if (options.enforceRequired === true && field.required === true) {
+    const empty = field.fieldType === "checkbox"
+      ? value.trim() !== "1" && value.trim().toLowerCase() !== "true"
+      : value.trim() === ""
+    if (empty) {
+      return { valid: false, value, error: FORM_FIELD_REQUIRED_ERROR }
+    }
+  }
 
   if (field.fieldType === "checkbox") {
     const normalized = value.trim().toLowerCase()
