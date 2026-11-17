@@ -31,9 +31,19 @@ export type PlotRect = {
   width: number;
 };
 
+export type ChartLegendMetrics = {
+  entryLines: string[][];
+  height: number;
+  maxTextWidth: number;
+  rowHeights: number[];
+  rows: number[][];
+  width: number;
+};
+
 export type ChartLayout = {
   height: number;
   legendItems: LegendItem[];
+  legendMetrics?: ChartLegendMetrics;
   legendPosition: string | undefined;
   plot: PlotRect;
   titleHeight: number;

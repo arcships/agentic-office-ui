@@ -1,7 +1,7 @@
 /** @jsxImportSource vue */
 import type { XlsxChart, XlsxChartAxis, XlsxChartSeries } from "@arcships/xlsx-core";
 import { safeNumber, normalizeCategoryLabel, clamp, normalizeRendererHexColor, lightenColor, darkenColor } from "./chart-shared";
-import { formatExcelSerial, isLikelyDateFormatCode } from "./chart-date";
+import { formatExcelDateSerial, isLikelyDateFormatCode } from "./chart-date";
 import type { ComboRenderableGroup } from "./chart-types";
 
 export function chartSeriesColor(chart: XlsxChart, seriesIndex: number) {
@@ -232,6 +232,224 @@ export {
 } from "./chart-date";
 export type { ExcelSerialFormatOptions } from "./chart-date";
 
+export type ParsedExcelNumberFormat = {
+  currencySuffix: string;
+  currencySymbol: string;
+  grouping: boolean;
+  kind: "currency" | "date" | "number" | "percent";
+  maxDecimals: number;
+  minDecimals: number;
+  prefix: string;
+  suffix: string;
+};
+
+const EXCEL_CURRENCY_SYMBOLS = ["R$", "$", "€", "£", "¥", "￥", "₹", "₩", "₽", "₪", "₫", "฿"];
+
+function splitExcelFormatSections(formatCode: string) {
+  const sections: string[] = [];
+  let current = "";
+  let quoted = false;
+  let bracketed = false;
+  for (const character of Array.from(formatCode)) {
+    if (character === "\"" && !bracketed) {
+      quoted = !quoted;
+    } else if (character === "[" && !quoted) {
+      bracketed = true;
+    } else if (character === "]" && !quoted) {
+      bracketed = false;
+    }
+    if (character === ";" && !quoted && !bracketed) {
+      sections.push(current);
+      current = "";
+      continue;
+    }
+    current += character;
+  }
+  sections.push(current);
+  return sections;
+}
+
+function findCurrencySymbol(value: string) {
+  for (const symbol of EXCEL_CURRENCY_SYMBOLS) {
+    if (value.includes(symbol)) {
+      return symbol;
+    }
+  }
+  return "";
+}
+
+export function parseExcelNumberFormat(formatCode: string | undefined): ParsedExcelNumberFormat {
+  const raw = (formatCode ?? "").trim();
+  if (isLikelyDateFormatCode(raw)) {
+    return {
+      currencySuffix: "",
+      currencySymbol: "",
+      grouping: false,
+      kind: "date",
+      maxDecimals: 0,
+      minDecimals: 0,
+      prefix: "",
+      suffix: ""
+    };
+  }
+
+  const section = splitExcelFormatSections(raw)[0] ?? "";
+  let currencySymbol = "";
+  let text = section.replace(/\[([^\]]*)\]/g, (_match, inner: string) => {
+    const content = String(inner);
+    if (content.startsWith("$")) {
+      const symbol = content.slice(1).split("-")[0] ?? "";
+      if (symbol) {
+        currencySymbol = symbol;
+        return symbol;
+      }
+    }
+    return "";
+  });
+  text = text
+    .replace(/\\(.)/g, "$1")
+    .replace(/"([^"]*)"/g, "$1")
+    .replace(/[_*]./g, "");
+
+  const percent = text.includes("%");
+  if (!currencySymbol) {
+    currencySymbol = findCurrencySymbol(text);
+  }
+
+  const numericMatch = /[0#?][0#?,.]*/.exec(text);
+  if (!numericMatch || numericMatch.index == null) {
+    return {
+      currencySuffix: "",
+      currencySymbol,
+      grouping: /,/.test(text),
+      kind: currencySymbol ? "currency" : "number",
+      maxDecimals: 0,
+      minDecimals: 0,
+      prefix: text.trim(),
+      suffix: ""
+    };
+  }
+
+  const numericStart = numericMatch.index;
+  const numericEnd = numericStart + numericMatch[0].length;
+  const numericPattern = text.slice(numericStart, numericEnd);
+  const decimalMatch = /\.([0#?]+)/.exec(numericPattern);
+  const decimalPlaceholders = decimalMatch?.[1] ?? "";
+  const minDecimals = (decimalPlaceholders.match(/0/g) ?? []).length;
+  const maxDecimals = decimalPlaceholders.length;
+  const grouping = /,/.test(numericPattern.split(".")[0] ?? numericPattern);
+
+  const prefixText = text.slice(0, numericStart).trim();
+  const suffixText = text.slice(numericEnd).replace(/%/g, "").trim();
+  const prefix = currencySymbol && prefixText.includes(currencySymbol)
+    ? currencySymbol
+    : prefixText;
+  const suffix = currencySymbol && suffixText.includes(currencySymbol)
+    ? currencySymbol
+    : suffixText;
+
+  return {
+    currencySuffix: currencySymbol && suffixText.includes(currencySymbol) ? currencySymbol : "",
+    currencySymbol,
+    grouping,
+    kind: percent ? "percent" : currencySymbol ? "currency" : "number",
+    maxDecimals,
+    minDecimals,
+    prefix: prefix.replace(/[()]/g, "").trim(),
+    suffix: suffix.replace(/[()]/g, "").trim()
+  };
+}
+
+export function formatDefaultTickValue(value: number) {
+  if (Math.abs(value) >= 1000) {
+    return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  }
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+export function formatExcelNumberValue(value: number, formatCode: string | undefined, use1904 = false) {
+  const raw = (formatCode ?? "").trim();
+  if (!raw || /^general$/i.test(raw) || /^@+$/.test(raw)) {
+    return null;
+  }
+  if (isLikelyDateFormatCode(raw)) {
+    return formatExcelDateSerial(value, raw, use1904);
+  }
+  const parsed = parseExcelNumberFormat(raw);
+  if (parsed.kind === "percent") {
+    return new Intl.NumberFormat(undefined, {
+      maximumFractionDigits: parsed.maxDecimals,
+      minimumFractionDigits: parsed.minDecimals,
+      style: "percent",
+      useGrouping: parsed.grouping
+    }).format(value);
+  }
+  const digits = new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: parsed.maxDecimals,
+    minimumFractionDigits: parsed.minDecimals,
+    useGrouping: parsed.grouping
+  }).format(Math.abs(value));
+  const sign = value < 0 ? "-" : "";
+  return `${sign}${parsed.prefix}${digits}${parsed.suffix}`;
+}
+
+export type ChartAxisTickFormatterOptions = {
+  defaultFormatter?: (value: number) => string;
+  percentValuesAreScaled?: boolean;
+};
+
+export function createChartAxisTickFormatter(
+  axis: XlsxChartAxis | null | undefined,
+  chart: XlsxChart | null | undefined,
+  options: ChartAxisTickFormatterOptions = {}
+) {
+  const defaultFormatter = options.defaultFormatter ?? formatDefaultTickValue;
+  const formatCode = axis?.numberFormat?.formatCode?.trim();
+  if (!formatCode || /^general$/i.test(formatCode) || /^@+$/.test(formatCode)) {
+    if (options.percentValuesAreScaled) {
+      const percentFormatter = new Intl.NumberFormat(undefined, {
+        maximumFractionDigits: 0,
+        minimumFractionDigits: 0,
+        style: "percent"
+      });
+      return (value: number) => percentFormatter.format(value / 100);
+    }
+    return defaultFormatter;
+  }
+
+  const rawRecord = chart?.raw && typeof chart.raw === "object"
+    ? chart.raw as Record<string, unknown>
+    : null;
+  const use1904 = rawRecord?.date1904 === true;
+  if (isLikelyDateFormatCode(formatCode)) {
+    return (value: number) => formatExcelDateSerial(value, formatCode, use1904);
+  }
+
+  const parsed = parseExcelNumberFormat(formatCode);
+  if (parsed.kind === "percent") {
+    const percentFormatter = new Intl.NumberFormat(undefined, {
+      maximumFractionDigits: parsed.maxDecimals,
+      minimumFractionDigits: parsed.minDecimals,
+      style: "percent",
+      useGrouping: parsed.grouping
+    });
+    if (options.percentValuesAreScaled) {
+      return (value: number) => percentFormatter.format(value / 100);
+    }
+    return (value: number) => percentFormatter.format(value);
+  }
+
+  const numberFormatter = new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: parsed.maxDecimals,
+    minimumFractionDigits: parsed.minDecimals,
+    useGrouping: parsed.grouping
+  });
+  return (value: number) => {
+    const sign = value < 0 ? "-" : "";
+    return `${sign}${parsed.prefix}${numberFormatter.format(Math.abs(value))}${parsed.suffix}`;
+  };
+}
+
 export function formatCategoryLabel(chart: XlsxChart, value: unknown, fallback = "") {
   const rawRecord = chart.raw && typeof chart.raw === "object"
     ? chart.raw as Record<string, unknown>
@@ -240,10 +458,11 @@ export function formatCategoryLabel(chart: XlsxChart, value: unknown, fallback =
     ? value
     : null;
   const formatCode = chart.categoryAxis?.numberFormat?.formatCode;
-  if (numeric != null && isLikelyDateFormatCode(formatCode)) {
-    return formatExcelSerial(numeric, formatCode, {
-      date1904: rawRecord?.date1904 === true
-    });
+  if (numeric != null && formatCode) {
+    const formatted = formatExcelNumberValue(numeric, formatCode, rawRecord?.date1904 === true);
+    if (formatted != null) {
+      return formatted;
+    }
   }
 
   const normalized = normalizeCategoryLabel(value);

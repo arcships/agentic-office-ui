@@ -12,12 +12,11 @@ import {
   resolveSurfacePlotRect,
 } from "./chart-renderer";
 import type { ChartLayout, ChartRendererPalette, PlotRect } from "./chart-renderer";
+import { createChartAxisTickFormatter, formatDefaultTickValue } from "./chart-data";
+import { estimateSvgTextWidth } from "./chart-shared";
 
 export function formatTickValue(value: number) {
-  if (Math.abs(value) >= 1000) {
-    return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  }
-  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return formatDefaultTickValue(value);
 }
 
 export function formatPercentTickValue(value: number) {
@@ -361,6 +360,48 @@ export function renderSurfaceAxes(chart: XlsxChart, layout: ChartLayout) {
   );
 }
 
+export type RenderCartesianAxesOptions = {
+  categoryAxis?: XlsxChartAxis | null;
+  percentValuesAreScaled?: boolean;
+  valueAxis?: XlsxChartAxis | null;
+};
+
+export type CategoryLabelLayout = {
+  rotate: boolean;
+  step: number;
+};
+
+function normalizeTickLabelPosition(axis: XlsxChartAxis | null | undefined) {
+  return axis?.labelPosition === "high" || axis?.labelPosition === "low" || axis?.labelPosition === "none"
+    ? axis.labelPosition
+    : "nextTo";
+}
+
+export function resolveCategoryLabelLayout(
+  labels: string[],
+  availableWidth: number,
+  tickLabelSkip?: number
+): CategoryLabelLayout {
+  const count = Math.max(1, labels.length);
+  const baseStep = typeof tickLabelSkip === "number" && tickLabelSkip > 0
+    ? Math.max(1, Math.floor(tickLabelSkip))
+    : 1;
+  const visibleCount = Math.max(1, Math.ceil(count / baseStep));
+  const slotWidth = Math.max(1, availableWidth / visibleCount);
+  const maxLabelWidth = labels.reduce(
+    (width, label) => Math.max(width, estimateSvgTextWidth(label, 10)),
+    0
+  );
+  if (maxLabelWidth <= slotWidth * 0.92) {
+    return { rotate: false, step: baseStep };
+  }
+  const projectedWidth = maxLabelWidth * Math.SQRT1_2;
+  const overlapStep = projectedWidth > slotWidth * 0.92
+    ? Math.max(1, Math.ceil(projectedWidth / (slotWidth * 0.92)))
+    : 1;
+  return { rotate: true, step: baseStep * overlapStep };
+}
+
 export function renderCartesianAxes(
   chart: XlsxChart,
   palette: ChartRendererPalette,
@@ -370,7 +411,7 @@ export function renderCartesianAxes(
   categoryPositions: number[],
   valueTicks: number[],
   mapValue: (value: number) => number,
-  formatValueTick: (value: number) => string = formatTickValue
+  options: RenderCartesianAxesOptions = {}
 ) {
   const axisColor = chart.axisLineColor ?? chart.chartAreaBorderColor ?? palette.border;
   const labelColor = resolveChartAxisTextColor(chart);
@@ -378,122 +419,234 @@ export function renderCartesianAxes(
   const zeroPosition = Number.isFinite(rawZeroPosition)
     ? rawZeroPosition
     : (isHorizontal ? plot.left : plot.top + plot.height);
+  const categoryAxis = options.categoryAxis ?? chart.categoryAxis ?? null;
+  const valueAxis = options.valueAxis ?? chart.valueAxis ?? null;
+  const categoryLabelPosition = normalizeTickLabelPosition(categoryAxis);
+  const valueLabelPosition = normalizeTickLabelPosition(valueAxis);
+  const showCategoryLabels = categoryAxis?.delete !== true && categoryLabelPosition !== "none";
+  const showValueLabels = valueAxis?.delete !== true && valueLabelPosition !== "none";
+  const showValueGridlines = valueAxis?.majorGridlines === true;
+  const showCategoryGridlines = categoryAxis?.majorGridlines === true;
+  const valueLabelSkip = typeof valueAxis?.tickLabelSkip === "number" && valueAxis.tickLabelSkip > 0
+    ? Math.max(1, Math.floor(valueAxis.tickLabelSkip))
+    : 1;
+  const formatValueTick = createChartAxisTickFormatter(valueAxis, chart, {
+    percentValuesAreScaled: options.percentValuesAreScaled === true
+  });
+  const categoryLabelLayout = isHorizontal
+    ? {
+        rotate: false,
+        step: Math.max(
+          1,
+          typeof categoryAxis?.tickLabelSkip === "number" && categoryAxis.tickLabelSkip > 0
+            ? Math.floor(categoryAxis.tickLabelSkip)
+            : 1,
+          Math.ceil(12 / Math.max(1, plot.height / Math.max(1, categoryLabels.length)))
+        )
+      }
+    : resolveCategoryLabelLayout(categoryLabels, plot.width, categoryAxis?.tickLabelSkip);
+  const valueLabelsOnRight = !isHorizontal && valueLabelPosition === "high";
+  const valueLabelsAbove = isHorizontal && valueLabelPosition === "high";
+  const categoryLabelsAtHighEnd = categoryLabelPosition === "high";
 
   return (
     <g>
-      {valueTicks.map((tick) => {
+      {showValueGridlines ? valueTicks.map((tick) => {
         const valuePosition = mapValue(tick);
         if (isHorizontal) {
           return (
-            <g key={`grid-v-${tick}`}>
-              <line
-                stroke={lightenColor(axisColor, 0.7)}
-                stroke-width={1}
-                x1={valuePosition}
-                x2={valuePosition}
-                y1={plot.top}
-                y2={plot.top + plot.height}
-              />
-              <text
-                fill={labelColor}
-                font-size={10}
-                text-anchor="middle"
-                x={valuePosition}
-                y={plot.top + plot.height + 14}
-              >
-                {formatValueTick(tick)}
-              </text>
-            </g>
+            <line
+              key={`grid-v-${tick}`}
+              stroke={lightenColor(axisColor, 0.7)}
+              stroke-width={1}
+              x1={valuePosition}
+              x2={valuePosition}
+              y1={plot.top}
+              y2={plot.top + plot.height}
+            />
           );
         }
         return (
-          <g key={`grid-h-${tick}`}>
-            <line
-              stroke={lightenColor(axisColor, 0.7)}
-              stroke-width={1}
-              x1={plot.left}
-              x2={plot.left + plot.width}
-              y1={valuePosition}
-              y2={valuePosition}
-            />
+          <line
+            key={`grid-h-${tick}`}
+            stroke={lightenColor(axisColor, 0.7)}
+            stroke-width={1}
+            x1={plot.left}
+            x2={plot.left + plot.width}
+            y1={valuePosition}
+            y2={valuePosition}
+          />
+        );
+      }) : null}
+      {showCategoryGridlines ? categoryPositions.map((position, index) => (
+        isHorizontal ? (
+          <line
+            key={`grid-category-${index}`}
+            stroke={lightenColor(axisColor, 0.78)}
+            stroke-width={1}
+            x1={plot.left}
+            x2={plot.left + plot.width}
+            y1={position}
+            y2={position}
+          />
+        ) : (
+          <line
+            key={`grid-category-${index}`}
+            stroke={lightenColor(axisColor, 0.78)}
+            stroke-width={1}
+            x1={position}
+            x2={position}
+            y1={plot.top}
+            y2={plot.top + plot.height}
+          />
+        )
+      )) : null}
+      {valueTicks.map((tick, tickIndex) => {
+        if (!showValueLabels || tickIndex % valueLabelSkip !== 0) {
+          return null;
+        }
+        const valuePosition = mapValue(tick);
+        if (isHorizontal) {
+          return (
             <text
+              key={`value-tick-${tick}`}
               fill={labelColor}
               font-size={10}
-              text-anchor="end"
-              x={plot.left - 6}
-              y={valuePosition + 3}
+              text-anchor="middle"
+              x={valuePosition}
+              y={valueLabelsAbove ? plot.top - 4 : plot.top + plot.height + 14}
             >
               {formatValueTick(tick)}
             </text>
-          </g>
+          );
+        }
+        return (
+          <text
+            key={`value-tick-${tick}`}
+            fill={labelColor}
+            font-size={10}
+            text-anchor={valueLabelsOnRight ? "start" : "end"}
+            x={valueLabelsOnRight ? plot.left + plot.width + 6 : plot.left - 6}
+            y={valuePosition + 3}
+          >
+            {formatValueTick(tick)}
+          </text>
         );
       })}
-      {categoryPositions.map((position, index) => {
+      {showCategoryLabels ? categoryPositions.map((position, index) => {
+        if (index % categoryLabelLayout.step !== 0) {
+          return null;
+        }
         const label = categoryLabels[index] ?? "";
         if (isHorizontal) {
+          const labelsOnRight = categoryLabelsAtHighEnd;
           return (
             <text
               key={`cat-y-${index}`}
               fill={labelColor}
               font-size={10}
-              text-anchor="end"
-              x={plot.left - 6}
+              text-anchor={labelsOnRight ? "start" : "end"}
+              x={labelsOnRight ? plot.left + plot.width + 6 : plot.left - 6}
               y={position + 3}
             >
               {label}
             </text>
           );
         }
+        if (categoryLabelsAtHighEnd) {
+          return (
+            <text
+              key={`cat-x-${index}`}
+              fill={labelColor}
+              font-size={10}
+              text-anchor="middle"
+              x={position}
+              y={plot.top - 4}
+            >
+              {label}
+            </text>
+          );
+        }
+        const labelY = plot.top + plot.height + 13;
         return (
           <text
             key={`cat-x-${index}`}
             fill={labelColor}
             font-size={10}
-            text-anchor="middle"
+            text-anchor={categoryLabelLayout.rotate ? "end" : "middle"}
+            transform={categoryLabelLayout.rotate ? `rotate(-45 ${position} ${labelY})` : undefined}
             x={position}
-            y={plot.top + plot.height + 14}
+            y={labelY}
           >
             {label}
           </text>
         );
-      })}
+      }) : null}
       {isHorizontal ? (
         <>
-          <line
-            stroke={axisColor}
-            stroke-width={1.2}
-            x1={plot.left}
-            x2={plot.left + plot.width}
-            y1={plot.top + plot.height}
-            y2={plot.top + plot.height}
-          />
-          <line
-            stroke={axisColor}
-            stroke-width={1.2}
-            x1={zeroPosition}
-            x2={zeroPosition}
-            y1={plot.top}
-            y2={plot.top + plot.height}
-          />
+          {categoryAxis?.delete === true ? null : (
+            <line
+              stroke={axisColor}
+              stroke-width={1.2}
+              x1={plot.left}
+              x2={plot.left}
+              y1={plot.top}
+              y2={plot.top + plot.height}
+            />
+          )}
+          {valueAxis?.delete === true ? null : (
+            <line
+              stroke={axisColor}
+              stroke-width={1.2}
+              x1={plot.left}
+              x2={plot.left + plot.width}
+              y1={plot.top + plot.height}
+              y2={plot.top + plot.height}
+            />
+          )}
+          {valueAxis?.delete === true ? null : (
+            <line
+              stroke={axisColor}
+              stroke-width={1.2}
+              x1={zeroPosition}
+              x2={zeroPosition}
+              y1={plot.top}
+              y2={plot.top + plot.height}
+            />
+          )}
         </>
       ) : (
         <>
-          <line
-            stroke={axisColor}
-            stroke-width={1.2}
-            x1={plot.left}
-            x2={plot.left}
-            y1={plot.top}
-            y2={plot.top + plot.height}
-          />
-          <line
-            stroke={axisColor}
-            stroke-width={1.2}
-            x1={plot.left}
-            x2={plot.left + plot.width}
-            y1={zeroPosition}
-            y2={zeroPosition}
-          />
+          {valueAxis?.delete === true ? null : (
+            <line
+              stroke={axisColor}
+              stroke-width={1.2}
+              x1={plot.left}
+              x2={plot.left}
+              y1={plot.top}
+              y2={plot.top + plot.height}
+            />
+          )}
+          {categoryAxis?.delete === true ? null : (
+            <line
+              stroke={axisColor}
+              stroke-width={1.2}
+              x1={plot.left}
+              x2={plot.left + plot.width}
+              y1={plot.top + plot.height}
+              y2={plot.top + plot.height}
+            />
+          )}
+          {valueAxis?.delete === true ? null : (
+            <line
+              stroke={axisColor}
+              stroke-width={1.2}
+              x1={plot.left}
+              x2={plot.left + plot.width}
+              y1={zeroPosition}
+              y2={zeroPosition}
+            />
+          )}
         </>
       )}
     </g>

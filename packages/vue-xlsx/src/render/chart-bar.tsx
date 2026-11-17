@@ -402,7 +402,7 @@ export function renderBarChart(chart: XlsxChart, palette: ChartRendererPalette, 
     categoryPositions,
     ticks,
     (value) => valueScale(value),
-    isPercentStacked ? formatPercentTickValue : formatTickValue
+    { categoryAxis: chart.categoryAxis, percentValuesAreScaled: isPercentStacked, valueAxis: chart.valueAxis }
   );
   const depthAxisColor = chart.axisLineColor ?? chart.chartAreaBorderColor ?? palette.border;
   const depthGridColor = lightenColor(depthAxisColor, 0.48);

@@ -307,22 +307,30 @@ export function renderBarOfPieChart(chart: XlsxChart, palette: ChartRendererPale
   const raw = (chart.raw ?? {}) as Record<string, unknown>;
   const ofPieType = raw.ofPieType === "pie" ? "pie" : "bar";
   const splitPos = typeof raw.splitPos === "number" ? raw.splitPos : 0;
-  let secondaryIndices = values
+  const totalValue = values.reduce((sum, value) => sum + value, 0);
+  if (totalValue <= 0) {
+    return null;
+  }
+  const positiveIndices = values
     .map((value, index) => ({ index, value }))
+    .filter(({ value }) => value > 0);
+  let secondaryIndices = positiveIndices
     .filter(({ value }) => value <= splitPos)
     .map(({ index }) => index);
   if (secondaryIndices.length === 0) {
-    secondaryIndices = values
-      .map((value, index) => ({ index, value }))
+    secondaryIndices = positiveIndices
+      .slice()
       .sort((left, right) => left.value - right.value)
-      .slice(0, Math.min(2, values.length))
+      .slice(0, Math.min(2, positiveIndices.length))
       .map(({ index }) => index);
   }
   const secondarySet = new Set(secondaryIndices);
   const secondaryTotal = secondaryIndices.reduce((sum, index) => sum + (values[index] ?? 0), 0);
-  const primaryData = values.flatMap((value, index) => secondarySet.has(index)
-    ? []
-    : [{ color: chartPointColor(chart, index, pieSeriesIndex), index, label: categories[index], value }]);
+  const primaryData = values.flatMap((value, index) => (
+    value > 0 && !secondarySet.has(index)
+      ? [{ color: chartPointColor(chart, index, pieSeriesIndex), index, label: categories[index], value }]
+      : []
+  ));
   if (secondaryTotal > 0) {
     primaryData.push({
       color: chartPointColor(chart, secondaryIndices[0] ?? 0, pieSeriesIndex),
@@ -335,12 +343,13 @@ export function renderBarOfPieChart(chart: XlsxChart, palette: ChartRendererPale
   const pieCenterX = layout.plot.left + layout.plot.width * 0.28;
   const pieCenterY = layout.plot.top + layout.plot.height * 0.55;
   const pieRadius = Math.max(16, Math.min(layout.plot.height, layout.plot.width * 0.45) * 0.3);
+  const pieStartAngle = ((chart.firstSliceAngle ?? 0) * Math.PI) / 180;
   const arc = d3Arc<{ endAngle: number; startAngle: number }>().innerRadius(0).outerRadius(pieRadius);
   const pieArcs = d3Pie<{ color: string; index: number; label: string; value: number }>()
     .value((entry) => entry.value)
     .sort(null)
-    .startAngle(((90 - (chart.firstSliceAngle ?? 0)) * Math.PI) / 180)
-    .endAngle(((90 - (chart.firstSliceAngle ?? 0)) * Math.PI) / 180 + Math.PI * 2)(primaryData);
+    .startAngle(pieStartAngle)
+    .endAngle(pieStartAngle + Math.PI * 2)(primaryData);
 
   const secondaryLabels = secondaryIndices.map((index) => categories[index] ?? "");
   const secondaryValues = secondaryIndices.map((index) => values[index] ?? 0);
@@ -358,8 +367,8 @@ export function renderBarOfPieChart(chart: XlsxChart, palette: ChartRendererPale
   const secondaryPieArcs = d3Pie<{ color: string; index: number; label: string; value: number }>()
     .value((entry) => entry.value)
     .sort(null)
-    .startAngle(((90 - (chart.firstSliceAngle ?? 0)) * Math.PI) / 180)
-    .endAngle(((90 - (chart.firstSliceAngle ?? 0)) * Math.PI) / 180 + Math.PI * 2)(secondaryData);
+    .startAngle(pieStartAngle)
+    .endAngle(pieStartAngle + Math.PI * 2)(secondaryData);
   const stackedBarLeft = layout.plot.left + layout.plot.width * 0.72;
   const stackedBarWidth = Math.max(20, layout.plot.width * 0.13);
   const stackedBarTop = layout.plot.top + 16;

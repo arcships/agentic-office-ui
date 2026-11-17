@@ -2,7 +2,7 @@ import { scaleBand, scaleLinear, scalePoint } from "d3-scale";
 import { area as d3Area, curveCatmullRom, curveLinear, curveLinearClosed, curveMonotoneX, line as d3Line, symbol as d3Symbol, symbolCircle, symbolCross, symbolDiamond, symbolSquare, symbolStar, symbolTriangle } from "d3-shape";
 import type { CurveFactory } from "d3-shape";
 import type { XlsxChart, XlsxChartAxis, XlsxChartElementSelection, XlsxChartSeries, XlsxChartTypeGroup, XlsxImageRect } from "@arcships/xlsx-core";
-import { chartSeriesColor, chartSeriesStrokeColor, chartPointColor, safeNumber, clamp, darkenColor, lightenColor, coerceLooseNumber, resolveRenderableSeriesValue, resolveChartTextColor, resolveChartAxisTextColor, resolveChartMutedTextColor, buildChartFontFamily, formatTickValue, formatPercentTickValue, chartElementDataProps, barChartElementDataProps, resolveChartElementTarget, resolveChartSelectionFromTarget, isSelectedChartSeries, isSelectedChartPoint, isSelectedChartPointOrSeries, renderSelectionRectHandles, renderSelectionPointHandles, normalizeRendererHexColor, toSvgNumber, normalizeChartMarkerSymbol, markerSymbolPath, normalizeLegendPosition, parseRgbColor, mixRgbColor, escapeCssFontFamilyToken, DEFAULT_CHART_FONT_STACK, DEFAULT_CHART_TEXT_COLOR, DEFAULT_CHART_MUTED_TEXT_COLOR, truncateSvgText, getCategoryLabels, getCategoryNumericValues, computePercentStackedTotals, resolveAxisLogBase, resolveLogAxisDomain, createValueScale, resolveDateAxisDomain, createDateScale, buildDateAxisTicks, normalizeCategoryLabel, estimateReferencePointCount, isHistogramLikeSeries, isHistogramLikeChart, resolve3dFrameOffsets, resolveAxisDomainWithChartOverrides, resolveCategoryBandPadding, chartSeriesBarColors, buildNumericTickValues, buildNiceStep, resolveNumericAxisDomain, renderCartesianAxes, renderExtrudedRect, buildChartStages, resolveChartStageSubtotal, computeBoxWhiskerStats, resolveBoxWhiskerVisibility, resolveBoxWhiskerQuartileMethod, computePercentile, renderLineOrAreaChart3d, projectCartesian3dPoint, scaleProjectedVector, buildLinearSvgPath, buildRibbonSvgPath, renderRadialFrustum, sampleProjectedEllipseArc, isComboChart, getComboLegendSeries, findAxisForGroup, buildComboGroups, resolveStockRoleIndices, resolveStockPalette, normalizeBuiltinPieStyleId, getBuiltinPiePalette, resolvePiePointColor, selectPrimaryPieSeriesIndex, buildPieEntries, buildHierarchyData, resolveHierarchyNodeColor, resolveTreemapNodeColor, excelTreemapTile, normalizePieArc, resolvePieFrontSegments, pieEllipsePoint, buildPieOuterWallPath, isPieFrontFacingAngle, buildPieRadialWallPath, TWO_PI, normalizeRegionMapKey, resolveRegionMapFeature, resolveRegionMapBaseColor, resolveRegionMapDataColor, resolveRegionMapValueColors, resolveRegionMapColorStrings, resolveRegionMapLayoutProperties, resolveRegionMapFeatureSet, getRegionMapBaseFeatures, resolveRegionMapValueColorFromStops, resolveRegionMapValueColor, resolveRegionMapNoDataColor, resolveSurfaceBaseColor, normalizeBuiltinSurfaceStyleId, hasExplicitSurfaceBaseColor, buildMonochromeSurfacePalette, getBuiltinSurfacePalette, shouldPreferBuiltinSurfacePalette, getSurfaceBandCount, getSurfaceColorStops, resolveSurfaceBandPaletteColor, getSurfaceDomain, resolveSurfaceColor, resolveSurfaceBandColor, resolveSurfaceBandIndex, buildSurfaceSmoothPath, splitSurfacePointRuns, connectSurfaceContourSegments, getSurfaceWireframePalette, resolveSurfaceWireframeColor, resolveSurfacePlotRect, buildSurfaceLegendItems, isContourSurfaceChart, getLegendItems, buildLayout, normalizeRenderableChartType, renderSurfaceAxes, renderTitle, renderLegend, buildRegionMapLegendItems, buildStockLegendItems, excelSerialToDate, isLikelyDateFormatCode, formatExcelDateSerial, formatCategoryLabel } from "./chart-renderer";
+import { chartSeriesColor, chartSeriesStrokeColor, chartPointColor, safeNumber, clamp, darkenColor, lightenColor, coerceLooseNumber, resolveRenderableSeriesValue, resolveChartTextColor, resolveChartAxisTextColor, resolveChartMutedTextColor, buildChartFontFamily, formatTickValue, formatPercentTickValue, createChartAxisTickFormatter, chartElementDataProps, barChartElementDataProps, resolveChartElementTarget, resolveChartSelectionFromTarget, isSelectedChartSeries, isSelectedChartPoint, isSelectedChartPointOrSeries, renderSelectionRectHandles, renderSelectionPointHandles, normalizeRendererHexColor, toSvgNumber, normalizeChartMarkerSymbol, markerSymbolPath, normalizeLegendPosition, parseRgbColor, mixRgbColor, escapeCssFontFamilyToken, DEFAULT_CHART_FONT_STACK, DEFAULT_CHART_TEXT_COLOR, DEFAULT_CHART_MUTED_TEXT_COLOR, truncateSvgText, getCategoryLabels, getCategoryNumericValues, computePercentStackedTotals, resolveAxisLogBase, resolveLogAxisDomain, createValueScale, resolveDateAxisDomain, createDateScale, buildDateAxisTicks, normalizeCategoryLabel, estimateReferencePointCount, isHistogramLikeSeries, isHistogramLikeChart, resolve3dFrameOffsets, resolveAxisDomainWithChartOverrides, resolveCategoryBandPadding, chartSeriesBarColors, buildNumericTickValues, buildNiceStep, resolveNumericAxisDomain, renderCartesianAxes, renderExtrudedRect, buildChartStages, resolveChartStageSubtotal, computeBoxWhiskerStats, resolveBoxWhiskerVisibility, resolveBoxWhiskerQuartileMethod, computePercentile, renderLineOrAreaChart3d, projectCartesian3dPoint, scaleProjectedVector, buildLinearSvgPath, buildRibbonSvgPath, renderRadialFrustum, sampleProjectedEllipseArc, isComboChart, getComboLegendSeries, findAxisForGroup, buildComboGroups, resolveStockRoleIndices, resolveStockPalette, normalizeBuiltinPieStyleId, getBuiltinPiePalette, resolvePiePointColor, selectPrimaryPieSeriesIndex, buildPieEntries, buildHierarchyData, resolveHierarchyNodeColor, resolveTreemapNodeColor, excelTreemapTile, normalizePieArc, resolvePieFrontSegments, pieEllipsePoint, buildPieOuterWallPath, isPieFrontFacingAngle, buildPieRadialWallPath, TWO_PI, normalizeRegionMapKey, resolveRegionMapFeature, resolveRegionMapBaseColor, resolveRegionMapDataColor, resolveRegionMapValueColors, resolveRegionMapColorStrings, resolveRegionMapLayoutProperties, resolveRegionMapFeatureSet, getRegionMapBaseFeatures, resolveRegionMapValueColorFromStops, resolveRegionMapValueColor, resolveRegionMapNoDataColor, resolveSurfaceBaseColor, normalizeBuiltinSurfaceStyleId, hasExplicitSurfaceBaseColor, buildMonochromeSurfacePalette, getBuiltinSurfacePalette, shouldPreferBuiltinSurfacePalette, getSurfaceBandCount, getSurfaceColorStops, resolveSurfaceBandPaletteColor, getSurfaceDomain, resolveSurfaceColor, resolveSurfaceBandColor, resolveSurfaceBandIndex, buildSurfaceSmoothPath, splitSurfacePointRuns, connectSurfaceContourSegments, getSurfaceWireframePalette, resolveSurfaceWireframeColor, resolveSurfacePlotRect, buildSurfaceLegendItems, isContourSurfaceChart, getLegendItems, buildLayout, normalizeRenderableChartType, renderSurfaceAxes, renderTitle, renderLegend, buildRegionMapLegendItems, buildStockLegendItems, excelSerialToDate, isLikelyDateFormatCode, formatExcelDateSerial, formatCategoryLabel } from "./chart-renderer";
 import type { ChartRendererPalette, ChartSvgProps, ChartLayout, LegendItem, BarRect, PlotRect, ChartStage, ChartHierarchyDatum, ComboRenderableGroup, BoxWhiskerStats, SurfaceDomain, RegionMapFeature, SurfacePathPoint, SurfaceContourSegment, ChartElementDataOptions } from "./chart-renderer";
 import { buildDataLabelText, hasVisibleDataLabels, resolveDataLabelsForPoint, resolveDataLabelPosition } from "./chart-labels";
 
@@ -239,7 +239,8 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
         axisCategoryLabels,
         axisCategoryPositions,
         ticks,
-        (value) => yScale(value)
+        (value) => yScale(value),
+        { categoryAxis: chart.categoryAxis, valueAxis: chart.valueAxis }
       )}
       {!isAreaChart && !isStackedSeries && highLowLinesRecord
         ? categories.map((_, categoryIndex) => {
@@ -549,6 +550,7 @@ export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette
   const showSecondaryAxis = !sharedValueAxis;
   const axisColor = chart.axisLineColor ?? chart.chartAreaBorderColor ?? palette.border;
   const labelColor = resolveChartAxisTextColor(chart);
+  const formatSecondaryTick = createChartAxisTickFormatter(lineGroup.valueAxis, chart);
 
   return (
     <g>
@@ -560,7 +562,8 @@ export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette
         categories,
         categoryPositions,
         primaryDomain.ticks,
-        (value) => primaryScale(value)
+        (value) => primaryScale(value),
+        { categoryAxis: primaryChart.categoryAxis, valueAxis: primaryChart.valueAxis }
       )}
       {showSecondaryAxis ? secondaryDomain.ticks.map((tick) => {
         const y = secondaryScale(tick);
@@ -573,7 +576,7 @@ export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette
             x={plot.left + plot.width + 6}
             y={y + 3}
           >
-            {formatTickValue(tick)}
+            {formatSecondaryTick(tick)}
           </text>
         );
       }) : null}
@@ -788,6 +791,7 @@ export function renderRadarChart(chart: XlsxChart, palette: ChartRendererPalette
   const ticks = buildNumericTickValues(minValue, safeMax, preferredMajorUnit);
   const axisColor = chart.axisLineColor ?? chart.chartAreaBorderColor ?? palette.border;
   const labelColor = resolveChartAxisTextColor(chart);
+  const formatRingTick = createChartAxisTickFormatter(chart.valueAxis, chart);
   const filled = chart.radarStyle === "filled";
   const showSpokes = chart.categoryAxis?.majorGridlines === true;
 
@@ -819,7 +823,7 @@ export function renderRadarChart(chart: XlsxChart, palette: ChartRendererPalette
               stroke-width={1}
             />
             <text fill={labelColor} font-size={9} x={centerX + 4} y={centerY - radius * ratio + 3}>
-              {formatTickValue(tick)}
+              {formatRingTick(tick)}
             </text>
           </g>
         );
@@ -992,6 +996,7 @@ export function renderStockChart(chart: XlsxChart, palette: ChartRendererPalette
     .paddingOuter(0.18);
   const ticks = resolvedDomain.ticks;
   const labelColor = resolveChartAxisTextColor(chart);
+  const formatStockTick = createChartAxisTickFormatter(chart.valueAxis, chart);
   const openTickColor = stockPalette.openAccent;
   const closeTickColor = openIndex != null ? stockPalette.lineColor : stockPalette.closeAccent;
   const labelStep = Math.max(1, Math.ceil(categories.length / Math.max(4, Math.floor(plot.width / 68))));
@@ -1010,7 +1015,7 @@ export function renderStockChart(chart: XlsxChart, palette: ChartRendererPalette
             y2={yScale(tick)}
           />
           <text fill={labelColor} font-size={10} text-anchor="end" x={plot.left - 6} y={yScale(tick) + 3}>
-            {formatTickValue(tick)}
+            {formatStockTick(tick)}
           </text>
         </g>
       ))}
