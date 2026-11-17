@@ -14,10 +14,12 @@
 
 import type {
   DocModel,
+  DocNode,
   DocumentNoteDefinition,
   DocumentNoteNumberingProperties,
   DocumentNoteProperties,
   NoteReferenceKind,
+  NumberingDefinitionSet,
 } from "../../engine/types";
 import type { DocumentPageNodeSegment } from "../../layout/page-segmentation-core";
 import {
@@ -343,4 +345,127 @@ export function buildDocumentNoteNumbering(model: DocModel): DocumentNoteNumberi
     footnote: new Map(pageNotes?.footnoteNumbers ?? []),
     endnote: new Map(pageNotes?.endnoteNumbers ?? []),
   };
+}
+
+// ── Note-height reserve ────────────────────────────────────────────
+//
+// Notes are printed at the bottom of the page that owns them, so the body has
+// less room there. The reserve below is wired into `buildLayoutSnapshot`
+// (`paginateDocumentLayout` iterates with per-page content-height overrides)
+// so the last page no longer overflows when a footnote carries a tall table.
+
+export type NoteDocNodeHeightEstimator = (
+  node: DocNode,
+  availableWidthPx?: number,
+  numberingDefinitions?: NumberingDefinitionSet,
+  docGridLinePitchPx?: number
+) => number;
+
+export interface NoteReserveEstimateOptions {
+  estimateDocNodeHeightPx: NoteDocNodeHeightEstimator;
+  numberingDefinitions?: NumberingDefinitionSet;
+  docGridLinePitchPx?: number;
+}
+
+/** Top padding + separator rule of `.docx-notes-section` (see DocxNotesSection). */
+const NOTE_SECTION_CHROME_PX = 19;
+/** Gap between two note bodies (`margin: 3px 0` twice). */
+const NOTE_ENTRY_GAP_PX = 6;
+/** Extra gap between two blocks (paragraph/table) inside one note body. */
+const NOTE_BLOCK_GAP_PX = 4;
+/** `.docx-notes-section--endnote { margin-top: 18px }` when both kinds share a page. */
+const ENDNOTE_SECTION_GAP_PX = 18;
+/** Fallback body height for a note without nodes (plain `note.text`). */
+const NOTE_TEXT_FALLBACK_HEIGHT_PX = 16;
+
+/**
+ * Height the rendered note bodies of one page take away from its content box.
+ *
+ * Counts paragraphs *and* tables: a footnote table (legal/technical docs) used
+ * to be ignored, which let the last page overflow.
+ */
+export function estimateDocumentNoteSectionHeightPx(
+  notes: readonly DocumentNoteDefinition[],
+  pageContentWidthPx: number,
+  options: NoteReserveEstimateOptions
+): number {
+  if (notes.length === 0) {
+    return 0;
+  }
+
+  const contentWidthPx = Math.max(1, Math.round(pageContentWidthPx));
+  let totalHeightPx = NOTE_SECTION_CHROME_PX;
+
+  notes.forEach((note, noteIndex) => {
+    if (noteIndex > 0) {
+      totalHeightPx += NOTE_ENTRY_GAP_PX;
+    }
+
+    const nodes = note.nodes ?? [];
+    if (nodes.length === 0) {
+      totalHeightPx += NOTE_TEXT_FALLBACK_HEIGHT_PX;
+      return;
+    }
+
+    nodes.forEach((node, nodeIndex) => {
+      if (nodeIndex > 0) {
+        totalHeightPx += NOTE_BLOCK_GAP_PX;
+      }
+      const heightPx = options.estimateDocNodeHeightPx(
+        node,
+        contentWidthPx,
+        options.numberingDefinitions,
+        options.docGridLinePitchPx
+      );
+      totalHeightPx += Math.max(1, Math.round(heightPx));
+    });
+  });
+
+  return Math.max(0, Math.round(totalHeightPx));
+}
+
+export interface PageNoteReserveOptions extends NoteReserveEstimateOptions {
+  /** Content-box width of a page, used to wrap the note bodies it prints. */
+  resolvePageContentWidthPx?: (pageIndex: number) => number;
+  /** Fallback content width when `resolvePageContentWidthPx` is absent. */
+  pageContentWidthPx?: number;
+}
+
+/**
+ * Reserve (in px) each page must leave for the notes printed at its bottom.
+ * Returns one entry per page; `0` means the page prints no notes.
+ */
+export function resolvePageNoteReservePx(
+  model: DocModel,
+  pages: readonly DocumentPageNodeSegment[][],
+  options: PageNoteReserveOptions
+): number[] {
+  const pageNotes = buildDocumentPageNotes(model, pages as DocumentPageNodeSegment[][]);
+  const fallbackWidthPx = Math.max(1, Math.round(options.pageContentWidthPx ?? 1));
+
+  return pageNotes.map((notes, pageIndex) => {
+    if (notes.footnotes.length === 0 && notes.endnotes.length === 0) {
+      return 0;
+    }
+    const widthPx = Math.max(
+      1,
+      Math.round(
+        options.resolvePageContentWidthPx?.(pageIndex) ?? fallbackWidthPx
+      )
+    );
+    const footnoteHeightPx = estimateDocumentNoteSectionHeightPx(
+      notes.footnotes.map((entry) => entry.note),
+      widthPx,
+      options
+    );
+    const endnoteHeightPx = estimateDocumentNoteSectionHeightPx(
+      notes.endnotes.map((entry) => entry.note),
+      widthPx,
+      options
+    );
+    if (footnoteHeightPx > 0 && endnoteHeightPx > 0) {
+      return footnoteHeightPx + ENDNOTE_SECTION_GAP_PX + endnoteHeightPx;
+    }
+    return Math.max(footnoteHeightPx, endnoteHeightPx);
+  });
 }

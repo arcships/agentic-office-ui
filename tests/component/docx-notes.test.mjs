@@ -11,11 +11,12 @@ import {
   importFromDemo,
   mount,
   textContent,
+  vue,
   walk,
 } from "./vue-test-renderer.mjs";
 
 const core = await importFromDemo("@arcships/docx-core");
-const { DocxViewer } = await importFromDemo("@arcships/vue-docx");
+const { DocxViewer, useDocxEditor } = await importFromDemo("@arcships/vue-docx");
 
 const WORD_NS =
   'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
@@ -221,6 +222,138 @@ test("DOCX editing a paragraph with a footnote keeps marker and note body", asyn
       ["1", "2"],
     );
     assert.match(domText(section), /First note/);
+    assert.deepEqual(mounted.warnings, []);
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+// ── Remaining issue #32 items ──────────────────────────────────────
+
+function tableCellParagraphXml(text, reference) {
+  return (
+    '<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid>' +
+    `<w:tr><w:tc><w:p><w:r><w:t>${text}</w:t></w:r>` +
+    `<w:r><w:${reference.kind}Reference w:id="${reference.id}"/></w:r></w:p></w:tc></w:tr>` +
+    "</w:tbl>"
+  );
+}
+
+test("DOCX a footnote inside a table cell renders its marker and body", async () => {
+  const model = await buildModel({
+    body: tableCellParagraphXml("Cell text", { kind: "footnote", id: 3 }),
+    footnotes: noteXml(
+      "footnote",
+      3,
+      "<w:p><w:r><w:t>Cell note</w:t></w:r></w:p>" +
+        '<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>' +
+        "<w:tr><w:tc><w:p><w:r><w:t>Cell note table</w:t></w:r></w:p></w:tc></w:tr></w:tbl>",
+    ),
+  });
+
+  const mounted = await render(model);
+  try {
+    assert.deepEqual(markerLabels(mounted.root), ["1"]);
+    const section = findByTestId(mounted.root, "docx-footnotes");
+    const [article] = noteArticles(section);
+    assert.equal(noteLabel(article), "1");
+    assert.match(domText(article), /Cell note/);
+    assert.ok(
+      walk(article).some((node) => node.type === "table"),
+      "the footnote table renders next to the cell marker",
+    );
+    assert.deepEqual(mounted.warnings, []);
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+function nestedCellTableModel() {
+  const cellParagraph = {
+    type: "paragraph",
+    children: [
+      { type: "text", text: "Nested text" },
+      { type: "text", text: "", noteReference: { kind: "footnote", id: 3 } },
+    ],
+  };
+  const nestedTable = {
+    type: "table",
+    rows: [
+      { type: "table-row", cells: [{ type: "table-cell", nodes: [cellParagraph] }] },
+    ],
+  };
+  const hostTable = {
+    type: "table",
+    rows: [{ type: "table-row", cells: [{ type: "table-cell", nodes: [nestedTable] }] }],
+  };
+  const base = core.createBlankDocumentModel();
+  return {
+    ...base,
+    nodes: [hostTable],
+    metadata: {
+      ...base.metadata,
+      footnotes: [
+        {
+          id: 3,
+          text: "Nested cell note",
+          nodes: [
+            {
+              type: "paragraph",
+              children: [{ type: "text", text: "Nested cell note" }],
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
+function nestedCellParagraph(model) {
+  return model.nodes[0].rows[0].cells[0].nodes[0].rows[0].cells[0].nodes[0];
+}
+
+async function mountController(model) {
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: model });
+      return () => vue.h("div", { "data-testid": "notes-controller" }, controller.status);
+    },
+  });
+  const mounted = await mount(Harness);
+  return { ...mounted, get controller() { return controller; } };
+}
+
+test("DOCX editing a nested table cell keeps its footnote reference", async () => {
+  const model = nestedCellTableModel();
+  const mounted = await mountController(model);
+  try {
+    mounted.controller.commitTableCellTextByRuntimeKey(
+      "body-cell-nested-table-0-0-0-0",
+      0,
+      0,
+      "Nested edited",
+    );
+    await vue.nextTick();
+
+    const paragraph = nestedCellParagraph(mounted.controller.model);
+    const text = paragraph.children
+      .filter((child) => child.type === "text")
+      .map((child) => child.text)
+      .join("");
+    assert.equal(text, "Nested edited");
+    assert.deepEqual(core.paragraphNoteReferences(paragraph), [
+      { kind: "footnote", id: 3 },
+    ]);
+
+    const pageNotes = core.buildDocumentPageNotes(mounted.controller.model, [
+      [{ nodeIndex: 0 }],
+    ]);
+    assert.deepEqual(
+      pageNotes[0].footnotes.map((entry) => [entry.note.id, entry.label]),
+      [[3, "1"]],
+    );
+    assert.equal(pageNotes[0].footnoteLabels.get(3), "1");
     assert.deepEqual(mounted.warnings, []);
   } finally {
     mounted.app.unmount();

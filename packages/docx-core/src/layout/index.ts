@@ -17,6 +17,7 @@ import {
 } from "./layout-engine";
 import {
   paginateDocumentLayout,
+  paginateDocumentLayoutWithNoteReserve,
   resolvePaginationSectionGeometry,
   type PaginatedPageBlock,
   type PaginationSectionGeometry
@@ -48,7 +49,13 @@ const DEFAULT_LAYOUT_OPTIONS: Required<LayoutOptions> = {
   respectSectionLayout: true
 };
 
-export type LayoutSnapshotOptions = LayoutOptions;
+export type LayoutSnapshotOptions = LayoutOptions & {
+  /**
+   * Reserve the height of the notes printed at the bottom of a page so body
+   * text does not run into them (default: true).
+   */
+  reserveNoteHeight?: boolean;
+};
 
 export interface LayoutSnapshotRect {
   x: number;
@@ -478,13 +485,19 @@ export function buildLayoutSnapshot(
 ): LayoutSnapshot {
   const resolvedDocument = resolveDocumentForLayout(model, options);
   const normalizedOptions = normalizeLayoutOptions(options);
-  const paginated = paginateDocumentLayout(model, {
+  const paginationOptions = {
     pageWidthPx: normalizedOptions.pageWidth,
     pageHeightPx: normalizedOptions.pageHeight,
     marginPx: normalizedOptions.margin,
     suppressSpacingBeforeAfterPageBreak:
       model.metadata.compatibility?.suppressSpacingBeforeAfterPageBreak === true
-  });
+  };
+  // Notes render at the bottom of their page; reserve that height during
+  // pagination so body content (and the notes themselves) never overflow.
+  const paginated =
+    options.reserveNoteHeight === false
+      ? paginateDocumentLayout(model, paginationOptions)
+      : paginateDocumentLayoutWithNoteReserve(model, paginationOptions);
 
   return {
     version: 1,

@@ -44,6 +44,7 @@ import {
   paragraphCanSplitAcrossPages,
   paragraphWidowControlEnabled
 } from "../editor/helpers/line-height-table-extra";
+import { resolvePageNoteReservePx } from "../editor/helpers/note-numbering";
 import { paragraphLineCountWithinWidth } from "../editor/helpers/line-height-wrap";
 import { paragraphHasVisibleText } from "../editor/helpers/paragraph-geometry";
 import { paragraphIsStructuralSectionBreakSpacer } from "../editor/helpers/paragraph-tracked";
@@ -121,6 +122,11 @@ export interface PaginateDocumentLayoutOptions {
   allowParagraphLineSplitting?: boolean;
   /** Defaults to false; mirrored from the document compatibility settings by callers. */
   suppressSpacingBeforeAfterPageBreak?: boolean;
+  /**
+   * Per-page content height overrides (page index → px). Used by the note-height
+   * reserve: a page that prints footnotes/endnotes has less room for body text.
+   */
+  pageContentHeightOverridesPx?: readonly number[];
 }
 
 function positiveRounded(value: number, fallback: number): number {
@@ -484,7 +490,11 @@ export function paginateDocumentLayout(
           {
             allowParagraphLineSplitting: options.allowParagraphLineSplitting ?? false,
             suppressSpacingBeforeAfterPageBreak:
-              options.suppressSpacingBeforeAfterPageBreak ?? false
+              options.suppressSpacingBeforeAfterPageBreak ?? false,
+            measuredPageContentHeightsPxByPageIndex:
+              options.pageContentHeightOverridesPx
+                ? [...options.pageContentHeightOverridesPx]
+                : undefined
           }
         );
 
@@ -521,4 +531,95 @@ export function paginateDocumentLayout(
     sectionGeometries,
     sectionMetrics
   };
+}
+
+const MAX_NOTE_RESERVE_ITERATIONS = 3;
+
+function samePageSegments(
+  left: DocumentPageNodeSegment[][],
+  right: DocumentPageNodeSegment[][]
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((segments, pageIndex) => {
+    const other = right[pageIndex] ?? [];
+    if (segments.length !== other.length) {
+      return false;
+    }
+    return segments.every((segment, segmentIndex) => {
+      const candidate = other[segmentIndex];
+      return (
+        candidate?.nodeIndex === segment.nodeIndex &&
+        candidate?.tableRowRange?.startRowIndex ===
+          segment.tableRowRange?.startRowIndex &&
+        candidate?.tableRowRange?.endRowIndex ===
+          segment.tableRowRange?.endRowIndex &&
+        candidate?.paragraphLineRange?.startLineIndex ===
+          segment.paragraphLineRange?.startLineIndex &&
+        candidate?.paragraphLineRange?.endLineIndex ===
+          segment.paragraphLineRange?.endLineIndex
+      );
+    });
+  });
+}
+
+/**
+ * Paginate while reserving the height of the notes printed at the bottom of
+ * each page.
+ *
+ * A page that owns footnotes (or endnotes placed at document/section end) has
+ * less room for body content. Pagination is re-run with per-page content-height
+ * overrides until the page segmentation is stable, so a footnote carrying a tall
+ * table can no longer overflow the last page.
+ */
+export function paginateDocumentLayoutWithNoteReserve(
+  model: DocModel,
+  options: PaginateDocumentLayoutOptions
+): PaginatedDocumentLayout {
+  const baseOptions: PaginateDocumentLayoutOptions = {
+    ...options,
+    pageContentHeightOverridesPx: undefined
+  };
+  let paginated = paginateDocumentLayout(model, baseOptions);
+  if (paginated.pages.length === 0) {
+    return paginated;
+  }
+
+  for (let iteration = 0; iteration < MAX_NOTE_RESERVE_ITERATIONS; iteration += 1) {
+    const reservePx = resolvePageNoteReservePx(model, paginated.segmentsByPage, {
+      estimateDocNodeHeightPx,
+      numberingDefinitions: model.metadata.numberingDefinitions,
+      resolvePageContentWidthPx: (pageIndex) =>
+        Math.max(
+          MIN_SECTION_CONTENT_PX,
+          Math.round(
+            paginated.pages[pageIndex]?.geometry.contentBoxPx.width ??
+              MIN_SECTION_CONTENT_PX
+          )
+        )
+    });
+    if (!reservePx.some((value) => value > 0)) {
+      break;
+    }
+
+    const overrides = paginated.pages.map((page, pageIndex) =>
+      Math.max(
+        MIN_SECTION_CONTENT_PX,
+        Math.round(page.geometry.contentBoxPx.height) -
+          Math.round(reservePx[pageIndex] ?? 0)
+      )
+    );
+    const next = paginateDocumentLayout(model, {
+      ...baseOptions,
+      pageContentHeightOverridesPx: overrides
+    });
+    const stable = samePageSegments(paginated.segmentsByPage, next.segmentsByPage);
+    paginated = next;
+    if (stable) {
+      break;
+    }
+  }
+
+  return paginated;
 }
