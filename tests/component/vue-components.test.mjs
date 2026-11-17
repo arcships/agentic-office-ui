@@ -63,6 +63,8 @@ function createPdfRuntime({
   onRenderPage,
   onRenderThumbnail,
   onSearch,
+  onSetFormFieldValue,
+  onUpdateAnnotationAppearance,
 } = {}) {
   const calls = {
     closeDocument: [],
@@ -74,6 +76,8 @@ function createPdfRuntime({
     renderPage: [],
     renderThumbnail: [],
     search: [],
+    setFormFieldValue: [],
+    updateAnnotationAppearance: [],
   };
   const document = {
     id: "component-pdf-document",
@@ -114,6 +118,22 @@ function createPdfRuntime({
           async getPageAnnotations(currentDocument, pageIndex, options = {}) {
             calls.getPageAnnotations.push({ document: currentDocument, options, pageIndex });
             return onGetPageAnnotations(currentDocument, pageIndex, options);
+          },
+        }
+      : {}),
+    ...(onSetFormFieldValue
+      ? {
+          async setFormFieldValue(currentDocument, pageIndex, annotationId, value, options = {}) {
+            calls.setFormFieldValue.push({ document: currentDocument, pageIndex, annotationId, value, options });
+            return onSetFormFieldValue(currentDocument, pageIndex, annotationId, value, options);
+          },
+        }
+      : {}),
+    ...(onUpdateAnnotationAppearance
+      ? {
+          async updateAnnotationAppearance(currentDocument, pageIndex, annotationId, patch, options = {}) {
+            calls.updateAnnotationAppearance.push({ document: currentDocument, pageIndex, annotationId, patch, options });
+            return onUpdateAnnotationAppearance(currentDocument, pageIndex, annotationId, patch, options);
           },
         }
       : {}),
@@ -977,6 +997,136 @@ test("PdfSurface exposes link and widget hit rectangles and forwards activation"
   mounted.app.unmount();
 });
 
+test("PdfSurface writes AcroForm values through the runtime and refreshes the page", async () => {
+  const widgets = [
+    {
+      id: "widget-name",
+      pageIndex: 0,
+      kind: "widget",
+      rect: { x: 10, y: 10, width: 120, height: 20 },
+      fieldName: "name",
+      fieldValue: "",
+      fieldType: "text",
+    },
+    {
+      id: "widget-agree",
+      pageIndex: 0,
+      kind: "widget",
+      rect: { x: 10, y: 40, width: 16, height: 16 },
+      fieldName: "agree",
+      fieldValue: "Off",
+      fieldType: "checkbox",
+      exportValue: "Yes",
+    },
+    {
+      id: "widget-plan",
+      pageIndex: 0,
+      kind: "widget",
+      rect: { x: 10, y: 70, width: 90, height: 20 },
+      fieldName: "plan",
+      fieldValue: "Alpha",
+      fieldType: "combobox",
+      options: [
+        { label: "Alpha", selected: true },
+        { label: "Beta", selected: false },
+      ],
+    },
+  ];
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageAnnotations: () => widgets,
+    onGetPageTextGeometry: () => pdfTextGeometry("form"),
+    onSetFormFieldValue: (_document, pageIndex, annotationId, value) => ({
+      ...widgets.find((widget) => widget.id === annotationId),
+      fieldValue: value === true ? "Yes" : String(value),
+    }),
+  });
+  const changes = [];
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    onFormFieldChange: (event) => changes.push(event),
+  });
+  await waitFor(
+    () => walk(mounted.root).some((node) => node.props?.["data-form-field-id"] === "widget-name"),
+    "PDF AcroForm controls",
+  );
+  const controls = walk(mounted.root).filter((node) => node.props?.["data-form-field-id"]);
+  assert.deepEqual(
+    controls.map((node) => node.props["data-form-field-type"]).sort(),
+    ["checkbox", "combobox", "text"],
+  );
+  const planControl = controls.find((node) => node.props["data-form-field-id"] === "widget-plan");
+  assert.equal(planControl.type, "select");
+  assert.deepEqual(planControl.options.map((option) => option.props.value), ["Alpha", "Beta"]);
+
+  const rendersBefore = fake.calls.renderPage.length;
+  await controls.find((node) => node.props["data-form-field-id"] === "widget-name").props.onChange({
+    target: { value: "Ada Lovelace" },
+  });
+  assert.deepEqual(fake.calls.setFormFieldValue.at(-1).annotationId, "widget-name");
+  assert.equal(fake.calls.setFormFieldValue.at(-1).value, "Ada Lovelace");
+  assert.equal(changes.at(-1).fieldName, "name");
+  assert.equal(changes.at(-1).value, "Ada Lovelace");
+  await waitFor(() => fake.calls.renderPage.length > rendersBefore, "form write page refresh");
+
+  await controls.find((node) => node.props["data-form-field-id"] === "widget-agree").props.onChange({
+    target: { checked: true, value: "Yes" },
+  });
+  assert.equal(fake.calls.setFormFieldValue.at(-1).value, true);
+  assert.equal(changes.at(-1).value, "Yes");
+
+  await planControl.props.onChange({ target: { value: "Beta" } });
+  assert.equal(fake.calls.setFormFieldValue.at(-1).annotationId, "widget-plan");
+  assert.equal(fake.calls.setFormFieldValue.at(-1).value, "Beta");
+  assert.equal(changes.at(-1).value, "Beta");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfSurface updates annotation appearance through the exposed API", async () => {
+  const annotations = [
+    { id: "note-1", pageIndex: 0, kind: "annotation", rect: { x: 10, y: 10, width: 40, height: 20 }, contents: "old", color: "#ffff00", opacity: 1 },
+  ];
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageAnnotations: () => annotations,
+    onGetPageTextGeometry: () => pdfTextGeometry("note"),
+    onUpdateAnnotationAppearance: (_document, pageIndex, annotationId, patch) => ({
+      ...annotations.find((annotation) => annotation.id === annotationId),
+      ...patch,
+    }),
+  });
+  const changes = [];
+  let api;
+  const Harness = vue.defineComponent({
+    setup() {
+      const surface = vue.ref(null);
+      vue.watch(surface, (value) => { api = value; }, { flush: "sync" });
+      return () => vue.h(PdfSurface, {
+        ref: surface,
+        source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+        runtime: fake.runtime,
+        onAnnotationChange: (event) => changes.push(event),
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(() => api && fake.calls.getPageAnnotations.length === 1, "PDF annotation appearance surface");
+
+  const rendersBefore = fake.calls.renderPage.length;
+  const updated = await api.updateAnnotationAppearance(0, "note-1", { contents: "reviewed", color: "#ff0000" });
+  assert.equal(updated.contents, "reviewed");
+  assert.deepEqual(fake.calls.updateAnnotationAppearance.at(-1).patch, { contents: "reviewed", color: "#ff0000" });
+  assert.equal(changes.at(-1).annotation.contents, "reviewed");
+  await waitFor(() => fake.calls.renderPage.length > rendersBefore, "annotation update page refresh");
+
+  const pageAnnotations = await api.getPageAnnotations(0);
+  assert.equal(pageAnnotations.find((annotation) => annotation.id === "note-1").contents, "reviewed");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
 test("PdfViewer exposes localized toolbar aria-labels and message overrides", async () => {
   const zh = await mount(PdfViewer, { locale: "zh-CN" });
   assert.equal(findByTestId(zh.root, "pdf-sidebar-toggle").props["aria-label"], "显示或隐藏缩略图");
@@ -1543,4 +1693,133 @@ test("PdfSurface reloads when urlPolicy, maxFileSize or runtime changes", async 
   await waitFor(() => second.calls.closeDocument.length === 1, "runtime swap surface unmount close");
   assert.equal(first.calls.dispose.length, 0, "caller-owned runtimes remain usable");
   assert.equal(second.calls.dispose.length, 0);
+});
+
+function preparePdfSelectionLayer(root) {
+  const layer = walk(root).find((node) => node.props?.["data-testid"] === "pdf-selection-layer");
+  assert.ok(layer, "PDF viewer selection layer");
+  const captures = new Set();
+  layer.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 800 });
+  layer.setPointerCapture = (pointerId) => captures.add(pointerId);
+  layer.hasPointerCapture = (pointerId) => captures.has(pointerId);
+  layer.releasePointerCapture = (pointerId) => captures.delete(pointerId);
+  return layer;
+}
+
+function viewerPointerEvent(layer, { clientX, clientY = 6, pointerId = 1 }) {
+  return {
+    button: 0,
+    clientX,
+    clientY,
+    currentTarget: layer,
+    isPrimary: true,
+    pointerId,
+    pointerType: "mouse",
+    preventDefault() {},
+  };
+}
+
+test("PdfViewer selects text on the rendered page, copies it and clears on Escape", async () => {
+  const text = "hello world";
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => pdfTextGeometry(text),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      text.slice(slice.charIndex, slice.charIndex + slice.charCount)),
+  });
+  const selections = [];
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    showToolbar: false,
+    onSelectionChange: (selection) => selections.push(selection),
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pdf-status")?.props["data-state"] === "ready" &&
+      walk(mounted.root).some((node) => node.props?.["data-testid"] === "pdf-selection-layer"),
+    "PDF viewer page and selection layer",
+  );
+  const layer = preparePdfSelectionLayer(mounted.root);
+
+  layer.props.onPointerdown(viewerPointerEvent(layer, { clientX: 2, pointerId: 21 }));
+  layer.props.onPointermove(viewerPointerEvent(layer, { clientX: 65, pointerId: 21 }));
+  layer.props.onPointerup(viewerPointerEvent(layer, { clientX: 65, pointerId: 21 }));
+
+  await waitFor(() => selections.at(-1)?.kind === "text", "PDF viewer drag selection");
+  assert.equal(selections.at(-1).text, "hello w");
+  assert.deepEqual(selections.at(-1).range, { pageIndex: 0, charIndex: 0, charCount: 7 });
+  assert.equal(
+    walk(mounted.root).filter((node) => node.props?.class === "pdf-viewer__selection-rect").length > 0,
+    true,
+    "selection rectangles render over the page",
+  );
+
+  const copied = [];
+  findByTestId(mounted.root, "pdf-viewer").props.onCopy({
+    clipboardData: { setData: (type, value) => copied.push({ type, value }) },
+    preventDefault() {},
+  });
+  assert.deepEqual(copied, [{ type: "text/plain", value: "hello w" }]);
+
+  findByTestId(mounted.root, "pdf-viewer").props.onKeydown({ key: "Escape" });
+  assert.equal(selections.at(-1).kind, "none");
+  await vue.nextTick();
+  assert.equal(
+    walk(mounted.root).filter((node) => node.props?.class === "pdf-viewer__selection-rect").length,
+    0,
+    "Escape clears the selection rectangles",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfViewer uses the native second click to select a word", async () => {
+  const text = "hello world";
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => pdfTextGeometry(text),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      text.slice(slice.charIndex, slice.charIndex + slice.charCount)),
+  });
+  const selections = [];
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    showToolbar: false,
+    onSelectionChange: (selection) => selections.push(selection),
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pdf-status")?.props["data-state"] === "ready" &&
+      walk(mounted.root).some((node) => node.props?.["data-testid"] === "pdf-selection-layer"),
+    "PDF viewer word selection layer",
+  );
+  const layer = preparePdfSelectionLayer(mounted.root);
+  const point = { clientX: 65, pointerId: 31 };
+
+  layer.props.onPointerdown(viewerPointerEvent(layer, point));
+  layer.props.onPointerup(viewerPointerEvent(layer, point));
+  await layer.props.onClick({
+    button: 0,
+    clientX: point.clientX,
+    clientY: 6,
+    currentTarget: layer,
+    detail: 1,
+    preventDefault() {},
+  });
+  layer.props.onPointerdown(viewerPointerEvent(layer, { ...point, pointerId: 32 }));
+  layer.props.onPointerup(viewerPointerEvent(layer, { ...point, pointerId: 32 }));
+  await layer.props.onClick({
+    button: 0,
+    clientX: point.clientX,
+    clientY: 6,
+    currentTarget: layer,
+    detail: 2,
+    preventDefault() {},
+  });
+
+  await waitFor(() => selections.at(-1)?.kind === "text", "PDF viewer double-click word selection");
+  assert.equal(selections.at(-1).text, "world");
+  assert.deepEqual(selections.at(-1).range, { pageIndex: 0, charIndex: 6, charCount: 5 });
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
 });

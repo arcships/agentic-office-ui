@@ -1,11 +1,12 @@
 import {
+  PDF_FORM_FIELD_TYPE,
   PdfActionType,
   PdfAnnotationSubtype,
   type PdfAnnotationObject,
   type PdfLinkTarget,
 } from "@embedpdf/models"
 import { pdfIntrinsicRectToCanonical } from "./pdf-coordinate-transform"
-import type { PdfRenderAnnotation, PdfRenderPageInfo } from "./pdf-render-runtime"
+import type { PdfFormFieldType, PdfRenderAnnotation, PdfRenderPageInfo } from "./pdf-render-runtime"
 
 /** Protocols a PDF link may target before the host applies its own URL policy. */
 export const PDF_LINK_PROTOCOLS: readonly string[] = ["http:", "https:", "mailto:"]
@@ -81,6 +82,7 @@ export function mapPdfAnnotationObjects(
     if (flags.some((flag) => HIDDEN_ANNOTATION_FLAGS.has(flag))) continue
     const rect = annotation.rect
     if (!rect || !rect.origin || !rect.size) continue
+    const appearance = annotation as PdfAnnotationObject & { color?: string; opacity?: number }
     const canonical: PdfRenderAnnotation = {
       id: annotation.id,
       pageIndex: page.index,
@@ -91,6 +93,8 @@ export function mapPdfAnnotationObjects(
         width: Math.abs(rect.size.width),
         height: Math.abs(rect.size.height),
       }),
+      ...(typeof appearance.color === "string" ? { color: appearance.color } : {}),
+      ...(typeof appearance.opacity === "number" ? { opacity: appearance.opacity } : {}),
       ...(flags.length ? { flags: [...flags] } : {}),
     }
     if (annotation.type === PdfAnnotationSubtype.LINK) {
@@ -111,6 +115,12 @@ export function mapPdfAnnotationObjects(
         kind: "widget",
         ...(field?.name ? { fieldName: field.name } : {}),
         ...(field?.value ? { fieldValue: field.value } : {}),
+        ...(field ? { fieldType: mapPdfFormFieldType(field.type) } : {}),
+        ...(annotation.exportValue ? { exportValue: annotation.exportValue } : {}),
+        readOnly: flags.includes("readOnly"),
+        ...(field && "options" in field && Array.isArray(field.options)
+          ? { options: field.options.map((option) => ({ label: option.label, selected: option.isSelected })) }
+          : {}),
       })
       continue
     }
@@ -121,4 +131,26 @@ export function mapPdfAnnotationObjects(
     })
   }
   return mapped
+}
+
+/** Map PDFium form field types onto the narrow writable field kinds. */
+export function mapPdfFormFieldType(type: PDF_FORM_FIELD_TYPE | undefined): PdfFormFieldType {
+  switch (type) {
+    case PDF_FORM_FIELD_TYPE.TEXTFIELD:
+      return "text"
+    case PDF_FORM_FIELD_TYPE.CHECKBOX:
+      return "checkbox"
+    case PDF_FORM_FIELD_TYPE.RADIOBUTTON:
+      return "radio"
+    case PDF_FORM_FIELD_TYPE.COMBOBOX:
+      return "combobox"
+    case PDF_FORM_FIELD_TYPE.LISTBOX:
+      return "listbox"
+    case PDF_FORM_FIELD_TYPE.PUSHBUTTON:
+      return "button"
+    case PDF_FORM_FIELD_TYPE.SIGNATURE:
+      return "signature"
+    default:
+      return "unknown"
+  }
 }

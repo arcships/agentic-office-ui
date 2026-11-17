@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import type { PdfPageGeometry, Position } from "@embedpdf/models"
+import { expandToWordBoundary, glyphAt, rectsWithinSlice } from "@embedpdf/plugin-selection"
 import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures"
 import {
   createLatestTaskCoordinator,
@@ -19,10 +21,21 @@ import {
 import {
   createPdfRenderRuntime,
   type PdfRenderDocument,
+  type PdfRenderRect,
   type PdfRenderRuntime,
   type PdfRotation,
   type PdfSearchHit,
+  type PdfSelectionState,
 } from "../pdf/pdf-render-runtime"
+import {
+  pdfCanonicalRectToDisplay,
+  pdfDisplayPointToCanonical,
+} from "../pdf/pdf-coordinate-transform"
+import {
+  nearestGlyphWithinContainingRun,
+  wordRangeFromCharacterTexts,
+} from "../pdf/pdf-selection-interaction"
+import { hasUnmappedPdfText } from "../pdf/pdf-selection-range"
 import { currentRenderDpr, watchDevicePixelRatio } from "../pdf/pdf-device-pixel-ratio"
 import type { PdfViewerProps } from "../types"
 import { formatOfficeMessage } from "@arcships/office-interaction"
@@ -53,6 +66,7 @@ const emit = defineEmits<{
   "document-load-error": [error: PdfLoadError]
   "active-page-change": [pageNumber: number]
   diagnostic: [event: PdfDiagnostic]
+  selectionChange: [selection: PdfSelectionState]
 }>()
 
 const m = providePdfMessages(() => props.locale, () => props.messages)
@@ -87,6 +101,30 @@ const renderedPageNumber = ref(0)
 const renderedZoom = ref(1)
 const renderedRotation = ref<PdfRotation>(0)
 const thumbnailUrls = ref<Record<number, string>>({})
+const selectionState = ref<PdfSelectionState>({ kind: "none" })
+const selectionRects = ref<readonly PdfRenderRect[]>([])
+
+/** Drag threshold before a single-page selection starts, in CSS px. */
+const PDF_VIEWER_SELECTION_DRAG_THRESHOLD_PX = 4
+const selectionGeometries = new Map<number, PdfPageGeometry>()
+const selectionGeometryRequests = new Map<number, Promise<PdfPageGeometry>>()
+const characterTextCache = new Map<number, Map<number, string>>()
+let selectionRequest = 0
+interface ViewerSelectionGesture {
+  request: number
+  pageIndex: number
+  pointerId: number
+  layer: HTMLElement
+  down: { x: number; y: number }
+  latest: { x: number; y: number }
+  pointerActive: boolean
+  thresholdExceeded: boolean
+  geometry?: PdfPageGeometry
+  anchor?: number
+  focus?: number
+}
+let selectionGesture: ViewerSelectionGesture | null = null
+let selectionClickCandidate = false
 
 let latestRequestId = 0
 let latestTaskId: string | undefined
@@ -139,6 +177,291 @@ function cn(...classes: (string | undefined | null | false)[]): string {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === "AbortError" || /aborted|cancelled/i.test(error.message))
+}
+
+// ── Single-page text selection ───────────────────────────────────────
+
+const renderedPage = computed(() => renderDocument.value?.pages[renderedPageNumber.value - 1])
+
+function selectionRectStyle(rect: PdfRenderRect): Record<string, string> {
+  const page = renderedPage.value
+  const displayed = page
+    ? pdfCanonicalRectToDisplay(page, rect, renderedRotation.value, renderedZoom.value)
+    : rect
+  return {
+    left: `${displayed.x}px`,
+    top: `${displayed.y}px`,
+    width: `${displayed.width}px`,
+    height: `${displayed.height}px`,
+  }
+}
+
+function emitSelection(next: PdfSelectionState): void {
+  selectionState.value = next
+  emit("selectionChange", next)
+}
+
+function clearSelection(): void {
+  selectionRequest += 1
+  selectionClickCandidate = false
+  selectionGesture = null
+  selectionRects.value = []
+  if (selectionState.value.kind === "none") return
+  emitSelection({ kind: "none" })
+}
+
+function selectionPageIndex(): number {
+  return Math.max(0, renderedPageNumber.value - 1)
+}
+
+function pageGeometry(pageIndex: number): Promise<PdfPageGeometry> {
+  const cached = selectionGeometries.get(pageIndex)
+  if (cached) return Promise.resolve(cached)
+  const pending = selectionGeometryRequests.get(pageIndex)
+  if (pending) return pending
+  const document = renderDocument.value
+  const runtime = runtimeForDocument
+  if (!document || !runtime) return Promise.reject(new Error("PDF document is not ready."))
+  let request: Promise<PdfPageGeometry>
+  request = runtime.getPageTextGeometry(document, pageIndex)
+    .then((geometry) => {
+      if (renderDocument.value === document && runtimeForDocument === runtime) {
+        selectionGeometries.set(pageIndex, geometry)
+      }
+      return geometry
+    })
+    .finally(() => {
+      if (selectionGeometryRequests.get(pageIndex) === request) selectionGeometryRequests.delete(pageIndex)
+    })
+  selectionGeometryRequests.set(pageIndex, request)
+  return request
+}
+
+function selectionPoint(event: { clientX: number; clientY: number }, layer: HTMLElement): Position | null {
+  const page = renderedPage.value
+  if (!page) return null
+  const bounds = layer.getBoundingClientRect()
+  return pdfDisplayPointToCanonical(
+    page,
+    { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
+    renderedRotation.value,
+    renderedZoom.value,
+  )
+}
+
+function resolveSelectionChar(geometry: PdfPageGeometry, point: Position, previous = -1): number {
+  const direct = glyphAt(geometry, point)
+  return direct >= 0 ? direct : nearestGlyphWithinContainingRun(geometry, point, previous)
+}
+
+function updateSelectionRects(geometry: PdfPageGeometry, anchor: number, focus: number): void {
+  selectionRects.value = rectsWithinSlice(geometry, Math.min(anchor, focus), Math.max(anchor, focus))
+    .map((rect) => ({
+      x: rect.origin.x,
+      y: rect.origin.y,
+      width: rect.size.width,
+      height: rect.size.height,
+    }))
+}
+
+function beginViewerSelection(gesture: ViewerSelectionGesture): void {
+  if (gesture.thresholdExceeded) return
+  gesture.thresholdExceeded = true
+  selectionRects.value = []
+  if (selectionState.value.kind !== "none") emitSelection({ kind: "none" })
+}
+
+function updateViewerGesture(gesture: ViewerSelectionGesture, point: { x: number; y: number }): void {
+  gesture.latest = point
+  if (gesture.thresholdExceeded) return
+  if (Math.hypot(point.x - gesture.down.x, point.y - gesture.down.y) < PDF_VIEWER_SELECTION_DRAG_THRESHOLD_PX) return
+  beginViewerSelection(gesture)
+}
+
+function flushViewerSelection(gesture: ViewerSelectionGesture): void {
+  if (selectionGesture !== gesture || !gesture.thresholdExceeded || !gesture.geometry) return
+  if (gesture.anchor === undefined) {
+    const downPoint = selectionPoint({ clientX: gesture.down.x, clientY: gesture.down.y }, gesture.layer)
+    gesture.anchor = downPoint ? resolveSelectionChar(gesture.geometry, downPoint) : -1
+  }
+  if (gesture.anchor < 0) return
+  const latestPoint = selectionPoint({ clientX: gesture.latest.x, clientY: gesture.latest.y }, gesture.layer)
+  if (!latestPoint) return
+  const resolved = resolveSelectionChar(gesture.geometry, latestPoint, gesture.focus ?? gesture.anchor)
+  const focus = resolved >= 0 ? resolved : (gesture.focus ?? gesture.anchor)
+  if (focus === gesture.focus && selectionRects.value.length > 0) return
+  gesture.focus = focus
+  updateSelectionRects(gesture.geometry, gesture.anchor, focus)
+}
+
+async function commitViewerSelection(gesture: ViewerSelectionGesture): Promise<void> {
+  const document = renderDocument.value
+  const runtime = runtimeForDocument
+  if (!document || !runtime) return
+  const from = Math.min(gesture.anchor ?? -1, gesture.focus ?? -1)
+  const to = Math.max(gesture.anchor ?? -1, gesture.focus ?? -1)
+  const request = gesture.request
+  if (from < 0 || to < from) {
+    clearSelection()
+    return
+  }
+  const range = { pageIndex: gesture.pageIndex, charIndex: from, charCount: to - from + 1 }
+  try {
+    const [text] = await runtime.getTextSlices(document, [range])
+    if (request !== selectionRequest || renderDocument.value !== document || runtimeForDocument !== runtime) return
+    if (!text || hasUnmappedPdfText(text)) {
+      emitSelection({ kind: "unavailable", pageIndex: gesture.pageIndex, reason: text ? "unicode-map" : "empty" })
+      selectionRects.value = []
+      return
+    }
+    emitSelection({ kind: "text", range, text, rects: [...selectionRects.value] })
+  } catch {
+    if (request === selectionRequest) emitSelection({ kind: "unavailable", pageIndex: gesture.pageIndex, reason: "empty" })
+  }
+}
+
+function onSelectionPointerDown(event: PointerEvent): void {
+  if (!event.isPrimary || event.button !== 0) return
+  const layer = event.currentTarget as HTMLElement
+  viewerRef.value?.focus()
+  selectionGesture = null
+  selectionClickCandidate = false
+  const pageIndex = selectionPageIndex()
+  const request = ++selectionRequest
+  const gesture: ViewerSelectionGesture = {
+    request,
+    pageIndex,
+    pointerId: event.pointerId,
+    layer,
+    down: { x: event.clientX, y: event.clientY },
+    latest: { x: event.clientX, y: event.clientY },
+    pointerActive: true,
+    thresholdExceeded: false,
+  }
+  selectionGesture = gesture
+  layer.setPointerCapture?.(event.pointerId)
+  const cached = selectionGeometries.get(pageIndex)
+  if (cached) {
+    gesture.geometry = cached
+    return
+  }
+  void pageGeometry(pageIndex)
+    .then((geometry) => {
+      if (selectionGesture !== gesture || request !== selectionRequest) return
+      gesture.geometry = geometry
+      if (!gesture.thresholdExceeded) return
+      flushViewerSelection(gesture)
+      if (!gesture.pointerActive) void commitViewerSelection(gesture)
+    })
+    .catch(() => {
+      if (selectionGesture !== gesture || request !== selectionRequest) return
+      if (layer.hasPointerCapture?.(event.pointerId)) layer.releasePointerCapture?.(event.pointerId)
+      clearSelection()
+    })
+}
+
+function onSelectionPointerMove(event: PointerEvent): void {
+  const gesture = selectionGesture
+  if (!gesture || gesture.pointerId !== event.pointerId) return
+  updateViewerGesture(gesture, { x: event.clientX, y: event.clientY })
+  if (gesture.thresholdExceeded && gesture.geometry) flushViewerSelection(gesture)
+}
+
+function onSelectionPointerUp(event: PointerEvent): void {
+  const gesture = selectionGesture
+  if (!gesture || gesture.pointerId !== event.pointerId) return
+  updateViewerGesture(gesture, { x: event.clientX, y: event.clientY })
+  gesture.pointerActive = false
+  const layer = event.currentTarget as HTMLElement
+  if (layer.hasPointerCapture?.(event.pointerId)) layer.releasePointerCapture?.(event.pointerId)
+  if (!gesture.thresholdExceeded) {
+    selectionGesture = null
+    clearSelection()
+    selectionClickCandidate = true
+    return
+  }
+  selectionClickCandidate = false
+  if (gesture.geometry) void commitViewerSelection(gesture)
+}
+
+function onSelectionPointerCancel(event: PointerEvent): void {
+  if (selectionGesture?.pointerId !== event.pointerId) return
+  clearSelection()
+}
+
+async function characterTextsForRange(pageIndex: number, from: number, to: number, request: number): Promise<readonly string[] | null> {
+  const document = renderDocument.value
+  const runtime = runtimeForDocument
+  if (!document || !runtime) return null
+  let cache = characterTextCache.get(pageIndex)
+  if (!cache) {
+    cache = new Map<number, string>()
+    characterTextCache.set(pageIndex, cache)
+  }
+  const missing = []
+  for (let charIndex = from; charIndex <= to; charIndex++) {
+    if (!cache.has(charIndex)) missing.push({ pageIndex, charIndex, charCount: 1 })
+  }
+  if (missing.length > 0) {
+    const texts = await runtime.getTextSlices(document, missing)
+    if (request !== selectionRequest || renderDocument.value !== document || runtimeForDocument !== runtime) return null
+    for (let index = 0; index < missing.length; index++) cache.set(missing[index].charIndex, texts[index] ?? "")
+  }
+  return Array.from({ length: to - from + 1 }, (_, index) => cache!.get(from + index) ?? "")
+}
+
+async function onSelectionClick(event: MouseEvent): Promise<void> {
+  const isNativeDoubleClick = selectionClickCandidate && event.button === 0 && event.detail === 2
+  selectionClickCandidate = false
+  if (!isNativeDoubleClick) return
+  event.preventDefault()
+  const pageIndex = selectionPageIndex()
+  const layer = event.currentTarget as HTMLElement
+  const request = ++selectionRequest
+  selectionRects.value = []
+  if (selectionState.value.kind !== "none") emitSelection({ kind: "none" })
+  try {
+    const geometry = await pageGeometry(pageIndex)
+    if (request !== selectionRequest) return
+    const point = selectionPoint(event, layer)
+    const charIndex = point ? resolveSelectionChar(geometry, point) : -1
+    if (charIndex < 0) return
+    const candidate = expandToWordBoundary(geometry, charIndex)
+    if (!candidate) return
+    const texts = await characterTextsForRange(pageIndex, candidate.from, candidate.to, request)
+    const Segmenter = (Intl as typeof Intl & {
+      Segmenter?: new (
+        locales?: string | readonly string[],
+        options?: { granularity: "word" },
+      ) => { segment(input: string): Iterable<{ index: number; segment: string; isWordLike?: boolean }> }
+    }).Segmenter
+    if (!texts || request !== selectionRequest || !Segmenter) return
+    const range = wordRangeFromCharacterTexts(candidate.from, charIndex, texts, new Segmenter(undefined, { granularity: "word" }))
+    if (!range) return
+    updateSelectionRects(geometry, range.from, range.to)
+    selectionGesture = {
+      request,
+      pageIndex,
+      pointerId: -1,
+      layer,
+      down: { x: event.clientX, y: event.clientY },
+      latest: { x: event.clientX, y: event.clientY },
+      pointerActive: false,
+      thresholdExceeded: true,
+      geometry,
+      anchor: range.from,
+      focus: range.to,
+    }
+    await commitViewerSelection(selectionGesture)
+  } catch {
+    // A failed word lookup must not revive a stale or partial selection.
+  }
+}
+
+function onViewerCopy(event: ClipboardEvent): void {
+  if (selectionState.value.kind !== "text" || !event.clipboardData) return
+  event.preventDefault?.()
+  event.clipboardData.setData("text/plain", selectionState.value.text)
 }
 
 function getDownloadFileName(): string {
@@ -214,6 +537,10 @@ function clearSearchAndRestoreFocus(): void {
 }
 
 function onViewerKeydown(event: KeyboardEvent): void {
+  if (event.key === "Escape" && selectionState.value.kind !== "none") {
+    clearSelection()
+    return
+  }
   if (
     !props.showToolbar
     || !(event.ctrlKey || event.metaKey)
@@ -225,6 +552,10 @@ function onViewerKeydown(event: KeyboardEvent): void {
 
 async function releaseCurrentDocument(options: { closeDocument?: boolean } = {}): Promise<void> {
   cancelRenderWork()
+  clearSelection()
+  selectionGeometries.clear()
+  selectionGeometryRequests.clear()
+  characterTextCache.clear()
   pendingAnchor = undefined
   replacePageImage()
   clearThumbnails()
@@ -709,6 +1040,7 @@ watch(
 )
 watch(activePage, (page) => { pageInput.value = String(page) })
 watch([activePage, zoom, rotation, renderDpr], () => {
+  clearSelection()
   if (renderDocument.value && !isLoading.value) void renderCurrentPage(latestRequestId)
 })
 
@@ -741,6 +1073,12 @@ onBeforeUnmount(() => {
   const closeDocument = !runtime || runtimeForDocument !== runtime
   void releaseCurrentDocument({ closeDocument }).finally(() => runtime?.dispose())
 })
+
+defineExpose({
+  setActivePage,
+  clearSelection,
+  getSelectionState: () => selectionState.value,
+})
 </script>
 
 <template>
@@ -750,6 +1088,7 @@ onBeforeUnmount(() => {
     data-testid="pdf-viewer"
     tabindex="0"
     @keydown="onViewerKeydown"
+    @copy="onViewerCopy"
   >
     <div v-if="props.showToolbar" data-testid="pdf-toolbar" class="pdf-toolbar">
       <button
@@ -859,6 +1198,23 @@ onBeforeUnmount(() => {
               :style="pageImageStyle"
               :alt="formatOfficeMessage(m.pdf.viewer.pageAlt, { page: renderedPageNumber })"
             />
+            <div
+              class="pdf-viewer__selection-layer"
+              data-testid="pdf-selection-layer"
+              aria-label="PDF page text selection layer"
+              @pointerdown="onSelectionPointerDown"
+              @pointermove="onSelectionPointerMove"
+              @pointerup="onSelectionPointerUp"
+              @pointercancel="onSelectionPointerCancel"
+              @click="onSelectionClick"
+            >
+              <div
+                v-for="(rect, rectIndex) in selectionRects"
+                :key="rectIndex"
+                class="pdf-viewer__selection-rect"
+                :style="selectionRectStyle(rect)"
+              />
+            </div>
           </div>
         </div>
       </main>
@@ -919,7 +1275,9 @@ onBeforeUnmount(() => {
 .thumbnail.active { border-color: #2563eb; background: color-mix(in srgb, #2563eb 12%, var(--pdf-panel-bg)); color: var(--pdf-link); font-weight: 700; }
 .pdf-frame-wrap { flex: 1; min-width: 0; min-height: 0; overflow: auto; position: relative; padding: 24px; touch-action: pan-x pan-y; }
 .pdf-page-stage { display: flex; min-width: min-content; min-height: 100%; align-items: flex-start; justify-content: center; position: relative; }
-.pdf-page-render { width: fit-content; margin: 0 auto; }
+.pdf-page-render { position: relative; width: fit-content; margin: 0 auto; }
+.pdf-viewer__selection-layer { inset: 0; position: absolute; cursor: text; touch-action: pan-x pan-y; }
+.pdf-viewer__selection-rect { background: rgba(37, 99, 235, .34); box-sizing: border-box; position: absolute; }
 .pdf-page-image { display: block; max-width: none; height: auto; border: 0; background: var(--pdf-control-bg); box-shadow: var(--pdf-page-shadow); filter: var(--pdf-page-filter); }
 .page-loading { position: absolute; z-index: 2; top: 12px; left: 50%; transform: translateX(-50%); border: 1px solid var(--pdf-control-border); border-radius: 999px; background: var(--pdf-control-bg); color: var(--pdf-link); padding: 5px 12px; font-size: 12px; white-space: nowrap; }
 .page-error { min-height: 0; min-width: min(300px, 100%); border-radius: 8px; background: var(--pdf-control-bg); padding: 24px; box-shadow: 0 2px 8px rgb(0 0 0 / 12%); }

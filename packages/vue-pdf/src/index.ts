@@ -48,6 +48,7 @@ export {
   MAX_PDF_RENDER_DPR,
   MAX_PDF_RENDER_SCALE,
   PdfRenderError,
+  resolvePdfFormFieldValue,
   resolvePdfPageRenderParameters,
 } from "./pdf/pdf-render-runtime"
 export {
@@ -65,6 +66,11 @@ export type {
   PdfTextReferenceSelection,
 } from "./pdf/pdf-reference-adapter"
 export type {
+  PdfAnnotationAppearancePatch,
+  PdfFormFieldDescriptor,
+  PdfFormFieldOption,
+  PdfFormFieldType,
+  PdfFormFieldValue,
   PdfOpenDocumentOptions,
   PdfPageRenderOptions,
   PdfPageRenderParameters,

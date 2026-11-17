@@ -560,13 +560,28 @@ Issue #84 指出 PDF 页面只有位图：选择限于单页、链接/表单/批
 - `PdfRenderRuntime.getPageAnnotations?()` 透传 PDFium 批注读取；`PdfRenderAnnotation` 把矩形适配到 canonical 空间，并给出链接目标、表单字段或批注文字。链接只接受绝对 `http`/`https`/`mailto`，并去掉内嵌凭据。
 - `PdfSurface` 在可见页附近预取批注，渲染不可见命中矩形（`data-annotation-kind`），点击时命中测试并发出 `linkActivate` 或 `annotationActivate`；命中层使用 `pointer-events: none`，不阻断拖选。
 - 内部链接在未被策略拦截时滚入目标页；外部链接默认不导航，由宿主打开。宿主提供 `urlPolicy` 时还会按该策略再次校验，失败以 `blocked: true` 上报。
-- 表单不实现填写：Surface 只暴露 widget 命中与字段信息，写入仍由宿主或后续编辑能力完成。
 
-### 16.3 区域 Escape
+### 16.3 AcroForm 写入
+
+- `PdfRenderRuntime.setFormFieldValue?()` 从 Runtime 的批注缓存中定位 widget，经 `resolvePdfFormFieldValue()` 转换成 PDFium `FormFieldValue`，再调用引擎写入并重新读取该页批注；文本字段接受字符串，复选框接受布尔值，单选与选择字段接受选项标签或索引，非法值在触碰引擎前报 `INVALID_FIELD_VALUE`。
+- `PdfSurface` 在 `content` 模式下为文本、复选框、单选框、下拉框和列表框渲染原生控件（`data-form-field-id`），控件层在交互层之上、其余区域 `pointer-events: none`，因此输入不会启动拖选；只读 widget 渲染为禁用控件，不支持写入的 Runtime 不渲染控件。
+- 提交后 Surface 替换缓存中的批注、标记该页位图过期并重新栅格化，再发出 `formFieldChange`；失败发出 `formFieldError` 并保留可编辑状态。组件实例暴露 `setFormFieldValue(pageIndex, annotationId, value)` 供宿主驱动。
+
+### 16.4 批注外观编辑
+
+- `PdfRenderRuntime.updateAnnotationAppearance?()` 改写缓存中的原始批注（`contents`、`color`/`strokeColor`、`opacity`、`strokeWidth`），调用 `updatePageAnnotation(..., { regenerateAppearance: true })` 重新生成外观流，再刷新缓存。
+- `PdfSurface.updateAnnotationAppearance(pageIndex, annotationId, patch)` 更新缓存、重新栅格化该页并发出 `annotationChange`；如果批注没有对应字段或取值非法，在修改前抛出 `ANNOTATION_NOT_WRITABLE`/`INVALID_RENDER_OPTIONS` 并发 `annotationError`。
+
+### 16.5 PdfViewer 单页选择
+
+- `PdfViewer` 在当前页位图上叠加选择层，复用与 Surface 相同的 canonical 坐标变换、glyph 命中、连续矩形和 `Intl.Segmenter` 选词；支持拖选、双击选词、`Ctrl/Cmd+C` 复制和 `Escape` 清除。
+- 选区随 `selectionChange` 发出 `PdfSelectionState`；`clearSelection()` 与 `getSelectionState()` 通过实例暴露。切页、缩放、旋转、重新加载和卸载会清除选区与 geometry 缓存。
+
+### 16.6 区域 Escape
 
 区域层处理 Escape 时 `stopPropagation()` 并 `preventDefault()`，Surface 处理器同时忽略 `defaultPrevented` 的事件；一次按键只发出一次 `selectionCancel`。
 
-### 16.4 验收
+### 16.7 验收
 
-- 组件测试覆盖跨页拖选、跨页复制、区域 Escape 去重、链接/控件命中与事件转发。
-- 仍未覆盖：`PdfViewer` 单页视图的选择与复制、表单写入、批注外观编辑。
+- 组件测试覆盖跨页拖选、跨页复制、区域 Escape 去重、链接/控件命中与事件转发、AcroForm 写入与页面刷新、批注外观更新，以及 `PdfViewer` 拖选、复制、Escape 和双击选词。
+- 单元测试覆盖 `resolvePdfFormFieldValue()` 的类型转换，以及 Runtime 在缓存引擎对象上写入表单和批注外观的错误分支。

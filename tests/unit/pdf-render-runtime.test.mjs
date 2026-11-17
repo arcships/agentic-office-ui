@@ -186,3 +186,126 @@ test("PDF encrypted runtime errors map to the public ENCRYPTED load code", () =>
   assert.equal(normalized.url, "https://files.example/secret.pdf");
   assert.equal(JSON.stringify(normalized).includes("hidden"), false);
 });
+
+test("PDF form field values map text, checkbox and choice widgets", () => {
+  const options = [
+    { label: "Alpha", selected: false },
+    { label: "Beta", selected: true },
+  ];
+  assert.deepEqual(
+    pdf.resolvePdfFormFieldValue({ fieldType: "text", fieldValue: "" }, "Ada"),
+    { kind: "text", text: "Ada" },
+  );
+  assert.deepEqual(
+    pdf.resolvePdfFormFieldValue({ fieldType: "checkbox" }, true),
+    { kind: "checked", checked: true },
+  );
+  assert.deepEqual(
+    pdf.resolvePdfFormFieldValue({ fieldType: "checkbox" }, "off"),
+    { kind: "checked", checked: false },
+  );
+  assert.deepEqual(
+    pdf.resolvePdfFormFieldValue({ fieldType: "combobox", options }, "Beta"),
+    { kind: "selection", index: 1, isSelected: true },
+  );
+  assert.deepEqual(
+    pdf.resolvePdfFormFieldValue({ fieldType: "listbox", options }, "0"),
+    { kind: "selection", index: 0, isSelected: true },
+  );
+  assert.throws(
+    () => pdf.resolvePdfFormFieldValue({ fieldType: "combobox", options }, "Gamma"),
+    /does not match any option/,
+  );
+  assert.throws(
+    () => pdf.resolvePdfFormFieldValue({ fieldType: "checkbox" }, "maybe"),
+    /not a boolean/,
+  );
+  assert.throws(
+    () => pdf.resolvePdfFormFieldValue({ fieldType: "radio", options }, true),
+    /expects an option label or index/,
+  );
+});
+
+function rawWidget(overrides = {}) {
+  return {
+    id: "widget-name",
+    pageIndex: 0,
+    type: 20,
+    rect: { origin: { x: 10, y: 10 }, size: { width: 120, height: 20 } },
+    flags: [],
+    field: { type: 6, name: "name", alternateName: "", value: "", flag: 0 },
+    ...overrides,
+  };
+}
+
+test("PDF runtime writes form values and annotation appearances through cached engine objects", async () => {
+  const runtime = pdf.createPdfRenderRuntime({ runtimeId: "form-writes" });
+  const native = fakeNativeDocument("form-native");
+  runtime.documents.set(native.id, native);
+  const document = {
+    id: native.id,
+    pageCount: 1,
+    pages: [{ index: 0, width: 600, height: 800, rotation: 0 }],
+  };
+  let widget = rawWidget();
+  let note = {
+    id: "note-1",
+    pageIndex: 0,
+    type: 1,
+    rect: { origin: { x: 20, y: 20 }, size: { width: 30, height: 30 } },
+    flags: [],
+    contents: "old",
+    color: "#ffff00",
+    opacity: 1,
+  };
+  assert.ok(widget);
+  assert.ok(note);
+  const writes = [];
+  const updates = [];
+  runtime.engine = {
+    getPageAnnotations() {
+      return { abort() {}, async toPromise() { return [widget, note]; } };
+    },
+    setFormFieldValue(_doc, _page, annotation, value) {
+      writes.push({ id: annotation.id, value });
+      widget = { ...widget, field: { ...widget.field, value: value.kind === "text" ? value.text : "Yes" } };
+      return { abort() {}, async toPromise() { return true; } };
+    },
+    updatePageAnnotation(_doc, _page, annotation, options) {
+      updates.push({ id: annotation.id, contents: annotation.contents, color: annotation.color, options });
+      note = { ...note, contents: annotation.contents, color: annotation.color };
+      return { abort() {}, async toPromise() { return true; } };
+    },
+  };
+
+  const written = await runtime.setFormFieldValue(document, 0, "widget-name", "Ada");
+  assert.deepEqual(writes, [{ id: "widget-name", value: { kind: "text", text: "Ada" } }]);
+  assert.equal(written.fieldType, "text");
+  assert.equal(written.fieldValue, "Ada");
+
+  const updated = await runtime.updateAnnotationAppearance(document, 0, "note-1", {
+    contents: "reviewed",
+    color: "#ff0000",
+  });
+  assert.equal(updates.at(-1).contents, "reviewed");
+  assert.deepEqual(updates.at(-1).options, { regenerateAppearance: true });
+  assert.equal(updated.contents, "reviewed");
+  assert.equal(updated.color, "#ff0000");
+
+  await assert.rejects(
+    () => runtime.setFormFieldValue(document, 0, "missing", "Ada"),
+    (error) => error.code === "ANNOTATION_NOT_FOUND",
+  );
+  await assert.rejects(
+    () => runtime.setFormFieldValue(document, 0, "note-1", "Ada"),
+    (error) => error.code === "ANNOTATION_NOT_WRITABLE",
+  );
+  await assert.rejects(
+    () => runtime.updateAnnotationAppearance(document, 0, "note-1", { opacity: 2 }),
+    (error) => error.code === "INVALID_RENDER_OPTIONS",
+  );
+  assert.equal(runtime.rawPageAnnotations.size, 1, "annotation reads are cached per page");
+  await runtime.closeDocument(document);
+  assert.equal(runtime.rawPageAnnotations.size, 0, "closing the document drops the annotation cache");
+  await runtime.dispose();
+});
