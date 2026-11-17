@@ -303,3 +303,32 @@ test("XLSX worker: a failed load keeps the previous workbook addressable", async
     "a failed load left the worker without its previous workbook",
   );
 });
+
+test("XLSX worker: cell snapshots carry the resolved number format", async () => {
+  const source = new sheetsWasm.Workbook();
+  const sheet = source.getSheet(0);
+  sheet.setCell("A1", 1234.56);
+  sheet.setCellStyleAt(0, 0, {
+    numberFormat: { formatType: "custom", formatString: "[$-407]#,##0.00" },
+  });
+  sheet.free();
+  const bytes = source.saveXlsxBytes();
+  source.free();
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+
+  const payload = { buffer, limits };
+  if (!wasmSourceSent) {
+    payload.wasmSource = wasmBuffer;
+    wasmSourceSent = true;
+  }
+  const loaded = await workerScope.request("load", payload).response;
+  assert.equal(loaded.success, true, `load failed: ${JSON.stringify(loaded)}`);
+
+  const snapshot = await readCell(0, 0, 0);
+  assert.equal(snapshot.displayValue, "1,234.56");
+  assert.deepEqual(snapshot.numberFormat, {
+    formatType: "custom",
+    formatString: "[$-407]#,##0.00",
+  });
+  assert.equal(snapshot.formula, "");
+});

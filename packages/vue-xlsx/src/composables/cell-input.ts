@@ -527,13 +527,11 @@ export function localizeFormattedNumber(
     return formatted;
   }
   const code = resolveNumberFormatCode(numberFormat);
-  if (!/\[\$/.test(code)) {
-    return formatted;
-  }
   const category = classifyNumberFormatCode(code);
   if (category !== "number" && category !== "currency" && category !== "percent" && category !== "scientific") {
     return formatted;
   }
+  // A `[$-…]` section wins; otherwise the host locale applies.
   const locale = resolveFormatLocale(code, fallbackLocale);
   if (!locale || (locale.decimalSeparator === "." && locale.groupSeparator === ",")) {
     return formatted;

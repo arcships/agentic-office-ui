@@ -2,6 +2,7 @@ import type { ComputedRef, Ref, ShallowRef } from "vue";
 import type { Workbook } from "@dukelib/sheets-wasm";
 import type {
   XlsxCellAddress,
+  XlsxCellNumberFormatInput,
   XlsxCellRange,
   XlsxChart,
   XlsxChartElementSelection,
@@ -426,6 +427,8 @@ export interface XlsxControllerContext {
   historyBudget: HistoryBudget;
   isApplyingHistoryRef: ShallowRef<boolean>;
   historyRevision: Ref<number>;
+  /** Locale used by number/date formats that name none of their own. */
+  locale: Ref<string>;
   shouldAutoCalculate: Ref<boolean>;
   workerCellSnapshotRevision: Ref<number>;
   isWorkerBacked: Ref<boolean>;
@@ -444,7 +447,7 @@ export interface XlsxControllerContext {
   chartDisplayFallbackCleanupRef: ShallowRef<(() => void) | null>;
   sheetOriginsRef: ShallowRef<Array<WorkbookImageSheetOrigin | null>>;
   workerClientRef: ShallowRef<XlsxWorkerClient | null>;
-  workerCellSnapshotCacheRef: ShallowRef<Map<string, { displayValue: string; formula: string }>>;
+  workerCellSnapshotCacheRef: ShallowRef<Map<string, { displayValue: string; formula: string; numberFormat?: XlsxCellNumberFormatInput | null }>>;
 
   // Derived computeds defined in the orchestrator
   activeTab: ComputedRef<XlsxWorkbookTab | null>;

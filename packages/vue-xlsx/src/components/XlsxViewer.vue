@@ -227,6 +227,11 @@ const props = withDefaults(
     /** Enables trackpad, pinch and double-tap zoom for the composite viewer. */
     enableGestureZoom?: boolean;
     locale?: OfficeLocale;
+    /**
+     * Locale for number and date formats that name none of their own
+     * (`[$-407]`-style sections win). Defaults to the controller's locale.
+     */
+    documentLocale?: string;
     messages?: OfficeMessagesOverride;
   }>(),
   {
@@ -244,6 +249,7 @@ const props = withDefaults(
     showUpload: false,
     enableGestureZoom: true,
     locale: "en",
+    documentLocale: undefined,
     messages: undefined,
   }
 );
@@ -262,6 +268,13 @@ type XlsxDeferredLoadPayload = { fileName: string; bytes: number };
 
 const effectiveReadOnly = computed(() => props.readOnly || props.controller.isEditingLocked === true || props.controller.readOnly);
 const m = provideXlsxMessages(() => props.locale, () => props.messages);
+
+// Number/date formats without a `[$-…]` section follow the host locale.
+watch(
+  () => props.documentLocale,
+  (locale) => { props.controller.setDocumentLocale?.(locale); },
+  { immediate: true },
+);
 
 const deferredLoadBytes = computed(() => props.controller.deferredLoadFileSize ?? 0);
 const deferredLoadSizeLabel = computed(() => formatBinaryBytes(deferredLoadBytes.value));

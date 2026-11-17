@@ -304,6 +304,25 @@ function localeForTag(tag: string, localeId: number | null) {
 }
 
 /**
+ * Normalize a host-provided locale for number/date formats.
+ *
+ * Invalid tags fall back to `en-US` instead of throwing, so a bad host value
+ * can never break rendering; an empty value selects the default locale.
+ */
+export function normalizeDocumentLocale(locale: string | null | undefined): string {
+  const trimmed = typeof locale === "string" ? locale.trim() : "";
+  if (!trimmed) {
+    return "en-US";
+  }
+  try {
+    const [canonical] = Intl.getCanonicalLocales(trimmed);
+    return canonical ?? "en-US";
+  } catch {
+    return "en-US";
+  }
+}
+
+/**
  * Resolve the locale named by a format code's `[$…]` section.
  *
  * `[$-409]` uses an LCID, `[$€-407]` additionally names the currency symbol.

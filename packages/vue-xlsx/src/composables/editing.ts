@@ -117,6 +117,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
     const input = resolveCellInput(value, {
       date1904: worksheet.date1904 === true,
+      locale: ctx.locale.value,
       numberFormat: resolveEffectiveCellNumberFormat(
         worksheet.getCellStyleAt(cell.row, cell.col),
         ctx.activeSheet.value,
@@ -167,7 +168,8 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
           ctx.activeSheet.value,
           cell.row,
           cell.col
-        )
+        ),
+        ctx.locale.value
       );
       if (numberFormat) {
         worksheet.setCellStyleAt(cell.row, cell.col, { numberFormat });
@@ -224,6 +226,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
     const resolved = resolveCellInput(text, {
       date1904: worksheet.date1904 === true,
+      locale: ctx.locale.value,
       numberFormat: resolveEffectiveCellNumberFormat(
         worksheet.getCellStyleAt(cell.row, cell.col),
         ctx.activeSheet.value,

@@ -27,6 +27,7 @@ import type {
   XlsxChart,
   XlsxChartsheet,
   XlsxCellAddress,
+  XlsxCellNumberFormatInput,
   XlsxCellRange,
   XlsxDataValidation,
   XlsxFreezePanes,
@@ -158,6 +159,7 @@ type WorkerSuccessResponse = {
     | {
         displayValue: string;
         formula: string;
+        numberFormat?: XlsxCellNumberFormatInput | null;
       }
     | unknown[]
     | null;
@@ -744,6 +746,48 @@ function decodeHtmlEntities(value: string): string {
     .replace(/&amp;/g, "&");
 }
 
+/**
+ * Number format that applies to a cell: its own style first, else the
+ * row/column style the sheet declares. Snapshots carry it so the viewer can
+ * localize the display string without reading styles on the main thread.
+ */
+/** Keep only the public number-format fields PostMessage can carry. */
+function normalizeSnapshotNumberFormat(format: unknown): XlsxCellNumberFormatInput | null {
+  if (!format || typeof format !== "object") {
+    return null;
+  }
+  const record = format as Record<string, unknown>;
+  const normalized: XlsxCellNumberFormatInput = {};
+  if (record.formatType === "custom" || record.formatType === "builtin" || record.formatType === "general") {
+    normalized.formatType = record.formatType;
+  }
+  if (typeof record.id === "number" && Number.isFinite(record.id)) {
+    normalized.id = record.id;
+  }
+  if (typeof record.formatString === "string" && record.formatString) {
+    normalized.formatString = record.formatString;
+  }
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+function resolveSnapshotNumberFormat(
+  worksheet: ReturnType<Workbook["getSheet"]>,
+  sheet: XlsxSheetData | null,
+  row: number,
+  col: number
+): XlsxCellNumberFormatInput | null {
+  const style = worksheet.getCellStyleAt(row, col) as { numberFormat?: XlsxCellNumberFormatInput } | null | undefined;
+  if (style && typeof style === "object") {
+    return normalizeSnapshotNumberFormat(style.numberFormat);
+  }
+  if (!sheet) {
+    return null;
+  }
+  const rowStyleId = sheet.rowStyleIds[row];
+  const colStyleId = sheet.colStyleIds[col];
+  return normalizeSnapshotNumberFormat(sheet.styleById[rowStyleId ?? colStyleId ?? -1]?.numberFormat);
+}
+
 function getCellDisplayValue(worksheet: ReturnType<Workbook["getSheet"]>, row: number, col: number, activeSheet?: XlsxSheetData | null) {
   const formula = worksheet.getFormulaAt(row, col);
   const cachedFormulaValue = formula ? activeSheet?.cachedFormulaValues?.[cellAddressToA1({ row, col })] : undefined;
@@ -1066,7 +1110,8 @@ function executeRequest(message: WorkerRequest, isSuperseded: () => boolean): Wo
       if (!workbook) {
         return {
           displayValue: "",
-          formula: ""
+          formula: "",
+          numberFormat: null
         };
       }
 
@@ -1075,7 +1120,8 @@ function executeRequest(message: WorkerRequest, isSuperseded: () => boolean): Wo
       try {
         return {
           displayValue: getCellDisplayValue(worksheet, message.payload.row, message.payload.col, targetSheet),
-          formula: worksheet.getFormulaAt(message.payload.row, message.payload.col) ?? ""
+          formula: worksheet.getFormulaAt(message.payload.row, message.payload.col) ?? "",
+          numberFormat: resolveSnapshotNumberFormat(worksheet, targetSheet, message.payload.row, message.payload.col)
         };
       } finally {
         worksheet.free();

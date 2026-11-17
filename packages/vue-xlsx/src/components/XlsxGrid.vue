@@ -840,7 +840,7 @@ function getGridCellDisplayValue(cell: XlsxCellAddress) {
     if (cached !== undefined) {
       // Worker rows keep the raw style, so localized formats render the same
       // way they do on the main thread.
-      return localizeFormattedNumber(cached.value, cached.style?.numberFormat);
+      return localizeFormattedNumber(cached.value, cached.style?.numberFormat, props.controller.locale);
     }
   }
   return props.controller.getCellDisplayValue(cell);

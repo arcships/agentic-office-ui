@@ -11,7 +11,7 @@ import {
 } from "./vue-test-renderer.mjs";
 
 const { getSheetsWasmModule, setWasmSource } = await importFromDemo("@arcships/xlsx-core");
-const { XlsxRibbon, useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
+const { XlsxRibbon, XlsxViewer, useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
 
 function configureWasm() {
   const bytes = readFileSync(
@@ -25,7 +25,7 @@ function configureWasm() {
   );
 }
 
-async function mountWorkbookController() {
+async function mountWorkbookController(options = {}) {
   const wasm = await getSheetsWasmModule();
   const source = wasm.Workbook.fromCsvString("a,b,c\n");
   const bytes = source.saveXlsxBytes();
@@ -40,6 +40,7 @@ async function mountWorkbookController() {
         fileName: "number-locale.xlsx",
         skipXmlParsing: true,
         useWorker: false,
+        ...options,
       });
       return () => vue.h("div", controller.sourceState);
     },
@@ -241,4 +242,98 @@ test("the ribbon classifies locale sections without misreading them", async (t) 
     await vue.nextTick();
     assert.equal(select.value, expected, JSON.stringify(numberFormat));
   }
+});
+
+test("the controller locale formats and parses values that name no locale", async (t) => {
+  const { app, controller } = await mountWorkbookController({ locale: "de-DE" });
+  t.after(() => app.unmount());
+  assert.equal(controller.locale, "de-DE");
+
+  const worksheet = controller.getActiveWorksheet();
+  try {
+    worksheet.setCell("A1", 1234.56);
+    worksheet.setCell("A2", 0.5);
+  } finally {
+    worksheet.free();
+  }
+
+  // Formats without a `[$-…]` section follow the host locale.
+  const money = { col: 0, row: 0 };
+  await applyNumberFormat(controller, money, "#,##0.00");
+  assert.equal(controller.getCellDisplayValue(money), "1.234,56");
+
+  const percent = { col: 0, row: 1 };
+  await applyNumberFormat(controller, percent, "0.00%");
+  assert.equal(controller.getCellDisplayValue(percent), "50,00%");
+
+  // Typing follows the same locale: 1.234 is grouped, 31.12.2024 is a date.
+  const grouped = { col: 0, row: 2 };
+  controller.setCellValue(grouped, "1.234");
+  await vue.nextTick();
+  assert.equal(readCell(controller, grouped).value, 1234);
+
+  const date = { col: 0, row: 3 };
+  controller.setCellValue(date, "31.12.2024");
+  await vue.nextTick();
+  assert.equal(typeof readCell(controller, date).value, "number");
+  assert.equal(readCell(controller, date).numberFormat?.formatString, "dd.mm.yyyy");
+  assert.equal(controller.getCellDisplayValue(date), "31.12.2024");
+});
+
+test("setDocumentLocale switches formats and rejects unknown locales", async (t) => {
+  const { app, controller } = await mountWorkbookController({ locale: "de-DE" });
+  t.after(() => app.unmount());
+
+  const worksheet = controller.getActiveWorksheet();
+  try {
+    worksheet.setCell("A1", 1234.56);
+  } finally {
+    worksheet.free();
+  }
+  const cell = { col: 0, row: 0 };
+  await applyNumberFormat(controller, cell, "#,##0.00");
+  assert.equal(controller.getCellDisplayValue(cell), "1.234,56");
+
+  controller.setDocumentLocale("en-US");
+  await vue.nextTick();
+  assert.equal(controller.locale, "en-US");
+  assert.equal(controller.getCellDisplayValue(cell), "1,234.56");
+
+  controller.setDocumentLocale("not a locale");
+  await vue.nextTick();
+  assert.equal(controller.locale, "en-US");
+
+  controller.setDocumentLocale("de-DE");
+  await vue.nextTick();
+  assert.equal(controller.getCellDisplayValue(cell), "1.234,56");
+});
+
+test("XlsxViewer forwards documentLocale to its controller", async (t) => {
+  const calls = [];
+  const controller = {
+    activeSheet: null,
+    canRedo: false,
+    canUndo: false,
+    error: null,
+    isEditingLocked: false,
+    isLoading: false,
+    readOnly: false,
+    redo() {},
+    setDocumentLocale(locale) { calls.push(locale); },
+    tabs: [],
+    undo() {},
+  };
+
+  const mounted = await mount(XlsxViewer, {
+    controller,
+    documentLocale: "de-DE",
+    showDefaultToolbar: false,
+    showFormulaBar: false,
+    showImages: false,
+    showRibbon: false,
+  });
+  t.after(() => mounted.app.unmount());
+
+  assert.deepEqual(calls, ["de-DE"]);
+  assert.deepEqual(mounted.warnings, []);
 });

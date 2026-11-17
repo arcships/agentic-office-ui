@@ -184,6 +184,7 @@ const suites = {
       "tests/component/xlsx-number-formats.test.mjs",
       "tests/component/xlsx-number-locale.test.mjs",
       "tests/component/xlsx-number-format-undo.test.mjs",
+      "tests/component/xlsx-worker-cell-format.test.mjs",
       "tests/component/xlsx-sheet-sync.test.mjs",
       "tests/component/xlsx-drawing-fidelity.test.mjs",
       "tests/component/xlsx-calculation-safety.test.mjs",
