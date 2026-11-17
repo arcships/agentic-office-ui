@@ -64,6 +64,50 @@ export function pageMarginPaddingStyle(
   };
 }
 
+/**
+ * Origin that floating DOCX images are positioned against.
+ *
+ * `.docx-page-surface` is the positioned ancestor of every page body: its
+ * padding box starts at the page edge (the margins are rendered as padding), so
+ * `page`-relative anchors are measured from `left/top = 0` while
+ * `margin`/`column`-relative anchors are offset by the page margins.
+ */
+export interface DocxFloatingPageOriginPx {
+  left: number;
+  top: number;
+  marginLeft: number;
+  marginTop: number;
+  columnLeft: number;
+  columnTop: number;
+  pageWidth: number;
+}
+
+export function resolveFloatingPageOriginPx(
+  pageWidthPx: number | undefined,
+  marginsPx?: { top: number; right: number; bottom: number; left: number }
+): DocxFloatingPageOriginPx {
+  const pageWidth =
+    Number.isFinite(pageWidthPx) && (pageWidthPx as number) > 0
+      ? Math.max(1, Math.round(pageWidthPx as number))
+      : DEFAULT_DOC_PAGE_WIDTH;
+  const marginLeft = Number.isFinite(marginsPx?.left)
+    ? Math.max(0, Math.round(marginsPx?.left as number))
+    : 0;
+  const marginTop = Number.isFinite(marginsPx?.top)
+    ? Math.max(0, Math.round(marginsPx?.top as number))
+    : 0;
+
+  return {
+    left: 0,
+    top: 0,
+    marginLeft,
+    marginTop,
+    columnLeft: marginLeft,
+    columnTop: marginTop,
+    pageWidth,
+  };
+}
+
 export function twipsToPixels(twips?: number): number | undefined {
   if (!Number.isFinite(twips)) {
     return undefined;

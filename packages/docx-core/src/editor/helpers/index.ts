@@ -93,6 +93,7 @@ export * from "./letterhead";
 export * from "./line-height";
 export * from "./line-height-wrap";
 export * from "./line-height-table";
+export * from "./page-flow-wrap-clearance";
 export * from "./table-height";
 export * from "./header-footer";
 export * from "./paragraph-tracked";

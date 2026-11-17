@@ -21,6 +21,7 @@
         :page-number="pageNumber"
         :total-pages="totalPages"
         :page-number-format="pageNumberFormat"
+        :floating-page-origin-px="floatingPageOriginPx"
         :within-header-footer="true"
         header-footer-region="footer"
       />
@@ -38,6 +39,7 @@
         :page-number="pageNumber"
         :total-pages="totalPages"
         :page-number-format="pageNumberFormat"
+        :floating-page-origin-px="floatingPageOriginPx"
         :within-header-footer="true"
         header-footer-region="footer"
         :max-available-width-px="pageContentWidthPx"
@@ -50,6 +52,7 @@
 import { computed } from "vue"
 import type {
   DocModel,
+  DocxFloatingPageOriginPx,
   DocxEditorController,
   FooterSection,
 } from "@arcships/docx-core"
@@ -69,6 +72,7 @@ const props = defineProps<{
     footerDistancePx?: number
   }
   pageContentWidthPx: number
+  floatingPageOriginPx?: DocxFloatingPageOriginPx
   theme: "light" | "dark"
   controller?: DocxEditorController
   pageNumber: number

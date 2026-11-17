@@ -15,6 +15,7 @@ import {
   wrappedFloatingImageStyle,
   absoluteFloatingImageStyle,
   resolvePageSpanningAbsoluteFloatingDimensions,
+  resolveImageFrameSizePx,
   imageCropLayout,
   resolveRenderableImageSource,
   imageUsesPlaceholderFallback,
@@ -175,6 +176,21 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
     ctx.floatingPageOriginPx
   ))
 
+  // A 90°/270° drawing rotation turns the visual footprint a quarter turn. Lay
+  // the frame out swapped and rotate the image content into it, otherwise the
+  // rotated image keeps its unrotated box, overflows it, and paints over the
+  // neighbouring runs.
+  const contentWidthPx = widthPx
+  const contentHeightPx = heightPx
+  const imageFrameSize = resolveImageFrameSizePx(
+    child,
+    contentWidthPx,
+    contentHeightPx
+  )
+  const frameWidthPx = imageFrameSize.widthPx
+  const frameHeightPx = imageFrameSize.heightPx
+  const rotationSwapsFrame = imageFrameSize.rotationSwapped
+
   const usesExternalHorizontalAnchorOrigin =
     horizontalRelativeTo === "page" ||
     horizontalRelativeTo === "margin" ||
@@ -328,8 +344,8 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
           role: "img",
           "aria-label": child.alt ?? "DOCX image",
           style: buildPlaceholderStyle(
-            widthPx,
-            heightPx,
+            frameWidthPx,
+            frameHeightPx,
             isSmallIcon,
             isWrappedFloatingImage,
             isAbsoluteFloatingImage,
@@ -349,18 +365,37 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
   }
 
   // Rendered image
-  const cropLayout = imageCropLayout(child, widthPx, heightPx)
+  const cropLayout = imageCropLayout(child, contentWidthPx, contentHeightPx)
   const imageVisualStyle: Record<string, string | number | undefined> = {
     filter: appendCssFilters(child.cssFilter, extra?.imageFilterSuffix),
     opacity: child.cssOpacity,
   }
-  const imageTransformStyle = resolveImageRenderTransformStyle(child, {
-    frameWidthPx: cropLayout?.frameWidthPx ?? widthPx,
-    frameHeightPx: cropLayout?.frameHeightPx ?? heightPx,
-    baseTransform: cropLayout
-      ? `translate(${-cropLayout.offsetXPx}px, ${-cropLayout.offsetYPx}px)`
-      : undefined,
-  })
+  // The rotated image content keeps the unrotated (content) box; the frame that
+  // holds it is swapped. `fillFrame: true` returns exactly that content box plus
+  // the quarter-turn transform that lands it inside the swapped frame.
+  const rotatedFrameTransformStyle = rotationSwapsFrame
+    ? resolveImageRenderTransformStyle(child, {
+        frameWidthPx: cropLayout
+          ? cropLayout.frameHeightPx
+          : frameWidthPx,
+        frameHeightPx: cropLayout
+          ? cropLayout.frameWidthPx
+          : frameHeightPx,
+        fillFrame: true,
+        baseTransform: cropLayout
+          ? `translate(${-cropLayout.offsetXPx}px, ${-cropLayout.offsetYPx}px)`
+          : undefined,
+      })
+    : undefined
+  const imageTransformStyle = rotationSwapsFrame
+    ? undefined
+    : resolveImageRenderTransformStyle(child, {
+        frameWidthPx: cropLayout?.frameWidthPx ?? widthPx,
+        frameHeightPx: cropLayout?.frameHeightPx ?? heightPx,
+        baseTransform: cropLayout
+          ? `translate(${-cropLayout.offsetXPx}px, ${-cropLayout.offsetYPx}px)`
+          : undefined,
+      })
   const onImageLoad = (event: Event) => {
     const image = event.currentTarget as HTMLImageElement | null
     if (image) image.dataset.imageState = "ready"
@@ -380,14 +415,100 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
   }
 
   if (cropLayout) {
+    const cropImageVNode = h("img", {
+      src: renderableImageSrc,
+      alt: child.alt ?? "DOCX image",
+      draggable: false,
+      loading: "lazy",
+      decoding: "async",
+      "data-image-state": "loading",
+      onLoad: onImageLoad,
+      onError: onImageError,
+      style: {
+        width: `${cropLayout.imageWidthPx}px`,
+        height: `${cropLayout.imageHeightPx}px`,
+        maxWidth: "none",
+        display: "block",
+        ...imageVisualStyle,
+        ...imageTransformStyle,
+      },
+    })
+
+    // The crop window itself is rotated into the swapped frame, so the floating
+    // box (and therefore the drag hit box) matches the rotated footprint.
+    const cropFrameStyle = buildCropFrameStyle(
+      cropLayout,
+      rotationSwapsFrame ? false : isCenteredStandaloneInlineImage,
+      isWrappedFloatingImage,
+      isAbsoluteFloatingImage,
+      rotationSwapsFrame ? {} : floatingStyleWithMovePreview,
+      rotationSwapsFrame ? undefined : sectionImageCursor,
+      rotationSwapsFrame ? undefined : decorativeStyle
+    )
+    const cropContents = rotationSwapsFrame
+      ? [
+          h(
+            "span",
+            { style: { ...cropFrameStyle, ...rotatedFrameTransformStyle } },
+            [cropImageVNode]
+          ),
+        ]
+      : [cropImageVNode]
+
+    if (!rotationSwapsFrame) {
+      return {
+        vnode: h(
+          "span",
+          {
+            key,
+            ...imageLayoutAttributes,
+            style: cropFrameStyle,
+            onPointerdown: onSectionImagePointerDown,
+            onClick: onSectionImageClick,
+          },
+          cropContents
+        ),
+        isWrappedFloating: isWrappedFloatingImage,
+        isAbsoluteFloating: isAbsoluteFloatingImage,
+      }
+    }
+
     return {
       vnode: h(
         "span",
         {
           key,
           ...imageLayoutAttributes,
-          style: buildCropFrameStyle(
-            cropLayout,
+          style: buildRotationFrameStyle(
+            frameWidthPx ?? cropLayout.frameHeightPx,
+            frameHeightPx ?? cropLayout.frameWidthPx,
+            isCenteredStandaloneInlineImage,
+            isWrappedFloatingImage,
+            isAbsoluteFloatingImage,
+            floatingStyleWithMovePreview,
+            sectionImageCursor,
+            decorativeStyle
+          ),
+          onPointerdown: onSectionImagePointerDown,
+          onClick: onSectionImageClick,
+        },
+        cropContents
+      ),
+      isWrappedFloating: isWrappedFloatingImage,
+      isAbsoluteFloating: isAbsoluteFloatingImage,
+    }
+  }
+
+  if (rotationSwapsFrame) {
+    return {
+      vnode: h(
+        "span",
+        {
+          key,
+          ...imageLayoutAttributes,
+          style: buildRotationFrameStyle(
+            frameWidthPx ?? 0,
+            frameHeightPx ?? 0,
             isCenteredStandaloneInlineImage,
             isWrappedFloatingImage,
             isAbsoluteFloatingImage,
@@ -409,18 +530,20 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
             onLoad: onImageLoad,
             onError: onImageError,
             style: {
-              width: `${cropLayout.imageWidthPx}px`,
-              height: `${cropLayout.imageHeightPx}px`,
-              maxWidth: "none",
               display: "block",
+              maxWidth: "none",
               ...imageVisualStyle,
-              ...imageTransformStyle,
+              ...rotatedFrameTransformStyle,
             },
           }),
         ]
       ),
       isWrappedFloating: isWrappedFloatingImage,
       isAbsoluteFloating: isAbsoluteFloatingImage,
+      inlineAdvancePx:
+        !isWrappedFloatingImage && !isAbsoluteFloatingImage
+          ? (frameWidthPx ?? 0)
+          : undefined,
     }
   }
 
@@ -612,6 +735,38 @@ function buildCropFrameStyle(
     verticalAlign: "middle",
     marginInline: isWrapped || isAbsolute ? undefined : 0,
     ...floatingStyle,
+    cursor,
+    ...decorative,
+  }
+}
+
+/**
+ * Outer frame of a quarter-turned image. It carries the layout box
+ * (width/height swapped for the rotation) plus the floating/drag styles, while
+ * the rotated content inside is sized to the unrotated content box.
+ */
+function buildRotationFrameStyle(
+  frameWidthPx: number,
+  frameHeightPx: number,
+  isCentered: boolean,
+  isWrapped: boolean,
+  isAbsolute: boolean,
+  floatingStyle: Record<string, string | number | undefined>,
+  cursor: string | undefined,
+  decorative?: Record<string, string>
+): Record<string, string | number | undefined> {
+  return {
+    display: isCentered ? "block" : "inline-block",
+    marginLeft: isCentered ? "auto" : undefined,
+    marginRight: isCentered ? "auto" : undefined,
+    verticalAlign: "middle",
+    lineHeight: 0,
+    marginInline: isWrapped || isAbsolute ? undefined : 0,
+    ...floatingStyle,
+    // The swapped frame is the layout box: it must win over the float's
+    // intrinsic (unrotated) width.
+    width: `${Math.max(1, Math.round(frameWidthPx))}px`,
+    height: `${Math.max(1, Math.round(frameHeightPx))}px`,
     cursor,
     ...decorative,
   }

@@ -32,6 +32,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted, onUnmounted } from "vue"
 import type {
+  DocxFloatingPageOriginPx,
   DocxEditorController,
   DocxTextRange,
   NumberingDefinitionSet,
@@ -72,6 +73,10 @@ const props = withDefaults(
     headerFooterRegion?: "header" | "footer"
     noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
     skipImageChildIndexes?: readonly number[]
+    /** Page-relative origin used to place margin/page/column anchored images. */
+    floatingPageOriginPx?: DocxFloatingPageOriginPx
+    /** Space to insert above the paragraph so it clears an overflowing float. */
+    wrapClearanceTopPx?: number
   }>(),
   {
     editable: false,
@@ -106,13 +111,22 @@ const isActiveParagraph = computed(() => {
 })
 
 const paragraphStyle = computed<Record<string, any>>(() => {
-  return {
+  const resolved: Record<string, any> = {
     ...paragraphStyleToCss(props.paragraph, {
       numberingDefinitions: props.numberingDefinitions,
     }),
     // Keep the shared paragraph typography (alignment/direction) too.
     ...paragraphTypographyStyle(props.paragraph.style),
   }
+  // A floating image that outlives this paragraph is cleared by pushing the next
+  // paragraph below it; the paragraph's own spacing-before still applies.
+  const wrapClearanceTopPx = Math.max(0, Math.round(props.wrapClearanceTopPx ?? 0))
+  if (wrapClearanceTopPx > 0) {
+    const modelMarginTopPx = Number.parseFloat(String(resolved.marginTop ?? ""))
+    const baseMarginTopPx = Number.isFinite(modelMarginTopPx) ? modelMarginTopPx : 0
+    resolved.marginTop = `${baseMarginTopPx + wrapClearanceTopPx}px`
+  }
+  return resolved
 })
 
 const displayHtml = computed(() => {
@@ -136,7 +150,7 @@ const displayHtml = computed(() => {
     theme,
     props.numberingLabel ? { label: props.numberingLabel } as any : undefined,
     undefined,
-    undefined,
+    props.floatingPageOriginPx,
     undefined,
     props.pageNumber,
     props.totalPages,

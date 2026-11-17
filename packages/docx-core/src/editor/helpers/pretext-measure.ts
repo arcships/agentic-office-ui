@@ -54,6 +54,7 @@ import {
   type ParagraphPretextLayoutSource
 } from "./pretext-build";
 import {
+  resolveWrappedFloatingTextBands,
   shouldRenderWrappedFloatingImage
 } from "./paragraph-geometry";
 import { resolveFloatingEffectExtentPx } from "../../engine/anchor-properties";
@@ -533,6 +534,33 @@ export function resolveDualWrappedFloatingImageGeometry(
   if (wrapType === "topAndBottom") {
     exclusionLeftPx = 0;
     exclusionRightPx = safeContainerWidthPx;
+  } else if (
+    floating?.wrapText === "left" ||
+    floating?.wrapText === "right"
+  ) {
+    // `wrapText = left|right` disables one side in Word. Ask the helper the
+    // renderer uses and snap the exclusion to that edge, so the measured free
+    // band is exactly the one the CSS float leaves for text; measuring both
+    // sides instead under-counts lines and shifts every later page break.
+    const textBands = resolveWrappedFloatingTextBands(image, {
+      containerWidthPx: safeContainerWidthPx,
+      imageWidthPx
+    });
+    const effectLeftPx = Math.round(effectExtent.leftPx);
+    const effectRightPx = Math.round(effectExtent.rightPx);
+    if (textBands.textOnLeft) {
+      exclusionLeftPx = Math.max(
+        0,
+        safeContainerWidthPx - imageWidthPx - distLPx - effectLeftPx
+      );
+      exclusionRightPx = safeContainerWidthPx;
+    } else {
+      exclusionLeftPx = 0;
+      exclusionRightPx = Math.min(
+        safeContainerWidthPx,
+        imageWidthPx + distRPx + effectRightPx
+      );
+    }
   } else if (horizontalAlign === "left" || horizontalAlign === "inside") {
     exclusionLeftPx = 0;
   } else if (horizontalAlign === "right" || horizontalAlign === "outside") {

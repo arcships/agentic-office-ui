@@ -33,6 +33,7 @@
 |---|---|
 | [architecture-review-and-target-design.md](architecture-review-and-target-design.md) | 目标架构、包边界、状态所有权和兼容约束 |
 | [docx-viewer-controlled-surface-and-pagination-fix.md](docx-viewer-controlled-surface-and-pagination-fix.md) | DOCX 受控文档面、分页切片、缩放测量、纸面主题和批注布局修复合同 |
+| [docx-floating-images.md](docx-floating-images.md) | DOCX 浮动图片定位基准、层级、旋转占位、绕排与 tight/through 限制 |
 | [surface-search-and-pdf-selection-design.md](surface-search-and-pdf-selection-design.md) | 四种 Surface 的统一搜索会话、Find Bar、精确定位，以及 PDF glyph 选择与交互优化设计 |
 | [pdf-text-layer-issue.md](pdf-text-layer-issue.md) | 已废止的 PDF 透明 text layer 历史方案与失败复盘 |
 | [unified-surface-api-design.md](unified-surface-api-design.md) | 统一 Surface API 设计——四个 surface 组件的边界、样式、事件、expose 合同 |

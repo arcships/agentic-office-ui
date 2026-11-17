@@ -42,6 +42,10 @@ export function shouldRenderWrappedFloatingImage(image: ImageRunNode): boolean {
     return false;
   }
 
+  // NOTE: `tight` and `through` are rendered as `square`. Polygon wrap
+  // (a:wrapTight / a:wrapThrough wrapPolygon) is not modelled, so every
+  // non-topAndBottom wrap uses the rectangular exclusion resolved by
+  // resolveWrappedFloatingSide(). See docs/docx-floating-images.md.
   const wrapType = floating.wrapType;
   if (wrapType === undefined || wrapType === "none") {
     return false;
@@ -263,6 +267,45 @@ export function resolveWrappedFloatingSide(
   }
 
   return "left";
+}
+
+export interface WrappedFloatingTextBandsPx {
+  /** Side of the anchor column the image is placed on. */
+  side: "left" | "right";
+  /** Whether line boxes beside the image may use the band left of it. */
+  textOnLeft: boolean;
+  /** Whether line boxes beside the image may use the band right of it. */
+  textOnRight: boolean;
+}
+
+/**
+ * Resolve the side a wrapped floating image occupies and the text bands a line
+ * box may use beside it.
+ *
+ * This is the single source of truth shared by the renderer
+ * (`wrappedFloatingImageStyle`) and text measurement
+ * (`resolveDualWrappedFloatingImageGeometry`): both decide the side here, so the
+ * line count that drives page breaks matches the lines CSS actually lays out.
+ *
+ * `wrapText = left|right` disables the opposite side (Word semantics: the value
+ * names the side the *text* is placed on). CSS floats can only push text to one
+ * side, so `wrapText = bothSides|largest` and the polygon wrap types
+ * (`tight`/`through`, rendered as `square`) fall back to a rectangular
+ * exclusion on the resolved float side.
+ */
+export function resolveWrappedFloatingTextBands(
+  image: ImageRunNode,
+  options?: {
+    containerWidthPx?: number;
+    imageWidthPx?: number;
+  }
+): WrappedFloatingTextBandsPx {
+  const side = resolveWrappedFloatingSide(image, options);
+  return {
+    side,
+    textOnLeft: side === "right",
+    textOnRight: side === "left",
+  };
 }
 
 export function wrappedFloatingImageStyle(

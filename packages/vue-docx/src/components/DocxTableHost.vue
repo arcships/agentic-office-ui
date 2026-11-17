@@ -109,6 +109,7 @@
                 :header-footer-region="headerFooterRegion"
                 :max-available-width-px="cellContentWidthPx(cell)"
                 :note-marker-labels="noteMarkerLabels"
+                :floating-page-origin-px="floatingPageOriginPx"
               />
             </template>
             </template>
@@ -143,6 +144,7 @@ import {
   tableElementBorderStyle,
   tableWrapperStyle,
   twipsToPixels,
+  type DocxFloatingPageOriginPx,
   type DocxDocumentTheme,
   type DocxEditorController,
   type DocxEditorSelection,
@@ -197,6 +199,8 @@ const props = withDefaults(
     headerFooterRegion?: "header" | "footer"
     maxAvailableWidthPx?: number
     noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
+    /** Page-relative origin used to place margin/page/column anchored images. */
+    floatingPageOriginPx?: DocxFloatingPageOriginPx
   }>(),
   {
     editable: false,
@@ -577,7 +581,7 @@ function cellParagraphHtml(
     props.documentTheme,
     undefined,
     undefined,
-    undefined,
+    props.floatingPageOriginPx,
     undefined,
     props.pageNumber,
     props.totalPages,
