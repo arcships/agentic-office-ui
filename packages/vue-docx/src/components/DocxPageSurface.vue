@@ -228,6 +228,7 @@ import {
   resolveHeaderPaginationReservePx,
   resolveRenderableImageSource,
   pageMarginPaddingStyle,
+  pagePatternPaintStyle,
 } from "@arcships/docx-core"
 import DocxPageHeader from "./DocxPageHeader.vue"
 import DocxPageFooter from "./DocxPageFooter.vue"
@@ -685,14 +686,22 @@ const frameStyle = computed(() => ({
 // TODO(#95 / #25 / #47): clipping is the rendering safety net, not the fix for
 // content assignment. Pagination must still move overflowing paragraphs to the
 // following page; until it does, clipped content is intentionally hidden.
+const pagePatternStyle = computed(() =>
+  pagePatternPaintStyle(props.model.metadata.documentBackgroundPattern)
+)
+
 const surfaceStyle = computed(() => ({
   width: `${props.pageWidthPx}px`,
   height: `${props.pageLayout.pageHeightPx}px`,
   overflow: "hidden" as const,
   backgroundColor:
     props.pageBackgroundColor ??
+    pagePatternStyle.value.backgroundColor ??
     resolveDocumentBackgroundColor(props.model.metadata.documentBackgroundColor) ??
     (props.theme === "dark" ? "#1f2937" : "#ffffff"),
+  backgroundImage: pagePatternStyle.value.backgroundImage,
+  backgroundSize: pagePatternStyle.value.backgroundSize,
+  backgroundRepeat: pagePatternStyle.value.backgroundRepeat,
   color: props.theme === "dark" ? "#f9fafb" : "#111827",
   position: "relative" as const,
   // Own stacking context: the behind-text image layer uses a negative z-index so

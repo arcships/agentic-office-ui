@@ -9,6 +9,7 @@ import wasmInit, {
   serialize_docx_wasm
 } from "./generated/docx_wasm.js";
 import { bundledDocxWasmUrl } from "./wasm-asset";
+import { parseDocumentBackground } from "./page-background";
 
 export type WasmSource = InitInput;
 
@@ -165,6 +166,30 @@ export function mapsToWasmPackage(input: {
   return { parts, binaryAssets };
 }
 
+/**
+ * The WASM builder only sees `w:background/@w:color`. Pattern fills live in
+ * the raw document XML, so mirror that metadata onto models returned by the
+ * low-level WASM helpers too (high-level buildDocModel also enriches).
+ */
+function attachWasmDocumentBackground<T>(model: T, pkg: WasmOoxmlPackage): T {
+  const background = parseDocumentBackground(pkg.parts?.["word/document.xml"]?.content);
+  if (!background) return model;
+  const candidate = model as {
+    metadata?: {
+      documentBackgroundColor?: string;
+      documentBackgroundPattern?: { preset: string };
+    };
+  };
+  if (!candidate?.metadata) return model;
+  if (background.color && !candidate.metadata.documentBackgroundColor) {
+    candidate.metadata.documentBackgroundColor = background.color;
+  }
+  if (background.pattern) {
+    candidate.metadata.documentBackgroundPattern = background.pattern;
+  }
+  return model;
+}
+
 export async function wasmParseDocx(bytes: ArrayBuffer | Uint8Array): Promise<WasmOoxmlPackage> {
   await initWasm();
   const payload = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -174,7 +199,7 @@ export async function wasmParseDocx(bytes: ArrayBuffer | Uint8Array): Promise<Wa
 export async function wasmBuildDocModelFromPackage(pkg: WasmOoxmlPackage): Promise<unknown> {
   await initWasm();
   const json = build_doc_model_from_package(pkg);
-  return JSON.parse(json) as unknown;
+  return attachWasmDocumentBackground(JSON.parse(json) as unknown, pkg);
 }
 
 export async function wasmBuildDocModelFromBytes(bytes: ArrayBuffer | Uint8Array): Promise<{
@@ -183,7 +208,12 @@ export async function wasmBuildDocModelFromBytes(bytes: ArrayBuffer | Uint8Array
 }> {
   await initWasm();
   const payload = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  return build_doc_model_from_bytes(payload) as { package: WasmOoxmlPackage; model: unknown };
+  const result = build_doc_model_from_bytes(payload) as {
+    package: WasmOoxmlPackage;
+    model: unknown;
+  };
+  attachWasmDocumentBackground(result.model, result.package);
+  return result;
 }
 
 export async function wasmSerializeDocx(

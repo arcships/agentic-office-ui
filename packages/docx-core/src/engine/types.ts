@@ -597,6 +597,16 @@ export interface DocumentNoteProperties {
   endnote?: DocumentNoteNumberingProperties;
 }
 
+/** Page background pattern/shading resolved from w:background. */
+export interface DocumentBackgroundPattern {
+  /** OOXML preset pattern name, e.g. "pct20", "ltHorz" or "diagCross". */
+  preset: string;
+  /** Pattern foreground colour as a CSS hex colour. */
+  foregroundColor?: string;
+  /** Pattern background fill as a CSS hex colour. */
+  backgroundColor?: string;
+}
+
 export interface DocModel {
   nodes: DocNode[];
   metadata: {
@@ -605,6 +615,7 @@ export interface DocModel {
     documentPageCount?: number;
     documentOpenTag?: string;
     documentBackgroundColor?: string;
+    documentBackgroundPattern?: DocumentBackgroundPattern;
     sectionPropertiesXml?: string;
     sections?: DocumentSection[];
     headerSections: HeaderSection[];

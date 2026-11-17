@@ -178,6 +178,7 @@ interface ThumbnailRelevantMetadata {
   footnotes?: unknown;
   endnotes?: unknown;
   documentBackgroundColor?: unknown;
+  documentBackgroundPattern?: unknown;
   compatibility?: unknown;
   headerSections?: unknown;
   footerSections?: unknown;
@@ -208,6 +209,7 @@ export function docModelThumbnailMetadataSignature(metadata: object): string {
   hash = fnv1aAppendValue(hash, relevant.footnotes);
   hash = fnv1aAppendValue(hash, relevant.endnotes);
   hash = fnv1aAppendValue(hash, relevant.documentBackgroundColor);
+  hash = fnv1aAppendValue(hash, relevant.documentBackgroundPattern);
   hash = fnv1aAppendValue(hash, relevant.compatibility);
   // Style tables decide every page's typography, so editing "Normal" or the
   // default style id must invalidate page thumbnails too.

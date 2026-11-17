@@ -10,6 +10,7 @@ import {
 import { parseDocx } from "./ooxml-core";
 
 import { normalizeDocModel } from "./normalize";
+import { parseDocumentBackground } from "./page-background";
 import { parseNoteProperties } from "./note-properties";
 import { enrichDocModelFormFields } from "./form-field-enrichment";
 import { enrichDocModelTypography } from "./model-enrichment";
@@ -26,6 +27,7 @@ export {
 export { normalizeDocModel } from "./normalize";
 
 const SETTINGS_PART = "word/settings.xml";
+const DOCUMENT_PART = "word/document.xml";
 
 /**
  * The WASM model builder does not surface w:footnotePr / w:endnotePr, so the
@@ -51,6 +53,30 @@ function attachDocumentNoteProperties(
   };
 }
 
+/**
+ * The WASM model builder only surfaces the solid w:background colour. Pattern
+ * and shading fills need the raw document XML, so they are attached here
+ * before normalization (both the main-thread and Worker import paths call
+ * buildDocModel).
+ */
+function attachDocumentBackground(
+  model: DocModel,
+  pkg: OoxmlPackage,
+): DocModel {
+  const documentXml = pkg.parts.get(DOCUMENT_PART)?.content;
+  const background = parseDocumentBackground(documentXml);
+  if (!background) return model;
+
+  const metadata = { ...model.metadata };
+  if (!metadata.documentBackgroundColor && background.color) {
+    metadata.documentBackgroundColor = background.color;
+  }
+  if (background.pattern) {
+    metadata.documentBackgroundPattern = background.pattern;
+  }
+  return { ...model, metadata };
+}
+
 export async function buildDocModel(pkg: OoxmlPackage): Promise<DocModel> {
   const wasmPackage = mapsToWasmPackage({
     parts: pkg.parts,
@@ -59,7 +85,9 @@ export async function buildDocModel(pkg: OoxmlPackage): Promise<DocModel> {
   const model = (await wasmBuildDocModelFromPackage(wasmPackage)) as DocModel;
   enrichDocModelFormFields(model);
   enrichDocModelTypography(model, pkg);
-  return normalizeDocModel(attachDocumentNoteProperties(model, pkg));
+  return normalizeDocModel(
+    attachDocumentBackground(attachDocumentNoteProperties(model, pkg), pkg)
+  );
 }
 
 export async function buildDocModelFromBytes(

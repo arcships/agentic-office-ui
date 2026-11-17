@@ -183,6 +183,56 @@ test("DOCX thumbnail paints the document page background colour", async (t) => {
   mounted.app.unmount();
 });
 
+test("DOCX thumbnail paints a patterned page background", async (t) => {
+  const operations = installCanvasEnvironment(t);
+  const model = cloneDocModel(defaultStarterModel);
+  model.metadata.documentBackgroundColor = "DDEBF7";
+  model.metadata.documentBackgroundPattern = {
+    preset: "pct20",
+    foregroundColor: "#2F5597",
+    backgroundColor: "#DDEBF7",
+  };
+  model.nodes = [paragraph("Patterned page")];
+
+  const mounted = await mount(DocxThumbnailPanel, {
+    model,
+    layoutOptions: {
+      pageWidth: 200,
+      pageHeight: 100,
+      margin: 10,
+      minLineHeight: 30,
+      paragraphSpacing: 10,
+    },
+    showToggle: false,
+  });
+  await vue.nextTick();
+  await vue.nextTick();
+
+  const firstCanvas = walk(mounted.root).find((node) => node.type === "canvas");
+  assert.ok(
+    operations.some((operation) =>
+      operation.canvas === firstCanvas &&
+      operation.name === "fillRect" &&
+      operation.fillStyle === "#DDEBF7" &&
+      operation.args[2] > 1 &&
+      operation.args[3] > 1
+    ),
+    "the thumbnail canvas must paint the pattern background colour"
+  );
+  assert.ok(
+    operations.some((operation) =>
+      operation.canvas === firstCanvas &&
+      operation.name === "fillRect" &&
+      operation.fillStyle === "#2F5597" &&
+      operation.args[2] === 1 &&
+      operation.args[3] === 1
+    ),
+    "the thumbnail canvas must paint pattern dots"
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
 test("DOCX thumbnail rail wraps body text and paints headers, footers and notes", async (t) => {
   const operations = installCanvasEnvironment(t);
   const model = cloneDocModel(defaultStarterModel);
