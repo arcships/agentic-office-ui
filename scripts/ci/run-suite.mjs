@@ -140,6 +140,7 @@ const suites = {
       "tests/component/xlsx-cell-editing.test.mjs",
       "tests/component/xlsx-anchored-panes.test.mjs",
       "tests/component/xlsx-ime-composition.test.mjs",
+      "tests/component/xlsx-clipboard-search.test.mjs",
       "tests/component/image-decode-state.test.mjs",
     ]),
     command("docx-xlsx-component-smoke", process.execPath, [

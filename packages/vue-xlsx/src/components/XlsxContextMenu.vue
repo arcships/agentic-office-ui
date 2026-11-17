@@ -56,11 +56,14 @@
       >重做</button>
     </div>
   </Teleport>
+  <XlsxClipboardNotice :message="clipboardNotice" />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onUnmounted, watch, type CSSProperties } from "vue";
 import type { XlsxCellAddress, XlsxSheetData, XlsxViewerController } from "@arcships/xlsx-core";
+import XlsxClipboardNotice from "./XlsxClipboardNotice.vue";
+import { useClipboardCopyNotice } from "../composables/useClipboardCopyNotice";
 
 const DEFAULT_ROW_HEIGHT = 24;
 const DEFAULT_COL_WIDTH = 80;
@@ -79,6 +82,7 @@ const position = ref({ x: 0, y: 0 });
 const sortTarget = ref<{ columnIndex: number; tableName: string } | null>(null);
 
 const isReadOnly = computed(() => props.controller.readOnly);
+const { notice: clipboardNotice, copySelection } = useClipboardCopyNotice(() => props.controller);
 
 const menuStyle = computed<CSSProperties>(() => ({
   left: `${position.value.x}px`,
@@ -167,7 +171,7 @@ function onContextMenu(event: MouseEvent) {
 }
 
 function close() { visible.value = false; sortTarget.value = null; }
-function onCopy() { props.controller.copySelectionToClipboard(); close(); }
+function onCopy() { void copySelection(); close(); }
 function onPaste() { props.controller.pasteFromClipboard(); close(); }
 function onClear() { props.controller.clearSelectedCells(); close(); }
 function onUndo() { props.controller.undo(); close(); }

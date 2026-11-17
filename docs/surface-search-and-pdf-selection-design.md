@@ -181,7 +181,9 @@ export interface PdfSearchMatch {
 
 ### 5.3 匹配语义
 
-- 首版默认模糊搜索，定义为大小写不敏感的连续子串包含匹配，不提供搜索模式开关。
+- 首版默认模糊搜索，定义为大小写不敏感的连续子串包含匹配，Find Bar 不提供搜索模式开关。
+- `useXlsxSearch` 接受可选的 `caseSensitive: true`，用于宿主需要精确大小写匹配的场景；默认保持大小写不敏感。
+- 搜索结果缓存的是匹配时刻的单元格文本，工作簿 `revision` 变化（编辑、撤销、排序、重新加载）后必须清空会话，不能继续复用陈旧的 `text/start/end`。
 - “模糊”不包含错别字纠正、编辑距离、拼音、同义词或语义召回；这些能力没有需求依据，也不能保证四种格式结果一致。
 - `start/end` 和 DOCX/PPTX offset 使用 UTF-16 code unit，start inclusive/end exclusive，与 DOM Range 和 `String#indexOf` 一致。
 - DOCX 搜索可表达位置的正文和表格段落；PPTX、PDF 搜索当前文档；XLSX 沿用现有 workbook 搜索的文字来源。本设计不新增范围或字段切换。
