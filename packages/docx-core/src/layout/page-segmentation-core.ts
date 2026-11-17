@@ -11,6 +11,7 @@ import {
   paragraphAfterSpacingPx,
   paragraphBeforeSpacingPx,
   paragraphLastRenderedPageBreakPosition,
+  paragraphLastRenderedPageBreakTextOffset,
   paragraphStartsWithLastRenderedPageBreak,
   paragraphHasPageBreakBefore,
   resolveDocumentSectionsFromMetadata,
@@ -215,29 +216,6 @@ function estimateBreakLineIndexForTextOffset(
       Math.round((clampedOffset / textLength) * lineCount)
     )
   );
-}
-
-function paragraphLastRenderedPageBreakTextOffset(
-  paragraph: ParagraphNode
-): number | undefined {
-  const xml = paragraph.sourceXml ?? "";
-  const breakMatch = /<w:lastRenderedPageBreak\b[^>]*\/?>/i.exec(xml);
-  if (!breakMatch || breakMatch.index === undefined) {
-    return undefined;
-  }
-
-  const leadingXml = xml.slice(0, breakMatch.index);
-  let textOffset = 0;
-  for (const match of leadingXml.matchAll(
-    /<w:t\b[^>]*>([\s\S]*?)<\/w:t>|<w:(?:tab|cr|noBreakHyphen)\b[^>]*\/?>|<w:br\b[^>]*\/?>/gi
-  )) {
-    if (match[1] !== undefined) {
-      textOffset += match[1].length;
-    } else {
-      textOffset += 1;
-    }
-  }
-  return textOffset;
 }
 
 /**

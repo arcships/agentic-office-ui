@@ -146,6 +146,24 @@ export function buildPaginationSectionMetrics(
         1,
         sectionColumns?.count ?? 1
       );
+      const bodyWidthPx = resolveSectionPaginationContentWidthPx(
+        layout,
+        section.sectionPropertiesXml
+      );
+      const columnWidthPx =
+        pageContentHeightMultiplier === 1
+          ? bodyWidthPx
+          : sectionColumns?.widthsPx?.length === pageContentHeightMultiplier
+          ? sectionColumns.widthsPx[0]
+          : Math.max(
+              24,
+              Math.round(
+                (bodyWidthPx -
+                  (sectionColumns?.gapPx ?? 0) *
+                    (pageContentHeightMultiplier - 1)) /
+                  pageContentHeightMultiplier
+              )
+            );
       const hasHeaderContent = sectionHasVisibleHeaderContent(section);
       const hasFooterContent = sectionHasVisibleFooterContent(section);
       const headerPaginationReservePx = hasHeaderContent
@@ -164,10 +182,7 @@ export function buildPaginationSectionMetrics(
         : 0;
       return {
         startNodeIndex: Math.max(0, Math.round(section.startNodeIndex)),
-        pageContentWidthPx: resolveSectionPaginationContentWidthPx(
-          layout,
-          section.sectionPropertiesXml
-        ),
+        pageContentWidthPx: columnWidthPx,
         pageContentHeightPx: Math.max(
           120,
           (layout.pageHeightPx -

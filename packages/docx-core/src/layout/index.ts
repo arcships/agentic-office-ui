@@ -20,6 +20,7 @@ import {
   paginateDocumentLayoutWithNoteReserve,
   resolvePaginationSectionGeometry,
   type PaginatedPageBlock,
+  type PaginationMeasurementFeedback,
   type PaginationSectionGeometry
 } from "./pagination-layout";
 import type { ParagraphLineRange, TableRowRange } from "./page-segmentation-core";
@@ -32,7 +33,19 @@ export type {
   LayoutBlock,
 };
 export { layoutDocument };
+export type { PaginationMeasurementFeedback } from "./pagination-layout";
+export {
+  paginateDocumentLayout,
+  resolvePaginationSectionGeometry
+} from "./pagination-layout";
+export type {
+  PaginatedDocumentLayout,
+  PaginatedPage,
+  PaginatedPageBlock,
+  PaginationSectionGeometry
+} from "./pagination-layout";
 export * from "./pagination";
+export * from "./pagination-iteration";
 export * from "./page-segmentation-core";
 export * from "./page-segmentation-table";
 // `pagination-layout` is intentionally not re-exported: it is the adapter that
@@ -49,13 +62,15 @@ const DEFAULT_LAYOUT_OPTIONS: Required<LayoutOptions> = {
   respectSectionLayout: true
 };
 
-export type LayoutSnapshotOptions = LayoutOptions & {
+export interface LayoutSnapshotOptions extends LayoutOptions {
   /**
    * Reserve the height of the notes printed at the bottom of a page so body
    * text does not run into them (default: true).
    */
   reserveNoteHeight?: boolean;
-};
+  /** Measured-height feedback from the previous render pass (#99). */
+  measurementFeedback?: PaginationMeasurementFeedback;
+}
 
 export interface LayoutSnapshotRect {
   x: number;
@@ -110,6 +125,8 @@ export interface LayoutFragmentSource {
   rowIndex?: number;
   cellIndex?: number;
   paragraphIndex?: number;
+  /** Body column this fragment is rendered in (0 for single-column pages). */
+  columnIndex?: number;
 }
 
 export interface LayoutSnapshotTextRun {
@@ -178,6 +195,10 @@ export interface LayoutSnapshotPage {
   pageSizePx: LayoutSnapshotPageSize;
   marginsPx: LayoutSnapshotMargins;
   contentBoxPx: LayoutSnapshotRect;
+  /** Real body column layout for this page's section. */
+  columnCount: number;
+  columnGapPx: number;
+  columnWidthsPx: number[];
   blocks: LayoutSnapshotBlockFragment[];
 }
 
@@ -188,7 +209,9 @@ export interface LayoutSnapshot {
   pages: LayoutSnapshotPage[];
 }
 
-function normalizeLayoutOptions(options: LayoutSnapshotOptions = {}): Required<LayoutOptions> {
+function normalizeLayoutOptions(options: LayoutSnapshotOptions = {}): Required<LayoutOptions> & {
+  measurementFeedback?: PaginationMeasurementFeedback;
+} {
   return {
     ...DEFAULT_LAYOUT_OPTIONS,
     ...options
@@ -435,7 +458,8 @@ function snapshotPageBlock(params: {
 
   const source: LayoutFragmentSource = {
     kind: params.block.kind,
-    nodeIndex: params.block.nodeIndex
+    nodeIndex: params.block.nodeIndex,
+    columnIndex: params.block.columnIndex
   };
 
   if (node.type === "table") {
@@ -490,7 +514,8 @@ export function buildLayoutSnapshot(
     pageHeightPx: normalizedOptions.pageHeight,
     marginPx: normalizedOptions.margin,
     suppressSpacingBeforeAfterPageBreak:
-      model.metadata.compatibility?.suppressSpacingBeforeAfterPageBreak === true
+      model.metadata.compatibility?.suppressSpacingBeforeAfterPageBreak === true,
+    measurementFeedback: normalizedOptions.measurementFeedback
   };
   // Notes render at the bottom of their page; reserve that height during
   // pagination so body content (and the notes themselves) never overflow.
@@ -512,6 +537,9 @@ export function buildLayoutSnapshot(
       },
       marginsPx: page.geometry.marginsPx,
       contentBoxPx: page.geometry.contentBoxPx,
+      columnCount: page.geometry.columnCount,
+      columnGapPx: page.geometry.columnGapPx,
+      columnWidthsPx: page.geometry.columnWidthsPx,
       blocks: page.blocks
         .map((block) =>
           snapshotPageBlock({ block, model, options: normalizedOptions })

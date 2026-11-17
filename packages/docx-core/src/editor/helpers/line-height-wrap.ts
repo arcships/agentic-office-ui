@@ -24,7 +24,7 @@ import {
 import {
   measurePretextPlainTextLineCount,
 } from "../../viewer/pretext-layout";
-import { textMeasurementGeneration } from "../../viewer/font-metrics";
+import { textMeasurementGeneration } from "../../viewer/text-measurement-generation";
 import {
   estimateParagraphLineHeightPx,
   measureTextWidthPx,

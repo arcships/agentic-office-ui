@@ -77,6 +77,17 @@ const props = withDefaults(
     floatingPageOriginPx?: DocxFloatingPageOriginPx
     /** Space to insert above the paragraph so it clears an overflowing float. */
     wrapClearanceTopPx?: number
+    /**
+     * Render only this wrap-line slice of the paragraph (pagination/columns).
+     * The host clips overflow and offsets the content so the slice starts at
+     * its own top edge. Ignored while editing.
+     */
+    lineRange?: {
+      startLineIndex: number
+      endLineIndex: number
+      totalLineCount: number
+      lineHeightPx: number
+    }
   }>(),
   {
     editable: false,
@@ -89,6 +100,7 @@ const emit = defineEmits<{
   focus: [nodeIndex: number]
   blur: [nodeIndex: number]
   click: [nodeIndex: number, event: MouseEvent]
+  measure: [nodeIndex: number, heightPx: number]
 }>()
 
 // ── State ──────────────────────────────────────────────────────────
@@ -126,6 +138,37 @@ const paragraphStyle = computed<Record<string, any>>(() => {
     const baseMarginTopPx = Number.isFinite(modelMarginTopPx) ? modelMarginTopPx : 0
     resolved.marginTop = `${baseMarginTopPx + wrapClearanceTopPx}px`
   }
+
+  const lineRange = props.lineRange
+  if (lineRange && !props.editable) {
+    const lineHeightPx = Math.max(1, Math.round(lineRange.lineHeightPx))
+    const startLineIndex = Math.max(0, Math.round(lineRange.startLineIndex))
+    const endLineIndex = Math.max(
+      startLineIndex + 1,
+      Math.round(lineRange.endLineIndex)
+    )
+    const sliceLineCount = endLineIndex - startLineIndex
+    const marginTopPx = Number.parseFloat(String(resolved.marginTop ?? ""))
+    const marginBottomPx = Number.parseFloat(String(resolved.marginBottom ?? ""))
+    const keepsTopSpacing = startLineIndex === 0
+    const keepsBottomSpacing = endLineIndex >= lineRange.totalLineCount
+    const topSpacingPx = keepsTopSpacing && Number.isFinite(marginTopPx)
+      ? marginTopPx
+      : 0
+    const bottomSpacingPx = keepsBottomSpacing && Number.isFinite(marginBottomPx)
+      ? marginBottomPx
+      : 0
+    // Pull the paragraph up so the first line of the slice lands at the top of
+    // the slot, then clip everything after the slice.
+    resolved.marginTop = `${topSpacingPx - startLineIndex * lineHeightPx}px`
+    resolved.marginBottom = `${bottomSpacingPx}px`
+    resolved.height = `${Math.max(
+      lineHeightPx,
+      sliceLineCount * lineHeightPx + topSpacingPx + bottomSpacingPx
+    )}px`
+    resolved.overflow = "hidden"
+  }
+
   return resolved
 })
 
@@ -161,7 +204,6 @@ const displayHtml = computed(() => {
   return result.map((v) => renderStaticHtml(v)).join("")
 })
 
-// ── Draft management ───────────────────────────────────────────────
 function readCurrentDomText(): string {
   const root = paragraphEl.value
   if (!root) return ""
@@ -505,12 +547,46 @@ watch(
   }
 )
 
+let paragraphResizeObserver: ResizeObserver | undefined
+
+function emitMeasuredHeight(): void {
+  // A clipped line-range fragment reports only its slice height; feeding that
+  // back as the paragraph height would shrink the paragraph on every pass.
+  if (props.lineRange) return
+  const element = paragraphEl.value
+  if (!element) return
+  const marginTopPx = Number.parseFloat(String(paragraphStyle.value.marginTop ?? ""))
+  const marginBottomPx = Number.parseFloat(
+    String(paragraphStyle.value.marginBottom ?? "")
+  )
+  const heightPx =
+    element.offsetHeight +
+    (Number.isFinite(marginTopPx) ? marginTopPx : 0) +
+    (Number.isFinite(marginBottomPx) ? marginBottomPx : 0)
+  if (Number.isFinite(heightPx) && heightPx > 0) {
+    emit("measure", props.paragraphIndex, heightPx)
+  }
+}
+
+watch(
+  () => displayHtml.value,
+  () => { void nextTick(emitMeasuredHeight) },
+  { flush: "post" }
+)
+
 onMounted(() => {
   unregisterDraftFlusher = props.controller?.registerTextDraftFlusher(flushDraft)
+  void nextTick(emitMeasuredHeight)
+  if (typeof ResizeObserver !== "undefined" && paragraphEl.value) {
+    paragraphResizeObserver = new ResizeObserver(() => emitMeasuredHeight())
+    paragraphResizeObserver.observe(paragraphEl.value)
+  }
 })
 
 onBeforeUnmount(() => {
   flushDraft()
+  paragraphResizeObserver?.disconnect()
+  paragraphResizeObserver = undefined
 })
 
 onUnmounted(() => {

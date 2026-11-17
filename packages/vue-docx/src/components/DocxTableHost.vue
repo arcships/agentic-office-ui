@@ -39,6 +39,7 @@
         <tr
           v-for="row of gridRows"
           :key="`row-${row.rowIndex}`"
+          :data-docx-table-row-index="row.rowIndex"
           :class="rowClass(row.rowIndex)"
           :data-docx-tracked-change="rowTrackedKind(row.rowIndex)"
           :data-docx-tracked-change-id="rowTrackedId(row.rowIndex)"
@@ -66,7 +67,7 @@
             }"
             :data-docx-tracked-change="cellTrackedKind(cell.rowIndex, cell.cellIndex)"
             :data-docx-tracked-change-id="cellTrackedId(cell.rowIndex, cell.cellIndex)"
-            :style="cellStyle(cell)"
+            :style="{ ...cellStyle(cell), ...tableCellSliceStyle(cell.rowIndex) }"
             @mousedown="onCellMouseDown(cell.rowIndex, cell.cellIndex, $event)"
             @mouseenter="onCellMouseEnter(cell.rowIndex, cell.cellIndex, $event)"
             @click.stop="onCellClick(cell.rowIndex, cell.cellIndex, $event)"
@@ -87,7 +88,7 @@
                 :data-docx-table-cell-index="cell.cellIndex"
                 :data-docx-paragraph-index="pi"
                 :suppresscontenteditablewarning="editable && controller ? 'true' : undefined"
-                :style="cellParagraphStyle(node)"
+                :style="{ ...cellParagraphStyle(node), ...cellParagraphSliceStyle(cell.rowIndex) }"
                 @input="onCellInput(tableIndex, cell.rowIndex, cell.cellIndex, pi, $event)"
                 @focus="onCellFocus(tableIndex, cell.rowIndex, cell.cellIndex, pi)"
                 @blur="onCellBlur(tableIndex, cell.rowIndex, cell.cellIndex, pi, $event)"
@@ -134,7 +135,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount, onMounted, onUnmounted } from "vue"
+import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted, onUnmounted } from "vue"
 import {
   mergeTableSpacing,
   resolveTableCellBorderCss,
@@ -191,6 +192,13 @@ const props = withDefaults(
     controller?: DocxEditorController
     tableRuntimeKey?: string
     rowRange?: TableRowRange
+    /** Partial row slice produced by the pagination engine. */
+    rowSlice?: {
+      rowIndex: number
+      startOffsetPx: number
+      sliceHeightPx: number
+      totalRowHeightPx: number
+    }
     documentTheme?: DocxDocumentTheme
     showTrackedChanges?: boolean
     showCommentHighlights?: boolean
@@ -214,10 +222,12 @@ const props = withDefaults(
 const emit = defineEmits<{
   cellInput: [tableIndex: number, rowIndex: number, cellIndex: number, paragraphIndex: number, text: string]
   cellFocus: [tableIndex: number, rowIndex: number, cellIndex: number, paragraphIndex: number]
+  measure: [tableIndex: number, rowHeightsPx: number[]]
 }>()
 
 // ── State ──────────────────────────────────────────────────────────
 const tableEl = ref<HTMLElement | undefined>()
+let rowResizeObserver: ResizeObserver | undefined
 const hovered = ref(false)
 const isResizing = ref(false)
 const resizeBoundaryIndex = ref(-1)
@@ -404,12 +414,30 @@ const showColumnHandles = computed(
     (hovered.value || isActiveTable.value)
 )
 
-const gridRows = computed(() =>
-  resolveTableGrid(props.table, {
-    startRowIndex: props.rowRange?.startRowIndex,
-    endRowIndex: props.rowRange?.endRowIndex,
+const gridRows = computed(() => {
+  const range = props.rowRange
+  const bodyRows = resolveTableGrid(props.table, {
+    startRowIndex: range?.startRowIndex,
+    endRowIndex: range?.endRowIndex,
   })
-)
+  const repeatHeaderRowCount = Math.max(
+    0,
+    Math.round(range?.repeatHeaderRowCount ?? 0)
+  )
+  const rangeStartsInBody = (range?.startRowIndex ?? 0) > 0
+  if (
+    repeatHeaderRowCount === 0 ||
+    !rangeStartsInBody ||
+    repeatHeaderRowCount >= (range?.startRowIndex ?? 0)
+  ) {
+    return bodyRows
+  }
+  const headerRows = resolveTableGrid(props.table, {
+    startRowIndex: 0,
+    endRowIndex: repeatHeaderRowCount,
+  })
+  return [...headerRows, ...bodyRows]
+})
 
 const tableTrackedMarkup = computed(() =>
   props.showTrackedChanges ? resolveTableTrackedMarkup(props.table) : undefined
@@ -456,6 +484,28 @@ const tableStyle = computed(() => ({
 }))
 
 // ── Cell helpers ───────────────────────────────────────────────────
+function rowSlicedFrame(rowIndex: number) {
+  return props.rowSlice?.rowIndex === rowIndex ? props.rowSlice : undefined
+}
+
+function tableCellSliceStyle(rowIndex: number): Record<string, string | number | undefined> {
+  const slice = rowSlicedFrame(rowIndex)
+  if (!slice) return {}
+  return {
+    height: `${Math.max(1, Math.round(slice.sliceHeightPx))}px`,
+    maxHeight: `${Math.max(1, Math.round(slice.sliceHeightPx))}px`,
+    overflow: "hidden",
+    paddingTop: "0px",
+    paddingBottom: "0px",
+  }
+}
+
+function cellParagraphSliceStyle(rowIndex: number): Record<string, string | number | undefined> {
+  const slice = rowSlicedFrame(rowIndex)
+  if (!slice) return {}
+  return { marginTop: `${-Math.max(0, Math.round(slice.startOffsetPx))}px` }
+}
+
 function rowStyle(
   row: TableRowNode,
   rowIndex: number
@@ -886,12 +936,44 @@ watch([() => props.editable, isReadOnly], ([editable, readOnly]) => {
   if (!editable || readOnly) cleanupColumnResize(false)
 })
 
+function emitMeasuredRowHeights(): void {
+  const root = tableEl.value
+  if (!root || typeof root.querySelectorAll !== "function") return
+  const rowHeightsPx: number[] = []
+  root
+    .querySelectorAll<HTMLElement>("tbody tr[data-docx-table-row-index]")
+    .forEach((rowElement) => {
+      const rowIndex = Number(rowElement.getAttribute("data-docx-table-row-index"))
+      const heightPx = rowElement.offsetHeight
+      if (Number.isSafeInteger(rowIndex) && heightPx > 0) {
+        rowHeightsPx[rowIndex] = Math.round(heightPx)
+      }
+    })
+  if (rowHeightsPx.some((heightPx) => Number.isFinite(heightPx) && heightPx > 0)) {
+    emit("measure", props.tableIndex, rowHeightsPx)
+  }
+}
+
+watch(
+  () => [props.table.rows, props.maxAvailableWidthPx] as const,
+  () => { void nextTick(emitMeasuredRowHeights) },
+  { flush: "post" },
+)
+
 onMounted(() => {
   unregisterDraftFlusher = props.controller?.registerTextDraftFlusher(flushCellDrafts)
+  void nextTick(emitMeasuredRowHeights)
+  if (typeof ResizeObserver !== "undefined" && tableEl.value) {
+    const observer = new ResizeObserver(() => emitMeasuredRowHeights())
+    observer.observe(tableEl.value)
+    rowResizeObserver = observer
+  }
 })
 
 onBeforeUnmount(() => {
   flushCellDrafts()
+  rowResizeObserver?.disconnect()
+  rowResizeObserver = undefined
 })
 
 onUnmounted(() => {

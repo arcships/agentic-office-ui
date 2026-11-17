@@ -266,6 +266,40 @@ export function paragraphLastRenderedPageBreakPosition(
   return paragraphStartsWithLastRenderedPageBreak(paragraph) ? "leading" : "internal";
 }
 
+/**
+ * Text offset (code units) of Word's cached `w:lastRenderedPageBreak` marker
+ * inside the paragraph's visible text. Mirrors `paragraphHasExplicitPageBreak`
+ * offset accounting: text runs contribute their decoded length, tabs, line
+ * breaks and hyphens contribute one position each.
+ */
+export function paragraphLastRenderedPageBreakTextOffset(
+  paragraph: ParagraphNode
+): number | undefined {
+  const xml = paragraph.sourceXml ?? "";
+  const breakMatch = LAST_RENDERED_PAGE_BREAK_XML_PATTERN.exec(xml);
+  if (!breakMatch || breakMatch.index === undefined) {
+    return undefined;
+  }
+
+  const leadingXml = xml.slice(0, breakMatch.index);
+  let textOffset = 0;
+  for (const match of leadingXml.matchAll(PARAGRAPH_INLINE_TOKEN_PATTERN)) {
+    const token = match[0];
+    if (match[1] !== undefined) {
+      textOffset += decodeXmlText(match[1]).length;
+      continue;
+    }
+    if (/^<w:br\b/i.test(token) && !/\bw:type="page"/i.test(token)) {
+      textOffset += 1;
+      continue;
+    }
+    if (/^<w:(?:tab|cr|noBreakHyphen)\b/i.test(token)) {
+      textOffset += 1;
+    }
+  }
+  return textOffset;
+}
+
 export function paragraphStartsWithLastRenderedPageBreak(paragraph: ParagraphNode): boolean {
   const xml = paragraph.sourceXml ?? "";
   if (!xml || !paragraphHasLastRenderedPageBreak(paragraph)) {
