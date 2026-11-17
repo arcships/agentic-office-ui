@@ -8,7 +8,6 @@
     />
     <div
       v-if="visible"
-      ref="menuRef"
       class="docx-context-menu"
       :style="menuStyle"
       @contextmenu.prevent
@@ -155,45 +154,44 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from "vue"
+import { computed, onMounted, onUnmounted } from "vue"
 import type {
   DocxEditorController,
   DocxContextMenuContext,
   DocxTableContextMenuContext,
 } from "@arcships/docx-core"
+import { compareTextRangeBoundaries, paragraphText } from "@arcships/docx-core"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = defineProps<{
   context: DocxContextMenuContext | undefined
   controller: DocxEditorController
+  /** Viewport coordinates where the menu was opened. */
+  x?: number
+  y?: number
+  /** Current DOM text of the text host under the pointer, if any. */
+  text?: string
+  /** Caret offset inside `text` when the menu was opened. */
+  caretOffset?: number
 }>()
 
 const emit = defineEmits<{
   close: []
 }>()
 
-// ── State ──────────────────────────────────────────────────────────
-const menuRef = ref<HTMLElement | undefined>()
-const x = ref(0)
-const y = ref(0)
-
 // ── Computed ───────────────────────────────────────────────────────
 const visible = computed(() => !!props.context)
 
-const tableContext = computed<DocxTableContextMenuContext | undefined>(() => {
-  const ctx = props.context
-  if (ctx && "tableIndex" in ctx) {
-    return ctx as unknown as DocxTableContextMenuContext
-  }
-  return undefined
-})
+const tableContext = computed<DocxTableContextMenuContext | undefined>(() => (
+  props.context?.tableContext
+))
 
 const selectedRunStyle = computed(() => props.controller.selectedRunStyle)
 
 const menuStyle = computed(() => {
   // Adjust position to stay within viewport
-  let posX = x.value
-  let posY = y.value
+  let posX = props.x ?? 0
+  let posY = props.y ?? 0
   if (typeof window !== "undefined") {
     const w = window.innerWidth
     const h = window.innerHeight
@@ -230,20 +228,87 @@ const textColors = [
 ]
 
 // ── Actions ────────────────────────────────────────────────────────
-function onAction(action: string, value?: string): void {
+function activeRange() {
+  return props.controller.activeTextRange ?? props.context?.activeTextRange
+}
+
+function currentParagraphCaret(): number | undefined {
+  const range = activeRange()
+  if (!range || range.start.location.kind !== "paragraph") return undefined
+  return range.start.offset
+}
+
+function splitParagraph(): void {
+  const ctrl = props.controller
+  const paragraph = ctrl.selectedParagraph
+  const draftText = props.text ?? (paragraph ? paragraphText(paragraph) : "")
+  const caret = props.caretOffset ?? currentParagraphCaret() ?? draftText.length
+  ctrl.splitParagraphAtSelection(draftText, caret, caret)
+}
+
+function deleteParagraph(): void {
+  const ctrl = props.controller
+  const range = activeRange()
+  if (range && compareTextRangeBoundaries(range.start, range.end) < 0) {
+    ctrl.deleteExpandedSelection(range)
+    return
+  }
+
+  const location = range?.start.location
+  if (!location || location.kind !== "paragraph") return
+  const paragraph = ctrl.model.nodes[location.nodeIndex]
+  if (!paragraph || paragraph.type !== "paragraph") return
+
+  const text = props.text ?? paragraphText(paragraph)
+  const rawCaret = props.caretOffset ?? range?.start.offset ?? text.length
+  const caret = Math.max(0, Math.min(Math.round(rawCaret), text.length))
+  const start = { kind: "paragraph" as const, nodeIndex: location.nodeIndex }
+  const nextNode = ctrl.model.nodes[location.nodeIndex + 1]
+
+  // Prefer the paragraph-merge path: deleting to the next paragraph's start
+  // removes the break instead of leaving a collapsed no-op.
+  if (nextNode && nextNode.type === "paragraph") {
+    ctrl.deleteExpandedSelection({
+      start: { location: start, offset: caret },
+      end: { location: { kind: "paragraph", nodeIndex: location.nodeIndex + 1 }, offset: 0 },
+    })
+    return
+  }
+
+  if (caret < text.length) {
+    ctrl.deleteExpandedSelection({
+      start: { location: start, offset: caret },
+      end: { location: start, offset: text.length },
+    })
+  } else if (text.length > 0) {
+    ctrl.deleteExpandedSelection({
+      start: { location: start, offset: 0 },
+      end: { location: start, offset: text.length },
+    })
+  }
+}
+
+async function onAction(action: string, value?: string): Promise<void> {
   const ctrl = props.controller
   switch (action) {
-    case "cut": ctrl.copy(); break
-    case "copy": ctrl.copy(); break
-    case "paste": ctrl.paste(); break
+    case "cut": {
+      const range = activeRange()
+      if (!range || compareTextRangeBoundaries(range.start, range.end) >= 0) break
+      ctrl.setActiveTextRange(range)
+      await ctrl.copy()
+      ctrl.deleteExpandedSelection(range)
+      break
+    }
+    case "copy": await ctrl.copy(); break
+    case "paste": await ctrl.paste(); break
     case "bold": ctrl.toggleBold(); break
     case "italic": ctrl.toggleItalic(); break
     case "underline": ctrl.toggleUnderline(); break
     case "strike": ctrl.toggleStrike(); break
     case "highlight": ctrl.setHighlight(value); break
     case "textColor": ctrl.setTextColor(value!); break
-    case "splitParagraph": ctrl.splitParagraphAtSelection("", 0); break
-    case "deleteParagraph": ctrl.deleteExpandedSelection(undefined); break
+    case "splitParagraph": splitParagraph(); break
+    case "deleteParagraph": deleteParagraph(); break
     // Table actions
     case "insertRowAbove":
       if (tableContext.value) {
@@ -304,12 +369,6 @@ function close(): void {
   emit("close")
 }
 
-// ── Position from context ──────────────────────────────────────────
-watch(() => props.context, (ctx) => {
-  // Position is set externally when showing the menu,
-  // context itself doesn't carry position info
-})
-
 // Keyboard shortcut: Escape to close
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === "Escape" && visible.value) {
@@ -318,11 +377,15 @@ function onKeydown(event: KeyboardEvent): void {
 }
 
 onMounted(() => {
-  window.addEventListener("keydown", onKeydown)
+  if (typeof window !== "undefined") {
+    window.addEventListener("keydown", onKeydown)
+  }
 })
 
 onUnmounted(() => {
-  window.removeEventListener("keydown", onKeydown)
+  if (typeof window !== "undefined") {
+    window.removeEventListener("keydown", onKeydown)
+  }
 })
 </script>
 

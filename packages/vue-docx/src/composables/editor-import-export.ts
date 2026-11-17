@@ -25,6 +25,19 @@ export function createEditorImportExport(ctx: EditorCore) {
 
   let activeExport: ExportTask | undefined
 
+  // New / Import / close all discard unsaved edits. Use the host's native
+  // confirmation when one is available; do not block in non-browser contexts.
+  const confirmDiscardChanges = (): boolean => {
+    if (!ctx.isDirty.value) return true
+    const confirmFn = (globalThis as { confirm?: (message?: string) => boolean }).confirm
+    if (typeof confirmFn !== "function") return true
+    try {
+      return Boolean(confirmFn("Discard unsaved changes?"))
+    } catch {
+      return false
+    }
+  }
+
   const invalidateImport = (): void => {
     loader.cancel()
     activeImport = undefined
@@ -99,10 +112,13 @@ export function createEditorImportExport(ctx: EditorCore) {
 
   // ── newDocument ──────────────────────────────────────────────────
   const newDocument = (): void => {
+    if (!confirmDiscardChanges()) return
     invalidateImport()
     invalidateExport()
     ctx.isImporting.value = false
-    ctx.model.value = cloneDocModel(ctx.starterTemplate)
+    const nextModel = cloneDocModel(ctx.starterTemplate)
+    ctx.model.value = nextModel
+    ctx.cleanModel.value = nextModel
     ctx.documentLoadNonce.value += 1
     ctx.history.value = { past: [], future: [] }
     ctx.historyRestoreRequest.value = undefined
@@ -117,6 +133,7 @@ export function createEditorImportExport(ctx: EditorCore) {
 
   // ── importDocxFile ───────────────────────────────────────────────
   const importDocxFile = async (file: File): Promise<void> => {
+    if (!confirmDiscardChanges()) return
     invalidateImport()
     invalidateExport()
 
@@ -147,6 +164,7 @@ export function createEditorImportExport(ctx: EditorCore) {
       })
       if (!isCurrentImport()) return
       ctx.model.value = parsedModel
+      ctx.cleanModel.value = parsedModel
       ctx.basePackage.value = parsedPkg
       ctx.documentLoadNonce.value += 1
       ctx.fileName.value = file.name
@@ -256,6 +274,7 @@ export function createEditorImportExport(ctx: EditorCore) {
           cleanupExportTask(task)
           return
         }
+        ctx.cleanModel.value = exportModel
         ctx.status.value = "Exported DOCX"
       } catch (error) {
         const shouldReport = isCurrentExport(task)

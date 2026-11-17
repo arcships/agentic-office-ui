@@ -450,6 +450,65 @@ export function createEditorTextInput(
     return replaceExpandedSelection("", range)
   }
 
+  // ── insertTextAtSelection ────────────────────────────────────────
+  // Inserts text at a collapsed caret, or replaces an expanded selection.
+  // Unlike replaceExpandedSelection it also handles the collapsed case, which
+  // is what clipboard paste needs.
+  const insertTextAtSelection = (
+    text: string,
+    range?: DocxTextRange
+  ): DocxTextRange | undefined => {
+    const sourceRange = range ?? ctx.activeTextRangeSnapshot.value
+    if (!sourceRange) return undefined
+
+    const replacementText = text.replace(/\r\n?/g, "\n")
+    if (!replacementText) return undefined
+
+    if (compareTextRangeBoundaries(sourceRange.start, sourceRange.end) < 0) {
+      return replaceExpandedSelection(replacementText, sourceRange)
+    }
+
+    const location = sourceRange.start.location
+    const { paragraph } = getParagraphAtLocation(ctx.model.value, location)
+    if (!paragraph) return undefined
+
+    const currentText = paragraphText(paragraph)
+    const offset = normalizeRangeBoundaryParagraphOffset(paragraph, sourceRange.start.offset)
+    const nextText = `${currentText.slice(0, offset)}${replacementText}${currentText.slice(offset)}`
+    if (nextText === currentText) return undefined
+
+    const insertedStyle = cloneTextStyle(
+      ctx.pendingRunStyleSnapshot.value ??
+        firstTextStyleAtOffset(paragraph, offset, true) ??
+        firstRunStyle(paragraph)
+    )
+
+    applyChange(
+      (current) => updateParagraphTextAtLocation(current, location, nextText, { insertedStyle }),
+      "Inserted text"
+    )
+
+    const caretOffset = offset + replacementText.length
+    const collapsedRange: DocxTextRange = {
+      start: { location: cloneTextRangeLocation(location), offset: caretOffset },
+      end: { location: cloneTextRangeLocation(location), offset: caretOffset },
+    }
+
+    ctx.suppressSelectionReset.value = true
+    ctx.selection.value = location.kind === "paragraph"
+      ? { kind: "paragraph", nodeIndex: location.nodeIndex }
+      : {
+          kind: "table-cell",
+          tableIndex: location.tableIndex,
+          rowIndex: location.rowIndex,
+          cellIndex: location.cellIndex,
+        }
+    ctx.activeTextRange.value = collapsedRange
+    ctx.pendingRunStyle.value = undefined
+
+    return collapsedRange
+  }
+
   // ── splitParagraphAtSelection ─────────────────────────────────────
   const splitParagraphAtSelection = (
     draftText: string,
@@ -619,5 +678,6 @@ export function createEditorTextInput(
     insertListItemAfterSelection,
     replaceExpandedSelection,
     deleteExpandedSelection,
+    insertTextAtSelection,
   }
 }

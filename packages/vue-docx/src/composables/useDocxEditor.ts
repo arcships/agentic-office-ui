@@ -121,6 +121,8 @@ export function useDocxEditor(
 
   // --- core state ---
   const model = ref<DocModel>(cloneDocModel(starterTemplate))
+  const cleanModel = ref<DocModel>(model.value)
+  const isDirty = computed(() => model.value !== cleanModel.value)
   const basePackage = ref<OoxmlPackage | undefined>(undefined)
   const documentLoadNonce = ref(0)
   const fileName = ref(options.initialFileName ?? "(new document)")
@@ -467,7 +469,7 @@ export function useDocxEditor(
 
   const ctx: EditorCore = {
     // refs
-    model, selection, activeTextRange, pendingRunStyle, history, historyBudget,
+    model, cleanModel, isDirty, selection, activeTextRange, pendingRunStyle, history, historyBudget,
     estimateHistorySnapshotBytes, status,
     selectedFormFieldLocation, documentLoadNonce, fileName, importError,
     isImporting, documentTheme, showTrackedChanges, showComments,
@@ -544,7 +546,7 @@ export function useDocxEditor(
   const lst = createEditorList(ctx, applyModelChange)
 
   // 10. editor-clipboard
-  const clp = createEditorClipboard(ctx)
+  const clp = createEditorClipboard(ctx, txt.insertTextAtSelection)
 
   // 11. editor-import-export
   const ie = createEditorImportExport(ctx)
@@ -629,6 +631,7 @@ export function useDocxEditor(
 
   return {
     get model() { return model.value },
+    get isDirty() { return isDirty.value },
     get documentLoadNonce() { return documentLoadNonce.value },
     get fileName() { return fileName.value },
     get status() { return status.value },

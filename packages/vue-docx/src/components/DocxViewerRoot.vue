@@ -138,7 +138,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   pageCountChange: [count: number]
   visiblePageRange: [range: { startPageIndex: number; endPageIndex: number }]
-  contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number }]
+  contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number; target?: EventTarget | null }]
   selectionChange: [sel: { kind: string; text?: string; pageIndex?: number }]
 }>()
 
@@ -571,6 +571,7 @@ function onContextMenu(event: MouseEvent): void {
     clientY: event.clientY,
     containerX: event.clientX - rect.left,
     containerY: event.clientY - rect.top,
+    target: event.target,
   })
 }
 

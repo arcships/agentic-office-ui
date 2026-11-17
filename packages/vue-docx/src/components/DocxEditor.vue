@@ -1,11 +1,17 @@
 <template>
-  <div class="docx-editor-viewer" :class="className" data-testid="docx-editor">
+  <div
+    ref="editorRootRef"
+    class="docx-editor-viewer"
+    :class="className"
+    data-testid="docx-editor"
+    @keydown="onKeydown"
+  >
     <!-- Toolbar -->
     <DocxToolbar
       v-if="showToolbar"
       :controller="controller"
       :zoom="zoomPercent"
-      :read-only="!editable"
+      :read-only="interactionLocked"
       :show-thumbnails="thumbnailPanelVisible"
       :current-page="currentPage"
       :total-pages="totalPages"
@@ -36,6 +42,7 @@
         :zoom-scale="zoomPercent"
         @page-count-change="onPageCountChange"
         @visible-page-range="onVisiblePageRange"
+        @context-menu="onDocumentContextMenu"
       />
       <div
         v-else
@@ -53,15 +60,19 @@
 
     <!-- Context menu -->
     <DocxContextMenu
-      v-if="editable && contextMenu.visible.value"
+      v-if="!interactionLocked && contextMenu.visible.value"
       :context="contextMenu.context.value"
       :controller="controller"
+      :x="contextMenu.x.value"
+      :y="contextMenu.y.value"
+      :text="contextMenu.text.value"
+      :caret-offset="contextMenu.caretOffset.value"
       @close="contextMenu.hide"
     />
 
     <!-- Drag overlay -->
     <DocxDragOverlay
-      v-if="editable && dragOverlay.visible.value"
+      v-if="!interactionLocked && dragOverlay.visible.value"
       :controller="controller"
     />
 
@@ -89,6 +100,13 @@ import type {
 } from "@arcships/docx-core"
 import { createDocxRuntime, DocxImportError } from "@arcships/docx-core"
 import { useDocxEditor } from "../composables/useDocxEditor"
+import {
+  docxTableContextFromNode,
+  docxTextHostFromNode,
+  readDocxTextHostText,
+  syncDomSelectionToEditor,
+  textOffsetAtDomPoint,
+} from "../composables/editor-selection"
 import DocxDocumentSurface from "./DocxDocumentSurface.vue"
 import DocxToolbar from "./DocxToolbar.vue"
 import DocxContextMenu from "./DocxContextMenu.vue"
@@ -136,8 +154,9 @@ watch(
   () => { pageLimitError.value = undefined },
 )
 
-// Provide controller to all child components
-provide("docxEditorController", controller)
+const interactionLocked = computed(
+  () => !props.editable || controller.showTrackedChanges
+)
 
 // ── Import file ────────────────────────────────────────────────────
 watch(
@@ -160,6 +179,9 @@ watch(
 
 // ── Viewer root ref ────────────────────────────────────────────────
 const viewerRootRef = ref<InstanceType<typeof DocxDocumentSurface> | undefined>()
+
+// Root element ref keeps context-menu/selection scoping explicit.
+const editorRootRef = ref<HTMLElement | undefined>()
 
 // ── Page tracking ──────────────────────────────────────────────────
 const currentPage = ref(1)
@@ -205,19 +227,75 @@ function onSelectPage(pageIndex: number): void {
 }
 
 // ── Context menu ───────────────────────────────────────────────────
+interface DocumentContextMenuEvent {
+  pageIndex: number
+  clientX: number
+  clientY: number
+  containerX: number
+  containerY: number
+  target?: EventTarget | null
+}
+
 const contextMenu = {
   visible: ref(false),
   context: ref<DocxContextMenuContext | undefined>(undefined),
-  show(ctx: DocxContextMenuContext) {
+  x: ref(0),
+  y: ref(0),
+  text: ref<string | undefined>(undefined),
+  caretOffset: ref<number | undefined>(undefined),
+  show(
+    x: number,
+    y: number,
+    ctx: DocxContextMenuContext,
+    text?: string,
+    caretOffset?: number,
+  ) {
+    this.x.value = x
+    this.y.value = y
     this.context.value = ctx
+    this.text.value = text
+    this.caretOffset.value = caretOffset
     this.visible.value = true
   },
   hide() {
     this.visible.value = false
     this.context.value = undefined
+    this.text.value = undefined
+    this.caretOffset.value = undefined
   },
 }
-provide("docxContextMenu", contextMenu)
+
+function onDocumentContextMenu(payload: DocumentContextMenuEvent): void {
+  if (interactionLocked.value) return
+
+  const root = viewerRootRef.value?.scrollContainer
+  if (root) syncDomSelectionToEditor(controller, root)
+
+  const target = typeof Node !== "undefined" && payload.target instanceof Node
+    ? payload.target
+    : null
+  const tableContext = docxTableContextFromNode(target)
+  const textHost = docxTextHostFromNode(target)
+  const range = controller.activeTextRange
+
+  const context: DocxContextMenuContext = tableContext
+    ? { kind: "table", tableContext }
+    : { kind: "text" }
+  if (range) context.activeTextRange = range
+
+  let text: string | undefined
+  let caretOffset: number | undefined
+  if (textHost) {
+    text = readDocxTextHostText(textHost)
+    caretOffset = textOffsetAtDomPoint(textHost, payload.clientX, payload.clientY)
+    if (caretOffset === undefined && range) {
+      caretOffset = range.start.offset
+    }
+    if (caretOffset === undefined) caretOffset = text.length
+  }
+
+  contextMenu.show(payload.clientX, payload.clientY, context, text, caretOffset)
+}
 
 // ── Drag overlay ───────────────────────────────────────────────────
 const dragOverlay = {
@@ -228,69 +306,92 @@ const dragOverlay = {
 provide("docxDragOverlay", dragOverlay)
 
 // ── Keyboard shortcuts ─────────────────────────────────────────────
+// The listener lives on the editor root, so host-page inputs and other editor
+// instances never see these shortcuts. Commands are also suppressed while the
+// document is read-only or while tracked-changes review locks editing.
 function onKeydown(event: KeyboardEvent): void {
-  const mod = event.metaKey || event.ctrlKey
-  const ctrl = controller
+  if (!props.editable || event.defaultPrevented || event.isComposing) return
 
-  if (mod && event.key === "b") {
+  const target = event.target as HTMLElement | null
+  const tagName = target?.tagName?.toLowerCase()
+  if (tagName === "input" || tagName === "textarea" || tagName === "select") return
+  if (target?.closest?.(".docx-toolbar-shell")) return
+
+  const mod = event.metaKey || event.ctrlKey
+  if (!mod) return
+
+  const key = event.key.toLowerCase()
+  if (key === "s") {
     event.preventDefault()
-    ctrl.toggleBold()
-  } else if (mod && event.key === "i") {
+    controller.exportDocx()
+    return
+  }
+  if (interactionLocked.value) return
+
+  if (key === "b") {
     event.preventDefault()
-    ctrl.toggleItalic()
-  } else if (mod && event.key === "u") {
+    controller.toggleBold()
+  } else if (key === "i") {
     event.preventDefault()
-    ctrl.toggleUnderline()
-  } else if (mod && event.key === "z" && !event.shiftKey) {
+    controller.toggleItalic()
+  } else if (key === "u") {
     event.preventDefault()
-    ctrl.undo()
-  } else if (mod && event.key === "z" && event.shiftKey) {
+    controller.toggleUnderline()
+  } else if (key === "z" && !event.shiftKey) {
     event.preventDefault()
-    ctrl.redo()
-  } else if (mod && event.key === "s") {
+    controller.undo()
+  } else if (key === "z" && event.shiftKey) {
     event.preventDefault()
-    ctrl.exportDocx()
+    controller.redo()
   }
 }
 
-let isMounted = false
-let keydownAttached = false
-
-function attachEditingListeners(): void {
-  if (!isMounted || keydownAttached || !props.editable) return
-  window.addEventListener("keydown", onKeydown)
-  keydownAttached = true
+// ── Unsaved changes guard ──────────────────────────────────────────
+function onBeforeUnload(event: BeforeUnloadEvent): void {
+  if (!controller.isDirty) return
+  event.preventDefault()
+  event.returnValue = ""
 }
 
-function detachEditingListeners(): void {
-  if (!keydownAttached) return
-  window.removeEventListener("keydown", onKeydown)
-  keydownAttached = false
+let beforeUnloadAttached = false
+
+function syncBeforeUnload(): void {
+  const shouldAttach = typeof window !== "undefined" && props.editable && controller.isDirty
+  if (shouldAttach && !beforeUnloadAttached) {
+    window.addEventListener("beforeunload", onBeforeUnload)
+    beforeUnloadAttached = true
+  } else if (!shouldAttach && beforeUnloadAttached) {
+    window.removeEventListener("beforeunload", onBeforeUnload)
+    beforeUnloadAttached = false
+  }
 }
 
 watch(
-  () => props.editable,
-  (editable) => {
-    if (editable) {
-      attachEditingListeners()
-      return
-    }
-    detachEditingListeners()
+  [() => props.editable, () => controller.isDirty],
+  syncBeforeUnload,
+  { immediate: true },
+)
+
+watch(
+  () => interactionLocked.value,
+  (locked) => {
+    if (!locked) return
     contextMenu.hide()
     dragOverlay.hide()
     controller.clearSelectionSession()
-  }
+  },
 )
 
 onMounted(() => {
-  isMounted = true
-  attachEditingListeners()
+  syncBeforeUnload()
 })
 
 onUnmounted(() => {
-  detachEditingListeners()
+  if (beforeUnloadAttached) {
+    window.removeEventListener("beforeunload", onBeforeUnload)
+    beforeUnloadAttached = false
+  }
   ownedLimitRuntime.dispose()
-  isMounted = false
 })
 </script>
 

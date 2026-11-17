@@ -64,6 +64,10 @@ function resolveTeleportTarget(selector) {
   return target;
 }
 
+export function teleportTarget(selector) {
+  return resolveTeleportTarget(selector);
+}
+
 const renderer = vue.createRenderer({
   patchProp(node, key, _previous, next) {
     if (next == null) {

@@ -7,6 +7,7 @@
 import type {
   DocxEditorController,
   DocxSelectionSessionKind,
+  DocxTableContextMenuContext,
   DocxTextRange,
   DocxTextRangeLocation,
 } from "@arcships/docx-core"
@@ -43,6 +44,43 @@ function closestTextHost(node: Node | null): SelectionHost | undefined {
   const element = elementForNode(node)
   const host = element?.closest?.(TEXT_HOST_SELECTOR)
   return host ? host as SelectionHost : undefined
+}
+
+/** Resolve the DOCX paragraph/table-cell host that contains a DOM node. */
+export function docxTextHostFromNode(
+  node: Node | null | undefined
+): HTMLElement | undefined {
+  return closestTextHost(node ?? null) as HTMLElement | undefined
+}
+
+/** Read the visible text of a DOCX text host, preserving line breaks. */
+export function readDocxTextHostText(host: HTMLElement): string {
+  function readNode(node: Node): string {
+    const element = node as Element
+    if (element.matches?.("[data-docx-numbering-label='true']")) return ""
+    if (element.matches?.("[data-docx-image-child-index]")) return ""
+    if (element.tagName?.toLowerCase() === "br") return "\n"
+    if (node.nodeType === 3) return node.textContent ?? ""
+    return Array.from(node.childNodes).map(readNode).join("")
+  }
+
+  return readNode(host)
+}
+
+/** Resolve the table cell under a DOM node for context-menu actions. */
+export function docxTableContextFromNode(
+  node: Node | null | undefined
+): DocxTableContextMenuContext | undefined {
+  const element = elementForNode(node ?? null)
+  const cell = element?.closest?.("[data-docx-table-cell='true']") as HTMLElement | null | undefined
+  if (!cell) return undefined
+  const tableIndex = nonNegativeInteger(cell.getAttribute?.("data-docx-table-index"))
+  const rowIndex = nonNegativeInteger(cell.getAttribute?.("data-docx-table-row-index"))
+  const cellIndex = nonNegativeInteger(cell.getAttribute?.("data-docx-table-cell-index"))
+  if (tableIndex === undefined || rowIndex === undefined || cellIndex === undefined) {
+    return undefined
+  }
+  return { tableIndex, rowIndex, cellIndex }
 }
 
 function nonNegativeInteger(value: string | null | undefined): number | undefined {
@@ -103,6 +141,39 @@ function boundaryOffsetWithinHost(
   } catch {
     return undefined
   }
+}
+
+/** Map a viewport point inside a text host to a plain-text caret offset. */
+export function textOffsetAtDomPoint(
+  host: HTMLElement,
+  clientX: number,
+  clientY: number
+): number | undefined {
+  const ownerDocument = host.ownerDocument as Document & {
+    caretRangeFromPoint?: (x: number, y: number) => Range | null
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
+  }
+  if (!ownerDocument) return undefined
+
+  let node: Node | undefined
+  let offset: number | undefined
+
+  if (typeof ownerDocument.caretRangeFromPoint === "function") {
+    const range = ownerDocument.caretRangeFromPoint(clientX, clientY)
+    if (range) {
+      node = range.startContainer
+      offset = range.startOffset
+    }
+  } else if (typeof ownerDocument.caretPositionFromPoint === "function") {
+    const position = ownerDocument.caretPositionFromPoint(clientX, clientY)
+    if (position) {
+      node = position.offsetNode
+      offset = position.offset
+    }
+  }
+
+  if (!node || offset === undefined) return undefined
+  return boundaryOffsetWithinHost(host as SelectionHost, node, offset)
 }
 
 function hostForLocation(
