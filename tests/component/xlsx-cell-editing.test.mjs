@@ -111,6 +111,8 @@ async function loadInlineEditor(controller) {
     const props = { controller: null, readOnly: false };
     const editingCell = { value: null };
     const editingValue = { value: "" };
+    const isEditComposing = { value: false };
+    let commitEditOnCompositionEnd = false;
     const editInputRef = { value: { focus() {}, select() {} } };
     const containerRef = { value: { focus() {} } };
     const emit = () => {};

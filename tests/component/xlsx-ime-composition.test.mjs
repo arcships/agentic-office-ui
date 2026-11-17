@@ -107,6 +107,10 @@ function createGridController() {
       selectedFormulaTarget: null,
       selectedValue: "",
       getCellDisplayValue: () => "",
+      getCellFormula: () => "",
+      commitCellInput(cell, value) {
+        setCellValueCalls.push({ cell, value });
+      },
       getActiveWorksheet: () => null,
       getRowsBatchAsync: async () => [],
       setCellValue(cell, value) {

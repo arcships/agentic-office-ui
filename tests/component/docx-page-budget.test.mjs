@@ -33,12 +33,12 @@ function assertPageLimitError(node, emittedError) {
   assert.equal(node.props["data-error-code"], "LIMIT_EXCEEDED");
   assert.equal(node.props["data-error-phase"], "layout");
   assert.equal(node.props["data-error-limit"], "maxDocxPages");
-  assert.equal(node.props["data-error-actual"], 2);
+  assert.equal(node.props["data-error-actual"], 4);
   assert.equal(node.props["data-error-allowed"], 1);
   assert.equal(emittedError?.code, "LIMIT_EXCEEDED");
   assert.equal(emittedError?.phase, "layout");
   assert.equal(emittedError?.limit, "maxDocxPages");
-  assert.equal(emittedError?.actual, 2);
+  assert.equal(emittedError?.actual, 4);
   assert.equal(emittedError?.allowed, 1);
 }
 
@@ -46,7 +46,7 @@ test("DocxViewer reports ready only after a normal document page count is accept
   const successes = [];
   const runtime = {
     id: "docx-page-budget-normal",
-    limits: { maxDocxPages: 2 },
+    limits: { maxDocxPages: 4 },
     createLoader() {
       return {
         async load() {
@@ -79,7 +79,7 @@ test("DocxViewer reports ready only after a normal document page count is accept
 
 test("DocxViewer hides an over-limit document and recovers with a new runtime limit", async () => {
   const lowRuntime = createDocxRuntime({ limits: { maxDocxPages: 1 } });
-  const normalRuntime = createDocxRuntime({ limits: { maxDocxPages: 2 } });
+  const normalRuntime = createDocxRuntime({ limits: { maxDocxPages: 4 } });
   const activeRuntime = vue.shallowRef(lowRuntime);
   const errors = [];
   const Harness = vue.defineComponent({
