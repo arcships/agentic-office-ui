@@ -7,6 +7,11 @@
  *
  * Run from repo root:
  *   node packages/vue-docx/tests/verify-integration.mjs
+ *
+ * A run only passes when it actually asserts something: demo fixtures are
+ * mandatory (a missing fixture is a failure, not a skip), and environment
+ * skips are capped by DOCX_INTEGRATION_MAX_SKIPS (default 2, the python-docx
+ * checks). CI registers this script, so an empty green run must stay impossible.
  */
 
 import { readFileSync, existsSync } from "node:fs";
@@ -24,6 +29,15 @@ const REPO_ROOT = resolve(__dirname, "../../..");
 const PASS = "✅";
 const FAIL = "❌";
 const SKIP = "⏭️";
+
+const MAX_SKIPS = Number.parseInt(
+  process.env.DOCX_INTEGRATION_MAX_SKIPS || "2",
+  10,
+);
+if (!Number.isInteger(MAX_SKIPS) || MAX_SKIPS < 0) {
+  console.error("DOCX_INTEGRATION_MAX_SKIPS must be a non-negative integer");
+  process.exit(2);
+}
 
 let passed = 0;
 let failed = 0;
@@ -66,7 +80,7 @@ async function verifyD1() {
     "apps/demo/public/samples/demo.docx",
   );
   if (!existsSync(samplePath)) {
-    skip("Load sample docx", "sample file not found");
+    check("Load sample docx", false, `missing fixture ${samplePath}`);
     return;
   }
 
@@ -165,7 +179,7 @@ async function verifyD2() {
     "apps/demo/public/samples/demo.docx",
   );
   if (!existsSync(samplePath)) {
-    skip("Worker import", "sample file not found");
+    check("Worker import", false, `missing fixture ${samplePath}`);
     return;
   }
 
@@ -453,7 +467,7 @@ async function verifyD5() {
     "apps/demo/public/samples/invoice-table.docx",
   );
   if (!existsSync(samplePath)) {
-    skip("basePackage test", "invoice-table.docx not found");
+    check("basePackage test", false, `missing fixture ${samplePath}`);
     return;
   }
 
@@ -510,9 +524,19 @@ async function verifyD5() {
   check("export without basePackage is non-empty",
     exportWithoutPackage.byteLength > 0);
 
-  // With basePackage should preserve more content (styles, numbering, headers)
-  check("basePackage export preserves more content (larger size)",
-    exportWithPackage.byteLength >= exportWithoutPackage.byteLength);
+  // With basePackage must preserve the original package content (styles,
+  // numbering, headers). Strict comparisons: an identical export would mean the
+  // basePackage was ignored, which used to pass with ">=".
+  check("basePackage export preserves more content (strictly larger size)",
+    exportWithPackage.byteLength > exportWithoutPackage.byteLength,
+    `with=${exportWithPackage.byteLength} without=${exportWithoutPackage.byteLength}`);
+  const decodedWithPackage = new TextDecoder("latin1").decode(
+    new Uint8Array(exportWithPackage),
+  );
+  check("basePackage export embeds word/styles.xml",
+    decodedWithPackage.includes("word/styles.xml"));
+  check("basePackage export embeds word/numbering.xml",
+    decodedWithPackage.includes("word/numbering.xml"));
 
   // Verify with python-docx for styles/numbering preservation
   const pythonCheck = spawnSync("python3", ["-c", "import docx; print('ok')"], {
@@ -539,19 +563,16 @@ async function verifyD5() {
     try { unlinkSync(withPath); } catch {}
     try { unlinkSync(withoutPath); } catch {}
 
-    if (pyWith.status === 0) {
-      const withOut = pyWith.stdout.toString().trim();
-      check("python-docx opens with-basePackage export", true, withOut);
-    }
-    if (pyWithout.status === 0) {
-      const withoutOut = pyWithout.stdout.toString().trim();
-      check("python-docx opens without-basePackage export", true, withoutOut);
-    }
+    check("python-docx opens with-basePackage export", pyWith.status === 0,
+      pyWith.stderr?.toString()?.trim());
+    check("python-docx opens without-basePackage export", pyWithout.status === 0,
+      pyWithout.stderr?.toString()?.trim());
 
     if (pyWith.status === 0 && pyWithout.status === 0) {
       const withStyles = parseInt(pyWith.stdout.toString().match(/styles=(\d+)/)?.[1] || "0");
       const withoutStyles = parseInt(pyWithout.stdout.toString().match(/styles=(\d+)/)?.[1] || "0");
-      check("basePackage preserves more styles", withStyles >= withoutStyles);
+      check("basePackage preserves strictly more styles", withStyles > withoutStyles,
+        `with=${withStyles} without=${withoutStyles}`);
     }
   } else {
     skip("python-docx style verification", "python3/python-docx not available");
@@ -602,9 +623,20 @@ async function main() {
 
   console.log(`\n${"=".repeat(60)}`);
   console.log(`  Results: ${PASS} ${passed} passed  ${FAIL} ${failed} failed  ${SKIP} ${skipped} skipped`);
+  console.log(`  Environment skips allowed: ${MAX_SKIPS} (DOCX_INTEGRATION_MAX_SKIPS)`);
   console.log(`${"=".repeat(60)}\n`);
 
-  if (failed > 0) {
+  let gateFailed = false;
+  if (passed === 0) {
+    console.log(`  ${FAIL} no check executed; a run without assertions is not a pass`);
+    gateFailed = true;
+  }
+  if (skipped > MAX_SKIPS) {
+    console.log(`  ${FAIL} ${skipped} skipped checks exceed the allowance of ${MAX_SKIPS}`);
+    gateFailed = true;
+  }
+
+  if (failed > 0 || gateFailed) {
     process.exit(1);
   }
 }

@@ -3,10 +3,73 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import signal
+import socket
+import subprocess
+import time
+import urllib.request
 from pathlib import Path
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
+
+
+ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_PORT = int(os.environ.get("CI_ANNOTATIONS_PORT", "4187"))
+
+
+def port_in_use(port: int) -> bool:
+    with socket.socket() as sock:
+        return sock.connect_ex(("127.0.0.1", port)) == 0
+
+
+def wait_for_preview(process: subprocess.Popen[bytes], base_url: str) -> None:
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(f"preview exited early with {process.returncode}")
+        try:
+            with urllib.request.urlopen(base_url, timeout=1) as response:
+                if response.status == 200:
+                    return
+        except Exception:
+            time.sleep(0.2)
+    raise TimeoutError(f"preview did not become ready at {base_url}")
+
+
+def start_preview(evidence_dir: Path, port: int) -> tuple[subprocess.Popen[bytes], object]:
+    preview_log = (evidence_dir / "preview.log").open("wb")
+    process = subprocess.Popen(
+        [
+            "pnpm",
+            "--filter",
+            "demo",
+            "preview",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+        ],
+        cwd=ROOT,
+        stdout=preview_log,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    return process, preview_log
+
+
+def stop_process(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+        process.wait(timeout=5)
+    except Exception:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except Exception:
+            process.kill()
 
 
 def run_attempt(browser, base_url: str, evidence_dir: Path, attempt: int) -> dict:
@@ -129,19 +192,63 @@ def run_attempt(browser, base_url: str, evidence_dir: Path, attempt: int) -> dic
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-url", default="http://127.0.0.1:4173")
-    parser.add_argument("--evidence-dir", required=True)
+    parser.add_argument("--base-url", default=os.environ.get("CI_ANNOTATIONS_BASE_URL") or None)
+    parser.add_argument(
+        "--evidence-dir",
+        default=os.environ.get("BLACKBOX_EVIDENCE_DIR") or None,
+    )
     args = parser.parse_args()
+    if not args.evidence_dir:
+        parser.error("--evidence-dir or BLACKBOX_EVIDENCE_DIR is required")
     evidence_dir = Path(args.evidence_dir).resolve()
     evidence_dir.mkdir(parents=True, exist_ok=True)
 
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        first = run_attempt(browser, args.base_url.rstrip("/"), evidence_dir, 1)
-        results = [first]
-        if first["status"] != "PASS":
-            results.append(run_attempt(browser, args.base_url.rstrip("/"), evidence_dir, 2))
-        browser.close()
+    # The formal preview is started here so the suite can register this case
+    # without a separately managed server; an explicit --base-url reuses one.
+    preview = None
+    preview_log = None
+    base_url = args.base_url
+    if base_url is None:
+        if port_in_use(DEFAULT_PORT):
+            raise RuntimeError(f"port {DEFAULT_PORT} is already in use")
+        base_url = f"http://127.0.0.1:{DEFAULT_PORT}"
+        preview, preview_log = start_preview(evidence_dir, DEFAULT_PORT)
+        try:
+            wait_for_preview(preview, base_url)
+        except Exception:
+            stop_process(preview)
+            preview_log.close()
+            raise
+
+    results: list[dict] = []
+    launch_error = None
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            first = run_attempt(browser, base_url.rstrip("/"), evidence_dir, 1)
+            results.append(first)
+            if first["status"] != "PASS":
+                results.append(run_attempt(browser, base_url.rstrip("/"), evidence_dir, 2))
+            browser.close()
+    except Exception as cause:
+        launch_error = f"{type(cause).__name__}: {cause}"
+    finally:
+        if preview is not None:
+            stop_process(preview)
+            preview_log.close()
+
+    if launch_error is not None:
+        summary = {
+            "suite": "P4-FIDELITY-DOCX-01",
+            "status": "FAIL",
+            "error": launch_error,
+            "attempts": results,
+        }
+        (evidence_dir / "summary.json").write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+        return 1
 
     status = "PASS" if results[0]["status"] == "PASS" else "FLAKY" if results[-1]["status"] == "PASS" else "FAIL"
     summary = {"suite": "P4-FIDELITY-DOCX-01", "status": status, "attempts": results}

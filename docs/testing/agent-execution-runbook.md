@@ -95,6 +95,8 @@ pnpm test:docs
 
 `test:blackbox` 会自行管理正式 preview 和延迟服务器；`test:consumer` 会自行打包、创建工作区外消费项目并清理。不要在运行这两个命令时另占它们登记的端口。
 
+`test:blackbox` 已登记 `tests/blackbox/docx_annotations.py`（P4-FIDELITY-DOCX-01）：批注与修订 gutter 的 3 卡片、隐藏和恢复断言由它覆盖，它自管正式 preview（默认端口 `4187`，可用 `CI_ANNOTATIONS_PORT` 覆盖），不需要另开服务器。`BLOCKED` 不再算通过：`run-suite.mjs` 对阻断步骤输出 `INCOMPLETE` 并以退出码 2 结束；只有本地明确缺少上游 checkout 时，才允许用 `CI_ALLOW_BLOCKED=1` 把它降级为警告。
+
 DOCX/XLSX 界面或交互发生变化时，必须额外确认 `tests/blackbox/ux_parity.py` 已由 `test:blackbox` 实际执行。它不是可选截图任务；失败、阻断或重试后通过都会阻止把对应路线图任务标为完成。
 
 失败时先读对应套件的 `summary.json`，再读首个 `FAIL` 步骤日志。浏览器用例继续查看该 attempt 下的 `failure.png`、`trace.zip`、`violations.json` 和网络文件；消费用例查看 `external-tgz-consumer/{typescript,vue-typescript,vite-build,browser}.log`。父套件将失败后的步骤标为 `NOT_RUN`，不要把它误记为新的产品失败。
@@ -148,6 +150,36 @@ git diff --check
 解释结果时必须附带已知边界：类型和构建通过不能替代黑盒；DOCX 既有集成检查也不能替代正式 Worker 断言；发布结论必须同时看 `test:blackbox` 与 `test:consumer`。当前 Vue 类型检查覆盖所有 Vue 包和 demo，XLSX 结构检查不得再产生 Vue 生命周期 warning。
 
 若任何命令改写了生成目录，测试结束后只清理自己创建且明确属于生成物的内容；不处理用户文件。
+
+### 6.1 持续集成分片
+
+`.github/workflows/ci.yml` 在 `ubuntu-latest` 上通过 corepack 安装 `packageManager` 声明的 pnpm，然后真实运行测试：
+
+```bash
+pnpm build
+pnpm test:unit
+pnpm test:component
+```
+
+除此之外，CI 以矩阵并行运行 4 个离线验收分片（不克隆上游、不启动 preview、不下载浏览器）：
+
+```bash
+node scripts/ci/run-acceptance-shard.mjs --list
+node scripts/ci/run-acceptance-shard.mjs docs
+node scripts/ci/run-acceptance-shard.mjs pack
+node scripts/ci/run-acceptance-shard.mjs self-test
+node scripts/ci/run-acceptance-shard.mjs release-pack
+node scripts/ci/run-acceptance-shard.mjs all   # 等价于 pnpm test:acceptance
+```
+
+| 分片 | 记录内容 | 防住什么 |
+|---|---|---|
+| `1` / `docs` | `scripts/ci/verify-docs.mjs` | 文档、套件登记和 CI 步骤被静默删除 |
+| `2` / `pack` | `scripts/ci/pack-manifests.mjs` | 发布包里缺少 `dist`/导出目标 |
+| `3` / `self-test` | `scripts/ci/verify-failure-propagation.mjs` | 子套件失败或类型错误仍返回绿色 |
+| `4` / `release-pack` | `scripts/ci/p4-reproducible-pack.mjs` | 两次干净构建产物不一致 |
+
+分片只登记离线步骤；`scripts/ci/run-acceptance-shard.mjs` 的 `assertOffline` 会拒绝任何引用 `tests/blackbox`、Playwright、上游 UX parity 或消费安装的步骤，需要浏览器的套件（`test:blackbox`、`test:stress`、`test:performance`、`test:consumer`、`test:release`）保持显式按需运行。每个分片把自己的 `summary.json`、步骤日志和 `environment.json` 写到 `output/acceptance/<commit>/P1-CI-01/<run-id>/shard-<name>/`。
 
 ## 7. 启动正式 preview 和浏览器
 

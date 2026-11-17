@@ -35,6 +35,11 @@ const evidenceRoot = path.resolve(
 );
 const suiteDir = path.join(evidenceRoot, suiteName || "unknown-suite");
 const prebuilt = process.env.CI_PREBUILT === "1";
+// A blocked step (exit code 2) is never a pass. `allowBlocked` only marks a step
+// as legitimately blockable in this environment; the suite still reports
+// INCOMPLETE and exits non-zero. CI_ALLOW_BLOCKED=1 downgrades that to a warning
+// for local runs that intentionally lack the upstream checkout.
+const allowBlocked = process.env.CI_ALLOW_BLOCKED === "1";
 
 function command(id, executable, args, options = {}) {
   return { id, executable, args, ...options };
@@ -132,6 +137,7 @@ const suites = {
       "tests/component/xlsx-history-budget.test.mjs",
       "tests/component/xlsx-grid-scroll.test.mjs",
       "tests/component/xlsx-cell-editing.test.mjs",
+      "tests/component/xlsx-anchored-panes.test.mjs",
       "tests/component/image-decode-state.test.mjs",
     ]),
     command("docx-xlsx-component-smoke", process.execPath, [
@@ -188,6 +194,15 @@ const suites = {
         BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-docx-editing"),
       },
     }),
+    // The only automated coverage for the DOCX comment/revision gutter.
+    command("formal-docx-annotations", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/docx_annotations.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-docx-annotations"),
+      },
+    }),
     command("formal-ux-parity", process.execPath, [
       "scripts/ci/run-python.mjs",
       "tests/blackbox/ux_parity.py",
@@ -195,6 +210,8 @@ const suites = {
       env: {
         BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-ux-parity"),
       },
+      // Blockable because the upstream reference worktree is an opt-in checkout,
+      // but a BLOCKED result makes the suite INCOMPLETE (issue #57), not PASS.
       allowBlocked: true,
     }),
     command("formal-fidelity-content", process.execPath, [
@@ -468,7 +485,12 @@ const baseEnv = {
   CI_EVIDENCE_ROOT: evidenceRoot,
 };
 const failureProbe = process.env.CI_FAILURE_PROBE || "";
+// The probe exit code lets scripts/ci/verify-failure-propagation.mjs exercise the
+// BLOCKED path (exit code 2) without a browser or an upstream checkout.
+const failureProbeExit = Number.parseInt(process.env.CI_FAILURE_PROBE_EXIT || "97", 10);
+const probeBlocked = process.env.CI_PROBE_BLOCKED === "1";
 const results = [];
+const blockedSteps = [];
 let failed = false;
 
 for (const step of steps) {
@@ -486,7 +508,7 @@ for (const step of steps) {
   let signal = null;
   let output = "";
   if (probeMatches) {
-    status = 97;
+    status = failureProbeExit;
     output = `Intentional CI failure probe at ${suiteName}:${step.id}\n`;
     console.error(output.trim());
   } else {
@@ -507,13 +529,14 @@ for (const step of steps) {
   }
 
   const finishedAt = new Date().toISOString();
-  const blockedOk = step.allowBlocked && status === 2;
-  const stepStatus = blockedOk ? "BLOCKED" : status === 0 ? "PASS" : "FAIL";
+  const blockable = step.allowBlocked || (probeMatches && probeBlocked);
+  const blocked = blockable && status === 2;
+  const stepStatus = blocked ? "BLOCKED" : status === 0 ? "PASS" : "FAIL";
 
   // When a Playwright blackbox test fails with no stdout, try reading its
   // summary.json from the evidence directory so the failure reason shows up
   // in CI logs.
-  if (!blockedOk && status !== 0 && !output.trim()) {
+  if (!blocked && status !== 0 && !output.trim()) {
     const summaryPath = path.join(suiteDir, step.id, "summary.json");
     try {
       const summary = JSON.parse(readFileSync(summaryPath, "utf8"));
@@ -534,20 +557,36 @@ for (const step of steps) {
     finishedAt,
     failureProbe: probeMatches,
   });
-  if (!blockedOk && status !== 0) failed = true;
+  if (blocked) blockedSteps.push(step.id);
+  else if (status !== 0) failed = true;
 }
 
+const result = failed
+  ? "FAIL"
+  : blockedSteps.length > 0 && !allowBlocked
+    ? "INCOMPLETE"
+    : "PASS";
 const summary = {
   suite: suiteName,
-  result: failed ? "FAIL" : "PASS",
+  result,
   runId,
   commit,
   evidenceRoot,
+  allowBlocked,
+  blockedSteps,
   results,
 };
 writeFileSync(
   path.join(suiteDir, "summary.json"),
   `${JSON.stringify(summary, null, 2)}\n`,
 );
-console.log(`\n[${suiteName}] ${summary.result}: ${suiteDir}`);
-process.exit(failed ? 1 : 0);
+
+if (blockedSteps.length > 0) {
+  const detail = allowBlocked
+    ? "counted as a warning because CI_ALLOW_BLOCKED=1"
+    : "not counted as a pass; set CI_ALLOW_BLOCKED=1 only for local runs without the upstream checkout";
+  console.warn(`\n[${suiteName}] BLOCKED steps (${detail}): ${blockedSteps.join(", ")}`);
+}
+console.log(`\n[${suiteName}] ${result}: ${suiteDir}`);
+if (failed) process.exit(1);
+process.exit(result === "INCOMPLETE" ? 2 : 0);
