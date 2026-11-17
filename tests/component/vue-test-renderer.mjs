@@ -64,7 +64,8 @@ function resolveTeleportTarget(selector) {
   return target;
 }
 
-export function teleportTarget(selector) {
+/** Returns the host node a component teleports into (defaults to `body`). */
+export function teleportTarget(selector = "body") {
   return resolveTeleportTarget(selector);
 }
 

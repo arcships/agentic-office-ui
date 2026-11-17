@@ -448,6 +448,15 @@ export interface DocxTableContextMenuRenderProps {
 export interface DocxContextMenuContext {
   /** Type of target that opened the menu. */
   kind: "text" | "table" | "image";
+  /**
+   * Viewport coordinates (`clientX`/`clientY`) of the pointer that opened the
+   * menu. The built-in menu anchors itself here; custom menus use it as the
+   * placement point.
+   */
+  position?: {
+    x: number;
+    y: number;
+  };
   /** Active text range when the menu was opened from text. */
   activeTextRange?: DocxTextRange;
   /** Text location under the pointer when available. */

@@ -157,6 +157,7 @@ const suites = {
       "tests/component/docx-table-presentation.test.mjs",
       "tests/component/docx-file-handling.test.mjs",
       "tests/component/docx-tracked-changes.test.mjs",
+      "tests/component/docx-context-menu-form-fields.test.mjs",
       "tests/component/docx-page-budget.test.mjs",
       "tests/component/pdf-surface-lazy-render.test.mjs",
       "tests/component/docx-notes.test.mjs",

@@ -69,8 +69,8 @@
         @blur="onFieldBlur(field)"
       >
         <option
-          v-for="opt of field.options"
-          :key="opt.value ?? opt.displayText"
+          v-for="(opt, optionIndex) of field.options"
+          :key="`${optionIndex}:${opt.value ?? opt.displayText}`"
           :value="opt.value ?? opt.displayText"
         >
           {{ opt.displayText }}
@@ -103,6 +103,7 @@ import {
   isoDateValueForField,
   validateFormFieldValue,
 } from "../composables/form-field-value"
+import { collectPageFormFields, docxFormFieldLocationKey } from "../composables/docx-form-fields"
 
 // ── Types ──────────────────────────────────────────────────────────
 type FormFieldControl = "text" | "date" | "checkbox" | "dropdown"
@@ -145,51 +146,30 @@ const formFields = computed<FormFieldEntry[]>(() => {
   const model = props.controller.model
   if (!model) return []
 
-  const fields: FormFieldEntry[] = []
-  const selectedLoc = props.controller.selectedFormField?.location
-  const pageNodeIndexes = new Set(
-    props.pageNodeSegments.map((segment) => segment.nodeIndex)
-  )
+  const selectedLocation = props.controller.selectedFormField?.location
+  const selectedKey = selectedLocation
+    ? docxFormFieldLocationKey(selectedLocation)
+    : undefined
 
-  model.nodes.forEach((node, nodeIndex) => {
-    if (!pageNodeIndexes.has(nodeIndex)) return
-    if (node.type !== "paragraph") return
-    node.children.forEach((child, childIndex) => {
-      if (child.type !== "form-field") return
-      const ff = child as FormFieldRunNode
-
-      const location: DocxFormFieldLocation = {
-        kind: "paragraph",
-        nodeIndex,
-        childIndex,
-      }
-
-      const locationKey = `p:${nodeIndex}:${childIndex}`
-      const isSelected =
-        selectedLoc?.kind === "paragraph" &&
-        selectedLoc.nodeIndex === nodeIndex &&
-        selectedLoc.childIndex === childIndex
-
-      fields.push({
-        id: `ff-${nodeIndex}-${childIndex}`,
-        control: controlFor(ff),
-        node: ff,
-        value: ff.value ?? "",
-        displayValue: formatFormFieldDateValue(ff),
-        dateValue: isoDateValueForField(ff),
-        placeholder: ff.placeholder,
-        checked: ff.checked ?? false,
-        title: ff.title,
-        options: (ff.options ?? []) as FormFieldOption[],
-        maxLength: ff.widget?.text?.maxLength,
-        locationKey,
-        location,
-        selected: isSelected,
-      })
-    })
+  return collectPageFormFields(model, props.pageNodeSegments).map((entry) => {
+    const ff = entry.field
+    return {
+      id: `ff-${entry.locationKey.replace(/:/g, "-")}`,
+      control: controlFor(ff),
+      node: ff,
+      value: ff.value ?? "",
+      displayValue: formatFormFieldDateValue(ff),
+      dateValue: isoDateValueForField(ff),
+      placeholder: ff.placeholder,
+      checked: ff.checked ?? false,
+      title: ff.title,
+      options: ff.options ?? [],
+      maxLength: ff.widget?.text?.maxLength,
+      locationKey: entry.locationKey,
+      location: entry.location,
+      selected: selectedKey === entry.locationKey,
+    }
   })
-
-  return fields
 })
 
 // ── Style helpers ──────────────────────────────────────────────────
