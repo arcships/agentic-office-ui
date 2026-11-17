@@ -10,7 +10,8 @@
     "paths": {
       "@arcships/office-interaction": ["../office-interaction/src/index.ts"],
       "@arcships/pptx-core": ["../pptx-core/src/index.ts"],
-      "@arcships/pptx-core/browser": ["../pptx-core/src/browser.ts"]
+      "@arcships/pptx-core/browser": ["../pptx-core/src/browser.ts"],
+      "@arcships/vue-ui": ["../vue-ui/src/index.ts"]
     }
   }
 }

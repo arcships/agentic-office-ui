@@ -61,6 +61,11 @@
     </div>
 
     <div class="pptx-viewer__body">
+      <OfficeLiveStatus
+        test-id="pptx-live-status"
+        :message="liveStatusMessage"
+        :busy="state === 'loading'"
+      />
       <aside
         v-if="showSidebar && !isPresent && document"
         ref="sidebarRef"
@@ -197,6 +202,7 @@ import {
   type PptxPreviewSource,
 } from "@arcships/pptx-core/browser"
 import type { PptxSearchState, UsePptxDocumentOptions, PptxStageExpose } from "./headless-types"
+import { OfficeLiveStatus } from "@arcships/vue-ui"
 import { usePptxDocument } from "./composables/usePptxDocument"
 import { usePptxPlayback } from "./composables/usePptxPlayback"
 import { watchFontLoading } from "./composables/font-loading"
@@ -447,6 +453,19 @@ function requireController(): PptxPlaybackController {
   if (!controller.value) throw new PptxPlaybackError("PLAYBACK_NOT_READY", "PPTX 播放控制器尚未准备好。")
   return controller.value
 }
+
+// Slide changes, playback and load failures were visible only to sighted users.
+// One stable live region announces them for assistive technology.
+const liveStatusMessage = computed(() => {
+  if (state.value === "empty") return "没有打开幻灯片文件"
+  if (state.value === "loading") return "正在加载幻灯片文件"
+  if (state.value === "error") return `无法打开幻灯片文件：${error.value?.message ?? "未知错误"}`
+  const total = document.value?.slides.length ?? 0
+  const position = `第 ${activeIndex.value + 1} 张，共 ${total} 张`
+  const hidden = activeSlide.value?.hidden ? "，隐藏页" : ""
+  const playbackStatus = isPresent.value ? `，${playbackStatusText.value}` : ""
+  return `幻灯片已就绪，${position}${hidden}${playbackStatus}`
+})
 
 function toPlaybackError(reason: unknown): PptxPlaybackError {
   return reason instanceof PptxPlaybackError

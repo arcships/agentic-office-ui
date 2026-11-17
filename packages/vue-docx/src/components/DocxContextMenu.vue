@@ -200,6 +200,7 @@ import type {
   DocxTableContextMenuContext,
 } from "@arcships/docx-core"
 import { compareTextRangeBoundaries, paragraphText } from "@arcships/docx-core"
+import { resolveOfficeMenuKeyCommand } from "@arcships/vue-ui"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -441,7 +442,28 @@ async function onAction(action: string, value?: string): Promise<void> {
 }
 
 function close(): void {
+  restoreInvokerFocus()
   emit("close")
+}
+
+// ── Focus return ───────────────────────────────────────────────────
+// Closing must hand focus back to the surface that opened the menu; otherwise
+// keyboard users land on <body> once the teleported menu disappears.
+let invoker: HTMLElement | null = null
+
+function captureInvoker(): void {
+  if (typeof document === "undefined") return
+  const active = document.activeElement as HTMLElement | null
+  if (!active || typeof active.focus !== "function") return
+  const menu = menuRef.value
+  if (menu && typeof menu.contains === "function" && menu.contains(active)) return
+  invoker = active
+}
+
+function restoreInvokerFocus(): void {
+  const target = invoker
+  invoker = null
+  target?.focus?.({ preventScroll: true })
 }
 
 // ── Position + focus from context ──────────────────────────────────
@@ -488,6 +510,7 @@ watch(
     }
     menuWidth.value = MENU_FALLBACK_WIDTH
     menuHeight.value = MENU_FALLBACK_HEIGHT
+    captureInvoker()
     await nextTick()
     measureMenu()
     focusMenuItem(0)
@@ -496,31 +519,25 @@ watch(
 )
 
 // ── Keyboard ───────────────────────────────────────────────────────
+// The key semantics come from the shared Office menu keyboard so DOCX and XLSX
+// menus answer Escape, Tab and the arrow keys the same way. Item collection and
+// the roving tabindex stay local: the menu must work with both real DOM nodes
+// and the non-DOM node objects used by the component test renderer.
 function onMenuKeydown(event: KeyboardEvent): void {
   if (!visible.value) return
-  switch (event.key) {
-    case "Escape":
-      event.preventDefault()
-      event.stopPropagation()
-      close()
-      break
-    case "ArrowDown":
-      event.preventDefault()
-      focusMenuItem(activeItemIndex.value + 1)
-      break
-    case "ArrowUp":
-      event.preventDefault()
-      focusMenuItem(activeItemIndex.value < 0 ? -1 : activeItemIndex.value - 1)
-      break
-    case "Home":
-      event.preventDefault()
-      focusMenuItem(0)
-      break
-    case "End":
-      event.preventDefault()
-      focusMenuItem(-1)
-      break
+  const command = resolveOfficeMenuKeyCommand(
+    event.key,
+    collectMenuItems().length,
+    activeItemIndex.value,
+  )
+  if (!command) return
+  event.preventDefault()
+  event.stopPropagation()
+  if (command.type === "focus") {
+    focusMenuItem(command.index)
+    return
   }
+  close()
 }
 </script>
 

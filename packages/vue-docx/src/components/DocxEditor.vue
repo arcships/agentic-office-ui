@@ -77,6 +77,7 @@
     />
 
     <!-- Status bar -->
+    <OfficeLiveStatus test-id="editor-live-status" :message="liveStatusMessage" />
     <div class="docx-editor-statusbar">
       <span class="docx-editor-statusbar-page">
         Page {{ currentPage }} of {{ totalPages }}
@@ -99,6 +100,7 @@ import type {
   DocxRuntime,
 } from "@arcships/docx-core"
 import { createDocxRuntime, DocxImportError } from "@arcships/docx-core"
+import { OfficeLiveStatus } from "@arcships/vue-ui"
 import { useDocxEditor } from "../composables/useDocxEditor"
 import {
   docxTableContextFromNode,
@@ -190,6 +192,17 @@ const zoomPercent = ref(100)
 const thumbnailPanelVisible = ref(props.showThumbnails)
 
 watch(() => props.showThumbnails, (visible) => { thumbnailPanelVisible.value = visible })
+
+// The editor status bar is visible but was never announced. Mirror it in a
+// live region so page turns and controller state reach assistive technology.
+const liveStatusMessage = computed(() => {
+  if (pageLimitError.value) return `文档无法显示：${pageLimitError.value.message}`
+  const pages = totalPages.value > 0
+    ? `第 ${Math.min(Math.max(currentPage.value, 1), totalPages.value)} 页，共 ${totalPages.value} 页`
+    : ""
+  const status = String(controller.status ?? "").trim()
+  return [pages, status].filter(Boolean).join("，") || "文档已就绪"
+})
 
 function onPageCountChange(count: number): void {
   const allowed = effectiveRuntime.value.limits?.maxDocxPages

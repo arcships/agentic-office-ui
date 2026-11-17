@@ -44,6 +44,11 @@
         {{ controller.calculationStatus.message }}
       </slot>
     </div>
+    <OfficeLiveStatus
+      test-id="xlsx-live-status"
+      :message="liveStatusMessage"
+      :busy="controller.isLoading"
+    />
     <div class="xlsx-viewer__body">
       <div
         v-if="controller.isLoading"
@@ -194,6 +199,7 @@ import XlsxSelectionOverlay from "./XlsxSelectionOverlay.vue";
 import XlsxContextMenu from "./XlsxContextMenu.vue";
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue";
 import { formatBinaryBytes } from "../composables/formatting";
+import { OfficeLiveStatus } from "@arcships/vue-ui";
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch";
 
 const props = withDefaults(
@@ -269,6 +275,18 @@ watch(
   },
   { immediate: true },
 );
+
+// Loading, error and sheet switches were rendered visually only. This live
+// region is the shared Office announcement channel for workbook state; the
+// selected cell is announced by XlsxSelectionOverlay.
+const liveStatusMessage = computed(() => {
+  if (props.controller.isLoading) return "正在加载工作簿";
+  if (props.controller.error) return `无法打开工作簿：${props.controller.error.message}`;
+  const sheet = props.controller.activeSheet;
+  if (sheet) return `工作表 ${sheet.name} 已就绪`;
+  if (props.controller.activeTab?.kind === "chartsheet") return "图表工作表已就绪";
+  return "没有打开工作簿";
+});
 
 type GridInstance = InstanceType<typeof XlsxGrid>;
 const viewerRef = ref<HTMLElement | null>(null);
