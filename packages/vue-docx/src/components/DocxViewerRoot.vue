@@ -91,6 +91,10 @@ import {
 } from "@arcships/docx-core"
 import DocxPageSurface from "./DocxPageSurface.vue"
 import {
+  DOCX_UNSUPPORTED_FILE_MESSAGE,
+  isSupportedDocxFileName,
+} from "../composables/docx-file-types"
+import {
   ensureDocxViewerPageSurfaceRegistry,
   notifyDocxViewerPageSurfaceListeners,
 } from "../composables/page-surface-registry"
@@ -582,10 +586,18 @@ function onDragLeave(event?: DragEvent): void {
 async function onDrop(event: DragEvent): Promise<void> {
   isDragOver.value = false
   if (!props.editable || !props.controller) return
-  const file = event.dataTransfer?.files?.[0]
-  if (file && file.name.endsWith(".docx")) {
-    await props.controller.importDocxFile(file)
+
+  const files = event.dataTransfer?.files
+  if (!files || files.length === 0) return
+
+  for (let i = 0; i < files.length; i++) {
+    if (isSupportedDocxFileName(files[i].name)) {
+      await props.controller.importDocxFile(files[i])
+      return
+    }
   }
+
+  props.controller.setStatus(DOCX_UNSUPPORTED_FILE_MESSAGE)
 }
 
 // ── Context menu ─────────────────────────────────────────────────────
@@ -635,7 +647,7 @@ function onMouseUp(): void {
 function hasDocxFile(dataTransfer: DataTransfer): boolean {
   if (dataTransfer.types.includes("Files")) {
     for (let i = 0; i < dataTransfer.files.length; i++) {
-      if (dataTransfer.files[i].name.endsWith(".docx")) return true
+      if (isSupportedDocxFileName(dataTransfer.files[i].name)) return true
     }
   }
   return false

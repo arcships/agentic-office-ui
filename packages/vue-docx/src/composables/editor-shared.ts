@@ -46,6 +46,8 @@ export interface EditorCore {
   selectedFormFieldLocation: Ref<DocxFormFieldLocation | undefined>
   documentLoadNonce: Ref<number>
   fileName: Ref<string>
+  /** File name restored by newDocument(). */
+  initialFileName: string
   importError: Ref<Error | undefined>
   isImporting: Ref<boolean>
   documentTheme: Ref<DocxDocumentTheme>

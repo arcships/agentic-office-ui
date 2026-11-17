@@ -11,6 +11,11 @@ import {
 } from "@arcships/docx-core"
 import { onScopeDispose, watch } from "vue"
 import type { EditorCore } from "./editor-shared"
+import {
+  DOCX_UNSUPPORTED_FILE_MESSAGE,
+  docxExportFileName,
+  isSupportedDocxFileName,
+} from "./docx-file-types"
 
 export function createEditorImportExport(ctx: EditorCore) {
   const runtime = createDocxRuntime()
@@ -126,6 +131,7 @@ export function createEditorImportExport(ctx: EditorCore) {
     ctx.model.value = nextModel
     ctx.cleanModel.value = nextModel
     ctx.documentLoadNonce.value += 1
+    ctx.fileName.value = ctx.initialFileName
     ctx.history.value = { past: [], future: [] }
     ctx.historyRestoreRequest.value = undefined
     ctx.basePackage.value = undefined
@@ -143,9 +149,9 @@ export function createEditorImportExport(ctx: EditorCore) {
     invalidateImport()
     invalidateExport()
 
-    if (!/\.docx?$/i.test(file.name)) {
+    if (!isSupportedDocxFileName(file.name)) {
       ctx.isImporting.value = false
-      ctx.status.value = `Only .docx and .doc files are supported`
+      ctx.status.value = DOCX_UNSUPPORTED_FILE_MESSAGE
       return
     }
 
@@ -269,9 +275,7 @@ export function createEditorImportExport(ctx: EditorCore) {
         task.anchor = anchor
         task.objectUrl = URL.createObjectURL(blob)
         anchor.href = task.objectUrl
-        anchor.download = /\.docx?$/i.test(fileName)
-          ? fileName.replace(/\.docx?$/i, "") + "-edited.docx"
-          : "edited.docx"
+        anchor.download = docxExportFileName(fileName)
         anchor.style.display = "none"
         ownerDocument.body.append(anchor)
         task.cleanupTimer = setTimeout(() => cleanupExportTask(task), 1000)

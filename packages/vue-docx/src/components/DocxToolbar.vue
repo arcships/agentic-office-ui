@@ -343,6 +343,7 @@
 import { computed, ref, watch } from "vue"
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { DocxEditorController, DocxBorderPreset, HeadingLevel } from "@arcships/docx-core"
+import { DOCX_FILE_ACCEPT } from "../composables/docx-file-types"
 
 const props = defineProps<{
   controller: DocxEditorController
@@ -513,7 +514,7 @@ function onInsertImage(): void {
 function onImport(): void {
   const input = document.createElement("input")
   input.type = "file"
-  input.accept = ".docx"
+  input.accept = DOCX_FILE_ACCEPT
   input.onchange = async () => {
     const file = input.files?.[0]
     if (file) {
