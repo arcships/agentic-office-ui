@@ -12,12 +12,23 @@ import {
   parseA1RangeReference,
   pixelsToEmu,
 } from "./image-parser";
-import type { WorkbookSheetState } from "./grid-render";
 
-type SheetAxisSizeState = Pick<
-  WorkbookSheetState,
-  "colWidthOverridesPx" | "defaultColWidthPx" | "rowHeightOverridesPx" | "defaultRowHeightPx"
->;
+type SheetAxisSizeState = {
+  colWidthOverridesPx?: Record<number, number>;
+  defaultColWidthPx?: number;
+  hiddenCols?: number[];
+  hiddenRows?: number[];
+  rowHeightOverridesPx?: Record<number, number>;
+  defaultRowHeightPx?: number;
+  /** Display-indexed widths after hidden columns are removed (grid paint order). */
+  colWidths?: number[];
+  /** Display-indexed heights after hidden rows are removed (grid paint order). */
+  rowHeights?: number[];
+  /** Workbook column indices that the grid actually paints, in paint order. */
+  visibleCols?: number[];
+  /** Workbook row indices that the grid actually paints, in paint order. */
+  visibleRows?: number[];
+} | null;
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -198,30 +209,98 @@ export function resolveSheetColumnWidthPx(sheetState: SheetAxisSizeState | null,
   if (col < 0) {
     return 0;
   }
-  return sheetState?.colWidthOverridesPx[col] ?? sheetState?.defaultColWidthPx ?? emuToPixels(DEFAULT_COL_WIDTH_EMU);
+  return sheetState?.colWidthOverridesPx?.[col] ?? sheetState?.defaultColWidthPx ?? emuToPixels(DEFAULT_COL_WIDTH_EMU);
 }
 
 export function resolveSheetRowHeightPx(sheetState: SheetAxisSizeState | null, row: number) {
   if (row < 0) {
     return 0;
   }
-  return sheetState?.rowHeightOverridesPx[row] ?? sheetState?.defaultRowHeightPx ?? emuToPixels(DEFAULT_ROW_HEIGHT_EMU);
+  return sheetState?.rowHeightOverridesPx?.[row] ?? sheetState?.defaultRowHeightPx ?? emuToPixels(DEFAULT_ROW_HEIGHT_EMU);
 }
 
-export function sumSheetColumnWidthsEmu(sheetState: SheetAxisSizeState | null, beforeCol: number) {
-  let total = 0;
-  for (let col = 0; col < beforeCol; col += 1) {
-    total += pixelsToEmu(resolveSheetColumnWidthPx(sheetState, col));
+export function sumSheetColumnWidthsEmu(sheetState: SheetAxisSizeState, beforeCol: number) {
+  return sumSheetAxisSizesEmu(sheetState, beforeCol, "column");
+}
+
+export function sumSheetRowHeightsEmu(sheetState: SheetAxisSizeState, beforeRow: number) {
+  return sumSheetAxisSizesEmu(sheetState, beforeRow, "row");
+}
+
+/**
+ * Sum the rendered size of every axis slot before `beforeIndex`.
+ *
+ * Anchors are stored with workbook indices, but the grid removes hidden rows /
+ * columns from layout and paints `colWidths` / `rowHeights` in display order.
+ * Walking workbook indices and skipping hidden slots keeps anchored objects
+ * aligned with the cells the canvas actually draws, including sheets whose
+ * hidden columns have a stored width (Excel keeps `ht` / `width` on hidden
+ * rows / columns).
+ */
+function sumSheetAxisSizesEmu(
+  sheetState: SheetAxisSizeState,
+  beforeIndex: number,
+  axis: "column" | "row",
+) {
+  if (!Number.isFinite(beforeIndex) || beforeIndex <= 0) {
+    return 0;
   }
+
+  const hidden = new Set(axis === "column" ? sheetState?.hiddenCols : sheetState?.hiddenRows);
+  const visible = axis === "column" ? sheetState?.visibleCols : sheetState?.visibleRows;
+  const sizes = axis === "column" ? sheetState?.colWidths : sheetState?.rowHeights;
+  const sortedVisible = visible && visible.length > 0 ? visible : null;
+  const lastVisible = sortedVisible ? sortedVisible[sortedVisible.length - 1] ?? -1 : -1;
+  let total = 0;
+
+  for (let index = 0; index < beforeIndex; index += 1) {
+    if (hidden.has(index)) {
+      continue;
+    }
+
+    let sizePx: number | undefined;
+    if (sortedVisible) {
+      const displayIndex = findSortedIndex(sortedVisible, index);
+      if (displayIndex >= 0) {
+        const candidate = sizes?.[displayIndex];
+        if (typeof candidate === "number" && candidate > 0) {
+          sizePx = candidate;
+        }
+      } else if (index <= lastVisible) {
+        // The grid's visible list covers every index up to the last displayed
+        // one; a missing slot in that range is hidden even when the caller did
+        // not populate `hiddenCols`.
+        continue;
+      }
+    }
+
+    if (sizePx === undefined) {
+      sizePx = axis === "column"
+        ? resolveSheetColumnWidthPx(sheetState, index)
+        : resolveSheetRowHeightPx(sheetState, index);
+    }
+    total += pixelsToEmu(sizePx);
+  }
+
   return total;
 }
 
-export function sumSheetRowHeightsEmu(sheetState: SheetAxisSizeState | null, beforeRow: number) {
-  let total = 0;
-  for (let row = 0; row < beforeRow; row += 1) {
-    total += pixelsToEmu(resolveSheetRowHeightPx(sheetState, row));
+function findSortedIndex(indices: number[], target: number) {
+  let low = 0;
+  let high = indices.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    const value = indices[middle];
+    if (value === target) {
+      return middle;
+    }
+    if (value < target) {
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
   }
-  return total;
+  return -1;
 }
 
 // ── Anchor → absolute rect ─────────────────────────────────────────────────
