@@ -387,8 +387,9 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
       }
     }
 
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
     const nextRange = normalizeRange({
       start: targetCell,
       end: {
@@ -518,8 +519,9 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
       }
     }
 
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
     const nextRange = normalizeRange({
       start: targetCell,
       end: {

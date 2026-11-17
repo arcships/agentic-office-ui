@@ -91,8 +91,9 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       }
     }
 
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
     ctx.recordRangeEditHistory(mutations, normalized, ctx.activeCell.value ?? normalized.start);
   }
 
@@ -137,8 +138,9 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     if (!after) {
       return;
     }
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
     ctx.recordCellEditHistory(cell, before, after);
   }
 
@@ -175,8 +177,9 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     if (!after) {
       return;
     }
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
     ctx.recordCellEditHistory(cell, before, after);
   }
 
@@ -396,8 +399,9 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       }
     }
 
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
     ctx.selection.value = nextRange;
     ctx.activeCell.value = nextRange.end;
     ctx.selectionAnchorRef.value = nextRange.start;

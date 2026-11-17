@@ -26,9 +26,10 @@ export {
   buildVisibleSheetIndexMap,
   resolveWorkbookBuffer,
   resolveWorkbookSource,
-  parseWorkbookBuffer,
-  tryRecalculate
+  parseWorkbookBuffer
 } from "./composables/workbook-state";
+
+export { tryRecalculate } from "@arcships/xlsx-core";
 
 export {
   cellAddressToA1,

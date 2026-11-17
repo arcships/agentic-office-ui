@@ -18,7 +18,8 @@ import type {
   XlsxSheetVisibility,
   XlsxLoadError,
   XlsxSourceState,
-  UseXlsxViewerControllerOptions
+  UseXlsxViewerControllerOptions,
+  SafeCalculateSkipReason
 } from "@arcships/xlsx-core";
 import type {
   XlsxWorkerClient,
@@ -32,6 +33,23 @@ import type { CellInputOptions } from "./cell-input";
 import type { XlsxDataValidationCheck } from "./validation";
 
 export const FORMULA_COUNT_THRESHOLD = 1000;
+
+export type XlsxCalculationSkipReason =
+  | "unresolved-sheet-refs"
+  | "calculate-trapped"
+  | "recovery-snapshot-unavailable";
+
+/** User-visible reason why the viewer is showing cached formula values. */
+export type XlsxCalculationStatus = {
+  reason: XlsxCalculationSkipReason;
+  message: string;
+};
+
+export type XlsxCalculationOutcome = {
+  calculated: boolean;
+  /** False when the workbook instance can no longer be read safely. */
+  safeToRefresh: boolean;
+};
 export const DEFAULT_ROW_HEIGHT = 24;
 export const DEFAULT_COL_WIDTH = 80;
 export const XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -425,7 +443,17 @@ export interface XlsxControllerContext {
    */
   consumePreservedTabSwitch: (nextTabIndex: number) => boolean;
   refreshWorkbookState: (targetWorkbook: Workbook) => void;
-  maybeRecalculateWorkbook: (targetWorkbook: Workbook) => void;
+  /** Recalculates when enabled; true when workbook state is safe to refresh. */
+  maybeRecalculateWorkbook: (targetWorkbook: Workbook) => boolean;
+  /** Recalculates through safeCalculate, snapshotting before a possible trap. */
+  recalculateWorkbookSafely: (targetWorkbook: Workbook) => XlsxCalculationOutcome;
+  /** Restores automatic recalculation after a successful manual retry. */
+  resumeAutoCalculate: () => void;
+  calculationStatus: Ref<XlsxCalculationStatus | null>;
+  noteCalculationResult: (result: {
+    calculated: boolean;
+    skipReason: XlsxCalculationSkipReason | null;
+  }) => void;
   getActiveWorksheet: () => ReturnType<Workbook["getSheet"]> | null;
   setChartAssets: (assets: WorkbookChartAssets | null) => void;
   setImageAssets: (assets: WorkbookImageAssets | null) => void;
@@ -443,7 +471,7 @@ export interface XlsxControllerContext {
   /** Abandons the one instance-owned deferred load; repeated calls are ignored. */
   cancelDeferredWorkbookLoad: () => void;
   startChartDisplayHydration: (buffer: ArrayBuffer, targetWorkbook: Workbook, targetSheets: XlsxSheetData[]) => void;
-  loadWorkbookOnMainThread: (buffer: ArrayBuffer) => Promise<{ imageAssets: WorkbookImageAssets; parsedWorkbook: { shouldAutoCalculate: boolean; workbook: Workbook } }>;
+  loadWorkbookOnMainThread: (buffer: ArrayBuffer) => Promise<{ imageAssets: WorkbookImageAssets; parsedWorkbook: { shouldAutoCalculate: boolean; calculationSkipReason: SafeCalculateSkipReason | null; workbook: Workbook } }>;
   hasIncompleteWorkerChartSnapshot: (snapshot: { chartsByWorkbookSheetIndex: XlsxChart[][] }) => boolean;
   ensureChartAssetsHydrated: (targetWorkbook: Workbook | null, targetSheets: XlsxSheetData[]) => WorkbookChartAssets | null;
   shouldForceReadOnlyForBuffer: (bufferByteLength: number) => boolean;

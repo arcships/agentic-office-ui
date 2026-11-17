@@ -171,6 +171,7 @@ const suites = {
       "tests/component/xlsx-number-formats.test.mjs",
       "tests/component/xlsx-sheet-sync.test.mjs",
       "tests/component/xlsx-drawing-fidelity.test.mjs",
+      "tests/component/xlsx-calculation-safety.test.mjs",
       "tests/component/xlsx-grid-scroll.test.mjs",
       "tests/component/xlsx-clipboard-search.test.mjs",
       "tests/component/xlsx-conditional-format.test.mjs",

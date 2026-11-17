@@ -735,6 +735,15 @@ export interface XlsxViewerController {
   canDownload: boolean;
   canExport: boolean;
   canLoadDeferred: boolean;
+  /**
+   * Why the most recent recalculation fell back to cached formula values, or
+   * `null` when formulas are current. Recalculation never traps the workbook
+   * silently: hosts can render `message` and call `recalculate()` to retry.
+   */
+  calculationStatus: {
+    reason: "unresolved-sheet-refs" | "calculate-trapped" | "recovery-snapshot-unavailable";
+    message: string;
+  } | null;
   canRedo: boolean;
   canUndo: boolean;
   canZoomIn: boolean;
