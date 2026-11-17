@@ -1,6 +1,7 @@
 /** @jsxImportSource vue */
 import type { XlsxChart, XlsxChartAxis, XlsxChartSeries } from "@arcships/xlsx-core";
 import { safeNumber, normalizeCategoryLabel, clamp, normalizeRendererHexColor, lightenColor, darkenColor } from "./chart-shared";
+import { formatExcelSerial, isLikelyDateFormatCode } from "./chart-date";
 import type { ComboRenderableGroup } from "./chart-types";
 
 export function chartSeriesColor(chart: XlsxChart, seriesIndex: number) {
@@ -222,63 +223,14 @@ export function estimateReferencePointCount(formula: string | undefined) {
   return Math.abs(endRow - startRow) + 1;
 }
 
-export function isLikelyDateFormatCode(formatCode: string | undefined) {
-  if (!formatCode) {
-    return false;
-  }
-  const normalized = formatCode
-    .toLowerCase()
-    .replace(/\[[^\]]*]/g, " ")
-    .replace(/"[^"]*"/g, " ")
-    .replace(/\\./g, " ");
-  return /(?:d|m|y)/.test(normalized);
-}
-
-export function excelSerialToDate(serial: number, use1904: boolean) {
-  const wholeDays = Math.trunc(serial);
-  const milliseconds = Math.round((serial - wholeDays) * 86_400_000);
-  const baseUtc = use1904
-    ? Date.UTC(1904, 0, 1)
-    : Date.UTC(1899, 11, 30);
-  return new Date(baseUtc + wholeDays * 86_400_000 + milliseconds);
-}
-
-export function formatExcelDateSerial(value: number, formatCode: string | undefined, use1904: boolean) {
-  const date = excelSerialToDate(value, use1904);
-  const normalized = (formatCode ?? "").toLowerCase();
-  const options: Intl.DateTimeFormatOptions = {};
-
-  if (/yyyy/.test(normalized)) {
-    options.year = "numeric";
-  } else if (/yy/.test(normalized)) {
-    options.year = "2-digit";
-  }
-
-  if (/mmmm/.test(normalized)) {
-    options.month = "long";
-  } else if (/mmm/.test(normalized)) {
-    options.month = "short";
-  } else if (/(^|[^a-z])m([^a-z]|$)|(^|[^a-z])mm([^a-z]|$)/.test(normalized)) {
-    options.month = "numeric";
-  }
-
-  if (/dddd/.test(normalized)) {
-    options.weekday = "long";
-  } else if (/ddd/.test(normalized)) {
-    options.weekday = "short";
-  }
-
-  if (/d/.test(normalized)) {
-    options.day = "numeric";
-  }
-
-  if (Object.keys(options).length === 0) {
-    options.month = "short";
-    options.day = "numeric";
-  }
-
-  return new Intl.DateTimeFormat(undefined, options).format(date);
-}
+export {
+  excelSerialToDate,
+  formatExcelDateSerial,
+  formatExcelSerial,
+  isDateLikeFormat,
+  isLikelyDateFormatCode
+} from "./chart-date";
+export type { ExcelSerialFormatOptions } from "./chart-date";
 
 export function formatCategoryLabel(chart: XlsxChart, value: unknown, fallback = "") {
   const rawRecord = chart.raw && typeof chart.raw === "object"
@@ -289,7 +241,9 @@ export function formatCategoryLabel(chart: XlsxChart, value: unknown, fallback =
     : null;
   const formatCode = chart.categoryAxis?.numberFormat?.formatCode;
   if (numeric != null && isLikelyDateFormatCode(formatCode)) {
-    return formatExcelDateSerial(numeric, formatCode, rawRecord?.date1904 === true);
+    return formatExcelSerial(numeric, formatCode, {
+      date1904: rawRecord?.date1904 === true
+    });
   }
 
   const normalized = normalizeCategoryLabel(value);

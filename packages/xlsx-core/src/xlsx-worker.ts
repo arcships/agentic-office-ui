@@ -20,6 +20,7 @@ import {
 } from "./images";
 import type { WorkbookStructureAssets } from "./images";
 import { safeCalculate } from "./safe-calculate";
+import { normalizeTypedDateCells } from "./typed-dates";
 import { trackXlsxWorkbookLifetime } from "./workbook-lifetime";
 import { getSheetsWasmModule, setWasmSource, type WorkerWasmSource } from "./wasm";
 import type {
@@ -786,8 +787,11 @@ async function loadWorkbook(
     // Nothing has been created yet, so there is nothing to release.
     throw new SupersededLoadError();
   }
-  const bytes = new Uint8Array(buffer);
-  const effectiveSkipXmlParsing = shouldSkipXmlParsingForWorkbook(bytes, skipXmlParsing);
+  const rawBytes = new Uint8Array(buffer);
+  const effectiveSkipXmlParsing = shouldSkipXmlParsingForWorkbook(rawBytes, skipXmlParsing);
+  const bytes = effectiveSkipXmlParsing
+    ? rawBytes
+    : normalizeTypedDateCells(rawBytes);
   let activeWorkbook = trackXlsxWorkbookLifetime(wasmModule.Workbook.fromBytes(bytes));
   let totalFormulas = 0;
   for (let index = 0; index < activeWorkbook.sheetCount; index += 1) {
@@ -888,8 +892,11 @@ async function parseCharts(
 ) {
   validateXlsxArchive(buffer, limits);
   const wasmModule = await getSheetsWasmModule();
-  const bytes = new Uint8Array(buffer);
-  const effectiveSkipXmlParsing = shouldSkipXmlParsingForWorkbook(bytes, skipXmlParsing);
+  const rawBytes = new Uint8Array(buffer);
+  const effectiveSkipXmlParsing = shouldSkipXmlParsingForWorkbook(rawBytes, skipXmlParsing);
+  const bytes = effectiveSkipXmlParsing
+    ? rawBytes
+    : normalizeTypedDateCells(rawBytes);
   let activeWorkbook = trackXlsxWorkbookLifetime(wasmModule.Workbook.fromBytes(bytes));
   let totalFormulas = 0;
   for (let index = 0; index < activeWorkbook.sheetCount; index += 1) {

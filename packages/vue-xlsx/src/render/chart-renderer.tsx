@@ -64,9 +64,11 @@ export {
   resolveRenderableSeriesValue,
   coerceLooseNumber,
   buildPieEntries,
+  isDateLikeFormat,
   isLikelyDateFormatCode,
   excelSerialToDate,
   formatExcelDateSerial,
+  formatExcelSerial,
   formatCategoryLabel
 } from "./chart-data";
 

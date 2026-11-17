@@ -4,6 +4,7 @@ import {
   getSheetsWasmModule,
   loadWorkbookChartAssets,
   mergeWorkbookImageAssets,
+  normalizeTypedDateCells,
   normalizeWorkbookTableMetadata,
   pxToSheetColumnWidth,
   resolveContentSheetAxisPixels,
@@ -548,8 +549,9 @@ export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{
   workbook: Workbook;
 }> {
   const wasmModule = await getSheetsWasmModule();
+  const bytes = normalizeTypedDateCells(new Uint8Array(buffer));
   const initialWorkbook = trackXlsxWorkbookLifetime(
-    wasmModule.Workbook.fromBytes(new Uint8Array(buffer))
+    wasmModule.Workbook.fromBytes(bytes)
   );
   let totalFormulas = 0;
 
@@ -569,7 +571,7 @@ export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{
 
   const result = safeCalculate(initialWorkbook, {
     reparse: () => trackXlsxWorkbookLifetime(
-      wasmModule.Workbook.fromBytes(new Uint8Array(buffer))
+      wasmModule.Workbook.fromBytes(bytes)
     )
   });
   if (result.workbook !== initialWorkbook) {
