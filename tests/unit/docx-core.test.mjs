@@ -1046,3 +1046,196 @@ test("DOCX pagination reserves footnote and endnote height", () => {
     "the page that owns the note must reserve the note body height",
   );
 });
+
+class ControlledExportWorker {
+  static instances = [];
+
+  constructor() {
+    this.listeners = new Map();
+    this.messages = [];
+    this.terminated = false;
+    ControlledExportWorker.instances.push(this);
+  }
+
+  addEventListener(type, listener) {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+  }
+
+  removeEventListener(type, listener) {
+    this.listeners.set(
+      type,
+      (this.listeners.get(type) ?? []).filter((candidate) => candidate !== listener),
+    );
+  }
+
+  postMessage(message) {
+    this.messages.push(message);
+  }
+
+  terminate() {
+    this.terminated = true;
+  }
+
+  emit(type, data) {
+    for (const listener of this.listeners.get(type) ?? []) {
+      listener({ data });
+    }
+  }
+}
+
+test("DOCX export Worker receives binary Uint8Array model data and reports progress", async () => {
+  const { model, package: pkg } = await core.wasmBuildDocModelFromBytes(
+    arrayBufferFromFile("report-with-image.docx"),
+  );
+  const normalized = core.normalizeDocModel(model);
+  const basePackage = core.wasmPackageToMaps(pkg);
+  const image = findFirstImage(normalized);
+  assert.ok(image?.data instanceof Uint8Array, "model image bytes must stay binary");
+  assert.ok(
+    basePackage.binaryAssets.get("word/media/image1.png") instanceof Uint8Array,
+    "base package image bytes must stay binary",
+  );
+
+  const worker = new ControlledExportWorker();
+  const progress = [];
+  const pending = core.exportDocxBuffer(normalized, basePackage, {
+    workerFactory: () => worker,
+    onProgress: (event) => progress.push(event),
+  });
+
+  assert.equal(worker.messages.length, 1);
+  const request = worker.messages[0];
+  assert.equal(request.type, "export-docx");
+  assert.ok(
+    findFirstImage(request.model)?.data instanceof Uint8Array,
+    "the Worker request must not JSON-expand image bytes into number arrays",
+  );
+  assert.ok(
+    request.basePackage.binaryAssets.get("word/media/image1.png") instanceof Uint8Array,
+    "the Worker request must keep package binary assets typed",
+  );
+  assert.equal(JSON.stringify(request).includes('"data":['), false);
+
+  const output = new Uint8Array([0x50, 0x4b, 0x03, 0x04]).buffer;
+  worker.emit("message", {
+    id: request.id,
+    type: "progress",
+    phase: "serializing",
+    percent: 10,
+  });
+  worker.emit("message", { id: request.id, type: "success", bytes: output });
+
+  assert.equal(await pending, output);
+  assert.deepEqual(progress.map((event) => event.phase), [
+    "starting",
+    "serializing",
+    "completed",
+  ]);
+  assert.equal(worker.terminated, true);
+});
+
+test("DOCX export Worker timeout terminates the Worker and reports maxExportMs", async () => {
+  const worker = new ControlledExportWorker();
+  await assert.rejects(
+    core.exportDocxBuffer(core.createBlankDocumentModel(), undefined, {
+      workerFactory: () => worker,
+      limits: { maxExportMs: 5 },
+    }),
+    (error) => error?.name === "DocxExportError" &&
+      error?.code === "TIMEOUT" &&
+      error?.phase === "export" &&
+      error?.limit === "maxExportMs" &&
+      error?.allowed === 5 &&
+      error?.actual > error?.allowed,
+  );
+  assert.equal(worker.terminated, true);
+});
+
+test("DOCX export Worker cancellation terminates the Worker", async () => {
+  const worker = new ControlledExportWorker();
+  const controller = new AbortController();
+  const pending = core.exportDocxBuffer(core.createBlankDocumentModel(), undefined, {
+    workerFactory: () => worker,
+    signal: controller.signal,
+  });
+  controller.abort();
+  await assert.rejects(
+    pending,
+    (error) => error?.name === "AbortError" && error?.code === "ABORTED",
+  );
+  assert.equal(worker.terminated, true);
+});
+
+test("DOCX export refuses a synchronous UI-thread fallback without a Worker", async () => {
+  const originalDocument = globalThis.document;
+  const originalWorker = globalThis.Worker;
+  globalThis.document = {};
+  delete globalThis.Worker;
+  try {
+    await assert.rejects(
+      core.exportDocxBuffer(core.createBlankDocumentModel()),
+      (error) => error?.name === "DocxExportError" &&
+        error?.code === "WORKER_UNAVAILABLE",
+    );
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+    if (originalWorker === undefined) delete globalThis.Worker;
+    else globalThis.Worker = originalWorker;
+  }
+});
+
+test("DOCX import refuses synchronous main-thread parsing in UI environments", async () => {
+  const originalDocument = globalThis.document;
+  const originalWorker = globalThis.Worker;
+  const input = arrayBufferFromFile("invoice-table.docx");
+  globalThis.document = {};
+  try {
+    await assert.rejects(
+      core.importDocxBuffer(input, { useWorker: false }),
+      (error) => error?.name === "DocxImportError" && error?.code === "WORKER_UNAVAILABLE",
+    );
+
+    class ThrowingWorker {
+      constructor() {
+        throw new Error("Worker blocked");
+      }
+    }
+    globalThis.Worker = ThrowingWorker;
+    const diagnostics = [];
+    await assert.rejects(
+      core.importDocxBuffer(input, {
+        allowMainThreadFallback: true,
+        mainThreadFallbackMaxBytes: 1024,
+        onDiagnostic: (event) => diagnostics.push(event),
+      }),
+      (error) => error?.name === "DocxImportError" && error?.code === "WORKER_UNAVAILABLE",
+    );
+    assert.equal(
+      diagnostics.some((event) =>
+        event.type === "main-thread-start" || event.type === "main-thread-fallback"
+      ),
+      false,
+      "a UI environment must never enter the synchronous parse path",
+    );
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+    if (originalWorker === undefined) delete globalThis.Worker;
+    else globalThis.Worker = originalWorker;
+  }
+});
+
+test("DOCX headless export remains available without a Worker", async () => {
+  const { model, package: pkg } = await core.wasmBuildDocModelFromBytes(
+    arrayBufferFromFile("report-with-image.docx"),
+  );
+  const output = await core.exportDocxBuffer(
+    core.normalizeDocModel(model),
+    core.wasmPackageToMaps(pkg),
+  );
+  assert.ok(output instanceof ArrayBuffer);
+  assert.deepEqual([...new Uint8Array(output).slice(0, 2)], [0x50, 0x4b]);
+  const roundtrip = await core.wasmBuildDocModelFromBytes(output);
+  assert.ok(roundtrip.model.nodes.length > 0);
+});

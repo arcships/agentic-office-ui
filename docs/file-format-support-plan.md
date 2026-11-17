@@ -126,6 +126,8 @@ DOCX 编辑器当前选择“保留容器类型和宏部件”的导出策略：
 - 导出使用导入时的 base package，`word/vbaProject.bin`、宏/模板 Content Types 等部件随包保留；宏仍然永不执行。
 - 新建文档按 `.docx` 导出；旧版 `.doc` 不作为可编辑输入。
 
+UI 环境中的 DOCX 导入和导出都在专用 Worker 中执行：导入不会回退到主线程同步 WASM 解析，导出不会在主线程展开图片字节或执行同步序列化；导出支持进度、取消和 `maxExportMs` 超时。
+
 模板和放映格式统一复用现有 View：
 
 - `.xltx`、`.xltm` 按普通工作簿预览。

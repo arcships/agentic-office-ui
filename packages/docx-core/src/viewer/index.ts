@@ -24,6 +24,9 @@ export * from "./thumbnail-cache";
 // DOCX import (main thread + worker dual path)
 export * from "./docx-import";
 
+// DOCX export (dedicated Worker; headless inline fallback)
+export * from "./docx-export";
+
 // Content signing (FNV-1a structural hash for change detection)
 export * from "./content-signature";
 

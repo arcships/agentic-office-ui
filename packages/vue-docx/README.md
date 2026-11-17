@@ -1,6 +1,6 @@
 # @arcships/vue-docx
 
-Vue 3 Word 文档组件。Viewer 支持 DOCX、DOCM、DOTX、DOTM 安全预览；Editor 的原格式编辑仍以 DOCX 为主，宏内容不会执行。从 DOCM/DOTX/DOTM 导入后导出会保留原容器类型和宏部件。
+Vue 3 Word 文档组件。Viewer 支持 DOCX、DOCM、DOTX、DOTM 安全预览；Editor 的原格式编辑仍以 DOCX 为主，宏内容不会执行。从 DOCM/DOTX/DOTM 导入后导出会保留原容器类型和宏部件。导入和导出都在专用 Worker 中执行，不会在 UI 主线程同步解析或序列化。
 
 ## 安装
 
