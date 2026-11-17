@@ -48,6 +48,7 @@ import { renderStaticHtml } from "../render/static-html"
 import {
   restoreDomSelectionFromTextRange,
   syncDomSelectionToEditor,
+  readDocxTextHostText,
 } from "../composables/editor-selection"
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -155,17 +156,7 @@ function readCurrentDomText(): string {
   if (!root) return ""
   // Test renderers (and some host shims) expose only textContent.
   if (!root.childNodes) return root.textContent ?? ""
-
-  function readNode(node: Node): string {
-    const element = node as Element
-    if (element.matches?.("[data-docx-numbering-label='true']")) return ""
-    if (element.matches?.("[data-docx-image-child-index]")) return ""
-    if (element.tagName?.toLowerCase() === "br") return "\n"
-    if (node.nodeType === 3) return node.textContent ?? ""
-    return Array.from(node.childNodes).map(readNode).join("")
-  }
-
-  return readNode(root)
+  return readDocxTextHostText(root)
 }
 
 function syncDraftFromDom(): void {
@@ -425,16 +416,59 @@ function onCompositionEnd(_event: Event): void {
   props.controller?.clearSelectionSession("composition")
 }
 
-function onPaste(event: ClipboardEvent): void {
-  if (!props.editable) return
-  event.preventDefault()
-  const text = event.clipboardData?.getData("text/plain") ?? ""
-  if (text) {
-    // Insert plain text at cursor
-    document.execCommand("insertText", false, text)
-    syncDraftFromDom()
-    syncCurrentSelection()
+function clipboardHtmlToText(html: string): string {
+  if (!html) return ""
+  if (typeof DOMParser !== "undefined") {
+    const parsed = new DOMParser().parseFromString(html, "text/html")
+    parsed.querySelectorAll("script,style").forEach((node) => node.remove())
+    parsed.querySelectorAll("br").forEach((node) => node.replaceWith("\n"))
+    parsed.querySelectorAll("p,div,li,tr,h1,h2,h3,h4,h5,h6,blockquote").forEach((node) => {
+      node.append("\n")
+    })
+    return parsed.body?.textContent ?? ""
   }
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+}
+
+function onPaste(event: ClipboardEvent): void {
+  if (!props.editable || !props.controller) return
+  const clipboard = event.clipboardData
+  const html = clipboard?.getData("text/html") ?? ""
+  const plain = clipboard?.getData("text/plain") ?? ""
+  const text = html ? clipboardHtmlToText(html) || plain : plain
+  if (!text) {
+    // Leave file/image clipboards to the browser instead of swallowing them.
+    return
+  }
+
+  event.preventDefault()
+  const currentText = readCurrentDomText()
+  const offsets = currentSelectionOffsets(currentText.length)
+  const controller = props.controller
+
+  // Use the model range for cross-paragraph selections; the local paragraph
+  // offsets can only describe a selection contained in this host.
+  const activeRange = controller.activeTextRange
+  if (activeRange && compareTextRangeBoundaries(activeRange.start, activeRange.end) < 0) {
+    syncDraftFromDom()
+    commitDraft(true)
+    const nextRange = controller.replaceExpandedSelection(text, activeRange)
+    if (nextRange) restoreControllerSelection()
+    return
+  }
+
+  const caretOffset = offsets.end + text.length
+  const nextText = `${currentText.slice(0, offsets.end)}${text}${currentText.slice(offsets.end)}`
+  if (nextText === currentText) return
+  clearDraft()
+  controller.commitParagraphText(props.paragraphIndex, nextText)
+  void nextTick(() => {
+    controller.setActiveTextRange(localTextRange(caretOffset, caretOffset))
+    restoreControllerSelection()
+  })
 }
 
 // ── Watch for model changes (clears draft when paragraph changes externally) ─

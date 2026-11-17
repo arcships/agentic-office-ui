@@ -102,6 +102,8 @@ export interface UseDocxImageWrapMenuResult {
 
 export interface DocxEditorController {
   model: DocModel;
+  /** True when the model differs from the last loaded/new/exported model. */
+  isDirty: boolean;
   documentLoadNonce: number;
   fileName: string;
   status: string;

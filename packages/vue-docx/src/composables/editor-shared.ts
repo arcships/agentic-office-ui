@@ -33,6 +33,9 @@ import type {
 export interface EditorCore {
   // ── core reactive refs ──────────────────────────────────────────
   model: Ref<DocModel>
+  /** Model snapshot as of the last load/new/export, used for dirty tracking. */
+  cleanModel: Ref<DocModel>
+  isDirty: ComputedRef<boolean>
   selection: Ref<DocxEditorSelection>
   activeTextRange: Ref<DocxTextRange | undefined>
   pendingRunStyle: Ref<TextRunNode["style"] | undefined>

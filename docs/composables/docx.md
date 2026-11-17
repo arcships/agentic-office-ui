@@ -13,6 +13,7 @@ const editor = useDocxEditor({
 它返回 `DocxEditorController`。主要状态包括：
 
 - `model`、`fileName`、`status`、`isImporting` 和 `importError`；
+- `isDirty`：模型自上次加载、新建或导出后是否发生修改；
 - `selection`、`activeTextRange` 和当前段落、文字样式、链接；
 - `canUndo`、`canRedo`、`currentPage` 和 `totalPages`；
 - 批注、修订、主题、列表、表单域和边框状态。

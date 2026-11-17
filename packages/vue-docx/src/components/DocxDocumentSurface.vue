@@ -125,7 +125,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   pageCountChange: [count: number]
   visiblePageRange: [range: { startPageIndex: number; endPageIndex: number }]
-  contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number }]
+  contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number; target?: EventTarget | null }]
   selectionChange: [sel: { kind: string; text?: string; nodeIndex?: number }]
   objectClick: [obj: { kind: "image" | "table"; nodeIndex?: number }]
   searchStateChange: [state: DocxSearchState]
