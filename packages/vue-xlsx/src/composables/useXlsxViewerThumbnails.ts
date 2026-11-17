@@ -7,6 +7,7 @@ import type {
   XlsxViewerThumbnails,
   XlsxCellRange,
 } from "@arcships/xlsx-core";
+import { cellAddressToA1 } from "./selection";
 
 export interface UseXlsxViewerThumbnailsOptions {
   includeHeaders?: boolean;
@@ -109,10 +110,34 @@ function createThumbnail(
   function loadGeometry(): ThumbnailGeometry {
     const worksheet = readController().workbook?.getSheet(sheet.workbookSheetIndex) ?? null;
     try {
+      // Worker-backed viewers have no main-thread Workbook; their snapshot
+      // already carries the resolved column widths and row heights.
+      const workerWidthByColumn = worksheet
+        ? null
+        : new Map<number, number>((sheet.visibleCols ?? []).flatMap((column, index) => {
+          const width = sheet.colWidths?.[index];
+          return typeof width === "number" && Number.isFinite(width) && width > 0
+            ? [[column, width] as const]
+            : [];
+        }));
+      const workerHeightByRow = worksheet
+        ? null
+        : new Map<number, number>((sheet.visibleRows ?? []).flatMap((row, index) => {
+          const height = sheet.rowHeights?.[index];
+          return typeof height === "number" && Number.isFinite(height) && height > 0
+            ? [[row, height] as const]
+            : [];
+        }));
+
       const colWidths: number[] = [];
       let totalColWidth = 0;
       for (let c = 0; c < previewCols; c++) {
-        const rawWidth = worksheet?.getColumnWidth(minCol + c);
+        const actualCol = minCol + c;
+        const rawWidth = worksheet
+          ? worksheet.getColumnWidth(actualCol)
+          : workerWidthByColumn?.get(actualCol)
+            ?? sheet.colWidthOverridesPx?.[actualCol]
+            ?? sheet.defaultColWidthPx;
         const width = rawWidth !== undefined && rawWidth !== null
           ? Math.max(rawWidth, DEFAULT_COL_WIDTH / 2)
           : DEFAULT_COL_WIDTH;
@@ -123,7 +148,12 @@ function createThumbnail(
       const rowHeights: number[] = [];
       let totalRowHeight = 0;
       for (let r = 0; r < previewRows; r++) {
-        const rawHeight = worksheet?.getRowHeight(minRow + r);
+        const actualRow = minRow + r;
+        const rawHeight = worksheet
+          ? worksheet.getRowHeight(actualRow)
+          : workerHeightByRow?.get(actualRow)
+            ?? sheet.rowHeightOverridesPx?.[actualRow]
+            ?? sheet.defaultRowHeightPx;
         const height = rawHeight !== undefined && rawHeight !== null
           ? Math.max(rawHeight, DEFAULT_ROW_HEIGHT / 1.5)
           : DEFAULT_ROW_HEIGHT;
@@ -155,7 +185,16 @@ function createThumbnail(
     try {
       const values = Array.from({ length: previewRows }, (_, rowOffset) =>
         Array.from({ length: previewCols }, (_, colOffset) => {
-          const formatted = worksheet?.getFormattedValueAt(minRow + rowOffset, minCol + colOffset);
+          if (!worksheet) {
+            // Worker snapshots carry cached formula values; the grid hydrates
+            // literal cell values separately.
+            const cached = sheet.cachedFormulaValues?.[cellAddressToA1({
+              col: minCol + colOffset,
+              row: minRow + rowOffset,
+            })];
+            return cached != null ? String(cached) : "";
+          }
+          const formatted = worksheet.getFormattedValueAt(minRow + rowOffset, minCol + colOffset);
           return formatted != null ? String(formatted) : "";
         }),
       );

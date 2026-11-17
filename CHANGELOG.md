@@ -19,6 +19,15 @@ All notable changes to the `@arcships` package family are documented in this fil
 - Keep ASCII, high-ANSI, eastAsia and complex-script fonts separately, build a per-glyph font stack and resolve major/minor theme fonts from `theme1.xml` during import.
 - Read `w:lvlJc`/`w:suff` from `numbering.xml`, align list markers accordingly, and add decimalZero, Chinese, ideographic, enclosed and text numbering formats.
 
+### XLSX worker robustness
+
+- Treat cell-snapshot and row-batch cancellation as per-request aborts instead of terminating the shared Worker, and recover cleanly from Worker failures.
+- Report non-cloneable Worker results as `WORKER_FAILED` immediately instead of waiting for the 30 s parse timeout.
+- Fall back to main-thread parsing when a Worker load fails for a non-limit reason, and apply `maxParseMs` to the main-thread path as well.
+- Keep charts refreshed after an edit from being overwritten by a late Worker chart-hydration result.
+- Render Worker-mode sheet thumbnails from the transferred sheet snapshot instead of an unavailable main-thread workbook.
+- Inflate only `xl/media/*` for image budget validation, avoid redundant source-buffer copies, and bound the Worker cell-snapshot cache as an LRU.
+
 ### Cross-format Office references
 
 - Prepare the nine public packages as the `0.6.0` candidate while keeping `0.5.4` as the published stable line.
