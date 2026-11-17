@@ -3,7 +3,12 @@
 // Extracted from useDocxEditor.ts.
 
 import type { DocModel } from "@arcships/docx-core"
-import { cloneDocModel, createDocxRuntime, serializeDocx } from "@arcships/docx-core"
+import {
+  cloneDocModel,
+  createDocxRuntime,
+  primeCommentAnchors,
+  serializeDocx,
+} from "@arcships/docx-core"
 import { onScopeDispose, watch } from "vue"
 import type { EditorCore } from "./editor-shared"
 
@@ -117,6 +122,7 @@ export function createEditorImportExport(ctx: EditorCore) {
     invalidateExport()
     ctx.isImporting.value = false
     const nextModel = cloneDocModel(ctx.starterTemplate)
+    primeCommentAnchors(nextModel)
     ctx.model.value = nextModel
     ctx.cleanModel.value = nextModel
     ctx.documentLoadNonce.value += 1
@@ -163,6 +169,7 @@ export function createEditorImportExport(ctx: EditorCore) {
         transferBuffer: false,
       })
       if (!isCurrentImport()) return
+      primeCommentAnchors(parsedModel)
       ctx.model.value = parsedModel
       ctx.cleanModel.value = parsedModel
       ctx.basePackage.value = parsedPkg

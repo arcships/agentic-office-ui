@@ -430,6 +430,48 @@ export function tableCellParagraphsRecursively(
   return paragraphs;
 }
 
+/**
+ * Enumerates a cell's paragraphs with stable, non-negative indexes. Direct
+ * paragraphs keep their existing `0..n-1` indexes; paragraphs inside nested
+ * tables follow in document order. Consumers can therefore address every
+ * paragraph in a cell through a single `paragraphIndex` without the negative
+ * sentinel values that no location lookup understands.
+ */
+export function tableCellParagraphEntries(
+  nodeContent: TableCellContentNode[]
+): Array<{ paragraph: ParagraphNode; paragraphIndex: number }> {
+  const directParagraphs = tableCellParagraphs(nodeContent);
+  const directSet = new Set(directParagraphs);
+  const entries = directParagraphs.map((paragraph, paragraphIndex) => ({
+    paragraph,
+    paragraphIndex,
+  }));
+
+  for (const paragraph of tableCellParagraphsRecursively(nodeContent)) {
+    if (directSet.has(paragraph)) {
+      continue;
+    }
+    entries.push({ paragraph, paragraphIndex: entries.length });
+  }
+
+  return entries;
+}
+
+export function tableCellParagraphAt(
+  nodeContent: TableCellContentNode[],
+  paragraphIndex: number
+): ParagraphNode | undefined {
+  if (!Number.isFinite(paragraphIndex) || paragraphIndex < 0) {
+    return undefined;
+  }
+  const index = Math.floor(paragraphIndex);
+  const directParagraphs = tableCellParagraphs(nodeContent);
+  if (index < directParagraphs.length) {
+    return directParagraphs[index];
+  }
+  return tableCellParagraphEntries(nodeContent)[index]?.paragraph;
+}
+
 export function tableCellHasImage(nodeContent: TableCellContentNode[]): boolean {
   for (const entry of nodeContent) {
     if (isParagraphCellContentNode(entry) && paragraphHasImage(entry)) {

@@ -32,6 +32,7 @@ import {
   getParagraphAtLocation,
   collectTrackedChangesFromModel,
   collectCommentsFromModel,
+  primeCommentAnchors,
 } from "@arcships/docx-core"
 
 import type {
@@ -121,6 +122,7 @@ export function useDocxEditor(
 
   // --- core state ---
   const model = ref<DocModel>(cloneDocModel(starterTemplate))
+  primeCommentAnchors(model.value)
   const cleanModel = ref<DocModel>(model.value)
   const isDirty = computed(() => model.value !== cleanModel.value)
   const basePackage = ref<OoxmlPackage | undefined>(undefined)

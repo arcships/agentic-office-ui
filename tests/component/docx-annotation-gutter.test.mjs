@@ -32,6 +32,7 @@ const {
   buildPageGutterAnnotations,
   collectCommentsFromModel,
   createBlankDocumentModel,
+  findGutterAnnotationAnchorElementInPage,
   layoutTrackedChangesForPage,
   resolveGutterAnnotationAnchorsInPage,
 } = await importFromDemo("@arcships/docx-core")
@@ -217,6 +218,92 @@ test("buildPageGutterAnnotations is deterministic for repeated calls", () => {
   const second = buildPageGutterAnnotations(input).map((annotation) => annotation.id)
   assert.deepEqual(first, second)
   assert.deepEqual(first, ["comment:comment-a", "comment:comment-b"])
+})
+
+test("buildPageGutterAnnotations keeps header/footer comments on matching parts and hides resolved threads", () => {
+  const header = {
+    ...commentFixture({ id: "comment-header", commentId: 21, nodeIndex: 0, text: "header note" }),
+    region: "header",
+    partName: "word/header1.xml",
+  }
+  const footer = {
+    ...commentFixture({ id: "comment-footer", commentId: 22, nodeIndex: 0, text: "footer note" }),
+    region: "footer",
+    partName: "word/footer1.xml",
+  }
+  const resolvedRoot = commentFixture({ id: "comment-resolved", commentId: 23, nodeIndex: 0, text: "done", resolved: true })
+  const resolvedReply = {
+    ...commentFixture({ id: "comment-reply", commentId: 24, nodeIndex: 0, text: "ack" }),
+    parentId: 23,
+  }
+
+  const annotations = buildPageGutterAnnotations({
+    pageSegments: pageSegments(0),
+    comments: [header, footer, resolvedRoot, resolvedReply],
+    headerPartName: "word/header1.xml",
+    footerPartName: "word/footer1.xml",
+  })
+  assert.deepEqual(
+    annotations.map((annotation) => annotation.id),
+    ["comment:comment-header", "comment:comment-footer"],
+  )
+
+  const withoutParts = buildPageGutterAnnotations({
+    pageSegments: pageSegments(0),
+    comments: [header, footer],
+  })
+  assert.deepEqual(withoutParts, [], "header/footer comments need their part on the page")
+
+  const withResolved = buildPageGutterAnnotations({
+    pageSegments: pageSegments(0),
+    comments: [resolvedRoot, resolvedReply],
+    showResolvedComments: true,
+  })
+  assert.deepEqual(
+    withResolved.map((annotation) => annotation.id),
+    ["comment:comment-resolved", "comment:comment-reply"],
+  )
+})
+
+test("findGutterAnnotationAnchorElementInPage resolves header comment anchors", () => {
+  const paragraphElement = {
+    ...fakeAnchor(rect(72, 40, 200, 20)),
+    hasAttribute: () => false,
+    getAttribute: () => null,
+    querySelectorAll: () => [],
+  }
+  const headerElement = {
+    hasAttribute: () => false,
+    getAttribute: () => null,
+    querySelectorAll: () => [],
+    querySelector: (selector) =>
+      selector.includes("data-docx-header-node-index") ? paragraphElement : null,
+  }
+  const page = fakePageElement({
+    clientRect: rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT),
+    pageOffsetSize: { width: PAGE_WIDTH, height: PAGE_HEIGHT },
+    matches: [
+      {
+        matches: (selector) => selector === '[data-docx-page-header="true"]',
+        element: headerElement,
+      },
+    ],
+  })
+  const header = {
+    ...commentFixture({ id: "comment-header", commentId: 31, nodeIndex: 0, text: "header note" }),
+    region: "header",
+    partName: "word/header1.xml",
+  }
+  const annotations = buildPageGutterAnnotations({
+    pageSegments: pageSegments(),
+    comments: [header],
+    headerPartName: "word/header1.xml",
+  })
+
+  assert.equal(
+    findGutterAnnotationAnchorElementInPage(page, annotations[0]),
+    paragraphElement,
+  )
 })
 
 // ── 2. docx-core: page-space anchors ───────────────────────────────

@@ -27,7 +27,10 @@ export function useDocxComments(
 ): UseDocxCommentsResult {
   const commentsByLocation = new Map<string, DocxComment[]>()
   for (const comment of editor.comments) {
-    const key = paragraphLocationKey(comment.location)
+    const locationKey = paragraphLocationKey(comment.location)
+    const key = comment.region && comment.region !== "body"
+      ? `${comment.region}:${comment.partName ?? ""}:${locationKey}`
+      : locationKey
     const bucket = commentsByLocation.get(key) ?? []
     bucket.push(comment)
     commentsByLocation.set(key, bucket)

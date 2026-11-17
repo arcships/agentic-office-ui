@@ -17,6 +17,7 @@ import type {
   DocxTrackedChangeKind
 } from "./editor-types";
 import type { DocumentPageNodeSegment } from "../../layout/page-segmentation-core";
+import { commentThreadIsResolved } from "./tracked-changes";
 import {
   TRACKED_CHANGE_GUTTER_CARD_GAP_PX,
   TRACKED_CHANGE_GUTTER_CARD_MIN_HEIGHT_PX,
@@ -321,6 +322,64 @@ export interface PageGutterAnnotationsOptions {
   showComments?: boolean;
   /** Defaults to true. */
   showTrackedChanges?: boolean;
+  /** Header part rendered on this page, used to place header comments. */
+  headerPartName?: string;
+  /** Footer part rendered on this page, used to place footer comments. */
+  footerPartName?: string;
+  /** Resolved threads are hidden unless this is true. Defaults to false. */
+  showResolvedComments?: boolean;
+}
+
+function gutterAnnotationRegionRank(annotation: DocxGutterAnnotation): number {
+  switch (annotation.comment?.region) {
+    case "header":
+      return 1;
+    case "footer":
+      return 2;
+    default:
+      return 0;
+  }
+}
+
+function gutterPartNamesMatch(left?: string, right?: string): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return (left.split("/").pop() ?? left) === (right.split("/").pop() ?? right);
+}
+
+function commentBelongsToPage(
+  comment: DocxComment,
+  options: PageGutterAnnotationsOptions
+): boolean {
+  if (comment.region === "header") {
+    return gutterPartNamesMatch(comment.partName, options.headerPartName);
+  }
+  if (comment.region === "footer") {
+    return gutterPartNamesMatch(comment.partName, options.footerPartName);
+  }
+  return trackedChangeBelongsToPageSegments(
+    resolveGutterAnnotationLocation(comment, -1),
+    options.pageSegments
+  );
+}
+
+function commentsVisibleInGutter(
+  options: PageGutterAnnotationsOptions
+): readonly DocxComment[] {
+  const comments = options.comments ?? [];
+  if (options.showResolvedComments) {
+    return comments;
+  }
+  const commentsById = new Map(
+    comments.map((comment) => [comment.commentId, comment])
+  );
+  return comments.filter(
+    (comment) => !commentThreadIsResolved(comment, commentsById)
+  );
 }
 
 function gutterAnnotationKindRank(annotation: DocxGutterAnnotation): number {
@@ -368,6 +427,12 @@ function compareGutterAnnotations(
   left: DocxGutterAnnotation,
   right: DocxGutterAnnotation
 ): number {
+  const regionDelta =
+    gutterAnnotationRegionRank(left) - gutterAnnotationRegionRank(right);
+  if (regionDelta !== 0) {
+    return regionDelta;
+  }
+
   const leftTuple = gutterAnnotationSortTuple(left.location);
   const rightTuple = gutterAnnotationSortTuple(right.location);
   for (let index = 0; index < leftTuple.length; index += 1) {
@@ -407,11 +472,11 @@ export function buildPageGutterAnnotations(
   const annotations: DocxGutterAnnotation[] = [];
 
   if (options.showComments ?? true) {
-    for (const comment of options.comments ?? []) {
-      const location = resolveGutterAnnotationLocation(comment, -1);
-      if (!trackedChangeBelongsToPageSegments(location, pageSegments)) {
+    for (const comment of commentsVisibleInGutter(options)) {
+      if (!commentBelongsToPage(comment, options)) {
         continue;
       }
+      const location = resolveGutterAnnotationLocation(comment, -1);
 
       annotations.push({
         id: `comment:${comment.id}`,
@@ -507,10 +572,57 @@ function findGutterAnnotationDataAnchorInPage(
   );
 }
 
+function findCommentRegionAnchorElementInPage(
+  pageElement: HTMLElement,
+  annotation: DocxGutterAnnotation
+): HTMLElement | undefined {
+  const comment = annotation.comment;
+  if (!comment?.region || comment.region === "body") {
+    return undefined;
+  }
+
+  const regionRoot = pageElement.querySelector(
+    `[data-docx-page-${comment.region}="true"]`
+  ) as HTMLElement | null;
+  if (!regionRoot) {
+    return undefined;
+  }
+
+  const inlineCommentAnchor = findFirstElementWithSpaceSeparatedDataValue(
+    regionRoot,
+    "data-docx-comment-ids",
+    String(comment.commentId)
+  );
+  if (inlineCommentAnchor) {
+    return inlineCommentAnchor;
+  }
+
+  const nodeIndex =
+    annotation.location.kind === "paragraph"
+      ? annotation.location.nodeIndex
+      : annotation.location.tableIndex;
+  const nodeSelector =
+    annotation.location.kind === "paragraph"
+      ? `[data-docx-paragraph-host="true"][data-docx-${comment.region}-node-index="${nodeIndex}"]`
+      : `[data-docx-table-host="true"][data-docx-${comment.region}-node-index="${nodeIndex}"]`;
+  return (
+    (regionRoot.querySelector(nodeSelector) as HTMLElement | null) ??
+    regionRoot
+  );
+}
+
 export function findGutterAnnotationAnchorElementInPage(
   pageElement: HTMLElement,
   annotation: DocxGutterAnnotation
 ): HTMLElement | undefined {
+  const regionAnchor = findCommentRegionAnchorElementInPage(
+    pageElement,
+    annotation
+  );
+  if (regionAnchor) {
+    return regionAnchor;
+  }
+
   if (annotation.trackedChange) {
     const trackedAnchor = findGutterAnnotationDataAnchorInPage(
       pageElement,

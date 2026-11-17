@@ -247,6 +247,10 @@ export interface DocxComment {
   anchorText?: string;
   nodeIndex: number;
   location: DocxTextRangeLocation;
+  /** Region that owns the anchored paragraph (defaults to the body). */
+  region?: "body" | "header" | "footer";
+  /** OOXML part name for header/footer comments. */
+  partName?: string;
 }
 
 export type DocxLineSpacingRule = "auto" | "exact" | "atLeast";

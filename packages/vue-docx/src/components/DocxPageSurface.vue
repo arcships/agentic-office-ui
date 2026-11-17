@@ -334,6 +334,8 @@ const pageAnnotations = computed(() =>
     pageSegments: props.pageNodeSegments,
     showComments: props.commentsEnabled,
     showTrackedChanges: props.trackedChangesEnabled,
+    headerPartName: props.headerSection?.partName,
+    footerPartName: props.footerSection?.partName,
   })
 )
 

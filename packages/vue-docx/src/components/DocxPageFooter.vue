@@ -11,6 +11,7 @@
         v-if="node.type === 'paragraph'"
         :paragraph="node"
         :paragraph-index="-(pageIndex * 1000 + ni + 1)"
+        :data-docx-footer-node-index="ni"
         :editable="false"
         :document-theme="theme"
         :controller="controller"
@@ -27,6 +28,7 @@
         v-else
         :table="node"
         :table-index="-(pageIndex * 1000 + ni + 1)"
+        :data-docx-footer-node-index="ni"
         :editable="false"
         :document-theme="theme"
         :controller="controller"

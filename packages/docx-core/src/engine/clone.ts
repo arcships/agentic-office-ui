@@ -20,6 +20,11 @@ import type {
   TableStyle,
   TextRunNode,
 } from "./types";
+import {
+  cloneDocumentCommentAnchor,
+  getCachedDocumentCommentAnchor,
+  setCachedDocumentCommentAnchor,
+} from "./comment-anchors";
 
 function isParagraphCellContent(
   node: TableCellContentNode
@@ -411,7 +416,17 @@ export function cloneDocModel(model: DocModel): DocModel {
         ...note,
         nodes: note.nodes?.map(cloneDocNode),
       })),
-      comments: model.metadata.comments?.map((comment) => ({ ...comment })),
+      comments: model.metadata.comments?.map((comment) => {
+        const cloned = { ...comment };
+        const anchor = getCachedDocumentCommentAnchor(comment);
+        if (anchor) {
+          setCachedDocumentCommentAnchor(
+            cloned,
+            cloneDocumentCommentAnchor(anchor)
+          );
+        }
+        return cloned;
+      }),
     },
   };
 }
