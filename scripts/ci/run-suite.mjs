@@ -157,6 +157,7 @@ const suites = {
       "tests/component/docx-floating-image-layout.test.mjs",
       "tests/component/docx-edit-interactions.test.mjs",
       "tests/component/docx-link-safety.test.mjs",
+      "tests/component/docx-toolbar-state.test.mjs",
       "tests/component/docx-table-editing.test.mjs",
       "tests/component/docx-command-wiring.test.mjs",
       "tests/component/docx-selection-input.test.mjs",
