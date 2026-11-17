@@ -211,7 +211,7 @@ def capture_fixture(file_name: str, spec: dict) -> dict:
     raw_output = directory / ".observed-events.json"
     sample_url = f"{APP_URL}/@fs{fixture}"
     command = [
-        "python3", "tests/blackbox/pptx_playback_model.py",
+        sys.executable, "tests/blackbox/pptx_playback_model.py",
         "--app-url", APP_URL,
         "--sample-url", sample_url,
         "--initial-slide", str(spec["slide"]),

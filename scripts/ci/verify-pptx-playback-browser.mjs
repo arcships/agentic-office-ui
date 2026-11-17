@@ -38,7 +38,7 @@ const demoServer = runVueChecks
   : null
 
 function stopServer(child) {
-  if (!child.pid || child.exitCode !== null) return
+  if (!child || !child.pid || child.exitCode !== null) return
   try {
     process.kill(-child.pid, "SIGINT")
   } catch { /* 进程已退出。 */ }
