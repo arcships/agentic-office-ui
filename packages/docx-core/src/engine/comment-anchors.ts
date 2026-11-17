@@ -23,11 +23,6 @@ type DocumentCommentDefinitionWithAnchor = DocumentCommentDefinition & {
   [DOCUMENT_COMMENT_ANCHOR]?: DocumentCommentAnchor;
 };
 
-const commentAnchors = new WeakMap<
-  DocumentCommentDefinition,
-  DocumentCommentAnchor
->();
-
 export function cloneDocumentCommentAnchor(
   anchor: DocumentCommentAnchor
 ): DocumentCommentAnchor {
@@ -37,11 +32,9 @@ export function cloneDocumentCommentAnchor(
 export function getCachedDocumentCommentAnchor(
   definition: DocumentCommentDefinition
 ): DocumentCommentAnchor | undefined {
-  return (
-    (definition as DocumentCommentDefinitionWithAnchor)[
-      DOCUMENT_COMMENT_ANCHOR
-    ] ?? commentAnchors.get(definition)
-  );
+  return (definition as DocumentCommentDefinitionWithAnchor)[
+    DOCUMENT_COMMENT_ANCHOR
+  ];
 }
 
 export function setCachedDocumentCommentAnchor(
@@ -60,8 +53,8 @@ export function setCachedDocumentCommentAnchor(
       writable: true,
     });
   } catch {
-    // Frozen definitions still get a best-effort identity cache.
-    commentAnchors.set(definition, anchor);
+    // Frozen definitions cannot carry a hidden anchor; callers fall back to
+    // re-reading sourceXml when available.
   }
 }
 
@@ -71,5 +64,4 @@ export function clearCachedDocumentCommentAnchor(
   delete (definition as DocumentCommentDefinitionWithAnchor)[
     DOCUMENT_COMMENT_ANCHOR
   ];
-  commentAnchors.delete(definition);
 }
