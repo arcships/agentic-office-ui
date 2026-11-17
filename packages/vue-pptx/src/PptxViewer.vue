@@ -188,6 +188,7 @@ import {
   type PptxActionRequest,
   type PptxApproximationPolicy,
   type PptxDocumentSessionFactory,
+  type PptxExternalMediaUrlPolicy,
   type PptxPlaybackController,
   type PptxPlaybackEvent,
   type PptxPlaybackSnapshot,
@@ -217,6 +218,7 @@ const props = withDefaults(defineProps<{
   approximation?: PptxApproximationPolicy
   documentSessionFactory?: PptxDocumentSessionFactory
   externalMedia?: "disabled" | "allowed"
+  externalMediaUrlPolicy?: PptxExternalMediaUrlPolicy
   sessionFactory?: PptxPreviewSessionFactory
   openTimeoutMs?: number
   showCapabilityStatus?: boolean
@@ -238,6 +240,7 @@ const props = withDefaults(defineProps<{
   approximation: "off",
   documentSessionFactory: undefined,
   externalMedia: "disabled",
+  externalMediaUrlPolicy: undefined,
   sessionFactory: undefined,
   openTimeoutMs: 30_000,
   showCapabilityStatus: true,
@@ -314,6 +317,7 @@ const documentOptions = {
     lazySlides: true,
     approximation: props.approximation,
     externalMedia: props.externalMedia,
+    externalMediaUrlPolicy: props.externalMediaUrlPolicy,
   }),
   get factory() {
     if (props.mode === "present") {

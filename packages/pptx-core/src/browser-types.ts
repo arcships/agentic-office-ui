@@ -54,9 +54,29 @@ export interface PptxPreviewSessionOptions {
 
 export type PptxApproximationPolicy = "off" | "safe"
 
+/**
+ * URL policy applied to external media. It mirrors the shared office URL policy
+ * without the `fetch` hook, because external media is played by the browser.
+ */
+export interface PptxExternalMediaUrlPolicy {
+  enabled?: boolean
+  baseUrl?: string
+  allowRelativeUrl?: boolean
+  allowedProtocols?: readonly string[]
+  allowedOrigins?: readonly string[]
+  allowHttpOnLocalhost?: boolean
+}
+
 export interface PptxDocumentSessionOptions extends PptxPreviewSessionOptions {
   approximation?: PptxApproximationPolicy
+  /** External media stays reported but unloaded unless this is `allowed`. */
   externalMedia?: "disabled" | "allowed"
+  /**
+   * URL policy that authorizes external media. `externalMedia: "allowed"` without
+   * a policy keeps every external target blocked, so a deck can never trigger
+   * arbitrary http(s) requests on its own.
+   */
+  externalMediaUrlPolicy?: PptxExternalMediaUrlPolicy
 }
 
 export interface PptxPreviewSession {

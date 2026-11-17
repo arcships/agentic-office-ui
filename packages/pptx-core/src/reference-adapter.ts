@@ -148,11 +148,16 @@ function objectLocator(identity: PptxObjectIdentity): PptxObjectKeyLocator {
   };
 }
 
-function objectFingerprint(identity: PptxObjectIdentity): OfficeObjectFingerprint {
+/**
+ * Fingerprints use the same slide id the locator and resolver use, so a host
+ * that supplies documented `slideIds` keeps matching its own references. The
+ * parser part path stays as the fallback when no slide id is available.
+ */
+function objectFingerprint(identity: PptxObjectIdentity, resolvedSlideId?: string): OfficeObjectFingerprint {
   return {
     ...(identity.name ? { objectName: identity.name } : {}),
     ancestorKeys: [
-      `pptx.slide-id:${identity.slidePath}`,
+      `pptx.slide-id:${resolvedSlideId ?? identity.slidePath}`,
       `pptx.node-type:${identity.nodeType}`,
       `pptx.shape-id:${identity.shapeId}`,
       ...identity.groupPath.map((id) => `pptx.group:${id}`),
@@ -207,8 +212,12 @@ function textForBoundaries(
   ].join("\n");
 }
 
-function textFingerprint(identity: PptxObjectIdentity, text: string): OfficeObjectFingerprint {
-  const object = objectFingerprint(identity);
+function textFingerprint(
+  identity: PptxObjectIdentity,
+  text: string,
+  resolvedSlideId?: string,
+): OfficeObjectFingerprint {
+  const object = objectFingerprint(identity, resolvedSlideId);
   return {
     ...object,
     ...(text.length <= 256 ? { exactText: text } : {}),
@@ -304,7 +313,7 @@ export function createPptxObjectReferenceDraft(
         object: objectLocator(identity),
       },
     },
-    fingerprint: objectFingerprint(identity),
+    fingerprint: objectFingerprint(identity, slideId(context, slideIndex)),
     ...(options.fallbackRegion ? { fallbackRegion: options.fallbackRegion } : {}),
     reliability: copyReliability(PPTX_OBJECT_RELIABILITY),
   };
@@ -343,7 +352,7 @@ export function createPptxTextReferenceDraft(
         end: range.end,
       },
     },
-    fingerprint: textFingerprint(identity, text),
+    fingerprint: textFingerprint(identity, text, slideId(context, slideIndex)),
     reliability: copyReliability(PPTX_TEXT_RELIABILITY),
   };
 }
@@ -556,7 +565,7 @@ function referencesForObjects(
     kind: "object",
     slide: slideLocator(context, slideIndex),
     object: objectLocator(identity),
-  }, objectFingerprint(identity), reference.fallbackRegion
+  }, objectFingerprint(identity, slideId(context, slideIndex)), reference.fallbackRegion
     ? { ...reference.fallbackRegion, slideIndex }
     : undefined));
 }
@@ -576,7 +585,7 @@ function textReferenceAt(
     object: objectLocator(identity),
     start,
     end,
-  }, textFingerprint(identity, text));
+  }, textFingerprint(identity, text, slideId(context, slideIndex)));
 }
 
 function flattenedParagraphText(paragraphs: readonly string[]): { text: string; starts: number[] } {

@@ -37,6 +37,14 @@ All notable changes to the `@arcships` package family are documented in this fil
 - Render Worker-mode sheet thumbnails from the transferred sheet snapshot instead of an unavailable main-thread workbook.
 - Inflate only `xl/media/*` for image budget validation, avoid redundant source-buffer copies, and bound the Worker cell-snapshot cache as an LRU.
 
+### PPTX archive limits, single-pass parsing and media policy
+
+- Pass the full PPTX archive budget subset through `toOfficeLimits` (`maxCompressionRatio`, `maxArchivePathLength`, `maxXmlBytes`, `maxSingleXmlBytes`, `maxXmlDepth`, `maxXmlAttributeBytes`, `maxTextNodeBytes`, `maxRelationships`) and expose it in `DEFAULT_PPTX_PREVIEW_LIMITS`, so the shared runtime limits are no longer silently disabled for PPTX.
+- Decompress each deck once: `loadPptxArchive` reads only the central directory, lets the renderer parse the container, and validates the decoded parts with `validateOfficeArchiveParts` instead of inflating the archive a second time.
+- Use one `slideId` for PPTX object fingerprints, locators and resolution, so hosts that supply `slideIds` keep resolving their own references as `exact`.
+- Route external media through the shared URL policy via `externalMediaUrlPolicy`; `externalMedia: "allowed"` alone no longer loads arbitrary `http(s)` targets.
+- Read byte sources in place instead of copying them twice and hand decoded media bytes to `Blob` without an extra copy.
+
 ### Cross-format Office references
 
 - Prepare the nine public packages as the `0.6.0` candidate while keeping `0.5.4` as the published stable line.

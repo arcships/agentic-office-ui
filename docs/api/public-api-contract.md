@@ -179,6 +179,8 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 
 无法精确执行的 PPTX 内容通过能力报告标记为近似、静态或未解析；公开说明不得宣称完整兼容 PowerPoint 全部动画。
 
+浏览器入口还提供 `loadPptxArchive`、`PPTX_ARCHIVE_READER` 和 `resolvePptxExternalMediaUrl`。`PptxPreviewLimits` 覆盖完整的归档预算（压缩比、路径长度、XML 总量与单部件、嵌套层数、标签与文本节点、关系数）。每次加载只解压一次：`inspectOfficeArchive` 只读中央目录，渲染器完成唯一一次解压，共享校验器直接检查已解码的部件。外部媒体默认禁用；`externalMedia: "allowed"` 必须同时配合 `externalMediaUrlPolicy`，目标 URL 经协议和来源校验后才加载。
+
 ### 3.8 `@arcships/vue-pptx`
 
 稳定入口为 `PptxViewer`、`PptxThumbnail`、`PptxStage`、`usePptxDocument`、`usePptxPlayback`、`PptxStageSelection`、`PptxStageObjectClick`、`PptxStageContextMenu` 和其他公开类型。`PptxViewer` 默认纵向连续浏览；`mode="present"` 使用单页舞台并提供下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏。自定义静态 Surface 使用 `PptxStage` + `usePptxDocument(renderMode: "list")`，自定义播放器增加 `usePptxPlayback` 并使用 `renderMode: "slide"`。样式从 `@arcships/vue-pptx/style.css` 导入。
