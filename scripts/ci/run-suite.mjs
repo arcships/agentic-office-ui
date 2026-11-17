@@ -149,6 +149,7 @@ const suites = {
       "tests/component/docx-thumbnail-panel.test.mjs",
       "tests/component/docx-multipage-shell.test.mjs",
       "tests/component/docx-page-thumbnails-cache.test.mjs",
+      "tests/component/docx-thumbnail-raster.test.mjs",
       "tests/component/docx-product-interactions.test.mjs",
       "tests/component/docx-annotation-gutter.test.mjs",
       "tests/component/docx-table-presentation.test.mjs",

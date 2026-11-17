@@ -29,6 +29,7 @@
           v-if="image.selected && editable && !image.behindDocument && !image.lockedAnchor"
           class="docx-image-wrap-toolbar"
           data-testid="docx-image-wrap-toolbar"
+          data-docx-thumbnail-exclude="true"
           @mousedown.stop
         >
           <button type="button" data-testid="docx-image-wrap-inline" title="Inline with text" @click.stop="setWrapMode(image, 'inline')">Inline</button>
@@ -44,6 +45,7 @@
             :key="handle.position"
             class="docx-image-resize-handle"
             data-testid="docx-image-resize-handle"
+            data-image-resize-handle="true"
             :class="`docx-image-resize-handle--${handle.position}`"
             :style="handle.style"
             @mousedown.prevent.stop="onResizeStart(image, handle.position, $event)"
