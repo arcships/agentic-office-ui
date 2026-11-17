@@ -35,3 +35,6 @@ export * from "./image-render";
 
 // Page count reconciliation (height-scaling page count alignment)
 export * from "./page-count-reconciliation";
+
+// Text-measurement cache invalidation (web-font loading, font-set changes)
+export * from "./font-metrics";

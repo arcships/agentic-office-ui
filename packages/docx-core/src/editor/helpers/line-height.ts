@@ -20,6 +20,10 @@ import type {
 import { twipsToPixels, TWIPS_PER_PIXEL } from "../../viewer/section-layout";
 import type { PretextVariableWidthLayout } from "../../viewer/pretext-layout";
 import {
+  ensureDocumentFontInvalidation,
+  textMeasurementGeneration
+} from "../../viewer/font-metrics";
+import {
   paragraphBaseFontSizePxByParagraph,
   paragraphDominantFontFamilyByParagraph,
   paragraphMeasureCanvasContext,
@@ -357,7 +361,8 @@ export function measureTextWidthPx(
     (style?.characterScalePercent as number) > 0
       ? (style?.characterScalePercent as number) / 100
       : 1;
-  const cacheKey = `${font}\u0000${characterSpacingPx}\u0000${characterScale}\u0000${text}`;
+  ensureDocumentFontInvalidation();
+  const cacheKey = `${textMeasurementGeneration()}\u0000${font}\u0000${characterSpacingPx}\u0000${characterScale}\u0000${text}`;
   const cached = textWidthByFontAndValue.get(cacheKey);
   if (cached !== undefined) {
     return cached;
