@@ -7,6 +7,7 @@
       :class="{ 'docx-form-field--selected': field.selected }"
       :data-docx-form-field="true"
       :data-docx-form-field-location="field.locationKey"
+      :data-docx-form-field-required="field.required ? 'true' : undefined"
       :style="fieldStyle(field)"
     >
       <!-- Text input -->
@@ -17,10 +18,11 @@
         :maxlength="field.maxLength"
         :placeholder="field.placeholder ?? m.docx.formField.placeholder"
         :aria-invalid="fieldErrors[field.locationKey] ? 'true' : undefined"
+        :aria-required="field.required ? 'true' : undefined"
         class="docx-form-text-input"
         @input="onTextInput(field, $event)"
         @focus="onFieldFocus(field)"
-        @blur="onFieldBlur(field)"
+        @blur="onFieldBlur(field, $event)"
         @dblclick="onFieldDoubleClick(field)"
       />
 
@@ -30,11 +32,12 @@
           type="date"
           :value="field.dateValue"
           :aria-invalid="fieldErrors[field.locationKey] ? 'true' : undefined"
+          :aria-required="field.required ? 'true' : undefined"
           :title="field.displayValue || m.docx.formField.selectDate"
           class="docx-form-text-input docx-form-date-input"
           @input="onDateInput(field, $event)"
           @focus="onFieldFocus(field)"
-          @blur="onFieldBlur(field)"
+          @blur="onFieldBlur(field, $event)"
         />
         <span v-if="field.displayValue" class="docx-form-date-display">
           {{ field.displayValue }}
@@ -49,9 +52,10 @@
         <input
           type="checkbox"
           :checked="field.checked"
+          :aria-required="field.required ? 'true' : undefined"
           @change="onCheckboxToggle(field)"
           @focus="onFieldFocus(field)"
-          @blur="onFieldBlur(field)"
+          @blur="onFieldBlur(field, $event)"
         />
         <span v-if="field.title" class="docx-form-checkbox-text">
           {{ field.title }}
@@ -63,10 +67,11 @@
         v-else-if="field.control === 'dropdown'"
         :value="field.value"
         :aria-invalid="fieldErrors[field.locationKey] ? 'true' : undefined"
+        :aria-required="field.required ? 'true' : undefined"
         class="docx-form-select"
         @change="onSelectChange(field, $event)"
         @focus="onFieldFocus(field)"
-        @blur="onFieldBlur(field)"
+        @blur="onFieldBlur(field, $event)"
       >
         <option
           v-for="(opt, optionIndex) of field.options"
@@ -98,6 +103,8 @@ import type {
   FormFieldRunNode,
 } from "@arcships/docx-core"
 import {
+  FORM_FIELD_REQUIRED_ERROR,
+  formFieldCurrentValue,
   formatFormFieldDateValue,
   isDateFormField,
   isoDateValueForField,
@@ -117,6 +124,7 @@ interface FormFieldEntry {
   displayValue: string
   dateValue: string
   placeholder?: string
+  required: boolean
   checked: boolean
   title?: string
   options: FormFieldOption[]
@@ -163,6 +171,7 @@ const formFields = computed<FormFieldEntry[]>(() => {
       displayValue: formatFormFieldDateValue(ff),
       dateValue: isoDateValueForField(ff),
       placeholder: ff.placeholder,
+      required: ff.required === true,
       checked: ff.checked ?? false,
       title: ff.title,
       options: ff.options ?? [],
@@ -237,8 +246,22 @@ function onFieldFocus(field: FormFieldEntry): void {
   props.controller.selectFormField(field.location)
 }
 
-function onFieldBlur(field: FormFieldEntry): void {
+function onFieldBlur(field: FormFieldEntry, event?: Event): void {
   props.controller.endFormFieldEdit(field.location)
+  const control = event?.target as HTMLInputElement | HTMLSelectElement | undefined
+  let value: string
+  if (field.control === "checkbox") {
+    const checked = (control as HTMLInputElement | undefined)?.checked ?? field.checked
+    value = checked ? "1" : "0"
+  } else {
+    value = control?.value ?? formFieldCurrentValue(field.node)
+  }
+  const result = validateFormFieldValue(field.node, value, { enforceRequired: true })
+  if (!result.valid) {
+    setFieldError(field, result.error ?? FORM_FIELD_REQUIRED_ERROR)
+    return
+  }
+  clearFieldError(field)
 }
 
 function onFieldDoubleClick(field: FormFieldEntry): void {
@@ -291,6 +314,10 @@ function onFieldDoubleClick(field: FormFieldEntry): void {
   flex-basis: 100%;
   font-size: 0.8em;
   margin-top: 2px;
+}
+.docx-form-field[data-docx-form-field-required="true"] .docx-form-text-input,
+.docx-form-field[data-docx-form-field-required="true"] .docx-form-select {
+  border-left: 2px solid #2563eb;
 }
 .docx-form-checkbox-label {
   display: inline-flex;

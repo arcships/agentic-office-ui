@@ -217,6 +217,8 @@ export interface FormFieldRunNode {
   tag?: string;
   title?: string;
   placeholder?: string;
+  /** Legacy form-field `w:ffData/w:required` flag. */
+  required?: boolean;
   checked?: boolean;
   value?: string;
   options?: FormFieldOption[];

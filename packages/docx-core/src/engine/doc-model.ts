@@ -11,6 +11,7 @@ import { parseDocx } from "./ooxml-core";
 
 import { normalizeDocModel } from "./normalize";
 import { parseNoteProperties } from "./note-properties";
+import { enrichDocModelFormFields } from "./form-field-enrichment";
 import { enrichDocModelTypography } from "./model-enrichment";
 import type { DocModel, DocumentNoteProperties } from "./types";
 
@@ -50,6 +51,7 @@ export async function buildDocModel(pkg: OoxmlPackage): Promise<DocModel> {
     binaryAssets: pkg.binaryAssets,
   });
   const model = (await wasmBuildDocModelFromPackage(wasmPackage)) as DocModel;
+  enrichDocModelFormFields(model);
   enrichDocModelTypography(model, pkg);
   return normalizeDocModel(attachDocumentNoteProperties(model, pkg));
 }

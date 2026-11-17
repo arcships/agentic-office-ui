@@ -5,12 +5,14 @@
 import type { DocModel } from "@arcships/docx-core"
 import {
   cloneDocModel,
+  collectFormFieldsFromModel,
   createDocxRuntime,
   primeCommentAnchors,
   serializeDocx,
 } from "@arcships/docx-core"
 import { onScopeDispose, watch } from "vue"
 import type { EditorCore } from "./editor-shared"
+import { isRequiredFormFieldEmpty } from "./form-field-value"
 import {
   DOCX_UNSUPPORTED_FILE_MESSAGE,
   docxExportFileName,
@@ -239,6 +241,21 @@ export function createEditorImportExport(ctx: EditorCore) {
     } catch (error) {
       const err = error instanceof Error ? error : new Error("Unknown export error")
       ctx.status.value = `Export failed: ${err.message}`
+      return
+    }
+
+    const invalidRequiredField = collectFormFieldsFromModel(exportModel).find(
+      ({ field }) => isRequiredFormFieldEmpty(field)
+    )
+    if (invalidRequiredField) {
+      ctx.selectedFormFieldLocation.value = invalidRequiredField.location
+      const label =
+        invalidRequiredField.field.widget?.name?.trim() ||
+        invalidRequiredField.field.title?.trim() ||
+        invalidRequiredField.field.tag?.trim()
+      ctx.status.value = label
+        ? `Cannot export: required form field "${label}" is empty`
+        : "Cannot export: a required form field is empty"
       return
     }
 
