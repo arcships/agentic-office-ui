@@ -34,6 +34,8 @@ import type {
   XlsxResolvedCellStyle,
   XlsxShape,
   XlsxSheetData,
+  XlsxSheetProtection,
+  XlsxSheetProtectionAction,
   XlsxSheetVisibility,
   XlsxTable,
   XlsxTableStyleDefinition,
@@ -381,15 +383,59 @@ function parseWorksheetDataValidations(worksheet: ReturnType<Workbook["getSheet"
       allowBlank: typeof validation.allowBlank === "boolean" ? validation.allowBlank : undefined,
       errorMessage: typeof validation.errorMessage === "string" ? validation.errorMessage : undefined,
       errorStyle: typeof validation.errorStyle === "string" ? validation.errorStyle : undefined,
+      errorTitle: typeof validation.errorTitle === "string" ? validation.errorTitle : undefined,
       inputMessage: typeof validation.inputMessage === "string" ? validation.inputMessage : undefined,
+      inputTitle: typeof validation.inputTitle === "string" ? validation.inputTitle : undefined,
       listSource: typeof validation.listSource === "string" ? validation.listSource : undefined,
+      operator: typeof validation.operator === "string" ? validation.operator : undefined,
       ranges,
       showDropdown: typeof validation.showDropdown === "boolean" ? validation.showDropdown : undefined,
       showErrorAlert: typeof validation.showErrorAlert === "boolean" ? validation.showErrorAlert : undefined,
       showInputMessage: typeof validation.showInputMessage === "boolean" ? validation.showInputMessage : undefined,
-      validationType
+      validationType,
+      value1: typeof validation.value1 === "string" ? validation.value1 : undefined,
+      value2: typeof validation.value2 === "string" ? validation.value2 : undefined
     } satisfies XlsxDataValidation];
   });
+}
+
+const SHEET_PROTECTION_ACTIONS: XlsxSheetProtectionAction[] = [
+  "autoFilter",
+  "deleteColumns",
+  "deleteRows",
+  "formatCells",
+  "formatColumns",
+  "formatRows",
+  "insertColumns",
+  "insertHyperlinks",
+  "insertRows",
+  "objects",
+  "pivotTables",
+  "scenarios",
+  "selectLockedCells",
+  "selectUnlockedCells",
+  "sort"
+];
+
+function parseWorksheetSheetProtection(
+  worksheet: ReturnType<Workbook["getSheet"]>
+): XlsxSheetProtection | null {
+  const rawProtection = worksheet.protection as Record<string, unknown> | null | undefined;
+  if (!rawProtection || typeof rawProtection !== "object" || rawProtection.protected !== true) {
+    return null;
+  }
+
+  const flags: Partial<Record<XlsxSheetProtectionAction, boolean>> = {};
+  for (const action of SHEET_PROTECTION_ACTIONS) {
+    if (typeof rawProtection[action] === "boolean") {
+      flags[action] = rawProtection[action];
+    }
+  }
+
+  return {
+    enabled: true,
+    flags
+  };
 }
 
 function resolveWorksheetZoomScale(
@@ -499,7 +545,7 @@ function buildSheetList(
         conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
         hyperlinks: sheetState?.hyperlinks ?? [],
         comments: sheetState?.comments ?? [],
-        dataValidations: parseWorksheetDataValidations(worksheet),
+        dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
         defaultColWidthPx,
         defaultRowHeightPx,
         freezePanes: parseWorksheetFreezePanes(worksheet),
@@ -516,6 +562,7 @@ function buildSheetList(
         maxUsedRow: -1,
         name: worksheet.name,
         visibility,
+        protection: parseWorksheetSheetProtection(worksheet),
         namedCellStyleByName: structureAssets?.namedCellStyleByName ?? {},
         rowCount: 0,
         rowHeightOverridesPx: sheetState?.rowHeightOverridesPx ?? {},
@@ -565,7 +612,7 @@ function buildSheetList(
       conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
       hyperlinks: sheetState?.hyperlinks ?? [],
       comments: sheetState?.comments ?? [],
-      dataValidations: parseWorksheetDataValidations(worksheet),
+      dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
       defaultColWidthPx,
       defaultRowHeightPx,
       freezePanes: parseWorksheetFreezePanes(worksheet),
@@ -582,6 +629,7 @@ function buildSheetList(
       maxUsedRow: maxRow,
       name: worksheet.name,
       visibility,
+      protection: parseWorksheetSheetProtection(worksheet),
       namedCellStyleByName: structureAssets?.namedCellStyleByName ?? {},
       rowCount: visibleRows.length,
       rowHeightOverridesPx: sheetState?.rowHeightOverridesPx ?? {},

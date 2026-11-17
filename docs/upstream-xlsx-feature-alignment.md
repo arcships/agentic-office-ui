@@ -1077,7 +1077,8 @@ print('OK', ws['C1'].value)
 | 导出 CSV | exportCsv → 文本检查 | TSV 格式正确 |
 | 冻结窗格 | 加载含冻结的 fixture | 滚动时冻结区固定 |
 | 条件格式 | 加载含 dataBar/colorScale 的 fixture | 渲染提示可见 |
-| 数据验证 | 加载含 validation 的 fixture | 下拉/提示可见 |
+| 数据验证 | 加载含 validation 的 fixture | 下拉/提示可见，非法输入按 errorStyle 拒绝或告警 |
+| 工作表保护 | 加载含 sheetProtection 的 fixture | 受保护工作表默认只读，宿主可显式放行 |
 | 图表 | 加载含 charts 的 fixture | 图表渲染 + 选中/拖拽 |
 | 图片 | 加载含 images 的 fixture | 图片显示 + 定位正确 |
 | worker 模式 | 开启 worker 开关 + 加载大文件 | 不阻塞 UI + worker 状态正确 |

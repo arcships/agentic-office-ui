@@ -95,7 +95,7 @@ const props = defineProps<{
 }>();
 
 const activeTabIndex = computed(() => props.controller.activeTabIndex);
-const isReadOnly = computed(() => props.controller.readOnly || props.readOnly === true);
+const isReadOnly = computed(() => props.controller.isEditingLocked === true || props.controller.readOnly || props.readOnly === true);
 const canRemoveActiveSheet = computed(() => Boolean(props.controller.activeSheet) && props.controller.sheets.length > 1);
 
 const { thumbnails: thumbnailComputedRaw } = useXlsxViewerThumbnails(

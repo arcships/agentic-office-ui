@@ -42,7 +42,7 @@ const focusedField = ref<"formula" | null>(null);
 const isFormulaComposing = ref(false);
 let commitFormulaOnCompositionEnd = false;
 
-const isReadOnly = computed(() => props.readOnly ?? props.controller.readOnly);
+const isReadOnly = computed(() => props.readOnly === true || props.controller.isEditingLocked === true || (props.readOnly === undefined && props.controller.readOnly));
 
 const hasFormulaTarget = computed(() => {
   const addr = props.controller.activeCellAddress;

@@ -322,7 +322,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
 
   function setChartRect(id: string, rect: XlsxImageRect) {
     const hydratedChartAssets = ctx.ensureChartAssetsHydrated(ctx.workbook.value, ctx.sheets.value);
-    if (ctx.readOnly.value || !ctx.workbook.value || !ctx.activeSheet.value || !ctx.imageAssetsRef.value || !hydratedChartAssets) {
+    if (ctx.isEditingLocked.value || !ctx.workbook.value || !ctx.activeSheet.value || !ctx.imageAssetsRef.value || !hydratedChartAssets) {
       return;
     }
 
@@ -353,7 +353,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
   }
 
   function setImageRect(id: string, rect: XlsxImageRect) {
-    if (ctx.readOnly.value || !ctx.workbook.value || !ctx.activeSheet.value || !ctx.imageAssetsRef.value) {
+    if (ctx.isEditingLocked.value || !ctx.workbook.value || !ctx.activeSheet.value || !ctx.imageAssetsRef.value) {
       return;
     }
 
@@ -527,7 +527,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
   function updateChart(id: string, patch: Partial<XlsxChart>) {
     const currentChart = getChartById(id);
     const hydratedChartAssets = ctx.ensureChartAssetsHydrated(ctx.workbook.value, ctx.sheets.value);
-    if (ctx.readOnly.value || !currentChart || currentChart.editable === false) {
+    if (ctx.isEditingLocked.value || !currentChart || currentChart.editable === false) {
       return;
     }
 
@@ -546,7 +546,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
   }
 
   function setChartSeriesFormula(chartId: string, seriesIndex: number, formula: string) {
-    if (ctx.readOnly.value) {
+    if (ctx.isEditingLocked.value) {
       return false;
     }
 

@@ -102,7 +102,7 @@ const textColor = ref("#18181b");
 const fillColor = ref("#fff2cc");
 const hasWorkbook = computed(() => props.controller.tabs.length > 0);
 const hasSelection = computed(() => Boolean(props.controller.selection));
-const isReadOnly = computed(() => props.readOnly ?? props.controller.readOnly);
+const isReadOnly = computed(() => props.readOnly === true || props.controller.isEditingLocked === true || (props.readOnly === undefined && props.controller.readOnly));
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};

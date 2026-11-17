@@ -22,6 +22,7 @@ import {
   type XlsxCellHyperlink,
   type XlsxCellComment,
   type XlsxConditionalFormatRule,
+  type XlsxDataValidation,
   type XlsxResolvedCellStyle,
   type XlsxSheetData,
   type XlsxSheetVisibility,
@@ -57,7 +58,7 @@ import {
   type CellEditHistoryEntry,
   type RangeEditHistoryEntry
 } from "./internal";
-import { parseWorksheetDataValidations, parseWorksheetFreezePanes, parseA1RangeReference, rangeToA1, cellAddressToA1, normalizeRange } from "./selection";
+import { parseWorksheetDataValidations, parseWorksheetFreezePanes, parseWorksheetSheetProtection, parseA1RangeReference, rangeToA1, cellAddressToA1, normalizeRange } from "./selection";
 import {
   XlsxFileSizeLimitExceededError,
   cloneBytes,
@@ -175,6 +176,7 @@ export function buildSheetList(
     colWidthOverridesPx?: Record<number, number>;
     colStyleIds?: Record<number, number>;
     conditionalFormatRules?: XlsxConditionalFormatRule[];
+    dataValidations?: XlsxDataValidation[];
     hyperlinks?: XlsxCellHyperlink[];
     comments?: XlsxCellComment[];
     defaultColWidthPx?: number;
@@ -231,7 +233,7 @@ export function buildSheetList(
           conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
           hyperlinks: sheetState?.hyperlinks ?? [],
           comments: sheetState?.comments ?? [],
-          dataValidations: parseWorksheetDataValidations(worksheet),
+          dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
           defaultColWidthPx,
           defaultRowHeightPx,
           freezePanes: parseWorksheetFreezePanes(worksheet),
@@ -248,6 +250,7 @@ export function buildSheetList(
           maxUsedRow: -1,
           name: worksheet.name,
           visibility,
+          protection: parseWorksheetSheetProtection(worksheet),
           namedCellStyleByName: namedCellStyleByName ?? {},
           rowCount: 0,
           colCount: 0,
@@ -305,7 +308,7 @@ export function buildSheetList(
         conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
         hyperlinks: sheetState?.hyperlinks ?? [],
         comments: sheetState?.comments ?? [],
-        dataValidations: parseWorksheetDataValidations(worksheet),
+        dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
         defaultColWidthPx,
         defaultRowHeightPx,
         freezePanes: parseWorksheetFreezePanes(worksheet),
@@ -322,6 +325,7 @@ export function buildSheetList(
         maxUsedRow: maxRow,
         name: worksheet.name,
         visibility,
+        protection: parseWorksheetSheetProtection(worksheet),
         namedCellStyleByName: namedCellStyleByName ?? {},
         rowCount: visibleRows.length,
         colCount: visibleCols.length,
@@ -785,7 +789,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
 
     const worksheet = ctx.getActiveWorksheet();
     const targetTable = tables.value.find((table) => table.name === tableName || table.displayName === tableName);
-    if (!worksheet || !ctx.workbook.value || !ctx.activeSheet.value || !targetTable) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value || !ctx.activeSheet.value || !targetTable) {
       return;
     }
 
@@ -985,7 +989,8 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function resizeColumn(col: number, widthPx: number) {
-    if ((ctx.readOnly.value && !ctx.canResizeReadOnly.value) || !ctx.activeSheet.value) {
+    const resizeAllowedInReadOnly = ctx.canResizeReadOnly.value && !ctx.isActiveSheetProtected.value;
+    if ((ctx.isEditingLocked.value && !resizeAllowedInReadOnly) || !ctx.activeSheet.value) {
       return;
     }
 
@@ -1009,7 +1014,8 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function resizeRow(row: number, heightPx: number) {
-    if ((ctx.readOnly.value && !ctx.canResizeReadOnly.value) || !ctx.activeSheet.value) {
+    const resizeAllowedInReadOnly = ctx.canResizeReadOnly.value && !ctx.isActiveSheetProtected.value;
+    if ((ctx.isEditingLocked.value && !resizeAllowedInReadOnly) || !ctx.activeSheet.value) {
       return;
     }
 
@@ -1033,7 +1039,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function undo() {
-    if (ctx.readOnly.value || ctx.isApplyingHistoryRef.value || !ctx.workbook.value || ctx.undoStackRef.value.length === 0) {
+    if (ctx.isEditingLocked.value || ctx.isApplyingHistoryRef.value || !ctx.workbook.value || ctx.undoStackRef.value.length === 0) {
       return;
     }
 
@@ -1061,7 +1067,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function redo() {
-    if (ctx.readOnly.value || ctx.isApplyingHistoryRef.value || !ctx.workbook.value || ctx.redoStackRef.value.length === 0) {
+    if (ctx.isEditingLocked.value || ctx.isApplyingHistoryRef.value || !ctx.workbook.value || ctx.redoStackRef.value.length === 0) {
       return;
     }
 

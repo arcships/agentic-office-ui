@@ -321,7 +321,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
   function pasteText(text: string) {
     const worksheet = ctx.getActiveWorksheet();
     const targetCell = ctx.activeCell.value ?? ctx.selection.value?.start ?? null;
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value || !targetCell || !text) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value || !targetCell || !text) {
       return false;
     }
 
@@ -334,6 +334,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
       activeCell: ctx.activeCell.value,
       selection: ctx.selection.value
     };
+    ctx.setValidationFeedback(null);
     const mutations: import("./internal").RangeCellMutation[] = [];
     for (let rowIndex = 0; rowIndex < grid.length; rowIndex += 1) {
       const row = grid[rowIndex] ?? [];
@@ -356,6 +357,15 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
             nextCell.col
           )
         });
+        if (input.kind !== "formula") {
+          const validationCheck = ctx.checkCellValue(nextCell, rawValue);
+          if (validationCheck.feedback) {
+            ctx.setValidationFeedback(validationCheck.feedback);
+          }
+          if (!validationCheck.accepted) {
+            continue;
+          }
+        }
         const address = cellAddressToA1(nextCell);
         if (input.kind === "formula") {
           worksheet.setFormula(address, input.formula);
@@ -396,7 +406,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
   function pasteStructuredClipboardData(serializedPayload: string) {
     const worksheet = ctx.getActiveWorksheet();
     const targetCell = ctx.activeCell.value ?? ctx.selection.value?.start ?? null;
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value || !targetCell || !serializedPayload) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value || !targetCell || !serializedPayload) {
       return false;
     }
 
@@ -416,6 +426,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
       activeCell: ctx.activeCell.value,
       selection: ctx.selection.value
     };
+    ctx.setValidationFeedback(null);
     const mutations: import("./internal").RangeCellMutation[] = [];
     if (hasMergeOperations) {
       ctx.recordHistoryBeforeMutation();
@@ -425,6 +436,18 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
         col: targetCell.col + cell.colOffset,
         row: targetCell.row + cell.rowOffset
       };
+      if (!cell.formula) {
+        const validationValue = cell.rawValue !== undefined
+          ? String(cell.rawValue ?? "")
+          : typeof cell.value === "string" ? cell.value : "";
+        const validationCheck = ctx.checkCellValue(nextCell, validationValue);
+        if (validationCheck.feedback) {
+          ctx.setValidationFeedback(validationCheck.feedback);
+        }
+        if (!validationCheck.accepted) {
+          continue;
+        }
+      }
       const before = hasMergeOperations ? null : ctx.captureCellMutationState(nextCell);
       const address = cellAddressToA1(nextCell);
 
@@ -526,7 +549,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
   }
 
   async function pasteFromClipboard() {
-    if (ctx.readOnly.value || typeof navigator === "undefined" || !navigator.clipboard) {
+    if (ctx.isEditingLocked.value || typeof navigator === "undefined" || !navigator.clipboard) {
       return false;
     }
 

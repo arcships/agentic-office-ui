@@ -162,7 +162,7 @@ type WebKitGestureEvent = Event & { clientX?: number; clientY?: number; scale?: 
 const surfaceRef = ref<HTMLElement | null>(null)
 const gridRef = ref<GridInstance | null>(null)
 const gridViewport = ref({ scrollLeft: 0, scrollTop: 0 })
-const effectiveReadOnly = computed(() => props.controller.readOnly || props.readOnly)
+const effectiveReadOnly = computed(() => props.readOnly || props.controller.isEditingLocked === true || props.controller.readOnly)
 const selectionMode = computed(() => props.selectionMode)
 const gridElement = computed<HTMLElement | null>(() => gridRef.value?.scrollContainer ?? null)
 const generatedDocumentId = `xlsx-surface-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`

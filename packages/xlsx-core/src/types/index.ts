@@ -16,7 +16,10 @@ export type {
   XlsxConditionalFormatRule,
   // Data validation / freeze panes
   XlsxDataValidation,
+  XlsxDataValidationFeedback,
   XlsxFreezePanes,
+  XlsxSheetProtection,
+  XlsxSheetProtectionAction,
   XlsxSheetVisibility,
   // Sheet data
   XlsxSheetData,
