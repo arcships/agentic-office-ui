@@ -35,17 +35,34 @@ export type XlsxImageAnchor =
 
 // ── Image ─────────────────────────────────────────────────────────────────
 
+/**
+ * Source crop of a picture, expressed as fractions of the intrinsic image
+ * (0 = no crop, 0.25 = hide a quarter of that edge). Mirrors DrawingML
+ * `a:srcRect`.
+ */
+export interface XlsxImageSourceRect {
+  bottom: number;
+  left: number;
+  right: number;
+  top: number;
+}
+
 export interface XlsxImage {
   anchor: XlsxImageAnchor;
   description?: string;
   editable?: boolean;
+  flipH?: boolean;
+  flipV?: boolean;
   hyperlink?: string;
   id: string;
   mediaPath?: string;
   mimeType: string;
   name?: string;
+  /** Clockwise rotation in degrees, as stored by DrawingML `rot`. */
+  rotationDeg?: number;
   sheetIndex: number;
   src: string;
+  srcRect?: XlsxImageSourceRect;
   workbookSheetIndex: number;
   zIndex: number;
 }

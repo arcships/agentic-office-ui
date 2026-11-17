@@ -86,6 +86,7 @@ export type {
   XlsxImageAnchor,
   // Image
   XlsxImage,
+  XlsxImageSourceRect,
   // Shape
   XlsxShapeFill,
   XlsxShapeStroke,

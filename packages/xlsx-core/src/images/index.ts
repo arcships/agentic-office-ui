@@ -58,6 +58,7 @@ export {
   parseAnchor,
   anchorToRect,
   parseTransformRect,
+  parseImageSourceRect,
   applyGroupTransform,
   emuToPixels,
   pixelsToEmu,

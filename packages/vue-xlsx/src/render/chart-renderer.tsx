@@ -1,5 +1,6 @@
 /** @jsxImportSource vue */
 import { defineComponent } from "vue";
+import type { VNode } from "vue";
 import type { XlsxChart, XlsxChartElementSelection, XlsxImageRect } from "@arcships/xlsx-core";
 
 // Re-export all chart utilities from their dedicated modules
@@ -269,7 +270,18 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
     selectedChartElement: { type: Object as () => XlsxChartElementSelection | null | undefined, default: null },
   },
   setup(props) {
-    return () => {
+    let memo: {
+      chart: XlsxChart;
+      onChartElementDoubleClick: typeof props.onChartElementDoubleClick;
+      onChartElementPointerDown: typeof props.onChartElementPointerDown;
+      palette: ChartRendererPalette;
+      rectHeight: number;
+      rectWidth: number;
+      selectedChartElement: XlsxChartElementSelection | null | undefined;
+      vnode: VNode;
+    } | null = null;
+
+    const renderContent = (): VNode => {
       const { chart, onChartElementDoubleClick, onChartElementPointerDown, palette, rect, selectedChartElement } = props;
       const renderChartType = normalizeRenderableChartType(chart);
       const legendItems = getLegendItems(chart, renderChartType, palette);
@@ -346,6 +358,37 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
           {renderChartPlot(chart, palette, layout, renderChartType, selectedChartElement)}
         </svg>
       );
+    };
+
+    return () => {
+      const { chart, onChartElementDoubleClick, onChartElementPointerDown, palette, rect, selectedChartElement } = props;
+      if (
+        memo
+        && memo.chart === chart
+        && memo.onChartElementDoubleClick === onChartElementDoubleClick
+        && memo.onChartElementPointerDown === onChartElementPointerDown
+        && memo.palette === palette
+        && memo.rectWidth === rect.width
+        && memo.rectHeight === rect.height
+        && memo.selectedChartElement === selectedChartElement
+      ) {
+        // Scrolling only translates the overlay item; rebuilding the SVG for
+        // every scroll frame is wasted work, so reuse the last tree.
+        return memo.vnode;
+      }
+
+      const vnode = renderContent();
+      memo = {
+        chart,
+        onChartElementDoubleClick,
+        onChartElementPointerDown,
+        palette,
+        rectHeight: rect.height,
+        rectWidth: rect.width,
+        selectedChartElement,
+        vnode,
+      };
+      return vnode;
     };
   },
 });

@@ -209,14 +209,38 @@ export function resolveSheetColumnWidthPx(sheetState: SheetAxisSizeState | null,
   if (col < 0) {
     return 0;
   }
-  return sheetState?.colWidthOverridesPx?.[col] ?? sheetState?.defaultColWidthPx ?? emuToPixels(DEFAULT_COL_WIDTH_EMU);
+  const fallback = sheetState?.defaultColWidthPx ?? emuToPixels(DEFAULT_COL_WIDTH_EMU);
+  const { colWidths, visibleCols } = sheetState ?? {};
+  if (visibleCols?.length && colWidths?.length) {
+    const displayIndex = visibleCols.indexOf(col);
+    if (displayIndex >= 0) {
+      return colWidths[displayIndex] ?? fallback;
+    }
+    // Columns past the tracked visible range still use the default width;
+    // indices inside the range that are absent are hidden and take no space.
+    return col > visibleCols[visibleCols.length - 1]! && !sheetState?.hiddenCols?.includes(col)
+      ? fallback
+      : 0;
+  }
+  return sheetState?.colWidthOverridesPx?.[col] ?? fallback;
 }
 
 export function resolveSheetRowHeightPx(sheetState: SheetAxisSizeState | null, row: number) {
   if (row < 0) {
     return 0;
   }
-  return sheetState?.rowHeightOverridesPx?.[row] ?? sheetState?.defaultRowHeightPx ?? emuToPixels(DEFAULT_ROW_HEIGHT_EMU);
+  const fallback = sheetState?.defaultRowHeightPx ?? emuToPixels(DEFAULT_ROW_HEIGHT_EMU);
+  const { rowHeights, visibleRows } = sheetState ?? {};
+  if (visibleRows?.length && rowHeights?.length) {
+    const displayIndex = visibleRows.indexOf(row);
+    if (displayIndex >= 0) {
+      return rowHeights[displayIndex] ?? fallback;
+    }
+    return row > visibleRows[visibleRows.length - 1]! && !sheetState?.hiddenRows?.includes(row)
+      ? fallback
+      : 0;
+  }
+  return sheetState?.rowHeightOverridesPx?.[row] ?? fallback;
 }
 
 export function sumSheetColumnWidthsEmu(sheetState: SheetAxisSizeState, beforeCol: number) {

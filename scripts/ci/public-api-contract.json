@@ -88,8 +88,8 @@
         "getSheetsWasmModule"
       ],
       "rootDeclarationFingerprint": {
-        "count": 181,
-        "sha256": "e915ba1563fd278c3444b8f59439202d0397aad1401cd57e91e17dee999eeb8f"
+        "count": 185,
+        "sha256": "dbbdd51f7471fea6b773be2f3aaabaea953f918b6ea5bb85c1e97dd7c97b8083"
       }
     },
     {
@@ -175,12 +175,13 @@
         "XlsxSheetTabs",
         "XlsxChartOverlay",
         "XlsxImageLayer",
+        "XlsxDrawingLayer",
         "XlsxSelectionOverlay",
         "XlsxContextMenu"
       ],
       "rootDeclarationFingerprint": {
-        "count": 42,
-        "sha256": "8bfbd2d48e74550b78dca7b47202cb89295f9ad523934bf883ede1447ce628d1"
+        "count": 43,
+        "sha256": "384928412e47fee3e5e2fef0afa2bc03353edb74f441bcff4a1aba3a5537dbbc"
       }
     },
     {
