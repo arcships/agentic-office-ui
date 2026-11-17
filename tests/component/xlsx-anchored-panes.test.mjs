@@ -84,3 +84,51 @@ test("XLSX image layer clips anchored objects per freeze pane and only scrolls t
     mounted.app.unmount();
   }
 });
+
+test("XLSX overlay panes follow resized frozen columns so anchored objects stay aligned", async () => {
+  const controller = {
+    selectedImageId: null,
+    zoomScale: 100,
+    activeSheet: {
+      name: "Sheet1",
+      freezePanes: { row: 0, col: 2 },
+      visibleRows: Array.from({ length: 20 }, (_, index) => index),
+      visibleCols: Array.from({ length: 10 }, (_, index) => index),
+      rowHeights: [],
+      colWidths: [],
+      rowHeightOverridesPx: {},
+      // The user dragged columns A and B wider; the grid paints those widths.
+      colWidthOverridesPx: { 0: 120, 1: 60 },
+      defaultRowHeightPx: 24,
+      defaultColWidthPx: 80,
+    },
+    images: [absoluteImage("pinned", 0, 0), absoluteImage("scrolling", 400, 0)],
+    selectImage() {},
+  };
+  const mounted = await mount(XlsxImageLayer, {
+    controller,
+    showImages: true,
+    scrollLeft: 40,
+    scrollTop: 0,
+  });
+  try {
+    const panes = walk(mounted.root).filter((node) => node.props?.["data-grid-pane"]);
+    const paneByKey = new Map(panes.map((pane) => [pane.props["data-grid-pane"], pane]));
+    // 120 + 60: the resized widths, not 2 × the 80px default.
+    assert.equal(
+      paneByKey.get("frozen-cols")?.props.style.width,
+      "180px",
+      "the frozen columns pane matches the widths the grid paints",
+    );
+    assert.equal(paneByKey.get("main")?.props.style.left, "180px");
+
+    const itemsIn = (pane) =>
+      walk(pane).filter((node) => node.props?.["data-testid"] === "xlsx-image-item");
+    // The x=400 object sits in the scrolling pane, which starts at the resized
+    // freeze line (180px) and compensates the 40px scroll.
+    const [scrollingItem] = itemsIn(paneByKey.get("main"));
+    assert.equal(scrollingItem.props.style.left, "180px");
+  } finally {
+    mounted.app.unmount();
+  }
+});

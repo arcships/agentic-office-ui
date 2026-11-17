@@ -104,3 +104,49 @@ export function resolvePaneViewPoint(input: PaneViewPointInput): { x: number; y:
     y: paneViewOffset(input.contentY, input.scrollTop, input.displayRow < input.frozenRows),
   };
 }
+
+export interface PaneOverlayInput extends PaneViewPointInput {
+  /** Overlay size in pixels; use 0 × 0 for a point anchor such as a popover. */
+  width: number;
+  height: number;
+  /** Pixel size of the frozen column/row strips. */
+  frozenWidth: number;
+  frozenHeight: number;
+  /** Pixel size of the scrolling viewport (grid body, headers excluded). */
+  viewportWidth: number;
+  viewportHeight: number;
+}
+
+export interface PaneOverlayRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Places a cell-anchored overlay inside the pane that owns the cell.
+ *
+ * The anchor is mapped like `resolvePaneViewPoint` and the box is then clipped
+ * to the pane's rectangle, so an overlay for a cell that is scrolled under a
+ * frozen strip (or off the scrolling edge) sticks to the freeze line instead of
+ * painting over the pinned cells or the headers. Clipping keeps the box aligned
+ * with the still-visible part of the cell: the edge that runs under the freeze
+ * line is the one that shrinks, never the opposite edge.
+ */
+export function resolvePaneOverlayRect(input: PaneOverlayInput): PaneOverlayRect {
+  const point = resolvePaneViewPoint(input);
+  const frozenWidth = Math.max(0, Math.min(input.frozenWidth, input.viewportWidth));
+  const frozenHeight = Math.max(0, Math.min(input.frozenHeight, input.viewportHeight));
+  const frozenX = input.displayCol < input.frozenCols;
+  const frozenY = input.displayRow < input.frozenRows;
+  const paneLeft = frozenX ? 0 : frozenWidth;
+  const paneRight = frozenX ? frozenWidth : Math.max(frozenWidth, input.viewportWidth);
+  const paneTop = frozenY ? 0 : frozenHeight;
+  const paneBottom = frozenY ? frozenHeight : Math.max(frozenHeight, input.viewportHeight);
+  const left = Math.max(paneLeft, Math.min(point.x, paneRight));
+  const top = Math.max(paneTop, Math.min(point.y, paneBottom));
+  const right = Math.max(left, Math.min(point.x + Math.max(0, input.width), paneRight));
+  const bottom = Math.max(top, Math.min(point.y + Math.max(0, input.height), paneBottom));
+  return { left, top, width: right - left, height: bottom - top };
+}
