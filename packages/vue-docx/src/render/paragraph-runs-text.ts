@@ -64,7 +64,8 @@ export function renderTextRun(
   const textStyle = {
     ...trackedInlineStyle(
       runStyleToCss(child.style, ctx.documentTheme),
-      trackedInlineChange
+      trackedInlineChange,
+      ctx.documentTheme
     ),
     ...commentHighlightStyle(ctx.documentTheme, undefined),
   }
@@ -198,14 +199,16 @@ function renderHyperlinkRun(
               : "inherit",
             textDecoration: "none",
           },
-          trackedInlineChange
+          trackedInlineChange,
+          ctx.documentTheme
         ),
         ...commentHighlightStyle(ctx.documentTheme, undefined),
       }
     : {
         ...trackedInlineStyle(
           linkStyleToCss(child.style, ctx.documentTheme),
-          trackedInlineChange
+          trackedInlineChange,
+          ctx.documentTheme
         ),
         ...commentHighlightStyle(ctx.documentTheme, undefined),
       }

@@ -237,6 +237,55 @@ test("DOCX page margin styles include CSS pixel units", () => {
   );
 });
 
+test("DOCX tracked revision styles stay valid and distinguishable", () => {
+  const baseStyle = core.runStyleToCss({}, "light");
+  assert.equal(baseStyle.textDecoration, "none");
+
+  const insertion = core.trackedInlineStyle(
+    baseStyle,
+    { id: "ins-1", kind: "insertion" },
+    "light",
+  );
+  const deletion = core.trackedDeletedStyle("light");
+  const insertionDark = core.trackedInlineStyle(
+    baseStyle,
+    { id: "ins-1", kind: "insertion" },
+    "dark",
+  );
+  const deletionDark = core.trackedDeletedStyle("dark");
+
+  assert.equal(insertion.textDecoration, "underline");
+  assert.equal(deletion.textDecoration, "line-through");
+  assert.notEqual(insertion.color, deletion.color);
+  assert.notEqual(insertionDark.color, deletionDark.color);
+  assert.equal(insertion.textDecorationColor, insertion.color);
+  assert.equal(deletion.textDecorationColor, deletion.color);
+
+  // "none" is exclusive in CSS; it must never be combined with a decoration.
+  assert.equal(core.mergeTextDecorations("none", "underline"), "underline");
+  assert.equal(core.mergeTextDecorations("none", "line-through"), "line-through");
+  assert.equal(
+    core.mergeTextDecorations("underline", "line-through"),
+    "underline line-through",
+  );
+  assert.equal(core.mergeTextDecorations("none", "none"), "none");
+
+  const underlinedDeletion = core.trackedDeletedStyle("light", { underline: true });
+  assert.match(underlinedDeletion.textDecoration, /\bline-through\b/);
+  assert.match(underlinedDeletion.textDecoration, /\bunderline\b/);
+  assert.doesNotMatch(underlinedDeletion.textDecoration, /\bnone\b/);
+
+  // The gutter accent helper should follow the same insertion/deletion split.
+  assert.notEqual(
+    core.trackedChangeAccentColor("insertion", "light"),
+    core.trackedChangeAccentColor("deletion", "light"),
+  );
+  assert.notEqual(
+    core.trackedChangeAccentColor("insertion", "dark"),
+    core.trackedChangeAccentColor("deletion", "dark"),
+  );
+});
+
 test("DOCX abort terminates the active Worker and rejects as ABORTED", async () => {
   await withWorkerGlobal(async () => {
     const worker = new ControlledDocxWorker({ respond: false });

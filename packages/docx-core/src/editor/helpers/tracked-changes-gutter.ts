@@ -108,15 +108,15 @@ export function trackedChangeAccentColor(
   const palette =
     documentTheme === "dark"
       ? {
-          insertion: "#f87171",
-          deletion: "#f87171",
+          insertion: "#4ade80",
+          deletion: "#fca5a5",
           moveFrom: "#86efac",
           moveTo: "#86efac",
           format: "#c084fc",
         }
       : {
-          insertion: "#dc2626",
-          deletion: "#dc2626",
+          insertion: "#15803d",
+          deletion: "#b91c1c",
           moveFrom: "#70ad47",
           moveTo: "#70ad47",
           format: "#7c3aed",

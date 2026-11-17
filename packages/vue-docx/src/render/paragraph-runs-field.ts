@@ -68,7 +68,8 @@ function renderLinkedFormField(
   const linkStyle = {
     ...trackedInlineStyle(
       linkStyleToCss(child.style, ctx.documentTheme),
-      trackedInlineChange
+      trackedInlineChange,
+      ctx.documentTheme
     ),
     ...commentHighlightStyle(ctx.documentTheme, undefined),
   }
@@ -116,7 +117,8 @@ function renderPlainFormField(
   const trackedStyle = {
     ...trackedInlineStyle(
       runStyleToCss(child.style, ctx.documentTheme),
-      trackedInlineChange
+      trackedInlineChange,
+      ctx.documentTheme
     ),
     ...commentHighlightStyle(ctx.documentTheme, undefined),
   }
