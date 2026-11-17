@@ -114,10 +114,13 @@ test("XlsxGrid boundary click selects the row or column unless the pointer actua
 });
 
 test("XlsxGrid returns keyboard focus after committing or cancelling cell editing", () => {
-  assert.match(GRID_SOURCE, /@keydown\.enter\.stop\.prevent="commitEdit"/);
-  assert.match(GRID_SOURCE, /@keydown\.escape\.stop\.prevent="cancelEdit"/);
+  assert.match(GRID_SOURCE, /@keydown="onEditKeydown"/);
+  assert.match(GRID_SOURCE, /@compositionstart="onEditCompositionStart"/);
+  assert.match(GRID_SOURCE, /@compositionend="onEditCompositionEnd"/);
   assert.match(SCRIPT_SOURCE, /function commitEdit\(\)[\s\S]*nextTick\(\(\) => containerRef\.value\?\.focus\(\)\)/);
   assert.match(SCRIPT_SOURCE, /function cancelEdit\(\)[\s\S]*nextTick\(\(\) => containerRef\.value\?\.focus\(\)\)/);
+  assert.match(functionNode("onEditKeydown").getText(AST), /isComposingKeyboardEvent\(event\)/);
+  assert.match(functionNode("onEditCompositionEnd").getText(AST), /nextTick\(commitEdit\)/);
 });
 
 test("XlsxGrid display indices keep hidden row and column workbook addresses", () => {

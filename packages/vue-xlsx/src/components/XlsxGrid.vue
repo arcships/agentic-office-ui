@@ -58,9 +58,9 @@
           class="xlsx-grid__edit-input"
           data-testid="xlsx-cell-editor"
           :style="editInputStyle"
-          @keydown.enter.stop.prevent="commitEdit"
-          @keydown.escape.stop.prevent="cancelEdit"
-          @keydown.tab.stop.prevent="commitAndTab"
+          @keydown="onEditKeydown"
+          @compositionstart="onEditCompositionStart"
+          @compositionend="onEditCompositionEnd"
           @blur="commitEdit"
         />
         <div
@@ -137,6 +137,8 @@ const containerHeight = ref(0);
 
 const editingCell = ref<XlsxCellAddress | null>(null);
 const editingValue = ref("");
+const isEditComposing = ref(false);
+let commitEditOnCompositionEnd = false;
 const hoveredCell = ref<XlsxCellAddress | null>(null);
 const resizePreview = ref<{
   actualIndex: number;
@@ -1608,13 +1610,59 @@ function commitEdit() {
   props.controller.commitCellInput(editingCell.value, editingValue.value);
   editingCell.value = null;
   editingValue.value = "";
+  isEditComposing.value = false;
+  commitEditOnCompositionEnd = false;
   void nextTick(() => containerRef.value?.focus());
 }
 
 function cancelEdit() {
   editingCell.value = null;
   editingValue.value = "";
+  isEditComposing.value = false;
+  commitEditOnCompositionEnd = false;
   void nextTick(() => containerRef.value?.focus());
+}
+
+function isComposingKeyboardEvent(event: KeyboardEvent) {
+  // keyCode 229 is the legacy signal browsers emit while an IME owns the key.
+  return event.isComposing || event.keyCode === 229;
+}
+
+function onEditKeydown(event: KeyboardEvent) {
+  if (isEditComposing.value || isComposingKeyboardEvent(event)) {
+    // Let the IME consume the key. Enter confirms the composition; remember it
+    // so the cell is committed once the final composition text is in place.
+    if (event.key === "Enter") commitEditOnCompositionEnd = true;
+    return;
+  }
+
+  if (event.key === "Enter") {
+    event.stopPropagation();
+    event.preventDefault();
+    commitEdit();
+  } else if (event.key === "Escape") {
+    event.stopPropagation();
+    event.preventDefault();
+    cancelEdit();
+  } else if (event.key === "Tab") {
+    event.stopPropagation();
+    event.preventDefault();
+    commitAndTab();
+  }
+}
+
+function onEditCompositionStart() {
+  isEditComposing.value = true;
+  commitEditOnCompositionEnd = false;
+}
+
+function onEditCompositionEnd() {
+  isEditComposing.value = false;
+  if (!commitEditOnCompositionEnd) return;
+  commitEditOnCompositionEnd = false;
+  // v-model writes the final composition text during compositionend listeners,
+  // so wait one tick before reading editingValue.
+  void nextTick(commitEdit);
 }
 
 function commitAndTab() {
@@ -1681,6 +1729,8 @@ function onGridKeydown(event: KeyboardEvent) {
   // When the inline edit input is active, let it consume all keys —
   // do not re-enter edit mode and overwrite the editing value.
   if (editingCell.value) return
+  // An IME composition owns the keyboard; never treat its keys as grid commands.
+  if (isComposingKeyboardEvent(event)) return
 
   const active = activeCell.value;
   if (!active) return;
