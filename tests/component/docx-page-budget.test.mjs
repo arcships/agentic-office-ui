@@ -5,6 +5,7 @@ import {
   findByTestId,
   importFromDemo,
   mount,
+  textContent,
   vue,
   waitFor,
   walk,
@@ -121,6 +122,91 @@ test("DocxViewer hides an over-limit document and recovers with a new runtime li
     mounted.app.unmount();
     lowRuntime.dispose();
     normalRuntime.dispose();
+  }
+});
+
+test("DocxViewer prechecks upload size and reports unreadable files", async () => {
+  const fileInput = (root) => walk(root).find(
+    (node) => node.type === "input" && node.props?.type === "file",
+  );
+  let readCalls = 0;
+  const limitEvents = [];
+  const limited = await mount(DocxViewer, {
+    runtime: {
+      limits: { maxInputBytes: 8 },
+      createLoader: () => ({
+        async load() { throw new Error("load must not run for an oversized upload"); },
+        cancel() {},
+        dispose() {},
+      }),
+    },
+    onLoadError: (error) => limitEvents.push(error),
+  });
+
+  try {
+    await fileInput(limited.root).props.onChange({
+      target: {
+        files: [{
+          name: "huge.docx",
+          size: 9,
+          arrayBuffer: async () => { readCalls += 1; return new ArrayBuffer(0); },
+        }],
+        value: "huge.docx",
+      },
+    });
+    await waitFor(
+      () => findByTestId(limited.root, "docx-viewer")?.props["data-state"] === "error",
+      "oversized DOCX upload error",
+    );
+    assert.equal(readCalls, 0, "an oversized file must be rejected before arrayBuffer()");
+    assert.equal(limitEvents.length, 1);
+    assert.equal(limitEvents[0].code, "LIMIT_EXCEEDED");
+    assert.equal(limitEvents[0].phase, "input");
+    assert.equal(limitEvents[0].limit, "maxInputBytes");
+    assert.equal(limitEvents[0].actual, 9);
+    assert.equal(limitEvents[0].allowed, 8);
+    const limitError = findByTestId(limited.root, "load-error");
+    assert.equal(limitError.props["data-error-code"], "LIMIT_EXCEEDED");
+    assert.equal(limitError.props["data-error-limit"], "maxInputBytes");
+    assert.match(textContent(limited.root), /超过允许值 8 字节/);
+    assert.deepEqual(limited.warnings, []);
+  } finally {
+    limited.app.unmount();
+  }
+
+  const readEvents = [];
+  const unreadable = await mount(DocxViewer, {
+    runtime: {
+      createLoader: () => ({
+        async load() { throw new Error("load must not run for an unreadable upload"); },
+        cancel() {},
+        dispose() {},
+      }),
+    },
+    onLoadError: (error) => readEvents.push(error),
+  });
+
+  try {
+    await fileInput(unreadable.root).props.onChange({
+      target: {
+        files: [{
+          name: "moved.docx",
+          size: 4,
+          arrayBuffer: async () => { throw new Error("file moved"); },
+        }],
+        value: "moved.docx",
+      },
+    });
+    await waitFor(
+      () => findByTestId(unreadable.root, "docx-viewer")?.props["data-state"] === "error",
+      "unreadable DOCX upload error",
+    );
+    assert.equal(readEvents.length, 1);
+    assert.match(readEvents[0].message, /Failed to read moved\.docx: file moved/);
+    assert.match(textContent(unreadable.root), /Failed to read moved\.docx: file moved/);
+    assert.deepEqual(unreadable.warnings, []);
+  } finally {
+    unreadable.app.unmount();
   }
 });
 

@@ -175,6 +175,65 @@ function createAbortError(): DocxImportError {
   return error;
 }
 
+function createParseTimeoutError(
+  limits: Readonly<DocxRuntimeLimits>,
+  elapsedMs: number,
+): DocxImportError {
+  const allowed = limits.maxParseMs ?? 0;
+  return new DocxImportError(
+    "TIMEOUT",
+    `DOCX 解析耗时超过 ${allowed} 毫秒。`,
+    {
+      phase: "parse",
+      limit: "maxParseMs",
+      actual: Math.max(elapsedMs, allowed + 1),
+      allowed,
+    },
+  );
+}
+
+interface MainThreadParseDeadline {
+  signal: AbortSignal | undefined;
+  timedOut(): boolean;
+  dispose(): void;
+}
+
+/**
+ * A main-thread parse cannot be preempted while synchronous WASM work runs,
+ * but a deadline still aborts interruptible stages (WASM initialization and
+ * archive validation) and lets every stage boundary reject a late result.
+ */
+function createMainThreadParseDeadline(
+  signal: AbortSignal | undefined,
+  limits: Readonly<DocxRuntimeLimits>,
+): MainThreadParseDeadline {
+  const allowed = limits.maxParseMs;
+  if (allowed === undefined) {
+    return { signal, timedOut: () => false, dispose: () => undefined };
+  }
+
+  const controller = new AbortController();
+  let timedOut = false;
+  const forwardAbort = (): void => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener("abort", forwardAbort, { once: true });
+  }
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, allowed);
+
+  return {
+    signal: controller.signal,
+    timedOut: () => timedOut,
+    dispose(): void {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", forwardAbort);
+    },
+  };
+}
+
 export function classifyDocxImportErrorCode(error: unknown): DocxImportErrorCode {
   if (error instanceof DocxImportError) {
     return error.code;
@@ -324,27 +383,35 @@ async function importDocxOnMainThread(
   });
 
   const startedAt = performanceNow();
+  const deadline = createMainThreadParseDeadline(signal, limits);
+  const assertWithinBudget = (): void => {
+    if (signal?.aborted) {
+      throw createAbortError();
+    }
+    assertDocxParseTime(performanceNow() - startedAt, limits);
+  };
   try {
-    validateOfficeArchive(buffer, limits, { format: "docx", signal });
+    assertWithinBudget();
+    validateOfficeArchive(buffer, limits, { format: "docx", signal: deadline.signal });
+    assertWithinBudget();
     const [{ parseDocx }, { buildDocModel }] = await Promise.all([
       import("../engine/ooxml-core"),
       import("../engine/doc-model"),
     ]);
+    assertWithinBudget();
     if (wasmSource !== undefined) {
       await initWasm(wasmSource);
     }
+    assertWithinBudget();
     const pkg = await parseDocx(buffer);
+    assertWithinBudget();
     validateDocxImageAssets(pkg, limits);
+    assertWithinBudget();
     const parsedAt = performanceNow();
-    if (signal?.aborted) {
-      throw createAbortError();
-    }
 
     const model = await buildDocModel(pkg);
+    assertWithinBudget();
     const finishedAt = performanceNow();
-    if (signal?.aborted) {
-      throw createAbortError();
-    }
     assertDocxModelBudget(model, limits);
     assertDocxParseTime(finishedAt - startedAt, limits);
 
@@ -367,7 +434,10 @@ async function importDocxOnMainThread(
     });
     return result;
   } catch (error) {
-    const normalized = toDocxImportError(error);
+    let normalized = toDocxImportError(error);
+    if (deadline.timedOut() && normalized.code === "ABORTED") {
+      normalized = createParseTimeoutError(limits, performanceNow() - startedAt);
+    }
     if (normalized.code === "ABORTED") {
       reportDiagnostic(options, {
         type: "aborted",
@@ -377,6 +447,8 @@ async function importDocxOnMainThread(
       });
     }
     throw normalized;
+  } finally {
+    deadline.dispose();
   }
 }
 
