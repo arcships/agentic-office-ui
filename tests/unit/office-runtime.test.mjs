@@ -1123,3 +1123,111 @@ test("all formats receive the same stable abort error and safe diagnostics", () 
   assert.equal(JSON.stringify(event).includes("secret"), false);
   assert.equal(Object.isFrozen(event), true);
 });
+
+test("archive parts validation matches the streaming validator without a second unzip", () => {
+  const archive = makeArchive({
+    "word/document.xml": "<w:document xmlns:w=\"urn:w\"><w:body><w:p>ok</w:p></w:body></w:document>",
+    "word/_rels/document.xml.rels": "<Relationships><Relationship Id=\"r1\" Type=\"t\" Target=\"x\"/></Relationships>",
+  });
+  const validated = runtime.validateOfficeArchive(archive, {}, { format: "docx" });
+  const parts = [
+    { name: "[Content_Types].xml", text: DOCX_CONTENT_TYPES },
+    { name: "word/document.xml", text: "<w:document xmlns:w=\"urn:w\"><w:body><w:p>ok</w:p></w:body></w:document>" },
+    { name: "word/_rels/document.xml.rels", text: "<Relationships><Relationship Id=\"r1\" Type=\"t\" Target=\"x\"/></Relationships>" },
+  ];
+  const fromParts = runtime.validateOfficeArchiveParts(parts, {}, { format: "docx" });
+  assert.equal(fromParts.sourceFormat, validated.sourceFormat);
+  assert.equal(fromParts.entryCount, validated.entryCount);
+  assert.equal(fromParts.uncompressedBytes, validated.uncompressedBytes);
+  assert.equal(fromParts.xmlBytes, validated.xmlBytes);
+  assert.equal(fromParts.relationships, validated.relationships);
+  assert.equal(Object.isFrozen(fromParts), true);
+
+  // Explicit byte lengths win over measuring the text, so binary parts can pass sizes.
+  assert.equal(
+    runtime.validateOfficeArchiveParts(
+      [{ name: "[Content_Types].xml", text: DOCX_CONTENT_TYPES }, { name: "word/media/a.bin", bytes: 4 }],
+      {},
+      { format: "docx" },
+    ).uncompressedBytes,
+    Buffer.byteLength(DOCX_CONTENT_TYPES) + 4,
+  );
+  assert.throws(
+    () => runtime.validateOfficeArchiveParts(
+      [{ name: "[Content_Types].xml", text: DOCX_CONTENT_TYPES }, { name: "word/media/a.bin" }],
+      {},
+      { format: "docx" },
+    ),
+    (error) => error?.code === "INVALID_ARGUMENT",
+  );
+});
+
+test("archive parts validation enforces XML budgets, duplicates and the OOXML family", () => {
+  const parts = [
+    { name: "[Content_Types].xml", text: DOCX_CONTENT_TYPES },
+    { name: "word/document.xml", text: `<w:document>${"<a>".repeat(12)}x${"</a>".repeat(12)}</w:document>` },
+    { name: "word/_rels/document.xml.rels", text: "<Relationships><Relationship Id=\"r1\" Type=\"t\" Target=\"x\"/></Relationships>" },
+  ];
+  for (const [limit, value] of [
+    ["maxArchiveEntries", 1],
+    ["maxSingleEntryBytes", 10],
+    ["maxUncompressedBytes", 10],
+    ["maxXmlBytes", 10],
+    ["maxSingleXmlBytes", 10],
+    ["maxXmlDepth", 4],
+    ["maxRelationships", 0],
+  ]) {
+    assert.throws(
+      () => runtime.validateOfficeArchiveParts(parts, { [limit]: value }, { format: "docx" }),
+      (error) => error?.code === "LIMIT_EXCEEDED" && error?.limit === limit,
+      `expected ${limit} to be enforced`,
+    );
+  }
+  assert.throws(
+    () => runtime.validateOfficeArchiveParts(
+      [{ name: "word/document.xml", text: "<x/>" }, { name: "word/document.xml", text: "<x/>" }],
+      {},
+      { format: "docx" },
+    ),
+    (error) => error?.code === "INVALID_SOURCE" && error?.phase === "archive",
+  );
+  assert.throws(
+    () => runtime.validateOfficeArchiveParts(
+      [{ name: "../evil.xml", text: "<x/>" }],
+      {},
+      { format: "docx" },
+    ),
+    (error) => error?.code === "INVALID_SOURCE" && error?.phase === "archive",
+  );
+  assert.throws(
+    () => runtime.validateOfficeArchiveParts(
+      [{ name: "[Content_Types].xml", text: XLSX_CONTENT_TYPES }],
+      {},
+      { format: "docx" },
+    ),
+    (error) => error?.code === "INVALID_SOURCE" && error?.phase === "archive",
+  );
+  assert.throws(
+    () => runtime.validateOfficeArchiveParts(
+      [{ name: "word/document.xml", text: "<!DOCTYPE x><x/>" }],
+      {},
+      { format: "docx" },
+    ),
+    (error) => error?.code === "INVALID_SOURCE" && error?.phase === "xml",
+  );
+  const controller = new AbortController();
+  controller.abort();
+  assert.throws(
+    () => runtime.validateOfficeArchiveParts(parts, {}, { format: "docx", signal: controller.signal }),
+    (error) => error?.code === "ABORTED",
+  );
+});
+
+test("byte sources are read in place instead of copied", async () => {
+  const bytes = zipSync({ "a.txt": strToU8("ok") });
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const loaded = await runtime.loadOfficeSource({ kind: "bytes", bytes: buffer, name: "a.docx" });
+  assert.equal(loaded.buffer, buffer);
+  assert.equal(loaded.fileName, "a.docx");
+  assert.equal(runtime.utf8ByteLength("a\u00e9\u4e2d\ud83d\ude00"), 10);
+});

@@ -342,6 +342,7 @@ export interface PptxPreviewSessionOptions {
 export interface PptxDocumentSessionOptions extends PptxPreviewSessionOptions {
   approximation?: PptxApproximationPolicy
   externalMedia?: "disabled" | "allowed"
+  externalMediaUrlPolicy?: PptxExternalMediaUrlPolicy
 }
 
 export interface PptxDocumentSession extends PptxPreviewSession {
@@ -519,7 +520,9 @@ type PptxStageContextMenu = PptxStageContextMenuPosition & (
 - `mode` 默认 `browse`；
 - `browse` 默认纵向连续页面，`present` 保持单页播放；
 - `approximation` 默认 `off`；
-- `externalMedia` 默认 `disabled`；
+- `externalMedia` 默认 `disabled`；`allowed` 仍必须同时提供 `externalMediaUrlPolicy`，媒体 URL 经共享 URL 规则校验后才加载；
+- 归档预算与共享 office 限制对齐：`toOfficeLimits` 传递完整的 PPTX 预算子集（压缩比、XML 嵌套层数与总量、路径长度、关系数），未传入的字段不会再被静默关闭；
+- 一次解压：`inspectOfficeArchive` 只读中央目录，渲染器完成唯一一次解压，共享校验器直接检查已解码的部件；
 - 新事件只增加，不改变旧事件参数；
 - `PptxPreviewSession` 不增加必须实现的方法；新增的列表/单页行为通过可选会话参数表达，测试替身无需实现播放接口。
 

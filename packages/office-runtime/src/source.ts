@@ -25,6 +25,11 @@ export interface OfficeFileLike {
 
 export type OfficeSource =
   | { kind: "file"; file: OfficeFileLike; name?: string }
+  /**
+   * Byte sources are read in place: `loadOfficeSource` returns the caller's
+   * buffer instead of copying it, so hosts must not reuse the buffer for a
+   * differently sized archive while a load is running.
+   */
   | { kind: "bytes"; bytes: ArrayBuffer; name?: string }
   | { kind: "url"; url: string; name?: string };
 
@@ -198,8 +203,10 @@ export async function loadOfficeSource(
 
   if (source.kind === "bytes") {
     assertOfficeInputBytes(source.bytes.byteLength, options.limits);
+    // Byte sources are handed over, not copied: callers own their buffer and a
+    // slice would double peak memory for large documents.
     return {
-      buffer: source.bytes.slice(0),
+      buffer: source.bytes,
       sourceKind: "bytes",
       fileName: source.name,
     };

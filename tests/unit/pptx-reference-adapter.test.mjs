@@ -9,8 +9,8 @@ const fixtures = JSON.parse(readFileSync(
 const pptx = await import(new URL("../../packages/pptx-core/dist/index.js", import.meta.url).href)
 const interaction = await import(new URL("../../packages/office-interaction/dist/index.js", import.meta.url).href)
 
-function context(revision, slideFixtures, dimensions = {}, textByShapeId = {}) {
-  const slideIds = slideFixtures.map((slide) => slide.slideId)
+function context(revision, slideFixtures, dimensions = {}, textByShapeId = {}, hostSlideIds) {
+  const slideIds = hostSlideIds ?? slideFixtures.map((slide) => slide.slideId)
   const playbackSlides = slideFixtures.map((slide, index) => ({
     index,
     hidden: false,
@@ -184,4 +184,41 @@ test("PPTX regions follow reordered slides only while normalized slide space is 
     pptx.resolvePptxReference(context("pptx-v2", fixtures.reordered, { width: 1440 }), selected),
     { status: "not-found", reasonCode: "pptx.slide-size-changed" },
   )
+})
+
+test("PPTX host slide ids drive fingerprints, locators and resolution identically", () => {
+  const hostSlideIds = fixtures.original.map((_, index) => `native-slide-${index + 1}`);
+  const hosted = context("pptx-v1", fixtures.original, {}, { "2": ["Quarterly outlook"] }, hostSlideIds);
+  const hostedObject = reference(pptx.createPptxObjectReferenceDraft(hosted, 0, summaryObject.key), "ref-hosted-object");
+  assert.equal(hostedObject.locator.value.slide.slideId, "native-slide-1");
+  assert.ok(hostedObject.fingerprint.ancestorKeys.includes("pptx.slide-id:native-slide-1"));
+  assert.equal(pptx.resolvePptxReference(hosted, hostedObject).status, "exact");
+
+  const hostedText = reference(pptx.createPptxTextReferenceDraft(
+    hosted,
+    0,
+    summaryObject.key,
+    { paragraphIndex: 0, offset: 0 },
+    { paragraphIndex: 0, offset: 9 },
+  ), "ref-hosted-text");
+  assert.ok(hostedText.fingerprint.ancestorKeys.includes("pptx.slide-id:native-slide-1"));
+  assert.equal(hostedText.fingerprint.exactText, "Quarterly");
+  assert.equal(pptx.resolvePptxReference(hosted, hostedText).status, "exact");
+
+  // Region locators carry no slide id of their own, so they only resolve when the
+  // fingerprint uses the same id the resolver looks up.
+  const hostedRegion = reference(pptx.createPptxRegionReferenceDraft(hosted, {
+    space: "slide",
+    slideIndex: 0,
+    rect: { x: 0.2, y: 0.3, width: 0.3, height: 0.25 },
+  }), "ref-hosted-region");
+  assert.ok(hostedRegion.fingerprint.ancestorKeys.includes("pptx.slide-id:native-slide-1"));
+  assert.equal(pptx.resolvePptxReference(hosted, hostedRegion).status, "exact");
+
+  // Reordering still relocates through the host id, not through the part path.
+  const hostedReordered = context("pptx-v2", fixtures.reordered, {}, {}, hostSlideIds.slice().reverse());
+  const relocated = pptx.resolvePptxReference(hostedReordered, hostedObject);
+  assert.equal(relocated.status, "relocated");
+  assert.equal(relocated.reference.locator.value.slide.index, 1);
+  assert.equal(relocated.reference.locator.value.slide.slideId, "native-slide-1");
 })

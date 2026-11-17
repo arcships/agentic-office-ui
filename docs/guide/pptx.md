@@ -35,7 +35,12 @@ import "@arcships/vue-pptx/style.css"
 | `showPlaybackControls` | `true` | 播放控制条 |
 | `showWarnings` | `true` | 显示文档 `warnings`（备注不支持、宏已忽略等） |
 | `openTimeoutMs` | `30000` | 加载超时毫秒数，超时后进入错误状态；`0` 关闭超时 |
-| `externalMedia` | `disabled` | 是否允许外部媒体 |
+| `externalMedia` | `disabled` | 是否允许外部媒体；设为 `allowed` 时仍需要 `externalMediaUrlPolicy` 放行 |
+| `externalMediaUrlPolicy` | `undefined` | 外部媒体的 URL 规则：`baseUrl`、`allowedProtocols`、`allowedOrigins` 等 |
+
+外部媒体默认禁用，只作为静态内容报告。只有同时设置 `externalMedia="allowed"` 和 `externalMediaUrlPolicy`，并且目标 URL 通过 `allowedProtocols` / `allowedOrigins` 校验时才真正加载；`javascript:`、`data:` 和未授权来源一律不加载，避免演示文稿自行发起跟踪请求。
+
+`limits` 支持完整的归档预算：`maxInputBytes`、`maxArchiveEntries`、`maxSingleEntryBytes`、`maxUncompressedBytes`、`maxMediaBytes`、`maxCompressionRatio`、`maxArchivePathLength`、`maxXmlBytes`、`maxSingleXmlBytes`、`maxXmlDepth`、`maxXmlAttributeBytes`、`maxTextNodeBytes`、`maxRelationships` 和 `maxConcurrency`。宿主只能收紧默认值，不能放宽硬上限。
 
 模板引用公开 `getController()`、`next()`、`previous()`、`play()`、`pause()`、`resume()`、`reset()`、`goToSlide()`、`enterFullscreen()` 和 `exitFullscreen()`。
 

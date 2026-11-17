@@ -51,10 +51,16 @@ export type {
 export {
   inspectOfficeArchive,
   validateOfficeArchive,
+  validateOfficeArchiveParts,
   validateOfficeXmlEntry,
+  validateOfficeXmlText,
+  utf8ByteLength,
 } from "./archive-budget";
 export type {
   OfficeArchiveEntry,
+  OfficeArchivePart,
+  OfficeArchivePartsOptions,
+  OfficeArchivePartsValidation,
   OfficeArchiveSummary,
   OfficeArchiveValidationOptions,
   OfficeArchiveValidationResult,

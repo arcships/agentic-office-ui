@@ -27,6 +27,22 @@ export interface PptxPreviewLimits {
   maxUncompressedBytes?: number
   maxMediaBytes?: number
   maxConcurrency?: number
+  /** Highest allowed uncompressed/compressed ratio for any single archive entry. */
+  maxCompressionRatio?: number
+  /** Longest allowed archive entry path, in bytes. */
+  maxArchivePathLength?: number
+  /** Total decoded XML budget across every part of the deck. */
+  maxXmlBytes?: number
+  /** Decoded XML budget for one part. */
+  maxSingleXmlBytes?: number
+  /** Deepest allowed XML element nesting. */
+  maxXmlDepth?: number
+  /** Longest allowed single XML tag, in bytes. */
+  maxXmlAttributeBytes?: number
+  /** Longest allowed XML text node or CDATA section, in bytes. */
+  maxTextNodeBytes?: number
+  /** Relationship count budget across all `.rels` parts. */
+  maxRelationships?: number
 }
 
 export interface PptxSlideInfo {

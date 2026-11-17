@@ -5,6 +5,13 @@ import test from "node:test";
 
 import { importFromDemo } from "../component/vue-test-renderer.mjs";
 
+const requireFromPptxCore = createRequire(
+  new URL("../../packages/pptx-core/package.json", import.meta.url),
+);
+const { strToU8, zipSync } = await import(
+  new URL(`file://${requireFromPptxCore.resolve("fflate")}`).href
+);
+
 const {
   DEFAULT_PPTX_PREVIEW_LIMITS,
   PptxPlaybackError,
@@ -19,13 +26,12 @@ const {
   rebuildPptxStateAtBoundary,
 } = await importFromDemo("@arcships/pptx-core");
 const {
+  PPTX_ARCHIVE_READER,
   createPptxDocumentSession,
   createPptxPreviewSession,
+  loadPptxArchive,
+  resolvePptxExternalMediaUrl,
 } = await importFromDemo("@arcships/pptx-core/browser");
-
-const requireFromPptxCore = createRequire(
-  new URL("../../packages/pptx-core/package.json", import.meta.url),
-);
 const typescript = requireFromPptxCore("typescript");
 const trackPlayer = await import(`data:text/javascript;base64,${Buffer.from(
   typescript.transpileModule(
@@ -49,6 +55,14 @@ test("PPTX core root stays browser-free and exposes fixed safe defaults", () => 
   assert.equal(DEFAULT_PPTX_PREVIEW_LIMITS.maxSingleEntryBytes, 32 * 1024 * 1024);
   assert.equal(DEFAULT_PPTX_PREVIEW_LIMITS.maxUncompressedBytes, 256 * 1024 * 1024);
   assert.equal(DEFAULT_PPTX_PREVIEW_LIMITS.maxMediaBytes, 192 * 1024 * 1024);
+  assert.equal(DEFAULT_PPTX_PREVIEW_LIMITS.maxCompressionRatio, 100);
+  assert.equal(DEFAULT_PPTX_PREVIEW_LIMITS.maxArchivePathLength, 1_024);
+  assert.equal(DEFAULT_PPTX_PREVIEW_LIMITS.maxXmlBytes, 256 * 1024 * 1024);
+  assert.equal(DEFAULT_PPTX_PREVIEW_LIMITS.maxSingleXmlBytes, 32 * 1024 * 1024);
+  assert.equal(DEFAULT_PPTX_PREVIEW_LIMITS.maxXmlDepth, 256);
+  assert.equal(DEFAULT_PPTX_PREVIEW_LIMITS.maxXmlAttributeBytes, 1 * 1024 * 1024);
+  assert.equal(DEFAULT_PPTX_PREVIEW_LIMITS.maxTextNodeBytes, 16 * 1024 * 1024);
+  assert.equal(DEFAULT_PPTX_PREVIEW_LIMITS.maxRelationships, 100_000);
 
   const error = new PptxPreviewError("LIMIT_EXCEEDED", "too large");
   assert.equal(error.name, "PptxPreviewError");
@@ -518,21 +532,34 @@ test("PPTX wipe and normalized straight motion paths interpolate in page coordin
   assert.equal(evaluatePptxTrack(y, 100), -270);
 });
 
-test("PPTX preview uses one archive parse and separates vertical browse from slide playback", () => {
+test("PPTX preview separates vertical browse from slide playback and keeps one archive pass", () => {
   assert.equal(typeof createPptxDocumentSession, "function");
   assert.equal(typeof createPptxPreviewSession, "function");
   const source = readFileSync(
     new URL("../../packages/pptx-core/src/browser.ts", import.meta.url),
     "utf8",
   );
-  assert.match(source, /parseZipLazyMedia\(resolved\.buffer/);
+  assert.match(source, /loadPptxArchive\(resolved\.buffer/);
+  // The streaming validator inflates every entry, so the browser path must not
+  // call it next to the renderer parse.
+  assert.doesNotMatch(source, /validateOfficeArchive\(/);
+  assert.doesNotMatch(source, /parseZip/);
   assert.match(source, /buildPresentation\(files/);
   assert.match(source, /viewer\.load\(presentation\)/);
   assert.match(source, /parsePptxPlaybackDocument\(files, presentation/);
   assert.match(source, /viewer\.renderList\(/);
   assert.match(source, /viewer\.renderSlide\(initialSlide\)/);
   assert.match(source, /renderMode: options\.renderMode \?\? "list"/);
+  assert.match(source, /resolvePptxExternalMediaUrl\(path, externalMediaPolicy\)/);
   assert.doesNotMatch(source, /viewer\.open\(/);
+
+  const archiveSource = readFileSync(
+    new URL("../../packages/pptx-core/src/archive.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(archiveSource, /reader\.parseLazyMedia\(buffer/);
+  assert.match(archiveSource, /inspectOfficeArchive\(buffer/);
+  assert.match(archiveSource, /validateOfficeArchiveParts\(pptxArchiveParts\(files/);
 
   const patch = readFileSync(
     new URL("../../patches/@aiden0z__pptx-renderer@1.2.4.patch", import.meta.url),
@@ -801,4 +828,151 @@ test("PPTX track targets resolve once per render and animate duplicate object ke
     trackPlayer.applyPptxObjectState(root, state, targets);
     assert.equal(root.queries, 2);
   });
+});
+
+const PPTX_CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>
+</Types>`;
+
+function pptxArchive(entries = {}) {
+  return zipSync({
+    "[Content_Types].xml": strToU8(PPTX_CONTENT_TYPES),
+    ...Object.fromEntries(Object.entries(entries).map(([name, value]) => [name, strToU8(value)])),
+  });
+}
+
+function countingReader(calls) {
+  return {
+    async parse(buffer, limits) {
+      calls.push("parse");
+      return PPTX_ARCHIVE_READER.parse(buffer, limits);
+    },
+    async parseLazyMedia(buffer, limits) {
+      calls.push("parseLazyMedia");
+      return PPTX_ARCHIVE_READER.parseLazyMedia(buffer, limits);
+    },
+  };
+}
+
+function bufferOf(bytes) {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+test("PPTX archive loading decompresses the container once and validates the decoded parts", async () => {
+  const fixture = readFileSync(new URL("../fixtures/pptx/playback-controlled.pptx", import.meta.url));
+  const calls = [];
+  const loaded = await loadPptxArchive(bufferOf(fixture), {
+    limits: DEFAULT_PPTX_PREVIEW_LIMITS,
+    lazyMedia: true,
+    reader: countingReader(calls),
+  });
+  // The reader is the only decompression pass: no second validator unzip.
+  assert.deepEqual(calls, ["parseLazyMedia"]);
+  assert.equal(loaded.validation.sourceFormat, "pptx");
+  assert.ok(loaded.validation.entryCount > 0);
+  assert.ok(loaded.validation.xmlBytes > 0);
+  assert.ok(loaded.validation.entryCount <= loaded.summary.entryCount);
+  assert.ok(loaded.summary.uncompressedBytes >= loaded.validation.uncompressedBytes);
+  assert.equal(Object.isFrozen(loaded), true);
+  assert.ok(loaded.files.slides.size > 0);
+
+  const eagerCalls = [];
+  const eager = await loadPptxArchive(bufferOf(fixture), {
+    limits: DEFAULT_PPTX_PREVIEW_LIMITS,
+    reader: countingReader(eagerCalls),
+  });
+  assert.deepEqual(eagerCalls, ["parse"]);
+  assert.ok(eager.validation.uncompressedBytes >= loaded.validation.uncompressedBytes);
+});
+
+test("PPTX archive budgets reject ratio bombs before decompressing and deep XML after it", async () => {
+  // A metadata-level ratio bomb never reaches the reader.
+  const calls = [];
+  const bomb = pptxArchive({
+    "ppt/presentation.xml": "<p:presentation/>",
+    "ppt/media/blob.bin": "A".repeat(4 * 1024 * 1024),
+  });
+  await assert.rejects(
+    loadPptxArchive(bufferOf(bomb), {
+      limits: { ...DEFAULT_PPTX_PREVIEW_LIMITS, maxCompressionRatio: 50 },
+      reader: countingReader(calls),
+    }),
+    (error) => error?.code === "LIMIT_EXCEEDED" && error?.limit === "maxCompressionRatio",
+  );
+  assert.deepEqual(calls, []);
+
+  // Deep XML is caught on the parts the renderer already decoded.
+  const deep = `<p:presentation>${"<a>".repeat(40)}x${"</a>".repeat(40)}</p:presentation>`;
+  const deepCalls = [];
+  await assert.rejects(
+    loadPptxArchive(bufferOf(pptxArchive({ "ppt/presentation.xml": deep })), {
+      limits: { ...DEFAULT_PPTX_PREVIEW_LIMITS, maxXmlDepth: 8 },
+      lazyMedia: true,
+      reader: countingReader(deepCalls),
+    }),
+    (error) => error?.code === "LIMIT_EXCEEDED" && error?.limit === "maxXmlDepth",
+  );
+  assert.deepEqual(deepCalls, ["parseLazyMedia"]);
+
+  await assert.rejects(
+    loadPptxArchive(bufferOf(pptxArchive({ "ppt/presentation.xml": "<p:presentation/>" })), {
+      limits: { ...DEFAULT_PPTX_PREVIEW_LIMITS, maxSingleXmlBytes: 8 },
+      reader: countingReader([]),
+    }),
+    (error) => error?.code === "LIMIT_EXCEEDED" && error?.limit === "maxSingleXmlBytes",
+  );
+
+  // Long entry paths are rejected from the central directory, before inflating.
+  const longPathCalls = [];
+  await assert.rejects(
+    loadPptxArchive(bufferOf(pptxArchive({
+      "ppt/presentation.xml": "<p:presentation/>",
+      [`ppt/media/${"long".repeat(40)}.bin`]: "x",
+    })), {
+      limits: { ...DEFAULT_PPTX_PREVIEW_LIMITS, maxArchivePathLength: 32 },
+      reader: countingReader(longPathCalls),
+    }),
+    (error) => error?.code === "LIMIT_EXCEEDED" && error?.limit === "maxArchivePathLength",
+  );
+  assert.deepEqual(longPathCalls, []);
+
+  // Relationship budgets are accumulated over the decoded `.rels` parts.
+  const relationships = pptxArchive({
+    "ppt/presentation.xml": "<p:presentation/>",
+    "ppt/_rels/presentation.xml.rels": "<Relationships>"
+      + ["1", "2", "3"].map((id) => `<Relationship Id="r${id}" Type="t" Target="x"/>`).join("")
+      + "</Relationships>",
+  });
+  await assert.rejects(
+    loadPptxArchive(bufferOf(relationships), {
+      limits: { ...DEFAULT_PPTX_PREVIEW_LIMITS, maxRelationships: 2 },
+      lazyMedia: true,
+      reader: countingReader([]),
+    }),
+    (error) => error?.code === "LIMIT_EXCEEDED" && error?.limit === "maxRelationships",
+  );
+  const accepted = await loadPptxArchive(bufferOf(relationships), {
+    limits: { ...DEFAULT_PPTX_PREVIEW_LIMITS, maxRelationships: 3 },
+    lazyMedia: true,
+    reader: countingReader([]),
+  });
+  assert.equal(accepted.validation.relationships, 3);
+});
+
+test("PPTX external media needs both the opt-in and a URL policy match", () => {
+  assert.equal(resolvePptxExternalMediaUrl("https://cdn.example/a.png", undefined), undefined);
+  const policy = {
+    baseUrl: "https://deck.example/slides/",
+    allowedProtocols: ["https:"],
+    allowedOrigins: ["https://cdn.example"],
+  };
+  assert.equal(
+    resolvePptxExternalMediaUrl("https://cdn.example/webfont/tracker.gif", policy),
+    "https://cdn.example/webfont/tracker.gif",
+  );
+  assert.equal(resolvePptxExternalMediaUrl("https://tracker.example/pixel.gif", policy), undefined);
+  assert.equal(resolvePptxExternalMediaUrl("javascript:alert(1)", policy), undefined);
+  assert.equal(resolvePptxExternalMediaUrl("data:image/png;base64,AAAA", policy), undefined);
+  assert.equal(resolvePptxExternalMediaUrl("https://cdn.example/x.png", { ...policy, enabled: false }), undefined);
 });
