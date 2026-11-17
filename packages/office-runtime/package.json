@@ -14,6 +14,7 @@
     "./source-format": "./src/source-format.ts",
     "./gesture-zoom": "./src/gesture-zoom.ts",
     "./link-policy": "./src/link-policy.ts",
+    "./touch-gestures": "./src/touch-gestures.ts",
     "./surface-search": "./src/surface-search.ts"
   },
   "scripts": {

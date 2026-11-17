@@ -2509,7 +2509,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.xlsx-grid { outline: none; }
+.xlsx-grid { outline: none; touch-action: pan-x pan-y; }
 .xlsx-grid__a11y, .xlsx-grid__a11y-cell {
   block-size: 1px;
   clip-path: inset(50%);

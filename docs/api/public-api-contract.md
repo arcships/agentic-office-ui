@@ -203,7 +203,7 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 
 ### 3.11 统一 Surface 缩放
 
-`DocxDocumentSurface`、`XlsxSheetSurface`、`PdfSurface` 和 `PptxStage` 统一接受倍率 `zoom?: number`、`enableGestureZoom?: boolean`，并发出 `update:zoom`。传入 `zoom` 后，Surface 在 50%–200% 范围内处理 `Ctrl+wheel` 和支持的 pinch；普通 wheel 不被拦截。未传 `zoom` 时保持旧缩放接口和行为。
+`DocxDocumentSurface`、`XlsxSheetSurface`、`PdfSurface` 和 `PptxStage` 统一接受倍率 `zoom?: number`、`enableGestureZoom?: boolean`，并发出 `update:zoom`。传入 `zoom` 后，Surface 在 50%–200% 范围内处理 `Ctrl+wheel`、trackpad pinch、两指 pointer pinch、双击缩放和 WebKit gesture；普通 wheel 不被拦截。触屏长按打开上下文菜单，原生重复 `contextmenu` 在长按后被抑制。未传 `zoom` 时保持旧缩放接口和行为。完整契约见 `docs/touch-interaction-spec.md`。
 
 `zoom` 与旧缩放属性或 `fitWidth` 同时存在时以受控 `zoom` 为准。宿主应使用 `v-model:zoom` 持有产品级百分比、toolbar 和切文件重置；页面、幻灯片或 XLSX 单元格锚点由各 Surface 自己恢复。
 

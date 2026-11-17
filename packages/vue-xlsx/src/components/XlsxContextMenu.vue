@@ -81,6 +81,8 @@ const MIN_DISPLAY_COLS = 50;
 const props = defineProps<{
   controller: XlsxViewerController;
   targetElement?: HTMLElement | null;
+  /** Native contextmenu is ignored right after a synthetic long press. */
+  suppressContextMenu?: ((clientX: number, clientY: number) => boolean) | null;
 }>();
 
 const visible = ref(false);
@@ -167,19 +169,25 @@ function resolveGridCell(
 }
 
 function onContextMenu(event: MouseEvent) {
+  if (props.suppressContextMenu?.(event.clientX, event.clientY)) {
+    event.preventDefault();
+    return;
+  }
+  if (openAt(event.clientX, event.clientY, event.target)) event.preventDefault();
+}
+
+function openAt(clientX: number, clientY: number, eventTarget?: unknown): boolean {
   const target = props.targetElement;
   const sheet = props.controller.activeSheet;
-  if (!target || !sheet) return;
-  const eventTarget = event.target;
+  if (!target || !sheet) return false;
   if (
     typeof HTMLElement !== "undefined" &&
     eventTarget instanceof HTMLElement &&
     eventTarget.closest("input, textarea, [contenteditable='true']")
-  ) return;
+  ) return false;
 
-  const cell = resolveGridCell(target, sheet, props.controller.zoomScale, event.clientX, event.clientY);
-  if (!cell) return;
-  event.preventDefault();
+  const cell = resolveGridCell(target, sheet, props.controller.zoomScale, clientX, clientY);
+  if (!cell) return false;
   props.controller.selectCell(cell);
   const table = props.controller.tables.find((candidate) => {
     const headerRows = Math.max(1, candidate.headerRowCount);
@@ -191,10 +199,11 @@ function onContextMenu(event: MouseEvent) {
   sortTarget.value = table
     ? { columnIndex: cell.col - table.start.col, tableName: table.name }
     : null;
-  position.value = { x: event.clientX, y: event.clientY };
+  position.value = { x: clientX, y: clientY };
   menuKeyboard.captureInvoker();
   visible.value = true;
   void nextTick(() => menuKeyboard.focusFirst());
+  return true;
 }
 
 function close() { visible.value = false; sortTarget.value = null; }
@@ -227,6 +236,8 @@ onUnmounted(() => {
   boundTarget?.removeEventListener("contextmenu", boundHandler);
   boundTarget = null;
 });
+
+defineExpose({ openAt, close });
 </script>
 
 <style scoped>
@@ -242,4 +253,7 @@ onUnmounted(() => {
 }
 .xlsx-contextmenu__item:hover { background: #f4f4f5; }
 .xlsx-contextmenu__separator { background: #e4e4e7; height: 1px; margin: 4px 0; }
+@media (pointer: coarse) {
+  .xlsx-contextmenu__item { height: 44px; }
+}
 </style>

@@ -126,8 +126,9 @@ test("XLSX 右键菜单只监听当前网格，并在显示前选择命中单元
   assert.match(CONTEXT_MENU_SOURCE, /targetElement/);
   assert.match(VIEWER_SOURCE, /:target-element="gridElement"/);
 
-  const handler = functionNode("onContextMenu").getText(AST);
+  const handler = functionNode("openAt").getText(AST);
   assert.ok(handler.indexOf("props.controller.selectCell(cell)") < handler.indexOf("visible.value = true"));
+  assert.match(functionNode("onContextMenu").getText(AST), /openAt\(event\.clientX, event\.clientY, event\.target\)/);
 
   const target = {
     scrollLeft: 80,

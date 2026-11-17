@@ -1349,3 +1349,144 @@ test("streamed URL sources accept bodies at the exact byte limit", async () => {
   );
   assert.deepEqual([...new Uint8Array(loaded.buffer)], [...bytes]);
 });
+
+test("touch gesture math keeps pinch and double-tap zoom inside the shared range", () => {
+  assert.equal(runtime.pointerDistance({ clientX: 0, clientY: 0 }, { clientX: 3, clientY: 4 }), 5);
+  assert.equal(runtime.pinchSurfaceZoom(1, 100, 200), 2);
+  assert.equal(runtime.pinchSurfaceZoom(1, 100, 50), 0.5);
+  assert.equal(runtime.pinchSurfaceZoom(1, 100, 400), 2);
+  assert.equal(runtime.pinchSurfaceZoom(1, 100, 1), 0.5);
+  assert.equal(runtime.pinchSurfaceZoom(1, 0, 200), 1);
+  assert.equal(runtime.pinchSurfaceZoom(Number.NaN, 100, 200), 1);
+  assert.equal(runtime.nextDoubleTapZoom(1), 2);
+  assert.equal(runtime.nextDoubleTapZoom(0.5), 2);
+  assert.equal(runtime.nextDoubleTapZoom(1.25), 1);
+  assert.equal(runtime.nextDoubleTapZoom(2), 1);
+  assert.equal(runtime.TOUCH_MIN_TARGET_PX, 44);
+});
+
+function touchPointer(overrides = {}) {
+  return {
+    pointerId: 1,
+    pointerType: "touch",
+    clientX: 0,
+    clientY: 0,
+    ...overrides,
+  };
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+test("touch tracker maps a two-finger pinch to zoom updates around the midpoint", () => {
+  const zooms = [];
+  const tracker = runtime.createTouchGestureTracker({
+    getZoom: () => 1,
+    onZoom: (zoom, center) => zooms.push({ zoom, center }),
+  });
+
+  tracker.pointerDown(touchPointer({ pointerId: 1, clientX: 0, clientY: 0 }));
+  tracker.pointerDown(touchPointer({ pointerId: 2, clientX: 100, clientY: 0 }));
+  assert.equal(tracker.isPinching, true);
+
+  tracker.pointerMove(touchPointer({ pointerId: 2, clientX: 200, clientY: 0 }));
+  assert.deepEqual(zooms, [{ zoom: 2, center: { clientX: 100, clientY: 0 } }]);
+
+  // The final finger-up after a pinch must not become a tap.
+  tracker.pointerUp(touchPointer({ pointerId: 2, clientX: 200, clientY: 0 }));
+  tracker.pointerUp(touchPointer({ pointerId: 1, clientX: 0, clientY: 0 }));
+  tracker.pointerDown(touchPointer({ pointerId: 1, clientX: 0, clientY: 0 }));
+  tracker.pointerUp(touchPointer({ pointerId: 1, clientX: 0, clientY: 0 }));
+  assert.equal(zooms.length, 1);
+});
+
+test("touch tracker fires a long press once, suppresses the native menu, and cancels on movement", async () => {
+  const presses = [];
+  const tracker = runtime.createTouchGestureTracker({
+    longPressMs: 10,
+    onLongPress: (pointer) => presses.push(pointer),
+  });
+
+  tracker.pointerDown(touchPointer({ clientX: 40, clientY: 50 }));
+  await wait(30);
+  assert.equal(presses.length, 1);
+  assert.equal(presses[0].clientX, 40);
+  assert.equal(presses[0].clientY, 50);
+  assert.equal(tracker.shouldSuppressContextMenu(42, 52), true);
+  assert.equal(tracker.shouldSuppressContextMenu(240, 52), false);
+  let prevented = 0;
+  const pressRelease = touchPointer({ clientX: 40, clientY: 50 });
+  tracker.pointerUp({ ...pressRelease, preventDefault: () => { prevented += 1; } });
+  assert.equal(prevented, 1, "long press suppresses the trailing click");
+
+  tracker.pointerDown(touchPointer({ clientX: 10, clientY: 10 }));
+  tracker.pointerMove(touchPointer({ clientX: 60, clientY: 10 }));
+  await wait(30);
+  assert.equal(presses.length, 1, "moving before the delay cancels the long press");
+});
+
+test("touch tracker recognises a double tap and prevents the trailing click", () => {
+  const taps = [];
+  let prevented = 0;
+  const tracker = runtime.createTouchGestureTracker({
+    doubleTapMs: 1_000,
+    onDoubleTap: (pointer) => taps.push(pointer),
+  });
+  const tap = (overrides = {}) => {
+    const event = touchPointer({ clientX: 20, clientY: 30, ...overrides });
+    tracker.pointerDown(event);
+    tracker.pointerUp({ ...event, preventDefault: () => { prevented += 1; } });
+  };
+
+  tap();
+  assert.equal(taps.length, 0);
+  tap();
+  assert.equal(taps.length, 1);
+  assert.equal(taps[0].clientX, 20);
+  assert.equal(prevented, 1);
+
+  // A second double tap pair starts a new sequence rather than firing twice.
+  tap();
+  assert.equal(taps.length, 1);
+  tap();
+  assert.equal(taps.length, 2);
+});
+
+test("touch tracker can keep double tap for editing targets", () => {
+  const taps = [];
+  const tracker = runtime.createTouchGestureTracker({
+    doubleTapMs: 1_000,
+    isDoubleTapEnabled: () => false,
+    onDoubleTap: (pointer) => taps.push(pointer),
+  });
+  const tap = () => {
+    tracker.pointerDown(touchPointer());
+    tracker.pointerUp(touchPointer());
+  };
+  tap();
+  tap();
+  assert.equal(taps.length, 0);
+});
+
+test("touch tracker ignores mouse pointers and disabled surfaces", async () => {
+  let presses = 0;
+  let enabled = false;
+  const tracker = runtime.createTouchGestureTracker({
+    longPressMs: 5,
+    isEnabled: () => enabled,
+    onLongPress: () => { presses += 1; },
+  });
+
+  tracker.pointerDown(touchPointer({ pointerType: "mouse" }));
+  await wait(15);
+  tracker.pointerDown(touchPointer());
+  await wait(15);
+  assert.equal(presses, 0);
+
+  enabled = true;
+  tracker.pointerDown(touchPointer());
+  await wait(15);
+  assert.equal(presses, 1);
+  tracker.reset();
+});

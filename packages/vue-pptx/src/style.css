@@ -81,7 +81,7 @@
 .pptx-viewer__sidebar { background: var(--pptx-panel); border-right: 1px solid var(--pptx-border); flex: 0 0 180px; overflow: auto; padding: 12px; }
 .pptx-viewer__stage-wrap { display: block; flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; position: relative; }
 .pptx-viewer__stage { box-sizing: border-box; inline-size: min(100%, 1280px); margin-inline: auto; min-height: 1px; padding: 24px; }
-.pptx-stage { box-sizing: border-box; min-height: 1px; }
+.pptx-stage { box-sizing: border-box; min-height: 1px; touch-action: pan-x pan-y; }
 .pptx-viewer__stage[aria-hidden="true"] { visibility: hidden; }
 .pptx-viewer__message { inset: 0; align-items: center; color: var(--pptx-muted); display: flex; justify-content: center; position: absolute; z-index: 2; }
 .pptx-viewer__message--error { color: #b91c1c; padding: 24px; text-align: center; }
@@ -212,6 +212,15 @@
   box-sizing: border-box;
   margin-block-end: 0;
   overflow: hidden;
+}
+
+@media (pointer: coarse) {
+  .pptx-viewer__toolbar button,
+  .pptx-viewer__search input,
+  .pptx-viewer__playback-controls button {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 @container pptx-viewer (max-width: 720px) {

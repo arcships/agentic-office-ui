@@ -29,6 +29,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { clampSurfaceZoom, nextSurfaceZoom } from "@arcships/office-runtime/gesture-zoom"
+import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures"
 import type {
   PptxStageContextMenu,
   PptxStageObjectClick,
@@ -244,8 +245,8 @@ function controlledZoom(): number | undefined {
     : undefined
 }
 
-function resolveHit(event: MouseEvent): StageHit | null {
-  const target = event.target as Element | null
+function resolveHitAt(rawTarget: unknown): StageHit | null {
+  const target = rawTarget as Element | null
   if (!target || typeof target.closest !== "function") return null
   const slideElement = target.closest<HTMLElement>("[data-slide-index]")
   const slideIndex = Number(slideElement?.dataset.slideIndex)
@@ -255,6 +256,10 @@ function resolveHit(event: MouseEvent): StageHit | null {
     slideIndex,
     objectKey: objectElement?.dataset.pptxObjectKey || undefined,
   }
+}
+
+function resolveHit(event: MouseEvent): StageHit | null {
+  return resolveHitAt(event.target)
 }
 
 function candidateForHit(hit: StageHit): OfficeReferenceCandidatePreview | undefined {
@@ -550,21 +555,50 @@ function onRegionKeyboardCancel(): void {
   emit("selectionCancel", { mode: "region", reason: "escape" })
 }
 
-function onContextMenu(event: MouseEvent): void {
-  const hit = resolveHit(event)
-  if (!hit) return
+function emitStageContextMenu(hit: StageHit, clientX: number, clientY: number): void {
   const rect = hostRef.value?.getBoundingClientRect?.()
   const position = {
     slideIndex: hit.slideIndex,
-    clientX: event.clientX,
-    clientY: event.clientY,
-    containerX: rect ? event.clientX - rect.left : 0,
-    containerY: rect ? event.clientY - rect.top : 0,
+    clientX,
+    clientY,
+    containerX: rect ? clientX - rect.left : 0,
+    containerY: rect ? clientY - rect.top : 0,
   }
   emit("contextMenu", hit.objectKey
     ? { ...position, kind: "object", objectKey: hit.objectKey }
     : { ...position, kind: "slide" })
 }
+
+function onContextMenu(event: MouseEvent): void {
+  if (touchGestures.shouldSuppressContextMenu(event.clientX, event.clientY)) {
+    event.preventDefault()
+    return
+  }
+  const hit = resolveHit(event)
+  if (!hit) return
+  emitStageContextMenu(hit, event.clientX, event.clientY)
+}
+
+const touchGestures = createTouchGestureTracker({
+  isEnabled: () => selectionMode.value === "content" && props.enableGestureZoom !== false,
+  isDoubleTapEnabled: () => controlledZoom() !== undefined,
+  getZoom: controlledZoom,
+  onZoom: (zoom, center) => requestGestureZoom(zoom, center.clientX, center.clientY),
+  onDoubleTap: (pointer) => {
+    const current = controlledZoom()
+    if (current === undefined) return
+    requestGestureZoom(nextDoubleTapZoom(current), pointer.clientX, pointer.clientY)
+  },
+  onLongPress: (pointer) => {
+    const hit = resolveHitAt(pointer.target)
+    if (hit) emitStageContextMenu(hit, pointer.clientX, pointer.clientY)
+  },
+})
+
+function onTouchPointerDown(event: PointerEvent): void { touchGestures.pointerDown(event) }
+function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMove(event) }
+function onTouchPointerUp(event: PointerEvent): void { touchGestures.pointerUp(event) }
+function onTouchPointerCancel(event: PointerEvent): void { touchGestures.pointerCancel(event) }
 
 watch(() => props.zoom, (next) => {
   if (pendingAnchor && typeof next === "number" && clampSurfaceZoom(next) === pendingAnchor.requestedZoom) {
@@ -584,6 +618,10 @@ onMounted(() => {
   host.addEventListener("gesturestart", onGestureStart, { passive: false })
   host.addEventListener("gesturechange", onGestureChange as EventListener, { passive: false })
   host.addEventListener("gestureend", onGestureEnd)
+  host.addEventListener("pointerdown", onTouchPointerDown, { passive: true })
+  host.addEventListener("pointermove", onTouchPointerMove, { passive: true })
+  host.addEventListener("pointerup", onTouchPointerUp)
+  host.addEventListener("pointercancel", onTouchPointerCancel)
   if (typeof MutationObserver !== "undefined") {
     contentObserver = new MutationObserver(scheduleRevisionChange)
     contentObserver.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-slide-index", "data-pptx-object-key", "data-pptx-paragraph-index"] })
@@ -595,11 +633,16 @@ watch(() => props.documentId, scheduleRevisionChange)
 
 onBeforeUnmount(() => {
   gestureToken += 1
+  touchGestures.reset()
   const host = hostRef.value
   host?.removeEventListener("wheel", onWheel)
   host?.removeEventListener("gesturestart", onGestureStart)
   host?.removeEventListener("gesturechange", onGestureChange as EventListener)
   host?.removeEventListener("gestureend", onGestureEnd)
+  host?.removeEventListener("pointerdown", onTouchPointerDown)
+  host?.removeEventListener("pointermove", onTouchPointerMove)
+  host?.removeEventListener("pointerup", onTouchPointerUp)
+  host?.removeEventListener("pointercancel", onTouchPointerCancel)
   contentObserver?.disconnect()
   contentObserver = undefined
 })
@@ -643,6 +686,7 @@ defineExpose({
 .pptx-stage {
   background: var(--pptx-surface-bg, transparent);
   position: relative;
+  touch-action: pan-x pan-y;
 }
 
 .pptx-stage__content {

@@ -287,4 +287,16 @@ function applyBorders(): void {
 @container xlsx-viewer (max-width: 560px) {
   .xlsx-ribbon__readonly span { display: none; }
 }
+
+@media (pointer: coarse) {
+  .xlsx-ribbon button,
+  .xlsx-ribbon select,
+  .xlsx-ribbon input {
+    min-height: 44px;
+  }
+  .xlsx-ribbon__icon-button,
+  .xlsx-ribbon__text-button {
+    min-width: 44px;
+  }
+}
 </style>

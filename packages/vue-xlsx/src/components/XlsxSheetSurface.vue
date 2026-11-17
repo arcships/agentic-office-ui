@@ -50,8 +50,10 @@
         :selection-fill-color="selectionFillColor"
       />
       <XlsxContextMenu
+        ref="contextMenuRef"
         :controller="controller"
         :target-element="gridElement"
+        :suppress-context-menu="touchGestures.shouldSuppressContextMenu"
       />
     </template>
     <div
@@ -73,6 +75,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from "vue"
 import { clampSurfaceZoom, nextSurfaceZoom } from "@arcships/office-runtime/gesture-zoom"
+import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures"
 import type { XlsxViewerController, XlsxCellAddress, XlsxCellStyleContext, XlsxOfficeReference, XlsxReferenceContext, XlsxReferenceSheet } from "@arcships/xlsx-core"
 import {
   createXlsxCellReferenceDraft,
@@ -162,6 +165,7 @@ type WebKitGestureEvent = Event & { clientX?: number; clientY?: number; scale?: 
 
 const surfaceRef = ref<HTMLElement | null>(null)
 const gridRef = ref<GridInstance | null>(null)
+const contextMenuRef = ref<{ openAt(clientX: number, clientY: number, target?: unknown): boolean } | null>(null)
 const gridViewport = ref({ scrollLeft: 0, scrollTop: 0 })
 const effectiveReadOnly = computed(() => props.readOnly || props.controller.isEditingLocked === true || props.controller.readOnly)
 const selectionMode = computed(() => props.selectionMode)
@@ -423,21 +427,51 @@ function onGestureEnd(): void {
   webkitGestureActive = false
 }
 
-function onContextMenu(event: MouseEvent): void {
+function emitContextMenuAt(clientX: number, clientY: number): void {
   const sel = props.controller.selection
   const active = props.controller.activeCell
-  const container = event.currentTarget as HTMLElement
+  const container = surfaceRef.value
+  if (!container) return
   const rect = container.getBoundingClientRect()
   emit("contextMenu", {
-    clientX: event.clientX,
-    clientY: event.clientY,
-    containerX: event.clientX - rect.left,
-    containerY: event.clientY - rect.top,
+    clientX,
+    clientY,
+    containerX: clientX - rect.left,
+    containerY: clientY - rect.top,
     sheetName: props.controller.activeSheet?.name,
     selection: sel ? { start: { row: sel.start.row, col: sel.start.col }, end: { row: sel.end.row, col: sel.end.col } } : undefined,
     activeCell: active ? { row: active.row, col: active.col } : undefined,
   })
 }
+
+function onContextMenu(event: MouseEvent): void {
+  if (touchGestures.shouldSuppressContextMenu(event.clientX, event.clientY)) {
+    event.preventDefault()
+    return
+  }
+  emitContextMenuAt(event.clientX, event.clientY)
+}
+
+const touchGestures = createTouchGestureTracker({
+  isEnabled: () => selectionMode.value === "content",
+  isDoubleTapEnabled: () => effectiveReadOnly.value && controlledZoom() !== undefined,
+  getZoom: controlledZoom,
+  onZoom: (zoom, center) => requestGestureZoom(zoom, center.clientX, center.clientY),
+  onDoubleTap: (pointer) => {
+    const current = controlledZoom()
+    if (current === undefined) return
+    requestGestureZoom(nextDoubleTapZoom(current), pointer.clientX, pointer.clientY)
+  },
+  onLongPress: (pointer) => {
+    if (!contextMenuRef.value?.openAt(pointer.clientX, pointer.clientY, pointer.target)) return
+    emitContextMenuAt(pointer.clientX, pointer.clientY)
+  },
+})
+
+function onTouchPointerDown(event: PointerEvent): void { touchGestures.pointerDown(event) }
+function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMove(event) }
+function onTouchPointerUp(event: PointerEvent): void { touchGestures.pointerUp(event) }
+function onTouchPointerCancel(event: PointerEvent): void { touchGestures.pointerCancel(event) }
 
 function onKeydown(event: KeyboardEvent) {
   if (event.key === "Escape" && selectionMode.value !== "content") {
@@ -524,16 +558,25 @@ onMounted(() => {
   element.addEventListener("gesturestart", onGestureStart, { passive: false })
   element.addEventListener("gesturechange", onGestureChange as EventListener, { passive: false })
   element.addEventListener("gestureend", onGestureEnd)
+  element.addEventListener("pointerdown", onTouchPointerDown, { passive: true })
+  element.addEventListener("pointermove", onTouchPointerMove, { passive: true })
+  element.addEventListener("pointerup", onTouchPointerUp)
+  element.addEventListener("pointercancel", onTouchPointerCancel)
 })
 
 onBeforeUnmount(() => {
   surfaceMounted.value = false
   gestureToken += 1
+  touchGestures.reset()
   const element = surfaceRef.value
   element?.removeEventListener("wheel", onWheel)
   element?.removeEventListener("gesturestart", onGestureStart)
   element?.removeEventListener("gesturechange", onGestureChange as EventListener)
   element?.removeEventListener("gestureend", onGestureEnd)
+  element?.removeEventListener("pointerdown", onTouchPointerDown)
+  element?.removeEventListener("pointermove", onTouchPointerMove)
+  element?.removeEventListener("pointerup", onTouchPointerUp)
+  element?.removeEventListener("pointercancel", onTouchPointerCancel)
 })
 
 defineExpose({
@@ -599,6 +642,7 @@ defineExpose({
   min-width: 0;
   outline: none;
   position: relative;
+  touch-action: pan-x pan-y;
   background: var(--xlsx-surface-bg, #ffffff);
 }
 

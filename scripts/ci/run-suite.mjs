@@ -183,6 +183,7 @@ const suites = {
       "tests/component/xlsx-chart-rendering.test.mjs",
       "tests/component/xlsx-chart-axis.test.mjs",
       "tests/component/office-a11y.test.mjs",
+      "tests/component/touch-interactions.test.mjs",
       "tests/component/image-decode-state.test.mjs",
       "tests/component/viewer-print-theme.test.mjs",
     ]),
