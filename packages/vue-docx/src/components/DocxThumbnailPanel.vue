@@ -57,10 +57,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from "vue"
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from "vue"
 import type {
   DocModel,
+  DocNode,
   DocxEditorController,
+  DocumentNoteDefinition,
   LayoutOptions,
   LayoutSnapshot,
   LayoutSnapshotPage,
@@ -70,11 +72,14 @@ import type {
 } from "@arcships/docx-core"
 import {
   buildLayoutSnapshot,
+  nodeReferencedNoteIds,
   parseSectionLayout,
   resolveDocumentBackgroundColor,
   resolveDocumentLayout,
   resolveDocumentSectionsFromMetadata,
+  resolveSectionIndexForNodeIndex,
   resolveSectionPropertiesXmlForNodeIndex,
+  selectSectionVariantForPage,
 } from "@arcships/docx-core"
 import {
   ensureDocxViewerPageSurfaceRegistry,
@@ -167,6 +172,93 @@ const pageCount = computed(() => {
   return layoutSnapshot.value?.pages.length ?? Math.max(0, props.totalPages ?? 0)
 })
 
+interface PagePresentation {
+  headerNodes: DocNode[]
+  footerNodes: DocNode[]
+  footnotes: DocumentNoteDefinition[]
+  endnotes: DocumentNoteDefinition[]
+}
+
+const pagePresentations = computed<PagePresentation[]>(() => {
+  const model = resolvedModel.value
+  const snapshot = layoutSnapshot.value
+  if (!model || !snapshot) return []
+
+  const metadata = model.metadata
+  const sections = resolveDocumentSectionsFromMetadata(metadata)
+  const evenAndOddHeaders = metadata.compatibility?.evenAndOddHeaders ?? false
+  const footnotesById = new Map((metadata.footnotes ?? []).map((note) => [note.id, note]))
+  const firstPageBySection = new Map<number, number>()
+  let previousSectionIndex = 0
+  let previousNodeIndex = 0
+
+  return snapshot.pages.map((page, pageIndex) => {
+    const sourceNodeIndex = page.blocks.find(
+      (block) => typeof block.source?.nodeIndex === "number"
+    )?.source?.nodeIndex
+    const firstNodeIndex = sourceNodeIndex ?? previousNodeIndex
+    previousNodeIndex = firstNodeIndex
+    const sectionIndex = resolveSectionIndexForNodeIndex(
+      sections,
+      firstNodeIndex,
+      previousSectionIndex
+    )
+    previousSectionIndex = sectionIndex
+    if (!firstPageBySection.has(sectionIndex)) {
+      firstPageBySection.set(sectionIndex, pageIndex)
+    }
+
+    const section = sections[sectionIndex]
+    const sectionPageIndex =
+      pageIndex - (firstPageBySection.get(sectionIndex) ?? pageIndex)
+    const sectionPropertiesXml =
+      section?.sectionPropertiesXml ?? metadata.sectionPropertiesXml
+    const headerSection = section
+      ? selectSectionVariantForPage(
+          section.headerSections,
+          sectionPropertiesXml,
+          sectionPageIndex,
+          { evenAndOddHeaders, documentPageIndex: pageIndex }
+        )
+      : undefined
+    const footerSection = section
+      ? selectSectionVariantForPage(
+          section.footerSections,
+          sectionPropertiesXml,
+          sectionPageIndex,
+          { evenAndOddHeaders, documentPageIndex: pageIndex }
+        )
+      : undefined
+
+    const referencedNoteIds: number[] = []
+    const seenNoteIds = new Set<number>()
+    for (const block of page.blocks) {
+      const nodeIndex = block.source?.nodeIndex
+      if (nodeIndex === undefined || nodeIndex < 0) continue
+      const node = model.nodes[nodeIndex]
+      if (!node) continue
+      for (const id of nodeReferencedNoteIds(node, "footnote")) {
+        if (!seenNoteIds.has(id)) {
+          seenNoteIds.add(id)
+          referencedNoteIds.push(id)
+        }
+      }
+    }
+
+    return {
+      headerNodes: headerSection?.nodes ?? [],
+      footerNodes: footerSection?.nodes ?? [],
+      footnotes: referencedNoteIds
+        .map((id) => footnotesById.get(id))
+        .filter((note): note is DocumentNoteDefinition => Boolean(note)),
+      endnotes:
+        pageIndex === snapshot.pages.length - 1
+          ? [...(metadata.endnotes ?? [])]
+          : [],
+    }
+  })
+})
+
 // ── Thumbnail dimensions ───────────────────────────────────────────
 const THUMBNAIL_WIDTH = 140
 const THUMBNAIL_ITEM_EXTRA_HEIGHT = 36
@@ -253,9 +345,41 @@ const railContentHeight = computed(() => {
   return last.top + last.height + THUMBNAIL_ITEM_EXTRA_HEIGHT
 })
 
-const devicePixelRatio = typeof window !== "undefined"
-  ? Math.min(3, Math.max(1, window.devicePixelRatio || 1))
-  : 1
+function readDevicePixelRatio(): number {
+  return typeof window === "undefined"
+    ? 1
+    : Math.min(3, Math.max(1, window.devicePixelRatio || 1))
+}
+
+const devicePixelRatio = ref(readDevicePixelRatio())
+let dprMediaQuery: MediaQueryList | undefined
+
+function bindDevicePixelRatioListener(): void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return
+  dprMediaQuery?.removeEventListener?.("change", syncDevicePixelRatio)
+  dprMediaQuery = window.matchMedia(
+    `(resolution: ${window.devicePixelRatio || 1}dppx)`
+  )
+  dprMediaQuery.addEventListener?.("change", syncDevicePixelRatio)
+}
+
+function syncDevicePixelRatio(): void {
+  devicePixelRatio.value = readDevicePixelRatio()
+  bindDevicePixelRatioListener()
+}
+
+onMounted(() => {
+  if (typeof window === "undefined") return
+  window.addEventListener("resize", syncDevicePixelRatio)
+  bindDevicePixelRatioListener()
+})
+
+onUnmounted(() => {
+  if (typeof window === "undefined") return
+  window.removeEventListener("resize", syncDevicePixelRatio)
+  dprMediaQuery?.removeEventListener?.("change", syncDevicePixelRatio)
+  dprMediaQuery = undefined
+})
 
 function pageMetric(pageIndex: number): ThumbnailPageMetric {
   return pageMetrics.value[pageIndex] ?? {
@@ -276,11 +400,11 @@ function thumbnailCanvasStyle(pageIndex: number): Record<string, string> {
 }
 
 function thumbnailCanvasPixelWidth(): number {
-  return Math.max(1, Math.round(THUMBNAIL_WIDTH * devicePixelRatio))
+  return Math.max(1, Math.round(THUMBNAIL_WIDTH * devicePixelRatio.value))
 }
 
 function thumbnailCanvasPixelHeight(pageIndex: number): number {
-  return Math.max(1, Math.round(pageMetric(pageIndex).height * devicePixelRatio))
+  return Math.max(1, Math.round(pageMetric(pageIndex).height * devicePixelRatio.value))
 }
 
 // ── Page range for rendering ───────────────────────────────────────
@@ -333,7 +457,13 @@ function scheduleThumbnailRender(): void {
 }
 
 watch(
-  [renderedPageRange, layoutSnapshot, pageMetrics, () => props.controller?.documentLoadNonce],
+  [
+    renderedPageRange,
+    layoutSnapshot,
+    pageMetrics,
+    () => props.controller?.documentLoadNonce,
+    devicePixelRatio,
+  ],
   scheduleThumbnailRender,
   { immediate: true, flush: "post" }
 )
@@ -371,6 +501,37 @@ function syncRailToCurrentPage(): void {
 }
 
 type ThumbnailTextRun = Extract<LayoutSnapshotRun, { kind: "text" }>
+type ThumbnailImageRun = Extract<LayoutSnapshotRun, { kind: "image" }>
+type ThumbnailImageState =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "loaded"; image: HTMLImageElement }
+
+const imageStates = new Map<string, ThumbnailImageState>()
+
+function requestThumbnailImage(src: string): ThumbnailImageState {
+  const existing = imageStates.get(src)
+  if (existing) return existing
+  if (typeof Image === "undefined") {
+    const unavailable: ThumbnailImageState = { status: "error" }
+    imageStates.set(src, unavailable)
+    return unavailable
+  }
+
+  const loading: ThumbnailImageState = { status: "loading" }
+  imageStates.set(src, loading)
+  const image = new Image()
+  image.onload = () => {
+    imageStates.set(src, { status: "loaded", image })
+    scheduleThumbnailRender()
+  }
+  image.onerror = () => {
+    imageStates.set(src, { status: "error" })
+    scheduleThumbnailRender()
+  }
+  image.src = src
+  return loading
+}
 
 // Scale of the page currently being rasterized. Pages can mix portrait and
 // landscape sections, so each thumbnail carries its own scale.
@@ -413,7 +574,7 @@ function drawTextRuns(
   runs: readonly ThumbnailTextRun[],
   frame: { x: number; y: number; width: number; height: number },
   headingLevel?: LayoutSnapshotParagraphFragment["headingLevel"],
-  maxLines = 1
+  maxLines?: number
 ): void {
   if (runs.length === 0 || frame.width <= 0 || frame.height <= 0) return
   const largestFont = runs.reduce(
@@ -421,6 +582,12 @@ function drawTextRuns(
     12
   )
   const lineHeight = Math.max(16, largestFont * 1.2)
+  const resolvedMaxLines = Math.max(
+    1,
+    Number.isFinite(maxLines)
+      ? Math.floor(maxLines as number)
+      : Math.floor(frame.height / lineHeight)
+  )
   let lineIndex = 0
   let cursorX = frame.x
   const right = frame.x + frame.width
@@ -436,7 +603,7 @@ function drawTextRuns(
       if (rawToken === "\r\n" || rawToken === "\n") {
         lineIndex++
         cursorX = frame.x
-        if (lineIndex >= maxLines) break outer
+        if (lineIndex >= resolvedMaxLines) break outer
         continue
       }
       const token = rawToken === "\t" ? "    " : rawToken
@@ -445,7 +612,7 @@ function drawTextRuns(
       if (cursorX > frame.x && cursorX + tokenWidth > right && token.trim()) {
         lineIndex++
         cursorX = frame.x
-        if (lineIndex >= maxLines) break outer
+        if (lineIndex >= resolvedMaxLines) break outer
       }
       if (cursorX === frame.x && !token.trim()) continue
       const baseline = frame.y + lineIndex * lineHeight + Math.min(lineHeight * 0.8, fontSize)
@@ -481,28 +648,55 @@ function contentFrame(
 
 function drawImagePlaceholder(
   ctx: CanvasRenderingContext2D,
-  block: LayoutSnapshotParagraphFragment,
-  page: LayoutSnapshotPage
+  frame: { x: number; y: number; width: number; height: number }
 ): void {
-  const image = block.runs.find((run) => run.kind === "image")
-  if (!image) return
-  const frame = contentFrame(page, block.framePx)
-  const width = Math.min(frame.width, Math.max(24, image.widthPx ?? 96))
-  const height = Math.max(
-    18,
-    Math.min(image.heightPx ?? block.framePx.height, block.framePx.height || 96)
-  )
   ctx.fillStyle = "#e5e7eb"
-  ctx.fillRect(frame.x, frame.y, width, height)
+  ctx.fillRect(frame.x, frame.y, frame.width, frame.height)
   ctx.strokeStyle = "#9ca3af"
   ctx.lineWidth = Math.max(1, 0.75 / renderScale)
-  ctx.strokeRect(frame.x, frame.y, width, height)
+  ctx.strokeRect(frame.x, frame.y, frame.width, frame.height)
   ctx.beginPath()
   ctx.moveTo(frame.x, frame.y)
-  ctx.lineTo(frame.x + width, frame.y + height)
-  ctx.moveTo(frame.x + width, frame.y)
-  ctx.lineTo(frame.x, frame.y + height)
+  ctx.lineTo(frame.x + frame.width, frame.y + frame.height)
+  ctx.moveTo(frame.x + frame.width, frame.y)
+  ctx.lineTo(frame.x, frame.y + frame.height)
   ctx.stroke()
+}
+
+function drawImageRun(
+  ctx: CanvasRenderingContext2D,
+  image: ThumbnailImageRun,
+  frame: { x: number; y: number; width: number; height: number }
+): void {
+  const maxWidth = Math.max(1, Math.min(frame.width, image.widthPx ?? frame.width))
+  const maxHeight = Math.max(1, Math.min(frame.height, image.heightPx ?? frame.height))
+  const src = image.src?.trim()
+  if (src) {
+    const state = requestThumbnailImage(src)
+    if (state.status === "loaded") {
+      const naturalWidth = state.image.naturalWidth || state.image.width || maxWidth
+      const naturalHeight = state.image.naturalHeight || state.image.height || maxHeight
+      if (naturalWidth > 0 && naturalHeight > 0) {
+        const scale = Math.min(maxWidth / naturalWidth, maxHeight / naturalHeight)
+        const width = Math.max(1, naturalWidth * scale)
+        const height = Math.max(1, naturalHeight * scale)
+        const x = frame.x + Math.max(0, (frame.width - width) / 2)
+        const y = frame.y + Math.max(0, (frame.height - height) / 2)
+        try {
+          ctx.drawImage(state.image, x, y, width, height)
+          return
+        } catch {
+          // Fall through to the placeholder for sources the canvas rejects.
+        }
+      }
+    }
+  }
+  drawImagePlaceholder(ctx, {
+    x: frame.x,
+    y: frame.y,
+    width: maxWidth,
+    height: maxHeight,
+  })
 }
 
 function drawParagraph(
@@ -512,8 +706,10 @@ function drawParagraph(
 ): void {
   const frame = contentFrame(page, block.framePx)
   const textRuns = block.runs.filter((run): run is ThumbnailTextRun => run.kind === "text")
-  drawTextRuns(ctx, textRuns, frame, block.headingLevel, 1)
-  drawImagePlaceholder(ctx, block, page)
+  drawTextRuns(ctx, textRuns, frame, block.headingLevel)
+  for (const run of block.runs) {
+    if (run.kind === "image") drawImageRun(ctx, run, frame)
+  }
 }
 
 function drawTable(
@@ -554,20 +750,130 @@ function drawTable(
       const textRuns = cell.paragraphs.flatMap((paragraph) =>
         paragraph.runs.filter((run): run is ThumbnailTextRun => run.kind === "text")
       )
-      drawTextRuns(
-        ctx,
-        textRuns,
-        {
-          x: cellX + padding,
-          y: cellY + padding,
-          width: Math.max(1, cellWidth - padding * 2),
-          height: Math.max(1, rowHeight - padding * 2),
-        },
-        undefined,
-        1
-      )
+      const cellFrame = {
+        x: cellX + padding,
+        y: cellY + padding,
+        width: Math.max(1, cellWidth - padding * 2),
+        height: Math.max(1, rowHeight - padding * 2),
+      }
+      drawTextRuns(ctx, textRuns, cellFrame)
+      for (const paragraph of cell.paragraphs) {
+        for (const run of paragraph.runs) {
+          if (run.kind === "image") drawImageRun(ctx, run, cellFrame)
+        }
+      }
       columnCursor += colSpan
     })
+  })
+}
+
+function paragraphPlainText(
+  paragraph: Extract<DocNode, { type: "paragraph" }>
+): string {
+  return paragraph.children
+    .map((child) => (child.type === "text" ? child.text : ""))
+    .join("")
+}
+
+function collectNodeTextLines(nodes: readonly DocNode[]): string[] {
+  const lines: string[] = []
+  for (const node of nodes) {
+    if (node.type === "paragraph") {
+      const text = paragraphPlainText(node).trim()
+      if (text) lines.push(text)
+      continue
+    }
+    for (const row of node.rows) {
+      const cells = row.cells
+        .map((cell) => collectNodeTextLines(cell.nodes).join(" "))
+        .filter((text) => text.trim())
+      if (cells.length > 0) lines.push(cells.join(" | "))
+    }
+  }
+  return lines
+}
+
+function textRunsFromLines(
+  lines: readonly string[],
+  fontSizePt: number
+): ThumbnailTextRun[] {
+  return lines.map((text, index) => ({
+    kind: "text" as const,
+    id: `line-${index}`,
+    text: index === 0 ? text : `\n${text}`,
+    style: { fontSizePt },
+  }))
+}
+
+function drawPageChrome(
+  ctx: CanvasRenderingContext2D,
+  page: LayoutSnapshotPage,
+  presentation: PagePresentation | undefined
+): void {
+  if (!presentation) return
+  const margins = pageMargins(page)
+  const width = Math.max(1, page.pageSizePx.width - margins.left - margins.right)
+  const pageHeight = page.pageSizePx.height
+  const chromeHeight = Math.max(8, margins.top * 0.7)
+
+  const headerRuns = textRunsFromLines(
+    collectNodeTextLines(presentation.headerNodes),
+    9
+  )
+  if (headerRuns.length > 0) {
+    drawTextRuns(ctx, headerRuns, {
+      x: margins.left,
+      y: Math.max(1, margins.top * 0.12),
+      width,
+      height: chromeHeight,
+    })
+  }
+
+  const footerRuns = textRunsFromLines(
+    collectNodeTextLines(presentation.footerNodes),
+    9
+  )
+  const footerHeight = Math.max(8, margins.bottom * 0.7)
+  const footerY = Math.max(
+    margins.top,
+    pageHeight - margins.bottom * 0.85 - footerHeight * 0.2
+  )
+  if (footerRuns.length > 0) {
+    drawTextRuns(ctx, footerRuns, {
+      x: margins.left,
+      y: footerY,
+      width,
+      height: footerHeight,
+    })
+  }
+
+  const noteText = (
+    note: DocumentNoteDefinition,
+    index: number
+  ): string => {
+    const text =
+      note.text?.trim() || collectNodeTextLines(note.nodes ?? []).join(" ").trim()
+    return text ? `[${index + 1}] ${text}` : ""
+  }
+  const noteLines = [
+    ...presentation.footnotes.map(noteText),
+    ...presentation.endnotes.map(noteText),
+  ].filter((line) => line.trim().length > 0)
+  if (noteLines.length === 0) return
+
+  const bodyBottom = page.blocks.reduce((bottom, block) => {
+    const frame = contentFrame(page, block.framePx)
+    return Math.max(bottom, frame.y + frame.height)
+  }, margins.top)
+  const noteTop = Math.min(bodyBottom + 8, footerY - 8)
+  const noteBottom = footerRuns.length > 0 ? footerY - 2 : pageHeight - margins.bottom * 0.15
+  const noteHeight = Math.max(1, noteBottom - noteTop)
+  if (noteHeight < 6) return
+  drawTextRuns(ctx, textRunsFromLines(noteLines, 7), {
+    x: margins.left,
+    y: noteTop,
+    width,
+    height: noteHeight,
   })
 }
 
@@ -575,7 +881,7 @@ function renderVisibleThumbnails(): void {
   const snapshot = layoutSnapshot.value
   if (!snapshot) return
 
-  const dpr = devicePixelRatio
+  const dpr = devicePixelRatio.value
 
   for (const pageIndex of renderedPageRange.value) {
     const canvas = canvasRefs.get(pageIndex)
@@ -614,6 +920,7 @@ function renderVisibleThumbnails(): void {
         if (block.kind === "paragraph") drawParagraph(ctx, block, page)
         else drawTable(ctx, block, page)
       }
+      drawPageChrome(ctx, page, pagePresentations.value[pageIndex])
       ctx.restore()
 
       canvas.dataset.thumbnailState = "ready"
