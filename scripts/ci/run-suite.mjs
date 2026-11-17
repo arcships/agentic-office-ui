@@ -178,6 +178,7 @@ const suites = {
       "tests/component/docx-notes.test.mjs",
       "tests/component/docx-history-budget.test.mjs",
       "tests/component/docx-edit-clone-sharing.test.mjs",
+      "tests/component/docx-text-commit-burst.test.mjs",
       "tests/component/xlsx-history-budget.test.mjs",
       "tests/component/xlsx-number-formats.test.mjs",
       "tests/component/xlsx-sheet-sync.test.mjs",

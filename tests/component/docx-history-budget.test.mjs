@@ -55,6 +55,9 @@ async function commitSeries(controller, prefix, count, textLength) {
       `${prefix}-${index}:`.padEnd(textLength, String.fromCharCode(65 + index)),
     );
     await vue.nextTick();
+    // Byte-budget assertions count one history entry per edit, so each commit
+    // is closed explicitly instead of coalescing into one typing burst.
+    controller.endTextCommitBurst();
   }
 }
 
@@ -187,7 +190,9 @@ test("typing in a 200-page document does not clone the whole document per keystr
 
     editor.undo();
     await vue.nextTick();
-    assert.equal(paragraphText(editor), "typed 98");
+    // The 100 keystrokes are one burst, so one undo restores the pre-burst text.
+    assert.equal(paragraphText(editor), "Paragraph 0 body text");
+    assert.equal(editor.canUndo, false);
     assert.equal(editor.model.nodes[1], untouchedNode);
   } finally {
     mounted.app.unmount();

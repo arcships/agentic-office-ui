@@ -28,7 +28,7 @@
 | `vue-docx/composables/editor-format.ts` | `applySelectedStyleChange`、`setLink`、`setHeading`、`setParagraphStyle`、`setLineSpacing`、`setAlignment`、`applyBorderPreset`（表格、区间、单段三条分支）只克隆被格式化的顶层节点 |
 | `vue-docx/composables/editor-image.ts` | `applyImageChange`（缩放/文本框/浮层/环绕）、`insertImageFile`、`moveImage`、`moveParagraphDropCap`、`setParagraphDropCapFontSizePt`、`setParagraphDropCapText` 只克隆图片所在节点（及移动目标节点）；`moveSectionFloatingImage` 走已迁移的 section 命令 |
 
-公开入口新增 `cloneDocModelShallow`、`cloneDocNode`、`cloneDocModelNodes`、`cloneDocModelSectionLists`（`@arcships/docx-core` 根入口与 `./core`），供宿主复用同一套写时复制约定；`scripts/ci/public-api-contract.json` 的 docx-core 声明指纹同步更新为 `1203 / 8f8d72b0…`（并入 #30/#31/#32/#34/#35/#38 后的合并值）。
+公开入口新增 `cloneDocModelShallow`、`cloneDocNode`、`cloneDocModelNodes`、`cloneDocModelSectionLists`（`@arcships/docx-core` 根入口与 `./core`），供宿主复用同一套写时复制约定；`DocxEditorTransactionPatch.textCommitKey` 与 `DocxEditorController.endTextCommitBurst()` 是文本提交合并的公开钩子。`scripts/ci/public-api-contract.json` 的 docx-core 声明指纹同步更新为 `1216 / 86c0e6e9…`（并入 #30/#31/#32/#34/#35/#38 后的合并值）。
 
 ### 不变量
 
@@ -64,14 +64,36 @@ node scripts/bench/docx-edit-history.mjs --json # 明细
 - 历史 push 的 2.97 次序列化 = 新条目估算 1 次 + 文本 run 样式比较 2 次（`distributeTextAcrossRuns` 的小对象比较，与文档大小无关）。修改前该数字随保留条目线性增长（60 条时平均 32.5 次/push）。
 - 两种实现的 `history.pastBytes` 完全一致（4 503 592 B），说明预算口径没有被放宽或收紧。
 - 每次击键仍会对**当前模型**做一次 JSON 估算；这是每条目一次的 O(document) 成本，不再是 O(保留条目 × 文档)。
+- 击键次数不再等于历史条目数：同一段落内连续输入合并为一条历史（见第 4 节）。
 
-## 4. 验证
+## 4. 文本提交合并契约（issue #37 optional）
+
+连续击键在同一个段落/单元格/页眉段落内只产生**一条**撤销条目；任何边界都会结束当前 burst，下一次输入另开一条。
+
+| 行为 | 结果 |
+|---|---|
+| 同一目标的连续 `commitParagraphText` / `commitTableCellText` / `commitTableCellParagraphTextRecursive` / 两个 runtime-key 单元格提交 / `commitSectionParagraphText` | 合并到同一撤销条目：条目保存 burst 开始前的模型与选区 |
+| 切换到另一个段落、单元格或页眉段落 | 新条目 |
+| 选区变为展开范围，或光标跳到其他段落/单元格 | 新条目（同一段落内跟随已提交文本的折叠光标不拆分条目） |
+| 任意命令事务：格式、表格结构、图片、列表、剪贴板、撤销/重做、导入/新建 | 新条目（撤销/重做本身也会关闭 burst） |
+| `endTextCommitBurst()`（段落宿主与单元格宿主在 blur 时调用，宿主也可在自己的命令边界调用） | 新条目 |
+
+实现入口：
+
+- `DocxEditorTransactionPatch.textCommitKey`（core 公开类型）：事务在 patch 上携带文本提交目标键；相同键且无其他事务介入时不再压入历史。
+- `ApplyModelChangeOptions.textCommitKey` 与 `DocxEditorController.endTextCommitBurst()`（`packages/vue-docx`）：命令侧写入键、宿主侧显式关闭 burst。
+- 键格式：`paragraph:<nodeIndex>`、`table-cell:<table>:<row>:<cell>:<paragraph>`、`runtime-table:<runtimeKey>:<row>:<cell>:<paragraph>`、`section:<region>:<partName>:<nodeIndex>`。
+
+行为影响：`docx-history-budget` 的按字节计数与 `docx-edit-clone-sharing` 的逐命令引用断言需要“一次提交一条历史”，因此这两处测试在每次提交后显式调用 `endTextCommitBurst()`（属于有意变更的粒度约定）；200 页输入测试的“一次撤销回到 burst 前”也按新约定断言。
+
+## 5. 验证
 
 | 测试 | 覆盖 |
 |---|---|
 | `tests/unit/docx-edit-structural-sharing.test.mjs` | 图片字节共享；写时复制外壳共享未修改节点与 metadata；`cloneDocModelNodes` 只复制列出的节点；`cloneDocModelSectionLists` 复制列表外壳并共享未改节点；单段编辑/表格编辑只重建一个节点；200 页文档 100 次击键只重建 100 个节点且不复制图片字节；历史预算每个快照只序列化一次，且 `pastBytes` 与逐条全量序列化一致 |
 | `tests/component/docx-edit-clone-sharing.test.mjs` | 通过 `useDocxEditor` 逐条验证交互命令（输入、格式、表格、追加段、图片缩放、插入表行、页眉文字）只改有限顶层节点、图片缓冲区保持同一引用；200 页文档 100 次击键重建 100 个节点、0 次图片复制 |
-| `tests/component/docx-history-budget.test.mjs` | 通过 `useDocxEditor` 在 200 页文档（2×2 MB 图片）里输入 100 个字符：未修改段落与图片 `data` 的引用保持稳定、撤销仍可回到上一状态；原有字节预算与溢出条目语义不变 |
+| `tests/component/docx-history-budget.test.mjs` | 通过 `useDocxEditor` 在 200 页文档（2×2 MB 图片）里输入 100 个字符：未修改段落与图片 `data` 的引用保持稳定；一次撤销回到 burst 前的文本；原有字节预算与溢出条目语义（每次提交显式结束 burst）不变 |
+| `tests/component/docx-text-commit-burst.test.mjs` | 合并契约：20 次击键=1 条历史；不同段落/命令/展开选区/跨段落光标/`endTextCommitBurst()`/撤销重做各开新条目；同段落内跟随光标不拆条；表格按单元格、页眉与正文各自独立 |
 | `tests/unit/core-purity.test.mjs`（既有） | 深度冻结模型上的 `updateParagraphText` / `updateTableCellText` / `applyRunStyle` 仍返回新对象且不修改输入 |
 | `tests/unit/docx-history-cache.test.mjs`（既有） | 历史按条数/字节淘汰、保留最新超限条目、实例隔离 |
 
@@ -82,12 +104,12 @@ pnpm --filter=@arcships/docx-core build
 pnpm --filter=@arcships/vue-docx build
 node --test --test-concurrency=1 tests/unit/docx-edit-structural-sharing.test.mjs
 node --test --test-concurrency=1 tests/unit/docx-history-cache.test.mjs tests/unit/docx-core.test.mjs
-node --test --test-concurrency=1 tests/component/docx-history-budget.test.mjs tests/component/docx-edit-clone-sharing.test.mjs
+node --test --test-concurrency=1 tests/component/docx-history-budget.test.mjs tests/component/docx-edit-clone-sharing.test.mjs tests/component/docx-text-commit-burst.test.mjs
 ```
 
-两个新测试已分别登记到 `pnpm test:unit` 与 `pnpm test:component`（`scripts/ci/run-suite.mjs`）。
+三个测试文件已登记到 `pnpm test:unit` 与 `pnpm test:component`（`scripts/ci/run-suite.mjs`）。
 
-## 5. 仍使用完整克隆的位置（非交互编辑路径）
+## 6. 仍使用完整克隆的位置（非交互编辑路径）
 
 交互编辑路径已无 `cloneDocModel()`：`packages/vue-docx` 内只剩编辑器构建（`useDocxEditor.ts` 的 starter/clone）与 `newDocument()` 重置（`editor-import-export.ts`）。以下保留完整克隆且不使用 `cloneDocModelShallow`：
 

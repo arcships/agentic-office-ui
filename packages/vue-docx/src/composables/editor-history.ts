@@ -11,6 +11,9 @@ import { trimHistoryEntriesToBudget } from "./history-budget"
 
 export function createEditorHistory(ctx: EditorCore) {
   function undo(): void {
+    // A keystroke after undo must open a new undo entry instead of folding into
+    // the burst that produced the undone text.
+    ctx.endTextCommitBurst()
     const h = ctx.history.value
     if (h.past.length === 0) return
     ctx.activeFormFieldEditKey.value = undefined
@@ -59,6 +62,7 @@ export function createEditorHistory(ctx: EditorCore) {
   }
 
   function redo(): void {
+    ctx.endTextCommitBurst()
     const h = ctx.history.value
     if (h.future.length === 0) return
     ctx.activeFormFieldEditKey.value = undefined

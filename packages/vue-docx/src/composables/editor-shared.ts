@@ -40,6 +40,16 @@ export interface ApplyModelChangeOptions {
   clearSelectedFormField?: boolean
   /** Set to false to fold a change into the previous undo entry. */
   pushHistory?: boolean
+  /**
+   * Coalesces consecutive text commits into one undo entry.
+   *
+   * Commits that carry the same key with no intervening transaction share the
+   * undo entry opened by the first commit of the burst; any other transaction
+   * (selection change, formatting command, structural edit, undo/redo, a
+   * different key) or `endTextCommitBurst()` closes the burst, so the next text
+   * commit starts a new entry.
+   */
+  textCommitKey?: string
 }
 
 export interface EditorCore {
@@ -88,6 +98,8 @@ export interface EditorCore {
   activeImportAbortController: { value: AbortController | undefined }
   pendingExportModelTransformer: { value: ((model: DocModel) => DocModel) | undefined }
   flushTextDrafts: () => void
+  /** Ends the current text-commit burst so the next keystroke opens a new undo entry. */
+  endTextCommitBurst: () => void
   activeFormFieldEditKey: { value: string | undefined }
   starterTemplate: DocModel
 

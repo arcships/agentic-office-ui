@@ -3,7 +3,12 @@
 // Extracted from useDocxEditor.ts. Provides the single-entry-point transaction
 // dispatcher and a convenience wrapper for model-only changes.
 
-import type { DocModel, DocxEditorTransactionContext, DocxEditorTransactionPatch } from "@arcships/docx-core"
+import type {
+  DocModel,
+  DocxEditorTransactionContext,
+  DocxEditorTransactionPatch,
+  DocxTextRange,
+} from "@arcships/docx-core"
 import {
   cloneDocModel,
   cloneEditorSelection,
@@ -28,6 +33,60 @@ function revisionLossStatus(lostParagraphs: number): string {
 }
 
 export function createEditorTransaction(ctx: EditorCore) {
+  // Text commits that share a key and have no intervening transaction share one
+  // undo entry: typing a word is one undo step, not one step per keystroke.
+  let openTextCommitKey: string | undefined
+
+  function endTextCommitBurst(): void {
+    openTextCommitKey = undefined
+  }
+
+  /**
+   * Key of the paragraph/cell that owns a caret range, using the same format as
+   * the text commands. Returns `undefined` for section (header/footer) ranges,
+   * which have no body location to compare.
+   */
+  function textCommitKeyForRange(range?: DocxTextRange): string | undefined {
+    if (!range) return undefined
+    const start = range.start.location
+    const end = range.end.location
+    if (start.kind !== end.kind) return undefined
+    if (start.kind === "paragraph" && end.kind === "paragraph") {
+      if (start.nodeIndex !== end.nodeIndex) return undefined
+      return `paragraph:${start.nodeIndex}`
+    }
+    if (start.kind === "table-cell" && end.kind === "table-cell") {
+      if (
+        start.tableIndex !== end.tableIndex ||
+        start.rowIndex !== end.rowIndex ||
+        start.cellIndex !== end.cellIndex
+      ) {
+        return undefined
+      }
+      return `table-cell:${start.tableIndex}:${start.rowIndex}:${start.cellIndex}:${
+        start.paragraphIndex ?? 0
+      }`
+    }
+    return undefined
+  }
+
+  /**
+   * True when a caret/selection update stays inside the open text-commit burst's
+   * own paragraph or cell and is collapsed. Typing moves the caret inside that
+   * target, so those updates must not split the undo entry; jumping elsewhere or
+   * selecting a range does.
+   */
+  function keepsTextCommitBurst(range?: DocxTextRange): boolean {
+    if (openTextCommitKey === undefined || !range) return false
+    if (
+      range.start.location.kind !== range.end.location.kind ||
+      range.start.offset !== range.end.offset
+    ) {
+      return false
+    }
+    return textCommitKeyForRange(range) === openTextCommitKey
+  }
+
   // ── dispatchEditorTransaction ────────────────────────────────────
   function dispatchEditorTransaction(
     resolver: (txCtx: DocxEditorTransactionContext) => DocxEditorTransactionPatch | undefined
@@ -75,24 +134,47 @@ export function createEditorTransaction(ctx: EditorCore) {
 
     // push history snapshot
     if (modelChanged && patch.pushHistory !== false) {
-      const nextPast = trimHistoryEntriesToBudget(
-        [
-          ...ctx.history.value.past,
-          {
-            model: currentModel,
-            selection: cloneEditorSelection(currentSelection),
-            activeTextRange: cloneTextRange(currentRange),
-          },
-        ],
-        {
-          ...ctx.historyBudget,
-          estimateBytes: ctx.estimateHistorySnapshotBytes,
+      const continuesTextBurst =
+        patch.textCommitKey !== undefined &&
+        patch.textCommitKey === openTextCommitKey &&
+        ctx.history.value.past.length > 0
+
+      if (continuesTextBurst) {
+        // The entry opened by the burst already holds the pre-burst model and
+        // selection, so the commit only drops the redo tail.
+        ctx.history.value = {
+          past: ctx.history.value.past,
+          future: [],
         }
-      )
-      ctx.history.value = {
-        past: nextPast.entries,
-        future: [],
+      } else {
+        const nextPast = trimHistoryEntriesToBudget(
+          [
+            ...ctx.history.value.past,
+            {
+              model: currentModel,
+              selection: cloneEditorSelection(currentSelection),
+              activeTextRange: cloneTextRange(currentRange),
+            },
+          ],
+          {
+            ...ctx.historyBudget,
+            estimateBytes: ctx.estimateHistorySnapshotBytes,
+          }
+        )
+        ctx.history.value = {
+          past: nextPast.entries,
+          future: [],
+        }
       }
+    }
+
+    // Any transaction without a text-commit key (selection change, formatting,
+    // structural edit, undo/redo) closes the burst. A keyed commit that changed
+    // nothing leaves the current burst state untouched.
+    if (patch.textCommitKey === undefined) {
+      openTextCommitKey = undefined
+    } else if (modelChanged) {
+      openTextCommitKey = patch.textCommitKey
     }
 
     if (modelChanged) {
@@ -170,6 +252,7 @@ export function createEditorTransaction(ctx: EditorCore) {
         status: successStatus,
         clearSelectedFormField: options?.clearSelectedFormField ?? true,
         pushHistory: options?.pushHistory,
+        textCommitKey: options?.textCommitKey,
       }
       if (options && hasOwn(options, "selection")) {
         patch.selection = options.selection
@@ -181,5 +264,5 @@ export function createEditorTransaction(ctx: EditorCore) {
     })
   }
 
-  return { dispatchEditorTransaction, applyModelChange }
+  return { dispatchEditorTransaction, applyModelChange, endTextCommitBurst, keepsTextCommitBurst }
 }

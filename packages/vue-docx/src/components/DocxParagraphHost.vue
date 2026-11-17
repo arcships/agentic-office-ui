@@ -487,6 +487,8 @@ function onBlur(): void {
   if (!props.editable) return
   syncDraftFromDom()
   commitDraft(true)
+  // Blur closes the typing burst: the next edit is a new undo step.
+  props.controller?.endTextCommitBurst?.()
   emit("blur", props.paragraphIndex)
 }
 

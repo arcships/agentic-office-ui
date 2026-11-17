@@ -886,6 +886,8 @@ function onCellBlur(
   const text = element ? readCellParagraphDomText(element) : draft?.text
   if (text === undefined) return
   commitCellParagraph(rowIndex, cellIndex, paragraphIndex, text)
+  // Blur closes the typing burst: the next edit in this cell is a new undo step.
+  props.controller.endTextCommitBurst?.()
 }
 
 function onColumnResizeStart(boundaryIndex: number, event: MouseEvent): void {
