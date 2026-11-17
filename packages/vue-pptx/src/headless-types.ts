@@ -33,6 +33,7 @@ export interface UsePptxDocumentOptions {
   source?: ValueOrRefOrGetter<PptxPreviewSource | null | undefined>
   initialSlide?: ValueOrRefOrGetter<number | undefined>
   session?: ValueOrRefOrGetter<PptxDocumentSessionOptions | undefined>
+  openTimeoutMs?: ValueOrRefOrGetter<number | undefined>
 }
 
 export type PptxDocumentState =
@@ -40,8 +41,18 @@ export type PptxDocumentState =
   | "waiting-for-stage"
   | "loading"
   | "ready"
+  | "cancelled"
   | "error"
   | "disposed"
+
+export interface PptxOpenOptions {
+  initialSlide?: number
+}
+
+export interface PptxSlideFailure {
+  index: number
+  error: PptxPreviewError
+}
 
 export type PptxSearchStatus = "idle" | "searching" | "ready" | "error"
 
@@ -64,8 +75,9 @@ export interface UsePptxDocumentReturn {
   readonly activeIndex: Readonly<Ref<number>>
   readonly zoomPercent: Readonly<Ref<number>>
   readonly searchState: Readonly<ShallowRef<PptxSearchState>>
+  readonly slideError: Readonly<ShallowRef<PptxSlideFailure | null>>
 
-  open(source: PptxPreviewSource): Promise<PptxPreviewDocument>
+  open(source: PptxPreviewSource, options?: PptxOpenOptions): Promise<PptxPreviewDocument>
   close(): void
   goTo(index: number): Promise<void>
   nextSlide(): Promise<void>
@@ -76,6 +88,7 @@ export interface UsePptxDocumentReturn {
   searchNext(): Promise<void>
   searchPrevious(): Promise<void>
   clearSearch(): void
+  clearSlideError(): void
   getSearchState(): PptxSearchState
   getSession(): PptxDocumentSession | null
   dispose(): void
@@ -84,7 +97,7 @@ export interface UsePptxDocumentReturn {
 export interface UsePptxPlaybackOptions {
   enabled?: ValueOrRefOrGetter<boolean>
   autoplay?: boolean
-  skipHiddenSlides?: boolean
+  skipHiddenSlides?: ValueOrRefOrGetter<boolean>
   approximation?: PptxApproximationPolicy
   onEvent?: (event: PptxPlaybackEvent) => void
 }

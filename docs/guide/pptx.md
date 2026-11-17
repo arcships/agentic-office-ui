@@ -33,9 +33,21 @@ import "@arcships/vue-pptx/style.css"
 | `showSidebar` | `true` | 缩略图侧栏 |
 | `showSearch` | `true` | 搜索框 |
 | `showPlaybackControls` | `true` | 播放控制条 |
+| `showWarnings` | `true` | 显示文档 `warnings`（备注不支持、宏已忽略等） |
+| `openTimeoutMs` | `30000` | 加载超时毫秒数，超时后进入错误状态；`0` 关闭超时 |
 | `externalMedia` | `disabled` | 是否允许外部媒体 |
 
 模板引用公开 `getController()`、`next()`、`previous()`、`play()`、`pause()`、`resume()`、`reset()`、`goToSlide()`、`enterFullscreen()` 和 `exitFullscreen()`。
+
+## 界面状态
+
+`data-state` 暴露当前视图状态：`empty`、`waiting`（舞台尚未挂载）、`loading`、`ready`、`cancelled` 和 `error`。
+
+- 加载失败、超时或取消才会进入 `error`/`cancelled`，并显示重试按钮；
+- 单页渲染失败不会锁死查看器：上一页保持可见，顶部提示第几页失败，并可选择“重试”或“跳过”到相邻页；
+- 切换 `browse`/`present` 会重新打开文档，但保留当前页；
+- 全屏时组件自动占满屏幕，忽略 `height`；演示模式按幻灯片比例等比缩放并留黑边，不会裁切页面；
+- 文档 `warnings` 显示在工具栏下方的提示条中，可用 `warnings` 插槽替换；单页失败提示可用 `slide-error` 插槽替换。
 
 ## 自定义播放器界面
 
@@ -76,4 +88,4 @@ type PptxStageContextMenu = Position & (
 
 无法精确执行的 PowerPoint 内容会报告为近似、静态或未解析。本库不会用静态显示冒充动画完全兼容。程序可以监听 `capability`、`playback-warning` 和 `playback-error`。
 
-宏格式加载后会通过文档 `warnings` 报告宏已忽略。
+宏格式加载后会通过文档 `warnings` 报告宏已忽略，演讲者备注目前同样以 `NOTES_UNSUPPORTED` 报告。`PptxViewer` 默认在工具栏下方显示这些警告；自定义界面可读取 `usePptxDocument` 返回的 `document.warnings`。
