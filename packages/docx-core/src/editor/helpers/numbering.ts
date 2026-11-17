@@ -19,6 +19,7 @@ import type {
   TableNode,
   TextRunNode
 } from "../../engine/types";
+import { invalidateParagraphSourceXml } from "../../engine/section-break";
 import type { DocxListType } from "./editor-types";
 import { TWIPS_PER_PIXEL } from "../../viewer/section-layout";
 import {
@@ -1131,7 +1132,7 @@ export function ensurePrefixListIndent(paragraph: ParagraphNode): boolean {
       hangingTwips: DEFAULT_LIST_HANGING_TWIPS,
     },
   };
-  paragraph.sourceXml = undefined;
+  invalidateParagraphSourceXml(paragraph);
   return true;
 }
 
@@ -1171,6 +1172,6 @@ export function clearAutoPrefixListIndent(paragraph: ParagraphNode): boolean {
     ...clonedStyle,
     indent: hasRemainingIndent ? nextIndent : undefined,
   };
-  paragraph.sourceXml = undefined;
+  invalidateParagraphSourceXml(paragraph);
   return true;
 }

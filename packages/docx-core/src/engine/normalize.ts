@@ -3,9 +3,11 @@ import type {
   DocNode,
   ImageRunNode,
   ParagraphChildNode,
+  ParagraphNode,
   TableCellContentNode
 } from "./types";
 import { parseFloatingAnchorProperties } from "./anchor-properties";
+import { sectionBreakFromSourceXml } from "./section-break";
 
 function normalizeUint8Array(value: unknown): Uint8Array | undefined {
   if (value instanceof Uint8Array) {
@@ -48,16 +50,15 @@ function normalizeTableCellContent(node: TableCellContentNode): TableCellContent
     return normalizeDocNode(node) as TableCellContentNode;
   }
 
-  return {
-    ...node,
-    children: node.children.map(normalizeParagraphChild)
-  };
+  return normalizeDocNode(node) as ParagraphNode;
 }
 
 function normalizeDocNode(node: DocNode): DocNode {
   if (node.type === "paragraph") {
     return {
       ...node,
+      sectionBreak:
+        node.sectionBreak ?? sectionBreakFromSourceXml(node.sourceXml),
       children: node.children.map(normalizeParagraphChild)
     };
   }
@@ -75,30 +76,30 @@ function normalizeDocNode(node: DocNode): DocNode {
 }
 
 export function normalizeDocModel(model: DocModel): DocModel {
+  const nodes = model.nodes.map(normalizeDocNode);
+  const headerSections = model.metadata.headerSections.map((section) => ({
+    ...section,
+    nodes: section.nodes.map(normalizeDocNode)
+  }));
+  const footerSections = model.metadata.footerSections.map((section) => ({
+    ...section,
+    nodes: section.nodes.map(normalizeDocNode)
+  }));
+  const sections = normalizeDocumentSections(
+    nodes,
+    model.metadata,
+    headerSections,
+    footerSections
+  );
+
   return {
     ...model,
-    nodes: model.nodes.map(normalizeDocNode),
+    nodes,
     metadata: {
       ...model.metadata,
-      headerSections: model.metadata.headerSections.map((section) => ({
-        ...section,
-        nodes: section.nodes.map(normalizeDocNode)
-      })),
-      footerSections: model.metadata.footerSections.map((section) => ({
-        ...section,
-        nodes: section.nodes.map(normalizeDocNode)
-      })),
-      sections: model.metadata.sections?.map((section) => ({
-        ...section,
-        headerSections: section.headerSections.map((header) => ({
-          ...header,
-          nodes: header.nodes.map(normalizeDocNode)
-        })),
-        footerSections: section.footerSections.map((footer) => ({
-          ...footer,
-          nodes: footer.nodes.map(normalizeDocNode)
-        }))
-      })),
+      headerSections,
+      footerSections,
+      sections,
       footnotes: model.metadata.footnotes?.map((note) => ({
         ...note,
         nodes: note.nodes?.map(normalizeDocNode)
@@ -109,4 +110,66 @@ export function normalizeDocModel(model: DocModel): DocModel {
       }))
     }
   };
+}
+
+/**
+ * Rebuild metadata.sections from preserved paragraph markers when the importer
+ * (or an older snapshot) did not provide section metadata. Existing imported
+ * section entries stay authoritative.
+ */
+function normalizeDocumentSections(
+  nodes: DocNode[],
+  metadata: DocModel["metadata"],
+  headerSections: DocModel["metadata"]["headerSections"],
+  footerSections: DocModel["metadata"]["footerSections"]
+): DocModel["metadata"]["sections"] {
+  const normalizedSections = metadata.sections?.map((section) => ({
+    ...section,
+    headerSections: section.headerSections.map((header) => ({
+      ...header,
+      nodes: header.nodes.map(normalizeDocNode)
+    })),
+    footerSections: section.footerSections.map((footer) => ({
+      ...footer,
+      nodes: footer.nodes.map(normalizeDocNode)
+    }))
+  }));
+
+  if (normalizedSections && normalizedSections.length > 0) {
+    return normalizedSections;
+  }
+
+  const markers: Array<{ startNodeIndex: number; sectionPropertiesXml: string }> = [];
+  nodes.forEach((node, nodeIndex) => {
+    if (node.type === "paragraph" && node.sectionBreak) {
+      markers.push({
+        startNodeIndex: nodeIndex + 1,
+        sectionPropertiesXml: node.sectionBreak.sectionPropertiesXml
+      });
+    }
+  });
+
+  if (markers.length === 0) {
+    return normalizedSections;
+  }
+
+  const sections: NonNullable<DocModel["metadata"]["sections"]> = [];
+  let startNodeIndex = 0;
+  for (const marker of markers) {
+    sections.push({
+      startNodeIndex,
+      sectionPropertiesXml: marker.sectionPropertiesXml,
+      headerSections,
+      footerSections
+    });
+    startNodeIndex = marker.startNodeIndex;
+  }
+  sections.push({
+    startNodeIndex,
+    sectionPropertiesXml: metadata.sectionPropertiesXml,
+    headerSections,
+    footerSections
+  });
+
+  return sections;
 }

@@ -12,6 +12,7 @@ import type {
   TableNode,
   TextRunNode
 } from "../../engine/types";
+import { paragraphHasSectionBreak } from "../../engine/section-break";
 import type { DocumentLayoutMetrics } from "../../viewer/section-layout";
 import {
   headingLevelFromStyleLabel,
@@ -535,7 +536,7 @@ export function paragraphHasActiveNumbering(paragraph: ParagraphNode): boolean {
 export function paragraphContainsSectionBreakProperties(
   paragraph: ParagraphNode
 ): boolean {
-  return /<w:sectPr\b/i.test(paragraph.sourceXml ?? "");
+  return paragraphHasSectionBreak(paragraph);
 }
 
 export function paragraphAbsoluteFloatingAnchorsDependOnParagraphFlow(

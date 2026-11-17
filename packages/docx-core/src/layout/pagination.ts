@@ -12,6 +12,7 @@ import {
   sectionBreakPropertiesStartNewPage,
   type ResolvedModelSection
 } from "./sections";
+import { paragraphSectionPropertiesXml } from "../engine/section-break";
 
 export {
   resolveDocumentSectionsFromMetadata,
@@ -35,7 +36,6 @@ const PAGE_BREAK_BEFORE_XML_PATTERN = /<w:pageBreakBefore\b[^>]*\/?>/i;
 const PARAGRAPH_INLINE_TOKEN_PATTERN =
   /<w:t\b[^>]*>([\s\S]*?)<\/w:t>|<w:br\b[^>]*\/?>|<w:cr\b[^>]*\/?>|<w:tab\b[^>]*\/?>|<w:noBreakHyphen\b[^>]*\/?>/gi;
 const XML_ENTITY_PATTERN = /&(?:#(\d+)|#x([0-9a-f]+)|(amp|lt|gt|quot|apos));/gi;
-const SECTION_PROPERTIES_XML_PATTERN = /<w:sectPr\b[\s\S]*?<\/w:sectPr>/i;
 const paragraphBreakFlagsByParagraph = new WeakMap<
   ParagraphNode,
   {
@@ -199,7 +199,7 @@ function resolveParagraphBreakFlags(paragraph: ParagraphNode): ParagraphBreakFla
     lastRenderedPageBreak: LAST_RENDERED_PAGE_BREAK_XML_PATTERN.test(sourceXml),
     pageBreakBefore: isOnOffTagEnabled(sourceXml.match(PAGE_BREAK_BEFORE_XML_PATTERN)?.[0]),
     sectionBreakStartsNewPage: (() => {
-      const sectionProperties = sourceXml.match(SECTION_PROPERTIES_XML_PATTERN)?.[0];
+      const sectionProperties = paragraphSectionPropertiesXml(paragraph);
       if (!sectionProperties) {
         return false;
       }
@@ -232,11 +232,12 @@ export function paragraphHasPageBreakBefore(paragraph: ParagraphNode): boolean {
 }
 
 export function sectionBreakAfterParagraphStartsNewPage(paragraph: ParagraphNode): boolean {
-  if (!paragraph.sourceXml) {
+  const sectionProperties = paragraphSectionPropertiesXml(paragraph);
+  if (!sectionProperties) {
     return false;
   }
 
-  return resolveParagraphBreakFlags(paragraph).sectionBreakStartsNewPage;
+  return sectionBreakPropertiesStartNewPage(sectionProperties);
 }
 
 export function paragraphHasLastRenderedPageBreak(paragraph: ParagraphNode): boolean {

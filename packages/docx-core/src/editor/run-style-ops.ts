@@ -13,6 +13,11 @@ import type {
 } from "../engine/types";
 import { cloneDocModel, cloneDocModelShallow, cloneDocNode } from "../engine/clone";
 import {
+  invalidateParagraphSourceXml,
+  removeSectionPropertiesXmlFromSourceXml,
+  shiftDocumentSectionStartNodeIndexes
+} from "../engine/section-break";
+import {
   cloneParagraph,
   ensureTextRun,
   getParagraph,
@@ -49,7 +54,7 @@ function applyTextRunTransformToParagraph(
   }
 
   if (changed) {
-    paragraph.sourceXml = undefined;
+    invalidateParagraphSourceXml(paragraph);
   }
 
   return changed;
@@ -124,7 +129,7 @@ export function setParagraphHeading(
     ...(paragraph.style ?? {}),
     headingLevel
   };
-  paragraph.sourceXml = undefined;
+  invalidateParagraphSourceXml(paragraph);
 
   return next;
 }
@@ -146,7 +151,7 @@ export function setParagraphAlignment(
     ...(paragraph.style ?? {}),
     align
   };
-  paragraph.sourceXml = undefined;
+  invalidateParagraphSourceXml(paragraph);
 
   return next;
 }
@@ -170,7 +175,7 @@ export function applyRunStyle(
     ...(textRun.style ?? {}),
     ...style
   };
-  paragraph.sourceXml = undefined;
+  invalidateParagraphSourceXml(paragraph);
 
   return next;
 }
@@ -197,7 +202,7 @@ export function toggleRunStyleFlag(
     ...(key === "underline" && current ? { underlineStyle: undefined } : undefined),
     ...(key === "strike" && current ? { strikeStyle: undefined } : undefined)
   };
-  paragraph.sourceXml = undefined;
+  invalidateParagraphSourceXml(paragraph);
 
   return next;
 }
@@ -242,6 +247,15 @@ export function pasteParagraphs(model: DocModel, index: number, paragraphs: Para
   // copy fresh XML identifiers instead of duplicating bookmarks/paraId/docPr ids.
   const registry = createSourceXmlIdentifierRegistry(next);
   const copies = paragraphs.map((paragraph) => cloneNodeForInsertion(paragraph, registry));
+  // Pasted section breaks have no metadata.sections entry at the paste target;
+  // strip them so a paste cannot silently create an unmodelled section.
+  copies.forEach((paragraph) => {
+    paragraph.sectionBreak = undefined;
+    paragraph.sourceXml = removeSectionPropertiesXmlFromSourceXml(
+      paragraph.sourceXml
+    );
+  });
+  shiftDocumentSectionStartNodeIndexes(next, safeIndex, copies.length);
   next.nodes.splice(safeIndex, 0, ...copies);
   return next;
 }

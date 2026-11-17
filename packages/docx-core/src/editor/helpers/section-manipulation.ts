@@ -11,6 +11,7 @@ import type {
   TableNode
 } from "../../engine/types";
 import { cloneDocModel } from "../../engine/clone";
+import { invalidateParagraphSourceXml } from "../../engine/section-break";
 import {
   updateParagraphText,
 } from "../paragraph-ops";
@@ -342,7 +343,7 @@ export function updateSectionImageFloatingAtLocation(
         ...(child.floating ?? {}),
         ...patch,
       };
-      paragraph.sourceXml = undefined;
+      invalidateParagraphSourceXml(paragraph);
       if (lookup.tableNode) {
         lookup.tableNode.sourceXml = undefined;
       }

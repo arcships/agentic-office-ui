@@ -26,6 +26,12 @@ import {
   cloneNodeForInsertion,
   createSourceXmlIdentifierRegistry
 } from "./helpers/xml-identifiers";
+import {
+  invalidateParagraphSourceXml,
+  paragraphSectionBreak,
+  removeSectionPropertiesXmlFromSourceXml,
+  shiftDocumentSectionStartNodeIndexes
+} from "../engine/section-break";
 
 export { cloneParagraph };
 
@@ -688,8 +694,63 @@ export function insertParagraph(
 ): DocModel {
   const next = cloneDocModelShallow(model);
   const safeIndex = Math.max(0, Math.min(index, next.nodes.length));
+  shiftDocumentSectionStartNodeIndexes(next, safeIndex, 1);
   next.nodes.splice(safeIndex, 0, paragraphFromText(text, options));
   return next;
+}
+
+function findPreviousParagraphIndex(
+  nodes: DocModel["nodes"],
+  beforeIndex: number,
+  requireWithoutSectionBreak = false
+): number | undefined {
+  for (let index = beforeIndex - 1; index >= 0; index -= 1) {
+    const node = nodes[index];
+    if (node?.type !== "paragraph") {
+      continue;
+    }
+    if (requireWithoutSectionBreak && node.sectionBreak) {
+      continue;
+    }
+    return index;
+  }
+  return undefined;
+}
+
+function findNextParagraphIndex(
+  nodes: DocModel["nodes"],
+  fromIndex: number,
+  requireWithoutSectionBreak = false
+): number | undefined {
+  for (let index = fromIndex; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    if (node?.type !== "paragraph") {
+      continue;
+    }
+    if (requireWithoutSectionBreak && node.sectionBreak) {
+      continue;
+    }
+    return index;
+  }
+  return undefined;
+}
+
+function shiftSectionStartsAfterParagraphRemoval(
+  model: DocModel,
+  removedIndex: number,
+  preservedSectionStart?: number
+): void {
+  model.metadata.sections?.forEach((section) => {
+    if (section.startNodeIndex <= removedIndex) {
+      return;
+    }
+
+    if (preservedSectionStart !== undefined && section.startNodeIndex === preservedSectionStart) {
+      return;
+    }
+
+    section.startNodeIndex = Math.max(0, section.startNodeIndex - 1);
+  });
 }
 
 export function removeParagraph(model: DocModel, index: number): DocModel {
@@ -699,11 +760,40 @@ export function removeParagraph(model: DocModel, index: number): DocModel {
     return next;
   }
 
+  // Deleting the paragraph that carries a section break must not delete the
+  // section. Move the break to the nearest surviving paragraph.
+  const sectionBreak = paragraphSectionBreak(node);
   next.nodes.splice(index, 1);
+
+  let transferForward = false;
+  if (sectionBreak) {
+    const previousParagraphIndex = findPreviousParagraphIndex(next.nodes, index, true);
+    if (previousParagraphIndex !== undefined) {
+      const previousParagraph = next.nodes[previousParagraphIndex];
+      if (previousParagraph?.type === "paragraph") {
+        previousParagraph.sectionBreak = { ...sectionBreak };
+      }
+    } else {
+      const nextParagraphIndex = findNextParagraphIndex(next.nodes, index, true);
+      if (nextParagraphIndex !== undefined) {
+        const nextParagraph = next.nodes[nextParagraphIndex];
+        if (nextParagraph?.type === "paragraph") {
+          nextParagraph.sectionBreak = { ...sectionBreak };
+          transferForward = true;
+        }
+      }
+    }
+  }
 
   if (!next.nodes.some((candidate) => candidate.type === "paragraph")) {
     next.nodes.push(paragraphFromText(""));
   }
+
+  shiftSectionStartsAfterParagraphRemoval(
+    next,
+    index,
+    transferForward ? index + 1 : undefined
+  );
 
   return next;
 }
@@ -718,7 +808,13 @@ export function duplicateParagraph(model: DocModel, index: number): DocModel {
   // The copy must not reuse the original's XML identifiers (bookmarks,
   // w14:paraId, wp:docPr ids) or the exported file binds them twice.
   const registry = createSourceXmlIdentifierRegistry(next);
-  next.nodes.splice(index + 1, 0, cloneNodeForInsertion(node, registry));
+  const copy = cloneNodeForInsertion(node, registry);
+  // A duplicate is content, not a new section boundary; keeping the marker
+  // would leave metadata.sections unable to describe the copied break.
+  copy.sectionBreak = undefined;
+  copy.sourceXml = removeSectionPropertiesXmlFromSourceXml(copy.sourceXml);
+  shiftDocumentSectionStartNodeIndexes(next, index + 1, 1);
+  next.nodes.splice(index + 1, 0, copy);
   return next;
 }
 
@@ -737,7 +833,7 @@ export function updateParagraphText(
   const paragraph = cloneDocNode(source);
   next.nodes[index] = paragraph;
   paragraph.children = distributeTextAcrossParagraphChildren(paragraph, text, options);
-  paragraph.sourceXml = undefined;
+  invalidateParagraphSourceXml(paragraph);
 
   return next;
 }
