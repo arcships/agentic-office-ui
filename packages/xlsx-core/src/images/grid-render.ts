@@ -25,8 +25,10 @@ import {
   DRAWING_REL_TYPE,
   REL_NS,
   type RelationshipRecord,
+  type WorkbookFormControlOrigin,
   type WorkbookImageOrigin,
   type WorkbookImageSheetOrigin,
+  type WorkbookShapeOrigin,
   getChildElements,
   getFirstChild,
   getFirstDescendant,
@@ -119,12 +121,15 @@ export type WorkbookTableMetadata = {
 
 export type WorkbookImageAssets = {
   archive: ArchiveEntries;
+  formControlOriginsById: Map<string, WorkbookFormControlOrigin>;
   formControlsByWorkbookSheetIndex: XlsxFormControl[][];
   imageOriginsById: Map<string, WorkbookImageOrigin>;
   imagesByWorkbookSheetIndex: XlsxImage[][];
   namedCellStyleByName: Record<string, XlsxResolvedCellStyle>;
   objectUrls: string[];
+  shapeOriginsById: Map<string, WorkbookShapeOrigin>;
   shapesByWorkbookSheetIndex: XlsxShape[][];
+  sheetPathsByWorkbookSheetIndex: string[];
   sheetStatesByWorkbookSheetIndex: Array<WorkbookSheetState | null>;
   sheetOrigins: Array<WorkbookImageSheetOrigin | null>;
   styleById: Record<number, XlsxResolvedCellStyle>;

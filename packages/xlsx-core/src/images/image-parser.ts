@@ -65,6 +65,26 @@ export type XlsxImageAttachment = {
 
 export type WorkbookImageOrigin = {
   anchorIndex: number;
+  /** Drawing part that owns this object, when known. */
+  drawingPath?: string;
+  /** `cNvPr@id` of the picture/shape element; stable across reorder and deletion. */
+  objectId?: string;
+  /** Element local name inside the anchor (`pic`, `sp`, `cxnSp`, `graphicFrame`). */
+  objectKind?: string;
+  workbookSheetIndex: number;
+};
+
+export type WorkbookShapeOrigin = WorkbookImageOrigin;
+
+export type WorkbookFormControlOrigin = {
+  /** Sheet part that owns the `<control>` element. */
+  sheetPath: string;
+  /** Position among sheet `<control>` elements, used when `shapeId` is absent. */
+  controlIndex: number;
+  /** Stable identifier from the worksheet `control@shapeId`. */
+  shapeId: number | null;
+  /** Relationship target for the control properties part. */
+  ctrlPropPath: string | null;
   workbookSheetIndex: number;
 };
 
@@ -378,7 +398,32 @@ export function parseAnchor(anchorNode: Element) {
   if (anchorNode.localName === "anchor") {
     const from = parseMarker(getFirstChild(anchorNode, "from"));
     const to = parseMarker(getFirstChild(anchorNode, "to"));
-    return from && to ? { from, kind: "two-cell" as const, to } : null;
+    if (from && to) return { from, kind: "two-cell" as const, to };
+    const extNode = getFirstChild(anchorNode, "ext");
+    if (from && extNode) {
+      return {
+        from,
+        kind: "one-cell" as const,
+        sizeEmu: {
+          cx: Number(extNode.getAttribute("cx") ?? 0),
+          cy: Number(extNode.getAttribute("cy") ?? 0),
+        },
+      };
+    }
+    const positionNode = getFirstChild(anchorNode, "pos");
+    return positionNode && extNode
+      ? {
+          kind: "absolute" as const,
+          positionEmu: {
+            x: Number(positionNode.getAttribute("x") ?? 0),
+            y: Number(positionNode.getAttribute("y") ?? 0),
+          },
+          sizeEmu: {
+            cx: Number(extNode.getAttribute("cx") ?? 0),
+            cy: Number(extNode.getAttribute("cy") ?? 0),
+          },
+        }
+      : null;
   }
 
   if (anchorNode.localName === "twoCellAnchor") {

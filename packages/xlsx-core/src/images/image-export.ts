@@ -13,12 +13,15 @@ import {
   PKG_REL_NS,
   SPREADSHEET_NS,
   REL_NS,
+  type WorkbookFormControlOrigin,
   type WorkbookImageOrigin,
   type WorkbookImageSheetOrigin,
+  type WorkbookShapeOrigin,
   cloneBytes,
   createImageAnchorNodes,
   getChildElements,
   getFirstChild,
+  getFirstDescendant,
   getLocalElements,
   normalizeArchivePath,
   parseRelationships,
@@ -28,7 +31,6 @@ import {
   relsPathForDocument,
   serializeXml,
   setChildText,
-  updateMarkerElement,
 } from "./image-parser";
 import {
   parseDrawingObjects,
@@ -150,11 +152,14 @@ export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntime
     workbookSheets
   } = parseWorkbookStructureAssetsFromArchive(archive);
   const objectUrls: string[] = [];
+  const formControlOriginsById = new Map<string, WorkbookFormControlOrigin>();
   const formControlsByWorkbookSheetIndex: XlsxFormControl[][] = [];
   const imagesByWorkbookSheetIndex: XlsxImage[][] = [];
   const shapesByWorkbookSheetIndex: XlsxShape[][] = [];
   const sheetOrigins: Array<WorkbookImageSheetOrigin | null> = [];
   const imageOriginsById = new Map<string, WorkbookImageOrigin>();
+  const shapeOriginsById = new Map<string, WorkbookShapeOrigin>();
+  const sheetPathsByWorkbookSheetIndex = workbookSheets.map((sheet) => sheet.path);
 
   try {
     workbookSheets.forEach((sheet, workbookSheetIndex) => {
@@ -180,7 +185,8 @@ export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntime
         zIndexBase,
         theme,
         sheetStatesByWorkbookSheetIndex[workbookSheetIndex] ?? null,
-        imageOriginsById
+        imageOriginsById,
+        shapeOriginsById
       );
       imageList.push(...drawingImages.images);
       shapeList.push(...drawingImages.shapes);
@@ -197,7 +203,8 @@ export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntime
       sheet.path,
       sheetRelationships,
       workbookSheetIndex,
-      zIndexBase
+      zIndexBase,
+      formControlOriginsById
     );
     const visibleShapeList = shapeList.filter((shape) => !shape.hidden);
     const enrichedFormControlList = enrichFormControlsWithHiddenShapes(
@@ -219,12 +226,15 @@ export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntime
 
     return {
       archive,
+      formControlOriginsById,
       formControlsByWorkbookSheetIndex,
       imageOriginsById,
       imagesByWorkbookSheetIndex,
       namedCellStyleByName,
       objectUrls,
+      shapeOriginsById,
       shapesByWorkbookSheetIndex,
+      sheetPathsByWorkbookSheetIndex,
       sheetOrigins,
       sheetStatesByWorkbookSheetIndex,
       styleById,
@@ -243,33 +253,157 @@ export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntime
 
 // ── Update image anchor ────────────────────────────────────────────────────
 
+const SPREADSHEET_DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing";
+const ANCHOR_CHILD_NAMES = new Set(["from", "to", "pos", "ext"]);
+
+function createMarkerNode(document: XMLDocument, name: string, marker: { col: number; colOffsetEmu: number; row: number; rowOffsetEmu: number }) {
+  const markerNode = document.createElementNS(SPREADSHEET_DRAWING_NS, name);
+  for (const [childName, value] of [
+    ["col", marker.col],
+    ["colOff", marker.colOffsetEmu],
+    ["row", marker.row],
+    ["rowOff", marker.rowOffsetEmu],
+  ] as const) {
+    const child = document.createElementNS(SPREADSHEET_DRAWING_NS, childName);
+    child.textContent = String(Math.max(0, Math.round(Number(value) || 0)));
+    markerNode.appendChild(child);
+  }
+  return markerNode;
+}
+
+function createExtNode(document: XMLDocument, anchor: { cx: number; cy: number }) {
+  const ext = document.createElementNS(SPREADSHEET_DRAWING_NS, "ext");
+  ext.setAttribute("cx", String(Math.max(0, Math.round(anchor.cx))));
+  ext.setAttribute("cy", String(Math.max(0, Math.round(anchor.cy))));
+  return ext;
+}
+
 function updateAnchorNode(anchorNode: Element, anchor: XlsxImage["anchor"]) {
-  if (anchor.kind === "two-cell") {
-    updateMarkerElement(getFirstChild(anchorNode, "from"), anchor.from);
-    updateMarkerElement(getFirstChild(anchorNode, "to"), anchor.to);
-    return;
-  }
+  const document = anchorNode.ownerDocument as XMLDocument | null;
+  if (!document) return;
+  const desiredName = anchor.kind === "two-cell"
+    ? "twoCellAnchor"
+    : anchor.kind === "one-cell"
+      ? "oneCellAnchor"
+      : "absoluteAnchor";
+  let target = anchorNode;
 
-  if (anchor.kind === "one-cell") {
-    updateMarkerElement(getFirstChild(anchorNode, "from"), anchor.from);
-    const extNode = getFirstChild(anchorNode, "ext");
-    if (extNode) {
-      extNode.setAttribute("cx", String(Math.max(0, Math.round(anchor.sizeEmu.cx))));
-      extNode.setAttribute("cy", String(Math.max(0, Math.round(anchor.sizeEmu.cy))));
+  if (anchorNode.localName !== desiredName) {
+    const replacement = document.createElementNS(SPREADSHEET_DRAWING_NS, desiredName);
+    for (const attribute of Array.from(anchorNode.attributes)) {
+      if (attribute.name !== "editAs") {
+        replacement.setAttribute(attribute.name, attribute.value);
+      }
     }
-    return;
+    const preserved = Array.from(anchorNode.childNodes).filter(
+      (child) => child.nodeType !== 1 || !ANCHOR_CHILD_NAMES.has((child as Element).localName)
+    );
+    for (const child of preserved) replacement.appendChild(child);
+    anchorNode.parentNode?.replaceChild(replacement, anchorNode);
+    target = replacement;
   }
 
-  const positionNode = getFirstChild(anchorNode, "pos");
-  if (positionNode) {
-    positionNode.setAttribute("x", String(Math.max(0, Math.round(anchor.positionEmu.x))));
-    positionNode.setAttribute("y", String(Math.max(0, Math.round(anchor.positionEmu.y))));
+  for (const child of Array.from(target.childNodes)) {
+    if (child.nodeType === 1 && ANCHOR_CHILD_NAMES.has((child as Element).localName)) {
+      target.removeChild(child);
+    }
   }
-  const extNode = getFirstChild(anchorNode, "ext");
-  if (extNode) {
-    extNode.setAttribute("cx", String(Math.max(0, Math.round(anchor.sizeEmu.cx))));
-    extNode.setAttribute("cy", String(Math.max(0, Math.round(anchor.sizeEmu.cy))));
+
+  const parts: Element[] = [];
+  if (anchor.kind === "two-cell") {
+    parts.push(createMarkerNode(document, "from", anchor.from));
+    parts.push(createMarkerNode(document, "to", anchor.to));
+  } else if (anchor.kind === "one-cell") {
+    parts.push(createMarkerNode(document, "from", anchor.from));
+    parts.push(createExtNode(document, anchor.sizeEmu));
+  } else {
+    const pos = document.createElementNS(SPREADSHEET_DRAWING_NS, "pos");
+    pos.setAttribute("x", String(Math.max(0, Math.round(anchor.positionEmu.x))));
+    pos.setAttribute("y", String(Math.max(0, Math.round(anchor.positionEmu.y))));
+    parts.push(pos);
+    parts.push(createExtNode(document, anchor.sizeEmu));
   }
+  const firstChild = target.firstChild;
+  for (const part of parts) {
+    target.insertBefore(part, firstChild);
+  }
+}
+
+function findNonVisualObject(root: Element, objectId: string, objectKind?: string): Element | null {
+  for (const child of Array.from(root.childNodes)) {
+    if (child.nodeType !== 1) continue;
+    const element = child as Element;
+    if (
+      (!objectKind || element.localName === objectKind)
+      && (element.localName === "pic" || element.localName === "sp" || element.localName === "cxnSp" || element.localName === "graphicFrame")
+      && getFirstDescendant(element, "cNvPr")?.getAttribute("id") === objectId
+    ) {
+      return element;
+    }
+    const nested = findNonVisualObject(element, objectId, objectKind);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function findAnchorForOrigin(document: XMLDocument, origin: WorkbookImageOrigin) {
+  const anchorNodes = createImageAnchorNodes(document);
+  if (origin.objectId) {
+    const match = anchorNodes.find((anchorNode) => Boolean(findNonVisualObject(anchorNode, origin.objectId!)));
+    if (match) return match;
+  }
+  return anchorNodes[origin.anchorIndex] ?? null;
+}
+
+function resolveDrawingDocument(assets: WorkbookImageAssets, origin: WorkbookImageOrigin) {
+  const attachments = assets.sheetOrigins[origin.workbookSheetIndex]?.attachments ?? [];
+  const candidates = origin.drawingPath
+    ? attachments.filter((attachment) => attachment.drawingPath === origin.drawingPath)
+    : attachments;
+  for (const attachment of candidates) {
+    const drawingXml = readArchiveText(assets.archive, attachment.drawingPath);
+    if (!drawingXml) continue;
+    const drawingDocument = parseXml(drawingXml);
+    if (!drawingDocument) continue;
+    const anchorNode = findAnchorForOrigin(drawingDocument, origin);
+    if (anchorNode) {
+      return { anchorNode, drawingDocument, drawingPath: attachment.drawingPath };
+    }
+  }
+  return null;
+}
+
+function hasDrawableChild(anchorNode: Element) {
+  return Array.from(anchorNode.childNodes).some(
+    (child) => child.nodeType === 1
+      && ["pic", "sp", "cxnSp", "graphicFrame"].includes((child as Element).localName)
+  );
+}
+
+function removeDrawingObject(assets: WorkbookImageAssets, origin: WorkbookImageOrigin): boolean {
+  const resolved = resolveDrawingDocument(assets, origin);
+  if (!resolved) return false;
+  const { anchorNode, drawingDocument, drawingPath } = resolved;
+  const objectNode = origin.objectId
+    ? findNonVisualObject(anchorNode, origin.objectId, origin.objectKind)
+    : Array.from(anchorNode.childNodes).find(
+      (child) => child.nodeType === 1 && (child as Element).localName === (origin.objectKind ?? "pic")
+    ) as Element | undefined;
+  const target = objectNode ?? anchorNode;
+  target.parentNode?.removeChild(target);
+  if (target !== anchorNode && !hasDrawableChild(anchorNode)) {
+    anchorNode.parentNode?.removeChild(anchorNode);
+  }
+  assets.archive[normalizeArchivePath(drawingPath)] = strToU8(serializeXml(drawingDocument));
+  return true;
+}
+
+function updateDrawingAnchor(assets: WorkbookImageAssets, origin: WorkbookImageOrigin, anchor: XlsxImage["anchor"]): boolean {
+  const resolved = resolveDrawingDocument(assets, origin);
+  if (!resolved) return false;
+  updateAnchorNode(resolved.anchorNode, anchor);
+  assets.archive[normalizeArchivePath(resolved.drawingPath)] = strToU8(serializeXml(resolved.drawingDocument));
+  return true;
 }
 
 export function updateWorkbookImageAnchor(
@@ -278,42 +412,56 @@ export function updateWorkbookImageAnchor(
   anchor: XlsxImage["anchor"]
 ) {
   const origin = assets.imageOriginsById.get(imageId);
-  if (!origin) {
+  if (!origin || !updateDrawingAnchor(assets, origin, anchor)) {
     return false;
   }
-
-  const attachments = assets.sheetOrigins[origin.workbookSheetIndex]?.attachments ?? [];
-  for (const attachment of attachments) {
-    const drawingXml = readArchiveText(assets.archive, attachment.drawingPath);
-    if (!drawingXml) {
-      continue;
-    }
-
-    const drawingDocument = parseXml(drawingXml);
-    if (!drawingDocument) {
-      continue;
-    }
-
-    const anchorNodes = createImageAnchorNodes(drawingDocument);
-    const anchorNode = anchorNodes[origin.anchorIndex];
-    if (!anchorNode || !getFirstChild(anchorNode, "pic")) {
-      continue;
-    }
-
-    updateAnchorNode(anchorNode, anchor);
-    assets.archive[attachment.drawingPath] = strToU8(serializeXml(drawingDocument));
-    const imageList = assets.imagesByWorkbookSheetIndex[origin.workbookSheetIndex] ?? [];
-    const imageIndex = imageList.findIndex((image) => image.id === imageId);
-    if (imageIndex >= 0) {
-      imageList[imageIndex] = {
-        ...imageList[imageIndex],
-        anchor
-      };
-    }
-    return true;
+  const imageList = assets.imagesByWorkbookSheetIndex[origin.workbookSheetIndex] ?? [];
+  const imageIndex = imageList.findIndex((image) => image.id === imageId);
+  if (imageIndex >= 0) {
+    imageList[imageIndex] = { ...imageList[imageIndex], anchor };
   }
+  return true;
+}
 
-  return false;
+export function updateWorkbookShapeAnchor(
+  assets: WorkbookImageAssets,
+  shapeId: string,
+  anchor: XlsxImage["anchor"]
+) {
+  const origin = assets.shapeOriginsById.get(shapeId);
+  if (!origin || !updateDrawingAnchor(assets, origin, anchor)) {
+    return false;
+  }
+  const shapeList = assets.shapesByWorkbookSheetIndex[origin.workbookSheetIndex] ?? [];
+  const shapeIndex = shapeList.findIndex((shape) => shape.id === shapeId);
+  if (shapeIndex >= 0) {
+    shapeList[shapeIndex] = { ...shapeList[shapeIndex], anchor };
+  }
+  return true;
+}
+
+export function deleteWorkbookImage(assets: WorkbookImageAssets, imageId: string) {
+  const origin = assets.imageOriginsById.get(imageId);
+  if (!origin || !removeDrawingObject(assets, origin)) {
+    return false;
+  }
+  assets.imageOriginsById.delete(imageId);
+  assets.imagesByWorkbookSheetIndex[origin.workbookSheetIndex] = (
+    assets.imagesByWorkbookSheetIndex[origin.workbookSheetIndex] ?? []
+  ).filter((image) => image.id !== imageId);
+  return true;
+}
+
+export function deleteWorkbookShape(assets: WorkbookImageAssets, shapeId: string) {
+  const origin = assets.shapeOriginsById.get(shapeId);
+  if (!origin || !removeDrawingObject(assets, origin)) {
+    return false;
+  }
+  assets.shapeOriginsById.delete(shapeId);
+  assets.shapesByWorkbookSheetIndex[origin.workbookSheetIndex] = (
+    assets.shapesByWorkbookSheetIndex[origin.workbookSheetIndex] ?? []
+  ).filter((shape) => shape.id !== shapeId);
+  return true;
 }
 
 // ── Merge workbook image assets ────────────────────────────────────────────

@@ -8,6 +8,7 @@ import {
   type DrawingRectEmu,
   type RelationshipRecord,
   VML_DRAWING_REL_TYPE,
+  type WorkbookFormControlOrigin,
   getFirstChild,
   getFirstDescendant,
   getLocalElements,
@@ -278,7 +279,8 @@ export function parseSheetFormControls(
   sheetPath: string,
   sheetRelationships: Map<string, RelationshipRecord>,
   workbookSheetIndex: number,
-  zIndexBase: number
+  zIndexBase: number,
+  formControlOriginsById?: Map<string, WorkbookFormControlOrigin>
 ) {
   const controlNodes = parseSheetFormControlNodes(archive, sheetPath);
   if (controlNodes.length === 0) {
@@ -311,6 +313,9 @@ export function parseSheetFormControls(
       ? vmlControlsByShapeId.get(controlNode.shapeId) ?? null
       : null;
     const kind = parseFormControlKind(ctrlProp?.objectType ?? vmlControl?.objectType);
+    const controlId = controlNode.shapeId !== null
+      ? `form-control-${workbookSheetIndex}-shape-${controlNode.shapeId}`
+      : `form-control-${workbookSheetIndex}-${index}`;
 
     parsedControls.push({
       anchor: controlNode.anchor,
@@ -318,16 +323,24 @@ export function parseSheetFormControls(
       fontFamily: vmlControl?.fontFamily,
       fontSizePt: vmlControl?.fontSizePt,
       hidden: vmlControl?.hidden ?? false,
-      id: `form-control-${workbookSheetIndex}-${index}`,
+      id: controlId,
       kind,
       label: vmlControl?.label,
       linkedCell: ctrlProp?.linkedCell ?? vmlControl?.linkedCell,
       name: controlNode.name,
       sheetIndex: workbookSheetIndex,
+      shapeId: controlNode.shapeId ?? undefined,
       textAlign: vmlControl?.textAlign,
       textColor: vmlControl?.textColor,
       workbookSheetIndex,
       zIndex: zIndexBase + (vmlControl?.zIndex ?? index + 1)
+    });
+    formControlOriginsById?.set(controlId, {
+      controlIndex: index,
+      ctrlPropPath,
+      shapeId: controlNode.shapeId,
+      sheetPath,
+      workbookSheetIndex
     });
   });
 

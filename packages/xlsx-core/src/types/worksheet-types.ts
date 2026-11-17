@@ -3,6 +3,7 @@ import type { XlsxChart, XlsxChartElementSelection, XlsxChartsheet } from "./cha
 import type { XlsxThemePalette } from "./theme-types";
 import type {
   XlsxFormControl,
+  XlsxFormControlInput,
   XlsxImage,
   XlsxImageRect,
   XlsxImageResizeHandlePosition,
@@ -935,6 +936,22 @@ export interface XlsxViewerController {
   selectedFormulaTarget: XlsxFormulaTarget;
   selectedImage: XlsxImage | null;
   selectedImageId: string | null;
+  selectedShape: XlsxShape | null;
+  selectedShapeId: string | null;
+  getShapeById: (id: string) => XlsxShape | null;
+  selectShape: (id: string | null) => void;
+  clearSelectedShape: () => void;
+  setShapeRect: (id: string, rect: XlsxImageRect) => void;
+  moveShapeBy: (id: string, deltaX: number, deltaY: number) => void;
+  resizeShapeBy: (id: string, handle: XlsxImageResizeHandlePosition, deltaX: number, deltaY: number) => void;
+  deleteShape: (id: string) => boolean;
+  deleteImage: (id: string) => boolean;
+  deleteChart: (id: string) => boolean;
+  addFormControl: (input: XlsxFormControlInput) => XlsxFormControl | null;
+  updateFormControl: (id: string, patch: Partial<XlsxFormControlInput>) => boolean;
+  removeFormControl: (id: string) => boolean;
+  getFormControlById: (id: string) => XlsxFormControl | null;
+  getFormControlItems: (sheetIndex?: number) => XlsxFormControl[];
   setSelectedFormula: (formula: string) => boolean;
   setSelectedCellFormula: (formula: string) => void;
   /**
@@ -1123,6 +1140,22 @@ export interface XlsxViewerImages {
   selectedChartId: string | null;
   selectedImage: XlsxImage | null;
   selectedImageId: string | null;
+  selectedShape: XlsxShape | null;
+  selectedShapeId: string | null;
+  getShapeById: (id: string) => XlsxShape | null;
+  selectShape: (id: string | null) => void;
+  clearSelectedShape: () => void;
+  setShapeRect: (id: string, rect: XlsxImageRect) => void;
+  moveShapeBy: (id: string, deltaX: number, deltaY: number) => void;
+  resizeShapeBy: (id: string, handle: XlsxImageResizeHandlePosition, deltaX: number, deltaY: number) => void;
+  deleteShape: (id: string) => boolean;
+  deleteImage: (id: string) => boolean;
+  deleteChart: (id: string) => boolean;
+  addFormControl: (input: XlsxFormControlInput) => XlsxFormControl | null;
+  updateFormControl: (id: string, patch: Partial<XlsxFormControlInput>) => boolean;
+  removeFormControl: (id: string) => boolean;
+  getFormControlById: (id: string) => XlsxFormControl | null;
+  getFormControlItems: (sheetIndex?: number) => XlsxFormControl[];
   selectChart: (id: string | null) => void;
   selectChartElement: (selection: XlsxChartElementSelection | null) => void;
   selectImage: (id: string | null) => void;

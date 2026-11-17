@@ -70,6 +70,8 @@ export type WorkbookChartOrigin = {
   chartPath: string | null;
   chartKind: "classic" | "modern";
   drawingPath: string;
+  /** `cNvPr@id` of the chart graphic frame, stable across reorder/deletion. */
+  objectId?: string;
   workbookSheetIndex: number;
 };
 

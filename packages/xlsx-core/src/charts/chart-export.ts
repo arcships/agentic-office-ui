@@ -562,6 +562,7 @@ export function collectChartOriginsForSheet(
         chartKind: relationship.type === CHART_EX_REL_TYPE ? "modern" : "classic",
         chartPath: relationship.target,
         drawingPath: attachment.drawingPath,
+        objectId: getFirstLocalDescendant(graphicFrame, "cNvPr")?.getAttribute("id") ?? undefined,
         workbookSheetIndex: origin.workbookSheetIndex
       });
       chartAnchorIndex += 1;
@@ -886,13 +887,63 @@ export function updateWorkbookChartAnchor(
     return false;
   }
 
-  const anchorNode = getChartAnchorNodes(drawingDocument)[origin.anchorIndex];
+  const anchorNode = findChartAnchorNode(drawingDocument, origin);
   if (!anchorNode) {
     return false;
   }
 
   updateAnchorNode(anchorNode, anchor);
   imageAssets.archive[normalizeArchivePath(origin.drawingPath)] = strToU8(serializeXml(drawingDocument));
+  return true;
+}
+
+function findChartAnchorNode(document: XMLDocument, origin: WorkbookChartOrigin) {
+  const anchorNodes = getChartAnchorNodes(document);
+  if (origin.objectId) {
+    const match = anchorNodes.find((anchorNode) => (
+      getFirstLocalDescendant(anchorNode, "cNvPr")?.getAttribute("id") === origin.objectId
+    ));
+    if (match) return match;
+  }
+  return anchorNodes[origin.anchorIndex] ?? null;
+}
+
+export function deleteWorkbookChart(
+  imageAssets: Pick<WorkbookImageAssets, "archive">,
+  chartAssets: WorkbookChartAssets,
+  chartId: string
+) {
+  const origin = chartAssets.chartOriginsById.get(chartId);
+  if (!origin) {
+    return false;
+  }
+  const drawingXml = readArchiveText(imageAssets.archive, origin.drawingPath);
+  if (!drawingXml) {
+    return false;
+  }
+  const drawingDocument = parseXml(drawingXml);
+  if (!drawingDocument) {
+    return false;
+  }
+  const anchorNode = findChartAnchorNode(drawingDocument, origin);
+  const graphicFrame = anchorNode ? getFirstLocalDescendant(anchorNode, "graphicFrame") : null;
+  if (!anchorNode || !graphicFrame) {
+    return false;
+  }
+  const parent = graphicFrame.parentNode;
+  parent?.removeChild(graphicFrame);
+  const remainingDrawable = Array.from(anchorNode.childNodes).some(
+    (child) => child.nodeType === 1
+      && ["pic", "sp", "cxnSp", "graphicFrame"].includes((child as Element).localName)
+  );
+  if (!remainingDrawable) {
+    anchorNode.parentNode?.removeChild(anchorNode);
+  }
+  imageAssets.archive[normalizeArchivePath(origin.drawingPath)] = strToU8(serializeXml(drawingDocument));
+  chartAssets.chartOriginsById.delete(chartId);
+  chartAssets.chartsByWorkbookSheetIndex = chartAssets.chartsByWorkbookSheetIndex.map((sheetCharts) => (
+    sheetCharts.filter((chart) => chart.id !== chartId)
+  ));
   return true;
 }
 

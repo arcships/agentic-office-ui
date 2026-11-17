@@ -97,6 +97,7 @@ export type {
   // Form controls
   XlsxFormControlKind,
   XlsxFormControl,
+  XlsxFormControlInput,
   // Image rect / resize
   XlsxImageRect,
   XlsxImageResizeHandlePosition,

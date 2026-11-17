@@ -26,6 +26,9 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 - Honour picture `zIndex` inside per-pane stacking contexts and render rotation, flip and `srcRect` crop.
 - Add drag, eight-way resize and arrow-key nudge for images and charts; pointer gestures preview locally and commit one history entry.
+- Add the same move/resize/nudge interaction to shapes, plus Delete for images, charts and shapes backed by stable non-visual object identities.
+- Expose programmable form-control CRUD (`addFormControl`/`updateFormControl`/`removeFormControl`) backed by worksheet controls, ctrlProps and content-type rewrites.
+- Cull anchored objects by visible pane bounds and cache content-space rects by sheet and zoom.
 - Render shape text from paragraphs and runs with alignment, insets, vertical alignment and flips.
 - Make checkbox and radio controls interactive and write `TRUE`/`FALSE` to their `linkedCell`.
 - Use one visible-column axis model for grid rendering and anchor write-back, including hidden rows and columns.

@@ -47,6 +47,12 @@ export {
   normalizeWorkbookTableMetadata,
   validateXlsxImageAssets,
   updateWorkbookImageAnchor,
+  updateWorkbookShapeAnchor,
+  deleteWorkbookImage,
+  deleteWorkbookShape,
+  addWorkbookFormControl,
+  updateWorkbookFormControl,
+  deleteWorkbookFormControl,
   mergeWorkbookImageAssets,
   emuToPixels,
   pixelsToEmu,
@@ -55,6 +61,7 @@ export {
   resolveSheetColumnWidthPx,
   resolveSheetRowHeightPixels,
   resolveSheetRowHeightPx,
+  createAnchoredRectCache,
   parseA1CellReference,
   resolveRenderedSheetAxisPixels,
   resolveContentSheetAxisPixels,
@@ -63,6 +70,9 @@ export {
   resizeImageRect,
 } from "./images";
 export type {
+  WorkbookFormControlOrigin,
+  WorkbookImageOrigin,
+  WorkbookShapeOrigin,
   WorkbookImageSheetOrigin,
   WorkbookTableMetadata,
   WorkbookImageAssets,
@@ -78,6 +88,7 @@ export {
   loadWorkbookChartAssets,
   updateWorkbookChartAnchor,
   updateWorkbookChartDefinition,
+  deleteWorkbookChart,
 } from "./charts";
 export type {
   ParsedChartSeriesFormula,
@@ -134,6 +145,7 @@ export type {
   XlsxDataValidationFeedback,
   XlsxFileTooLargeRenderProps,
   XlsxFormControl,
+  XlsxFormControlInput,
   XlsxFormControlKind,
   XlsxFreezePanes,
   XlsxImage,

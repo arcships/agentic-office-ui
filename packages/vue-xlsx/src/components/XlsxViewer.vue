@@ -151,17 +151,23 @@
           :is-dark="isDark ?? false"
           :scroll-left="gridViewport.scrollLeft"
           :scroll-top="gridViewport.scrollTop"
+          :viewport-width="gridViewport.width"
+          :viewport-height="gridViewport.height"
         />
         <XlsxImageLayer
           :controller="controller"
           :show-images="showImages ?? true"
           :scroll-left="gridViewport.scrollLeft"
           :scroll-top="gridViewport.scrollTop"
+          :viewport-width="gridViewport.width"
+          :viewport-height="gridViewport.height"
         />
         <XlsxDrawingLayer
           :controller="controller"
           :scroll-left="gridViewport.scrollLeft"
           :scroll-top="gridViewport.scrollTop"
+          :viewport-width="gridViewport.width"
+          :viewport-height="gridViewport.height"
         />
         <XlsxSelectionOverlay
           :controller="controller"
@@ -322,7 +328,7 @@ const bodyRef = ref<HTMLElement | null>(null);
 const toolbarRef = ref<InstanceType<typeof XlsxToolbar> | null>(null);
 const gridRef = ref<GridInstance | null>(null);
 const contextMenuRef = ref<{ openAt(clientX: number, clientY: number, target?: unknown): boolean } | null>(null);
-const gridViewport = ref({ scrollLeft: 0, scrollTop: 0 });
+const gridViewport = ref({ height: 0, scrollLeft: 0, scrollTop: 0, width: 0 });
 const gridElement = computed<HTMLElement | null>(() => gridRef.value?.scrollContainer ?? null);
 const surfaceSearch = useXlsxSearch(
   () => props.controller,

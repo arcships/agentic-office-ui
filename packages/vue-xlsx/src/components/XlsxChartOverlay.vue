@@ -79,6 +79,8 @@ const props = defineProps<{
   isDark?: boolean;
   scrollLeft?: number;
   scrollTop?: number;
+  viewportWidth?: number;
+  viewportHeight?: number;
 }>();
 
 const layerStyle = gridBodyLayerStyle;
@@ -124,10 +126,13 @@ const chartItems = computed<ChartItem[]>(() => {
   const layout = paneLayout.value;
   return (props.controller.charts as XlsxChart[])
     .filter((chart) => chart.anchor)
-    .map((chart) => {
+    .flatMap((chart) => {
       const rect = resolveAnchorRect(chart.anchor, props.controller.activeSheet, props.controller.zoomScale);
       const isSelected = chart.id === selectedChartId.value;
       const placement = layout.place(rect);
+      if (!layout.isVisible(rect, placement.pane, props.viewportWidth ?? 0, props.viewportHeight ?? 0)) {
+        return [];
+      }
       const preview = interaction.previewFor(chart.id);
       const style: CSSProperties = {
         ...placement.style,
@@ -144,7 +149,7 @@ const chartItems = computed<ChartItem[]>(() => {
         style.width = `${preview.width}px`;
         style.height = `${preview.height}px`;
       }
-      return { chart, rect, pane: placement.pane, style };
+      return [{ chart, rect, pane: placement.pane, style }];
     });
 });
 
@@ -185,6 +190,12 @@ function onChartKeydown(chart: XlsxChart, event: KeyboardEvent) {
     event.preventDefault();
     event.stopPropagation();
     props.controller.moveChartBy(chart.id, delta[0] * step, delta[1] * step);
+    return;
+  }
+  if (event.key === "Delete" || event.key === "Backspace") {
+    event.preventDefault();
+    event.stopPropagation();
+    props.controller.deleteChart(chart.id);
     return;
   }
   if (event.key === "Escape") {

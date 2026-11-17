@@ -224,6 +224,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const selectedChartId = ref<string | null>(null);
   const selectedChartElement = ref<XlsxChartElementSelection | null>(null);
   const selectedImageId = ref<string | null>(null);
+  const selectedShapeId = ref<string | null>(null);
   const revision = ref(0);
   const selectionAnchorRef = shallowRef<XlsxCellAddress | null>(null);
   const undoStackRef = shallowRef<HistoryEntry[]>([]);
@@ -452,12 +453,15 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     );
     setImageAssets({
       archive: {},
+      formControlOriginsById: new Map(),
       formControlsByWorkbookSheetIndex: formControls,
       imageOriginsById: new Map(),
       imagesByWorkbookSheetIndex: images,
       namedCellStyleByName: {},
       objectUrls: snapshot.objectUrls ?? [],
+      shapeOriginsById: new Map(),
       shapesByWorkbookSheetIndex: shapes,
+      sheetPathsByWorkbookSheetIndex: [],
       sheetOrigins: Array.from({ length: workbookSheetCount }, () => null),
       sheetStatesByWorkbookSheetIndex: Array.from({ length: workbookSheetCount }, () => null),
       styleById: {},
@@ -1171,6 +1175,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     selectedChartId.value = null;
     selectedChartElement.value = null;
     selectedImageId.value = null;
+    selectedShapeId.value = null;
     selectionAnchorRef.value = null;
     sortState.value = null;
     reportDiagnostic({
@@ -1225,7 +1230,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       sourceBufferRef.value = null;
       activeSheetIndex.value = 0; activeTabIndex.value = 0;
       activeCell.value = null; selection.value = null;
-      selectedChartId.value = null; selectedChartElement.value = null; selectedImageId.value = null;
+      selectedChartId.value = null; selectedChartElement.value = null; selectedImageId.value = null; selectedShapeId.value = null;
       selectionAnchorRef.value = null;
       undoStackRef.value = []; redoStackRef.value = []; isApplyingHistoryRef.value = false; historyRevision.value = 0;
       shouldAutoCalculate.value = false;
@@ -1253,7 +1258,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     deferredLoadRef.value = null; deferredBufferRef.value = null; deferredLoadRequestIdRef.value = null; sourceBufferRef.value = null; deferredLoadFileSize.value = null;
     activeSheetIndex.value = 0; activeTabIndex.value = 0;
     activeCell.value = null; selection.value = null;
-    selectedChartId.value = null; selectedChartElement.value = null; selectedImageId.value = null;
+    selectedChartId.value = null; selectedChartElement.value = null; selectedImageId.value = null; selectedShapeId.value = null;
     selectionAnchorRef.value = null;
     undoStackRef.value = []; redoStackRef.value = []; isApplyingHistoryRef.value = false; historyRevision.value = 0;
     shouldAutoCalculate.value = false;
@@ -1369,7 +1374,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     isChartsLoading, workerTablesByWorkbookSheetIndex, formControlsByWorkbookSheetIndex,
     imagesByWorkbookSheetIndex, shapesByWorkbookSheetIndex, activeSheetIndex, activeTabIndex,
     zoomScaleOverridesByTabId, activeCell, selection, selectedChartId, selectedChartElement,
-    selectedImageId, revision, selectionAnchorRef, undoStackRef, redoStackRef, historyBudget,
+    selectedImageId, selectedShapeId, revision, selectionAnchorRef, undoStackRef, redoStackRef, historyBudget,
     isApplyingHistoryRef, historyRevision, shouldAutoCalculate, workerCellSnapshotRevision,
     isWorkerBacked, sortState, forcedReadOnly, dataValidationFeedback, deferredBufferRef, deferredLoadRequestIdRef, sourceBufferRef, deferredLoadFileSize,
     imageAssetsRef, chartAssetsRef, chartLoadRequestTokenRef, chartDisplayFallbackCleanupRef,
@@ -1513,10 +1518,16 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get error() { return error.value; },
     fillSelection: editingDomain.fillSelection,
     get formControls() { return chartImageDomain.formControls.value; },
+    getFormControlById: chartImageDomain.getFormControlById,
+    getFormControlItems: chartImageDomain.getFormControlItems,
+    addFormControl: chartImageDomain.addFormControl,
+    updateFormControl: chartImageDomain.updateFormControl,
+    removeFormControl: chartImageDomain.removeFormControl,
     getChartById: chartImageDomain.getChartById,
     getChartSeriesFormula: chartImageDomain.getChartSeriesFormula,
     getChartsheetById: chartImageDomain.getChartsheetById,
     getImageById: chartImageDomain.getImageById,
+    getShapeById: chartImageDomain.getShapeById,
     getSheetCharts: chartImageDomain.getSheetCharts,
     getSheetFormControls: chartImageDomain.getSheetFormControls,
     getSheetImages: chartImageDomain.getSheetImages,
@@ -1569,6 +1580,10 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     minZoomScale: MIN_ZOOM_SCALE,
     moveChartBy: chartImageDomain.moveChartBy,
     moveImageBy: chartImageDomain.moveImageBy,
+    moveShapeBy: chartImageDomain.moveShapeBy,
+    deleteChart: chartImageDomain.deleteChart,
+    deleteImage: chartImageDomain.deleteImage,
+    deleteShape: chartImageDomain.deleteShape,
     pasteFromClipboard: clipboardDomain.pasteFromClipboard,
     pasteStructuredClipboardData: clipboardDomain.pasteStructuredClipboardData,
     pasteText: clipboardDomain.pasteText,
@@ -1585,6 +1600,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get revision() { return revision.value; },
     resizeChartBy: chartImageDomain.resizeChartBy,
     resizeImageBy: chartImageDomain.resizeImageBy,
+    resizeShapeBy: chartImageDomain.resizeShapeBy,
     resizeColumn: historyDomain.resizeColumn,
     resizeRow: historyDomain.resizeRow,
     setCellFormula: editingDomain.setCellFormula,
@@ -1597,6 +1613,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     setChartRect: chartImageDomain.setChartRect,
     setChartSeriesFormula: chartImageDomain.setChartSeriesFormula,
     setImageRect: chartImageDomain.setImageRect,
+    setShapeRect: chartImageDomain.setShapeRect,
     get selectedChart() { return chartImageDomain.selectedChart.value; },
     get selectedChartElement() { return selectedChartElement.value; },
     get selectedChartFormula() { return selectedChartFormula.value; },
@@ -1606,12 +1623,16 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get selectedFormulaTarget() { return selectedFormulaTarget.value; },
     get selectedImage() { return chartImageDomain.selectedImage.value; },
     get selectedImageId() { return selectedImageId.value; },
+    get selectedShape() { return chartImageDomain.selectedShape.value; },
+    get selectedShapeId() { return selectedShapeId.value; },
     get selectedRangeAddress() { return selectedRangeAddress.value; },
     get selectedValue() { return selectedValue.value; },
     selectCell: editingDomain.selectCell,
     selectChart: chartImageDomain.selectChart,
     selectChartElement: chartImageDomain.selectChartElement,
     selectImage: chartImageDomain.selectImage,
+    selectShape: chartImageDomain.selectShape,
+    clearSelectedShape: chartImageDomain.clearSelectedShape,
     selectRange: editingDomain.selectRange,
     get selection() { return selection.value; },
     setActiveSheetIndex: navigationDomain.setActiveSheetIndex,
