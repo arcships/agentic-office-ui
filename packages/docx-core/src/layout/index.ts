@@ -17,7 +17,9 @@ import {
 } from "./layout-engine";
 import {
   paginateDocumentLayout,
-  type PaginatedPageBlock
+  resolvePaginationSectionGeometry,
+  type PaginatedPageBlock,
+  type PaginationSectionGeometry
 } from "./pagination-layout";
 import type { ParagraphLineRange, TableRowRange } from "./page-segmentation-core";
 export type {
@@ -185,29 +187,16 @@ function normalizeLayoutOptions(options: LayoutSnapshotOptions = {}): Required<L
   };
 }
 
-function createResolvedLayoutMetrics(
-  options: Required<LayoutOptions>
+function resolvedLayoutMetricsFromGeometry(
+  geometry: PaginationSectionGeometry
 ): ResolvedLayoutMetrics {
-  const marginPx = Math.max(0, Math.round(options.margin));
-  const pageWidthPx = Math.max(1, Math.round(options.pageWidth));
-  const pageHeightPx = Math.max(1, Math.round(options.pageHeight));
   return {
     pageSizePx: {
-      width: pageWidthPx,
-      height: pageHeightPx
+      width: geometry.pageWidthPx,
+      height: geometry.pageHeightPx
     },
-    marginsPx: {
-      top: marginPx,
-      right: marginPx,
-      bottom: marginPx,
-      left: marginPx
-    },
-    contentBoxPx: {
-      x: marginPx,
-      y: marginPx,
-      width: Math.max(0, pageWidthPx - marginPx * 2),
-      height: Math.max(0, pageHeightPx - marginPx * 2)
-    }
+    marginsPx: { ...geometry.marginsPx },
+    contentBoxPx: { ...geometry.contentBoxPx }
   };
 }
 
@@ -240,7 +229,30 @@ export function resolveDocumentForLayout(
   options: LayoutSnapshotOptions = {}
 ): ResolvedDocument {
   const normalizedOptions = normalizeLayoutOptions(options);
-  const layout = createResolvedLayoutMetrics(normalizedOptions);
+  const sectionGeometries = resolvePaginationSectionGeometry(model, {
+    pageWidthPx: normalizedOptions.pageWidth,
+    pageHeightPx: normalizedOptions.pageHeight,
+    marginPx: normalizedOptions.margin
+  });
+  const layout = resolvedLayoutMetricsFromGeometry(
+    sectionGeometries[0] ?? {
+      startNodeIndex: 0,
+      pageWidthPx: normalizedOptions.pageWidth,
+      pageHeightPx: normalizedOptions.pageHeight,
+      marginsPx: {
+        top: normalizedOptions.margin,
+        right: normalizedOptions.margin,
+        bottom: normalizedOptions.margin,
+        left: normalizedOptions.margin
+      },
+      contentBoxPx: {
+        x: normalizedOptions.margin,
+        y: normalizedOptions.margin,
+        width: Math.max(0, normalizedOptions.pageWidth - normalizedOptions.margin * 2),
+        height: Math.max(0, normalizedOptions.pageHeight - normalizedOptions.margin * 2)
+      }
+    }
+  );
 
   return {
     source: "layout-engine-adapter",

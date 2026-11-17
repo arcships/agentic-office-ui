@@ -61,7 +61,13 @@ const props = defineProps<{
   pageIndex: number
   section?: FooterSection
   model: DocModel
-  pageLayout: { pageWidthPx: number; pageHeightPx: number; marginsPx?: { top: number; bottom: number; left: number; right: number } }
+  pageLayout: {
+    pageWidthPx: number
+    pageHeightPx: number
+    marginsPx?: { top: number; bottom: number; left: number; right: number }
+    headerDistancePx?: number
+    footerDistancePx?: number
+  }
   pageContentWidthPx: number
   theme: "light" | "dark"
   controller?: DocxEditorController
@@ -70,25 +76,32 @@ const props = defineProps<{
   pageNumberFormat?: string
   trackedChangesEnabled?: boolean
   commentsEnabled?: boolean
+  /** Distance from the paper's bottom edge to the bottom of the footer box. */
+  footerDistancePx?: number
 }>()
 
+const resolvedFooterDistancePx = computed(() => {
+  const explicit = props.footerDistancePx
+  if (Number.isFinite(explicit) && (explicit as number) >= 0) return Math.round(explicit as number)
+  const fromLayout = props.pageLayout.footerDistancePx
+  if (Number.isFinite(fromLayout) && (fromLayout as number) >= 0) return Math.round(fromLayout as number)
+  return Math.round(props.pageLayout.marginsPx?.bottom ?? 72)
+})
+
 const footerStyle = computed(() => ({
+  position: "absolute" as const,
+  bottom: `${resolvedFooterDistancePx.value}px`,
+  left: `${props.pageLayout.marginsPx?.left ?? 72}px`,
+  right: `${props.pageLayout.marginsPx?.right ?? 72}px`,
   display: "grid",
   gap: "0px",
-  width: "100%",
+  width: "auto",
   boxSizing: "border-box" as const,
-  paddingTop: "8px",
-  borderTop: `1px solid ${props.theme === "dark" ? "#374151" : "#e5e7eb"}`,
-  color: props.theme === "dark" ? "#9ca3af" : "#6b7280",
-  marginTop: "auto",
 }))
 
 </script>
 
 <style scoped>
-.docx-page-footer {
-  font-size: 10pt;
-}
 .docx-page-footer-node {
   width: 100%;
 }

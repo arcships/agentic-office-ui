@@ -30,6 +30,12 @@ import type {
 } from "../engine/types";
 import { estimateParagraphLineHeightPx } from "../editor/helpers/line-height";
 import {
+  resolveFooterPaginationReservePx,
+  resolveHeaderPaginationReservePx,
+  sectionHasVisibleFooterContent,
+  sectionHasVisibleHeaderContent
+} from "../editor/helpers/header-footer";
+import {
   estimateParagraphHeightPx,
   estimateTableRowHeightsPx
 } from "../editor/helpers/line-height-table";
@@ -52,6 +58,7 @@ import {
 import {
   paragraphAfterSpacingPx,
   paragraphBeforeSpacingPx,
+  resolveDocumentSectionsFromMetadata,
   resolveSectionIndexForNodeIndex,
   type PaginationSectionMetrics
 } from "./pagination";
@@ -124,17 +131,25 @@ function resolveSectionContentBox(params: {
   pageWidthPx: number;
   pageHeightPx: number;
   marginsPx: PaginationMargins;
+  headerReservePx?: number;
+  footerReservePx?: number;
 }): PaginationRect {
+  const headerReservePx = Math.max(0, Math.round(params.headerReservePx ?? 0));
+  const footerReservePx = Math.max(0, Math.round(params.footerReservePx ?? 0));
   return {
     x: params.marginsPx.left,
-    y: params.marginsPx.top,
+    y: params.marginsPx.top + headerReservePx,
     width: Math.max(
       MIN_SECTION_CONTENT_PX,
       params.pageWidthPx - params.marginsPx.left - params.marginsPx.right
     ),
     height: Math.max(
       MIN_SECTION_CONTENT_PX,
-      params.pageHeightPx - params.marginsPx.top - params.marginsPx.bottom
+      params.pageHeightPx -
+        params.marginsPx.top -
+        params.marginsPx.bottom -
+        headerReservePx -
+        footerReservePx
     )
   };
 }
@@ -161,43 +176,70 @@ export function resolvePaginationSectionGeometry(
   };
   defaultGeometry.contentBoxPx = resolveSectionContentBox(defaultGeometry);
 
-  const sections = model.metadata.sections ?? [];
-  if (sections.length === 0) {
-    return [{ startNodeIndex: 0, ...defaultGeometry }];
-  }
+  const resolvedSections = resolveDocumentSectionsFromMetadata(
+    model.metadata
+  );
 
-  return sections.map((section, index) => {
+  return resolvedSections.map((section) => {
     const startNodeIndex =
       Number.isFinite(section.startNodeIndex) && section.startNodeIndex >= 0
         ? Math.round(section.startNodeIndex)
         : 0;
-
-    if (index === 0 && !section.sectionPropertiesXml) {
-      return { startNodeIndex, ...defaultGeometry };
-    }
-
-    if (!section.sectionPropertiesXml) {
-      return { startNodeIndex, ...defaultGeometry };
-    }
-
-    const layout = parseSectionLayout(section.sectionPropertiesXml);
-    const marginsPx: PaginationMargins = {
-      top: Math.max(0, Math.round(layout.marginsPx.top)),
-      right: Math.max(0, Math.round(layout.marginsPx.right)),
-      bottom: Math.max(0, Math.round(layout.marginsPx.bottom)),
-      left: Math.max(0, Math.round(layout.marginsPx.left))
-    };
+    const hasSectionProperties = Boolean(section.sectionPropertiesXml);
+    const parsedLayout = parseSectionLayout(section.sectionPropertiesXml);
+    const marginsPx: PaginationMargins = hasSectionProperties
+      ? {
+          top: Math.max(0, Math.round(parsedLayout.marginsPx.top)),
+          right: Math.max(0, Math.round(parsedLayout.marginsPx.right)),
+          bottom: Math.max(0, Math.round(parsedLayout.marginsPx.bottom)),
+          left: Math.max(0, Math.round(parsedLayout.marginsPx.left))
+        }
+      : defaultGeometry.marginsPx;
     const geometry = {
-      pageWidthPx: positiveRounded(layout.pageWidthPx, defaultGeometry.pageWidthPx),
-      pageHeightPx: positiveRounded(layout.pageHeightPx, defaultGeometry.pageHeightPx),
+      pageWidthPx: hasSectionProperties
+        ? positiveRounded(parsedLayout.pageWidthPx, defaultGeometry.pageWidthPx)
+        : defaultGeometry.pageWidthPx,
+      pageHeightPx: hasSectionProperties
+        ? positiveRounded(parsedLayout.pageHeightPx, defaultGeometry.pageHeightPx)
+        : defaultGeometry.pageHeightPx,
       marginsPx,
-      docGridLinePitchPx: layout.docGridLinePitchPx
+      docGridLinePitchPx: parsedLayout.docGridLinePitchPx
     };
+    const reserveOptions = {
+      estimateDocNodeHeightPx,
+      // Pagination should reserve only the real overlap with the body, not the
+      // renderer's small safety strip for a footer that fits in the margin.
+      minimumVisibleFlowFooterReservePx: 0
+    };
+    const headerReservePx = sectionHasVisibleHeaderContent(section)
+      ? resolveHeaderPaginationReservePx(
+          section.headerSections,
+          {
+            ...geometry,
+            headerDistancePx: parsedLayout.headerDistancePx
+          },
+          reserveOptions
+        )
+      : 0;
+    const footerReservePx = sectionHasVisibleFooterContent(section)
+      ? resolveFooterPaginationReservePx(
+          section.footerSections,
+          {
+            ...geometry,
+            footerDistancePx: parsedLayout.footerDistancePx
+          },
+          reserveOptions
+        )
+      : 0;
 
     return {
       startNodeIndex,
       ...geometry,
-      contentBoxPx: resolveSectionContentBox(geometry)
+      contentBoxPx: resolveSectionContentBox({
+        ...geometry,
+        headerReservePx,
+        footerReservePx
+      })
     };
   });
 }

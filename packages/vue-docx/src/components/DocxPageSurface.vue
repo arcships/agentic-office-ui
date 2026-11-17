@@ -59,23 +59,9 @@
         :comments-enabled="commentsEnabled"
         :note-marker-labels="noteMarkerLabels"
         :cover-image-child-indexes-by-node="coverImageChildIndexesByNode"
+        :header-reserve-px="pageFurnitureReservePx.header"
+        :footer-reserve-px="pageFurnitureReservePx.footer"
       >
-        <template v-if="hasHeader" #header>
-          <DocxPageHeader
-            :page-index="pageIndex"
-            :section="headerSection"
-            :page-layout="pageLayout"
-            :page-content-width-px="pageContentWidthPx"
-            :theme="theme"
-            :model="model"
-            :controller="controller"
-            :page-number="pageNumber"
-            :total-pages="totalPages"
-            :page-number-format="pageNumberFormat"
-            :tracked-changes-enabled="trackedChangesEnabled"
-            :comments-enabled="commentsEnabled"
-          />
-        </template>
         <template v-if="footnotes.length" #footnotes>
           <DocxNotesSection
             kind="footnote"
@@ -94,23 +80,42 @@
             :theme="theme"
           />
         </template>
-        <template v-if="hasFooter" #footer>
-          <DocxPageFooter
-            :page-index="pageIndex"
-            :section="footerSection"
-            :page-layout="pageLayout"
-            :page-content-width-px="pageContentWidthPx"
-            :theme="theme"
-            :model="model"
-            :controller="controller"
-            :page-number="pageNumber"
-            :total-pages="totalPages"
-            :page-number-format="pageNumberFormat"
-            :tracked-changes-enabled="trackedChangesEnabled"
-            :comments-enabled="commentsEnabled"
-          />
-        </template>
       </DocxPageBody>
+
+      <template v-if="hasHeader">
+        <DocxPageHeader
+          :page-index="pageIndex"
+          :section="headerSection"
+          :page-layout="pageLayout"
+          :page-content-width-px="pageContentWidthPx"
+          :theme="theme"
+          :model="model"
+          :controller="controller"
+          :page-number="pageNumber"
+          :total-pages="totalPages"
+          :page-number-format="pageNumberFormat"
+          :tracked-changes-enabled="trackedChangesEnabled"
+          :comments-enabled="commentsEnabled"
+          :header-distance-px="pageLayout.headerDistancePx"
+        />
+      </template>
+      <template v-if="hasFooter">
+        <DocxPageFooter
+          :page-index="pageIndex"
+          :section="footerSection"
+          :page-layout="pageLayout"
+          :page-content-width-px="pageContentWidthPx"
+          :theme="theme"
+          :model="model"
+          :controller="controller"
+          :page-number="pageNumber"
+          :total-pages="totalPages"
+          :page-number-format="pageNumberFormat"
+          :tracked-changes-enabled="trackedChangesEnabled"
+          :comments-enabled="commentsEnabled"
+          :footer-distance-px="pageLayout.footerDistancePx"
+        />
+      </template>
 
       <!-- Floating image layer -->
       <DocxImageLayer
@@ -189,10 +194,13 @@ import {
   findGutterAnnotationAnchorElementInPage,
   fullPageCoverAbsoluteFloatingImageStyle,
   isLikelyFullPageCoverFloatingImage,
+  estimateDocNodeHeightPx,
   parseSectionPageBorders,
   resolveDocumentBackgroundColor,
   resolveDocumentLayout,
   resolveDocumentSectionPropertiesXml,
+  resolveFooterPaginationReservePx,
+  resolveHeaderPaginationReservePx,
   resolveRenderableImageSource,
   pageMarginPaddingStyle,
 } from "@arcships/docx-core"
@@ -320,6 +328,32 @@ function publishPageSurface(): void {
 // ── Computed ───────────────────────────────────────────────────────
 const hasHeader = computed(() => (props.headerSection?.nodes.length ?? 0) > 0)
 const hasFooter = computed(() => (props.footerSection?.nodes.length ?? 0) > 0)
+
+// Extra body padding needed when a tall header/footer grows past the nominal
+// margin. The helpers return the overlap beyond the margin, so the body area
+// shrinks instead of the header/footer pushing the paper taller.
+const pageFurnitureReservePx = computed(() => {
+  const reserveOptions = {
+    estimateDocNodeHeightPx,
+    minimumVisibleFlowFooterReservePx: 0,
+  }
+  return {
+    header: hasHeader.value
+      ? resolveHeaderPaginationReservePx(
+          [props.headerSection as HeaderSection],
+          props.pageLayout,
+          reserveOptions
+        )
+      : 0,
+    footer: hasFooter.value
+      ? resolveFooterPaginationReservePx(
+          [props.footerSection as FooterSection],
+          props.pageLayout,
+          reserveOptions
+        )
+      : 0,
+  }
+})
 
 function nodesContainFormField(nodes: TableCellContentNode[]): boolean {
   return nodes.some((node) => {

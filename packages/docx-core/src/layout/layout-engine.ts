@@ -1,5 +1,6 @@
 import type {
   DocModel,
+  DocNode,
   FormFieldRunNode,
   HeadingLevel,
   ParagraphAlignment,
@@ -9,6 +10,7 @@ import type {
   TextStyle
 } from "../engine/types";
 import { shareImageData } from "../engine/clone";
+import { parseSectionLayout } from "../viewer/section-layout";
 
 export interface LayoutOptions {
   pageWidth?: number;
@@ -315,12 +317,132 @@ function estimateBlockHeight(block: LayoutBlock): number {
   return block.height;
 }
 
+// Header/footer content occupies the page margin band. When it grows past the
+// nominal margin, Word pushes the body down instead of growing the paper. The
+// legacy paginator must reserve that overflow so body lines do not slide under
+// the footer.
+const PAGE_FURNITURE_INTER_PARAGRAPH_GAP_PX = 8;
+
+function pageFurnitureNodeHasVisibleContent(node: DocNode): boolean {
+  if (node.type === "table") {
+    return true;
+  }
+
+  return node.children.some((child) => {
+    if (child.type === "text") {
+      return child.text.trim().length > 0;
+    }
+    return child.type === "image" || child.type === "form-field";
+  });
+}
+
+function estimatePageFurnitureSectionHeightPx(
+  nodes: DocNode[] | undefined,
+  availableWidthPx: number,
+  options: Required<LayoutOptions>
+): number {
+  const visibleNodes = (nodes ?? []).filter(pageFurnitureNodeHasVisibleContent);
+  if (visibleNodes.length === 0) {
+    return 0;
+  }
+
+  const heightPx = visibleNodes.reduce((sum, node) => {
+    const block =
+      node.type === "paragraph"
+        ? paragraphToLayout(
+            node,
+            "page-furniture",
+            0,
+            0,
+            availableWidthPx,
+            options.minLineHeight
+          )
+        : tableToLayout(node, "page-furniture", 0, 0, availableWidthPx, options);
+    return sum + block.height;
+  }, 0);
+
+  return (
+    heightPx +
+    Math.max(0, visibleNodes.length - 1) * PAGE_FURNITURE_INTER_PARAGRAPH_GAP_PX
+  );
+}
+
+export function resolvePageFurnitureReservePx(
+  model: DocModel,
+  options: Required<LayoutOptions>
+): { headerReservePx: number; footerReservePx: number } {
+  const metadata = model.metadata;
+  if (!metadata) {
+    return { headerReservePx: 0, footerReservePx: 0 };
+  }
+  const section = metadata.sections?.[0];
+  const sectionPropertiesXml =
+    section?.sectionPropertiesXml ?? metadata.sectionPropertiesXml;
+  const sectionLayout = parseSectionLayout(sectionPropertiesXml);
+  const headerSections =
+    section?.headerSections && section.headerSections.length > 0
+      ? section.headerSections
+      : metadata.headerSections;
+  const footerSections =
+    section?.footerSections && section.footerSections.length > 0
+      ? section.footerSections
+      : metadata.footerSections;
+  const availableWidthPx = Math.max(
+    24,
+    options.pageWidth - options.margin * 2
+  );
+  const estimateGroupsHeightPx = (
+    groups: Array<{ nodes?: DocNode[] }> | undefined
+  ): number =>
+    (groups ?? []).reduce(
+      (largest, group) =>
+        Math.max(
+          largest,
+          estimatePageFurnitureSectionHeightPx(
+            group.nodes,
+            availableWidthPx,
+            options
+          )
+        ),
+      0
+    );
+  const headerHeightPx = estimateGroupsHeightPx(headerSections);
+  const footerHeightPx = estimateGroupsHeightPx(footerSections);
+
+  return {
+    headerReservePx:
+      headerHeightPx > 0
+        ? Math.max(
+            0,
+            Math.round(
+              headerHeightPx + sectionLayout.headerDistancePx - options.margin
+            )
+          )
+        : 0,
+    footerReservePx:
+      footerHeightPx > 0
+        ? Math.max(
+            0,
+            Math.round(
+              footerHeightPx + sectionLayout.footerDistancePx - options.margin
+            )
+          )
+        : 0
+  };
+}
+
 export function layoutDocument(model: DocModel, options: LayoutOptions = {}): LayoutPage[] {
   const resolved = { ...DEFAULT_OPTIONS, ...options };
   const pages: LayoutPage[] = [{ number: 1, blocks: [] }];
   const contentWidth = resolved.pageWidth - resolved.margin * 2;
-  const pageBottom = resolved.pageHeight - resolved.margin;
-  let cursorY = resolved.margin;
+  const { headerReservePx, footerReservePx } = resolvePageFurnitureReservePx(
+    model,
+    resolved
+  );
+  const contentTop = resolved.margin + headerReservePx;
+  const pageBottom =
+    resolved.pageHeight - resolved.margin - footerReservePx;
+  let cursorY = contentTop;
 
   for (const [index, node] of model.nodes.entries()) {
     const block =
@@ -343,7 +465,7 @@ export function layoutDocument(model: DocModel, options: LayoutOptions = {}): La
         number: pages.length + 1,
         blocks: []
       });
-      cursorY = resolved.margin;
+      cursorY = contentTop;
 
       if (block.kind === "paragraph") {
         block.y = cursorY;

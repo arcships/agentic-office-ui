@@ -789,3 +789,97 @@ test("DOCX effectExtent expands the wrapped-image exclusion zone", () => {
     bottom: 138,
   });
 });
+
+function furnitureParagraph(text) {
+  return { type: "paragraph", children: [{ type: "text", text }] };
+}
+
+function furnitureModel(headerNodes = [], footerNodes = []) {
+  return {
+    nodes: Array.from({ length: 30 }, (_, index) =>
+      furnitureParagraph(`body ${index}`),
+    ),
+    metadata: {
+      sourceParts: 0,
+      warnings: [],
+      headerSections: headerNodes.length
+        ? [{ partName: "header1.xml", referenceType: "default", nodes: headerNodes }]
+        : [],
+      footerSections: footerNodes.length
+        ? [{ partName: "footer1.xml", referenceType: "default", nodes: footerNodes }]
+        : [],
+      paragraphStyles: [],
+      sectionPropertiesXml:
+        '<w:sectPr><w:pgMar w:top="720" w:bottom="720" w:header="720" w:footer="720"/></w:sectPr>',
+    },
+  };
+}
+
+const furnitureLayoutOptions = {
+  pageWidth: 400,
+  pageHeight: 400,
+  margin: 48,
+  minLineHeight: 20,
+  paragraphSpacing: 10,
+};
+
+test("DOCX pagination reserves a tall header instead of growing the page", () => {
+  const baselinePages = core.layoutDocument(
+    furnitureModel(),
+    furnitureLayoutOptions,
+  );
+  const headerModel = furnitureModel(
+    Array.from({ length: 4 }, (_, index) =>
+      furnitureParagraph(`header ${index}`),
+    ),
+  );
+  const headerPages = core.layoutDocument(headerModel, furnitureLayoutOptions);
+
+  assert.ok(headerPages.length > baselinePages.length);
+  // Four 20px lines + three 8px gaps + 48px header distance - 48px top margin.
+  assert.equal(headerPages[0].blocks[0].y, 152);
+  assert.equal(headerPages[0].blocks[0].height, 20);
+});
+
+test("DOCX pagination reserves a tall footer so body lines stay above it", () => {
+  const baselinePages = core.layoutDocument(
+    furnitureModel(),
+    furnitureLayoutOptions,
+  );
+  const footerModel = furnitureModel(
+    [],
+    Array.from({ length: 4 }, (_, index) =>
+      furnitureParagraph(`footer ${index}`),
+    ),
+  );
+  const footerPages = core.layoutDocument(footerModel, furnitureLayoutOptions);
+
+  assert.ok(footerPages.length > baselinePages.length);
+  const lastPage = footerPages[footerPages.length - 1];
+  const lastBlock = lastPage.blocks[lastPage.blocks.length - 1];
+  // Body content bottom is pageHeight - margin - footer reserve (104px).
+  assert.ok(lastBlock.y + lastBlock.height <= 248);
+});
+
+test("DOCX layout snapshot inherits header/footer pagination reserves", () => {
+  const model = furnitureModel(
+    Array.from({ length: 4 }, (_, index) =>
+      furnitureParagraph(`header ${index}`),
+    ),
+  );
+  const snapshot = core.buildLayoutSnapshot(model, furnitureLayoutOptions);
+  const firstBlock = snapshot.pages[0].blocks[0];
+  assert.equal(firstBlock.framePx.y, 124);
+  const resolved = core.resolveDocumentForLayout(model, furnitureLayoutOptions);
+  assert.equal(resolved.layout.contentBoxPx.y, 124);
+  assert.equal(resolved.layout.contentBoxPx.height, 1028);
+
+  const baseline = core.buildLayoutSnapshot(
+    furnitureModel(),
+    furnitureLayoutOptions,
+  );
+  assert.ok(snapshot.pages[0].contentBoxPx.y > baseline.pages[0].contentBoxPx.y);
+  assert.ok(
+    snapshot.pages[0].contentBoxPx.height < baseline.pages[0].contentBoxPx.height,
+  );
+});
