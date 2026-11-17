@@ -170,6 +170,7 @@ import {
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
 import { renderStaticHtml } from "../render/static-html"
 import { readDocxTextHostText } from "../composables/editor-selection"
+import { useDocxMessages } from "../i18n"
 import { resolveTableGrid, type TableGridCell } from "./table-grid"
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -238,6 +239,8 @@ const emit = defineEmits<{
   cellFocus: [tableIndex: number, rowIndex: number, cellIndex: number, paragraphIndex: number]
   measure: [tableIndex: number, rowHeightsPx: number[]]
 }>()
+
+const m = useDocxMessages()
 
 // ── State ──────────────────────────────────────────────────────────
 const tableEl = ref<HTMLElement | undefined>()
@@ -662,6 +665,8 @@ function cellParagraphHtml(
     resolveBookmarkPageNumber: props.resolveBookmarkPageNumber,
     noteMarkerLabels: props.noteMarkerLabels,
     tableCellLayout: { widthPx: cellContentWidthPx(cell) },
+    imageAltText: m.value.docx.image.alt,
+    imageMissingText: m.value.docx.image.missing,
   }
   const rendered = renderParagraphRuns(
     para,

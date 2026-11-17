@@ -61,7 +61,7 @@ import {
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
-import { formatOfficeMessage, localizeOfficeObjectDescriptor } from "@arcships/office-interaction"
+import { formatOfficeMessage, localizeOfficeObjectDescriptor, localizeOfficeResolveResult, localizeOfficeDescriptorLabel } from "@arcships/office-interaction"
 import { providePptxMessages } from "./i18n"
 
 const props = withDefaults(defineProps<{
@@ -281,7 +281,10 @@ function candidateForHit(hit: StageHit): OfficeReferenceCandidatePreview | undef
   if (hit.objectKey) {
     const draft = createPptxObjectReferenceDraft(context, hit.slideIndex, hit.objectKey)
     const identity = context.playbackDocument.slides[hit.slideIndex]?.objects.find((object) => object.key === hit.objectKey)
-    const label = identity?.name || `${draft.kind} ${identity?.shapeId ?? ""}`.trim()
+    const rawLabel = identity?.name || `${draft.kind} ${identity?.shapeId ?? ""}`.trim()
+    const label = identity?.name?.trim()
+      ? identity.name.trim()
+      : localizeOfficeDescriptorLabel(rawLabel, m.value.common)
     return {
       candidateId: `pptx:object:${hit.objectKey}`,
       draft,
@@ -677,9 +680,7 @@ defineExpose({
   },
   async resolveReference(reference: OfficeObjectReference): Promise<ResolveReferenceResult> {
     const result = resolvePptxReference(referenceContext(), reference)
-    const localized = result.status === "exact" || result.status === "relocated"
-      ? { ...result, descriptor: localizeOfficeObjectDescriptor(result.descriptor, m.value.common) }
-      : result
+    const localized = localizeOfficeResolveResult(result, m.value.common)
     emit("referenceResolve", { referenceId: reference.referenceId, result: localized })
     return localized
   },

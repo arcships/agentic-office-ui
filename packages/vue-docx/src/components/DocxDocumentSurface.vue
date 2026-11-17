@@ -105,7 +105,7 @@ import {
 } from "../composables/useDocxSearch"
 import DocxViewerRoot from "./DocxViewerRoot.vue"
 import { provideDocxMessages } from "../i18n"
-import { formatOfficeMessage, localizeOfficeObjectDescriptor } from "@arcships/office-interaction"
+import { formatOfficeMessage, localizeOfficeObjectDescriptor, localizeOfficeResolveResult } from "@arcships/office-interaction"
 import { docxTextRangeFromDomSelection } from "../composables/editor-selection"
 
 const props = withDefaults(
@@ -1264,9 +1264,7 @@ defineExpose({
   async resolveReference(reference: OfficeObjectReference): Promise<ResolveReferenceResult> {
     const result = resolveDocxReference(referenceContext(), reference)
     emitResolveFailure(reference, result, "resolve")
-    const localized = result.status === "exact" || result.status === "relocated"
-      ? { ...result, descriptor: localizeOfficeObjectDescriptor(result.descriptor, m.value.common) }
-      : result
+    const localized = localizeOfficeResolveResult(result, m.value.common)
     emit("referenceResolve", { referenceId: reference.referenceId, result: localized })
     return localized
   },

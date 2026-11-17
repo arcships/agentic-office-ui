@@ -323,6 +323,57 @@ test("PptxStage confirms rendered objects and slide regions without owning produ
   mounted.app.unmount()
 })
 
+test("PptxStage localizes lowercase object candidate labels under zh-CN", async () => {
+  const changes = []
+  const Harness = vue.defineComponent({
+    setup() {
+      return () => vue.h(PptxStage, {
+        documentId: "surface.pptx",
+        locale: "zh-CN",
+        selectionMode: "object",
+        emitReferenceCandidates: true,
+        onReferenceCandidateChange: (event) => changes.push(event),
+      })
+    },
+  })
+  const mounted = await mount(Harness)
+  const stage = findByTestId(mounted.root, "pptx-stage")
+  const content = walk(mounted.root).find((node) => node.props?.class === "pptx-stage__content")
+  assert.ok(stage)
+  assert.ok(content)
+
+  const object = {
+    dataset: {
+      pptxObjectKey: "slide-1/shape-7",
+      pptxNodeId: "7",
+      pptxNodeType: "shape",
+      pptxSource: "slide",
+    },
+    getAttribute: () => null,
+    querySelectorAll: () => [],
+  }
+  const slide = {
+    dataset: { slideIndex: "0", pptxSlidePath: "ppt/slides/slide1.xml" },
+    getBoundingClientRect: () => ({ left: 10, top: 20, width: 1280, height: 720 }),
+    querySelector: () => null,
+    querySelectorAll: (selector) => selector === "[data-pptx-object-key]" ? [object] : [],
+  }
+  content.querySelectorAll = (selector) => selector === "[data-slide-index]" ? [slide] : []
+  content.querySelector = () => slide
+  const objectTarget = { closest: (selector) => selector === "[data-slide-index]" ? slide : object }
+  stage.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1300, height: 760 })
+  const ownerDocument = { elementFromPoint: () => objectTarget, elementsFromPoint: () => [objectTarget] }
+  stage.ownerDocument = ownerDocument
+  content.ownerDocument = ownerDocument
+
+  stage.props.onPointermove({ clientX: 110, clientY: 120 })
+  await new Promise((resolve) => setTimeout(resolve, 30))
+  assert.equal(changes.at(-1).candidates[0].preview.label, "形状 7")
+  assert.equal(changes.at(-1).candidates[0].preview.path[0].label, "演示文稿")
+  assert.deepEqual(mounted.warnings, [])
+  mounted.app.unmount()
+})
+
 test("XlsxSheetSurface localizes describeReference and resolveReference descriptors", async (t) => {
   const previousWindow = globalThis.window
   const previousResizeObserver = globalThis.ResizeObserver

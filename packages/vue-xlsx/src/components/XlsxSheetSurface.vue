@@ -114,7 +114,7 @@ import XlsxContextMenu from "./XlsxContextMenu.vue"
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue"
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch"
 import { provideXlsxMessages } from "../i18n"
-import { formatOfficeMessage, localizeOfficeObjectDescriptor } from "@arcships/office-interaction"
+import { formatOfficeMessage, localizeOfficeObjectDescriptor, localizeOfficeResolveResult } from "@arcships/office-interaction"
 
 const props = withDefaults(
   defineProps<{
@@ -621,9 +621,7 @@ defineExpose({
   },
   async resolveReference(reference: OfficeObjectReference): Promise<ResolveReferenceResult> {
     const result = resolveXlsxReference(referenceContext(), reference)
-    const localized = result.status === "exact" || result.status === "relocated"
-      ? { ...result, descriptor: localizeOfficeObjectDescriptor(result.descriptor, m.value.common) }
-      : result
+    const localized = localizeOfficeResolveResult(result, m.value.common)
     emit("referenceResolve", { referenceId: reference.referenceId, result: localized })
     return localized
   },
