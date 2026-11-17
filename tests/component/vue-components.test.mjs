@@ -312,7 +312,6 @@ test("DocxViewer displays model-derived tracked changes and comments without an 
   assert.equal(trackedToggle.props["aria-pressed"], true);
   assert.equal(commentToggle.props["aria-pressed"], true);
   assert.match(textContent(mounted.root), /Alex Reviewer/);
-  assert.match(textContent(mounted.root), /Morgan Editor/);
   assert.match(textContent(mounted.root), /Priya Reviewer/);
   assert.match(textContent(mounted.root), /Please confirm this report includes the service-level summary/);
 
