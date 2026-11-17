@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -42,12 +43,14 @@ function documentWithSlides(count, fileName = "preview.pptx", warnings = []) {
   };
 }
 
-function createSession({ document = documentWithSlides(3), open, renderSlide } = {}) {
+function createSession({ document = documentWithSlides(3), open, renderSlide, withRefresh = false } = {}) {
   const calls = {
     clearSearchHighlights: 0,
     dispose: 0,
     open: [],
+    refresh: 0,
     renderSlide: [],
+    renderThumbnail: [],
     setZoom: [],
   };
   let currentSlideIndex = 0;
@@ -68,7 +71,11 @@ function createSession({ document = documentWithSlides(3), open, renderSlide } =
       if (renderSlide) await renderSlide(index, session);
       currentSlideIndex = index;
     },
-    renderThumbnail() { return null; },
+    renderThumbnail(index, target, width) {
+      calls.renderThumbnail.push({ index, target, width });
+      return null;
+    },
+    ...(withRefresh ? { async refresh() { calls.refresh += 1; } } : {}),
     searchText() { return []; },
     async highlightSearchResult() { return null; },
     clearSearchHighlights() { calls.clearSearchHighlights += 1; },
@@ -165,6 +172,85 @@ function createPlaybackSession({ document = documentWithSlides(3), open, renderS
 
 function button(root, label) {
   return walk(root).find((node) => node.type === "button" && node.props?.["aria-label"] === label);
+}
+
+function classNames(node) {
+  return String(node?.props?.class || "").split(/\s+/).filter(Boolean);
+}
+
+function nodesWithClass(root, className) {
+  return walk(root).filter((node) => classNames(node).includes(className));
+}
+
+function thumbnails(root) {
+  return nodesWithClass(root, "pptx-thumbnail").filter((node) => node.type === "button");
+}
+
+function installIntersectionObserver(t) {
+  const original = globalThis.IntersectionObserver;
+  const instances = [];
+  class StubIntersectionObserver {
+    constructor(callback, options) {
+      this.callback = callback;
+      this.options = options;
+      this.targets = new Set();
+      this.disconnected = false;
+      instances.push(this);
+    }
+
+    observe(target) {
+      this.targets.add(target);
+    }
+
+    unobserve(target) {
+      this.targets.delete(target);
+    }
+
+    disconnect() {
+      this.disconnected = true;
+      this.targets.clear();
+    }
+
+    intersect(target) {
+      this.targets.delete(target);
+      this.callback([{ target, isIntersecting: true }]);
+    }
+  }
+  globalThis.IntersectionObserver = StubIntersectionObserver;
+  t.after(() => {
+    if (original) globalThis.IntersectionObserver = original;
+    else delete globalThis.IntersectionObserver;
+  });
+  return instances;
+}
+
+function installFontFaceSet(t) {
+  const originalDocument = globalThis.document;
+  const listeners = new Set();
+  let resolveReady;
+  const ready = new Promise((resolve) => { resolveReady = resolve; });
+  const fonts = {
+    ready,
+    status: "loading",
+    addEventListener(type, listener) {
+      if (type === "loadingdone") listeners.add(listener);
+    },
+    removeEventListener(type, listener) {
+      if (type === "loadingdone") listeners.delete(listener);
+    },
+  };
+  globalThis.document = { fonts };
+  t.after(() => {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  });
+  return {
+    emitLoadingDone() {
+      for (const listener of [...listeners]) listener({ type: "loadingdone" });
+    },
+    listenerCount: () => listeners.size,
+    resolveReady: () => resolveReady(fonts),
+  };
 }
 
 test("PptxStage and composables expose the minimal document and playback controls", async () => {
@@ -496,7 +582,6 @@ test("PptxViewer keeps the deck reachable when a single slide fails to render", 
     () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
     "PPTX ready state",
   );
-
   button(mounted.root, "下一页").props.onClick();
   await waitFor(() => calls.renderSlide.includes(1), "second slide render");
   button(mounted.root, "下一页").props.onClick();
@@ -843,4 +928,162 @@ test("pptx-viewer stylesheet keeps the fullscreen and letterbox rules", async ()
   assert.match(css, /\.pptx-viewer:fullscreen\s*\{/);
   assert.match(css, /aspect-ratio:\s*var\(--pptx-slide-aspect/);
   assert.match(css, /--pptx-slide-ratio/);
+});
+
+test("PptxViewer windows the sidebar and shares one thumbnail observer", async (t) => {
+  const observers = installIntersectionObserver(t);
+  const { calls, session } = createSession({ document: documentWithSlides(240) });
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([1]),
+    sessionFactory: () => session,
+    showSearch: false,
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state",
+  );
+  // 960x540 slide at the default 148px thumbnail width => 132px rows.
+  const sidebar = findByTestId(mounted.root, "pptx-sidebar");
+  assert.equal(sidebar.props.style["--pptx-thumbnail-item-height"], "132px");
+
+  const initial = thumbnails(mounted.root);
+  assert.equal(initial.length, 12, "only the visible window plus overscan may mount");
+  assert.equal(initial[0].props["data-pptx-thumbnail-index"], 0);
+  assert.equal(initial.at(-1).props["data-pptx-thumbnail-index"], 11);
+  const initialSpacers = nodesWithClass(mounted.root, "pptx-viewer__sidebar-spacer");
+  assert.equal(initialSpacers.length, 1);
+  assert.equal(initialSpacers[0].props.style.height, `${(240 - 12) * 132}px`);
+
+  assert.equal(observers.length, 1, "the whole sidebar must share a single observer");
+  assert.equal(observers[0].options.rootMargin, "240px");
+  assert.equal(observers[0].targets.size, 12);
+  assert.deepEqual(calls.renderThumbnail, [], "thumbnails wait until they approach the viewport");
+
+  const observed = [...observers[0].targets].find((node) => node.props["data-pptx-thumbnail-index"] === 2);
+  assert.ok(observed, "the third thumbnail must be observed");
+  observers[0].intersect(observed);
+  await vue.nextTick();
+  assert.deepEqual(calls.renderThumbnail.map((call) => call.index), [2]);
+  assert.equal(calls.renderThumbnail[0].width, 148);
+
+  sidebar.props.onScrollPassive({ target: { scrollTop: 30 * 132, clientHeight: 660 } });
+  await vue.nextTick();
+  const scrolled = thumbnails(mounted.root);
+  assert.equal(scrolled.length, 12);
+  assert.equal(scrolled[0].props["data-pptx-thumbnail-index"], 27);
+  assert.equal(scrolled.at(-1).props["data-pptx-thumbnail-index"], 38);
+  const scrolledSpacers = nodesWithClass(mounted.root, "pptx-viewer__sidebar-spacer");
+  assert.equal(scrolledSpacers.length, 2);
+  assert.equal(scrolledSpacers[0].props.style.height, `${27 * 132}px`);
+  assert.equal(observers[0].targets.size, 12, "scrolled-out thumbnails must unobserve");
+
+  mounted.app.unmount();
+  assert.equal(observers[0].disconnected, true);
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("PptxViewer re-measures the stage and thumbnails once per loaded font batch", async (t) => {
+  const fontSet = installFontFaceSet(t);
+  const { calls, session } = createSession({ document: documentWithSlides(3), withRefresh: true });
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([1]),
+    sessionFactory: () => session,
+    showSearch: false,
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state",
+  );
+  assert.deepEqual(calls.renderThumbnail.map((call) => call.index), [0, 1, 2]);
+  assert.equal(calls.refresh, 0);
+
+  fontSet.emitLoadingDone();
+  fontSet.emitLoadingDone();
+  fontSet.emitLoadingDone();
+  await waitFor(() => calls.refresh === 1, "PPTX refresh after fonts load");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls.refresh, 1, "one font batch must coalesce into one refresh");
+
+  await waitFor(() => calls.renderThumbnail.length === 6, "thumbnail repaint after fonts load");
+  assert.deepEqual(
+    calls.renderThumbnail.slice(3).map((call) => call.index).sort((left, right) => left - right),
+    [0, 1, 2],
+    "thumbnails must render again with the loaded font metrics",
+  );
+
+  fontSet.resolveReady();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(calls.refresh, 1, "fonts.ready must not repeat a batch already reported by loadingdone");
+  assert.equal(calls.renderThumbnail.length, 6);
+
+  mounted.app.unmount();
+  assert.equal(fontSet.listenerCount(), 0);
+  const refreshed = calls.refresh;
+  fontSet.emitLoadingDone();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(calls.refresh, refreshed, "the font listener must be removed on unmount");
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("PptxViewer refreshes once when webfonts settle through fonts.ready", async (t) => {
+  const fontSet = installFontFaceSet(t);
+  const { calls, session } = createSession({ document: documentWithSlides(2), withRefresh: true });
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([1]),
+    sessionFactory: () => session,
+    showSearch: false,
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state",
+  );
+  assert.equal(calls.refresh, 0);
+  assert.deepEqual(calls.renderThumbnail.map((call) => call.index), [0, 1]);
+
+  fontSet.resolveReady();
+  await waitFor(() => calls.refresh === 1, "fonts.ready refresh");
+  await waitFor(() => calls.renderThumbnail.length === 4, "thumbnail repaint after fonts.ready");
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(calls.refresh, 1);
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("PptxViewer tolerates sessions without a refresh hook", async (t) => {
+  const fontSet = installFontFaceSet(t);
+  const { session } = createSession({ document: documentWithSlides(2) });
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([1]),
+    sessionFactory: () => session,
+    showSearch: false,
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state",
+  );
+
+  fontSet.emitLoadingDone();
+  fontSet.resolveReady();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(findByTestId(mounted.root, "pptx-viewer").props["data-state"], "ready");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PPTX viewer styles keep a CJK-aware font stack", async () => {
+  const style = await readFile(
+    new URL("../../packages/vue-pptx/src/style.css", import.meta.url),
+    "utf8",
+  );
+  const stack = /--pptx-font-family:\s*([^;]+);/u.exec(style)?.[1] ?? "";
+  for (const family of [
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
+    "Noto Sans CJK SC",
+    "Source Han Sans SC",
+  ]) {
+    assert.ok(stack.includes(`"${family}"`), `font stack must include ${family}`);
+  }
+  assert.match(style, /font-family:\s*var\(--pptx-font-family\)/u);
 });

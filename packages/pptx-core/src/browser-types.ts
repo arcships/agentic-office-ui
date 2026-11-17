@@ -70,6 +70,12 @@ export interface PptxPreviewSession {
   highlightSearchResult(result: PptxSearchResult): Promise<PptxDisposableHandle | null>
   clearSearchHighlights(): void
   setZoom(percent: number): Promise<void>
+  /**
+   * Re-render the current view so text is measured again.
+   * Hosts call this after external layout inputs change, such as web fonts
+   * finishing loading after the first paint.
+   */
+  refresh?(): Promise<void>
   cancel(): void
   dispose(): void
 }

@@ -61,15 +61,35 @@
     </div>
 
     <div class="pptx-viewer__body">
-      <aside v-if="showSidebar && !isPresent && document" class="pptx-viewer__sidebar" aria-label="幻灯片列表">
+      <aside
+        v-if="showSidebar && !isPresent && document"
+        ref="sidebarRef"
+        class="pptx-viewer__sidebar"
+        aria-label="幻灯片列表"
+        data-testid="pptx-sidebar"
+        :style="{ '--pptx-thumbnail-item-height': `${thumbnailItemHeight}px` }"
+        @scroll.passive="onSidebarScroll"
+      >
+        <div
+          v-if="sidebarWindow.start > 0"
+          class="pptx-viewer__sidebar-spacer"
+          :style="{ height: `${sidebarWindow.start * thumbnailItemHeight}px` }"
+          aria-hidden="true"
+        />
         <PptxThumbnail
-          v-for="slide in document.slides"
-          :key="`${loadGeneration}:${slide.index}`"
+          v-for="slide in visibleSlides"
+          :key="`${loadGeneration}:${thumbnailFontEpoch}:${slide.index}`"
           :session="requireSession()"
           :slide="slide"
           :active="slide.index === activeIndex"
           :width="thumbnailWidth"
           @select="run(() => goTo($event))"
+        />
+        <div
+          v-if="document.slides.length > sidebarWindow.end"
+          class="pptx-viewer__sidebar-spacer"
+          :style="{ height: `${(document.slides.length - sidebarWindow.end) * thumbnailItemHeight}px` }"
+          aria-hidden="true"
         />
       </aside>
 
@@ -152,7 +172,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from "vue"
 import {
   PptxPlaybackError,
   PptxPreviewError,
@@ -178,6 +198,11 @@ import {
 import type { PptxSearchState, UsePptxDocumentOptions, PptxStageExpose } from "./headless-types"
 import { usePptxDocument } from "./composables/usePptxDocument"
 import { usePptxPlayback } from "./composables/usePptxPlayback"
+import { watchFontLoading } from "./composables/font-loading"
+import {
+  PPTX_THUMBNAIL_OBSERVER,
+  createPptxThumbnailObserver,
+} from "./composables/thumbnail-observer"
 import PptxStage from "./PptxStage.vue"
 import PptxThumbnail from "./PptxThumbnail.vue"
 
@@ -245,12 +270,30 @@ const emit = defineEmits<{
 
 type ViewerState = "empty" | "waiting" | "loading" | "ready" | "cancelled" | "error"
 
+/** Padding, border, label and gap around the thumbnail canvas, kept in sync with `style.css`. */
+const THUMBNAIL_CHROME_PX = 48
+const THUMBNAIL_MIN_CANVAS_PX = 84
+const SIDEBAR_OVERSCAN_ROWS = 3
+const SIDEBAR_FALLBACK_VIEWPORT_PX = 640
+
 const viewerRef = ref<HTMLElement | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const stageScrollRef = ref<HTMLElement | null>(null)
 const stageRef = ref<PptxStageExpose | null>(null)
 const stageElement = computed(() => stageRef.value?.element ?? null)
 const isPresent = computed(() => props.mode === "present")
+
+// One laziness gate shared by every sidebar thumbnail.
+const thumbnailObserver = createPptxThumbnailObserver()
+provide(PPTX_THUMBNAIL_OBSERVER, thumbnailObserver)
+onBeforeUnmount(() => thumbnailObserver.dispose())
+
+// Thumbnails painted before a webfont loaded keep fallback metrics; remount them once per font batch.
+const thumbnailFontEpoch = ref(0)
+const stopFontLoadingWatcher = watchFontLoading(() => {
+  thumbnailFontEpoch.value += 1
+})
+onBeforeUnmount(stopFontLoadingWatcher)
 
 const documentOptions = {
   source: () => props.source,
@@ -357,6 +400,29 @@ const canGoNext = computed(() =>
   && activeIndex.value < document.value.slides.length - 1,
 )
 
+// Sidebar virtualization: keep the mounted thumbnail count proportional to the
+// visible rows instead of the deck length.
+const sidebarRef = ref<HTMLElement | null>(null)
+const sidebarScrollTop = ref(0)
+const sidebarViewportHeight = ref(SIDEBAR_FALLBACK_VIEWPORT_PX)
+const thumbnailItemHeight = computed(() => {
+  const slideshow = document.value
+  const ratio = slideshow && slideshow.width > 0 ? slideshow.height / slideshow.width : 9 / 16
+  return Math.max(THUMBNAIL_MIN_CANVAS_PX, Math.round(props.thumbnailWidth * ratio)) + THUMBNAIL_CHROME_PX
+})
+const sidebarWindow = computed(() => {
+  const count = document.value?.slides.length ?? 0
+  const itemHeight = thumbnailItemHeight.value
+  const firstVisible = Math.floor(Math.max(0, sidebarScrollTop.value) / itemHeight)
+  const visibleRows = Math.ceil(sidebarViewportHeight.value / itemHeight) + 1
+  const start = Math.max(0, Math.min(firstVisible, Math.max(count - 1, 0)) - SIDEBAR_OVERSCAN_ROWS)
+  const end = Math.max(start, Math.min(count, start + visibleRows + SIDEBAR_OVERSCAN_ROWS * 2))
+  return { start, end }
+})
+const visibleSlides = computed(() =>
+  document.value?.slides.slice(sidebarWindow.value.start, sidebarWindow.value.end) ?? [],
+)
+
 const playbackToggleLabel = computed(() => playbackSnapshot.value?.status === "running" ? "暂停" : "播放")
 const playbackStatusText = computed(() => {
   const labels: Record<string, string> = {
@@ -451,6 +517,51 @@ function requireSession(): PptxPreviewSession {
   if (!session) throw new PptxPreviewError("RENDER_FAILED", "PPTX 预览会话尚未准备好。")
   return session
 }
+
+function measureSidebar(): void {
+  const element = sidebarRef.value
+  if (!element || typeof element.clientHeight !== "number" || element.clientHeight <= 0) return
+  sidebarViewportHeight.value = element.clientHeight
+}
+
+function setSidebarScrollTop(value: number): void {
+  sidebarScrollTop.value = Math.max(0, value)
+  const element = sidebarRef.value
+  if (element && typeof element.scrollTop === "number") element.scrollTop = sidebarScrollTop.value
+}
+
+function revealSidebarSlide(index: number): void {
+  if (!sidebarRef.value) return
+  const itemHeight = thumbnailItemHeight.value
+  const top = Math.max(0, index) * itemHeight
+  const bottom = top + itemHeight
+  const current = sidebarScrollTop.value
+  const viewport = sidebarViewportHeight.value
+  const next = top < current ? top : bottom > current + viewport ? bottom - viewport : current
+  if (next !== current) setSidebarScrollTop(next)
+}
+
+function onSidebarScroll(event: Event): void {
+  const target = event.target as { scrollTop?: unknown; clientHeight?: unknown } | null
+  if (typeof target?.scrollTop === "number") sidebarScrollTop.value = Math.max(0, target.scrollTop)
+  if (typeof target?.clientHeight === "number" && target.clientHeight > 0) {
+    sidebarViewportHeight.value = target.clientHeight
+  }
+}
+
+watch(document, () => {
+  setSidebarScrollTop(0)
+  measureSidebar()
+}, { flush: "post" })
+
+watch(activeIndex, (index) => {
+  measureSidebar()
+  revealSidebarSlide(index)
+}, { flush: "post" })
+
+watch(thumbnailItemHeight, () => {
+  revealSidebarSlide(activeIndex.value)
+}, { flush: "post" })
 
 function resetSearch(): void {
   pptxDocument.clearSearch()
@@ -694,6 +805,7 @@ defineExpose({
   searchPrevious: pptxDocument.searchPrevious,
   clearSearch,
   getSearchState: pptxDocument.getSearchState,
+  refresh: pptxDocument.refresh,
   enterFullscreen,
   exitFullscreen,
 })

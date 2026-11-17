@@ -194,6 +194,14 @@ export function createPptxDocumentSession(
   let currentArchive: PptxFiles | null = null
   let currentPlaybackDocument: PptxPlaybackDocument | null = null
   let disposed = false
+  const renderMode = options.renderMode ?? "slide"
+  const listOptions = {
+    windowed: options.listOptions?.windowed ?? true,
+    batchSize: options.listOptions?.batchSize,
+    initialSlides: options.listOptions?.initialSlides,
+    overscanViewport: options.listOptions?.overscanViewport,
+    showSlideLabels: options.listOptions?.showSlideLabels,
+  }
   const playbackControllers = new Set<ReturnType<typeof createPptxPlaybackController>>()
   const searchCache = new Map<string, TextSearchResult>()
   const mediaUrls = new Map<string, string>()
@@ -298,14 +306,8 @@ export function createPptxDocumentSession(
           Math.max(presentation.slides.length - 1, 0),
         )
         viewer.load(presentation)
-        if ((options.renderMode ?? "slide") === "list") {
-          await viewer.renderList({
-            windowed: options.listOptions?.windowed ?? true,
-            batchSize: options.listOptions?.batchSize,
-            initialSlides: options.listOptions?.initialSlides,
-            overscanViewport: options.listOptions?.overscanViewport,
-            showSlideLabels: options.listOptions?.showSlideLabels,
-          })
+        if (renderMode === "list") {
+          await viewer.renderList(listOptions)
           if (initialSlide > 0) {
             await viewer.goToSlide(initialSlide, { behavior: "instant", block: "start" })
           }
@@ -385,6 +387,21 @@ export function createPptxDocumentSession(
     async setZoom(percent) {
       assertUsable()
       await viewer.setZoom(Math.min(400, Math.max(10, Math.round(percent))))
+    },
+    async refresh() {
+      assertUsable()
+      if (!currentDocument) return
+      const slideIndex = viewer.currentSlideIndex
+      try {
+        if (renderMode === "list") {
+          await viewer.renderList(listOptions)
+          await viewer.goToSlide(slideIndex, { behavior: "instant", block: "center" })
+        } else {
+          await viewer.renderSlide(slideIndex)
+        }
+      } catch (error) {
+        throw new PptxPreviewError("RENDER_FAILED", "无法重新渲染 PPTX。", error)
+      }
     },
     cancel() {
       coordinator.cancel()

@@ -35,6 +35,7 @@ import type {
   UsePptxDocumentReturn,
 } from "../headless-types"
 import { isDocumentSession, registerDocumentBinding } from "./internal"
+import { watchFontLoading } from "./font-loading"
 
 interface InternalDocumentOptions extends UsePptxDocumentOptions {
   factory?: PptxDocumentSessionFactory | PptxPreviewSessionFactory
@@ -112,6 +113,7 @@ export function usePptxDocument(
   let navigationGeneration = 0
   let disposed = false
   let pendingOpen: PendingOpen | null = null
+  let stopFontLoadingWatcher: (() => void) | null = null
 
   const surfaceSearch = createSurfaceSearchSession<PptxSearchResult>({
     search(query, { signal }) {
@@ -134,7 +136,27 @@ export function usePptxDocument(
     searchStateValue.value = next
   })
 
+  function stopFontWatcher(): void {
+    stopFontLoadingWatcher?.()
+    stopFontLoadingWatcher = null
+  }
+
+  async function refresh(): Promise<void> {
+    const current = sessionValue.value
+    if (!current || stateValue.value !== "ready" || typeof current.refresh !== "function") return
+    await current.refresh()
+  }
+
+  function startFontWatcher(): void {
+    stopFontWatcher()
+    if (disposed) return
+    stopFontLoadingWatcher = watchFontLoading(() => {
+      void refresh().catch(() => undefined)
+    })
+  }
+
   function releaseSession(): void {
+    stopFontWatcher()
     surfaceSearch.clearSearch()
     const current = sessionValue.value
     sessionValue.value = null
@@ -252,6 +274,7 @@ export function usePptxDocument(
       capabilityValue.value = isDocumentSession(current) ? current.capabilityReport : null
       slideErrorValue.value = null
       stateValue.value = "ready"
+      startFontWatcher()
       if (pendingOpen?.source === source) {
         pendingOpen.resolve(loaded)
         pendingOpen = null
@@ -379,6 +402,7 @@ export function usePptxDocument(
     nextSlide: () => goTo(activeIndexValue.value + 1),
     previousSlide: () => goTo(activeIndexValue.value - 1),
     setZoom,
+    refresh,
     search: (query) => surfaceSearch.search(query),
     activateSearchMatch: (index) => surfaceSearch.activateSearchMatch(index),
     searchNext: () => surfaceSearch.searchNext(),
