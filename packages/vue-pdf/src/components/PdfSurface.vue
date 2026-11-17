@@ -482,7 +482,20 @@ function referenceContext(): PdfReferenceContext {
   const document = renderDocument.value
   const runtime = runtimeForDocument
   if (!document || !runtime) throw new Error("PDF reference context is unavailable before the document loads.")
-  return { revision: documentRevision.value, document, runtime }
+  return {
+    revision: documentRevision.value,
+    document,
+    runtime,
+    descriptors: {
+      document: descriptor("pdf"),
+      page: (pageIndex) => descriptor("page", { number: pageIndex + 1 }),
+      selectedText: m.value.common.selectedText,
+      textRange: m.value.common.descriptors.textRange,
+      selectedRegion: m.value.common.descriptors.selectedRegion,
+      textLabel: (text) => formatOfficeMessage(m.value.common.descriptors.textLabel, { text }),
+      regionOnPage: (pageIndex) => descriptor("regionOnPage", { number: pageIndex + 1 }),
+    },
+  }
 }
 
 function ensurePageContentHash(pageIndex: number): Promise<void> | undefined {

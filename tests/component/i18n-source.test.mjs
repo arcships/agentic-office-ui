@@ -284,6 +284,7 @@ test("TypeScript status, label and error assignments use catalog keys", () => {
     /\b(?:ctx\.)?status(?:\.value)?\s*=\s*(`[^`]*`|"[^"]*"|'[^']*')/gu,
     /\b(?:status|message|label|ariaLabel|title)\s*:\s*(`[^`]*`|"[^"]*"|'[^']*')/gu,
     /\b(?:refuse|unsupported)\(\s*("[^"]*"|'[^']*')/gu,
+    /\?\?\s*(`[^`]*`|"[^"]*"|'[^']*')/gu,
   ]
 
   for (const packageName of SCANNED_PACKAGES) {
@@ -407,8 +408,15 @@ test("the previously hard-coded strings now resolve through the catalog", () => 
     ["vue-xlsx", "src/components/XlsxSheetSurface.vue", "Unable to confirm XLSX reference.", "common.reference.confirmFailed"],
     ["vue-xlsx", "src/components/XlsxSheetSurface.vue", "label: \"Workbook\"", "descriptor(\"workbook\")"],
     ["vue-xlsx", "src/render/chart-svg-utils.tsx", "Unsupported chart type:", "officeMessagesEn.xlsx.chart.unsupportedType"],
-    ["vue-xlsx", "src/render/chart-renderer.tsx", "?? \"Chart\"", "labels.value.ariaLabel"],
-    ["vue-xlsx", "src/render/surface-regl.tsx", "?? \"Chart\"", "props.chartLabels?.ariaLabel"],
+    ["vue-xlsx", "src/render/chart-renderer.tsx", "?? \"Chart\"", "resolveChartAriaLabel"],
+    ["vue-xlsx", "src/render/surface-regl.tsx", "?? \"Chart\"", "resolveChartAriaLabel"],
+    ["vue-xlsx", "src/render/chart-svg-utils.tsx", "label: series.name ??", "resolveChartSeriesLabel"],
+    ["vue-xlsx", "src/render/chart-data.ts", "Series ${", "resolveChartSeriesLabel"],
+    ["vue-xlsx", "src/render/chart-bar.tsx", "Series ${", "resolveChartSeriesLabel"],
+    ["vue-docx", "src/components/DocxDocumentSurface.vue", "Table ${", "descriptor(\"table\""],
+    ["vue-xlsx", "src/components/XlsxSheetSurface.vue", "Row ${", "descriptor(\"row\""],
+    ["vue-xlsx", "src/components/XlsxSheetSurface.vue", "Column ${", "descriptor(\"column\""],
+    ["vue-pdf", "src/pdf/pdf-reference-adapter.ts", "label: \"Document\"", "resolveDescriptorLabels"],
     ["vue-docx", "src/composables/editor-image.ts", "Select an image file", "ctx.statusMessage(\"selectImageFile\")"],
     ["vue-docx", "src/composables/editor-table.ts", "Cannot delete the only table row", "refuse(\"cannotDeleteOnlyTableRow\")"],    ["vue-docx", "src/composables/editor-format.ts", "Unsupported: diagonal paragraph borders", "ctx.statusMessage(\"unsupportedDiagonalParagraphBorders\""],
     ["vue-pdf", "src/pdf-url-policy.ts", "The source is not a verified PDF file.", "messages.invalidPdf"],

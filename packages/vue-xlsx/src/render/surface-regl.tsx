@@ -1,7 +1,7 @@
 import { defineComponent, onMounted, onUnmounted, ref, watchEffect, type VNode } from "vue";
 import createREGL from "regl";
 import type { XlsxChart } from "@arcships/xlsx-core";
-import { officeMessagesEn } from "@arcships/office-interaction";
+import { resolveChartAriaLabel } from "./chart-shared";
 
 type SurfacePalette = {
   border: string;
@@ -1140,7 +1140,7 @@ export const MemoSurfaceChartComposite = /* @__PURE__ */ defineComponent({
 
       return (
         <div
-          aria-label={chart.title ?? chart.name ?? props.chartLabels?.ariaLabel ?? officeMessagesEn.xlsx.chart.ariaLabel}
+          aria-label={resolveChartAriaLabel(chart, props.chartLabels)}
           role="img"
           style={{
             background,

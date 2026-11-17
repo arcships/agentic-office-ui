@@ -22,6 +22,8 @@ import {
   wrapSvgText,
 } from "./chart-renderer";
 import type { ChartLayout, ChartLegendMetrics, ChartRendererPalette, LegendItem } from "./chart-renderer";
+import type { ChartLabels } from "./chart-types";
+import { resolveChartSeriesLabel } from "./chart-shared";
 
 const LEGEND_FONT_SIZE = 10;
 const LEGEND_SWATCH_SIZE = 8;
@@ -30,15 +32,15 @@ const LEGEND_LINE_HEIGHT = 12;
 const LEGEND_ITEM_GAP = 6;
 const LEGEND_PADDING = 8;
 
-export function getLegendItems(chart: XlsxChart, chartType: string, palette: ChartRendererPalette): LegendItem[] {
+export function getLegendItems(chart: XlsxChart, chartType: string, palette: ChartRendererPalette, labels?: ChartLabels): LegendItem[] {
   if (!chart.legend) {
     return [];
   }
   if (isComboChart(chart)) {
-    return getComboLegendSeries(chart);
+    return getComboLegendSeries(chart, labels);
   }
   if (chartType === "Stock") {
-    return buildStockLegendItems(chart, palette);
+    return buildStockLegendItems(chart, palette, labels);
   }
   if (chartType === "Surface") {
     return buildSurfaceLegendItems(chart, palette);
@@ -87,7 +89,7 @@ export function getLegendItems(chart: XlsxChart, chartType: string, palette: Cha
     color: isXyLegend
       ? (series.lineColor ?? series.markerColor ?? series.color ?? chartSeriesColor(chart, index))
       : chartSeriesColor(chart, index),
-    label: series.name ?? `Series ${index + 1}`
+    label: resolveChartSeriesLabel(series, index, labels)
   }));
 }
 

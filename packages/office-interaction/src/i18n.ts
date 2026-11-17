@@ -77,6 +77,14 @@ export interface OfficeCommonMessages {
     image: string
     /** Template with a `{number}` placeholder. */
     table: string
+    /** Template with a `{number}` placeholder. */
+    row: string
+    /** Template with a `{number}` placeholder. */
+    cell: string
+    /** Template with a `{number}` placeholder. */
+    paragraph: string
+    /** Template with a `{column}` placeholder. */
+    column: string
     workbook: string
     presentation: string
     /** Template with a `{number}` placeholder. */
@@ -86,6 +94,8 @@ export interface OfficeCommonMessages {
     selectedRegion: string
     /** Template with a `{number}` placeholder. */
     regionOnPage: string
+    /** Template with a `{name}` placeholder. */
+    regionOnSheet: string
     /** Template with a `{text}` placeholder. */
     textLabel: string
   }
@@ -528,9 +538,18 @@ export interface OfficeXlsxMessages {
     /** Template with a `{type}` placeholder. */
     unsupportedType: string
     other: string
+    /** Template with a `{number}` placeholder. */
+    seriesName: string
+    root: string
   }
   image: {
     alt: string
+  }
+  table: {
+    /** Template with a `{number}` placeholder. */
+    defaultName: string
+    /** Template with a `{number}` placeholder. */
+    defaultColumn: string
   }
   drawing: {
     button: string
@@ -858,6 +877,10 @@ export const officeMessagesEn: OfficeMessages = {
       page: "Page {number}",
       image: "Image",
       table: "Table {number}",
+      row: "Row {number}",
+      cell: "Cell {number}",
+      paragraph: "Paragraph {number}",
+      column: "Column {column}",
       workbook: "Workbook",
       presentation: "Presentation",
       slide: "Slide {number}",
@@ -865,6 +888,7 @@ export const officeMessagesEn: OfficeMessages = {
       textRange: "Text range",
       selectedRegion: "Selected region",
       regionOnPage: "Region on page {number}",
+      regionOnSheet: "Region on {name}",
       textLabel: "Text: {text}",
     },
   },
@@ -1273,9 +1297,15 @@ export const officeMessagesEn: OfficeMessages = {
       ariaLabel: "Chart",
       unsupportedType: "Unsupported chart type: {type}",
       other: "Other",
+      seriesName: "Series {number}",
+      root: "Root",
     },
     image: {
       alt: "Image",
+    },
+    table: {
+      defaultName: "Table {number}",
+      defaultColumn: "Column {number}",
     },
     drawing: {
       button: "Button",
@@ -1560,6 +1590,10 @@ export const officeMessagesZhCN: OfficeMessages = {
       page: "第 {number} 页",
       image: "图片",
       table: "表格 {number}",
+      row: "第 {number} 行",
+      cell: "第 {number} 个单元格",
+      paragraph: "第 {number} 段",
+      column: "{column} 列",
       workbook: "工作簿",
       presentation: "演示文稿",
       slide: "第 {number} 张幻灯片",
@@ -1567,6 +1601,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       textRange: "文本范围",
       selectedRegion: "选定区域",
       regionOnPage: "第 {number} 页上的区域",
+      regionOnSheet: "{name} 上的区域",
       textLabel: "文本：{text}",
     },
   },
@@ -1974,9 +2009,15 @@ export const officeMessagesZhCN: OfficeMessages = {
       ariaLabel: "图表",
       unsupportedType: "不支持的图表类型：{type}",
       other: "其他",
+      seriesName: "系列 {number}",
+      root: "根节点",
     },
     image: {
       alt: "图片",
+    },
+    table: {
+      defaultName: "表格 {number}",
+      defaultColumn: "列 {number}",
     },
     drawing: {
       button: "按钮",

@@ -22,6 +22,10 @@ const {
 } = await importFromDemo("@arcships/vue-docx")
 const {
   XlsxViewer,
+  buildLayout,
+  getLegendItems,
+  renderChartPlot,
+  resolveChartAriaLabel,
   checkCellValueAgainstDataValidation,
   localizeDataValidationFeedback,
   useClipboardCopyNotice,
@@ -36,6 +40,12 @@ const {
   new URL("../../packages/office-interaction/src/i18n.ts", import.meta.url)
 )
 const { createBlankDocumentModel, normalizeDocModel } = await importFromDemo("@arcships/docx-core")
+const {
+  localizeOfficeDescriptorLabel,
+  localizeOfficeObjectDescriptor,
+} = await import(
+  new URL("../../packages/office-interaction/dist/index.js", import.meta.url)
+)
 
 function message(locale) {
   return resolveOfficeMessages(locale)
@@ -256,6 +266,78 @@ test("XLSX error text and live region localize from the load error code", async 
     } finally {
       mounted.app.unmount()
     }
+  }
+})
+
+function vnodeText(value, result = []) {
+  if (Array.isArray(value)) {
+    for (const item of value) vnodeText(item, result)
+    return result
+  }
+  if (!value || typeof value !== "object") {
+    if (typeof value === "string" && value.trim()) result.push(value.trim())
+    return result
+  }
+  vnodeText(value.children, result)
+  return result
+}
+
+test("XLSX chart aria, legend and unsupported copy localize", () => {
+  for (const [locale, aria, legend, unsupported] of [
+    ["en", "Chart", "Series 1", "Unsupported chart type: Mystery"],
+    ["zh-CN", "图表", "系列 1", "不支持的图表类型：Mystery"],
+  ]) {
+    const labels = message(locale).xlsx.chart
+    const palette = { border: "#cccccc", mutedText: "#666666", surface: "#ffffff", text: "#111111" }
+    const chart = {
+      id: "chart-known",
+      chartType: "ColumnClustered",
+      categories: ["A", "B"],
+      legend: { position: "bottom" },
+      series: [{ categories: ["A", "B"], values: [1, 2] }, { categories: ["A", "B"], values: [3, 4] }],
+    }
+    assert.equal(resolveChartAriaLabel(chart, labels), aria)
+    const legendItems = getLegendItems(chart, "ColumnClustered", palette, labels)
+    assert.equal(legendItems[0]?.label, legend)
+
+    const layout = buildLayout(chart, { left: 0, top: 0, width: 640, height: 360 }, legendItems)
+    const unsupportedNode = renderChartPlot(
+      { ...chart, chartType: "Mystery" },
+      palette,
+      layout,
+      "Mystery",
+      null,
+      labels,
+    )
+    assert.match(vnodeText(unsupportedNode).join(" "), new RegExp(unsupported, "u"))
+  }
+})
+
+test("descriptor mapping localizes Table, Row, Column and describeReference paths", () => {
+  for (const [locale, table, row, column, page, workbook] of [
+    ["en", "Table 2", "Row 3", "Column A", "Page 4", "Workbook"],
+    ["zh-CN", "表格 2", "第 3 行", "A 列", "第 4 页", "工作簿"],
+  ]) {
+    const messages = message(locale).common
+    assert.equal(localizeOfficeDescriptorLabel("Table 2", messages), table)
+    assert.equal(localizeOfficeDescriptorLabel("Row 3", messages), row)
+    assert.equal(localizeOfficeDescriptorLabel("Column A", messages), column)
+    assert.equal(localizeOfficeDescriptorLabel("Page 4", messages), page)
+    assert.equal(localizeOfficeDescriptorLabel("Workbook", messages), workbook)
+
+    const descriptor = localizeOfficeObjectDescriptor({
+      objectId: "xlsx:row:2",
+      draft: { document: { format: "xlsx", documentId: "doc", revision: "r1" }, locator: { type: "format", format: "xlsx", value: { kind: "row", sheetId: "s1", index: 2 } } },
+      label: "Row 3",
+      path: [
+        { kind: "workbook", label: "Workbook" },
+        { kind: "worksheet", label: "Sheet1" },
+        { kind: "row", label: "Row 3" },
+      ],
+      childrenState: "none",
+    }, messages)
+    assert.equal(descriptor.label, row)
+    assert.deepEqual(descriptor.path.map((entry) => entry.label), [workbook, "Sheet1", row])
   }
 })
 

@@ -180,8 +180,8 @@ import { renderPieChart, renderBarOfPieChart, renderSunburstChart, renderTreemap
 import { renderScatterChart, renderBubbleChart } from "./chart-scatter";
 import { renderSurfaceChart, renderSurfaceHitOverlay, renderRegionMapChart } from "./chart-surface";
 import { MemoSurfaceChartComposite } from "./surface-regl";
-import type { ChartRendererPalette, ChartLayout } from "./chart-types";
-import { buildChartFontFamily, resolveChartMutedTextColor } from "./chart-shared";
+import type { ChartLabels, ChartRendererPalette, ChartLayout } from "./chart-types";
+import { buildChartFontFamily, resolveChartAriaLabel, resolveChartMutedTextColor } from "./chart-shared";
 import { normalizeRenderableChartType, isComboChart } from "./chart-data";
 import { getLegendItems } from "./chart-legend";
 import { buildLayout } from "./chart-legend";
@@ -197,7 +197,7 @@ export function renderChartPlot(
   layout: ChartLayout,
   chartType: string,
   selectedChartElement?: XlsxChartElementSelection | null,
-  chartLabels?: { ariaLabel: string; unsupportedType: string },
+  chartLabels?: ChartLabels,
 ) {
   if (isComboChart(chart)) {
     return renderComboChart(chart, palette, layout, selectedChartElement) ?? renderUnsupported(chart, palette, layout, "Combo", chartLabels?.unsupportedType);
@@ -210,7 +210,7 @@ export function renderChartPlot(
     || chartType === "BarStacked"
     || chartType === "BarPercentStacked"
   ) {
-    return renderBarChart(chart, palette, layout, chartType, selectedChartElement);
+    return renderBarChart(chart, palette, layout, chartType, selectedChartElement, chartLabels);
   }
   if (
     chartType === "Line"
@@ -250,13 +250,13 @@ export function renderChartPlot(
     return renderStockChart(chart, palette, layout, selectedChartElement);
   }
   if (chartType === "Waterfall") {
-    return renderWaterfallChart(chart, palette, layout, selectedChartElement);
+    return renderWaterfallChart(chart, palette, layout, selectedChartElement, chartLabels);
   }
   if (chartType === "Funnel") {
-    return renderFunnelChart(chart, palette, layout, selectedChartElement);
+    return renderFunnelChart(chart, palette, layout, selectedChartElement, chartLabels);
   }
   if (chartType === "BoxWhisker") {
-    return renderBoxWhiskerChart(chart, palette, layout, selectedChartElement);
+    return renderBoxWhiskerChart(chart, palette, layout, selectedChartElement, chartLabels);
   }
   if (chartType === "Sunburst") {
     return renderSunburstChart(chart, palette, layout, selectedChartElement);
@@ -274,7 +274,7 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
   name: "MemoChartSvg",
   props: {
     chart: { type: Object as () => XlsxChart, required: true },
-    chartLabels: { type: Object as () => { ariaLabel: string; unsupportedType: string } | undefined, default: undefined },
+    chartLabels: { type: Object as () => ChartLabels | undefined, default: undefined },
     onChartElementDoubleClick: { type: Function as unknown as () => ((selection: XlsxChartElementSelection, event: MouseEvent) => void) | undefined, default: undefined },
     onChartElementPointerDown: { type: Function as unknown as () => ((selection: XlsxChartElementSelection, event: PointerEvent) => void) | undefined, default: undefined },
     palette: { type: Object as () => ChartRendererPalette, required: true },
@@ -294,14 +294,16 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
       vnode: VNode;
     } | null = null;
 
-    const labels = computed(() => props.chartLabels ?? {
+    const labels = computed<ChartLabels>(() => props.chartLabels ?? {
       ariaLabel: officeMessagesEn.xlsx.chart.ariaLabel,
       unsupportedType: officeMessagesEn.xlsx.chart.unsupportedType,
+      other: officeMessagesEn.xlsx.chart.other,
+      seriesName: officeMessagesEn.xlsx.chart.seriesName,
     });
     const renderContent = (): VNode => {
       const { chart, onChartElementDoubleClick, onChartElementPointerDown, palette, rect, selectedChartElement } = props;
       const renderChartType = normalizeRenderableChartType(chart);
-      const legendItems = getLegendItems(chart, renderChartType, palette);
+      const legendItems = getLegendItems(chart, renderChartType, palette, labels.value);
       const layout = buildLayout(chart, rect, legendItems);
       const chartRaw = chart.raw && typeof chart.raw === "object" ? chart.raw as Record<string, unknown> : null;
       const explicitNoFill = chartRaw?.chartAreaNoFill === true || chartRaw?.plotAreaNoFill === true;
@@ -361,7 +363,7 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
 
       return (
         <svg
-          aria-label={chart.title ?? chart.name ?? labels.value.ariaLabel}
+          aria-label={resolveChartAriaLabel(chart, labels.value)}
           onDblclick={handleDoubleClick}
           onPointerdown={handlePointerDown}
           role="img"

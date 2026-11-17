@@ -1,5 +1,30 @@
 /** @jsxImportSource vue */
-import type { XlsxChart } from "@arcships/xlsx-core";
+import type { XlsxChart, XlsxChartSeries } from "@arcships/xlsx-core";
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction";
+import type { ChartLabels } from "./chart-types";
+
+/** Localized accessible name for a chart without an explicit title or name. */
+export function resolveChartAriaLabel(
+  chart: Pick<XlsxChart, "title" | "name">,
+  labels?: Pick<ChartLabels, "ariaLabel">,
+): string {
+  return chart.title ?? chart.name ?? labels?.ariaLabel ?? officeMessagesEn.xlsx.chart.ariaLabel
+}
+
+/** Localized legend/stage name for a chart series without an explicit name. */
+export function resolveChartSeriesLabel(
+  series: Pick<XlsxChartSeries, "name"> | null | undefined,
+  index: number,
+  labels?: Pick<ChartLabels, "seriesName">,
+): string {
+  const name = series?.name?.trim();
+  if (name) return name;
+  return formatOfficeMessage(
+    labels?.seriesName ?? officeMessagesEn.xlsx.chart.seriesName,
+    { number: index + 1 },
+  );
+}
+
 
 // ---- Color utilities ----
 

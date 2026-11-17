@@ -114,7 +114,7 @@ import XlsxContextMenu from "./XlsxContextMenu.vue"
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue"
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch"
 import { provideXlsxMessages } from "../i18n"
-import { formatOfficeMessage } from "@arcships/office-interaction"
+import { formatOfficeMessage, localizeOfficeObjectDescriptor } from "@arcships/office-interaction"
 
 const props = withDefaults(
   defineProps<{
@@ -266,12 +266,12 @@ function candidateForPoint(point: { clientX: number; clientY: number }): OfficeR
   const axis = gridRef.value?.hitTestAxis(point.clientX, point.clientY)
   if (axis?.kind === "row") {
     const draft = createXlsxRowReferenceDraft(referenceContext(), sheet, axis.actualIndex)
-    return [{ candidateId: `xlsx:row:${axis.actualIndex}`, draft, preview: { label: `Row ${axis.actualIndex + 1}`, path: [...worksheetPath(sheet), { kind: "row", label: `Row ${axis.actualIndex + 1}` }] }, hit: "direct", depth: 2 }]
+    return [{ candidateId: `xlsx:row:${axis.actualIndex}`, draft, preview: { label: descriptor("row", { number: axis.actualIndex + 1 }), path: [...worksheetPath(sheet), { kind: "row", label: descriptor("row", { number: axis.actualIndex + 1 }) }] }, hit: "direct", depth: 2 }]
   }
   if (axis?.kind === "column") {
     const label = columnLabel(axis.actualIndex)
     const draft = createXlsxColumnReferenceDraft(referenceContext(), sheet, axis.actualIndex)
-    return [{ candidateId: `xlsx:column:${axis.actualIndex}`, draft, preview: { label: `Column ${label}`, path: [...worksheetPath(sheet), { kind: "column", label: `Column ${label}` }] }, hit: "direct", depth: 2 }]
+    return [{ candidateId: `xlsx:column:${axis.actualIndex}`, draft, preview: { label: descriptor("column", { column: label }), path: [...worksheetPath(sheet), { kind: "column", label: descriptor("column", { column: label }) }] }, hit: "direct", depth: 2 }]
   }
   if (axis?.kind === "corner") {
     const draft = createXlsxWorksheetReferenceDraft(referenceContext(), sheet)
@@ -617,7 +617,7 @@ defineExpose({
     if (signal?.aborted) throw new DOMException("XLSX reference description aborted.", "AbortError")
     const descriptor = describeXlsxReference(referenceContext(), reference)
     if (!descriptor) throw new Error("XLSX reference is not resolvable in the current revision.")
-    return descriptor
+    return localizeOfficeObjectDescriptor(descriptor, m.value.common)
   },
   async resolveReference(reference: OfficeObjectReference): Promise<ResolveReferenceResult> {
     const result = resolveXlsxReference(referenceContext(), reference)
