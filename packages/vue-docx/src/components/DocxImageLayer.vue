@@ -440,17 +440,6 @@ watch(() => props.editable, (editable) => {
 
 const imageGroupsKey = computed(() =>
   floatingImages.value.map((image) => [
-
-// A new document model can reuse the same node/child position. Failure state
-// belongs to the image source, not to that position, so reset it on switch.
-watch(() => props.controller.model, () => {
-  if (failedImageSourceKeys.value.size > 0) {
-    failedImageSourceKeys.value = new Set<string>()
-  }
-})
-
-watch(
-  () => floatingImages.value.map((image) => [
     image.key,
     image.flowWrapped,
     image.behindDocument,
@@ -460,6 +449,14 @@ watch(
     image.heightPx,
   ].join(":")).join("|")
 )
+
+// A new document model can reuse the same node/child position. Failure state
+// belongs to the image source, not to that position, so reset it on switch.
+watch(() => props.controller.model, () => {
+  if (failedImageSourceKeys.value.size > 0) {
+    failedImageSourceKeys.value = new Set<string>()
+  }
+})
 
 watch(
   imageGroupsKey,
