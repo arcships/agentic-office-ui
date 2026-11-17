@@ -128,15 +128,61 @@ export function resolveFieldText(
 
 function formatPageFieldValue(value: number, format?: string): string {
   if (!format) return String(value)
-  const lower = format.trim().toLowerCase()
-  if (lower === "i" || lower === "romanlower") return numberToRoman(value).toLowerCase()
-  if (lower === "I" || lower === "romanupper" || lower === "roman") return numberToRoman(value)
-  if (/^[a-z]$/i.test(lower)) {
-    const offset = lower.charCodeAt(0) - 97
-    const base = lower === lower.toUpperCase() ? 65 : 97
+  const rawFormat = format.trim()
+  if (!rawFormat) return String(value)
+  const normalized = rawFormat.toLowerCase()
+
+  // OOXML ST_NumberFormat values (w:pgNumType/@w:fmt) are case-insensitive.
+  switch (normalized) {
+    case "lowerroman":
+    case "romanlower":
+      return numberToRoman(value).toLowerCase()
+    case "upperroman":
+    case "romanupper":
+    case "roman":
+      return numberToRoman(value)
+    case "lowerletter":
+    case "loweralpha":
+      return numberToLetters(value).toLowerCase()
+    case "upperletter":
+    case "upperalpha":
+      return numberToLetters(value)
+    case "none":
+      return ""
+    case "decimalzero":
+      return String(value).padStart(2, "0")
+    default:
+      break
+  }
+
+  // Legacy single-letter aliases: "i"/"I" select lower/upper Roman, and
+  // "a".."z"/"A".."Z" select letter numbering with that letter as offset.
+  if (normalized === "i") {
+    return rawFormat === "I"
+      ? numberToRoman(value)
+      : numberToRoman(value).toLowerCase()
+  }
+
+  if (/^[a-z]$/.test(normalized)) {
+    const offset = normalized.charCodeAt(0) - 97
+    const uppercase = rawFormat === rawFormat.toUpperCase()
+    const base = uppercase ? 65 : 97
     return String.fromCharCode(base + ((value - 1 + offset) % 26))
   }
+
   return String(value)
+}
+
+export function numberToLetters(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return ""
+  let remaining = Math.floor(value)
+  let output = ""
+  while (remaining > 0) {
+    const offset = (remaining - 1) % 26
+    output = String.fromCharCode(65 + offset) + output
+    remaining = Math.floor((remaining - 1) / 26)
+  }
+  return output
 }
 
 export function numberToRoman(value: number): string {

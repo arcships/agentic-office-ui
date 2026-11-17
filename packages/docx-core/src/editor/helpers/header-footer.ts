@@ -557,6 +557,12 @@ export interface HeaderFooterReserveOptions {
     numberingDefinitions: NumberingDefinitionSet | undefined,
     docGridLinePitchPx?: number
   ) => number;
+  /**
+   * Safety reserve applied whenever a footer has visible flow content, even
+   * when it fits inside the nominal bottom margin. Defaults to the historical
+   * safety value; callers that only want the real body-overlap reserve pass 0.
+   */
+  minimumVisibleFlowFooterReservePx?: number;
 }
 
 export function resolveHeaderPaginationReservePx(
@@ -771,7 +777,13 @@ export function resolveFooterPaginationReservePx(
 
   return Math.max(
     estimatedFooterHeightPx > 0
-      ? MIN_VISIBLE_FLOW_FOOTER_PAGINATION_RESERVE_PX
+      ? Math.max(
+          0,
+          Math.round(
+            options.minimumVisibleFlowFooterReservePx ??
+              MIN_VISIBLE_FLOW_FOOTER_PAGINATION_RESERVE_PX
+          )
+        )
       : 0,
     resolvedReservePx
   );

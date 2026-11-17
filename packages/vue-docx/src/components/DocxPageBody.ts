@@ -93,6 +93,8 @@ export default defineComponent({
       type: Object as PropType<Record<number, readonly number[]>>,
       required: false,
     },
+    headerReservePx: { type: Number, default: 0 },
+    footerReservePx: { type: Number, default: 0 },
   },
   emits: ["measure"],
   setup(props, { emit, slots }) {
@@ -352,6 +354,8 @@ export default defineComponent({
             flex: "0 1 auto",
             minHeight: "0px",
             overflow: "hidden",
+            paddingTop: `${Math.max(0, Math.round(props.headerReservePx))}px`,
+            paddingBottom: `${Math.max(0, Math.round(props.footerReservePx))}px`,
             color: props.theme === "dark" ? "#f9fafb" : "#111827",
           },
         },

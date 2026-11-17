@@ -61,7 +61,13 @@ const props = defineProps<{
   pageIndex: number
   section?: HeaderSection
   model: DocModel
-  pageLayout: { pageWidthPx: number; pageHeightPx: number; marginsPx?: { top: number; bottom: number; left: number; right: number } }
+  pageLayout: {
+    pageWidthPx: number
+    pageHeightPx: number
+    marginsPx?: { top: number; bottom: number; left: number; right: number }
+    headerDistancePx?: number
+    footerDistancePx?: number
+  }
   pageContentWidthPx: number
   theme: "light" | "dark"
   controller?: DocxEditorController
@@ -70,24 +76,32 @@ const props = defineProps<{
   pageNumberFormat?: string
   trackedChangesEnabled?: boolean
   commentsEnabled?: boolean
+  /** Distance from the paper's top edge to the top of the header box. */
+  headerDistancePx?: number
 }>()
 
+const resolvedHeaderDistancePx = computed(() => {
+  const explicit = props.headerDistancePx
+  if (Number.isFinite(explicit) && (explicit as number) >= 0) return Math.round(explicit as number)
+  const fromLayout = props.pageLayout.headerDistancePx
+  if (Number.isFinite(fromLayout) && (fromLayout as number) >= 0) return Math.round(fromLayout as number)
+  return Math.round(props.pageLayout.marginsPx?.top ?? 72)
+})
+
 const headerStyle = computed(() => ({
+  position: "absolute" as const,
+  top: `${resolvedHeaderDistancePx.value}px`,
+  left: `${props.pageLayout.marginsPx?.left ?? 72}px`,
+  right: `${props.pageLayout.marginsPx?.right ?? 72}px`,
   display: "grid",
   gap: "0px",
-  width: "100%",
+  width: "auto",
   boxSizing: "border-box" as const,
-  paddingBottom: "8px",
-  borderBottom: `1px solid ${props.theme === "dark" ? "#374151" : "#e5e7eb"}`,
-  color: props.theme === "dark" ? "#9ca3af" : "#6b7280",
 }))
 
 </script>
 
 <style scoped>
-.docx-page-header {
-  font-size: 10pt;
-}
 .docx-page-header-node {
   width: 100%;
 }
