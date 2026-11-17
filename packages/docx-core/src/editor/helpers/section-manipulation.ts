@@ -10,7 +10,7 @@ import type {
   ParagraphNode,
   TableNode
 } from "../../engine/types";
-import { cloneDocModel } from "../../engine/clone";
+import { cloneDocModelSectionLists, cloneDocNode } from "../../engine/clone";
 import { invalidateParagraphSourceXml } from "../../engine/section-break";
 import {
   updateParagraphText,
@@ -197,21 +197,8 @@ export function updateSectionParagraphTextAtLocation(
   text: string,
   options?: ParagraphTextUpdateOptions
 ): DocModel {
-  const next = cloneDocModel(model);
-  const candidateSectionLists =
-    location.region === "header"
-      ? [
-          next.metadata.headerSections ?? [],
-          ...(next.metadata.sections?.map(
-            (section) => section.headerSections ?? []
-          ) ?? []),
-        ]
-      : [
-          next.metadata.footerSections ?? [],
-          ...(next.metadata.sections?.map(
-            (section) => section.footerSections ?? []
-          ) ?? []),
-        ];
+  const { model: next, sections: candidateSectionLists } =
+    cloneDocModelSectionLists(model, location.region);
 
   const normalizedLocation = {
     nodeIndex: Math.max(0, Math.round(location.nodeIndex)),
@@ -231,46 +218,44 @@ export function updateSectionParagraphTextAtLocation(
   };
 
   let changed = false;
-  candidateSectionLists.forEach((sections) => {
-    sections.forEach((section) => {
-      if (section.partName !== location.partName) {
-        return;
-      }
+  candidateSectionLists.forEach((section) => {
+    if (section.partName !== location.partName) {
+      return;
+    }
 
-      const currentText = paragraphTextFromSectionLocation(
-        section.nodes,
-        normalizedLocation
-      );
-      if (currentText === undefined || currentText === text) {
-        return;
-      }
+    const currentText = paragraphTextFromSectionLocation(
+      section.nodes,
+      normalizedLocation
+    );
+    if (currentText === undefined || currentText === text) {
+      return;
+    }
 
-      const scopedModel: DocModel = {
-        ...next,
-        nodes: section.nodes,
-      };
-      const updatedScopedModel =
-        normalizedLocation.rowIndex === undefined ||
-        normalizedLocation.cellIndex === undefined
-          ? updateParagraphText(
-              scopedModel,
-              normalizedLocation.nodeIndex,
-              text,
-              options
-            )
-          : updateTableCellParagraphText(
-              scopedModel,
-              normalizedLocation.nodeIndex,
-              normalizedLocation.rowIndex,
-              normalizedLocation.cellIndex,
-              normalizedLocation.paragraphIndex ?? 0,
-              text,
-              options
-            );
+    const scopedModel: DocModel = {
+      ...next,
+      nodes: section.nodes,
+    };
+    const updatedScopedModel =
+      normalizedLocation.rowIndex === undefined ||
+      normalizedLocation.cellIndex === undefined
+        ? updateParagraphText(
+            scopedModel,
+            normalizedLocation.nodeIndex,
+            text,
+            options
+          )
+        : updateTableCellParagraphText(
+            scopedModel,
+            normalizedLocation.nodeIndex,
+            normalizedLocation.rowIndex,
+            normalizedLocation.cellIndex,
+            normalizedLocation.paragraphIndex ?? 0,
+            text,
+            options
+          );
 
-      section.nodes = updatedScopedModel.nodes;
-      changed = true;
-    });
+    section.nodes = updatedScopedModel.nodes;
+    changed = true;
   });
 
   return changed ? next : model;
@@ -281,21 +266,8 @@ export function updateSectionImageFloatingAtLocation(
   location: DocxSectionImageLocation,
   patch: Partial<NonNullable<ImageRunNode["floating"]>>
 ): DocModel {
-  const next = cloneDocModel(model);
-  const candidateSectionLists =
-    location.region === "header"
-      ? [
-          next.metadata.headerSections ?? [],
-          ...(next.metadata.sections?.map(
-            (section) => section.headerSections ?? []
-          ) ?? []),
-        ]
-      : [
-          next.metadata.footerSections ?? [],
-          ...(next.metadata.sections?.map(
-            (section) => section.footerSections ?? []
-          ) ?? []),
-        ];
+  const { model: next, sections: candidateSectionLists } =
+    cloneDocModelSectionLists(model, location.region);
 
   const normalizedLocation = {
     nodeIndex: Math.max(0, Math.round(location.nodeIndex)),
@@ -316,39 +288,55 @@ export function updateSectionImageFloatingAtLocation(
   };
 
   let changed = false;
-  candidateSectionLists.forEach((sections) => {
-    sections.forEach((section) => {
-      if (section.partName !== location.partName) {
-        return;
-      }
+  candidateSectionLists.forEach((section) => {
+    if (section.partName !== location.partName) {
+      return;
+    }
 
-      const lookup = sectionParagraphFromLocation(
-        section.nodes,
-        normalizedLocation
-      );
-      const paragraph = lookup.paragraph;
-      if (!paragraph) {
-        return;
-      }
+    const lookup = sectionParagraphFromLocation(
+      section.nodes,
+      normalizedLocation
+    );
+    const paragraph = lookup.paragraph;
+    if (!paragraph) {
+      return;
+    }
 
-      const child = paragraph.children[normalizedLocation.childIndex];
-      if (!child || child.type !== "image") {
-        return;
-      }
-      if (child.floating?.lockedAnchor && patch.lockedAnchor !== false) {
-        return;
-      }
+    const child = paragraph.children[normalizedLocation.childIndex];
+    if (!child || child.type !== "image") {
+      return;
+    }
+    if (child.floating?.lockedAnchor && patch.lockedAnchor !== false) {
+      return;
+    }
 
-      child.floating = {
-        ...(child.floating ?? {}),
-        ...patch,
-      };
-      invalidateParagraphSourceXml(paragraph);
-      if (lookup.tableNode) {
-        lookup.tableNode.sourceXml = undefined;
-      }
-      changed = true;
-    });
+    // Section lists own copied `nodes` arrays but still share the node objects
+    // with the source model, so the edited node must be cloned before mutating.
+    const sourceNode = section.nodes[normalizedLocation.nodeIndex];
+    if (!sourceNode) {
+      return;
+    }
+    section.nodes[normalizedLocation.nodeIndex] = cloneDocNode(sourceNode);
+
+    const editableLookup = sectionParagraphFromLocation(
+      section.nodes,
+      normalizedLocation
+    );
+    const editableParagraph = editableLookup.paragraph;
+    const editableChild = editableParagraph?.children[normalizedLocation.childIndex];
+    if (!editableParagraph || !editableChild || editableChild.type !== "image") {
+      return;
+    }
+
+    editableChild.floating = {
+      ...(editableChild.floating ?? {}),
+      ...patch,
+    };
+    invalidateParagraphSourceXml(editableParagraph);
+    if (editableLookup.tableNode) {
+      editableLookup.tableNode.sourceXml = undefined;
+    }
+    changed = true;
   });
 
   return changed ? next : model;

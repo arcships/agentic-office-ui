@@ -5,9 +5,11 @@
 //   A. keystroke commits (updateParagraphText) — how much of the document is
 //      rebuilt per keystroke and whether image bytes are copied;
 //   B. paragraph style toggles (applyRunStyle) — same accounting;
-//   C. history pushes (createEditorStateV2 + applyEditorTransactionV2) — how
+//   C. table-cell commits — same accounting for a table node;
+//   D. header/footer text commits — same accounting for section lists;
+//   E. history pushes (createEditorStateV2 + applyEditorTransactionV2) — how
 //      many times the retained snapshots are JSON-serialised per push;
-//   D. layout passes — whether the layout copies image bytes.
+//   F. layout passes — whether the layout copies image bytes.
 //
 // It imports the DOCX core *source* modules (Node type stripping) so it can run
 // in any checkout, including one without a build or node_modules:
@@ -46,6 +48,10 @@ const importSource = (relative) =>
 
 const { updateParagraphText } = await importSource("editor/paragraph-ops.ts");
 const { applyRunStyle } = await importSource("editor/run-style-ops.ts");
+const { updateTableCellText } = await importSource("editor/table-ops.ts");
+const { updateSectionParagraphTextAtLocation } = await importSource(
+  "editor/helpers/section-manipulation.ts",
+);
 const { createEditorStateV2, applyEditorTransactionV2 } = await importSource(
   "editor/helpers/state.ts",
 );
@@ -84,12 +90,35 @@ function createModel({ pageCount = PAGE_COUNT, textLength = 180, imageCount = IM
     nodes.push({ type: "paragraph", children });
   }
 
+  nodes.push({
+    type: "table",
+    rows: [
+      {
+        type: "table-row",
+        cells: [
+          {
+            type: "table-cell",
+            nodes: [
+              { type: "paragraph", children: [{ type: "text", text: "cell text" }] },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
   return {
     nodes,
     metadata: {
       sourceParts: 1,
       warnings: [],
-      headerSections: [],
+      headerSections: [
+        {
+          partName: "word/header1.xml",
+          referenceType: "default",
+          nodes: [{ type: "paragraph", children: [{ type: "text", text: "Header" }] }],
+        },
+      ],
       footerSections: [],
       paragraphStyles: [],
     },
@@ -99,6 +128,17 @@ function createModel({ pageCount = PAGE_COUNT, textLength = 180, imageCount = IM
 function imageRunsOf(model) {
   const runs = [];
   for (const node of model.nodes) {
+    if (node.type !== "paragraph") continue;
+    for (const child of node.children) {
+      if (child.type === "image" && child.data) runs.push(child.data);
+    }
+  }
+  return runs;
+}
+
+function imageRunsOfNodeList(nodes) {
+  const runs = [];
+  for (const node of nodes) {
     if (node.type !== "paragraph") continue;
     for (const child of node.children) {
       if (child.type === "image" && child.data) runs.push(child.data);
@@ -189,6 +229,52 @@ function benchmarkStyleToggles() {
   };
 }
 
+function benchmarkTableCellCommit() {
+  let model = createModel();
+  const tableIndex = model.nodes.length - 1;
+  let rebuilt = 0;
+  let copiedBytes = 0;
+  const timing = measure(KEYSTROKES, (index) => {
+    const next = updateTableCellText(model, tableIndex, 0, 0, `cell ${index}`);
+    rebuilt += rebuiltNodeIndexes(model, next).length;
+    copiedBytes += copiedImageBytes(model, next);
+    model = next;
+  });
+
+  return {
+    scenario: "table-cell commit (updateTableCellText)",
+    iterations: KEYSTROKES,
+    ...timing,
+    rebuiltNodesPerOp: Number((rebuilt / KEYSTROKES).toFixed(2)),
+    copiedImageBytesPerOp: Math.round(copiedBytes / KEYSTROKES),
+  };
+}
+
+function benchmarkSectionTextCommit() {
+  let model = createModel();
+  const location = {
+    region: "header",
+    partName: "word/header1.xml",
+    nodeIndex: 0,
+  };
+  let rebuilt = 0;
+  let copiedBytes = 0;
+  const timing = measure(KEYSTROKES, (index) => {
+    const next = updateSectionParagraphTextAtLocation(model, location, `header ${index}`);
+    rebuilt += rebuiltNodeIndexes(model, next).length;
+    copiedBytes += copiedImageBytes(model, next);
+    model = next;
+  });
+
+  return {
+    scenario: "header text commit (updateSectionParagraphTextAtLocation)",
+    iterations: KEYSTROKES,
+    ...timing,
+    rebuiltNodesPerOp: Number((rebuilt / KEYSTROKES).toFixed(2)),
+    copiedImageBytesPerOp: Math.round(copiedBytes / KEYSTROKES),
+  };
+}
+
 function benchmarkHistory(mode) {
   const selection = { kind: "paragraph", nodeIndex: 0 };
   let state = createEditorStateV2({
@@ -259,6 +345,8 @@ function benchmarkLayout() {
 const results = [
   benchmarkKeystrokes(),
   benchmarkStyleToggles(),
+  benchmarkTableCellCommit(),
+  benchmarkSectionTextCommit(),
   benchmarkHistory("history"),
   benchmarkLayout(),
 ];

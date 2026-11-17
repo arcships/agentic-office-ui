@@ -5,7 +5,8 @@
 import type { DocModel, ParagraphNode, TableNode, TextRunNode } from "@arcships/docx-core"
 import type { DocxTextRange, ParagraphLocation } from "@arcships/docx-core"
 import {
-  cloneDocModel,
+  cloneDocModelNodes,
+  cloneDocModelShallow,
   parseEmbeddedTableRuntimeKey,
   updateParagraphText,
   normalizeTextRange,
@@ -52,6 +53,7 @@ import {
 } from "@arcships/docx-core"
 import type { DocxListType } from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
+import { cloneHostTableForRuntimeKey, topLevelNodeIndex } from "./editor-clone-helpers"
 
 function commonPrefixLength(left: string, right: string): number {
   const limit = Math.min(left.length, right.length)
@@ -210,7 +212,8 @@ export function createEditorTextInput(
     tableRuntimeKey: string, rowIndex: number, cellIndex: number, text: string
   ): void => {
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneHostTableForRuntimeKey(current, tableRuntimeKey)
+      if (!nextModel) return current
       const node = resolveRuntimeKeyTable(nextModel, tableRuntimeKey, true)
       if (!node) return current
       return writeFirstTableCellText(node, rowIndex, cellIndex, text)
@@ -228,7 +231,8 @@ export function createEditorTextInput(
     text: string
   ): void => {
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneHostTableForRuntimeKey(current, tableRuntimeKey)
+      if (!nextModel) return current
       return updateRuntimeKeyParagraph(
         nextModel, tableRuntimeKey, rowIndex, cellIndex, paragraphIndex, text
       )
@@ -271,7 +275,7 @@ export function createEditorTextInput(
   const appendParagraph = (text?: string): number => {
     let nodeIndex = -1
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneDocModelShallow(current)
       const para: ParagraphNode = { type: "paragraph", children: [] }
       if (text) {
         para.children.push({ type: "text", text, style: {} })
@@ -315,7 +319,10 @@ export function createEditorTextInput(
 
     applyChange(
       (current) => {
-        let next = cloneDocModel(current)
+        let next = cloneDocModelNodes(current, [
+          topLevelNodeIndex(normalizedRange.start.location),
+          topLevelNodeIndex(normalizedRange.end.location),
+        ])
 
         const clearNumberingIfParagraphEmpty = (location: ParagraphLocation): void => {
           const { paragraph, tableNode } = getParagraphAtLocation(next, location)
@@ -684,7 +691,7 @@ export function createEditorTextInput(
     let splitResult: { paragraphIndex: number; caretOffset: number } | undefined
 
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const next = cloneDocModelNodes(current, [targetLocation.nodeIndex])
       const paragraphNode = next.nodes[targetLocation.nodeIndex]
       if (!paragraphNode || paragraphNode.type !== "paragraph") return current
 
@@ -773,7 +780,7 @@ export function createEditorTextInput(
     const normalizedEndOffset = Math.max(normalizedStartOffset, Math.round(endOffset ?? normalizedStartOffset))
 
     applyChange((current) => {
-      let next = cloneDocModel(current)
+      let next = cloneDocModelShallow(current)
       let paragraphNode = next.nodes[targetLocation.nodeIndex]
       if (!paragraphNode || paragraphNode.type !== "paragraph") return current
 

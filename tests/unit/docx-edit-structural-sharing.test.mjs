@@ -151,6 +151,79 @@ test("cloneDocModelShallow shares nodes and metadata until a node is replaced", 
   assert.equal(shell.nodes[1], model.nodes[1]);
 });
 
+test("cloneDocModelNodes copies only the listed top-level nodes", () => {
+  const model = createLongModel({ pages: 6, imageCount: 2 });
+  const next = core.cloneDocModelNodes(model, [0, 3, 3, 99, -1]);
+
+  assert.notEqual(next, model);
+  assert.notEqual(next.nodes, model.nodes);
+  assert.notEqual(next.nodes[0], model.nodes[0]);
+  assert.notEqual(next.nodes[3], model.nodes[3]);
+  for (const index of [1, 2, 4, 5]) {
+    assert.equal(next.nodes[index], model.nodes[index], `node ${index} stays shared`);
+  }
+  assert.notEqual(next.metadata, model.metadata);
+  assert.equal(next.metadata.warnings, model.metadata.warnings);
+  assert.equal(
+    next.nodes[3].children[1].data,
+    model.nodes[3].children[1].data,
+    "cloned nodes keep sharing image bytes",
+  );
+
+  next.nodes[0].children = [{ type: "text", text: "edited" }];
+  assert.equal(model.nodes[0].children[0].text, "Paragraph 0 body text");
+});
+
+test("cloneDocModelSectionLists copies header/footer lists and shares untouched nodes", () => {
+  const base = core.createBlankDocumentModel();
+  const headerNode = { type: "paragraph", children: [{ type: "text", text: "Header" }] };
+  const otherHeaderNode = { type: "paragraph", children: [{ type: "text", text: "First" }] };
+  const model = {
+    ...base,
+    nodes: [{ type: "paragraph", children: [{ type: "text", text: "Body" }] }],
+    metadata: {
+      ...base.metadata,
+      headerSections: [
+        { partName: "word/header1.xml", referenceType: "default", nodes: [headerNode] },
+        { partName: "word/header2.xml", referenceType: "first", nodes: [otherHeaderNode] },
+      ],
+      sections: [
+        {
+          startNodeIndex: 0,
+          headerSections: [
+            { partName: "word/header3.xml", referenceType: "default", nodes: [headerNode] },
+          ],
+          footerSections: [],
+        },
+      ],
+    },
+  };
+
+  const { model: next, sections } = core.cloneDocModelSectionLists(model, "header");
+
+  assert.notEqual(next, model);
+  assert.notEqual(next.metadata, model.metadata);
+  assert.notEqual(next.metadata.headerSections, model.metadata.headerSections);
+  assert.notEqual(next.metadata.sections, model.metadata.sections);
+  assert.notEqual(next.metadata.sections[0], model.metadata.sections[0]);
+  assert.equal(next.nodes[0], model.nodes[0], "body nodes stay shared");
+  assert.equal(sections.length, 3, "every header list contributes its sections");
+  assert.equal(
+    sections[1].nodes[0],
+    otherHeaderNode,
+    "untouched section nodes stay shared",
+  );
+
+  sections[0].nodes[0] = core.cloneDocNode(headerNode);
+  sections[0].nodes[0].children = [{ type: "text", text: "Edited header" }];
+  assert.equal(headerNode.children[0].text, "Header");
+  assert.equal(
+    next.metadata.headerSections[0].nodes[0].children[0].text,
+    "Edited header",
+    "the returned model owns the copied section node list",
+  );
+});
+
 test("single-paragraph edit commands rebuild one node and keep siblings shared", () => {
   const model = createLongModel({ pages: 6, imageCount: 2 });
 
@@ -295,5 +368,96 @@ test("history budgets measure each retained snapshot once", () => {
       0,
     ),
     "the cached estimate must match a full serialisation of each entry",
+  );
+});
+
+function createHeaderModel() {
+  const base = core.createBlankDocumentModel();
+  const headerImage = {
+    type: "image",
+    src: "data:image/png;base64,AAAA",
+    contentType: "image/png",
+    widthPx: 100,
+    heightPx: 80,
+    floating: { xPx: 1, yPx: 1, wrapType: "square" },
+    data: new Uint8Array(64),
+  };
+  const headerNode = {
+    type: "paragraph",
+    children: [{ type: "text", text: "Header" }, headerImage],
+  };
+
+  return {
+    ...base,
+    nodes: [{ type: "paragraph", children: [{ type: "text", text: "Body" }] }],
+    metadata: {
+      ...base.metadata,
+      headerSections: [
+        { partName: "word/header1.xml", referenceType: "default", nodes: [headerNode] },
+      ],
+    },
+  };
+}
+
+test("header text edits keep body nodes shared and the source model intact", () => {
+  const model = createHeaderModel();
+  const before = JSON.stringify(model);
+
+  const next = core.updateSectionParagraphTextAtLocation(
+    model,
+    { region: "header", partName: "word/header1.xml", nodeIndex: 0 },
+    "Header edited",
+  );
+
+  assert.notEqual(next, model);
+  assert.equal(next.nodes[0], model.nodes[0], "body nodes stay shared");
+  assert.notEqual(next.metadata, model.metadata);
+  assert.equal(JSON.stringify(model), before, "the source model is untouched");
+  assert.equal(
+    next.metadata.headerSections[0].nodes[0].children[0].text,
+    "Header edited",
+  );
+  assert.equal(
+    next.metadata.headerSections[0].nodes[0].children[1].data,
+    model.metadata.headerSections[0].nodes[0].children[1].data,
+    "header image bytes stay shared",
+  );
+});
+
+test("header image moves clone only the edited section node", () => {
+  const model = createHeaderModel();
+  const before = JSON.stringify(model);
+  const headerNode = model.metadata.headerSections[0].nodes[0];
+
+  const next = core.updateSectionImageFloatingAtLocation(
+    model,
+    {
+      region: "header",
+      partName: "word/header1.xml",
+      nodeIndex: 0,
+      childIndex: 1,
+    },
+    { xPx: 42 },
+  );
+
+  assert.notEqual(next, model);
+  assert.equal(next.nodes[0], model.nodes[0], "body nodes stay shared");
+  assert.notEqual(
+    next.metadata.headerSections[0].nodes[0],
+    headerNode,
+    "the edited header node is cloned",
+  );
+  assert.equal(
+    next.metadata.headerSections[0].nodes[0].children[1].floating.xPx,
+    42,
+  );
+  assert.equal(
+    JSON.stringify(model),
+    before,
+    "moving a header image must not mutate the source model",
+  );
+  assert.equal(
+    model.metadata.headerSections[0].nodes[0].children[1].floating.xPx,
+    1,
   );
 });
