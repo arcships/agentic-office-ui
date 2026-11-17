@@ -162,11 +162,28 @@ const resolvedLayoutOptions = computed<LayoutOptions>(() => ({
 const paginationPlan = computed(() => {
   const snapshot = buildLayoutSnapshot(props.model, resolvedLayoutOptions.value)
   const pageNodeSegments: DocumentPageNodeSegment[][] = snapshot.pages.map((page) =>
-    page.blocks.flatMap((block) => {
+    page.blocks.flatMap((block): DocumentPageNodeSegment[] => {
       const nodeIndex = block.source?.nodeIndex
-      return Number.isFinite(nodeIndex) && (nodeIndex as number) >= 0
-        ? [{ nodeIndex: Math.round(nodeIndex as number) }]
-        : []
+      if (!Number.isFinite(nodeIndex) || (nodeIndex as number) < 0) return []
+
+      const segment: DocumentPageNodeSegment = {
+        nodeIndex: Math.round(nodeIndex as number),
+      }
+      if (block.kind === "table" && block.tableRowRange) {
+        segment.tableRowRange = {
+          startRowIndex: block.tableRowRange.startRowIndex,
+          endRowIndex: block.tableRowRange.endRowIndex,
+        }
+      }
+      if (block.kind === "paragraph" && block.paragraphLineRange) {
+        segment.paragraphLineRange = {
+          startLineIndex: block.paragraphLineRange.startLineIndex,
+          endLineIndex: block.paragraphLineRange.endLineIndex,
+          totalLineCount: block.paragraphLineRange.totalLineCount,
+          lineHeightPx: block.paragraphLineRange.lineHeightPx,
+        }
+      }
+      return [segment]
     })
   )
 

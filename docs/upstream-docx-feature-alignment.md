@@ -574,7 +574,7 @@ pnpm --filter @arcships/vue-docx add @tanstack/vue-virtual
 | 文档模型 | 简化 types.ts | 完整 DocModel 类型体系（438行）+ clone + normalize |
 | 解析/序列化 | 手写 XML | wasm 引擎（Rust） |
 | 编辑 | stub 方法 | 完整事务分发器 + 60+ 编辑操作 |
-| 分页 | 简单 layout.ts | 完整分页引擎（段落/表格跨页、keepNext、widow/orphan、margin collapse） |
+| 分页 | `buildLayoutSnapshot` → `buildDocumentPageNodeSegments`（issue #25；行切分待渲染端支持） | 完整分页引擎（段落/表格跨页、keepNext、widow/orphan、margin collapse） |
 | 文本布局 | 无 | pretext 变宽布局（绕排除区、光标/选区命中） |
 | 渲染 | 简单 DOM | 完整 DOM 渲染 + 虚拟化 + contentEditable 编辑 + 浮动图片 + 缩略图 |
 | 图片 | 基础 | wrap 几何 + 三种 anchor + EMF/TIFF 处理 |

@@ -158,7 +158,7 @@ function formFieldDisplayText(field: FormFieldRunNode): string {
   }
 }
 
-function paragraphToLayout(
+export function paragraphToLayout(
   paragraph: ParagraphNode,
   idPrefix: string,
   x: number,
@@ -235,7 +235,7 @@ function paragraphsForTableCellNodes(nodes: TableCellContentNode[]): ParagraphNo
   return paragraphs;
 }
 
-function tableToLayout(
+export function tableToLayout(
   table: TableNode,
   idPrefix: string,
   x: number,
