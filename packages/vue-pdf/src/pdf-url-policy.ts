@@ -17,6 +17,12 @@ export interface PdfUrlPolicy {
   allowedProtocols?: readonly string[]
   allowedOrigins?: readonly string[]
   allowHttpOnLocalhost?: boolean
+  /**
+   * Redirects are followed by the shared loader and the final response URL is
+   * revalidated against this policy before bytes are accepted. Diagnostics and
+   * errors only expose the final URL after query, fragment and credentials are
+   * stripped.
+   */
   fetch?: typeof fetch
 }
 
@@ -248,7 +254,8 @@ export function toPdfLoadError(error: unknown, sourceKind: PdfSource["kind"], ur
 
 /**
  * Compatibility adapter over office-runtime. PDF keeps its public Blob shape,
- * while URL validation, controlled fetch, cancellation and redaction are shared.
+ * while URL validation, redirect revalidation, controlled fetch, cancellation
+ * and query/fragment/credential redaction are shared with every office loader.
  */
 export async function loadVerifiedPdfSource(
   source: PdfSource,

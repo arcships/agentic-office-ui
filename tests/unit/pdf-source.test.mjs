@@ -157,6 +157,122 @@ test("PDF URL loading shares controlled fetch and strips query secrets", async (
   assert.equal(JSON.stringify(result).includes("secret"), false);
 });
 
+test("PDF URL loading follows same-origin redirects and strips redirect query tokens", async () => {
+  const calls = [];
+  const result = await pdf.loadVerifiedPdfSource(
+    { kind: "url", url: "sample.pdf?token=request-secret" },
+    {
+      enabled: true,
+      baseUrl: "https://app.example/viewer/",
+      allowRelativeUrl: true,
+      allowedProtocols: ["https:"],
+      allowedOrigins: ["https://app.example"],
+      fetch: async (url, init) => {
+        calls.push({ url, init });
+        return {
+          ok: true,
+          status: 200,
+          url: "https://app.example/cdn/final.pdf?token=redirect-secret#fragment",
+          headers: { get: (name) => name.toLowerCase() === "content-type" ? "application/pdf" : null },
+          arrayBuffer: async () => fixture.buffer.slice(fixture.byteOffset, fixture.byteOffset + fixture.byteLength),
+        };
+      },
+    },
+  );
+  assert.equal(calls[0].url, "https://app.example/viewer/sample.pdf?token=request-secret");
+  assert.equal(calls[0].init.redirect, "follow");
+  assert.equal(result.resolvedUrl, "https://app.example/cdn/final.pdf");
+  assert.equal(result.fileName, "final.pdf");
+  assert.equal(JSON.stringify(result).includes("secret"), false);
+});
+
+test("PDF URL loading rejects cross-origin and downgraded redirects before reading bytes", async () => {
+  for (const finalUrl of [
+    "https://other.example/final.pdf?token=redirect-secret",
+    "http://app.example/final.pdf?token=redirect-secret",
+  ]) {
+    let reads = 0;
+    await assert.rejects(
+      pdf.loadVerifiedPdfSource(
+        { kind: "url", url: "https://app.example/report.pdf?token=request-secret" },
+        {
+          enabled: true,
+          baseUrl: "https://app.example/",
+          allowedProtocols: ["https:"],
+          allowedOrigins: ["https://app.example"],
+          fetch: async () => ({
+            ok: true,
+            status: 200,
+            url: finalUrl,
+            headers: { get: () => null },
+            arrayBuffer: async () => {
+              reads += 1;
+              return new ArrayBuffer(4);
+            },
+          }),
+        },
+      ),
+      (error) => {
+        assert.equal(error?.code, "SOURCE_NOT_ALLOWED");
+        assert.equal(error?.url, finalUrl.split("?", 1)[0]);
+        assert.equal(JSON.stringify(error).includes("secret"), false);
+        return true;
+      },
+    );
+    assert.equal(reads, 0);
+  }
+});
+
+test("PDF post-redirect validation rejects the wrong type without exposing the redirected URL", async () => {
+  await assert.rejects(
+    pdf.loadVerifiedPdfSource(
+      { kind: "url", url: "https://app.example/report.pdf?token=request-secret" },
+      {
+        enabled: true,
+        baseUrl: "https://app.example/",
+        allowedProtocols: ["https:"],
+        allowedOrigins: ["https://app.example"],
+        fetch: async () => ({
+          ok: true,
+          status: 200,
+          url: "https://app.example/cdn/final.pdf?token=redirect-secret",
+          headers: { get: (name) => name.toLowerCase() === "content-type" ? "text/plain" : null },
+          arrayBuffer: async () => fixture.buffer.slice(fixture.byteOffset, fixture.byteOffset + fixture.byteLength),
+        }),
+      },
+    ),
+    (error) => {
+      assert.equal(error?.code, "INVALID_PDF");
+      assert.equal(error?.url, "https://app.example/cdn/final.pdf");
+      assert.equal(JSON.stringify(error).includes("secret"), false);
+      return true;
+    },
+  );
+});
+
+test("PDF URL policy rejects a disallowed requested origin with a token-free error", async () => {
+  let requests = 0;
+  await assert.rejects(
+    pdf.loadVerifiedPdfSource(
+      { kind: "url", url: "https://blocked.invalid/sample.pdf?token=request-secret" },
+      {
+        enabled: true,
+        baseUrl: "https://app.example/",
+        allowedProtocols: ["https:"],
+        allowedOrigins: ["https://app.example"],
+        fetch: async () => { requests += 1; throw new Error("must not fetch"); },
+      },
+    ),
+    (error) => {
+      assert.equal(error?.code, "SOURCE_NOT_ALLOWED");
+      assert.equal(error?.url, "https://blocked.invalid/sample.pdf");
+      assert.equal(JSON.stringify(error).includes("secret"), false);
+      return true;
+    },
+  );
+  assert.equal(requests, 0);
+});
+
 test("PDF URL loading accepts CDN octet-stream and missing Content-Type when the magic is valid", async () => {
   for (const contentType of ["application/octet-stream", "binary/octet-stream", undefined]) {
     const result = await pdf.loadVerifiedPdfSource(

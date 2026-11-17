@@ -17,7 +17,7 @@ import "@arcships/vue-pdf/style.css"
 </template>
 ```
 
-`source` 是推荐输入；同时提供 `source` 和旧的 `src` 时，`source` 优先。URL 来源必须显式提供 `urlPolicy`，本地 `Blob`、`File` 和字节输入不需要网络规则。
+`source` 是推荐输入；同时提供 `source` 和旧的 `src` 时，`source` 优先。URL 来源必须显式提供 `urlPolicy`，本地 `Blob`、`File` 和字节输入不需要网络规则。URL 加载会跟随重定向，但最终地址会按同一协议与来源规则重新校验；跨来源或协议降级重定向会在读取正文前拒绝。诊断和错误只暴露去掉查询串、片段与内嵌凭据后的地址。
 
 | 属性 | 类型 | 默认值 | 说明 |
 |---|---|---|---|

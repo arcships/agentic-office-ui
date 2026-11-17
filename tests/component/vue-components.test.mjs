@@ -1422,6 +1422,175 @@ test("PdfViewer sanitizes load-start diagnostics instead of leaking query tokens
   mounted.app.unmount();
 });
 
+test("PdfViewer applies token sanitization to the legacy src path", async () => {
+  const diagnostics = [];
+  const fetch = (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener(
+      "abort",
+      () => reject(new DOMException("Aborted", "AbortError")),
+      { once: true },
+    );
+  });
+  const mounted = await mount(PdfViewer, {
+    src: "https://files.example/report.pdf?token=legacy-secret#page=3",
+    runtime: createPdfRuntime().runtime,
+    urlPolicy: {
+      allowedOrigins: ["https://files.example"],
+      allowedProtocols: ["https:"],
+      baseUrl: "https://files.example/",
+      fetch,
+    },
+    onDiagnostic: (event) => diagnostics.push(event),
+  });
+  await waitFor(
+    () => diagnostics.some((event) => event.type === "load-start"),
+    "legacy PDF load-start diagnostic",
+  );
+  assert.equal(
+    diagnostics.find((event) => event.type === "load-start").url,
+    "https://files.example/report.pdf",
+  );
+  assert.equal(JSON.stringify(diagnostics).includes("legacy-secret"), false);
+  assert.equal(JSON.stringify(diagnostics).includes("page=3"), false);
+  mounted.app.unmount();
+});
+
+test("PdfViewer follows same-origin redirects and reports only the sanitized final URL", async () => {
+  const bytes = new TextEncoder().encode("%PDF-1.4\n%%EOF");
+  const diagnostics = [];
+  const fetch = async () => ({
+    ok: true,
+    status: 200,
+    url: "https://files.example/cdn/final.pdf?token=redirect-secret#fragment",
+    headers: { get: (name) => name.toLowerCase() === "content-type" ? "application/pdf" : null },
+    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  });
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "url", url: "https://files.example/report.pdf?token=request-secret" },
+    runtime: createPdfRuntime().runtime,
+    urlPolicy: {
+      allowedOrigins: ["https://files.example"],
+      allowedProtocols: ["https:"],
+      baseUrl: "https://files.example/",
+      fetch,
+    },
+    onDiagnostic: (event) => diagnostics.push(event),
+  });
+  await waitFor(
+    () => diagnostics.some((event) => event.type === "load-success"),
+    "redirected PDF load-success",
+  );
+  assert.equal(
+    diagnostics.find((event) => event.type === "load-success").url,
+    "https://files.example/cdn/final.pdf",
+  );
+  assert.equal(JSON.stringify(diagnostics).includes("secret"), false);
+  mounted.app.unmount();
+});
+
+test("PdfViewer rejects cross-origin redirects with token-free load errors", async () => {
+  const errors = [];
+  const diagnostics = [];
+  const fetch = async () => ({
+    ok: true,
+    status: 200,
+    url: "https://blocked.invalid/sample.pdf?token=redirect-secret",
+    headers: { get: () => null },
+    arrayBuffer: async () => new ArrayBuffer(0),
+  });
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "url", url: "https://files.example/report.pdf?token=request-secret" },
+    runtime: createPdfRuntime().runtime,
+    urlPolicy: {
+      allowedOrigins: ["https://files.example"],
+      allowedProtocols: ["https:"],
+      baseUrl: "https://files.example/",
+      fetch,
+    },
+    onDocumentLoadError: (error) => errors.push(error),
+    onDiagnostic: (event) => diagnostics.push(event),
+  });
+  await waitFor(() => errors.length === 1, "redirected PDF load error");
+  assert.equal(errors[0].code, "SOURCE_NOT_ALLOWED");
+  assert.equal(errors[0].url, "https://blocked.invalid/sample.pdf");
+  assert.equal(JSON.stringify({ errors, diagnostics }).includes("secret"), false);
+  assert.equal(
+    diagnostics.find((event) => event.type === "load-start").url,
+    "https://files.example/report.pdf",
+  );
+  assert.equal(
+    diagnostics.find((event) => event.type === "load-error").error.url,
+    "https://blocked.invalid/sample.pdf",
+  );
+  mounted.app.unmount();
+});
+
+test("PdfSurface rejects cross-origin redirects with token-free load errors for source and src", async () => {
+  for (const sourceProps of [
+    { source: { kind: "url", url: "https://files.example/report.pdf?token=request-secret" } },
+    { src: "https://files.example/report.pdf?token=request-secret" },
+  ]) {
+    const errors = [];
+    const fetch = async () => ({
+      ok: true,
+      status: 200,
+      url: "https://blocked.invalid/sample.pdf?token=redirect-secret",
+      headers: { get: () => null },
+      arrayBuffer: async () => new ArrayBuffer(0),
+    });
+    const mounted = await mount(PdfSurface, {
+      ...sourceProps,
+      runtime: createPdfRuntime().runtime,
+      urlPolicy: {
+        allowedOrigins: ["https://files.example"],
+        allowedProtocols: ["https:"],
+        baseUrl: "https://files.example/",
+        fetch,
+      },
+      onDocumentLoadError: (error) => errors.push(error),
+    });
+    await waitFor(() => errors.length === 1, "surface redirected PDF load error");
+    assert.equal(errors[0].code, "SOURCE_NOT_ALLOWED");
+    assert.equal(errors[0].url, "https://blocked.invalid/sample.pdf");
+    assert.equal(JSON.stringify(errors).includes("secret"), false);
+    mounted.app.unmount();
+  }
+});
+
+test("PdfViewer sanitizes the source URL in render-error diagnostics", async () => {
+  const bytes = new TextEncoder().encode("%PDF-1.4\n%%EOF");
+  const diagnostics = [];
+  const fake = createPdfRuntime({
+    onRenderPage: () => { throw new Error("render exploded"); },
+  });
+  const fetch = async () => ({
+    ok: true,
+    status: 200,
+    url: "https://files.example/report.pdf?token=request-secret",
+    headers: { get: (name) => name.toLowerCase() === "content-type" ? "application/pdf" : null },
+    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  });
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "url", url: "https://files.example/report.pdf?token=request-secret" },
+    runtime: fake.runtime,
+    urlPolicy: {
+      allowedOrigins: ["https://files.example"],
+      allowedProtocols: ["https:"],
+      baseUrl: "https://files.example/",
+      fetch,
+    },
+    onDiagnostic: (event) => diagnostics.push(event),
+  });
+  await waitFor(
+    () => diagnostics.some((event) => event.type === "render-error"),
+    "PDF render-error diagnostic",
+  );
+  const renderError = diagnostics.find((event) => event.type === "render-error");
+  assert.equal(renderError.error.url, "https://files.example/report.pdf");
+  assert.equal(JSON.stringify(diagnostics).includes("secret"), false);
+  mounted.app.unmount();
+});
+
 test("PdfViewer aborts URL loading when unmounted", async () => {
   let observedSignal;
   let errorEvents = 0;
