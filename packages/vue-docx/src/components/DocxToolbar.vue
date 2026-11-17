@@ -381,27 +381,27 @@
       class="docx-toolbar-group docx-toolbar-group--table"
       data-testid="editor-table-actions"
     >
-      <button data-testid="editor-table-row-above" class="docx-toolbar-btn" title="Insert row above" @click="insertSelectedTableRow('above')">R↑</button>
-      <button data-testid="editor-table-row-below" class="docx-toolbar-btn" title="Insert row below" @click="insertSelectedTableRow('below')">R↓</button>
-      <button data-testid="editor-table-column-left" class="docx-toolbar-btn" title="Insert column left" @click="insertSelectedTableColumn('left')">C←</button>
-      <button data-testid="editor-table-column-right" class="docx-toolbar-btn" title="Insert column right" @click="insertSelectedTableColumn('right')">C→</button>
-      <button data-testid="editor-table-delete-row" class="docx-toolbar-btn" title="Delete row" @click="deleteSelectedTableRow()">R×</button>
-      <button data-testid="editor-table-delete-column" class="docx-toolbar-btn" title="Delete column" @click="deleteSelectedTableColumn()">C×</button>
+      <button data-testid="editor-table-row-above" class="docx-toolbar-btn" :title="m.docx.contextMenu.insertRowAbove" @click="insertSelectedTableRow('above')">R↑</button>
+      <button data-testid="editor-table-row-below" class="docx-toolbar-btn" :title="m.docx.contextMenu.insertRowBelow" @click="insertSelectedTableRow('below')">R↓</button>
+      <button data-testid="editor-table-column-left" class="docx-toolbar-btn" :title="m.docx.contextMenu.insertColumnLeft" @click="insertSelectedTableColumn('left')">C←</button>
+      <button data-testid="editor-table-column-right" class="docx-toolbar-btn" :title="m.docx.contextMenu.insertColumnRight" @click="insertSelectedTableColumn('right')">C→</button>
+      <button data-testid="editor-table-delete-row" class="docx-toolbar-btn" :title="m.docx.contextMenu.deleteRow" @click="deleteSelectedTableRow()">R×</button>
+      <button data-testid="editor-table-delete-column" class="docx-toolbar-btn" :title="m.docx.contextMenu.deleteColumn" @click="deleteSelectedTableColumn()">C×</button>
       <button
         data-testid="editor-table-merge"
         class="docx-toolbar-btn"
-        title="Merge cells"
+        :title="m.docx.contextMenu.mergeCells"
         :disabled="!canMergeSelectedTableCells"
         @click="mergeSelectedTableCells()"
-      >Merge</button>
+      >⧉</button>
       <button
         data-testid="editor-table-split"
         class="docx-toolbar-btn"
-        title="Split cell"
+        :title="m.docx.contextMenu.splitCell"
         :disabled="!canSplitSelectedTableCell"
         @click="splitSelectedTableCell()"
-      >Split</button>
-      <button data-testid="editor-table-delete" class="docx-toolbar-btn" title="Delete table" @click="deleteSelectedTable()">T×</button>
+      >⧅</button>
+      <button data-testid="editor-table-delete" class="docx-toolbar-btn" :title="m.docx.contextMenu.deleteTable" @click="deleteSelectedTable()">T×</button>
     </div>
 
 
