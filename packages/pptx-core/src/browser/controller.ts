@@ -18,7 +18,7 @@ import {
 import type { PptxMediaItem, PptxPlaybackDocument } from "../playback/types"
 import { createPptxClock } from "./clock"
 import { createPptxMediaPlayer, type PptxMediaPlayer } from "./media-player"
-import { applyPptxObjectState, capturePptxStaticState } from "./track-player"
+import { applyPptxObjectState, capturePptxStaticState, createPptxTrackTargets, type PptxTrackTargets } from "./track-player"
 import {
   capturePptxTransition,
   mountPptxTransition,
@@ -74,6 +74,7 @@ export function createPptxPlaybackController(
   let generation = 1
   let disposed = false
   let compiled: PptxCompiledSlide | null = null
+  let targets: PptxTrackTargets | undefined
   let stableState: PptxObjectStateMap = Object.freeze({})
   let activeGroup: PptxCompiledTriggerGroup | null = null
   let activeResolve: (() => void) | null = null
@@ -132,7 +133,7 @@ export function createPptxPlaybackController(
     })
   }
   const applyStableState = () => {
-    applyPptxObjectState(host.root, stableState)
+    applyPptxObjectState(host.root, stableState, targets)
     mediaPlayer?.apply(stableState)
   }
 
@@ -145,18 +146,16 @@ export function createPptxPlaybackController(
   const prepareCurrentSlide = () => {
     const slide = host.document.slides[slideIndex]
     if (!slide) throw new PptxPlaybackError("PLAYBACK_NOT_READY", "当前页面没有播放模型。", { slideIndex })
-    compiled = compilePptxSlideTracks(slide, capturePptxStaticState(host.root))
-    const targetCounts = new Map<string, number>()
-    for (const element of host.root.querySelectorAll<HTMLElement>("[data-pptx-object-key]")) {
-      const key = element.dataset.pptxObjectKey
-      if (key) targetCounts.set(key, (targetCounts.get(key) ?? 0) + 1)
-    }
+    // The rendered slide is the only moment targets can change: resolve them once and
+    // let every animation frame reuse the index.
+    targets = createPptxTrackTargets(host.root)
+    compiled = compilePptxSlideTracks(slide, capturePptxStaticState(host.root, targets))
     const checkedTargets = new Set<string>()
     for (const effect of compiled.groups.flatMap((group) => group.effects)) {
       const objectKey = effect.effect.targetObjectKey
       if (!objectKey || checkedTargets.has(objectKey)) continue
       checkedTargets.add(objectKey)
-      const count = targetCounts.get(objectKey) ?? 0
+      const count = targets.elements.get(objectKey)?.length ?? 0
       if (count === 1) continue
       emit({
         type: "warning",
@@ -288,7 +287,7 @@ export function createPptxPlaybackController(
     const group = activeGroup
     if (group) {
       const currentState = mergeState(stableState, evaluatePptxTriggerGroup(group, positionMs))
-      applyPptxObjectState(host.root, currentState)
+      applyPptxObjectState(host.root, currentState, targets)
       mediaPlayer?.apply(currentState)
       updateEffectEvents(positionMs)
       if (group.durationMs !== "indefinite" && positionMs >= group.durationMs) finishActiveGroup()
