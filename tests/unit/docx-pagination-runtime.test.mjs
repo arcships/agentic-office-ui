@@ -11,6 +11,13 @@
 // indexes and split ranges through `buildLayoutSnapshot()`, and they also assert
 // that the estimator gives different (wrong) results for the same fixtures. If
 // `buildLayoutSnapshot()` is ever reverted to the estimator, these tests fail.
+//
+// Fixture coverage for the issue's four required cases, each asserting an
+// explicit page count *and* explicit page-start node indexes:
+//   - explicit page break  → 2 pages, starts [0, 1]
+//   - next-page section break → 2 pages, starts [0, 1] (+ per-section geometry)
+//   - multi-page table    → 3 pages, starts [0, 1, 1] (row ranges per page)
+//   - footnote            → 2 pages, starts [0, 2] (note reserve moves the break)
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -68,6 +75,29 @@ function modelWith(nodes, metadata = {}) {
 function pageStartNodeIndexes(snapshot) {
   return snapshot.pages.map(
     (page) => page.blocks[0]?.source?.nodeIndex ?? null,
+  );
+}
+
+function snapshotSegmentsByPage(snapshot) {
+  return snapshot.pages.map((page) =>
+    page.blocks.flatMap((block) =>
+      block.source?.nodeIndex === undefined
+        ? []
+        : [
+            {
+              nodeIndex: block.source.nodeIndex,
+              tableRowRange: block.tableRowRange,
+              paragraphLineRange: block.paragraphLineRange,
+            },
+          ],
+    ),
+  );
+}
+
+function pageBodyBottomPx(page) {
+  return Math.max(
+    ...page.blocks.map((block) => block.framePx.y + block.framePx.height),
+    page.contentBoxPx.y,
   );
 }
 
@@ -216,6 +246,11 @@ test("a multi-page table is split into disjoint row ranges inside the page conte
   );
 
   assert.ok(tableSegments.length >= 2, "the table must span more than one page");
+  assert.equal(
+    snapshot.pages.length,
+    3,
+    "intro + two table continuations + trailing paragraph land on three pages",
+  );
   assert.ok(
     tableSegments.every((segment) => segment.nodeIndex === 1),
     "every table segment points at the same source node",
@@ -251,6 +286,94 @@ test("a multi-page table is split into disjoint row ranges inside the page conte
   // The estimator keeps the whole table on one page and overflows the paper.
   assert.deepEqual(legacyPageStartNodeIndexes(legacy), [0, 1, 2]);
   assert.deepEqual(pageStartNodeIndexes(snapshot), [0, 1, 1]);
+});
+
+test("a footnote reserves page height and moves the page break", () => {
+  const longText = "The quick brown fox jumps over the lazy dog. ".repeat(40);
+  const model = modelWith(
+    [
+      {
+        type: "paragraph",
+        children: [
+          { type: "text", text: longText },
+          // The importer stores note references on the run, not in sourceXml
+          // (see editor/helpers/note-references.ts).
+          { type: "text", text: "", noteReference: { kind: "footnote", id: 1 } },
+        ],
+      },
+      paragraph(longText),
+      paragraph(longText),
+    ],
+    {
+      footnotes: [
+        {
+          id: 1,
+          text: "Footnote body",
+          nodes: [
+            paragraph("Note line 1"),
+            paragraph("Note line 2"),
+            paragraph("Note line 3"),
+            paragraph("Note line 4"),
+          ],
+        },
+      ],
+    },
+  );
+
+  const withReserve = core.buildLayoutSnapshot(model, PAGE_OPTIONS);
+  const withoutReserve = core.buildLayoutSnapshot(model, {
+    ...PAGE_OPTIONS,
+    reserveNoteHeight: false,
+  });
+
+  // Each body paragraph wraps to 286px, so three of them fit in the 912px
+  // content box. The footnote section printed on page 1 costs another ~83px,
+  // which leaves room for two paragraphs and moves node 2 to page 2.
+  assert.equal(withReserve.pages.length, 2);
+  assert.deepEqual(pageStartNodeIndexes(withReserve), [0, 2]);
+  assert.deepEqual(
+    withReserve.pages.map((page) => page.blocks.length),
+    [2, 1],
+  );
+
+  // The same body collapses to a single page without the note reserve, so it
+  // is the reserve — not generic overflow — that moved the page break.
+  assert.equal(withoutReserve.pages.length, 1);
+  assert.deepEqual(pageStartNodeIndexes(withoutReserve), [0]);
+
+  const reservePx = core.resolvePageNoteReservePx(
+    model,
+    snapshotSegmentsByPage(withReserve),
+    {
+      estimateDocNodeHeightPx: core.estimateDocNodeHeightPx,
+      numberingDefinitions: model.metadata.numberingDefinitions,
+      resolvePageContentWidthPx: (pageIndex) =>
+        withReserve.pages[pageIndex].contentBoxPx.width,
+    },
+  );
+  assert.ok(
+    reservePx[0] > 0,
+    "the page that prints the footnote must reserve note height",
+  );
+  assert.equal(reservePx[1], 0, "the continuation page prints no notes");
+
+  const firstPage = withReserve.pages[0];
+  const contentBottomPx = firstPage.contentBoxPx.y + firstPage.contentBoxPx.height;
+  const bodyBottomPx = pageBodyBottomPx(firstPage);
+  const nextParagraphHeightPx = withReserve.pages[1].blocks[0].framePx.height;
+
+  assert.ok(
+    bodyBottomPx + nextParagraphHeightPx > contentBottomPx - reservePx[0],
+    "the third paragraph no longer fits once the note section is reserved",
+  );
+  assert.ok(
+    bodyBottomPx + nextParagraphHeightPx <= contentBottomPx,
+    "without the reserve that same paragraph would have fitted on page 1",
+  );
+  assert.ok(
+    bodyBottomPx + reservePx[0] <= contentBottomPx + 2,
+    `body bottom ${bodyBottomPx} plus reserve ${reservePx[0]} must stay inside ${contentBottomPx}`,
+  );
 });
 
 test("demo.docx paginates to the Word/LibreOffice baseline page count", async () => {
