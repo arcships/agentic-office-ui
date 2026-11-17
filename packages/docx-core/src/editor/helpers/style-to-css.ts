@@ -259,6 +259,19 @@ export function trackedInlineStyle(
     };
   }
 
+  if (change.kind === "deletion" || change.kind === "move-from") {
+    const accentColor = change.kind === "move-from" ? "#70ad47" : "#b91c1c";
+    return {
+      ...baseStyle,
+      color: accentColor,
+      textDecoration: mergeTextDecorations(
+        baseStyle.textDecoration,
+        "line-through"
+      ),
+      opacity: 0.95,
+    };
+  }
+
   return baseStyle;
 }
 

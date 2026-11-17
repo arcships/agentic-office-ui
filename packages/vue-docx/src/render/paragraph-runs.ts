@@ -52,6 +52,7 @@ import {
   type FieldResolutionState,
   resolveFieldText,
 } from "./paragraph-runs-field-resolve"
+import { renderParagraphMarkChange } from "./paragraph-runs-annotation"
 
 // ---- Public types ----
 
@@ -277,6 +278,15 @@ export function renderParagraphRuns(
       }
     }
     return attrs
+  }
+
+  const appendParagraphMarkChange = (target: VNode[]): void => {
+    const marker = renderParagraphMarkChange({
+      keyPrefix,
+      change: trackedMarkup?.paragraphMarkChange,
+      documentTheme,
+    })
+    if (marker) target.push(marker)
   }
 
   const consumeTrackedVisibleChild = (
@@ -794,6 +804,9 @@ export function renderParagraphRuns(
       zones[Math.max(0, Math.min(zoneCount - 1, activeZone))],
       `${keyPrefix}-tail`
     )
+    appendParagraphMarkChange(
+      zones[Math.max(0, Math.min(zoneCount - 1, activeZone))]
+    )
     return zones
   }
 
@@ -989,6 +1002,7 @@ export function renderParagraphRuns(
   }
 
   if (useTabLeaderLayout && hasTabSplit) {
+    appendParagraphMarkChange(runsRight)
     return h("div", {
       key: `${keyPrefix}-toc`,
       "data-docx-tab-layout": "leader",
@@ -1000,5 +1014,7 @@ export function renderParagraphRuns(
     ])
   }
 
-  return runsLeft.length > 0 ? runsLeft : runs
+  const finalRuns = runsLeft.length > 0 ? runsLeft : runs
+  appendParagraphMarkChange(finalRuns)
+  return finalRuns
 }

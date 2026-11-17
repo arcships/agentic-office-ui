@@ -43,6 +43,8 @@
 //   pretext-build.ts       — buildParagraphPretextLayoutSource
 //   pretext-measure.ts     — pretext measurement integration
 //   tracked-changes.ts     — tracked changes and comments collection
+//   tracked-changes-inline.ts — XML visible-unit ↔ model-child cursor mapping
+//   tracked-changes-table.ts — table/row/cell revision parsing and anchoring
 //   tracked-changes-gutter.ts — tracked-change gutter card layout
 //   selection-helpers.ts   — selection/cursor helpers (paragraph location navigation, core helpers)
 //   selection-helpers-range.ts — range normalization/cloning/selection resolution
@@ -97,6 +99,12 @@ export * from "./section-manipulation";
 export * from "./pretext-build";
 export * from "./pretext-measure";
 export * from "./tracked-changes";
+export {
+  resolveTableTrackedMarkup,
+  type TableTrackedMarkup,
+  type TableTrackedRevision,
+  type TableTrackedRevisionScope
+} from "./tracked-changes-table";
 export * from "./tracked-changes-gutter";
 export * from "./pagination-plan-iterate";
 export * from "./pagination-plan-core";

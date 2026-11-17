@@ -218,7 +218,19 @@ export type DocxTrackedChangeKind =
   | "move-from"
   | "move-to"
   | "format-change"
-  | "paragraph-format-change";
+  | "paragraph-format-change"
+  | "table-format-change"
+  | "row-format-change"
+  | "cell-format-change";
+
+export type DocxInlineTrackedChangeKind = Exclude<
+  DocxTrackedChangeKind,
+  | "format-change"
+  | "paragraph-format-change"
+  | "table-format-change"
+  | "row-format-change"
+  | "cell-format-change"
+>;
 
 export interface DocxTrackedChange {
   id: string;

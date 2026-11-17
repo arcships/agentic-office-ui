@@ -38,7 +38,10 @@
         <tr
           v-for="row of gridRows"
           :key="`row-${row.rowIndex}`"
-          :style="rowStyle(row.row)"
+          :class="rowClass(row.rowIndex)"
+          :data-docx-tracked-change="rowTrackedKind(row.rowIndex)"
+          :data-docx-tracked-change-id="rowTrackedId(row.rowIndex)"
+          :style="rowStyle(row.row, row.rowIndex)"
         >
           <template
             v-for="cell of row.cells"
@@ -57,7 +60,11 @@
               'docx-table-cell--active': isCellActive(cell.rowIndex, cell.cellIndex),
               'docx-table-cell--merge-fallback': cell.continuationFallback,
               'docx-table-cell--contain-floating': cellContainsLayoutInCellFloatingImage(cell),
+              'docx-table-cell--insertion': cellTrackedKind(cell.rowIndex, cell.cellIndex) === 'insertion',
+              'docx-table-cell--deletion': cellTrackedKind(cell.rowIndex, cell.cellIndex) === 'deletion',
             }"
+            :data-docx-tracked-change="cellTrackedKind(cell.rowIndex, cell.cellIndex)"
+            :data-docx-tracked-change-id="cellTrackedId(cell.rowIndex, cell.cellIndex)"
             :style="cellStyle(cell)"
             @click.stop="onCellClick(cell.rowIndex, cell.cellIndex, $event)"
           >
@@ -143,6 +150,7 @@ import {
   type TableRowNode,
   type TableRowRange,
   paragraphText,
+  resolveTableTrackedMarkup,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
 import { renderStaticHtml } from "../render/static-html"
@@ -399,6 +407,43 @@ const gridRows = computed(() =>
   })
 )
 
+const tableTrackedMarkup = computed(() =>
+  props.showTrackedChanges ? resolveTableTrackedMarkup(props.table) : undefined
+)
+
+function rowTrackedRevision(rowIndex: number) {
+  return tableTrackedMarkup.value?.rowChangeByIndex.get(rowIndex)
+}
+
+function cellTrackedRevision(rowIndex: number, cellIndex: number) {
+  return tableTrackedMarkup.value?.cellChangeByIndex.get(
+    `${rowIndex}:${cellIndex}`
+  )
+}
+
+function rowTrackedKind(rowIndex: number): string | undefined {
+  return rowTrackedRevision(rowIndex)?.kind
+}
+
+function rowTrackedId(rowIndex: number): string | undefined {
+  return rowTrackedRevision(rowIndex)?.stableId
+}
+
+function cellTrackedKind(rowIndex: number, cellIndex: number): string | undefined {
+  return cellTrackedRevision(rowIndex, cellIndex)?.kind
+}
+
+function cellTrackedId(rowIndex: number, cellIndex: number): string | undefined {
+  return cellTrackedRevision(rowIndex, cellIndex)?.stableId
+}
+
+function rowClass(rowIndex: number): string | undefined {
+  const kind = rowTrackedKind(rowIndex)
+  return kind === "insertion" || kind === "deletion"
+    ? `docx-table-row--${kind}`
+    : undefined
+}
+
 const tableStyle = computed(() => ({
   width: `${Math.max(1, Math.round(renderedTableWidthPx.value))}px`,
   maxWidth: "100%",
@@ -407,13 +452,23 @@ const tableStyle = computed(() => ({
 }))
 
 // ── Cell helpers ───────────────────────────────────────────────────
-function rowStyle(row: TableRowNode): Record<string, string | number | undefined> {
+function rowStyle(
+  row: TableRowNode,
+  rowIndex: number
+): Record<string, string | number | undefined> {
   const style: Record<string, string | number | undefined> = {}
   const explicitHeightPx = twipsToPixels(row.style?.heightTwips)
   const heightCss = resolveTableRowHeightCss(row, explicitHeightPx)
   if (heightCss) Object.assign(style, heightCss)
   if (row.style?.backgroundColor) style.backgroundColor = row.style.backgroundColor
   if (row.style?.cantSplit) style.breakInside = "avoid"
+  const trackedKind = rowTrackedKind(rowIndex)
+  if (trackedKind === "deletion") {
+    style.backgroundColor = "rgba(185, 28, 28, 0.07)"
+    style.opacity = 0.72
+  } else if (trackedKind === "insertion") {
+    style.backgroundColor = "rgba(220, 38, 38, 0.08)"
+  }
   return style
 }
 
@@ -434,6 +489,7 @@ function cellStyle(cell: TableGridCell): Record<string, string | number | undefi
     endColumnIndex,
     columnCount.value
   )
+  const trackedKind = cellTrackedKind(cell.rowIndex, cell.cellIndex)
   return {
     ...borders,
     ...tableSpacingPaddingStyle(
@@ -448,7 +504,15 @@ function cellStyle(cell: TableGridCell): Record<string, string | number | undefi
     ),
     verticalAlign: cell.cell.style?.verticalAlign ?? "top",
     minWidth: "0",
-    backgroundColor: cell.cell.style?.backgroundColor as string | undefined,
+    backgroundColor:
+      trackedKind === "deletion"
+        ? "rgba(185, 28, 28, 0.08)"
+        : trackedKind === "insertion"
+        ? "rgba(220, 38, 38, 0.08)"
+        : (cell.cell.style?.backgroundColor as string | undefined),
+    color: trackedKind === "deletion" ? "#b91c1c" : undefined,
+    textDecoration: trackedKind === "deletion" ? "line-through" : undefined,
+    opacity: trackedKind === "deletion" ? 0.8 : undefined,
     wordWrap: "break-word",
     overflowWrap: "break-word",
     wordBreak: "break-word",
@@ -767,6 +831,21 @@ onUnmounted(() => {
 }
 .docx-table-cell--active {
   background: rgba(59, 130, 246, 0.04);
+}
+.docx-table-row--insertion .docx-table-cell {
+  box-shadow: inset 0 2px 0 rgba(220, 38, 38, 0.55);
+}
+.docx-table-row--deletion .docx-table-cell {
+  text-decoration: line-through;
+}
+.docx-table-row--deletion .docx-table-cell-paragraph {
+  opacity: 0.72;
+}
+.docx-table-cell--deletion {
+  text-decoration: line-through;
+}
+.docx-table-cell--insertion {
+  box-shadow: inset 0 2px 0 rgba(220, 38, 38, 0.55);
 }
 .docx-table-cell--merge-fallback {
   background: transparent;
