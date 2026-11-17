@@ -96,8 +96,13 @@ export {
 export {
   DOCX_ANNOTATION_GUTTER_WIDTH_PX,
   DOCX_ANNOTATION_GUTTER_GAP_PX,
+  DOCX_ANNOTATION_GUTTER_DRAWER_MAX_WIDTH_PX,
+  DOCX_ANNOTATION_GUTTER_DRAWER_WIDTH_PX,
+  DOCX_ANNOTATION_GUTTER_DRAWER_TAB_WIDTH_PX,
   annotationGutterReservedWidthPx,
   annotationGutterPaneStyle,
+  annotationGutterDrawerPaneStyle,
+  annotationGutterUsesDrawer,
   annotationGutterCardTopPx,
   annotationGutterMarkerStyle,
   annotationGutterLeaderStyle,

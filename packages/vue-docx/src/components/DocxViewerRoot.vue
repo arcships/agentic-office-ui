@@ -47,6 +47,7 @@
             :page-background-color="documentBackgroundColor"
             :page-borders="entry.pageBorders ?? null"
             :theme="theme"
+            :annotation-drawer-mode="annotationDrawerMode"
             @measure="onPageMeasure(entry.pageIndex, $event)"
           />
         </div>
@@ -103,6 +104,7 @@ import {
 } from "../composables/page-surface-registry"
 import {
   annotationGutterReservedWidthPx,
+  annotationGutterUsesDrawer,
 } from "./gutter-metrics"
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -284,14 +286,26 @@ const FIT_ZOOM_MIN = 0.25
 const FIT_ZOOM_MAX = 2
 const FIT_ZOOM_SIDE_PAD = 48
 
-// Horizontal space the annotation gutter reserves beside the paper, in screen
-// px. The pane counter-scales itself (see gutter-metrics), so this footprint is
-// constant at every zoom level. 0 when annotations are hidden.
-const gutterScreenWidthPx = computed(() =>
-  (
+// Narrow viewports get the drawer overlay instead of a column beside the paper,
+// so the paper can keep the full container width.
+const annotationsVisible = computed(
+  () =>
     (props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false) ||
     (props.showComments ?? props.controller?.showComments ?? false)
-  )
+)
+
+const annotationDrawerMode = computed(
+  () =>
+    annotationsVisible.value &&
+    annotationGutterUsesDrawer(containerWidth.value)
+)
+
+// Horizontal space the annotation gutter reserves beside the paper, in screen
+// px. The pane counter-scales itself (see gutter-metrics), so this footprint is
+// constant at every zoom level. 0 when annotations are hidden or when the pane
+// is an overlay drawer (it then takes no space from the paper).
+const gutterScreenWidthPx = computed(() =>
+  annotationsVisible.value && !annotationDrawerMode.value
     ? annotationGutterReservedWidthPx()
     : 0
 )

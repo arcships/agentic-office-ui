@@ -299,6 +299,7 @@ export function cloneParagraph(
     sectionBreak: paragraph.sectionBreak
       ? { ...paragraph.sectionBreak }
       : undefined,
+    commentRanges: paragraph.commentRanges?.map((range) => ({ ...range })),
     children: paragraph.children.map((child) =>
       cloneParagraphChild(child, options)
     ),

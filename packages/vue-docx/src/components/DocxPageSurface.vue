@@ -170,6 +170,7 @@
       :page-height-px="annotationPageHeightPx"
       :document-theme="theme"
       :active-annotation-id="activeAnnotationId"
+      :drawer-mode="annotationDrawerMode"
       :decidable="editable && Boolean(controller)"
       @activate="activateAnnotation($event, { scrollToAnchor: true })"
       @card-height="reportGutterCardHeight"
@@ -234,6 +235,8 @@ interface DocxPageSurfaceProps {
   editable?: boolean
   /** Zoom factor applied to the page subtree; the annotation pane counter-scales. */
   zoomFactor?: number
+  /** Render the annotation pane as an overlay drawer (narrow viewports). */
+  annotationDrawerMode?: boolean
   pageWidthPx: number
   pageContentWidthPx: number
   pageNumber: number
@@ -273,6 +276,7 @@ const props = withDefaults(
     endnotes: () => [],
     theme: "light" as const,
     zoomFactor: 1,
+    annotationDrawerMode: false,
   }
 )
 

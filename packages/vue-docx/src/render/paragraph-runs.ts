@@ -15,6 +15,7 @@ import type {
 } from "@arcships/docx-core"
 import type { DocxDocumentTheme } from "@arcships/docx-core"
 import type { ParagraphTrackedInlineChange } from "@arcships/docx-core"
+import type { ParagraphCommentTextRange } from "@arcships/docx-core"
 import {
   paragraphUsesTabLeaders,
   paragraphAnchoredTabLayout,
@@ -260,6 +261,67 @@ export function renderParagraphRuns(
       commentMarkup?.commentIdsByVisibleChildIndex[trackedVisibleChildCursor]
     if (!commentIds || commentIds.length === 0) return undefined
     return commentHighlightStyle(documentTheme, commentIds[0])
+  }
+
+  // Exact character windows for the child being rendered. When the paragraph
+  // carries model comment offsets the renderer splits the run's text at these
+  // boundaries instead of highlighting the whole run.
+  const currentCommentTextRanges = ():
+    | ParagraphCommentTextRange[]
+    | undefined => {
+    const ranges =
+      commentMarkup?.rangesByVisibleChildIndex?.[trackedVisibleChildCursor]
+    return ranges && ranges.length > 0 ? ranges : undefined
+  }
+
+  const commentStyleForIds = (
+    commentIds: readonly number[]
+  ): Record<string, string | number | undefined> | undefined =>
+    commentIds.length > 0
+      ? commentHighlightStyle(documentTheme, commentIds[0])
+      : undefined
+
+  const commentAttributesForIds = (
+    commentIds: readonly number[]
+  ): Record<string, string> => {
+    if (commentIds.length === 0) return {}
+    const attributes: Record<string, string> = {
+      "data-docx-comment-ids": commentIds.join(" "),
+    }
+    if (commentIds.length === 1) {
+      attributes["data-docx-comment-id"] = String(commentIds[0])
+    }
+    return attributes
+  }
+
+  /**
+   * Splits `text` into the segments defined by `ranges`, so each character is
+   * highlighted by exactly the comments that cover it.
+   */
+  const commentTextSegments = (
+    text: string,
+    ranges: readonly ParagraphCommentTextRange[]
+  ): Array<{ start: number; end: number; commentIds: number[] }> => {
+    const boundaries = new Set<number>([0, text.length])
+    for (const range of ranges) {
+      if (range.start > 0 && range.start < text.length) boundaries.add(range.start)
+      if (range.end > 0 && range.end < text.length) boundaries.add(range.end)
+    }
+    const positions = [...boundaries].sort((left, right) => left - right)
+    const segments: Array<{ start: number; end: number; commentIds: number[] }> = []
+    for (let index = 0; index < positions.length - 1; index += 1) {
+      const start = positions[index]
+      const end = positions[index + 1]
+      if (end <= start) continue
+      const commentIds: number[] = []
+      for (const range of ranges) {
+        if (range.start <= start && range.end >= end && !commentIds.includes(range.commentId)) {
+          commentIds.push(range.commentId)
+        }
+      }
+      segments.push({ start, end, commentIds: commentIds.sort((a, b) => a - b) })
+    }
+    return segments
   }
 
   const currentAnnotationAttributes = (
@@ -562,12 +624,24 @@ export function renderParagraphRuns(
     annotationAttributes: Record<string, string>,
     trackedInlineChange: ParagraphTrackedInlineChange | undefined
   ): void => {
-    const textStyle = {
-      ...trackedInlineStyle(
-        runStyleToCss(child.style, documentTheme),
-        trackedInlineChange,
-        documentTheme
-      ),
+    const baseTextStyle = trackedInlineStyle(
+      runStyleToCss(child.style, documentTheme),
+      trackedInlineChange,
+      documentTheme
+    )
+    const effectiveText = textOverride ?? child.text
+    // Character-level ranges only line up when the rendered text is the child's
+    // own text (a checkbox leading space becomes an nbsp of the same length).
+    // Tab-leader parts are substrings, so they keep the run-level highlight.
+    const commentTextRanges =
+      effectiveText.length === child.text.length ? currentCommentTextRanges() : undefined
+    const textStyle = commentTextRanges
+      ? baseTextStyle
+      : { ...baseTextStyle, ...currentCommentHighlightStyle() }
+    // Single-unit runs (note markers, tabs) keep the run-level highlight: a
+    // character window inside them would not change what is painted.
+    const singleUnitTextStyle = {
+      ...textStyle,
       ...currentCommentHighlightStyle(),
     }
 
@@ -577,18 +651,17 @@ export function renderParagraphRuns(
       target.push(h("span", {
         key, ...annotationAttributes,
         "data-docx-note-marker": "true",
-        style: { ...textStyle, verticalAlign: "super", fontSize: "0.75em" },
+        style: { ...singleUnitTextStyle, verticalAlign: "super", fontSize: "0.75em" },
       }, noteLabel))
       trackTextAdvance(noteLabel, child.style)
       return
     }
 
     // Tab
-    const effectiveText = textOverride ?? child.text
     if (effectiveText === "\t" && !useTabLeaderLayout && !useAnchoredTabLayout) {
       target.push(h("span", {
         key, ...annotationAttributes,
-        style: tabTextStyle(child.style, textStyle),
+        style: tabTextStyle(child.style, singleUnitTextStyle),
       }, "\u00a0"))
       return
     }
@@ -613,7 +686,21 @@ export function renderParagraphRuns(
             onInternalLinkClick(linkHref.slice(1))
           },
           style: trackedLinkStyle(child.style, trackedInlineChange),
-        }, effectiveText)
+        },
+        commentTextRanges
+          ? commentTextSegments(effectiveText, commentTextRanges).map((segment) =>
+              h(
+                "span",
+                {
+                  key: `${key}-comment-${segment.start}`,
+                  ...commentAttributesForIds(segment.commentIds),
+                  style: commentStyleForIds(segment.commentIds),
+                },
+                effectiveText.slice(segment.start, segment.end)
+              )
+            )
+          : effectiveText
+        )
       )
       trackTextAdvance(effectiveText, child.style)
       return
@@ -622,7 +709,7 @@ export function renderParagraphRuns(
     // Plain text with soft-break control
     appendPlainTextWithSoftBreakControl(
       target, key, effectiveText, textStyle,
-      child.style, annotationAttributes
+      child.style, annotationAttributes, commentTextRanges
     )
   }
 
@@ -633,8 +720,26 @@ export function renderParagraphRuns(
     text: string,
     style: Record<string, string | number | undefined>,
     measureStyle?: TextRunNode["style"] | FormFieldRunNode["style"],
-    spanAttributes?: Record<string, string>
+    spanAttributes?: Record<string, string>,
+    commentTextRanges?: readonly ParagraphCommentTextRange[]
   ): void => {
+    // Exact comment windows: emit one span per run of identically-commented
+    // characters, so a range covering half a run highlights only that half.
+    if (commentTextRanges && commentTextRanges.length > 0) {
+      for (const segment of commentTextSegments(text, commentTextRanges)) {
+        target.push(
+          h("span", {
+            key: `${keySeed}-comment-${segment.start}`,
+            ...spanAttributes,
+            ...commentAttributesForIds(segment.commentIds),
+            style: { ...style, ...commentStyleForIds(segment.commentIds) },
+          }, text.slice(segment.start, segment.end))
+        )
+      }
+      trackTextAdvance(text, measureStyle)
+      return
+    }
+
     const shouldControlSoftBreakStretch =
       isJustifiedAlignment(paragraph.style?.align) && text.includes("\n")
     if (!shouldControlSoftBreakStretch) {

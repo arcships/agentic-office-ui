@@ -10,6 +10,9 @@ All notable changes to the `@arcships` package family are documented in this fil
 - Counter-scale the annotation pane so cards keep a fixed screen size at every zoom level, and reserve a constant screen-space footprint beside the paper.
 - Number every comment and draw a numbered marker plus leader line at its anchor, linking the highlighted range to its card; clicking a card, marker, or highlighted range activates the pair.
 - Stop switching the pane to `position: static` below 1100px, which inflated the measured page height and broke multi-page scroll positions.
+- Store `w:commentRangeStart` / `w:commentRangeEnd` on the paragraph model as UTF-16 character offsets, so a comment highlights exactly the commented characters instead of a whole run, and so highlights and gutter cards survive the edits that clear `sourceXml`.
+- Remap those offsets on every text edit (typing, delete, find/replace, paragraph split and join) with an `anchorText` fallback when an edit cannot be mapped, and re-emit the range markers plus `w:commentReference` when serializing an edited paragraph.
+- Turn the pane into a toggleable overlay drawer below 1024px instead of a column that leaves the paper, so the paper keeps the full viewport width on laptop screens.
 
 ### DOCX character typography
 

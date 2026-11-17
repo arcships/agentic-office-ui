@@ -29,6 +29,10 @@ import {
   firstTextStyleAtOffset,
   firstRunStyle,
   paragraphHasOnlyTextRuns,
+  remapParagraphCommentRanges,
+  splitParagraphCommentRanges,
+  shiftParagraphCommentRanges,
+  mergeParagraphCommentRanges,
   cloneTextRunWithMetadata,
   splitTextRunsAtOffset,
   cloneTextRangeLocation,
@@ -126,6 +130,13 @@ export function createEditorTextInput(
     // Diff instead of replacing the run list: a cell paragraph can carry a
     // footnote/endnote reference (or an image/form field) that must survive the
     // text edit, exactly like body paragraphs and index-based cell commits.
+    // Comment offsets are character offsets, so they follow the same diff.
+    const previousText = paragraphText(para)
+    para.commentRanges = remapParagraphCommentRanges(
+      previousText,
+      text,
+      para.commentRanges
+    )
     para.children = distributeTextAcrossParagraphChildren(para, text)
     para.sourceXml = undefined
     table.sourceXml = undefined
@@ -152,6 +163,11 @@ export function createEditorTextInput(
     paragraph.children = distributeTextAcrossParagraphChildren(paragraph, text, {
       insertedStyle,
     })
+    paragraph.commentRanges = remapParagraphCommentRanges(
+      previousText,
+      text,
+      paragraph.commentRanges
+    )
     paragraph.sourceXml = undefined
     table.sourceXml = undefined
     return true
@@ -416,6 +432,28 @@ export function createEditorTextInput(
           next = updateParagraphTextAtLocation(next, normalizedRange.start.location, mergedText, { insertedStyle })
         }
 
+        // Comment ranges span character offsets, so a join must take the
+        // surviving left prefix and the shifted right suffix. Fragments that
+        // become adjacent once the deleted text is gone are coalesced again.
+        const mergedCommentRanges = mergeParagraphCommentRanges(
+          [
+            ...splitParagraphCommentRanges(startParagraph.commentRanges, safeStart).before,
+            ...shiftParagraphCommentRanges(
+              splitParagraphCommentRanges(endParagraph.commentRanges, safeEnd).after,
+              safeStart + replacementText.length
+            ),
+          ],
+          `${startText.slice(0, safeStart)}${replacementText}${endText.slice(safeEnd)}`
+        )
+        const mergedParagraphAfterReplace = getParagraphAtLocation(
+          next,
+          normalizedRange.start.location
+        ).paragraph
+        if (mergedParagraphAfterReplace) {
+          mergedParagraphAfterReplace.commentRanges =
+            mergedCommentRanges.length > 0 ? mergedCommentRanges : undefined
+        }
+
         if (shouldAdoptEndParagraphStyleOnDelete) {
           const mergedLookup = getParagraphAtLocation(next, normalizedRange.start.location)
           if (mergedLookup.paragraph) {
@@ -672,14 +710,33 @@ export function createEditorTextInput(
         { beforeInsertedStyle, afterInsertedStyle: inheritedRunStyle }
       )
 
+      // Split comment ranges with the text: each side keeps the part of a range
+      // that survives on it, so highlights stay exact across the break.
+      const draftCommentRanges = remapParagraphCommentRanges(
+        paragraphText(paragraphNode),
+        normalizedDraftText,
+        paragraphNode.commentRanges
+      )
+      const beforeCommentRanges = splitParagraphCommentRanges(
+        draftCommentRanges,
+        safeStart
+      ).before
+      const afterCommentRanges = splitParagraphCommentRanges(
+        draftCommentRanges,
+        safeEnd
+      ).after
+
       paragraphNode.style = cloneParagraphStyle(splitParagraphStyle)
       paragraphNode.children = splitChildren.beforeChildren
+      paragraphNode.commentRanges =
+        beforeCommentRanges.length > 0 ? beforeCommentRanges : undefined
       paragraphNode.sourceXml = undefined
 
       next.nodes.splice(insertionIndex, 0, {
         type: "paragraph",
         style: cloneParagraphStyle(splitParagraphStyle),
         children: splitChildren.afterChildren,
+        commentRanges: afterCommentRanges.length > 0 ? afterCommentRanges : undefined,
       })
 
       splitResult = { paragraphIndex: insertionIndex, caretOffset: 0 }
@@ -758,17 +815,34 @@ export function createEditorTextInput(
             })()
           : textWithListType(beforeText, paragraphListType)
 
+      const draftCommentRanges = remapParagraphCommentRanges(
+        paragraphText(paragraphNode),
+        normalizedDraftText,
+        paragraphNode.commentRanges
+      )
+      const beforeCommentRanges = splitParagraphCommentRanges(
+        draftCommentRanges,
+        safeStart
+      ).before
+      const afterCommentRanges = splitParagraphCommentRanges(
+        draftCommentRanges,
+        safeEnd
+      ).after
+
       next = updateParagraphText(next, targetLocation.nodeIndex, textForCurrentParagraph, {
         insertedStyle: cloneTextStyle(ctx.pendingRunStyleSnapshot.value),
       })
       paragraphNode = next.nodes[targetLocation.nodeIndex]
       if (!paragraphNode || paragraphNode.type !== "paragraph") return current
+      paragraphNode.commentRanges =
+        beforeCommentRanges.length > 0 ? beforeCommentRanges : undefined
       paragraphNode.sourceXml = undefined
 
       next.nodes.splice(insertionIndex, 0, {
         type: "paragraph",
         style: cloneParagraphStyle(paragraphNode.style),
         children: [{ type: "text", text: textForInsertedParagraph, style: insertRunStyle }],
+        commentRanges: afterCommentRanges.length > 0 ? afterCommentRanges : undefined,
       })
       insertedParagraphResult = { paragraphIndex: insertionIndex, caretOffset: insertedCaretOffset }
       return next

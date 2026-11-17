@@ -9,6 +9,16 @@ export * from "./types";
 export { cloneDocModel, cloneDocModelShallow, cloneDocNode } from "./clone";
 export { normalizeDocModel } from "./normalize";
 
+// Comment ranges as character offsets (parse + edit-time maintenance)
+export {
+  parseParagraphCommentRanges,
+  mergeParagraphCommentRanges,
+  remapParagraphCommentRanges,
+  resolveParagraphCommentRanges,
+  shiftParagraphCommentRanges,
+  splitParagraphCommentRanges,
+} from "./comment-ranges";
+
 // DocModel construction (buildDocModel / buildDocModelFromBytes)
 export { buildDocModel, buildDocModelFromBytes } from "./doc-model";
 
