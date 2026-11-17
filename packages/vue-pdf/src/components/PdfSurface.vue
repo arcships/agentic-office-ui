@@ -164,6 +164,7 @@ import {
   type OfficeObjectReference,
   type OfficeReferenceCandidatePreview,
   type OfficeReferenceError,
+  type OfficeRegionDraftChange,
   type OfficeSelectionMode,
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
@@ -222,7 +223,7 @@ const emit = defineEmits<{
   documentRevisionChange: [revision: OfficeDocumentRevision]
   referenceCandidateChange: [change: { candidates: readonly OfficeReferenceCandidatePreview[]; activeCandidateId?: string }]
   referenceConfirm: [event: ReturnType<typeof confirmOfficeReferenceDraft>]
-  regionDraftChange: [event: { phase: "start" | "change"; region: { space: "page"; pageIndex: number; rect: NormalizedRect } }]
+  regionDraftChange: [event: OfficeRegionDraftChange]
   selectionCancel: [event: { mode: OfficeSelectionMode; reason: "escape" | "pointer-cancel" | "programmatic" }]
   linkActivate: [event: {
     pageIndex: number
@@ -412,11 +413,14 @@ function pageRegionRect(gesture: RegionGesture, clientX: number, clientY: number
 function beginRegion(event: PointerEvent, pageIndex: number): void {
   if (event.button !== 0) return
   const layer = event.currentTarget as HTMLElement
+  const bounds = layer.getBoundingClientRect()
+  const x = bounds.width > 0 ? clampUnit((event.clientX - bounds.left) / bounds.width) : 0
+  const y = bounds.height > 0 ? clampUnit((event.clientY - bounds.top) / bounds.height) : 0
   regionGesture.value = { pointerId: event.pointerId, pageIndex, layer, startX: event.clientX, startY: event.clientY }
   regionPageIndex.value = pageIndex
-  regionRect.value = { x: 0, y: 0, width: 0, height: 0 }
+  regionRect.value = { x, y, width: 0, height: 0 }
   layer.setPointerCapture?.(event.pointerId)
-  emit("regionDraftChange", { phase: "start", region: { space: "page", pageIndex, rect: regionRect.value } })
+  emit("regionDraftChange", { phase: "start", point: { space: "page", pageIndex, x, y } })
   event.preventDefault()
 }
 

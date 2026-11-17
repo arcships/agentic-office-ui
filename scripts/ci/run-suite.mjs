@@ -136,6 +136,7 @@ const suites = {
       "tests/component/vue-components.test.mjs",
       "tests/component/office-selection-ui.test.mjs",
       "tests/component/office-reference-surfaces.test.mjs",
+      "tests/component/docx-reference-surfaces.test.mjs",
       "tests/component/pptx-preview.test.mjs",
       "tests/component/xlsx-race.test.mjs",
       "tests/component/xlsx-deferred-load.test.mjs",

@@ -426,10 +426,39 @@ export interface OfficeReferenceCandidateChange {
   activeCandidateId?: string
 }
 
-export interface OfficeRegionDraftChange {
-  phase: "start" | "change"
-  region: ManualRegionLocator
+export interface OfficeRegionDraftStartPage {
+  space: "page"
+  pageIndex: number
+  x: number
+  y: number
 }
+
+export interface OfficeRegionDraftStartSlide {
+  space: "slide"
+  slideIndex: number
+  x: number
+  y: number
+}
+
+export interface OfficeRegionDraftStartSheet {
+  space: "sheet"
+  sheetId: string
+  start: SheetRegionPoint
+}
+
+/**
+ * A region gesture starts at a single normalized point. The first `change`
+ * event supplies the positive-area rectangle; a zero-area rectangle is never
+ * part of this contract.
+ */
+export type OfficeRegionDraftStart =
+  | OfficeRegionDraftStartPage
+  | OfficeRegionDraftStartSlide
+  | OfficeRegionDraftStartSheet
+
+export type OfficeRegionDraftChange =
+  | { phase: "start"; point: OfficeRegionDraftStart }
+  | { phase: "change"; region: ManualRegionLocator }
 
 export interface OfficeSelectionCancelEvent {
   mode: OfficeSelectionMode

@@ -11,7 +11,7 @@ import type {
   OfficeObjectReliability,
   ResolveReferenceResult,
 } from "@arcships/office-interaction";
-import type { DocModel, ParagraphNode } from "./engine/types";
+import type { DocModel, ImageRunNode, ParagraphNode } from "./engine/types";
 import type {
   DocxTextRange,
   DocxTextRangeBoundary,
@@ -80,6 +80,27 @@ const DOCX_REGION_RELIABILITY: OfficeObjectReliability = {
   boundary: { level: "exact", score: 1, reasonCodes: ["normalized-region"] },
   hierarchy: { level: "likely", reasonCodes: ["docx.page-index"] },
   relocation: { level: "uncertain", reasonCodes: ["docx.reflow-sensitive"] },
+};
+
+const DOCX_IMAGE_RELIABILITY: OfficeObjectReliability = {
+  semantic: { level: "exact", score: 1, reasonCodes: ["docx.native-image"] },
+  boundary: { level: "exact", score: 1, reasonCodes: ["docx.model-child-index"] },
+  hierarchy: { level: "likely", reasonCodes: ["docx.model-path"] },
+  relocation: { level: "likely", reasonCodes: ["docx.structural-path"] },
+};
+
+const DOCX_TABLE_RELIABILITY: OfficeObjectReliability = {
+  semantic: { level: "exact", score: 1, reasonCodes: ["docx.native-table"] },
+  boundary: { level: "likely", reasonCodes: ["docx.model-table-index"] },
+  hierarchy: { level: "exact", score: 1, reasonCodes: ["docx.model-path"] },
+  relocation: { level: "likely", reasonCodes: ["docx.structural-path"] },
+};
+
+const DOCX_COMMENT_RELIABILITY: OfficeObjectReliability = {
+  semantic: { level: "exact", score: 1, reasonCodes: ["docx.native-comment"] },
+  boundary: { level: "likely", reasonCodes: ["docx.comment-anchor"] },
+  hierarchy: { level: "likely", reasonCodes: ["docx.model-path"] },
+  relocation: { level: "uncertain", reasonCodes: ["docx.comment-anchor"] },
 };
 
 function copyReliability(value: OfficeObjectReliability): OfficeObjectReliability {
@@ -344,6 +365,116 @@ export function createDocxRegionReferenceDraft(
   };
 }
 
+export interface DocxImageReferenceTarget {
+  paragraph: DocxTextRangeLocation;
+  childIndex: number;
+}
+
+function draftParagraph(
+  context: DocxReferenceContext,
+  location: DocxTextRangeLocation,
+): ParagraphNode | undefined {
+  return getParagraphAtLocation(context.model, location).paragraph;
+}
+
+export function createDocxImageReferenceDraft(
+  context: DocxReferenceContext,
+  target: DocxImageReferenceTarget,
+): DocxOfficeReferenceDraft {
+  assertDocxContext(context);
+  if (!Number.isSafeInteger(target.childIndex) || target.childIndex < 0) {
+    throw new TypeError("DOCX image childIndex must be a non-negative safe integer");
+  }
+  const paragraph = draftParagraph(context, target.paragraph);
+  const child = paragraph?.children[target.childIndex];
+  if (!child || child.type !== "image") {
+    throw new RangeError("DOCX image reference requires an image child in the current model");
+  }
+  return {
+    schemaVersion: 1,
+    document: context.revision,
+    kind: "image",
+    source: "native",
+    locator: {
+      type: "format",
+      format: "docx",
+      value: {
+        kind: "image",
+        part: { kind: "body" },
+        paragraphPath: pathFromLocation(target.paragraph),
+        childIndex: target.childIndex,
+      },
+    },
+    reliability: copyReliability(DOCX_IMAGE_RELIABILITY),
+  };
+}
+
+export function createDocxTableReferenceDraft(
+  context: DocxReferenceContext,
+  tableIndex: number,
+): DocxOfficeReferenceDraft {
+  assertDocxContext(context);
+  if (!Number.isSafeInteger(tableIndex) || tableIndex < 0) {
+    throw new TypeError("DOCX tableIndex must be a non-negative safe integer");
+  }
+  if (context.model.nodes[tableIndex]?.type !== "table") {
+    throw new RangeError(`DOCX table ${tableIndex} is not present in the current model`);
+  }
+  return {
+    schemaVersion: 1,
+    document: context.revision,
+    kind: "table",
+    source: "native",
+    locator: {
+      type: "format",
+      format: "docx",
+      value: {
+        kind: "structure",
+        part: { kind: "body" },
+        path: [{ kind: "table", index: tableIndex }],
+      },
+    },
+    reliability: copyReliability(DOCX_TABLE_RELIABILITY),
+  };
+}
+
+export interface DocxCommentReferenceTarget {
+  commentId: string;
+  anchor?: DocxTextRangeLocation;
+}
+
+export function createDocxCommentReferenceDraft(
+  context: DocxReferenceContext,
+  target: DocxCommentReferenceTarget,
+): DocxOfficeReferenceDraft {
+  assertDocxContext(context);
+  const commentId = target.commentId.trim();
+  if (!commentId) throw new TypeError("DOCX commentId must not be empty");
+  if (!context.model.metadata.comments?.some((comment) => String(comment.id) === commentId)) {
+    throw new RangeError(`DOCX comment ${commentId} is not present in the current model`);
+  }
+  if (target.anchor && !draftParagraph(context, target.anchor)) {
+    throw new RangeError("DOCX comment anchor is not present in the current model");
+  }
+  return {
+    schemaVersion: 1,
+    document: context.revision,
+    kind: "comment",
+    source: "native",
+    locator: {
+      type: "format",
+      format: "docx",
+      value: {
+        kind: "comment",
+        part: { kind: "body" },
+        commentId,
+        ...(target.anchor ? { anchorPath: pathFromLocation(target.anchor) } : {}),
+      },
+    },
+    reliability: copyReliability(DOCX_COMMENT_RELIABILITY),
+  };
+}
+
 function draftFromReference(reference: DocxOfficeReference): DocxOfficeReferenceDraft {
   const { referenceId: _referenceId, ...draft } = reference;
   return draft;
@@ -420,6 +551,78 @@ function simpleDescriptor(reference: DocxOfficeReference): OfficeObjectDescripto
   };
 }
 
+function visualForFallbackRegion(reference: DocxOfficeReference): OfficeObjectDescriptor["visual"] {
+  const region = reference.fallbackRegion;
+  return region
+    ? {
+        fragments: [{ container: { space: "page", pageIndex: region.pageIndex }, rect: region.rect }],
+        layoutVersion: reference.document.revision,
+      }
+    : undefined;
+}
+
+function pathKey(path: readonly DocxPathSegment[]): string {
+  return path.map((segment) => `${segment.kind}:${segment.index}`).join("/");
+}
+
+function imageDescriptor(reference: DocxOfficeReference, image: ImageRunNode): OfficeObjectDescriptor {
+  const locator = reference.locator.type === "format" && reference.locator.value.kind === "image"
+    ? reference.locator.value
+    : undefined;
+  const paragraphLocation = locator ? locationFromPath(locator.paragraphPath) : undefined;
+  const label = image.alt?.replace(/\s+/gu, " ").trim() || "Image";
+  const visual = visualForFallbackRegion(reference);
+  return {
+    objectId: `docx:image:${locator ? pathKey(locator.paragraphPath) : "?"}:${locator?.childIndex ?? -1}`,
+    draft: draftFromReference(reference),
+    label: label === "Image" ? "Image" : `Image: ${label.slice(0, 80)}`,
+    path: [
+      { kind: "document", label: "Document" },
+      ...(paragraphLocation ? locationPath(paragraphLocation).slice(1) : []),
+      { kind: "image", label },
+    ],
+    childrenState: "none",
+    ...(image.alt ? { content: { text: image.alt } } : {}),
+    ...(visual ? { visual } : {}),
+  };
+}
+
+function tableDescriptor(reference: DocxOfficeReference, tableIndex: number): OfficeObjectDescriptor {
+  return {
+    objectId: `docx:table:${tableIndex}`,
+    draft: draftFromReference(reference),
+    label: `Table ${tableIndex + 1}`,
+    path: [
+      { kind: "document", label: "Document" },
+      { kind: "table", label: `Table ${tableIndex + 1}` },
+    ],
+    childrenState: "available",
+  };
+}
+
+function commentDescriptor(
+  reference: DocxOfficeReference,
+  commentId: string,
+  comment: { author?: string; text: string },
+): OfficeObjectDescriptor {
+  const text = comment.text.replace(/\s+/gu, " ").trim();
+  const anchorLocation = reference.locator.type === "format" && reference.locator.value.kind === "comment"
+    ? locationFromPath(reference.locator.value.anchorPath ?? [])
+    : undefined;
+  return {
+    objectId: `docx:comment:${commentId}`,
+    draft: draftFromReference(reference),
+    label: text ? `Comment: ${text.slice(0, 80)}` : `Comment ${commentId}`,
+    path: [
+      { kind: "document", label: "Document" },
+      ...(anchorLocation ? locationPath(anchorLocation).slice(1) : []),
+      { kind: "comment", label: comment.author ? `Comment by ${comment.author}` : "Comment" },
+    ],
+    childrenState: "none",
+    content: { text: comment.text },
+  };
+}
+
 function currentReference(
   context: DocxReferenceContext,
   reference: DocxOfficeReference,
@@ -478,11 +681,97 @@ function textCandidates(
   return candidates.filter((candidate) => candidate.score === topScore);
 }
 
-function docxReferenceKind(reference: DocxOfficeReference): "text" | "page" | "region" | "other" {
+function docxReferenceKind(
+  reference: DocxOfficeReference,
+): "text" | "page" | "region" | "image" | "table" | "comment" | "other" {
   if (reference.locator.type === "manual-region") return "region";
-  if (reference.locator.value.kind === "text-range") return "text";
-  if (reference.locator.value.kind === "page") return "page";
+  const value = reference.locator.value;
+  if (value.kind === "text-range") return "text";
+  if (value.kind === "page") return "page";
+  if (value.kind === "image") return "image";
+  if (value.kind === "comment") return "comment";
+  if (value.kind === "structure" && value.path[0]?.kind === "table") return "table";
   return "other";
+}
+
+function resolveDocxImageReference(
+  context: DocxReferenceContext,
+  reference: DocxOfficeReference,
+): ResolveReferenceResult {
+  if (reference.locator.type !== "format" || reference.locator.value.kind !== "image") {
+    return { status: "unsupported", reasonCode: "docx.image-locator-unsupported" };
+  }
+  const locator = reference.locator.value;
+  const paragraphLocation = locationFromPath(locator.paragraphPath);
+  const image = paragraphLocation
+    ? getParagraphAtLocation(context.model, paragraphLocation).paragraph?.children[locator.childIndex]
+    : undefined;
+  if (!image || image.type !== "image") {
+    return { status: "not-found", reasonCode: "docx.image-not-found" };
+  }
+  if (sameRevision(reference.document, context.revision)) {
+    return { status: "exact", reference, descriptor: imageDescriptor(reference, image) };
+  }
+  const relocated = currentReference(context, reference, locator);
+  return {
+    status: "relocated",
+    reference: relocated,
+    descriptor: imageDescriptor(relocated, image),
+    reasonCodes: ["docx.revision-changed", "docx.locator-stable"],
+  };
+}
+
+function resolveDocxTableReference(
+  context: DocxReferenceContext,
+  reference: DocxOfficeReference,
+): ResolveReferenceResult {
+  if (reference.locator.type !== "format" || reference.locator.value.kind !== "structure") {
+    return { status: "unsupported", reasonCode: "docx.table-locator-unsupported" };
+  }
+  const locator = reference.locator.value;
+  const table = locator.path[0];
+  if (!table || table.kind !== "table") {
+    return { status: "unsupported", reasonCode: "docx.table-locator-unsupported" };
+  }
+  if (context.model.nodes[table.index]?.type !== "table") {
+    return { status: "not-found", reasonCode: "docx.table-not-found" };
+  }
+  if (sameRevision(reference.document, context.revision)) {
+    return { status: "exact", reference, descriptor: tableDescriptor(reference, table.index) };
+  }
+  const relocated = currentReference(context, reference, locator);
+  return {
+    status: "relocated",
+    reference: relocated,
+    descriptor: tableDescriptor(relocated, table.index),
+    reasonCodes: ["docx.revision-changed", "docx.locator-stable"],
+  };
+}
+
+function resolveDocxCommentReference(
+  context: DocxReferenceContext,
+  reference: DocxOfficeReference,
+): ResolveReferenceResult {
+  if (reference.locator.type !== "format" || reference.locator.value.kind !== "comment") {
+    return { status: "unsupported", reasonCode: "docx.comment-locator-unsupported" };
+  }
+  const locator = reference.locator.value;
+  const comment = context.model.metadata.comments?.find(
+    (entry) => String(entry.id) === locator.commentId,
+  );
+  if (!comment) {
+    return { status: "not-found", reasonCode: "docx.comment-not-found" };
+  }
+  if (sameRevision(reference.document, context.revision)) {
+    return { status: "exact", reference, descriptor: commentDescriptor(reference, locator.commentId, comment) };
+  }
+  const relocated = currentReference(context, reference, locator);
+  return {
+    status: "relocated",
+    reference: relocated,
+    descriptor: commentDescriptor(relocated, locator.commentId, comment),
+    reasonCodes: ["docx.revision-changed", "docx.locator-stable"],
+  };
 }
 
 export function resolveDocxReference(
@@ -497,6 +786,10 @@ export function resolveDocxReference(
   }
   const kind = docxReferenceKind(docxReference);
   if (kind === "other") return { status: "unsupported", reasonCode: "docx.reference-kind-unsupported" };
+
+  if (kind === "image") return resolveDocxImageReference(context, docxReference);
+  if (kind === "table") return resolveDocxTableReference(context, docxReference);
+  if (kind === "comment") return resolveDocxCommentReference(context, docxReference);
 
   if (kind === "page" || kind === "region") {
     const pageIndex = docxReference.locator.type === "manual-region"

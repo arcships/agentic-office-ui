@@ -13,8 +13,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 105,
-        "sha256": "c8e7779a130bbbbf509df8d95572f7d18883a8cd885080bf252a049d93a106b8"
+        "count": 114,
+        "sha256": "1c3d047cd274d2390d324a1c1f88cbbdd488015d1990bb054b2325edd166dd0c"
       }
     },
     {
@@ -49,8 +49,8 @@
         "setWasmSource"
       ],
       "rootDeclarationFingerprint": {
-        "count": 1167,
-        "sha256": "7e410babec89f26a73129443d8473ad5f9f0115d3016b9971d9a630f13dc7b4a"
+        "count": 1172,
+        "sha256": "f156ad0642309c0120b99bfb712d419f556f4a5ba522ffa15579c58a8d4ff848"
       }
     },
     {
