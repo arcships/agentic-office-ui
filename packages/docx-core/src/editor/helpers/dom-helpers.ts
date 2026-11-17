@@ -56,7 +56,7 @@ export function selectionOffsetsWithinElementDom(
     const textLengthWithoutNumberingLabels = (range: Range): number => {
       const fragment = range.cloneContents();
       fragment
-        .querySelectorAll("[data-docx-numbering-label='true']")
+        .querySelectorAll("[data-docx-numbering-label='true'], [data-docx-note-marker='true']")
         .forEach((label) => {
           label.remove();
         });
@@ -111,7 +111,7 @@ export function setSelectionWithinElementByTextOffsetsDom(
       if (
         currentTextNode instanceof Text &&
         currentTextNode.parentElement?.closest(
-          "[data-docx-numbering-label='true']"
+          "[data-docx-numbering-label='true'], [data-docx-note-marker='true']"
         )
       ) {
         currentTextNode = walker.nextNode();

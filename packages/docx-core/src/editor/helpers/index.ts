@@ -88,6 +88,8 @@ export * from "./line-height-table";
 export * from "./table-height";
 export * from "./header-footer";
 export * from "./paragraph-tracked";
+export * from "./note-references";
+export * from "./note-numbering";
 export * from "./selection-helpers";
 export * from "./selection-helpers-range";
 export * from "./selection-restore";

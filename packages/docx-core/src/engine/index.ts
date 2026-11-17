@@ -11,6 +11,13 @@ export { normalizeDocModel } from "./normalize";
 // DocModel construction (buildDocModel / buildDocModelFromBytes)
 export { buildDocModel, buildDocModelFromBytes } from "./doc-model";
 
+// Note numbering/placement properties (w:footnotePr / w:endnotePr)
+export {
+  parseNoteNumberingProperties,
+  parseNoteProperties,
+  mergeNoteNumberingProperties,
+} from "./note-properties";
+
 // WASM bridge: initWasm / setWasmSource / wasmParseDocx / wasmSerializeDocx / ...
 export type { WasmSource, WasmOoxmlPart, WasmOoxmlPackage, LegacyWasmOoxmlPackage } from "./wasm";
 export {

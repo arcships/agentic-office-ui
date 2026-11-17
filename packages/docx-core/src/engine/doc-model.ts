@@ -10,11 +10,38 @@ import {
 import { parseDocx } from "./ooxml-core";
 
 import { normalizeDocModel } from "./normalize";
-import type { DocModel } from "./types";
+import { parseNoteProperties } from "./note-properties";
+import type { DocModel, DocumentNoteProperties } from "./types";
 
 export * from "./types";
 export { cloneDocModel } from "./clone";
 export { normalizeDocModel } from "./normalize";
+
+const SETTINGS_PART = "word/settings.xml";
+
+/**
+ * The WASM model builder does not surface w:footnotePr / w:endnotePr, so the
+ * document-wide note properties are read from word/settings.xml here. Section
+ * level overrides stay in metadata.sections[].sectionPropertiesXml.
+ */
+function attachDocumentNoteProperties(
+  model: DocModel,
+  pkg: OoxmlPackage,
+): DocModel {
+  if (model.metadata.noteProperties) {
+    return model;
+  }
+  const settingsXml = pkg.parts.get(SETTINGS_PART)?.content;
+  const noteProperties: DocumentNoteProperties | undefined =
+    parseNoteProperties(settingsXml);
+  if (!noteProperties) {
+    return model;
+  }
+  return {
+    ...model,
+    metadata: { ...model.metadata, noteProperties },
+  };
+}
 
 export async function buildDocModel(pkg: OoxmlPackage): Promise<DocModel> {
   const wasmPackage = mapsToWasmPackage({
@@ -22,7 +49,7 @@ export async function buildDocModel(pkg: OoxmlPackage): Promise<DocModel> {
     binaryAssets: pkg.binaryAssets,
   });
   const model = (await wasmBuildDocModelFromPackage(wasmPackage)) as DocModel;
-  return normalizeDocModel(model);
+  return normalizeDocModel(attachDocumentNoteProperties(model, pkg));
 }
 
 export async function buildDocModelFromBytes(

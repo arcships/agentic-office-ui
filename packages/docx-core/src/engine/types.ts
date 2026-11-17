@@ -25,15 +25,20 @@ export interface TextStyle {
   runBorder?: TextRunBorderStyle;
 }
 
+export type NoteReferenceKind = "footnote" | "endnote";
+
+export interface NoteReference {
+  kind: NoteReferenceKind;
+  /** Raw OOXML w:id of the referenced note definition. */
+  id: number;
+}
+
 export interface TextRunNode {
   type: "text";
   text: string;
   style?: TextStyle;
   link?: string;
-  noteReference?: {
-    kind: "footnote" | "endnote";
-    id: number;
-  };
+  noteReference?: NoteReference;
 }
 
 export interface ImageRunNode {
@@ -438,6 +443,26 @@ export interface DocumentCompatibilitySettings {
   evenAndOddHeaders?: boolean;
 }
 
+export type NoteNumberRestart = "continuous" | "eachSect" | "eachPage";
+export type NoteNumberPosition = "docEnd" | "sectEnd";
+
+/** Subset of w:footnotePr / w:endnotePr that changes note numbering/placement. */
+export interface DocumentNoteNumberingProperties {
+  /** OOXML w:numFmt/@w:val, e.g. "decimal", "lowerRoman", "upperLetter". */
+  numFmt?: string;
+  /** OOXML w:numRestart/@w:val. */
+  numRestart?: NoteNumberRestart;
+  /** OOXML w:numStart/@w:val — first display number of the numbering run. */
+  numStart?: number;
+  /** Endnote placement (w:endnotePr/w:pos): "docEnd" or "sectEnd". */
+  position?: NoteNumberPosition;
+}
+
+export interface DocumentNoteProperties {
+  footnote?: DocumentNoteNumberingProperties;
+  endnote?: DocumentNoteNumberingProperties;
+}
+
 export interface DocModel {
   nodes: DocNode[];
   metadata: {
@@ -457,5 +482,7 @@ export interface DocModel {
     footnotes?: DocumentNoteDefinition[];
     endnotes?: DocumentNoteDefinition[];
     comments?: DocumentCommentDefinition[];
+    /** Document-wide w:footnotePr / w:endnotePr from word/settings.xml. */
+    noteProperties?: DocumentNoteProperties;
   };
 }

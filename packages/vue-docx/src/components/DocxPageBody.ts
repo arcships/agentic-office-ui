@@ -82,6 +82,13 @@ export default defineComponent({
     pageNumber: { type: Number, required: true },
     totalPages: { type: Number, required: true },
     pageNumberFormat: { type: String, required: false },
+    noteMarkerLabels: {
+      type: Object as PropType<{
+        footnote?: Map<number, string>
+        endnote?: Map<number, string>
+      }>,
+      required: false,
+    },
   },
   emits: ["measure"],
   setup(props, { emit, slots }) {
@@ -280,6 +287,7 @@ export default defineComponent({
                 pageNumber: props.pageNumber,
                 totalPages: props.totalPages,
                 pageNumberFormat: props.pageNumberFormat,
+                noteMarkerLabels: props.noteMarkerLabels,
                 onTextInput: (nodeIndex: number, text: string) => {
                   props.controller?.commitParagraphText(nodeIndex, text)
                 },
@@ -308,6 +316,7 @@ export default defineComponent({
                 totalPages: props.totalPages,
                 pageNumberFormat: props.pageNumberFormat,
                 maxAvailableWidthPx: props.pageContentWidthPx,
+                noteMarkerLabels: props.noteMarkerLabels,
               })
             )
           }

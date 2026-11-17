@@ -151,7 +151,10 @@ function splitRunsAtOffset(
     const runEnd = runStart + runLength;
     cursor = runEnd;
 
-    if (runEnd <= safeOffset) {
+    // A zero-length run (a footnote/endnote marker is a zero-length text run)
+    // sits *at* the boundary, not before it: keep it on the right so deleting
+    // text next to a marker no longer deletes the marker itself.
+    if (runEnd < safeOffset || (runEnd === safeOffset && runLength > 0)) {
       left.push(cloneTextRun(run));
       continue;
     }
