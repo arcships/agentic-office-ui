@@ -462,8 +462,12 @@ export function absoluteFloatingImageStyle(
     return {};
   }
 
-  const horizontalRelativeTo = floating.horizontalRelativeTo?.toLowerCase();
-  const verticalRelativeTo = floating.verticalRelativeTo?.toLowerCase();
+  const horizontalRelativeTo = floating.simplePos
+    ? "page"
+    : floating.horizontalRelativeTo?.toLowerCase();
+  const verticalRelativeTo = floating.simplePos
+    ? "page"
+    : floating.verticalRelativeTo?.toLowerCase();
   const horizontalAlign = floating.horizontalAlign?.toLowerCase();
   const verticalAlign = floating.verticalAlign?.toLowerCase();
   const usesWrapDistance = Boolean(

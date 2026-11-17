@@ -834,7 +834,69 @@ test("newDocument asks before discarding dirty edits and resets dirty state", as
   await vue.nextTick();
   assert.notEqual(controller.model, dirtyModel);
   assert.equal(controller.isDirty, false, "accepted New starts from a clean document");
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
 
+test("locked image anchors cannot be dragged or resized and allowOverlap is honoured", async () => {
+  const source = deepFreeze(starterModel([
+    {
+      type: "paragraph",
+      children: [
+        {
+          type: "image",
+          src: "data:image/svg+xml;base64,PHN2Zy8+",
+          alt: "locked-image",
+          widthPx: 80,
+          heightPx: 50,
+          floating: {
+            xPx: 10,
+            yPx: 10,
+            wrapType: "square",
+            lockedAnchor: true,
+          },
+        },
+        {
+          type: "image",
+          src: "data:image/svg+xml;base64,PHN2Zy8+",
+          alt: "non-overlap-image",
+          widthPx: 60,
+          heightPx: 40,
+          floating: {
+            xPx: 300,
+            yPx: 300,
+            wrapType: "square",
+            allowOverlap: false,
+          },
+        },
+      ],
+    },
+  ]));
+  const mounted = await mountController(source);
+  const { controller } = mounted;
+  const lockedLocation = { kind: "paragraph", nodeIndex: 0, childIndex: 0 };
+  const freeLocation = { kind: "paragraph", nodeIndex: 0, childIndex: 1 };
+
+  const beforeLockedEdit = controller.model;
+  controller.moveFloatingImage(lockedLocation, { xPx: 60, yPx: 70 });
+  await vue.nextTick();
+  assert.strictEqual(controller.model, beforeLockedEdit);
+  assert.match(controller.status, /locked/i);
+
+  controller.resizeImage(lockedLocation, 200, 120);
+  await vue.nextTick();
+  assert.strictEqual(controller.model, beforeLockedEdit);
+  assert.equal(imageAt(controller.model, 0, 0).widthPx, 80);
+
+  controller.moveFloatingImage(freeLocation, { xPx: 10, yPx: 10 });
+  await vue.nextTick();
+  assert.strictEqual(controller.model, beforeLockedEdit);
+  assert.match(controller.status, /overlap/i);
+
+  controller.moveFloatingImage(freeLocation, { xPx: 320, yPx: 320 });
+  await vue.nextTick();
+  assert.equal(imageAt(controller.model, 0, 1).floating?.xPx, 320);
+  assert.equal(imageAt(controller.model, 0, 1).floating?.yPx, 320);
   mounted.app.unmount();
   assert.deepEqual(mounted.warnings, []);
 });

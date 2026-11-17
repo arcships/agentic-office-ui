@@ -74,6 +74,21 @@ export interface ImageRunNode {
     wrapText?: "bothSides" | "left" | "right" | "largest";
     behindDocument?: boolean;
     zIndex?: number;
+    /** Whether the anchor is laid out inside its table cell (wp:anchor/@layoutInCell). */
+    layoutInCell?: boolean;
+    /** Whether the anchored object may overlap other floating objects (wp:anchor/@allowOverlap). */
+    allowOverlap?: boolean;
+    /** Whether the editor must not move or resize the anchor (wp:anchor/@locked). */
+    lockedAnchor?: boolean;
+    /** Whether x/y are page-relative simple positions (wp:anchor/@simplePos). */
+    simplePos?: boolean;
+    /** Visual overflow beyond the extent, in CSS pixels (wp:effectExtent). */
+    effectExtent?: {
+      leftPx?: number;
+      topPx?: number;
+      rightPx?: number;
+      bottomPx?: number;
+    };
   };
   syntheticTextBox?: boolean;
   textBoxText?: string;

@@ -71,6 +71,11 @@ export interface ParagraphRunRenderOptions {
   paragraphOriginTopPx?: number
   imageFilterSuffix?: string
   onImageDecodeError?: ImageRunRenderExtra["onImageDecodeError"]
+  /** Bounds of the table cell that hosts this paragraph. */
+  tableCellLayout?: {
+    widthPx?: number
+    heightPx?: number
+  }
   /** Floating body images are rendered by the editor interaction layer. */
   skipFloatingImages?: boolean
   /** Keep wrapped images in document flow while the interaction layer supplies controls. */
@@ -521,6 +526,7 @@ export function renderParagraphRuns(
       floatingAnchorOriginCorrectionXPx,
       withinHeaderFooter: options?.withinHeaderFooter,
       headerFooterRegion: options?.headerFooterRegion,
+      tableCellLayout: options?.tableCellLayout,
       extra: {
         imageFilterSuffix: options?.imageFilterSuffix,
         onImageDecodeError: options?.onImageDecodeError,

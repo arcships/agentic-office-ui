@@ -56,6 +56,7 @@
             :class="{
               'docx-table-cell--active': isCellActive(cell.rowIndex, cell.cellIndex),
               'docx-table-cell--merge-fallback': cell.continuationFallback,
+              'docx-table-cell--contain-floating': cellContainsLayoutInCellFloatingImage(cell),
             }"
             :style="cellStyle(cell)"
             @click.stop="onCellClick(cell.rowIndex, cell.cellIndex, $event)"
@@ -80,7 +81,7 @@
                 @input="onCellInput(tableIndex, cell.rowIndex, cell.cellIndex, pi, $event)"
                 @focus="onCellFocus(tableIndex, cell.rowIndex, cell.cellIndex, pi)"
                 @blur="onCellBlur(tableIndex, cell.rowIndex, cell.cellIndex, pi, $event)"
-                v-html="cellParagraphHtml(node, cell.rowIndex, cell.cellIndex, pi)"
+                v-html="cellParagraphHtml(node, cell, pi)"
               />
               <DocxTableHost
                 v-else
@@ -482,10 +483,21 @@ function cellParagraphStyle(para: ParagraphNode): Record<string, any> {
   }
 }
 
+function cellContainsLayoutInCellFloatingImage(cell: TableGridCell): boolean {
+  return cell.cell.nodes.some((node) =>
+    node.type === "paragraph" &&
+    node.children.some(
+      (child) =>
+        child.type === "image" &&
+        Boolean(child.floating) &&
+        child.floating?.layoutInCell !== false
+    )
+  )
+}
+
 function cellParagraphHtml(
   para: ParagraphNode,
-  ri: number,
-  ci: number,
+  cell: TableGridCell,
   pi: number
 ): string {
   const runOptions: ParagraphRunRenderOptions = {
@@ -496,10 +508,11 @@ function cellParagraphHtml(
     headerFooterRegion: props.headerFooterRegion,
     pageNumberFormat: props.pageNumberFormat,
     noteMarkerLabels: props.noteMarkerLabels,
+    tableCellLayout: { widthPx: cellContentWidthPx(cell) },
   }
   const rendered = renderParagraphRuns(
     para,
-    `table-${domTableIndex.value}-r${ri}-c${ci}-p${pi}`,
+    `table-${domTableIndex.value}-r${cell.rowIndex}-c${cell.cellIndex}-p${pi}`,
     props.documentTheme,
     undefined,
     undefined,
@@ -757,6 +770,10 @@ onUnmounted(() => {
 }
 .docx-table-cell--merge-fallback {
   background: transparent;
+}
+.docx-table-cell--contain-floating {
+  position: relative;
+  overflow: hidden;
 }
 .docx-table-cell-paragraph {
   margin: 0;

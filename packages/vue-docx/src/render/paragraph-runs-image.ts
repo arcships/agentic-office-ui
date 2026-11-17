@@ -87,6 +87,11 @@ export interface ImageRunRenderContext {
   floatingAnchorOriginCorrectionXPx: number
   withinHeaderFooter?: boolean
   headerFooterRegion?: "header" | "footer"
+  /** Bounds of the table cell that contains this paragraph, when applicable. */
+  tableCellLayout?: {
+    widthPx?: number
+    heightPx?: number
+  }
   extra?: ImageRunRenderExtra
 }
 
@@ -140,13 +145,23 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
     ? false
     : shouldRenderAbsoluteFloatingImage(child)
 
-  const imageLayoutAttributes = {
+  const imageLayoutAttributes: Record<string, string> = {
     "data-docx-image-child-index": String(childIndex),
     "data-docx-image-layout": isWrappedFloatingImage
       ? "wrapped"
       : isAbsoluteFloatingImage
       ? "absolute"
       : "inline",
+  }
+
+  const tableCellLayout = ctx.tableCellLayout
+  const layoutInCellActive =
+    isAbsoluteFloatingImage &&
+    child.floating?.layoutInCell !== false &&
+    Number.isFinite(tableCellLayout?.widthPx) &&
+    (tableCellLayout?.widthPx as number) > 0
+  if (layoutInCellActive) {
+    imageLayoutAttributes["data-docx-layout-in-cell"] = "true"
   }
 
   const horizontalRelativeTo =
@@ -202,9 +217,19 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
       }
     : {}
 
-  const floatingStyleWithMovePreview = isWrappedFloatingImage
+  let floatingStyleWithMovePreview = isWrappedFloatingImage
     ? { ...floatingStyle }
     : floatingStyle
+
+  if (layoutInCellActive) {
+    floatingStyleWithMovePreview = constrainFloatingImageToTableCell(
+      floatingStyleWithMovePreview,
+      child,
+      tableCellLayout,
+      widthPx,
+      heightPx
+    )
+  }
 
   const onSectionImagePointerDown =
     sectionImageLocation &&
@@ -439,6 +464,70 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
 }
 
 // ---- Style builders ----
+
+function positivePixels(value: number | undefined): number | undefined {
+  return Number.isFinite(value) && (value as number) > 0
+    ? Math.max(1, Math.round(value as number))
+    : undefined
+}
+
+/**
+ * Keep a floating image inside its table cell when `wp:anchor/@layoutInCell`
+ * is enabled (the OOXML default). Without an explicit cell width the image is
+ * still clipped by the cell's positioned container in the host component.
+ */
+function constrainFloatingImageToTableCell(
+  style: Record<string, string | number | undefined>,
+  image: ImageRunNode,
+  tableCellLayout: { widthPx?: number; heightPx?: number } | undefined,
+  widthPx: number | undefined,
+  heightPx: number | undefined
+): Record<string, string | number | undefined> {
+  const cellWidthPx = positivePixels(tableCellLayout?.widthPx)
+  if (!cellWidthPx) {
+    return style
+  }
+
+  const next: Record<string, string | number | undefined> = {
+    ...style,
+    maxWidth: `${cellWidthPx}px`,
+  }
+  const floating = image.floating
+  const horizontalRelativeTo = floating?.simplePos
+    ? "page"
+    : floating?.horizontalRelativeTo?.toLowerCase()
+  const externalHorizontalAnchor =
+    horizontalRelativeTo === "page" || horizontalRelativeTo === "margin"
+  const imageWidthPx = Math.max(1, Math.round(widthPx ?? image.widthPx ?? cellWidthPx))
+  if (!externalHorizontalAnchor && typeof next.left === "number") {
+    next.left = Math.max(
+      0,
+      Math.min(next.left, Math.max(0, cellWidthPx - imageWidthPx))
+    )
+  }
+
+  const cellHeightPx = positivePixels(tableCellLayout?.heightPx)
+  if (cellHeightPx) {
+    next.maxHeight = `${cellHeightPx}px`
+    const verticalRelativeTo = floating?.simplePos
+      ? "page"
+      : floating?.verticalRelativeTo?.toLowerCase()
+    const externalVerticalAnchor =
+      verticalRelativeTo === "page" || verticalRelativeTo === "margin"
+    const imageHeightPx = Math.max(
+      1,
+      Math.round(heightPx ?? image.heightPx ?? cellHeightPx)
+    )
+    if (!externalVerticalAnchor && typeof next.top === "number") {
+      next.top = Math.max(
+        0,
+        Math.min(next.top, Math.max(0, cellHeightPx - imageHeightPx))
+      )
+    }
+  }
+
+  return next
+}
 
 function buildMissingImageStyle(
   isWrapped: boolean,

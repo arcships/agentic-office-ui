@@ -23,8 +23,10 @@
         :style="imageContainerStyle(image)"
         @mousedown="onImageMouseDown(image, $event)"
       >
+
+
         <div
-          v-if="image.selected && editable && !image.behindDocument"
+          v-if="image.selected && editable && !image.behindDocument && !image.lockedAnchor"
           class="docx-image-wrap-toolbar"
           data-testid="docx-image-wrap-toolbar"
           @mousedown.stop
@@ -36,7 +38,7 @@
         </div>
 
         <!-- Resize handles -->
-        <template v-if="image.selected && editable && !image.behindDocument">
+        <template v-if="image.selected && editable && !image.behindDocument && !image.lockedAnchor">
           <div
             v-for="handle of resizeHandles"
             :key="handle.position"
@@ -49,7 +51,7 @@
         </template>
 
         <img
-          v-if="!image.flowWrapped && image.src && !failedImageKeys.has(image.key)"
+          v-if="!image.flowWrapped && image.src && !failedImageSourceKeys.has(image.failureKey)"
           :src="image.src"
           :alt="image.alt ?? 'Image'"
           :draggable="false"
@@ -62,15 +64,17 @@
           @error="onImageError(image, $event)"
         />
 
+
         <!-- Fallback for unsupported images -->
         <div
           v-else-if="!image.flowWrapped"
           class="docx-floating-image-fallback"
-          :data-image-state="failedImageKeys.has(image.key) ? 'error' : 'unsupported'"
+          :data-image-state="failedImageSourceKeys.has(image.failureKey) ? 'error' : 'unsupported'"
           :style="{ width: `${image.widthPx}px`, height: `${image.heightPx}px` }"
         >
           {{ image.fallbackLabel ?? "Image" }}
         </div>
+
       </div>
     </div>
   </div>
@@ -104,6 +108,8 @@ interface FloatingImageEntry {
   flowWrapped: boolean
   behindDocument: boolean
   selected: boolean
+  lockedAnchor: boolean
+  failureKey: string
   fallbackLabel?: string
 }
 
@@ -130,7 +136,7 @@ const dragStartY = ref(0)
 const dragStartPosX = ref(0)
 const dragStartPosY = ref(0)
 const dragPreview = ref<{ key: string; xPx: number; yPx: number } | null>(null)
-const failedImageKeys = ref(new Set<string>())
+const failedImageSourceKeys = ref(new Set<string>())
 const imageLayerEl = ref<HTMLElement | null>(null)
 const layoutRevision = ref(0)
 
@@ -140,6 +146,16 @@ const resizeStartPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 const resizePosition = ref("se")
 const resizePreview = ref<{ key: string; widthPx: number; heightPx: number } | null>(null)
 let pointerListenersAttached = false
+
+function imageSourceFailureKey(src: string | undefined): string {
+  if (!src) return "missing"
+  let hash = 2166136261
+  for (let index = 0; index < src.length; index += 1) {
+    hash ^= src.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `${src.length}:${(hash >>> 0).toString(36)}`
+}
 
 // ── Computed ───────────────────────────────────────────────────────
 const floatingImages = computed<FloatingImageEntry[]>(() => {
@@ -175,6 +191,8 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
         flowWrapped: shouldRenderWrappedFloatingImage(run),
         behindDocument: run.floating?.behindDocument === true,
         selected: selection.kind === "paragraph" && selection.nodeIndex === nodeIndex,
+        lockedAnchor: run.floating?.lockedAnchor === true,
+        failureKey: imageSourceFailureKey(src),
         fallbackLabel: undefined,
       })
     })
@@ -235,7 +253,7 @@ function imageContainerStyle(image: FloatingImageEntry): Record<string, string> 
     width: `${resize?.widthPx ?? flowBox?.width ?? image.widthPx}px`,
     height: `${resize?.heightPx ?? flowBox?.height ?? image.heightPx}px`,
     pointerEvents: image.behindDocument ? "none" : "auto",
-    cursor: image.behindDocument ? "default" : "move",
+    cursor: image.lockedAnchor ? "default" : image.behindDocument ? "default" : "move",
     outline: image.selected && !image.behindDocument ? "2px solid #3b82f6" : "none",
     outlineOffset: "2px",
   }
@@ -285,9 +303,9 @@ function onImageLoad(event: Event): void {
 function onImageError(image: FloatingImageEntry, event: Event): void {
   const target = event.currentTarget as HTMLImageElement | null
   if (target) target.dataset.imageState = "error"
-  const next = new Set(failedImageKeys.value)
-  next.add(image.key)
-  failedImageKeys.value = next
+  const next = new Set(failedImageSourceKeys.value)
+  next.add(image.failureKey)
+  failedImageSourceKeys.value = next
 }
 
 // ── Mouse handlers ─────────────────────────────────────────────────
@@ -295,6 +313,7 @@ function onImageMouseDown(image: FloatingImageEntry, event: MouseEvent): void {
   if (!props.editable || image.behindDocument) return
   event.preventDefault()
   props.controller.selectParagraph(image.nodeIndex)
+  if (image.lockedAnchor) return
   draggingImage.value = image
   dragStartX.value = event.clientX
   dragStartY.value = event.clientY
@@ -309,7 +328,7 @@ function onResizeStart(
   position: string,
   event: MouseEvent
 ): void {
-  if (!props.editable) return
+  if (!props.editable || image.lockedAnchor) return
   resizingImage.value = image
   resizeStartSize.value = { w: image.widthPx, h: image.heightPx }
   resizeStartPos.value = { x: event.clientX, y: event.clientY }
@@ -421,6 +440,17 @@ watch(() => props.editable, (editable) => {
 
 const imageGroupsKey = computed(() =>
   floatingImages.value.map((image) => [
+
+// A new document model can reuse the same node/child position. Failure state
+// belongs to the image source, not to that position, so reset it on switch.
+watch(() => props.controller.model, () => {
+  if (failedImageSourceKeys.value.size > 0) {
+    failedImageSourceKeys.value = new Set<string>()
+  }
+})
+
+watch(
+  () => floatingImages.value.map((image) => [
     image.key,
     image.flowWrapped,
     image.behindDocument,
@@ -443,7 +473,7 @@ watch(
 
 onUnmounted(() => {
   finishPointerInteraction(false)
-  failedImageKeys.value.clear()
+  failedImageSourceKeys.value.clear()
 })
 </script>
 
