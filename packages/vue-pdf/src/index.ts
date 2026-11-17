@@ -70,6 +70,7 @@ export type {
   PdfPageRenderParameters,
   PdfPasswordHandler,
   PdfPasswordRequest,
+  PdfRenderAnnotation,
   PdfRenderDocument,
   PdfRenderErrorCode,
   PdfRenderPageInfo,
@@ -80,6 +81,7 @@ export type {
   PdfSearchHit,
   PdfSearchState,
   PdfSearchStatus,
+  PdfSelectionSegment,
   PdfSelectionState,
   PdfThumbnailRenderOptions,
 } from "./pdf/pdf-render-runtime"

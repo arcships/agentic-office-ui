@@ -47,10 +47,19 @@
             :style="displayRectStyle(pageIndex, entry.rect)"
           />
           <div
-            v-for="(rect, rectIndex) in selectionRectsForPage(pageIndex)"
-            :key="`selection-${rectIndex}`"
+            v-for="entry in selectionRectsForPage(pageIndex)"
+            :key="entry.key"
             class="pdf-surface__selection-hit"
-            :style="displayRectStyle(pageIndex, rect)"
+            :style="displayRectStyle(pageIndex, entry.rect)"
+          />
+          <div
+            v-for="annotation in annotationHitsForPage(pageIndex)"
+            :key="`annotation-${annotation.id}`"
+            class="pdf-surface__annotation-hit"
+            :class="`pdf-surface__annotation-hit--${annotation.kind}`"
+            :data-annotation-kind="annotation.kind"
+            :data-annotation-page="pageIndex"
+            :style="displayRectStyle(pageIndex, annotation.rect)"
           />
         </div>
         <div
@@ -85,6 +94,7 @@ import {
   createLatestTaskCoordinator,
   createOfficeTaskSequence,
   createSurfaceSearchSession,
+  resolveOfficeUrl,
   type OfficeSource,
 } from "@arcships/office-runtime"
 import {
@@ -99,12 +109,14 @@ import {
 import {
   createPdfRenderRuntime,
   type PdfPasswordHandler,
+  type PdfRenderAnnotation,
   type PdfRenderDocument,
   type PdfRenderRect,
   type PdfRenderRuntime,
   type PdfRotation,
   type PdfSearchHit,
   type PdfSearchState,
+  type PdfSelectionSegment,
   type PdfSelectionState,
 } from "../pdf/pdf-render-runtime"
 import {
@@ -123,6 +135,14 @@ import {
   type PdfPageRange,
   type PdfPageSlotSnapshot,
 } from "../pdf/pdf-page-viewport"
+import {
+  hasUnmappedPdfText,
+  joinSelectionTexts,
+  pdfPageCharCount,
+  selectionPageIndexes,
+  selectionPageRanges,
+  type PdfSelectionPoint,
+} from "../pdf/pdf-selection-range"
 import {
   nearestGlyphWithinContainingRun,
   wordRangeFromCharacterTexts,
@@ -152,6 +172,11 @@ import {
 interface PageSlot {
   url: string | null
   state: PdfPageBitmapState
+}
+
+interface PageSelectionRects {
+  pageIndex: number
+  rects: readonly PdfRenderRect[]
 }
 
 // ── Props ────────────────────────────────────────────────────────────
@@ -199,6 +224,25 @@ const emit = defineEmits<{
   referenceConfirm: [event: ReturnType<typeof confirmOfficeReferenceDraft>]
   regionDraftChange: [event: { phase: "start" | "change"; region: { space: "page"; pageIndex: number; rect: NormalizedRect } }]
   selectionCancel: [event: { mode: OfficeSelectionMode; reason: "escape" | "pointer-cancel" | "programmatic" }]
+  linkActivate: [event: {
+    pageIndex: number
+    annotationId: string
+    clientX: number
+    clientY: number
+    url?: string
+    targetPageIndex?: number
+    blocked?: boolean
+  }]
+  annotationActivate: [event: {
+    pageIndex: number
+    annotationId: string
+    kind: "widget" | "annotation"
+    clientX: number
+    clientY: number
+    fieldName?: string
+    fieldValue?: string
+    contents?: string
+  }]
   referenceResolve: [event: { referenceId: string; result: ResolveReferenceResult }]
   referenceError: [error: OfficeReferenceError]
 }>()
@@ -249,7 +293,9 @@ const searchState = ref<PdfSearchState>({
   activeIndex: -1,
 })
 const selectionState = ref<PdfSelectionState>({ kind: "none" })
-const selectionVisual = ref<{ pageIndex: number; rects: readonly PdfRenderRect[] } | null>(null)
+const selectionVisual = ref<{ ranges: readonly PageSelectionRects[] } | null>(null)
+const pageAnnotations = reactive<Record<number, readonly PdfRenderAnnotation[]>>({})
+const annotationRequests = new Map<number, Promise<readonly PdfRenderAnnotation[]>>()
 const geometryCache = new Map<number, PdfPageGeometry>()
 const geometryRequests = new Map<number, Promise<PdfPageGeometry>>()
 const characterTextCache = new Map<number, Map<number, string>>()
@@ -272,9 +318,11 @@ let selectionGesture: {
   pointerActive: boolean
   thresholdExceeded: boolean
   started: boolean
-  geometry?: PdfPageGeometry
-  anchor?: number
-  focus?: number
+  geometries: Map<number, PdfPageGeometry>
+  pendingGeometries: Set<number>
+  anchor?: PdfSelectionPoint
+  focus?: PdfSelectionPoint
+  visualKey?: string
 } | null = null
 let selectionFrame: number | undefined
 let selectionClickCandidate = false
@@ -438,7 +486,12 @@ function onSurfaceClick(event: MouseEvent, pageIndex: number): void {
     else confirmPage()
   }
 }
-function onRegionKeyboardCancel(): void {
+function onRegionKeyboardCancel(event?: KeyboardEvent): void {
+  if (selectionMode.value !== "region") return
+  // The Surface also listens for Escape; stop the bubble so the host receives
+  // exactly one `selectionCancel` per key press.
+  event?.stopPropagation?.()
+  event?.preventDefault?.()
   regionGesture.value = null; regionRect.value = null; regionPageIndex.value = null
   emit("selectionCancel", { mode: "region", reason: "escape" })
 }
@@ -647,6 +700,8 @@ async function releaseDocument(): Promise<void> {
   geometryCache.clear()
   geometryRequests.clear()
   characterTextCache.clear()
+  annotationRequests.clear()
+  for (const key of Object.keys(pageAnnotations)) delete pageAnnotations[Number(key)]
   for (const slot of Object.values(pageSlots)) {
     if (slot.url) URL.revokeObjectURL(slot.url)
   }
@@ -782,6 +837,7 @@ async function load(): Promise<void> {
     measureViewportHeight()
     scheduleVisibleRender(0)
     prefetchPageGeometry(0)
+    prefetchPageAnnotations(0)
   } catch (cause) {
     if (openedDocument && selectedRuntime) {
       await selectedRuntime.closeDocument(openedDocument)
@@ -879,8 +935,50 @@ function searchRectsForPage(pageIndex: number): Array<{
   )
 }
 
-function selectionRectsForPage(pageIndex: number): readonly PdfRenderRect[] {
-  return selectionVisual.value?.pageIndex === pageIndex ? selectionVisual.value.rects : []
+function selectionRectsForPage(pageIndex: number): Array<{ key: string; rect: PdfRenderRect }> {
+  const page = selectionVisual.value?.ranges.find((entry) => entry.pageIndex === pageIndex)
+  return page ? page.rects.map((rect, rectIndex) => ({ key: `selection-${rectIndex}`, rect })) : []
+}
+
+function annotationHitsForPage(pageIndex: number): readonly PdfRenderAnnotation[] {
+  return pageAnnotations[pageIndex] ?? []
+}
+
+async function pageAnnotationsFor(pageIndex: number): Promise<readonly PdfRenderAnnotation[]> {
+  const cached = pageAnnotations[pageIndex]
+  if (cached) return cached
+  const pending = annotationRequests.get(pageIndex)
+  if (pending) return pending
+  const doc = renderDocument.value
+  const rt = runtimeForDocument
+  if (!doc || !rt || typeof rt.getPageAnnotations !== "function") return []
+  const read = rt.getPageAnnotations.bind(rt)
+  let request: Promise<readonly PdfRenderAnnotation[]>
+  request = read(doc, pageIndex)
+    .then((annotations) => {
+      if (renderDocument.value === doc && runtimeForDocument === rt) pageAnnotations[pageIndex] = annotations
+      return annotations
+    })
+    .catch(() => [] as readonly PdfRenderAnnotation[])
+    .finally(() => {
+      if (annotationRequests.get(pageIndex) === request) annotationRequests.delete(pageIndex)
+    })
+  annotationRequests.set(pageIndex, request)
+  return request
+}
+
+function pageSupportsAnnotations(): boolean {
+  return typeof runtimeForDocument?.getPageAnnotations === "function"
+}
+
+function prefetchPageAnnotations(centerPageIndex: number): void {
+  const doc = renderDocument.value
+  if (!doc || !pageSupportsAnnotations()) return
+  const first = Math.max(0, centerPageIndex - 1)
+  const last = Math.min(doc.pageCount - 1, centerPageIndex + 1)
+  for (let pageIndex = first; pageIndex <= last; pageIndex++) {
+    if (!pageAnnotations[pageIndex]) void pageAnnotationsFor(pageIndex)
+  }
 }
 
 async function activatePdfSearchHit(
@@ -968,6 +1066,59 @@ function selectionRects(geometry: PdfPageGeometry, anchor: number, focus: number
   }))
 }
 
+/**
+ * Nearest character on the page, used when a cross-page drag enters a margin or
+ * a blank area instead of a text run.
+ */
+function clampSelectionChar(geometry: PdfPageGeometry, point: Position): number {
+  const total = pdfPageCharCount(geometry)
+  if (total <= 0) return -1
+  let bestRun: PdfPageGeometry["runs"][number] | undefined
+  let bestDistance = Number.POSITIVE_INFINITY
+  for (const run of geometry.runs) {
+    if (run.glyphs.length === 0) continue
+    const bottom = run.rect.y + run.rect.height
+    const distance = point.y < run.rect.y ? run.rect.y - point.y : point.y > bottom ? point.y - bottom : 0
+    if (distance < bestDistance) {
+      bestDistance = distance
+      bestRun = run
+    }
+  }
+  if (!bestRun) return -1
+  const before = point.x < bestRun.rect.x + bestRun.rect.width / 2
+  return before ? bestRun.charStart : bestRun.charStart + bestRun.glyphs.length - 1
+}
+
+function resolveGesturePoint(
+  gesture: NonNullable<typeof selectionGesture>,
+  point: ClientPoint,
+  pageIndex: number,
+  layer: HTMLElement,
+  previous?: PdfSelectionPoint,
+  clampToPage = false,
+): PdfSelectionPoint | null {
+  const geometry = gesture.geometries.get(pageIndex)
+  if (!geometry) return null
+  const canonical = canonicalPoint(point, pageIndex, layer)
+  if (!canonical) return null
+  const previousFocus = previous?.pageIndex === pageIndex ? previous.charIndex : -1
+  let charIndex = resolveSelectionGlyph(geometry, canonical, previousFocus)
+  if (charIndex < 0 && clampToPage) charIndex = clampSelectionChar(geometry, canonical)
+  return charIndex >= 0 ? { pageIndex, charIndex } : null
+}
+
+/** Page layer under a client point. Pointer capture keeps events on the anchor page. */
+function selectionPageAtPoint(point: ClientPoint): { pageIndex: number; layer: HTMLElement } | null {
+  const ownerDocument = scrollRef.value?.ownerDocument
+  const element = ownerDocument?.elementFromPoint?.(point.x, point.y) as Element | null | undefined
+  const slot = element?.closest?.<HTMLElement>("[data-page-index]")
+  if (!slot) return null
+  const pageIndex = Number(slot.dataset.pageIndex)
+  if (!Number.isSafeInteger(pageIndex) || pageIndex < 0) return null
+  const layer = slot.querySelector<HTMLElement>(".pdf-surface__interaction") ?? slot
+  return { pageIndex, layer }
+}
+
 function cancelSelectionFrame(): void {
   if (selectionFrame === undefined) return
   if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(selectionFrame)
@@ -1003,28 +1154,89 @@ function updateGesturePoint(
   beginGestureSelection(gesture)
 }
 
+function selectionRangesForGesture(gesture: NonNullable<typeof selectionGesture>): PageTextSlice[] {
+  if (!gesture.anchor) return []
+  const focus = gesture.focus ?? gesture.anchor
+  return selectionPageRanges(
+    gesture.anchor,
+    focus,
+    (pageIndex) => pdfPageCharCount(gesture.geometries.get(pageIndex)),
+  )
+}
+
+function buildSelectionVisual(gesture: NonNullable<typeof selectionGesture>): PageSelectionRects[] {
+  const pages: PageSelectionRects[] = []
+  for (const range of selectionRangesForGesture(gesture)) {
+    const geometry = gesture.geometries.get(range.pageIndex)
+    if (!geometry) continue
+    const rects = selectionRects(geometry, range.charIndex, range.charIndex + range.charCount - 1)
+    if (rects.length > 0) pages.push({ pageIndex: range.pageIndex, rects })
+  }
+  return pages
+}
+
+function requestGestureGeometry(
+  gesture: NonNullable<typeof selectionGesture>,
+  pageIndex: number,
+): void {
+  if (gesture.geometries.has(pageIndex) || gesture.pendingGeometries.has(pageIndex)) return
+  gesture.pendingGeometries.add(pageIndex)
+  void pageGeometry(pageIndex)
+    .then((geometry) => {
+      gesture.pendingGeometries.delete(pageIndex)
+      if (selectionGesture !== gesture) return
+      gesture.geometries.set(pageIndex, geometry)
+      flushSelectionGesture(gesture)
+      if (!gesture.pointerActive) finalizeSelectionGesture(gesture)
+    })
+    .catch(() => {
+      gesture.pendingGeometries.delete(pageIndex)
+      if (selectionGesture !== gesture) return
+      if (pageIndex === gesture.pageIndex) {
+        if (gesture.layer.hasPointerCapture?.(gesture.pointerId)) {
+          gesture.layer.releasePointerCapture?.(gesture.pointerId)
+        }
+        clearSelection()
+        return
+      }
+      if (!gesture.pointerActive) finalizeSelectionGesture(gesture)
+    })
+}
+
 function flushSelectionGesture(gesture: NonNullable<typeof selectionGesture>): void {
-  const geometry = gesture.geometry
-  if (selectionGesture !== gesture || !gesture.thresholdExceeded || !geometry) return
+  if (selectionGesture !== gesture || !gesture.thresholdExceeded) return
   beginGestureSelection(gesture)
 
-  if (gesture.anchor === undefined) {
-    const down = canonicalPoint(gesture.down, gesture.pageIndex, gesture.layer)
-    gesture.anchor = down ? resolveSelectionGlyph(geometry, down) : -1
+  if (!gesture.anchor) {
+    gesture.anchor = resolveGesturePoint(gesture, gesture.down, gesture.pageIndex, gesture.layer) ?? undefined
+    if (!gesture.anchor) {
+      requestGestureGeometry(gesture, gesture.pageIndex)
+      return
+    }
   }
-  if (gesture.anchor < 0) return
 
-  const latest = canonicalPoint(gesture.latest, gesture.pageIndex, gesture.layer)
-  if (!latest) return
-  const resolvedFocus = resolveSelectionGlyph(geometry, latest, gesture.focus ?? gesture.anchor)
-  const focus = resolvedFocus >= 0 ? resolvedFocus : (gesture.focus ?? gesture.anchor)
-  if (focus === gesture.focus && selectionVisual.value?.pageIndex === gesture.pageIndex) return
+  const target = selectionPageAtPoint(gesture.latest)
+  const focusPageIndex = target?.pageIndex ?? gesture.pageIndex
+  const focusLayer = target?.layer ?? gesture.layer
+  const previousFocus = gesture.focus?.pageIndex === focusPageIndex ? gesture.focus : undefined
+  const resolved = resolveGesturePoint(
+    gesture,
+    gesture.latest,
+    focusPageIndex,
+    focusLayer,
+    previousFocus,
+    focusPageIndex !== gesture.pageIndex,
+  )
+  if (resolved) gesture.focus = resolved
+  else requestGestureGeometry(gesture, focusPageIndex)
 
-  gesture.focus = focus
-  selectionVisual.value = {
-    pageIndex: gesture.pageIndex,
-    rects: selectionRects(geometry, gesture.anchor, focus),
-  }
+  const anchor = gesture.anchor
+  const focus = gesture.focus ?? anchor
+  const measured = [...gesture.geometries.keys()].sort((a, b) => a - b).join(",")
+  const visualKey = `${anchor.pageIndex}:${anchor.charIndex}|${focus.pageIndex}:${focus.charIndex}|${measured}`
+  if (visualKey === gesture.visualKey) return
+  gesture.visualKey = visualKey
+  selectionVisual.value = { ranges: buildSelectionVisual(gesture) }
 }
 
 function scheduleSelectionFrame(gesture: NonNullable<typeof selectionGesture>): void {
@@ -1046,56 +1258,99 @@ function setSelectionUnavailable(pageIndex: number): void {
   emit("selectionChange", unavailable)
 }
 
-async function commitSelectionRange(
-  pageIndex: number,
-  anchor: number,
-  focus: number,
-  rects: readonly PdfRenderRect[],
+async function commitSelection(
+  anchor: PdfSelectionPoint,
+  focus: PdfSelectionPoint,
+  geometries: Map<number, PdfPageGeometry>,
   request: number,
 ): Promise<void> {
   const doc = renderDocument.value
   const rt = runtimeForDocument
   if (!doc || !rt) return
-  const from = Math.min(anchor, focus)
-  const range: PageTextSlice = {
-    pageIndex,
-    charIndex: from,
-    charCount: Math.max(anchor, focus) - from + 1,
-  }
   try {
-    const [text] = await rt.getTextSlices(doc, [range])
+    for (const pageIndex of selectionPageIndexes(anchor, focus)) {
+      if (geometries.has(pageIndex)) continue
+      geometries.set(pageIndex, await pageGeometry(pageIndex))
+      if (request !== selectionRequest || renderDocument.value !== doc || runtimeForDocument !== rt) return
+    }
+    const ranges = selectionPageRanges(
+      anchor,
+      focus,
+      (pageIndex) => pdfPageCharCount(geometries.get(pageIndex)),
+    )
+    const texts = ranges.length > 0 ? await rt.getTextSlices(doc, ranges) : []
     if (request !== selectionRequest || renderDocument.value !== doc || runtimeForDocument !== rt) return
-    if (!text) {
-      setSelectionUnavailable(pageIndex)
+    if (ranges.length === 0 || texts.length !== ranges.length) {
+      setSelectionUnavailable(anchor.pageIndex)
       return
     }
-    if (/[\u0000\ufffd\ufffe]/u.test(text)) {
-      const unavailable: PdfSelectionState = { kind: "unavailable", pageIndex, reason: "unicode-map" }
+
+    const rectsByPage = new Map<number, readonly PdfRenderRect[]>()
+    for (const range of ranges) {
+      const geometry = geometries.get(range.pageIndex)
+      if (!geometry) continue
+      rectsByPage.set(
+        range.pageIndex,
+        selectionRects(geometry, range.charIndex, range.charIndex + range.charCount - 1),
+      )
+    }
+    const visuals = ranges.flatMap((range) => {
+      const rects = rectsByPage.get(range.pageIndex) ?? []
+      return rects.length > 0 ? [{ pageIndex: range.pageIndex, rects }] : []
+    })
+    selectionVisual.value = visuals.length > 0 ? { ranges: visuals } : null
+
+    const invalidIndex = texts.findIndex((text) => hasUnmappedPdfText(text))
+    if (invalidIndex >= 0) {
+      const unavailable: PdfSelectionState = {
+        kind: "unavailable",
+        pageIndex: ranges[invalidIndex].pageIndex,
+        reason: "unicode-map",
+      }
       selectionState.value = unavailable
       selectionVisual.value = null
       emit("selectionChange", unavailable)
       return
     }
-    const next: PdfSelectionState = { kind: "text", range, text, rects }
+
+    const segments: PdfSelectionSegment[] = ranges.map((range, index) => ({
+      range,
+      text: texts[index] ?? "",
+      rects: rectsByPage.get(range.pageIndex) ?? [],
+    }))
+    if (segments.every((segment) => segment.text.length === 0)) {
+      setSelectionUnavailable(anchor.pageIndex)
+      return
+    }
+    const first = segments[0]
+    const next: PdfSelectionState = {
+      kind: "text",
+      range: first.range,
+      text: joinSelectionTexts(segments.map((segment) => segment.text)),
+      rects: first.rects,
+      segments,
+    }
     selectionState.value = next
     emit("selectionChange", next)
-    if (selectionMode.value === "content") {
+    // PDF references address one page; multi-page selections stay copy/selection
+    // only until the reference model can express a page span.
+    if (segments.length === 1 && selectionMode.value === "content") {
       try {
         const context = referenceContext()
-        await ensurePageContentHash(pageIndex)
+        await ensurePageContentHash(first.range.pageIndex)
         if (renderDocument.value?.id !== context.document.id) return
         const draft = createPdfTextReferenceDraft(context, next)
         confirmDraft(draft, "pointer", {
-          label: text.length > 80 ? `${text.slice(0, 77)}…` : text,
-          path: [{ kind: "document", label: "PDF" }, { kind: "page", label: `Page ${pageIndex + 1}` }, { kind: "text-range", label: "Selected text" }],
-          content: { text },
+          label: next.text.length > 80 ? `${next.text.slice(0, 77)}…` : next.text,
+          path: [{ kind: "document", label: "PDF" }, { kind: "page", label: `Page ${next.range.pageIndex + 1}` }, { kind: "text-range", label: "Selected text" }],
+          content: { text: next.text },
         })
       } catch (reason) {
         emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to create PDF text reference.")
       }
     }
   } catch {
-    if (request === selectionRequest) setSelectionUnavailable(pageIndex)
+    if (request === selectionRequest) setSelectionUnavailable(anchor.pageIndex)
   }
 }
 
@@ -1103,21 +1358,11 @@ function finalizeSelectionGesture(gesture: NonNullable<typeof selectionGesture>)
   if (selectionGesture !== gesture) return
   cancelSelectionFrame()
   flushSelectionGesture(gesture)
+  // Wait for the anchor and focus page geometry so a cross-page commit cannot
+  // fall back to a single-page range that omits the page under the pointer.
+  if (!gesture.anchor || gesture.pendingGeometries.size > 0) return
   selectionGesture = null
-  if ((gesture.anchor ?? -1) < 0 || (gesture.focus ?? -1) < 0) {
-    selectionVisual.value = null
-    return
-  }
-  const rects = selectionVisual.value?.pageIndex === gesture.pageIndex
-    ? selectionVisual.value.rects
-    : []
-  void commitSelectionRange(
-    gesture.pageIndex,
-    gesture.anchor!,
-    gesture.focus!,
-    rects,
-    gesture.request,
-  )
+  void commitSelection(gesture.anchor, gesture.focus ?? gesture.anchor, gesture.geometries, gesture.request)
 }
 
 function onSelectionPointerDown(event: PointerEvent, pageIndex: number): void {
@@ -1138,36 +1383,30 @@ function onSelectionPointerDown(event: PointerEvent, pageIndex: number): void {
     pointerActive: true,
     thresholdExceeded: false,
     started: false,
+    geometries: new Map(),
+    pendingGeometries: new Set(),
   }
   selectionGesture = gesture
   layer.setPointerCapture(event.pointerId)
-  void pageGeometry(pageIndex).then((geometry) => {
-    if (selectionGesture !== gesture || request !== selectionRequest) return
-    gesture.geometry = geometry
-    if (!gesture.thresholdExceeded) return
-    flushSelectionGesture(gesture)
-    if (!gesture.pointerActive) finalizeSelectionGesture(gesture)
-  }).catch(() => {
-    if (selectionGesture !== gesture || request !== selectionRequest) return
-    if (layer.hasPointerCapture(event.pointerId)) layer.releasePointerCapture(event.pointerId)
-    clearSelection()
-  })
+  requestGestureGeometry(gesture, pageIndex)
 }
 
-function onSelectionPointerMove(event: PointerEvent, pageIndex: number): void {
+function onSelectionPointerMove(event: PointerEvent, _pageIndex: number): void {
   const gesture = selectionGesture
-  if (!gesture || gesture.pointerId !== event.pointerId || gesture.pageIndex !== pageIndex) return
+  // Pointer capture keeps events on the anchor page; the page under the pointer
+  // is resolved from the client position so a drag can cross page boundaries.
+  if (!gesture || gesture.pointerId !== event.pointerId) return
   updateGesturePoint(gesture, eventClientPoint(event))
-  if (gesture.thresholdExceeded && gesture.geometry) scheduleSelectionFrame(gesture)
+  if (gesture.thresholdExceeded) scheduleSelectionFrame(gesture)
 }
 
-function onSelectionPointerUp(event: PointerEvent, pageIndex: number): void {
+function onSelectionPointerUp(event: PointerEvent, _pageIndex: number): void {
   const gesture = selectionGesture
   const layer = event.currentTarget as HTMLElement
-  if (!gesture || gesture.pointerId !== event.pointerId || gesture.pageIndex !== pageIndex) return
+  if (!gesture || gesture.pointerId !== event.pointerId) return
   updateGesturePoint(gesture, eventClientPoint(event))
   gesture.pointerActive = false
-  if (layer.hasPointerCapture(event.pointerId)) layer.releasePointerCapture(event.pointerId)
+  if (layer.hasPointerCapture?.(event.pointerId)) layer.releasePointerCapture?.(event.pointerId)
   if (!gesture.thresholdExceeded) {
     stopSelectionGesture()
     clearSelection()
@@ -1175,7 +1414,7 @@ function onSelectionPointerUp(event: PointerEvent, pageIndex: number): void {
     return
   }
   selectionClickCandidate = false
-  if (gesture.geometry) finalizeSelectionGesture(gesture)
+  finalizeSelectionGesture(gesture)
 }
 
 async function characterTextsForRange(
@@ -1208,10 +1447,87 @@ async function characterTextsForRange(
   return Array.from({ length: to - from + 1 }, (_, index) => pageCache!.get(from + index) ?? "")
 }
 
+function isPdfLinkUrlAllowed(url: string): boolean {
+  const policy = props.urlPolicy
+  if (!policy || policy.enabled === false) return true
+  try {
+    resolveOfficeUrl(url, policy)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function annotationAtPoint(
+  annotations: readonly PdfRenderAnnotation[],
+  point: Position,
+): PdfRenderAnnotation | undefined {
+  for (let index = annotations.length - 1; index >= 0; index--) {
+    const annotation = annotations[index]
+    const rect = annotation.rect
+    if (rect.width <= 0 || rect.height <= 0) continue
+    if (
+      point.x >= rect.x && point.x <= rect.x + rect.width &&
+      point.y >= rect.y && point.y <= rect.y + rect.height
+    ) {
+      return annotation
+    }
+  }
+  return undefined
+}
+
+/**
+ * Forward a click that landed on a link, form widget or annotation rectangle to
+ * the host. The raster page bakes those objects into the image, so the Surface
+ * owns the hit test and never navigates by itself.
+ */
+async function activateAnnotationAt(event: MouseEvent, pageIndex: number): Promise<void> {
+  const doc = renderDocument.value
+  const rt = runtimeForDocument
+  if (!doc || !rt || !pageSupportsAnnotations()) return
+  const layer = event.currentTarget as HTMLElement | null
+  if (!layer) return
+  const point = canonicalPoint(eventClientPoint(event), pageIndex, layer)
+  if (!point) return
+  const annotations = pageAnnotations[pageIndex] ?? await pageAnnotationsFor(pageIndex)
+  if (renderDocument.value !== doc || runtimeForDocument !== rt) return
+  const annotation = annotationAtPoint(annotations, point)
+  if (!annotation) return
+  event.preventDefault?.()
+  if (annotation.kind === "link") {
+    const blocked = annotation.blocked === true
+      || (annotation.url !== undefined && !isPdfLinkUrlAllowed(annotation.url))
+    emit("linkActivate", {
+      pageIndex,
+      annotationId: annotation.id,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      ...(!blocked && annotation.url ? { url: annotation.url } : {}),
+      ...(annotation.targetPageIndex !== undefined ? { targetPageIndex: annotation.targetPageIndex } : {}),
+      ...(blocked ? { blocked: true } : {}),
+    })
+    if (!blocked && annotation.targetPageIndex !== undefined) scrollToPage(annotation.targetPageIndex)
+    return
+  }
+  emit("annotationActivate", {
+    pageIndex,
+    annotationId: annotation.id,
+    kind: annotation.kind,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    ...(annotation.fieldName ? { fieldName: annotation.fieldName } : {}),
+    ...(annotation.fieldValue ? { fieldValue: annotation.fieldValue } : {}),
+    ...(annotation.contents ? { contents: annotation.contents } : {}),
+  })
+}
+
 async function onSelectionClick(event: MouseEvent, pageIndex: number): Promise<void> {
   const isNativeDoubleClick = selectionClickCandidate && event.button === 0 && event.detail === 2
   selectionClickCandidate = false
-  if (!isNativeDoubleClick) return
+  if (!isNativeDoubleClick) {
+    if (event.button === 0 && (event.detail ?? 0) <= 1) await activateAnnotationAt(event, pageIndex)
+    return
+  }
   event.preventDefault()
 
   const layer = event.currentTarget as HTMLElement
@@ -1235,9 +1551,12 @@ async function onSelectionClick(event: MouseEvent, pageIndex: number): Promise<v
       new Segmenter(undefined, { granularity: "word" }),
     )
     if (!range) return
-    const rects = selectionRects(geometry, range.from, range.to)
-    selectionVisual.value = { pageIndex, rects }
-    await commitSelectionRange(pageIndex, range.from, range.to, rects, request)
+    await commitSelection(
+      { pageIndex, charIndex: range.from },
+      { pageIndex, charIndex: range.to },
+      new Map([[pageIndex, geometry]]),
+      request,
+    )
   } catch {
     // A failed word lookup must not revive a stale or partial selection.
   }
@@ -1298,6 +1617,7 @@ function flushScrollFrame(): void {
     visiblePageIndex = pageIndex
     emit("visible-page-change", pageIndex)
     prefetchPageGeometry(pageIndex)
+    prefetchPageAnnotations(pageIndex)
   }
   if (!pageRangeEquals(currentRenderRange(), renderedRange)) {
     scheduleVisibleRender(PDF_SCROLL_RENDER_DEBOUNCE_MS)
@@ -1485,7 +1805,8 @@ function scrollToPage(pageIndex: number): void {
   scheduleVisibleRender()
 }
 
-function onSurfaceEscape(): void {
+function onSurfaceEscape(event?: KeyboardEvent): void {
+  if (event?.defaultPrevented) return
   clearSelection()
   if (selectionMode.value !== "content") emit("selectionCancel", { mode: selectionMode.value, reason: "escape" })
 }
@@ -1601,6 +1922,8 @@ onBeforeUnmount(async () => {
   outline: 2px solid rgba(180, 83, 9, .9);
 }
 .pdf-surface__selection-hit { background: rgba(37, 99, 235, .34); }
+/* Invisible link/widget hit rectangles; the Surface hit-tests them on click. */
+.pdf-surface__annotation-hit { box-sizing: border-box; position: absolute; pointer-events: none; }
 .pdf-surface__page-loading,
 .pdf-surface__page-error,
 .pdf-surface__page-placeholder {

@@ -21,6 +21,14 @@ All notable changes to the `@arcships` package family are documented in this fil
 - Keep every level of multi-level category caches instead of only the deepest label.
 - Worker mode still plots the cached chart XML values after an in-worker cell edit until the workbook is reloaded; main-thread mode refreshes the plot from the edited workbook.
 
+### PDF selection and annotation hit layer
+
+- Allow PDF text selection to cross page boundaries: drag focus is resolved from the client position, each touched page becomes its own text slice, and copy joins the pages in document order.
+- Extend `PdfSelectionState` with per-page `segments` while keeping `range`, `text`, and `rects` compatible for single-page selections.
+- Add optional `PdfRenderRuntime.getPageAnnotations()` and `PdfRenderAnnotation`, exposing link, widget, and annotation rectangles in canonical page space with sanitized link targets and form-field identity.
+- Add an invisible hit layer to `PdfSurface` that emits `linkActivate` and `annotationActivate`; external links never navigate automatically, and a host `urlPolicy` blocks unapproved targets.
+- Stop the region interaction layer from bubbling Escape to the Surface handler so hosts receive one `selectionCancel` per key press.
+
 ### Boundaries
 
 - Keep screenshot bitmap capture and annotation editing outside the built-in Surface implementation; unsupported capture rejects with a structured error.
