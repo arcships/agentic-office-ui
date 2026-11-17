@@ -2,15 +2,17 @@
 //
 // Extracted from useDocxEditor.ts.
 
-import type { DocModel, ParagraphNode, TextRunNode } from "@arcships/docx-core"
+import type { DocModel, ParagraphNode, TableNode, TextRunNode } from "@arcships/docx-core"
 import type { DocxTextRange, ParagraphLocation } from "@arcships/docx-core"
 import {
   cloneDocModel,
+  parseEmbeddedTableRuntimeKey,
   updateParagraphText,
   normalizeTextRange,
   compareTextRangeBoundaries,
   sameParagraphLocation,
   paragraphText,
+  distributeTextAcrossParagraphChildren,
   paragraphIsEffectivelyEmpty,
   rangeCoversEntireDocument,
   firstParagraphLocationInDocument,
@@ -72,6 +74,86 @@ export function createEditorTextInput(
     return cloneTextStyle({ ...(baseStyle ?? {}), ...pending })
   }
 
+  function resolveRuntimeKeyTable(
+    model: DocModel,
+    tableRuntimeKey: string,
+    invalidateSources = false
+  ): TableNode | undefined {
+    const location = parseEmbeddedTableRuntimeKey(tableRuntimeKey)
+    if (!location) return undefined
+
+    const hostTable = model.nodes[location.hostTableIndex]
+    if (!hostTable || hostTable.type !== "table") return undefined
+    if (invalidateSources) hostTable.sourceXml = undefined
+    const hostCell = hostTable.rows[location.hostRowIndex]?.cells[location.hostCellIndex]
+    const rootContent = hostCell?.nodes[location.rootContentIndex]
+    if (!rootContent || rootContent.type !== "table") return undefined
+
+    let table = rootContent
+    if (invalidateSources) table.sourceXml = undefined
+    for (const segment of location.descendants) {
+      const cell = table.rows[segment.rowIndex]?.cells[segment.cellIndex]
+      const content = cell?.nodes[segment.contentIndex]
+      if (!content || content.type !== "table") return undefined
+      table = content
+      if (invalidateSources) table.sourceXml = undefined
+    }
+    return table
+  }
+
+  function writeFirstTableCellText(
+    table: TableNode,
+    rowIndex: number,
+    cellIndex: number,
+    text: string
+  ): boolean {
+    const cell = table.rows[rowIndex]?.cells[cellIndex]
+    if (!cell) return false
+    const para = cell.nodes[0]
+    if (!para || para.type !== "paragraph") {
+      const newPara: ParagraphNode = {
+        type: "paragraph",
+        children: [{ type: "text", text, style: {} }],
+      }
+      if (cell.nodes.length > 0) {
+        cell.nodes[0] = newPara
+      } else {
+        cell.nodes.push(newPara)
+      }
+      table.sourceXml = undefined
+      return true
+    }
+    para.children = [{ type: "text", text, style: {} }]
+    para.sourceXml = undefined
+    table.sourceXml = undefined
+    return true
+  }
+
+  function updateRuntimeKeyParagraph(
+    model: DocModel,
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number,
+    paragraphIndex: number,
+    text: string
+  ): boolean {
+    const table = resolveRuntimeKeyTable(model, tableRuntimeKey, true)
+    if (!table) return false
+    const cell = table.rows[rowIndex]?.cells[cellIndex]
+    const paragraph = cell?.nodes
+      .filter((child): child is ParagraphNode => child.type === "paragraph")[paragraphIndex]
+    if (!paragraph) return false
+    const previousText = paragraphText(paragraph)
+    if (previousText === text) return false
+    const insertedStyle = insertedStyleForTextChange(paragraph, previousText, text)
+    paragraph.children = distributeTextAcrossParagraphChildren(paragraph, text, {
+      insertedStyle,
+    })
+    paragraph.sourceXml = undefined
+    table.sourceXml = undefined
+    return true
+  }
+
   // ── commitParagraphText ──────────────────────────────────────────
   const commitParagraphText = (nodeIndex: number, text: string): void => {
     applyChange((current) => {
@@ -101,6 +183,38 @@ export function createEditorTextInput(
       // Diff per paragraph so run styles, images and form fields survive, and
       // the paragraph/table sourceXml caches are invalidated for export.
       return updateTableCellText(current, tableIndex, rowIndex, cellIndex, text)
+    })
+  }
+
+  // ── commitTableCellTextByRuntimeKey ──────────────────────────────
+  const commitTableCellTextByRuntimeKey = (
+    tableRuntimeKey: string, rowIndex: number, cellIndex: number, text: string
+  ): void => {
+    applyChange((current) => {
+      const nextModel = cloneDocModel(current)
+      const node = resolveRuntimeKeyTable(nextModel, tableRuntimeKey, true)
+      if (!node) return current
+      return writeFirstTableCellText(node, rowIndex, cellIndex, text)
+        ? nextModel
+        : current
+    })
+  }
+
+  // ── commitTableCellParagraphTextByRuntimeKey ─────────────────────
+  const commitTableCellParagraphTextByRuntimeKey = (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number,
+    paragraphIndex: number,
+    text: string
+  ): void => {
+    applyChange((current) => {
+      const nextModel = cloneDocModel(current)
+      return updateRuntimeKeyParagraph(
+        nextModel, tableRuntimeKey, rowIndex, cellIndex, paragraphIndex, text
+      )
+        ? nextModel
+        : current
     })
   }
 
@@ -671,6 +785,8 @@ export function createEditorTextInput(
   return {
     commitParagraphText,
     commitTableCellText,
+    commitTableCellTextByRuntimeKey,
+    commitTableCellParagraphTextByRuntimeKey,
     commitTableCellParagraphTextRecursive,
     commitSectionParagraphText,
     appendParagraph,

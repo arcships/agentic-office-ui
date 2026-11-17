@@ -32,6 +32,8 @@ export type DocxEditorSelection =
       tableIndex: number;
       rowIndex: number;
       cellIndex: number;
+      /** Runtime key for a cell in a nested table; absent for body tables. */
+      tableRuntimeKey?: string;
     };
 
 export interface DocxTableCellLocation {

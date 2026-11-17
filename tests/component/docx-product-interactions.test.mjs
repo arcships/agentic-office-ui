@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -15,7 +16,8 @@ const {
   findDocxSearchMatches,
   useDocxEditor,
 } = await importFromDemo("@arcships/vue-docx");
-const { createBlankDocumentModel } = await importFromDemo("@arcships/docx-core");
+const { createBlankDocumentModel, wasmBuildDocModelFromBytes } =
+  await importFromDemo("@arcships/docx-core");
 
 function modelWithNodes(nodes) {
   return {
@@ -452,6 +454,188 @@ test("insertImageFile drops the insertion when the document changes while readin
     "a document loaded during the file read must not receive the image",
   );
   assert.equal(mounted.controller.status, "Image insertion cancelled: document changed");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+function tableRowCells(root) {
+  return walk(root)
+    .filter((node) => node.type === "tr")
+    .map((row) => row.children.filter((child) => child.type === "td"));
+}
+
+function paragraphNodeText(node) {
+  return (node?.children ?? [])
+    .map((child) => (child.type === "text" ? child.text : ""))
+    .join("");
+}
+
+async function loadMergedTableFixture() {
+  const bytes = readFileSync(
+    new URL("../../test-data/corpus/docx-merged-table.docx", import.meta.url),
+  );
+  const input = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const { model } = await wasmBuildDocModelFromBytes(input);
+  return model;
+}
+
+test("DOCX table grid carries vMerge rowSpan and drops continuation cells", async () => {
+  const fixture = await loadMergedTableFixture();
+  const table = fixture.nodes[1];
+  assert.equal(table.type, "table");
+
+  const mounted = await mount(DocxTableHost, { table, tableIndex: 1 });
+  const rows = tableRowCells(mounted.root);
+
+  assert.equal(rows.length, 3);
+  assert.deepEqual(rows.map((cells) => cells.length), [3, 2, 3]);
+  assert.equal(rows[0][0].props.rowspan, 2);
+  assert.deepEqual(
+    rows[1].map((cell) => cell.props["data-docx-table-cell-index"]),
+    [1, 2],
+    "the continuation cell must be covered by the restart rowSpan",
+  );
+  assert.equal(
+    walk(mounted.root).filter((node) => node.type === "col").length,
+    3,
+  );
+  const renderedHtml = walk(mounted.root)
+    .map((node) => String(node.props?.innerHTML ?? ""))
+    .join("");
+  assert.match(renderedHtml, /Merged A1/);
+  assert.equal(renderedHtml.includes("Hidden continuation"), false);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("DOCX table grid counts columns from gridSpan instead of the first row", async () => {
+  const fixture = await loadMergedTableFixture();
+  const table = fixture.nodes[3];
+  assert.equal(table.type, "table");
+  table.style = {
+    ...(table.style ?? {}),
+    columnWidthsTwips: [1500, 3000, 1500],
+  };
+
+  const mounted = await mount(DocxTableHost, { table, tableIndex: 3 });
+  const rows = tableRowCells(mounted.root);
+  const columns = walk(mounted.root).filter((node) => node.type === "col");
+
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].length, 2, "the wide first cell stays a single td");
+  assert.equal(rows[0][0].props.colspan, 2);
+  assert.equal(rows[1].length, 3);
+  assert.equal(
+    columns.length,
+    3,
+    "the grid must use the widest row, not the first row's cell count",
+  );
+  assert.deepEqual(
+    columns.map((column) => column.props.style.width),
+    ["100px", "200px", "100px"],
+    "stored column widths must line up with the full grid",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("DOCX table grid degrades vMerge continuations across a page slice", async () => {
+  const fixture = await loadMergedTableFixture();
+  const table = fixture.nodes[1];
+
+  const mounted = await mount(DocxTableHost, {
+    table,
+    tableIndex: 1,
+    rowRange: { startRowIndex: 1, endRowIndex: 2 },
+  });
+  const rows = tableRowCells(mounted.root);
+
+  assert.equal(rows.length, 1);
+  assert.equal(
+    rows[0].length,
+    3,
+    "a continuation row without its restart must keep all three columns",
+  );
+  assert.equal(rows[0][0].props.rowspan, undefined);
+  assert.equal(
+    String(rows[0][0].props.class).includes("docx-table-cell--merge-fallback"),
+    true,
+  );
+  assert.deepEqual(
+    rows[0].slice(1).map((cell) => cell.props["data-docx-table-cell-index"]),
+    [1, 2],
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("DOCX nested tables use a unique runtime key and commit into the inner cell", async () => {
+  const fixture = await loadMergedTableFixture();
+  const model = modelWithNodes(fixture.nodes);
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: model });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[5],
+        tableIndex: 5,
+        editable: true,
+        controller,
+      });
+    },
+  });
+
+  const mounted = await mount(Harness);
+  const tableHosts = walk(mounted.root).filter((node) =>
+    hasClass(node, "docx-table-host")
+  );
+  const outerHost = tableHosts.find((node) =>
+    node.props?.["data-docx-table-index"] === 5
+  );
+  const nestedHost = tableHosts.find((node) =>
+    String(node.props?.["data-docx-table-index"] ?? "").startsWith(
+      "body-cell-nested-table-5-0-0-1"
+    )
+  );
+
+  assert.ok(outerHost);
+  assert.ok(nestedHost, "the nested table must expose its runtime key");
+  assert.notEqual(
+    nestedHost.props["data-docx-table-index"],
+    outerHost.props["data-docx-table-index"],
+  );
+
+  const innerParagraph = walk(nestedHost).find((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true &&
+    node.props?.["data-docx-table-row-index"] === 0 &&
+    node.props?.["data-docx-table-cell-index"] === 0
+  );
+  assert.ok(innerParagraph);
+  assert.equal(innerParagraph.props.contenteditable, "true");
+
+  innerParagraph.props.onFocus();
+  await vue.nextTick();
+  assert.equal(
+    controller.selection.tableRuntimeKey,
+    nestedHost.props["data-docx-table-index"],
+  );
+
+  nestedHost.querySelector = () => ({ textContent: "Inner A1 updated" });
+  innerParagraph.props.onBlur();
+  await vue.nextTick();
+
+  const outerTable = controller.model.nodes[5];
+  assert.equal(
+    paragraphNodeText(outerTable.rows[0].cells[0].nodes[0]),
+    "Outer A1",
+    "editing the nested cell must not overwrite the outer cell",
+  );
+  const innerTable = outerTable.rows[0].cells[0].nodes[1];
+  assert.equal(innerTable.type, "table");
+  assert.equal(
+    paragraphNodeText(innerTable.rows[0].cells[0].nodes[0]),
+    "Inner A1 updated",
+  );
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });

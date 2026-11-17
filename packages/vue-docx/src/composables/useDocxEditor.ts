@@ -20,6 +20,7 @@ import {
   resolveAutoLineSpacingMultiple,
   tableBorderPresetState,
   paragraphBorderPresetState,
+  parseEmbeddedTableRuntimeKey,
 } from "@arcships/docx-core"
 import {
   firstRunStyle,
@@ -111,9 +112,30 @@ function sameTextRangeLocation(
 
 // ── useDocxEditor ──────────────────────────────────────────────────
 
+type RuntimeKeyTableController = {
+  selectTableCellByRuntimeKey: (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number
+  ) => void
+  commitTableCellTextByRuntimeKey: (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number,
+    text: string
+  ) => void
+  commitTableCellParagraphTextByRuntimeKey: (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number,
+    paragraphIndex: number,
+    text: string
+  ) => void
+}
+
 export function useDocxEditor(
   options: UseDocxEditorOptions = {}
-): DocxEditorController {
+): DocxEditorController & RuntimeKeyTableController {
   // --- starter template ---
   const starterModel = options.starterModel ?? defaultStarterModel
   assertValidDocxModel(starterModel)
@@ -624,6 +646,24 @@ export function useDocxEditor(
       activeTextRange: undefined,
     }))
   }
+  const selectTableCellByRuntimeKey = (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number
+  ): void => {
+    const location = parseEmbeddedTableRuntimeKey(tableRuntimeKey)
+    if (!location) return
+    dispatchEditorTransaction(() => ({
+      selection: {
+        kind: "table-cell",
+        tableIndex: location.hostTableIndex,
+        rowIndex,
+        cellIndex,
+        tableRuntimeKey,
+      },
+      activeTextRange: undefined,
+    }))
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // Controller assembly
@@ -719,6 +759,7 @@ export function useDocxEditor(
     setActiveTextRange,
     selectParagraph,
     selectTableCell,
+    selectTableCellByRuntimeKey,
     clearTableCellContents: tbl.clearTableCellContents,
     setTableColumnWidths: tbl.setTableColumnWidths,
     insertTableRow: tbl.insertTableRow,
@@ -732,6 +773,8 @@ export function useDocxEditor(
     deleteExpandedSelection: txt.deleteExpandedSelection,
     commitParagraphText: txt.commitParagraphText,
     commitTableCellText: txt.commitTableCellText,
+    commitTableCellTextByRuntimeKey: txt.commitTableCellTextByRuntimeKey,
+    commitTableCellParagraphTextByRuntimeKey: txt.commitTableCellParagraphTextByRuntimeKey,
     commitTableCellParagraphTextRecursive: txt.commitTableCellParagraphTextRecursive,
     commitSectionParagraphText: txt.commitSectionParagraphText,
     copy: clp.copy,
