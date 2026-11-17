@@ -30,6 +30,7 @@ import type {
 } from "../engine/types";
 import { estimateParagraphLineHeightPx } from "../editor/helpers/line-height";
 import {
+  parseSectionColumns,
   resolveFooterPaginationReservePx,
   resolveHeaderPaginationReservePx,
   sectionHasVisibleFooterContent,
@@ -46,8 +47,12 @@ import {
 } from "../editor/helpers/line-height-table-extra";
 import { resolvePageNoteReservePx } from "../editor/helpers/note-numbering";
 import { paragraphLineCountWithinWidth } from "../editor/helpers/line-height-wrap";
+import { paragraphLastRenderedPageBreakLineIndex } from "../editor/helpers/pagination-line-index";
 import { paragraphHasVisibleText } from "../editor/helpers/paragraph-geometry";
 import { paragraphIsStructuralSectionBreakSpacer } from "../editor/helpers/paragraph-tracked";
+import { paragraphHasExplicitColumnBreak } from "../editor/helpers/paragraph-tracked";
+import { buildRenderColumnSegmentsForPageSection } from "../editor/helpers/pagination-plan-core";
+import { documentPageNodeSegmentsIdentityKey } from "../editor/helpers/pagination-plan-stabilize";
 import { parseSectionLayout } from "../viewer/section-layout";
 import {
   buildDocumentPageNodeSegments,
@@ -89,6 +94,12 @@ export interface PaginationSectionGeometry {
   marginsPx: PaginationMargins;
   contentBoxPx: PaginationRect;
   docGridLinePitchPx?: number;
+  /** Real section column count (`w:cols w:num`), 1 when the body is single-column. */
+  columnCount: number;
+  /** Gap between adjacent columns in CSS pixels. */
+  columnGapPx: number;
+  /** Width of each column in CSS pixels (length === columnCount). */
+  columnWidthsPx: number[];
 }
 
 export interface PaginatedPageBlock {
@@ -97,6 +108,8 @@ export interface PaginatedPageBlock {
   framePx: PaginationRect;
   paragraphLineRange?: ParagraphLineRange;
   tableRowRange?: TableRowRange;
+  /** Zero-based column within the page body (0 for single-column sections). */
+  columnIndex: number;
 }
 
 export interface PaginatedPage {
@@ -104,6 +117,8 @@ export interface PaginatedPage {
   sectionIndex: number;
   geometry: PaginationSectionGeometry;
   segments: DocumentPageNodeSegment[];
+  /** Segments per body column; a single entry for single-column sections. */
+  columns: DocumentPageNodeSegment[][];
   blocks: PaginatedPageBlock[];
 }
 
@@ -112,6 +127,19 @@ export interface PaginatedDocumentLayout {
   segmentsByPage: DocumentPageNodeSegment[][];
   sectionGeometries: PaginationSectionGeometry[];
   sectionMetrics: PaginationSectionMetrics[];
+}
+
+/**
+ * Feedback from a previous render/measure pass. Paragraph and table-row
+ * heights are measured in the DOM; page content heights are only applied when
+ * the page identity keys still match the re-estimated pagination, which is the
+ * oscillation guard for the measure→repaginate loop.
+ */
+export interface PaginationMeasurementFeedback {
+  paragraphHeightsPxByNodeIndex?: Record<number, number>;
+  tableRowHeightsPxByNodeIndex?: Record<number, number[]>;
+  pageContentHeightsPxByPageIndex?: number[];
+  pageIdentityKeys?: string[];
 }
 
 export interface PaginateDocumentLayoutOptions {
@@ -127,6 +155,10 @@ export interface PaginateDocumentLayoutOptions {
    * reserve: a page that prints footnotes/endnotes has less room for body text.
    */
   pageContentHeightOverridesPx?: readonly number[];
+  /** Honour Word's cached `w:lastRenderedPageBreak` markers. Defaults to true. */
+  useLastRenderedPageBreakHints?: boolean;
+  /** Measured-height feedback from the previous render pass (#99). */
+  measurementFeedback?: PaginationMeasurementFeedback;
 }
 
 function positiveRounded(value: number, fallback: number): number {
@@ -179,9 +211,13 @@ export function resolvePaginationSectionGeometry(
       bottom: defaultMargins,
       left: defaultMargins
     },
-    contentBoxPx: { x: 0, y: 0, width: 0, height: 0 }
+    contentBoxPx: { x: 0, y: 0, width: 0, height: 0 },
+    columnCount: 1,
+    columnGapPx: 0,
+    columnWidthsPx: [0]
   };
   defaultGeometry.contentBoxPx = resolveSectionContentBox(defaultGeometry);
+  defaultGeometry.columnWidthsPx = [defaultGeometry.contentBoxPx.width];
 
   const resolvedSections = resolveDocumentSectionsFromMetadata(
     model.metadata
@@ -239,23 +275,79 @@ export function resolvePaginationSectionGeometry(
         )
       : 0;
 
+    const contentBoxPx = resolveSectionContentBox({
+      ...geometry,
+      headerReservePx,
+      footerReservePx
+    });
+    const parsedColumns = parseSectionColumns(section.sectionPropertiesXml);
+    const columnCount = Math.max(1, parsedColumns?.count ?? 1);
+    const columnGapPx = columnCount > 1 ? Math.max(0, parsedColumns?.gapPx ?? 0) : 0;
+    const equalColumnWidthPx = Math.max(
+      24,
+      Math.round(
+        (contentBoxPx.width - columnGapPx * (columnCount - 1)) / columnCount
+      )
+    );
+    const columnWidthsPx =
+      columnCount === 1
+        ? [contentBoxPx.width]
+        : parsedColumns?.widthsPx?.length === columnCount
+        ? [...(parsedColumns.widthsPx ?? [])]
+        : Array.from({ length: columnCount }, () => equalColumnWidthPx);
+
     return {
       startNodeIndex,
       ...geometry,
-      contentBoxPx: resolveSectionContentBox({
-        ...geometry,
-        headerReservePx,
-        footerReservePx
-      })
+      contentBoxPx,
+      columnCount,
+      columnGapPx,
+      columnWidthsPx
     };
   });
 }
 
-function createSegmentationCallbacks(): PageSegmentationCallbacks {
+function createSegmentationCallbacks(
+  model: DocModel,
+  measuredParagraphHeightsPxByNodeIndex?: Record<number, number>
+): PageSegmentationCallbacks {
+  const nodeIndexByParagraph = new WeakMap<ParagraphNode, number>();
+  if (measuredParagraphHeightsPxByNodeIndex) {
+    model.nodes.forEach((node, nodeIndex) => {
+      if (node.type === "paragraph") {
+        nodeIndexByParagraph.set(node, nodeIndex);
+      }
+    });
+  }
+
+  const estimateParagraphHeightWithMeasurement = (
+    paragraph: ParagraphNode,
+    availableWidthPx?: number,
+    numberingDefinitions?: NumberingDefinitionSet,
+    docGridLinePitchPx?: number
+  ): number => {
+    if (measuredParagraphHeightsPxByNodeIndex) {
+      const nodeIndex = nodeIndexByParagraph.get(paragraph);
+      const measuredHeightPx =
+        nodeIndex === undefined
+          ? undefined
+          : measuredParagraphHeightsPxByNodeIndex[nodeIndex];
+      if (Number.isFinite(measuredHeightPx) && (measuredHeightPx as number) > 0) {
+        return Math.round(measuredHeightPx as number);
+      }
+    }
+    return estimateParagraphHeightPx(
+      paragraph,
+      availableWidthPx,
+      numberingDefinitions,
+      docGridLinePitchPx
+    );
+  };
+
   return {
     estimateDocNodeHeightPx,
     paragraphHasVisibleText,
-    estimateParagraphHeightPx,
+    estimateParagraphHeightPx: estimateParagraphHeightWithMeasurement,
     estimateParagraphLineHeightPx,
     estimateTableRowHeightsPx,
     paragraphLineCountWithinWidth,
@@ -268,19 +360,30 @@ function createSegmentationCallbacks(): PageSegmentationCallbacks {
 function sectionMetricsFromGeometry(
   geometries: PaginationSectionGeometry[]
 ): PaginationSectionMetrics[] {
-  return geometries.map((geometry) => ({
-    startNodeIndex: geometry.startNodeIndex,
-    pageContentWidthPx: Math.max(
+  return geometries.map((geometry) => {
+    const columnCount = Math.max(1, geometry.columnCount);
+    const columnWidthPx = Math.max(
       MIN_SECTION_CONTENT_PX,
-      Math.round(geometry.contentBoxPx.width)
-    ),
-    pageContentHeightPx: Math.max(
-      MIN_SECTION_CONTENT_PX,
-      Math.round(geometry.contentBoxPx.height)
-    ),
-    pageContentHeightMultiplier: 1,
-    docGridLinePitchPx: geometry.docGridLinePitchPx
-  }));
+      Math.round(
+        Math.min(
+          ...geometry.columnWidthsPx,
+          geometry.contentBoxPx.width
+        )
+      )
+    );
+    return {
+      startNodeIndex: geometry.startNodeIndex,
+      // Text wraps inside one column; the flow budget spans every column on
+      // the page (word processors fill column 1, then column 2, ...).
+      pageContentWidthPx: columnWidthPx,
+      pageContentHeightPx: Math.max(
+        MIN_SECTION_CONTENT_PX,
+        Math.round(geometry.contentBoxPx.height) * columnCount
+      ),
+      pageContentHeightMultiplier: columnCount,
+      docGridLinePitchPx: geometry.docGridLinePitchPx
+    };
+  });
 }
 
 function paragraphSegmentHeightPx(params: {
@@ -289,6 +392,7 @@ function paragraphSegmentHeightPx(params: {
   metrics: PaginationSectionMetrics;
   numberingDefinitions?: NumberingDefinitionSet;
   pageConsumedHeightPx: number;
+  availableWidthPx?: number;
 }): { heightPx: number; afterSpacingPx: number } {
   const beforeSpacingPx = paragraphBeforeSpacingPx(params.paragraph);
   const afterSpacingPx = paragraphAfterSpacingPx(params.paragraph);
@@ -328,7 +432,7 @@ function paragraphSegmentHeightPx(params: {
     Math.round(
       estimateParagraphHeightPx(
         params.paragraph,
-        params.metrics.pageContentWidthPx,
+        params.availableWidthPx ?? params.metrics.pageContentWidthPx,
         params.numberingDefinitions,
         params.metrics.docGridLinePitchPx
       )
@@ -350,10 +454,11 @@ function tableSegmentHeightPx(params: {
   segment: DocumentPageNodeSegment;
   metrics: PaginationSectionMetrics;
   numberingDefinitions?: NumberingDefinitionSet;
+  availableWidthPx?: number;
 }): number {
   const rowHeightsPx = estimateTableRowHeightsPx(
     params.table,
-    params.metrics.pageContentWidthPx,
+    params.availableWidthPx ?? params.metrics.pageContentWidthPx,
     params.numberingDefinitions,
     params.metrics.docGridLinePitchPx
   );
@@ -403,66 +508,129 @@ function tableSegmentHeightPx(params: {
 }
 
 function projectPageBlocks(params: {
-  pageSegments: DocumentPageNodeSegment[];
+  columns: DocumentPageNodeSegment[][];
   model: DocModel;
   geometry: PaginationSectionGeometry;
   metrics: PaginationSectionMetrics;
+  measuredParagraphHeightsPxByNodeIndex?: Map<number, number>;
 }): PaginatedPageBlock[] {
   const blocks: PaginatedPageBlock[] = [];
   const contentBox = params.geometry.contentBoxPx;
   const numberingDefinitions = params.model.metadata.numberingDefinitions;
-  let pageConsumedHeightPx = 0;
+  const columnWidthsPx =
+    params.geometry.columnWidthsPx.length > 0
+      ? params.geometry.columnWidthsPx
+      : [contentBox.width];
+  let columnX = contentBox.x;
 
-  for (const segment of params.pageSegments) {
-    const node = params.model.nodes[segment.nodeIndex];
-    if (!node) {
-      continue;
-    }
+  params.columns.forEach((columnSegments, columnIndex) => {
+    const columnWidthPx = Math.max(
+      24,
+      Math.round(columnWidthsPx[columnIndex] ?? columnWidthsPx[0] ?? contentBox.width)
+    );
+    let pageConsumedHeightPx = 0;
 
-    if (node.type === "paragraph") {
-      const height = paragraphSegmentHeightPx({
+    for (const segment of columnSegments) {
+      const node = params.model.nodes[segment.nodeIndex];
+      if (!node) {
+        continue;
+      }
+
+      if (node.type === "paragraph") {
+        const measuredHeightPx = params.measuredParagraphHeightsPxByNodeIndex?.get(
+          segment.nodeIndex
+        );
+        const height =
+          Number.isFinite(measuredHeightPx) && (measuredHeightPx as number) > 0
+            ? {
+                heightPx: Math.round(measuredHeightPx as number),
+                afterSpacingPx: paragraphAfterSpacingPx(node)
+              }
+            : paragraphSegmentHeightPx({
+                segment,
+                paragraph: node,
+                metrics: params.metrics,
+                numberingDefinitions,
+                pageConsumedHeightPx,
+                availableWidthPx: columnWidthPx
+              });
+        blocks.push({
+          kind: "paragraph",
+          nodeIndex: segment.nodeIndex,
+          framePx: {
+            x: columnX,
+            y: contentBox.y + pageConsumedHeightPx,
+            width: columnWidthPx,
+            height: height.heightPx
+          },
+          paragraphLineRange: segment.paragraphLineRange,
+          columnIndex
+        });
+        pageConsumedHeightPx += height.heightPx;
+        continue;
+      }
+
+      const heightPx = tableSegmentHeightPx({
+        table: node,
         segment,
-        paragraph: node,
         metrics: params.metrics,
         numberingDefinitions,
-        pageConsumedHeightPx
+        availableWidthPx: columnWidthPx
       });
       blocks.push({
-        kind: "paragraph",
+        kind: "table",
         nodeIndex: segment.nodeIndex,
         framePx: {
-          x: contentBox.x,
+          x: columnX,
           y: contentBox.y + pageConsumedHeightPx,
-          width: contentBox.width,
-          height: height.heightPx
+          width: columnWidthPx,
+          height: heightPx
         },
-        paragraphLineRange: segment.paragraphLineRange
+        tableRowRange: segment.tableRowRange,
+        columnIndex
       });
-      pageConsumedHeightPx += height.heightPx;
-      continue;
+      pageConsumedHeightPx += heightPx;
     }
 
-    const heightPx = tableSegmentHeightPx({
-      table: node,
-      segment,
-      metrics: params.metrics,
-      numberingDefinitions
-    });
-    blocks.push({
-      kind: "table",
-      nodeIndex: segment.nodeIndex,
-      framePx: {
-        x: contentBox.x,
-        y: contentBox.y + pageConsumedHeightPx,
-        width: contentBox.width,
-        height: heightPx
-      },
-      tableRowRange: segment.tableRowRange
-    });
-    pageConsumedHeightPx += heightPx;
-  }
+    columnX += columnWidthPx + params.geometry.columnGapPx;
+  });
 
   return blocks;
+}
+
+function resolveKeepNextGroupEnds(model: DocModel): Map<number, number> {
+  const groupEndByStartNodeIndex = new Map<number, number>();
+  for (let nodeIndex = 0; nodeIndex < model.nodes.length; nodeIndex += 1) {
+    const node = model.nodes[nodeIndex];
+    if (
+      node.type !== "paragraph" ||
+      node.style?.keepNext !== true ||
+      !paragraphHasVisibleText(node)
+    ) {
+      continue;
+    }
+    let chainEndNodeIndex = nodeIndex;
+    while (chainEndNodeIndex < model.nodes.length - 1) {
+      const current = model.nodes[chainEndNodeIndex];
+      if (
+        current.type !== "paragraph" ||
+        current.style?.keepNext !== true ||
+        !paragraphHasVisibleText(current)
+      ) {
+        break;
+      }
+      const next = model.nodes[chainEndNodeIndex + 1];
+      if (next.type !== "paragraph") {
+        chainEndNodeIndex += 1;
+        break;
+      }
+      chainEndNodeIndex += 1;
+    }
+    if (chainEndNodeIndex > nodeIndex) {
+      groupEndByStartNodeIndex.set(nodeIndex, chainEndNodeIndex);
+    }
+  }
+  return groupEndByStartNodeIndex;
 }
 
 /**
@@ -476,51 +644,124 @@ export function paginateDocumentLayout(
   const sectionGeometries = resolvePaginationSectionGeometry(model, options);
   const sectionMetrics = sectionMetricsFromGeometry(sectionGeometries);
   const fallbackMetrics = sectionMetrics[0];
+  const feedback = options.measurementFeedback;
 
-  const segmentsByPage =
+  const buildSegments = (measuredPageContentHeightsPx?: number[]) =>
     model.nodes.length === 0
       ? []
       : buildDocumentPageNodeSegments(
           model,
           fallbackMetrics.pageContentHeightPx,
           fallbackMetrics.pageContentWidthPx,
-          createSegmentationCallbacks(),
+          createSegmentationCallbacks(
+            model,
+            feedback?.paragraphHeightsPxByNodeIndex
+          ),
           model.metadata.numberingDefinitions,
           sectionMetrics,
           {
             allowParagraphLineSplitting: options.allowParagraphLineSplitting ?? false,
             suppressSpacingBeforeAfterPageBreak:
               options.suppressSpacingBeforeAfterPageBreak ?? false,
+            preferLastRenderedParagraphStartBreaks:
+              options.useLastRenderedPageBreakHints ?? true,
+            paragraphLastRenderedPageBreakLineIndex,
             measuredPageContentHeightsPxByPageIndex:
               options.pageContentHeightOverridesPx
                 ? [...options.pageContentHeightOverridesPx]
-                : undefined
+                : measuredPageContentHeightsPx,
+            measuredTableRowHeightsByNodeIndex:
+              feedback?.tableRowHeightsPxByNodeIndex
           }
         );
+
+  let segmentsByPage = buildSegments();
+  if (
+    feedback?.pageContentHeightsPxByPageIndex?.some((heightPx) =>
+      Number.isFinite(heightPx) && heightPx > 0
+    )
+  ) {
+    // Apply measured page budgets only where the page still contains the same
+    // segments that were measured; otherwise the value belongs to a different
+    // pagination and would oscillate.
+    const currentIdentityKeys = segmentsByPage.map(
+      documentPageNodeSegmentsIdentityKey
+    );
+    const measuredHeights = feedback.pageContentHeightsPxByPageIndex.map(
+      (heightPx, pageIndex) =>
+        feedback.pageIdentityKeys?.[pageIndex] === currentIdentityKeys[pageIndex]
+          ? heightPx
+          : -1
+    );
+    if (measuredHeights.some((heightPx) => heightPx > 0)) {
+      segmentsByPage = buildSegments(measuredHeights);
+    }
+  }
 
   const pagesBySegment: DocumentPageNodeSegment[][] =
     segmentsByPage.length > 0 ? segmentsByPage : [[]];
 
   let sectionIndex = 0;
-  const pages: PaginatedPage[] = pagesBySegment.map((pageSegments, pageIndex) => {
+  const pageSections = pagesBySegment.map((pageSegments) => {
     const firstNodeIndex = pageSegments[0]?.nodeIndex;
     sectionIndex =
       firstNodeIndex === undefined
         ? sectionIndex
         : resolveSectionIndexForNodeIndex(sectionGeometries, firstNodeIndex, sectionIndex);
-    const geometry = sectionGeometries[sectionIndex] ?? sectionGeometries[0];
-    const metrics = sectionMetrics[sectionIndex] ?? fallbackMetrics;
+    return sectionIndex;
+  });
+  const forceColumnBreakNodeIndexes = new Set<number>();
+  model.nodes.forEach((node, nodeIndex) => {
+    if (node.type === "paragraph" && paragraphHasExplicitColumnBreak(node)) {
+      forceColumnBreakNodeIndexes.add(nodeIndex);
+    }
+  });
+  const keepTogetherNodeRangeByStartNodeIndex = resolveKeepNextGroupEnds(model);
+  const measuredParagraphHeightsPxByNodeIndex =
+    feedback?.paragraphHeightsPxByNodeIndex
+      ? new Map(
+          Object.entries(feedback.paragraphHeightsPxByNodeIndex).map(
+            ([nodeIndex, heightPx]) => [Number(nodeIndex), heightPx] as const
+          )
+        )
+      : undefined;
+
+  const pages: PaginatedPage[] = pagesBySegment.map((pageSegments, pageIndex) => {
+    const section = pageSections[pageIndex] ?? 0;
+    const geometry = sectionGeometries[section] ?? sectionGeometries[0];
+    const metrics = sectionMetrics[section] ?? fallbackMetrics;
+    const nextSection = pageSections[pageIndex + 1];
+    const isLastPageOfSection =
+      nextSection === undefined || nextSection !== section;
+    const columns =
+      geometry.columnCount > 1 && pageSegments.length > 0
+        ? buildRenderColumnSegmentsForPageSection(
+            model,
+            pageSegments,
+            geometry.columnWidthsPx,
+            geometry.contentBoxPx.height,
+            model.metadata.numberingDefinitions,
+            undefined,
+            measuredParagraphHeightsPxByNodeIndex,
+            isLastPageOfSection,
+            forceColumnBreakNodeIndexes,
+            keepTogetherNodeRangeByStartNodeIndex
+          )
+        : [pageSegments];
+    const flowSegments = columns.flat();
 
     return {
       index: pageIndex,
-      sectionIndex,
+      sectionIndex: section,
       geometry,
-      segments: pageSegments,
+      segments: flowSegments,
+      columns,
       blocks: projectPageBlocks({
-        pageSegments,
+        columns,
         model,
         geometry,
-        metrics
+        metrics,
+        measuredParagraphHeightsPxByNodeIndex
       })
     };
   });

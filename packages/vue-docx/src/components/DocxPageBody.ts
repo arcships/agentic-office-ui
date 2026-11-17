@@ -11,6 +11,7 @@ import {
   h,
   defineComponent,
   nextTick,
+  onMounted,
   onUnmounted,
   ref,
   watch,
@@ -66,6 +67,19 @@ export default defineComponent({
       type: Array as PropType<DocumentPageNodeSegment[]>,
       required: true,
     },
+    /** Per-body-column segments; omitted for single-column pages. */
+    pageColumns: {
+      type: Array as PropType<DocumentPageNodeSegment[][]>,
+      required: false,
+    },
+    columnLayout: {
+      type: Object as PropType<{
+        count: number
+        gapPx: number
+        widthsPx: number[]
+      }>,
+      required: false,
+    },
     pageLayout: {
       type: Object as PropType<PageLayoutInfo>,
       required: true,
@@ -108,10 +122,24 @@ export default defineComponent({
     headerReservePx: { type: Number, default: 0 },
     footerReservePx: { type: Number, default: 0 },
   },
-  emits: ["measure"],
+  emits: ["measure", "paragraphMeasure", "tableRowMeasure", "contentMeasure"],
   setup(props, { emit, slots }) {
     const selectionOwner = {}
     const bodyElement = ref<HTMLElement>()
+
+    function emitContentMeasure(): void {
+      const heightPx = bodyElement.value?.scrollHeight ?? 0
+      if (Number.isFinite(heightPx) && heightPx > 0) {
+        emit("contentMeasure", heightPx)
+      }
+    }
+
+    onMounted(() => { void nextTick(emitContentMeasure) })
+    watch(
+      () => props.pageNodeSegments,
+      () => { void nextTick(emitContentMeasure) },
+      { flush: "post" }
+    )
     let selectionDocument: Document | undefined
     let selectionRoot: HTMLElement | undefined
     let toolbarPointerDown = false
@@ -297,12 +325,114 @@ export default defineComponent({
       controller.selectParagraph(nodeIndex)
     }
 
+    function renderSegmentList(
+      segments: DocumentPageNodeSegment[],
+      keyPrefix: string,
+      paragraphSlotRef: { value: number },
+      wrapClearances: DocxPageFlowWrapClearance[],
+      columnIndex?: number
+    ): VNode[] {
+      const children: VNode[] = []
+      for (let i = 0; i < segments.length; i++) {
+        const segment = segments[i]
+        const node = segmentNode(segment)
+        const key = `${keyPrefix}${segmentKey(segment, i)}`
+
+        if (!node) {
+          children.push(
+            h("div", {
+              key,
+              class: "docx-page-body-unknown",
+              style: {
+                padding: "8px",
+                color: "#9ca3af",
+                fontSize: "12px",
+              },
+            }, "Unsupported node type")
+          )
+        } else if (node.type === "paragraph") {
+          const wrapClearanceTopPx =
+            wrapClearances[paragraphSlotRef.value++]?.marginTopPx ?? 0
+          children.push(
+            h(DocxParagraphHost, {
+              key,
+              paragraph: node as ParagraphNode,
+              paragraphIndex: segment.nodeIndex,
+              // Showing revisions is a display choice: it must not turn the
+              // document read-only, otherwise a document with revisions can
+              // never be edited or cleaned up.
+              editable: props.editable,
+              documentTheme: props.theme,
+              controller: props.controller,
+              floatingPageOriginPx: floatingPageOrigin(),
+              wrapClearanceTopPx,
+              lineRange: segment.paragraphLineRange,
+              showTrackedChanges: props.trackedChangesEnabled,
+              showCommentHighlights: props.commentsEnabled,
+              numberingDefinitions: props.model.metadata.numberingDefinitions,
+              pageNumber: props.pageNumber,
+              totalPages: props.totalPages,
+              pageNumberFormat: props.pageNumberFormat,
+              noteMarkerLabels: props.noteMarkerLabels,
+              skipImageChildIndexes:
+                props.coverImageChildIndexesByNode?.[segment.nodeIndex],
+              onTextInput: (nodeIndex: number, text: string) => {
+                props.controller?.commitParagraphText(nodeIndex, text)
+              },
+              onFocus: (nodeIndex: number) => {
+                ensureParagraphSelection(nodeIndex)
+              },
+              onClick: (nodeIndex: number, _event: MouseEvent) => {
+                ensureParagraphSelection(nodeIndex)
+              },
+              onMeasure: (nodeIndex: number, heightPx: number) => {
+                emit("paragraphMeasure", nodeIndex, heightPx)
+              },
+            })
+          )
+        } else if (node.type === "table") {
+          children.push(
+            h(DocxTableHost, {
+              key,
+              table: node as TableNode,
+              tableIndex: segment.nodeIndex,
+              editable: props.editable,
+              controller: props.controller,
+              rowRange: segment.tableRowRange,
+              rowSlice: segment.tableRowSlice,
+              documentTheme: props.theme,
+              floatingPageOriginPx: floatingPageOrigin(),
+              showTrackedChanges: props.trackedChangesEnabled,
+              showCommentHighlights: props.commentsEnabled,
+              numberingDefinitions: props.model.metadata.numberingDefinitions,
+              pageNumber: props.pageNumber,
+              totalPages: props.totalPages,
+              pageNumberFormat: props.pageNumberFormat,
+              maxAvailableWidthPx:
+                (columnIndex !== undefined
+                  ? props.columnLayout?.widthsPx?.[columnIndex]
+                  : undefined) ?? props.pageContentWidthPx,
+              noteMarkerLabels: props.noteMarkerLabels,
+              onMeasure: (tableIndex: number, rowHeightsPx: number[]) => {
+                emit("tableRowMeasure", tableIndex, rowHeightsPx)
+              },
+            })
+          )
+        }
+      }
+      return children
+    }
+
     // ── Render ─────────────────────────────────────────────────────
     return () => {
       const segments = props.pageNodeSegments
       const bodyChildren: VNode[] = []
       const wrapClearances = wrappedImageClearances()
-      let paragraphSlot = 0
+      const paragraphSlotRef = { value: 0 }
+      const columns =
+        !props.editable && props.pageColumns && props.pageColumns.length > 1
+          ? props.pageColumns
+          : undefined
 
       if (segments.length === 0 && props.editable && props.controller) {
         // Empty page hint
@@ -321,83 +451,71 @@ export default defineComponent({
             },
           }, "Click to add content")
         )
-      } else {
-        for (let i = 0; i < segments.length; i++) {
-          const segment = segments[i]
-          const node = segmentNode(segment)
-          const key = segmentKey(segment, i)
-
-          if (!node) {
-            bodyChildren.push(
-              h("div", {
-                key,
-                class: "docx-page-body-unknown",
-                style: {
-                  padding: "8px",
-                  color: "#9ca3af",
-                  fontSize: "12px",
-                },
-              }, "Unsupported node type")
-            )
-          } else if (node.type === "paragraph") {
-            const wrapClearanceTopPx =
-              wrapClearances[paragraphSlot++]?.marginTopPx ?? 0
-            bodyChildren.push(
-              h(DocxParagraphHost, {
-                key,
-                paragraph: node as ParagraphNode,
-                paragraphIndex: segment.nodeIndex,
-                // Showing revisions is a display choice: it must not turn the
-                // document read-only, otherwise a document with revisions can
-                // never be edited or cleaned up.
-                editable: props.editable,
-                documentTheme: props.theme,
-                controller: props.controller,
-                floatingPageOriginPx: floatingPageOrigin(),
-                wrapClearanceTopPx,
-                showTrackedChanges: props.trackedChangesEnabled,
-                showCommentHighlights: props.commentsEnabled,
-                numberingDefinitions: props.model.metadata.numberingDefinitions,
-                pageNumber: props.pageNumber,
-                totalPages: props.totalPages,
-                pageNumberFormat: props.pageNumberFormat,
-                noteMarkerLabels: props.noteMarkerLabels,
-                skipImageChildIndexes:
-                  props.coverImageChildIndexesByNode?.[segment.nodeIndex],
-                onTextInput: (nodeIndex: number, text: string) => {
-                  props.controller?.commitParagraphText(nodeIndex, text)
-                },
-                onFocus: (nodeIndex: number) => {
-                  ensureParagraphSelection(nodeIndex)
-                },
-                onClick: (nodeIndex: number, _event: MouseEvent) => {
-                  ensureParagraphSelection(nodeIndex)
-                },
-              })
-            )
-          } else if (node.type === "table") {
-            bodyChildren.push(
-              h(DocxTableHost, {
-                key,
-                table: node as TableNode,
-                tableIndex: segment.nodeIndex,
-                editable: props.editable,
-                controller: props.controller,
-                rowRange: segment.tableRowRange,
-                documentTheme: props.theme,
-                floatingPageOriginPx: floatingPageOrigin(),
-                showTrackedChanges: props.trackedChangesEnabled,
-                showCommentHighlights: props.commentsEnabled,
-                numberingDefinitions: props.model.metadata.numberingDefinitions,
-                pageNumber: props.pageNumber,
-                totalPages: props.totalPages,
-                pageNumberFormat: props.pageNumberFormat,
-                maxAvailableWidthPx: props.pageContentWidthPx,
-                noteMarkerLabels: props.noteMarkerLabels,
-              })
-            )
-          }
+      } else if (columns) {
+        const margins = props.pageLayout.marginsPx ?? {
+          top: 0,
+          right: 0,
+          bottom: 0,
+          left: 0,
         }
+        const columnHeightPx = Math.max(
+          0,
+          Math.round(
+            props.pageLayout.pageHeightPx -
+              margins.top -
+              margins.bottom -
+              (props.headerReservePx ?? 0) -
+              (props.footerReservePx ?? 0)
+          )
+        )
+        bodyChildren.push(
+          h(
+            "div",
+            {
+              class: "docx-page-columns",
+              "data-docx-page-columns": columns.length,
+              style: {
+                display: "flex",
+                alignItems: "flex-start",
+                gap: `${Math.max(0, props.columnLayout?.gapPx ?? 0)}px`,
+                height: `${columnHeightPx}px`,
+                overflow: "hidden",
+              },
+            },
+            columns.map((columnSegments, columnIndex) =>
+              h(
+                "div",
+                {
+                  key: `column-${columnIndex}`,
+                  class: "docx-page-column",
+                  style: {
+                    flex: "0 0 auto",
+                    width: `${Math.max(
+                      24,
+                      Math.round(
+                        props.columnLayout?.widthsPx?.[columnIndex] ??
+                          props.pageContentWidthPx
+                      )
+                    )}px`,
+                    height: "100%",
+                    overflow: "hidden",
+                  },
+                },
+                renderSegmentList(
+                  columnSegments,
+                  `col-${columnIndex}-`,
+                  paragraphSlotRef,
+                  [],
+                  columnIndex
+                )
+              )
+            )
+          )
+        )
+      } else {
+        bodyChildren.push(
+          ...renderSegmentList(segments, "", paragraphSlotRef, wrapClearances)
+        )
       }
 
       return h(

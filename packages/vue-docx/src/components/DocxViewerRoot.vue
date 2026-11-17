@@ -24,6 +24,8 @@
             :page-index="entry.pageIndex"
             :page-layout="entry.pageLayout"
             :page-node-segments="entry.pageNodeSegments"
+            :page-columns="entry.columns"
+            :column-layout="entry.columnLayout"
             :model="model"
             :controller="controller"
             :editable="editable"
@@ -49,6 +51,9 @@
             :theme="theme"
             :annotation-drawer-mode="annotationDrawerMode"
             @measure="onPageMeasure(entry.pageIndex, $event)"
+            @paragraph-measure="onParagraphMeasure"
+            @table-row-measure="onTableRowMeasure"
+            @content-measure="onPageContentMeasure(entry.pageIndex, $event)"
           />
         </div>
       </div>
@@ -91,6 +96,8 @@ import {
   groupGutterAnnotationsByPage,
   trackedChangeDuplicatesInlineMarkup,
   selectSectionVariantForPage,
+  documentPageNodeSegmentsIdentityKey,
+  type PaginationMeasurementFeedback,
   DEFAULT_DOC_PAGE_WIDTH,
   DEFAULT_DOC_PAGE_HEIGHT,
 } from "@arcships/docx-core"
@@ -140,6 +147,8 @@ interface VisiblePageEntry {
   heightPx: number
   pageLayout: ReturnType<typeof resolveDocumentLayout>
   pageNodeSegments: DocumentPageNodeSegment[]
+  columns: DocumentPageNodeSegment[][]
+  columnLayout: { count: number; gapPx: number; widthsPx: number[] }
   pageWidthPx: number
   pageContentWidthPx: number
   pageNumber: number
@@ -178,6 +187,23 @@ const containerWidth = ref(800)
 // Track measured page heights (key: pageIndex). Each entry is tagged with the
 // page layout it was measured for so layout changes invalidate stale values.
 const measuredPageHeights = ref<Record<number, { heightPx: number; layoutKey: string }>>({})
+
+// Measure→repaginate feedback (#99). Paragraph heights come from rendered
+// paragraph hosts; page content heights come from the page body. Feedback is
+// applied for at most PAGINATION_MEASUREMENT_MAX_ITERATIONS passes and cleared
+// whenever the document/layout changes.
+const PAGINATION_MEASUREMENT_MAX_ITERATIONS = 3
+const PAGINATION_MEASUREMENT_TOLERANCE_PX = 1
+const paginationMeasurementFeedback = ref<PaginationMeasurementFeedback | undefined>()
+const paginationMeasurementIteration = ref(0)
+const measuredParagraphHeightsPxByNodeIndex = ref<Record<number, number>>({})
+const measuredTableRowHeightsPxByNodeIndex = ref<Record<number, number[]>>({})
+const measuredPageContentHeights = ref<
+  Record<number, { heightPx: number; identityKey: string }>
+>({})
+const seenPaginationMeasurementSignatures = new Set<string>()
+let measurementFlushScheduled = false
+let measurementFlushHandle: ReturnType<typeof setTimeout> | undefined
 
 // Drag-over state for file drops
 const isDragOver = ref(false)
@@ -250,38 +276,66 @@ const resolvedLayoutOptions = computed<LayoutOptions>(() => ({
 }))
 
 const paginationPlan = computed(() => {
-  const snapshot = buildLayoutSnapshot(props.model, resolvedLayoutOptions.value)
+  const snapshot = buildLayoutSnapshot(props.model, {
+    ...resolvedLayoutOptions.value,
+    measurementFeedback: paginationMeasurementFeedback.value,
+  })
+
+  const segmentFromBlock = (block: (typeof snapshot.pages)[number]["blocks"][number]): DocumentPageNodeSegment | undefined => {
+    const nodeIndex = block.source?.nodeIndex
+    if (!Number.isFinite(nodeIndex) || (nodeIndex as number) < 0) return undefined
+
+    const segment: DocumentPageNodeSegment = {
+      nodeIndex: Math.round(nodeIndex as number),
+    }
+    if (block.kind === "table" && block.tableRowRange) {
+      segment.tableRowRange = {
+        startRowIndex: block.tableRowRange.startRowIndex,
+        endRowIndex: block.tableRowRange.endRowIndex,
+      }
+    }
+    if (block.kind === "paragraph" && block.paragraphLineRange) {
+      segment.paragraphLineRange = {
+        startLineIndex: block.paragraphLineRange.startLineIndex,
+        endLineIndex: block.paragraphLineRange.endLineIndex,
+        totalLineCount: block.paragraphLineRange.totalLineCount,
+        lineHeightPx: block.paragraphLineRange.lineHeightPx,
+      }
+    }
+    return segment
+  }
+
   const pageNodeSegments: DocumentPageNodeSegment[][] = snapshot.pages.map((page) =>
     page.blocks.flatMap((block): DocumentPageNodeSegment[] => {
-      const nodeIndex = block.source?.nodeIndex
-      if (!Number.isFinite(nodeIndex) || (nodeIndex as number) < 0) return []
-
-      const segment: DocumentPageNodeSegment = {
-        nodeIndex: Math.round(nodeIndex as number),
-      }
-      if (block.kind === "table" && block.tableRowRange) {
-        segment.tableRowRange = {
-          startRowIndex: block.tableRowRange.startRowIndex,
-          endRowIndex: block.tableRowRange.endRowIndex,
-        }
-      }
-      if (block.kind === "paragraph" && block.paragraphLineRange) {
-        segment.paragraphLineRange = {
-          startLineIndex: block.paragraphLineRange.startLineIndex,
-          endLineIndex: block.paragraphLineRange.endLineIndex,
-          totalLineCount: block.paragraphLineRange.totalLineCount,
-          lineHeightPx: block.paragraphLineRange.lineHeightPx,
-        }
-      }
-      return [segment]
+      const segment = segmentFromBlock(block)
+      return segment ? [segment] : []
     })
   )
 
-  return { pages: snapshot.pages, pageNodeSegments, snapshot }
+  const pageColumns: DocumentPageNodeSegment[][][] = snapshot.pages.map((page) => {
+    const columnCount = Math.max(1, page.columnCount ?? 1)
+    const columns = Array.from(
+      { length: columnCount },
+      () => [] as DocumentPageNodeSegment[]
+    )
+    page.blocks.forEach((block) => {
+      const segment = segmentFromBlock(block)
+      if (!segment) return
+      const columnIndex = Math.max(
+        0,
+        Math.min(columnCount - 1, block.source?.columnIndex ?? 0)
+      )
+      columns[columnIndex].push(segment)
+    })
+    return columns
+  })
+
+  return { pages: snapshot.pages, pageNodeSegments, pageColumns, snapshot }
 })
 
 const pages = computed(() => paginationPlan.value.pages)
 const pageNodeSegments = computed(() => paginationPlan.value.pageNodeSegments)
+const pageColumns = computed(() => paginationPlan.value.pageColumns)
 const pageCount = computed(() => pages.value.length)
 const FIT_ZOOM_MIN = 0.25
 const FIT_ZOOM_MAX = 2
@@ -374,6 +428,13 @@ const pagePresentations = computed(() => {
       pageNumber,
       pageNumberFormat: parseSectionPageNumberFormat(sectionPropertiesXml),
       pageBorders: parseSectionPageBorders(sectionPropertiesXml),
+      columnLayout: {
+        count: pages.value[pageIndex]?.columnCount ?? 1,
+        gapPx: pages.value[pageIndex]?.columnGapPx ?? 0,
+        widthsPx: pages.value[pageIndex]?.columnWidthsPx ?? [],
+      },
+      segments: pageNodeSegments.value[pageIndex] ?? [],
+      columns: pageColumns.value[pageIndex] ?? [],
       headerSection: section
         ? selectSectionVariantForPage(
             section.headerSections,
@@ -553,6 +614,12 @@ const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
         heightPx: pageHeight,
         pageLayout: pagePresentations.value[i]?.pageLayout ?? baseDocumentLayout.value,
         pageNodeSegments: pageNodeSegments.value[i] ?? [],
+        columns: pageColumns.value[i] ?? [],
+        columnLayout: pagePresentations.value[i]?.columnLayout ?? {
+          count: 1,
+          gapPx: 0,
+          widthsPx: [],
+        },
         pageWidthPx:
           pagePresentations.value[i]?.pageLayout.pageWidthPx ?? DEFAULT_DOC_PAGE_WIDTH,
         pageContentWidthPx: Math.max(
@@ -705,12 +772,131 @@ function onPageMeasure(pageIndex: number, event: PageMeasureEvent): void {
   }
 }
 
+function pageIdentityKey(pageIndex: number): string {
+  return documentPageNodeSegmentsIdentityKey(pageNodeSegments.value[pageIndex] ?? [])
+}
+
+function schedulePaginationMeasurementFlush(): void {
+  if (measurementFlushScheduled) return
+  measurementFlushScheduled = true
+  measurementFlushHandle = setTimeout(() => {
+    measurementFlushScheduled = false
+    measurementFlushHandle = undefined
+    flushPaginationMeasurementFeedback()
+  }, 0)
+}
+
+function onParagraphMeasure(nodeIndex: number, heightPx: number): void {
+  if (!Number.isFinite(heightPx) || heightPx <= 0) return
+  measuredParagraphHeightsPxByNodeIndex.value = {
+    ...measuredParagraphHeightsPxByNodeIndex.value,
+    [nodeIndex]: Math.round(heightPx),
+  }
+  schedulePaginationMeasurementFlush()
+}
+
+function onTableRowMeasure(nodeIndex: number, rowHeightsPx: number[]): void {
+  if (!Number.isFinite(nodeIndex) || rowHeightsPx.length === 0) return
+  measuredTableRowHeightsPxByNodeIndex.value = {
+    ...measuredTableRowHeightsPxByNodeIndex.value,
+    [nodeIndex]: rowHeightsPx.map((heightPx) => Math.max(1, Math.round(heightPx))),
+  }
+  schedulePaginationMeasurementFlush()
+}
+
+function onPageContentMeasure(pageIndex: number, heightPx: number): void {
+  if (!Number.isFinite(heightPx) || heightPx <= 0) return
+  measuredPageContentHeights.value = {
+    ...measuredPageContentHeights.value,
+    [pageIndex]: {
+      heightPx: Math.round(heightPx),
+      identityKey: pageIdentityKey(pageIndex),
+    },
+  }
+  schedulePaginationMeasurementFlush()
+}
+
+function flushPaginationMeasurementFeedback(): void {
+  if (paginationMeasurementIteration.value >= PAGINATION_MEASUREMENT_MAX_ITERATIONS) return
+  const keys = pageNodeSegments.value.map((_, pageIndex) => pageIdentityKey(pageIndex))
+  if (keys.length === 0) return
+
+  const paragraphHeightsPxByNodeIndex = { ...measuredParagraphHeightsPxByNodeIndex.value }
+  const tableRowHeightsPxByNodeIndex = { ...measuredTableRowHeightsPxByNodeIndex.value }
+  if (
+    Object.keys(paragraphHeightsPxByNodeIndex).length === 0 &&
+    Object.keys(tableRowHeightsPxByNodeIndex).length === 0
+  ) {
+    return
+  }
+
+  const previous = paginationMeasurementFeedback.value
+  const previousParagraphs = previous?.paragraphHeightsPxByNodeIndex ?? {}
+  const previousTableRows = previous?.tableRowHeightsPxByNodeIndex ?? {}
+  const paragraphChanged =
+    Object.keys(paragraphHeightsPxByNodeIndex).some(
+      (key) =>
+        Math.abs(
+          (paragraphHeightsPxByNodeIndex[Number(key)] ?? 0) -
+            (previousParagraphs[Number(key)] ?? Number.NEGATIVE_INFINITY)
+        ) > PAGINATION_MEASUREMENT_TOLERANCE_PX
+    ) ||
+    Object.keys(tableRowHeightsPxByNodeIndex).some((key) => {
+      const nextRows = tableRowHeightsPxByNodeIndex[Number(key)] ?? []
+      const previousRows = previousTableRows[Number(key)] ?? []
+      return (
+        nextRows.length !== previousRows.length ||
+        nextRows.some(
+          (heightPx, rowIndex) =>
+            Math.abs(heightPx - (previousRows[rowIndex] ?? -1)) >
+            PAGINATION_MEASUREMENT_TOLERANCE_PX
+        )
+      )
+    })
+  const identityKeysChanged =
+    previous?.pageIdentityKeys?.join("\u0000") !== keys.join("\u0000")
+  if (!paragraphChanged && !identityKeysChanged) return
+
+  // Page content heights are diagnostic only: using them directly as page
+  // budgets would let sparse pages shrink their own budget and spiral. They do
+  // make the oscillation signature sensitive to rendered overflow.
+  const renderedPageSignature = keys
+    .map((key, pageIndex) => {
+      const measured = measuredPageContentHeights.value[pageIndex]
+      return measured && measured.identityKey === key ? measured.heightPx : -1
+    })
+    .join(",")
+  const signature = `${keys.join("\u0000")}|${renderedPageSignature}|${Object.entries(
+    paragraphHeightsPxByNodeIndex
+  )
+    .map(([nodeIndex, heightPx]) => `${nodeIndex}:${Math.round(heightPx)}`)
+    .join(",")}`
+  if (seenPaginationMeasurementSignatures.has(signature)) return
+  seenPaginationMeasurementSignatures.add(signature)
+
+  paginationMeasurementFeedback.value = {
+    paragraphHeightsPxByNodeIndex,
+    tableRowHeightsPxByNodeIndex,
+    pageIdentityKeys: keys,
+  }
+  paginationMeasurementIteration.value += 1
+  measuredPageContentHeights.value = {}
+}
+
 // A new document (or a new pagination layout) invalidates every cached height:
 // only mounted pages re-measure, so stale values would corrupt offsets for all
 // virtualized pages until each one has been visited.
 watch(
   () => [props.model, props.controller?.documentLoadNonce, props.layoutOptions] as const,
-  () => { measuredPageHeights.value = {} }
+  () => {
+    measuredPageHeights.value = {}
+    measuredParagraphHeightsPxByNodeIndex.value = {}
+    measuredTableRowHeightsPxByNodeIndex.value = {}
+    measuredPageContentHeights.value = {}
+    paginationMeasurementFeedback.value = undefined
+    paginationMeasurementIteration.value = 0
+    seenPaginationMeasurementSignatures.clear()
+  }
 )
 
 // ── Drag-and-drop file import ──────────────────────────────────────
@@ -858,6 +1044,8 @@ onUnmounted(() => {
   containerObserver?.disconnect()
   containerObserver = undefined
   if (scrollTimer !== null) clearTimeout(scrollTimer)
+  if (measurementFlushHandle !== undefined) clearTimeout(measurementFlushHandle)
+  measurementFlushHandle = undefined
   touchGestures.reset()
   const container = scrollContainerRef.value
   container?.removeEventListener("pointerdown", onTouchPointerDown)

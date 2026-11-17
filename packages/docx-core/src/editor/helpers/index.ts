@@ -119,4 +119,5 @@ export * from "./tracked-change-markup-loss";
 export * from "./tracked-changes-gutter";
 export * from "./pagination-plan-iterate";
 export * from "./pagination-plan-core";
+export * from "./pagination-line-index";
 export * from "./pagination-plan-stabilize";

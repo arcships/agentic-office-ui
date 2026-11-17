@@ -46,6 +46,8 @@
       <DocxPageBody
         :page-index="pageIndex"
         :page-node-segments="pageNodeSegments"
+        :page-columns="pageColumns"
+        :column-layout="columnLayout"
         :page-layout="pageLayout"
         :page-content-width-px="pageContentWidthPx"
         :floating-page-origin-px="floatingPageOriginPx"
@@ -62,6 +64,9 @@
         :cover-image-child-indexes-by-node="coverImageChildIndexesByNode"
         :header-reserve-px="pageFurnitureReservePx.header"
         :footer-reserve-px="pageFurnitureReservePx.footer"
+        @paragraph-measure="(nodeIndex: number, heightPx: number) => emit('paragraphMeasure', nodeIndex, heightPx)"
+        @table-row-measure="(nodeIndex: number, rowHeightsPx: number[]) => emit('tableRowMeasure', nodeIndex, rowHeightsPx)"
+        @content-measure="(heightPx: number) => emit('contentMeasure', heightPx)"
       >
         <template v-if="footnotes.length" #footnotes>
           <DocxNotesSection
@@ -230,6 +235,9 @@ interface DocxPageSurfaceProps {
   pageIndex: number
   pageLayout: ReturnType<typeof resolveDocumentLayout>
   pageNodeSegments: DocumentPageNodeSegment[]
+  /** Per-body-column segments; omitted for single-column pages. */
+  pageColumns?: DocumentPageNodeSegment[][]
+  columnLayout?: { count: number; gapPx: number; widthsPx: number[] }
   model: DocModel
   controller?: DocxEditorController
   editable?: boolean
@@ -282,6 +290,9 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   measure: [event: { heightPx: number }]
+  paragraphMeasure: [nodeIndex: number, heightPx: number]
+  tableRowMeasure: [nodeIndex: number, rowHeightsPx: number[]]
+  contentMeasure: [heightPx: number]
 }>()
 
 // ── Refs ───────────────────────────────────────────────────────────
