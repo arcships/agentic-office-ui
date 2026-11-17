@@ -944,6 +944,33 @@ function respond(message: WorkerResponse) {
 }
 
 /**
+ * A result that cannot be structured-cloned (for example a WASM handle that
+ * leaked into a snapshot) makes `postMessage` throw. Without this guard the
+ * client receives no response at all and only reports a 30 s TIMEOUT.
+ */
+function respondSafely(message: WorkerResponse) {
+  try {
+    respond(message);
+  } catch (error) {
+    try {
+      respond({
+        error: {
+          code: "WORKER_FAILED",
+          message: error instanceof Error
+            ? `XLSX Worker 无法返回结果：${error.message}`
+            : "XLSX Worker 无法返回结果。",
+          phase: "response",
+        },
+        id: message.id,
+        success: false,
+      } satisfies WorkerErrorResponse);
+    } catch {
+      // The Worker transport itself is gone; the client reports WORKER_FAILED.
+    }
+  }
+}
+
+/**
  * Worker message shapes handled outside the serial queue.
  *
  * `cancel` marks a queued interactive read as abandoned; it never produces a
@@ -1108,15 +1135,11 @@ async function drainJobQueue() {
       const isSuperseded = () => job.type === "load" && job.id !== latestLoadRequestId;
       try {
         const result = await job.run(isSuperseded);
-        try {
-          respond({
-            id: job.id,
-            result,
-            success: true
-          });
-        } catch {
-          // One failed response must not stall the serial queue.
-        }
+        respondSafely({
+          id: job.id,
+          result,
+          success: true
+        });
       } catch (error) {
         postErrorResponse(job.id, error);
       }

@@ -9,8 +9,8 @@ import {
   waitFor,
 } from "./vue-test-renderer.mjs";
 
-const { useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
-const { setWasmSource } = await importFromDemo("@arcships/xlsx-core");
+const { useXlsxViewerController, useXlsxViewerThumbnails } = await importFromDemo("@arcships/vue-xlsx");
+const { createXlsxRuntime, setWasmSource } = await importFromDemo("@arcships/xlsx-core");
 
 const workbookBytes = readFileSync(
   new URL("../../apps/demo/public/samples/sales-table.xlsx", import.meta.url),
@@ -21,6 +21,25 @@ function workbookBuffer() {
     workbookBytes.byteOffset,
     workbookBytes.byteOffset + workbookBytes.byteLength,
   );
+}
+
+function sampleBuffer(name) {
+  const bytes = readFileSync(
+    new URL(`../../apps/demo/public/samples/${name}`, import.meta.url),
+  );
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+let mainThreadWasmConfigured = false;
+function configureMainThreadWasm() {
+  if (mainThreadWasmConfigured) return;
+  const wasmBytes = readFileSync(
+    new URL("../../packages/xlsx-core/dist/assets/duke_sheets_wasm_bg.wasm", import.meta.url),
+  );
+  setWasmSource(
+    wasmBytes.buffer.slice(wasmBytes.byteOffset, wasmBytes.byteOffset + wasmBytes.byteLength),
+  );
+  mainThreadWasmConfigured = true;
 }
 
 function deferred() {
@@ -91,6 +110,12 @@ class ManualWorker {
   respond(message, result) {
     for (const listener of [...(this.listeners.get("message") ?? [])]) {
       listener({ data: { id: message.id, result, success: true } });
+    }
+  }
+
+  fail(message, error) {
+    for (const listener of [...(this.listeners.get("message") ?? [])]) {
+      listener({ data: { id: message.id, error, success: false } });
     }
   }
 
@@ -402,12 +427,7 @@ test("public XLSX download always cleans up and avoids URL creation without docu
 });
 
 test("unmount invalidates an asynchronous XLSX snapshot history restore", async (t) => {
-  const wasmBytes = readFileSync(
-    new URL("../../packages/xlsx-core/dist/assets/duke_sheets_wasm_bg.wasm", import.meta.url),
-  );
-  setWasmSource(
-    wasmBytes.buffer.slice(wasmBytes.byteOffset, wasmBytes.byteOffset + wasmBytes.byteLength),
-  );
+  configureMainThreadWasm();
   const unhandledRejections = [];
   const onUnhandledRejection = (reason) => unhandledRejections.push(reason);
   process.on("unhandledRejection", onUnhandledRejection);
@@ -444,5 +464,175 @@ test("unmount invalidates an asynchronous XLSX snapshot history restore", async 
   assert.equal(mounted.controller.workbook, null);
   assert.equal(mounted.controller.sourceState, "idle");
   assert.deepEqual(unhandledRejections, []);
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("worker load failure falls back to the main thread", async (t) => {
+  configureMainThreadWasm();
+  enableWorkerSupport(t);
+  const worker = new ManualWorker();
+  const diagnostics = [];
+  const mounted = await mountController({
+    createWorker: () => worker,
+    deferLoadingAboveBytes: 0,
+    file: workbookBuffer(),
+    onDiagnostic: (event) => diagnostics.push(event),
+    readOnly: true,
+    skipXmlParsing: true,
+  });
+  t.after(() => mounted.app.unmount());
+
+  await waitFor(() => worker.messages.length === 1, "worker load request");
+  assert.equal(worker.messages[0].type, "load");
+  worker.fail(worker.messages[0], {
+    code: "WORKER_FAILED",
+    message: "worker exploded",
+  });
+
+  await waitFor(
+    () => mounted.controller.sourceState === "ready"
+      || mounted.controller.sourceState === "error",
+    "main-thread fallback terminal state",
+  );
+  assert.equal(mounted.controller.sourceState, "ready");
+  assert.equal(mounted.controller.sourceError, null);
+  assert.equal(mounted.controller.isWorkerBacked, false);
+  assert.ok(mounted.controller.workbook, "fallback must load a real workbook");
+  assert.equal(
+    diagnostics.filter((event) => event.type === "worker-error").length,
+    1,
+  );
+  assert.equal(
+    diagnostics.some((event) => event.type === "load-error"),
+    false,
+  );
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("late worker chart hydration does not overwrite charts refreshed after an edit", async (t) => {
+  configureMainThreadWasm();
+  enableWorkerSupport(t);
+  const worker = new ManualWorker();
+  const mounted = await mountController({
+    createWorker: () => worker,
+    deferLoadingAboveBytes: 0,
+    file: sampleBuffer("charts-images.xlsx"),
+    readOnly: false,
+  });
+  t.after(() => mounted.app.unmount());
+
+  await waitFor(
+    () => mounted.controller.sourceState === "ready",
+    "chart workbook ready state",
+  );
+  await waitFor(
+    () => worker.messages.some((message) => message.type === "parseCharts"),
+    "chart hydration request",
+  );
+  const chartMessage = worker.messages.find((message) => message.type === "parseCharts");
+  const tabCountBefore = mounted.controller.tabs.length;
+  const chartsheetCountBefore = mounted.controller.chartsheets.length;
+  assert.ok(tabCountBefore > 0);
+  assert.ok(chartsheetCountBefore > 0);
+
+  mounted.controller.setCellValue({ col: 0, row: 0 }, "edited");
+  assert.equal(mounted.controller.tabs.length, tabCountBefore);
+  assert.equal(mounted.controller.chartsheets.length, chartsheetCountBefore);
+
+  let quickChartCount = 0;
+  for (let sheetIndex = 0; sheetIndex < mounted.controller.sheets.length; sheetIndex += 1) {
+    quickChartCount += mounted.controller.getSheetCharts(sheetIndex).length;
+  }
+  worker.respond(chartMessage, {
+    chartsByWorkbookSheetIndex: [
+      Array.from({ length: Math.max(1, quickChartCount) }, () => ({
+        chartType: "Line",
+        series: [],
+      })),
+    ],
+    chartsheets: [],
+    tabs: [],
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await vue.nextTick();
+
+  assert.equal(
+    mounted.controller.chartsheets.length,
+    chartsheetCountBefore,
+    "a stale worker result replaced charts refreshed after the edit",
+  );
+  assert.equal(mounted.controller.tabs.length, tabCountBefore);
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("worker-mode sheet thumbnails render snapshot values and widths", () => {
+  const sheet = {
+    cachedFormulaValues: { A1: "Revenue", B1: "1200" },
+    colWidthOverridesPx: {},
+    colWidths: [120, 90],
+    defaultColWidthPx: 64,
+    defaultRowHeightPx: 24,
+    maxUsedCol: 1,
+    maxUsedRow: 1,
+    minUsedCol: 0,
+    minUsedRow: 0,
+    name: "Data",
+    rowHeightOverridesPx: {},
+    rowHeights: [30, 24],
+    visibleCols: [0, 1],
+    visibleRows: [0, 1],
+    workbookSheetIndex: 0,
+  };
+  const thumbnails = useXlsxViewerThumbnails(() => ({
+    sheets: [sheet],
+    workbook: null,
+  }));
+  const thumbnail = thumbnails.thumbnails[0];
+  assert.ok(thumbnail);
+  assert.equal(thumbnail.contentWidth, 120 + 90 + 64 + 64);
+  assert.equal(thumbnail.contentHeight, 30 + 24 + 24 + 24);
+
+  const paintedText = [];
+  const context = {
+    beginPath() {},
+    fillRect() {},
+    fillText(text) { paintedText.push(text); },
+    lineTo() {},
+    moveTo() {},
+    setTransform() {},
+    stroke() {},
+  };
+  const canvas = {
+    height: 0,
+    style: {},
+    width: 0,
+    getContext: () => context,
+  };
+  assert.equal(thumbnails.paintThumbnail(0, canvas), true);
+  assert.ok(paintedText.includes("Revenue"));
+  assert.ok(paintedText.includes("1200"));
+});
+
+test("main-thread parsing enforces the maxParseMs budget", async (t) => {
+  configureMainThreadWasm();
+  const runtime = createXlsxRuntime({ limits: { maxParseMs: 1 } });
+  t.after(() => runtime.dispose());
+  const mounted = await mountController({
+    file: sampleBuffer("large-grid.xlsx"),
+    readOnly: false,
+    runtime,
+    skipXmlParsing: true,
+    useWorker: false,
+  });
+  t.after(() => mounted.app.unmount());
+
+  await waitFor(
+    () => mounted.controller.sourceState === "ready"
+      || mounted.controller.sourceState === "error",
+    "main-thread parse terminal state",
+  );
+  assert.equal(mounted.controller.sourceState, "error");
+  assert.equal(mounted.controller.sourceError?.code, "TIMEOUT");
+  assert.equal(mounted.controller.sourceError?.limit, "maxParseMs");
   assert.deepEqual(mounted.warnings, []);
 });

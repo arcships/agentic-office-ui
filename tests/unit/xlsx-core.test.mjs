@@ -1090,3 +1090,51 @@ test("XLSX Worker timeout terminates the client for clean recovery", async () =>
   assert.equal(worker.terminated, true);
   client.dispose();
 });
+
+test("XLSX Worker reports an uncloneable result as WORKER_FAILED instead of timing out", async () => {
+  const originalSelf = globalThis.self;
+  const messages = [];
+  const listeners = new Map();
+  let throwOnce = true;
+  globalThis.self = {
+    addEventListener(type, listener) {
+      listeners.set(type, listener);
+    },
+    postMessage(message) {
+      if (throwOnce) {
+        throwOnce = false;
+        throw new Error("DataCloneError: could not be cloned");
+      }
+      messages.push(message);
+    },
+  };
+  try {
+    const workerUrl = new URL(
+      "../../packages/xlsx-core/dist/xlsx-worker.js",
+      import.meta.url,
+    );
+    workerUrl.searchParams.set("worker-response-test", String(Date.now()));
+    await import(workerUrl.href);
+    const onMessage = listeners.get("message");
+    assert.equal(typeof onMessage, "function");
+    onMessage({
+      data: {
+        id: 7,
+        payload: { col: 0, row: 0, workbookSheetIndex: 0 },
+        type: "getCellSnapshot",
+      },
+    });
+    for (let attempt = 0; attempt < 50 && messages.length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].id, 7);
+    assert.equal(messages[0].success, false);
+    assert.equal(messages[0].error.code, "WORKER_FAILED");
+    assert.equal(messages[0].error.phase, "response");
+    assert.match(messages[0].error.message, /无法返回结果/);
+  } finally {
+    if (originalSelf === undefined) delete globalThis.self;
+    else globalThis.self = originalSelf;
+  }
+});

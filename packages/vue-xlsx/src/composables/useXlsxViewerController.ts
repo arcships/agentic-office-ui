@@ -114,6 +114,38 @@ type DeferredWorkbookLoad = {
   archiveValidated?: boolean;
 };
 
+const WORKER_CELL_SNAPSHOT_CACHE_MAX_ENTRIES = 512;
+
+/** Bounded LRU for Worker cell snapshots; browsing a sheet must not grow forever. */
+class WorkerCellSnapshotCache extends Map<string, { displayValue: string; formula: string }> {
+  private readonly maxEntries: number;
+
+  constructor(maxEntries = WORKER_CELL_SNAPSHOT_CACHE_MAX_ENTRIES) {
+    super();
+    this.maxEntries = maxEntries;
+  }
+
+  override get(key: string) {
+    const value = super.get(key);
+    if (value !== undefined) {
+      super.delete(key);
+      super.set(key, value);
+    }
+    return value;
+  }
+
+  override set(key: string, value: { displayValue: string; formula: string }) {
+    super.delete(key);
+    super.set(key, value);
+    while (this.size > this.maxEntries) {
+      const oldest = this.keys().next().value;
+      if (oldest === undefined) break;
+      super.delete(oldest);
+    }
+    return this;
+  }
+}
+
 export function useXlsxViewerController(options: UseXlsxViewerControllerOptions): XlsxViewerController {
   const {
     allowProtectedSheetEditing = false,
@@ -202,7 +234,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const chartDisplayFallbackCleanupRef = shallowRef<(() => void) | null>(null);
   const sheetOriginsRef = shallowRef<Array<WorkbookImageSheetOrigin | null>>([]);
   const workerClientRef = shallowRef<XlsxWorkerClient | null>(null);
-  const workerCellSnapshotCacheRef = shallowRef(new Map<string, { displayValue: string; formula: string }>());
+  const workerCellSnapshotCacheRef = shallowRef<Map<string, { displayValue: string; formula: string }>>(new WorkerCellSnapshotCache());
   let latestLoadRequestId = 0;
   const xlsxRuntimeId = xlsxRuntime.id;
   const xlsxTaskSequence = createOfficeTaskSequence(xlsxRuntimeId);
@@ -414,6 +446,10 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     snapshot.objectUrls?.splice(0, snapshot.objectUrls.length);
   }
   function setChartAssets(assets: WorkbookChartAssets | null) {
+    // Any authoritative chart reload invalidates an in-flight Worker hydration.
+    // Otherwise a Worker result parsed from the original bytes can overwrite
+    // charts that were already refreshed after an edit.
+    chartLoadRequestTokenRef.value += 1;
     chartAssetsRef.value = assets;
     chartsByWorkbookSheetIndex.value = assets?.chartsByWorkbookSheetIndex ?? [];
     chartsheets.value = assets?.chartsheets ?? [];
@@ -506,15 +542,62 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
         finishWorkerFailure(error);
       });
   }
+  function createParseTimeoutError(maxParseMs: number, actual: number) {
+    return new XlsxWorkerError(
+      "TIMEOUT",
+      `XLSX 解析超过 ${maxParseMs} 毫秒。`,
+      {
+        phase: "parse",
+        limit: "maxParseMs",
+        actual,
+        allowed: maxParseMs,
+      },
+    );
+  }
   async function loadWorkbookOnMainThread(buffer: ArrayBuffer) {
-    const nextParsedWorkbook = await parseWorkbookBuffer(buffer);
+    const parsePromise = (async () => {
+      const nextParsedWorkbook = await parseWorkbookBuffer(buffer);
+      try {
+        const bytes = new Uint8Array(buffer);
+        const nextImageAssets = loadWorkbookImageAssets(bytes, nextParsedWorkbook.workbook, shouldSkipXmlParsingForWorkbook(bytes, skipXmlParsing));
+        return { imageAssets: nextImageAssets, parsedWorkbook: nextParsedWorkbook };
+      } catch (error) {
+        disposeWorkbook(nextParsedWorkbook.workbook);
+        throw error;
+      }
+    })();
+
+    const maxParseMs = xlsxRuntime.limits?.maxParseMs;
+    if (maxParseMs === undefined || maxParseMs <= 0) return parsePromise;
+
+    const startedAt = Date.now();
+    let timedOut = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      timeout = setTimeout(() => {
+        timedOut = true;
+        reject(createParseTimeoutError(maxParseMs, Math.max(maxParseMs + 1, Date.now() - startedAt)));
+      }, maxParseMs);
+    });
     try {
-      const bytes = new Uint8Array(buffer);
-      const nextImageAssets = loadWorkbookImageAssets(bytes, nextParsedWorkbook.workbook, shouldSkipXmlParsingForWorkbook(bytes, skipXmlParsing));
-      return { imageAssets: nextImageAssets, parsedWorkbook: nextParsedWorkbook };
-    } catch (error) {
-      disposeWorkbook(nextParsedWorkbook.workbook);
-      throw error;
+      const result = await Promise.race([parsePromise, timeoutPromise]);
+      const elapsed = Date.now() - startedAt;
+      // The synchronous WASM parse cannot be interrupted, so also enforce the
+      // budget once it returns instead of only racing module initialization.
+      if (elapsed > maxParseMs) {
+        discardWorkbookLoadResult(result.imageAssets, result.parsedWorkbook.workbook);
+        throw createParseTimeoutError(maxParseMs, elapsed);
+      }
+      return result;
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout);
+      if (timedOut) {
+        void parsePromise.then((result) => {
+          discardWorkbookLoadResult(result.imageAssets, result.parsedWorkbook.workbook);
+        }).catch(() => {
+          // Late failures after the timeout need no further cleanup.
+        });
+      }
     }
   }
   function refreshWorkbookState(targetWorkbook: Workbook) {
@@ -761,7 +844,13 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
           return;
         }
         if (!effectiveSkipXmlParsing && hasIncompleteWorkerChartSnapshot(snapshot)) {
-          throw new Error("Worker chart payload incomplete");
+          // Treat this as a Worker defect, not a workbook failure: the catch
+          // below reports a diagnostic and retries on the main thread.
+          throw new XlsxWorkerError(
+            "WORKER_FAILED",
+            "XLSX Worker 返回的图表数据不完整。",
+            { phase: "chart" },
+          );
         }
         replaceWorkbook(null);
         setWorkerImageAssets(snapshot);
@@ -769,11 +858,12 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
         chartsByWorkbookSheetIndex.value = snapshot.chartsByWorkbookSheetIndex;
         chartsheets.value = snapshot.chartsheets;
         tabs.value = snapshot.tabs;
+        chartLoadRequestTokenRef.value += 1;
         chartAssetsRef.value = null;
         workerTablesByWorkbookSheetIndex.value = snapshot.tablesByWorkbookSheetIndex;
         shouldAutoCalculate.value = false;
         isWorkerBacked.value = true;
-        sourceBufferRef.value = sourceBuffer.slice(0);
+        sourceBufferRef.value = sourceBuffer;
         sortState.value = null;
         isChartsLoading.value = false;
         isLoading.value = false;
@@ -792,7 +882,23 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       } catch (workerError) {
         if (!isCurrentWorkbookLoad(load) || isAbortError(workerError)) throw workerError;
         disposeWorkerClient();
-        throw workerError;
+        reportDiagnostic({
+          type: "worker-error",
+          requestId,
+          taskId: task.context.taskId,
+          sourceKind,
+          url: resolvedUrl,
+          error: toXlsxLoadError(workerError, sourceKind, resolvedUrl),
+        });
+        if (
+          workerError instanceof XlsxWorkerError
+          && (workerError.code === "LIMIT_EXCEEDED" || workerError.code === "INVALID_SOURCE")
+        ) {
+          throw workerError;
+        }
+        // A Worker-side failure (protocol error, timeout, incomplete chart
+        // payload) must not fail a legal workbook: retry once on the main
+        // thread, which is also where non-Worker loads normally run.
       } finally {
         task.signal.removeEventListener("abort", terminateOwnedWorker);
       }
@@ -820,7 +926,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       shouldAutoCalculate.value = nextParsedWorkbook.shouldAutoCalculate;
       workerTablesByWorkbookSheetIndex.value = [];
       isWorkerBacked.value = false;
-      sourceBufferRef.value = sourceBuffer.slice(0);
+      sourceBufferRef.value = sourceBuffer;
       sortState.value = null;
       isLoading.value = false;
       sourceState.value = "ready";
@@ -1197,10 +1303,11 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
           workerCellSnapshotCacheRef.value.set(cacheKey, snapshot);
           workerCellSnapshotRevision.value = workerCellSnapshotRevision.value + 1;
         })
-        .catch(() => {
-          if (!isCurrent) return;
-          workerCellSnapshotCacheRef.value.set(cacheKey, { displayValue: "", formula: "" });
-          workerCellSnapshotRevision.value = workerCellSnapshotRevision.value + 1;
+        .catch((error: unknown) => {
+          if (!isCurrent || isAbortError(error)) return;
+          // Transient Worker failures must not be cached as a permanent empty
+          // cell. Recreate the client so the next selection can retry.
+          disposeWorkerClient();
         });
       onCleanup(() => {
         isCurrent = false;

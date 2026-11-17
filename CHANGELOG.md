@@ -28,6 +28,15 @@ All notable changes to the `@arcships` package family are documented in this fil
 - Use one visible-column axis model for grid rendering and anchor write-back, including hidden rows and columns.
 - Memoise chart SVG trees so scrolling does not rebuild chart DOM.
 
+### XLSX worker robustness
+
+- Treat cell-snapshot and row-batch cancellation as per-request aborts instead of terminating the shared Worker, and recover cleanly from Worker failures.
+- Report non-cloneable Worker results as `WORKER_FAILED` immediately instead of waiting for the 30 s parse timeout.
+- Fall back to main-thread parsing when a Worker load fails for a non-limit reason, and apply `maxParseMs` to the main-thread path as well.
+- Keep charts refreshed after an edit from being overwritten by a late Worker chart-hydration result.
+- Render Worker-mode sheet thumbnails from the transferred sheet snapshot instead of an unavailable main-thread workbook.
+- Inflate only `xl/media/*` for image budget validation, avoid redundant source-buffer copies, and bound the Worker cell-snapshot cache as an LRU.
+
 ### Cross-format Office references
 
 - Prepare the nine public packages as the `0.6.0` candidate while keeping `0.5.4` as the published stable line.
