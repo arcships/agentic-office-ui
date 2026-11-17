@@ -41,7 +41,6 @@ function modelNeedsDocumentXmlPatch(model: DocModel): boolean {
     modelNeedsFormFieldRequiredPatch(model)
   );
 }
-}
 
 function patchPackageDocumentXml(
   pkg: OoxmlPackage,
