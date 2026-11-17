@@ -320,6 +320,21 @@ export interface ParagraphSectionBreak {
   sectionPropertiesXml: string;
 }
 
+export interface ParagraphCommentRange {
+  /** `w:id` of the comment in `word/comments.xml`. */
+  commentId: number;
+  /** Inclusive UTF-16 offset into `paragraphText(paragraph)`. */
+  start: number;
+  /** Exclusive UTF-16 offset into `paragraphText(paragraph)`. */
+  end: number;
+  /**
+   * The commented text when the range was captured. Edits remap the offsets;
+   * when an edit cannot be mapped (a wholesale text replacement, for example)
+   * the renderer re-anchors the range by searching for this text.
+   */
+  anchorText?: string;
+}
+
 export interface ParagraphNode {
   type: "paragraph";
   children: ParagraphChildNode[];
@@ -327,6 +342,13 @@ export interface ParagraphNode {
   paragraphMarkDeleted?: boolean;
   sourceXml?: string;
   sectionBreak?: ParagraphSectionBreak;
+  /**
+   * Comment ranges (`w:commentRangeStart` / `w:commentRangeEnd`) as character
+   * offsets into this paragraph's plain text, captured at parse time and kept
+   * up to date by the editing commands. Rendering and the comment gutter read
+   * these instead of re-parsing `sourceXml`, which every edit clears.
+   */
+  commentRanges?: ParagraphCommentRange[];
 }
 
 export interface TableBoxSpacing {

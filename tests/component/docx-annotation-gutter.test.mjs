@@ -620,6 +620,20 @@ test("DocxPageSurface hides comment cards and markers when comments are toggled 
 })
 
 // ── 6. DocxViewerRoot zoom wiring ──────────────────────────────────
+// The gutter becomes an overlay drawer below 1024px, so column-mode tests pin a
+// wide container width.
+function withContainerWidth(t, widthPx) {
+  const original = Object.getOwnPropertyDescriptor(Object.prototype, "clientWidth")
+  Object.defineProperty(Object.prototype, "clientWidth", {
+    configurable: true,
+    get: () => widthPx,
+  })
+  t.after(() => {
+    if (original) Object.defineProperty(Object.prototype, "clientWidth", original)
+    else delete Object.prototype.clientWidth
+  })
+}
+
 function modelWithComment() {
   const model = createBlankDocumentModel()
   return {
@@ -642,7 +656,8 @@ function modelWithComment() {
   }
 }
 
-test("DocxViewerRoot reserves a constant gutter footprint and counter-scales it at any zoom", async () => {
+test("DocxViewerRoot reserves a constant gutter footprint and counter-scales it at any zoom", async (t) => {
+  withContainerWidth(t, 1440)
   const model = modelWithComment()
   assert.equal(collectCommentsFromModel(model).length, 1, "fixture must carry one comment")
 
@@ -680,7 +695,8 @@ test("DocxViewerRoot reserves a constant gutter footprint and counter-scales it 
   }
 })
 
-test("DocxViewerRoot renders annotation cards as an overlay, not in flow under the page", async () => {
+test("DocxViewerRoot renders annotation cards as an overlay, not in flow under the page", async (t) => {
+  withContainerWidth(t, 1440)
   const mounted = await mount(DocxViewerRoot, {
     model: modelWithComment(),
     zoomScale: 100,

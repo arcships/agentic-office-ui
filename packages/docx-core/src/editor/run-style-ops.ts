@@ -7,6 +7,7 @@ import type {
   HeadingLevel,
   ParagraphAlignment,
   ParagraphNode,
+  TableCellContentNode,
   TableNode,
   TextRunNode,
   TextStyle,
@@ -30,6 +31,8 @@ import {
   cloneNodeForInsertion,
   createSourceXmlIdentifierRegistry,
 } from "./helpers/xml-identifiers";
+import { remapParagraphCommentRanges } from "../engine/comment-ranges";
+import { paragraphText } from "./helpers/paragraph-inspect";
 
 /** Returns true when the transform actually changed the run. */
 type TextRunTransform = (run: TextRunNode) => boolean;
@@ -98,6 +101,10 @@ function mutateParagraphTextRuns(model: DocModel, transform: TextRunTransform): 
 
 export function replaceText(model: DocModel, searchValue: string | RegExp, replacement: string): DocModel {
   const next = cloneDocModel(model);
+  const previousTextByParagraph = new Map<unknown, string>();
+  forEachParagraphNode(next, (paragraph) => {
+    previousTextByParagraph.set(paragraph, paragraphText(paragraph));
+  });
 
   mutateParagraphTextRuns(next, (run) => {
     const replaced = run.text.replace(searchValue, replacement);
@@ -109,7 +116,56 @@ export function replaceText(model: DocModel, searchValue: string | RegExp, repla
     return true;
   });
 
+  // A find/replace can change any run's length, so comment offsets (which are
+  // character offsets into the paragraph text) have to follow the edit.
+  forEachParagraphNode(next, (paragraph) => {
+    const previousText = previousTextByParagraph.get(paragraph);
+    if (previousText === undefined || !paragraph.commentRanges?.length) {
+      return;
+    }
+    paragraph.commentRanges = remapParagraphCommentRanges(
+      previousText,
+      paragraphText(paragraph),
+      paragraph.commentRanges
+    );
+  });
+
   return next;
+}
+
+function forEachParagraphNode(
+  model: DocModel,
+  visit: (paragraph: ParagraphNode) => void
+): void {
+  for (const node of model.nodes) {
+    if (node.type === "paragraph") {
+      visit(node);
+      continue;
+    }
+
+    for (const row of node.rows) {
+      for (const cell of row.cells) {
+        visitParagraphsInCellNodes(cell.nodes, visit);
+      }
+    }
+  }
+}
+
+function visitParagraphsInCellNodes(
+  nodes: TableCellContentNode[],
+  visit: (paragraph: ParagraphNode) => void
+): void {
+  for (const node of nodes) {
+    if (node.type === "paragraph") {
+      visit(node);
+      continue;
+    }
+    for (const row of node.rows) {
+      for (const cell of row.cells) {
+        visitParagraphsInCellNodes(cell.nodes, visit);
+      }
+    }
+  }
 }
 
 export function setParagraphHeading(

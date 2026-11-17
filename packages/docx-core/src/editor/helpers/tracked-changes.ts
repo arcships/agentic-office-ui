@@ -27,6 +27,11 @@ import {
   getCachedDocumentCommentAnchor,
   setCachedDocumentCommentAnchor,
 } from "../../engine/comment-anchors";
+import {
+  parseParagraphCommentRanges,
+  resolveParagraphCommentRanges,
+  type ParagraphCommentRange,
+} from "../../engine/comment-ranges";
 import type {
   DocxComment,
   DocxInlineTrackedChangeKind,
@@ -94,8 +99,27 @@ export interface ParagraphTrackedMarkup {
   changes: ParagraphTrackedInlineChange[];
 }
 
+/** A comment range expressed in a single rendered child's text. */
+export interface ParagraphCommentTextRange {
+  commentId: number;
+  /** Inclusive offset inside the child's own text. */
+  start: number;
+  /** Exclusive offset inside the child's own text. */
+  end: number;
+}
+
 export interface ParagraphCommentMarkup {
+  /**
+   * Comment ids touching each rendered child. A run that only partly intersects
+   * a range still appears here so the gutter can match it from the DOM.
+   */
   commentIdsByVisibleChildIndex: Array<number[] | undefined>;
+  /**
+   * Exact character windows per rendered child. Present when the paragraph
+   * carries model-level comment offsets; the renderer splits the child's text
+   * at these boundaries instead of highlighting the whole run.
+   */
+  rangesByVisibleChildIndex?: Array<ParagraphCommentTextRange[] | undefined>;
 }
 
 // Shared caches keyed by paragraph sourceXml. `null` marks a confirmed miss so
@@ -526,14 +550,123 @@ export function resolveParagraphTrackedMarkup(
 // ---------------------------------------------------------------------------
 
 /**
- * Maps comment ranges (`commentRangeStart`/`commentRangeEnd`) to the
- * paragraph's visible child indexes using the same run accounting as
- * `resolveParagraphTrackedMarkup`, so the run renderer can highlight
- * commented content at the matching child cursor.
+ * The paragraph's live comment ranges as character offsets.
+ *
+ * Reads the model field that parsing put on the paragraph (kept up to date by
+ * the editing commands) and falls back to re-parsing `sourceXml` for models
+ * built before the field existed. Ranges are reconciled with the current text,
+ * so a comment keeps its place even when an edit could not be remapped.
+ */
+export function resolveParagraphCommentRangesForParagraph(
+  paragraph: ParagraphNode
+): ParagraphCommentRange[] {
+  const text = paragraphText(paragraph);
+  if (paragraph.commentRanges && paragraph.commentRanges.length > 0) {
+    return resolveParagraphCommentRanges(text, paragraph.commentRanges);
+  }
+
+  const sourceXml = paragraph.sourceXml ?? "";
+  if (!sourceXml || !/commentRange|commentReference/i.test(sourceXml)) {
+    return [];
+  }
+
+  return resolveParagraphCommentRanges(
+    text,
+    parseParagraphCommentRanges(sourceXml, text.length)
+  );
+}
+
+function mapCommentRangesToVisibleChildren(
+  paragraph: ParagraphNode,
+  ranges: readonly ParagraphCommentRange[]
+): ParagraphCommentMarkup | undefined {
+  const commentIdsByVisibleChildIndex: Array<number[] | undefined> = [];
+  const rangesByVisibleChildIndex: Array<ParagraphCommentTextRange[] | undefined> = [];
+  let textCursor = 0;
+  let visibleChildIndex = 0;
+  let matched = false;
+
+  for (const child of paragraph.children) {
+    // The run renderer skips form fields without advancing its cursor.
+    if (child.type === "form-field") {
+      continue;
+    }
+    if (child.type !== "text") {
+      visibleChildIndex += 1;
+      continue;
+    }
+
+    const childStart = textCursor;
+    const childEnd = textCursor + child.text.length;
+    textCursor = childEnd;
+
+    const childRanges: ParagraphCommentTextRange[] = [];
+    const childCommentIds: number[] = [];
+    for (const range of ranges) {
+      const overlapStart = Math.max(range.start, childStart);
+      const overlapEnd = Math.min(range.end, childEnd);
+      if (overlapEnd > overlapStart) {
+        childRanges.push({
+          commentId: range.commentId,
+          start: overlapStart - childStart,
+          end: overlapEnd - childStart,
+        });
+        if (!childCommentIds.includes(range.commentId)) {
+          childCommentIds.push(range.commentId);
+        }
+        matched = true;
+        continue;
+      }
+
+      // Point anchor (a comment with only `w:commentReference`) or a range that
+      // owns no characters of this run: tag the run without a highlight so the
+      // marker and card can still find it.
+      if (
+        range.start === range.end &&
+        range.start >= childStart &&
+        range.start <= childEnd &&
+        !childCommentIds.includes(range.commentId)
+      ) {
+        childCommentIds.push(range.commentId);
+      }
+    }
+
+    if (childRanges.length > 0) {
+      rangesByVisibleChildIndex[visibleChildIndex] = childRanges;
+    }
+    if (childCommentIds.length > 0) {
+      commentIdsByVisibleChildIndex[visibleChildIndex] =
+        childCommentIds.sort((left, right) => left - right);
+    }
+    visibleChildIndex += 1;
+  }
+
+  if (!matched && commentIdsByVisibleChildIndex.length === 0) {
+    return undefined;
+  }
+
+  return { commentIdsByVisibleChildIndex, rangesByVisibleChildIndex };
+}
+
+/**
+ * Resolves comment highlighting for one paragraph.
+ *
+ * Model offsets are authoritative: they are captured when the document is
+ * parsed and remapped by every text edit, so the highlight is exact to the
+ * character and survives edits that clear `sourceXml`. Only when the model has
+ * no offsets does this re-parse the paragraph markup (compatibility path).
  */
 export function resolveParagraphCommentMarkup(
   paragraph: ParagraphNode
 ): ParagraphCommentMarkup | undefined {
+  const text = paragraphText(paragraph);
+  if (paragraph.commentRanges && paragraph.commentRanges.length > 0) {
+    return mapCommentRangesToVisibleChildren(
+      paragraph,
+      resolveParagraphCommentRanges(text, paragraph.commentRanges)
+    );
+  }
+
   const sourceXml = paragraph.sourceXml ?? "";
   if (!sourceXml || !/commentRange|commentReference/i.test(sourceXml)) {
     return undefined;
@@ -544,74 +677,14 @@ export function resolveParagraphCommentMarkup(
     return cached ?? undefined;
   }
 
-  const rangeStartById = new Map<number, number>();
-  const rangeEndById = new Map<number, number>();
-  for (const match of sourceXml.matchAll(
-    /<w:commentRangeStart\b[^>]*w:id="(-?\d+)"[^>]*\/?>/gi
-  )) {
-    const commentId = Number.parseInt(match[1] ?? "", 10);
-    if (Number.isFinite(commentId) && match.index !== undefined) {
-      rangeStartById.set(commentId, match.index + match[0].length);
-    }
-  }
-  for (const match of sourceXml.matchAll(
-    /<w:commentRangeEnd\b[^>]*w:id="(-?\d+)"[^>]*\/?>/gi
-  )) {
-    const commentId = Number.parseInt(match[1] ?? "", 10);
-    if (Number.isFinite(commentId) && match.index !== undefined) {
-      rangeEndById.set(commentId, match.index);
-    }
-  }
-  // Ranges may open in an earlier paragraph (start missing) or close in a
-  // later one (end missing); treat the missing side as the paragraph edge.
-  const ranges: Array<{ commentId: number; start: number; end: number }> = [];
-  const rangeIds = new Set<number>([
-    ...rangeStartById.keys(),
-    ...rangeEndById.keys(),
-  ]);
-  rangeIds.forEach((commentId) => {
-    const start = rangeStartById.get(commentId) ?? 0;
-    const end = rangeEndById.get(commentId) ?? sourceXml.length;
-    if (end > start) {
-      ranges.push({ commentId, start, end });
-    }
-  });
-  if (ranges.length === 0) {
-    setCacheEntry(paragraphCommentMarkupBySourceXml, sourceXml, null);
-    return undefined;
-  }
-
-  const commentIdsByVisibleChildIndex: Array<number[] | undefined> = [];
-  const visibleUnits = collectParagraphVisibleUnits(sourceXml);
-  mapVisibleUnitsToParagraphChildren(visibleUnits, paragraph.children);
-  visibleUnits.forEach((unit) => {
-    if (unit.visibleChildIndex === undefined) {
-      return;
-    }
-    const activeCommentIds = ranges
-      .filter((range) => unit.start >= range.start && unit.start < range.end)
-      .map((range) => range.commentId);
-    if (activeCommentIds.length === 0) {
-      return;
-    }
-    const existing = commentIdsByVisibleChildIndex[unit.visibleChildIndex] ?? [];
-    for (const commentId of activeCommentIds) {
-      if (!existing.includes(commentId)) {
-        existing.push(commentId);
-      }
-    }
-    commentIdsByVisibleChildIndex[unit.visibleChildIndex] = existing.sort(
-      (left, right) => left - right
-    );
-  });
-
-  if (commentIdsByVisibleChildIndex.length === 0) {
-    setCacheEntry(paragraphCommentMarkupBySourceXml, sourceXml, null);
-    return undefined;
-  }
-
-  const resolved: ParagraphCommentMarkup = { commentIdsByVisibleChildIndex };
-  setCacheEntry(paragraphCommentMarkupBySourceXml, sourceXml, resolved);
+  const resolved = mapCommentRangesToVisibleChildren(
+    paragraph,
+    resolveParagraphCommentRanges(
+      text,
+      parseParagraphCommentRanges(sourceXml, text.length)
+    )
+  );
+  setCacheEntry(paragraphCommentMarkupBySourceXml, sourceXml, resolved ?? null);
   return resolved;
 }
 
@@ -1039,6 +1112,104 @@ function collectCommentRegionParts(model: DocModel): CommentRegionPart[] {
   return Array.from(parts.values());
 }
 
+/**
+ * Anchors that come from the paragraph's model-level comment offsets.
+ *
+ * These are the authoritative anchors: parsing stores the offsets on the
+ * paragraph and every text edit remaps them, so a comment keeps its anchor (and
+ * its gutter card) after `sourceXml` is cleared.
+ */
+function collectModelCommentAnchors(
+  model: DocModel
+): Map<number, ResolvedCommentAnchor> {
+  const anchors = new Map<number, ResolvedCommentAnchor>();
+  scanModelCommentAnchorsInNodes(model.nodes, "body", undefined, anchors);
+  for (const part of collectCommentRegionParts(model)) {
+    scanModelCommentAnchorsInNodes(
+      part.nodes,
+      part.region,
+      part.partName,
+      anchors
+    );
+  }
+  return anchors;
+}
+
+function scanModelCommentAnchorsInParagraph(
+  paragraph: ParagraphNode,
+  base: Omit<
+    DocumentCommentAnchor,
+    "textOffset" | "runIndex" | "offset" | "anchorText"
+  >,
+  anchors: Map<number, ResolvedCommentAnchor>
+): void {
+  if (!paragraph.commentRanges || paragraph.commentRanges.length === 0) {
+    return;
+  }
+
+  const text = paragraphText(paragraph);
+  for (const range of resolveParagraphCommentRanges(
+    text,
+    paragraph.commentRanges
+  )) {
+    if (anchors.has(range.commentId)) {
+      continue;
+    }
+
+    const position = locateParagraphTextOffset(paragraph, range.start);
+    const anchor: DocumentCommentAnchor = {
+      ...base,
+      textOffset: range.start,
+      runIndex: position.runIndex,
+      offset: position.offset,
+      anchorText: text.slice(range.start, range.end) || undefined,
+    };
+    anchors.set(range.commentId, {
+      anchor,
+      location: commentAnchorLocation(anchor),
+    });
+  }
+}
+
+function scanModelCommentAnchorsInNodes(
+  nodes: DocNode[],
+  region: "body" | "header" | "footer",
+  partName: string | undefined,
+  anchors: Map<number, ResolvedCommentAnchor>
+): void {
+  nodes.forEach((node, nodeIndex) => {
+    if (node.type === "paragraph") {
+      scanModelCommentAnchorsInParagraph(
+        node,
+        { region, partName, nodeIndex },
+        anchors
+      );
+      return;
+    }
+
+    node.rows.forEach((row, rowIndex) => {
+      row.cells.forEach((cell, cellIndex) => {
+        for (const { paragraph, paragraphIndex } of tableCellParagraphEntries(
+          cell.nodes
+        )) {
+          scanModelCommentAnchorsInParagraph(
+            paragraph,
+            {
+              region,
+              partName,
+              nodeIndex,
+              rowIndex,
+              cellIndex,
+              paragraphIndex,
+            },
+            anchors
+          );
+        }
+      });
+    });
+  });
+}
+
 function collectDiscoveredCommentAnchors(
   model: DocModel
 ): Map<number, ResolvedCommentAnchor> {
@@ -1148,6 +1319,7 @@ function resolveDefinedCommentAnchors(
   model: DocModel,
   definitions: DocumentCommentDefinition[]
 ): Map<number, ResolvedCommentAnchor> {
+  const modelAnchors = collectModelCommentAnchors(model);
   const discovered = collectDiscoveredCommentAnchors(model);
   const definitionById = new Map(
     definitions.map((definition) => [definition.id, definition])
@@ -1171,7 +1343,12 @@ function resolveDefinedCommentAnchors(
       ? Boolean(paragraphAtCommentAnchor(model, cached))
       : false;
     const discoveredAnchor = discovered.get(definition.id)?.anchor;
-    const ownAnchor = (cachedIsLocated ? cached : undefined) ?? discoveredAnchor;
+    // Model offsets win: they are the only source that survives edits. The
+    // cached/discovered sourceXml anchors are the compatibility fallbacks.
+    const ownAnchor =
+      modelAnchors.get(definition.id)?.anchor ??
+      (cachedIsLocated ? cached : undefined) ??
+      discoveredAnchor;
 
     let anchor = ownAnchor;
     if (!anchor && definition.parentId !== undefined) {

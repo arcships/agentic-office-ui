@@ -16,6 +16,7 @@ import {
   paragraphFromText,
 } from "./paragraph-ops";
 import { cloneTextStyle } from "./helpers/text-mutation";
+import { remapParagraphCommentRanges } from "../engine/comment-ranges";
 
 export function updateTableCellText(
   model: DocModel,
@@ -41,6 +42,12 @@ export function updateTableCellText(
   }
 
   const paragraphs = cell.nodes.filter((node): node is ParagraphNode => node.type === "paragraph");
+  const currentParagraphTexts = paragraphs.map((paragraph) =>
+    paragraph.children
+      .filter((child) => child.type === "text")
+      .map((child) => (child.type === "text" ? child.text : ""))
+      .join("")
+  );
   const incomingParagraphTexts = text
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
@@ -60,7 +67,13 @@ export function updateTableCellText(
 
   paragraphs.forEach((paragraph, paragraphIndex) => {
     const paragraphText = incomingParagraphTexts[paragraphIndex] ?? "";
+    const previousText = currentParagraphTexts[paragraphIndex] ?? "";
     paragraph.children = distributeTextAcrossParagraphChildren(paragraph, paragraphText, options);
+    paragraph.commentRanges = remapParagraphCommentRanges(
+      previousText,
+      paragraphText,
+      paragraph.commentRanges
+    );
     invalidateParagraphSourceXml(paragraph);
   });
 
@@ -102,7 +115,16 @@ export function updateTableCellParagraphText(
     return next;
   }
 
+  const previousText = paragraph.children
+    .filter((child) => child.type === "text")
+    .map((child) => (child.type === "text" ? child.text : ""))
+    .join("");
   paragraph.children = distributeTextAcrossParagraphChildren(paragraph, text, options);
+  paragraph.commentRanges = remapParagraphCommentRanges(
+    previousText,
+    text,
+    paragraph.commentRanges
+  );
   invalidateParagraphSourceXml(paragraph);
   tableNode.sourceXml = undefined;
 

@@ -7,6 +7,7 @@ import type {
   TableCellContentNode
 } from "./types";
 import { parseFloatingAnchorProperties } from "./anchor-properties";
+import { parseParagraphCommentRanges } from "./comment-ranges";
 import { sectionBreakFromSourceXml } from "./section-break";
 
 function normalizeUint8Array(value: unknown): Uint8Array | undefined {
@@ -53,12 +54,45 @@ function normalizeTableCellContent(node: TableCellContentNode): TableCellContent
   return normalizeDocNode(node) as ParagraphNode;
 }
 
+function paragraphModelTextLength(node: ParagraphNode): number {
+  let length = 0;
+  for (const child of node.children) {
+    if (child.type === "text") {
+      length += child.text.length;
+    }
+  }
+  return length;
+}
+
+/**
+ * Captures `w:commentRangeStart` / `w:commentRangeEnd` as character offsets the
+ * first time a parsed paragraph is normalized. The offsets live on the model so
+ * highlights and comment cards survive the edits that clear `sourceXml`.
+ */
+function normalizeParagraphCommentRanges(
+  node: ParagraphNode
+): ParagraphNode["commentRanges"] {
+  if (node.commentRanges) {
+    return node.commentRanges;
+  }
+  if (!node.sourceXml || !/commentRange|commentReference/i.test(node.sourceXml)) {
+    return undefined;
+  }
+
+  const ranges = parseParagraphCommentRanges(
+    node.sourceXml,
+    paragraphModelTextLength(node)
+  );
+  return ranges.length > 0 ? ranges : undefined;
+}
+
 function normalizeDocNode(node: DocNode): DocNode {
   if (node.type === "paragraph") {
     return {
       ...node,
       sectionBreak:
         node.sectionBreak ?? sectionBreakFromSourceXml(node.sourceXml),
+      commentRanges: normalizeParagraphCommentRanges(node),
       children: node.children.map(normalizeParagraphChild)
     };
   }

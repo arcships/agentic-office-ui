@@ -2,14 +2,38 @@
   <div
     v-if="positioned.length > 0"
     class="docx-tracked-change-gutter"
+    :class="{
+      'docx-tracked-change-gutter--drawer': drawerMode,
+      'docx-tracked-change-gutter--drawer-closed': drawerMode && !drawerOpen,
+    }"
     data-docx-thumbnail-exclude="true"
     data-docx-annotation-gutter="true"
+    :data-docx-annotation-gutter-mode="drawerMode ? 'drawer' : 'column'"
+    :data-docx-annotation-drawer-open="drawerMode ? String(drawerOpen) : undefined"
     :data-docx-gutter-card-count="positioned.length"
     :data-docx-gutter-zoom="zoomFactor"
     :style="paneStyle"
   >
+    <!--
+      Narrow viewports have no room for a column beside the paper, so the pane
+      becomes an overlay drawer with a tab: the paper keeps the full viewport
+      width and the cards slide over its right edge when opened.
+    -->
+    <button
+      v-if="drawerMode"
+      type="button"
+      class="docx-gutter-drawer-tab"
+      data-docx-gutter-drawer-tab="true"
+      :aria-expanded="drawerOpen ? 'true' : 'false'"
+      :title="drawerOpen ? 'Hide comments' : 'Show comments'"
+      @click.stop="toggleDrawer"
+      @keydown.stop
+    >
+      <span class="docx-gutter-drawer-tab-count">{{ positioned.length }}</span>
+      <span class="docx-gutter-drawer-tab-label">{{ drawerOpen ? "Comments" : "" }}</span>
+    </button>
     <div
-      v-for="entry of positioned"
+      v-for="entry of visibleCards"
       :key="entry.annotation.id"
       :ref="(element) => registerCardElement(entry.annotation.id, element)"
       class="docx-gutter-card"
@@ -75,7 +99,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, watch } from "vue"
+import { computed, nextTick, onMounted, ref, watch } from "vue"
 import {
   commentAccentColor,
   trackedChangeAccentColor,
@@ -86,6 +110,7 @@ import {
 } from "@arcships/docx-core"
 import {
   annotationGutterCardTopPx,
+  annotationGutterDrawerPaneStyle,
   annotationGutterPaneStyle,
 } from "./gutter-metrics"
 import { formatOfficeDate } from "@arcships/office-interaction"
@@ -104,12 +129,15 @@ const props = withDefaults(
     activeAnnotationId?: string
     /** True when the host can accept/reject revisions on the cards. */
     decidable?: boolean
+    /** Render as an overlay drawer instead of a column beside the paper. */
+    drawerMode?: boolean
   }>(),
   {
     zoomFactor: 1,
     pageHeightPx: 0,
     documentTheme: "light" as DocxDocumentTheme,
     decidable: false,
+    drawerMode: false,
   }
 )
 
@@ -130,8 +158,33 @@ function canDecide(entry: PositionedGutterAnnotation): boolean {
 // ── Pane geometry ──────────────────────────────────────────────────
 // Counter-scaled so the pane keeps Word's fixed annotation-pane metrics at
 // every zoom level instead of shrinking/growing with the paper.
+const drawerOpen = ref(true)
+
 const paneStyle = computed(() =>
-  annotationGutterPaneStyle(props.zoomFactor, props.pageHeightPx)
+  props.drawerMode
+    ? annotationGutterDrawerPaneStyle(
+        props.zoomFactor,
+        props.pageHeightPx,
+        drawerOpen.value
+      )
+    : annotationGutterPaneStyle(props.zoomFactor, props.pageHeightPx)
+)
+
+// A closed drawer keeps the tab clickable and hides the cards entirely, so the
+// paper underneath stays usable.
+const visibleCards = computed(() =>
+  props.drawerMode && !drawerOpen.value ? [] : props.positioned
+)
+
+function toggleDrawer(): void {
+  drawerOpen.value = !drawerOpen.value
+}
+
+watch(
+  () => props.drawerMode,
+  () => {
+    drawerOpen.value = true
+  }
 )
 
 function cardStyle(entry: PositionedGutterAnnotation): Record<string, string> {
@@ -444,6 +497,61 @@ watch(
   margin-top: 2px;
 }
 
+/* Drawer mode: an overlay that slides over the paper's right edge. The pane is
+   counter-scaled by `annotationGutterDrawerPaneStyle`, so these sizes are
+   screen px at every zoom level. */
+.docx-tracked-change-gutter--drawer {
+  background: rgba(255, 255, 255, 0.97);
+  border-left: 1px solid #e5e7eb;
+  box-shadow: -4px 0 16px rgba(15, 23, 42, 0.12);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 28px 8px 8px 6px;
+  pointer-events: auto;
+}
+.docx-tracked-change-gutter--drawer-closed {
+  background: transparent;
+  border-left: none;
+  box-shadow: none;
+  overflow: visible;
+  padding: 0;
+}
+.docx-gutter-drawer-tab {
+  align-items: center;
+  background: #1f2937;
+  border: none;
+  border-radius: 4px 0 0 4px;
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  font-family: inherit;
+  font-size: 11px;
+  gap: 4px;
+  justify-content: center;
+  padding: 4px 6px;
+  position: absolute;
+  right: 0;
+  top: 8px;
+  z-index: 2;
+}
+.docx-gutter-drawer-tab:hover {
+  background: #374151;
+}
+.docx-gutter-drawer-tab:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+.docx-gutter-drawer-tab-count {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  font-weight: 600;
+  min-width: 14px;
+  padding: 0 4px;
+  text-align: center;
+}
+.docx-gutter-drawer-tab-label {
+  font-weight: 600;
+}
 /*
  * Keep the gutter beside the paper at every viewport width. The page frame is
  * exactly one paper tall and clips the page surface, so flowing the gutter

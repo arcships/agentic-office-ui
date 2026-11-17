@@ -2,16 +2,43 @@ import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import type { DocModel } from "./types";
 import type { OoxmlPackage } from "./ooxml-core";
 import {
+  applyCommentRangesToDocumentXml,
+  modelNeedsCommentRangeSerialization
+} from "./comment-range-serialization";
+import {
   applyPreservedSectionBreaksToDocumentXml,
   modelNeedsSectionBreakSerialization
 } from "./section-break-serialization";
 import { mapsToWasmPackage, wasmModelToDocumentXml, wasmSerializeDocx } from "./wasm";
 
-function patchPackageSectionBreaks(
+/**
+ * Both serialization patches rewrite the same document part, so they run in
+ * order: preserved section breaks first (they live in `w:pPr`), then the
+ * comment range markers derived from the model's character offsets.
+ */
+function patchDocumentXml(documentXml: string, model: DocModel): string {
+  let patched = documentXml;
+  if (modelNeedsSectionBreakSerialization(model)) {
+    patched = applyPreservedSectionBreaksToDocumentXml(patched, model);
+  }
+  if (modelNeedsCommentRangeSerialization(model)) {
+    patched = applyCommentRangesToDocumentXml(patched, model);
+  }
+  return patched;
+}
+
+function modelNeedsDocumentXmlPatch(model: DocModel): boolean {
+  return (
+    modelNeedsSectionBreakSerialization(model) ||
+    modelNeedsCommentRangeSerialization(model)
+  );
+}
+
+function patchPackageDocumentXml(
   pkg: OoxmlPackage,
   model: DocModel
 ): OoxmlPackage {
-  if (!modelNeedsSectionBreakSerialization(model)) {
+  if (!modelNeedsDocumentXmlPatch(model)) {
     return pkg;
   }
 
@@ -20,10 +47,7 @@ function patchPackageSectionBreaks(
     return pkg;
   }
 
-  const patchedXml = applyPreservedSectionBreaksToDocumentXml(
-    documentPart.content,
-    model
-  );
+  const patchedXml = patchDocumentXml(documentPart.content, model);
   if (patchedXml === documentPart.content) {
     return pkg;
   }
@@ -40,7 +64,7 @@ function patchSerializedDocxBytes(
   bytes: ArrayBuffer,
   model: DocModel
 ): ArrayBuffer {
-  if (!modelNeedsSectionBreakSerialization(model)) {
+  if (!modelNeedsDocumentXmlPatch(model)) {
     return bytes;
   }
 
@@ -51,10 +75,7 @@ function patchSerializedDocxBytes(
   }
 
   const documentXml = strFromU8(documentBytes);
-  const patchedXml = applyPreservedSectionBreaksToDocumentXml(
-    documentXml,
-    model
-  );
+  const patchedXml = patchDocumentXml(documentXml, model);
   if (patchedXml === documentXml) {
     return bytes;
   }
@@ -75,7 +96,7 @@ export async function modelToDocumentXml(
     model,
     basePackage ? mapsToWasmPackage(basePackage) : undefined
   );
-  return applyPreservedSectionBreaksToDocumentXml(documentXml, model);
+  return patchDocumentXml(documentXml, model);
 }
 
 export async function serializeDocModel(
@@ -87,7 +108,7 @@ export async function serializeDocModel(
     basePackage ? mapsToWasmPackage(basePackage) : undefined
   );
   const { parseDocx } = await import("./ooxml-core");
-  return patchPackageSectionBreaks(await parseDocx(bytes), model);
+  return patchPackageDocumentXml(await parseDocx(bytes), model);
 }
 
 export async function serializeDocx(
