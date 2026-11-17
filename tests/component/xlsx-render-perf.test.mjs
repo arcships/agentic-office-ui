@@ -58,7 +58,11 @@ async function loadStatsModule() {
 
 async function loadThumbnailsModule() {
   const code = transpile(readFileSync(THUMBNAILS_PATH, "utf8"))
-    .replace(/from\s*"vue"/u, `from "${VUE_SHIM}"`);
+    .replace(/from\s*"vue"/u, `from "${VUE_SHIM}"`)
+    .replace(
+      /import \{ cellAddressToA1 \} from "\.\/selection";/u,
+      `const cellAddressToA1 = ({ row, col }) => { let label = ""; let n = col; while (n >= 0) { label = String.fromCharCode((n % 26) + 65) + label; n = Math.floor(n / 26) - 1; } return label + String(row + 1); };`,
+    );
   return import(moduleUrl(code));
 }
 
