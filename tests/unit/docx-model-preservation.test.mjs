@@ -1,8 +1,13 @@
 // Regression coverage for issue #45 — model-level data loss on edit.
 //
-// Each test locks down one of the edit paths that used to silently drop model
-// data: cloning (`cloneDocModel`), global replacement, node duplication/paste,
-// image cloning and range style/link mutations.
+// The issue has five bullets; every block below names the bullet it covers so
+// the mapping stays checkable:
+//
+//   1. `cloneDocModel` dropped note references ............. clone round-trip
+//   2. global replace invalidated the whole document's `sourceXml` ... replaceText
+//   3. duplicated/pasted nodes copied document-scoped ids .. duplicate/paste
+//   4. the paragraph-level image clone dropped crop/XML .... image runs
+//   5. range style/link edits dropped note references ...... range mutators
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -87,6 +92,45 @@ function noteReferencesOf(paragraph) {
   return seen;
 }
 
+function paragraphImage({ alt = "Cropped" } = {}) {
+  return {
+    type: "image",
+    src: "data:image/png;base64,AAAA",
+    alt,
+    widthPx: 100,
+    heightPx: 60,
+    partName: "word/media/image1.png",
+    contentType: "image/png",
+    data: Uint8Array.from([9, 8, 7]),
+    sourceXml:
+      '<w:drawing><wp:inline><wp:docPr id="2" name="Cropped"/></wp:inline></w:drawing>',
+    crop: { leftFraction: 0.25, topFraction: 0.1, rightFraction: 0.15, bottomFraction: 0.05 },
+    cssFilter: "saturate(1.4)",
+    cssOpacity: 0.6,
+    floating: {
+      xPx: 12,
+      yPx: 34,
+      horizontalAlign: "right",
+      verticalAlign: "bottom",
+      wrapType: "none",
+    },
+  };
+}
+
+// A model built through `buildDocModelFromBytes`, i.e. the normalized import
+// path the editor uses. It is the only path that populates the model-level
+// `commentRanges` anchors that serialization re-emits.
+async function sampleModelWithComments() {
+  const imported = await core.buildDocModelFromBytes(
+    arrayBufferFromFile("review-comments.docx"),
+  );
+  const commentedIndex = imported.model.nodes.findIndex(
+    (node) => node.type === "paragraph" && (node.commentRanges?.length ?? 0) > 0,
+  );
+  assert.ok(commentedIndex >= 0, "the fixture carries a comment anchor");
+  return { ...imported, commentedIndex };
+}
+
 function modelWithSourceXml() {
   const model = core.createBlankDocumentModel();
   model.nodes = [
@@ -161,6 +205,13 @@ function buildFixtureModel() {
       },
       paragraphMarkDeleted: false,
       sourceXml: BOOKMARK_PARA_XML,
+      // Model-level anchors that only the normalized import path produces.
+      sectionBreak: {
+        sectionPropertiesXml: '<w:sectPr><w:type w:val="continuous"/></w:sectPr>',
+      },
+      commentRanges: [
+        { commentId: 5, start: 0, end: 5, anchorText: "Hello" },
+      ],
       children: [
         {
           type: "text",
@@ -418,11 +469,20 @@ test("cloneDocModel round-trips every model field", () => {
   assert.notEqual(clone.nodes[1].style.floating, model.nodes[1].style.floating);
   assert.notEqual(clone.metadata.footnotes, model.metadata.footnotes);
   assert.notEqual(clone.metadata.warnings, model.metadata.warnings);
+  // Model-level anchors are value objects on the paragraph, so they must be
+  // copied (not aliased) as well.
+  assert.notEqual(clone.nodes[0].sectionBreak, model.nodes[0].sectionBreak);
+  assert.notEqual(clone.nodes[0].commentRanges, model.nodes[0].commentRanges);
+  assert.notEqual(clone.nodes[0].commentRanges[0], model.nodes[0].commentRanges[0]);
+  assert.deepEqual(clone.nodes[0].sectionBreak, model.nodes[0].sectionBreak);
+  assert.deepEqual(clone.nodes[0].commentRanges, model.nodes[0].commentRanges);
 
   clone.nodes[0].style.tabStops[0].positionTwips = 99;
   clone.nodes[0].children[1].crop.leftFraction = 0.9;
   clone.nodes[0].children[2].widget.text.defaultText = "changed";
   clone.nodes[0].children[3].noteReference.id = 99;
+  clone.nodes[0].commentRanges[0].end = 1;
+  clone.nodes[0].sectionBreak.sectionPropertiesXml = "<w:sectPr/>";
   clone.nodes[1].rows[0].cells[0].nodes[0].children[0].text = "changed";
 
   assert.equal(jsonOf(model), snapshot, "mutating the clone must not touch the source model");
@@ -762,6 +822,241 @@ test("mergeAdjacentTextRuns does not merge runs with different note references",
   assert.equal(sameReference.length, 1);
   assert.equal(sameReference[0].text, "ab");
   assert.deepEqual(sameReference[0].noteReference, { kind: "footnote", id: 1 });
+});
+
+test("range style and link mutations keep note references, crops and comment anchors", () => {
+  const buildParagraph = () => ({
+    type: "paragraph",
+    // Comment anchors are character offsets; a style/link edit keeps the text, so
+    // the anchors must come through untouched.
+    commentRanges: [{ commentId: 2, start: 0, end: 7, anchorText: "Total: " }],
+    children: [
+      { type: "text", text: "Total: " },
+      paragraphImage({ alt: "Range image" }),
+      { type: "text", text: "", noteReference: { kind: "footnote", id: 1 } },
+      { type: "text", text: "amount" },
+    ],
+  });
+
+  for (const [label, mutate] of [
+    [
+      "style",
+      (paragraph) =>
+        core.mutateParagraphTextStyleInRange(paragraph, 0, 7, (style) => ({
+          ...style,
+          bold: true,
+        })),
+    ],
+    [
+      "link",
+      (paragraph) =>
+        core.mutateParagraphLinkInRange(paragraph, 0, 5, "https://example.com"),
+    ],
+  ]) {
+    const paragraph = buildParagraph();
+    assert.equal(mutate(paragraph), true, `${label} edit reports a change`);
+
+    const noteRuns = paragraph.children.filter((child) => child.noteReference);
+    assert.equal(noteRuns.length, 1, `${label} edit keeps the footnote reference once`);
+    assert.deepEqual(noteRuns[0].noteReference, { kind: "footnote", id: 1 });
+
+    const image = paragraph.children.find((child) => child.type === "image");
+    assert.ok(image, `${label} edit keeps the image run`);
+    assert.deepEqual(image.crop, paragraphImage().crop, `${label} edit keeps the crop`);
+    assert.equal(image.sourceXml, paragraphImage().sourceXml, `${label} edit keeps the drawing XML`);
+    assert.deepEqual([...image.data], [9, 8, 7]);
+
+    assert.deepEqual(
+      paragraph.commentRanges,
+      [{ commentId: 2, start: 0, end: 7, anchorText: "Total: " }],
+      `${label} edit keeps the comment anchor`,
+    );
+  }
+});
+
+test("splitting a paragraph keeps its image runs intact", () => {
+  const paragraph = {
+    type: "paragraph",
+    children: [
+      { type: "text", text: "Before " },
+      paragraphImage({ alt: "Split image" }),
+      { type: "text", text: " after" },
+      { type: "text", text: "", noteReference: { kind: "endnote", id: 2 } },
+    ],
+  };
+
+  const { beforeChildren, afterChildren } = core.splitParagraphChildrenAtTextOffsets(
+    paragraph,
+    "Before split after",
+    6,
+    6,
+  );
+  const children = [...beforeChildren, ...afterChildren];
+  const image = children.find((child) => child.type === "image");
+
+  assert.ok(image, "the image survives the split");
+  assert.deepEqual(image.crop, paragraphImage().crop);
+  assert.equal(image.sourceXml, paragraphImage().sourceXml);
+  assert.deepEqual([...image.data], [9, 8, 7]);
+  assert.equal(
+    children.filter((child) => child.noteReference).length,
+    1,
+    "the note reference survives on exactly one side of the split",
+  );
+});
+
+test("copy and paste do not inherit the source paragraph's comment anchors", async () => {
+  const { model, commentedIndex } = await sampleModelWithComments();
+  const originalAnchors = model.nodes[commentedIndex].commentRanges;
+
+  const duplicated = core.duplicateParagraph(model, commentedIndex);
+  const duplicate = duplicated.nodes[commentedIndex + 1];
+
+  assert.equal(duplicate.commentRanges, undefined, "the copy carries no comment anchor");
+  assert.equal(
+    core.resolveParagraphCommentMarkup(duplicate),
+    undefined,
+    "the copy does not render the original comment",
+  );
+  assert.deepEqual(
+    duplicated.nodes[commentedIndex].commentRanges,
+    originalAnchors,
+    "the original keeps its anchor",
+  );
+
+  const pasted = core.pasteParagraphs(model, model.nodes.length, [model.nodes[commentedIndex]]);
+  assert.equal(
+    pasted.nodes[pasted.nodes.length - 1].commentRanges,
+    undefined,
+    "the pasted copy carries no comment anchor",
+  );
+});
+
+test("duplicating or pasting a commented paragraph exports one comment anchor, not two", async () => {
+  const { model, package: pkg, commentedIndex } = await sampleModelWithComments();
+  const originalText = core.paragraphText(model.nodes[commentedIndex]);
+
+  for (const [label, edited] of [
+    [
+      "duplicate",
+      core.updateParagraphText(
+        core.duplicateParagraph(model, commentedIndex),
+        commentedIndex + 1,
+        `${originalText} (copy)`,
+      ),
+    ],
+    [
+      "paste",
+      core.updateParagraphText(
+        core.pasteParagraphs(model, model.nodes.length, [model.nodes[commentedIndex]]),
+        model.nodes.length,
+        `${originalText} (pasted)`,
+      ),
+    ],
+  ]) {
+    const documentXml = documentXmlFromExport(await core.serializeDocx(edited, pkg));
+    const commentIds = collectAttributeValues(
+      documentXml,
+      /<w:commentRangeStart w:id="(\d+)"/g,
+    );
+    assert.deepEqual(commentIds, ["0"], `${label} exports the comment anchor once`);
+    assert.deepEqual(
+      collectAttributeValues(documentXml, /<w:commentRangeEnd w:id="(\d+)"/g),
+      ["0"],
+      `${label} exports the range end once`,
+    );
+    assert.deepEqual(
+      collectAttributeValues(documentXml, /<w:commentReference w:id="(\d+)"/g),
+      ["0"],
+      `${label} exports the reference once`,
+    );
+
+    // Re-importing keeps the anchor on the original paragraph only.
+    const reimported = await core.buildDocModelFromBytes(
+      await core.serializeDocx(edited, pkg),
+    );
+    const rangesByParagraph = reimported.model.nodes
+      .filter((node) => node.type === "paragraph")
+      .map((node) => node.commentRanges?.length ?? 0);
+    assert.deepEqual(
+      rangesByParagraph,
+      [0, 1, 0, 0, 0],
+      `${label} leaves exactly one anchored paragraph`,
+    );
+  }
+});
+
+test("a rebuilt paragraph keeps its comment range in the export", async () => {
+  const { model, package: pkg } = await sampleModelWithComments();
+  const anchoredIndex = model.nodes.findIndex(
+    (node) =>
+      node.type === "paragraph" &&
+      node.children.some((child) => child.type === "text" && child.noteReference),
+  );
+  assert.ok(anchoredIndex >= 0, "the fixture carries a note reference");
+
+  // Append instead of replacing the commented words: the range is remapped onto
+  // the surviving text, which is what keeps it exportable.
+  const edited = core.updateParagraphText(
+    model,
+    anchoredIndex,
+    "Monthly operational report (edited)",
+  );
+  assert.equal(edited.nodes[anchoredIndex].sourceXml, undefined);
+  // The note reference lives on in the model even though this paragraph is no
+  // longer emitted from its original XML (the WASM serializer has no
+  // note-reference slot yet, so the anchor itself only survives through
+  // `sourceXml`; keeping the model field is what lets a later serializer fix
+  // recover it, and what the renderer draws today).
+  assert.deepEqual(
+    noteReferencesOf(edited.nodes[anchoredIndex]),
+    [{ kind: "footnote", id: 1 }],
+  );
+
+  const documentXml = documentXmlFromExport(await core.serializeDocx(edited, pkg));
+  assert.match(documentXml, /<w:commentRangeStart w:id="0"\/>/, "the comment range is still exported");
+  assert.match(documentXml, /<w:commentRangeEnd w:id="0"\/>/);
+  assert.match(documentXml, /Monthly operational report \(edited\)/, "the edited text is exported");
+});
+
+// ── Issue proposal: import → change one paragraph → export → re-import ────
+test("editing one paragraph leaves every other node field-identical after a round trip", async () => {
+  for (const sample of ["review-comments.docx", "report-with-image.docx", "legal-contract.docx"]) {
+    const { model, package: pkg } = await core.buildDocModelFromBytes(
+      arrayBufferFromFile(sample),
+    );
+    const editedText = `${core.paragraphText(model.nodes[1])} (edited)`;
+    const edited = core.updateParagraphText(model, 1, editedText);
+    const reimported = await core.buildDocModelFromBytes(
+      await core.serializeDocx(edited, pkg),
+    );
+
+    assert.equal(reimported.model.nodes.length, model.nodes.length, sample);
+    for (let index = 0; index < model.nodes.length; index += 1) {
+      if (index === 1) {
+        continue;
+      }
+      assert.equal(
+        jsonOf(reimported.model.nodes[index]),
+        jsonOf(model.nodes[index]),
+        `${sample}: node ${index} must round-trip field-identical (XML, note ids, comment ranges, crops)`,
+      );
+    }
+
+    // The edited paragraph itself keeps the anchors that live on the model (the
+    // WASM serializer still has no note-reference slot, so the in-text anchor is
+    // only re-emitted for paragraphs whose `sourceXml` survives).
+    assert.match(
+      core.paragraphText(reimported.model.nodes[1]),
+      /\(edited\)$/,
+      `${sample}: the edit reaches the exported file`,
+    );
+    assert.deepEqual(
+      noteReferencesOf(edited.nodes[1]),
+      noteReferencesOf(model.nodes[1]),
+      `${sample}: the edit keeps the paragraph's note references in the model`,
+    );
+  }
 });
 
 test("a global replace leaves comment ranges, revisions and note anchors in the export", async () => {
