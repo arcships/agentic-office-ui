@@ -4,6 +4,20 @@ import path from "node:path";
 import test from "node:test";
 
 import ts from "../../packages/xlsx-core/node_modules/typescript/lib/typescript.js";
+import {
+  findByTestId,
+  importFromDemo,
+  mount,
+  textContent,
+  vue,
+  waitFor,
+  walk,
+} from "./vue-test-renderer.mjs";
+
+// Vue's v-model directive checks these browser constructors; the shared
+// component renderer intentionally has no browser DOM.
+if (globalThis.Document === undefined) globalThis.Document = class Document {};
+if (globalThis.ShadowRoot === undefined) globalThis.ShadowRoot = class ShadowRoot {};
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const read = (relativePath) => readFileSync(path.join(ROOT, relativePath), "utf8");
@@ -15,6 +29,7 @@ const DOCX_VIEWER_PATH = "packages/vue-docx/src/components/DocxViewer.vue";
 const DOCX_EDITOR_PATH = "packages/vue-docx/src/components/DocxEditor.vue";
 const DOCX_MENU_PATH = "packages/vue-docx/src/components/DocxContextMenu.vue";
 const PPTX_VIEWER_PATH = "packages/vue-pptx/src/PptxViewer.vue";
+const PDF_VIEWER_PATH = "packages/vue-pdf/src/components/PdfViewer.vue";
 const XLSX_VIEWER_PATH = "packages/vue-xlsx/src/components/XlsxViewer.vue";
 const XLSX_GRID_PATH = "packages/vue-xlsx/src/components/XlsxGrid.vue";
 const XLSX_MENU_PATH = "packages/vue-xlsx/src/components/XlsxContextMenu.vue";
@@ -81,6 +96,51 @@ function computedBody(filePath, name) {
   const match = new RegExp(`const ${name} = computed\\(([\\s\\S]*?)\\n\\}\\)`).exec(source);
   assert.ok(match, `${filePath} 必须定义 ${name}`);
   return match[1];
+}
+
+function pptxSearchHit(slideIndex, text) {
+  return {
+    slideIndex,
+    nodeId: `node-${slideIndex}`,
+    text,
+    snippet: text,
+    matchStart: 0,
+    matchEnd: text.length,
+  };
+}
+
+// Minimal preview session: the viewer only needs open/render/search here.
+function searchSession() {
+  let currentSlideIndex = 0;
+  const session = {
+    document: null,
+    get currentSlideIndex() { return currentSlideIndex; },
+    get zoomPercent() { return 100; },
+    async open(_source, options) {
+      session.document = {
+        fileName: "a11y-search.pptx",
+        height: 540,
+        width: 960,
+        slides: [0, 1, 2].map((index) => ({ hidden: false, index, number: index + 1 })),
+        warnings: [],
+      };
+      currentSlideIndex = options?.initialSlide ?? 0;
+      return session.document;
+    },
+    async renderSlide(index) { currentSlideIndex = index; },
+    renderThumbnail() { return null; },
+    searchText(query) {
+      return query === "needle"
+        ? [pptxSearchHit(0, "needle"), pptxSearchHit(2, "needle")]
+        : [];
+    },
+    async highlightSearchResult() { return null; },
+    clearSearchHighlights() {},
+    async setZoom() {},
+    cancel() {},
+    dispose() {},
+  };
+  return session;
 }
 
 test("OfficeLiveStatus is one stable shared live region for DOCX/PPTX/XLSX", () => {
@@ -158,6 +218,106 @@ test("PPTX and XLSX viewers use the same shared live region", () => {
   assert.match(xlsxMessage, /m\.value\.xlsx\.viewer\.live\.loading/);
   assert.match(xlsxMessage, /formatOfficeMessage\(m\.value\.xlsx\.viewer\.live\.error/);
   assert.match(xlsxMessage, /formatOfficeMessage\(m\.value\.xlsx\.viewer\.live\.sheetReady, \{ name: sheet\.name \}\)/);
+});
+
+test("PPTX announces search hits in a live region like the other viewers", () => {
+  const pptx = read(PPTX_VIEWER_PATH);
+  assert.match(
+    pptx,
+    /<OfficeLiveStatus test-id="pptx-search-status" :message="searchStatusMessage" \/>/,
+    "the slide search hit counter needs its own live region",
+  );
+  assert.match(
+    pptx,
+    /class="pptx-viewer__search-count" aria-hidden="true"/,
+    "the visual counter must not be announced twice",
+  );
+
+  const message = computedBody(PPTX_VIEWER_PATH, "searchStatusMessage");
+  assert.match(message, /pptxDocument\.searchState\.value/);
+  assert.match(message, /m\.value\.common\.search\.searching/);
+  assert.match(message, /m\.value\.common\.search\.error/);
+  assert.match(message, /m\.value\.common\.search\.noResults/);
+  assert.match(
+    message,
+    /formatOfficeMessage\(m\.value\.common\.search\.resultOf, \{ current, total \}\)/,
+    "the announcement must reuse the DOCX/XLSX find-bar wording",
+  );
+  assert.match(message, /search\.activeIndex \+ 1/, "the announced hit must follow the active result");
+  assert.match(message, /Math\.min\(Math\.max\(search\.activeIndex \+ 1, 1\), total\)/);
+});
+
+test("PPTX search live region announces counts, no results and clearing", async (t) => {
+  const { PptxViewer } = await importFromDemo("@arcships/vue-pptx");
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([1, 2, 3]),
+    sessionFactory: () => searchSession(),
+    showSearch: true,
+    showSidebar: false,
+  });
+  t.after(() => mounted.app.unmount());
+
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state",
+  );
+  const form = walk(mounted.root).find(
+    (node) => node.type === "form" && node.props?.role === "search",
+  );
+  assert.ok(form, "the search form must render");
+  const input = walk(form).find((node) => node.type === "input");
+  const statusText = () => textContent(findByTestId(mounted.root, "pptx-search-status"));
+
+  assert.equal(statusText(), "", "an untouched viewer must not announce anything");
+  assert.equal(findByTestId(mounted.root, "pptx-search-status").props.role, "status");
+
+  async function submit(query) {
+    input.value = query;
+    input.dispatchEvent({ type: "input", target: input });
+    await vue.nextTick();
+    await form.props.onSubmit({ preventDefault() {} });
+  }
+
+  await submit("needle");
+  await waitFor(() => /1 of 2/.test(statusText()), "announced first hit", 4_000);
+
+  const next = walk(form).find(
+    (node) => node.type === "button" && node.props?.["aria-label"] === "Next result",
+  );
+  assert.ok(next, "the next-hit button must render once there are results");
+  next.props.onClick();
+  await waitFor(() => /2 of 2/.test(statusText()), "announced second hit", 4_000);
+
+  await submit("missing");
+  await waitFor(() => statusText() === "No results", "announced empty result set", 4_000);
+
+  input.props.onKeydown({ key: "Escape", preventDefault() {} });
+  await waitFor(() => statusText() === "", "cleared search announcement", 4_000);
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("vue-pdf announces viewer state and search hits through live regions", () => {
+  const pdf = read(PDF_VIEWER_PATH);
+  assert.match(
+    pdf,
+    /data-testid="pdf-status"[^>]*role="status"[^>]*aria-live="polite"[^>]*aria-atomic="true"/,
+    "the PDF viewer state line must be a polite, atomic live region",
+  );
+  assert.match(pdf, /class="pdf-status"[^>]*>\{\{ viewerState \}\}</, "the region must speak the viewer state");
+  assert.match(
+    pdf,
+    /\.pdf-status \{[^}]*clip-path: inset\(50%\)/,
+    "the PDF state region must be visually hidden but announced",
+  );
+  assert.match(
+    pdf,
+    /data-testid="pdf-search-result"[^>]*role="status"[^>]*aria-atomic="true"/,
+    "PDF search hits need an atomic status region",
+  );
+  // The announced hit carries the current index, the total and the page.
+  assert.match(pdf, /m\.value\.pdf\.viewer\.searchResult, \{\s*current: 1,\s*total: hits\.length,\s*page: hits\[0\]\.pageIndex \+ 1,/);
+  assert.match(pdf, /m\.value\.pdf\.viewer\.searchResult, \{\s*current: next \+ 1,\s*total: searchHits\.value\.length,\s*page: hit\.pageIndex \+ 1,/);
+  assert.match(pdf, /m\.value\.pdf\.viewer\.searchNoResults/);
 });
 
 test("XLSX canvas grid exposes role=grid and a live active descendant", () => {
