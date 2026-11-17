@@ -25,6 +25,8 @@ import type {
   WorkbookImageSheetOrigin
 } from "@arcships/xlsx-core";
 import { cellAddressToA1 } from "./selection";
+import { DEFAULT_CELL_STYLE_PATCH, coerceEnteredValue } from "./cell-input";
+import type { CellInputOptions } from "./cell-input";
 
 export const FORMULA_COUNT_THRESHOLD = 1000;
 export const DEFAULT_ROW_HEIGHT = 24;
@@ -127,6 +129,14 @@ export type ClipboardMatrixCell = {
   colOffset: number;
   formula: string | null;
   rowOffset: number;
+  /** Raw typed value (number/boolean/text); keeps the value type on internal paste. */
+  rawValue?: unknown;
+  /**
+   * Effective cell style captured with the cell. `null` means "no explicit
+   * style", so an internal paste clears the target formatting like Excel does.
+   */
+  style?: unknown;
+  /** Display string used for the plain-text and HTML flavours. */
   value: string;
 };
 
@@ -253,28 +263,8 @@ export function cloneCellStyle(style: unknown): unknown {
   }
 }
 
-export function coerceUserEnteredValue(value: string): unknown {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  if (trimmed.startsWith("'")) {
-    return trimmed.slice(1);
-  }
-
-  if (/^(true|false)$/i.test(trimmed)) {
-    return trimmed.toLowerCase() === "true";
-  }
-
-  if (/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(trimmed)) {
-    const parsed = Number(trimmed);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-
-  return value;
+export function coerceUserEnteredValue(value: string, options: CellInputOptions = {}): unknown {
+  return coerceEnteredValue(value, options);
 }
 
 export function scheduleLowPriorityTask(task: () => void) {
@@ -314,6 +304,15 @@ export function applyCellMutationState(
 
   if (state.style && typeof state.style === "object") {
     worksheet.setCellStyleAt(cell.row, cell.col, state.style);
+    return;
+  }
+
+  // `null` means the cell had no explicit style before the mutation. The wasm
+  // workbook has no "unset style" entry point, so undo has to restore the
+  // default formatting explicitly; only do that when a style exists now, so
+  // plain value edits never add a style to a cell that never had one.
+  if (state.style === null && worksheet.getCellStyleAt(cell.row, cell.col)) {
+    worksheet.setCellStyleAt(cell.row, cell.col, DEFAULT_CELL_STYLE_PATCH);
   }
 }
 

@@ -16,6 +16,8 @@ import {
   type HistoryEntry
 } from "./internal";
 import { buildSheetList, buildVisibleSheetIndexMap } from "./workbook-state";
+import { canonicalizeFormula, resolveCellInput, resolveFormulaNumberFormat } from "./cell-input";
+import { resolveEffectiveCellNumberFormat } from "./formatting";
 import type { XlsxControllerContext } from "./internal";
 
 export { applyCellMutationState, cloneCellStyle, coerceUserEnteredValue, normalizeCellValue, pushHistoryEntry };
@@ -105,8 +107,25 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const nextValue = coerceUserEnteredValue(value);
-    worksheet.setCell(cellAddressToA1(cell), nextValue);
+    const input = resolveCellInput(value, {
+      date1904: worksheet.date1904 === true,
+      numberFormat: resolveEffectiveCellNumberFormat(
+        worksheet.getCellStyleAt(cell.row, cell.col),
+        ctx.activeSheet.value,
+        cell.row,
+        cell.col
+      )
+    });
+    const address = cellAddressToA1(cell);
+    if (input.kind === "formula") {
+      worksheet.setFormula(address, input.formula);
+    } else {
+      worksheet.setCell(address, input.value);
+    }
+    if (input.numberFormat) {
+      worksheet.setCellStyleAt(cell.row, cell.col, { numberFormat: input.numberFormat });
+    }
+
     const after = ctx.captureCellMutationState(cell);
     if (!after) {
       return;
@@ -127,11 +146,23 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const trimmedFormula = formula.trim();
+    const trimmedFormula = canonicalizeFormula(formula);
     if (!trimmedFormula) {
       worksheet.setCell(cellAddressToA1(cell), "");
     } else {
       worksheet.setFormula(cellAddressToA1(cell), trimmedFormula);
+      const numberFormat = resolveFormulaNumberFormat(
+        trimmedFormula,
+        resolveEffectiveCellNumberFormat(
+          worksheet.getCellStyleAt(cell.row, cell.col),
+          ctx.activeSheet.value,
+          cell.row,
+          cell.col
+        )
+      );
+      if (numberFormat) {
+        worksheet.setCellStyleAt(cell.row, cell.col, { numberFormat });
+      }
     }
     const after = ctx.captureCellMutationState(cell);
     if (!after) {
