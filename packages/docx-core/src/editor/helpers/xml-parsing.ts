@@ -384,6 +384,64 @@ export function joinCssTransforms(
   return resolved.length > 0 ? resolved.join(" ") : undefined;
 }
 
+/**
+ * Normalized quarter-turn rotation of a drawing (90 or 270), or `undefined`
+ * when the image is not rotated by a quarter turn.
+ */
+export function resolveImageRotationQuarterTurnDegrees(
+  rotationDegrees?: number
+): 90 | 270 | undefined {
+  if (!Number.isFinite(rotationDegrees)) {
+    return undefined;
+  }
+
+  const degrees = rotationDegrees as number;
+  if (Math.abs((Math.abs(degrees) % 180) - 90) >= 0.5) {
+    return undefined;
+  }
+
+  const normalized = (((Math.round(degrees / 90) % 4) + 4) % 4) * 90;
+  return normalized === 90 || normalized === 270 ? normalized : undefined;
+}
+
+/**
+ * Resolve the layout frame an image occupies after its drawing rotation.
+ *
+ * A 90°/270° rotation turns the visual footprint a quarter turn, so the frame
+ * swaps width and height; rendering the image inside the unrotated frame makes
+ * it overflow and paint over neighbouring content. Quarter-turned frames are
+ * reported with `rotationSwapped` so callers can rotate the image into the
+ * frame (`resolveImageRenderTransformStyle` with `fillFrame: true`).
+ */
+export function resolveImageFrameSizePx(
+  image: ImageRunNode,
+  widthPx?: number,
+  heightPx?: number
+): { widthPx?: number; heightPx?: number; rotationSwapped: boolean } {
+  const quarterTurn = resolveImageRotationQuarterTurnDegrees(
+    parseDrawingImageTransformFromSourceXml(image.sourceXml)?.rotationDegrees
+  );
+  const safeWidthPx = Number.isFinite(widthPx)
+    ? Math.max(1, Math.round(widthPx as number))
+    : undefined;
+  const safeHeightPx = Number.isFinite(heightPx)
+    ? Math.max(1, Math.round(heightPx as number))
+    : undefined;
+  if (
+    quarterTurn === undefined ||
+    safeWidthPx === undefined ||
+    safeHeightPx === undefined
+  ) {
+    return { widthPx, heightPx, rotationSwapped: false };
+  }
+
+  return {
+    widthPx: safeHeightPx,
+    heightPx: safeWidthPx,
+    rotationSwapped: true,
+  };
+}
+
 export function resolveImageRenderTransformStyle(
   image: ImageRunNode,
   options?: {
@@ -402,11 +460,9 @@ export function resolveImageRenderTransformStyle(
     ? Math.max(1, Math.round(options?.frameHeightPx as number))
     : undefined;
   const fillFrame = options?.fillFrame === true;
-  const normalizedQuarterTurn =
-    Number.isFinite(rotationDegrees) &&
-    Math.abs((Math.abs(rotationDegrees as number) % 180) - 90) < 0.5
-      ? (((Math.round((rotationDegrees as number) / 90) % 4) + 4) % 4) * 90
-      : undefined;
+  const normalizedQuarterTurn = resolveImageRotationQuarterTurnDegrees(
+    rotationDegrees
+  );
   const flipScaleTransform =
     transform?.flipH || transform?.flipV
       ? `scale(${transform?.flipH ? -1 : 1}, ${transform?.flipV ? -1 : 1})`
@@ -423,11 +479,7 @@ export function resolveImageRenderTransformStyle(
     const rotationTransform =
       normalizedQuarterTurn === 90
         ? `translate(${safeFrameWidthPx}px, 0px) rotate(90deg)`
-        : normalizedQuarterTurn === 180
-        ? `translate(${safeFrameWidthPx}px, ${safeFrameHeightPx}px) rotate(180deg)`
-        : normalizedQuarterTurn === 270
-        ? `translate(0px, ${safeFrameHeightPx}px) rotate(-90deg)`
-        : undefined;
+        : `translate(0px, ${safeFrameHeightPx}px) rotate(-90deg)`;
 
     return {
       width: `${safeFrameHeightPx}px`,

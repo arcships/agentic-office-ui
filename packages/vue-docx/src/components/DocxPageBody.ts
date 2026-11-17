@@ -19,10 +19,17 @@ import {
 } from "vue"
 import {
   type DocxEditorController,
+  type DocxFloatingPageOriginPx,
   type DocModel,
   type ParagraphNode,
   type TableNode,
   type DocumentPageNodeSegment,
+} from "@arcships/docx-core"
+import {
+  DEFAULT_DOC_PAGE_MARGIN,
+  resolveFloatingPageOriginPx,
+  resolveWrappedImageFlowClearancePx,
+  type DocxPageFlowWrapClearance,
 } from "@arcships/docx-core"
 import DocxParagraphHost from "./DocxParagraphHost.vue"
 import DocxTableHost from "./DocxTableHost.vue"
@@ -64,6 +71,11 @@ export default defineComponent({
       required: true,
     },
     pageContentWidthPx: { type: Number, required: true },
+    /** Page-relative origin for margin/page/column anchored floating images. */
+    floatingPageOriginPx: {
+      type: Object as PropType<DocxFloatingPageOriginPx>,
+      required: false,
+    },
     controller: {
       type: Object as PropType<DocxEditorController>,
       required: false,
@@ -221,6 +233,53 @@ export default defineComponent({
       return 0
     }
 
+    /**
+     * Top clearance for each paragraph on this page: a float that outlives its
+     * anchor paragraph would otherwise be covered by the following paragraph,
+     * because every paragraph is an isolated flex item that CSS floats cannot
+     * reach across. Only whole-paragraph pages are cleared — a page whose
+     * paragraphs were split by pagination has no reliable flow origin.
+     */
+    function wrappedImageClearances(): DocxPageFlowWrapClearance[] {
+      const paragraphs: ParagraphNode[] = []
+      for (const segment of props.pageNodeSegments) {
+        const node = segmentNode(segment)
+        if (!node || node.type !== "paragraph" || segment.paragraphLineRange) {
+          return []
+        }
+        paragraphs.push(node)
+      }
+      if (paragraphs.length < 2) return []
+      // Fast path: most pages have no floating image at all.
+      const hasFloatingImage = paragraphs.some((paragraph) =>
+        paragraph.children.some(
+          (child) => child.type === "image" && Boolean(child.floating)
+        )
+      )
+      if (!hasFloatingImage) return []
+      return resolveWrappedImageFlowClearancePx(
+        paragraphs,
+        props.pageContentWidthPx,
+        props.model.metadata.numberingDefinitions
+      )
+    }
+
+    // Floating images anchored to the page, its margins, or the text column must
+    // be placed from the page origin. Without it `absoluteFloatingImageStyle`
+    // degrades every margin/page anchor to the (0, 0) page corner.
+    function floatingPageOrigin(): DocxFloatingPageOriginPx {
+      if (props.floatingPageOriginPx) return props.floatingPageOriginPx
+      return resolveFloatingPageOriginPx(
+        props.pageLayout.pageWidthPx,
+        props.pageLayout.marginsPx ?? {
+          top: DEFAULT_DOC_PAGE_MARGIN,
+          right: DEFAULT_DOC_PAGE_MARGIN,
+          bottom: DEFAULT_DOC_PAGE_MARGIN,
+          left: DEFAULT_DOC_PAGE_MARGIN,
+        }
+      )
+    }
+
     function ensureParagraphSelection(nodeIndex: number): void {
       const controller = props.controller
       if (!controller) return
@@ -242,6 +301,8 @@ export default defineComponent({
     return () => {
       const segments = props.pageNodeSegments
       const bodyChildren: VNode[] = []
+      const wrapClearances = wrappedImageClearances()
+      let paragraphSlot = 0
 
       if (segments.length === 0 && props.editable && props.controller) {
         // Empty page hint
@@ -279,6 +340,8 @@ export default defineComponent({
               }, "Unsupported node type")
             )
           } else if (node.type === "paragraph") {
+            const wrapClearanceTopPx =
+              wrapClearances[paragraphSlot++]?.marginTopPx ?? 0
             bodyChildren.push(
               h(DocxParagraphHost, {
                 key,
@@ -290,6 +353,8 @@ export default defineComponent({
                 editable: props.editable,
                 documentTheme: props.theme,
                 controller: props.controller,
+                floatingPageOriginPx: floatingPageOrigin(),
+                wrapClearanceTopPx,
                 showTrackedChanges: props.trackedChangesEnabled,
                 showCommentHighlights: props.commentsEnabled,
                 numberingDefinitions: props.model.metadata.numberingDefinitions,
@@ -320,6 +385,7 @@ export default defineComponent({
                 controller: props.controller,
                 rowRange: segment.tableRowRange,
                 documentTheme: props.theme,
+                floatingPageOriginPx: floatingPageOrigin(),
                 showTrackedChanges: props.trackedChangesEnabled,
                 showCommentHighlights: props.commentsEnabled,
                 numberingDefinitions: props.model.metadata.numberingDefinitions,

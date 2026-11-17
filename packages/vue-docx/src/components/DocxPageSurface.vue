@@ -48,6 +48,7 @@
         :page-node-segments="pageNodeSegments"
         :page-layout="pageLayout"
         :page-content-width-px="pageContentWidthPx"
+        :floating-page-origin-px="floatingPageOriginPx"
         :model="model"
         :controller="controller"
         :editable="editable"
@@ -88,6 +89,7 @@
           :section="headerSection"
           :page-layout="pageLayout"
           :page-content-width-px="pageContentWidthPx"
+          :floating-page-origin-px="floatingPageOriginPx"
           :theme="theme"
           :model="model"
           :controller="controller"
@@ -105,6 +107,7 @@
           :section="footerSection"
           :page-layout="pageLayout"
           :page-content-width-px="pageContentWidthPx"
+          :floating-page-origin-px="floatingPageOriginPx"
           :theme="theme"
           :model="model"
           :controller="controller"
@@ -201,6 +204,7 @@ import {
   resolveDocumentLayout,
   resolveDocumentSectionPropertiesXml,
   resolveFooterPaginationReservePx,
+  resolveFloatingPageOriginPx,
   resolveHeaderPaginationReservePx,
   resolveRenderableImageSource,
   pageMarginPaddingStyle,
@@ -380,6 +384,14 @@ const pageFurnitureReservePx = computed(() => {
       : 0,
   }
 })
+
+// Origin for margin/page/column anchored floating images. The surface is the
+// positioned ancestor of the page body, and its padding box starts at the page
+// edge, so `page` anchors are measured from 0/0 and margin anchors add the
+// page margins.
+const floatingPageOriginPx = computed(() =>
+  resolveFloatingPageOriginPx(props.pageWidthPx, props.pageLayout.marginsPx)
+)
 
 // The layer and its mount gate share one collector: table-cell fields are
 // found recursively and a table split across pages only reports the fields in
@@ -643,8 +655,10 @@ const surfaceStyle = computed(() => ({
     (props.theme === "dark" ? "#1f2937" : "#ffffff"),
   color: props.theme === "dark" ? "#f9fafb" : "#111827",
   position: "relative" as const,
-  boxSizing: "border-box" as const,
+  // Own stacking context: the behind-text image layer uses a negative z-index so
+  // it paints under the page text but still above the page background.
   isolation: "isolate" as const,
+  boxSizing: "border-box" as const,
   // Draw the paper outline inside the box so the content area keeps exactly
   // the page size pagination lays out (border-box height minus margins).
   boxShadow: "inset 0 0 0 1px #d4d4d4, 0 8px 24px rgba(0, 0, 0, 0.08)",

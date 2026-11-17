@@ -83,7 +83,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onUnmounted } from "vue"
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, onUpdated } from "vue"
 import type {
   DocxEditorController,
   DocxImageLocation,
@@ -115,6 +115,13 @@ interface FloatingImageEntry {
   fallbackLabel?: string
 }
 
+interface WrappedImageBox {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
   defineProps<{
@@ -140,7 +147,7 @@ const dragStartPosY = ref(0)
 const dragPreview = ref<{ key: string; xPx: number; yPx: number } | null>(null)
 const failedImageSourceKeys = ref(new Set<string>())
 const imageLayerEl = ref<HTMLElement | null>(null)
-const layoutRevision = ref(0)
+const wrappedBoxes = ref(new Map<string, WrappedImageBox>())
 
 const resizingImage = ref<FloatingImageEntry | null>(null)
 const resizeStartSize = ref<{ w: number; h: number }>({ w: 0, h: 0 })
@@ -148,6 +155,8 @@ const resizeStartPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 const resizePosition = ref("se")
 const resizePreview = ref<{ key: string; widthPx: number; heightPx: number } | null>(null)
 let pointerListenersAttached = false
+let resizeObserver: ResizeObserver | null = null
+let wrappedBoxRefreshScheduled = false
 
 function imageSourceFailureKey(src: string | undefined): string {
   if (!src) return "missing"
@@ -240,7 +249,6 @@ const pointerScale = computed(() => {
 
 // ── Style helpers ──────────────────────────────────────────────────
 function imageContainerStyle(image: FloatingImageEntry): Record<string, string> {
-  void layoutRevision.value
   const drag = dragPreview.value?.key === image.key ? dragPreview.value : undefined
   const resize = resizePreview.value?.key === image.key ? resizePreview.value : undefined
   const flowBox = image.flowWrapped ? wrappedImageBox(image) : undefined
@@ -261,32 +269,111 @@ function imageContainerStyle(image: FloatingImageEntry): Record<string, string> 
   }
 }
 
-function wrappedImageBox(
-  image: FloatingImageEntry
-): { left: number; top: number; width: number; height: number } | undefined {
+/**
+ * Box of the in-flow (wrapped) image inside its anchor paragraph, in page
+ * coordinates. Measured from the DOM and cached in `wrappedBoxes`: a wrapped
+ * image moves whenever text above it reflows (edits, font loading, resize,
+ * zoom), so the transparent drag target is re-derived from layout instead of
+ * being frozen at the position it had on the render that created it.
+ */
+function wrappedImageBox(image: FloatingImageEntry): WrappedImageBox | undefined {
+  return wrappedBoxes.value.get(image.key)
+}
+
+function pageSurfaceElement(): HTMLElement | undefined {
   const layer = imageLayerEl.value
   if (!layer || typeof layer.closest !== "function") return undefined
-  const surface = layer.closest<HTMLElement>("[data-docx-page-surface='true']")
-  if (!surface || typeof surface.querySelector !== "function") return undefined
-  const paragraph = surface.querySelector<HTMLElement>(
-    `[data-docx-paragraph-node-index="${image.nodeIndex}"]`
-  )
-  const wrapped = paragraph?.querySelector<HTMLElement>(
-    `[data-docx-image-child-index="${image.childIndex}"][data-docx-image-layout="wrapped"]`
-  )
-  if (!wrapped) return undefined
-  const surfaceRect = surface.getBoundingClientRect()
-  const wrappedRect = wrapped.getBoundingClientRect()
-  const scale = surface.offsetWidth > 0
-    ? surfaceRect.width / surface.offsetWidth
-    : 1
-  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1
-  return {
-    left: (wrappedRect.left - surfaceRect.left) / safeScale,
-    top: (wrappedRect.top - surfaceRect.top) / safeScale,
-    width: wrappedRect.width / safeScale,
-    height: wrappedRect.height / safeScale,
+  return layer.closest<HTMLElement>("[data-docx-page-surface='true']") ?? undefined
+}
+
+function measureScale(surface: HTMLElement, surfaceRect: DOMRect): number {
+  const scale =
+    surface.offsetWidth > 0 ? surfaceRect.width / surface.offsetWidth : 1
+  return Number.isFinite(scale) && scale > 0 ? scale : 1
+}
+
+function measureWrappedBoxes(): void {
+  const surface = pageSurfaceElement()
+  const next = new Map<string, WrappedImageBox>()
+  if (
+    surface &&
+    typeof surface.querySelector === "function" &&
+    typeof surface.getBoundingClientRect === "function"
+  ) {
+    const surfaceRect = surface.getBoundingClientRect()
+    const scale = measureScale(surface, surfaceRect)
+    for (const image of floatingImages.value) {
+      if (!image.flowWrapped) continue
+      const paragraph = surface.querySelector<HTMLElement>(
+        `[data-docx-paragraph-node-index="${image.nodeIndex}"]`
+      )
+      const wrapped = paragraph?.querySelector<HTMLElement>(
+        `[data-docx-image-child-index="${image.childIndex}"][data-docx-image-layout="wrapped"]`
+      )
+      if (!wrapped || typeof wrapped.getBoundingClientRect !== "function") continue
+      const wrappedRect = wrapped.getBoundingClientRect()
+      next.set(image.key, {
+        left: (wrappedRect.left - surfaceRect.left) / scale,
+        top: (wrappedRect.top - surfaceRect.top) / scale,
+        width: wrappedRect.width / scale,
+        height: wrappedRect.height / scale,
+      })
+    }
   }
+
+  if (sameWrappedBoxes(next, wrappedBoxes.value)) return
+  wrappedBoxes.value = next
+}
+
+function sameWrappedBoxes(
+  next: Map<string, WrappedImageBox>,
+  current: Map<string, WrappedImageBox>
+): boolean {
+  if (next.size !== current.size) return false
+  for (const [key, box] of next) {
+    const previous = current.get(key)
+    if (!previous) return false
+    if (
+      Math.abs(previous.left - box.left) > 0.5 ||
+      Math.abs(previous.top - box.top) > 0.5 ||
+      Math.abs(previous.width - box.width) > 0.5 ||
+      Math.abs(previous.height - box.height) > 0.5
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+function scheduleWrappedBoxRefresh(): void {
+  if (wrappedBoxRefreshScheduled) return
+  wrappedBoxRefreshScheduled = true
+  void nextTick(() => {
+    wrappedBoxRefreshScheduled = false
+    measureWrappedBoxes()
+  })
+}
+
+function observeWrappedLayout(): void {
+  const ResizeObserverConstructor = globalThis.ResizeObserver
+  if (typeof ResizeObserverConstructor !== "function") return
+  const surface = pageSurfaceElement()
+  if (!surface) return
+  resizeObserver ??= new ResizeObserverConstructor(() => {
+    scheduleWrappedBoxRefresh()
+  })
+  resizeObserver.observe(surface)
+  for (const image of floatingImages.value) {
+    if (!image.flowWrapped) continue
+    const paragraph = surface.querySelector<HTMLElement>(
+      `[data-docx-paragraph-node-index="${image.nodeIndex}"]`
+    )
+    if (paragraph) resizeObserver.observe(paragraph)
+  }
+}
+
+function onWindowResize(): void {
+  scheduleWrappedBoxRefresh()
 }
 
 function imageStyle(image: FloatingImageEntry): Record<string, string> {
@@ -300,6 +387,7 @@ function imageStyle(image: FloatingImageEntry): Record<string, string> {
 function onImageLoad(event: Event): void {
   const target = event.currentTarget as HTMLImageElement | null
   if (target) target.dataset.imageState = "ready"
+  scheduleWrappedBoxRefresh()
 }
 
 function onImageError(image: FloatingImageEntry, event: Event): void {
@@ -460,19 +548,49 @@ watch(() => props.controller.model, () => {
   }
 })
 
+// Zoom does not resize the surface's layout box (the viewer applies a CSS
+// transform), so the hit box has to be re-measured when the factor changes.
+watch(() => props.zoomFactor, () => scheduleWrappedBoxRefresh())
+
 watch(
   imageGroupsKey,
   () => {
     void nextTick(() => {
-      layoutRevision.value += 1
+      scheduleWrappedBoxRefresh()
+      observeWrappedLayout()
     })
   },
   { immediate: true }
 )
 
+onMounted(() => {
+  observeWrappedLayout()
+  if (typeof window !== "undefined") {
+    window.addEventListener("resize", onWindowResize)
+  }
+  // Late font loading reflows the text above a wrapped image.
+  const fonts = (globalThis as { document?: Document }).document?.fonts
+  if (fonts && typeof fonts.ready?.then === "function") {
+    void fonts.ready.then(() => scheduleWrappedBoxRefresh())
+  }
+  scheduleWrappedBoxRefresh()
+})
+
+// Any re-render can move the wrapped image (text edit, font swap, decode), so
+// re-measure once the update has been flushed.
+onUpdated(() => {
+  scheduleWrappedBoxRefresh()
+  observeWrappedLayout()
+})
+
 onUnmounted(() => {
   finishPointerInteraction(false)
   failedImageSourceKeys.value.clear()
+  if (typeof window !== "undefined") {
+    window.removeEventListener("resize", onWindowResize)
+  }
+  resizeObserver?.disconnect()
+  resizeObserver = null
 })
 </script>
 
