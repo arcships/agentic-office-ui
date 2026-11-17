@@ -32,6 +32,7 @@ def main() -> None:
     parser.add_argument("--paragraph-check", action="store_true")
     parser.add_argument("--shape-trigger-check", action="store_true")
     parser.add_argument("--rapid-navigation-check", action="store_true")
+    parser.add_argument("--search-cache-check", action="store_true")
     parser.add_argument("--effect-timing-check", action="store_true")
     parser.add_argument("--duplicate-target-check", action="store_true")
     parser.add_argument("--reset-check", action="store_true")
@@ -62,7 +63,7 @@ def main() -> None:
         core_url = args.app_url + "/@fs" + quote(str(core_path), safe="/")
         result = page.evaluate(
             """
-            async ({ moduleUrl, coreUrl, sampleUrl, initialSlide, steps, pauseCheck, previousCheck, transitionCheck, approximation, autoAdvanceCheck, mediaCheck, resourceCheck, repeatCheck, indefiniteCheck, hiddenCheck, actionCheck, overlapCheck, paragraphCheck, shapeTriggerCheck, rapidNavigationCheck, effectTimingCheck, duplicateTargetCheck, resetCheck, mediaBlockCheck }) => {
+            async ({ moduleUrl, coreUrl, sampleUrl, initialSlide, steps, pauseCheck, previousCheck, transitionCheck, approximation, autoAdvanceCheck, mediaCheck, resourceCheck, repeatCheck, indefiniteCheck, hiddenCheck, actionCheck, overlapCheck, paragraphCheck, shapeTriggerCheck, rapidNavigationCheck, searchCacheCheck, effectTimingCheck, duplicateTargetCheck, resetCheck, mediaBlockCheck }) => {
               const api = await import(moduleUrl)
               const core = await import(coreUrl)
               const response = await fetch(sampleUrl)
@@ -83,6 +84,14 @@ def main() -> None:
                 const playback = session.playbackDocument
                 if (!playback) throw new Error("playback document missing")
                 const schedule = core.compilePptxSlideSchedule(playback.slides[initialSlide])
+                let searchCacheLeaked
+                if (searchCacheCheck) {
+                  const matches = session.searchText("切换")
+                  if (matches.length === 0) throw new Error("search matches missing")
+                  const staleMatch = matches[0]
+                  await session.open(await (await fetch(sampleUrl)).arrayBuffer(), { initialSlide })
+                  searchCacheLeaked = (await session.highlightSearchResult(staleMatch)) !== null
+                }
                 let playbackResult = {}
                 if (steps > 0 || autoAdvanceCheck || mediaCheck || repeatCheck || indefiniteCheck || hiddenCheck || actionCheck || overlapCheck || paragraphCheck || shapeTriggerCheck || rapidNavigationCheck || effectTimingCheck || duplicateTargetCheck || resetCheck || mediaBlockCheck) {
                   const events = []
@@ -163,6 +172,7 @@ def main() -> None:
                     let shapeTriggerKey
                     let rapidNavigationSlideIndex
                     let rapidNavigationChanges
+                    let rapidNavigationRejections
                     let effectTiming
                     let duplicateFinalStyles
                     let duplicateWarnings
@@ -204,7 +214,7 @@ def main() -> None:
                         .filter((event) => event.type === "warning")
                         .map((event) => event.warning.code)
                     } else if (rapidNavigationCheck) {
-                      await Promise.all([
+                      const rapidResults = await Promise.allSettled([
                         controller.goToSlide(initialSlide + 1),
                         controller.goToSlide(initialSlide + 2),
                         controller.goToSlide(initialSlide + 3),
@@ -213,6 +223,9 @@ def main() -> None:
                       rapidNavigationChanges = eventRecords
                         .filter((event) => event.type === "slidechange")
                         .map((event) => event.to)
+                      rapidNavigationRejections = rapidResults
+                        .filter((result) => result.status === "rejected")
+                        .map((result) => result.reason?.code ?? String(result.reason))
                     } else if (effectTimingCheck) {
                       const group = schedule.groups.find((candidate) => candidate.key.startsWith("click:"))
                       if (!group) throw new Error("controlled click group missing")
@@ -509,6 +522,7 @@ def main() -> None:
                       shapeTriggerKey,
                       rapidNavigationSlideIndex,
                       rapidNavigationChanges,
+                      rapidNavigationRejections,
                       effectTiming,
                       duplicateInitialStyles,
                       duplicateFinalStyles,
@@ -557,6 +571,7 @@ def main() -> None:
                   unparsed: playback.capability.unparsed,
                   markedObjects: root.querySelectorAll("[data-pptx-object-key]").length,
                   markedParagraphs: root.querySelectorAll("[data-pptx-paragraph-index]").length,
+                  searchCacheLeaked,
                   schedule: schedule.groups.map((group) => ({
                     key: group.key,
                     durationMs: group.durationMs,
@@ -624,6 +639,7 @@ def main() -> None:
                 "paragraphCheck": args.paragraph_check,
                 "shapeTriggerCheck": args.shape_trigger_check,
                 "rapidNavigationCheck": args.rapid_navigation_check,
+                "searchCacheCheck": args.search_cache_check,
                 "effectTimingCheck": args.effect_timing_check,
                 "duplicateTargetCheck": args.duplicate_target_check,
                 "resetCheck": args.reset_check,
@@ -749,6 +765,9 @@ def main() -> None:
     if args.rapid_navigation_check:
         assert result["rapidNavigationSlideIndex"] == args.initial_slide + 3, result
         assert result["rapidNavigationChanges"] == [args.initial_slide + 1, args.initial_slide + 3], result
+        assert result["rapidNavigationRejections"] == ["COMMAND_CANCELLED"], result
+    if args.search_cache_check:
+        assert result["searchCacheLeaked"] is False, result
     if args.effect_timing_check:
         assert result["effectTiming"], result
         for timing in result["effectTiming"]:

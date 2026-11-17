@@ -1,0 +1,392 @@
+import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+import test from "node:test";
+
+import { importFromDemo } from "../component/vue-test-renderer.mjs";
+
+const requireFromPptxCore = createRequire(
+  new URL("../../packages/pptx-core/package.json", import.meta.url),
+);
+// The PPTX renderer is browser-only. This small DOM stand-in covers the empty
+// slides used below; xmldom already ships with the xlsx core package.
+const requireFromXlsxCore = createRequire(
+  new URL("../../packages/xlsx-core/package.json", import.meta.url),
+);
+const { strToU8, zipSync } = requireFromPptxCore("fflate");
+const { DOMParser, Document, XMLSerializer } = requireFromXlsxCore("@xmldom/xmldom");
+
+Document.prototype.querySelector = function querySelector(selector) {
+  return selector === "parsererror" ? null : undefined;
+};
+
+function matchesSelector(element, selector) {
+  if (selector.startsWith(".")) return element.classList.contains(selector.slice(1));
+  if (selector.startsWith("[")) {
+    const match = /^\[([^=\]]+)(?:="?([^"\]]*)"?)?\]$/.exec(selector);
+    if (!match) return false;
+    const [, name, value] = match;
+    const actual = name.startsWith("data-")
+      ? element.dataset[name.slice(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())]
+      : element.attributes[name];
+    return value === undefined ? actual !== undefined : actual === value;
+  }
+  return element.localName.toLowerCase() === selector.toLowerCase();
+}
+
+class FakeElement {
+  constructor(localName) {
+    this.localName = localName;
+    this.tagName = localName.toUpperCase();
+    this.nodeType = 1;
+    this.children = [];
+    this.childNodes = this.children;
+    this.parentElement = null;
+    this.parentNode = null;
+    this.dataset = {};
+    this.attributes = {};
+    this.textContent = "";
+    this.innerHTMLValue = "";
+    this.style = {
+      cssText: "",
+      setProperty(name, value) {
+        this[name] = String(value);
+      },
+      removeProperty(name) {
+        delete this[name];
+      },
+    };
+    this.classList = {
+      add() {},
+      contains() {
+        return false;
+      },
+      remove() {},
+      toggle() {},
+    };
+    this.ownerDocument = globalThis.document;
+  }
+
+  get firstElementChild() {
+    return this.children[0] ?? null;
+  }
+
+  get lastElementChild() {
+    return this.children.at(-1) ?? null;
+  }
+
+  get innerHTML() {
+    return this.innerHTMLValue;
+  }
+
+  set innerHTML(value) {
+    this.innerHTMLValue = value;
+    if (value === "") this.children = [];
+    this.childNodes = this.children;
+  }
+
+  appendChild(child) {
+    if (child.isFragment) {
+      for (const item of [...child.children]) this.appendChild(item);
+      return child;
+    }
+    child.parentElement = this;
+    child.parentNode = this;
+    this.children.push(child);
+    return child;
+  }
+
+  insertBefore(child, reference) {
+    const index = this.children.indexOf(reference);
+    if (index < 0) this.children.push(child);
+    else this.children.splice(index, 0, child);
+    child.parentElement = this;
+    child.parentNode = this;
+    return child;
+  }
+
+  removeChild(child) {
+    const index = this.children.indexOf(child);
+    if (index >= 0) this.children.splice(index, 1);
+    child.parentElement = null;
+    child.parentNode = null;
+    return child;
+  }
+
+  remove() {
+    this.parentElement?.removeChild(this);
+  }
+
+  replaceChildren(...children) {
+    this.children = [];
+    for (const child of children) this.appendChild(child);
+  }
+
+  setAttribute(name, value) {
+    this.attributes[name] = String(value);
+    if (name.startsWith("data-")) {
+      const key = name.slice(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+      this.dataset[key] = String(value);
+    }
+  }
+
+  getAttribute(name) {
+    return this.attributes[name] ?? null;
+  }
+
+  hasAttribute(name) {
+    return name in this.attributes;
+  }
+
+  removeAttribute(name) {
+    delete this.attributes[name];
+  }
+
+  matches(selector) {
+    return this.querySelectorAll(selector).includes(this);
+  }
+
+  closest(selector) {
+    let current = this;
+    while (current) {
+      if (current.matches(selector)) return current;
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  querySelector(selector) {
+    return this.querySelectorAll(selector)[0] ?? null;
+  }
+
+  querySelectorAll(selector) {
+    const result = [];
+    const visit = (node) => {
+      for (const child of node.children) {
+        if (matchesSelector(child, selector)) result.push(child);
+        visit(child);
+      }
+    };
+    visit(this);
+    return result;
+  }
+
+  getBoundingClientRect() {
+    return { bottom: 100, height: 100, left: 0, right: 100, top: 0, width: 100, x: 0, y: 0 };
+  }
+
+  getContext() {
+    return null;
+  }
+
+  addEventListener() {}
+  removeEventListener() {}
+  dispatchEvent() {}
+  focus() {}
+  scrollIntoView() {}
+
+  cloneNode() {
+    return new FakeElement(this.localName);
+  }
+
+  get offsetWidth() {
+    return 100;
+  }
+
+  get offsetHeight() {
+    return 100;
+  }
+
+  get clientWidth() {
+    return 100;
+  }
+
+  get clientHeight() {
+    return 100;
+  }
+}
+
+const documentObject = {
+  body: new FakeElement("body"),
+  createDocumentFragment() {
+    const fragment = new FakeElement("#fragment");
+    fragment.isFragment = true;
+    return fragment;
+  },
+  createElement(tag) {
+    return new FakeElement(tag);
+  },
+  createElementNS(_namespace, tag) {
+    return new FakeElement(tag);
+  },
+  createTextNode(text) {
+    const node = new FakeElement("#text");
+    node.textContent = text;
+    return node;
+  },
+  documentElement: new FakeElement("html"),
+  querySelector() {
+    return null;
+  },
+};
+
+globalThis.document = documentObject;
+globalThis.window = {
+  addEventListener() {},
+  innerHeight: 720,
+  removeEventListener() {},
+};
+globalThis.getComputedStyle = () => ({
+  clipPath: "none",
+  display: "block",
+  filter: "none",
+  opacity: "1",
+  position: "static",
+  visibility: "visible",
+});
+globalThis.requestAnimationFrame = (callback) => {
+  callback(performance.now());
+  return 1;
+};
+globalThis.cancelAnimationFrame = () => {};
+globalThis.HTMLElement = FakeElement;
+globalThis.DOMParser = DOMParser;
+globalThis.XMLSerializer = XMLSerializer;
+
+const {
+  createPptxDocumentSession,
+} = await importFromDemo("@arcships/pptx-core/browser");
+
+const NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main";
+const NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main";
+const NS_R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const NS_REL = "http://schemas.openxmlformats.org/package/2006/relationships";
+
+const emptySlide = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:p="${NS_P}" xmlns:a="${NS_A}" xmlns:r="${NS_R}"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld></p:sld>`;
+const textSlide = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sld xmlns:p="${NS_P}" xmlns:a="${NS_A}" xmlns:r="${NS_R}"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="TextBox 1"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="1000000" y="1000000"/><a:ext cx="2000000" cy="1000000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="zh-CN"/><a:t>切换文字</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`;
+
+function deck({ text = false } = {}) {
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/><Override PartName="/ppt/slides/slide2.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>`;
+  const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="${NS_REL}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>`;
+  const presentation = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:presentation xmlns:p="${NS_P}" xmlns:a="${NS_A}" xmlns:r="${NS_R}"><p:sldIdLst><p:sldId id="256" r:id="rId2"/><p:sldId id="257" r:id="rId3"/></p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`;
+  const presentationRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="${NS_REL}"><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide2.xml"/></Relationships>`;
+  const emptyRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="${NS_REL}"></Relationships>`;
+  return zipSync({
+    "[Content_Types].xml": strToU8(contentTypes),
+    "_rels/.rels": strToU8(rootRels),
+    "ppt/presentation.xml": strToU8(presentation),
+    "ppt/_rels/presentation.xml.rels": strToU8(presentationRels),
+    "ppt/slides/slide1.xml": strToU8(emptySlide),
+    "ppt/slides/slide2.xml": strToU8(text ? textSlide : emptySlide),
+    "ppt/slides/_rels/slide1.xml.rels": strToU8(emptyRels),
+    "ppt/slides/_rels/slide2.xml.rels": strToU8(emptyRels),
+  });
+}
+
+function createRoot({ failOnRender = false } = {}) {
+  const root = new FakeElement("div");
+  if (failOnRender) {
+    let failed = false;
+    Object.defineProperty(root.style, "position", {
+      get() {
+        return this.positionValue ?? "";
+      },
+      set(value) {
+        if (!failed) {
+          failed = true;
+          throw new Error("render container rejected the slide");
+        }
+        this.positionValue = value;
+      },
+    });
+  }
+  return root;
+}
+
+test("a failed open keeps the previous document and playback model", async () => {
+  const session = createPptxDocumentSession(createRoot(), {
+    lazyMedia: true,
+    lazySlides: true,
+    renderMode: "slide",
+  });
+  try {
+    const first = await session.open(deck(), { initialSlide: 0 });
+    const playback = session.playbackDocument;
+    assert.equal(first.slides.length, 2);
+    assert.ok(playback);
+
+    await assert.rejects(
+      session.open(new Uint8Array([1, 2, 3])),
+      (error) => error.code === "INVALID_SOURCE",
+    );
+
+    assert.equal(session.document, first);
+    assert.equal(session.playbackDocument, playback);
+  } finally {
+    session.dispose();
+  }
+});
+
+test("a render failure clears the session instead of keeping a dead document", async () => {
+  const session = createPptxDocumentSession(createRoot({ failOnRender: true }), {
+    lazyMedia: true,
+    lazySlides: true,
+    renderMode: "slide",
+  });
+  try {
+    await assert.rejects(session.open(deck(), { initialSlide: 0 }));
+    assert.equal(session.document, null);
+    assert.equal(session.playbackDocument, null);
+
+    const recovered = await session.open(deck(), { initialSlide: 0 });
+    assert.equal(recovered.slides.length, 2);
+    assert.equal(session.document, recovered);
+  } finally {
+    session.dispose();
+  }
+});
+
+test("search results from a previous document cannot highlight the next one", async () => {
+  const root = createRoot();
+  const session = createPptxDocumentSession(root, {
+    lazyMedia: true,
+    lazySlides: true,
+    renderMode: "slide",
+  });
+  try {
+    await session.open(deck({ text: true }), { initialSlide: 0 });
+    const matches = session.searchText("切换");
+    assert.equal(matches.length, 1);
+    const liveHighlight = await session.highlightSearchResult(matches[0]);
+    assert.ok(liveHighlight);
+    liveHighlight.dispose();
+
+    await session.open(deck(), { initialSlide: 0 });
+    const staleHighlight = await session.highlightSearchResult(matches[0]);
+    assert.equal(staleHighlight, null);
+    assert.equal(root.querySelectorAll("[data-pptx-search-highlight]").length, 0);
+  } finally {
+    session.dispose();
+  }
+});
+
+test("a fresh session stays empty after a failed open", async () => {
+  const session = createPptxDocumentSession(createRoot(), {
+    lazyMedia: true,
+    lazySlides: true,
+    renderMode: "slide",
+  });
+  try {
+    await assert.rejects(session.open(new Uint8Array([1, 2, 3])));
+    assert.equal(session.document, null);
+    assert.equal(session.playbackDocument, null);
+  } finally {
+    session.dispose();
+  }
+});
