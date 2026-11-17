@@ -59,6 +59,7 @@ import type {
   DocxFormFieldLocation,
   DocxDocumentTheme,
   DocxSelectionSessionKind,
+  DocxTableCellSelectionRange,
   DocxLineSpacingInfo,
   DocxLineSpacingRule,
   DocxBorderContext,
@@ -721,6 +722,30 @@ export function useDocxEditor(
       activeTextRange: undefined,
     }))
   }
+  const selectTableCellRange = (
+    tableIndex: number,
+    range: DocxTableCellSelectionRange,
+    tableRuntimeKey?: string
+  ): void => {
+    clearPendingRunStyle()
+    dispatchEditorTransaction(() => ({
+      selection: {
+        kind: "table-cell",
+        tableIndex,
+        rowIndex: range.focusRowIndex,
+        cellIndex: range.focusCellIndex,
+        ...(tableRuntimeKey ? { tableRuntimeKey } : undefined),
+        cellRange: {
+          tableIndex,
+          anchorRowIndex: range.anchorRowIndex,
+          anchorCellIndex: range.anchorCellIndex,
+          focusRowIndex: range.focusRowIndex,
+          focusCellIndex: range.focusCellIndex,
+        },
+      },
+      activeTextRange: undefined,
+    }))
+  }
   const selectTableCellByRuntimeKey = (
     tableRuntimeKey: string,
     rowIndex: number,
@@ -842,6 +867,7 @@ export function useDocxEditor(
     setActiveTextRange,
     selectParagraph,
     selectTableCell,
+    selectTableCellRange,
     selectTableCellByRuntimeKey,
     clearTableCellContents: tbl.clearTableCellContents,
     setTableColumnWidths: tbl.setTableColumnWidths,

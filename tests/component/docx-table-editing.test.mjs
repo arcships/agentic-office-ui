@@ -2,12 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  findByTestId,
   importFromDemo,
   mount,
+  teleportTarget,
   vue,
+  walk,
 } from "./vue-test-renderer.mjs";
 
-const { useDocxEditor } = await importFromDemo("@arcships/vue-docx");
+const { DocxContextMenu, DocxTableHost, DocxToolbar, useDocxEditor } =
+  await importFromDemo("@arcships/vue-docx");
 const { createBlankDocumentModel } = await importFromDemo("@arcships/docx-core");
 
 function deepFreeze(value, seen = new Set()) {
@@ -446,4 +450,304 @@ test("list commands resolve numbering definitions and respect their maximum leve
   assert.deepEqual(limited.warnings, []);
   mounted.app.unmount();
   assert.deepEqual(mounted.warnings, []);
+});
+
+function installFakeDocument(t) {
+  const originalDocument = globalThis.document;
+  const listeners = new Map();
+  const createElement = (tagName) => ({
+    tagName: String(tagName).toUpperCase(),
+    style: {},
+    children: [],
+    innerHTML: "",
+    appendChild(child) {
+      this.children.push(child);
+      return child;
+    },
+    setAttribute() {},
+    removeAttribute() {},
+    getAttribute() { return null; },
+  });
+  const fakeDocument = {
+    createElement,
+    createTextNode(text) {
+      return { nodeType: 3, textContent: String(text) };
+    },
+    addEventListener(type, listener) {
+      const entries = listeners.get(type) ?? new Set();
+      entries.add(listener);
+      listeners.set(type, entries);
+    },
+    removeEventListener(type, listener) {
+      listeners.get(type)?.delete(listener);
+    },
+    dispatch(type) {
+      for (const listener of listeners.get(type) ?? []) listener();
+    },
+  };
+  globalThis.document = fakeDocument;
+  t.after(() => {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  });
+  return fakeDocument;
+}
+
+function tableCellHosts(root) {
+  return walk(root).filter(
+    (node) =>
+      node.type === "td" && node.props?.["data-docx-table-cell"] === true
+  );
+}
+
+function tableCellHostAt(root, rowIndex, cellIndex) {
+  return tableCellHosts(root).find(
+    (node) =>
+      node.props?.["data-docx-table-row-index"] === rowIndex &&
+      node.props?.["data-docx-table-cell-index"] === cellIndex
+  );
+}
+
+test("table host drag selection exposes a multi-cell range and keeps it active", async (t) => {
+  const fakeDocument = installFakeDocument(t);
+  const source = deepFreeze(starterModel([
+    tableNode([
+      { type: "table-row", cells: [cell("A"), cell("B")] },
+      { type: "table-row", cells: [cell("C"), cell("D")] },
+    ], [1000, 1000]),
+  ]));
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: source });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[0],
+        tableIndex: 0,
+        editable: true,
+        controller,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+
+  const first = tableCellHostAt(mounted.root, 0, 0);
+  const second = tableCellHostAt(mounted.root, 0, 1);
+  const fourth = tableCellHostAt(mounted.root, 1, 1);
+  assert.ok(first && second && fourth);
+
+  await first.props.onMousedown({
+    button: 0,
+    shiftKey: false,
+    target: null,
+    preventDefault() {},
+  });
+  await vue.nextTick();
+  await second.props.onMouseenter({ buttons: 1 });
+  await vue.nextTick();
+
+  assert.deepEqual(controller.selection, {
+    kind: "table-cell",
+    tableIndex: 0,
+    rowIndex: 0,
+    cellIndex: 1,
+    cellRange: {
+      tableIndex: 0,
+      anchorRowIndex: 0,
+      anchorCellIndex: 0,
+      focusRowIndex: 0,
+      focusCellIndex: 1,
+    },
+  });
+  assert.deepEqual(
+    tableCellHosts(mounted.root)
+      .filter((node) =>
+        String(node.props?.class || "").split(/\s+/).includes("docx-table-cell--active")
+      )
+      .map((node) => [
+        node.props["data-docx-table-row-index"],
+        node.props["data-docx-table-cell-index"],
+      ]),
+    [[0, 0], [0, 1]]
+  );
+
+  fakeDocument.dispatch("mouseup");
+  await fourth.props.onMousedown({
+    button: 0,
+    shiftKey: true,
+    target: null,
+    preventDefault() {},
+  });
+  await vue.nextTick();
+  assert.deepEqual(controller.selection.cellRange, {
+    tableIndex: 0,
+    anchorRowIndex: 0,
+    anchorCellIndex: 0,
+    focusRowIndex: 1,
+    focusCellIndex: 1,
+  });
+
+  // A text range inside the selected rectangle must not collapse the range.
+  controller.setActiveTextRange({
+    start: { location: { kind: "table-cell", tableIndex: 0, rowIndex: 1, cellIndex: 1, paragraphIndex: 0 }, offset: 0 },
+    end: { location: { kind: "table-cell", tableIndex: 0, rowIndex: 1, cellIndex: 1, paragraphIndex: 0 }, offset: 1 },
+  });
+  await vue.nextTick();
+  assert.deepEqual(controller.selection.cellRange, {
+    tableIndex: 0,
+    anchorRowIndex: 0,
+    anchorCellIndex: 0,
+    focusRowIndex: 1,
+    focusCellIndex: 1,
+  });
+
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("context menu merges a selected range and splits the merged cell", async () => {
+  const source = deepFreeze(starterModel([
+    tableNode([
+      { type: "table-row", cells: [cell("A"), cell("B")] },
+      { type: "table-row", cells: [cell("C"), cell("D")] },
+    ], [1000, 1000]),
+  ]));
+  const mounted = await mountController(source);
+  const { controller } = mounted;
+  const menu = await mount(DocxContextMenu, {
+    context: {
+      kind: "table",
+      tableContext: { tableIndex: 0, rowIndex: 0, cellIndex: 0 },
+    },
+    controller,
+    x: 10,
+    y: 10,
+  });
+  const body = teleportTarget("body");
+  await vue.nextTick();
+
+  const mergeButton = findByTestId(body, "docx-context-menu-merge-cells");
+  const splitButton = findByTestId(body, "docx-context-menu-split-cell");
+  assert.ok(mergeButton, "context menu must expose Merge cells");
+  assert.ok(splitButton, "context menu must expose Split cell");
+  assert.equal(mergeButton.props.disabled, true, "merge needs a multi-cell range");
+
+  controller.selectTableCellRange(0, {
+    tableIndex: 0,
+    anchorRowIndex: 0,
+    anchorCellIndex: 0,
+    focusRowIndex: 1,
+    focusCellIndex: 1,
+  });
+  await vue.nextTick();
+  assert.equal(mergeButton.props.disabled, false);
+  await mergeButton.props.onClick();
+  await vue.nextTick();
+
+  let table = controller.model.nodes[0];
+  assert.equal(table.rows[0].cells.length, 1);
+  assert.equal(table.rows[0].cells[0].style?.gridSpan, 2);
+  assert.equal(table.rows[0].cells[0].style?.rowSpan, 2);
+  assert.equal(findByTestId(body, "docx-context-menu-split-cell").props.disabled, false);
+
+  await findByTestId(body, "docx-context-menu-split-cell").props.onClick();
+  await vue.nextTick();
+  table = controller.model.nodes[0];
+  assert.equal(table.rows[0].cells.length, 2);
+  assert.equal(table.rows[1].cells.length, 2);
+
+  menu.app.unmount();
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("toolbar exposes row, column, merge and split commands for a table selection", async () => {
+  const source = deepFreeze(starterModel([
+    tableNode([
+      { type: "table-row", cells: [cell("A"), cell("B")] },
+      { type: "table-row", cells: [cell("C"), cell("D")] },
+    ], [1000, 1000]),
+  ]));
+  const mounted = await mountController(source);
+  const { controller } = mounted;
+  const toolbar = await mount(DocxToolbar, { controller });
+
+  controller.selectTableCell(0, 0, 0);
+  await vue.nextTick();
+  assert.ok(findByTestId(toolbar.root, "editor-table-actions"), "table actions appear for a table selection");
+
+  await findByTestId(toolbar.root, "editor-table-row-below").props.onClick();
+  await vue.nextTick();
+  assert.equal(controller.model.nodes[0].rows.length, 3);
+
+  controller.selectTableCell(0, 0, 0);
+  await vue.nextTick();
+  await findByTestId(toolbar.root, "editor-table-column-right").props.onClick();
+  await vue.nextTick();
+  assert.equal(tableGridWidth(controller.model.nodes[0]), 3);
+
+  controller.selectTableCellRange(0, {
+    tableIndex: 0,
+    anchorRowIndex: 0,
+    anchorCellIndex: 0,
+    focusRowIndex: 0,
+    focusCellIndex: 1,
+  });
+  await vue.nextTick();
+  const mergeButton = findByTestId(toolbar.root, "editor-table-merge");
+  assert.equal(mergeButton.props.disabled, false);
+  await mergeButton.props.onClick();
+  await vue.nextTick();
+  assert.equal(controller.model.nodes[0].rows[0].cells[0].style?.gridSpan, 2);
+
+  const splitButton = findByTestId(toolbar.root, "editor-table-split");
+  assert.equal(splitButton.props.disabled, false);
+  await splitButton.props.onClick();
+  await vue.nextTick();
+  assert.equal(controller.model.nodes[0].rows[0].cells[0].style?.gridSpan, undefined);
+
+  toolbar.app.unmount();
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("table, list and form-field commands reuse untouched top-level nodes", async () => {
+  const tableModel = starterModel([
+    { type: "paragraph", children: [{ type: "text", text: "before" }] },
+    tableNode([{ type: "table-row", cells: [cell("only")] }], [1000]),
+    { type: "paragraph", children: [{ type: "text", text: "after" }] },
+  ]);
+  const tableMounted = await mountController(deepFreeze(tableModel));
+  const tableController = tableMounted.controller;
+  const untouchedParagraph = tableController.model.nodes[2];
+  const beforeModel = tableController.model;
+  const beforeJson = JSON.stringify(beforeModel);
+  tableController.insertTableRow(1, 0, "below");
+  await vue.nextTick();
+  assert.strictEqual(tableController.model.nodes[2], untouchedParagraph);
+  assert.equal(JSON.stringify(beforeModel), beforeJson);
+  tableMounted.app.unmount();
+
+  const listMounted = await mountController(deepFreeze(starterModel([
+    { type: "paragraph", children: [{ type: "text", text: "item" }] },
+    { type: "paragraph", children: [{ type: "text", text: "untouched" }] },
+  ])));
+  const listController = listMounted.controller;
+  const listUntouched = listController.model.nodes[1];
+  listController.selectParagraph(0);
+  await vue.nextTick();
+  listController.toggleList("unordered");
+  await vue.nextTick();
+  assert.strictEqual(listController.model.nodes[1], listUntouched);
+  listMounted.app.unmount();
+
+  const formMounted = await mountController(deepFreeze(starterModel([
+    { type: "paragraph", children: [{ type: "form-field", fieldType: "checkbox", checked: false, value: "0" }] },
+    { type: "paragraph", children: [{ type: "text", text: "untouched" }] },
+  ])));
+  const formController = formMounted.controller;
+  const formUntouched = formController.model.nodes[1];
+  formController.toggleFormCheckbox({ kind: "paragraph", nodeIndex: 0, childIndex: 0 });
+  await vue.nextTick();
+  assert.strictEqual(formController.model.nodes[1], formUntouched);
+  formMounted.app.unmount();
 });

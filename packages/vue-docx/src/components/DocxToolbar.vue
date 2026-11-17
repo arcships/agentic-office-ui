@@ -375,6 +375,35 @@
       </button>
     </div>
 
+    <!-- Table structure commands for the selected cell/range -->
+    <div
+      v-if="selectedTableCell"
+      class="docx-toolbar-group docx-toolbar-group--table"
+      data-testid="editor-table-actions"
+    >
+      <button data-testid="editor-table-row-above" class="docx-toolbar-btn" title="Insert row above" @click="insertSelectedTableRow('above')">R↑</button>
+      <button data-testid="editor-table-row-below" class="docx-toolbar-btn" title="Insert row below" @click="insertSelectedTableRow('below')">R↓</button>
+      <button data-testid="editor-table-column-left" class="docx-toolbar-btn" title="Insert column left" @click="insertSelectedTableColumn('left')">C←</button>
+      <button data-testid="editor-table-column-right" class="docx-toolbar-btn" title="Insert column right" @click="insertSelectedTableColumn('right')">C→</button>
+      <button data-testid="editor-table-delete-row" class="docx-toolbar-btn" title="Delete row" @click="deleteSelectedTableRow()">R×</button>
+      <button data-testid="editor-table-delete-column" class="docx-toolbar-btn" title="Delete column" @click="deleteSelectedTableColumn()">C×</button>
+      <button
+        data-testid="editor-table-merge"
+        class="docx-toolbar-btn"
+        title="Merge cells"
+        :disabled="!canMergeSelectedTableCells"
+        @click="mergeSelectedTableCells()"
+      >Merge</button>
+      <button
+        data-testid="editor-table-split"
+        class="docx-toolbar-btn"
+        title="Split cell"
+        :disabled="!canSplitSelectedTableCell"
+        @click="splitSelectedTableCell()"
+      >Split</button>
+      <button data-testid="editor-table-delete" class="docx-toolbar-btn" title="Delete table" @click="deleteSelectedTable()">T×</button>
+    </div>
+
 
     </fieldset>
   </div>
@@ -470,6 +499,104 @@ const canIncreaseListDepth = computed(
   () => selectedListLevel.value !== undefined && selectedListLevel.value < 8
 )
 const canDecreaseListDepth = computed(() => (selectedListLevel.value ?? 0) > 0)
+
+// ── Table commands ──────────────────────────────────────────────────
+const selectedTableCell = computed(() => {
+  const selection = props.controller.selection
+  if (selection.kind !== "table-cell" || selection.tableRuntimeKey) {
+    return undefined
+  }
+  return selection
+})
+
+const selectedTableRange = computed(() => selectedTableCell.value?.cellRange)
+
+const canMergeSelectedTableCells = computed(() => {
+  const range = selectedTableRange.value
+  return Boolean(
+    range &&
+      (range.anchorRowIndex !== range.focusRowIndex ||
+        range.anchorCellIndex !== range.focusCellIndex)
+  )
+})
+
+const canSplitSelectedTableCell = computed(() => {
+  const selection = selectedTableCell.value
+  if (!selection) return false
+  const table = props.controller.model.nodes[selection.tableIndex]
+  if (!table || table.type !== "table") return false
+  const cell = table.rows[selection.rowIndex]?.cells[selection.cellIndex]
+  return Boolean(
+    cell &&
+      ((cell.style?.gridSpan ?? 1) > 1 ||
+        (cell.style?.rowSpan ?? 1) > 1 ||
+        cell.style?.vMergeContinuation)
+  )
+})
+
+function insertSelectedTableRow(direction: "above" | "below"): void {
+  const selection = selectedTableCell.value
+  if (!selection) return
+  props.controller.insertTableRow(selection.tableIndex, selection.rowIndex, direction)
+}
+
+function insertSelectedTableColumn(direction: "left" | "right"): void {
+  const selection = selectedTableCell.value
+  if (!selection) return
+  props.controller.insertTableColumn(
+    selection.tableIndex,
+    selection.cellIndex,
+    direction,
+    selection.rowIndex
+  )
+}
+
+function deleteSelectedTableRow(): void {
+  const selection = selectedTableCell.value
+  if (!selection) return
+  props.controller.deleteTableRow(selection.tableIndex, selection.rowIndex)
+}
+
+function deleteSelectedTableColumn(): void {
+  const selection = selectedTableCell.value
+  if (!selection) return
+  props.controller.deleteTableColumn(
+    selection.tableIndex,
+    selection.cellIndex,
+    selection.rowIndex
+  )
+}
+
+function mergeSelectedTableCells(): void {
+  const selection = selectedTableCell.value
+  if (!selection) return
+  props.controller.mergeTableCells(
+    selection.tableIndex,
+    selectedTableRange.value ?? {
+      tableIndex: selection.tableIndex,
+      anchorRowIndex: selection.rowIndex,
+      anchorCellIndex: selection.cellIndex,
+      focusRowIndex: selection.rowIndex,
+      focusCellIndex: selection.cellIndex,
+    }
+  )
+}
+
+function splitSelectedTableCell(): void {
+  const selection = selectedTableCell.value
+  if (!selection) return
+  props.controller.splitTableCell(
+    selection.tableIndex,
+    selection.rowIndex,
+    selection.cellIndex
+  )
+}
+
+function deleteSelectedTable(): void {
+  const selection = selectedTableCell.value
+  if (!selection) return
+  props.controller.deleteTable(selection.tableIndex)
+}
 
 // ── Border presets ──────────────────────────────────────────────────
 const borderPresets = computed<{ value: DocxBorderPreset; label: string }[]>(() => [

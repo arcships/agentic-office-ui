@@ -448,7 +448,7 @@ export function cloneDocModelShallow(model: DocModel): DocModel {
   };
 }
 
-function cloneNumberingDefinitions(
+export function cloneNumberingDefinitions(
   numberingDefinitions?: NumberingDefinitionSet
 ): NumberingDefinitionSet | undefined {
   if (!numberingDefinitions) {

@@ -268,6 +268,11 @@ export interface DocxEditorController {
     rowIndex: number,
     cellIndex: number
   ) => void;
+  selectTableCellRange: (
+    tableIndex: number,
+    range: DocxTableCellSelectionRange,
+    tableRuntimeKey?: string
+  ) => void;
   selectTableCellByRuntimeKey: (
     tableRuntimeKey: string,
     rowIndex: number,
@@ -365,6 +370,8 @@ export type DocxTableContextMenuActionId =
   | "insert-column-right"
   | "delete-row"
   | "delete-column"
+  | "merge-cells"
+  | "split-cell"
   | "delete-table";
 
 export type DocxContextMenuActionId =

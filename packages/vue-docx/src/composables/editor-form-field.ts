@@ -4,7 +4,7 @@
 
 import type { DocModel, FormFieldRunNode } from "@arcships/docx-core"
 import type { DocxFormFieldLocation } from "@arcships/docx-core"
-import { cloneDocModel, getParagraphAtLocation } from "@arcships/docx-core"
+import { cloneDocModelShallow, cloneDocNode, getParagraphAtLocation } from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
 import { validateFormFieldValue } from "./form-field-value"
 
@@ -18,6 +18,21 @@ function formFieldEditKey(location: DocxFormFieldLocation): string {
   return location.kind === "paragraph"
     ? `p:${location.nodeIndex}:${location.childIndex}`
     : `t:${location.tableIndex}:${location.rowIndex}:${location.cellIndex}:${location.paragraphIndex}:${location.childIndex}`
+}
+
+/** Copy-on-write shell plus the paragraph/table that owns the form field. */
+function cloneModelForFormFieldEdit(
+  current: DocModel,
+  location: DocxFormFieldLocation,
+): DocModel {
+  const next = cloneDocModelShallow(current)
+  const nodeIndex =
+    location.kind === "paragraph" ? location.nodeIndex : location.tableIndex
+  const node = current.nodes[nodeIndex]
+  if (node) {
+    next.nodes[nodeIndex] = cloneDocNode(node)
+  }
+  return next
 }
 
 export function createEditorFormField(
@@ -50,7 +65,7 @@ export function createEditorFormField(
     endFormFieldEdit()
     applyChange(
       (current) => {
-        const nextModel = cloneDocModel(current)
+        const nextModel = cloneModelForFormFieldEdit(current, location)
         const { paragraph: para } = getParagraphAtLocation(nextModel, location)
         if (!para) return current
         const field = para.children[location.childIndex]
@@ -89,7 +104,7 @@ export function createEditorFormField(
 
     const changed = applyChange(
       (current) => {
-        const nextModel = cloneDocModel(current)
+        const nextModel = cloneModelForFormFieldEdit(current, location)
         const { paragraph: para } = getParagraphAtLocation(nextModel, location)
         if (!para) return current
         const field = para.children[location.childIndex]
@@ -122,7 +137,7 @@ export function createEditorFormField(
     patch: Partial<NonNullable<FormFieldRunNode["widget"]>>
   ): void => {
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForFormFieldEdit(current, location)
       const { paragraph: para } = getParagraphAtLocation(nextModel, location)
       if (!para) return current
       const field = para.children[location.childIndex]

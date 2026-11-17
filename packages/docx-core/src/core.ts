@@ -57,7 +57,12 @@ export type {
   TextStyle,
 } from "./engine/types";
 
-export { cloneDocModel, cloneDocModelShallow, cloneDocNode } from "./engine/clone";
+export {
+  cloneDocModel,
+  cloneDocModelShallow,
+  cloneDocNode,
+  cloneNumberingDefinitions,
+} from "./engine/clone";
 export { normalizeDocModel } from "./engine/normalize";
 
 export type {

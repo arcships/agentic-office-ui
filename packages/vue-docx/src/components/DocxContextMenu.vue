@@ -184,6 +184,28 @@
         <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteColumn')">
           <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteColumn }}</span>
         </button>
+        <button
+          data-testid="docx-context-menu-merge-cells"
+          class="docx-context-menu-item"
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          :disabled="!canMergeTableCells"
+          @click="onAction('mergeCells')"
+        >
+          Merge cells
+        </button>
+        <button
+          data-testid="docx-context-menu-split-cell"
+          class="docx-context-menu-item"
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          :disabled="!canSplitTableCell"
+          @click="onAction('splitCell')"
+        >
+          Split cell
+        </button>
         <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteTable')">
           <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteTable }}</span>
         </button>
@@ -254,6 +276,43 @@ const visible = computed(() => !!props.context)
 const tableContext = computed<DocxTableContextMenuContext | undefined>(() => (
   props.context?.tableContext
 ))
+
+const selectedTableSelection = computed(() => {
+  const selection = props.controller.selection
+  const context = tableContext.value
+  if (!context || selection.kind !== "table-cell") return undefined
+  if (selection.tableIndex !== context.tableIndex) return undefined
+  if (selection.tableRuntimeKey) return undefined
+  return selection
+})
+
+const selectedTableRange = computed(() => selectedTableSelection.value?.cellRange)
+
+const canMergeTableCells = computed(() => {
+  const range = selectedTableRange.value
+  return Boolean(
+    range &&
+      (range.anchorRowIndex !== range.focusRowIndex ||
+        range.anchorCellIndex !== range.focusCellIndex)
+  )
+})
+
+const canSplitTableCell = computed(() => {
+  const context = tableContext.value
+  const selection = selectedTableSelection.value
+  if (!context) return false
+  const rowIndex = selection?.rowIndex ?? context.rowIndex
+  const cellIndex = selection?.cellIndex ?? context.cellIndex
+  const table = props.controller.model.nodes[context.tableIndex]
+  if (!table || table.type !== "table") return false
+  const cell = table.rows[rowIndex]?.cells[cellIndex]
+  return Boolean(
+    cell &&
+      ((cell.style?.gridSpan ?? 1) > 1 ||
+        (cell.style?.rowSpan ?? 1) > 1 ||
+        cell.style?.vMergeContinuation)
+  )
+})
 
 const selectedRunStyle = computed(() => props.controller.selectedRunStyle)
 
@@ -431,6 +490,28 @@ async function onAction(action: string, value?: string): Promise<void> {
           tableContext.value.tableIndex,
           tableContext.value.cellIndex,
           tableContext.value.rowIndex
+        )
+      }
+      break
+    case "mergeCells":
+      if (tableContext.value) {
+        const range = selectedTableRange.value ?? {
+          tableIndex: tableContext.value.tableIndex,
+          anchorRowIndex: tableContext.value.rowIndex,
+          anchorCellIndex: tableContext.value.cellIndex,
+          focusRowIndex: tableContext.value.rowIndex,
+          focusCellIndex: tableContext.value.cellIndex,
+        }
+        ctrl.mergeTableCells(tableContext.value.tableIndex, range)
+      }
+      break
+    case "splitCell":
+      if (tableContext.value) {
+        const selection = selectedTableSelection.value
+        ctrl.splitTableCell(
+          tableContext.value.tableIndex,
+          selection?.rowIndex ?? tableContext.value.rowIndex,
+          selection?.cellIndex ?? tableContext.value.cellIndex
         )
       }
       break

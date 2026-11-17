@@ -8,7 +8,8 @@ import type {
   ParagraphNode,
 } from "@arcships/docx-core"
 import {
-  cloneDocModel,
+  cloneDocModelShallow,
+  cloneDocNode,
   cloneParagraphStyle,
   createDefaultEditorTableBorders,
   createEmptyParagraphFromTemplate,
@@ -85,6 +86,30 @@ function insertedTableNode(model: DocModel) {
   }
 }
 
+/** Copy-on-write shell plus the one top-level table node the command edits. */
+function cloneModelForTableEdit(
+  current: DocModel,
+  tableIndex?: number
+): DocModel {
+  const next = cloneDocModelShallow(current)
+  if (tableIndex !== undefined) {
+    const node = current.nodes[tableIndex]
+    if (node) {
+      next.nodes[tableIndex] = cloneDocNode(node)
+    }
+  }
+  return next
+}
+
+/** Shallow shell with copied section wrappers for startNodeIndex edits. */
+function cloneModelForSectionEdit(current: DocModel): DocModel {
+  const next = cloneDocModelShallow(current)
+  next.metadata.sections = current.metadata.sections?.map((section) => ({
+    ...section,
+  }))
+  return next
+}
+
 export function createEditorTable(
   ctx: EditorCore,
   applyChange: (
@@ -129,7 +154,14 @@ export function createEditorTable(
     const caretOffset = range ? Math.max(0, Math.round(range.start.offset)) : undefined
 
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForSectionEdit(current)
+      if (location?.kind === "paragraph") {
+        const node = current.nodes[location.nodeIndex]
+        if (node) nextModel.nodes[location.nodeIndex] = cloneDocNode(node)
+      } else if (location?.kind === "table-cell") {
+        const node = current.nodes[location.tableIndex]
+        if (node) nextModel.nodes[location.tableIndex] = cloneDocNode(node)
+      }
       const table = insertedTableNode(nextModel)
 
       if (!location || caretOffset === undefined) {
@@ -202,7 +234,7 @@ export function createEditorTable(
     tableIndex: number, rowIndex: number, direction: "above" | "below"
   ): void => {
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
         refuse("Cannot insert a row: table not found")
@@ -222,7 +254,7 @@ export function createEditorTable(
     tableIndex: number, cellIndex: number, direction: "left" | "right", rowIndex?: number
   ): void => {
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
         refuse("Cannot insert a column: table not found")
@@ -239,7 +271,7 @@ export function createEditorTable(
 
   const deleteTableRow = (tableIndex: number, rowIndex: number): void => {
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
         refuse("Cannot delete a row: table not found")
@@ -257,7 +289,7 @@ export function createEditorTable(
     tableIndex: number, cellIndex: number, rowIndex?: number
   ): void => {
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
         refuse("Cannot delete a column: table not found")
@@ -289,7 +321,7 @@ export function createEditorTable(
     )
 
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForSectionEdit(current)
       const tableNode = nextModel.nodes[tableIndex]
       if (!tableNode || tableNode.type !== "table") return current
       nextModel.nodes.splice(tableIndex, 1)
@@ -308,7 +340,7 @@ export function createEditorTable(
     tableIndex: number, cells: Array<{ rowIndex: number; cellIndex: number }>
   ): void => {
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
         refuse("Cannot clear cells: table not found")
@@ -344,7 +376,7 @@ export function createEditorTable(
     const normalizedPx = widthsPx.map((width) => Math.max(1, Math.round(width)))
     const columnWidthsTwips = normalizedPx.map((width) => width * 15)
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") return current
       node.style = {
@@ -363,7 +395,7 @@ export function createEditorTable(
   ): void => {
     let merged: TableCellPosition | undefined
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
         refuse("Cannot merge cells: table not found")
@@ -387,7 +419,7 @@ export function createEditorTable(
   ): void => {
     let split: TableCellPosition | undefined
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForTableEdit(current, tableIndex)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
         refuse("Cannot split a cell: table not found")
@@ -408,7 +440,7 @@ export function createEditorTable(
 
   const moveTable = (tableIndex: number, targetNodeIndex: number): void => {
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForSectionEdit(current)
       const node = nextModel.nodes[tableIndex]
       if (!node || node.type !== "table") {
         refuse("Cannot move the table: table not found")
@@ -432,11 +464,16 @@ export function createEditorTable(
     if (parts.length < 3) return
 
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForSectionEdit(current)
       const parentTableIndex = Number(parts[0])
       const parentRowIndex = Number(parts[1])
       const parentCellIndex = Number(parts[2])
       const nestedTableIndex = parts[3] !== undefined ? Number(parts[3]) : undefined
+
+      const sourceParentTable = current.nodes[parentTableIndex]
+      if (sourceParentTable?.type === "table") {
+        nextModel.nodes[parentTableIndex] = cloneDocNode(sourceParentTable)
+      }
 
       const parentTable = nextModel.nodes[parentTableIndex]
       if (!parentTable || parentTable.type !== "table") {

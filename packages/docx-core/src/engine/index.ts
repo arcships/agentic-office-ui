@@ -6,7 +6,12 @@ export * from "./types";
 // The granular run/paragraph clone helpers stay internal: editor code imports
 // them from "./clone". `cloneDocModel`, `cloneDocModelShallow` and
 // `cloneDocNode` are the document-copy contract (full clone vs copy-on-write).
-export { cloneDocModel, cloneDocModelShallow, cloneDocNode } from "./clone";
+export {
+  cloneDocModel,
+  cloneDocModelShallow,
+  cloneDocNode,
+  cloneNumberingDefinitions,
+} from "./clone";
 export { normalizeDocModel } from "./normalize";
 
 // DocModel construction (buildDocModel / buildDocModelFromBytes)
