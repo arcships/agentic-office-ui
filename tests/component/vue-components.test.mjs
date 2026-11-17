@@ -57,6 +57,7 @@ function xlsxController(overrides = {}) {
 function createPdfRuntime({
   pageCount = 3,
   onOpenDocument,
+  onGetPageAnnotations,
   onGetPageTextGeometry,
   onGetTextSlices,
   onRenderPage,
@@ -66,6 +67,7 @@ function createPdfRuntime({
   const calls = {
     closeDocument: [],
     dispose: [],
+    getPageAnnotations: [],
     getPageTextGeometry: [],
     getTextSlices: [],
     openDocument: [],
@@ -107,6 +109,14 @@ function createPdfRuntime({
         ? onGetPageTextGeometry(currentDocument, pageIndex, options)
         : { runs: [] };
     },
+    ...(onGetPageAnnotations
+      ? {
+          async getPageAnnotations(currentDocument, pageIndex, options = {}) {
+            calls.getPageAnnotations.push({ document: currentDocument, options, pageIndex });
+            return onGetPageAnnotations(currentDocument, pageIndex, options);
+          },
+        }
+      : {}),
     async getTextSlices(currentDocument, slices, options = {}) {
       calls.getTextSlices.push({ document: currentDocument, options, slices });
       return onGetTextSlices
@@ -167,6 +177,34 @@ function pdfPointerEvent(interaction, { clientX, clientY = 6, pointerId = 1 }) {
     pointerId,
     pointerType: "mouse",
     preventDefault() {},
+  };
+}
+
+function pdfInteractionLayers(root) {
+  const layers = new Map();
+  for (const node of walk(root)) {
+    if (node.props?.class !== "pdf-surface__interaction") continue;
+    const slot = node.parent;
+    const pageIndex = Number(slot?.props?.["data-page-index"]);
+    if (!Number.isSafeInteger(pageIndex)) continue;
+    const captures = new Set();
+    node.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 800 });
+    node.setPointerCapture = (pointerId) => captures.add(pointerId);
+    node.hasPointerCapture = (pointerId) => captures.has(pointerId);
+    node.releasePointerCapture = (pointerId) => captures.delete(pointerId);
+    layers.set(pageIndex, { layer: node, slot });
+  }
+  return layers;
+}
+
+/** Route pointer hit-testing to a specific rendered page, like a real document. */
+function routePdfPointerToPage(surface, page) {
+  page.slot.dataset = { pageIndex: String(Number(page.slot.props["data-page-index"])) };
+  page.slot.querySelector = (selector) =>
+    selector === ".pdf-surface__interaction" ? page.layer : null;
+  surface.ownerDocument = {
+    elementFromPoint: (clientX, clientY) =>
+      clientY >= 0 && clientY <= 800 ? { closest: () => page.slot } : null,
   };
 }
 
@@ -732,6 +770,157 @@ test("PdfSurface exposes the unified controlled object/region reference contract
   interaction.props.onPointerup(pdfPointerEvent(interaction, { clientX: 110, clientY: 210, pointerId: 7 }));
   assert.equal(confirmations.at(-1).reference.kind, "region");
   assert.equal(confirmations.at(-1).reference.locator.value.space, "page");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfSurface drag selection spans pages and copies the joined text", async () => {
+  const pageTexts = ["abcdefgh", "ijklmnop"];
+  const fake = createPdfRuntime({
+    pageCount: 2,
+    onGetPageTextGeometry: (_document, pageIndex) => pdfTextGeometry(pageTexts[pageIndex]),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      pageTexts[slice.pageIndex].slice(slice.charIndex, slice.charIndex + slice.charCount)),
+  });
+  const selections = [];
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    onSelectionChange: (selection) => selections.push(selection),
+  });
+  await waitFor(
+    () => fake.calls.getPageTextGeometry.length === 2 && pdfInteractionLayers(mounted.root).size === 2,
+    "PDF selection layers for both pages",
+  );
+  const surface = findByTestId(mounted.root, "pdf-surface");
+  surface.focus = () => {};
+  const layers = pdfInteractionLayers(mounted.root);
+  const pageOne = layers.get(0);
+  const pageTwo = layers.get(1);
+  routePdfPointerToPage(surface, pageTwo);
+
+  pageOne.layer.props.onPointerdown(pdfPointerEvent(pageOne.layer, { clientX: 2, pointerId: 11 }));
+  pageOne.layer.props.onPointermove(pdfPointerEvent(pageOne.layer, { clientX: 35, pointerId: 11 }));
+  pageOne.layer.props.onPointerup(pdfPointerEvent(pageOne.layer, { clientX: 35, pointerId: 11 }));
+
+  await waitFor(() => selections.at(-1)?.kind === "text", "cross-page PDF drag selection");
+  const selection = selections.at(-1);
+  assert.equal(selection.text, "abcdefgh\nijkl");
+  assert.deepEqual(selection.range, { pageIndex: 0, charIndex: 0, charCount: 8 });
+  assert.deepEqual(selection.segments.map((segment) => segment.range), [
+    { pageIndex: 0, charIndex: 0, charCount: 8 },
+    { pageIndex: 1, charIndex: 0, charCount: 4 },
+  ]);
+  assert.deepEqual(selection.segments.map((segment) => segment.text), ["abcdefgh", "ijkl"]);
+  assert.equal(selection.segments[0].rects.length > 0, true);
+  assert.equal(selection.segments[1].rects.length > 0, true);
+  assert.equal(
+    walk(mounted.root).filter((node) => node.props?.class === "pdf-surface__selection-hit").length,
+    selection.segments[0].rects.length + selection.segments[1].rects.length,
+    "selection rectangles render on both pages",
+  );
+
+  const copied = [];
+  surface.props.onCopy({
+    clipboardData: { setData: (type, value) => copied.push({ type, value }) },
+    preventDefault() {},
+  });
+  assert.deepEqual(copied, [{ type: "text/plain", value: "abcdefgh\nijkl" }]);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfSurface forwards Escape from the region layer exactly once", async () => {
+  const fake = createPdfRuntime({ pageCount: 1, onGetPageTextGeometry: () => pdfTextGeometry("region") });
+  const cancellations = [];
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    selectionMode: "region",
+    onSelectionCancel: (event) => cancellations.push(event),
+  });
+  await waitFor(
+    () => walk(mounted.root).some((node) => node.props?.class === "pdf-surface__interaction"),
+    "PDF region interaction layer",
+  );
+  const surface = findByTestId(mounted.root, "pdf-surface");
+  const interaction = preparePdfSurfaceInteraction(mounted.root);
+  let stopped = false;
+  interaction.props.onKeydown({
+    key: "Escape",
+    stopPropagation() { stopped = true; },
+    preventDefault() {},
+  });
+  assert.equal(stopped, true, "region layer stops the Escape bubble");
+  assert.deepEqual(cancellations, [{ mode: "region", reason: "escape" }]);
+
+  surface.props.onKeydown({ key: "Escape", defaultPrevented: true });
+  assert.equal(cancellations.length, 1, "an already-handled Escape is not emitted twice");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfSurface exposes link and widget hit rectangles and forwards activation", async () => {
+  const annotations = [
+    { id: "link-1", pageIndex: 0, kind: "link", rect: { x: 10, y: 10, width: 50, height: 20 }, url: "https://example.com/a" },
+    { id: "widget-1", pageIndex: 0, kind: "widget", rect: { x: 100, y: 10, width: 40, height: 20 }, fieldName: "name", fieldValue: "Ada" },
+  ];
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageAnnotations: () => annotations,
+    onGetPageTextGeometry: () => pdfTextGeometry("annotated"),
+  });
+  const links = [];
+  const activations = [];
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    onLinkActivate: (event) => links.push(event),
+    onAnnotationActivate: (event) => activations.push(event),
+  });
+  await waitFor(
+    () => fake.calls.getPageAnnotations.length === 1 &&
+      walk(mounted.root).some((node) => node.props?.["data-annotation-kind"] === "link"),
+    "PDF annotation hit layer",
+  );
+  const hits = walk(mounted.root).filter((node) => node.props?.["data-annotation-kind"]);
+  assert.deepEqual(hits.map((node) => node.props["data-annotation-kind"]).sort(), ["link", "widget"]);
+  assert.equal(hits[0].props.style.left, "10px");
+
+  const interaction = preparePdfSurfaceInteraction(mounted.root);
+  const click = async (clientX, clientY) => {
+    interaction.props.onPointerdown(pdfPointerEvent(interaction, { clientX, clientY }));
+    interaction.props.onPointerup(pdfPointerEvent(interaction, { clientX, clientY }));
+    await interaction.props.onClick({
+      button: 0,
+      clientX,
+      clientY,
+      currentTarget: interaction,
+      detail: 1,
+      preventDefault() {},
+    });
+  };
+
+  await click(30, 15);
+  assert.deepEqual(links, [{
+    pageIndex: 0,
+    annotationId: "link-1",
+    clientX: 30,
+    clientY: 15,
+    url: "https://example.com/a",
+  }]);
+  assert.deepEqual(activations, []);
+
+  await click(110, 15);
+  assert.deepEqual(activations, [{
+    pageIndex: 0,
+    annotationId: "widget-1",
+    kind: "widget",
+    clientX: 110,
+    clientY: 15,
+    fieldName: "name",
+    fieldValue: "Ada",
+  }]);
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });

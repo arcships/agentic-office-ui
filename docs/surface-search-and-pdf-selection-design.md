@@ -1,6 +1,6 @@
 # Surface 搜索与 PDF 文字选择设计
 
-> 状态：首版实现已提交（`cf0a408`）；PDF 拖选与双击选词优化已实现并通过单元、组件及 Chromium 交互验证，待 Firefox/WebKit 矩阵复验
+> 状态：首版实现已提交（`cf0a408`）；PDF 拖选与双击选词优化已实现并通过单元、组件及 Chromium 交互验证，待 Firefox/WebKit 矩阵复验；Issue #84 追加跨页选择、批注命中层和区域 Escape 去重（2026-11-17）
 > 适用范围：`packages/vue-docx`、`packages/vue-xlsx`、`packages/vue-pptx`、`packages/vue-pdf`、`packages/vue-ui`
 > 取代：`pdf-text-layer-issue.md` 中的透明 `<span>` 文字层方案
 > 目标：让四种 Surface 都能搜索并定位结果，让 PDF 在原生文字可用时可靠选择和复制文字
@@ -44,6 +44,8 @@
 
 - OCR、扫描件文字识别以及 OCR Provider。
 - PDF 跨页选择、双击选句、三击选行、边缘自动滚动、触屏拖拽手柄和永久高亮。
+
+> 2026-11-17（Issue #84）把“PDF 跨页选择”从非目标移入范围：多页选区按页拆分 `PageTextSlice`，一起读取文字并在复制时用 `\n` 连接。跨页选择不生成 PDF 引用（引用仍然是单页文本范围）；双击选句、三击选行、边缘自动滚动、触屏拖拽手柄和永久高亮仍不在范围内。
 - 查找替换、正则、大小写开关和整词搜索。
 - XLSX 搜索范围切换，以及公式、批注等搜索字段选择。
 - 隐藏 Sheet、隐藏行列、隐藏幻灯片和播放模式的特殊搜索规则；首版沿用现有文档模型的可搜索内容，不在本设计新增产品语义。
@@ -540,3 +542,31 @@ PDF 搜索结果必须透传上游已有的 `charIndex/charCount`，不能根据
 - `unified-surface-api-design.md` 定义 Surface 边界、通用事件和 expose 命名；搜索与 PDF 选择以本文为准。
 - `pdf-text-layer-issue.md` 仅作为历史问题记录，不再作为实现计划。
 - `docx-viewer-controlled-surface-and-pagination-fix.md` 中未实现的搜索 props/update/expose 方案已经撤回；该文档只负责非搜索的分页与受控状态设计。
+
+## 16. Issue #84：跨页选择与批注命中层
+
+Issue #84 指出 PDF 页面只有位图：选择限于单页、链接/表单/批注被烘焙进图片、区域层 Escape 重复触发。本轮补齐以下能力，仍不重新引入透明 `<span>` 文字层。
+
+### 16.1 跨页选择
+
+- 手势同时保存 anchor 与 focus 的 `{ pageIndex, charIndex }`；指针捕获仍在起始页，focus 页由 `elementFromPoint()` 定位，因此拖动可以跨页。
+- 中间页按完整字符范围参与选择；每页由一个 `selectionPageRanges()` 生成 `PageTextSlice`，共用同一个 canonical 坐标管线。
+- 提交前等待起始页与 focus 页的 geometry，避免 geometry 未返回时退化成单页选区；无法解析 focus 页字符时保留上一个 focus 点，与单页行为一致。
+- 复制文本按文档顺序用 `\n` 连接各页；`PdfSelectionState.text` 是完整文本，`range`/`rects` 描述第一页，新增可选的 `segments` 给出每页范围。
+- 多页选区不确认文本引用草稿：office-interaction 的 PDF 定位器仍是单页字符范围。
+
+### 16.2 链接、表单与批注命中层
+
+- `PdfRenderRuntime.getPageAnnotations?()` 透传 PDFium 批注读取；`PdfRenderAnnotation` 把矩形适配到 canonical 空间，并给出链接目标、表单字段或批注文字。链接只接受绝对 `http`/`https`/`mailto`，并去掉内嵌凭据。
+- `PdfSurface` 在可见页附近预取批注，渲染不可见命中矩形（`data-annotation-kind`），点击时命中测试并发出 `linkActivate` 或 `annotationActivate`；命中层使用 `pointer-events: none`，不阻断拖选。
+- 内部链接在未被策略拦截时滚入目标页；外部链接默认不导航，由宿主打开。宿主提供 `urlPolicy` 时还会按该策略再次校验，失败以 `blocked: true` 上报。
+- 表单不实现填写：Surface 只暴露 widget 命中与字段信息，写入仍由宿主或后续编辑能力完成。
+
+### 16.3 区域 Escape
+
+区域层处理 Escape 时 `stopPropagation()` 并 `preventDefault()`，Surface 处理器同时忽略 `defaultPrevented` 的事件；一次按键只发出一次 `selectionCancel`。
+
+### 16.4 验收
+
+- 组件测试覆盖跨页拖选、跨页复制、区域 Escape 去重、链接/控件命中与事件转发。
+- 仍未覆盖：`PdfViewer` 单页视图的选择与复制、表单写入、批注外观编辑。

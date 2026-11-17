@@ -10,6 +10,7 @@ import {
   type PdfPageGeometry,
 } from "@embedpdf/models"
 import { pdfIntrinsicRectToCanonical } from "./pdf-coordinate-transform"
+import { mapPdfAnnotationObjects } from "./pdf-annotation"
 import { pdfPageTextHash } from "./pdf-page-signature"
 
 export type PdfRotation = 0 | 90 | 180 | 270
@@ -103,19 +104,56 @@ export interface PdfSearchState {
   }
 }
 
+/** One page of a text selection, in document order. */
+export interface PdfSelectionSegment {
+  range: PageTextSlice
+  text: string
+  rects: readonly PdfRenderRect[]
+}
+
 export type PdfSelectionState =
   | { kind: "none" }
   | {
       kind: "text"
+      /** First page slice of the selection, kept for single-page compatibility. */
       range: PageTextSlice
+      /** Complete selection text. Multi-page selections join pages with `\n`. */
       text: string
+      /** Highlight rectangles for `range.pageIndex`. */
       rects: readonly PdfRenderRect[]
+      /** Every selected page in document order, including `range`. */
+      segments?: readonly PdfSelectionSegment[]
     }
   | {
       kind: "unavailable"
       pageIndex: number
       reason: "empty" | "unicode-map"
     }
+
+/**
+ * A link, form widget or annotation rectangle that the raster page cannot
+ * expose on its own. Rectangles are in canonical page space.
+ */
+export interface PdfRenderAnnotation {
+  id: string
+  pageIndex: number
+  kind: "link" | "widget" | "annotation"
+  rect: PdfRenderRect
+  /** Sanitized absolute link target when the annotation links to a URL. */
+  url?: string
+  /** Destination page index when the annotation links inside the document. */
+  targetPageIndex?: number
+  /** True when the link target was rejected before it reached the host. */
+  blocked?: boolean
+  /** Form field name for widget annotations. */
+  fieldName?: string
+  /** Current form field value for widget annotations. */
+  fieldValue?: string
+  /** Annotation contents or subject, used for tooltips and notes. */
+  contents?: string
+  /** Raw annotation flags that affect interaction (`readOnly`, `noZoom`, ...). */
+  flags?: readonly string[]
+}
 
 export interface PdfPageRenderOptions {
   scale: number
@@ -258,6 +296,15 @@ export interface PdfRenderRuntime {
     pageIndex: number,
     options?: { signal?: AbortSignal },
   ): Promise<string>
+  /**
+   * Optional link/widget/annotation hit layer. Runtimes that cannot enumerate
+   * annotations simply omit this method and the Surface skips the hit layer.
+   */
+  getPageAnnotations?(
+    document: PdfRenderDocument,
+    pageIndex: number,
+    options?: { signal?: AbortSignal },
+  ): Promise<readonly PdfRenderAnnotation[]>
   dispose(): Promise<void>
 }
 
@@ -654,6 +701,23 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
       timeoutMs: this.operationTimeoutMs,
       label: "PDF text extraction",
     })
+  }
+
+  async getPageAnnotations(
+    document: PdfRenderDocument,
+    pageIndex: number,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<readonly PdfRenderAnnotation[]> {
+    const nativeDocument = this.getNativeDocument(document)
+    const page = nativeDocument.pages[pageIndex]
+    const renderPage = document.pages[pageIndex]
+    if (!page || !renderPage) throw new Error(`PDF page ${pageIndex + 1} does not exist.`)
+    const annotations = await runPdfTask(this.getEngine().getPageAnnotations(nativeDocument, page), {
+      signal: options.signal,
+      timeoutMs: this.operationTimeoutMs,
+      label: `PDF page ${pageIndex + 1} annotation read`,
+    })
+    return mapPdfAnnotationObjects(annotations, renderPage)
   }
 
   async closeDocument(document: PdfRenderDocument): Promise<void> {
