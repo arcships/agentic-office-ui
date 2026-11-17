@@ -47,6 +47,70 @@ assert.ok(
   "steps after the failure must not run",
 );
 
+// Issue #57: a BLOCKED step (exit code 2) must never be reported as a pass.
+function runUnitProbe(id, extraEnv) {
+  const probeRoot = path.resolve(evidenceRoot, id);
+  const probe = spawnSync(pnpm, ["test:unit"], {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      CI_PREBUILT: "1",
+      CI_RUN_ID: process.env.CI_RUN_ID || "blocked-probe",
+      CI_EVIDENCE_ROOT: probeRoot,
+      CI_FAILURE_PROBE: "unit:docx-integration",
+      ...extraEnv,
+    },
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  const summaryPath = path.join(probeRoot, "unit", "summary.json");
+  writeFileSync(
+    path.join(evidenceRoot, `${id}-command.log`),
+    `${probe.stdout || ""}${probe.stderr || ""}`,
+  );
+  return { probe, summary: JSON.parse(readFileSync(summaryPath, "utf8")) };
+}
+
+const blockedProbe = runUnitProbe("blocked", {
+  CI_FAILURE_PROBE_EXIT: "2",
+  CI_PROBE_BLOCKED: "1",
+});
+assert.equal(blockedProbe.probe.status, 2, "a BLOCKED step must exit non-zero");
+assert.equal(blockedProbe.summary.result, "INCOMPLETE", "blocked steps must not pass the suite");
+assert.equal(blockedProbe.summary.allowBlocked, false);
+assert.deepEqual(blockedProbe.summary.blockedSteps, ["docx-integration"]);
+assert.equal(
+  blockedProbe.summary.results.find((item) => item.id === "docx-integration")?.status,
+  "BLOCKED",
+);
+
+const allowedProbe = runUnitProbe("blocked-allowed", {
+  CI_FAILURE_PROBE_EXIT: "2",
+  CI_PROBE_BLOCKED: "1",
+  CI_ALLOW_BLOCKED: "1",
+});
+assert.equal(allowedProbe.probe.status, 0, "CI_ALLOW_BLOCKED=1 is the only opt-out");
+assert.equal(allowedProbe.summary.result, "PASS");
+assert.equal(allowedProbe.summary.allowBlocked, true);
+assert.deepEqual(allowedProbe.summary.blockedSteps, ["docx-integration"]);
+
+// The acceptance shard registry must stay callable and must reject typos.
+const shardList = spawnSync(
+  process.execPath,
+  [path.join(root, "scripts", "ci", "run-acceptance-shard.mjs"), "--list"],
+  { cwd: root, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
+);
+assert.equal(shardList.status, 0, "the acceptance shard registry must list its shards");
+for (const shard of ["docs", "pack", "self-test", "release-pack"]) {
+  assert.ok(shardList.stdout.includes(shard), `acceptance shard ${shard} must be registered`);
+}
+const unknownShard = spawnSync(
+  process.execPath,
+  [path.join(root, "scripts", "ci", "run-acceptance-shard.mjs"), "not-a-shard"],
+  { cwd: root, encoding: "utf8", maxBuffer: 4 * 1024 * 1024 },
+);
+assert.equal(unknownShard.status, 2, "an unknown shard must fail fast");
+
 const typeProbe = path.join(root, "apps", "demo", "src", "__ci_type_failure_probe__.vue");
 assert.equal(existsSync(typeProbe), false, "the temporary type probe path must be unused");
 let typeResult;
@@ -78,6 +142,19 @@ const report = {
   assertion: "registered child failures propagate as non-zero and identify the failing step",
   childExitCode: result.status,
   childSummary: summaryPath,
+  blockedProbe: {
+    exitCode: blockedProbe.probe.status,
+    result: blockedProbe.summary.result,
+    blockedSteps: blockedProbe.summary.blockedSteps,
+  },
+  allowBlockedProbe: {
+    exitCode: allowedProbe.probe.status,
+    result: allowedProbe.summary.result,
+  },
+  acceptanceShards: shardList.stdout
+    .split("\n")
+    .map((line) => line.trim().split(/\s+/)[1])
+    .filter(Boolean),
   typeErrorProbe: {
     exitCode: typeResult.status,
     errorCode: "TS2322",

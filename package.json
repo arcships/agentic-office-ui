@@ -20,6 +20,8 @@
     "capture:pptx-baselines": "python3 scripts/fixtures/capture-pptx-formal-baselines.py",
     "test:unit": "node scripts/ci/run-suite.mjs unit",
     "test:component": "node scripts/ci/run-suite.mjs component",
+    "test:shard": "node scripts/ci/run-acceptance-shard.mjs",
+    "test:acceptance": "node scripts/ci/run-acceptance-shard.mjs all",
     "test:blackbox": "node scripts/ci/run-suite.mjs blackbox",
     "test:stress": "node scripts/ci/run-suite.mjs stress",
     "test:performance": "node scripts/ci/run-suite.mjs performance",
