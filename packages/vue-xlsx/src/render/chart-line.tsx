@@ -443,16 +443,21 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
 export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, selectedChartElement?: XlsxChartElementSelection | null) {
   const groups = buildComboGroups(chart);
   const columnGroup = groups.find((group) => group.chartType.startsWith("Column"));
-  const lineGroup = groups.find((group) => group.chartType.startsWith("Line"));
+  const lineGroup = groups.find((group) => (
+    group.chartType.startsWith("Line") || group.chartType.startsWith("Area")
+  ));
   if (!columnGroup || !lineGroup) {
     return null;
   }
+  const isAreaGroup = lineGroup.chartType.startsWith("Area");
+  const columnDataLabels = columnGroup.dataLabels ?? chart.dataLabels;
+  const lineDataLabels = lineGroup.dataLabels ?? chart.dataLabels;
 
   const primaryChart: XlsxChart = {
     ...chart,
     categoryAxis: columnGroup.categoryAxis ?? chart.categoryAxis,
     chartType: columnGroup.chartType,
-    dataLabels: undefined,
+    dataLabels: columnDataLabels,
     is3d: columnGroup.is3d ?? false,
     series: columnGroup.series,
     valueAxis: columnGroup.valueAxis ?? chart.valueAxis
@@ -497,6 +502,23 @@ export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette
   if (primaryValues.length === 0 || secondaryValues.length === 0) {
     return null;
   }
+  const columnCategoryTotals = categories.map((_, categoryIndex) => (
+    columnGroup.series.reduce((sum, series) => (
+      sum + Math.abs(safeNumber(series.values[categoryIndex]) ?? 0)
+    ), 0)
+  ));
+  const lineCategoryTotals = categories.map((_, categoryIndex) => (
+    lineGroup.series.reduce((sum, series) => (
+      sum + Math.abs(safeNumber(series.values[categoryIndex]) ?? 0)
+    ), 0)
+  ));
+  const lineLabelChart: XlsxChart = {
+    ...primaryChart,
+    chartType: lineGroup.chartType,
+    dataLabels: lineDataLabels,
+    series: lineGroup.series,
+    valueAxis: lineGroup.valueAxis ?? chart.valueAxis
+  };
 
   const columnValueAxis = columnGroup.valueAxis ?? chart.valueAxis ?? null;
   const lineValueAxis = lineGroup.valueAxis ?? chart.valueAxis ?? null;
@@ -606,12 +628,18 @@ export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette
         const labelText = labels && hasVisibleDataLabels(labels)
           ? buildDataLabelText(primaryChart, series, labels, {
               categoryLabel: categories[categoryIndex],
+              totalValue: columnCategoryTotals[categoryIndex],
               value
             })
           : "";
-        const labelY = value >= 0
-          ? Math.min(y, zeroY) - 4
-          : Math.min(y, zeroY) + height + 12;
+        const labelPosition = resolveDataLabelPosition(labels, "outEnd");
+        const labelY = labelPosition === "inEnd"
+          ? (value >= 0 ? Math.min(y, zeroY) + 11 : Math.min(y, zeroY) + height - 4)
+          : labelPosition === "ctr"
+            ? Math.min(y, zeroY) + height / 2 + 3
+            : labelPosition === "inBase"
+              ? (value >= 0 ? Math.min(y, zeroY) + height - 4 : Math.min(y, zeroY) + 11)
+              : (value >= 0 ? Math.min(y, zeroY) - 4 : Math.min(y, zeroY) + height + 12);
         const selected = isSelectedChartPoint(selectedChartElement, chart.id, globalSeriesIndex, categoryIndex)
           || (
             isSelectedChartSeries(selectedChartElement, chart.id, globalSeriesIndex)
@@ -668,12 +696,32 @@ export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette
           .x((point) => point.x)
           .y((point) => secondaryScale(point.y ?? 0))
           .curve(seriesCurve)(lineStrokePoints) ?? "";
+        const areaBaseline = secondaryScale(
+          resolveAxisLogBase(lineValueAxis) ? secondaryDomain.min : Math.max(secondaryDomain.min, 0)
+        );
+        const areaPath = isAreaGroup
+          ? d3Area<{ x: number; y: number | null }>()
+              .defined((point) => point.y != null)
+              .x((point) => point.x)
+              .y0(areaBaseline)
+              .y1((point) => secondaryScale(point.y ?? 0))
+              .curve(seriesCurve)(lineStrokePoints) ?? ""
+          : "";
         const markerSymbol = series.markerSymbol == null
           ? "circle"
           : normalizeChartMarkerSymbol(series.markerSymbol);
         const markerPath = markerSymbolPath(markerSymbol, Math.max(3, (series.markerSize ?? 7) * 0.5));
         return (
           <g key={`combo-line-${seriesIndex}`}>
+            {areaPath ? (
+              <path
+                {...chartElementDataProps(globalSeriesIndex)}
+                d={areaPath}
+                fill={series.color ?? series.lineColor ?? chartSeriesColor(chart, globalSeriesIndex)}
+                fill-opacity={0.32}
+                stroke="none"
+              />
+            ) : null}
             <path
               {...chartElementDataProps(globalSeriesIndex)}
               d={path}
@@ -697,12 +745,13 @@ export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette
               )
             )) : null}
             {points.map((point, pointIndex) => {
-              const labels = resolveDataLabelsForPoint(primaryChart, pointIndex, series);
+              const labels = resolveDataLabelsForPoint(lineLabelChart, pointIndex, series);
               if (!labels || !hasVisibleDataLabels(labels) || point.y == null) {
                 return null;
               }
-              const text = buildDataLabelText(primaryChart, series, labels, {
+              const text = buildDataLabelText(lineLabelChart, series, labels, {
                 categoryLabel: categories[pointIndex],
+                totalValue: lineCategoryTotals[pointIndex],
                 value: point.y
               });
               if (!text) {

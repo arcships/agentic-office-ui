@@ -62,6 +62,7 @@ All notable changes to the `@arcships` package family are documented in this fil
 ### XLSX chart data
 
 - Render value, series-name, category, and percent data labels on 2D and 3D bar, column, line, and area charts, including label position and number format.
+- Read combo-chart data labels independently from each column, line, or area type group, falling back to chart-level labels only when a group does not define its own.
 - Normalize 100 % stacked charts with `Σ|v|`, so mixed positive and negative categories render at their real percentages.
 - Honour logarithmic value axes, smooth line series, marker symbols, shared combo-chart value axes, and date category axes with elapsed-time spacing.
 - Exclude hidden rows and columns from chart series unless the chart explicitly opts out with `plotVisOnly=0`.

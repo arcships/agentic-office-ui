@@ -1,7 +1,7 @@
 /** @jsxImportSource vue */
 import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 import type { Feature, Geometry } from "geojson";
-import type { XlsxChart, XlsxChartAxis, XlsxChartElementSelection, XlsxChartSeries, XlsxImageRect } from "@arcships/xlsx-core";
+import type { XlsxChart, XlsxChartAxis, XlsxChartDataLabels, XlsxChartElementSelection, XlsxChartSeries, XlsxImageRect } from "@arcships/xlsx-core";
 
 export type ChartRendererPalette = {
   border: string;
@@ -92,6 +92,7 @@ export type ComboRenderableGroup = {
   axisIds: number[];
   categoryAxis: XlsxChartAxis | null;
   chartType: string;
+  dataLabels?: XlsxChartDataLabels | null;
   gapWidth?: number;
   is3d?: boolean;
   raw?: Record<string, unknown>;
