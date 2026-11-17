@@ -116,6 +116,13 @@ function tightenLimits(
   return Object.freeze(tightened) as Readonly<PptxPreviewLimits>
 }
 
+function sameLimits(
+  left: Readonly<PptxPreviewLimits>,
+  right: Readonly<PptxPreviewLimits>,
+): boolean {
+  return PREVIEW_LIMIT_KEYS.every((name) => left[name] === right[name])
+}
+
 function toZipLimits(limits: Readonly<PptxPreviewLimits>): PptxArchiveZipLimits {
   return {
     maxEntries: limits.maxArchiveEntries,
@@ -194,11 +201,14 @@ export function createPptxDocumentSession(
   const baseLimits = resolveLimits(options.limits)
   const externalMediaAllowed = options.externalMedia === "allowed"
   const externalMediaPolicy = options.externalMediaUrlPolicy
-  const viewer = new PptxViewer(container, {
+  const createViewer = (
+    limits: Readonly<PptxPreviewLimits>,
+    zoomPercent = options.zoomPercent ?? 100,
+  ): PptxViewer => new PptxViewer(container, {
     fitMode: options.fitMode ?? "contain",
-    zoomPercent: options.zoomPercent ?? 100,
+    zoomPercent,
     scrollContainer: options.scrollContainer,
-    zipLimits: toZipLimits(baseLimits),
+    zipLimits: toZipLimits(limits),
     lazyMedia: options.lazyMedia ?? true,
     lazySlides: options.lazySlides ?? true,
     pdfjs: false,
@@ -210,6 +220,9 @@ export function createPptxDocumentSession(
       if (slide) applyPptxObjectMarkers(element, slide.slidePath)
     },
   })
+  let viewer = createViewer(baseLimits)
+  let viewerLimits = baseLimits
+  let currentLimits = baseLimits
   let currentDocument: PptxPreviewDocument | null = null
   let currentArchive: PptxFiles | null = null
   let currentPlaybackDocument: PptxPlaybackDocument | null = null
@@ -281,6 +294,9 @@ export function createPptxDocumentSession(
     get zoomPercent() {
       return viewer.zoomPercent
     },
+    get limits() {
+      return currentLimits
+    },
     get playbackDocument() {
       return currentPlaybackDocument
     },
@@ -337,6 +353,17 @@ export function createPptxDocumentSession(
         currentDocument = null
         currentArchive = null
         currentPlaybackDocument = null
+        // The viewer owns lazy slide/media parsing. Rebuild it when the open
+        // request tightens limits so those parses cannot fall back to base
+        // limits. Rebuild only after the new deck parsed: a failed parse keeps
+        // the previous deck and its limits fully usable.
+        if (!sameLimits(limits, viewerLimits)) {
+          const zoomPercent = viewer.zoomPercent
+          viewer.destroy()
+          viewer = createViewer(limits, zoomPercent)
+          viewerLimits = limits
+        }
+        currentLimits = limits
         viewer.load(presentation)
         if (renderMode === "list") {
           await viewer.renderList(listOptions)

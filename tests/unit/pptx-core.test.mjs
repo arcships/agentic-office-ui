@@ -976,3 +976,21 @@ test("PPTX external media needs both the opt-in and a URL policy match", () => {
   assert.equal(resolvePptxExternalMediaUrl("data:image/png;base64,AAAA", policy), undefined);
   assert.equal(resolvePptxExternalMediaUrl("https://cdn.example/x.png", { ...policy, enabled: false }), undefined);
 });
+
+test("PPTX per-open limits rebuild the viewer used by lazy slide and media parsing", () => {
+  const source = readFileSync(
+    new URL("../../packages/pptx-core/src/browser.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /const createViewer = \(/);
+  assert.match(source, /zipLimits: toZipLimits\(limits\)/);
+  assert.match(source, /currentLimits = limits/);
+  assert.match(source, /if \(!sameLimits\(limits, viewerLimits\)\)/);
+  assert.match(source, /viewer = createViewer\(limits, zoomPercent\)/);
+
+  const types = readFileSync(
+    new URL("../../packages/pptx-core/src/browser-types.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(types, /readonly limits: Readonly<PptxPreviewLimits>/);
+});

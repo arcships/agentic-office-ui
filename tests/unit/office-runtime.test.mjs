@@ -482,6 +482,23 @@ test("load context snapshots source, resources, limits and stable task identity"
   assert.equal(Object.isFrozen(context), true);
   assert.equal(Object.isFrozen(context.resources), true);
   assert.equal(Object.isFrozen(context.limits), true);
+
+  const coordinator = runtime.createLatestTaskCoordinator(sequence);
+  const task = coordinator.start(
+    { kind: "bytes", bytes: new ArrayBuffer(4) },
+    {
+      limits: { maxInputBytes: 4 },
+      limitDefaults: { maxInputBytes: 100, maxArchiveEntries: 10 },
+      limitHardCaps: { maxInputBytes: 50, maxUncompressedBytes: 7 },
+    },
+  );
+  assert.deepEqual(task.context.limits, {
+    maxInputBytes: 4,
+    maxArchiveEntries: 10,
+    maxUncompressedBytes: 7,
+  });
+  coordinator.dispose();
+  sequence.dispose();
 });
 
 test("task sequences are instance-owned and shared by loaders of one runtime", () => {
@@ -1230,4 +1247,105 @@ test("byte sources are read in place instead of copied", async () => {
   assert.equal(loaded.buffer, buffer);
   assert.equal(loaded.fileName, "a.docx");
   assert.equal(runtime.utf8ByteLength("a\u00e9\u4e2d\ud83d\ude00"), 10);
+});
+
+test("resolved limits include hard-cap-only entries and never drop caps", () => {
+  const resolved = runtime.resolveOfficeLimits(
+    { maxInputBytes: 1000 },
+    { maxInputBytes: 5000, maxArchiveEntries: 5 },
+    { maxInputBytes: 100, maxArchiveEntries: 10, maxUncompressedBytes: 7 },
+  );
+  assert.equal(resolved.maxInputBytes, 100);
+  assert.equal(resolved.maxArchiveEntries, 5);
+  assert.equal(resolved.maxUncompressedBytes, 7);
+  assert.equal("maxParseMs" in resolved, false);
+});
+
+test("load context resolves partial limits against defaults and hard caps", () => {
+  const context = runtime.createOfficeLoadContext({
+    runtimeId: "limits-runtime",
+    taskId: "limits-runtime:1",
+    source: { kind: "bytes", bytes: new ArrayBuffer(4) },
+    limits: { maxInputBytes: 4 },
+    limitDefaults: { maxInputBytes: 100, maxArchiveEntries: 10 },
+    limitHardCaps: { maxInputBytes: 50, maxUncompressedBytes: 7 },
+    signal: new AbortController().signal,
+  });
+  assert.deepEqual(context.limits, {
+    maxInputBytes: 4,
+    maxArchiveEntries: 10,
+    maxUncompressedBytes: 7,
+  });
+  assert.equal(Object.isFrozen(context.limits), true);
+});
+
+test("streamed URL sources are rejected before an oversized body is buffered", async () => {
+  let arrayBufferReads = 0;
+  const policy = {
+    enabled: true,
+    baseUrl: "https://files.example/",
+    allowedProtocols: ["https:"],
+    allowedOrigins: ["https://files.example"],
+    fetch: async (url) => ({
+      ok: true,
+      status: 200,
+      url,
+      headers: { get: () => null },
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(6));
+          controller.enqueue(new Uint8Array(6));
+          controller.close();
+        },
+      }),
+      arrayBuffer: async () => {
+        arrayBufferReads += 1;
+        return new ArrayBuffer(12);
+      },
+    }),
+  };
+
+  await assert.rejects(
+    runtime.loadOfficeSource(
+      { kind: "url", url: "https://files.example/large.bin" },
+      { urlPolicy: policy, limits: { maxInputBytes: 8 } },
+    ),
+    (error) => error?.code === "LIMIT_EXCEEDED"
+      && error?.limit === "maxInputBytes"
+      && error?.actual === 12
+      && error?.allowed === 8,
+  );
+  assert.equal(arrayBufferReads, 0);
+});
+
+test("streamed URL sources accept bodies at the exact byte limit", async () => {
+  const bytes = Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]);
+  const policy = {
+    enabled: true,
+    baseUrl: "https://files.example/",
+    allowedProtocols: ["https:"],
+    allowedOrigins: ["https://files.example"],
+    fetch: async (url) => ({
+      ok: true,
+      status: 200,
+      url,
+      headers: { get: () => null },
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(bytes.slice(0, 3));
+          controller.enqueue(bytes.slice(3));
+          controller.close();
+        },
+      }),
+      arrayBuffer: async () => {
+        throw new Error("streaming responses must not be buffered twice");
+      },
+    }),
+  };
+
+  const loaded = await runtime.loadOfficeSource(
+    { kind: "url", url: "https://files.example/exact.bin" },
+    { urlPolicy: policy, limits: { maxInputBytes: bytes.byteLength } },
+  );
+  assert.deepEqual([...new Uint8Array(loaded.buffer)], [...bytes]);
 });
