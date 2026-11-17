@@ -12,6 +12,15 @@ All notable changes to the `@arcships` package family are documented in this fil
 - Add one controlled reference-selection contract to all four minimal Surfaces without making them own the host's reference collection or Agent workflow.
 - Add optional object-outline and region-selection primitives, demo coverage, external package-consumer checks, and release-gate coverage.
 
+### XLSX chart data
+
+- Render value, series-name, category, and percent data labels on bar, column, line, and area charts, including label position and number format.
+- Normalize 100 % stacked charts with `Σ|v|`, so mixed positive and negative categories render at their real percentages.
+- Honour logarithmic value axes, smooth line series, marker symbols, shared combo-chart value axes, and date category axes with elapsed-time spacing.
+- Exclude hidden rows and columns from chart series unless the chart explicitly opts out with `plotVisOnly=0`.
+- Keep every level of multi-level category caches instead of only the deepest label.
+- Worker mode still plots the cached chart XML values after an in-worker cell edit until the workbook is reloaded; main-thread mode refreshes the plot from the edited workbook.
+
 ### Boundaries
 
 - Keep screenshot bitmap capture and annotation editing outside the built-in Surface implementation; unsupported capture rejects with a structured error.

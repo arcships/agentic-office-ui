@@ -209,9 +209,26 @@ export function parseChartDataLabelsFromXml(labelsNode: Element | null): XlsxCha
   }
 
   const pointLabels = parseChartPointDataLabelsFromXml(labelsNode);
+  const position = getFirstLocalChild(labelsNode, "dLblPos")?.getAttribute("val") ?? undefined;
+  const numFmt = getFirstLocalChild(labelsNode, "numFmt");
+  const numberFormat = numFmt
+    ? {
+        formatCode: numFmt.getAttribute("formatCode") ?? undefined,
+        sourceLinked: numFmt.getAttribute("sourceLinked") === "1"
+          ? true
+          : numFmt.getAttribute("sourceLinked") === "0"
+            ? false
+            : undefined
+      }
+    : undefined;
   const labels: XlsxChartDataLabels = {
+    numberFormat,
     pointLabels: pointLabels.length > 0 ? pointLabels : undefined,
-    raw: {},
+    position,
+    raw: {
+      numberFormat,
+      position
+    },
     showBubbleSize: readChartBooleanAttribute(labelsNode, "showBubbleSize"),
     showCategoryName: readChartBooleanAttribute(labelsNode, "showCatName"),
     showLegendKey: readChartBooleanAttribute(labelsNode, "showLegendKey"),
@@ -973,7 +990,8 @@ function buildChartsheetCharts(
           referenceSheetIndex,
           chartId,
           entry,
-          seriesIndex
+          seriesIndex,
+          raw.plotVisibleOnly !== false
         ))
         : [],
       sheetIndex: -1,
@@ -1071,7 +1089,7 @@ export function loadWorkbookChartAssets(
             ? chart.shape3d
             : undefined,
         seriesAxis: null,
-        series: rawSeries.map((entry, seriesIndex) => normalizeChartSeries(workbook, workbookSheetIndex, chartId, entry, seriesIndex)),
+        series: rawSeries.map((entry, seriesIndex) => normalizeChartSeries(workbook, workbookSheetIndex, chartId, entry, seriesIndex, chart.plotVisibleOnly !== false)),
         sheetIndex: visibleSheetIndex,
         showDlblsOverMax: typeof chart.showDlblsOverMax === "boolean" ? chart.showDlblsOverMax : undefined,
         sideWall: null,
@@ -1086,7 +1104,7 @@ export function loadWorkbookChartAssets(
         titleFontFamily: undefined,
         typeGroups: Array.isArray(chart.typeGroups)
           ? chart.typeGroups
-            .map((entry, groupIndex) => normalizeChartTypeGroup(workbook, workbookSheetIndex, chartId, entry, groupIndex))
+            .map((entry, groupIndex) => normalizeChartTypeGroup(workbook, workbookSheetIndex, chartId, entry, groupIndex, chart.plotVisibleOnly !== false))
             .filter((value): value is XlsxChartTypeGroup => value != null)
           : [],
         valueAxis: normalizeChartAxis(chart.valueAxis),

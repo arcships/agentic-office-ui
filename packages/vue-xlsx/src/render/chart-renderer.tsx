@@ -54,6 +54,8 @@ export {
   normalizeRenderableChartType,
   estimateReferencePointCount,
   getCategoryLabels,
+  getCategoryNumericValues,
+  computePercentStackedTotals,
   isComboChart,
   getComboLegendSeries,
   findAxisForGroup,
@@ -158,7 +160,7 @@ export {
 } from "./chart-svg-pipeline";
 
 export { buildLayout, getLegendItems, renderLegend } from "./chart-legend";
-export { buildNiceStep, buildNumericTickValues, formatPercentTickValue, formatTickValue, renderCartesianAxes, renderSurfaceAxes, resolveAxisDomainWithChartOverrides, resolveNumericAxisDomain } from "./chart-axis";
+export { buildDateAxisTicks, buildLogTickValues, buildNiceStep, buildNumericTickValues, createDateScale, createValueScale, formatPercentTickValue, formatTickValue, renderCartesianAxes, renderSurfaceAxes, resolveAxisDomainWithChartOverrides, resolveAxisLogBase, resolveDateAxisDomain, resolveLogAxisDomain, resolveNumericAxisDomain } from "./chart-axis";
 
 // Chart type renderers
 import { renderBarChart, renderWaterfallChart, renderFunnelChart, renderBoxWhiskerChart } from "./chart-bar";

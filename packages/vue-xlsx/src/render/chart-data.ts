@@ -347,6 +347,34 @@ export function getCategoryLabels(chart: XlsxChart) {
   });
 }
 
+export function getCategoryNumericValues(chart: XlsxChart) {
+  const categoryCount = Math.max(
+    getCategoryLabels(chart).length,
+    ...chart.series.map((series) => series.categories.length)
+  );
+  return Array.from({ length: categoryCount }, (_, categoryIndex) => {
+    for (const series of chart.series) {
+      const numeric = coerceLooseNumber(series.categories[categoryIndex]);
+      if (numeric != null) {
+        return numeric;
+      }
+    }
+    return null;
+  });
+}
+
+export function computePercentStackedTotals(
+  valuesBySeries: Array<Array<number | null>>,
+  categoryCount: number
+) {
+  return Array.from({ length: categoryCount }, (_, categoryIndex) => {
+    const total = valuesBySeries.reduce((sum, seriesValues) => (
+      sum + Math.abs(seriesValues[categoryIndex] ?? 0)
+    ), 0);
+    return Math.abs(total) < 1e-9 ? 1 : total;
+  });
+}
+
 export function isComboChart(chart: XlsxChart) {
   const typeGroups = chart.typeGroups ?? [];
   if (typeGroups.length < 2) {

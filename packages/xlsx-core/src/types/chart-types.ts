@@ -9,7 +9,12 @@ export interface XlsxChartReference {
 }
 
 export interface XlsxChartDataLabels {
+  numberFormat?: {
+    formatCode?: string;
+    sourceLinked?: boolean;
+  };
   pointLabels?: XlsxChartPointDataLabel[];
+  position?: string;
   raw?: Record<string, unknown>;
   showBubbleSize?: boolean;
   showCategoryName?: boolean;
@@ -43,6 +48,7 @@ export interface XlsxChartLegend {
 // ── Axis ──────────────────────────────────────────────────────────────────
 
 export interface XlsxChartAxis {
+  axisType?: "category" | "date" | "value" | "series";
   crossId?: number;
   crosses?: string;
   crossBetween?: string;
@@ -50,6 +56,8 @@ export interface XlsxChartAxis {
   id?: number;
   labelPosition?: string;
   logBase?: number;
+  majorTimeUnit?: string;
+  minorTimeUnit?: string;
   orientation?: string;
   majorUnit?: number;
   max?: number;
