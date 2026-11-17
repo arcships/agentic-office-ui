@@ -56,6 +56,7 @@ import {
 import {
   shouldRenderWrappedFloatingImage
 } from "./paragraph-geometry";
+import { resolveFloatingEffectExtentPx } from "../../engine/anchor-properties";
 import {
   syntheticTextBoxActsAsTopAndBottomMasthead
 } from "./synthetic-textbox";
@@ -463,6 +464,7 @@ export function resolveDualWrappedFloatingImageGeometry(
     : 0;
   const wrapType = floating?.wrapType;
   const horizontalAlign = floating?.horizontalAlign?.trim().toLowerCase();
+  const effectExtent = resolveFloatingEffectExtentPx(floating);
   const distLPx = Math.max(0, Math.round(floating?.distLPx ?? 0));
   const distRPx = Math.max(0, Math.round(floating?.distRPx ?? 0));
   const distTPx = Math.max(0, Math.round(floating?.distTPx ?? 0));
@@ -517,10 +519,16 @@ export function resolveDualWrappedFloatingImageGeometry(
       ? Math.round(rawImageTopPx)
       : Math.max(0, Math.round(rawImageTopPx));
 
-  let exclusionLeftPx = Math.max(0, imageLeftPx - distLPx);
+  let exclusionLeftPx = Math.max(
+    0,
+    imageLeftPx - distLPx - Math.round(effectExtent.leftPx)
+  );
   let exclusionRightPx = Math.min(
     safeContainerWidthPx,
-    imageLeftPx + imageWidthPx + distRPx
+    imageLeftPx +
+      imageWidthPx +
+      distRPx +
+      Math.round(effectExtent.rightPx)
   );
   if (wrapType === "topAndBottom") {
     exclusionLeftPx = 0;
@@ -560,8 +568,12 @@ export function resolveDualWrappedFloatingImageGeometry(
     exclusion: {
       left: exclusionLeftPx,
       right: exclusionRightPx,
-      top: imageTopPx,
-      bottom: imageTopPx + imageHeightPx + distBPx,
+      top: imageTopPx - Math.round(effectExtent.topPx),
+      bottom:
+        imageTopPx +
+        imageHeightPx +
+        distBPx +
+        Math.round(effectExtent.bottomPx),
     },
   };
 }

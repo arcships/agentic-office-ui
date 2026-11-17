@@ -11,7 +11,10 @@ declare const Buffer: {
   from(data: Uint8Array): { toString(encoding: "base64"): string };
 };
 
-type ImageRenderSource = Pick<ImageRunNode, "src" | "contentType" | "data">;
+type ImageRenderSource = Pick<
+  ImageRunNode,
+  "src" | "contentType" | "data" | "widthPx" | "heightPx"
+>;
 
 interface TiffIfd {
   width?: number;
@@ -38,6 +41,97 @@ const TIFF_DATA_URI_PREFIXES = ["data:image/tiff", "data:image/tif"];
 const EMF_DATA_URI_PREFIXES = ["data:image/emf", "data:image/x-emf"];
 const WMF_DATA_URI_PREFIXES = ["data:image/wmf", "data:image/x-wmf"];
 const UTIF = UTIFModule as unknown as UtifModule;
+
+const TIFF_CONVERSION_CACHE_MAX_ENTRIES = 64;
+const TIFF_CONVERSION_CACHE_MAX_BYTES = 24 * 1024 * 1024;
+
+interface TiffConversionCacheEntry {
+  value: string | undefined;
+  bytes: number;
+}
+
+const tiffConversionCache = new Map<string, TiffConversionCacheEntry>();
+let tiffConversionCacheBytes = 0;
+let nextTiffSourceIdentity = 1;
+const tiffSourceIdentities = new WeakMap<Uint8Array, number>();
+
+function normalizeTargetSize(value: number | undefined): number | undefined {
+  return Number.isFinite(value) && (value as number) > 0
+    ? Math.max(1, Math.round(value as number))
+    : undefined;
+}
+
+function tiffSourceIdentity(image: ImageRenderSource): string | undefined {
+  if (image.data?.byteLength) {
+    let identity = tiffSourceIdentities.get(image.data);
+    if (identity === undefined) {
+      identity = nextTiffSourceIdentity;
+      nextTiffSourceIdentity += 1;
+      tiffSourceIdentities.set(image.data, identity);
+    }
+    return `bytes:${identity}`;
+  }
+
+  const src = normalizeImageSrc(image);
+  return src ? `src:${src}` : undefined;
+}
+
+function tiffConversionCacheKey(
+  image: ImageRenderSource,
+): string | undefined {
+  const identity = tiffSourceIdentity(image);
+  if (!identity) {
+    return undefined;
+  }
+  const width = normalizeTargetSize(image.widthPx) ?? 0;
+  const height = normalizeTargetSize(image.heightPx) ?? 0;
+  return `${identity}|${width}x${height}`;
+}
+
+function readTiffConversionCache(key: string): {
+  hit: boolean;
+  value?: string;
+} {
+  const entry = tiffConversionCache.get(key);
+  if (!entry) {
+    return { hit: false };
+  }
+  // Refresh LRU order: the most recently used conversion stays longest.
+  tiffConversionCache.delete(key);
+  tiffConversionCache.set(key, entry);
+  return { hit: true, value: entry.value };
+}
+
+function writeTiffConversionCache(key: string, value: string | undefined): void {
+  const bytes = value ? value.length * 2 : 0;
+  if (bytes > TIFF_CONVERSION_CACHE_MAX_BYTES) {
+    return;
+  }
+
+  const previous = tiffConversionCache.get(key);
+  if (previous) {
+    tiffConversionCacheBytes -= previous.bytes;
+    tiffConversionCache.delete(key);
+  }
+
+  tiffConversionCache.set(key, { value, bytes });
+  tiffConversionCacheBytes += bytes;
+
+  while (
+    tiffConversionCache.size > TIFF_CONVERSION_CACHE_MAX_ENTRIES ||
+    tiffConversionCacheBytes > TIFF_CONVERSION_CACHE_MAX_BYTES
+  ) {
+    const oldestKey = tiffConversionCache.keys().next().value as
+      | string
+      | undefined;
+    if (oldestKey === undefined) {
+      break;
+    }
+    const oldest = tiffConversionCache.get(oldestKey);
+    tiffConversionCache.delete(oldestKey);
+    tiffConversionCacheBytes -= oldest?.bytes ?? 0;
+  }
+}
 
 function normalizeImageContentType(image: ImageRenderSource): string | undefined {
   return image.contentType?.trim().toLowerCase();
@@ -199,7 +293,61 @@ function selectPrimaryTiffPage(ifds: TiffIfd[]): TiffIfd | undefined {
   return best ?? ifds[0];
 }
 
-function convertTiffToPngDataUri(bytes: Uint8Array): string | undefined {
+function scaleRgbaForTarget(
+  rgba: Uint8Array,
+  width: number,
+  height: number,
+  targetWidthPx: number | undefined,
+  targetHeightPx: number | undefined,
+): { width: number; height: number; data: Uint8Array } {
+  let nextWidth = width;
+  let nextHeight = height;
+  if (targetWidthPx !== undefined && targetWidthPx < width) {
+    nextWidth = targetWidthPx;
+  }
+  if (targetHeightPx !== undefined && targetHeightPx < height) {
+    nextHeight = targetHeightPx;
+    if (targetWidthPx === undefined) {
+      nextWidth = Math.max(1, Math.round((width * nextHeight) / height));
+    }
+  } else if (
+    targetWidthPx !== undefined &&
+    targetWidthPx < width &&
+    targetHeightPx === undefined
+  ) {
+    nextHeight = Math.max(1, Math.round((height * nextWidth) / width));
+  }
+  if (nextWidth === width && nextHeight === height) {
+    return { width, height, data: rgba };
+  }
+
+  const scaled = new Uint8Array(nextWidth * nextHeight * 4);
+  for (let y = 0; y < nextHeight; y += 1) {
+    const sourceY = Math.min(
+      height - 1,
+      Math.floor((y * height) / nextHeight),
+    );
+    for (let x = 0; x < nextWidth; x += 1) {
+      const sourceX = Math.min(
+        width - 1,
+        Math.floor((x * width) / nextWidth),
+      );
+      const sourceIndex = (sourceY * width + sourceX) * 4;
+      const targetIndex = (y * nextWidth + x) * 4;
+      scaled[targetIndex] = rgba[sourceIndex] ?? 0;
+      scaled[targetIndex + 1] = rgba[sourceIndex + 1] ?? 0;
+      scaled[targetIndex + 2] = rgba[sourceIndex + 2] ?? 0;
+      scaled[targetIndex + 3] = rgba[sourceIndex + 3] ?? 0;
+    }
+  }
+  return { width: nextWidth, height: nextHeight, data: scaled };
+}
+
+function convertTiffToPngDataUri(
+  bytes: Uint8Array,
+  targetWidthPx?: number,
+  targetHeightPx?: number,
+): string | undefined {
   const budget = createOfficeImageBudget(DEFAULT_DOCX_RUNTIME_LIMITS, "docx");
   try {
     budget.inspectAndReserve(bytes, "inline-image.tiff");
@@ -221,10 +369,17 @@ function convertTiffToPngDataUri(bytes: Uint8Array): string | undefined {
     return undefined;
   }
 
-  const pngBytes = encodePng({
+  const scaled = scaleRgbaForTarget(
+    rgba,
     width,
     height,
-    data: rgba,
+    normalizeTargetSize(targetWidthPx),
+    normalizeTargetSize(targetHeightPx),
+  );
+  const pngBytes = encodePng({
+    width: scaled.width,
+    height: scaled.height,
+    data: scaled.data,
     channels: 4,
     depth: 8
   });
@@ -247,16 +402,27 @@ export function resolveRenderableImageSource(image: ImageRenderSource): string |
     return src;
   }
 
+  const cacheKey = tiffConversionCacheKey(image);
+  if (cacheKey) {
+    const cached = readTiffConversionCache(cacheKey);
+    if (cached.hit) {
+      return cached.value;
+    }
+  }
+
   let converted: string | undefined;
   try {
     const bytes = resolveTiffBytes(image);
     if (bytes) {
-      converted = convertTiffToPngDataUri(bytes);
+      converted = convertTiffToPngDataUri(bytes, image.widthPx, image.heightPx);
     }
   } catch {
     converted = undefined;
   }
 
+  if (cacheKey) {
+    writeTiffConversionCache(cacheKey, converted);
+  }
   return converted;
 }
 

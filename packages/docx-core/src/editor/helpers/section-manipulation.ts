@@ -334,6 +334,9 @@ export function updateSectionImageFloatingAtLocation(
       if (!child || child.type !== "image") {
         return;
       }
+      if (child.floating?.lockedAnchor && patch.lockedAnchor !== false) {
+        return;
+      }
 
       child.floating = {
         ...(child.floating ?? {}),

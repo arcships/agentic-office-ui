@@ -5,6 +5,7 @@ import type {
   ParagraphChildNode,
   TableCellContentNode
 } from "./types";
+import { parseFloatingAnchorProperties } from "./anchor-properties";
 
 function normalizeUint8Array(value: unknown): Uint8Array | undefined {
   if (value instanceof Uint8Array) {
@@ -23,13 +24,22 @@ function normalizeParagraphChild(child: ParagraphChildNode): ParagraphChildNode 
 
   const image = child as ImageRunNode;
   const data = normalizeUint8Array(image.data);
-  if (data === image.data) {
+  const anchorProperties = image.floating
+    ? parseFloatingAnchorProperties(image.sourceXml)
+    : undefined;
+  const floating = anchorProperties
+    ? { ...image.floating, ...anchorProperties }
+    : image.floating;
+  const dataChanged = data !== image.data;
+  const floatingChanged = floating !== image.floating;
+  if (!dataChanged && !floatingChanged) {
     return child;
   }
 
   return {
     ...image,
-    data
+    data,
+    floating
   };
 }
 

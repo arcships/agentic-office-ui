@@ -57,6 +57,92 @@ function invalidateImageSource(location: LocatedImage): void {
   if (location.table) location.table.sourceXml = undefined
 }
 
+interface FloatingImageRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+function floatingImageRect(
+  floating: NonNullable<ImageRunNode["floating"]>,
+  widthPx: number,
+  heightPx: number,
+): FloatingImageRect | undefined {
+  if (!Number.isFinite(floating.xPx) || !Number.isFinite(floating.yPx)) {
+    return undefined
+  }
+  const effect = floating.effectExtent
+  const leftEffect = Math.max(0, effect?.leftPx ?? 0)
+  const topEffect = Math.max(0, effect?.topPx ?? 0)
+  const rightEffect = Math.max(0, effect?.rightPx ?? 0)
+  const bottomEffect = Math.max(0, effect?.bottomPx ?? 0)
+  return {
+    left: (floating.xPx as number) - leftEffect,
+    top: (floating.yPx as number) - topEffect,
+    right: (floating.xPx as number) + widthPx + rightEffect,
+    bottom: (floating.yPx as number) + heightPx + bottomEffect,
+  }
+}
+
+function floatingImageRectsOverlap(
+  first: FloatingImageRect,
+  second: FloatingImageRect,
+): boolean {
+  return (
+    first.left < second.right &&
+    first.right > second.left &&
+    first.top < second.bottom &&
+    first.bottom > second.top
+  )
+}
+
+function findOverlappingFloatingImage(
+  model: DocModel,
+  target: ImageRunNode,
+  candidate: NonNullable<ImageRunNode["floating"]>,
+  widthPx: number,
+  heightPx: number,
+): ImageRunNode | undefined {
+  if (candidate.allowOverlap !== false) {
+    return undefined
+  }
+  const candidateRect = floatingImageRect(candidate, widthPx, heightPx)
+  if (!candidateRect) {
+    return undefined
+  }
+
+  const visit = (nodes: DocModel["nodes"]): ImageRunNode | undefined => {
+    for (const node of nodes) {
+      if (node.type === "paragraph") {
+        for (const child of node.children) {
+          if (child.type !== "image" || child === target || !child.floating) {
+            continue
+          }
+          const rect = floatingImageRect(
+            child.floating,
+            child.widthPx ?? 120,
+            child.heightPx ?? 80,
+          )
+          if (rect && floatingImageRectsOverlap(candidateRect, rect)) {
+            return child
+          }
+        }
+        continue
+      }
+      for (const row of node.rows) {
+        for (const cell of row.cells) {
+          const overlap = visit(cell.nodes)
+          if (overlap) return overlap
+        }
+      }
+    }
+    return undefined
+  }
+
+  return visit(model.nodes)
+}
+
 function insertImageAtTextRange(
   paragraph: ParagraphNode,
   image: ImageRunNode,
@@ -223,6 +309,28 @@ export function createEditorImage(
     }
     const width = Math.max(1, Math.round(widthPx))
     const height = Math.max(1, Math.round(heightPx))
+    const located = locateImage(ctx.modelSnapshot.value, location)
+    if (!located) {
+      unsupported("resize target is unavailable")
+      return
+    }
+    if (located.image.floating?.lockedAnchor) {
+      unsupported("locked image anchor cannot be resized")
+      return
+    }
+    if (
+      located.image.floating &&
+      findOverlappingFloatingImage(
+        ctx.modelSnapshot.value,
+        located.image,
+        located.image.floating,
+        width,
+        height,
+      )
+    ) {
+      unsupported("image overlap is disabled for this anchor")
+      return
+    }
     applyImageChange(location, ({ image }) => {
       image.widthPx = width
       image.heightPx = height
@@ -279,16 +387,40 @@ export function createEditorImage(
     location: DocxImageLocation,
     patch: Partial<NonNullable<ImageRunNode["floating"]>>
   ): void => {
+    const located = locateImage(ctx.modelSnapshot.value, location)
+    if (!located) {
+      unsupported("image move target is unavailable")
+      return
+    }
+    if (located.image.floating?.lockedAnchor) {
+      unsupported("locked image anchor cannot be moved")
+      return
+    }
+
+    const floating: NonNullable<ImageRunNode["floating"]> = {
+      xPx: 0,
+      yPx: 0,
+      wrapType: "square",
+      ...(located.image.floating ?? {}),
+      ...patch,
+    }
+    if (patch.xPx !== undefined) delete floating.horizontalAlign
+    if (patch.yPx !== undefined) delete floating.verticalAlign
+
+    if (
+      findOverlappingFloatingImage(
+        ctx.modelSnapshot.value,
+        located.image,
+        floating,
+        located.image.widthPx ?? 120,
+        located.image.heightPx ?? 80,
+      )
+    ) {
+      unsupported("image overlap is disabled for this anchor")
+      return
+    }
+
     applyImageChange(location, ({ image }) => {
-      const floating: NonNullable<ImageRunNode["floating"]> = {
-        xPx: 0,
-        yPx: 0,
-        wrapType: "square",
-        ...(image.floating ?? {}),
-        ...patch,
-      }
-      if (patch.xPx !== undefined) delete floating.horizontalAlign
-      if (patch.yPx !== undefined) delete floating.verticalAlign
       image.floating = floating
     }, "Moved image")
   }

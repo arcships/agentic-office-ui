@@ -13,6 +13,7 @@ const requireFromDocxCore = createRequire(
 const { strFromU8, strToU8, unzipSync, zipSync } = await import(
   pathToFileURL(requireFromDocxCore.resolve("fflate")).href
 );
+const UTIF = requireFromDocxCore("utif");
 const core = await import(
   pathToFileURL(requireFromVueDocx.resolve("@arcships/docx-core")).href
 );
@@ -27,6 +28,65 @@ const samples = new URL("../../apps/demo/public/samples/", import.meta.url);
 function arrayBufferFromFile(name) {
   const bytes = readFileSync(new URL(name, samples));
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+function tiffDataUri(width, height, [red, green, blue]) {
+  const rgba = new Uint8Array(width * height * 4);
+  for (let index = 0; index < rgba.length; index += 4) {
+    rgba[index] = red;
+    rgba[index + 1] = green;
+    rgba[index + 2] = blue;
+    rgba[index + 3] = 255;
+  }
+  const tiff = new Uint8Array(UTIF.encodeImage(rgba, width, height));
+  return `data:image/tiff;base64,${Buffer.from(tiff).toString("base64")}`;
+}
+
+function docxWithAnchoredImage(anchorAttributes) {
+  const archive = unzipSync(new Uint8Array(arrayBufferFromFile("report-with-image.docx")));
+  let documentXml = strFromU8(archive["word/document.xml"]);
+  const inline = documentXml.match(
+    /<w:drawing><wp:inline[\s\S]*?<\/wp:inline><\/w:drawing>/
+  )[0];
+  const extent = inline.match(/<wp:extent cx="(\d+)" cy="(\d+)"/);
+  const anchor = `<w:drawing><wp:anchor ${anchorAttributes}>` +
+    `<wp:simplePos x="0" y="0"/>` +
+    `<wp:positionH relativeFrom="column"><wp:posOffset>720000</wp:posOffset></wp:positionH>` +
+    `<wp:positionV relativeFrom="paragraph"><wp:posOffset>360000</wp:posOffset></wp:positionV>` +
+    `<wp:extent cx="${extent[1]}" cy="${extent[2]}"/>` +
+    `<wp:effectExtent l="19050" t="19050" r="19050" b="19050"/>` +
+    `<wp:wrapSquare wrapText="bothSides"/>` +
+    `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">` +
+    `<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+    `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+    `<pic:nvPicPr><pic:cNvPr id="0" name="invoice.png"/><pic:cNvPicPr/></pic:nvPicPr>` +
+    `<pic:blipFill><a:blip r:embed="rId11"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+    `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${extent[1]}" cy="${extent[2]}"/></a:xfrm>` +
+    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>` +
+    `</a:graphicData></a:graphic></wp:anchor></w:drawing>`;
+  documentXml = documentXml.replace(inline, anchor);
+  archive["word/document.xml"] = strToU8(documentXml);
+  const bytes = zipSync(archive);
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+function findFirstImage(model) {
+  let found;
+  const visit = (nodes) => {
+    for (const node of nodes) {
+      if (node.type === "paragraph") {
+        for (const child of node.children) {
+          if (child.type === "image" && !found) found = child;
+        }
+      } else if (node.type === "table") {
+        for (const row of node.rows) {
+          for (const cell of row.cells) visit(cell.nodes);
+        }
+      }
+    }
+  };
+  visit(model.nodes);
+  return found;
 }
 
 function withWordMainContentType(input, contentType) {
@@ -620,4 +680,112 @@ test("DOCX resolved comment threads are detected for replies", () => {
   const byId = commentByIdMap(comments);
   assert.equal(core.commentThreadIsResolved(byId.get(0), byId), true);
   assert.equal(core.commentThreadIsResolved(byId.get(1), byId), true);
+});
+
+test("DOCX TIFF conversion is cached per source and target size", () => {
+  const originalDecode = UTIF.decode;
+  let decodeCount = 0;
+  const countingDecode = (...args) => {
+    decodeCount += 1;
+    return originalDecode(...args);
+  };
+  // UTIF.decode carries its codec helpers as static properties and reads them
+  // back through `UTIF.decode`; keep them on the counting wrapper.
+  Object.assign(countingDecode, originalDecode);
+  UTIF.decode = countingDecode;
+
+  try {
+    const firstSrc = tiffDataUri(16, 16, [220, 40, 40]);
+    const secondSrc = tiffDataUri(16, 16, [40, 80, 220]);
+    const first = { type: "image", src: firstSrc, contentType: "image/tiff", widthPx: 16, heightPx: 16 };
+    const second = { type: "image", src: secondSrc, contentType: "image/tiff", widthPx: 16, heightPx: 16 };
+
+    const firstPng = core.resolveRenderableImageSource(first);
+    assert.match(firstPng, /^data:image\/png;base64,/);
+    assert.equal(core.resolveRenderableImageSource({ ...first }), firstPng);
+    assert.equal(core.resolveRenderableImageSource(first), firstPng);
+    assert.equal(decodeCount, 1);
+
+    const secondPng = core.resolveRenderableImageSource(second);
+    assert.match(secondPng, /^data:image\/png;base64,/);
+    assert.notEqual(secondPng, firstPng);
+    assert.equal(core.resolveRenderableImageSource(second), secondPng);
+    assert.equal(decodeCount, 2);
+
+    // The target size is part of the cache key, so a different render size
+    // produces its own conversion instead of reusing the wrong pixels.
+    core.resolveRenderableImageSource({ ...first, widthPx: 8, heightPx: 8 });
+    assert.equal(decodeCount, 3);
+  } finally {
+    UTIF.decode = originalDecode;
+  }
+});
+
+test("DOCX floating anchor parses layoutInCell, allowOverlap, locked, simplePos and effectExtent", async () => {
+  const input = docxWithAnchoredImage(
+    'distT="0" distB="0" distL="114300" distR="114300" simplePos="0" ' +
+    'relativeHeight="251658240" behindDoc="0" locked="1" layoutInCell="0" allowOverlap="1"'
+  );
+  const { model } = await core.importDocxBuffer(input, { useWorker: false });
+  const image = findFirstImage(model);
+  assert.ok(image?.floating);
+  assert.equal(image.floating.layoutInCell, false);
+  assert.equal(image.floating.allowOverlap, true);
+  assert.equal(image.floating.lockedAnchor, true);
+  assert.equal(image.floating.simplePos, false);
+  assert.deepEqual(image.floating.effectExtent, {
+    leftPx: 2,
+    topPx: 2,
+    rightPx: 2,
+    bottomPx: 2,
+  });
+});
+
+test("DOCX simplePos anchors resolve against the page origin", () => {
+  const style = core.absoluteFloatingImageStyle(
+    {
+      type: "image",
+      floating: {
+        xPx: 120,
+        yPx: 60,
+        horizontalRelativeTo: "paragraph",
+        verticalRelativeTo: "paragraph",
+        simplePos: true,
+      },
+    },
+    {
+      pageOriginLeft: 10,
+      pageOriginTop: 20,
+      paragraphOriginLeft: 1000,
+      paragraphOriginTop: 1000,
+    }
+  );
+  assert.equal(style.left, 130);
+  assert.equal(style.top, 80);
+});
+
+test("DOCX effectExtent expands the wrapped-image exclusion zone", () => {
+  const geometry = core.resolveDualWrappedFloatingImageGeometry(
+    {
+      type: "image",
+      widthPx: 100,
+      heightPx: 80,
+      floating: {
+        xPx: 150,
+        yPx: 50,
+        wrapType: "square",
+        horizontalRelativeTo: "column",
+        verticalRelativeTo: "paragraph",
+        effectExtent: { leftPx: 5, topPx: 6, rightPx: 7, bottomPx: 8 },
+      },
+    },
+    400
+  );
+  assert.ok(geometry);
+  assert.deepEqual(geometry.exclusion, {
+    left: 145,
+    right: 257,
+    top: 44,
+    bottom: 138,
+  });
 });
