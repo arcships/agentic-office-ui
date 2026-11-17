@@ -7,31 +7,60 @@
     <p v-if="loadError" data-testid="runtime-isolation-error">{{ loadError }}</p>
 
     <div class="runtime-grid">
-      <section data-testid="runtime-a">
+      <section
+        data-testid="runtime-a"
+        :data-runtime-id="runtimeAId"
+        :data-input-limit="ISOLATION_SUCCESS_LIMIT_BYTES"
+      >
         <h3>Runtime A</h3>
         <div data-testid="runtime-a-status" :data-state="stateA">{{ stateA }}</div>
         <code data-testid="runtime-a-wasm">{{ wasmUrlA }}</code>
+        <code data-testid="runtime-a-input-limit">maxInputBytes={{ ISOLATION_SUCCESS_LIMIT_BYTES }}</code>
         <DocxViewer
           v-if="bufferA"
           :file="bufferA"
           :runtime="runtimeA"
-          @load-success="stateA = 'ready'"
+          @load-success="onSuccess('A')"
           @load-error="onError('A', $event)"
         />
+        <div
+          v-if="errorA"
+          data-testid="runtime-a-error"
+          :data-error-code="errorA.code"
+          :data-error-phase="errorA.phase"
+          :data-error-limit="errorA.limit"
+          :data-error-actual="errorA.actual"
+          :data-error-allowed="errorA.allowed"
+        >{{ errorA.code }}: {{ errorA.message }}</div>
         <pre data-testid="runtime-a-diagnostics">{{ JSON.stringify(diagnosticsA, null, 2) }}</pre>
       </section>
 
-      <section data-testid="runtime-b">
+      <section
+        data-testid="runtime-b"
+        :data-runtime-id="runtimeBId"
+        :data-input-limit="ISOLATION_REJECT_LIMIT_BYTES"
+        :data-demo-rejection="isExpectedLimitRejection ? 'input-size' : ''"
+      >
         <h3>Runtime B</h3>
         <div data-testid="runtime-b-status" :data-state="stateB">{{ stateB }}</div>
         <code data-testid="runtime-b-wasm">{{ wasmUrlB }}</code>
+        <code data-testid="runtime-b-input-limit">maxInputBytes={{ ISOLATION_REJECT_LIMIT_BYTES }}</code>
         <DocxViewer
           v-if="bufferB"
           :file="bufferB"
           :runtime="runtimeB"
-          @load-success="stateB = 'ready'"
+          @load-success="onSuccess('B')"
           @load-error="onError('B', $event)"
         />
+        <div
+          v-if="errorB"
+          data-testid="runtime-b-error"
+          :data-error-code="errorB.code"
+          :data-error-phase="errorB.phase"
+          :data-error-limit="errorB.limit"
+          :data-error-actual="errorB.actual"
+          :data-error-allowed="errorB.allowed"
+        >{{ errorB.code }}: {{ errorB.message }}</div>
         <pre data-testid="runtime-b-diagnostics">{{ JSON.stringify(diagnosticsB, null, 2) }}</pre>
       </section>
     </div>
@@ -46,6 +75,13 @@ import {
   type DocxImportDiagnostic,
 } from "@arcships/docx-core"
 import { DocxViewer } from "@arcships/vue-docx"
+import {
+  ISOLATION_REJECT_LIMIT_BYTES,
+  ISOLATION_SUCCESS_LIMIT_BYTES,
+  isInputLimitError,
+  normalizeRuntimeError,
+  type StructuredRuntimeError,
+} from "../runtime-limits"
 
 type State = "loading" | "ready" | "error"
 
@@ -55,37 +91,69 @@ const diagnosticsA = ref<DocxImportDiagnostic[]>([])
 const diagnosticsB = ref<DocxImportDiagnostic[]>([])
 const stateA = ref<State>("loading")
 const stateB = ref<State>("loading")
+const errorA = shallowRef<StructuredRuntimeError | null>(null)
+const errorB = shallowRef<StructuredRuntimeError | null>(null)
 const loadError = ref("")
 const bufferA = shallowRef<ArrayBuffer>()
 const bufferB = shallowRef<ArrayBuffer>()
 
 const configA = {
   wasmUrl: wasmUrlA,
-  limits: { maxInputBytes: 2 * 1024 * 1024 },
+  limits: { maxInputBytes: ISOLATION_SUCCESS_LIMIT_BYTES },
   onDiagnostic: (event: DocxImportDiagnostic) => diagnosticsA.value.push(event),
 }
 const configB = {
   wasmUrl: wasmUrlB,
-  limits: { maxInputBytes: 3 * 1024 * 1024 },
+  // Deliberately below the 36 KB sample: Runtime B must reject the input before
+  // the Worker starts while Runtime A loads the same bytes successfully.
+  limits: { maxInputBytes: ISOLATION_REJECT_LIMIT_BYTES },
   onDiagnostic: (event: DocxImportDiagnostic) => diagnosticsB.value.push(event),
 }
 const runtimeA = createDocxRuntime(configA)
 const runtimeB = createDocxRuntime(configB)
+const runtimeAId = runtimeA.id
+const runtimeBId = runtimeB.id
 
 // Mutating the caller objects after construction must not affect either runtime.
 configA.limits.maxInputBytes = 1
 configB.limits.maxInputBytes = 1
 
+const isExpectedLimitRejection = computed(() =>
+  stateA.value === "ready" && stateB.value === "error" && isInputLimitError(errorB.value)
+)
+
 const pageState = computed<State>(() => {
-  if (stateA.value === "error" || stateB.value === "error") return "error"
-  if (stateA.value === "ready" && stateB.value === "ready") return "ready"
-  return "loading"
+  if (stateA.value === "loading" || stateB.value === "loading") return "loading"
+  if (stateA.value === "ready" && (stateB.value === "ready" || isExpectedLimitRejection.value)) {
+    return "ready"
+  }
+  return "error"
 })
 
+function onSuccess(instance: "A" | "B") {
+  if (instance === "A") {
+    stateA.value = "ready"
+    errorA.value = null
+  } else {
+    stateB.value = "ready"
+    errorB.value = null
+  }
+}
+
 function onError(instance: "A" | "B", error: Error) {
-  if (instance === "A") stateA.value = "error"
-  else stateB.value = "error"
-  loadError.value = `${instance}: ${error.message}`
+  const normalized = normalizeRuntimeError(error)
+  if (instance === "A") {
+    stateA.value = "error"
+    errorA.value = normalized
+  } else {
+    stateB.value = "error"
+    errorB.value = normalized
+  }
+  if (!(instance === "B" && isInputLimitError(normalized))) {
+    loadError.value = `${instance}: ${error.message}`
+  } else {
+    loadError.value = ""
+  }
 }
 
 onMounted(async () => {

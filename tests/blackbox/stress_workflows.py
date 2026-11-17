@@ -402,6 +402,8 @@ def run_attempt(browser, case: dict[str, object], fixtures: dict[str, dict[str, 
                 "limit": error.get_attribute("data-error-limit"),
                 "actual": parse_number(error.get_attribute("data-error-actual")),
                 "allowed": parse_number(error.get_attribute("data-error-allowed")),
+                "source": error.get_attribute("data-error-source"),
+                "readBytes": parse_number(error.get_attribute("data-read-bytes")),
             }
             expected = dict(case["error"])
             if "code" in expected:
@@ -416,6 +418,13 @@ def run_attempt(browser, case: dict[str, object], fixtures: dict[str, dict[str, 
             if "allowed" in expected:
                 assert error_details["allowed"] == float(expected["allowed"]), error_details
                 assert error_details["actual"] is not None and error_details["actual"] > error_details["allowed"], error_details
+            if expected.get("limit") == "maxInputBytes":
+                # The demo must reject from file.size alone, before reading bytes.
+                assert error_details["source"] == "file-size", error_details
+                assert error_details["readBytes"] == 0, error_details
+            else:
+                assert error_details["source"] == "runtime", error_details
+                assert error_details["readBytes"] is not None and error_details["readBytes"] > 0, error_details
             page.screenshot(path=str(attempt_dir / "error.png"), full_page=True)
 
             normal = fixtures[f"normal-{fixture['format']}"]

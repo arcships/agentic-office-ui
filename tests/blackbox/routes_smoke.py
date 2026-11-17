@@ -32,8 +32,17 @@ ROUTES = [
     ("CI-ROUTE-XLSX-VIEWER", "/xlsx-viewer"),
     ("CI-ROUTE-PPTX-VIEWER", "/pptx-viewer"),
     ("CI-ROUTE-RUNTIME-ISOLATION", "/runtime-isolation"),
+    ("CI-ROUTE-RUNTIME-LIMITS", "/runtime-limits"),
+    ("CI-ROUTE-RUNTIME-WORKER", "/runtime-worker"),
 ]
-READY_ROUTES = {"/docx-viewer", "/docx-editor", "/xlsx-viewer", "/runtime-isolation"}
+READY_ROUTES = {
+    "/docx-viewer",
+    "/docx-editor",
+    "/xlsx-viewer",
+    "/runtime-isolation",
+    "/runtime-limits",
+    "/runtime-worker",
+}
 
 
 def port_in_use() -> bool:

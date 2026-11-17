@@ -62,6 +62,7 @@ const suites = {
       "--test",
       "--test-concurrency=1",
       "tests/unit/office-runtime.test.mjs",
+      "tests/unit/runtime-demo-limits.test.mjs",
       "tests/unit/office-interaction.test.mjs",
       "tests/unit/i18n.test.mjs",
       "tests/unit/image-budget.test.mjs",
