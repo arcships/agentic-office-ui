@@ -701,3 +701,51 @@ test("main-thread parsing enforces the maxParseMs budget", async (t) => {
   assert.equal(mounted.controller.sourceError?.limit, "maxParseMs");
   assert.deepEqual(mounted.warnings, []);
 });
+
+test("large main-thread workbook load keeps peak source-buffer memory under 1.5x", async (t) => {
+  configureMainThreadWasm();
+  const file = sampleBuffer("large-grid.xlsx");
+  const fileSize = file.byteLength;
+  assert.ok(fileSize > 64 * 1024, "fixture must be large enough for a meaningful budget");
+
+  // Explicit byteLength accounting instead of a noisy process-wide heap delta:
+  // every large ArrayBuffer clone made while loading counts against the peak.
+  const originalSlice = ArrayBuffer.prototype.slice;
+  let copiedBytes = 0;
+  ArrayBuffer.prototype.slice = function trackedSlice(...args) {
+    const result = originalSlice.apply(this, args);
+    if (result instanceof ArrayBuffer && result.byteLength >= 1024) {
+      copiedBytes += result.byteLength;
+    }
+    return result;
+  };
+  t.after(() => {
+    ArrayBuffer.prototype.slice = originalSlice;
+  });
+
+  const mounted = await mountController({
+    file,
+    readOnly: false,
+    skipXmlParsing: true,
+    useWorker: false,
+  });
+  t.after(() => mounted.app.unmount());
+
+  await waitFor(
+    () => mounted.controller.sourceState === "ready"
+      || mounted.controller.sourceState === "error",
+    "large workbook load terminal state",
+  );
+  assert.ifError(mounted.controller.error);
+  assert.equal(mounted.controller.sourceState, "ready");
+
+  // The source itself is 1x; the whole load may keep at most another ~0.5x.
+  const peakSourceBytes = fileSize + copiedBytes;
+  const budget = Math.ceil(fileSize * 1.5);
+  assert.ok(
+    peakSourceBytes <= budget,
+    `peak source-buffer memory ${peakSourceBytes} exceeded ${budget} `
+      + `(fileSize=${fileSize}, copiedBytes=${copiedBytes})`,
+  );
+  assert.deepEqual(mounted.warnings, []);
+});
