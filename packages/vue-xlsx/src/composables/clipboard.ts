@@ -330,6 +330,10 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
       return false;
     }
 
+    const beforeSnapshot = {
+      activeCell: ctx.activeCell.value,
+      selection: ctx.selection.value
+    };
     const mutations: import("./internal").RangeCellMutation[] = [];
     for (let rowIndex = 0; rowIndex < grid.length; rowIndex += 1) {
       const row = grid[rowIndex] ?? [];
@@ -385,7 +389,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     ctx.activeCell.value = targetCell;
     ctx.selection.value = nextRange;
     ctx.selectionAnchorRef.value = targetCell;
-    ctx.recordRangeEditHistory(mutations, nextRange, targetCell);
+    ctx.recordRangeEditHistory(mutations, nextRange, targetCell, beforeSnapshot);
     return true;
   }
 
@@ -408,6 +412,10 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     }
 
     const hasMergeOperations = Array.isArray(payload.merges) && payload.merges.some((merge) => (merge.rowSpan ?? 1) > 1 || (merge.colSpan ?? 1) > 1);
+    const beforeSnapshot = {
+      activeCell: ctx.activeCell.value,
+      selection: ctx.selection.value
+    };
     const mutations: import("./internal").RangeCellMutation[] = [];
     if (hasMergeOperations) {
       ctx.recordHistoryBeforeMutation();
@@ -500,7 +508,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     ctx.selection.value = nextRange;
     ctx.selectionAnchorRef.value = targetCell;
     if (!hasMergeOperations) {
-      ctx.recordRangeEditHistory(mutations, nextRange, targetCell);
+      ctx.recordRangeEditHistory(mutations, nextRange, targetCell, beforeSnapshot);
     }
     return true;
   }
