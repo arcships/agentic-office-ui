@@ -137,6 +137,7 @@ const suites = {
       "tests/component/docx-history-budget.test.mjs",
       "tests/component/xlsx-history-budget.test.mjs",
       "tests/component/xlsx-number-formats.test.mjs",
+      "tests/component/xlsx-sheet-sync.test.mjs",
       "tests/component/xlsx-grid-scroll.test.mjs",
       "tests/component/xlsx-cell-editing.test.mjs",
       "tests/component/xlsx-anchored-panes.test.mjs",

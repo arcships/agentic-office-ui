@@ -672,9 +672,9 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
       committed = true;
       ctx.sheets.value = nextSheets;
       ctx.setChartAssets(nextChartAssets);
-      ctx.activeSheetIndex.value = nextSheetIndex;
-      const nextTabIndex = nextChartAssets.tabs.findIndex((tab) => tab.kind === "sheet" && tab.sheetIndex === nextSheetIndex);
-      if (nextTabIndex >= 0) ctx.activeTabIndex.value = nextTabIndex;
+      // Restore the sheet and its tab together, then reinstate the selection that
+      // belongs to it; the tab watcher must not reset what we restore here.
+      ctx.switchToSheet(nextSheetIndex, { preserveSelection: true });
       ctx.activeCell.value = entry.activeCell;
       ctx.selection.value = entry.selection;
       ctx.selectionAnchorRef.value = entry.selection ? normalizeRange(entry.selection).start : entry.activeCell;
@@ -740,7 +740,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
 
       const nextActiveCell = direction === "undo" ? entry.activeCellBefore : entry.activeCellAfter;
       const nextSelection = direction === "undo" ? entry.selectionBefore : entry.selectionAfter;
-      if (visibleSheetIndex >= 0) ctx.activeSheetIndex.value = visibleSheetIndex;
+      if (visibleSheetIndex >= 0) ctx.switchToSheet(visibleSheetIndex, { preserveSelection: true });
       ctx.activeCell.value = nextActiveCell;
       ctx.selection.value = nextSelection;
       ctx.selectionAnchorRef.value = nextSelection ? normalizeRange(nextSelection).start : nextActiveCell;
@@ -768,7 +768,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
 
       const nextActiveCell = direction === "undo" ? entry.activeCellBefore : entry.activeCellAfter;
       const nextSelection = direction === "undo" ? entry.selectionBefore : entry.selectionAfter;
-      if (visibleSheetIndex >= 0) ctx.activeSheetIndex.value = visibleSheetIndex;
+      if (visibleSheetIndex >= 0) ctx.switchToSheet(visibleSheetIndex, { preserveSelection: true });
       ctx.activeCell.value = nextActiveCell;
       ctx.selection.value = nextSelection;
       ctx.selectionAnchorRef.value = nextSelection ? normalizeRange(nextSelection).start : nextActiveCell;
@@ -779,6 +779,10 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function sortTable(tableName: string, columnIndex: number, direction: XlsxTableSortDirection) {
+    if (ctx.readOnly.value) {
+      return;
+    }
+
     const worksheet = ctx.getActiveWorksheet();
     const targetTable = tables.value.find((table) => table.name === tableName || table.displayName === tableName);
     if (!worksheet || !ctx.workbook.value || !ctx.activeSheet.value || !targetTable) {

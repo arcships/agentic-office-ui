@@ -450,11 +450,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       ctx.setChartAssets(nextChartAssets);
     }
     const nextIndex = nextSheets.findIndex((sheet) => sheet.name === candidate);
-    ctx.activeSheetIndex.value = nextIndex >= 0 ? nextIndex : 0;
-    const nextTabIndex = nextChartAssets?.tabs.findIndex((tab) => tab.kind === "sheet" && tab.name === candidate) ?? -1;
-    if (nextTabIndex >= 0) {
-      ctx.activeTabIndex.value = nextTabIndex;
-    }
+    ctx.switchToSheet(nextIndex >= 0 ? nextIndex : 0);
     ctx.revision.value = ctx.revision.value + 1;
   }
 
@@ -465,6 +461,9 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     }
 
     ctx.recordHistoryBeforeMutation();
+    const removedVisibleIndex = ctx.sheets.value.findIndex(
+      (sheet) => sheet.workbookSheetIndex === activeSheetData.workbookSheetIndex
+    );
     ctx.workbook.value.removeSheet(activeSheetData.workbookSheetIndex);
     ctx.sheetOriginsRef.value = ctx.sheetOriginsRef.value.filter((_, index) => index !== activeSheetData.workbookSheetIndex);
     ctx.imagesByWorkbookSheetIndex.value = ctx.imagesByWorkbookSheetIndex.value.filter((_, index) => index !== activeSheetData.workbookSheetIndex);
@@ -487,7 +486,15 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     if (ctx.imageAssetsRef.value) {
       ctx.setChartAssets(loadWorkbookChartAssets(ctx.workbook.value, ctx.imageAssetsRef.value, buildVisibleSheetIndexMap(nextSheets), ctx.showHiddenSheets));
     }
-    ctx.activeSheetIndex.value = Math.max(0, Math.min(ctx.activeSheetIndex.value, nextSheets.length - 1));
+    // The removed sheet's selection must not follow us onto its successor, and
+    // the successor has to own both the tab and the sheet index: deleting a
+    // middle sheet keeps the tab index but shifts which sheet it points at.
+    clearSelection();
+    const nextIndex = Math.max(
+      0,
+      Math.min(removedVisibleIndex >= 0 ? removedVisibleIndex : ctx.activeSheetIndex.value, nextSheets.length - 1)
+    );
+    ctx.switchToSheet(nextIndex);
     ctx.revision.value = ctx.revision.value + 1;
   }
 
