@@ -264,18 +264,13 @@ export function createPptxDocumentSession(
     },
     async open(source, openOptions = {}) {
       assertUsable()
-      for (const controller of playbackControllers) controller.dispose()
-      playbackControllers.clear()
-      releaseMediaUrls()
-      currentDocument = null
-      currentArchive = null
-      currentPlaybackDocument = null
       const officeSource = toOfficeSource(source)
       const limits = tightenLimits(baseLimits, openOptions.limits)
       const task = coordinator.start(officeSource, {
         signal: openOptions.signal,
         limits: toOfficeLimits(limits),
       })
+      let installing = false
       try {
         const resolved = await loadOfficeSource(officeSource, {
           signal: task.signal,
@@ -305,6 +300,17 @@ export function createPptxDocumentSession(
           Math.max(Math.trunc(openOptions.initialSlide ?? 0), 0),
           Math.max(presentation.slides.length - 1, 0),
         )
+        // Replace the current document only after the new deck has parsed: a
+        // failed parse keeps the previous deck fully usable. A failed render is
+        // handled below by clearing both the viewport and the session state.
+        for (const controller of playbackControllers) controller.dispose()
+        playbackControllers.clear()
+        releaseMediaUrls()
+        searchCache.clear()
+        installing = true
+        currentDocument = null
+        currentArchive = null
+        currentPlaybackDocument = null
         viewer.load(presentation)
         if (renderMode === "list") {
           await viewer.renderList(listOptions)
@@ -343,6 +349,16 @@ export function createPptxDocumentSession(
         })
         return currentDocument
       } catch (error) {
+        if (installing && task.isCurrent()) {
+          viewer.destroy()
+          currentDocument = null
+          currentArchive = null
+          currentPlaybackDocument = null
+          searchCache.clear()
+          releaseMediaUrls()
+          for (const controller of playbackControllers) controller.dispose()
+          playbackControllers.clear()
+        }
         throw toPreviewError(error)
       } finally {
         task.finish()
@@ -454,6 +470,9 @@ export function createPptxPreviewSession(
     renderMode: options.renderMode ?? "list",
   })
 }
+
+export { createPptxPlaybackController } from "./browser/controller"
+export type { PptxPlaybackControllerHost } from "./browser/controller"
 
 export type {
   PptxDisposableHandle,

@@ -71,6 +71,7 @@ try {
   run("chromium", ["--initial-slide", "9", "--action-check"])
   run("chromium", ["--initial-slide", "5", "--media-check", "--resource-check", "--performance-check"])
   run("chromium", ["--initial-slide", "0", "--rapid-navigation-check", "--approximation", "safe"])
+  run("chromium", ["--initial-slide", "0", "--search-cache-check"])
   run("chromium", ["--initial-slide", "0", "--duplicate-target-check"])
   run("chromium", ["--initial-slide", "0", "--reset-check"])
   run("chromium", ["--initial-slide", "5", "--media-block-check"])
