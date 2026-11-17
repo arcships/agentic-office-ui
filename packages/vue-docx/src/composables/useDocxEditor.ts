@@ -152,7 +152,7 @@ export function useDocxEditor(
   const isDirty = computed(() => model.value !== cleanModel.value)
   const basePackage = ref<OoxmlPackage | undefined>(undefined)
   const documentLoadNonce = ref(0)
-  const initialFileName = options.initialFileName ?? "(new document)"
+  const initialFileName = options.initialFileName ?? officeMessagesEn.docx.editor.newDocument
   const fileName = ref(initialFileName)
   const statusMessage = (
     key: keyof DocxEditorStatusMessages,

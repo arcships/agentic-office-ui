@@ -61,7 +61,7 @@ import {
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
-import { formatOfficeMessage } from "@arcships/office-interaction"
+import { formatOfficeMessage, localizeOfficeObjectDescriptor } from "@arcships/office-interaction"
 import { providePptxMessages } from "./i18n"
 
 const props = withDefaults(defineProps<{
@@ -673,7 +673,7 @@ defineExpose({
     if (signal?.aborted) throw new DOMException("PPTX reference description aborted.", "AbortError")
     const descriptor = describePptxReference(referenceContext(), reference)
     if (!descriptor) throw new Error("PPTX reference is not resolvable in the current revision.")
-    return descriptor
+    return localizeOfficeObjectDescriptor(descriptor, m.value.common)
   },
   async resolveReference(reference: OfficeObjectReference): Promise<ResolveReferenceResult> {
     const result = resolvePptxReference(referenceContext(), reference)

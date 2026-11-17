@@ -12,6 +12,12 @@
         <MemoChartSvg
           v-else-if="chart.chartType !== 'Unsupported'"
           :chart="chart"
+          :chart-labels="{
+            ariaLabel: m.xlsx.chart.ariaLabel,
+            unsupportedType: m.xlsx.chart.unsupportedType,
+            other: m.xlsx.chart.other,
+            seriesName: m.xlsx.chart.seriesName,
+          }"
           :rect="chartRect"
           :palette="palette"
           :selected-chart-element="controller.selectedChartId === chart.id ? controller.selectedChartElement : null"

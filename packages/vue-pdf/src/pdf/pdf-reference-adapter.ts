@@ -38,12 +38,24 @@ export type PdfOfficeReferenceDraft = Extract<
   { document: { format: "pdf" } }
 >
 
+export interface PdfReferenceDescriptorLabels {
+  document: string
+  page: (pageIndex: number) => string
+  selectedText: string
+  textRange: string
+  selectedRegion: string
+  textLabel: (text: string) => string
+  regionOnPage: (pageIndex: number) => string
+}
+
 export interface PdfReferenceContext {
   revision: OfficeDocumentRevision & { format: "pdf" }
   document: PdfRenderDocument
   runtime: Pick<PdfRenderRuntime, "getTextSlices" | "search"> & {
     getPageContentHash?: PdfRenderRuntime["getPageContentHash"]
   }
+  /** Localized labels for descriptors emitted to hosts. */
+  descriptors?: PdfReferenceDescriptorLabels
 }
 
 export interface PdfTextReferenceSelection {
@@ -298,7 +310,22 @@ function currentRegionReference(
   return { ...reference, document: context.revision } as PdfOfficeReference
 }
 
+function resolveDescriptorLabels(context: PdfReferenceContext): PdfReferenceDescriptorLabels {
+  if (context.descriptors) return context.descriptors
+  const messages = officeMessagesEn.common
+  return {
+    document: messages.descriptors.document,
+    page: (pageIndex) => formatOfficeMessage(messages.descriptors.page, { number: pageIndex + 1 }),
+    selectedText: messages.selectedText,
+    textRange: messages.descriptors.textRange,
+    selectedRegion: messages.descriptors.selectedRegion,
+    textLabel: (text) => formatOfficeMessage(messages.descriptors.textLabel, { text }),
+    regionOnPage: (pageIndex) => formatOfficeMessage(messages.descriptors.regionOnPage, { number: pageIndex + 1 }),
+  }
+}
+
 function textDescriptor(
+  context: PdfReferenceContext,
   reference: PdfOfficeReference,
   text: string,
   page: PdfRenderPageInfo,
@@ -317,17 +344,17 @@ function textDescriptor(
       }]
     : undefined
   const labelText = text.replace(/\s+/gu, " ").trim()
-  const messages = officeMessagesEn.common
+  const labels = resolveDescriptorLabels(context)
   return {
     objectId: `pdf:text:${pageIndex}:${locator?.kind === "text-range" ? `${locator.charIndex}:${locator.charCount}` : "unknown"}`,
     draft: draftFromReference(reference),
     label: labelText
-      ? formatOfficeMessage(messages.descriptors.textLabel, { text: labelText.slice(0, 80) })
-      : messages.descriptors.textRange,
+      ? labels.textLabel(labelText.slice(0, 80))
+      : labels.textRange,
     path: [
-      { kind: "document", label: messages.descriptors.document },
-      { kind: "page", label: formatOfficeMessage(messages.descriptors.page, { number: pageIndex + 1 }) },
-      { kind: "text-range", label: messages.selectedText },
+      { kind: "document", label: labels.document },
+      { kind: "page", label: labels.page(pageIndex) },
+      { kind: "text-range", label: labels.selectedText },
     ],
     childrenState: "none",
     content: { text },
@@ -340,21 +367,19 @@ function textDescriptor(
   }
 }
 
-function simpleDescriptor(reference: PdfOfficeReference): OfficeObjectDescriptor {
+function simpleDescriptor(context: PdfReferenceContext, reference: PdfOfficeReference): OfficeObjectDescriptor {
   const region = reference.locator.type === "manual-region" ? reference.locator.value : undefined
   const locator = reference.locator.type === "format" ? reference.locator.value : undefined
   const pageIndex = region?.pageIndex ?? (locator?.kind === "page" ? locator.pageIndex : 0)
-  const messages = officeMessagesEn.common
+  const labels = resolveDescriptorLabels(context)
   return {
     objectId: region ? `pdf:region:${pageIndex}:${JSON.stringify(region.rect)}` : `pdf:page:${pageIndex}`,
     draft: draftFromReference(reference),
-    label: region
-      ? formatOfficeMessage(messages.descriptors.regionOnPage, { number: pageIndex + 1 })
-      : formatOfficeMessage(messages.descriptors.page, { number: pageIndex + 1 }),
+    label: region ? labels.regionOnPage(pageIndex) : labels.page(pageIndex),
     path: [
-      { kind: "document", label: messages.descriptors.document },
-      { kind: "page", label: formatOfficeMessage(messages.descriptors.page, { number: pageIndex + 1 }) },
-      ...(region ? [{ kind: "region" as const, label: messages.descriptors.selectedRegion }] : []),
+      { kind: "document", label: labels.document },
+      { kind: "page", label: labels.page(pageIndex) },
+      ...(region ? [{ kind: "region" as const, label: labels.selectedRegion }] : []),
     ],
     childrenState: region ? "none" : "unknown",
     ...(region ? {
@@ -473,7 +498,7 @@ export async function resolvePdfReference(
     const page = pageAt(context, pageIndex)
     if (!page) return { status: "not-found", reasonCode: "pdf.page-not-found" }
     if (sameRevision(pdfReference.document, context.revision)) {
-      return { status: "exact", reference: pdfReference, descriptor: simpleDescriptor(pdfReference) }
+      return { status: "exact", reference: pdfReference, descriptor: simpleDescriptor(context, pdfReference) }
     }
     if (!pdfReference.fingerprint?.ancestorKeys?.some(isPdfPageSignature)) {
       return { status: "unsupported", reasonCode: "pdf.page-signature-unavailable" }
@@ -488,7 +513,7 @@ export async function resolvePdfReference(
     return {
       status: "relocated",
       reference: relocated,
-      descriptor: simpleDescriptor(relocated),
+      descriptor: simpleDescriptor(context, relocated),
       reasonCodes: ["pdf.revision-changed", "pdf.page-signature-match"],
     }
   }
@@ -507,7 +532,7 @@ export async function resolvePdfReference(
       return {
         status: "exact",
         reference: pdfReference,
-        descriptor: textDescriptor(pdfReference, currentText, page),
+        descriptor: textDescriptor(context, pdfReference, currentText, page),
       }
     }
     const relocated = currentFormatReference(
@@ -520,7 +545,7 @@ export async function resolvePdfReference(
     return {
       status: "relocated",
       reference: relocated,
-      descriptor: textDescriptor(relocated, currentText, page),
+      descriptor: textDescriptor(context, relocated, currentText, page),
       reasonCodes: ["pdf.revision-changed", "pdf.locator-stable"],
     }
   }
@@ -549,7 +574,7 @@ export async function resolvePdfReference(
       status: "ambiguous",
       candidates: bestHits.map((hit) => {
         const candidate = referenceFromHit(context, pdfReference, hit)
-        return textDescriptor(candidate, hit.match, context.document.pages[hit.pageIndex]!, hit.rects)
+        return textDescriptor(context, candidate, hit.match, context.document.pages[hit.pageIndex]!, hit.rects)
       }),
       reasonCodes: ["pdf.multiple-text-matches"],
     }
@@ -559,7 +584,7 @@ export async function resolvePdfReference(
   return {
     status: "relocated",
     reference: relocated,
-    descriptor: textDescriptor(relocated, hit.match, context.document.pages[hit.pageIndex]!, hit.rects),
+    descriptor: textDescriptor(context, relocated, hit.match, context.document.pages[hit.pageIndex]!, hit.rects),
     reasonCodes: ["pdf.revision-changed", "pdf.text-quote-match"],
   }
 }

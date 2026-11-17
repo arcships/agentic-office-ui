@@ -105,7 +105,7 @@ import {
 } from "../composables/useDocxSearch"
 import DocxViewerRoot from "./DocxViewerRoot.vue"
 import { provideDocxMessages } from "../i18n"
-import { formatOfficeMessage } from "@arcships/office-interaction"
+import { formatOfficeMessage, localizeOfficeObjectDescriptor } from "@arcships/office-interaction"
 import { docxTextRangeFromDomSelection } from "../composables/editor-selection"
 
 const props = withDefaults(
@@ -341,7 +341,7 @@ function tableHitCandidate(element: Element): OfficeHitCandidate | undefined {
     candidateId: `docx:table:${tableIndex}`,
     draft: createDocxTableReferenceDraft(referenceContext(), tableIndex),
     preview: {
-      label: `Table ${tableIndex + 1}`,
+      label: descriptor("table", { number: tableIndex + 1 }),
       path: [{ kind: "document", label: descriptor("document") }, { kind: "table", label: descriptor("table", { number: tableIndex + 1 }) }],
     },
     hit: "direct",
@@ -1259,7 +1259,7 @@ defineExpose({
       const reason = result.status === "ambiguous" ? result.reasonCodes.join(", ") : result.reasonCode
       throw new Error(`DOCX reference is not resolvable in the current revision (${reason}).`)
     }
-    return result.descriptor
+    return localizeOfficeObjectDescriptor(result.descriptor, m.value.common)
   },
   async resolveReference(reference: OfficeObjectReference): Promise<ResolveReferenceResult> {
     const result = resolveDocxReference(referenceContext(), reference)

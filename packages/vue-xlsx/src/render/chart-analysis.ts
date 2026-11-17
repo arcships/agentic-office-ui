@@ -2,9 +2,10 @@
 import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 import { treemapBinary, treemapDice } from "d3-hierarchy";
 import type { XlsxChart, XlsxChartSeries } from "@arcships/xlsx-core";
-import { safeNumber, normalizeCategoryLabel, clamp, lightenColor } from "./chart-shared";
+import { officeMessagesEn } from "@arcships/office-interaction";
+import { safeNumber, normalizeCategoryLabel, clamp, lightenColor, resolveChartSeriesLabel } from "./chart-shared";
 import { chartSeriesColor, chartPointColor, getCategoryLabels } from "./chart-data";
-import type { ChartHierarchyDatum, ChartStage, BoxWhiskerStats } from "./chart-types";
+import type { ChartHierarchyDatum, ChartLabels, ChartStage, BoxWhiskerStats } from "./chart-types";
 
 export function resolveChartStageSubtotal(series: XlsxChart["series"][number]) {
   const raw = series.raw && typeof series.raw === "object"
@@ -17,7 +18,7 @@ export function resolveChartStageSubtotal(series: XlsxChart["series"][number]) {
   return subtotals.length > 0 || layoutProperties?.aggregation === true;
 }
 
-export function buildChartStages(chart: XlsxChart) {
+export function buildChartStages(chart: XlsxChart, labels?: ChartLabels) {
   if (chart.chartType === "Funnel" || chart.chartType === "Waterfall") {
     const primarySeriesIndex = Math.max(0, chart.series.findIndex((series) => series.hidden !== true));
     const primarySeries = chart.series[primarySeriesIndex] ?? null;
@@ -52,7 +53,7 @@ export function buildChartStages(chart: XlsxChart) {
       }
       const formula = typeof series.valuesRef?.formula === "string" ? series.valuesRef.formula : "";
       const label = series.name
-        ?? (formula.length > 0 ? formula.replace(/^.*!/, "").replace(/\$/g, "") : `Series ${index + 1}`);
+        ?? (formula.length > 0 ? formula.replace(/^.*!/, "").replace(/\$/g, "") : resolveChartSeriesLabel(series, index, labels));
       return {
         color: chartSeriesColor(chart, typeof series.formatIdx === "number" ? series.formatIdx : index),
         isSubtotal: resolveChartStageSubtotal(series),
@@ -66,7 +67,7 @@ export function buildChartStages(chart: XlsxChart) {
 export function buildHierarchyData(chart: XlsxChart) {
   const root: ChartHierarchyDatum = {
     children: [],
-    name: chart.title ?? chart.name ?? "Root"
+    name: chart.title ?? chart.name ?? officeMessagesEn.xlsx.chart.root
   };
   const rootChildren = root.children ?? [];
   const topLevelIndexByName = new Map<string, number>();

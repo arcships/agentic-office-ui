@@ -1,5 +1,5 @@
 import { computed } from "vue";
-import { officeMessagesEn } from "@arcships/office-interaction";
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction";
 import type { Workbook } from "@dukelib/sheets-wasm";
 import {
   getSheetsWasmModule,
@@ -362,13 +362,15 @@ export function mapWorksheetTables(worksheet: ReturnType<Workbook["getSheet"]> |
   const rawTables = (worksheet?.tables ?? []) as Array<Record<string, unknown>>;
   return rawTables.flatMap((table, index) => {
     const rawColumns = Array.isArray(table.columns) ? table.columns : [];
-    const rawName = typeof table.name === "string" ? table.name : `Table${index + 1}`;
+    const rawName = typeof table.name === "string"
+      ? table.name
+      : formatOfficeMessage(officeMessagesEn.xlsx.table.defaultName, { number: index + 1 });
     const rawDisplayName =
       typeof table.displayName === "string"
         ? table.displayName
         : typeof table.name === "string"
           ? table.name
-          : `Table ${index + 1}`;
+          : formatOfficeMessage(officeMessagesEn.xlsx.table.defaultName, { number: index + 1 });
     const rawReference = typeof table.reference === "string" ? table.reference : "";
     const reference = rawReference;
     const parsedRange = parseA1RangeReference(reference);
@@ -380,7 +382,9 @@ export function mapWorksheetTables(worksheet: ReturnType<Workbook["getSheet"]> |
       columns: rawColumns.map((column, columnIndex) => ({
         id: typeof (column as { id?: unknown }).id === "number" ? ((column as { id?: number }).id ?? columnIndex + 1) : columnIndex + 1,
         index: columnIndex,
-        name: typeof (column as { name?: unknown }).name === "string" ? ((column as { name?: string }).name ?? `Column ${columnIndex + 1}`) : `Column ${columnIndex + 1}`
+        name: typeof (column as { name?: unknown }).name === "string"
+          ? ((column as { name?: string }).name ?? formatOfficeMessage(officeMessagesEn.xlsx.table.defaultColumn, { number: columnIndex + 1 }))
+          : formatOfficeMessage(officeMessagesEn.xlsx.table.defaultColumn, { number: columnIndex + 1 })
       })),
       displayName: rawDisplayName,
       end: parsedRange.end,

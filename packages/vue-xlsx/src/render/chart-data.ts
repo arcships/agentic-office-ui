@@ -1,8 +1,8 @@
 /** @jsxImportSource vue */
 import type { XlsxChart, XlsxChartAxis, XlsxChartSeries } from "@arcships/xlsx-core";
-import { safeNumber, normalizeCategoryLabel, clamp, normalizeRendererHexColor, lightenColor, darkenColor } from "./chart-shared";
+import { safeNumber, normalizeCategoryLabel, clamp, normalizeRendererHexColor, lightenColor, darkenColor, resolveChartSeriesLabel } from "./chart-shared";
 import { formatExcelDateSerial, isLikelyDateFormatCode } from "./chart-date";
-import type { ComboRenderableGroup } from "./chart-types";
+import type { ChartLabels, ComboRenderableGroup } from "./chart-types";
 
 export function chartSeriesColor(chart: XlsxChart, seriesIndex: number) {
   const series = chart.series[seriesIndex];
@@ -557,17 +557,17 @@ export function isComboChart(chart: XlsxChart) {
   return distinctChartTypes.size > 1;
 }
 
-export function getComboLegendSeries(chart: XlsxChart) {
+export function getComboLegendSeries(chart: XlsxChart, labels?: ChartLabels) {
   if (!isComboChart(chart)) {
     return chart.series.map((series, index) => ({
       color: chartSeriesColor(chart, index),
-      label: series.name ?? `Series ${index + 1}`
+      label: resolveChartSeriesLabel(series, index, labels)
     }));
   }
   return (chart.typeGroups ?? []).flatMap((group) => (
     group.series.map((series, seriesIndex) => ({
       color: series.lineColor ?? series.markerColor ?? series.color ?? chartSeriesColor(chart, seriesIndex),
-      label: series.name ?? `Series ${seriesIndex + 1}`
+      label: resolveChartSeriesLabel(series, seriesIndex, labels)
     }))
   ));
 }

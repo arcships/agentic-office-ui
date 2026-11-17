@@ -10,13 +10,18 @@ export type ChartRendererPalette = {
   text: string;
 };
 
+export type ChartLabels = {
+  ariaLabel: string;
+  /** Template with a `{type}` placeholder. */
+  unsupportedType: string;
+  other: string;
+  /** Template with a `{number}` placeholder. */
+  seriesName: string;
+};
+
 export type ChartSvgProps = {
   chart: XlsxChart;
-  chartLabels?: {
-    ariaLabel: string;
-    /** Template with a `{type}` placeholder. */
-    unsupportedType: string;
-  };
+  chartLabels?: ChartLabels;
   onChartElementDoubleClick?: (selection: XlsxChartElementSelection, event: MouseEvent) => void;
   onChartElementPointerDown?: (selection: XlsxChartElementSelection, event: PointerEvent) => void;
   palette: ChartRendererPalette;

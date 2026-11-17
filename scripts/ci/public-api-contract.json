@@ -13,8 +13,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 135,
-        "sha256": "e8d3fc1b57efae396924c3ac1d4d5bf98906fc42dc7677afcd94103ea2c4dece"
+        "count": 138,
+        "sha256": "7e6117583cd081a204b7cc9569afcdcf0f7c2ab9627ad967a768b8b26bbd9f4a"
       }
     },
     {
@@ -181,8 +181,8 @@
         "XlsxContextMenu"
       ],
       "rootDeclarationFingerprint": {
-        "count": 51,
-        "sha256": "db3c410b397182e512919fb2afd5548f1af21c6b9509b7d0bef40837f8e64edb"
+        "count": 55,
+        "sha256": "ad8eac251c42ded0e184548fd148c29f3f6f7b78d3120f15a7b8ab8179502087"
       }
     },
     {
@@ -199,8 +199,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 73,
-        "sha256": "8060c6ff2f59e3907db9ac47045e8f62d565974058e840f154f9591085f28563"
+        "count": 74,
+        "sha256": "e918ca5458284afd7a8a2439c162f55ca73121ee692e833bb6d8fc6d34aaced3"
       }
     },
     {

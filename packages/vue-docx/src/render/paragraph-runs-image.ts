@@ -343,7 +343,7 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
           key,
           ...imageLayoutAttributes,
           role: "img",
-          "aria-label": child.alt ?? "DOCX image",
+          "aria-label": child.alt ?? officeMessagesEn.docx.image.alt,
           style: buildPlaceholderStyle(
             frameWidthPx,
             frameHeightPx,
@@ -418,7 +418,7 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
   if (cropLayout) {
     const cropImageVNode = h("img", {
       src: renderableImageSrc,
-      alt: child.alt ?? "DOCX image",
+      alt: child.alt ?? officeMessagesEn.docx.image.alt,
       draggable: false,
       loading: "lazy",
       decoding: "async",
@@ -523,7 +523,7 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
         [
           h("img", {
             src: renderableImageSrc,
-            alt: child.alt ?? "DOCX image",
+            alt: child.alt ?? officeMessagesEn.docx.image.alt,
             draggable: false,
             loading: "lazy",
             decoding: "async",
@@ -553,7 +553,7 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
       key,
       ...imageLayoutAttributes,
       src: renderableImageSrc,
-      alt: child.alt ?? "DOCX image",
+      alt: child.alt ?? officeMessagesEn.docx.image.alt,
       draggable: false,
       loading: "lazy",
       decoding: "async",

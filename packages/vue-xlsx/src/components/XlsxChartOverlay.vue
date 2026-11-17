@@ -33,6 +33,8 @@
           :chart-labels="{
             ariaLabel: m.xlsx.chart.ariaLabel,
             unsupportedType: m.xlsx.chart.unsupportedType,
+            other: m.xlsx.chart.other,
+            seriesName: m.xlsx.chart.seriesName,
           }"
           :rect="item.rect"
           :palette="chartPalette"

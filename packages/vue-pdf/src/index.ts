@@ -65,6 +65,7 @@ export type {
   PdfOfficeReference,
   PdfOfficeReferenceDraft,
   PdfReferenceContext,
+  PdfReferenceDescriptorLabels,
   PdfTextReferenceSelection,
 } from "./pdf/pdf-reference-adapter"
 export type {
