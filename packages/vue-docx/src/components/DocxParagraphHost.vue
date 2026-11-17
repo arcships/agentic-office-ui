@@ -288,10 +288,10 @@ function selectionRoot(): HTMLElement | undefined {
   return (element?.closest?.(".docx-editor-viewer") as HTMLElement | undefined) ?? element
 }
 
-function syncCurrentSelection(): void {
+function syncCurrentSelection(options?: { preservePendingRunStyle?: boolean }): void {
   const root = selectionRoot()
   if (!root || !props.controller) return
-  syncDomSelectionToEditor(props.controller, root)
+  syncDomSelectionToEditor(props.controller, root, undefined, options)
 }
 
 function currentSelectionOffsets(textLength: number): { start: number; end: number } {
@@ -396,7 +396,9 @@ function deleteAdjacentParagraph(direction: "backward" | "forward"): boolean {
 function onInput(_event: Event): void {
   if (!props.editable || isComposing.value) return
   syncDraftFromDom()
-  syncCurrentSelection()
+  // Typing expands the range before the draft is committed; keep the caret's
+  // pending run style until blur/export applies it to the inserted text.
+  syncCurrentSelection({ preservePendingRunStyle: true })
 }
 
 function onPointerDown(): void {
@@ -500,7 +502,7 @@ function onCompositionStart(): void {
 function onCompositionEnd(_event: Event): void {
   isComposing.value = false
   syncDraftFromDom()
-  syncCurrentSelection()
+  syncCurrentSelection({ preservePendingRunStyle: true })
   props.controller?.clearSelectionSession("composition")
 }
 

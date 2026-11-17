@@ -266,7 +266,10 @@ export interface DocxEditorController {
   ) => void;
   setParagraphDropCapText: (nodeIndex: number, text: string) => void;
   moveImage: (source: DocxImageLocation, target: DocxImageDropTarget) => void;
-  setActiveTextRange: (range?: DocxTextRange) => void;
+  setActiveTextRange: (
+    range?: DocxTextRange,
+    options?: { preservePendingRunStyle?: boolean },
+  ) => void;
   selectParagraph: (nodeIndex: number) => void;
   selectTableCell: (
     tableIndex: number,
