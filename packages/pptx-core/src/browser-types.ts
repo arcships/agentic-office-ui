@@ -81,6 +81,8 @@ export interface PptxDocumentSessionOptions extends PptxPreviewSessionOptions {
 
 export interface PptxPreviewSession {
   readonly document: PptxPreviewDocument | null
+  /** Effective limits of the latest open request, including per-open tightening. */
+  readonly limits: Readonly<PptxPreviewLimits>
   readonly currentSlideIndex: number
   readonly zoomPercent: number
   open(source: PptxPreviewSource, options?: PptxPreviewOpenOptions): Promise<PptxPreviewDocument>

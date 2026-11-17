@@ -479,6 +479,39 @@ test("DOCX loader cancels the older request and accepts only the latest result",
   });
 });
 
+test("DOCX runtime shares one latest-wins slot across top-level imports", async () => {
+  await withWorkerGlobal(async () => {
+    const workers = [];
+    const runtime = core.createDocxRuntime({
+      createWorker: () => {
+        const index = workers.length;
+        const worker = new ControlledDocxWorker({
+          delay: index === 0 ? 40 : 0,
+          marker: ["old", "latest", "after"][index] ?? "extra",
+        });
+        workers.push(worker);
+        return worker;
+      },
+      wasmUrl: "https://unit.invalid/docx.wasm",
+    });
+
+    const oldRequest = runtime.importDocxBuffer(new ArrayBuffer(8));
+    const latestRequest = runtime.loadSource({ kind: "bytes", bytes: new ArrayBuffer(8) });
+    await assert.rejects(
+      oldRequest,
+      (error) => error?.name === "AbortError" && error?.code === "ABORTED",
+    );
+    const latest = await latestRequest;
+    assert.equal(latest.model.nodes[0].id, "latest");
+    assert.equal(workers[0].terminated, true);
+
+    const after = await runtime.importDocxBuffer(new ArrayBuffer(8));
+    assert.equal(after.model.nodes[0].id, "after");
+    assert.equal(workers.length, 3);
+    runtime.dispose();
+  });
+});
+
 test("DOCX runtime loads URL sources through shared policy and one task identity", async () => {
   await withWorkerGlobal(async () => {
     const diagnostics = [];

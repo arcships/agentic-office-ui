@@ -18,6 +18,8 @@ export interface StartOfficeTaskOptions {
   signal?: AbortSignal;
   resources?: OfficeResourceConfig;
   limits?: OfficeLimits;
+  limitDefaults?: OfficeLimits;
+  limitHardCaps?: OfficeLimits;
   urlPolicy?: OfficeUrlPolicy;
 }
 
@@ -105,6 +107,8 @@ export function createLatestTaskCoordinator(sequence: OfficeTaskSequence): Lates
         source,
         resources: options.resources,
         limits: options.limits,
+        limitDefaults: options.limitDefaults,
+        limitHardCaps: options.limitHardCaps,
         urlPolicy: options.urlPolicy,
         signal: controller.signal,
       });
