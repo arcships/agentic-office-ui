@@ -1,5 +1,7 @@
 import type {
   NormalizedRect,
+  OfficeLocale,
+  OfficeMessagesOverride,
   OfficeObjectKind,
   ReliabilityLevel,
 } from "@arcships/office-interaction"
@@ -110,6 +112,8 @@ export interface OfficeObjectOutlineLayerProps {
   interactive?: boolean
   ariaLabel?: string
   className?: string
+  locale?: OfficeLocale
+  messages?: OfficeMessagesOverride
 }
 
 export interface OfficeOutlineConfirmOptions {
@@ -124,4 +128,6 @@ export interface OfficeRegionSelectorProps {
   keyboardStep?: number
   ariaLabel?: string
   className?: string
+  locale?: OfficeLocale
+  messages?: OfficeMessagesOverride
 }

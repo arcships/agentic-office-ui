@@ -9,6 +9,7 @@ const i18n = await import(
 
 const ROOT = path.resolve(import.meta.dirname, "../..")
 const VIEWER_PACKAGES = ["vue-docx", "vue-xlsx", "vue-pptx", "vue-pdf"]
+const SCANNED_PACKAGES = [...VIEWER_PACKAGES, "vue-ui"]
 
 const VIEWERS = [
   ["vue-docx", "src/components/DocxViewer.vue", "provideDocxMessages"],
@@ -17,6 +18,7 @@ const VIEWERS = [
   ["vue-xlsx", "src/components/XlsxViewer.vue", "provideXlsxMessages"],
   ["vue-xlsx", "src/components/XlsxSheetSurface.vue", "provideXlsxMessages"],
   ["vue-pptx", "src/PptxViewer.vue", "providePptxMessages"],
+  ["vue-pptx", "src/PptxStage.vue", "providePptxMessages"],
   ["vue-pdf", "src/components/PdfViewer.vue", "providePdfMessages"],
   ["vue-pdf", "src/components/PdfSurface.vue", "providePdfMessages"],
 ]
@@ -30,6 +32,30 @@ const FONT_NAMES = new Set([
   "Helvetica",
   "Courier New",
   "fx",
+])
+
+const ALLOWED_EXPRESSION_LITERALS = new Set([
+  "true",
+  "false",
+  "region",
+  "content",
+  "object",
+  "button",
+  "checkbox",
+  "radio",
+  "page",
+  "number",
+  "text",
+  "date",
+  "general",
+  "currency",
+  "percent",
+  "none",
+  "single",
+  "auto",
+  "footnote",
+  "endnote",
+  "document.docx",
 ])
 
 function read(relativePath) {
@@ -49,6 +75,18 @@ function templateOf(source) {
   return match[1].replace(/<!--[\s\S]*?-->/gu, "")
 }
 
+function styleOf(source) {
+  return [...source.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gu)]
+    .map((match) => match[1])
+    .join("\n")
+}
+
+function scriptOf(source) {
+  return [...source.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gu)]
+    .map((match) => match[1])
+    .join("\n")
+}
+
 function textNodes(template) {
   return [...template.matchAll(/>([^<>{}]+)</gu)]
     .map((match) => match[1].replace(/\s+/gu, " ").trim())
@@ -59,6 +97,27 @@ function literalAttributes(template) {
   return [...template.matchAll(/(?<!:)\b(aria-label|title|placeholder|alt)="([^"]*)"/gu)]
     .map((match) => [match[1], match[2]])
     .filter(([, value]) => value.trim().length > 0)
+}
+
+function boundLabelAttributes(template) {
+  return [...template.matchAll(/:(aria-label|title|placeholder|alt)="([^"]*)"/gu)]
+    .map((match) => [match[1], match[2]])
+}
+
+function mustacheExpressions(template) {
+  return [...template.matchAll(/\{\{([\s\S]*?)\}\}/gu)].map((match) => match[1])
+}
+
+function stringLiterals(expression) {
+  return [...expression.matchAll(/(['"])((?:\\.|(?!\1)[^\\])*)\1/gu)]
+    .map((match) => match[2])
+    .filter((value) => value.length > 0)
+}
+
+function isTranslatableLiteral(value) {
+  if (/[\u4e00-\u9fff]/u.test(value)) return true
+  if (!/[A-Za-z]{3,}/u.test(value)) return false
+  return !ALLOWED_EXPRESSION_LITERALS.has(value)
 }
 
 function leaves(value, prefix = "", result = new Map()) {
@@ -100,7 +159,7 @@ test("every viewer accepts locale/messages props and provides the shared catalog
     )
   }
 
-  for (const packageName of VIEWER_PACKAGES) {
+  for (const packageName of SCANNED_PACKAGES) {
     const helper = read(`packages/${packageName}/src/i18n.ts`)
     assert.match(helper, /OFFICE_I18N_INJECTION_KEY/u, `${packageName} must share the i18n injection key`)
     assert.match(helper, /OFFICE_LOCALE_INJECTION_KEY/u, `${packageName} must share the locale injection key`)
@@ -109,11 +168,12 @@ test("every viewer accepts locale/messages props and provides the shared catalog
 })
 
 test("templates contain no hard-coded labels or translatable copy", () => {
-  for (const packageName of VIEWER_PACKAGES) {
+  for (const packageName of SCANNED_PACKAGES) {
     for (const absolutePath of walk(path.join(ROOT, "packages", packageName, "src"))) {
       if (!absolutePath.endsWith(".vue")) continue
       const relativePath = path.relative(ROOT, absolutePath)
-      const template = templateOf(readFileSync(absolutePath, "utf8"))
+      const source = readFileSync(absolutePath, "utf8")
+      const template = templateOf(source)
 
       assert.equal(
         literalAttributes(template).length,
@@ -122,6 +182,24 @@ test("templates contain no hard-coded labels or translatable copy", () => {
       )
       assert.doesNotMatch(template, /[\u4e00-\u9fff]/u, `${relativePath} must not hard-code Chinese template copy`)
 
+      for (const [attribute, expression] of boundLabelAttributes(template)) {
+        const literals = stringLiterals(expression).filter(isTranslatableLiteral)
+        assert.equal(
+          literals.length,
+          0,
+          `${relativePath} :${attribute} binding contains translatable literals: ${JSON.stringify(literals)}`,
+        )
+      }
+
+      for (const expression of mustacheExpressions(template)) {
+        const literals = stringLiterals(expression).filter(isTranslatableLiteral)
+        assert.equal(
+          literals.length,
+          0,
+          `${relativePath} mustache interpolation contains translatable literals: ${JSON.stringify(literals)}`,
+        )
+      }
+
       for (const text of textNodes(template)) {
         if (!/[A-Za-z]{2,}/u.test(text)) continue
         assert.ok(
@@ -129,20 +207,82 @@ test("templates contain no hard-coded labels or translatable copy", () => {
           `${relativePath} must not hard-code user-facing copy: ${JSON.stringify(text)}`,
         )
       }
+
+      const style = styleOf(source)
+      assert.doesNotMatch(style, /[\u4e00-\u9fff]/u, `${relativePath} must not hard-code Chinese style copy`)
+      assert.doesNotMatch(
+        style,
+        /content\s*:\s*["'][^"']*[A-Za-z]{3,}/u,
+        `${relativePath} must not inject user-facing copy through CSS content`,
+      )
+
+      for (const literal of stringLiterals(scriptOf(source))) {
+        assert.doesNotMatch(
+          literal,
+          /[\u4e00-\u9fff]/u,
+          `${relativePath} script contains hard-coded Chinese copy: ${JSON.stringify(literal)}`,
+        )
+      }
+    }
+  }
+})
+
+test("TypeScript sources contain no hard-coded translatable copy", () => {
+  const forbidden = [
+    "Hide comments",
+    "Show comments",
+    "Cannot change the list",
+    "Copied to clipboard",
+    "Pasted from clipboard",
+    "Applied bullet list",
+    "Applied numbered list",
+    "Export cancelled",
+    "Exporting DOCX",
+    "Exported DOCX",
+    "Failed to load file",
+    "Discard unsaved changes?",
+    "Unable to load PPTX",
+    "PPTX preview session",
+    "PPTX open request",
+  ]
+  for (const packageName of SCANNED_PACKAGES) {
+    for (const absolutePath of walk(path.join(ROOT, "packages", packageName, "src"))) {
+      if (!absolutePath.endsWith(".ts")) continue
+      const relativePath = path.relative(ROOT, absolutePath)
+      // This module parses localized CJK date input; its regex and example
+      // comment legitimately contain Chinese characters.
+      if (relativePath.endsWith("number-locale.ts")) continue
+      const source = readFileSync(absolutePath, "utf8")
+      for (const literal of stringLiterals(source)) {
+        assert.doesNotMatch(
+          literal,
+          /[\u4e00-\u9fff]/u,
+          `${relativePath} contains hard-coded Chinese copy: ${JSON.stringify(literal)}`,
+        )
+        for (const phrase of forbidden) {
+          assert.ok(
+            !literal.includes(phrase),
+            `${relativePath} contains hard-coded status copy: ${JSON.stringify(literal)}`,
+          )
+        }
+      }
     }
   }
 })
 
 test("templates only reference message keys that exist in the shared catalog", () => {
-  for (const packageName of [...VIEWER_PACKAGES, "vue-ui"]) {
+  for (const packageName of SCANNED_PACKAGES) {
     for (const absolutePath of walk(path.join(ROOT, "packages", packageName, "src"))) {
       if (!absolutePath.endsWith(".vue")) continue
       const relativePath = path.relative(ROOT, absolutePath)
       const source = readFileSync(absolutePath, "utf8")
-      for (const match of source.matchAll(/\bm(?:\.value)?\.((?:common|docx|xlsx|pptx|pdf)(?:\.[A-Za-z0-9_]+)+)/gu)) {
+      for (const match of source.matchAll(/\bm(?:\.value)?\.((?:common|docx|xlsx|pptx|pdf|vueUi)(?:\.[A-Za-z0-9_]+)+)/gu)) {
+        const key = match[1]
+        const valid = catalogKeys.has(key)
+          || [...catalogKeys.keys()].some((candidate) => candidate.startsWith(`${key}.`))
         assert.ok(
-          catalogKeys.has(match[1]),
-          `${relativePath} references missing message key ${match[1]}`,
+          valid,
+          `${relativePath} references missing message key ${key}`,
         )
       }
     }
@@ -156,15 +296,22 @@ test("the previously hard-coded strings now resolve through the catalog", () => 
     ["vue-xlsx", "src/components/XlsxViewer.vue", "打开一个 XLSX 文件开始查看", "m.xlsx.viewer.empty"],
     ["vue-docx", "src/components/DocxViewerToolbar.vue", "修订", "m.docx.toolbar.trackedChanges"],
     ["vue-docx", "src/components/DocxNotesSection.vue", "脚注", "m.docx.notes.footnote"],
+    ["vue-docx", "src/components/DocxTrackedChangeGutter.vue", "Hide comments", "m.docx.gutter.hideComments"],
+    ["vue-docx", "src/components/DocxTrackedChangeGutter.vue", "Show comments", "m.docx.gutter.showComments"],
     ["vue-pptx", "src/PptxViewer.vue", "上一页", "m.pptx.viewer.previousSlide"],
     ["vue-pptx", "src/PptxThumbnail.vue", "隐藏", "m.pptx.thumbnail.hidden"],
     ["vue-pdf", "src/components/PdfViewer.vue", "搜索 PDF 文本", "m.pdf.viewer.searchLabel"],
     ["vue-pdf", "src/components/PdfSurface.vue", "选择 PDF 页面区域", "m.pdf.surface.selectionRegion"],
+    ["vue-ui", "src/components/OfficeRegionSelector.vue", "选定区域", "m.vueUi.regionSelector.label"],
+    ["vue-ui", "src/components/OfficeObjectOutlineLayer.vue", "没有可用对象", "m.vueUi.objectOutline.noObjects"],
   ]
   for (const [packageName, relativePath, legacy, key] of expectations) {
     const source = read(`packages/${packageName}/${relativePath}`)
     assert.doesNotMatch(source, new RegExp(legacy.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"))
-    assert.ok(source.includes(key), `${relativePath} must use ${key}`)
+    assert.ok(
+      source.includes(key) || source.includes(key.replace(/^m\./u, "m.value.")),
+      `${relativePath} must use ${key}`,
+    )
   }
 
   const findBar = read("packages/vue-ui/src/components/OfficeFindBar.vue")

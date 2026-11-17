@@ -40,7 +40,7 @@ export function usePptxPlayback(
   options: UsePptxPlaybackOptions = {},
 ): UsePptxPlaybackReturn {
   const foundBinding = getDocumentBinding(document)
-  if (!foundBinding) throw new Error("usePptxPlayback 必须接收 usePptxDocument 的返回值。")
+  if (!foundBinding) throw new Error("usePptxPlayback requires the return value of usePptxDocument.")
   const binding = foundBinding
 
   const controllerValue = shallowRef<PptxPlaybackController | null>(null)
@@ -99,7 +99,7 @@ export function usePptxPlayback(
 
   function requireController(): PptxPlaybackController {
     if (!controllerValue.value) {
-      throw new PptxPlaybackError("PLAYBACK_NOT_READY", "PPTX 播放控制器尚未准备好。")
+      throw new PptxPlaybackError("PLAYBACK_NOT_READY", "The PPTX playback controller is not ready.")
     }
     return controllerValue.value
   }

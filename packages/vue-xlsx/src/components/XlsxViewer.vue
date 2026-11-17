@@ -41,7 +41,7 @@
         name="calculation-status"
         :status="controller.calculationStatus"
       >
-        {{ controller.calculationStatus.message }}
+        {{ calculationMessage }}
       </slot>
     </div>
     <OfficeLiveStatus
@@ -277,6 +277,13 @@ type XlsxDeferredLoadPayload = { fileName: string; bytes: number };
 
 const effectiveReadOnly = computed(() => props.readOnly || props.controller.isEditingLocked === true || props.controller.readOnly);
 const m = provideXlsxMessages(() => props.locale, () => props.messages);
+const calculationMessage = computed(() => {
+  const status = props.controller.calculationStatus;
+  if (!status) return "";
+  if (status.reason === "unresolved-sheet-refs") return m.value.xlsx.calculation.sheetMissing;
+  if (status.reason === "recovery-snapshot-unavailable") return m.value.xlsx.calculation.snapshotUnavailable;
+  return m.value.xlsx.calculation.failed;
+});
 
 // Number/date formats without a `[$-…]` section follow the host locale.
 watch(

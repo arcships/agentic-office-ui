@@ -837,7 +837,7 @@ export function renderParagraphRuns(
                     code: "IMAGE_DECODE_FAILED",
                     phase: "image-decode",
                     imageKey: numberingKey,
-                    message: "DOCX 编号图片无法解码。",
+                    message: "DOCX numbering image could not be decoded.",
                   })
                 },
                 style: {

@@ -46,6 +46,7 @@ import {
   paragraphTypographyStyle,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
+import { useDocxMessages } from "../i18n"
 import { paragraphStyleToCss } from "../render/paragraph-style"
 import { renderStaticHtml } from "../render/static-html"
 import {
@@ -130,8 +131,10 @@ const isActiveParagraph = computed(() => {
   return false
 })
 
+const m = useDocxMessages()
 const paragraphStyle = computed<Record<string, any>>(() => {
   const resolved: Record<string, any> = {
+    "--docx-editor-placeholder": m.value.docx.editor.placeholder,
     ...paragraphStyleToCss(props.paragraph, {
       numberingDefinitions: props.numberingDefinitions,
     }),
@@ -642,7 +645,7 @@ defineExpose({
   cursor: text;
 }
 .docx-paragraph-host--editable:empty::before {
-  content: "Type here...";
+  content: var(--docx-editor-placeholder);
   color: #9ca3af;
 }
 .docx-paragraph-host--active {

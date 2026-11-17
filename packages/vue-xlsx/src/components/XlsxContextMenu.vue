@@ -93,7 +93,9 @@ const position = ref({ x: 0, y: 0 });
 const sortTarget = ref<{ columnIndex: number; tableName: string } | null>(null);
 
 const isReadOnly = computed(() => props.controller.isEditingLocked ?? props.controller.readOnly);
-const { notice: clipboardNotice, copySelection } = useClipboardCopyNotice(() => props.controller);
+const { notice: clipboardNotice, copySelection } = useClipboardCopyNotice(() => props.controller, {
+  failureMessage: () => m.value.xlsx.clipboard.copyFailed,
+});
 
 // Escape/Tab and arrow navigation come from the shared Office menu keyboard, so
 // the cell menu closes exactly like the DOCX context menu and returns focus to

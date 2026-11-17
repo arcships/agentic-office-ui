@@ -138,6 +138,8 @@
           :aria-hidden="state !== 'ready'"
           :zoom="zoom / 100"
           :enable-gesture-zoom="!isPresent"
+          :locale="locale"
+          :messages="messages"
           :scroll-container="stageScrollRef"
           @update:zoom="run(() => setZoom($event * 100))"
           @click="run(() => onStageClick($event))"
@@ -321,6 +323,7 @@ const documentOptions = {
   source: () => props.source,
   initialSlide: () => props.initialSlide,
   openTimeoutMs: () => props.openTimeoutMs,
+  messages: () => m.value.pptx.documentErrors,
   session: () => ({
     fitMode: "contain" as const,
     zoomPercent: 100,

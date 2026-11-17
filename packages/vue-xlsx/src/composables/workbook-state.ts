@@ -502,7 +502,7 @@ export async function convertCsvBufferToXlsx(buffer: ArrayBuffer): Promise<Array
   try {
     csv = csvTextDecoder(buffer).decode(buffer);
   } catch (cause) {
-    throw new Error("CSV 必须使用 UTF-8，或带 BOM 的 UTF-16 编码。", { cause });
+    throw new Error("CSV must use UTF-8, or UTF-16 with a BOM.", { cause });
   }
 
   const wasmModule = await getSheetsWasmModule();
@@ -514,7 +514,7 @@ export async function convertCsvBufferToXlsx(buffer: ArrayBuffer): Promise<Array
     new Uint8Array(output).set(bytes);
     return output;
   } catch (cause) {
-    throw new Error("无法解析 CSV 文件。", { cause });
+    throw new Error("Unable to parse the CSV file.", { cause });
   } finally {
     csvWorkbook?.free();
   }
@@ -539,7 +539,7 @@ export async function convertXlsbBufferToXlsx(buffer: ArrayBuffer): Promise<Arra
     new Uint8Array(output).set(bytes);
     return output;
   } catch (cause) {
-    throw new Error("无法解析 XLSB 文件。", { cause });
+    throw new Error("Unable to parse the XLSB file.", { cause });
   }
 }
 
@@ -595,7 +595,7 @@ const MACRO_ENABLED_SPREADSHEET = /\.(xlsm|xltm)$/i;
 
 function macroLossWarning(fileName: string) {
   return MACRO_ENABLED_SPREADSHEET.test(fileName.trim())
-    ? "源文件为启用宏的工作簿（.xlsm/.xltm），导出的 .xlsx 会丢失 VBA 宏。"
+    ? "The source workbook is macro-enabled (.xlsm/.xltm); exporting to .xlsx drops VBA macros."
     : null;
 }
 

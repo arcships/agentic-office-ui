@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue"
+import { useOfficeUiMessages } from "../i18n"
 
 export interface FileThumbnailFile {
   name: string
@@ -17,6 +18,7 @@ const props = withDefaults(defineProps<FileThumbnailProps>(), {
   size: "md",
   className: "",
 })
+const m = useOfficeUiMessages()
 
 const sizePx: Record<"sm" | "md" | "lg", number> = {
   sm: 32,
@@ -79,7 +81,7 @@ const iconStyle = computed(() => {
     </div>
     <div class="file-thumbnail-meta">
       <p class="file-thumbnail-name">{{ props.file.name }}</p>
-      <p class="file-thumbnail-type">{{ props.file.type || "Unknown type" }}</p>
+      <p class="file-thumbnail-type">{{ props.file.type || m.vueUi.fileThumbnail.unknownType }}</p>
     </div>
   </div>
 </template>

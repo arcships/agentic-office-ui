@@ -286,7 +286,7 @@ test("XLSX addSheet rejects Excel-invalid worksheet names", async (t) => {
   await waitForReady(controller);
   const initialSheetCount = controller.sheets.length;
   for (const name of ["Bad/Name", "Bad:Name", "Bad*Name", "Bad?Name", "Bad[Name]", "Bad\\Name"]) {
-    assert.throws(() => controller.addSheet(name), /工作表名称/);
+    assert.throws(() => controller.addSheet(name), /Worksheet names/);
   }
   assert.equal(controller.sheets.length, initialSheetCount);
   assert.equal(controller.canUndo, false);

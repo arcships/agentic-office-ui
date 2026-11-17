@@ -1,8 +1,10 @@
 import { defineAsyncComponent, defineComponent, h } from "vue";
+import { useXlsxMessages } from "../i18n";
 
 const RendererLoading = defineComponent({
   name: "XlsxOptionalRendererLoading",
   setup() {
+    const m = useXlsxMessages();
     return () => h("div", {
       "aria-live": "polite",
       "data-testid": "xlsx-optional-renderer-loading",
@@ -14,17 +16,18 @@ const RendererLoading = defineComponent({
         justifyContent: "center",
         width: "100%",
       },
-    }, "正在加载图表…");
+    }, m.value.xlsx.chart.loading);
   },
 });
 
 const RendererError = defineComponent({
   name: "XlsxOptionalRendererError",
   setup() {
+    const m = useXlsxMessages();
     return () => h("div", {
       "data-testid": "xlsx-optional-renderer-error",
       role: "alert",
-    }, "图表加载失败，请重试。");
+    }, m.value.xlsx.chart.loadFailed);
   },
 });
 

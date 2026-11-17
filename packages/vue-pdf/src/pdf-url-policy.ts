@@ -137,19 +137,19 @@ function mapOfficeCode(error: OfficeLoadError): PdfLoadErrorCode {
 
 function pdfMessage(code: PdfLoadErrorCode, actual?: number, allowed?: number): string {
   switch (code) {
-    case "SOURCE_NOT_ALLOWED": return "PDF 地址不在允许范围内。"
-    case "FETCH_FAILED": return "无法获取 PDF 文件。"
-    case "PDF_TOO_LARGE": return `PDF 文件大小 ${actual ?? "未知"} 字节超过允许值 ${allowed ?? "未知"} 字节。`
-    case "ABORTED": return "PDF 加载已取消。"
-    case "ENCRYPTED": return "PDF 文档已加密，需要密码。"
-    default: return "来源不是可验证的 PDF 文件。"
+    case "SOURCE_NOT_ALLOWED": return "The PDF URL is outside the allowed policy."
+    case "FETCH_FAILED": return "Unable to fetch the PDF file."
+    case "PDF_TOO_LARGE": return `PDF file size ${actual ?? "unknown"} bytes exceeds the allowed maximum of ${allowed ?? "unknown"} bytes.`
+    case "ABORTED": return "PDF loading was cancelled."
+    case "ENCRYPTED": return "The PDF document is encrypted and requires a password."
+    default: return "The source is not a verified PDF file."
   }
 }
 
 function fromOfficeError(error: unknown, sourceKind: PdfSource["kind"], url?: string): PdfSourceError {
   const officeError = toOfficeLoadError(error, {
     fallbackCode: "INVALID_SOURCE",
-    message: "无法打开 PDF 文件。",
+    message: "Unable to open the PDF file.",
     format: "pdf",
     sourceKind: sourceKind === "blob" ? "file" : "url",
     url,
@@ -190,7 +190,7 @@ function verifyPdfBytes(bytes: Uint8Array, sourceKind: PdfSource["kind"], url?: 
     bytes[3] === 0x46 &&
     bytes[4] === 0x2d
   if (!isPdf) {
-    throw new PdfSourceError({ code: "INVALID_PDF", message: "来源不是可验证的 PDF 文件。", sourceKind, url })
+    throw new PdfSourceError({ code: "INVALID_PDF", message: "The source is not a verified PDF file.", sourceKind, url })
   }
 }
 
@@ -213,7 +213,7 @@ function isAcceptedPdfContentType(contentType: string | undefined): boolean {
 
 function verifyPdfMime(contentType: string | undefined, sourceKind: PdfSource["kind"], url?: string): void {
   if (isAcceptedPdfContentType(contentType)) return
-  throw new PdfSourceError({ code: "INVALID_PDF", message: "来源响应不是 PDF 文件类型。", sourceKind, url })
+  throw new PdfSourceError({ code: "INVALID_PDF", message: "The source response is not a PDF file type.", sourceKind, url })
 }
 
 function isEncryptedPdfError(error: unknown): boolean {
@@ -288,7 +288,7 @@ export async function loadVerifiedPdfSource(
     if (sourceKind === "blob") {
       const mime = source.blob.type.trim().toLowerCase()
       if (mime && !isAcceptedPdfContentType(mime)) {
-        throw new PdfSourceError({ code: "INVALID_PDF", message: "文件不是 PDF 文件类型。", sourceKind })
+        throw new PdfSourceError({ code: "INVALID_PDF", message: "The file is not a PDF file type.", sourceKind })
       }
     } else {
       verifyPdfMime(resolved.contentType, sourceKind, resolved.resolvedUrl)

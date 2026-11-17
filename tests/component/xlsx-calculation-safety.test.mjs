@@ -76,7 +76,7 @@ test("XLSX recalc trap keeps cached values readable and exposes recovery status"
 
     assert.notEqual(controller.workbook, originalWorkbook);
     assert.equal(controller.calculationStatus?.reason, "calculate-trapped");
-    assert.match(controller.calculationStatus.message, /缓存值/);
+    assert.match(controller.calculationStatus.message, /cached values/);
     assert.equal(controller.getCellDisplayValue({ row: 0, col: 0 }), "10");
     assert.equal(controller.getCellDisplayValue({ row: 0, col: 2 }), "3");
     assert.equal(controller.canUndo, true);
@@ -109,7 +109,7 @@ test("XLSX load surfaces unresolved formula references without trapping", async 
   const { controller } = mounted;
   try {
     assert.equal(controller.calculationStatus?.reason, "unresolved-sheet-refs");
-    assert.match(controller.calculationStatus.message, /缓存值/);
+    assert.match(controller.calculationStatus.message, /cached values/);
     assert.equal(controller.getCellDisplayValue({ row: 0, col: 0 }), "1");
   } finally {
     mounted.app.unmount();

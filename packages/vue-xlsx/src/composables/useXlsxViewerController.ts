@@ -292,7 +292,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     });
   }
 
-  function reportImageDecodeError(imageId: string, message = "XLSX 图片无法解码。") {
+  function reportImageDecodeError(imageId: string, message = "XLSX image could not be decoded.") {
     reportDiagnostic({
       type: "image-decode-error",
       requestId: latestLoadRequestId,
@@ -572,7 +572,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
         if (workerChartCount < quickChartCount || hasIncompleteWorkerChartSnapshot(result)) {
           finishWorkerFailure(new XlsxWorkerError(
             "WORKER_FAILED",
-            "XLSX Worker 返回的图表数据不完整。",
+            "XLSX Worker returned incomplete chart data.",
             { phase: "chart" },
           ));
           return;
@@ -587,7 +587,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   function createParseTimeoutError(maxParseMs: number, actual: number) {
     return new XlsxWorkerError(
       "TIMEOUT",
-      `XLSX 解析超过 ${maxParseMs} 毫秒。`,
+      `XLSX parsing exceeded ${maxParseMs} ms.`,
       {
         phase: "parse",
         limit: "maxParseMs",
@@ -816,12 +816,12 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   }
   function calculationMessage(reason: SafeCalculateSkipReason | "recovery-snapshot-unavailable"): string {
     if (reason === "unresolved-sheet-refs") {
-      return "公式引用了不存在的工作表，当前显示缓存值。";
+      return "A formula references a sheet that no longer exists; cached values are shown.";
     }
     if (reason === "recovery-snapshot-unavailable") {
-      return "无法保存工作簿快照，已跳过公式重算以保护当前数据，当前显示缓存值。";
+      return "The workbook snapshot could not be saved, so recalculation was skipped to protect the current data; cached values are shown.";
     }
-    return "公式无法重新计算，当前显示缓存值。可手动重新计算重试。";
+    return "Formulas could not be recalculated; cached values are shown. Recalculate manually to retry.";
   }
   function noteCalculationResult(result: {
     calculated: boolean;
@@ -883,7 +883,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     if (sanitized.error) {
       console.warn("[xlsx] failed to sanitize saved workbook XML", sanitized.error);
       if (reportSanitizationWarning) {
-        setExportWarning("导出前的 XML 转义修复失败，导出的工作簿可能包含双重转义。");
+        setExportWarning("The XML escape repair before export failed; the exported workbook may contain double escaping.");
       }
     }
     return mergeWorkbookImageAssets(sanitized.bytes, imageAssetsRef.value, sheetOriginsRef.value);
@@ -995,7 +995,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
           // below reports a diagnostic and retries on the main thread.
           throw new XlsxWorkerError(
             "WORKER_FAILED",
-            "XLSX Worker 返回的图表数据不完整。",
+            "XLSX Worker returned incomplete chart data.",
             { phase: "chart" },
           );
         }

@@ -73,8 +73,10 @@ import type {
   DocxSectionParagraphLocation,
   DocxSectionImageLocation,
   UseDocxEditorOptions,
+  DocxEditorStatusMessages,
   ParagraphLocation,
 } from "@arcships/docx-core"
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction"
 
 import type { EditorCore } from "./editor-shared"
 import { createEditorTransaction } from "./editor-transaction"
@@ -101,6 +103,16 @@ function typedKeys<T extends object>(obj: T): (keyof T)[] {
 // Shared empty result so a hidden revision list keeps a stable identity and
 // never allocates on keystrokes.
 const EMPTY_TRACKED_CHANGES: DocxTrackedChange[] = []
+
+const DEFAULT_STATUS_MESSAGES: DocxEditorStatusMessages =
+  officeMessagesEn.docx.editor.status
+
+function resolveStatusMessages(
+  option: UseDocxEditorOptions["statusMessages"],
+): DocxEditorStatusMessages {
+  const provided = typeof option === "function" ? option() : option
+  return { ...DEFAULT_STATUS_MESSAGES, ...provided }
+}
 
 // ── useDocxEditor ──────────────────────────────────────────────────
 
@@ -142,7 +154,14 @@ export function useDocxEditor(
   const documentLoadNonce = ref(0)
   const initialFileName = options.initialFileName ?? "(new document)"
   const fileName = ref(initialFileName)
-  const status = ref(options.initialStatus ?? "Ready")
+  const statusMessage = (
+    key: keyof DocxEditorStatusMessages,
+    values: Record<string, string | number> = {},
+  ): string => formatOfficeMessage(
+    resolveStatusMessages(options.statusMessages)[key] ?? DEFAULT_STATUS_MESSAGES[key],
+    values,
+  )
+  const status = ref(options.initialStatus ?? statusMessage("ready"))
   const importError = ref<Error | undefined>(undefined)
   const isImporting = ref(false)
 
@@ -507,6 +526,7 @@ export function useDocxEditor(
     // refs
     model, cleanModel, isDirty, selection, activeTextRange, pendingRunStyle, history, historyBudget,
     estimateHistorySnapshotBytes, status,
+    statusMessage,
     selectedFormFieldLocation, documentLoadNonce, fileName, initialFileName, importError,
     isImporting, documentTheme, showTrackedChanges, showComments,
     paginationInfo, historyRestoreRequest, basePackage,
@@ -637,17 +657,23 @@ export function useDocxEditor(
       const result = applyTrackedChangeDecision(current.model, decision, scope)
       if (result.model === current.model) return undefined
       applied = true
-      const verb = decision === "accept" ? "Accepted" : "Rejected"
       const count = result.resolvedChangeIds.length
+      const status = decision === "accept"
+        ? (count === 1
+          ? ctx.statusMessage("acceptedChange")
+          : ctx.statusMessage("acceptedChanges", { count }))
+        : (count === 1
+          ? ctx.statusMessage("rejectedChange")
+          : ctx.statusMessage("rejectedChanges", { count }))
       const keptFormatting =
         result.clearedOnlyChangeIds.length > 0
-          ? ` (${result.clearedOnlyChangeIds.length} formatting revision${
-              result.clearedOnlyChangeIds.length === 1 ? "" : "s"
-            } cleared without reverting; the model keeps no previous formatting)`
+          ? (result.clearedOnlyChangeIds.length === 1
+            ? ctx.statusMessage("formattingClearedOne")
+            : ctx.statusMessage("formattingCleared", { count: result.clearedOnlyChangeIds.length }))
           : ""
       return {
         model: result.model,
-        status: `${verb} ${count} tracked change${count === 1 ? "" : "s"}${keptFormatting}`,
+        status: `${status}${keptFormatting}`,
         clearSelectedFormField: true,
       }
     })

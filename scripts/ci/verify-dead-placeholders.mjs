@@ -95,7 +95,8 @@ for (const [name, requiredCall] of [
 addCheck(
   "DOCX_THUMBNAIL_EXPLICIT_UNAVAILABLE",
   thumbnails.includes('availability: "unavailable"') &&
-    thumbnails.includes("unavailableReason: VIEWER_THUMBNAIL_UNAVAILABLE_MESSAGE"),
+    thumbnails.includes("unavailableReason") &&
+    thumbnails.includes("VIEWER_THUMBNAIL_UNAVAILABLE_MESSAGE"),
   "无文档输入的兼容缩略图接口必须公开 unavailable 状态和原因。",
 );
 

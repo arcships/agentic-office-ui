@@ -131,6 +131,7 @@ export interface OfficeDocxMessages {
     subscript: string
     textColor: string
     highlightColor: string
+    placeholder: string
     link: string
     alignLeft: string
     alignCenter: string
@@ -159,6 +160,44 @@ export interface OfficeDocxMessages {
     acceptAllTitle: string
     rejectAll: string
     rejectAllTitle: string
+    status: {
+      ready: string
+      copied: string
+      pasted: string
+      listParagraphNotFound: string
+      listAppliedBullet: string
+      listAppliedNumbered: string
+      /** Template with a `{level}` placeholder. */
+      maximumListLevel: string
+      discardChanges: string
+      /** Template with a `{name}` placeholder. */
+      loadingFile: string
+      /** Template with a `{message}` placeholder. */
+      importFailed: string
+      unsupportedFile: string
+      exportCancelledChanged: string
+      exportNotReady: string
+      /** Template with a `{message}` placeholder. */
+      exportFailed: string
+      /** Template with a `{label}` placeholder. */
+      exportRequiredField: string
+      exportRequiredFieldEmpty: string
+      exporting: string
+      /** Template with a `{phase}` placeholder. */
+      exportingPhase: string
+      exported: string
+      unknownImportError: string
+      unknownExportError: string
+      /** Template with a `{count}` placeholder. */
+      acceptedChanges: string
+      acceptedChange: string
+      /** Template with a `{count}` placeholder. */
+      rejectedChanges: string
+      rejectedChange: string
+      /** Template with a `{count}` placeholder. */
+      formattingCleared: string
+      formattingClearedOne: string
+    }
     borderPresets: {
       bottom: string
       top: string
@@ -215,6 +254,8 @@ export interface OfficeDocxMessages {
     show: string
     hide: string
     pages: string
+    unavailable: string
+    unavailableReason: string
   }
   image: {
     inline: string
@@ -257,6 +298,9 @@ export interface OfficeDocxMessages {
     acceptTitle: string
     reject: string
     rejectTitle: string
+    hideComments: string
+    showComments: string
+    comments: string
   }
   dragOverlay: {
     drop: string
@@ -346,8 +390,12 @@ export interface OfficeXlsxMessages {
   chart: {
     unsupported: string
     loading: string
+    loadFailed: string
     unavailable: string
     noPayload: string
+  }
+  image: {
+    alt: string
   }
   drawing: {
     button: string
@@ -364,6 +412,26 @@ export interface OfficeXlsxMessages {
     /** Template with an `{address}` placeholder. */
     current: string
     none: string
+  }
+  validation: {
+    list: string
+    whole: string
+    decimal: string
+    textLength: string
+    date: string
+    time: string
+    generic: string
+  }
+  calculation: {
+    sheetMissing: string
+    snapshotUnavailable: string
+    failed: string
+  }
+  clipboard: {
+    copyFailed: string
+    noDocument: string
+    invalidUrl: string
+    unverifiedBlob: string
   }
   grid: {
     openValidation: string
@@ -442,6 +510,19 @@ export interface OfficePptxMessages {
       unknownError: string
     }
   }
+  documentErrors: {
+    loadFailed: string
+    previewNotReady: string
+    disposed: string
+    staleOpen: string
+    timeout: string
+    /** Template with an `{ms}` placeholder. */
+    timeoutMs: string
+    staleResult: string
+    aborted: string
+    slideRenderFailedWithMessage: string
+    slideRenderFailed: string
+  }
   thumbnail: {
     /** Template with a `{number}` placeholder. */
     label: string
@@ -503,6 +584,40 @@ export interface OfficeMessages {
   xlsx: OfficeXlsxMessages
   pptx: OfficePptxMessages
   pdf: OfficePdfMessages
+  vueUi: {
+    regionSelector: {
+      label: string
+      instructions: string
+      defaultAriaLabel: string
+      /** Template with `{left}`, `{top}`, `{width}` and `{height}` placeholders. */
+      description: string
+      noSelection: string
+    }
+    objectOutline: {
+      defaultAriaLabel: string
+      noObjects: string
+      noCandidates: string
+      /** Template with `{label}`, `{kind}` and `{reliability}` placeholders. */
+      itemDescription: string
+    }
+    boundingBox: {
+      noFields: string
+      imageAlt: string
+    }
+    fileUpload: {
+      prompt: string
+    }
+    layoutBlocks: {
+      noBlocks: string
+      imageAlt: string
+    }
+    signaturePad: {
+      clear: string
+    }
+    fileThumbnail: {
+      unknownType: string
+    }
+  }
 }
 
 /** Injection key shared by the viewer packages and the shared UI package. */
@@ -613,6 +728,7 @@ export const officeMessagesEn: OfficeMessages = {
       subscript: "Subscript",
       textColor: "Text color",
       highlightColor: "Highlight color",
+      placeholder: "Type here...",
       link: "Link",
       alignLeft: "Align left",
       alignCenter: "Align center",
@@ -640,6 +756,35 @@ export const officeMessagesEn: OfficeMessages = {
       acceptAllTitle: "Accept all tracked changes",
       rejectAll: "Reject all",
       rejectAllTitle: "Reject all tracked changes",
+      status: {
+        ready: "Ready",
+        copied: "Copied to clipboard",
+        pasted: "Pasted from clipboard",
+        listParagraphNotFound: "Cannot change the list: paragraph not found",
+        listAppliedBullet: "Applied bullet list",
+        listAppliedNumbered: "Applied numbered list",
+        maximumListLevel: "Maximum list level is {level}",
+        discardChanges: "Discard unsaved changes?",
+        loadingFile: "Loading {name}...",
+        importFailed: "Failed to load file: {message}",
+        unsupportedFile: "Only .docx, .docm, .dotx and .dotm files are supported",
+        exportCancelledChanged: "Export cancelled: document changed",
+        exportNotReady: "Wait for the document to finish loading before exporting",
+        exportFailed: "Export failed: {message}",
+        exportRequiredField: "Cannot export: required form field \"{label}\" is empty",
+        exportRequiredFieldEmpty: "Cannot export: a required form field is empty",
+        exporting: "Exporting DOCX...",
+        exportingPhase: "Exporting DOCX: {phase}...",
+        exported: "Exported DOCX",
+        unknownImportError: "Unknown import error",
+        unknownExportError: "Unknown export error",
+        acceptedChanges: "Accepted {count} tracked changes",
+        acceptedChange: "Accepted 1 tracked change",
+        rejectedChanges: "Rejected {count} tracked changes",
+        rejectedChange: "Rejected 1 tracked change",
+        formattingCleared: " ({count} formatting revisions cleared without reverting; the model keeps no previous formatting)",
+        formattingClearedOne: " (1 formatting revision cleared without reverting; the model keeps no previous formatting)",
+      },
       borderPresets: {
         bottom: "Bottom Border",
         top: "Top Border",
@@ -696,6 +841,8 @@ export const officeMessagesEn: OfficeMessages = {
       show: "Show thumbnails",
       hide: "Hide thumbnails",
       pages: "Pages",
+      unavailable: "Thumbnail unavailable",
+      unavailableReason: "This thumbnail API has no document source to render. Use useDocxPageThumbnails(editor) or DocxThumbnailPanel.",
     },
     image: {
       inline: "Inline",
@@ -738,6 +885,9 @@ export const officeMessagesEn: OfficeMessages = {
       acceptTitle: "Accept this revision",
       reject: "Reject",
       rejectTitle: "Reject this revision",
+      hideComments: "Hide comments",
+      showComments: "Show comments",
+      comments: "Comments",
     },
     dragOverlay: {
       drop: "Drop DOCX file to import",
@@ -825,8 +975,12 @@ export const officeMessagesEn: OfficeMessages = {
     chart: {
       unsupported: "Unsupported chart type",
       loading: "Loading chart…",
+      loadFailed: "Chart failed to load. Try again.",
       unavailable: "This chart type is not available yet.",
       noPayload: "This chart sheet does not expose an embedded chart payload.",
+    },
+    image: {
+      alt: "Image",
     },
     drawing: {
       button: "Button",
@@ -842,6 +996,26 @@ export const officeMessagesEn: OfficeMessages = {
     selection: {
       current: "Current selection {address}",
       none: "No cells selected",
+    },
+    validation: {
+      list: "The value is not in the allowed list.",
+      whole: "Enter a valid whole number.",
+      decimal: "Enter a valid number.",
+      textLength: "The text length does not meet the requirement.",
+      date: "Enter a valid date.",
+      time: "Enter a valid time.",
+      generic: "The value does not meet the data validation rule.",
+    },
+    calculation: {
+      sheetMissing: "A formula references a sheet that no longer exists; cached values are shown.",
+      snapshotUnavailable: "The workbook snapshot could not be saved, so recalculation was skipped to protect the current data; cached values are shown.",
+      failed: "Formulas could not be recalculated; cached values are shown. Recalculate manually to retry.",
+    },
+    clipboard: {
+      copyFailed: "Copy failed: this browser does not allow clipboard writes.",
+      noDocument: "Download failed: no document is available in this environment.",
+      invalidUrl: "The download URL is invalid.",
+      unverifiedBlob: "Downloads must use a verified Blob URL.",
     },
     grid: {
       openValidation: "Open data validation dropdown",
@@ -914,6 +1088,18 @@ export const officeMessagesEn: OfficeMessages = {
         unknownError: "Unknown error",
       },
     },
+    documentErrors: {
+      loadFailed: "Unable to load PPTX.",
+      previewNotReady: "The PPTX preview session is not ready.",
+      disposed: "The PPTX document has been disposed.",
+      staleOpen: "The PPTX open request was replaced.",
+      timeout: "The PPTX stage did not become ready in time.",
+      timeoutMs: "PPTX loading did not finish within {ms} ms.",
+      staleResult: "The PPTX load result is stale.",
+      aborted: "The PPTX open request was cancelled.",
+      slideRenderFailedWithMessage: "Slide render failed: {message}",
+      slideRenderFailed: "Slide render failed.",
+    },
     thumbnail: {
       label: "Slide {number}",
       hiddenLabel: "Slide {number}, hidden",
@@ -955,6 +1141,38 @@ export const officeMessagesEn: OfficeMessages = {
       pageAlt: "Page {page}",
       selectionRegion: "Choose PDF page region",
       selectionText: "PDF page text selection layer",
+    },
+  },
+  vueUi: {
+    regionSelector: {
+      label: "Selected region",
+      instructions: "Drag to select a region. Use the arrow keys to move it, Shift+arrow keys to resize, Enter to confirm, and Escape to cancel.",
+      defaultAriaLabel: "Choose document region",
+      description: "Region, left {left}%, top {top}%, width {width}%, height {height}%",
+      noSelection: "No region selected",
+    },
+    objectOutline: {
+      defaultAriaLabel: "Selectable document object",
+      noObjects: "No objects available",
+      noCandidates: "No candidate objects",
+      itemDescription: "{label}, type {kind}, reliability {reliability}",
+    },
+    boundingBox: {
+      noFields: "No fields to display",
+      imageAlt: "Citation source preview",
+    },
+    fileUpload: {
+      prompt: "Drag & drop files here, or click to select",
+    },
+    layoutBlocks: {
+      noBlocks: "No layout blocks detected",
+      imageAlt: "Layout preview",
+    },
+    signaturePad: {
+      clear: "Clear",
+    },
+    fileThumbnail: {
+      unknownType: "Unknown type",
     },
   },
 }
@@ -1056,6 +1274,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       subscript: "下标",
       textColor: "文字颜色",
       highlightColor: "突出显示颜色",
+      placeholder: "在此输入…",
       link: "链接",
       alignLeft: "左对齐",
       alignCenter: "居中对齐",
@@ -1083,6 +1302,35 @@ export const officeMessagesZhCN: OfficeMessages = {
       acceptAllTitle: "接受所有修订",
       rejectAll: "全部拒绝",
       rejectAllTitle: "拒绝所有修订",
+      status: {
+        ready: "就绪",
+        copied: "已复制到剪贴板",
+        pasted: "已从剪贴板粘贴",
+        listParagraphNotFound: "无法更改列表：未找到段落",
+        listAppliedBullet: "已应用项目符号列表",
+        listAppliedNumbered: "已应用编号列表",
+        maximumListLevel: "列表最大层级为 {level}",
+        discardChanges: "放弃未保存的更改？",
+        loadingFile: "正在加载 {name}…",
+        importFailed: "文件加载失败：{message}",
+        unsupportedFile: "仅支持 .docx、.docm、.dotx 和 .dotm 文件",
+        exportCancelledChanged: "导出已取消：文档已更改",
+        exportNotReady: "请等待文档加载完成后再导出",
+        exportFailed: "导出失败：{message}",
+        exportRequiredField: "无法导出：必填表单字段“{label}”为空",
+        exportRequiredFieldEmpty: "无法导出：必填表单字段为空",
+        exporting: "正在导出 DOCX…",
+        exportingPhase: "正在导出 DOCX：{phase}…",
+        exported: "已导出 DOCX",
+        unknownImportError: "未知导入错误",
+        unknownExportError: "未知导出错误",
+        acceptedChanges: "已接受 {count} 处修订",
+        acceptedChange: "已接受 1 处修订",
+        rejectedChanges: "已拒绝 {count} 处修订",
+        rejectedChange: "已拒绝 1 处修订",
+        formattingCleared: "（已清除 {count} 处格式修订且未回退；模型未保留旧格式）",
+        formattingClearedOne: "（已清除 1 处格式修订且未回退；模型未保留旧格式）",
+      },
       borderPresets: {
         bottom: "下边框",
         top: "上边框",
@@ -1139,6 +1387,8 @@ export const officeMessagesZhCN: OfficeMessages = {
       show: "显示缩略图",
       hide: "隐藏缩略图",
       pages: "页面",
+      unavailable: "缩略图暂不可用",
+      unavailableReason: "此缩略图接口没有文档来源，无法渲染。请使用 useDocxPageThumbnails(editor) 或 DocxThumbnailPanel。",
     },
     image: {
       inline: "嵌入",
@@ -1181,6 +1431,9 @@ export const officeMessagesZhCN: OfficeMessages = {
       acceptTitle: "接受此修订",
       reject: "拒绝",
       rejectTitle: "拒绝此修订",
+      hideComments: "隐藏批注",
+      showComments: "显示批注",
+      comments: "批注",
     },
     dragOverlay: {
       drop: "拖放 DOCX 文件以导入",
@@ -1268,8 +1521,12 @@ export const officeMessagesZhCN: OfficeMessages = {
     chart: {
       unsupported: "不支持的图表类型",
       loading: "正在加载图表…",
+      loadFailed: "图表加载失败，请重试。",
       unavailable: "此图表类型暂不可用。",
       noPayload: "此图表工作表未提供嵌入图表数据。",
+    },
+    image: {
+      alt: "图片",
     },
     drawing: {
       button: "按钮",
@@ -1285,6 +1542,26 @@ export const officeMessagesZhCN: OfficeMessages = {
     selection: {
       current: "当前选择 {address}",
       none: "当前没有选择单元格",
+    },
+    validation: {
+      list: "输入值不在允许的列表中。",
+      whole: "请输入有效的整数。",
+      decimal: "请输入有效的数字。",
+      textLength: "文本长度不符合要求。",
+      date: "请输入有效的日期。",
+      time: "请输入有效的时间。",
+      generic: "输入值不符合数据验证规则。",
+    },
+    calculation: {
+      sheetMissing: "公式引用了不存在的工作表，当前显示缓存值。",
+      snapshotUnavailable: "无法保存工作簿快照，已跳过公式重算以保护当前数据，当前显示缓存值。",
+      failed: "公式无法重新计算，当前显示缓存值。可手动重新计算重试。",
+    },
+    clipboard: {
+      copyFailed: "复制失败：当前浏览器不允许写入剪贴板。",
+      noDocument: "下载失败：当前环境没有可用的 document。",
+      invalidUrl: "下载地址无效。",
+      unverifiedBlob: "下载只能使用已验证的 Blob 地址。",
     },
     grid: {
       openValidation: "打开数据验证下拉列表",
@@ -1357,6 +1634,18 @@ export const officeMessagesZhCN: OfficeMessages = {
         unknownError: "未知错误",
       },
     },
+    documentErrors: {
+      loadFailed: "无法加载 PPTX。",
+      previewNotReady: "PPTX 预览会话尚未准备好。",
+      disposed: "PPTX 文档已经销毁。",
+      staleOpen: "PPTX 打开请求已经被替换。",
+      timeout: "PPTX 舞台长时间未就绪。",
+      timeoutMs: "PPTX 加载超过 {ms} 毫秒仍未完成。",
+      staleResult: "PPTX 加载结果已经过期。",
+      aborted: "PPTX 打开请求已经取消。",
+      slideRenderFailedWithMessage: "页面渲染失败：{message}",
+      slideRenderFailed: "页面渲染失败。",
+    },
     thumbnail: {
       label: "第 {number} 页",
       hiddenLabel: "第 {number} 页，隐藏页",
@@ -1398,6 +1687,38 @@ export const officeMessagesZhCN: OfficeMessages = {
       pageAlt: "第 {page} 页",
       selectionRegion: "选择 PDF 页面区域",
       selectionText: "PDF 页面文本选择层",
+    },
+  },
+  vueUi: {
+    regionSelector: {
+      label: "选定区域",
+      instructions: "拖动以框选区域。方向键移动区域，按住 Shift 配合方向键调整大小，Enter 确认，Escape 取消。",
+      defaultAriaLabel: "选择文档区域",
+      description: "区域，左侧 {left}%，顶部 {top}%，宽 {width}%，高 {height}%",
+      noSelection: "尚未选择区域",
+    },
+    objectOutline: {
+      defaultAriaLabel: "可选择的文档对象",
+      noObjects: "没有可用对象",
+      noCandidates: "没有候选对象",
+      itemDescription: "{label}，类型 {kind}，识别可靠度 {reliability}",
+    },
+    boundingBox: {
+      noFields: "没有可显示的字段",
+      imageAlt: "引用来源预览",
+    },
+    fileUpload: {
+      prompt: "将文件拖放到此处，或点击选择",
+    },
+    layoutBlocks: {
+      noBlocks: "未检测到布局块",
+      imageAlt: "布局预览",
+    },
+    signaturePad: {
+      clear: "清除",
+    },
+    fileThumbnail: {
+      unknownType: "未知类型",
     },
   },
 }

@@ -455,7 +455,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
     const baseName = name?.trim() || "Sheet";
     if (/[\\/:*?\[\]]/.test(baseName)) {
-      throw new Error("工作表名称不能包含以下字符：\\ / : * ? [ ]");
+      throw new Error("Worksheet names cannot contain these characters: \\ / : * ? [ ]");
     }
 
     ctx.recordHistoryBeforeMutation();

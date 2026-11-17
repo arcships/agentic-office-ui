@@ -15,6 +15,16 @@ export type {
 } from "@arcships/office-interaction"
 
 export { useXlsxViewerController } from "./composables"
+export { useClipboardCopyNotice } from "./composables/useClipboardCopyNotice"
+export type {
+  ClipboardCopyNotice,
+  UseClipboardCopyNoticeOptions,
+} from "./composables/useClipboardCopyNotice"
+export {
+  checkCellValueAgainstDataValidation,
+  localizeDataValidationFeedback,
+} from "./composables/validation"
+export type { XlsxValidationMessages } from "./composables/validation"
 export { useXlsxViewerThumbnails } from "./composables/useXlsxViewerThumbnails"
 export { useXlsxSearch } from "./composables/useXlsxSearch"
 export type {

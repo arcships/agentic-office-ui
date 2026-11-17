@@ -103,7 +103,7 @@ export function createEditorClipboard(
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
       try {
         await navigator.clipboard.writeText(text)
-        ctx.status.value = "Copied to clipboard"
+        ctx.status.value = ctx.statusMessage("copied")
       } catch {
         // Clipboard write failed — silently ignore
       }
@@ -128,7 +128,7 @@ export function createEditorClipboard(
     const replaced = insertTextAtSelection(text)
     if (!replaced) return
 
-    ctx.status.value = "Pasted from clipboard"
+    ctx.status.value = ctx.statusMessage("pasted")
   }
 
   return { copy, paste, resolveSelectedTextForRange }

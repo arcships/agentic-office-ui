@@ -35,7 +35,7 @@ function resolveClipboardWriteTargets(mimeType: string): ClipboardWriteTargets {
 function downloadBlob(blob: Blob, fileName: string) {
   const ownerDocument = globalThis.document;
   if (!ownerDocument?.body || typeof ownerDocument.createElement !== "function") {
-    throw new Error("下载失败：当前环境没有可用的 document。");
+    throw new Error("Download failed: no document is available in this environment.");
   }
   const anchor = ownerDocument.createElement("a");
   let objectUrl: string | undefined;
@@ -84,21 +84,21 @@ export function downloadUrl(src: string, fileName: string) {
   } catch {
     throw new XlsxSourceError({
       code: "SOURCE_NOT_ALLOWED",
-      message: "下载地址无效。",
+      message: "The download URL is invalid.",
       sourceKind: "url",
     });
   }
   if (url.protocol !== "blob:") {
     throw new XlsxSourceError({
       code: "SOURCE_NOT_ALLOWED",
-      message: "下载只能使用已验证的 Blob 地址。",
+      message: "Downloads must use a verified Blob URL.",
       sourceKind: "url",
       url: url.href,
     });
   }
   const ownerDocument = globalThis.document;
   if (!ownerDocument?.body || typeof ownerDocument.createElement !== "function") {
-    throw new Error("下载失败：当前环境没有可用的 document。");
+    throw new Error("Download failed: no document is available in this environment.");
   }
   const anchor = ownerDocument.createElement("a");
   try {
