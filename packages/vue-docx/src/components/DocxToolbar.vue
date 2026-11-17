@@ -73,6 +73,18 @@
           </svg>
         </button>
         <span class="docx-toolbar-separator" />
+        <label class="docx-toolbar-zoom" title="Zoom">
+          <select
+            data-testid="editor-zoom"
+            class="docx-toolbar-select docx-toolbar-select-sm"
+            :value="zoomPercent"
+            @change="onZoomChange"
+            title="Zoom"
+            aria-label="Zoom"
+          >
+            <option v-for="z of zoomLevels" :key="z" :value="z">{{ z }}%</option>
+          </select>
+        </label>
         <button data-testid="editor-new" type="button" class="docx-toolbar-action" title="New document" :disabled="readOnly" @click="controller.newDocument()">
           <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M12.5 8.5v7" /></svg>
           <span>New</span>
@@ -273,6 +285,26 @@
       >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h1v4M3.5 9H6M3.5 13h2L3.5 17H6M10 7h10M10 15h10" /></svg>
       </button>
+      <button
+        data-testid="editor-indent"
+        class="docx-toolbar-btn"
+        title="Increase list indent (Tab)"
+        aria-label="Increase list indent"
+        :disabled="!canIncreaseListDepth"
+        @click="controller.adjustSelectedListDepth(1)"
+      >
+        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M9 6l-4 3 4 3" /></svg>
+      </button>
+      <button
+        data-testid="editor-outdent"
+        class="docx-toolbar-btn"
+        title="Decrease list indent (Shift+Tab)"
+        aria-label="Decrease list indent"
+        :disabled="!canDecreaseListDepth"
+        @click="controller.adjustSelectedListDepth(-1)"
+      >
+        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M5 6l4 3-4 3" /></svg>
+      </button>
     </div>
 
     <div class="docx-toolbar-separator" />
@@ -341,20 +373,6 @@
       <button class="docx-toolbar-btn" title="Insert Table" @click="controller.insertTable()">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 10h18M3 15h18M9 4v16M15 4v16" /></svg>
       </button>
-    </div>
-
-    <div class="docx-toolbar-spacer" />
-
-    <!-- Zoom -->
-    <div class="docx-toolbar-group">
-      <select
-        class="docx-toolbar-select docx-toolbar-select-sm"
-        :value="zoomPercent"
-        @change="onZoomChange"
-        title="Zoom"
-      >
-        <option v-for="z of zoomLevels" :key="z" :value="z">{{ z }}%</option>
-      </select>
     </div>
 
     </fieldset>
@@ -434,6 +452,16 @@ const lineSpacingValue = computed(() => {
   )
   return String(closest)
 })
+
+const selectedListLevel = computed<number | undefined>(() => {
+  const numbering = props.controller.selectedParagraph?.style?.numbering
+  if (!numbering || numbering.numId <= 0) return undefined
+  return Math.max(0, numbering.ilvl ?? 0)
+})
+const canIncreaseListDepth = computed(
+  () => selectedListLevel.value !== undefined && selectedListLevel.value < 8
+)
+const canDecreaseListDepth = computed(() => (selectedListLevel.value ?? 0) > 0)
 
 // ── Border presets ──────────────────────────────────────────────────
 const borderPresets: { value: DocxBorderPreset; label: string }[] = [
@@ -711,6 +739,10 @@ function onImport(): void {
 }
 .docx-toolbar-spacer {
   flex: 1;
+}
+.docx-toolbar-zoom {
+  align-items: center;
+  display: flex;
 }
 .docx-toolbar-color-picker {
   position: relative;

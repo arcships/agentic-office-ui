@@ -339,6 +339,19 @@ function onKeydown(event: KeyboardEvent): void {
   if (isComposing.value || event.isComposing) return
   props.controller.beginSelectionSession("keyboard", { settleAfterMs: 120 })
 
+  if (event.key === "Tab" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    const currentText = readCurrentDomText()
+    if (!paragraphIsList(props.paragraph, currentText)) return
+    event.preventDefault()
+    syncDraftFromDom()
+    commitDraft()
+    const changed = props.controller.adjustSelectedListDepth(
+      event.shiftKey ? -1 : 1
+    )
+    if (changed) restoreControllerSelection()
+    return
+  }
+
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault()
     const currentText = readCurrentDomText()

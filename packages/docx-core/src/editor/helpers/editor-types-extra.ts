@@ -195,7 +195,10 @@ export interface DocxEditorController {
   setLink: (link?: string) => void;
   selectFormField: (location?: DocxFormFieldLocation) => void;
   toggleFormCheckbox: (location: DocxFormFieldLocation) => void;
-  setFormFieldValue: (location: DocxFormFieldLocation, value: string) => void;
+  /** Returns false when the value violates the field's constraints. */
+  setFormFieldValue: (location: DocxFormFieldLocation, value: string) => boolean;
+  /** Closes the current inline editing session (one undo entry per session). */
+  endFormFieldEdit: (location?: DocxFormFieldLocation) => void;
   updateFormFieldWidget: (
     location: DocxFormFieldLocation,
     patch: Partial<NonNullable<FormFieldRunNode["widget"]>>
@@ -722,8 +725,9 @@ export interface UseDocxFormFieldsResult {
   formFields: DocxSelectedFormField[];
   selectedFormField?: DocxSelectedFormField;
   selectFormField: (location?: DocxFormFieldLocation) => void;
-  setFormFieldValue: (location: DocxFormFieldLocation, value: string) => void;
+  setFormFieldValue: (location: DocxFormFieldLocation, value: string) => boolean;
   toggleFormCheckbox: (location: DocxFormFieldLocation) => void;
+  endFormFieldEdit: (location?: DocxFormFieldLocation) => void;
   updateFormFieldWidget: (
     location: DocxFormFieldLocation,
     patch: Partial<NonNullable<FormFieldRunNode["widget"]>>

@@ -33,6 +33,13 @@ import type {
 export interface ApplyModelChangeOptions {
   selection?: DocxEditorSelection
   activeTextRange?: DocxTextRange | undefined
+  /**
+   * Form-field edits keep the field selected so its focus ring survives the
+   * model update; regular edits clear the selection as before.
+   */
+  clearSelectedFormField?: boolean
+  /** Set to false to fold a change into the previous undo entry. */
+  pushHistory?: boolean
 }
 
 export interface EditorCore {
@@ -81,6 +88,7 @@ export interface EditorCore {
   activeImportAbortController: { value: AbortController | undefined }
   pendingExportModelTransformer: { value: ((model: DocModel) => DocModel) | undefined }
   flushTextDrafts: () => void
+  activeFormFieldEditKey: { value: string | undefined }
   starterTemplate: DocModel
 
   // ── computed refs (pre-computed in useDocxEditor, read by sub-modules) ─

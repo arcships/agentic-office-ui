@@ -508,6 +508,7 @@ export function useDocxEditor(
   // --- pagination reset on document load ---
   watch(documentLoadNonce, () => {
     paginationInfo.value = { currentPage: 1, totalPages: 1 }
+    activeFormFieldEditKey = undefined
   })
 
   // ═══════════════════════════════════════════════════════════════════
@@ -539,6 +540,7 @@ export function useDocxEditor(
     activeImportAbortController: { get value() { return activeImportAbortController }, set value(v) { activeImportAbortController = v } },
     pendingExportModelTransformer: { get value() { return pendingExportModelTransformer }, set value(v) { pendingExportModelTransformer = v } },
     flushTextDrafts,
+    activeFormFieldEditKey: { get value() { return activeFormFieldEditKey }, set value(v) { activeFormFieldEditKey = v } },
     starterTemplate,
 
     // computed
@@ -604,6 +606,7 @@ export function useDocxEditor(
 
   let activeImportAbortController: AbortController | undefined
   let pendingExportModelTransformer: ((model: DocModel) => DocModel) | undefined
+  let activeFormFieldEditKey: string | undefined
 
   const setStatus = (v: string | ((prev: string) => string)): void => {
     status.value = typeof v === "function" ? v(status.value) : v
@@ -816,6 +819,7 @@ export function useDocxEditor(
     selectFormField: ff.selectFormField,
     toggleFormCheckbox: ff.toggleFormCheckbox,
     setFormFieldValue: ff.setFormFieldValue,
+    endFormFieldEdit: ff.endFormFieldEdit,
     updateFormFieldWidget: ff.updateFormFieldWidget,
     applyBorderPreset: fmt.applyBorderPreset,
     setAlignment: fmt.setAlignment,
