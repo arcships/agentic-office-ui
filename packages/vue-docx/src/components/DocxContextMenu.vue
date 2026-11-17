@@ -193,7 +193,7 @@
           :disabled="!canMergeTableCells"
           @click="onAction('mergeCells')"
         >
-          Merge cells
+          {{ m.docx.contextMenu.mergeCells }}
         </button>
         <button
           data-testid="docx-context-menu-split-cell"
@@ -204,7 +204,7 @@
           :disabled="!canSplitTableCell"
           @click="onAction('splitCell')"
         >
-          Split cell
+          {{ m.docx.contextMenu.splitCell }}
         </button>
         <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteTable')">
           <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteTable }}</span>

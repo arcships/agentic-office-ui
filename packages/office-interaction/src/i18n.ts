@@ -197,6 +197,8 @@ export interface OfficeDocxMessages {
     deleteRow: string
     deleteColumn: string
     deleteTable: string
+    mergeCells: string
+    splitCell: string
   }
   colors: {
     black: string
@@ -675,6 +677,8 @@ export const officeMessagesEn: OfficeMessages = {
       deleteRow: "Delete Row",
       deleteColumn: "Delete Column",
       deleteTable: "Delete Table",
+      mergeCells: "Merge cells",
+      splitCell: "Split cell",
     },
     colors: {
       black: "Black",
@@ -1115,6 +1119,8 @@ export const officeMessagesZhCN: OfficeMessages = {
       deleteRow: "删除行",
       deleteColumn: "删除列",
       deleteTable: "删除表格",
+      mergeCells: "合并单元格",
+      splitCell: "拆分单元格",
     },
     colors: {
       black: "黑色",
