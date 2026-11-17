@@ -175,6 +175,16 @@ import {
 } from "../pdf/pdf-coordinate-transform"
 import { currentRenderDpr, watchDevicePixelRatio } from "../pdf/pdf-device-pixel-ratio"
 import {
+  DEFAULT_PDF_BITMAP_BUDGET_BYTES,
+  createPdfBitmapCache,
+  type PdfBitmapCache,
+} from "../pdf/pdf-bitmap-cache"
+import {
+  DEFAULT_MAX_PAGE_RASTER_PIXELS,
+  planPageRaster,
+  type PdfPageRasterPlan,
+} from "../pdf/pdf-page-raster"
+import {
   DEFAULT_PAGE_OVERSCAN,
   computePageOffsets,
   pageIndexAtPosition,
@@ -227,6 +237,8 @@ interface PageSlot {
   state: PdfPageBitmapState
   /** Zoom/rotation/DPR key of the bitmap in `url`; an empty key is stale. */
   renderKey: string
+  /** Decoded RGBA footprint of the bitmap in `url`, for the bitmap budget. */
+  bitmapBytes: number
 }
 
 interface PageSelectionRects {
@@ -261,6 +273,17 @@ const props = withDefaults(
     isDark?: boolean
     locale?: import("@arcships/office-interaction").OfficeLocale
     messages?: import("@arcships/office-interaction").OfficeMessagesOverride
+    /**
+     * Byte budget for page bitmaps kept outside the viewport. Pages scroll back
+     * from this cache instead of rasterizing again; the least recently used
+     * bitmap is released once the budget is exceeded. Defaults to 64 MiB.
+     */
+    maxBitmapBytes?: number
+    /**
+     * Per-page raster pixel cap (device px). Above it the page renders at a
+     * reduced scale and is downscaled for display. Defaults to 8 MP.
+     */
+    maxPagePixels?: number
   }>(),
   {
     maxFileSize: DEFAULT_PDF_MAX_FILE_SIZE,
@@ -272,6 +295,8 @@ const props = withDefaults(
     isDark: false,
     locale: "en",
     messages: undefined,
+    maxBitmapBytes: DEFAULT_PDF_BITMAP_BUDGET_BYTES,
+    maxPagePixels: DEFAULT_MAX_PAGE_RASTER_PIXELS,
   },
 )
 
@@ -638,6 +663,12 @@ const pageStackStyle = {
 
 const pageSlots = reactive<Record<number, PageSlot>>({})
 const viewportHeightPx = ref(0)
+/**
+ * Off-viewport bitmaps under the `maxBitmapBytes` budget. Pages scroll back
+ * from here instead of rasterizing again; `bitmapCache` owns no URLs, the slot
+ * keeps the object URL and the cache only records its byte footprint.
+ */
+let bitmapCache: PdfBitmapCache = createPdfBitmapCache({ maxBytes: props.maxBitmapBytes })
 let pageLayoutCache: { key: string; offsets: number[]; heights: number[] } | undefined
 let renderedRange: PdfPageRange = { first: 0, last: -1 }
 let visiblePageIndex = -1
@@ -648,9 +679,10 @@ let resizeObserver: ResizeObserver | undefined
 
 function initPageSlots(): void {
   for (const key of Object.keys(pageSlots)) delete pageSlots[Number(key)]
+  bitmapCache.clear()
   if (!renderDocument.value) return
   for (let i = 0; i < renderDocument.value.pageCount; i++) {
-    pageSlots[i] = { url: null, state: "pending", renderKey: "" }
+    pageSlots[i] = { url: null, state: "pending", renderKey: "", bitmapBytes: 0 }
   }
   renderedRange = { first: 0, last: -1 }
   visiblePageIndex = -1
@@ -659,13 +691,14 @@ function initPageSlots(): void {
 /**
  * Zoom, rotation and display scale moved: every rasterized bitmap is stale, but
  * the window keeps showing it until the replacement arrives, so the page stack
- * never collapses to empty placeholders mid-gesture. Pages that leave the
- * render window are still released (and revoked) by `releasePageBitmaps`.
+ * never collapses to empty placeholders mid-gesture. Cached off-viewport
+ * bitmaps cannot be reused at the new scale, so they are released right away.
  */
 function markPageBitmapsStale(): void {
   for (const slot of Object.values(pageSlots)) {
     if (slot.url) slot.renderKey = ""
   }
+  releasePageBitmaps(bitmapCache.clear())
   renderedRange = { first: 0, last: -1 }
   visiblePageIndex = -1
 }
@@ -735,7 +768,7 @@ function currentRenderRange(): PdfPageRange {
   })
 }
 
-/** Release the bitmaps of pages that left the render window. */
+/** Revoke a slot's bitmap and drop it back to a placeholder. */
 function releasePageBitmaps(pageIndexes: Iterable<number>): void {
   for (const pageIndex of pageIndexes) {
     const slot = pageSlots[pageIndex]
@@ -744,8 +777,58 @@ function releasePageBitmaps(pageIndexes: Iterable<number>): void {
       URL.revokeObjectURL(slot.url)
       slot.url = null
     }
+    slot.renderKey = ""
+    slot.bitmapBytes = 0
     if (slot.state !== "pending") slot.state = "pending"
   }
+}
+
+/**
+ * Pages left the render window: keep usable bitmaps in the byte-budgeted LRU so
+ * scrolling back is instant, and release whatever the budget evicted.
+ */
+function retirePageBitmaps(pageIndexes: Iterable<number>): void {
+  const renderKey = pageRenderKey()
+  const evicted: number[] = []
+  for (const pageIndex of pageIndexes) {
+    const slot = pageSlots[pageIndex]
+    if (!slot) continue
+    if (!slot.url) {
+      if (slot.state !== "pending") slot.state = "pending"
+      continue
+    }
+    // Stale pixels can never be shown again and unmeasured bitmaps would sit in
+    // the cache outside the budget, so both are released instead of retained.
+    if (slot.renderKey !== renderKey || slot.bitmapBytes <= 0) {
+      evicted.push(pageIndex)
+      continue
+    }
+    // Already cached: keep its original recency so the LRU reflects when the
+    // page left the window, not the order pages happen to be scanned in.
+    if (bitmapCache.has(pageIndex)) continue
+    evicted.push(...bitmapCache.retain(pageIndex, slot.bitmapBytes))
+  }
+  releasePageBitmaps(evicted)
+}
+
+/** The window owns its bitmaps while it shows them; only off-window pages count. */
+function activatePageBitmaps(range: PdfPageRange): void {
+  if (range.last < range.first) return
+  for (let pageIndex = range.first; pageIndex <= range.last; pageIndex++) {
+    bitmapCache.drop(pageIndex)
+  }
+}
+
+/** Per-page raster plan for the current zoom, rotation and display scale. */
+function pageRaster(pageIndex: number): PdfPageRasterPlan {
+  const size = pageDisplaySize(pageIndex)
+  return planPageRaster({
+    displayWidth: size?.width ?? 0,
+    displayHeight: size?.height ?? 0,
+    zoom: zoom.value,
+    dpr: renderDpr.value,
+    maxPixels: props.maxPagePixels,
+  })
 }
 
 function pageSlotSnapshots(): readonly PdfPageSlotSnapshot[] {
@@ -895,6 +978,7 @@ async function releaseDocument(): Promise<void> {
   for (const slot of Object.values(pageSlots)) {
     if (slot.url) URL.revokeObjectURL(slot.url)
   }
+  bitmapCache.clear()
   for (const key of Object.keys(pageSlots)) delete pageSlots[Number(key)]
   invalidatePageLayout()
   renderedRange = { first: 0, last: -1 }
@@ -941,7 +1025,10 @@ async function renderVisiblePages(): Promise<void> {
   renderedRange = range
   const renderKey = pageRenderKey()
   const plan = planPageRenders(pageSlotSnapshots(), range)
-  releasePageBitmaps(plan.release)
+  // The window takes its bitmaps out of the LRU (they are active), and the
+  // pages that left it move into the byte-budgeted cache instead of vanishing.
+  activatePageBitmaps(range)
+  retirePageBitmaps(plan.release)
 
   try {
     for (const pageIndex of plan.render) {
@@ -953,10 +1040,11 @@ async function renderVisiblePages(): Promise<void> {
       // replacement arrives; only pages without pixels show a loading state.
       if (!slot.url) slot.state = "loading"
       try {
+        const raster = pageRaster(pageIndex)
         const blob = await rt.renderPage(doc, pageIndex, {
-          scale: zoom.value,
+          scale: raster.scale,
           rotation: rotation.value,
-          dpr: renderDpr.value,
+          dpr: raster.dpr,
           signal: controller.signal,
         })
         if (controller.signal.aborted || gen !== renderGeneration) return
@@ -967,6 +1055,7 @@ async function renderVisiblePages(): Promise<void> {
         slot.url = url
         slot.state = "ready"
         slot.renderKey = renderKey
+        slot.bitmapBytes = raster.bytes
         void ensurePageContentHash(pageIndex)
       } catch (err) {
         if ((err as Error)?.name === "AbortError" || controller.signal.aborted) return
@@ -1062,8 +1151,8 @@ watch([zoom, rotation, renderDpr], () => {
   cancelRender()
   // Every bitmap is stale at the new scale, rotation or display ratio: keep the
   // rasterized window on screen and let the next pass swap each bitmap in place.
-  // Pages outside the window are still released, so the bitmap budget stays
-  // proportional to the viewport instead of the whole document.
+  // Bitmaps cached outside the window cannot be reused at the new scale and are
+  // released, so the cache never holds pixels from two scales at once.
   markPageBitmapsStale()
   invalidatePageLayout()
   scheduleVisibleRender(0)
@@ -1079,6 +1168,13 @@ watch(
 )
 
 watch(() => props.documentId, () => emit("documentRevisionChange", documentRevision.value))
+
+// A host that lowers the bitmap budget expects the excess to be released now.
+watch(() => props.maxBitmapBytes, (next) => {
+  releasePageBitmaps(bitmapCache.clear())
+  bitmapCache = createPdfBitmapCache({ maxBytes: next })
+  if (renderDocument.value) scheduleVisibleRender(0)
+})
 
 // ── Page geometry ────────────────────────────────────────────────────
 function pageDisplaySize(pageIndex: number): { width: number; height: number } | undefined {
