@@ -193,7 +193,9 @@ export function toggleRunStyleFlag(
   const current = Boolean(textRun.style?.[key]);
   textRun.style = {
     ...(textRun.style ?? {}),
-    [key]: !current
+    [key]: !current,
+    ...(key === "underline" && current ? { underlineStyle: undefined } : undefined),
+    ...(key === "strike" && current ? { strikeStyle: undefined } : undefined)
   };
   paragraph.sourceXml = undefined;
 

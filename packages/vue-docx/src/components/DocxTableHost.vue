@@ -150,6 +150,7 @@ import {
   type TableRowNode,
   type TableRowRange,
   paragraphText,
+  paragraphTypographyStyle,
   resolveTableTrackedMarkup,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
@@ -540,7 +541,7 @@ function cellContentWidthPx(cell: TableGridCell): number | undefined {
 function cellParagraphStyle(para: ParagraphNode): Record<string, any> {
   return {
     margin: "0",
-    textAlign: para.style?.align,
+    ...paragraphTypographyStyle(para.style),
     fontWeight: para.style?.headingLevel ? "700" : undefined,
     minHeight: "1em",
     outline: "none",

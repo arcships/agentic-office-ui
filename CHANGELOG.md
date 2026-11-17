@@ -11,6 +11,14 @@ All notable changes to the `@arcships` package family are documented in this fil
 - Number every comment and draw a numbered marker plus leader line at its anchor, linking the highlighted range to its card; clicking a card, marker, or highlighted range activates the pair.
 - Stop switching the pane to `position: static` below 1100px, which inflated the measured page height and broke multi-page scroll positions.
 
+### DOCX character typography
+
+- Preserve OOXML underline/strike variants (`double`, `dotted`, `dash`, `wave`, `dstrike`) and expose them as CSS text-decoration style/thickness instead of flattening every run to a single solid line.
+- Map run, paragraph and table borders through one OOXML-to-CSS line-style table so `wave`, `triple`, `thick` and compound gap styles stay visible instead of producing invalid CSS declarations.
+- Model and render `w:caps`, `w:smallCaps`, `w:spacing`, `w:w`, `w:bdr`, text shadow/outline, run RTL and paragraph `w:bidi`/extended `w:jc` values.
+- Keep ASCII, high-ANSI, eastAsia and complex-script fonts separately, build a per-glyph font stack and resolve major/minor theme fonts from `theme1.xml` during import.
+- Read `w:lvlJc`/`w:suff` from `numbering.xml`, align list markers accordingly, and add decimalZero, Chinese, ideographic, enclosed and text numbering formats.
+
 ### Cross-format Office references
 
 - Prepare the nine public packages as the `0.6.0` candidate while keeping `0.5.4` as the published stable line.

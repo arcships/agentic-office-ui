@@ -15,6 +15,7 @@ import {
   updateEstimatedLineWidthPxForText,
   resolveTabSpacerWidthPx,
   noteMarkerLabel,
+  isJustifiedAlignment,
 } from "@arcships/docx-core"
 import type { DocxDocumentTheme } from "@arcships/docx-core"
 import type { ParagraphTrackedInlineChange } from "@arcships/docx-core"
@@ -267,7 +268,8 @@ function renderPlainTextRun(
   annotationAttributes: Record<string, string>
 ): TextRunRenderResult {
   const shouldControlSoftBreakStretch =
-    ctx.paragraph.style?.align === "justify" && textOverride.includes("\n")
+    isJustifiedAlignment(ctx.paragraph.style?.align) &&
+    textOverride.includes("\n")
 
   if (!shouldControlSoftBreakStretch) {
     return {

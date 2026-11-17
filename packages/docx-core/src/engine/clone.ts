@@ -19,6 +19,7 @@ import type {
   TableNode,
   TableStyle,
   TextRunNode,
+  TextStyle,
 } from "./types";
 import {
   cloneDocumentCommentAnchor,
@@ -87,6 +88,19 @@ function cloneImageBytes(
   return options.shareImageBytes === false
     ? copyImageData(data)
     : shareImageData(data);
+}
+
+function cloneTextStyle(style?: TextStyle): TextStyle | undefined {
+  if (!style) {
+    return undefined;
+  }
+
+  return {
+    ...style,
+    runBorder: style.runBorder ? { ...style.runBorder } : undefined,
+    textShadow: style.textShadow ? { ...style.textShadow } : undefined,
+    textOutline: style.textOutline ? { ...style.textOutline } : undefined,
+  };
 }
 
 function isParagraphCellContent(
@@ -185,7 +199,7 @@ function cloneParagraphStyle(
 export function cloneTextRun(run: TextRunNode): TextRunNode {
   return {
     ...run,
-    style: run.style ? { ...run.style } : undefined,
+    style: cloneTextStyle(run.style),
     link: run.link,
     noteReference: run.noteReference ? { ...run.noteReference } : undefined,
   };
@@ -233,7 +247,7 @@ export function cloneFormFieldRun(run: FormFieldRunNode): FormFieldRunNode {
       value: option.value,
     })),
     widget: cloneFormFieldWidget(run.widget),
-    style: run.style ? { ...run.style } : undefined,
+    style: cloneTextStyle(run.style),
     link: run.link,
     sourceXml: run.sourceXml,
   };
@@ -443,7 +457,7 @@ function cloneNumberingDefinitions(
       abstractNumId: abstractDefinition.abstractNumId,
       levels: abstractDefinition.levels.map((level) => ({
         ...level,
-        runStyle: level.runStyle ? { ...level.runStyle } : undefined,
+        runStyle: cloneTextStyle(level.runStyle),
         pictureBullet: level.pictureBullet
           ? { ...level.pictureBullet }
           : undefined,
@@ -458,7 +472,7 @@ function cloneNumberingDefinitions(
       levelOverrides: instanceDefinition.levelOverrides
         ? instanceDefinition.levelOverrides.map((level) => ({
             ...level,
-            runStyle: level.runStyle ? { ...level.runStyle } : undefined,
+            runStyle: cloneTextStyle(level.runStyle),
             pictureBullet: level.pictureBullet
               ? { ...level.pictureBullet }
               : undefined,
@@ -515,13 +529,23 @@ export function cloneDocModel(model: DocModel): DocModel {
       })),
       paragraphStyles: (model.metadata.paragraphStyles ?? []).map((style) => ({
         ...style,
-        runStyle: style.runStyle ? { ...style.runStyle } : undefined,
+        runStyle: cloneTextStyle(style.runStyle),
         numbering: cloneParagraphNumbering(style.numbering),
         spacing: cloneParagraphSpacing(style.spacing),
         indent: cloneParagraphIndent(style.indent),
         borders: cloneParagraphBorderSet(style.borders),
       })),
       defaultParagraphStyleId: model.metadata.defaultParagraphStyleId,
+      themeFonts: model.metadata.themeFonts
+        ? {
+            major: model.metadata.themeFonts.major
+              ? { ...model.metadata.themeFonts.major }
+              : undefined,
+            minor: model.metadata.themeFonts.minor
+              ? { ...model.metadata.themeFonts.minor }
+              : undefined,
+          }
+        : undefined,
       numberingDefinitions: cloneNumberingDefinitions(
         model.metadata.numberingDefinitions
       ),

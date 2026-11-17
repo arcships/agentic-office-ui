@@ -3,10 +3,17 @@
 // Upstream editor.tsx: lines 16061-16261, 16263-16413, 17032-17156.
 
 import type {
+  DocxThemeFonts,
   ImageRunNode,
   ParagraphAlignment,
+  ParagraphDirection,
   TextRunNode
 } from "../../engine/types";
+import {
+  parseParagraphAlignmentFromParagraphProperties,
+  parseParagraphDirectionFromParagraphProperties,
+  parseRunTypographyFromRunXml
+} from "../../engine/text-typography";
 import { xmlAttribute } from "./ooxml-helpers";
 import type { DocxInlineTrackedChangeKind } from "./editor-types";
 
@@ -264,71 +271,10 @@ export function xmlColorValue(tagXml: string | undefined): string | undefined {
 }
 
 export function parseRunStyleFromRunXml(
-  runXml: string
+  runXml: string,
+  options: { themeFonts?: DocxThemeFonts } = {}
 ): TextRunNode["style"] | undefined {
-  const rPrRange = extractBalancedTagRanges(runXml, "w:rPr")[0];
-  const rPrXml = rPrRange ? runXml.slice(rPrRange.start, rPrRange.end) : "";
-  if (!rPrXml) {
-    return undefined;
-  }
-
-  const rFontsTag = rPrXml.match(/<w:rFonts\b[^>]*\/?>/i)?.[0];
-  const rFontsAscii = rFontsTag
-    ? xmlAttribute(rFontsTag, "w:ascii")
-    : undefined;
-  const rFontsHAnsi = rFontsTag
-    ? xmlAttribute(rFontsTag, "w:hAnsi")
-    : undefined;
-  const rFontsEastAsia = rFontsTag
-    ? xmlAttribute(rFontsTag, "w:eastAsia")
-    : undefined;
-  const rFontsCs = rFontsTag ? xmlAttribute(rFontsTag, "w:cs") : undefined;
-  const fontFamily = rFontsAscii ?? rFontsHAnsi ?? rFontsEastAsia ?? rFontsCs;
-
-  const sizeTag =
-    rPrXml.match(/<w:sz\b[^>]*\/?>/i)?.[0] ??
-    rPrXml.match(/<w:szCs\b[^>]*\/?>/i)?.[0];
-  const sizeHalfPoints = sizeTag
-    ? Number(xmlAttribute(sizeTag, "w:val"))
-    : Number.NaN;
-  const fontSizePt =
-    Number.isFinite(sizeHalfPoints) && sizeHalfPoints > 0
-      ? Number((sizeHalfPoints / 2).toFixed(2))
-      : undefined;
-
-  const bold = xmlBooleanFlag(rPrXml.match(/<w:b(?:Cs)?\b[^>]*\/?>/i)?.[0]);
-  const italic = xmlBooleanFlag(rPrXml.match(/<w:i(?:Cs)?\b[^>]*\/?>/i)?.[0]);
-  const underlineTag = rPrXml.match(/<w:u\b[^>]*\/?>/i)?.[0];
-  const underline = xmlBooleanFlag(underlineTag);
-  const strike = xmlBooleanFlag(rPrXml.match(/<w:strike\b[^>]*\/?>/i)?.[0]);
-  const color = xmlColorValue(rPrXml.match(/<w:color\b[^>]*\/?>/i)?.[0]);
-  const highlightTag = rPrXml.match(/<w:highlight\b[^>]*\/?>/i)?.[0];
-  const highlight = highlightTag
-    ? xmlAttribute(highlightTag, "w:val")
-    : undefined;
-  const verticalAlignTag = rPrXml.match(/<w:vertAlign\b[^>]*\/?>/i)?.[0];
-  const verticalAlign = verticalAlignTag
-    ? xmlAttribute(verticalAlignTag, "w:val")
-    : undefined;
-
-  const style: NonNullable<TextRunNode["style"]> = {
-    fontFamily: fontFamily?.trim() || undefined,
-    fontSizePt,
-    bold: bold || undefined,
-    italic: italic || undefined,
-    underline: underline || undefined,
-    strike: strike || undefined,
-    color,
-    highlight: highlight?.trim() || undefined,
-    verticalAlign:
-      verticalAlign === "superscript" || verticalAlign === "subscript"
-        ? verticalAlign
-        : undefined,
-  };
-
-  return Object.values(style).some((value) => value !== undefined)
-    ? style
-    : undefined;
+  return parseRunTypographyFromRunXml(runXml, options);
 }
 
 export function balancedTagXmlBlocks(xml: string, tagName: string): string[] {
@@ -347,14 +293,30 @@ export function mergeTextRunStyles(
 
   const merged: TextRunNode["style"] = {
     fontFamily: override?.fontFamily ?? base?.fontFamily,
+    fontFamilyEastAsia:
+      override?.fontFamilyEastAsia ?? base?.fontFamilyEastAsia,
+    fontFamilyComplexScript:
+      override?.fontFamilyComplexScript ?? base?.fontFamilyComplexScript,
     fontSizePt: override?.fontSizePt ?? base?.fontSizePt,
     bold: override?.bold ?? base?.bold,
     italic: override?.italic ?? base?.italic,
     underline: override?.underline ?? base?.underline,
+    underlineStyle: override?.underlineStyle ?? base?.underlineStyle,
     strike: override?.strike ?? base?.strike,
+    strikeStyle: override?.strikeStyle ?? base?.strikeStyle,
+    caps: override?.caps ?? base?.caps,
+    smallCaps: override?.smallCaps ?? base?.smallCaps,
     color: override?.color ?? base?.color,
     highlight: override?.highlight ?? base?.highlight,
+    characterSpacingTwips:
+      override?.characterSpacingTwips ?? base?.characterSpacingTwips,
+    characterScalePercent:
+      override?.characterScalePercent ?? base?.characterScalePercent,
+    direction: override?.direction ?? base?.direction,
     verticalAlign: override?.verticalAlign ?? base?.verticalAlign,
+    runBorder: override?.runBorder ?? base?.runBorder,
+    textShadow: override?.textShadow ?? base?.textShadow,
+    textOutline: override?.textOutline ?? base?.textOutline,
   };
 
   return Object.values(merged).some((value) => value !== undefined)
@@ -365,19 +327,13 @@ export function mergeTextRunStyles(
 export function parseParagraphAlignmentFromXml(
   paragraphPropertiesXml: string
 ): ParagraphAlignment | undefined {
-  const jcTag = paragraphPropertiesXml.match(/<w:jc\b[^>]*\/?>/i)?.[0];
-  const raw = jcTag
-    ? xmlAttribute(jcTag, "w:val")?.trim().toLowerCase()
-    : undefined;
-  if (
-    raw === "center" ||
-    raw === "right" ||
-    raw === "justify" ||
-    raw === "left"
-  ) {
-    return raw;
-  }
-  return undefined;
+  return parseParagraphAlignmentFromParagraphProperties(paragraphPropertiesXml);
+}
+
+export function parseParagraphDirectionFromXml(
+  paragraphPropertiesXml: string
+): ParagraphDirection | undefined {
+  return parseParagraphDirectionFromParagraphProperties(paragraphPropertiesXml);
 }
 
 export function parseDrawingImageTransformFromSourceXml(sourceXml?: string):
