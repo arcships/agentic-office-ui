@@ -8,6 +8,7 @@ import type {
 } from "@arcships/xlsx-core";
 import { resolveWorkbookColor, resolveWorkbookFillStyle } from "@arcships/xlsx-core";
 import { cellAddressToA1, normalizeRange, rangeToA1 } from "./selection";
+import { isWithinSheetBounds, SHEET_MAX_COLUMNS, SHEET_MAX_ROWS, shiftFormulaReferences } from "./formula-references";
 import { decodeHtmlEntities, escapeHtml, mapBorder, resolveEffectiveCellNumberFormat, resolveInheritedCellStyle } from "./formatting";
 import { DEFAULT_CELL_STYLE_PATCH, localizeFormattedNumber, resolveCellInput } from "./cell-input";
 import type { XlsxControllerContext } from "./internal";
@@ -209,6 +210,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
       cells: [],
       cols: normalized.end.col - normalized.start.col + 1,
       merges: [],
+      origin: { col: normalized.start.col, row: normalized.start.row },
       rows: normalized.end.row - normalized.start.row + 1
     };
 
@@ -373,6 +375,11 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
           col: targetCell.col + colIndex,
           row: targetCell.row + rowIndex
         };
+        // Overflow past the sheet and merged secondary cells are not
+        // writable: skip them instead of corrupting the worksheet.
+        if (!isWithinSheetBounds(nextCell) || worksheet.isMergedSecondary(nextCell.row, nextCell.col)) {
+          continue;
+        }
         const before = ctx.captureCellMutationState(nextCell);
         if (!before) {
           continue;
@@ -423,8 +430,8 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     const nextRange = normalizeRange({
       start: targetCell,
       end: {
-        col: targetCell.col + Math.max(0, Math.max(...grid.map((row) => row.length), 1) - 1),
-        row: targetCell.row + grid.length - 1
+        col: Math.min(targetCell.col + Math.max(0, Math.max(...grid.map((row) => row.length), 1) - 1), SHEET_MAX_COLUMNS - 1),
+        row: Math.min(targetCell.row + grid.length - 1, SHEET_MAX_ROWS - 1)
       }
     });
     ctx.activeCell.value = targetCell;
@@ -453,6 +460,11 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     }
 
     const hasMergeOperations = Array.isArray(payload.merges) && payload.merges.some((merge) => (merge.rowSpan ?? 1) > 1 || (merge.colSpan ?? 1) > 1);
+    // Formulas copied from another range shift by the distance between the
+    // copied range's origin and the paste target, like Excel. Payloads from
+    // other hosts may omit the origin; those paste verbatim.
+    const rowDelta = payload.origin ? targetCell.row - payload.origin.row : 0;
+    const colDelta = payload.origin ? targetCell.col - payload.origin.col : 0;
     const beforeSnapshot = {
       activeCell: ctx.activeCell.value,
       selection: ctx.selection.value
@@ -467,6 +479,11 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
         col: targetCell.col + cell.colOffset,
         row: targetCell.row + cell.rowOffset
       };
+      // Overflow past the sheet and merged secondary cells are not writable:
+      // skip them instead of corrupting the merge.
+      if (!isWithinSheetBounds(nextCell) || worksheet.isMergedSecondary(nextCell.row, nextCell.col)) {
+        continue;
+      }
       if (!cell.formula) {
         const validationValue = cell.rawValue !== undefined
           ? String(cell.rawValue ?? "")
@@ -483,7 +500,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
       const address = cellAddressToA1(nextCell);
 
       if (cell.formula) {
-        worksheet.setFormula(address, cell.formula);
+        worksheet.setFormula(address, shiftFormulaReferences(cell.formula, rowDelta, colDelta));
       } else if (cell.rawValue !== undefined) {
         worksheet.setCell(address, cell.rawValue);
       } else {
@@ -500,7 +517,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
           )
         });
         if (input.kind === "formula") {
-          worksheet.setFormula(address, input.formula);
+          worksheet.setFormula(address, shiftFormulaReferences(input.formula, rowDelta, colDelta));
         } else {
           worksheet.setCell(address, input.value);
         }
@@ -546,6 +563,9 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
             row: targetCell.row + merge.rowOffset + merge.rowSpan - 1
           }
         });
+        if (!isWithinSheetBounds(mergeRange.start) || !isWithinSheetBounds(mergeRange.end)) {
+          continue;
+        }
         worksheet.mergeCells(rangeToA1(mergeRange));
       }
     }
@@ -556,8 +576,8 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     const nextRange = normalizeRange({
       start: targetCell,
       end: {
-        col: targetCell.col + Math.max((payload.cols ?? 1) - 1, 0),
-        row: targetCell.row + Math.max((payload.rows ?? 1) - 1, 0)
+        col: Math.min(targetCell.col + Math.max((payload.cols ?? 1) - 1, 0), SHEET_MAX_COLUMNS - 1),
+        row: Math.min(targetCell.row + Math.max((payload.rows ?? 1) - 1, 0), SHEET_MAX_ROWS - 1)
       }
     });
     ctx.activeCell.value = targetCell;

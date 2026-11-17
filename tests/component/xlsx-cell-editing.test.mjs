@@ -170,6 +170,18 @@ async function countUndoDepth(controller) {
   return count;
 }
 
+// Reads the workbook value behind a cell, including merged secondary cells
+// that the display APIs hide.
+function readRawCell(controller, cell) {
+  const worksheet = controller.getActiveWorksheet();
+  const value = worksheet.getCellAt(cell.row, cell.col);
+  try {
+    return value.toJs() ?? "";
+  } finally {
+    value.free();
+  }
+}
+
 configureWasm();
 
 test("inline editor seeds the formula and commits it back unchanged on blur", async () => {
@@ -298,6 +310,178 @@ test("formula bar writes plain text as values and keeps formula entry intact", a
     } finally {
       mounted.app.unmount();
     }
+  } finally {
+    app.unmount();
+  }
+});
+
+test("fill shifts relative references and keeps absolute ones", async () => {
+  const { controller, app } = await mountController();
+  try {
+    // The issue's case: =B1 filled down one row becomes =B2.
+    controller.setCellFormula({ row: 0, col: 0 }, "=B1");
+    controller.selectCell({ row: 0, col: 0 });
+    await vue.nextTick();
+    controller.fillSelection({ start: { row: 0, col: 0 }, end: { row: 2, col: 0 } });
+    await vue.nextTick();
+    assert.deepEqual(
+      [0, 1, 2].map((row) => controller.getCellFormula({ row, col: 0 })),
+      ["=B1", "=B2", "=B3"],
+    );
+
+    // Absolute parts stay anchored; mixed anchors only shift the relative half.
+    controller.setCellFormula({ row: 10, col: 0 }, "=$A$1+B1+$C1+D$1");
+    controller.selectCell({ row: 10, col: 0 });
+    await vue.nextTick();
+    controller.fillSelection({ start: { row: 10, col: 0 }, end: { row: 10, col: 2 } });
+    await vue.nextTick();
+    assert.deepEqual(
+      [0, 1, 2].map((col) => controller.getCellFormula({ row: 10, col })),
+      ["=$A$1+B1+$C1+D$1", "=$A$1+C1+$C1+E$1", "=$A$1+D1+$C1+F$1"],
+    );
+
+    // Quoted strings, quoted sheet names, structured table references and
+    // function names are not rewritten.
+    controller.setCellFormula({ row: 3, col: 0 }, "=LOG10(B1)&\"A1\"&'Sheet 1'!C1");
+    controller.selectCell({ row: 3, col: 0 });
+    await vue.nextTick();
+    controller.fillSelection({ start: { row: 3, col: 0 }, end: { row: 4, col: 0 } });
+    await vue.nextTick();
+    assert.equal(
+      controller.getCellFormula({ row: 4, col: 0 }),
+      "=LOG10(B2)&\"A1\"&'Sheet 1'!C2",
+    );
+
+    controller.setCellFormula({ row: 6, col: 0 }, "=Table1[Amount]+B1+Name1");
+    controller.selectCell({ row: 6, col: 0 });
+    await vue.nextTick();
+    controller.fillSelection({ start: { row: 6, col: 0 }, end: { row: 7, col: 0 } });
+    await vue.nextTick();
+    assert.equal(
+      controller.getCellFormula({ row: 7, col: 0 }),
+      "=Table1[Amount]+B2+Name1",
+    );
+
+    // Shifting a reference off the sheet produces Excel's #REF!.
+    controller.setCellFormula({ row: 8, col: 0 }, "=A1");
+    controller.selectCell({ row: 8, col: 0 });
+    await vue.nextTick();
+    controller.fillSelection({ start: { row: 8, col: 0 }, end: { row: 0, col: 0 } });
+    await vue.nextTick();
+    assert.equal(controller.getCellFormula({ row: 0, col: 0 }), "=#REF!");
+  } finally {
+    app.unmount();
+  }
+});
+
+test("paste shifts relative references by the copy-to-paste distance", async () => {
+  const { controller, app } = await mountController();
+  try {
+    controller.setCellFormula({ row: 0, col: 1 }, "=$A$1+B1");
+    controller.selectCell({ row: 0, col: 1 });
+    await vue.nextTick();
+    const clipboard = controller.getClipboardData();
+    assert.deepEqual(
+      JSON.parse(clipboard.structured).origin,
+      { col: 1, row: 0 },
+      "the internal payload records where the range was copied from",
+    );
+
+    // One column right: the relative B1 moves, the anchored $A$1 does not.
+    controller.selectCell({ row: 0, col: 3 });
+    assert.equal(controller.pasteStructuredClipboardData(clipboard.structured), true);
+    await vue.nextTick();
+    assert.equal(controller.getCellFormula({ row: 0, col: 3 }), "=$A$1+D1");
+
+    // Two rows down.
+    controller.selectCell({ row: 0, col: 1 });
+    const down = controller.getClipboardData();
+    controller.selectCell({ row: 2, col: 1 });
+    assert.equal(controller.pasteStructuredClipboardData(down.structured), true);
+    await vue.nextTick();
+    assert.equal(controller.getCellFormula({ row: 2, col: 1 }), "=$A$1+B3");
+
+    // Payloads without an origin (other hosts, older builds) paste verbatim.
+    const legacy = JSON.parse(down.structured);
+    delete legacy.origin;
+    controller.selectCell({ row: 6, col: 1 });
+    assert.equal(controller.pasteStructuredClipboardData(JSON.stringify(legacy)), true);
+    await vue.nextTick();
+    assert.equal(controller.getCellFormula({ row: 6, col: 1 }), "=$A$1+B1");
+  } finally {
+    app.unmount();
+  }
+});
+
+test("paste skips merged secondary cells and stays inside sheet bounds", async () => {
+  const { controller, app } = await mountController();
+  try {
+    const worksheet = controller.getActiveWorksheet();
+    const mergeStart = { row: 30, col: 10 };
+    const mergeEnd = { row: 31, col: 11 };
+    const secondaries = [
+      { row: mergeStart.row, col: mergeEnd.col },
+      { row: mergeEnd.row, col: mergeStart.col },
+      { row: mergeEnd.row, col: mergeEnd.col },
+    ];
+    const assertMergeIntact = () => {
+      assert.deepEqual(worksheet.getMergeSpan(mergeStart.row, mergeStart.col), {
+        colSpan: 2,
+        rowSpan: 2,
+      });
+      assert.deepEqual(
+        secondaries.map((cell) => readRawCell(controller, cell)),
+        ["", "", ""],
+        "merged secondary cells must not receive pasted values",
+      );
+    };
+
+    controller.selectRange({ start: mergeStart, end: mergeEnd });
+    controller.mergeSelection();
+    await vue.nextTick();
+    assert.ok(secondaries.every((cell) => worksheet.isMergedSecondary(cell.row, cell.col)));
+    assertMergeIntact();
+
+    // Text paste writes the merge anchor and leaves the secondaries alone.
+    controller.selectCell(mergeStart);
+    assert.equal(controller.pasteText("one\ttwo\nthree\tfour"), true);
+    await vue.nextTick();
+    assert.equal(controller.getCellDisplayValue(mergeStart), "one");
+    assertMergeIntact();
+
+    // Structured (internal copy) paste behaves the same.
+    const sourceStart = { row: 50, col: 10 };
+    controller.setCellValue(sourceStart, "alpha");
+    controller.setCellValue({ row: 50, col: 11 }, "beta");
+    controller.setCellValue({ row: 51, col: 10 }, "gamma");
+    controller.setCellValue({ row: 51, col: 11 }, "delta");
+    controller.selectRange({ start: sourceStart, end: { row: 51, col: 11 } });
+    await vue.nextTick();
+    const block = controller.getClipboardData();
+    controller.selectCell(mergeStart);
+    assert.equal(controller.pasteStructuredClipboardData(block.structured), true);
+    await vue.nextTick();
+    assert.equal(controller.getCellDisplayValue(mergeStart), "alpha");
+    assertMergeIntact();
+
+    // Pasting past the last column stops at the sheet edge instead of writing
+    // an out-of-bounds address, which the worksheet engine rejects.
+    controller.selectCell({ row: 0, col: 16_383 });
+    assert.equal(controller.pasteText("left\tright"), true);
+    await vue.nextTick();
+    assert.equal(controller.getCellDisplayValue({ row: 0, col: 16_383 }), "left");
+    assert.equal(controller.selection?.end.col, 16_383, "the selection stays in bounds");
+
+    controller.setCellValue({ row: 60, col: 10 }, "x");
+    controller.setCellValue({ row: 60, col: 11 }, "y");
+    controller.selectRange({ start: { row: 60, col: 10 }, end: { row: 60, col: 11 } });
+    await vue.nextTick();
+    const wide = controller.getClipboardData();
+    controller.selectCell({ row: 60, col: 16_383 });
+    assert.equal(controller.pasteStructuredClipboardData(wide.structured), true);
+    await vue.nextTick();
+    assert.equal(controller.getCellDisplayValue({ row: 60, col: 16_383 }), "x");
+    assert.equal(controller.selection?.end.col, 16_383, "the selection stays in bounds");
   } finally {
     app.unmount();
   }

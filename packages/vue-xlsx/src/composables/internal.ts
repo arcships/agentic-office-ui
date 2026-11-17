@@ -178,6 +178,12 @@ export type ClipboardPayload = {
   cells: ClipboardMatrixCell[];
   cols: number;
   merges: ClipboardMerge[];
+  /**
+   * Top-left cell the payload was copied from. Paste uses it to shift relative
+   * formula references by the copy→paste distance. Optional so payloads from
+   * older builds and other hosts still paste (verbatim).
+   */
+  origin?: XlsxCellAddress;
   rows: number;
 };
 
