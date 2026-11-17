@@ -222,7 +222,16 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       return true;
     }
 
-    if (Object.is(coerceUserEnteredValue(text), readCellRawValue(cell))) {
+    const resolved = resolveCellInput(text, {
+      date1904: worksheet.date1904 === true,
+      numberFormat: resolveEffectiveCellNumberFormat(
+        worksheet.getCellStyleAt(cell.row, cell.col),
+        ctx.activeSheet.value,
+        cell.row,
+        cell.col
+      )
+    });
+    if (resolved.kind === "value" && Object.is(resolved.value, readCellRawValue(cell))) {
       return false;
     }
 

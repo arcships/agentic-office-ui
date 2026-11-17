@@ -320,7 +320,8 @@ export function asFiniteNumber(value: unknown) {
 export function applyCellMutationState(
   worksheet: ReturnType<Workbook["getSheet"]>,
   cell: XlsxCellAddress,
-  state: CellMutationState
+  state: CellMutationState,
+  fallbackStyle?: unknown
 ) {
   if (state.formula) {
     worksheet.setFormula(cellAddressToA1(cell), state.formula);
@@ -333,13 +334,47 @@ export function applyCellMutationState(
     return;
   }
 
+  if (state.style !== null) {
+    return;
+  }
+
   // `null` means the cell had no explicit style before the mutation. The wasm
   // workbook has no "unset style" entry point, so undo has to restore the
-  // default formatting explicitly; only do that when a style exists now, so
-  // plain value edits never add a style to a cell that never had one.
-  if (state.style === null && worksheet.getCellStyleAt(cell.row, cell.col)) {
-    worksheet.setCellStyleAt(cell.row, cell.col, DEFAULT_CELL_STYLE_PATCH);
+  // effective formatting explicitly: the inherited row/column style (or the
+  // workbook default) when the caller knows it, Excel's defaults otherwise.
+  // A cell that matches the workbook default normalizes back to "no style".
+  // Only touch cells that have a style now, so plain value edits never add a
+  // style to a cell that never had one.
+  if (!worksheet.getCellStyleAt(cell.row, cell.col)) {
+    return;
   }
+
+  const restoreStyle = fallbackStyle && typeof fallbackStyle === "object"
+    ? fallbackStyle
+    : DEFAULT_CELL_STYLE_PATCH;
+  worksheet.setCellStyleAt(cell.row, cell.col, restoreStyle);
+}
+
+/**
+ * Style patch that restores the workbook's default formatting.
+ *
+ * Undo clears a cell that had no explicit style back to the workbook default
+ * rather than to a hard-coded Calibri style, so a workbook with its own default
+ * font (or a default number format) keeps it. The number format is always
+ * explicit, because that is the group undo is usually restoring.
+ */
+export function resolveCellFallbackStyle(
+  sheet: { styleById?: Record<number, unknown> } | null | undefined
+): unknown {
+  const defaultStyle = sheet?.styleById?.[0];
+  if (!defaultStyle || typeof defaultStyle !== "object") {
+    return null;
+  }
+  const record = defaultStyle as Record<string, unknown>;
+  if (record.numberFormat) {
+    return defaultStyle;
+  }
+  return { ...record, numberFormat: { formatType: "general" } };
 }
 
 /**

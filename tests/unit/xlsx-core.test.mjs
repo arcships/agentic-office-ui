@@ -312,6 +312,37 @@ test("XLSX roundtrip preserves values, formula, calculation and cell style", () 
   workbook.free();
 });
 
+test("XLSX styles expose number formats for custom and built-in ids", () => {
+  const workbook = new wasm.Workbook();
+  const sheet = workbook.getSheet(0);
+  sheet.setCell("A1", 1234.5);
+  sheet.setCell("B1", 1234.5);
+  sheet.setCell("C1", 45306);
+  sheet.setCellStyle("A1", {
+    numberFormat: { formatType: "custom", formatString: "[$-407]#,##0.00" },
+  });
+  sheet.setCellStyle("B1", { numberFormat: { formatType: "builtin", id: 14 } });
+  sheet.free();
+
+  const bytes = workbook.saveXlsxBytes();
+  workbook.free();
+
+  const structure = core.parseWorkbookStructureAssets(bytes);
+  const formats = Object.values(structure.styleById).map((style) => style.numberFormat);
+  assert.ok(
+    formats.some((format) => format?.formatType === "custom" && format.formatString === "[$-407]#,##0.00"),
+    "a custom numFmtId keeps its format code",
+  );
+  assert.ok(
+    formats.some((format) => format?.formatType === "builtin" && format.id === 14),
+    "a built-in numFmtId is recorded so the renderer can resolve it",
+  );
+  assert.ok(
+    formats.some((format) => format === undefined),
+    "General styles stay lean",
+  );
+});
+
 test("XLSX export keeps chart parts, chart relationships and chart edits", () => {
   const bytes = bytesFromFile("charts-images.xlsx");
   const workbook = wasm.Workbook.fromBytes(bytes);

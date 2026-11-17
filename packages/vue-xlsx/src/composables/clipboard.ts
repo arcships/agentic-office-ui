@@ -9,7 +9,7 @@ import type {
 import { resolveWorkbookColor, resolveWorkbookFillStyle } from "@arcships/xlsx-core";
 import { cellAddressToA1, normalizeRange, rangeToA1 } from "./selection";
 import { decodeHtmlEntities, escapeHtml, mapBorder, resolveEffectiveCellNumberFormat, resolveInheritedCellStyle } from "./formatting";
-import { DEFAULT_CELL_STYLE_PATCH, resolveCellInput } from "./cell-input";
+import { DEFAULT_CELL_STYLE_PATCH, localizeFormattedNumber, resolveCellInput } from "./cell-input";
 import type { XlsxControllerContext } from "./internal";
 import { XlsxSourceError } from "@arcships/xlsx-core";
 import {
@@ -112,6 +112,23 @@ export function downloadUrl(src: string, fileName: string) {
 }
 
 export function createClipboardDomain(ctx: XlsxControllerContext) {
+  // Only re-render values that can be a localized number; dates, text and
+  // errors skip the extra style lookup entirely.
+  const localizableDisplayValue = /^[\s($€£¥₹₽₪¢₫₴₦₱₸₺฿]*[+-]?\d/;
+
+  function localizeDisplayValue(value: string, worksheet: ReturnType<typeof ctx.getActiveWorksheet>, cell: XlsxCellAddress) {
+    if (!worksheet || !localizableDisplayValue.test(value)) {
+      return value;
+    }
+    const numberFormat = resolveEffectiveCellNumberFormat(
+      worksheet.getCellStyleAt(cell.row, cell.col),
+      ctx.activeSheet.value,
+      cell.row,
+      cell.col
+    );
+    return localizeFormattedNumber(value, numberFormat);
+  }
+
   function getCellDisplayValue(cell?: XlsxCellAddress | null) {
     if (cell && ctx.activeSheet.value) {
       const workerSnapshot = ctx.workerCellSnapshotCacheRef.value.get(`${ctx.activeSheet.value.workbookSheetIndex}:${cell.row}:${cell.col}`);
@@ -129,7 +146,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     const cachedFormulaValue = formula ? ctx.activeSheet.value?.cachedFormulaValues?.[cellAddressToA1(cell)] : undefined;
     const formatted = worksheet.getFormattedValueAt(cell.row, cell.col);
     if (formatted && !(formula && cachedFormulaValue !== undefined && formatted.startsWith("#"))) {
-      return decodeHtmlEntities(formatted);
+      return localizeDisplayValue(decodeHtmlEntities(formatted), worksheet, cell);
     }
 
     const calculated = worksheet.getCalculatedValueAt(cell.row, cell.col);
@@ -144,7 +161,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
         return "";
       }
 
-      return calculated.toString();
+      return localizeDisplayValue(calculated.toString(), worksheet, cell);
     } finally {
       calculated.free();
     }
