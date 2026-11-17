@@ -194,7 +194,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from "vue";
-import { clampSurfaceZoom } from "@arcships/office-runtime/gesture-zoom";
+import { clampSurfaceZoom, nextSurfaceZoom } from "@arcships/office-runtime/gesture-zoom";
 import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures";
 import type { XlsxViewerController, XlsxCellAddress, XlsxCellStyleContext } from "@arcships/xlsx-core";
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction";
@@ -475,6 +475,19 @@ function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMo
 function onTouchPointerUp(event: PointerEvent): void { touchGestures.pointerUp(event); }
 function onTouchPointerCancel(event: PointerEvent): void { touchGestures.pointerCancel(event); }
 
+function onWheel(event: WheelEvent): void {
+  if (props.enableGestureZoom === false || event.defaultPrevented) return;
+  // Chrome/Edge report trackpad pinch as ctrl+wheel; macOS reports Cmd+wheel
+  // for explicit zoom shortcuts. Both must stay inside the viewer.
+  if (!event.ctrlKey && !event.metaKey) return;
+  event.preventDefault();
+  requestViewerZoom(
+    nextSurfaceZoom(pendingZoom ?? currentZoom(), event.deltaY, event.deltaMode),
+    event.clientX,
+    event.clientY,
+  );
+}
+
 watch(() => props.controller.zoomScale, (value) => {
   if (typeof value !== "number" || !Number.isFinite(value)) return;
   const normalized = clampSurfaceZoom(value / 100);
@@ -507,6 +520,7 @@ onMounted(() => {
   element.addEventListener("pointermove", onTouchPointerMove, { passive: true });
   element.addEventListener("pointerup", onTouchPointerUp);
   element.addEventListener("pointercancel", onTouchPointerCancel);
+  element.addEventListener("wheel", onWheel, { passive: false });
 });
 
 onBeforeUnmount(() => {
@@ -519,6 +533,7 @@ onBeforeUnmount(() => {
   element?.removeEventListener("pointermove", onTouchPointerMove);
   element?.removeEventListener("pointerup", onTouchPointerUp);
   element?.removeEventListener("pointercancel", onTouchPointerCancel);
+  element?.removeEventListener("wheel", onWheel);
 });
 
 watch(surfaceSearch.searchState, (next) => {
