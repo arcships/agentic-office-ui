@@ -6,6 +6,7 @@ import {
   mount,
   textContent,
   vue,
+  waitFor,
   walk,
 } from "./vue-test-renderer.mjs";
 
@@ -70,6 +71,7 @@ function installCanvasEnvironment(t) {
         moveTo: (...args) => record("moveTo", ...args),
         lineTo: (...args) => record("lineTo", ...args),
         stroke: () => record("stroke"),
+        drawImage: (...args) => record("drawImage", ...args),
         measureText: (value) => ({ width: String(value).length * 8 }),
       };
       Object.defineProperty(this, "__thumbnailContext", {
@@ -177,6 +179,173 @@ test("DOCX thumbnail paints the document page background colour", async (t) => {
   );
   assert.ok(pageFill, "the thumbnail canvas must use the document background colour");
   assert.deepEqual(pageFill.args.slice(0, 2), [0, 0]);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("DOCX thumbnail rail wraps body text and paints headers, footers and notes", async (t) => {
+  const operations = installCanvasEnvironment(t);
+  const model = cloneDocModel(defaultStarterModel);
+  model.nodes = [
+    {
+      type: "paragraph",
+      children: [{ type: "text", text: "word ".repeat(40) }],
+    },
+  ];
+  model.metadata.headerSections = [
+    {
+      partName: "header1.xml",
+      referenceType: "default",
+      nodes: [paragraph("Confidential header")],
+    },
+  ];
+  model.metadata.footerSections = [
+    {
+      partName: "footer1.xml",
+      referenceType: "default",
+      nodes: [paragraph("Footer disclaimer")],
+    },
+  ];
+  model.metadata.endnotes = [{ id: 1, text: "Endnote details" }];
+
+  const mounted = await mount(DocxThumbnailPanel, {
+    model,
+    layoutOptions: {
+      pageWidth: 300,
+      pageHeight: 400,
+      margin: 30,
+      minLineHeight: 80,
+      paragraphSpacing: 4,
+    },
+    showToggle: false,
+  });
+  await vue.nextTick();
+  await vue.nextTick();
+
+  const firstCanvas = walk(mounted.root).find((node) => node.type === "canvas");
+  const paintedText = operations
+    .filter((operation) => operation.canvas === firstCanvas && operation.name === "fillText")
+    .map((operation) => String(operation.args[0]));
+
+  assert.ok(
+    paintedText.filter((text) => text === "word").length > 1,
+    "wrapped body text must paint more than one line",
+  );
+  assert.ok(paintedText.some((text) => text.includes("Confidential")));
+  assert.ok(paintedText.some((text) => text.includes("Footer")));
+  assert.ok(paintedText.some((text) => text.includes("Endnote")));
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("DOCX thumbnail rail draws embedded images instead of an X placeholder", async (t) => {
+  const operations = installCanvasEnvironment(t);
+  const originalImage = globalThis.Image;
+  globalThis.Image = class {
+    constructor() {
+      this.naturalWidth = 120;
+      this.naturalHeight = 80;
+      this.width = 120;
+      this.height = 80;
+    }
+
+    set src(value) {
+      this._src = value;
+      queueMicrotask(() => this.onload?.());
+    }
+
+    get src() {
+      return this._src;
+    }
+  };
+  t.after(() => {
+    if (originalImage === undefined) delete globalThis.Image;
+    else globalThis.Image = originalImage;
+  });
+
+  const model = cloneDocModel(defaultStarterModel);
+  model.nodes = [
+    {
+      type: "paragraph",
+      children: [
+        {
+          type: "image",
+          src: "data:image/png;base64,AAAA",
+          widthPx: 120,
+          heightPx: 80,
+        },
+      ],
+    },
+  ];
+
+  const mounted = await mount(DocxThumbnailPanel, {
+    model,
+    layoutOptions: { pageWidth: 200, pageHeight: 300, margin: 20, minLineHeight: 20 },
+    showToggle: false,
+  });
+
+  const firstCanvas = walk(mounted.root).find((node) => node.type === "canvas");
+  await waitFor(
+    () => operations.some((operation) => operation.canvas === firstCanvas && operation.name === "drawImage"),
+    "embedded image draw",
+  );
+  assert.ok(
+    operations.some(
+      (operation) =>
+        operation.canvas === firstCanvas &&
+        operation.name === "drawImage" &&
+        operation.args[0]?.naturalWidth === 120,
+    ),
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("DOCX thumbnail rail follows device pixel ratio changes", async (t) => {
+  installCanvasEnvironment(t);
+  const originalWindow = globalThis.window;
+  const resizeListeners = new Set();
+  globalThis.window = {
+    devicePixelRatio: 1,
+    addEventListener(type, listener) {
+      if (type === "resize") resizeListeners.add(listener);
+    },
+    removeEventListener(type, listener) {
+      if (type === "resize") resizeListeners.delete(listener);
+    },
+    matchMedia() {
+      return {
+        addEventListener() {},
+        removeEventListener() {},
+      };
+    },
+  };
+  t.after(() => {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  });
+
+  const model = cloneDocModel(defaultStarterModel);
+  model.nodes = [paragraph("Resolution test")];
+  const mounted = await mount(DocxThumbnailPanel, {
+    model,
+    layoutOptions: { pageWidth: 200, pageHeight: 300, margin: 20 },
+    showToggle: false,
+  });
+  await vue.nextTick();
+  await vue.nextTick();
+
+  const firstCanvas = walk(mounted.root).find((node) => node.type === "canvas");
+  assert.equal(firstCanvas.props.width, 140);
+  assert.equal(firstCanvas.props.height, firstCanvas.props.width * (300 / 200));
+
+  globalThis.window.devicePixelRatio = 2;
+  for (const listener of resizeListeners) listener();
+  await vue.nextTick();
+  await vue.nextTick();
+
+  assert.equal(firstCanvas.props.width, 280);
+  assert.equal(firstCanvas.props.height, 280 * (300 / 200));
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });

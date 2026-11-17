@@ -8,13 +8,22 @@
  * produce a different signature.
  *
  * Long strings (image data URIs can be multiple megabytes) are digested from
- * their length plus head/tail samples instead of being fully hashed.
+ * their length plus head/tail samples instead of being fully hashed, except
+ * for media payloads (data:/blob: URIs) where the bytes are the content: those
+ * are hashed in full so two same-sized images never collide.
+ *
+ * Binary values are hashed byte-for-byte when small and from deterministic
+ * head/middle/tail windows when large, so swapping an image for a different
+ * one of identical byte length still changes the signature.
  */
 
 const FNV_OFFSET_BASIS = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
 const LONG_STRING_SAMPLE_LENGTH = 64;
 const LONG_STRING_THRESHOLD = 256;
+const BINARY_FULL_HASH_THRESHOLD = 1024;
+const BINARY_SAMPLE_LENGTH = 64;
+const BINARY_SAMPLE_COUNT = 8;
 
 function fnv1aAppend(hash: number, text: string): number {
   let next = hash;
@@ -25,8 +34,12 @@ function fnv1aAppend(hash: number, text: string): number {
   return next >>> 0;
 }
 
+function isMediaContentString(value: string): boolean {
+  return value.startsWith("data:") || value.startsWith("blob:");
+}
+
 function fnv1aAppendString(hash: number, value: string): number {
-  if (value.length <= LONG_STRING_THRESHOLD) {
+  if (value.length <= LONG_STRING_THRESHOLD || isMediaContentString(value)) {
     return fnv1aAppend(fnv1aAppend(hash, `${value.length}:`), value);
   }
 
@@ -41,6 +54,52 @@ function fnv1aAppendString(hash: number, value: string): number {
   next = fnv1aAppend(next, head);
   next = fnv1aAppend(next, middle);
   return fnv1aAppend(next, tail);
+}
+
+function fnv1aAppendBytes(hash: number, bytes: Uint8Array): number {
+  let next = hash;
+  for (let index = 0; index < bytes.length; index += 1) {
+    next ^= bytes[index] as number;
+    next = Math.imul(next, FNV_PRIME);
+  }
+  return next >>> 0;
+}
+
+function binaryBytes(value: ArrayBuffer | ArrayBufferView): Uint8Array {
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value);
+  }
+  return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+}
+
+function fnv1aAppendBinary(
+  hash: number,
+  value: ArrayBuffer | ArrayBufferView
+): number {
+  const bytes = binaryBytes(value);
+  let next = fnv1aAppend(hash, `~b${bytes.byteLength}:`);
+  if (bytes.byteLength <= BINARY_FULL_HASH_THRESHOLD) {
+    return fnv1aAppendBytes(next, bytes);
+  }
+
+  // Sample deterministic windows, always including the head, middle and tail.
+  const lastOffset = Math.max(0, bytes.byteLength - BINARY_SAMPLE_LENGTH);
+  const offsets = new Set<number>([
+    0,
+    Math.floor(lastOffset / 2),
+    lastOffset,
+  ]);
+  for (let sample = 1; sample < BINARY_SAMPLE_COUNT; sample += 1) {
+    offsets.add(Math.round((lastOffset * sample) / BINARY_SAMPLE_COUNT));
+  }
+  for (const offset of [...offsets].sort((left, right) => left - right)) {
+    next = fnv1aAppend(next, `@${offset}:`);
+    next = fnv1aAppendBytes(
+      next,
+      bytes.subarray(offset, offset + BINARY_SAMPLE_LENGTH)
+    );
+  }
+  return next >>> 0;
 }
 
 function fnv1aAppendValue(hash: number, value: unknown): number {
@@ -73,9 +132,7 @@ function fnv1aAppendValue(hash: number, value: unknown): number {
   }
 
   if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
-    const byteLength =
-      value instanceof ArrayBuffer ? value.byteLength : value.byteLength;
-    return fnv1aAppend(hash, `~b${byteLength}`);
+    return fnv1aAppendBinary(hash, value);
   }
 
   let next = fnv1aAppend(hash, "~o");
@@ -124,14 +181,17 @@ interface ThumbnailRelevantMetadata {
   compatibility?: unknown;
   headerSections?: unknown;
   footerSections?: unknown;
+  paragraphStyles?: unknown;
+  defaultParagraphStyleId?: unknown;
 }
 
 const metadataSignatureCache = new WeakMap<object, string>();
 
 /**
  * Signature of the metadata fields that affect a rendered page surface
- * (headers, footers, numbering, footnotes, page background). Deliberately
- * excludes bulky fields with no visual impact (`sourceParts`, `warnings`).
+ * (headers, footers, numbering, footnotes, page background, style tables).
+ * Deliberately excludes bulky fields with no visual impact (`sourceParts`,
+ * `warnings`).
  */
 export function docModelThumbnailMetadataSignature(metadata: object): string {
   const cached = metadataSignatureCache.get(metadata);
@@ -149,6 +209,10 @@ export function docModelThumbnailMetadataSignature(metadata: object): string {
   hash = fnv1aAppendValue(hash, relevant.endnotes);
   hash = fnv1aAppendValue(hash, relevant.documentBackgroundColor);
   hash = fnv1aAppendValue(hash, relevant.compatibility);
+  // Style tables decide every page's typography, so editing "Normal" or the
+  // default style id must invalidate page thumbnails too.
+  hash = fnv1aAppendValue(hash, relevant.paragraphStyles);
+  hash = fnv1aAppendValue(hash, relevant.defaultParagraphStyleId);
   const signature = (hash >>> 0).toString(36);
   metadataSignatureCache.set(metadata, signature);
   return signature;

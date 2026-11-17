@@ -285,44 +285,68 @@ let publishedSurface:
     }
   | undefined
 
-function unpublishPageSurface(): void {
+function unpublishPageSurface(notify = true): void {
   if (!publishedSurface) return
   const { controller, element, pageIndex } = publishedSurface
+  publishedSurface = undefined
   const registry = ensureDocxViewerPageSurfaceRegistry(controller)
   if (registry.pageElements.get(pageIndex) === element) {
     registry.pageElements.delete(pageIndex)
     registry.pageContentKeys.delete(pageIndex)
     registry.pageSizes.delete(pageIndex)
-    registry.pageThumbnailSnapshots.delete(pageIndex)
-    notifyDocxViewerPageSurfaceListeners(controller)
+    if (notify) {
+      notifyDocxViewerPageSurfaceListeners(controller, {
+        pageIndex,
+        kind: "unpublish",
+      })
+    }
   }
-  publishedSurface = undefined
 }
 
 function publishPageSurface(): void {
-  unpublishPageSurface()
   const controller = props.controller
   const element = pageSurfaceRef.value
-  if (!controller || !element) return
+  if (!controller || !element) {
+    unpublishPageSurface()
+    return
+  }
 
+  // Replacing a surface for the same page is one publish, not an unpublish
+  // notification followed by a publish notification.
   const registry = ensureDocxViewerPageSurfaceRegistry(controller)
-  registry.pageElements.set(props.pageIndex, element)
-  registry.pageSizes.set(props.pageIndex, {
+  const previousElement = registry.pageElements.get(props.pageIndex)
+  const previousContentKey = registry.pageContentKeys.get(props.pageIndex)
+  const previousSize = registry.pageSizes.get(props.pageIndex)
+  unpublishPageSurface(false)
+  const pageSize = {
     widthPx: props.pageWidthPx,
     heightPx: props.pageLayout.pageHeightPx,
-  })
-  registry.pageContentKeys.set(
-    props.pageIndex,
-    [
-      controller.documentLoadNonce,
-      docModelThumbnailMetadataSignature(props.model.metadata),
-      ...props.pageNodeSegments.map((segment) =>
-        docNodeContentSignature(props.model.nodes[segment.nodeIndex])
-      ),
-    ].join(":")
-  )
+  }
+  const contentKey = [
+    controller.documentLoadNonce,
+    docModelThumbnailMetadataSignature(props.model.metadata),
+    ...props.pageNodeSegments.map((segment) =>
+      docNodeContentSignature(props.model.nodes[segment.nodeIndex])
+    ),
+  ].join(":")
+
+  registry.pageElements.set(props.pageIndex, element)
+  registry.pageSizes.set(props.pageIndex, pageSize)
+  registry.pageContentKeys.set(props.pageIndex, contentKey)
   publishedSurface = { controller, element, pageIndex: props.pageIndex }
-  notifyDocxViewerPageSurfaceListeners(controller)
+
+  const changed =
+    previousElement !== element ||
+    previousContentKey !== contentKey ||
+    previousSize?.widthPx !== pageSize.widthPx ||
+    previousSize?.heightPx !== pageSize.heightPx
+  if (changed) {
+    notifyDocxViewerPageSurfaceListeners(controller, {
+      pageIndex: props.pageIndex,
+      kind: "publish",
+      contentKey,
+    })
+  }
 }
 
 // ── Computed ───────────────────────────────────────────────────────
@@ -674,6 +698,7 @@ watch(
     props.controller,
     props.controller?.documentLoadNonce,
     props.model,
+    props.pageNodeSegments,
     props.pageIndex,
     props.pageWidthPx,
     props.pageLayout.pageHeightPx,
