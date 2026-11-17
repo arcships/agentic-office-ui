@@ -123,7 +123,10 @@ export function createEditorTextInput(
       table.sourceXml = undefined
       return true
     }
-    para.children = [{ type: "text", text, style: {} }]
+    // Diff instead of replacing the run list: a cell paragraph can carry a
+    // footnote/endnote reference (or an image/form field) that must survive the
+    // text edit, exactly like body paragraphs and index-based cell commits.
+    para.children = distributeTextAcrossParagraphChildren(para, text)
     para.sourceXml = undefined
     table.sourceXml = undefined
     return true

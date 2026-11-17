@@ -103,6 +103,26 @@ const secondNote = noteXml(
   "<w:p><w:r><w:t>Second note</w:t></w:r></w:p>",
 );
 
+function noteTableXml(rowCount, cellText = "Note table cell") {
+  const rows = Array.from(
+    { length: rowCount },
+    () => `<w:tr><w:tc><w:p><w:r><w:t>${cellText}</w:t></w:r></w:p></w:tc></w:tr>`,
+  ).join("");
+  return `<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid>${rows}</w:tbl>`;
+}
+
+function tableWithCellParagraphXml(paragraphBodyXml) {
+  return (
+    '<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid>' +
+    `<w:tr><w:tc>${paragraphBodyXml}</w:tc></w:tr></w:tbl>`
+  );
+}
+
+function cellNoteParagraphXml(text, reference) {
+  return `<w:p><w:r><w:t>${text}</w:t></w:r>` +
+    `<w:r><w:${reference.kind}Reference w:id="${reference.id}"/></w:r></w:p>`;
+}
+
 test("note references are read from the run model and survive sourceXml loss", async () => {
   const model = await buildModel({
     body: paragraphXml("Alpha", { kind: "footnote", id: 3 }),
@@ -349,4 +369,228 @@ test("section-level notePr overrides the document defaults", async () => {
     [0, 5, "B"],
     [2, 9, "3"],
   ]);
+});
+
+// ── Remaining issue #32 items ──────────────────────────────────────
+
+function snapshotSegmentsByPage(snapshot) {
+  return snapshot.pages.map((page) =>
+    page.blocks.map((block) => ({ nodeIndex: block.source.nodeIndex })),
+  );
+}
+
+function pageBodyBottomPx(page) {
+  return Math.max(
+    0,
+    ...page.blocks.map((block) => block.framePx.y + block.framePx.height),
+  );
+}
+
+function pageContentBottomPx(page) {
+  return page.contentBoxPx.y + page.contentBoxPx.height;
+}
+
+test("note-height estimate counts tables inside note bodies", async () => {
+  const model = await buildModel({
+    body: paragraphXml("Alpha", { kind: "footnote", id: 3 }),
+    footnotes: noteXml(
+      "footnote",
+      3,
+      "<w:p><w:r><w:t>Short note</w:t></w:r></w:p>" + noteTableXml(6),
+    ),
+  });
+  const note = model.metadata.footnotes.find((entry) => entry.id === 3);
+  const estimateOptions = {
+    estimateDocNodeHeightPx: core.estimateDocNodeHeightPx,
+    numberingDefinitions: model.metadata.numberingDefinitions,
+  };
+
+  const fullEstimate = core.estimateDocumentNoteSectionHeightPx(
+    [note],
+    600,
+    estimateOptions,
+  );
+  const paragraphOnly = core.estimateDocumentNoteSectionHeightPx(
+    [{ ...note, nodes: note.nodes.filter((node) => node.type === "paragraph") }],
+    600,
+    estimateOptions,
+  );
+  const tableOnly = core.estimateDocumentNoteSectionHeightPx(
+    [{ ...note, nodes: note.nodes.filter((node) => node.type === "table") }],
+    600,
+    estimateOptions,
+  );
+
+  assert.ok(tableOnly > 0, "a note table needs a height estimate");
+  // Each estimate adds the 19px section chrome once; the note with both nodes
+  // adds one 4px block gap on top.
+  assert.equal(fullEstimate, paragraphOnly + 4 + tableOnly - 19);
+  assert.ok(
+    fullEstimate > paragraphOnly + 100,
+    "six table rows must add more than the paragraph gap",
+  );
+  assert.equal(core.estimateDocumentNoteSectionHeightPx([], 600, estimateOptions), 0);
+});
+
+test("page note reserve follows footnote and endnote placement", async () => {
+  const model = await buildModel({
+    body:
+      paragraphXml("Alpha", { kind: "footnote", id: 3 }) +
+      paragraphXml("Beta") +
+      paragraphXml("Gamma", { kind: "endnote", id: 4 }),
+    footnotes: firstNote,
+    endnotes: noteXml("endnote", 4, "<w:p><w:r><w:t>An endnote</w:t></w:r></w:p>"),
+  });
+  const reservablePages = [pageOf([0]), pageOf([1]), pageOf([2])];
+  const reservePx = core.resolvePageNoteReservePx(model, reservablePages, {
+    estimateDocNodeHeightPx: core.estimateDocNodeHeightPx,
+    numberingDefinitions: model.metadata.numberingDefinitions,
+    pageContentWidthPx: 600,
+  });
+
+  assert.equal(reservePx.length, 3);
+  assert.ok(reservePx[0] > 0, "page 0 owns the footnote");
+  assert.equal(reservePx[1], 0, "page 1 has no notes");
+  assert.ok(reservePx[2] > 0, "the endnote prints on the document's last page");
+});
+
+test("buildLayoutSnapshot reserves note height so tall note tables cannot overflow", async () => {
+  const paragraphs = Array.from(
+    { length: 40 },
+    (_value, index) =>
+      paragraphXml(
+        `Body line ${index + 1}`,
+        index === 0 ? { kind: "footnote", id: 3 } : undefined,
+      ),
+  ).join("");
+  const model = await buildModel({
+    body: paragraphs,
+    footnotes: noteXml(
+      "footnote",
+      3,
+      "<w:p><w:r><w:t>Note with a tall table</w:t></w:r></w:p>" + noteTableXml(24),
+    ),
+  });
+
+  const withoutReserve = core.buildLayoutSnapshot(model, {
+    reserveNoteHeight: false,
+  });
+  const withReserve = core.buildLayoutSnapshot(model);
+
+  assert.equal(withoutReserve.pages.length, 1, "all body lines fit without notes");
+  assert.ok(
+    withReserve.pages.length > withoutReserve.pages.length,
+    "the note reserve must push body lines to the next page",
+  );
+
+  const reservePx = core.resolvePageNoteReservePx(
+    model,
+    snapshotSegmentsByPage(withReserve),
+    {
+      estimateDocNodeHeightPx: core.estimateDocNodeHeightPx,
+      numberingDefinitions: model.metadata.numberingDefinitions,
+      resolvePageContentWidthPx: (pageIndex) =>
+        withReserve.pages[pageIndex].contentBoxPx.width,
+    },
+  );
+  assert.ok(reservePx[0] > 0, "the note page reserves its note section height");
+  const notePage = withReserve.pages[0];
+  assert.ok(
+    pageBodyBottomPx(notePage) + reservePx[0] <= pageContentBottomPx(notePage) + 2,
+    `body bottom ${pageBodyBottomPx(notePage)} + reserve ${reservePx[0]} must fit in ${pageContentBottomPx(notePage)}`,
+  );
+  assert.ok(
+    notePage.blocks.length < withoutReserve.pages[0].blocks.length,
+    "the note page carries fewer body blocks than without a reserve",
+  );
+});
+
+test("buildLayoutSnapshot reserves the endnote block on the last page", async () => {
+  const model = await buildModel({
+    body: paragraphXml("Alpha", { kind: "endnote", id: 4 }),
+    endnotes: noteXml(
+      "endnote",
+      4,
+      "<w:p><w:r><w:t>Endnote text</w:t></w:r></w:p>" + noteTableXml(3),
+    ),
+  });
+  const snapshot = core.buildLayoutSnapshot(model);
+  const reservePx = core.resolvePageNoteReservePx(
+    model,
+    snapshotSegmentsByPage(snapshot),
+    {
+      estimateDocNodeHeightPx: core.estimateDocNodeHeightPx,
+      numberingDefinitions: model.metadata.numberingDefinitions,
+      resolvePageContentWidthPx: (pageIndex) =>
+        snapshot.pages[pageIndex].contentBoxPx.width,
+    },
+  );
+
+  const lastPageIndex = snapshot.pages.length - 1;
+  assert.ok(reservePx[lastPageIndex] > 0);
+  const lastPage = snapshot.pages[lastPageIndex];
+  assert.ok(
+    pageBodyBottomPx(lastPage) + reservePx[lastPageIndex] <=
+      pageContentBottomPx(lastPage) + 2,
+  );
+});
+
+test("notes inside table cells are numbered and attached to the page", async () => {
+  const model = await buildModel({
+    body: tableWithCellParagraphXml(
+      cellNoteParagraphXml("Cell text", { kind: "footnote", id: 3 }),
+    ),
+    footnotes: firstNote,
+  });
+  assert.equal(model.nodes[0].type, "table");
+
+  const [page] = core.buildDocumentPageNotes(model, [pageOf([0])]);
+  assert.deepEqual(labels(page.footnotes), [[3, "1"]]);
+  assert.equal(page.footnoteLabels.get(3), "1");
+});
+
+test("table cell text edits keep the cell's note reference", async () => {
+  const model = await buildModel({
+    body: tableWithCellParagraphXml(
+      cellNoteParagraphXml("Cell text", { kind: "footnote", id: 3 }),
+    ),
+    footnotes: firstNote,
+  });
+
+  const cellParagraph = (candidate) =>
+    candidate.nodes[0].rows[0].cells[0].nodes[0];
+
+  const cellEdit = core.updateTableCellText(model, 0, 0, 0, "Cell edited");
+  assert.deepEqual(
+    core.paragraphNoteReferences(cellParagraph(cellEdit)),
+    [{ kind: "footnote", id: 3 }],
+  );
+  const [cellEditPage] = core.buildDocumentPageNotes(cellEdit, [pageOf([0])]);
+  assert.deepEqual(labels(cellEditPage.footnotes), [[3, "1"]]);
+
+  const paragraphEdit = core.updateTableCellParagraphText(
+    model,
+    0,
+    0,
+    0,
+    0,
+    "Cell paragraph edited",
+  );
+  assert.deepEqual(
+    core.paragraphNoteReferences(cellParagraph(paragraphEdit)),
+    [{ kind: "footnote", id: 3 }],
+  );
+
+  const recursiveEdit = core.updateTableCellParagraphTextRecursive(
+    model,
+    0,
+    0,
+    0,
+    0,
+    "Cell recursive edited",
+  );
+  assert.deepEqual(
+    core.paragraphNoteReferences(cellParagraph(recursiveEdit)),
+    [{ kind: "footnote", id: 3 }],
+  );
 });
