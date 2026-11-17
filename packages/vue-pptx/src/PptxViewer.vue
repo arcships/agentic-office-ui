@@ -36,9 +36,10 @@
           @keydown.esc.prevent="closeSearch"
         />
         <button type="submit" :disabled="state !== 'ready' || !searchQuery.trim()">{{ m.pptx.viewer.search }}</button>
-        <span v-if="searchResults.length" class="pptx-viewer__search-count">
+        <span v-if="searchResults.length" class="pptx-viewer__search-count" aria-hidden="true">
           {{ searchCursor + 1 }} / {{ searchResults.length }}
         </span>
+        <OfficeLiveStatus test-id="pptx-search-status" :message="searchStatusMessage" />
         <button v-if="searchResults.length" type="button" :aria-label="m.common.search.previous" @click="run(() => moveSearch(-1))">↑</button>
         <button v-if="searchResults.length" type="button" :aria-label="m.common.search.next" @click="run(() => moveSearch(1))">↓</button>
       </form>
@@ -523,6 +524,21 @@ const liveStatusMessage = computed(() => {
     ? formatOfficeMessage(m.value.pptx.viewer.live.playbackSuffix, { status: playbackStatusText.value })
     : ""
   return `${position}${hidden}${playbackStatus}`
+})
+
+// The search hit counter used to be a visual-only span. DOCX, XLSX and PDF all
+// announce hits through a status region; the PPTX viewer now speaks the same
+// common search wording so a slide search is announced the same way in every
+// format.
+const searchStatusMessage = computed(() => {
+  const search = pptxDocument.searchState.value
+  if (search.status === "searching") return m.value.common.search.searching
+  if (search.status === "error") return m.value.common.search.error
+  if (!search.query.trim()) return ""
+  const total = search.matches.length
+  if (!total) return m.value.common.search.noResults
+  const current = Math.min(Math.max(search.activeIndex + 1, 1), total)
+  return formatOfficeMessage(m.value.common.search.resultOf, { current, total })
 })
 
 function toPlaybackError(reason: unknown): PptxPlaybackError {

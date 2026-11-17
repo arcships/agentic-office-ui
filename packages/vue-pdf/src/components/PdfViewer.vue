@@ -1311,11 +1311,11 @@ defineExpose({
         <button data-testid="pdf-search-prev" type="button" :disabled="!searchHits.length" :aria-label="m.common.search.previous" @click="moveSearch(-1)">↑</button>
         <button data-testid="pdf-search-next" type="button" :disabled="!searchHits.length" :aria-label="m.common.search.next" @click="moveSearch(1)">↓</button>
       </form>
-      <span v-if="searchResult" data-testid="pdf-search-result" class="search-result" role="status">{{ searchResult }}</span>
+      <span v-if="searchResult" data-testid="pdf-search-result" class="search-result" role="status" aria-atomic="true">{{ searchResult }}</span>
       <button v-if="props.showDownload" data-testid="pdf-download" type="button" :disabled="!verifiedBlob || !!loadError" :aria-label="m.pdf.viewer.download" @click="handleDownload">⬇</button>
     </div>
 
-    <div data-testid="pdf-status" class="pdf-status" :data-state="viewerState" aria-live="polite">{{ viewerState }}</div>
+    <div data-testid="pdf-status" class="pdf-status" :data-state="viewerState" role="status" aria-live="polite" aria-atomic="true">{{ viewerState }}</div>
     <div v-if="!effectiveSource" class="pdf-empty">{{ m.pdf.viewer.noPdf }}</div>
     <div v-else-if="isLoading && !renderDocument" class="pdf-empty">{{ m.pdf.viewer.opening }}</div>
     <div v-else-if="loadError" data-testid="load-error" class="pdf-error" :data-error-code="loadError.code">
