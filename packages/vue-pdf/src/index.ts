@@ -74,6 +74,8 @@ export type {
   PdfOpenDocumentOptions,
   PdfPageRenderOptions,
   PdfPageRenderParameters,
+  PdfPageTextLayer,
+  PdfPageTextLayerGlyph,
   PdfPasswordHandler,
   PdfPasswordRequest,
   PdfRenderAnnotation,

@@ -65,11 +65,13 @@ function createPdfRuntime({
   onSearch,
   onSetFormFieldValue,
   onUpdateAnnotationAppearance,
+  onGetPageTextLayer,
 } = {}) {
   const calls = {
     closeDocument: [],
     dispose: [],
     getPageAnnotations: [],
+    getPageTextLayer: [],
     getPageTextGeometry: [],
     getTextSlices: [],
     openDocument: [],
@@ -121,6 +123,16 @@ function createPdfRuntime({
           },
         }
       : {}),
+    async getPageTextLayer(currentDocument, pageIndex, options = {}) {
+      calls.getPageTextLayer.push({ document: currentDocument, options, pageIndex });
+      if (onGetPageTextLayer) return onGetPageTextLayer(currentDocument, pageIndex, options);
+      return {
+        pageIndex,
+        width: currentDocument.pages[pageIndex]?.width ?? 0,
+        height: currentDocument.pages[pageIndex]?.height ?? 0,
+        glyphs: [],
+      };
+    },
     ...(onSetFormFieldValue
       ? {
           async setFormFieldValue(currentDocument, pageIndex, annotationId, value, options = {}) {
@@ -170,6 +182,20 @@ function pdfTextGeometry(text) {
         flags: character === " " ? 1 : 0,
       })),
     }],
+  };
+}
+
+function pdfTestTextLayer(text, { pageIndex = 0, width = 600, height = 800 } = {}) {
+  return {
+    pageIndex,
+    width,
+    height,
+    glyphs: Array.from(text, (character, index) => ({
+      charIndex: index,
+      text: character,
+      rect: { x: index * 10, y: 0, width: 8, height: 12 },
+      unmapped: /[\u0000\ufffd\ufffe]/u.test(character),
+    })),
   };
 }
 
@@ -1989,6 +2015,161 @@ test("PdfViewer uses the native second click to select a word", async () => {
   await waitFor(() => selections.at(-1)?.kind === "text", "PDF viewer double-click word selection");
   assert.equal(selections.at(-1).text, "world");
   assert.deepEqual(selections.at(-1).range, { pageIndex: 0, charIndex: 6, charCount: 5 });
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+function pdfTextGlyphNodes(root, selector) {
+  return walk(root).filter((node) =>
+    typeof node.props?.class === "string" && node.props.class.split(/\s+/).includes(selector));
+}
+
+test("PdfSurface renders a positioned DOM text layer that keeps selection working", async () => {
+  const text = "abc";
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => pdfTextGeometry(text),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      text.slice(slice.charIndex, slice.charIndex + slice.charCount)),
+    onGetPageTextLayer: () => pdfTestTextLayer(text),
+  });
+  const selections = [];
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    onSelectionChange: (selection) => selections.push(selection),
+  });
+  await waitFor(
+    () => walk(mounted.root).some((node) => node.props?.["data-text-page"] === 0),
+    "PDF accessible text layer",
+  );
+  const layer = walk(mounted.root).find((node) => node.props?.["data-text-page"] === 0);
+  assert.equal(layer.props["data-text-transform"], "matrix(1, 0, 0, 1, 0, 0)");
+  assert.equal(layer.props.style.width, "600px");
+  assert.equal(layer.props.style.height, "800px");
+  assert.equal(layer.props["aria-hidden"], undefined, "the text layer stays visible to assistive tech");
+
+  const glyphs = pdfTextGlyphNodes(mounted.root, "pdf-surface__text-glyph");
+  assert.deepEqual(glyphs.map((glyph) => textContent(glyph)), ["a", "b", "c"]);
+  assert.deepEqual(glyphs.map((glyph) => glyph.props["data-char-index"]), [0, 1, 2]);
+  assert.equal(glyphs[1].props.style.left, "10px");
+  assert.equal(glyphs[1].props.style.top, "0px");
+  assert.equal(glyphs[1].props.style.width, "8px");
+  assert.equal(glyphs[1].props.style.height, "12px");
+  assert.equal(glyphs[1].props.style.fontSize, "12px");
+  assert.deepEqual(glyphs.map((glyph) => glyph.props["aria-hidden"]), [undefined, undefined, undefined]);
+
+  const interaction = preparePdfSurfaceInteraction(mounted.root);
+  interaction.props.onPointerdown(pdfPointerEvent(interaction, { clientX: 2 }));
+  interaction.props.onPointerup(pdfPointerEvent(interaction, { clientX: 22 }));
+  await waitFor(() => selections.at(-1)?.kind === "text", "selection with the text layer present");
+  assert.equal(selections.at(-1).text, "abc");
+  assert.equal(
+    walk(mounted.root).filter((node) => node.props?.class === "pdf-surface__selection-hit").length > 0,
+    true,
+    "geometry selection rectangles still render",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfSurface text layer transforms with zoom and rotation instead of moving spans", async () => {
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => pdfTextGeometry("ab"),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      "ab".slice(slice.charIndex, slice.charIndex + slice.charCount)),
+    onGetPageTextLayer: () => pdfTestTextLayer("ab"),
+  });
+  let api;
+  const Harness = vue.defineComponent({
+    setup() {
+      const surface = vue.ref(null);
+      vue.watch(surface, (value) => { api = value; }, { flush: "sync" });
+      return () => vue.h(PdfSurface, {
+        ref: surface,
+        source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+        runtime: fake.runtime,
+        zoom: 2,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(() => api && walk(mounted.root).some((node) => node.props?.["data-text-page"] === 0), "zoomed text layer");
+  const layer = walk(mounted.root).find((node) => node.props?.["data-text-page"] === 0);
+  assert.equal(layer.props["data-text-transform"], "matrix(2, 0, 0, 2, 0, 0)");
+  assert.equal(layer.props.style.transform, "matrix(2, 0, 0, 2, 0, 0)");
+  const glyph = pdfTextGlyphNodes(mounted.root, "pdf-surface__text-glyph")[1];
+  assert.equal(glyph.props.style.left, "10px", "glyph spans stay in canonical coordinates");
+
+  api.rotation = 90;
+  await waitFor(
+    () => walk(mounted.root).find((node) => node.props?.["data-text-page"] === 0)?.props["data-text-transform"]
+      === "matrix(0, 2, -2, 0, 1600, 0)",
+    "rotated text layer transform",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfSurface marks unmapped text-layer glyphs as hidden from assistive tech", async () => {
+  const text = "a\ufffdb";
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => pdfTextGeometry(text),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      text.slice(slice.charIndex, slice.charIndex + slice.charCount)),
+    onGetPageTextLayer: () => pdfTestTextLayer(text),
+  });
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+  });
+  await waitFor(
+    () => walk(mounted.root).some((node) => node.props?.["data-text-page"] === 0),
+    "PDF text layer with unmapped glyph",
+  );
+  const glyphs = pdfTextGlyphNodes(mounted.root, "pdf-surface__text-glyph");
+  assert.deepEqual(glyphs.map((glyph) => glyph.props["aria-hidden"]), [undefined, "true", undefined]);
+  assert.equal(glyphs[1].props.class, "pdf-surface__text-glyph pdf-surface__text-glyph--unmapped");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfViewer renders the text layer and re-transforms it on rotate and zoom", async () => {
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => pdfTextGeometry("hi"),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      "hi".slice(slice.charIndex, slice.charIndex + slice.charCount)),
+    onGetPageTextLayer: () => pdfTestTextLayer("hi"),
+  });
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pdf-status")?.props["data-state"] === "ready" &&
+      findByTestId(mounted.root, "pdf-text-layer"),
+    "PDF viewer text layer",
+  );
+  const layer = findByTestId(mounted.root, "pdf-text-layer");
+  assert.equal(layer.props["data-text-transform"], "matrix(1, 0, 0, 1, 0, 0)");
+  const glyphs = pdfTextGlyphNodes(mounted.root, "pdf-viewer__text-glyph");
+  assert.deepEqual(glyphs.map((glyph) => textContent(glyph)), ["h", "i"]);
+  assert.equal(glyphs[0].props.style.fontSize, "12px");
+
+  await findByTestId(mounted.root, "pdf-rotate").props.onClick();
+  await waitFor(
+    () => findByTestId(mounted.root, "pdf-text-layer")?.props["data-text-transform"] === "matrix(0, 1, -1, 0, 800, 0)",
+    "rotated viewer text layer",
+  );
+
+  await findByTestId(mounted.root, "pdf-zoom-in").props.onClick();
+  await waitFor(
+    () => findByTestId(mounted.root, "pdf-text-layer")?.props["data-text-transform"] === "matrix(0, 1.25, -1.25, 0, 1000, 0)",
+    "zoomed rotated viewer text layer",
+  );
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });

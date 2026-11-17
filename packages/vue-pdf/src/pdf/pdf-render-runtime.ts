@@ -216,6 +216,32 @@ export interface PdfAnnotationAppearancePatch {
   strokeWidth?: number
 }
 
+/** One positioned character of the accessible PDF text layer. */
+export interface PdfPageTextLayerGlyph {
+  /** PDFium character index used for text extraction and hit-testing. */
+  charIndex: number
+  text: string
+  /** Canonical page-space box of the glyph; the layer transform scales it. */
+  rect: PdfRenderRect
+  /** True when PDFium has no reliable Unicode mapping for the character. */
+  unmapped: boolean
+}
+
+/**
+ * A page of extractable text positioned in canonical page space. The Surface
+ * renders one transparent DOM span per glyph so browser find, screen readers and
+ * CJK extraction see real text, while the bitmap stays the visual source.
+ */
+export interface PdfPageTextLayer {
+  pageIndex: number
+  /** Canonical page width; the text layer's untransformed coordinate width. */
+  width: number
+  /** Canonical page height; the text layer's untransformed coordinate height. */
+  height: number
+  /** Glyphs in PDFium reading order (run order, then character order). */
+  glyphs: readonly PdfPageTextLayerGlyph[]
+}
+
 export interface PdfPageRenderOptions {
   scale: number
   rotation: PdfRotation
@@ -425,6 +451,16 @@ export interface PdfRenderRuntime {
     options?: { signal?: AbortSignal },
   ): Promise<readonly PdfRenderAnnotation[]>
   /**
+   * Positioned text for the accessible text layer. Optional so injected
+   * runtimes that only raster pages can omit it; the Surface then renders no
+   * text layer instead of fabricating text.
+   */
+  getPageTextLayer?(
+    document: PdfRenderDocument,
+    pageIndex: number,
+    options?: { signal?: AbortSignal },
+  ): Promise<PdfPageTextLayer>
+  /**
    * Write one AcroForm widget value and return the refreshed annotation.
    *
    * Runtime implementers that cannot write forms omit this method; the Surface
@@ -581,6 +617,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
   private readonly documents = new Map<string, PdfDocumentObject>()
   private readonly contentHashRequests = new Map<string, Promise<string>>()
   private readonly rawPageAnnotations = new Map<string, readonly PdfAnnotationObject[]>()
+  private readonly pageTextLayers = new Map<string, PdfPageTextLayer>()
   private documentSequence = 0
   private disposed = false
 
@@ -847,7 +884,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     })
   }
 
-  private annotationCacheKey(document: PdfRenderDocument, pageIndex: number): string {
+  private pageCacheKey(document: PdfRenderDocument, pageIndex: number): string {
     return `${document.id}:${pageIndex}`
   }
 
@@ -856,7 +893,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     pageIndex: number,
     options: { signal?: AbortSignal } = {},
   ): Promise<readonly PdfAnnotationObject[]> {
-    const key = this.annotationCacheKey(document, pageIndex)
+    const key = this.pageCacheKey(document, pageIndex)
     const cached = this.rawPageAnnotations.get(key)
     if (cached) return cached
     const nativeDocument = this.getNativeDocument(document)
@@ -876,7 +913,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     pageIndex: number,
     options: { signal?: AbortSignal } = {},
   ): Promise<readonly PdfRenderAnnotation[]> {
-    this.rawPageAnnotations.delete(this.annotationCacheKey(document, pageIndex))
+    this.rawPageAnnotations.delete(this.pageCacheKey(document, pageIndex))
     const annotations = await this.readRawPageAnnotations(document, pageIndex, options)
     const renderPage = document.pages[pageIndex]
     if (!renderPage) throw new Error(`PDF page ${pageIndex + 1} does not exist.`)
@@ -911,6 +948,70 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     return mapPdfAnnotationObjects(annotations, renderPage)
   }
 
+  async getPageTextLayer(
+    document: PdfRenderDocument,
+    pageIndex: number,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<PdfPageTextLayer> {
+    const key = this.pageCacheKey(document, pageIndex)
+    const cached = this.pageTextLayers.get(key)
+    if (cached) return cached
+    const nativeDocument = this.getNativeDocument(document)
+    const page = nativeDocument.pages[pageIndex]
+    const renderPage = document.pages[pageIndex]
+    if (!page || !renderPage) throw new Error(`PDF page ${pageIndex + 1} does not exist.`)
+    const geometry = await runPdfTask(this.getEngine().getPageGeometry(nativeDocument, page), {
+      signal: options.signal,
+      timeoutMs: this.operationTimeoutMs,
+      label: `PDF page ${pageIndex + 1} text layer geometry`,
+    })
+    const boxes: Array<{ charIndex: number; rect: PdfRenderRect }> = []
+    for (const run of geometry.runs) {
+      for (let offset = 0; offset < run.glyphs.length; offset++) {
+        const glyph = run.glyphs[offset]
+        // flags 2 marks an empty glyph that carries no text or box.
+        if (glyph.flags === 2) continue
+        if (!(glyph.width > 0) || !(glyph.height > 0)) continue
+        boxes.push({
+          charIndex: run.charStart + offset,
+          rect: { x: glyph.x, y: glyph.y, width: glyph.width, height: glyph.height },
+        })
+      }
+    }
+    const texts = boxes.length > 0
+      ? await runPdfTask(
+          this.getEngine().getTextSlices(
+            nativeDocument,
+            boxes.map((box) => ({ pageIndex, charIndex: box.charIndex, charCount: 1 })),
+          ),
+          {
+            signal: options.signal,
+            timeoutMs: this.operationTimeoutMs,
+            label: `PDF page ${pageIndex + 1} text layer characters`,
+          },
+        )
+      : []
+    const glyphs: PdfPageTextLayerGlyph[] = []
+    for (let index = 0; index < boxes.length; index++) {
+      const text = texts[index] ?? ""
+      if (!text) continue
+      glyphs.push({
+        charIndex: boxes[index].charIndex,
+        rect: boxes[index].rect,
+        text,
+        unmapped: /[\u0000\ufffd\ufffe]/u.test(text),
+      })
+    }
+    const layer: PdfPageTextLayer = {
+      pageIndex,
+      width: renderPage.width,
+      height: renderPage.height,
+      glyphs,
+    }
+    if (this.documents.has(document.id)) this.pageTextLayers.set(key, layer)
+    return layer
+  }
+
   async setFormFieldValue(
     document: PdfRenderDocument,
     pageIndex: number,
@@ -942,6 +1043,9 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     const updated = await this.refreshMappedPageAnnotations(document, pageIndex, options)
     const next = updated.find((candidate) => candidate.id === annotationId)
     if (!next) throw new PdfRenderError("ANNOTATION_NOT_FOUND", `PDF annotation ${annotationId} disappeared after the write.`)
+    // A form value can change the page's extractable text, so drop the text
+    // layer for this page; appearance-only updates do not need it.
+    this.pageTextLayers.delete(this.pageCacheKey(document, pageIndex))
     return next
   }
 
@@ -1005,6 +1109,9 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     for (const key of this.rawPageAnnotations.keys()) {
       if (key.startsWith(`${document.id}:`)) this.rawPageAnnotations.delete(key)
     }
+    for (const key of this.pageTextLayers.keys()) {
+      if (key.startsWith(`${document.id}:`)) this.pageTextLayers.delete(key)
+    }
     const engine = this.engine
     if (!engine) return
     try {
@@ -1023,6 +1130,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     this.documents.clear()
     this.contentHashRequests.clear()
     this.rawPageAnnotations.clear()
+    this.pageTextLayers.clear()
     const engine = this.engine
     this.engine = undefined
     if (!engine) return

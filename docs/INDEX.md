@@ -35,7 +35,7 @@
 | [docx-viewer-controlled-surface-and-pagination-fix.md](docx-viewer-controlled-surface-and-pagination-fix.md) | DOCX 受控文档面、分页切片、缩放测量、纸面主题和批注布局修复合同 |
 | [docx-floating-images.md](docx-floating-images.md) | DOCX 浮动图片定位基准、层级、旋转占位、绕排与 tight/through 限制 |
 | [surface-search-and-pdf-selection-design.md](surface-search-and-pdf-selection-design.md) | 四种 Surface 的统一搜索会话、Find Bar、精确定位，以及 PDF glyph 选择与交互优化设计 |
-| [pdf-text-layer-issue.md](pdf-text-layer-issue.md) | 已废止的 PDF 透明 text layer 历史方案与失败复盘 |
+| [pdf-text-layer-issue.md](pdf-text-layer-issue.md) | PDF 透明 text layer 历史复盘，以及 0.6.0 无障碍文本层的恢复边界 |
 | [unified-surface-api-design.md](unified-surface-api-design.md) | 统一 Surface API 设计——四个 surface 组件的边界、样式、事件、expose 合同 |
 | [file-format-support-plan.md](file-format-support-plan.md) | XLSX、DOCX、PPTX、PDF View 的文件格式支持范围、接入边界和实施顺序 |
 | [plan/stabilization-roadmap.md](plan/stabilization-roadmap.md) | 唯一任务顺序、依赖、状态和执行证据来源 |
