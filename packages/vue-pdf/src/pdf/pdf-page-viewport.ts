@@ -181,6 +181,11 @@ export interface PdfPageSlotSnapshot {
   state: PdfPageBitmapState
   /** Whether the slot still holds an object URL for a rasterized bitmap. */
   hasBitmap: boolean
+  /**
+   * Whether the held bitmap no longer matches the current zoom/rotation/DPR.
+   * A stale in-range page is rasterized again while its bitmap stays mounted.
+   */
+  stale?: boolean
 }
 
 export interface PdfPageRenderPlan {
@@ -193,13 +198,14 @@ export interface PdfPageRenderPlan {
 /**
  * Pages to rasterize and pages to release for a viewport window.
  *
- * In-range pages are rendered unless they are already `ready`, so a failed
- * page retries the next time it enters the window. In-range `loading` slots
- * are rendered again: callers plan after aborting the previous pass, so a
- * `loading` slot that is still visible belongs to work that will never finish.
- * Out-of-range slots must release their bitmap and return to `pending`, which
- * keeps the bitmap budget proportional to the viewport rather than to the
- * document.
+ * In-range pages are rendered unless they are already `ready` at the current
+ * scale, so a failed page retries the next time it enters the window and a
+ * stale bitmap (held across a zoom/rotation/display change) is replaced in
+ * place instead of being dropped. In-range `loading` slots are rendered again:
+ * callers plan after aborting the previous pass, so a `loading` slot that is
+ * still visible belongs to work that will never finish. Out-of-range slots must
+ * release their bitmap and return to `pending`, which keeps the bitmap budget
+ * proportional to the viewport rather than to the document.
  */
 export function planPageRenders(
   slots: readonly PdfPageSlotSnapshot[],
@@ -209,7 +215,7 @@ export function planPageRenders(
   for (let pageIndex = 0; pageIndex < slots.length; pageIndex++) {
     const slot = slots[pageIndex]
     if (pageRangeContains(range, pageIndex)) {
-      if (!slot || slot.state !== "ready") plan.render.push(pageIndex)
+      if (!slot || slot.state !== "ready" || slot.stale === true) plan.render.push(pageIndex)
       continue
     }
     if ((slot && slot.state !== "pending") || slot?.hasBitmap === true) plan.release.push(pageIndex)

@@ -138,6 +138,7 @@ const suites = {
       "--test-concurrency=1",
       "tests/component/vue-component-behavior.test.mjs",
       "tests/component/vue-components.test.mjs",
+      "tests/component/pdf-page-lifecycle.test.mjs",
       "tests/component/office-selection-ui.test.mjs",
       "tests/component/office-reference-surfaces.test.mjs",
       "tests/component/docx-reference-surfaces.test.mjs",

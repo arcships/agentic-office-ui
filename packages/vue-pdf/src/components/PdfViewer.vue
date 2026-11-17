@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue"
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import {
   createLatestTaskCoordinator,
   createOfficeTaskSequence,
@@ -22,6 +22,7 @@ import {
   type PdfRotation,
   type PdfSearchHit,
 } from "../pdf/pdf-render-runtime"
+import { currentRenderDpr, watchDevicePixelRatio } from "../pdf/pdf-device-pixel-ratio"
 import type { PdfViewerProps } from "../types"
 
 const props = withDefaults(defineProps<PdfViewerProps>(), {
@@ -51,11 +52,15 @@ const emit = defineEmits<{
 const zoomOptions = [0.5, 0.75, 1, 1.25, 1.5, 2]
 const zoom = ref(Math.min(2, Math.max(0.5, props.defaultZoom)))
 const rotation = ref<PdfRotation>(0)
+/** Pixel ratio the current page bitmap was rendered at; re-renders on display change. */
+const renderDpr = ref(currentRenderDpr())
 const activePage = ref(1)
 const pageInput = ref("1")
 const showThumbnails = ref(true)
 const searchDraft = ref("")
 const viewerRef = ref<HTMLElement | null>(null)
+const frameRef = ref<HTMLElement | null>(null)
+const pageImageRef = ref<HTMLElement | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 const searchResult = ref("")
 const searchHits = ref<readonly PdfSearchHit[]>([])
@@ -87,6 +92,7 @@ let runtimeForDocument: PdfRenderRuntime | undefined
 let ownedRuntime: PdfRenderRuntime | undefined
 let ownedRuntimeWasmUrl: string | undefined
 let unmounted = false
+let stopDprWatch: (() => void) | undefined
 
 const pdfRuntimeId = `pdf-controller-${
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
@@ -211,6 +217,7 @@ function onViewerKeydown(event: KeyboardEvent): void {
 
 async function releaseCurrentDocument(options: { closeDocument?: boolean } = {}): Promise<void> {
   cancelRenderWork()
+  pendingAnchor = undefined
   replacePageImage()
   clearThumbnails()
   pageRenderState.value = "idle"
@@ -276,22 +283,85 @@ async function confirmImageDecodes(url: string): Promise<void> {
   }
 }
 
+/**
+ * Viewport-center anchor of the rendered page. The bitmap only resizes once the
+ * replacement arrives, so the anchor is held until that render lands.
+ */
+type PageAnchor = { xRatio: number; yRatio: number; clientX: number; clientY: number }
+
+let pendingAnchor: (PageAnchor & { zoom: number; rotation: PdfRotation }) | undefined
+
+function clampRatio(value: number): number {
+  return Math.min(1, Math.max(0, value))
+}
+
+function measureAnchor(): PageAnchor | undefined {
+  const frame = frameRef.value
+  const image = pageImageRef.value
+  if (!frame || !image) return undefined
+  if (typeof frame.getBoundingClientRect !== "function" || typeof image.getBoundingClientRect !== "function") return undefined
+  const rect = image.getBoundingClientRect()
+  if (!(rect.width > 0) || !(rect.height > 0)) return undefined
+  const frameRect = frame.getBoundingClientRect()
+  const clientX = frameRect.left + frameRect.width / 2
+  const clientY = frameRect.top + frameRect.height / 2
+  return {
+    xRatio: clampRatio((clientX - rect.left) / rect.width),
+    yRatio: clampRatio((clientY - rect.top) / rect.height),
+    clientX,
+    clientY,
+  }
+}
+
+async function restoreAnchor(zoomValue: number, rotationValue: PdfRotation): Promise<void> {
+  const anchor = pendingAnchor
+  if (!anchor || anchor.zoom !== zoomValue || anchor.rotation !== rotationValue) return
+  pendingAnchor = undefined
+  await nextTick()
+  await nextPaint()
+  const frame = frameRef.value
+  const image = pageImageRef.value
+  if (!frame || !image) return
+  if (typeof frame.getBoundingClientRect !== "function" || typeof image.getBoundingClientRect !== "function") return
+  const rect = image.getBoundingClientRect()
+  const scrollLeft = typeof frame.scrollLeft === "number" ? frame.scrollLeft : 0
+  const scrollTop = typeof frame.scrollTop === "number" ? frame.scrollTop : 0
+  frame.scrollLeft = scrollLeft + rect.left + rect.width * anchor.xRatio - anchor.clientX
+  frame.scrollTop = scrollTop + rect.top + rect.height * anchor.yRatio - anchor.clientY
+}
+
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resolve())
+    else setTimeout(resolve, 0)
+  })
+}
+
+function applyZoom(next: number | undefined): void {
+  if (next === undefined || next === zoom.value) return
+  const anchor = measureAnchor()
+  pendingAnchor = anchor ? { ...anchor, zoom: next, rotation: rotation.value } : undefined
+  zoom.value = next
+}
+
 function zoomIn(): void {
-  const next = zoomOptions.find((value) => value > zoom.value)
-  if (next) zoom.value = next
+  applyZoom(zoomOptions.find((value) => value > zoom.value))
 }
 
 function zoomOut(): void {
-  const next = [...zoomOptions].reverse().find((value) => value < zoom.value)
-  if (next) zoom.value = next
+  applyZoom([...zoomOptions].reverse().find((value) => value < zoom.value))
 }
 
 function rotateClockwise(): void {
-  rotation.value = ((rotation.value + 90) % 360) as PdfRotation
+  const anchor = measureAnchor()
+  const next = ((rotation.value + 90) % 360) as PdfRotation
+  pendingAnchor = anchor ? { ...anchor, zoom: zoom.value, rotation: next } : undefined
+  rotation.value = next
 }
 
 function setActivePage(page: number): void {
   const next = Math.max(1, Math.min(numPages.value || 1, Math.trunc(page) || 1))
+  if (next !== activePage.value) pendingAnchor = undefined
   activePage.value = next
   pageInput.value = String(next)
   emit("active-page-change", next)
@@ -335,13 +405,15 @@ async function renderCurrentPage(
   const pageNumber = activePage.value
   const renderZoom = zoom.value
   const renderRotation = rotation.value
+  const renderDprValue = renderDpr.value
   const generation = ++renderGeneration
   renderAbort?.abort()
   const { controller, unlink } = createLinkedAbort(parentSignal)
   renderAbort = controller
   pageRenderError.value = ""
+  // The previous bitmap stays mounted while this render runs, so the stage
+  // never collapses to an empty white box between pages or zoom steps.
   pageRenderState.value = "rendering"
-  replacePageImage()
   emitDiagnostic({
     type: "render-start",
     pageNumber,
@@ -354,7 +426,7 @@ async function renderCurrentPage(
     const blob = await runtime.renderPage(document, pageNumber - 1, {
       scale: renderZoom,
       rotation: renderRotation,
-      dpr: typeof devicePixelRatio === "number" ? Math.min(2, Math.max(1, devicePixelRatio)) : 1,
+      dpr: renderDprValue,
       signal: controller.signal,
     })
     if (
@@ -377,6 +449,7 @@ async function renderCurrentPage(
     renderedZoom.value = renderZoom
     renderedRotation.value = renderRotation
     pageRenderState.value = "rendered"
+    void restoreAnchor(renderZoom, renderRotation)
     emitDiagnostic({
       type: "render-success",
       pageNumber,
@@ -389,6 +462,9 @@ async function renderCurrentPage(
     if (controller.signal.aborted || generation !== renderGeneration || requestId !== latestRequestId || isAbortError(error)) return
     pageRenderState.value = "error"
     pageRenderError.value = "PDF 页面渲染失败。"
+    // A stale bitmap no longer describes the current page or zoom.
+    pendingAnchor = undefined
+    replacePageImage()
     const source = effectiveSource.value
     const normalized = toPdfLoadError(error, source?.kind ?? "blob", source?.kind === "url" ? source.url : undefined)
     emitDiagnostic({ type: "render-error", pageNumber, pageCount: document.pageCount, error: normalized })
@@ -605,12 +681,18 @@ watch(
   { immediate: true },
 )
 watch(activePage, (page) => { pageInput.value = String(page) })
-watch([activePage, zoom, rotation], () => {
+watch([activePage, zoom, rotation, renderDpr], () => {
   if (renderDocument.value && !isLoading.value) void renderCurrentPage(latestRequestId)
+})
+
+onMounted(() => {
+  stopDprWatch = watchDevicePixelRatio((next) => { renderDpr.value = next })
 })
 
 onBeforeUnmount(() => {
   unmounted = true
+  stopDprWatch?.()
+  stopDprWatch = undefined
   latestRequestId++
   latestTaskId = undefined
   pdfLoadCoordinator.dispose()
@@ -717,7 +799,7 @@ onBeforeUnmount(() => {
           <span>第 {{ page }} 页</span>
         </button>
       </aside>
-      <main class="pdf-frame-wrap">
+      <main ref="frameRef" class="pdf-frame-wrap">
         <div v-if="currentSearchHit" class="pdf-search-context" role="status">
           <span>{{ currentSearchHit.before }}</span><mark>{{ currentSearchHit.match }}</mark><span>{{ currentSearchHit.after }}</span>
         </div>
@@ -731,6 +813,7 @@ onBeforeUnmount(() => {
           <div v-if="pageRenderError" class="pdf-error page-error">{{ pageRenderError }}</div>
           <div v-if="pageImageUrl" data-testid="pdf-page-render" class="pdf-page-render">
             <img
+              ref="pageImageRef"
               data-testid="pdf-page-image"
               class="pdf-page-image"
               :src="pageImageUrl"

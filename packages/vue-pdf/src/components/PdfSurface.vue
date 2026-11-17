@@ -124,6 +124,7 @@ import {
   pdfDisplayPointToCanonical,
   pdfDisplaySize,
 } from "../pdf/pdf-coordinate-transform"
+import { currentRenderDpr, watchDevicePixelRatio } from "../pdf/pdf-device-pixel-ratio"
 import {
   DEFAULT_PAGE_OVERSCAN,
   computePageOffsets,
@@ -173,6 +174,8 @@ import {
 interface PageSlot {
   url: string | null
   state: PdfPageBitmapState
+  /** Zoom/rotation/DPR key of the bitmap in `url`; an empty key is stale. */
+  renderKey: string
 }
 
 interface PageSelectionRects {
@@ -260,6 +263,8 @@ const zoom = computed({
   },
 })
 const rotation = ref<PdfRotation>(0)
+/** Pixel ratio the current bitmaps were rendered at; re-renders on display change. */
+const renderDpr = ref(currentRenderDpr())
 const loading = ref(false)
 const loadError = ref<PdfLoadError | null>(null)
 const renderDocument = ref<PdfRenderDocument | null>(null)
@@ -286,6 +291,7 @@ let latestRequestId = 0
 let renderGeneration = 0
 let renderAbort: AbortController | undefined
 let unmounted = false
+let stopDprWatch: (() => void) | undefined
 
 const searchState = ref<PdfSearchState>({
   status: "idle",
@@ -556,20 +562,24 @@ function initPageSlots(): void {
   for (const key of Object.keys(pageSlots)) delete pageSlots[Number(key)]
   if (!renderDocument.value) return
   for (let i = 0; i < renderDocument.value.pageCount; i++) {
-    pageSlots[i] = { url: null, state: "pending" }
+    pageSlots[i] = { url: null, state: "pending", renderKey: "" }
   }
   renderedRange = { first: 0, last: -1 }
   visiblePageIndex = -1
 }
 
-/** Revoke every rasterized page but keep the slot records for the new layout. */
-function resetPageSlots(): void {
+/**
+ * Zoom, rotation and display scale moved: every rasterized bitmap is stale, but
+ * the window keeps showing it until the replacement arrives, so the page stack
+ * never collapses to empty placeholders mid-gesture. Pages that leave the
+ * render window are still released (and revoked) by `releasePageBitmaps`.
+ */
+function markPageBitmapsStale(): void {
   for (const slot of Object.values(pageSlots)) {
-    if (slot.url) URL.revokeObjectURL(slot.url)
-    slot.url = null
-    if (slot.state !== "pending") slot.state = "pending"
+    if (slot.url) slot.renderKey = ""
   }
   renderedRange = { first: 0, last: -1 }
+  visiblePageIndex = -1
 }
 
 function invalidatePageLayout(): void {
@@ -580,6 +590,11 @@ function pageLayoutKey(): string {
   const doc = renderDocument.value
   if (!doc) return "none"
   return `${doc.id}:${doc.pageCount}:${zoom.value}:${rotation.value}`
+}
+
+/** Bitmaps are only valid for the zoom/rotation/DPR they were rasterized at. */
+function pageRenderKey(): string {
+  return `${zoom.value}:${rotation.value}:${renderDpr.value}`
 }
 
 /**
@@ -644,10 +659,15 @@ function releasePageBitmaps(pageIndexes: Iterable<number>): void {
 
 function pageSlotSnapshots(): readonly PdfPageSlotSnapshot[] {
   const pageCount = renderDocument.value?.pageCount ?? 0
+  const renderKey = pageRenderKey()
   const snapshots: PdfPageSlotSnapshot[] = []
   for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
     const slot = pageSlots[pageIndex]
-    snapshots.push({ state: slot?.state ?? "pending", hasBitmap: !!slot?.url })
+    snapshots.push({
+      state: slot?.state ?? "pending",
+      hasBitmap: !!slot?.url,
+      stale: !!slot?.url && slot.renderKey !== renderKey,
+    })
   }
   return snapshots
 }
@@ -753,6 +773,7 @@ async function renderVisiblePages(): Promise<void> {
   renderAbort = controller
   const range = currentRenderRange()
   renderedRange = range
+  const renderKey = pageRenderKey()
   const plan = planPageRenders(pageSlotSnapshots(), range)
   releasePageBitmaps(plan.release)
 
@@ -761,13 +782,15 @@ async function renderVisiblePages(): Promise<void> {
       if (controller.signal.aborted || gen !== renderGeneration) return
       if (renderDocument.value !== doc || runtimeForDocument !== rt) return
       const slot = pageSlots[pageIndex]
-      if (!slot || slot.state === "ready") continue
-      slot.state = "loading"
+      if (!slot || (slot.state === "ready" && slot.renderKey === renderKey)) continue
+      // A stale bitmap stays mounted (and keeps its slot record) until the
+      // replacement arrives; only pages without pixels show a loading state.
+      if (!slot.url) slot.state = "loading"
       try {
         const blob = await rt.renderPage(doc, pageIndex, {
           scale: zoom.value,
           rotation: rotation.value,
-          dpr: typeof devicePixelRatio === "number" ? Math.min(2, Math.max(1, devicePixelRatio)) : 1,
+          dpr: renderDpr.value,
           signal: controller.signal,
         })
         if (controller.signal.aborted || gen !== renderGeneration) return
@@ -777,10 +800,11 @@ async function renderVisiblePages(): Promise<void> {
         if (slot.url) URL.revokeObjectURL(slot.url)
         slot.url = url
         slot.state = "ready"
+        slot.renderKey = renderKey
         void ensurePageContentHash(pageIndex)
       } catch (err) {
         if ((err as Error)?.name === "AbortError" || controller.signal.aborted) return
-        if (gen === renderGeneration) slot.state = "error"
+        if (gen === renderGeneration && !slot.url) slot.state = "error"
       }
     }
     // Scrolling during a render pass can move the window past the pages just
@@ -866,12 +890,14 @@ async function load(): Promise<void> {
 }
 
 // ── Watchers ─────────────────────────────────────────────────────────
-watch([zoom, rotation], () => {
+watch([zoom, rotation, renderDpr], () => {
   if (!renderDocument.value) return
   cancelRender()
-  // Every bitmap is stale at the new scale/rotation: drop them and rasterize
-  // only the pages the viewport shows instead of the whole document.
-  resetPageSlots()
+  // Every bitmap is stale at the new scale, rotation or display ratio: keep the
+  // rasterized window on screen and let the next pass swap each bitmap in place.
+  // Pages outside the window are still released, so the bitmap budget stays
+  // proportional to the viewport instead of the whole document.
+  markPageBitmapsStale()
   invalidatePageLayout()
   scheduleVisibleRender(0)
 })
@@ -1773,17 +1799,21 @@ watch(effectiveSource, () => {
 })
 
 // ── fit-width zoom ───────────────────────────────────────────────────
-watch([scrollRef, () => props.fitWidth, renderDocument], ([el, fit, doc]) => {
+watch([scrollRef, () => props.fitWidth, renderDocument, rotation], ([el, fit, doc]) => {
   if (!fit || props.zoom !== undefined || !el || !doc) return
-  const observer = new ResizeObserver(() => {
+  const fitToWidth = (): void => {
+    // The widest page is the one that limits the fit, in the orientation the
+    // reader currently sees — the intrinsic /Rotate alone is not enough.
     const maxPageWidth = Math.max(
-      ...doc.pages.map((p) => (p.rotation / 90) % 2 ? p.height : p.width),
+      ...doc.pages.map((page) => pdfDisplaySize(page, rotation.value, 1).width),
       200,
     )
     const containerW = el.clientWidth - 32
     zoom.value = clampSurfaceZoom(containerW / maxPageWidth)
-  })
+  }
+  const observer = new ResizeObserver(fitToWidth)
   observer.observe(el)
+  fitToWidth()
   return () => observer.disconnect()
 })
 
@@ -1795,6 +1825,7 @@ onMounted(() => {
   element.addEventListener("gesturechange", onGestureChange as EventListener, { passive: false })
   element.addEventListener("gestureend", onGestureEnd)
   measureViewportHeight()
+  stopDprWatch = watchDevicePixelRatio((next) => { renderDpr.value = next })
   const ResizeObserverConstructor = globalThis.ResizeObserver
   if (typeof ResizeObserverConstructor === "function") {
     resizeObserver = new ResizeObserverConstructor(() => onSurfaceResize())
@@ -1870,6 +1901,8 @@ onBeforeUnmount(async () => {
   unmounted = true
   latestRequestId += 1
   gestureToken += 1
+  stopDprWatch?.()
+  stopDprWatch = undefined
   cancelScrollFrame()
   cancelScheduledRender()
   if (resizeTimer !== undefined) {
