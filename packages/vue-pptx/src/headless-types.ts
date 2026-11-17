@@ -83,6 +83,8 @@ export interface UsePptxDocumentReturn {
   nextSlide(): Promise<void>
   previousSlide(): Promise<void>
   setZoom(percent: number): Promise<void>
+  /** Re-render the current view so text is measured again. */
+  refresh(): Promise<void>
   search(query: string): Promise<PptxSearchState>
   activateSearchMatch(index: number): Promise<void>
   searchNext(): Promise<void>

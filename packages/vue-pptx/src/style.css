@@ -5,11 +5,13 @@
   --pptx-text: #18181b;
   --pptx-muted: #71717a;
   --pptx-accent: #2563eb;
+  /* Latin first, then CJK/Japanese/Korean fallbacks; hosts and deck themes can override. */
+  --pptx-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "WenQuanYi Micro Hei", "Malgun Gothic", "Yu Gothic UI", sans-serif;
   background: var(--pptx-bg);
   color: var(--pptx-text);
   display: flex;
   flex-direction: column;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--pptx-font-family);
   min-height: 320px;
   min-width: 0;
   overflow: hidden;
@@ -200,7 +202,16 @@
 .pptx-thumbnail--active { border-color: var(--pptx-accent); box-shadow: 0 0 0 1px var(--pptx-accent); }
 .pptx-thumbnail__canvas { background: white; display: block; min-height: 84px; overflow: hidden; pointer-events: none; width: 100%; }
 .pptx-thumbnail__canvas[data-error="true"]::after { color: #b91c1c; content: "缩略图失败"; display: block; font-size: 11px; padding: 24px 4px; text-align: center; }
-.pptx-thumbnail__label { align-items: center; color: var(--pptx-muted); display: flex; font-size: 12px; gap: 6px; justify-content: center; padding-top: 6px; }
+.pptx-thumbnail__label { align-items: center; color: var(--pptx-muted); display: flex; font-size: 12px; gap: 6px; justify-content: center; line-height: 16px; padding-top: 6px; }
+
+/* Fixed sidebar rows keep the virtual window and its spacers pixel-aligned. */
+.pptx-viewer__sidebar-spacer { pointer-events: none; }
+.pptx-viewer__sidebar .pptx-thumbnail {
+  block-size: var(--pptx-thumbnail-item-height, auto);
+  box-sizing: border-box;
+  margin-block-end: 0;
+  overflow: hidden;
+}
 
 @media (max-width: 720px) {
   .pptx-viewer__toolbar { align-items: stretch; flex-wrap: wrap; }
