@@ -26,6 +26,8 @@ type SelectionHost = HTMLElement & {
 
 type SelectionSyncOptions = {
   preserveExpandedSelection?: boolean
+  /** Typing extends the active range; keep the caret's pending run style. */
+  preservePendingRunStyle?: boolean
 }
 
 function elementForNode(node: Node | null): HTMLElement | undefined {
@@ -61,6 +63,10 @@ export function readDocxTextHostText(host: HTMLElement): string {
     // Footnote/endnote markers are display-only: their label is not paragraph text.
     if (element.matches?.("[data-docx-note-marker='true']")) return ""
     if (element.matches?.("[data-docx-image-child-index]")) return ""
+    // Form fields are atomic model runs edited through the field layer, not
+    // text characters. Skipping their display value keeps draft text/offsets
+    // aligned with paragraphText() and lets an unrelated edit preserve them.
+    if (element.matches?.("[data-docx-form-field='true']")) return ""
     // Deleted/moved-from runs stay on screen while revisions are shown, but they
     // are not part of the text the model keeps: skipping them here keeps
     // selection offsets and committed text in agreement.
@@ -323,7 +329,9 @@ export function syncDomSelectionToEditor(
     return editor.activeTextRange
   }
   if (!sameTextRange(editor.activeTextRange, range)) {
-    editor.setActiveTextRange(range)
+    editor.setActiveTextRange(range, {
+      preservePendingRunStyle: options.preservePendingRunStyle,
+    })
   }
   return range
 }

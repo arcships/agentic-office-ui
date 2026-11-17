@@ -268,6 +268,255 @@ test("flushing cell drafts commits every dirty paragraph in one model chain", as
   mounted.app.unmount();
 });
 
+test("unmounting a table host commits live cell drafts", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [{
+        nodes: [
+          { type: "paragraph", children: [{ type: "text", text: "first" }] },
+          { type: "paragraph", children: [{ type: "text", text: "second" }] },
+        ],
+      }],
+    }],
+  };
+  const show = vue.ref(true);
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([table]) });
+      return () => show.value
+        ? vue.h(DocxTableHost, {
+            table: controller.model.nodes[0],
+            tableIndex: 0,
+            editable: true,
+            controller,
+          })
+        : null;
+    },
+  });
+  const mounted = await mount(Harness);
+  const cellParagraphs = walk(mounted.root).filter((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true
+  );
+  cellParagraphs[0].props.onInput({ target: { textContent: "first edited" } });
+  cellParagraphs[1].props.onInput({ target: { textContent: "second edited" } });
+
+  show.value = false;
+  await vue.nextTick();
+
+  const paragraphs = controller.model.nodes[0].rows[0].cells[0].nodes;
+  assert.deepEqual(paragraphs.map(paragraphText), ["first edited", "second edited"]);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("a cell draft is dropped when the document is replaced before unmount", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [{
+        nodes: [{ type: "paragraph", children: [{ type: "text", text: "original" }] }],
+      }],
+    }],
+  };
+  const show = vue.ref(true);
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([table]) });
+      return () => show.value
+        ? vue.h(DocxTableHost, {
+            table: controller.model.nodes[0],
+            tableIndex: 0,
+            editable: true,
+            controller,
+          })
+        : null;
+    },
+  });
+  const mounted = await mount(Harness);
+  const [cellParagraph] = walk(mounted.root).filter((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true
+  );
+  cellParagraph.props.onInput({ target: { textContent: "stale edit" } });
+  controller.newDocument();
+  await vue.nextTick();
+
+  show.value = false;
+  await vue.nextTick();
+
+  assert.equal(
+    controller.model.nodes.some((node) =>
+      node.type === "paragraph" && paragraphText(node) === "stale edit"
+    ),
+    false,
+    "a draft captured from the old document must not land in the new one",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("cell blur keeps image children while diffing the paragraph text", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [{
+        nodes: [{
+          type: "paragraph",
+          sourceXml: "<w:p image/>",
+          children: [
+            { type: "text", text: "before" },
+            {
+              type: "image",
+              src: "data:image/svg+xml;base64,PHN2Zy8+",
+              alt: "inline",
+              widthPx: 20,
+              heightPx: 20,
+            },
+            { type: "text", text: "after" },
+          ],
+        }],
+      }],
+    }],
+  };
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([table]) });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[0],
+        tableIndex: 0,
+        editable: true,
+        controller,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  const [cellParagraph] = walk(mounted.root).filter((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true
+  );
+  cellParagraph.props.onInput({ target: { textContent: "beforeXafter" } });
+  cellParagraph.props.onBlur({ target: { textContent: "beforeXafter" } });
+  await vue.nextTick();
+
+  const paragraph = controller.model.nodes[0].rows[0].cells[0].nodes[0];
+  assert.equal(paragraphText(paragraph), "beforeXafter");
+  assert.equal(
+    paragraph.children.some((child) => child.type === "image"),
+    true,
+    "the inline image anchor must survive the text diff",
+  );
+  assert.equal(paragraph.sourceXml, undefined);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("cell blur keeps an empty form-field run while diffing the paragraph text", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [{
+        nodes: [{
+          type: "paragraph",
+          sourceXml: "<w:p field/>",
+          children: [
+            { type: "text", text: "hello " },
+            { type: "form-field", fieldType: "text", widget: { text: {} } },
+            { type: "text", text: "world" },
+          ],
+        }],
+      }],
+    }],
+  };
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([table]) });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[0],
+        tableIndex: 0,
+        editable: true,
+        controller,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  const [cellParagraph] = walk(mounted.root).filter((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true
+  );
+  cellParagraph.props.onInput({ target: { textContent: "hello Xworld" } });
+  cellParagraph.props.onBlur({ target: { textContent: "hello Xworld" } });
+  await vue.nextTick();
+
+  const paragraph = controller.model.nodes[0].rows[0].cells[0].nodes[0];
+  assert.equal(paragraphText(paragraph), "hello Xworld");
+  assert.deepEqual(
+    paragraph.children.map((child) => child.type),
+    ["text", "form-field", "text"],
+    "an empty form field is an atomic anchor and must survive unrelated text edits",
+  );
+  assert.equal(paragraph.sourceXml, undefined);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("a paragraph after a nested table keeps its own cell paragraph index", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [{
+        nodes: [
+          { type: "paragraph", children: [{ type: "text", text: "before nested" }] },
+          {
+            type: "table",
+            rows: [{
+              cells: [{
+                nodes: [{ type: "paragraph", children: [{ type: "text", text: "inside nested" }] }],
+              }],
+            }],
+          },
+          { type: "paragraph", children: [{ type: "text", text: "after nested" }] },
+        ],
+      }],
+    }],
+  };
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([table]) });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[0],
+        tableIndex: 0,
+        editable: true,
+        controller,
+      });
+    },
+  });
+
+  const mounted = await mount(Harness);
+  const outerParagraph = walk(mounted.root).find((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true &&
+    node.props?.["data-docx-table-row-index"] === 0 &&
+    node.props?.["data-docx-table-cell-index"] === 0 &&
+    node.props?.["data-docx-paragraph-index"] === 1
+  );
+  assert.ok(outerParagraph, "the paragraph after the nested table must be addressable as paragraph 1");
+
+  outerParagraph.props.onInput({ target: { textContent: "after nested edited" } });
+  outerParagraph.props.onBlur({ target: { textContent: "after nested edited" } });
+  await vue.nextTick();
+
+  const cellNodes = controller.model.nodes[0].rows[0].cells[0].nodes;
+  assert.equal(paragraphNodeText(cellNodes[0]), "before nested");
+  assert.equal(paragraphNodeText(cellNodes[2]), "after nested edited");
+  const nested = cellNodes[1];
+  assert.equal(nested.type, "table");
+  assert.equal(paragraphNodeText(nested.rows[0].cells[0].nodes[0]), "inside nested");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
 test("whole-cell commit diffs multiline text, keeps run styles, and clears source XML", async () => {
   const table = {
     type: "table",
@@ -301,6 +550,39 @@ test("whole-cell commit diffs multiline text, keeps run styles, and clears sourc
   assert.equal(paragraphs[0].sourceXml, undefined);
   assert.equal(paragraphs[1].sourceXml, undefined);
   assert.equal(committed.sourceXml, undefined);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("section paragraph commit preserves run style and clears source XML", async () => {
+  const base = createBlankDocumentModel();
+  const model = {
+    ...base,
+    nodes: [{ type: "paragraph", children: [{ type: "text", text: "body" }] }],
+    metadata: {
+      ...base.metadata,
+      headerSections: [{
+        partName: "word/header1.xml",
+        referenceType: "default",
+        nodes: [{
+          type: "paragraph",
+          sourceXml: "<w:p header/>",
+          children: [{ type: "text", text: "Header", style: { bold: true } }],
+        }],
+      }],
+    },
+  };
+  const mounted = await mountController(model);
+  mounted.controller.commitSectionParagraphText(
+    { region: "header", partName: "word/header1.xml", nodeIndex: 0 },
+    "Header edited",
+  );
+  await vue.nextTick();
+
+  const paragraph = mounted.controller.model.metadata.headerSections[0].nodes[0];
+  assert.equal(paragraphText(paragraph), "Header edited");
+  assert.equal(paragraph.children[0].style.bold, true, "run formatting must survive the commit");
+  assert.equal(paragraph.sourceXml, undefined, "the serializer must rebuild the header paragraph");
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });

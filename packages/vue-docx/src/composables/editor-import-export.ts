@@ -150,6 +150,7 @@ export function createEditorImportExport(ctx: EditorCore) {
     ctx.selection.value = { kind: "paragraph", nodeIndex: 0 }
     ctx.activeTextRange.value = undefined
     ctx.pendingRunStyle.value = undefined
+    ctx.pendingRunStyleSnapshot.value = undefined
     ctx.selectedFormFieldLocation.value = undefined
     ctx.importError.value = undefined
     ctx.status.value = "Ready"
@@ -199,6 +200,7 @@ export function createEditorImportExport(ctx: EditorCore) {
       ctx.selection.value = { kind: "paragraph", nodeIndex: 0 }
       ctx.activeTextRange.value = undefined
       ctx.pendingRunStyle.value = undefined
+      ctx.pendingRunStyleSnapshot.value = undefined
       ctx.selectedFormFieldLocation.value = undefined
       ctx.importError.value = undefined
       ctx.status.value = "Ready"

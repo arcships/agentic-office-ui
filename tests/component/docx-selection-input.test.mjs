@@ -10,7 +10,10 @@ import {
 } from "./vue-test-renderer.mjs";
 
 const { DocxEditor, DocxParagraphHost, useDocxEditor } = await importFromDemo("@arcships/vue-docx");
-const { createBlankDocumentModel } = await importFromDemo("@arcships/docx-core");
+const { createBlankDocumentModel, serializeDocx } = await importFromDemo("@arcships/docx-core");
+const { strFromU8, unzipSync } = await import(
+  new URL("../..", import.meta.url).href + "packages/docx-core/node_modules/fflate/esm/browser.js"
+);
 
 function paragraphText(node) {
   if (!node || node.type !== "paragraph") return "";
@@ -651,6 +654,40 @@ test("composition text is committed on blur after compositionend", async (t) => 
   assert.deepEqual(mounted.warnings, []);
 });
 
+test("pending caret style survives the input range update and styles the typed text", async (t) => {
+  const mounted = await mountEditableDocument(t, ["abcdef"]);
+  const [paragraph] = paragraphHosts(mounted.root);
+  setHostDomText(paragraph, "abcdef", mounted.dom.document);
+  mounted.controller.selectParagraph(0);
+  await vue.nextTick();
+  mounted.controller.setActiveTextRange({
+    start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
+    end: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
+  });
+  await vue.nextTick();
+  mounted.controller.toggleBold();
+  await vue.nextTick();
+  assert.equal(mounted.controller.pendingRunStyle?.bold, true);
+
+  const typed = setHostDomText(paragraph, "abXcdef", mounted.dom.document);
+  mounted.dom.setSelection(typed, 3);
+  eventHandler(paragraph, "input")({});
+  await vue.nextTick();
+  assert.equal(
+    mounted.controller.pendingRunStyle?.bold,
+    true,
+    "typing extends the range but must not discard the pending style",
+  );
+
+  eventHandler(paragraph, "blur")();
+  await vue.nextTick();
+  const runs = mounted.controller.model.nodes[0].children.filter((child) => child.type === "text");
+  const inserted = runs.find((run) => run.text === "X");
+  assert.ok(inserted);
+  assert.equal(inserted.style?.bold, true);
+  assert.deepEqual(mounted.warnings, []);
+});
+
 test("export commits every live paragraph draft before reading the model", async (t) => {
   const mounted = await mountEditableDocument(t, ["start", "second"]);
   const [paragraph, secondParagraph] = paragraphHosts(mounted.root);
@@ -671,7 +708,28 @@ test("export commits every live paragraph draft before reading the model", async
   assert.ok(exportedModel, "export must receive the flushed model");
   assert.equal(paragraphText(exportedModel.nodes[0]), "start edited");
   assert.equal(paragraphText(exportedModel.nodes[1]), "second edited");
+  const bytes = await serializeDocx(exportedModel);
+  const documentXml = strFromU8(unzipSync(new Uint8Array(bytes))["word/document.xml"]);
+  assert.match(documentXml, /start edited/, "the serialized document must contain the flushed edit");
+  assert.match(documentXml, /second edited/, "the serializer must rebuild every flushed paragraph");
   await vue.nextTick();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("unmounting DocxEditor commits every live paragraph draft", async (t) => {
+  const mounted = await mountEditableDocument(t, ["start", "second"]);
+  const [paragraph, secondParagraph] = paragraphHosts(mounted.root);
+  setHostDomText(paragraph, "start edited", mounted.dom.document);
+  eventHandler(paragraph, "input")({});
+  setHostDomText(secondParagraph, "second edited", mounted.dom.document);
+  eventHandler(secondParagraph, "input")({});
+  assert.equal(paragraphText(mounted.controller.model.nodes[0]), "start");
+
+  mounted.app.unmount();
+  await vue.nextTick();
+
+  assert.equal(paragraphText(mounted.controller.model.nodes[0]), "start edited");
+  assert.equal(paragraphText(mounted.controller.model.nodes[1]), "second edited");
   assert.deepEqual(mounted.warnings, []);
 });
 

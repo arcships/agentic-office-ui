@@ -359,6 +359,110 @@ test("character formatting applies to every paragraph in a cross-paragraph selec
   mounted.app.unmount();
 });
 
+test("character formatting spans table-cell paragraphs and body paragraphs in one selection", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [
+        {
+          nodes: [
+            { type: "paragraph", children: [{ type: "text", text: "cell a" }] },
+            { type: "paragraph", children: [{ type: "text", text: "cell b" }] },
+          ],
+        },
+        { nodes: [{ type: "paragraph", children: [{ type: "text", text: "cell c" }] }] },
+      ],
+    }],
+  };
+  const mounted = await mountController(starterModel([
+    { type: "paragraph", children: [{ type: "text", text: "body one" }] },
+    table,
+    { type: "paragraph", children: [{ type: "text", text: "body two" }] },
+  ]));
+  const { controller } = mounted;
+
+  controller.selectParagraph(0);
+  await vue.nextTick();
+  controller.setActiveTextRange({
+    start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 5 },
+    end: {
+      location: {
+        kind: "table-cell",
+        tableIndex: 1,
+        rowIndex: 0,
+        cellIndex: 1,
+        paragraphIndex: 0,
+      },
+      offset: 2,
+    },
+  });
+  await vue.nextTick();
+
+  controller.toggleBold();
+  await vue.nextTick();
+
+  const boldText = (node) => node.children
+    .filter((child) => child.type === "text" && child.style?.bold)
+    .map((child) => child.text)
+    .join("");
+  assert.equal(boldText(controller.model.nodes[0]), "one", "the tail of the first body paragraph must be bold");
+  const cells = controller.model.nodes[1].rows[0].cells;
+  assert.equal(boldText(cells[0].nodes[0]), "cell a", "the first cell paragraph is fully covered");
+  assert.equal(boldText(cells[0].nodes[1]), "cell b", "middle cell paragraphs are fully covered");
+  assert.equal(boldText(cells[1].nodes[0]), "ce", "the last cell paragraph is partially covered");
+  assert.equal(boldText(controller.model.nodes[2]), "", "paragraphs after the selection must stay untouched");
+  assert.equal(controller.model.nodes[1].sourceXml, undefined);
+  assert.equal(cells[0].nodes[0].sourceXml, undefined);
+  assert.equal(cells[1].nodes[0].sourceXml, undefined);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("pending caret style styles text typed into a table cell", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [{
+        nodes: [{
+          type: "paragraph",
+          children: [{ type: "text", text: "cell a", style: { fontSizePt: 11 } }],
+        }],
+      }],
+    }],
+  };
+  const mounted = await mountController(starterModel([table]));
+  const { controller } = mounted;
+  const location = {
+    kind: "table-cell",
+    tableIndex: 0,
+    rowIndex: 0,
+    cellIndex: 0,
+    paragraphIndex: 0,
+  };
+
+  controller.selectTableCell(0, 0, 0);
+  await vue.nextTick();
+  controller.setActiveTextRange({
+    start: { location, offset: 2 },
+    end: { location, offset: 2 },
+  });
+  await vue.nextTick();
+  controller.toggleBold();
+  await vue.nextTick();
+  assert.equal(controller.pendingRunStyle?.bold, true);
+
+  controller.commitTableCellParagraphTextRecursive(0, 0, 0, 0, "ceXll a");
+  await vue.nextTick();
+  const runs = controller.model.nodes[0].rows[0].cells[0].nodes[0].children
+    .filter((child) => child.type === "text");
+  const inserted = runs.find((run) => run.text === "X");
+  assert.ok(inserted, "typed cell text should produce a run");
+  assert.equal(inserted.style?.bold, true);
+  assert.equal(inserted.style?.fontSizePt, 11);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
 test("collapsed caret formatting stays pending, adds no undo entry, and styles the next typed run", async () => {
   const source = deepFreeze(starterModel([
     {
@@ -399,6 +503,107 @@ test("collapsed caret formatting stays pending, adds no undo entry, and styles t
   controller.selectParagraph(0);
   await vue.nextTick();
   assert.equal(controller.pendingRunStyle, undefined, "moving the caret must drop the pending style");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("form-field anchors survive body text commits and paragraph splits", async () => {
+  const field = { type: "form-field", fieldType: "text", widget: { text: {} } };
+  const mounted = await mountController(starterModel([
+    {
+      type: "paragraph",
+      sourceXml: "<w:p field/>",
+      children: [
+        { type: "text", text: "hello " },
+        field,
+        { type: "text", text: "world" },
+      ],
+    },
+  ]));
+  const { controller } = mounted;
+
+  controller.commitParagraphText(0, "hello Xworld");
+  await vue.nextTick();
+  assert.deepEqual(
+    controller.model.nodes[0].children.map((child) => child.type),
+    ["text", "form-field", "text"],
+  );
+  assert.equal(paragraphText(controller.model.nodes[0]), "hello Xworld");
+
+  controller.selectParagraph(0);
+  await vue.nextTick();
+  controller.splitParagraphAtSelection("hello Xworld", 6, 6);
+  await vue.nextTick();
+  assert.equal(controller.model.nodes.length, 2);
+  assert.equal(
+    controller.model.nodes.some((node) =>
+      node.type === "paragraph" && node.children.some((child) => child.type === "form-field")
+    ),
+    true,
+    "splitting the paragraph must not drop the form field",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("pending caret style is cleared by undo, redo and document replacement", async () => {
+  const mounted = await mountController(starterModel([
+    { type: "paragraph", children: [{ type: "text", text: "alpha" }] },
+  ]));
+  const { controller } = mounted;
+  const collapsedAt = (offset) => ({
+    start: { location: { kind: "paragraph", nodeIndex: 0 }, offset },
+    end: { location: { kind: "paragraph", nodeIndex: 0 }, offset },
+  });
+
+  controller.selectParagraph(0);
+  await vue.nextTick();
+  controller.commitParagraphText(0, "alpha typed");
+  await vue.nextTick();
+  assert.equal(controller.canUndo, true);
+
+  controller.setActiveTextRange(collapsedAt(3));
+  await vue.nextTick();
+  controller.toggleBold();
+  await vue.nextTick();
+  assert.equal(controller.pendingRunStyle?.bold, true);
+  controller.undo();
+  await vue.nextTick();
+  assert.equal(controller.pendingRunStyle, undefined, "undo must clear the pending caret style");
+
+  controller.setActiveTextRange(collapsedAt(1));
+  await vue.nextTick();
+  controller.toggleBold();
+  await vue.nextTick();
+  assert.equal(controller.pendingRunStyle?.bold, true);
+  controller.redo();
+  await vue.nextTick();
+  assert.equal(controller.pendingRunStyle, undefined, "redo must clear the pending caret style");
+
+  controller.setActiveTextRange(collapsedAt(2));
+  await vue.nextTick();
+  controller.toggleBold();
+  await vue.nextTick();
+  assert.equal(controller.pendingRunStyle?.bold, true);
+  controller.setActiveTextRange({
+    start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
+    end: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 5 },
+  });
+  await vue.nextTick();
+  assert.equal(
+    controller.pendingRunStyle,
+    undefined,
+    "selecting a range must clear the pending caret style",
+  );
+
+  controller.setActiveTextRange(collapsedAt(2));
+  await vue.nextTick();
+  controller.toggleBold();
+  await vue.nextTick();
+  assert.equal(controller.pendingRunStyle?.bold, true);
+  controller.newDocument();
+  await vue.nextTick();
+  assert.equal(controller.pendingRunStyle, undefined, "newDocument must clear the pending caret style");
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });

@@ -86,12 +86,12 @@
                 :data-docx-table-runtime-key="tableRuntimeKey"
                 :data-docx-table-row-index="cell.rowIndex"
                 :data-docx-table-cell-index="cell.cellIndex"
-                :data-docx-paragraph-index="pi"
+                :data-docx-paragraph-index="cellParagraphIndex(cell.cell.nodes, pi)"
                 :suppresscontenteditablewarning="editable && controller ? 'true' : undefined"
                 :style="{ ...cellParagraphStyle(node), ...cellParagraphSliceStyle(cell.rowIndex) }"
-                @input="onCellInput(tableIndex, cell.rowIndex, cell.cellIndex, pi, $event)"
-                @focus="onCellFocus(tableIndex, cell.rowIndex, cell.cellIndex, pi)"
-                @blur="onCellBlur(tableIndex, cell.rowIndex, cell.cellIndex, pi, $event)"
+                @input="onCellInput(tableIndex, cell.rowIndex, cell.cellIndex, cellParagraphIndex(cell.cell.nodes, pi), $event)"
+                @focus="onCellFocus(tableIndex, cell.rowIndex, cell.cellIndex, cellParagraphIndex(cell.cell.nodes, pi))"
+                @blur="onCellBlur(tableIndex, cell.rowIndex, cell.cellIndex, cellParagraphIndex(cell.cell.nodes, pi), $event)"
                 v-html="cellParagraphHtml(node, cell, pi)"
               />
               <DocxTableHost
@@ -276,6 +276,20 @@ function parseCellDraftKey(
     return undefined
   }
   return { rowIndex: row, cellIndex: cell, paragraphIndex: paragraph }
+}
+
+function cellParagraphIndex(
+  nodes: TableGridCell["cell"]["nodes"],
+  contentIndex: number
+): number {
+  // `paragraphIndex` addresses paragraphs, not all cell content nodes. Nested
+  // tables occupy content slots but must not shift the index of a following
+  // paragraph, otherwise the host commits into the wrong paragraph.
+  let paragraphIndex = 0
+  for (let index = 0; index < contentIndex; index += 1) {
+    if (nodes[index]?.type === "paragraph") paragraphIndex += 1
+  }
+  return paragraphIndex
 }
 
 function cellParagraphAt(

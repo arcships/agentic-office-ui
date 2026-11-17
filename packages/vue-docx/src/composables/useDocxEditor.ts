@@ -74,7 +74,6 @@ import type {
   DocxSectionImageLocation,
   UseDocxEditorOptions,
   ParagraphLocation,
-  DocxTextRangeLocation,
 } from "@arcships/docx-core"
 
 import type { EditorCore } from "./editor-shared"
@@ -102,23 +101,6 @@ function typedKeys<T extends object>(obj: T): (keyof T)[] {
 // Shared empty result so a hidden revision list keeps a stable identity and
 // never allocates on keystrokes.
 const EMPTY_TRACKED_CHANGES: DocxTrackedChange[] = []
-
-function sameTextRangeLocation(
-  left: DocxTextRangeLocation | undefined,
-  right: DocxTextRangeLocation | undefined
-): boolean {
-  if (!left || !right) return left === right
-  if (left.kind === "paragraph" && right.kind === "paragraph") {
-    return left.nodeIndex === right.nodeIndex
-  }
-  if (left.kind === "table-cell" && right.kind === "table-cell") {
-    return left.tableIndex === right.tableIndex &&
-      left.rowIndex === right.rowIndex &&
-      left.cellIndex === right.cellIndex &&
-      left.paragraphIndex === right.paragraphIndex
-  }
-  return false
-}
 
 // ── useDocxEditor ──────────────────────────────────────────────────
 
@@ -692,31 +674,20 @@ export function useDocxEditor(
   // Browser-originated ranges are already reflected in the DOM. Keep the
   // synchronous snapshot current without issuing a DOM restore request that
   // would fight the user's live selection.
-  const setActiveTextRange = (range?: DocxTextRange): void => {
+  const setActiveTextRange = (
+    range?: DocxTextRange,
+    options?: { preservePendingRunStyle?: boolean },
+  ): void => {
     const nextRange = normalizeEditorCursorStateForModel(
       modelSnapshot,
       selectionSnapshot,
       range
     ).activeTextRange
     if (sameTextRange(activeTextRangeSnapshot, nextRange)) return
-    const previousRange = activeTextRangeSnapshot
-    const nextIsCollapsed = Boolean(
-      nextRange &&
-      sameTextRangeLocation(nextRange.start.location, nextRange.end.location) &&
-      nextRange.start.offset === nextRange.end.offset
-    )
-    const locationChanged =
-      !sameTextRangeLocation(previousRange?.start.location, nextRange?.start.location) ||
-      !sameTextRangeLocation(previousRange?.end.location, nextRange?.end.location)
-    const collapsedCaretMoved = Boolean(
-      previousRange &&
-      nextIsCollapsed &&
-      (
-        !sameTextRangeLocation(previousRange.start.location, nextRange?.start.location) ||
-        previousRange.start.offset !== nextRange?.start.offset
-      )
-    )
-    if (locationChanged || collapsedCaretMoved) clearPendingRunStyle()
+    // A real selection/caret move discards a pending caret style. Typing
+    // passes preservePendingRunStyle because the input event extends the range
+    // before the draft is committed on blur/export.
+    if (!options?.preservePendingRunStyle) clearPendingRunStyle()
     // A selection change ends the typing burst, except for the caret following
     // the text that the burst just committed (which stays in the same
     // paragraph/cell and is collapsed).
