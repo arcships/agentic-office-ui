@@ -13,6 +13,8 @@ import {
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const CONTEXT_MENU_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/XlsxContextMenu.vue");
+const GRID_METRICS_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/grid-metrics.ts");
+const PANE_GEOMETRY_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/grid-pane-geometry.ts");
 const VIEWER_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/XlsxViewer.vue");
 const RIBBON_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/XlsxRibbon.vue");
 const TOOLBAR_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/XlsxToolbar.vue");
@@ -54,6 +56,21 @@ function functionNode(name) {
   )[0];
 }
 
+const GRID_METRICS_AST = ts.createSourceFile(
+  GRID_METRICS_PATH,
+  readFileSync(GRID_METRICS_PATH, "utf8"),
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+);
+
+function gridMetricsFunction(name) {
+  return descendants(
+    GRID_METRICS_AST,
+    (node) => ts.isFunctionDeclaration(node) && node.name?.text === name,
+  )[0];
+}
+
 function constantNode(name) {
   return descendants(
     AST,
@@ -75,7 +92,17 @@ async function loadMenuGeometry() {
     "MIN_DISPLAY_COLS",
   ];
   const functions = ["resolveDisplayIndices", "findDisplayIndexAtOffset", "resolveGridCell"];
+  // resolveGridCell shares the freeze-pane mapping with the grid, so the
+  // transpiled module carries the same helpers.
+  const paneGeometry = readFileSync(PANE_GEOMETRY_PATH, "utf8").replace(/^import type .*;\n/m, "");
+  const sharedFunctions = ["gridZoomFactor", "frozenExtent"].map((name) => {
+    const node = gridMetricsFunction(name);
+    assert.ok(node, `grid-metrics 缺少 ${name}`);
+    return node.getText(GRID_METRICS_AST);
+  });
   const source = [
+    paneGeometry,
+    ...sharedFunctions,
     ...constants.map((name) => constantNode(name)?.getText(AST)),
     ...functions.map((name) => functionNode(name)?.getText(AST)),
   ];
@@ -116,7 +143,7 @@ test("XLSX 右键菜单只监听当前网格，并在显示前选择命中单元
     visibleRows: [1, 4],
   };
   assert.deepEqual(
-    geometry.resolveGridCell(target, sheet, 100, 109, 221),
+    geometry.resolveGridCell(target, sheet, 100, 157, 245),
     { col: 2, row: 4 },
     "滚动后仍按可见行列映射到工作表坐标",
   );
@@ -124,6 +151,25 @@ test("XLSX 右键菜单只监听当前网格，并在显示前选择命中单元
     geometry.resolveGridCell(target, sheet, 100, 60, 180),
     null,
     "表头外不应伪造单元格",
+  );
+
+  // Row 0 and column 1 are hidden in this fixture, so the freeze must land
+  // on the first *visible* row (1) and column (0).
+  const frozenSheet = {
+    ...sheet,
+    freezePanes: { row: 2, col: 2 },
+    colWidths: [40, 80, 80, 80],
+    visibleCols: [0, 2, 5, 7],
+  };
+  assert.deepEqual(
+    geometry.resolveGridCell(target, frozenSheet, 100, 178, 234),
+    { col: 0, row: 1 },
+    "冻结行列内的右键必须命中被钉住的行列，而不是滚到下面的行列",
+  );
+  assert.deepEqual(
+    geometry.resolveGridCell(target, frozenSheet, 100, 208, 245),
+    { col: 5, row: 4 },
+    "冻结存在时滚动窗格仍叠加滚动偏移",
   );
 });
 

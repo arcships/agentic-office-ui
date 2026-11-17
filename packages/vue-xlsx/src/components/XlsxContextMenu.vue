@@ -61,6 +61,8 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted, watch, type CSSProperties } from "vue";
 import type { XlsxCellAddress, XlsxSheetData, XlsxViewerController } from "@arcships/xlsx-core";
+import { frozenExtent } from "./grid-metrics";
+import { paneAxisContentOffset } from "./grid-pane-geometry";
 
 const DEFAULT_ROW_HEIGHT = 24;
 const DEFAULT_COL_WIDTH = 80;
@@ -115,9 +117,14 @@ function resolveGridCell(
   clientY: number,
 ): XlsxCellAddress | null {
   const rect = target.getBoundingClientRect();
-  const x = clientX - rect.left + target.scrollLeft - ROW_HEADER_WIDTH;
-  const y = clientY - rect.top + target.scrollTop - HEADER_HEIGHT;
-  if (x < 0 || y < 0) return null;
+  const localX = clientX - rect.left - ROW_HEADER_WIDTH;
+  const localY = clientY - rect.top - HEADER_HEIGHT;
+  if (localX < 0 || localY < 0) return null;
+  // A frozen row/column keeps content coordinates: only the scrolling pane
+  // adds the scroll offset, otherwise a right-click on a pinned cell would
+  // select whatever scrolled underneath it.
+  const x = paneAxisContentOffset(localX, target.scrollLeft, frozenExtent(sheet, "column", zoomScale));
+  const y = paneAxisContentOffset(localY, target.scrollTop, frozenExtent(sheet, "row", zoomScale));
 
   const zoom = Math.max(0.01, zoomScale / 100);
   const colCount = Math.max(sheet.colWidths.length, MIN_DISPLAY_COLS);

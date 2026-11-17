@@ -159,8 +159,10 @@ test("XlsxGrid display indices keep hidden row and column workbook addresses", (
     "Arrow navigation skips a hidden row",
   );
 
-  assert.match(functionNode("hitTestCell").getText(AST), /getSheetCell\(displayRow, displayCol\)/);
-  assert.match(functionNode("hitTestCell").getText(AST), /container\.scrollLeft/);
+  const hitTestSource = functionNode("hitTestCell").getText(AST);
+  assert.match(hitTestSource, /getSheetCell\(displayRow, displayCol\)/);
+  assert.match(hitTestSource, /resolvePanePoint\(/, "hit testing resolves the freeze pane before adding scroll");
+  assert.doesNotMatch(hitTestSource, /container\.scroll(Left|Top)/);
   assert.equal(descendants(functionNode("hitTestCell"), ts.isForStatement).length, 0);
   assert.match(functionNode("paintBody").getText(AST), /getSheetCell\(r, c\)/);
   assert.match(declaration("editInputStyle").getText(AST), /getDisplayCell\(cell\)/);

@@ -94,6 +94,7 @@ import {
   type XlsxSheetData,
 } from "@arcships/xlsx-core";
 import { GRID_HEADER_HEIGHT_PX, GRID_ROW_HEADER_WIDTH_PX } from "./grid-metrics";
+import { paneAxisContentOffset, paneViewOffset, resolvePaneContentPoint, resolvePaneViewPoint } from "./grid-pane-geometry";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -180,11 +181,22 @@ const hoveredComment = computed(() => {
   const comment = commentsByCell.value.get(`${cell.row}:${cell.col}`);
   const display = getDisplayCell(cell);
   if (!comment || !display) return null;
+  const frozen = frozenPaneMetrics();
+  const anchor = resolvePaneViewPoint({
+    contentX: getColOffsetSum(display.col + 1),
+    contentY: getRowOffsetSum(display.row),
+    displayCol: display.col,
+    displayRow: display.row,
+    frozenCols: frozen.cols,
+    frozenRows: frozen.rows,
+    scrollLeft: scrollLeft.value,
+    scrollTop: scrollTop.value,
+  });
   return {
     ...comment,
     style: {
-      left: `${ROW_HEADER_WIDTH + getColOffsetSum(display.col + 1) - scrollLeft.value + 6}px`,
-      top: `${HEADER_HEIGHT + getRowOffsetSum(display.row) - scrollTop.value + 4}px`,
+      left: `${ROW_HEADER_WIDTH + anchor.x + 6}px`,
+      top: `${HEADER_HEIGHT + anchor.y + 4}px`,
     } as CSSProperties,
   };
 });
@@ -349,21 +361,60 @@ type XlsxZoomAnchor = {
   scrollY: boolean;
 };
 
-function frozenPaneExtents(): { width: number; height: number } {
+interface FrozenPaneMetrics {
+  /** Pixel width of the frozen column strip. */
+  width: number;
+  /** Pixel height of the frozen row strip. */
+  height: number;
+  /** Number of frozen display columns. */
+  cols: number;
+  /** Number of frozen display rows. */
+  rows: number;
+}
+
+function frozenPaneMetrics(): FrozenPaneMetrics {
   const sheet = activeSheet.value;
   const freezeRow = sheet?.freezePanes?.row ?? 0;
   const freezeCol = sheet?.freezePanes?.col ?? 0;
   let width = 0;
   let height = 0;
+  let cols = 0;
+  let rows = 0;
   for (let index = 0; index < displayCols.value.length; index += 1) {
     if ((displayCols.value[index] ?? 0) >= freezeCol) break;
     width += effectiveColWidths.value[index] || 0;
+    cols += 1;
   }
   for (let index = 0; index < displayRows.value.length; index += 1) {
     if ((displayRows.value[index] ?? 0) >= freezeRow) break;
     height += effectiveRowHeights.value[index] || 0;
+    rows += 1;
   }
-  return { width, height };
+  return { width, height, cols, rows };
+}
+
+/**
+ * Grid-body-local point (headers excluded) mapped into sheet content space.
+ * Frozen strips keep content coordinates; the scrolling pane adds the live
+ * scroll offset, so a click on a pinned cell resolves to that cell instead
+ * of whatever scrolled underneath it.
+ */
+function resolvePanePoint(clientX: number, clientY: number) {
+  const container = containerRef.value;
+  if (!container) return null;
+  const rect = container.getBoundingClientRect();
+  const localX = clientX - rect.left - ROW_HEADER_WIDTH;
+  const localY = clientY - rect.top - HEADER_HEIGHT;
+  if (localX < 0 || localY < 0) return null;
+  const frozen = frozenPaneMetrics();
+  return resolvePaneContentPoint(
+    localX,
+    localY,
+    container.scrollLeft,
+    container.scrollTop,
+    frozen.width,
+    frozen.height,
+  );
 }
 
 function captureZoomAnchor(clientX: number, clientY: number): XlsxZoomAnchor | null {
@@ -374,7 +425,7 @@ function captureZoomAnchor(clientX: number, clientY: number): XlsxZoomAnchor | n
   const localY = clientY - rect.top;
   const bodyX = localX - ROW_HEADER_WIDTH;
   const bodyY = localY - HEADER_HEIGHT;
-  const frozen = frozenPaneExtents();
+  const frozen = frozenPaneMetrics();
   const scrollX = localX > ROW_HEADER_WIDTH && bodyX >= frozen.width;
   const scrollY = localY > HEADER_HEIGHT && bodyY >= frozen.height;
   if (!scrollX && !scrollY) return null;
@@ -623,29 +674,20 @@ function mergeRegionAtAnchor(cell: XlsxCellAddress): GridMergeRegion | undefined
 }
 
 function hitTestCell(clientX: number, clientY: number): XlsxCellAddress | null {
-  const container = containerRef.value;
-  if (!container) return null;
-  const rect = container.getBoundingClientRect();
-  const x = clientX - rect.left + container.scrollLeft - ROW_HEADER_WIDTH;
-  const y = clientY - rect.top + container.scrollTop - HEADER_HEIGHT;
-  if (x < 0 || y < 0) return null;
-
-  const displayCol = findDisplayIndexAtOffset(colOffsets.value, x);
-  const displayRow = findDisplayIndexAtOffset(rowOffsets.value, y);
+  const point = resolvePanePoint(clientX, clientY);
+  if (!point) return null;
+  const displayCol = findDisplayIndexAtOffset(colOffsets.value, point.contentX);
+  const displayRow = findDisplayIndexAtOffset(rowOffsets.value, point.contentY);
   if (displayCol < 0 || displayRow < 0) return null;
   const cell = getSheetCell(displayRow, displayCol);
   return cell ? resolveMergeAnchor(cell) : null;
 }
 
 function hitTestSheetPoint(clientX: number, clientY: number): { row: number; col: number; xOffset: number; yOffset: number } | null {
-  const container = containerRef.value;
-  if (!container) return null;
-  const rect = container.getBoundingClientRect();
-  const x = clientX - rect.left + container.scrollLeft - ROW_HEADER_WIDTH;
-  const y = clientY - rect.top + container.scrollTop - HEADER_HEIGHT;
-  if (x < 0 || y < 0) return null;
-  const displayCol = findDisplayIndexAtOffset(colOffsets.value, x);
-  const displayRow = findDisplayIndexAtOffset(rowOffsets.value, y);
+  const point = resolvePanePoint(clientX, clientY);
+  if (!point) return null;
+  const displayCol = findDisplayIndexAtOffset(colOffsets.value, point.contentX);
+  const displayRow = findDisplayIndexAtOffset(rowOffsets.value, point.contentY);
   if (displayCol < 0 || displayRow < 0) return null;
   const cell = getSheetCell(displayRow, displayCol);
   if (!cell) return null;
@@ -656,8 +698,8 @@ function hitTestSheetPoint(clientX: number, clientY: number): { row: number; col
   return {
     row: cell.row,
     col: cell.col,
-    xOffset: Math.max(0, Math.min(1, (x - left) / width)),
-    yOffset: Math.max(0, Math.min(1, (y - top) / height)),
+    xOffset: Math.max(0, Math.min(1, (point.contentX - left) / width)),
+    yOffset: Math.max(0, Math.min(1, (point.contentY - top) / height)),
   };
 }
 
@@ -932,6 +974,175 @@ function wrapCellText(ctx: CanvasRenderingContext2D, value: string, width: numbe
   return lines;
 }
 
+interface CellPaintState {
+  style: CanvasCellStyle;
+  conditional: ReturnType<typeof conditionalVisual>;
+  comment?: XlsxCellComment;
+  hyperlink?: XlsxCellHyperlink;
+  sparkline?: XlsxSparkline;
+  value: string;
+  /**
+   * Stroke the cell's box with the grid colour. The scrolling pass outlines
+   * merged cells only (its gridlines cover the rest); the frozen strips have
+   * no scrolled gridlines underneath, so they outline every cell.
+   */
+  gridLines: boolean;
+  selected: boolean;
+  selectionFill: string;
+  gridColor: string;
+  textColor: string;
+}
+
+/**
+ * Draws a cell's complete content — background, conditional formatting,
+ * sparkline, selection tint, text, comment marker and borders — into a
+ * viewport rectangle. The scrolling pass and the frozen-pane overdraw share
+ * it so a pinned cell keeps the formatting it has in the live pane.
+ */
+function drawCellContent(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  state: CellPaintState,
+): void {
+  const { style, conditional, hyperlink, comment, sparkline, value } = state;
+  ctx.fillStyle = conditional?.kind === "colorScale" ? conditional.background : style.backgroundColor;
+  ctx.fillRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
+  if (conditional?.kind === "dataBar") {
+    ctx.fillStyle = `${conditional.color}99`;
+    ctx.fillRect(x + 3, y + 4, Math.max(2, (width - 6) * conditional.ratio), Math.max(2, height - 8));
+  }
+  if (sparkline) drawSparkline(ctx, sparkline, x, y, width, height);
+  if (state.gridLines) {
+    ctx.strokeStyle = state.gridColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
+  }
+
+  if (state.selected) {
+    ctx.fillStyle = state.selectionFill;
+    ctx.fillRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+  }
+
+  if (value && !sparkline && (conditional?.kind !== "dataBar" || conditional.showValue)) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x + 2, y + 1, Math.max(0, width - 4), Math.max(0, height - 2));
+    ctx.clip();
+    ctx.fillStyle = hyperlink ? "#2563eb" : style.color || state.textColor;
+    ctx.font = `${style.fontStyle} ${style.fontWeight} ${Math.round(style.fontSizePx)}px ${JSON.stringify(style.fontFamily)}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.textAlign = style.alignment;
+    const padding = 5;
+    const textX = style.alignment === "right"
+      ? x + width - padding
+      : style.alignment === "center" ? x + width / 2 : x + padding;
+    const lineHeight = Math.max(12, style.fontSizePx * 1.25);
+    const maxLines = style.wrap ? Math.max(1, Math.floor((height - 4) / lineHeight)) : 1;
+    const lines = wrapCellText(ctx, value, Math.max(0, width - padding * 2), maxLines);
+    const blockHeight = lines.length * lineHeight;
+    const firstBaseline = style.vertical === "top"
+      ? y + 2 + lineHeight * 0.8
+      : style.vertical === "middle"
+        ? y + (height - blockHeight) / 2 + lineHeight * 0.8
+        : y + height - blockHeight + lineHeight * 0.8 - 2;
+    lines.forEach((line, index) => ctx.fillText(line, textX, firstBaseline + index * lineHeight));
+    if (style.underline || style.strike || hyperlink) {
+      const measured = Math.min(ctx.measureText(lines[0] ?? "").width, Math.max(0, width - padding * 2));
+      const startX = style.alignment === "right" ? textX - measured : style.alignment === "center" ? textX - measured / 2 : textX;
+      ctx.strokeStyle = style.color;
+      ctx.lineWidth = 1;
+      for (const offset of [style.underline || hyperlink ? 2 : null, style.strike ? -style.fontSizePx * 0.3 : null]) {
+        if (offset === null) continue;
+        ctx.beginPath();
+        ctx.moveTo(startX, firstBaseline + offset);
+        ctx.lineTo(startX + measured, firstBaseline + offset);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+  if (conditional?.kind === "iconSet") {
+    ctx.fillStyle = conditional.ratio < .34 ? "#dc2626" : conditional.ratio < .67 ? "#d97706" : "#16a34a";
+    ctx.font = `${Math.max(10, Math.min(15, height - 6))}px sans-serif`;
+    ctx.textAlign = "right";
+    ctx.fillText(conditional.icon, x + width - 4, y + height / 2 + 5);
+  }
+  if (comment) {
+    ctx.fillStyle = "#dc2626";
+    ctx.beginPath(); ctx.moveTo(x + width - 9, y + 1); ctx.lineTo(x + width - 1, y + 1); ctx.lineTo(x + width - 1, y + 9); ctx.closePath(); ctx.fill();
+  }
+
+  drawCellBorders(ctx, style, x, y, width, height);
+}
+
+type ActiveWorksheet = NonNullable<ReturnType<XlsxViewerController["getActiveWorksheet"]>>;
+
+/** Workbook style for a cell: worker cache, then the loaded worksheet, then row/column styles. */
+function resolveCellWorkbookStyle(
+  cell: XlsxCellAddress,
+  worksheet: ActiveWorksheet | null,
+  sheet: XlsxSheetData,
+): XlsxResolvedCellStyle | undefined {
+  let workbookStyle = getWorkerCellStyle(cell);
+  if (!workbookStyle && worksheet) {
+    try {
+      workbookStyle = worksheet.getCellStyleAt(cell.row, cell.col) as XlsxResolvedCellStyle | undefined;
+    } catch {
+      workbookStyle = undefined;
+    }
+  }
+  if (!workbookStyle) {
+    const rowStyleId = sheet.rowStyleIds[cell.row];
+    const colStyleId = sheet.colStyleIds[cell.col];
+    workbookStyle = rowStyleId !== undefined
+      ? sheet.styleById[rowStyleId]
+      : colStyleId !== undefined ? sheet.styleById[colStyleId] : undefined;
+  }
+  return workbookStyle;
+}
+
+/**
+ * Selection and active-cell outlines, drawn once per pane: each pane clips to
+ * its own box and translates content by the scroll offset only on its
+ * scrolling axes, so an outline inside the frozen strips lands on the pinned
+ * cells instead of their scrolled positions.
+ */
+function paintSelectionBorders(
+  ctx: CanvasRenderingContext2D,
+  bodyWidth: number,
+  bodyHeight: number,
+  color: string,
+): void {
+  const sel = selection.value;
+  const active = activeCell.value;
+  const ranges: XlsxCellRange[] = [];
+  if (sel) ranges.push(sel);
+  if (active && (!sel || (sel.start.row === sel.end.row && sel.start.col === sel.end.col))) {
+    ranges.push({ start: active, end: active });
+  }
+  if (!ranges.length) return;
+
+  const frozen = frozenPaneMetrics();
+  const panes = [
+    { x: 0, y: 0, width: frozen.width, height: frozen.height, scrollX: false, scrollY: false },
+    { x: 0, y: frozen.height, width: frozen.width, height: Math.max(0, bodyHeight - frozen.height), scrollX: false, scrollY: true },
+    { x: frozen.width, y: 0, width: Math.max(0, bodyWidth - frozen.width), height: frozen.height, scrollX: true, scrollY: false },
+    { x: frozen.width, y: frozen.height, width: Math.max(0, bodyWidth - frozen.width), height: Math.max(0, bodyHeight - frozen.height), scrollX: true, scrollY: true },
+  ];
+  for (const pane of panes) {
+    if (pane.width <= 0 || pane.height <= 0) continue;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(pane.x, pane.y, pane.width, pane.height);
+    ctx.clip();
+    ctx.translate(pane.scrollX ? -scrollLeft.value : 0, pane.scrollY ? -scrollTop.value : 0);
+    for (const range of ranges) drawSelectionBorder(ctx, range, color);
+    ctx.restore();
+  }
+}
+
 function paintGrid() {
   paintBody();
   paintColHeaders();
@@ -994,7 +1205,6 @@ function paintBody() {
   }
 
   const sel = selection.value;
-  const active = activeCell.value;
 
   try {
     for (let r = rowRange.start; r <= rowRange.end && r < heights.length; r++) {
@@ -1013,106 +1223,28 @@ function paintBody() {
           : rowH;
         const colX = getColOffsetSum(c);
         const value = getGridCellDisplayValue(cell);
-        let workbookStyle = getWorkerCellStyle(cell);
-        if (!workbookStyle && worksheet) {
-          try {
-            workbookStyle = worksheet.getCellStyleAt(cell.row, cell.col) as XlsxResolvedCellStyle | undefined;
-          } catch {
-            workbookStyle = undefined;
-          }
-        }
-        if (!workbookStyle) {
-          const rowStyleId = sheet.rowStyleIds[cell.row];
-          const colStyleId = sheet.colStyleIds[cell.col];
-          workbookStyle = rowStyleId !== undefined
-            ? sheet.styleById[rowStyleId]
-            : colStyleId !== undefined ? sheet.styleById[colStyleId] : undefined;
-        }
-        const style = resolveCanvasCellStyle(cell, value, workbookStyle);
-        const conditional = conditionalVisual(cell, value);
-        const hyperlink = hyperlinksByCell.value.get(`${cell.row}:${cell.col}`);
-        const comment = commentsByCell.value.get(`${cell.row}:${cell.col}`);
-        const sparkline = sparklinesByCell.value.get(`${cell.row}:${cell.col}`);
-
-        ctx.fillStyle = conditional?.kind === "colorScale" ? conditional.background : style.backgroundColor;
-        ctx.fillRect(colX + 0.5, rowY + 0.5, Math.max(0, colW - 1), Math.max(0, rowHResolved - 1));
-        if (conditional?.kind === "dataBar") {
-          ctx.fillStyle = `${conditional.color}99`;
-          ctx.fillRect(colX + 3, rowY + 4, Math.max(2, (colW - 6) * conditional.ratio), Math.max(2, rowHResolved - 8));
-        }
-        if (sparkline) drawSparkline(ctx, sparkline, colX, rowY, colW, rowHResolved);
-        if (merge && sheet.showGridLines !== false) {
-          ctx.strokeStyle = gridColor;
-          ctx.lineWidth = 1;
-          ctx.strokeRect(colX + 0.5, rowY + 0.5, Math.max(0, colW - 1), Math.max(0, rowHResolved - 1));
-        }
-
-        if (isCellInRange(cell, sel) || (merge && sel && rangesIntersect(merge, sel))) {
-          ctx.fillStyle = selFill;
-          ctx.fillRect(colX + 1, rowY + 1, Math.max(0, colW - 2), Math.max(0, rowHResolved - 2));
-        }
-
-        if (value && !sparkline && (conditional?.kind !== "dataBar" || conditional.showValue)) {
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(colX + 2, rowY + 1, Math.max(0, colW - 4), Math.max(0, rowHResolved - 2));
-          ctx.clip();
-          ctx.fillStyle = hyperlink ? "#2563eb" : style.color || textColor;
-          ctx.font = `${style.fontStyle} ${style.fontWeight} ${Math.round(style.fontSizePx)}px ${JSON.stringify(style.fontFamily)}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-          ctx.textAlign = style.alignment;
-          const padding = 5;
-          const textX = style.alignment === "right"
-            ? colX + colW - padding
-            : style.alignment === "center" ? colX + colW / 2 : colX + padding;
-          const lineHeight = Math.max(12, style.fontSizePx * 1.25);
-          const maxLines = style.wrap ? Math.max(1, Math.floor((rowHResolved - 4) / lineHeight)) : 1;
-          const lines = wrapCellText(ctx, value, Math.max(0, colW - padding * 2), maxLines);
-          const blockHeight = lines.length * lineHeight;
-          const firstBaseline = style.vertical === "top"
-            ? rowY + 2 + lineHeight * 0.8
-            : style.vertical === "middle"
-              ? rowY + (rowHResolved - blockHeight) / 2 + lineHeight * 0.8
-              : rowY + rowHResolved - blockHeight + lineHeight * 0.8 - 2;
-          lines.forEach((line, index) => ctx.fillText(line, textX, firstBaseline + index * lineHeight));
-          if (style.underline || style.strike || hyperlink) {
-            const measured = Math.min(ctx.measureText(lines[0] ?? "").width, Math.max(0, colW - padding * 2));
-            const startX = style.alignment === "right" ? textX - measured : style.alignment === "center" ? textX - measured / 2 : textX;
-            ctx.strokeStyle = style.color;
-            ctx.lineWidth = 1;
-            for (const offset of [style.underline || hyperlink ? 2 : null, style.strike ? -style.fontSizePx * 0.3 : null]) {
-              if (offset === null) continue;
-              ctx.beginPath();
-              ctx.moveTo(startX, firstBaseline + offset);
-              ctx.lineTo(startX + measured, firstBaseline + offset);
-              ctx.stroke();
-            }
-          }
-          ctx.restore();
-        }
-        if (conditional?.kind === "iconSet") {
-          ctx.fillStyle = conditional.ratio < .34 ? "#dc2626" : conditional.ratio < .67 ? "#d97706" : "#16a34a";
-          ctx.font = `${Math.max(10, Math.min(15, rowHResolved - 6))}px sans-serif`;
-          ctx.textAlign = "right";
-          ctx.fillText(conditional.icon, colX + colW - 4, rowY + rowHResolved / 2 + 5);
-        }
-        if (comment) {
-          ctx.fillStyle = "#dc2626";
-          ctx.beginPath(); ctx.moveTo(colX + colW - 9, rowY + 1); ctx.lineTo(colX + colW - 1, rowY + 1); ctx.lineTo(colX + colW - 1, rowY + 9); ctx.closePath(); ctx.fill();
-        }
-
-        drawCellBorders(ctx, style, colX, rowY, colW, rowHResolved);
+        const style = resolveCanvasCellStyle(cell, value, resolveCellWorkbookStyle(cell, worksheet, sheet));
+        drawCellContent(ctx, colX, rowY, colW, rowHResolved, {
+          style,
+          conditional: conditionalVisual(cell, value),
+          comment: commentsByCell.value.get(`${cell.row}:${cell.col}`),
+          hyperlink: hyperlinksByCell.value.get(`${cell.row}:${cell.col}`),
+          sparkline: sparklinesByCell.value.get(`${cell.row}:${cell.col}`),
+          value,
+          gridLines: Boolean(merge) && sheet.showGridLines !== false,
+          selected: isCellInRange(cell, sel) || Boolean(merge && sel && rangesIntersect(merge, sel)),
+          selectionFill: selFill,
+          gridColor,
+          textColor,
+        });
       }
-    }
-
-    if (sel) drawSelectionBorder(ctx, sel, selBorder);
-    if (active && (!sel || (sel.start.row === sel.end.row && sel.start.col === sel.end.col))) {
-      drawSelectionBorder(ctx, { start: active, end: active }, selBorder);
     }
   } finally {
     worksheet?.free();
     ctx.restore();
   }
-  paintFrozenPanes(ctx, bw, bh, gridColor, selFill, selBorder);
+  paintFrozenPanes(ctx, bw, bh, gridColor, selFill, textColor);
+  paintSelectionBorders(ctx, bw, bh, selBorder);
 }
 
 function paintFrozenPanes(
@@ -1121,7 +1253,7 @@ function paintFrozenPanes(
   bodyHeight: number,
   gridColor: string,
   selectionFill: string,
-  selectionBorder: string,
+  textColor: string,
 ): void {
   const sheet = activeSheet.value;
   const freezeRow = sheet?.freezePanes?.row ?? 0;
@@ -1156,44 +1288,23 @@ function paintFrozenPanes(
     const height = mergeEnd
       ? getRowOffsetSum(mergeEnd.row + 1) - getRowOffsetSum(displayRow)
       : effectiveRowHeights.value[displayRow] || 0;
-    const x = getColOffsetSum(displayCol) - (frozenX ? 0 : scrollLeft.value);
-    const y = getRowOffsetSum(displayRow) - (frozenY ? 0 : scrollTop.value);
+    const x = paneViewOffset(getColOffsetSum(displayCol), scrollLeft.value, frozenX);
+    const y = paneViewOffset(getRowOffsetSum(displayRow), scrollTop.value, frozenY);
     const value = getGridCellDisplayValue(cell);
-    let workbookStyle = getWorkerCellStyle(cell);
-    if (!workbookStyle && worksheet) {
-      try { workbookStyle = worksheet.getCellStyleAt(cell.row, cell.col) as XlsxResolvedCellStyle | undefined; } catch { /* keep fallback */ }
-    }
-    const style = resolveCanvasCellStyle(cell, value, workbookStyle);
-    ctx.fillStyle = style.backgroundColor;
-    ctx.fillRect(x, y, width, height);
-    if (sheet.showGridLines !== false) {
-      ctx.strokeStyle = gridColor;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
-    }
-    if (isCellInRange(cell, selection.value) || (merge && selection.value && rangesIntersect(merge, selection.value))) {
-      ctx.fillStyle = selectionFill;
-      ctx.fillRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
-    }
-    if (value) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(x + 2, y + 1, Math.max(0, width - 4), Math.max(0, height - 2));
-      ctx.clip();
-      ctx.fillStyle = style.color;
-      ctx.font = `${style.fontStyle} ${style.fontWeight} ${Math.round(style.fontSizePx)}px ${JSON.stringify(style.fontFamily)}, "Segoe UI", sans-serif`;
-      ctx.textBaseline = "middle";
-      ctx.textAlign = style.alignment;
-      const textX = style.alignment === "right" ? x + width - 5 : style.alignment === "center" ? x + width / 2 : x + 5;
-      ctx.fillText(truncateText(ctx, value, Math.max(0, width - 10)), textX, y + height / 2);
-      ctx.restore();
-    }
-    drawCellBorders(ctx, style, x, y, width, height);
-    if (activeCell.value?.row === cell.row && activeCell.value?.col === cell.col) {
-      ctx.strokeStyle = selectionBorder;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
-    }
+    drawCellContent(ctx, x, y, width, height, {
+      style: resolveCanvasCellStyle(cell, value, resolveCellWorkbookStyle(cell, worksheet, sheet)),
+      conditional: conditionalVisual(cell, value),
+      comment: commentsByCell.value.get(`${cell.row}:${cell.col}`),
+      hyperlink: hyperlinksByCell.value.get(`${cell.row}:${cell.col}`),
+      sparkline: sparklinesByCell.value.get(`${cell.row}:${cell.col}`),
+      value,
+      gridLines: sheet.showGridLines !== false,
+      selected: isCellInRange(cell, selection.value)
+        || Boolean(merge && selection.value && rangesIntersect(merge, selection.value)),
+      selectionFill,
+      gridColor,
+      textColor,
+    });
   };
 
   try {
@@ -1245,11 +1356,10 @@ function paintColHeaders() {
   const bgColor = props.isDark ? "#27272a" : "#f4f4f5";
   const textColor = props.isDark ? "#a1a1aa" : "#71717a";
   const borderColor = props.isDark ? "#3f3f46" : "#d4d4d8";
+  const dividerColor = props.isDark ? "#71717a" : "#a1a1aa";
 
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, cw, HEADER_HEIGHT);
-  ctx.save();
-  ctx.translate(-scrollLeft.value, 0);
   ctx.font = "11px -apple-system, BlinkMacSystemFont, sans-serif";
   ctx.textBaseline = "middle";
   ctx.textAlign = "center";
@@ -1258,10 +1368,14 @@ function paintColHeaders() {
   const widths = effectiveColWidths.value;
   const colRange = visibleColRange.value;
   const selected = selection.value;
-  for (let c = colRange.start; c <= colRange.end && c < widths.length; c++) {
-    const colW = widths[c] || 0;
-    const x = getColOffsetSum(c);
-    const sheetCol = displayCols.value[c] ?? c;
+  const frozen = frozenPaneMetrics();
+
+  const paintColumn = (displayIndex: number) => {
+    const colW = widths[displayIndex] || 0;
+    // The frozen strip pins its labels above the pinned cells; only the
+    // scrolling strip follows scrollLeft.
+    const x = paneViewOffset(getColOffsetSum(displayIndex), scrollLeft.value, displayIndex < frozen.cols);
+    const sheetCol = displayCols.value[displayIndex] ?? displayIndex;
     const selectedCol = activeCell.value?.col === sheetCol || Boolean(selected &&
       sheetCol >= Math.min(selected.start.col, selected.end.col) &&
       sheetCol <= Math.max(selected.start.col, selected.end.col));
@@ -1273,13 +1387,32 @@ function paintColHeaders() {
     ctx.fillText(columnLabel(sheetCol), x + colW / 2, HEADER_HEIGHT / 2);
     ctx.strokeStyle = borderColor; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x + colW, 0); ctx.lineTo(x + colW, HEADER_HEIGHT); ctx.stroke();
-  }
-  ctx.strokeStyle = borderColor;
+    ctx.beginPath(); ctx.moveTo(x, HEADER_HEIGHT - 0.5); ctx.lineTo(x + colW, HEADER_HEIGHT - 0.5); ctx.stroke();
+  };
+
+  ctx.save();
   ctx.beginPath();
-  ctx.moveTo(getColOffsetSum(colRange.start), HEADER_HEIGHT - 0.5);
-  ctx.lineTo(getColOffsetSum(colRange.end + 1), HEADER_HEIGHT - 0.5);
-  ctx.stroke();
+  ctx.rect(frozen.width, 0, Math.max(0, cw - frozen.width), HEADER_HEIGHT);
+  ctx.clip();
+  for (let c = Math.max(colRange.start, frozen.cols); c <= colRange.end && c < widths.length; c++) {
+    paintColumn(c);
+  }
   ctx.restore();
+
+  if (frozen.width > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, frozen.width, HEADER_HEIGHT);
+    ctx.clip();
+    for (let c = 0; c < frozen.cols && c < widths.length; c++) paintColumn(c);
+    ctx.restore();
+    ctx.strokeStyle = dividerColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(frozen.width - 0.5, 0);
+    ctx.lineTo(frozen.width - 0.5, HEADER_HEIGHT);
+    ctx.stroke();
+  }
 }
 
 function paintRowHeaders() {
@@ -1295,11 +1428,10 @@ function paintRowHeaders() {
   const bgColor = props.isDark ? "#27272a" : "#f4f4f5";
   const textColor = props.isDark ? "#a1a1aa" : "#71717a";
   const borderColor = props.isDark ? "#3f3f46" : "#d4d4d8";
+  const dividerColor = props.isDark ? "#71717a" : "#a1a1aa";
 
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, ROW_HEADER_WIDTH, rh);
-  ctx.save();
-  ctx.translate(0, -scrollTop.value);
   ctx.font = "11px -apple-system, BlinkMacSystemFont, sans-serif";
   ctx.textBaseline = "middle";
   ctx.textAlign = "center";
@@ -1308,10 +1440,14 @@ function paintRowHeaders() {
   const heights = effectiveRowHeights.value;
   const rowRange = visibleRowRange.value;
   const selected = selection.value;
-  for (let r = rowRange.start; r <= rowRange.end && r < heights.length; r++) {
-    const rowH = heights[r] || 0;
-    const y = getRowOffsetSum(r);
-    const sheetRow = displayRows.value[r] ?? r;
+  const frozen = frozenPaneMetrics();
+
+  const paintRow = (displayIndex: number) => {
+    const rowH = heights[displayIndex] || 0;
+    // The frozen strip pins its labels beside the pinned cells; only the
+    // scrolling strip follows scrollTop.
+    const y = paneViewOffset(getRowOffsetSum(displayIndex), scrollTop.value, displayIndex < frozen.rows);
+    const sheetRow = displayRows.value[displayIndex] ?? displayIndex;
     const selectedRow = activeCell.value?.row === sheetRow || Boolean(selected &&
       sheetRow >= Math.min(selected.start.row, selected.end.row) &&
       sheetRow <= Math.max(selected.start.row, selected.end.row));
@@ -1323,13 +1459,32 @@ function paintRowHeaders() {
     ctx.fillText(String(sheetRow + 1), ROW_HEADER_WIDTH / 2, y + rowH / 2);
     ctx.strokeStyle = borderColor; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, y + rowH); ctx.lineTo(ROW_HEADER_WIDTH, y + rowH); ctx.stroke();
-  }
-  ctx.strokeStyle = borderColor;
+    ctx.beginPath(); ctx.moveTo(ROW_HEADER_WIDTH - 0.5, y); ctx.lineTo(ROW_HEADER_WIDTH - 0.5, y + rowH); ctx.stroke();
+  };
+
+  ctx.save();
   ctx.beginPath();
-  ctx.moveTo(ROW_HEADER_WIDTH - 0.5, getRowOffsetSum(rowRange.start));
-  ctx.lineTo(ROW_HEADER_WIDTH - 0.5, getRowOffsetSum(rowRange.end + 1));
-  ctx.stroke();
+  ctx.rect(0, frozen.height, ROW_HEADER_WIDTH, Math.max(0, rh - frozen.height));
+  ctx.clip();
+  for (let r = Math.max(rowRange.start, frozen.rows); r <= rowRange.end && r < heights.length; r++) {
+    paintRow(r);
+  }
   ctx.restore();
+
+  if (frozen.height > 0) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, ROW_HEADER_WIDTH, frozen.height);
+    ctx.clip();
+    for (let r = 0; r < frozen.rows && r < heights.length; r++) paintRow(r);
+    ctx.restore();
+    ctx.strokeStyle = dividerColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, frozen.height - 0.5);
+    ctx.lineTo(ROW_HEADER_WIDTH, frozen.height - 0.5);
+    ctx.stroke();
+  }
 }
 
 function paintCorner() {
@@ -1388,7 +1543,8 @@ function hitTestAxis(clientX: number, clientY: number): AxisHit | null {
     return { actualIndex: 0, displayIndex: 0, kind: "corner", resize: false };
   }
   if (localY <= HEADER_HEIGHT && localX > ROW_HEADER_WIDTH) {
-    const contentX = localX + container.scrollLeft - ROW_HEADER_WIDTH;
+    const frozen = frozenPaneMetrics();
+    const contentX = paneAxisContentOffset(localX - ROW_HEADER_WIDTH, container.scrollLeft, frozen.width);
     const hitDisplayIndex = findDisplayIndexAtOffset(colOffsets.value, contentX);
     if (hitDisplayIndex < 0) return null;
     const startBoundary = getColOffsetSum(hitDisplayIndex);
@@ -1405,7 +1561,8 @@ function hitTestAxis(clientX: number, clientY: number): AxisHit | null {
     };
   }
   if (localX <= ROW_HEADER_WIDTH && localY > HEADER_HEIGHT) {
-    const contentY = localY + container.scrollTop - HEADER_HEIGHT;
+    const frozen = frozenPaneMetrics();
+    const contentY = paneAxisContentOffset(localY - HEADER_HEIGHT, container.scrollTop, frozen.height);
     const hitDisplayIndex = findDisplayIndexAtOffset(rowOffsets.value, contentY);
     if (hitDisplayIndex < 0) return null;
     const startBoundary = getRowOffsetSum(hitDisplayIndex);
@@ -1654,17 +1811,27 @@ function scrollToCell(cell: XlsxCellAddress) {
   if (!container) return;
   const displayCell = getDisplayCell(cell);
   if (!displayCell) return;
+  const frozen = frozenPaneMetrics();
   const colX = getColOffsetSum(displayCell.col);
   const rowY = getRowOffsetSum(displayCell.row);
   const colW = effectiveColWidths.value[displayCell.col] || DEFAULT_COL_WIDTH;
   const rowH = effectiveRowHeights.value[displayCell.row] || DEFAULT_ROW_HEIGHT;
   const bodyWidth = Math.max(0, container.clientWidth - ROW_HEADER_WIDTH);
   const bodyHeight = Math.max(0, container.clientHeight - HEADER_HEIGHT);
+  // The scrolling pane is smaller than the body by the frozen strips, and
+  // pinned cells are always on screen — scrolling them into view would jump
+  // the sheet for no reason.
+  const scrollingWidth = Math.max(0, bodyWidth - frozen.width);
+  const scrollingHeight = Math.max(0, bodyHeight - frozen.height);
 
-  if (colX < container.scrollLeft) container.scrollLeft = Math.max(0, colX);
-  else if (colX + colW > container.scrollLeft + bodyWidth) container.scrollLeft = colX + colW - bodyWidth;
-  if (rowY < container.scrollTop) container.scrollTop = Math.max(0, rowY);
-  else if (rowY + rowH > container.scrollTop + bodyHeight) container.scrollTop = rowY + rowH - bodyHeight;
+  if (displayCell.col >= frozen.cols) {
+    if (colX < container.scrollLeft) container.scrollLeft = Math.max(0, colX);
+    else if (colX + colW > container.scrollLeft + scrollingWidth) container.scrollLeft = colX + colW - scrollingWidth;
+  }
+  if (displayCell.row >= frozen.rows) {
+    if (rowY < container.scrollTop) container.scrollTop = Math.max(0, rowY);
+    else if (rowY + rowH > container.scrollTop + scrollingHeight) container.scrollTop = rowY + rowH - scrollingHeight;
+  }
   schedulePaint();
 }
 
@@ -1729,9 +1896,20 @@ const editInputStyle = computed<CSSProperties>(() => {
   const displayCell = getDisplayCell(cell);
   if (!displayCell) return { display: "none" };
   const z = zoomScale.value / 100;
+  const frozen = frozenPaneMetrics();
+  const anchor = resolvePaneViewPoint({
+    contentX: getColOffsetSum(displayCell.col),
+    contentY: getRowOffsetSum(displayCell.row),
+    displayCol: displayCell.col,
+    displayRow: displayCell.row,
+    frozenCols: frozen.cols,
+    frozenRows: frozen.rows,
+    scrollLeft: scrollLeft.value,
+    scrollTop: scrollTop.value,
+  });
   return {
-    left: `${ROW_HEADER_WIDTH + getColOffsetSum(displayCell.col) - scrollLeft.value}px`,
-    top: `${HEADER_HEIGHT + getRowOffsetSum(displayCell.row) - scrollTop.value}px`,
+    left: `${ROW_HEADER_WIDTH + anchor.x}px`,
+    top: `${HEADER_HEIGHT + anchor.y}px`,
     width: `${effectiveColWidths.value[displayCell.col] || DEFAULT_COL_WIDTH}px`,
     height: `${effectiveRowHeights.value[displayCell.row] || DEFAULT_ROW_HEIGHT}px`,
     position: "absolute", zIndex: "10",
