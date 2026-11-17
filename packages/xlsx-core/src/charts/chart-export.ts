@@ -77,6 +77,9 @@ export function normalizeChartAxis(raw: unknown): XlsxChartAxis | null {
     : null;
 
   return {
+    axisType: axis.axisType === "date" || axis.axisType === "category" || axis.axisType === "value" || axis.axisType === "series"
+      ? axis.axisType
+      : undefined,
     crossId: typeof rawAxis.crossId === "number" && Number.isFinite(rawAxis.crossId) ? rawAxis.crossId : undefined,
     crosses: typeof axis.crosses === "string" ? axis.crosses : undefined,
     crossBetween: typeof axis.crossBetween === "string" ? axis.crossBetween : undefined,
@@ -84,6 +87,8 @@ export function normalizeChartAxis(raw: unknown): XlsxChartAxis | null {
     id: typeof rawAxis.id === "number" && Number.isFinite(rawAxis.id) ? rawAxis.id : undefined,
     labelPosition: typeof axis.labelPosition === "string" ? axis.labelPosition : undefined,
     logBase: typeof axis.logBase === "number" ? axis.logBase : undefined,
+    majorTimeUnit: typeof axis.majorTimeUnit === "string" ? axis.majorTimeUnit : undefined,
+    minorTimeUnit: typeof axis.minorTimeUnit === "string" ? axis.minorTimeUnit : undefined,
     orientation: typeof axis.orientation === "string" ? axis.orientation : undefined,
     majorUnit: typeof axis.majorUnit === "number" ? axis.majorUnit : undefined,
     max: typeof axis.max === "number" ? axis.max : undefined,
@@ -124,7 +129,15 @@ export function readChartAxisFromXml(axisNode: Element | null): Partial<XlsxChar
 
   const numFmt = getFirstLocalChild(axisNode, "numFmt");
   const scalingNode = getFirstLocalChild(axisNode, "scaling");
+  const axisType = axisNode.localName === "dateAx"
+    ? "date"
+    : axisNode.localName === "catAx"
+      ? "category"
+      : axisNode.localName === "serAx"
+        ? "series"
+        : "value";
   return {
+    axisType,
     crossId: readChartNumericAttribute(axisNode, "crossAx"),
     crosses: getFirstLocalChild(axisNode, "crosses")?.getAttribute("val") ?? undefined,
     crossBetween: getFirstLocalChild(axisNode, "crossBetween")?.getAttribute("val") ?? undefined,
@@ -136,6 +149,8 @@ export function readChartAxisFromXml(axisNode: Element | null): Partial<XlsxChar
     id: readChartNumericAttribute(axisNode, "axId"),
     labelPosition: getFirstLocalChild(axisNode, "tickLblPos")?.getAttribute("val") ?? undefined,
     logBase: readChartNumericAttribute(getFirstLocalChild(axisNode, "scaling"), "logBase"),
+    majorTimeUnit: getFirstLocalChild(axisNode, "majorTimeUnit")?.getAttribute("val") ?? undefined,
+    minorTimeUnit: getFirstLocalChild(axisNode, "minorTimeUnit")?.getAttribute("val") ?? undefined,
     orientation: getFirstLocalChild(scalingNode ?? axisNode, "orientation")?.getAttribute("val") ?? undefined,
     majorGridlines: Boolean(getFirstLocalChild(axisNode, "majorGridlines")),
     majorTickMark: getFirstLocalChild(axisNode, "majorTickMark")?.getAttribute("val") ?? undefined,
@@ -229,8 +244,16 @@ export function normalizeChartDataLabels(raw: unknown): XlsxChartDataLabels | nu
         return normalized;
       })()
     : undefined;
+  const numberFormat = labels.numberFormat && typeof labels.numberFormat === "object"
+    ? labels.numberFormat as Record<string, unknown>
+    : null;
   return {
+    numberFormat: numberFormat ? {
+      formatCode: typeof numberFormat.formatCode === "string" ? numberFormat.formatCode : undefined,
+      sourceLinked: typeof numberFormat.sourceLinked === "boolean" ? numberFormat.sourceLinked : undefined
+    } : undefined,
     pointLabels: pointLabels && pointLabels.length > 0 ? pointLabels : undefined,
+    position: typeof labels.position === "string" ? labels.position : undefined,
     raw: labels,
     showBubbleSize: typeof labels.showBubbleSize === "boolean" ? labels.showBubbleSize : undefined,
     showCategoryName: typeof labels.showCategoryName === "boolean" ? labels.showCategoryName : undefined,
@@ -372,7 +395,8 @@ export function normalizeChartTypeGroup(
   workbookSheetIndex: number,
   chartId: string,
   raw: unknown,
-  index: number
+  index: number,
+  skipHidden = false
 ): XlsxChartTypeGroup | null {
   if (!raw || typeof raw !== "object") {
     return null;
@@ -391,7 +415,7 @@ export function normalizeChartTypeGroup(
     overlap: typeof group.overlap === "number" && Number.isFinite(group.overlap) ? group.overlap : undefined,
     raw: group,
     series: rawSeries.map((entry, seriesIndex) => (
-      normalizeChartSeries(workbook, workbookSheetIndex, `${chartId}-group-${index}`, entry, seriesIndex)
+      normalizeChartSeries(workbook, workbookSheetIndex, `${chartId}-group-${index}`, entry, seriesIndex, skipHidden)
     )),
     varyColors: typeof group.varyColors === "boolean" ? group.varyColors : undefined
   };
@@ -809,6 +833,16 @@ export function updateDataLabels(chartTypeNode: Element, labels: XlsxChartDataLa
   }
 
   const labelsNode = ensureChild(chartTypeNode, "dLbls");
+  if (labels.position) {
+    ensureChild(labelsNode, "dLblPos").setAttribute("val", labels.position);
+  }
+  if (labels.numberFormat?.formatCode) {
+    const numFmt = ensureChild(labelsNode, "numFmt");
+    numFmt.setAttribute("formatCode", labels.numberFormat.formatCode);
+    if (labels.numberFormat.sourceLinked !== undefined) {
+      numFmt.setAttribute("sourceLinked", labels.numberFormat.sourceLinked ? "1" : "0");
+    }
+  }
   if (labels.showLegendKey !== undefined) {
     setBooleanValue(labelsNode, "showLegendKey", labels.showLegendKey);
   }

@@ -225,12 +225,12 @@ export function applyChartSeriesFormula(
     ...currentSeries,
     bubbleSizeRef,
     bubbleSizes: workbook && bubbleSizeRef?.formula
-      ? resolveReferenceValues(workbook, chart.workbookSheetIndex, bubbleSizeRef, "value").map((value) => (
+      ? resolveReferenceValues(workbook, chart.workbookSheetIndex, bubbleSizeRef, "value", chart.plotVisibleOnly !== false).map((value) => (
           typeof value === "number" && Number.isFinite(value) ? value : null
         ))
       : currentSeries.bubbleSizes,
     categories: workbook
-      ? resolveReferenceValues(workbook, chart.workbookSheetIndex, categoriesRef, "category")
+      ? resolveReferenceValues(workbook, chart.workbookSheetIndex, categoriesRef, "category", chart.plotVisibleOnly !== false)
       : currentSeries.categories,
     categoriesRef,
     name: parsed.nameLiteral ?? (
@@ -240,7 +240,7 @@ export function applyChartSeriesFormula(
     ),
     raw,
     values: workbook
-      ? resolveReferenceValues(workbook, chart.workbookSheetIndex, valuesRef, "value").map((value) => (
+      ? resolveReferenceValues(workbook, chart.workbookSheetIndex, valuesRef, "value", chart.plotVisibleOnly !== false).map((value) => (
           typeof value === "number" && Number.isFinite(value) ? value : null
         ))
       : currentSeries.values,
@@ -538,7 +538,8 @@ export function resolveReferenceValues(
   workbook: Workbook,
   fallbackSheetIndex: number,
   reference: XlsxChartReference | null | undefined,
-  mode: "category" | "value"
+  mode: "category" | "value",
+  skipHidden = false
 ): Array<number | string | null> {
   if (!reference?.formula) {
     return reference?.values ?? [];
@@ -552,7 +553,13 @@ export function resolveReferenceValues(
   try {
     const values: Array<number | string | null> = [];
     for (let row = resolved.range.start.row; row <= resolved.range.end.row; row += 1) {
+      if (skipHidden && typeof resolved.sheet.isRowHidden === "function" && resolved.sheet.isRowHidden(row)) {
+        continue;
+      }
       for (let col = resolved.range.start.col; col <= resolved.range.end.col; col += 1) {
+        if (skipHidden && typeof resolved.sheet.isColumnHidden === "function" && resolved.sheet.isColumnHidden(col)) {
+          continue;
+        }
         const calculated = typeof resolved.sheet.getCalculatedValueAt === "function"
           ? resolved.sheet.getCalculatedValueAt(row, col)
           : null;
@@ -604,7 +611,8 @@ export function normalizeChartSeries(
   workbookSheetIndex: number,
   chartId: string,
   raw: unknown,
-  index: number
+  index: number,
+  skipHidden = false
 ): XlsxChartSeries {
   const series = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
   const categoriesRef = normalizeChartReference(series.categories);
@@ -622,10 +630,10 @@ export function normalizeChartSeries(
 
   return {
     bubbleSizeRef,
-    bubbleSizes: resolveReferenceValues(workbook, workbookSheetIndex, bubbleSizeRef, "value").map((value) => (
+    bubbleSizes: resolveReferenceValues(workbook, workbookSheetIndex, bubbleSizeRef, "value", skipHidden).map((value) => (
       typeof value === "number" && Number.isFinite(value) ? value : null
     )),
-    categories: resolveReferenceValues(workbook, workbookSheetIndex, categoriesRef, "category"),
+    categories: resolveReferenceValues(workbook, workbookSheetIndex, categoriesRef, "category", skipHidden),
     categoriesRef,
     color: rawFillColor ?? undefined,
     dataPoints: Array.isArray(series.dataPoints) ? series.dataPoints : [],
@@ -651,7 +659,7 @@ export function normalizeChartSeries(
     raw: series,
     shapeProperties,
     smooth: typeof series.smooth === "boolean" ? series.smooth : undefined,
-    values: resolveReferenceValues(workbook, workbookSheetIndex, valuesRef, "value").map((value) => (
+    values: resolveReferenceValues(workbook, workbookSheetIndex, valuesRef, "value", skipHidden).map((value) => (
       typeof value === "number" && Number.isFinite(value) ? value : null
     )),
     valuesRef

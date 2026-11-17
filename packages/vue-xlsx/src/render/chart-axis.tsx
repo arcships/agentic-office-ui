@@ -1,7 +1,11 @@
 /** @jsxImportSource vue */
+import { scaleLinear, scaleLog, scaleTime } from "d3-scale";
 import type { XlsxChart, XlsxChartAxis } from "@arcships/xlsx-core";
 import {
+  excelSerialToDate,
+  formatExcelDateSerial,
   getCategoryLabels,
+  isLikelyDateFormatCode,
   lightenColor,
   normalizeCategoryLabel,
   resolveChartAxisTextColor,
@@ -108,6 +112,201 @@ export function resolveAxisDomainWithChartOverrides(
   };
 }
 
+export function resolveAxisLogBase(axis: XlsxChartAxis | null | undefined) {
+  const base = axis?.logBase;
+  return typeof base === "number" && Number.isFinite(base) && base > 1 ? base : null;
+}
+
+function normalizePowerValue(value: number) {
+  return Number(value.toPrecision(12));
+}
+
+export function buildLogTickValues(minValue: number, maxValue: number, base: number, maxTicks = 8) {
+  if (
+    !Number.isFinite(minValue)
+    || !Number.isFinite(maxValue)
+    || !Number.isFinite(base)
+    || base <= 1
+    || minValue <= 0
+    || maxValue <= minValue
+  ) {
+    return [];
+  }
+  const logMin = Math.log(minValue) / Math.log(base);
+  const logMax = Math.log(maxValue) / Math.log(base);
+  const startExponent = Math.ceil(logMin - 1e-9);
+  const endExponent = Math.floor(logMax + 1e-9);
+  if (endExponent < startExponent) {
+    return [];
+  }
+  const exponentCount = endExponent - startExponent + 1;
+  const step = exponentCount > maxTicks ? Math.ceil(exponentCount / maxTicks) : 1;
+  const values: number[] = [];
+  for (let exponent = startExponent; exponent <= endExponent; exponent += step) {
+    values.push(normalizePowerValue(base ** exponent));
+  }
+  return values;
+}
+
+export function resolveLogAxisDomain(
+  axis: XlsxChartAxis | null | undefined,
+  minValue: number,
+  maxValue: number,
+  fallbackMin = 1
+) {
+  const base = resolveAxisLogBase(axis) ?? 10;
+  const hasExplicitMin = typeof axis?.min === "number" && Number.isFinite(axis.min) && axis.min > 0;
+  const hasExplicitMax = typeof axis?.max === "number" && Number.isFinite(axis.max) && axis.max > 0;
+  const rawMin = hasExplicitMin
+    ? Number(axis?.min)
+    : (Number.isFinite(minValue) && minValue > 0 ? minValue : fallbackMin);
+  const rawMax = hasExplicitMax
+    ? Number(axis?.max)
+    : (Number.isFinite(maxValue) && maxValue > rawMin ? maxValue : rawMin * base);
+  const domainMin = hasExplicitMin
+    ? rawMin
+    : normalizePowerValue(base ** Math.floor(Math.log(rawMin) / Math.log(base) + 1e-9));
+  let domainMax = hasExplicitMax
+    ? rawMax
+    : normalizePowerValue(base ** Math.ceil(Math.log(rawMax) / Math.log(base) - 1e-9));
+  if (domainMax <= domainMin) {
+    domainMax = normalizePowerValue(domainMin * base);
+  }
+  const ticks = buildLogTickValues(domainMin, domainMax, base);
+  return {
+    max: domainMax,
+    min: domainMin,
+    ticks: ticks.length >= 2 ? ticks : [domainMin, domainMax]
+  };
+}
+
+export function createValueScale(
+  axis: XlsxChartAxis | null | undefined,
+  minValue: number,
+  maxValue: number,
+  range: [number, number]
+): (value: number) => number {
+  const logBase = resolveAxisLogBase(axis);
+  const scale = logBase
+    ? scaleLog().base(logBase).domain([minValue, maxValue]).range(range)
+    : scaleLinear().domain([minValue, maxValue]).range(range);
+  return (value: number) => scale(value);
+}
+
+export function resolveDateAxisDomain(
+  axis: XlsxChartAxis | null | undefined,
+  values: Array<number | null | undefined>
+) {
+  const numericValues = values.filter((value): value is number => (
+    typeof value === "number" && Number.isFinite(value)
+  ));
+  const explicitMin = typeof axis?.min === "number" && Number.isFinite(axis.min) ? axis.min : null;
+  const explicitMax = typeof axis?.max === "number" && Number.isFinite(axis.max) ? axis.max : null;
+  const min = explicitMin ?? (numericValues.length > 0 ? Math.min(...numericValues) : 0);
+  const rawMax = explicitMax ?? (numericValues.length > 0 ? Math.max(...numericValues) : min + 1);
+  const max = rawMax <= min ? min + 1 : rawMax;
+  return { max, min };
+}
+
+export function createDateScale(
+  minSerial: number,
+  maxSerial: number,
+  range: [number, number],
+  use1904 = false
+): (serial: number) => number {
+  const scale = scaleTime()
+    .domain([
+      excelSerialToDate(minSerial, use1904).getTime(),
+      excelSerialToDate(maxSerial, use1904).getTime()
+    ])
+    .range(range);
+  return (serial: number) => scale(excelSerialToDate(serial, use1904).getTime());
+}
+
+const MILLISECONDS_PER_DAY = 86_400_000;
+
+function excelSerialFromDate(date: Date, use1904: boolean) {
+  const baseUtc = use1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30);
+  return (date.getTime() - baseUtc) / MILLISECONDS_PER_DAY;
+}
+
+function resolveDateTickStep(spanDays: number, unit: "days" | "months" | "years", preferredStep: number | undefined) {
+  const candidates = unit === "days"
+    ? [1, 2, 7, 14, 30]
+    : unit === "months"
+      ? [1, 2, 3, 6]
+      : [1, 2, 5, 10];
+  if (typeof preferredStep === "number" && preferredStep > 0) {
+    return preferredStep;
+  }
+  const spanUnits = unit === "days" ? spanDays : unit === "months" ? spanDays / 30 : spanDays / 365;
+  return candidates.find((candidate) => spanUnits / candidate <= 8) ?? candidates[candidates.length - 1] ?? 1;
+}
+
+export function buildDateAxisTicks(
+  axis: XlsxChartAxis | null | undefined,
+  minSerial: number,
+  maxSerial: number,
+  use1904 = false
+) {
+  if (!Number.isFinite(minSerial) || !Number.isFinite(maxSerial) || maxSerial <= minSerial) {
+    return [] as Array<{ label: string; serial: number; time: number }>;
+  }
+  const spanDays = maxSerial - minSerial;
+  const rawUnit = axis?.majorTimeUnit?.toLowerCase();
+  const unit = rawUnit === "days" || rawUnit === "months" || rawUnit === "years"
+    ? rawUnit
+    : spanDays <= 45
+      ? "days"
+      : spanDays <= 900
+        ? "months"
+        : "years";
+  const step = resolveDateTickStep(spanDays, unit, axis?.majorUnit);
+  const startDate = excelSerialToDate(minSerial, use1904);
+  let cursor: Date;
+  if (unit === "days") {
+    cursor = new Date(startDate.getTime());
+  } else if (unit === "months") {
+    cursor = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), 1));
+    if (cursor.getTime() < startDate.getTime()) {
+      cursor = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, 1));
+    }
+  } else {
+    cursor = new Date(Date.UTC(startDate.getUTCFullYear() + (startDate.getUTCMonth() > 0 || startDate.getUTCDate() > 1 ? 1 : 0), 0, 1));
+  }
+
+  const ticks: Array<{ label: string; serial: number; time: number }> = [];
+  const formatCode = axis?.numberFormat?.formatCode;
+  for (let guard = 0; guard < 64; guard += 1) {
+    const serial = excelSerialFromDate(cursor, use1904);
+    if (serial > maxSerial + 1e-6) {
+      break;
+    }
+    if (serial >= minSerial - 1e-6) {
+      const label = formatCode && isLikelyDateFormatCode(formatCode)
+        ? formatExcelDateSerial(serial, formatCode, use1904)
+        : (() => {
+            if (unit === "years") {
+              return String(cursor.getUTCFullYear());
+            }
+            if (unit === "months") {
+              return cursor.toLocaleDateString(undefined, { month: "short", year: "numeric", timeZone: "UTC" });
+            }
+            return cursor.toLocaleDateString(undefined, { day: "numeric", month: "numeric", timeZone: "UTC" });
+          })();
+      ticks.push({ label, serial, time: cursor.getTime() });
+    }
+    if (unit === "days") {
+      cursor = new Date(cursor.getTime() + MILLISECONDS_PER_DAY * step);
+    } else if (unit === "months") {
+      cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + step, 1));
+    } else {
+      cursor = new Date(Date.UTC(cursor.getUTCFullYear() + step, 0, 1));
+    }
+  }
+  return ticks;
+}
+
 export function renderSurfaceAxes(chart: XlsxChart, layout: ChartLayout) {
   const plot = resolveSurfacePlotRect(chart, layout);
   const categories = getCategoryLabels(chart);
@@ -175,7 +374,10 @@ export function renderCartesianAxes(
 ) {
   const axisColor = chart.axisLineColor ?? chart.chartAreaBorderColor ?? palette.border;
   const labelColor = resolveChartAxisTextColor(chart);
-  const zeroPosition = mapValue(0);
+  const rawZeroPosition = mapValue(0);
+  const zeroPosition = Number.isFinite(rawZeroPosition)
+    ? rawZeroPosition
+    : (isHorizontal ? plot.left : plot.top + plot.height);
 
   return (
     <g>

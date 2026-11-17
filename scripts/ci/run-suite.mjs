@@ -63,6 +63,7 @@ const suites = {
       "tests/unit/docx-reference-adapter.test.mjs",
       "tests/unit/docx-history-cache.test.mjs",
       "tests/unit/xlsx-core.test.mjs",
+      "tests/unit/xlsx-chart-data.test.mjs",
       "tests/unit/xlsx-reference-adapter.test.mjs",
       "packages/vue-xlsx/test/lazy-loading.mjs",
       "tests/unit/pdf-source.test.mjs",
@@ -125,6 +126,7 @@ const suites = {
       "tests/component/docx-history-budget.test.mjs",
       "tests/component/xlsx-history-budget.test.mjs",
       "tests/component/xlsx-grid-scroll.test.mjs",
+      "tests/component/xlsx-chart-rendering.test.mjs",
       "tests/component/image-decode-state.test.mjs",
     ]),
     command("docx-xlsx-component-smoke", process.execPath, [
