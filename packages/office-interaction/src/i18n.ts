@@ -116,6 +116,8 @@ export interface OfficeCommonMessages {
     object: string
     /** Template with a `{id}` placeholder. */
     textBox: string
+    /** Template with a `{id}` placeholder. */
+    imageId: string
     /** Template with a `{text}` placeholder. */
     imageText: string
     /** Template with a `{text}` placeholder. */
@@ -927,6 +929,7 @@ export const officeMessagesEn: OfficeMessages = {
       shape: "Shape {id}",
       object: "Object {id}",
       textBox: "Text box {id}",
+      imageId: "Image {id}",
       imageText: "Image: {text}",
       textLabel: "Text: {text}",
     },
@@ -1655,6 +1658,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       shape: "形状 {id}",
       object: "对象 {id}",
       textBox: "文本框 {id}",
+      imageId: "图片 {id}",
       imageText: "图片：{text}",
       textLabel: "文本：{text}",
     },

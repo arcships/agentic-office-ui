@@ -420,6 +420,10 @@ test("the previously hard-coded strings now resolve through the catalog", () => 
     ["vue-xlsx", "src/components/XlsxSheetSurface.vue", "Column ${", "descriptor(\"column\""],
     ["vue-xlsx", "src/render/chart-axis.tsx", "Q${", "surfaceSeries"],
     ["vue-docx", "src/render/paragraph-runs-image.ts", "\"Missing image\"", "imageMissingText"],
+    ["vue-docx", "src/components/DocxTableHost.vue", "officeMessagesEn.docx.image.alt", "imageAltText: m.value.docx.image.alt"],
+    ["vue-docx", "src/components/DocxDocumentSurface.vue", "result.status === \"exact\"", "localizeOfficeResolveResult"],
+    ["vue-xlsx", "src/components/XlsxSheetSurface.vue", "result.status === \"exact\"", "localizeOfficeResolveResult"],
+    ["vue-pptx", "src/PptxStage.vue", "result.status === \"exact\"", "localizeOfficeResolveResult"],
     ["vue-pdf", "src/pdf/pdf-reference-adapter.ts", "label: \"Document\"", "resolveDescriptorLabels"],
     ["vue-docx", "src/composables/editor-image.ts", "Select an image file", "ctx.statusMessage(\"selectImageFile\")"],
     ["vue-docx", "src/composables/editor-table.ts", "Cannot delete the only table row", "refuse(\"cannotDeleteOnlyTableRow\")"],    ["vue-docx", "src/composables/editor-format.ts", "Unsupported: diagonal paragraph borders", "ctx.statusMessage(\"unsupportedDiagonalParagraphBorders\""],
@@ -445,4 +449,15 @@ test("the previously hard-coded strings now resolve through the catalog", () => 
   assert.ok(findBar.includes("m.common.search.next"))
   assert.ok(findBar.includes("m.common.search.close"))
   assert.doesNotMatch(findBar, /aria-label="上一个搜索结果"/u)
+})
+
+test("core adapter lowercase kind labels stay covered by the descriptor mapper", () => {
+  const pptx = read("packages/pptx-core/src/reference-adapter.ts")
+  assert.match(pptx, /`\$\{kind\} \$\{identity\.shapeId\}`/u)
+  const mapper = read("packages/office-interaction/src/descriptor-i18n.ts")
+  for (const token of ["lowerShape", "lowerTable", "lowerChart", "lowerImage", "lowerTextBox"]) {
+    assert.ok(mapper.includes(token), `descriptor mapper must cover ${token}`)
+  }
+  assert.ok(mapper.includes("status === \"ambiguous\""), "descriptor mapper must localize ambiguous candidates")
+  assert.ok(mapper.includes("candidates.map"), "ambiguous candidates must be mapped")
 })

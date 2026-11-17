@@ -1,4 +1,4 @@
-import type { OfficeObjectDescriptor } from "./types"
+import type { OfficeObjectDescriptor, ResolveReferenceResult } from "./types"
 import type { OfficeMessages } from "./i18n"
 import { formatOfficeMessage } from "./i18n"
 
@@ -53,6 +53,16 @@ export function localizeOfficeDescriptorLabel(
   if (object) return formatOfficeMessage(descriptors.object, { id: object[1] })
   const textBox = /^Text box\s+(.+)$/u.exec(text)
   if (textBox) return formatOfficeMessage(descriptors.textBox, { id: textBox[1] })
+  const lowerShape = /^shape\s+(.+)$/u.exec(text)
+  if (lowerShape) return formatOfficeMessage(descriptors.shape, { id: lowerShape[1] })
+  const lowerTable = /^table\s+(.+)$/u.exec(text)
+  if (lowerTable) return formatOfficeMessage(descriptors.table, { number: lowerTable[1] })
+  const lowerChart = /^chart\s+(.+)$/u.exec(text)
+  if (lowerChart) return formatOfficeMessage(descriptors.chartName, { name: lowerChart[1] })
+  const lowerImage = /^image\s+(.+)$/u.exec(text)
+  if (lowerImage) return formatOfficeMessage(descriptors.imageId, { id: lowerImage[1] })
+  const lowerTextBox = /^text-box\s+(.+)$/u.exec(text)
+  if (lowerTextBox) return formatOfficeMessage(descriptors.textBox, { id: lowerTextBox[1] })
   if (text === "Selected text") return messages.selectedText
   if (text === "Selected region") return descriptors.selectedRegion
   if (text === "Text range") return descriptors.textRange
@@ -97,4 +107,23 @@ export function localizeOfficeObjectDescriptor(
       label: localizeOfficeDescriptorLabel(entry.label, messages),
     })),
   }
+}
+
+/** Localize every descriptor carried by a reference resolution result. */
+export function localizeOfficeResolveResult(
+  result: ResolveReferenceResult,
+  messages: OfficeDescriptorMessages,
+): ResolveReferenceResult {
+  if (result.status === "exact" || result.status === "relocated") {
+    return { ...result, descriptor: localizeOfficeObjectDescriptor(result.descriptor, messages) }
+  }
+  if (result.status === "ambiguous") {
+    return {
+      ...result,
+      candidates: result.candidates.map((descriptor) =>
+        localizeOfficeObjectDescriptor(descriptor, messages),
+      ),
+    }
+  }
+  return result
 }

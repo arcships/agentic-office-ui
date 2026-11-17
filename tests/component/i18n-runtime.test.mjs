@@ -14,6 +14,7 @@ import {
 const {
   DocxEditor,
   DocxFormFieldLayer,
+  DocxTableHost,
   DocxTrackedChangeGutter,
   DocxViewerRoot,
   useDocxEditor,
@@ -42,6 +43,7 @@ const { createBlankDocumentModel, normalizeDocModel } = await importFromDemo("@a
 const {
   localizeOfficeDescriptorLabel,
   localizeOfficeObjectDescriptor,
+  localizeOfficeResolveResult,
 } = await import(
   new URL("../../packages/office-interaction/dist/index.js", import.meta.url)
 )
@@ -338,6 +340,32 @@ test("DOCX image alt and missing-image copy follow the active locale", () => {
   }
 })
 
+test("DocxTableHost wires localized image labels into table-cell runs", async () => {
+  for (const [locale, alt] of [["en", "Image"], ["zh-CN", "图片"]]) {
+    const table = {
+      type: "table",
+      rows: [{
+        cells: [{
+          nodes: [{
+            type: "paragraph",
+            children: [{ type: "image", src: "data:image/png;base64,AAAA", widthPx: 40, heightPx: 30 }],
+          }],
+        }],
+      }],
+    }
+    const mounted = await mount(withLocale(locale, DocxTableHost, { table, tableIndex: 0 }))
+    try {
+      await vue.nextTick()
+      const html = walk(mounted.root)
+        .map((node) => String(node.props?.innerHTML ?? ""))
+        .join("")
+      assert.match(html, new RegExp(`alt="${alt}"`, "u"))
+    } finally {
+      mounted.app.unmount()
+    }
+  }
+})
+
 test("XLSX chart aria, legend and unsupported copy localize", () => {
   for (const [locale, aria, legend, unsupported] of [
     ["en", "Chart", "Series 1", "Unsupported chart type: Mystery"],
@@ -390,6 +418,11 @@ test("descriptor mapping localizes Table, Row, Column and describeReference path
         group: "Group 2",
         shape: "Shape 7",
         object: "Object 7",
+        lowerShape: "Shape 7",
+        lowerTable: "Table 7",
+        lowerChart: "Chart 7",
+        lowerImage: "Image 7",
+        lowerTextBox: "Text box 7",
         slideRegion: "Region on slide 3",
       }
       : {
@@ -400,6 +433,11 @@ test("descriptor mapping localizes Table, Row, Column and describeReference path
         group: "组 2",
         shape: "形状 7",
         object: "对象 7",
+        lowerShape: "形状 7",
+        lowerTable: "表格 7",
+        lowerChart: "图表 7",
+        lowerImage: "图片 7",
+        lowerTextBox: "文本框 7",
         slideRegion: "第 3 张幻灯片上的区域",
       }
     assert.equal(localizeOfficeDescriptorLabel("Comment", messages), extra.comment)
@@ -409,6 +447,11 @@ test("descriptor mapping localizes Table, Row, Column and describeReference path
     assert.equal(localizeOfficeDescriptorLabel("Group 2", messages), extra.group)
     assert.equal(localizeOfficeDescriptorLabel("Shape 7", messages), extra.shape)
     assert.equal(localizeOfficeDescriptorLabel("Object 7", messages), extra.object)
+    assert.equal(localizeOfficeDescriptorLabel("shape 7", messages), extra.lowerShape)
+    assert.equal(localizeOfficeDescriptorLabel("table 7", messages), extra.lowerTable)
+    assert.equal(localizeOfficeDescriptorLabel("chart 7", messages), extra.lowerChart)
+    assert.equal(localizeOfficeDescriptorLabel("image 7", messages), extra.lowerImage)
+    assert.equal(localizeOfficeDescriptorLabel("text-box 7", messages), extra.lowerTextBox)
     assert.equal(localizeOfficeDescriptorLabel("Region on slide 3", messages), extra.slideRegion)
 
     const descriptor = localizeOfficeObjectDescriptor({
@@ -425,6 +468,27 @@ test("descriptor mapping localizes Table, Row, Column and describeReference path
     assert.equal(descriptor.label, row)
     assert.deepEqual(descriptor.path.map((entry) => entry.label), [workbook, "Sheet1", row])
   }
+})
+
+test("ambiguous resolution candidates localize at the shared boundary", () => {
+  const descriptor = {
+    objectId: "docx:table:1",
+    draft: { document: { format: "docx", documentId: "doc", revision: "r1" }, locator: { type: "format", format: "docx", value: { kind: "table", tableIndex: 1 } } },
+    label: "Table 2",
+    path: [
+      { kind: "document", label: "Document" },
+      { kind: "table", label: "Table 2" },
+    ],
+    childrenState: "available",
+  }
+  const zh = localizeOfficeResolveResult({
+    status: "ambiguous",
+    reasonCodes: ["docx.multiple-matches"],
+    candidates: [descriptor],
+  }, message("zh-CN").common)
+  assert.equal(zh.status, "ambiguous")
+  assert.equal(zh.candidates[0].label, "表格 2")
+  assert.deepEqual(zh.candidates[0].path.map((entry) => entry.label), ["文档", "表格 2"])
 })
 
 test("a mounted viewer switches locale without remounting", async () => {
