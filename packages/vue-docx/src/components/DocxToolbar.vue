@@ -82,7 +82,7 @@
             :title="m.docx.editor.zoom"
             :aria-label="m.docx.editor.zoom"
           >
-            <option v-for="z of zoomLevels" :key="z" :value="z">{{ z }}%</option>
+            <option v-for="z of zoomSelectOptions" :key="z" :value="z">{{ z }}%</option>
           </select>
         </label>
         <button data-testid="editor-new" type="button" class="docx-toolbar-action" :title="m.docx.editor.newTitle" :disabled="readOnly" @click="controller.newDocument()">
@@ -150,33 +150,48 @@
     <div class="docx-toolbar-group">
       <button
         data-testid="editor-bold"
+        type="button"
         class="docx-toolbar-btn"
         :class="{ active: selectedRunStyle?.bold }"
         :title="m.docx.editor.bold"
+        :aria-label="m.docx.editor.bold"
+        :aria-pressed="Boolean(selectedRunStyle?.bold)"
         @click="controller.toggleBold()"
       >
         <strong>B</strong>
       </button>
       <button
+        data-testid="editor-italic"
+        type="button"
         class="docx-toolbar-btn"
         :class="{ active: selectedRunStyle?.italic }"
         :title="m.docx.editor.italic"
+        :aria-label="m.docx.editor.italic"
+        :aria-pressed="Boolean(selectedRunStyle?.italic)"
         @click="controller.toggleItalic()"
       >
         <em>I</em>
       </button>
       <button
+        data-testid="editor-underline"
+        type="button"
         class="docx-toolbar-btn"
         :class="{ active: selectedRunStyle?.underline }"
         :title="m.docx.editor.underline"
+        :aria-label="m.docx.editor.underline"
+        :aria-pressed="Boolean(selectedRunStyle?.underline)"
         @click="controller.toggleUnderline()"
       >
         <u>U</u>
       </button>
       <button
+        data-testid="editor-strike"
+        type="button"
         class="docx-toolbar-btn"
         :class="{ active: selectedRunStyle?.strike }"
         :title="m.docx.editor.strikethrough"
+        :aria-label="m.docx.editor.strikethrough"
+        :aria-pressed="Boolean(selectedRunStyle?.strike)"
         @click="controller.toggleStrike()"
       >
         <s>S</s>
@@ -188,19 +203,23 @@
     <!-- Superscript / Subscript -->
     <div class="docx-toolbar-group">
       <button
+        type="button"
         class="docx-toolbar-btn"
         :class="{ active: selectedRunStyle?.verticalAlign === 'superscript' }"
         :title="m.docx.editor.superscript"
         :aria-label="m.docx.editor.superscript"
+        :aria-pressed="selectedRunStyle?.verticalAlign === 'superscript'"
         @click="controller.toggleSuperscript()"
       >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 7 7 10M11 7 4 17M15 8c.4-1.3 1.4-2 2.8-2 1.3 0 2.2.7 2.2 1.8 0 1.6-1.7 2.3-4.8 4.2H20" /></svg>
       </button>
       <button
+        type="button"
         class="docx-toolbar-btn"
         :class="{ active: selectedRunStyle?.verticalAlign === 'subscript' }"
         :title="m.docx.editor.subscript"
         :aria-label="m.docx.editor.subscript"
+        :aria-pressed="selectedRunStyle?.verticalAlign === 'subscript'"
         @click="controller.toggleSubscript()"
       >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 7 10M11 6 4 16M15 15c.4-1.3 1.4-2 2.8-2 1.3 0 2.2.7 2.2 1.8 0 1.6-1.7 2.3-4.8 4.2H20" /></svg>
@@ -216,6 +235,7 @@
           type="color"
           class="docx-toolbar-color-input"
           :value="textColorValue"
+          :aria-label="m.docx.editor.textColor"
           @input="onTextColorChange"
         />
         <span class="docx-toolbar-color-label">A</span>
@@ -225,6 +245,7 @@
           type="color"
           class="docx-toolbar-color-input"
           :value="highlightColorValue"
+          :aria-label="m.docx.editor.highlightColor"
           @input="onHighlightColorChange"
         />
         <span class="docx-toolbar-color-label docx-toolbar-highlight-label">H</span>
@@ -236,9 +257,13 @@
     <!-- Hyperlink -->
     <div class="docx-toolbar-group">
       <button
+        data-testid="editor-link"
+        type="button"
         class="docx-toolbar-btn"
         :class="{ active: !!controller.selectedLink }"
         :title="m.docx.editor.link"
+        :aria-label="m.docx.editor.link"
+        :aria-pressed="Boolean(controller.selectedLink)"
         @click="onLinkClick"
       >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 14.5 14.5 9.5M7.3 16.7l-1 1a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0M16.7 7.3l1-1a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0" /></svg>
@@ -249,16 +274,52 @@
 
     <!-- Alignment -->
     <div class="docx-toolbar-group">
-      <button class="docx-toolbar-btn" :title="m.docx.editor.alignLeft" @click="controller.setAlignment('left')">
+      <button
+        data-testid="editor-align-left"
+        type="button"
+        class="docx-toolbar-btn"
+        :class="{ active: paragraphAlignment === 'left' }"
+        :title="m.docx.editor.alignLeft"
+        :aria-label="m.docx.editor.alignLeft"
+        :aria-pressed="paragraphAlignment === 'left'"
+        @click="controller.setAlignment('left')"
+      >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h11M4 14h16M4 18h9" /></svg>
       </button>
-      <button class="docx-toolbar-btn" :title="m.docx.editor.alignCenter" @click="controller.setAlignment('center')">
+      <button
+        data-testid="editor-align-center"
+        type="button"
+        class="docx-toolbar-btn"
+        :class="{ active: paragraphAlignment === 'center' }"
+        :title="m.docx.editor.alignCenter"
+        :aria-label="m.docx.editor.alignCenter"
+        :aria-pressed="paragraphAlignment === 'center'"
+        @click="controller.setAlignment('center')"
+      >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 10h10M4 14h16M8 18h8" /></svg>
       </button>
-      <button class="docx-toolbar-btn" :title="m.docx.editor.alignRight" @click="controller.setAlignment('right')">
+      <button
+        data-testid="editor-align-right"
+        type="button"
+        class="docx-toolbar-btn"
+        :class="{ active: paragraphAlignment === 'right' }"
+        :title="m.docx.editor.alignRight"
+        :aria-label="m.docx.editor.alignRight"
+        :aria-pressed="paragraphAlignment === 'right'"
+        @click="controller.setAlignment('right')"
+      >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M9 10h11M4 14h16M11 18h9" /></svg>
       </button>
-      <button class="docx-toolbar-btn" :title="m.docx.editor.justify" @click="controller.setAlignment('justify')">
+      <button
+        data-testid="editor-align-justify"
+        type="button"
+        class="docx-toolbar-btn"
+        :class="{ active: paragraphAlignment === 'justify' }"
+        :title="m.docx.editor.justify"
+        :aria-label="m.docx.editor.justify"
+        :aria-pressed="paragraphAlignment === 'justify'"
+        @click="controller.setAlignment('justify')"
+      >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
       </button>
     </div>
@@ -268,19 +329,23 @@
     <!-- Lists -->
     <div class="docx-toolbar-group">
       <button
+        type="button"
         class="docx-toolbar-btn"
         :class="{ active: controller.hasUnorderedList }"
         :title="m.docx.editor.bulletList"
         :aria-label="m.docx.editor.bulletList"
+        :aria-pressed="controller.hasUnorderedList"
         @click="controller.toggleList('unordered')"
       >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="7" r="1" /><circle cx="5" cy="12" r="1" /><circle cx="5" cy="17" r="1" /><path d="M9 7h11M9 12h11M9 17h11" /></svg>
       </button>
       <button
+        type="button"
         class="docx-toolbar-btn"
         :class="{ active: controller.hasOrderedList }"
         :title="m.docx.editor.numberedList"
         :aria-label="m.docx.editor.numberedList"
+        :aria-pressed="controller.hasOrderedList"
         @click="controller.toggleList('ordered')"
       >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h1v4M3.5 9H6M3.5 13h2L3.5 17H6M10 7h10M10 15h10" /></svg>
@@ -443,6 +508,11 @@ const m = useDocxMessages()
 // ── Zoom ────────────────────────────────────────────────────────────
 const zoomLevels = [50, 60, 70, 80, 90, 100, 110, 120, 130, 150, 175, 200]
 const zoomPercent = ref(props.zoom ?? 100)
+const zoomSelectOptions = computed(() => {
+  const current = zoomPercent.value
+  if (!Number.isFinite(current) || zoomLevels.includes(current)) return zoomLevels
+  return [...zoomLevels, current].sort((a, b) => a - b)
+})
 
 watch(() => props.zoom, (v) => { zoomPercent.value = v ?? 100 })
 
@@ -462,6 +532,7 @@ function onPageChange(event: Event): void {
 
 // ── Derived values ──────────────────────────────────────────────────
 const selectedRunStyle = computed(() => props.controller.selectedRunStyle)
+const paragraphAlignment = computed(() => props.controller.selectedParagraph?.style?.align ?? "left")
 
 // Revisions are only counted while they are visible, so `null` means "unknown"
 // rather than "none": the buttons stay enabled so a document whose edits are

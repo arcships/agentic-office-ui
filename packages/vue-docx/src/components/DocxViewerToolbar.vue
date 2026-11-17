@@ -52,7 +52,12 @@
           @keydown.enter.prevent="onSearchEnter"
           @keydown.esc.prevent="emit('searchClose')"
         />
-        <span data-testid="docx-search-status">{{ searchResultCount ? `${searchResultIndex + 1}/${searchResultCount}` : searchQuery ? '0/0' : '' }}</span>
+        <span
+          data-testid="docx-search-status"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >{{ searchResultCount ? `${searchResultIndex + 1}/${searchResultCount}` : searchQuery ? '0/0' : '' }}</span>
         <button type="button" :aria-label="m.common.search.previous" data-testid="docx-search-previous" :disabled="disabled || !searchResultCount" @click="emit('searchPrevious')">‹</button>
         <button type="button" :aria-label="m.common.search.next" data-testid="docx-search-next" :disabled="disabled || !searchResultCount" @click="emit('searchNext')">›</button>
       </div>
@@ -76,7 +81,7 @@
         :value="zoom"
         @change="onZoomChange"
       >
-        <option v-for="option in zoomOptions" :key="option" :value="option">
+        <option v-for="option in zoomSelectOptions" :key="option" :value="option">
           {{ option }}%
         </option>
       </select>
@@ -219,6 +224,10 @@ const emit = defineEmits<{
 }>()
 
 const zoomOptions = [50, 75, 100, 125, 150, 175, 200]
+const zoomSelectOptions = computed(() => {
+  if (!Number.isFinite(props.zoom) || zoomOptions.includes(props.zoom)) return zoomOptions
+  return [...zoomOptions, props.zoom].sort((a, b) => a - b)
+})
 const m = useDocxMessages()
 const trackedChangesTitle = computed(() => {
   if (props.trackedChangeCount <= 0) return m.value.docx.toolbar.trackedChangesNone
@@ -284,7 +293,7 @@ function nextZoom(direction: -1 | 1): number {
 
 function onZoomChange(event: Event): void {
   const value = Number((event.target as HTMLSelectElement).value)
-  if (zoomOptions.includes(value)) emit("update:zoom", value)
+  if (Number.isFinite(value) && value > 0) emit("update:zoom", value)
 }
 
 function onSearchEnter(event: KeyboardEvent): void {
