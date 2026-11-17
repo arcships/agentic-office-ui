@@ -48,6 +48,7 @@
     "vue": ">=3.2.25 <4"
   },
   "devDependencies": {
+    "@arcships/vue-ui": "^0.6.0",
     "@vitejs/plugin-vue": "^5.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.0.0",

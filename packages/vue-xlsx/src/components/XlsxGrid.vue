@@ -9,6 +9,12 @@
     :data-first-row-height="effectiveRowHeights[0] ?? DEFAULT_ROW_HEIGHT"
     :data-merged-region-count="activeSheet?.mergedRegions?.length ?? 0"
     :data-worker-backed="String(Boolean(controller.isWorkerBacked))"
+    role="grid"
+    :aria-label="gridAriaLabel"
+    :aria-rowcount="gridRowCount"
+    :aria-colcount="gridColCount"
+    :aria-readonly="gridAriaReadOnly"
+    :aria-activedescendant="activeCellDescendantId"
     tabindex="0"
     :style="containerStyle"
     @keydown="onGridKeydown"
@@ -20,6 +26,21 @@
     @pointerleave="onPointerLeave"
     @dblclick="onDblClick"
   >
+    <div
+      v-if="activeCellAria"
+      class="xlsx-grid__a11y"
+      role="row"
+      :aria-rowindex="activeCellAria.rowIndex"
+    >
+      <div
+        :id="activeCellDescendantId"
+        class="xlsx-grid__a11y-cell"
+        role="gridcell"
+        :aria-colindex="activeCellAria.colIndex"
+        :aria-label="activeCellAria.label"
+        aria-selected="true"
+      >{{ activeCellAria.text }}</div>
+    </div>
     <div
       class="xlsx-grid__scroll-space"
       data-testid="xlsx-grid-scroll-space"
@@ -162,6 +183,7 @@ import {
 } from "@arcships/xlsx-core";
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy";
 import { GRID_HEADER_HEIGHT_PX, GRID_ROW_HEADER_WIDTH_PX, gridZoomFactor } from "./grid-metrics";
+import { nextGridA11yId } from "./grid-a11y";
 import XlsxClipboardNotice from "./XlsxClipboardNotice.vue";
 import { useClipboardCopyNotice } from "../composables/useClipboardCopyNotice";
 import {
@@ -279,6 +301,44 @@ const conditionalRuleEnvironments = createScopedCache<ConditionalEnvironment>();
 
 // ── Computed from controller ──────────────────────────────────────────
 const activeSheet = computed(() => props.controller.activeSheet as XlsxSheetData | null);
+
+// ── Grid accessibility ────────────────────────────────────────────────
+// The grid paints cells onto canvases, so assistive technology would otherwise
+// see one anonymous focusable div. The container is now a real `grid` whose
+// `aria-activedescendant` points at a hidden cell carrying the active address
+// and value; keyboard navigation already lives in `onGridKeydown`.
+const gridA11yId = nextGridA11yId();
+const gridAriaLabel = computed(() => {
+  const name = activeSheet.value?.name?.trim();
+  return name ? `工作表 ${name}` : "工作表";
+});
+const gridAriaReadOnly = computed(() => (props.readOnly ? "true" : "false"));
+// Prefer the worksheet's real size; the display counts include row/column
+// filler so the canvas can always paint a full viewport.
+const gridRowCount = computed(() => {
+  const declared = activeSheet.value?.rowCount ?? 0;
+  return declared > 0 ? declared : effectiveRowHeights.value.length;
+});
+const gridColCount = computed(() => {
+  const declared = activeSheet.value?.colCount ?? 0;
+  return declared > 0 ? declared : effectiveColWidths.value.length;
+});
+const activeCellAria = computed(() => {
+  const cell = activeCell.value;
+  if (!cell) return null;
+  const address = `${columnLabel(cell.col)}${cell.row + 1}`;
+  const value = props.controller.getCellDisplayValue(cell);
+  const display = value && value.trim() ? value : "空白";
+  return {
+    colIndex: cell.col + 1,
+    label: `${address}，${display}`,
+    rowIndex: cell.row + 1,
+    text: `${address}: ${display}`,
+  };
+});
+const activeCellDescendantId = computed(() =>
+  activeCellAria.value ? `${gridA11yId}-active-cell` : undefined,
+);
 const hyperlinksByCell = computed(() => new Map((activeSheet.value?.hyperlinks ?? []).map((link) => [`${link.cell.row}:${link.cell.col}`, link])));
 const commentsByCell = computed(() => new Map((activeSheet.value?.comments ?? []).map((comment) => [`${comment.cell.row}:${comment.cell.col}`, comment])));
 const sparklinesByCell = computed(() => new Map((activeSheet.value?.sparklines ?? []).map((sparkline) => [`${sparkline.target.row}:${sparkline.target.col}`, sparkline])));
@@ -2450,6 +2510,15 @@ onUnmounted(() => {
 
 <style scoped>
 .xlsx-grid { outline: none; }
+.xlsx-grid__a11y, .xlsx-grid__a11y-cell {
+  block-size: 1px;
+  clip-path: inset(50%);
+  inline-size: 1px;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  white-space: nowrap;
+}
 .xlsx-grid__scroll-space { position: relative; }
 .xlsx-grid__viewport {
   left: 0;

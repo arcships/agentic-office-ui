@@ -181,6 +181,7 @@ const suites = {
       "tests/component/xlsx-data-validation.test.mjs",
       "tests/component/xlsx-chart-rendering.test.mjs",
       "tests/component/xlsx-chart-axis.test.mjs",
+      "tests/component/office-a11y.test.mjs",
       "tests/component/image-decode-state.test.mjs",
     ]),
     command("docx-xlsx-component-smoke", process.execPath, [

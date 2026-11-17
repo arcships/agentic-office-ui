@@ -8,10 +8,13 @@
     />
     <div
       v-if="visible"
+      ref="menuRef"
       class="xlsx-contextmenu"
       data-testid="xlsx-context-menu"
       :style="menuStyle"
       role="menu"
+      aria-label="单元格菜单"
+      @keydown="onMenuKeydown"
     >
       <button class="xlsx-contextmenu__item" role="menuitem" @click="onCopy">复制</button>
       <button
@@ -27,7 +30,7 @@
         @click="onClear"
       >清除内容</button>
       <template v-if="sortTarget && !isReadOnly">
-        <div class="xlsx-contextmenu__separator" />
+        <div class="xlsx-contextmenu__separator" role="separator" />
         <button
           class="xlsx-contextmenu__item"
           data-testid="xlsx-sort-ascending"
@@ -41,7 +44,7 @@
           @click="onSort('descending')"
         >按此列降序</button>
       </template>
-      <div class="xlsx-contextmenu__separator" />
+      <div class="xlsx-contextmenu__separator" role="separator" />
       <button
         v-if="!isReadOnly"
         class="xlsx-contextmenu__item"
@@ -60,7 +63,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted, watch, type CSSProperties } from "vue";
+import { ref, computed, nextTick, onUnmounted, watch, type CSSProperties } from "vue";
+import { useOfficeMenuKeyboard } from "@arcships/vue-ui";
 import type { XlsxCellAddress, XlsxSheetData, XlsxViewerController } from "@arcships/xlsx-core";
 import XlsxClipboardNotice from "./XlsxClipboardNotice.vue";
 import { useClipboardCopyNotice } from "../composables/useClipboardCopyNotice";
@@ -80,11 +84,25 @@ const props = defineProps<{
 }>();
 
 const visible = ref(false);
+const menuRef = ref<HTMLElement | null>(null);
 const position = ref({ x: 0, y: 0 });
 const sortTarget = ref<{ columnIndex: number; tableName: string } | null>(null);
 
 const isReadOnly = computed(() => props.controller.isEditingLocked ?? props.controller.readOnly);
 const { notice: clipboardNotice, copySelection } = useClipboardCopyNotice(() => props.controller);
+
+// Escape/Tab and arrow navigation come from the shared Office menu keyboard, so
+// the cell menu closes exactly like the DOCX context menu and returns focus to
+// the surface that opened it.
+const menuKeyboard = useOfficeMenuKeyboard({
+  menu: () => menuRef.value,
+  close: () => close(),
+  restoreTarget: () => props.targetElement ?? null,
+});
+
+function onMenuKeydown(event: KeyboardEvent): void {
+  menuKeyboard.onKeydown(event);
+}
 
 const menuStyle = computed<CSSProperties>(() => ({
   left: `${position.value.x}px`,
@@ -174,7 +192,9 @@ function onContextMenu(event: MouseEvent) {
     ? { columnIndex: cell.col - table.start.col, tableName: table.name }
     : null;
   position.value = { x: event.clientX, y: event.clientY };
+  menuKeyboard.captureInvoker();
   visible.value = true;
+  void nextTick(() => menuKeyboard.focusFirst());
 }
 
 function close() { visible.value = false; sortTarget.value = null; }

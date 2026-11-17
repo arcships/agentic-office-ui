@@ -167,7 +167,9 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 
 ### 3.6 `@arcships/vue-ui`
 
-稳定入口为 `OfficeObjectOutlineLayer`、`OfficeRegionSelector`、`SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`，以及根入口导出的属性和事件类型。新代码使用 `@arcships/vue-ui/style.css`。
+稳定入口为 `OfficeObjectOutlineLayer`、`OfficeRegionSelector`、`SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`、`OfficeFindBar`、`OfficeLiveStatus`、`useOfficeMenuKeyboard` 和 `resolveOfficeMenuKeyCommand`，以及根入口导出的属性和事件类型。新代码使用 `@arcships/vue-ui/style.css`。
+
+`OfficeLiveStatus` 是所有 Office 视图共享的单一 `role=status` / `aria-live` 区域：视图只改文本，不改节点，因此加载、错误、页码和幻灯片切换都能被辅助技术重新播报。`useOfficeMenuKeyboard` 统一 DOCX 与 XLSX 右键菜单的键盘语义：打开时把焦点放到第一个 `menuitem`，上下方向键、`Home`、`End` 在菜单项之间循环，`Escape` / `Tab` 关闭菜单并把焦点还给打开它的表面；`resolveOfficeMenuKeyCommand` 是可单测的纯函数版本。
 
 两个 Office 选择原语依赖 `@arcships/office-interaction` 的公开类型。它们只消费规范化几何和受控临时状态：不解析 Office 文件，不从 DOM 猜测格式对象，也不保存引用集合。轮廓层负责候选可视化和键盘事件；区域框负责 `0..1` 坐标中的拖选与键盘调整。确认后的工具栏、引用列表和 Agent 工作流由宿主实现。
 

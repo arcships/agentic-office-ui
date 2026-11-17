@@ -23,6 +23,19 @@ export { default as LayoutBlocks } from "./components/LayoutBlocks.vue"
 export { default as Spinner } from "./components/Spinner.vue"
 export { default as Tooltip } from "./components/Tooltip.vue"
 export { default as OfficeFindBar } from "./components/OfficeFindBar.vue"
+export { default as OfficeLiveStatus } from "./components/OfficeLiveStatus.vue"
+
+// Shared keyboard semantics for Office context menus
+export {
+  OFFICE_MENU_ITEM_SELECTOR,
+  resolveOfficeMenuKeyCommand,
+  useOfficeMenuKeyboard,
+} from "./composables/office-menu-keyboard"
+export type {
+  OfficeMenuKeyboard,
+  OfficeMenuKeyboardCommand,
+  OfficeMenuKeyboardOptions,
+} from "./composables/office-menu-keyboard"
 
 // Office selection primitives
 export { default as OfficeObjectOutlineLayer } from "./components/OfficeObjectOutlineLayer.vue"

@@ -18,6 +18,12 @@
       @change="onUploadChange"
     />
 
+    <OfficeLiveStatus
+      test-id="docx-live-status"
+      :message="liveStatusMessage"
+      :busy="liveStatusBusy"
+    />
+
     <DocxViewerToolbar
       v-if="showToolbar"
       ref="toolbarRef"
@@ -140,6 +146,7 @@ import {
   DOCX_UNSUPPORTED_FILE_MESSAGE,
   isSupportedDocxFileName,
 } from "../composables/docx-file-types"
+import { OfficeLiveStatus } from "@arcships/vue-ui"
 import DocxDocumentSurface from "./DocxDocumentSurface.vue"
 import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
 import DocxViewerToolbar from "./DocxViewerToolbar.vue"
@@ -230,6 +237,21 @@ const viewerState = computed(() => {
   if (error.value) return "error"
   if (renderableModel.value) return "ready"
   return "idle"
+})
+
+const liveStatusBusy = computed(() => viewerState.value === "loading")
+
+// The viewer used to reveal its state to sighted users only: loading, page and
+// error transitions were never announced. A single stable live region now
+// carries every state change for assistive technology.
+const liveStatusMessage = computed(() => {
+  if (viewerState.value === "loading") return "正在打开 DOCX 文档"
+  if (error.value) return `无法打开文档：${error.value.message}`
+  if (!renderableModel.value) return "没有打开文档"
+  const total = totalPages.value
+  if (total <= 0) return "文档已就绪"
+  const page = Math.min(Math.max(currentPage.value, 1), total)
+  return `文档已就绪，第 ${page} 页，共 ${total} 页`
 })
 
 const ownedRuntime = createDocxRuntime()
