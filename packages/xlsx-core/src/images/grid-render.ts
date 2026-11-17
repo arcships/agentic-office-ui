@@ -252,9 +252,14 @@ function parseConditionalFormatValueObject(node: Element | null): XlsxConditiona
 
   const rawValue = node.getAttribute("val") ?? getFirstChild(node, "f")?.textContent ?? undefined;
   const numericValue = rawValue !== undefined ? Number(rawValue) : Number.NaN;
+  const isFormula = type.trim().toLowerCase() === "formula";
   return {
     type,
-    value: Number.isFinite(numericValue) ? numericValue : undefined
+    value: Number.isFinite(numericValue)
+      ? numericValue
+      : isFormula && rawValue !== undefined && rawValue.trim().length > 0
+        ? rawValue.trim()
+        : undefined
   };
 }
 

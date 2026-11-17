@@ -125,6 +125,7 @@ const suites = {
       "tests/component/docx-history-budget.test.mjs",
       "tests/component/xlsx-history-budget.test.mjs",
       "tests/component/xlsx-grid-scroll.test.mjs",
+      "tests/component/xlsx-conditional-format.test.mjs",
       "tests/component/image-decode-state.test.mjs",
     ]),
     command("docx-xlsx-component-smoke", process.execPath, [

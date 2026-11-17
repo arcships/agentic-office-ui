@@ -94,6 +94,15 @@ import {
   type XlsxSheetData,
 } from "@arcships/xlsx-core";
 import { GRID_HEADER_HEIGHT_PX, GRID_ROW_HEADER_WIDTH_PX } from "./grid-metrics";
+import {
+  conditionalRulesForCell as sortConditionalRulesForCell,
+  createConditionalEnvironment,
+  resolveColorScaleFill,
+  resolveDataBarGeometry,
+  resolveIconGeometry,
+  withAlpha,
+  type ConditionalEnvironment,
+} from "../render/conditional-format";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -167,7 +176,7 @@ const pendingWorkerBatches = new Map<string, AbortController>();
 let workerCacheSheetIndex: number | null = null;
 let paintedMergeRegions: GridMergeRegion[] = [];
 let paintedMergeAnchors = new Map<string, XlsxCellAddress>();
-let conditionalRuleStats = new Map<XlsxConditionalFormatRule, { min: number; max: number }>();
+let conditionalRuleEnvironments = new Map<XlsxConditionalFormatRule, ConditionalEnvironment>();
 
 // ── Computed from controller ──────────────────────────────────────────
 const activeSheet = computed(() => props.controller.activeSheet as XlsxSheetData | null);
@@ -701,73 +710,100 @@ function cssText(value: unknown): string | undefined {
   return typeof value === "string" || typeof value === "number" ? String(value) : undefined;
 }
 
-function cellInRange(cell: XlsxCellAddress, range: XlsxCellRange): boolean {
-  return cell.row >= Math.min(range.start.row, range.end.row)
-    && cell.row <= Math.max(range.start.row, range.end.row)
-    && cell.col >= Math.min(range.start.col, range.end.col)
-    && cell.col <= Math.max(range.start.col, range.end.col);
-}
-
 function conditionalRulesForCell(cell: XlsxCellAddress): XlsxConditionalFormatRule[] {
-  return (activeSheet.value?.conditionalFormatRules ?? []).filter((rule) => rule.ranges.some((range) => cellInRange(cell, range)));
+  // Sorted by rule priority: index 0 is the rule Excel would apply first.
+  return sortConditionalRulesForCell(activeSheet.value?.conditionalFormatRules ?? [], cell);
 }
 
-function ruleStats(rule: XlsxConditionalFormatRule): { min: number; max: number } {
-  const cached = conditionalRuleStats.get(rule);
-  if (cached) return cached;
+function conditionalRangeValues(rule: XlsxConditionalFormatRule): number[] {
   const sheet = activeSheet.value;
-  if (!sheet) return { min: 0, max: 0 };
+  if (!sheet) return [];
   const values: number[] = [];
   for (const range of rule.ranges) {
     const endRow = Math.min(range.end.row, Math.max(sheet.maxUsedRow, range.start.row));
     const endCol = Math.min(range.end.col, Math.max(sheet.maxUsedCol, range.start.col));
     for (let row = range.start.row; row <= endRow; row++) {
       for (let col = range.start.col; col <= endCol; col++) {
-        const value = Number(getGridCellDisplayValue({ row, col }).replace(/[,％%]/g, ""));
+        const text = getGridCellDisplayValue({ row, col });
+        if (!text.trim()) continue;
+        const value = Number(text.replace(/[,％%]/g, ""));
         if (Number.isFinite(value)) values.push(value);
       }
     }
   }
-  const stats = values.length ? { min: Math.min(...values), max: Math.max(...values) } : { min: 0, max: 0 };
-  conditionalRuleStats.set(rule, stats);
-  return stats;
+  return values;
 }
 
-function colorRgb(value: Record<string, unknown> | undefined, fallback: string): [number, number, number] {
-  const resolved = resolveWorkbookColor(value, activeSheet.value?.themePalette) || fallback;
-  const hex = resolved.match(/^#?([0-9a-f]{6})$/i)?.[1];
-  if (!hex) return [37, 99, 235];
-  return [Number.parseInt(hex.slice(0, 2), 16), Number.parseInt(hex.slice(2, 4), 16), Number.parseInt(hex.slice(4, 6), 16)];
-}
-
-function mixColor(start: [number, number, number], end: [number, number, number], ratio: number): string {
-  const channel = (index: number) => Math.round(start[index] + (end[index] - start[index]) * ratio);
-  return `rgb(${channel(0)}, ${channel(1)}, ${channel(2)})`;
+function conditionalEnvironmentFor(rule: XlsxConditionalFormatRule): ConditionalEnvironment {
+  const cached = conditionalRuleEnvironments.get(rule);
+  if (cached) return cached;
+  const environment = createConditionalEnvironment(
+    rule,
+    conditionalRangeValues(rule),
+    (color) => resolveWorkbookColor(color, activeSheet.value?.themePalette) ?? undefined,
+  );
+  conditionalRuleEnvironments.set(rule, environment);
+  return environment;
 }
 
 function conditionalVisual(cell: XlsxCellAddress, valueText: string) {
-  const rules = conditionalRulesForCell(cell);
-  if (!rules.length) return null;
+  const rule = conditionalRulesForCell(cell)[0];
+  if (!rule) return null;
+  // Excel leaves blank cells unformatted: no bar, no icon, no scale colour.
+  if (!valueText.trim()) return null;
   const value = Number(valueText.replace(/[,％%]/g, ""));
   if (!Number.isFinite(value)) return null;
-  const rule = rules[0];
-  const stats = ruleStats(rule);
-  const min = stats.min;
-  const max = stats.max;
-  const ratio = max === min ? 1 : Math.max(0, Math.min(1, (value - min) / (max - min)));
+  const environment = conditionalEnvironmentFor(rule);
   if (rule.kind === "dataBar") {
-    return { kind: rule.kind, ratio, color: resolveWorkbookColor(rule.color, activeSheet.value?.themePalette) || "#5b9bd5", showValue: rule.showValue !== false } as const;
+    return { environment, kind: rule.kind, showValue: rule.showValue !== false, value } as const;
   }
   if (rule.kind === "colorScale") {
-    const colors = rule.colors;
-    const low = colorRgb(colors[0], "#f8696b");
-    const middle = colorRgb(colors[Math.floor((colors.length - 1) / 2)], "#ffeb84");
-    const high = colorRgb(colors[colors.length - 1], "#63be7b");
-    const background = ratio <= .5 ? mixColor(low, middle, ratio * 2) : mixColor(middle, high, (ratio - .5) * 2);
-    return { kind: rule.kind, ratio, background, showValue: true } as const;
+    return { environment, kind: rule.kind, showValue: true, value } as const;
   }
-  const symbols = rule.reverse ? ["▲", "●", "▼"] : ["▼", "●", "▲"];
-  return { kind: rule.kind, ratio, icon: symbols[Math.min(2, Math.floor(ratio * 3))], showValue: rule.showValue !== false } as const;
+  return { environment, kind: rule.kind, showValue: rule.showValue !== false, value } as const;
+}
+
+function drawConditionalDataBar(
+  ctx: CanvasRenderingContext2D,
+  conditional: NonNullable<ReturnType<typeof conditionalVisual>>,
+  colX: number,
+  rowY: number,
+  colW: number,
+  rowHeight: number,
+): void {
+  const style = conditional.environment.dataBar;
+  if (!style) return;
+  const width = Math.max(0, colW - 6);
+  const geometry = resolveDataBarGeometry(conditional.environment, conditional.value, width);
+  const left = colX + 3;
+  const top = rowY + 4;
+  const height = Math.max(2, rowHeight - 8);
+  if (geometry.barWidth > 0) {
+    const fillColor = geometry.negative ? style.negativeFillColor : style.color;
+    if (style.gradient) {
+      const gradient = ctx.createLinearGradient(
+        left + geometry.barX,
+        top,
+        left + geometry.barX + geometry.barWidth,
+        top,
+      );
+      gradient.addColorStop(0, withAlpha(fillColor, "66"));
+      gradient.addColorStop(1, withAlpha(fillColor, "dd"));
+      ctx.fillStyle = gradient;
+    } else {
+      ctx.fillStyle = withAlpha(fillColor, "99");
+    }
+    ctx.fillRect(left + geometry.barX, top, geometry.barWidth, height);
+    if (style.border) {
+      ctx.strokeStyle = geometry.negative ? style.negativeBorderColor : style.borderColor;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(left + geometry.barX + 0.5, top + 0.5, Math.max(0, geometry.barWidth - 1), Math.max(0, height - 1));
+    }
+  }
+  if (geometry.showAxis) {
+    ctx.fillStyle = style.axisColor;
+    ctx.fillRect(left + geometry.axisX - 0.5, top, 1, height);
+  }
 }
 
 function drawSparkline(ctx: CanvasRenderingContext2D, sparkline: XlsxSparkline, x: number, y: number, width: number, height: number): void {
@@ -955,7 +991,7 @@ function paintBody() {
   const colRange = visibleColRange.value;
   const sheet = activeSheet.value;
   if (!sheet) return;
-  conditionalRuleStats = new Map();
+  conditionalRuleEnvironments = new Map();
 
   const widths = effectiveColWidths.value;
   const heights = effectiveRowHeights.value;
@@ -1030,15 +1066,21 @@ function paintBody() {
         }
         const style = resolveCanvasCellStyle(cell, value, workbookStyle);
         const conditional = conditionalVisual(cell, value);
+        const conditionalIcon = conditional?.kind === "iconSet"
+          ? resolveIconGeometry(conditional.environment, conditional.value, colW, rowHResolved)
+          : null;
+        const textAreaWidth = conditionalIcon?.textWidth ?? colW;
         const hyperlink = hyperlinksByCell.value.get(`${cell.row}:${cell.col}`);
         const comment = commentsByCell.value.get(`${cell.row}:${cell.col}`);
         const sparkline = sparklinesByCell.value.get(`${cell.row}:${cell.col}`);
 
-        ctx.fillStyle = conditional?.kind === "colorScale" ? conditional.background : style.backgroundColor;
+        const conditionalBackground = conditional?.kind === "colorScale"
+          ? resolveColorScaleFill(conditional.environment, conditional.value)
+          : undefined;
+        ctx.fillStyle = conditionalBackground || style.backgroundColor;
         ctx.fillRect(colX + 0.5, rowY + 0.5, Math.max(0, colW - 1), Math.max(0, rowHResolved - 1));
         if (conditional?.kind === "dataBar") {
-          ctx.fillStyle = `${conditional.color}99`;
-          ctx.fillRect(colX + 3, rowY + 4, Math.max(2, (colW - 6) * conditional.ratio), Math.max(2, rowHResolved - 8));
+          drawConditionalDataBar(ctx, conditional, colX, rowY, colW, rowHResolved);
         }
         if (sparkline) drawSparkline(ctx, sparkline, colX, rowY, colW, rowHResolved);
         if (merge && sheet.showGridLines !== false) {
@@ -1055,18 +1097,18 @@ function paintBody() {
         if (value && !sparkline && (conditional?.kind !== "dataBar" || conditional.showValue)) {
           ctx.save();
           ctx.beginPath();
-          ctx.rect(colX + 2, rowY + 1, Math.max(0, colW - 4), Math.max(0, rowHResolved - 2));
+          ctx.rect(colX + 2, rowY + 1, Math.max(0, textAreaWidth - 4), Math.max(0, rowHResolved - 2));
           ctx.clip();
           ctx.fillStyle = hyperlink ? "#2563eb" : style.color || textColor;
           ctx.font = `${style.fontStyle} ${style.fontWeight} ${Math.round(style.fontSizePx)}px ${JSON.stringify(style.fontFamily)}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
           ctx.textAlign = style.alignment;
           const padding = 5;
           const textX = style.alignment === "right"
-            ? colX + colW - padding
-            : style.alignment === "center" ? colX + colW / 2 : colX + padding;
+            ? colX + textAreaWidth - padding
+            : style.alignment === "center" ? colX + textAreaWidth / 2 : colX + padding;
           const lineHeight = Math.max(12, style.fontSizePx * 1.25);
           const maxLines = style.wrap ? Math.max(1, Math.floor((rowHResolved - 4) / lineHeight)) : 1;
-          const lines = wrapCellText(ctx, value, Math.max(0, colW - padding * 2), maxLines);
+          const lines = wrapCellText(ctx, value, Math.max(0, textAreaWidth - padding * 2), maxLines);
           const blockHeight = lines.length * lineHeight;
           const firstBaseline = style.vertical === "top"
             ? rowY + 2 + lineHeight * 0.8
@@ -1075,7 +1117,7 @@ function paintBody() {
               : rowY + rowHResolved - blockHeight + lineHeight * 0.8 - 2;
           lines.forEach((line, index) => ctx.fillText(line, textX, firstBaseline + index * lineHeight));
           if (style.underline || style.strike || hyperlink) {
-            const measured = Math.min(ctx.measureText(lines[0] ?? "").width, Math.max(0, colW - padding * 2));
+            const measured = Math.min(ctx.measureText(lines[0] ?? "").width, Math.max(0, textAreaWidth - padding * 2));
             const startX = style.alignment === "right" ? textX - measured : style.alignment === "center" ? textX - measured / 2 : textX;
             ctx.strokeStyle = style.color;
             ctx.lineWidth = 1;
@@ -1089,11 +1131,18 @@ function paintBody() {
           }
           ctx.restore();
         }
-        if (conditional?.kind === "iconSet") {
-          ctx.fillStyle = conditional.ratio < .34 ? "#dc2626" : conditional.ratio < .67 ? "#d97706" : "#16a34a";
-          ctx.font = `${Math.max(10, Math.min(15, rowHResolved - 6))}px sans-serif`;
-          ctx.textAlign = "right";
-          ctx.fillText(conditional.icon, colX + colW - 4, rowY + rowHResolved / 2 + 5);
+        if (conditionalIcon) {
+          ctx.save();
+          ctx.fillStyle = conditionalIcon.color;
+          ctx.font = `${conditionalIcon.size}px "Segoe UI Symbol", "Apple Symbols", sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(
+            conditionalIcon.glyph,
+            colX + conditionalIcon.iconX + conditionalIcon.size / 2,
+            rowY + rowHResolved / 2,
+          );
+          ctx.restore();
         }
         if (comment) {
           ctx.fillStyle = "#dc2626";
