@@ -278,11 +278,19 @@ export interface DocxEditorController {
     cells: Array<{ rowIndex: number; cellIndex: number }>
   ) => void;
   setTableColumnWidths: (tableIndex: number, widthsPx: number[]) => void;
+  /**
+   * Inserts a row on the requested side of the reference row.
+   * `rowIndex` is the index of that reference row, not the insertion index.
+   */
   insertTableRow: (
     tableIndex: number,
     rowIndex: number,
     direction: "above" | "below"
   ) => void;
+  /**
+   * Inserts a column on the requested side of the reference cell.
+   * `cellIndex` is the index of that reference cell, not the insertion index.
+   */
   insertTableColumn: (
     tableIndex: number,
     cellIndex: number,

@@ -5,9 +5,11 @@
 import type {
   DocModel,
   DocxTableCellSelectionRange,
+  ParagraphNode,
 } from "@arcships/docx-core"
 import {
   cloneDocModel,
+  cloneParagraphStyle,
   createDefaultEditorTableBorders,
   createEmptyParagraphFromTemplate,
   deleteTableColumn as deleteTableColumnOnGrid,
@@ -16,9 +18,13 @@ import {
   insertTableRow as insertTableRowOnGrid,
   mergeTableCells as mergeTableCellsOnGrid,
   moveBodyNodeInModel,
+  paragraphLocationFromTextRangeLocation,
+  paragraphText,
   parseSectionLayout,
   shiftSectionStartIndexesForInsertion,
   shiftSectionStartIndexesForRemoval,
+  splitParagraphChildrenAtTextOffsets,
+  splitParagraphStyleWithDefaultSpacing,
   splitTableCell as splitTableCellOnGrid,
   tableColumnCount,
 } from "@arcships/docx-core"
@@ -54,6 +60,31 @@ function insertedTableColumnWidths(widthTwips: number): number[] {
   return widths
 }
 
+function insertedTableNode(model: DocModel) {
+  const widthTwips = insertedTableContentWidthTwips(model)
+  const columnWidthsTwips = insertedTableColumnWidths(widthTwips)
+  return {
+    type: "table" as const,
+    style: {
+      layout: "fixed" as const,
+      widthTwips,
+      columnWidthsTwips,
+      borders: createDefaultEditorTableBorders(),
+    },
+    rows: Array.from({ length: INSERTED_TABLE_ROWS }, () => ({
+      type: "table-row" as const,
+      cells: Array.from(
+        { length: INSERTED_TABLE_COLUMNS },
+        (_, columnIndex) => ({
+          type: "table-cell" as const,
+          style: { widthTwips: columnWidthsTwips[columnIndex] },
+          nodes: [createEmptyParagraphFromTemplate()],
+        })
+      ),
+    })),
+  }
+}
+
 export function createEditorTable(
   ctx: EditorCore,
   applyChange: (
@@ -87,32 +118,82 @@ export function createEditorTable(
     ctx.activeTextRangeSnapshot.value = undefined
   }
 
+  // Inserts a table at the caret instead of appending it to the document. The
+  // caret paragraph is split when the caret sits in the middle of its text, and
+  // a caret inside a table cell nests the new table in that cell.
   const insertTable = (): void => {
+    const range = ctx.activeTextRangeSnapshot.value
+    const location = range
+      ? paragraphLocationFromTextRangeLocation(range.start.location)
+      : undefined
+    const caretOffset = range ? Math.max(0, Math.round(range.start.offset)) : undefined
+
     applyChange((current) => {
       const nextModel = cloneDocModel(current)
-      const widthTwips = insertedTableContentWidthTwips(nextModel)
-      const columnWidthsTwips = insertedTableColumnWidths(widthTwips)
-      const table = {
-        type: "table" as const,
-        style: {
-          layout: "fixed" as const,
-          widthTwips,
-          columnWidthsTwips,
-          borders: createDefaultEditorTableBorders(),
-        },
-        rows: Array.from({ length: INSERTED_TABLE_ROWS }, () => ({
-          type: "table-row" as const,
-          cells: Array.from(
-            { length: INSERTED_TABLE_COLUMNS },
-            (_, columnIndex) => ({
-              type: "table-cell" as const,
-              style: { widthTwips: columnWidthsTwips[columnIndex] },
-              nodes: [createEmptyParagraphFromTemplate()],
-            })
-          ),
-        })),
+      const table = insertedTableNode(nextModel)
+
+      if (!location || caretOffset === undefined) {
+        nextModel.nodes.push(table)
+        return nextModel
       }
-      nextModel.nodes.push(table as any)
+
+      if (location.kind === "table-cell") {
+        const tableNode = nextModel.nodes[location.tableIndex]
+        if (!tableNode || tableNode.type !== "table") {
+          nextModel.nodes.push(table)
+          return nextModel
+        }
+        const cell = tableNode.rows[location.rowIndex]?.cells[location.cellIndex]
+        if (!cell) {
+          nextModel.nodes.push(table)
+          return nextModel
+        }
+        const insertIdx = Math.max(0, Math.min(cell.nodes.length, location.paragraphIndex + 1))
+        cell.nodes.splice(insertIdx, 0, table)
+        tableNode.sourceXml = undefined
+        return nextModel
+      }
+
+      const paragraphNode = nextModel.nodes[location.nodeIndex]
+      if (!paragraphNode || paragraphNode.type !== "paragraph") {
+        nextModel.nodes.push(table)
+        return nextModel
+      }
+
+      const text = paragraphText(paragraphNode)
+      const splitOffset = Math.max(0, Math.min(text.length, caretOffset))
+      if (splitOffset <= 0) {
+        nextModel.nodes.splice(location.nodeIndex, 0, table)
+        shiftSectionStartIndexesForInsertion(nextModel, location.nodeIndex)
+        return nextModel
+      }
+      if (splitOffset >= text.length) {
+        nextModel.nodes.splice(location.nodeIndex + 1, 0, table)
+        shiftSectionStartIndexesForInsertion(nextModel, location.nodeIndex + 1)
+        return nextModel
+      }
+
+      // Split the caret paragraph so the table lands exactly at the caret.
+      const splitStyle = cloneParagraphStyle(
+        splitParagraphStyleWithDefaultSpacing(paragraphNode.style, paragraphNode.sourceXml)
+      )
+      const splitChildren = splitParagraphChildrenAtTextOffsets(
+        paragraphNode,
+        text,
+        splitOffset,
+        splitOffset
+      )
+      paragraphNode.style = cloneParagraphStyle(splitStyle)
+      paragraphNode.children = splitChildren.beforeChildren
+      paragraphNode.sourceXml = undefined
+      const afterParagraph: ParagraphNode = {
+        type: "paragraph",
+        style: cloneParagraphStyle(splitStyle),
+        children: splitChildren.afterChildren,
+      }
+      nextModel.nodes.splice(location.nodeIndex + 1, 0, table, afterParagraph)
+      shiftSectionStartIndexesForInsertion(nextModel, location.nodeIndex + 1)
+      shiftSectionStartIndexesForInsertion(nextModel, location.nodeIndex + 1)
       return nextModel
     }, "Inserted table")
   }
@@ -127,6 +208,8 @@ export function createEditorTable(
         refuse("Cannot insert a row: table not found")
         return current
       }
+      // `rowIndex` is the reference row; `direction` decides which side of it
+      // the new row lands on.
       if (!insertTableRowOnGrid(node, rowIndex, direction)) {
         refuse("Cannot insert a table row")
         return current
@@ -145,6 +228,7 @@ export function createEditorTable(
         refuse("Cannot insert a column: table not found")
         return current
       }
+      // `cellIndex` is the reference cell; `direction` decides the side.
       if (!insertTableColumnOnGrid(node, cellIndex, direction, rowIndex)) {
         refuse("Cannot insert a table column")
         return current

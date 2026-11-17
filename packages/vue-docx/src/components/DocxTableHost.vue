@@ -748,7 +748,8 @@ function cleanupColumnResize(commit: boolean): void {
 }
 
 function onAddRow(): void {
-  props.controller?.insertTableRow(props.tableIndex, props.table.rows.length, "below")
+  const lastRowIndex = Math.max(0, props.table.rows.length - 1)
+  props.controller?.insertTableRow(props.tableIndex, lastRowIndex, "below")
 }
 
 watch(
