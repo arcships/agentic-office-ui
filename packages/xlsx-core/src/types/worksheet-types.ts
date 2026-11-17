@@ -53,8 +53,10 @@ export interface XlsxTableStyleDefinition {
 // ── Conditional formatting ───────────────────────────────────────────────
 
 export interface XlsxConditionalFormatValueObject {
+  /** Raw cfvo type: min, max, num, percent, percentile, formula, autoMin/autoMax. */
   type: string;
-  value?: number;
+  /** Numeric bound, or the raw formula text for `formula` cfvos. */
+  value?: number | string;
 }
 
 export interface XlsxConditionalDataBarRule {
