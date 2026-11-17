@@ -335,7 +335,7 @@ export function resolveMeasureFont(
       complexScript: style?.fontFamilyComplexScript
     }) ??
     cssFontFamily(DEFAULT_UNSPECIFIED_DOCX_FONT_FAMILY) ??
-    '"Times New Roman", serif';
+    '"Calibri", sans-serif';
   return `${fontStyle} normal ${fontWeight} ${fontSizePx}px ${fontFamily}`;
 }
 

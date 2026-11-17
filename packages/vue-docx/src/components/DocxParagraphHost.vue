@@ -45,18 +45,13 @@ import {
   paragraphTypographyStyle,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
+import { paragraphStyleToCss } from "../render/paragraph-style"
 import { renderStaticHtml } from "../render/static-html"
 import {
   restoreDomSelectionFromTextRange,
   syncDomSelectionToEditor,
   readDocxTextHostText,
 } from "../composables/editor-selection"
-
-// ── Constants ──────────────────────────────────────────────────────
-const HEADING_FONT_SIZES: Record<number, string> = {
-  1: "2rem", 2: "1.6rem", 3: "1.35rem",
-  4: "1.2rem", 5: "1.05rem", 6: "0.95rem",
-}
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
@@ -111,15 +106,12 @@ const isActiveParagraph = computed(() => {
 })
 
 const paragraphStyle = computed<Record<string, any>>(() => {
-  const style = props.paragraph.style
   return {
-    margin: "0",
-    minHeight: "1em",
-    ...paragraphTypographyStyle(style),
-    fontWeight: style?.headingLevel ? 700 : undefined,
-    fontSize: style?.headingLevel
-      ? HEADING_FONT_SIZES[style.headingLevel]
-      : undefined,
+    ...paragraphStyleToCss(props.paragraph, {
+      numberingDefinitions: props.numberingDefinitions,
+    }),
+    // Keep the shared paragraph typography (alignment/direction) too.
+    ...paragraphTypographyStyle(props.paragraph.style),
   }
 })
 
@@ -518,9 +510,6 @@ defineExpose({
   outline: none;
   white-space: pre-wrap;
   word-wrap: break-word;
-  line-height: 1.35;
-  font-family: "Calibri", sans-serif;
-  font-size: 11pt;
 }
 .docx-paragraph-host--editable {
   cursor: text;
