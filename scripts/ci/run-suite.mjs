@@ -71,6 +71,7 @@ const suites = {
       "tests/unit/docx-pagination-runtime.test.mjs",
       "tests/unit/xlsx-core.test.mjs",
       "tests/unit/xlsx-worker.test.mjs",
+      "tests/unit/xlsx-anchor-geometry.test.mjs",
       "tests/unit/xlsx-reference-adapter.test.mjs",
       "packages/vue-xlsx/test/lazy-loading.mjs",
       "tests/unit/pdf-source.test.mjs",
@@ -145,6 +146,7 @@ const suites = {
       "tests/component/xlsx-clipboard-search.test.mjs",
       "tests/component/xlsx-conditional-format.test.mjs",
       "tests/component/xlsx-grid-freeze-panes.test.mjs",
+      "tests/component/xlsx-grid-fidelity.test.mjs",
       "tests/component/image-decode-state.test.mjs",
     ]),
     command("docx-xlsx-component-smoke", process.execPath, [

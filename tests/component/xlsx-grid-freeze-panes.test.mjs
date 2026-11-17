@@ -197,7 +197,12 @@ test("XLSX headers paint a pinned strip and a scrolling strip", () => {
 });
 
 test("XLSX frozen panes reuse the full cell renderer", () => {
-  const content = functionText("drawCellContent");
+  const content = `${functionText("drawCellContent")}\n${functionText("drawCellText")}`;
+  assert.match(
+    functionText("drawCellContent"),
+    /drawCellText\(ctx, x, y, width, height, state/,
+    "drawCellContent must delegate text so the overflow pass can share it",
+  );
   for (const [fragment, label] of [
     [/conditional\?\.kind === "dataBar"/, "data bars"],
     [/drawSparkline\(ctx, sparkline/, "sparklines"],

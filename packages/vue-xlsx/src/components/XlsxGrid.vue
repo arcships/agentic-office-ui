@@ -95,7 +95,7 @@ import {
   type XlsxSheetData,
 } from "@arcships/xlsx-core";
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy";
-import { GRID_HEADER_HEIGHT_PX, GRID_ROW_HEADER_WIDTH_PX } from "./grid-metrics";
+import { GRID_HEADER_HEIGHT_PX, GRID_ROW_HEADER_WIDTH_PX, gridZoomFactor } from "./grid-metrics";
 import XlsxClipboardNotice from "./XlsxClipboardNotice.vue";
 import { useClipboardCopyNotice } from "../composables/useClipboardCopyNotice";
 import {
@@ -108,6 +108,14 @@ import {
   type ConditionalEnvironment,
 } from "../render/conditional-format";
 import { paneAxisContentOffset, paneViewOffset, resolvePaneContentPoint, resolvePaneViewPoint } from "./grid-pane-geometry";
+import {
+  MAX_CANVAS_DIMENSION_PX,
+  intersectsViewport,
+  readDevicePixelRatio,
+  resolveAxisResizeSize,
+  resolveCanvasPixelRatio,
+  resolveOverflowTextWidth,
+} from "./grid-paint";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -135,7 +143,6 @@ const WORKER_ROW_BATCH_SIZE = 64;
 const MIN_DISPLAY_ROWS = 200;
 const MIN_DISPLAY_COLS = 50;
 const AXIS_RESIZE_DRAG_THRESHOLD = 3;
-const DPR = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
 
 // ── Refs ───────────────────────────────────────────────────────────────
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -169,6 +176,7 @@ const resizePreview = ref<{
 const isSelecting = ref(false);
 const selectionAnchor = ref<XlsxCellAddress | null>(null);
 const workerRowsRevision = ref(0);
+const devicePixelRatioRevision = ref(0);
 interface GridCellSnapshot {
   style?: XlsxResolvedCellStyle;
   value: string;
@@ -225,7 +233,7 @@ const revision = computed(() => props.controller.revision);
 const effectiveColWidths = computed(() => {
   const sheet = activeSheet.value;
   if (!sheet) return [];
-  const z = zoomScale.value / 100;
+  const z = gridZoomFactor(zoomScale.value);
   const count = Math.max(sheet.colWidths?.length ?? 0, MIN_DISPLAY_COLS);
   return Array.from({ length: count }, (_, index) => {
     const actualIndex = sheet.visibleCols?.[index] ?? index;
@@ -240,7 +248,7 @@ const effectiveColWidths = computed(() => {
 const effectiveRowHeights = computed(() => {
   const sheet = activeSheet.value;
   if (!sheet) return [];
-  const z = zoomScale.value / 100;
+  const z = gridZoomFactor(zoomScale.value);
   const count = Math.max(sheet.rowHeights?.length ?? 0, MIN_DISPLAY_ROWS);
   return Array.from({ length: count }, (_, index) => {
     const actualIndex = sheet.visibleRows?.[index] ?? index;
@@ -725,8 +733,12 @@ function resizeCanvas(canvas: HTMLCanvasElement | null, width: number, height: n
   if (!canvas) return;
   const safeWidth = Math.max(0, width);
   const safeHeight = Math.max(0, height);
-  const pixelWidth = Math.ceil(safeWidth * DPR);
-  const pixelHeight = Math.ceil(safeHeight * DPR);
+  // The browser aborts / blanks a canvas whose backing store exceeds its
+  // per-canvas area or dimension limit. Lower the effective ratio instead of
+  // letting a wide window at high DPR take the grid down.
+  const pixelRatio = resolveCanvasPixelRatio(safeWidth, safeHeight, readDevicePixelRatio());
+  const pixelWidth = safeWidth > 0 ? Math.max(1, Math.min(MAX_CANVAS_DIMENSION_PX, Math.ceil(safeWidth * pixelRatio))) : 0;
+  const pixelHeight = safeHeight > 0 ? Math.max(1, Math.min(MAX_CANVAS_DIMENSION_PX, Math.ceil(safeHeight * pixelRatio))) : 0;
   const cssWidth = `${safeWidth}px`;
   const cssHeight = `${safeHeight}px`;
   if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
@@ -734,7 +746,7 @@ function resizeCanvas(canvas: HTMLCanvasElement | null, width: number, height: n
   if (canvas.style.width !== cssWidth) canvas.style.width = cssWidth;
   if (canvas.style.height !== cssHeight) canvas.style.height = cssHeight;
   const ctx = canvas.getContext("2d");
-  if (ctx) ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (ctx) ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
 }
 
 interface CanvasCellStyle {
@@ -909,7 +921,7 @@ function resolveCanvasCellStyle(
     border: asStyleRecord(workbookStyle?.border) as Record<string, Record<string, unknown>> | undefined,
     color: fontColor || (props.isDark ? "#e4e4e7" : "#18181b"),
     fontFamily: typeof font?.name === "string" && font.name.trim() ? font.name : "Segoe UI",
-    fontSizePx: Math.max(8, (typeof font?.size === "number" ? font.size * 4 / 3 : 12) * zoomScale.value / 100),
+    fontSizePx: Math.max(8, (typeof font?.size === "number" ? font.size * 4 / 3 : 12) * gridZoomFactor(zoomScale.value)),
     fontStyle: font?.italic ? "italic" : "normal",
     fontWeight: font?.bold ? "700" : "400",
     strike: Boolean(font?.strikethrough),
@@ -1035,53 +1047,37 @@ interface CellPaintState {
   selectionFill: string;
   gridColor: string;
   textColor: string;
+  /** Width available for text when Excel-style overflow into empty neighbours is allowed. */
+  overflowWidth?: number;
+  /** Defer text/icon drawing so the caller can repaint it after all cell backgrounds. */
+  skipText?: boolean;
 }
 
 /**
- * Draws a cell's complete content — background, conditional formatting,
- * sparkline, selection tint, text, comment marker and borders — into a
- * viewport rectangle. The scrolling pass and the frozen-pane overdraw share
- * it so a pinned cell keeps the formatting it has in the live pane.
+ * Draws a cell's text and conditional icon. Shared by `drawCellContent` and by
+ * the overflow pass, which repaints text after every neighbour background has
+ * been filled (otherwise an empty right-hand cell would erase the spill).
  */
-function drawCellContent(
+function drawCellText(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   width: number,
   height: number,
   state: CellPaintState,
+  hyperlinkColor: string,
 ): void {
-  const { style, conditional, hyperlink, comment, sparkline, value } = state;
-  const conditionalBackground = conditional?.kind === "colorScale"
-    ? resolveColorScaleFill(conditional.environment, conditional.value)
-    : undefined;
-  ctx.fillStyle = conditionalBackground || style.backgroundColor;
-  ctx.fillRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
-  if (conditional?.kind === "dataBar") {
-    drawConditionalDataBar(ctx, conditional, x, y, width, height);
-  }
+  const { style, conditional, hyperlink, sparkline, value } = state;
   const conditionalIcon = conditional?.kind === "iconSet"
     ? resolveIconGeometry(conditional.environment, conditional.value, width, height)
     : null;
-  const textAreaWidth = conditionalIcon?.textWidth ?? width;
-  if (sparkline) drawSparkline(ctx, sparkline, x, y, width, height);
-  if (state.gridLines) {
-    ctx.strokeStyle = state.gridColor;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
-  }
-
-  if (state.selected) {
-    ctx.fillStyle = state.selectionFill;
-    ctx.fillRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
-  }
-
+  const textAreaWidth = conditionalIcon?.textWidth ?? state.overflowWidth ?? width;
   if (value && !sparkline && (conditional?.kind !== "dataBar" || conditional.showValue)) {
     ctx.save();
     ctx.beginPath();
     ctx.rect(x + 2, y + 1, Math.max(0, textAreaWidth - 4), Math.max(0, height - 2));
     ctx.clip();
-    ctx.fillStyle = hyperlink ? "#2563eb" : style.color || state.textColor;
+    ctx.fillStyle = hyperlink ? hyperlinkColor : style.color || state.textColor;
     ctx.font = `${style.fontStyle} ${style.fontWeight} ${Math.round(style.fontSizePx)}px ${JSON.stringify(style.fontFamily)}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
     ctx.textAlign = style.alignment;
     const padding = 5;
@@ -1124,6 +1120,44 @@ function drawCellContent(
       y + height / 2,
     );
   }
+}
+
+/**
+ * Draws a cell's complete content — background, conditional formatting,
+ * sparkline, selection tint, text, comment marker and borders — into a
+ * viewport rectangle. The scrolling pass and the frozen-pane overdraw share
+ * it so a pinned cell keeps the formatting it has in the live pane.
+ */
+function drawCellContent(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  state: CellPaintState,
+): void {
+  const { style, conditional, comment, sparkline } = state;
+  const conditionalBackground = conditional?.kind === "colorScale"
+    ? resolveColorScaleFill(conditional.environment, conditional.value)
+    : undefined;
+  ctx.fillStyle = conditionalBackground || style.backgroundColor;
+  ctx.fillRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
+  if (conditional?.kind === "dataBar") {
+    drawConditionalDataBar(ctx, conditional, x, y, width, height);
+  }
+  if (sparkline) drawSparkline(ctx, sparkline, x, y, width, height);
+  if (state.gridLines) {
+    ctx.strokeStyle = state.gridColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
+  }
+
+  if (state.selected) {
+    ctx.fillStyle = state.selectionFill;
+    ctx.fillRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+  }
+
+  if (!state.skipText) drawCellText(ctx, x, y, width, height, state, "#2563eb");
   if (comment) {
     ctx.fillStyle = "#dc2626";
     ctx.beginPath(); ctx.moveTo(x + width - 9, y + 1); ctx.lineTo(x + width - 1, y + 1); ctx.lineTo(x + width - 1, y + 9); ctx.closePath(); ctx.fill();
@@ -1205,6 +1239,14 @@ function paintGrid() {
   paintCorner();
 }
 
+interface OverflowTextTask {
+  height: number;
+  state: CellPaintState;
+  width: number;
+  x: number;
+  y: number;
+}
+
 function paintBody() {
   const canvas = bodyCanvasRef.value;
   if (!canvas) return;
@@ -1216,7 +1258,6 @@ function paintBody() {
   resizeCanvas(canvas, bw, bh);
 
   ctx.clearRect(0, 0, bw, bh);
-  const z = zoomScale.value / 100;
   const rowRange = visibleRowRange.value;
   const colRange = visibleColRange.value;
   const sheet = activeSheet.value;
@@ -1233,6 +1274,9 @@ function paintBody() {
   const textColor = props.isDark ? "#e4e4e7" : "#18181b";
   const selFill = props.selectionFillColor || (props.isDark ? "rgba(37, 99, 235, 0.15)" : "rgba(37, 99, 235, 0.08)");
   const selBorder = props.selectionColor || "#2563eb";
+  const viewport = { bottom: scrollTop.value + bh, left: scrollLeft.value, right: scrollLeft.value + bw, top: scrollTop.value };
+  const paintedBodyCells = new Set<string>();
+  const overflowTextTasks: OverflowTextTask[] = [];
 
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, bw, bh);
@@ -1261,44 +1305,105 @@ function paintBody() {
 
   const sel = selection.value;
 
+  // Excel lets left-aligned text spill into adjacent empty cells. Only the
+  // scrolling pass allows it: frozen strips keep their pinned-cell clipping.
+  const resolveBodyOverflowWidth = (
+    displayRow: number,
+    displayCol: number,
+    value: string,
+    merge: GridMergeRegion | undefined,
+    style: CanvasCellStyle,
+    conditional: ReturnType<typeof conditionalVisual>,
+    sparkline: XlsxSparkline | undefined,
+  ): number => {
+    const cellWidth = widths[displayCol] || 0;
+    if (merge || style.wrap || style.alignment !== "left" || conditional?.kind === "iconSet") return cellWidth;
+    if (!value || sparkline || (conditional?.kind === "dataBar" && !conditional.showValue)) return cellWidth;
+    const neighbourWidths: number[] = [];
+    for (let nextCol = displayCol + 1; nextCol < widths.length; nextCol += 1) {
+      const neighbour = getSheetCell(displayRow, nextCol);
+      if (!neighbour) break;
+      const neighbourKey = `${neighbour.row}:${neighbour.col}`;
+      if (paintedMergeAnchors.has(neighbourKey) || mergeRegionAtAnchor(neighbour)) break;
+      if (commentsByCell.value.has(neighbourKey) || sparklinesByCell.value.has(neighbourKey)) break;
+      if (getGridCellDisplayValue(neighbour)) break;
+      neighbourWidths.push(widths[nextCol] || 0);
+    }
+    return resolveOverflowTextWidth(cellWidth, neighbourWidths);
+  };
+
+  const paintBodyCell = (displayRow: number, displayCol: number, knownCell?: XlsxCellAddress | null): void => {
+    const paintKey = `${displayRow}:${displayCol}`;
+    if (paintedBodyCells.has(paintKey)) return;
+    const cell = knownCell === undefined ? getSheetCell(displayRow, displayCol) : knownCell;
+    if (!cell || paintedMergeAnchors.has(`${cell.row}:${cell.col}`)) return;
+    paintedBodyCells.add(paintKey);
+
+    const merge = mergeRegionAtAnchor(cell);
+    const mergeEnd = merge ? getDisplayCell(merge.end) : null;
+    const colW = mergeEnd
+      ? getColOffsetSum(mergeEnd.col + 1) - getColOffsetSum(displayCol)
+      : widths[displayCol] || 0;
+    const rowHResolved = mergeEnd
+      ? getRowOffsetSum(mergeEnd.row + 1) - getRowOffsetSum(displayRow)
+      : heights[displayRow] || 0;
+    const colX = getColOffsetSum(displayCol);
+    const rowY = getRowOffsetSum(displayRow);
+    const value = getGridCellDisplayValue(cell);
+    const style = resolveCanvasCellStyle(cell, value, resolveCellWorkbookStyle(cell, worksheet, sheet));
+    const conditional = conditionalVisual(cell, value);
+    const sparkline = sparklinesByCell.value.get(`${cell.row}:${cell.col}`);
+    const state: CellPaintState = {
+      style,
+      conditional,
+      comment: commentsByCell.value.get(`${cell.row}:${cell.col}`),
+      hyperlink: hyperlinksByCell.value.get(`${cell.row}:${cell.col}`),
+      sparkline,
+      value,
+      gridLines: Boolean(merge) && sheet.showGridLines !== false,
+      selected: isCellInRange(cell, sel) || Boolean(merge && sel && rangesIntersect(merge, sel)),
+      selectionFill: selFill,
+      gridColor,
+      textColor,
+    };
+    const overflowWidth = resolveBodyOverflowWidth(displayRow, displayCol, value, merge, style, conditional, sparkline);
+    if (overflowWidth > colW) {
+      // Paint the background now and defer the text until every neighbour has
+      // been filled; otherwise the empty neighbour background erases the spill.
+      drawCellContent(ctx, colX, rowY, colW, rowHResolved, { ...state, overflowWidth, skipText: true });
+      overflowTextTasks.push({ height: rowHResolved, state: { ...state, overflowWidth }, width: colW, x: colX, y: rowY });
+    } else {
+      drawCellContent(ctx, colX, rowY, colW, rowHResolved, state);
+    }
+  };
+
   try {
     for (let r = rowRange.start; r <= rowRange.end && r < heights.length; r++) {
-      const rowH = heights[r] || 0;
-      const rowY = getRowOffsetSum(r);
       for (let c = colRange.start; c <= colRange.end && c < widths.length; c++) {
-        const cell = getSheetCell(r, c);
-        if (!cell || paintedMergeAnchors.has(`${cell.row}:${cell.col}`)) continue;
-        const merge = mergeRegionAtAnchor(cell);
-        const mergeEnd = merge ? getDisplayCell(merge.end) : null;
-        const colW = mergeEnd
-          ? getColOffsetSum(mergeEnd.col + 1) - getColOffsetSum(c)
-          : widths[c] || 0;
-        const rowHResolved = mergeEnd
-          ? getRowOffsetSum(mergeEnd.row + 1) - getRowOffsetSum(r)
-          : rowH;
-        const colX = getColOffsetSum(c);
-        const value = getGridCellDisplayValue(cell);
-
-        const style = resolveCanvasCellStyle(
-          cell,
-          value,
-          resolveCellWorkbookStyle(cell, worksheet, sheet),
-        );
-        drawCellContent(ctx, colX, rowY, colW, rowHResolved, {
-          style,
-          conditional: conditionalVisual(cell, value),
-          comment: commentsByCell.value.get(`${cell.row}:${cell.col}`),
-          hyperlink: hyperlinksByCell.value.get(`${cell.row}:${cell.col}`),
-          sparkline: sparklinesByCell.value.get(`${cell.row}:${cell.col}`),
-          value,
-          gridLines: Boolean(merge) && sheet.showGridLines !== false,
-          selected: isCellInRange(cell, sel) || Boolean(merge && sel && rangesIntersect(merge, sel)),
-          selectionFill: selFill,
-          gridColor,
-          textColor,
-        });
-
+        paintBodyCell(r, c, getSheetCell(r, c));
       }
+    }
+
+    // A merged region is painted from its anchor rect even when that anchor is
+    // outside the visible range: the canvas clips the region to the viewport,
+    // so the still-visible part keeps its fill, borders and selection.
+    for (const region of paintedMergeRegions) {
+      const start = getDisplayCell(region.start);
+      const end = getDisplayCell(region.end);
+      if (!start || !end) continue;
+      const regionX = getColOffsetSum(start.col);
+      const regionY = getRowOffsetSum(start.row);
+      const regionWidth = getColOffsetSum(end.col + 1) - regionX;
+      const regionHeight = getRowOffsetSum(end.row + 1) - regionY;
+      if (!intersectsViewport(
+        { height: regionHeight, left: regionX, top: regionY, width: regionWidth },
+        viewport,
+      )) continue;
+      paintBodyCell(start.row, start.col);
+    }
+
+    for (const task of overflowTextTasks) {
+      drawCellText(ctx, task.x, task.y, task.width, task.height, task.state, "#2563eb");
     }
   } finally {
     worksheet?.free();
@@ -1672,7 +1777,7 @@ function onPointerDown(event: PointerEvent) {
   if (event.button !== 0) return
   const axisHit = hitTestAxis(event.clientX, event.clientY);
   if (axisHit?.resize && axisHit.kind !== "corner") {
-    const z = Math.max(0.5, zoomScale.value / 100);
+    const z = gridZoomFactor(zoomScale.value);
     const renderedSize = axisHit.kind === "column"
       ? effectiveColWidths.value[axisHit.displayIndex] ?? DEFAULT_COL_WIDTH * z
       : effectiveRowHeights.value[axisHit.displayIndex] ?? DEFAULT_ROW_HEIGHT * z;
@@ -1714,13 +1819,12 @@ function onPointerDown(event: PointerEvent) {
 function onPointerMove(event: PointerEvent) {
   const resizing = resizePreview.value;
   if (resizing) {
-    const z = Math.max(0.5, zoomScale.value / 100);
     const position = resizing.kind === "column" ? event.clientX : event.clientY;
     const delta = position - resizing.startPosition;
     if (!resizing.moved && Math.abs(delta) < AXIS_RESIZE_DRAG_THRESHOLD) return;
     const minimum = resizing.kind === "column" ? 32 : 18;
     resizing.moved = true;
-    resizing.size = Math.max(minimum, resizing.startSize + delta / z);
+    resizing.size = resolveAxisResizeSize(resizing.startSize, delta, zoomScale.value, minimum);
     resizePreview.value = { ...resizing };
     schedulePaint();
     return;
@@ -2012,7 +2116,7 @@ const editInputStyle = computed<CSSProperties>(() => {
   const cell = editingCell.value;
   const displayCell = getDisplayCell(cell);
   if (!displayCell) return { display: "none" };
-  const z = zoomScale.value / 100;
+  const z = gridZoomFactor(zoomScale.value);
   const frozen = frozenPaneMetrics();
   const anchor = resolvePaneViewPoint({
     contentX: getColOffsetSum(displayCell.col),
@@ -2055,6 +2159,7 @@ watch(
   () => [
     revision.value,
     workerRowsRevision.value,
+    devicePixelRatioRevision.value,
     zoomScale.value,
     containerWidth.value,
     containerHeight.value,
@@ -2074,12 +2179,48 @@ watch(
 );
 
 let resizeObs: ResizeObserver | null = null;
+let dprMediaQuery: MediaQueryList | null = null;
+let dprMediaListener: (() => void) | null = null;
+
+function unbindDevicePixelRatioWatch(): void {
+  if (!dprMediaQuery) return;
+  const listener = dprMediaListener;
+  if (listener) {
+    if (typeof dprMediaQuery.removeEventListener === "function") dprMediaQuery.removeEventListener("change", listener);
+    else if (typeof dprMediaQuery.removeListener === "function") dprMediaQuery.removeListener(listener);
+  }
+  dprMediaQuery = null;
+  dprMediaListener = null;
+}
+
+// `devicePixelRatio` changes when the window moves between monitors with
+// different scaling or the browser zoom changes. Re-arm the media query for the
+// new ratio and repaint, otherwise the backing store stays at the old
+// resolution until some unrelated resize happens.
+function bindDevicePixelRatioWatch(): void {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+  unbindDevicePixelRatioWatch();
+  try {
+    dprMediaQuery = window.matchMedia(`(resolution: ${readDevicePixelRatio()}dppx)`);
+  } catch {
+    dprMediaQuery = null;
+    return;
+  }
+  dprMediaListener = () => {
+    devicePixelRatioRevision.value += 1;
+    bindDevicePixelRatioWatch();
+    schedulePaint();
+  };
+  if (typeof dprMediaQuery.addEventListener === "function") dprMediaQuery.addEventListener("change", dprMediaListener);
+  else if (typeof dprMediaQuery.addListener === "function") dprMediaQuery.addListener(dprMediaListener);
+}
 
 onMounted(() => {
   const container = containerRef.value;
   if (!container) return;
   containerWidth.value = container.clientWidth;
   containerHeight.value = container.clientHeight;
+  bindDevicePixelRatioWatch();
   resizeObs = new ResizeObserver((entries) => {
     for (const entry of entries) { containerWidth.value = entry.contentRect.width; containerHeight.value = entry.contentRect.height; }
   });
@@ -2089,6 +2230,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   resizeObs?.disconnect();
+  unbindDevicePixelRatioWatch();
   resetWorkerRows(null);
   if (paintFrame !== null) window.cancelAnimationFrame(paintFrame);
   paintFrame = null;

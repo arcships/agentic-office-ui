@@ -241,6 +241,9 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
 
   function getColumnWidthPx(worksheet: ReturnType<Workbook["getSheet"]>, col: number) {
     const sheetState = ctx.imageAssetsRef.value?.sheetStatesByWorkbookSheetIndex[ctx.activeSheet.value?.workbookSheetIndex ?? -1] ?? null;
+    if (typeof worksheet.isColumnHidden === "function" && worksheet.isColumnHidden(col)) {
+      return 0;
+    }
     const width = worksheet.getColumnWidth(col);
     const showGridLines = ctx.activeSheet.value?.showGridLines ?? true;
     if (width !== undefined && width !== null) {
@@ -258,6 +261,9 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
 
   function getRowHeightPx(worksheet: ReturnType<Workbook["getSheet"]>, row: number) {
     const sheetState = ctx.imageAssetsRef.value?.sheetStatesByWorkbookSheetIndex[ctx.activeSheet.value?.workbookSheetIndex ?? -1] ?? null;
+    if (typeof worksheet.isRowHidden === "function" && worksheet.isRowHidden(row)) {
+      return 0;
+    }
     const height = worksheet.getRowHeight(row);
     const showGridLines = ctx.activeSheet.value?.showGridLines ?? true;
     if (height !== undefined && height !== null) {
