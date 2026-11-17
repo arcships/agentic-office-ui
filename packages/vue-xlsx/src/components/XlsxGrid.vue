@@ -212,6 +212,7 @@ import {
   resolveOverflowTextWidth,
 } from "./grid-paint";
 import { isDataValidationListDropdownVisible } from "../composables/validation";
+import { localizeFormattedNumber, parseDisplayedNumber } from "../composables/cell-input";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { useXlsxMessages } from "../i18n";
 
@@ -836,7 +837,11 @@ function getGridCellDisplayValue(cell: XlsxCellAddress) {
   const sheetIndex = activeSheet.value?.workbookSheetIndex;
   if (sheetIndex !== undefined && props.controller.isWorkerBacked) {
     const cached = workerCellCache.get(workerCellKey(sheetIndex, cell.row, cell.col));
-    if (cached !== undefined) return cached.value;
+    if (cached !== undefined) {
+      // Worker rows keep the raw style, so localized formats render the same
+      // way they do on the main thread.
+      return localizeFormattedNumber(cached.value, cached.style?.numberFormat, props.controller.locale);
+    }
   }
   return props.controller.getCellDisplayValue(cell);
 }
@@ -1120,8 +1125,8 @@ function conditionalVisual(cell: XlsxCellAddress, valueText: string) {
   if (!rule) return null;
   // Excel leaves blank cells unformatted: no bar, no icon, no scale colour.
   if (!valueText.trim()) return null;
-  const value = Number(valueText.replace(/[,％%]/g, ""));
-  if (!Number.isFinite(value)) return null;
+  const value = parseDisplayedNumber(valueText);
+  if (value === null) return null;
   const environment = conditionalEnvironmentFor(rule);
   if (rule.kind === "dataBar") {
     return { environment, kind: rule.kind, showValue: rule.showValue !== false, value } as const;
@@ -1179,8 +1184,8 @@ function drawSparkline(ctx: CanvasRenderingContext2D, sparkline: XlsxSparkline, 
   const values: number[] = [];
   for (let row = sparkline.range.start.row; row <= sparkline.range.end.row; row++) {
     for (let col = sparkline.range.start.col; col <= sparkline.range.end.col; col++) {
-      const value = Number(getGridCellDisplayValue({ row, col }).replace(/,/g, ""));
-      if (Number.isFinite(value)) values.push(value);
+      const value = parseDisplayedNumber(getGridCellDisplayValue({ row, col }));
+      if (value !== null) values.push(value);
     }
   }
   if (!values.length) return;

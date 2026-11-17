@@ -71,7 +71,7 @@ import {
   resolveDisplayFileName,
   sanitizeSavedWorkbookBytes
 } from "./formatting";
-import { applyCellMutationState } from "./internal";
+import { applyCellMutationState, resolveCellFallbackStyle } from "./internal";
 import { loadWorkbookImageAssets } from "./image-assets";
 import { downloadArrayBuffer, downloadBytes, downloadText } from "./clipboard";
 import type { XlsxControllerContext } from "./internal";
@@ -760,7 +760,12 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
 
     ctx.isApplyingHistoryRef.value = true;
     try {
-      applyCellMutationState(worksheet, entry.cell, targetState);
+      applyCellMutationState(
+        worksheet,
+        entry.cell,
+        targetState,
+        resolveCellFallbackStyle(visibleSheetIndex >= 0 ? ctx.sheets.value[visibleSheetIndex] : null)
+      );
       if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
         ctx.refreshWorkbookState(ctx.workbook.value);
       }
@@ -787,8 +792,14 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
 
     ctx.isApplyingHistoryRef.value = true;
     try {
+      const sheet = visibleSheetIndex >= 0 ? ctx.sheets.value[visibleSheetIndex] : null;
       for (const mutation of entry.mutations) {
-        applyCellMutationState(worksheet, mutation.cell, direction === "undo" ? mutation.before : mutation.after);
+        applyCellMutationState(
+          worksheet,
+          mutation.cell,
+          direction === "undo" ? mutation.before : mutation.after,
+          resolveCellFallbackStyle(sheet)
+        );
       }
       if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
         ctx.refreshWorkbookState(ctx.workbook.value);
@@ -909,7 +920,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
         }
 
         const cell = { row: targetRow, col: startCol + colOffset };
-        applyCellMutationState(worksheet, cell, after);
+        applyCellMutationState(worksheet, cell, after, resolveCellFallbackStyle(ctx.activeSheet.value));
         mutations.push({
           after,
           before,

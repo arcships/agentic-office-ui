@@ -43,7 +43,8 @@ import {
   type SafeCalculateSkipReason,
   type WorkbookChartAssets,
   type WorkbookImageAssets,
-  type WorkbookImageSheetOrigin
+  type WorkbookImageSheetOrigin,
+  type XlsxCellNumberFormatInput
 } from "@arcships/xlsx-core";
 import {
   DEFAULT_DEFER_LOADING_ABOVE_BYTES,
@@ -95,6 +96,7 @@ import {
   sanitizeSavedWorkbookBytes
 } from "./formatting";
 import { cellAddressToA1, parseA1RangeReference, rangeToA1 } from "./selection";
+import { normalizeDocumentLocale } from "./number-locale";
 import {
   checkCellValueAgainstDataValidation,
   findDataValidationForCell,
@@ -120,8 +122,14 @@ type DeferredWorkbookLoad = {
 
 const WORKER_CELL_SNAPSHOT_CACHE_MAX_ENTRIES = 512;
 
+type WorkerCellSnapshot = {
+  displayValue: string;
+  formula: string;
+  numberFormat?: XlsxCellNumberFormatInput | null;
+};
+
 /** Bounded LRU for Worker cell snapshots; browsing a sheet must not grow forever. */
-class WorkerCellSnapshotCache extends Map<string, { displayValue: string; formula: string }> {
+class WorkerCellSnapshotCache extends Map<string, WorkerCellSnapshot> {
   private readonly maxEntries: number;
 
   constructor(maxEntries = WORKER_CELL_SNAPSHOT_CACHE_MAX_ENTRIES) {
@@ -138,7 +146,7 @@ class WorkerCellSnapshotCache extends Map<string, { displayValue: string; formul
     return value;
   }
 
-  override set(key: string, value: { displayValue: string; formula: string }) {
+  override set(key: string, value: WorkerCellSnapshot) {
     super.delete(key);
     super.set(key, value);
     while (this.size > this.maxEntries) {
@@ -160,6 +168,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     fileName,
     historyMaxBytes = DEFAULT_HISTORY_MAX_BYTES,
     historyMaxEntries = HISTORY_LIMIT,
+    locale: configuredLocale,
     maxFileSizeBytes: configuredMaxFileSizeBytes,
     onDiagnostic,
     readOnly: initialRequestedReadOnly = false,
@@ -240,7 +249,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const chartDisplayFallbackCleanupRef = shallowRef<(() => void) | null>(null);
   const sheetOriginsRef = shallowRef<Array<WorkbookImageSheetOrigin | null>>([]);
   const workerClientRef = shallowRef<XlsxWorkerClient | null>(null);
-  const workerCellSnapshotCacheRef = shallowRef<Map<string, { displayValue: string; formula: string }>>(new WorkerCellSnapshotCache());
+  const workerCellSnapshotCacheRef = shallowRef<Map<string, WorkerCellSnapshot>>(new WorkerCellSnapshotCache());
+  const documentLocale = ref(normalizeDocumentLocale(configuredLocale));
   let latestLoadRequestId = 0;
   const xlsxRuntimeId = xlsxRuntime.id;
   const xlsxTaskSequence = createOfficeTaskSequence(xlsxRuntimeId);
@@ -283,6 +293,17 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
         phase: "image-decode",
       },
     });
+  }
+
+  /**
+   * Select the locale used by number and date formats that name none of their
+   * own (`[$-…]` wins over this value) and repaint the workbook.
+   */
+  function setDocumentLocale(nextLocale?: string) {
+    const normalized = normalizeDocumentLocale(nextLocale);
+    if (normalized === documentLocale.value) return;
+    documentLocale.value = normalized;
+    revision.value = revision.value + 1;
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -1352,7 +1373,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     isApplyingHistoryRef, historyRevision, shouldAutoCalculate, workerCellSnapshotRevision,
     isWorkerBacked, sortState, forcedReadOnly, dataValidationFeedback, deferredBufferRef, deferredLoadRequestIdRef, sourceBufferRef, deferredLoadFileSize,
     imageAssetsRef, chartAssetsRef, chartLoadRequestTokenRef, chartDisplayFallbackCleanupRef,
-    sheetOriginsRef, workerClientRef, workerCellSnapshotCacheRef,
+    sheetOriginsRef, workerClientRef, workerCellSnapshotCacheRef, locale: documentLocale,
     activeTab, activeSheet, deferredMetadataCell, deferredMetadataSheet,
     activeZoomTabKey, defaultZoomScale, zoomScale, canZoomIn, canZoomOut,
     readOnly, isActiveSheetProtected, isEditingLocked, canResizeReadOnly, displayFileName, visibleSheetIndexByWorkbookSheetIndex,
@@ -1553,6 +1574,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     pasteText: clipboardDomain.pasteText,
     removeActiveSheet: editingDomain.removeActiveSheet,
     get readOnly() { return readOnly.value; },
+    get locale() { return documentLocale.value; },
+    setDocumentLocale,
     get dataValidationFeedback() { return dataValidationFeedback.value; },
     dismissDataValidationFeedback: dismissValidationFeedback,
     recalculate: historyDomain.recalculate,

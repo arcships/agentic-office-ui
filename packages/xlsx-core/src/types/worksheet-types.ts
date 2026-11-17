@@ -650,6 +650,14 @@ export interface UseXlsxViewerControllerOptions {
    */
   maxFileSizeBytes?: number;
   /**
+   * Locale used for number and date formats that do not name one of their own
+   * (`[$-407]`-style sections always win), for example `"de-DE"`. Typed values
+   * and displayed values both follow it.
+   *
+   * @default "en-US"
+   */
+  locale?: string;
+  /**
    * Maximum number of undo and redo entries retained by this controller
    * instance.
    *
@@ -810,6 +818,8 @@ export interface XlsxViewerController {
   getCellSnapshotAsync?: (workbookSheetIndex: number, row: number, col: number, signal?: AbortSignal) => Promise<{
     displayValue: string;
     formula: string;
+    /** Resolved number format of the cell, so the viewer can localize it. */
+    numberFormat?: XlsxCellNumberFormatInput | null;
   }>;
   isLoadDeferred: boolean;
   isLoading: boolean;
@@ -817,6 +827,8 @@ export interface XlsxViewerController {
   isEditingLocked: boolean;
   isChartsLoading: boolean;
   isWorkerBacked?: boolean;
+  /** Locale used for number and date formats that do not name one. */
+  locale: string;
   maxConcurrentImageDecodes?: number;
   sourceState: XlsxSourceState;
   sourceError: XlsxLoadError | null;
@@ -925,6 +937,14 @@ export interface XlsxViewerController {
   selectedImageId: string | null;
   setSelectedFormula: (formula: string) => boolean;
   setSelectedCellFormula: (formula: string) => void;
+  /**
+   * Switches the locale used by number and date formats that name none of
+   * their own, and repaints the workbook.
+   *
+   * @param locale BCP-47 tag such as `"de-DE"`; omitted or invalid values fall
+   * back to `"en-US"`.
+   */
+  setDocumentLocale: (locale?: string) => void;
   /**
    * Applies persisted Excel style properties to the active cell.
    *

@@ -1,4 +1,14 @@
 import type { XlsxCellNumberFormatInput } from "@arcships/xlsx-core";
+import {
+  normalizeNumberDigits,
+  parseDisplayedNumber,
+  parseLocaleDate,
+  resolveFormatLocale,
+  resolveNumberSeparators,
+  type NumberFormatLocale
+} from "./number-locale";
+
+export { parseDisplayedNumber };
 
 /**
  * Value typing and number-format helpers for XLSX cell input.
@@ -24,6 +34,8 @@ export type CellInputOptions = {
   numberFormat?: unknown;
   /** Workbook uses the 1904 date system. */
   date1904?: boolean;
+  /** Fallback locale for cells whose format names no locale (`[$-407]`). */
+  locale?: string;
 };
 
 export type CellInputResolution =
@@ -49,14 +61,14 @@ const MS_PER_DAY = 86_400_000;
 const EXCEL_1900_EPOCH_UTC = Date.UTC(1899, 11, 30);
 const EXCEL_1904_EPOCH_UTC = Date.UTC(1904, 0, 1);
 
-const DATE_FORMULA_FORMATS: Readonly<Record<string, string>> = Object.freeze({
-  DATE: "m/d/yyyy",
-  DATEVALUE: "m/d/yyyy",
-  EDATE: "m/d/yyyy",
-  EOMONTH: "m/d/yyyy",
-  TODAY: "m/d/yyyy",
-  NOW: "m/d/yyyy h:mm",
-});
+const DATE_FORMULA_FUNCTIONS = new Set([
+  "DATE",
+  "DATEVALUE",
+  "EDATE",
+  "EOMONTH",
+  "TODAY",
+]);
+const DATETIME_FORMULA_FUNCTIONS = new Set(["NOW"]);
 
 /**
  * Built-in Excel number format ids (ECMA-376 §18.8.30) resolved to their
@@ -299,13 +311,6 @@ function dateToSerial(
   return (date.getTime() - epoch) / MS_PER_DAY + dayFraction;
 }
 
-function normalizeYear(year: number): number {
-  if (year >= 100) {
-    return year;
-  }
-  return year <= 29 ? 2000 + year : 1900 + year;
-}
-
 function parseIsoDateTime(text: string) {
   const match = /^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ](\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?\s*(?:Z|[+-]\d{2}:?\d{2})?$/.exec(text);
   if (!match) {
@@ -321,32 +326,6 @@ function parseIsoDateTime(text: string) {
     second: match[6] === undefined ? 0 : Number(match[6]),
     year: Number(match[1]),
   };
-}
-
-function parseSlashDate(text: string, dayFirst: boolean) {
-  const usMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(text);
-  if (usMatch) {
-    const first = Number(usMatch[1]);
-    const second = Number(usMatch[2]);
-    let monthFirst = !dayFirst;
-    if (first > 12 && second <= 12) {
-      monthFirst = false;
-    } else if (second > 12 && first <= 12) {
-      monthFirst = true;
-    }
-    return {
-      day: monthFirst ? second : first,
-      month: monthFirst ? first : second,
-      year: normalizeYear(Number(usMatch[3])),
-    };
-  }
-
-  const isoMatch = /^(\d{4})\/(\d{1,2})\/(\d{1,2})$/.exec(text);
-  if (isoMatch) {
-    return { day: Number(isoMatch[3]), month: Number(isoMatch[2]), year: Number(isoMatch[1]) };
-  }
-
-  return null;
 }
 
 function parseTimeOnly(text: string) {
@@ -377,7 +356,10 @@ type ParsedDateInput = {
   serial: number;
 };
 
-function parseDateInput(text: string, options: Required<Pick<CellInputOptions, "date1904">> & { code: string }): ParsedDateInput | null {
+function parseDateInput(
+  text: string,
+  options: Required<Pick<CellInputOptions, "date1904">> & { code: string; locale: NumberFormatLocale | null }
+): ParsedDateInput | null {
   const iso = parseIsoDateTime(text);
   if (iso) {
     const serial = dateToSerial(
@@ -390,7 +372,7 @@ function parseDateInput(text: string, options: Required<Pick<CellInputOptions, "
     return serial === null ? null : { hasDate: true, hasTime: iso.hasTime, serial };
   }
 
-  const slash = parseSlashDate(text, prefersDayFirst(options.code));
+  const slash = parseLocaleDate(text, options.locale, prefersDayFirst(options.code) ? "dmy" : undefined);
   if (slash) {
     const serial = dateToSerial(slash.year, slash.month, slash.day, {}, options.date1904);
     return serial === null ? null : { hasDate: true, hasTime: false, serial };
@@ -414,10 +396,16 @@ type ParsedNumber = {
 };
 
 const PLAIN_NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)$/;
-const GROUPED_NUMBER = /^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$/;
 const SCIENTIFIC_NUMBER = /^[+-]?(?:\d+\.?\d*|\.\d+)[eE][+-]?\d+$/;
 
-function parseNumberInput(raw: string): ParsedNumber | null {
+/**
+ * Parse the numeric part of typed text.
+ *
+ * Locale separators come from the target cell's format (`[$-407]` and
+ * friends); `1.234` is 1.234 in en-US and 1234 in de-DE, and `1.234,56` is
+ * always 1234.56 because the rightmost separator is the decimal mark.
+ */
+function parseNumberInput(raw: string, locale: NumberFormatLocale | null): ParsedNumber | null {
   let text = raw.trim();
   let negative = false;
   let percent = false;
@@ -458,10 +446,10 @@ function parseNumberInput(raw: string): ParsedNumber | null {
     return null;
   }
 
-  const grouped = GROUPED_NUMBER.test(text);
-  const normalized = grouped ? text.replace(/,/g, "") : text;
-  const scientific = SCIENTIFIC_NUMBER.test(normalized);
-  if (!scientific && !PLAIN_NUMBER.test(normalized)) {
+  const scientific = SCIENTIFIC_NUMBER.test(text);
+  const digits = scientific ? null : normalizeNumberDigits(text, resolveNumberSeparators(locale));
+  const normalized = scientific ? text : digits?.normalized;
+  if (!normalized || (!scientific && !PLAIN_NUMBER.test(normalized))) {
     return null;
   }
 
@@ -471,7 +459,7 @@ function parseNumberInput(raw: string): ParsedNumber | null {
   }
 
   return {
-    grouped,
+    grouped: digits?.grouped ?? false,
     percent,
     scientific,
     symbol,
@@ -499,11 +487,71 @@ function suggestNumberFormat(parsed: ParsedNumber): XlsxCellNumberFormatInput | 
   return undefined;
 }
 
-function suggestDateFormat(parsed: ParsedDateInput): XlsxCellNumberFormatInput {
+function datePatternForLocale(locale: NumberFormatLocale | null) {
+  const order = locale?.dateOrder ?? "mdy";
+  return order === "dmy" ? "dd.mm.yyyy" : order === "ymd" ? "yyyy-mm-dd" : "m/d/yyyy";
+}
+
+function suggestDateFormat(parsed: ParsedDateInput, locale: NumberFormatLocale | null): XlsxCellNumberFormatInput {
   if (!parsed.hasDate) {
     return buildFormat("h:mm:ss");
   }
-  return buildFormat(parsed.hasTime ? "m/d/yyyy h:mm" : "m/d/yyyy");
+  const dateCode = datePatternForLocale(locale);
+  return buildFormat(parsed.hasTime ? `${dateCode} h:mm` : dateCode);
+}
+
+const NUMERIC_PREFIX = "[\\s($€£¥₹₽₪¢₫₴₦₱₸₺฿]*";
+const NUMERIC_SUFFIX = "[\\s)%€£¥₹₽₪¢₫₴₦₱₸₺฿]*";
+const LOCALIZABLE_NUMBER = new RegExp(
+  `^(${NUMERIC_PREFIX})([+-]?\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?|[+-]?\\d+(?:\\.\\d+)?)(${NUMERIC_SUFFIX})$`
+);
+
+function groupDigits(digits: string, separator: string) {
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, separator);
+}
+
+/**
+ * Render a formatted number with the separators the cell's locale asks for.
+ *
+ * The workbook engine matches the format code but always emits en-US
+ * separators, so `[$-407]#,##0.00` comes back as `1,234.56` and is rewritten to
+ * `1.234,56`. Dates, times, text and errors never match the numeric shape and
+ * are returned unchanged.
+ */
+export function localizeFormattedNumber(
+  formatted: string,
+  numberFormat: unknown,
+  fallbackLocale?: string
+): string {
+  if (!formatted) {
+    return formatted;
+  }
+  const code = resolveNumberFormatCode(numberFormat);
+  const category = classifyNumberFormatCode(code);
+  if (category !== "number" && category !== "currency" && category !== "percent" && category !== "scientific") {
+    return formatted;
+  }
+  // A `[$-…]` section wins; otherwise the host locale applies.
+  const locale = resolveFormatLocale(code, fallbackLocale);
+  if (!locale || (locale.decimalSeparator === "." && locale.groupSeparator === ",")) {
+    return formatted;
+  }
+
+  const match = LOCALIZABLE_NUMBER.exec(formatted);
+  if (!match) {
+    return formatted;
+  }
+
+  const [, prefix, digits, suffix] = match;
+  const sign = /^[+-]/.test(digits) ? digits[0] : "";
+  const unsigned = sign ? digits.slice(1) : digits;
+  const [integerPart = "", fractionPart] = unsigned.split(".");
+  const usesGrouping = integerPart.includes(",");
+  const nextInteger = usesGrouping
+    ? groupDigits(integerPart.replace(/,/g, ""), locale.groupSeparator)
+    : integerPart;
+  const nextNumber = `${sign}${nextInteger}${fractionPart === undefined ? "" : `${locale.decimalSeparator}${fractionPart}`}`;
+  return `${prefix}${nextNumber}${suffix}`;
 }
 
 function isCellReferenceBoundary(text: string, start: number, end: number): boolean {
@@ -577,7 +625,8 @@ export function canonicalizeFormula(formula: string): string {
 /** Format to apply when a date function is typed into a General cell. */
 export function resolveFormulaNumberFormat(
   formula: string,
-  targetFormat?: unknown
+  targetFormat?: unknown,
+  fallbackLocale?: string
 ): XlsxCellNumberFormatInput | undefined {
   if (classifyNumberFormat(targetFormat) !== "general") {
     return undefined;
@@ -589,8 +638,15 @@ export function resolveFormulaNumberFormat(
     return undefined;
   }
 
-  const formatString = DATE_FORMULA_FORMATS[match[1].toUpperCase()];
-  return formatString ? buildFormat(formatString) : undefined;
+  const name = match[1].toUpperCase();
+  const withTime = DATETIME_FORMULA_FUNCTIONS.has(name);
+  if (!withTime && !DATE_FORMULA_FUNCTIONS.has(name)) {
+    return undefined;
+  }
+
+  const locale = resolveFormatLocale(resolveNumberFormatCode(targetFormat), fallbackLocale);
+  const dateCode = datePatternForLocale(locale);
+  return buildFormat(withTime ? `${dateCode} h:mm` : dateCode);
 }
 
 /**
@@ -627,8 +683,9 @@ export function resolveCellInput(text: string, options: CellInputOptions = {}): 
     return { kind: "value", value: text };
   }
 
-  const dateOptions = { code, date1904: options.date1904 === true };
-  const number = parseNumberInput(trimmed);
+  const locale = resolveFormatLocale(code, options.locale);
+  const dateOptions = { code, date1904: options.date1904 === true, locale };
+  const number = parseNumberInput(trimmed, locale);
   if (number) {
     return {
       kind: "value",
@@ -641,7 +698,7 @@ export function resolveCellInput(text: string, options: CellInputOptions = {}): 
   if (date) {
     return {
       kind: "value",
-      numberFormat: category === "general" ? suggestDateFormat(date) : undefined,
+      numberFormat: category === "general" ? suggestDateFormat(date, locale) : undefined,
       value: date.serial,
     };
   }

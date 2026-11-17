@@ -9,7 +9,7 @@ import type {
 import { resolveWorkbookColor, resolveWorkbookFillStyle } from "@arcships/xlsx-core";
 import { cellAddressToA1, normalizeRange, rangeToA1 } from "./selection";
 import { decodeHtmlEntities, escapeHtml, mapBorder, resolveEffectiveCellNumberFormat, resolveInheritedCellStyle } from "./formatting";
-import { DEFAULT_CELL_STYLE_PATCH, resolveCellInput } from "./cell-input";
+import { DEFAULT_CELL_STYLE_PATCH, localizeFormattedNumber, resolveCellInput } from "./cell-input";
 import type { XlsxControllerContext } from "./internal";
 import { XlsxSourceError } from "@arcships/xlsx-core";
 import {
@@ -112,11 +112,24 @@ export function downloadUrl(src: string, fileName: string) {
 }
 
 export function createClipboardDomain(ctx: XlsxControllerContext) {
+  // Only re-render values that can be a localized number; dates, text and
+  // errors skip the extra style lookup entirely.
+  const localizableDisplayValue = /^[\s($€£¥₹₽₪¢₫₴₦₱₸₺฿]*[+-]?\d/;
+
+  function localizeDisplayValue(value: string, resolveFormat: () => unknown) {
+    if (!localizableDisplayValue.test(value)) {
+      return value;
+    }
+    return localizeFormattedNumber(value, resolveFormat(), ctx.locale.value);
+  }
+
   function getCellDisplayValue(cell?: XlsxCellAddress | null) {
     if (cell && ctx.activeSheet.value) {
       const workerSnapshot = ctx.workerCellSnapshotCacheRef.value.get(`${ctx.activeSheet.value.workbookSheetIndex}:${cell.row}:${cell.col}`);
       if (workerSnapshot) {
-        return workerSnapshot.displayValue;
+        // Worker snapshots carry the resolved number format so the formula bar
+        // and a11y labels can localize exactly like the main thread does.
+        return localizeDisplayValue(workerSnapshot.displayValue, () => workerSnapshot.numberFormat);
       }
     }
 
@@ -129,7 +142,15 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     const cachedFormulaValue = formula ? ctx.activeSheet.value?.cachedFormulaValues?.[cellAddressToA1(cell)] : undefined;
     const formatted = worksheet.getFormattedValueAt(cell.row, cell.col);
     if (formatted && !(formula && cachedFormulaValue !== undefined && formatted.startsWith("#"))) {
-      return decodeHtmlEntities(formatted);
+      return localizeDisplayValue(
+        decodeHtmlEntities(formatted),
+        () => resolveEffectiveCellNumberFormat(
+          worksheet.getCellStyleAt(cell.row, cell.col),
+          ctx.activeSheet.value,
+          cell.row,
+          cell.col
+        )
+      );
     }
 
     const calculated = worksheet.getCalculatedValueAt(cell.row, cell.col);
@@ -144,7 +165,15 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
         return "";
       }
 
-      return calculated.toString();
+      return localizeDisplayValue(
+        calculated.toString(),
+        () => resolveEffectiveCellNumberFormat(
+          worksheet.getCellStyleAt(cell.row, cell.col),
+          ctx.activeSheet.value,
+          cell.row,
+          cell.col
+        )
+      );
     } finally {
       calculated.free();
     }
@@ -350,6 +379,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
         }
         const input = resolveCellInput(rawValue, {
           date1904: worksheet.date1904 === true,
+          locale: ctx.locale.value,
           numberFormat: resolveEffectiveCellNumberFormat(
             worksheet.getCellStyleAt(nextCell.row, nextCell.col),
             ctx.activeSheet.value,
@@ -461,6 +491,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
         // display string; coerce it like typed input instead of pasting text.
         const input = resolveCellInput(typeof cell.value === "string" ? cell.value : "", {
           date1904: worksheet.date1904 === true,
+          locale: ctx.locale.value,
           numberFormat: resolveEffectiveCellNumberFormat(
             worksheet.getCellStyleAt(nextCell.row, nextCell.col),
             ctx.activeSheet.value,
