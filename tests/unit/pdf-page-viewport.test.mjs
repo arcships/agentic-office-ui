@@ -183,6 +183,29 @@ test("planPageRenders retries failed pages and re-renders stale loading slots", 
   );
 });
 
+test("planPageRenders re-rasterizes stale bitmaps without releasing them", () => {
+  const slots = pendingSlots(5);
+  slots[0] = { state: "ready", hasBitmap: true };
+  slots[1] = { state: "ready", hasBitmap: true, stale: true };
+  slots[2] = { state: "ready", hasBitmap: true };
+  assert.deepEqual(
+    planPageRenders(slots, { first: 0, last: 2 }),
+    { render: [1], release: [] },
+    "a bitmap held across a zoom/rotation/DPR change is replaced in place",
+  );
+  assert.deepEqual(
+    planPageRenders(slots, { first: 2, last: 3 }).release,
+    [0, 1],
+    "stale bitmaps still leave the window like any other bitmap",
+  );
+  slots[1] = { state: "ready", hasBitmap: true, stale: false };
+  assert.deepEqual(
+    planPageRenders(slots, { first: 0, last: 2 }),
+    { render: [], release: [] },
+    "an up-to-date bitmap is not rasterized again",
+  );
+});
+
 test("a full scroll through a document never plans a whole-document re-rasterization", () => {
   const pageCount = 60;
   const heights = Array.from({ length: pageCount }, () => 800);
