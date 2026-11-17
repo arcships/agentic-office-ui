@@ -1,20 +1,22 @@
 // XML identifier hygiene for duplicated nodes.
 //
-// `DocNode.sourceXml` holds the original `<w:p>` / `<w:tbl>` markup and the
-// exporter re-emits it verbatim, so anything stored in it survives a round-trip
-// untouched — including identifiers that must stay document-unique:
+// A duplicated or pasted node must not share document-scoped identity with the
+// node it came from. That identity lives in two places:
 //
-//   * `w:bookmarkStart` / `w:bookmarkEnd` (bookmark name + id)
-//   * `w14:paraId` / `w14:textId` on the paragraph mark
-//   * `wp:docPr@id` of every inline/anchored drawing
-//   * `w:id` of tracked-change containers
-//   * `w:commentRangeStart` / `w:commentRangeEnd` / `w:commentReference`
+//   * `DocNode.sourceXml`, which the exporter re-emits verbatim:
+//       - `w:bookmarkStart` / `w:bookmarkEnd` (bookmark name + id)
+//       - `w14:paraId` / `w14:textId` on the paragraph mark
+//       - `wp:docPr@id` of every inline/anchored drawing
+//       - `w:id` of tracked-change containers
+//       - `w:commentRangeStart` / `w:commentRangeEnd` / `w:commentReference`
+//   * `ParagraphNode.commentRanges`, the character-offset form of the same
+//     comment anchors, which rendering and the comment gutter read directly.
 //
 // Copying a paragraph without touching them yields two nodes that share ids:
 // Word reports the exported file as damaged, and bookmarks/comments bind to the
 // wrong paragraph. `cloneNodeForInsertion()` clones a node and gives it a fresh,
 // collision-free identity; markers that cannot be duplicated (bookmarks,
-// comment ranges) are dropped from the copy instead of duplicated.
+// comment anchors) are dropped from the copy instead of duplicated.
 
 import type { DocModel, DocNode, HeaderSection, FooterSection } from "../../engine/types";
 import { cloneDocNode } from "../../engine/clone";
@@ -220,10 +222,18 @@ export function sanitizeDuplicatedSourceXml(
   return sanitized;
 }
 
-function sanitizeNodeSourceXml(
+function sanitizeNodeForInsertion(
   node: DocNode,
   registry: SourceXmlIdentifierRegistry
 ): void {
+  if (node.type === "paragraph") {
+    // Comment ids are document-scoped and one paragraph anchors a comment once.
+    // Keeping the offsets would render the original's comment on the copy and,
+    // as soon as an edit clears the copy's `sourceXml`, re-emit
+    // `w:commentRangeStart w:id`/`w:commentReference w:id` a second time.
+    node.commentRanges = undefined;
+  }
+
   if (node.sourceXml) {
     node.sourceXml = sanitizeDuplicatedSourceXml(node.sourceXml, registry);
   }
@@ -235,7 +245,7 @@ function sanitizeNodeSourceXml(
   for (const row of node.rows) {
     for (const cell of row.cells) {
       for (const child of cell.nodes) {
-        sanitizeNodeSourceXml(child, registry);
+        sanitizeNodeForInsertion(child, registry);
       }
     }
   }
@@ -243,13 +253,14 @@ function sanitizeNodeSourceXml(
 
 /**
  * Clone a node for insertion into `registry`'s model: the clone keeps every
- * model field but no XML identifier is shared with the node it came from.
+ * model field but no document-scoped identifier (XML id or comment anchor) is
+ * shared with the node it came from.
  */
 export function cloneNodeForInsertion<T extends DocNode>(
   node: T,
   registry: SourceXmlIdentifierRegistry
 ): T {
   const clone = cloneDocNode(node) as T;
-  sanitizeNodeSourceXml(clone, registry);
+  sanitizeNodeForInsertion(clone, registry);
   return clone;
 }

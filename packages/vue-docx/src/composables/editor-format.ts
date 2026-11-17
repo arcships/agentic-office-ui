@@ -17,6 +17,7 @@ import type {
 } from "@arcships/docx-core"
 import {
   cloneDocModelNodes,
+  mutateParagraphLinkInRange,
   mutateParagraphTextStyleInRange,
   resolveSelectedParagraphLocation,
   getParagraphAtLocation,
@@ -160,35 +161,20 @@ export function createEditorFormat(
     dispatch((txCtx) => {
       const rng = ctx.activeTextRangeSnapshot.value
       if (!rng) return undefined
-      const nextModel = cloneDocModelNodes(txCtx.model, [
-        topLevelNodeIndex(resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, rng)),
-      ])
-      const { paragraph: para } = getParagraphAtLocation(
-        nextModel,
-        resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, rng)
-      )
+      const location = resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, rng)
+      const nextModel = cloneDocModelNodes(txCtx.model, [topLevelNodeIndex(location)])
+      const { paragraph: para, tableNode } = getParagraphAtLocation(nextModel, location)
       if (!para) return undefined
       const safeStart = Math.max(0, Math.min(rng.start.offset, rng.end.offset))
       const safeEnd = Math.max(safeStart, Math.max(rng.start.offset, rng.end.offset))
-      if (safeStart === safeEnd) return undefined
-      let cursor = 0
-      for (const child of para.children) {
-        if (child.type === "text") {
-          const childLen = child.text.length
-          const childStart = cursor
-          const childEnd = cursor + childLen
-          const overlapStart = Math.max(safeStart, childStart)
-          const overlapEnd = Math.min(safeEnd, childEnd)
-          if (overlapStart < overlapEnd) {
-            if (safeLink) {
-              child.link = safeLink
-            } else {
-              delete child.link
-            }
-          }
-          cursor = childEnd
-        }
-      }
+      // One implementation for every range link edit: it splits only the runs the
+      // range covers and keeps note references, image crops, form fields and run
+      // styles on the pieces it keeps.
+      if (!mutateParagraphLinkInRange(para, safeStart, safeEnd, safeLink)) return undefined
+      // The link only exists on the model, so the verbatim XML must not survive
+      // the edit or the exporter would drop the link again.
+      para.sourceXml = undefined
+      if (tableNode) tableNode.sourceXml = undefined
       return { model: nextModel }
     })
   }
@@ -210,10 +196,12 @@ export function createEditorFormat(
       )
       let mutated = false
       for (const location of locations) {
-        const { paragraph: para } = getParagraphAtLocation(nextModel, location)
+        const { paragraph: para, tableNode } = getParagraphAtLocation(nextModel, location)
         if (!para) continue
         if (!para.style) para.style = {}
         para.style.headingLevel = heading
+        para.sourceXml = undefined
+        if (tableNode) tableNode.sourceXml = undefined
         mutated = true
       }
       return mutated ? { model: nextModel } : undefined
@@ -233,11 +221,13 @@ export function createEditorFormat(
       )
       let mutated = false
       for (const location of locations) {
-        const { paragraph: para } = getParagraphAtLocation(nextModel, location)
+        const { paragraph: para, tableNode } = getParagraphAtLocation(nextModel, location)
         if (!para) continue
         if (!para.style) para.style = {}
         para.style.styleId = styleId
         delete para.style.headingLevel
+        para.sourceXml = undefined
+        if (tableNode) tableNode.sourceXml = undefined
         mutated = true
       }
       return mutated ? { model: nextModel } : undefined
@@ -258,12 +248,14 @@ export function createEditorFormat(
       const lineTwips = Math.max(1, Math.round(lineMultiple * 240))
       let mutated = false
       for (const location of locations) {
-        const { paragraph: para } = getParagraphAtLocation(nextModel, location)
+        const { paragraph: para, tableNode } = getParagraphAtLocation(nextModel, location)
         if (!para) continue
         if (!para.style) para.style = {}
         if (!para.style.spacing) para.style.spacing = {}
         para.style.spacing.lineTwips = lineTwips
         para.style.spacing.lineRule = "auto"
+        para.sourceXml = undefined
+        if (tableNode) tableNode.sourceXml = undefined
         mutated = true
       }
       return mutated ? nextModel : current
@@ -283,10 +275,12 @@ export function createEditorFormat(
       )
       let mutated = false
       for (const location of locations) {
-        const { paragraph: para } = getParagraphAtLocation(nextModel, location)
+        const { paragraph: para, tableNode } = getParagraphAtLocation(nextModel, location)
         if (!para) continue
         if (!para.style) para.style = {}
         para.style.align = align
+        para.sourceXml = undefined
+        if (tableNode) tableNode.sourceXml = undefined
         mutated = true
       }
       return mutated ? nextModel : current

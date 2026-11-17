@@ -11,8 +11,14 @@ import { pathToFileURL } from "node:url";
 const requireFromVueDocx = createRequire(
   new URL("../../packages/vue-docx/package.json", import.meta.url),
 );
+const requireFromDocxCore = createRequire(
+  new URL("../../packages/docx-core/package.json", import.meta.url),
+);
 const core = await import(
   pathToFileURL(requireFromVueDocx.resolve("@arcships/docx-core")).href
+);
+const { strFromU8, unzipSync } = await import(
+  pathToFileURL(requireFromDocxCore.resolve("fflate")).href
 );
 
 const WORD_NS =
@@ -52,6 +58,12 @@ function sectionBreakParagraph(propsXml = SECTION_PROPS) {
 }
 
 async function buildModel({ body, footnotes, endnotes, settings }) {
+  const built = await buildModelWithPackage({ body, footnotes, endnotes, settings });
+  return built.model;
+}
+
+/** Same as {@link buildModel}, keeping the package so the model can be exported. */
+async function buildModelWithPackage({ body, footnotes, endnotes, settings }) {
   let pkg = core.createMinimalDocxPackage(documentXml(body));
   if (footnotes) {
     pkg = core.withPart(pkg, {
@@ -71,7 +83,12 @@ async function buildModel({ body, footnotes, endnotes, settings }) {
       content: settingsXml(settings),
     });
   }
-  return core.buildDocModel(pkg);
+  return { model: await core.buildDocModel(pkg), package: pkg };
+}
+
+function documentXmlOf(bytes) {
+  const archive = unzipSync(new Uint8Array(bytes));
+  return strFromU8(archive["word/document.xml"]);
 }
 
 function pageOf(nodeIndexes) {
@@ -591,6 +608,174 @@ test("table cell text edits keep the cell's note reference", async () => {
   );
   assert.deepEqual(
     core.paragraphNoteReferences(cellParagraph(recursiveEdit)),
+    [{ kind: "footnote", id: 3 }],
+  );
+});
+
+// ── Serialization: the marker run is re-emitted into document.xml ──────────
+//
+// The WASM serializer writes a paragraph's `sourceXml` verbatim and renders the
+// rest from model fields, which have no slot for `w:footnoteReference` /
+// `w:endnoteReference`. Without the note-reference serialization patch an edited
+// paragraph exported a note body that nothing pointed at.
+
+const endnoteFive = noteXml(
+  "endnote",
+  5,
+  "<w:p><w:r><w:t>Fifth endnote</w:t></w:r></w:p>",
+);
+
+test("editing a paragraph keeps its marker and note body through export and re-import", async () => {
+  const { model, package: pkg } = await buildModelWithPackage({
+    body:
+      paragraphXml("Alpha", { kind: "footnote", id: 3 }) +
+      paragraphXml("Beta", { kind: "endnote", id: 5 }),
+    footnotes: firstNote,
+    endnotes: endnoteFive,
+  });
+
+  const edited = core.updateParagraphText(model, 0, "Alpha updated");
+  assert.equal(edited.nodes[0].sourceXml, undefined, "the edit clears sourceXml");
+  const bytes = await core.serializeDocx(edited, pkg);
+  const xml = documentXmlOf(bytes);
+
+  // The marker sits after the edited text, not at the paragraph start.
+  assert.match(
+    xml,
+    /Alpha updated<\/w:t><\/w:r>(?:(?!<w:t\b)[\s\S])*?<w:footnoteReference w:id="3"\/>/,
+    "the footnote reference is re-emitted after the edited run",
+  );
+  // The untouched paragraph keeps its own XML, marker included.
+  assert.match(xml, /<w:endnoteReference w:id="5"\/>/);
+  assert.doesNotMatch(xml, /<w:r><w:t\/><\/w:r>/, "no empty marker run is left behind");
+
+  const reimported = await core.buildDocModelFromBytes(bytes);
+  assert.deepEqual(
+    core.paragraphNoteReferences(reimported.model.nodes[0]),
+    [{ kind: "footnote", id: 3 }],
+    "the reference survives export + re-import",
+  );
+  assert.deepEqual(
+    reimported.model.metadata.footnotes.map((note) => note.text),
+    ["First note"],
+    "the note body survives export + re-import",
+  );
+  assert.deepEqual(
+    core.paragraphNoteReferences(reimported.model.nodes[1]),
+    [{ kind: "endnote", id: 5 }],
+  );
+  assert.deepEqual(
+    reimported.model.metadata.endnotes.map((note) => note.text),
+    ["Fifth endnote"],
+  );
+});
+
+test("the marker run keeps its run properties and follows a text run split", async () => {
+  const { model, package: pkg } = await buildModelWithPackage({
+    body: paragraphXml("Alpha", { kind: "footnote", id: 7 }),
+    footnotes: secondNote,
+  });
+
+  // Shorten the text so the marker offset no longer sits on a run boundary: the
+  // serialized paragraph has one text run and one empty marker run, and the
+  // patch must fill the marker run instead of appending a second one.
+  const edited = core.updateParagraphText(model, 0, "Al");
+  const bytes = await core.serializeDocx(edited, pkg);
+  const xml = documentXmlOf(bytes);
+  const referenceCount = (xml.match(/<w:footnoteReference w:id="7"\/>/g) ?? []).length;
+  assert.equal(referenceCount, 1, "the reference is emitted exactly once");
+  assert.match(xml, /Al<\/w:t><\/w:r>(?:(?!<w:t\b)[\s\S])*?<w:footnoteReference w:id="7"\/>/);
+
+  const reimported = await core.buildDocModelFromBytes(bytes);
+  assert.deepEqual(
+    core.paragraphNoteReferences(reimported.model.nodes[0]),
+    [{ kind: "footnote", id: 7 }],
+  );
+});
+
+test("note references inside table cells and nested tables are re-attached", async () => {
+  const body =
+    '<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc>' +
+    paragraphXml("Cell note", { kind: "footnote", id: 3 }) +
+    '<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid><w:tr><w:tc>' +
+    paragraphXml("Nested endnote", { kind: "endnote", id: 5 }) +
+    "</w:tc></w:tr></w:tbl>" +
+    "</w:tc></w:tr></w:tbl>";
+  const { model, package: pkg } = await buildModelWithPackage({
+    body,
+    footnotes: firstNote,
+    endnotes: endnoteFive,
+  });
+
+  // Simulate the edits that clear `sourceXml` on the cell and nested paragraphs.
+  const edited = core.cloneDocModel(model);
+  const hostTable = edited.nodes[0];
+  assert.equal(hostTable.type, "table");
+  const hostCell = hostTable.rows[0].cells[0];
+  const cellParagraph = hostCell.nodes[0];
+  assert.equal(cellParagraph.type, "paragraph");
+  cellParagraph.sourceXml = undefined;
+  const nestedTable = hostCell.nodes[1];
+  assert.equal(nestedTable.type, "table");
+  const nestedParagraph = nestedTable.rows[0].cells[0].nodes[0];
+  assert.equal(nestedParagraph.type, "paragraph");
+  nestedParagraph.sourceXml = undefined;
+
+  const bytes = await core.serializeDocx(edited, pkg);
+  const xml = documentXmlOf(bytes);
+  const cellStart = xml.indexOf("<w:tc>");
+  const nestedTableStart = xml.indexOf("<w:tbl>", xml.indexOf("<w:tbl>") + 1);
+  const footnoteIndex = xml.indexOf('<w:footnoteReference w:id="3"/>');
+  const endnoteIndex = xml.indexOf('<w:endnoteReference w:id="5"/>');
+
+  assert.ok(footnoteIndex > cellStart, "the cell marker is emitted inside the cell");
+  assert.ok(
+    endnoteIndex > nestedTableStart,
+    "the nested-table marker is emitted inside the nested table",
+  );
+  assert.ok(footnoteIndex < nestedTableStart, "the cell marker precedes the nested table");
+
+  const reimported = await core.buildDocModelFromBytes(bytes);
+  const reimportedTable = reimported.model.nodes[0];
+  assert.equal(reimportedTable.type, "table");
+  const reimportedCell = reimportedTable.rows[0].cells[0];
+  assert.deepEqual(
+    core.paragraphReferencedNoteIds(reimportedCell.nodes[0], "footnote"),
+    [3],
+  );
+  const reimportedNested = reimportedCell.nodes[1];
+  assert.equal(reimportedNested.type, "table");
+  assert.deepEqual(
+    core.paragraphReferencedNoteIds(reimportedNested.rows[0].cells[0].nodes[0], "endnote"),
+    [5],
+  );
+});
+
+test("a section-ending paragraph keeps both its break and its note marker", async () => {
+  // Exercises the serialization patch order: the section break goes back into
+  // `w:pPr`, the note marker into the run sequence, both from the model.
+  const { model, package: pkg } = await buildModelWithPackage({
+    body:
+      `<w:p><w:pPr><w:sectPr>${SECTION_PROPS}</w:sectPr></w:pPr>` +
+      '<w:r><w:t>Section one</w:t></w:r>' +
+      '<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="3"/></w:r></w:p>' +
+      paragraphXml("Section two"),
+    footnotes: firstNote,
+  });
+  assert.ok(model.nodes[0].sectionBreak, "the break is promoted onto the paragraph");
+
+  const edited = core.updateParagraphText(model, 0, "Section one updated");
+  assert.equal(edited.nodes[0].sourceXml, undefined);
+
+  const bytes = await core.serializeDocx(edited, pkg);
+  const xml = documentXmlOf(bytes);
+  assert.match(xml, /<w:sectPr><w:pgSz w:w="12240"/, "the section break is re-emitted");
+  assert.match(xml, /<w:footnoteReference w:id="3"\/>/, "the note marker is re-emitted");
+
+  const reimported = await core.buildDocModelFromBytes(bytes);
+  assert.ok(reimported.model.nodes[0].sectionBreak, "the break survives re-import");
+  assert.deepEqual(
+    core.paragraphNoteReferences(reimported.model.nodes[0]),
     [{ kind: "footnote", id: 3 }],
   );
 });

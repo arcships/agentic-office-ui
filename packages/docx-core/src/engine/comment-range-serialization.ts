@@ -8,7 +8,17 @@
 // them at the stored offsets, and put the markers between the halves.
 
 import type { DocModel, DocNode, ParagraphNode, TableNode } from "./types";
-import { decodeCommentXmlText, resolveParagraphCommentRanges } from "./comment-ranges";
+import { resolveParagraphCommentRanges } from "./comment-ranges";
+import {
+  applyDocumentXmlEdits,
+  collectRunTextAtoms,
+  ensurePreserveSpace,
+  escapeXmlText,
+  extractRunProperties,
+  locateBodyParagraphSpans,
+  type DocumentXmlEdit,
+  type XmlTextAtom,
+} from "./document-xml-patch";
 
 interface SerializedCommentRange {
   commentId: number;
@@ -21,8 +31,6 @@ interface ParagraphCommentTarget {
   paragraphIndex: number;
   ranges: SerializedCommentRange[];
 }
-
-const TEXT_ATOM_PATTERN = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/gi;
 
 function paragraphTextOf(paragraph: ParagraphNode): string {
   let text = "";
@@ -94,130 +102,12 @@ export function modelNeedsCommentRangeSerialization(model: DocModel): boolean {
   return collectUnserializedCommentRanges(model).length > 0;
 }
 
-interface ParagraphBounds {
-  contentStart: number;
-  contentEnd: number;
-}
-
-/** Locates every `<w:p>` content span in the part, in document order. */
-function paragraphBounds(xml: string): ParagraphBounds[] {
-  const bounds: ParagraphBounds[] = [];
-  const tagPattern = /<(\/?)w:p\b[^>]*?(\/?)>/g;
-  const openStack: number[] = [];
-  let match: RegExpExecArray | null;
-
-  tagPattern.lastIndex = 0;
-  while ((match = tagPattern.exec(xml)) !== null) {
-    const closing = match[1] === "/";
-    const selfClosing = match[2] === "/";
-    if (closing) {
-      const contentStart = openStack.pop();
-      if (contentStart === undefined) continue;
-      bounds.push({ contentStart, contentEnd: match.index });
-      continue;
-    }
-    if (selfClosing) {
-      const empty = match.index + match[0].length;
-      bounds.push({ contentStart: empty, contentEnd: empty });
-      continue;
-    }
-    openStack.push(match.index + match[0].length);
-  }
-
-  // Outermost paragraphs are the ones the model describes; `w:p` nesting only
-  // happens through text boxes, which the model renders as run content.
-  return bounds;
-}
-
-interface TextAtom {
-  /** Index of the `<w:t>` open tag inside the paragraph content. */
-  tagStart: number;
-  /** Index just past `</w:t>`. */
-  tagEnd: number;
-  /** Index of the enclosing `<w:r>` open tag. */
-  runStart: number;
-  /** Index just past the enclosing `</w:r>`. */
-  runEnd: number;
-  openTag: string;
-  closeTag: string;
-  /** Decoded text inside the `<w:t>` element. */
-  text: string;
-  /** Offset of the first character of this atom in the paragraph text. */
-  textOffset: number;
-}
-
-function collectTextAtoms(content: string): TextAtom[] {
-  const atoms: TextAtom[] = [];
-  const runOpens: number[] = [];
-  const runPairs: Array<{ start: number; end: number }> = [];
-
-  for (const open of content.matchAll(/<w:r\b[^>]*>/g)) {
-    runOpens.push(open.index ?? 0);
-  }
-  let openIndex = 0;
-  for (const close of content.matchAll(/<\/w:r>/g)) {
-    const start = runOpens[openIndex];
-    if (start === undefined) break;
-    runPairs.push({ start, end: (close.index ?? 0) + "</w:r>".length });
-    openIndex += 1;
-  }
-
-  const runFor = (index: number): { start: number; end: number } | undefined =>
-    runPairs.find((pair) => index >= pair.start && index < pair.end);
-
-  let textOffset = 0;
-  for (const match of content.matchAll(TEXT_ATOM_PATTERN)) {
-    const tagStart = match.index ?? 0;
-    const fullMatch = match[0] ?? "";
-    const tagEnd = tagStart + fullMatch.length;
-    const text = decodeCommentXmlText(match[1] ?? "");
-    const run = runFor(tagStart);
-    atoms.push({
-      tagStart,
-      tagEnd,
-      runStart: run ? run.start : tagStart,
-      runEnd: run ? run.end : tagEnd,
-      openTag: fullMatch.slice(0, fullMatch.indexOf(">") + 1),
-      closeTag: "</w:t>",
-      text,
-      textOffset,
-    });
-    textOffset += text.length;
-  }
-
-  return atoms;
-}
-
-function extractRunProperties(runXml: string): string {
-  const match = /<w:rPr\b[\s\S]*?<\/w:rPr>|<w:rPr\b[^>]*\/>/.exec(runXml);
-  return match ? match[0] : "";
-}
-
-function escapeXmlText(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
 interface MarkerEvent {
   /** Offset in the paragraph text where the marker belongs. */
   offset: number;
   xml: string;
   /** Ordering among markers at the same offset (range starts before ends). */
   order: number;
-}
-
-interface XmlEdit {
-  start: number;
-  end: number;
-  replacement: string;
-}
-
-function ensurePreserveSpace(openTag: string): string {
-  return openTag.includes("xml:space")
-    ? openTag
-    : openTag.replace(/>$/, ' xml:space="preserve">');
 }
 
 /**
@@ -229,9 +119,9 @@ function ensurePreserveSpace(openTag: string): string {
  */
 function splitRunAtMarkers(
   content: string,
-  atom: TextAtom,
+  atom: XmlTextAtom,
   events: readonly MarkerEvent[]
-): XmlEdit {
+): DocumentXmlEdit {
   const runXml = content.slice(atom.runStart, atom.runEnd);
   const runOpenEnd = runXml.indexOf(">") + 1;
   const runOpenTag = runXml.slice(0, runOpenEnd);
@@ -276,7 +166,7 @@ function insertCommentMarkersIntoParagraphContent(
     return content;
   }
 
-  const atoms = collectTextAtoms(content);
+  const atoms = collectRunTextAtoms(content);
   if (atoms.length === 0) {
     return content;
   }
@@ -295,7 +185,7 @@ function insertCommentMarkersIntoParagraphContent(
     });
   });
 
-  const edits: XmlEdit[] = [];
+  const edits: DocumentXmlEdit[] = [];
   const boundaryEvents = new Map<number, MarkerEvent[]>();
 
   for (const event of events) {
@@ -373,61 +263,31 @@ export function applyCommentRangesToDocumentXml(
     return documentXml;
   }
 
-  const bodyOpen = /<w:body\b[^>]*>/i.exec(documentXml);
-  if (!bodyOpen || bodyOpen.index === undefined) {
+  const spans = locateBodyParagraphSpans(documentXml);
+  if (!spans) {
     return documentXml;
   }
 
-  const bodyContentStart = bodyOpen.index + bodyOpen[0].length;
-  const bodyCloseIndex = documentXml.toLowerCase().lastIndexOf("</w:body>");
-  if (bodyCloseIndex < bodyContentStart) {
-    return documentXml;
-  }
-
-  const bodyXml = documentXml.slice(bodyContentStart, bodyCloseIndex);
-  const bounds = paragraphBounds(bodyXml);
   const targetByIndex = new Map(
     targets.map((target) => [target.paragraphIndex, target])
   );
+  const edits: DocumentXmlEdit[] = [];
 
-  interface Edit {
-    start: number;
-    end: number;
-    replacement: string;
-  }
-  const edits: Edit[] = [];
-
-  bounds.forEach((paragraph, paragraphIndex) => {
+  spans.paragraphs.forEach((span, paragraphIndex) => {
     const target = targetByIndex.get(paragraphIndex);
     if (!target) return;
-    const content = bodyXml.slice(paragraph.contentStart, paragraph.contentEnd);
+    const content = documentXml.slice(span.contentStart, span.contentEnd);
     const patched = insertCommentMarkersIntoParagraphContent(
       content,
       target.ranges
     );
     if (patched === content) return;
     edits.push({
-      start: paragraph.contentStart,
-      end: paragraph.contentEnd,
+      start: span.contentStart,
+      end: span.contentEnd,
       replacement: patched,
     });
   });
 
-  if (edits.length === 0) {
-    return documentXml;
-  }
-
-  let patchedBody = bodyXml;
-  for (const edit of edits.sort((left, right) => right.start - left.start)) {
-    patchedBody =
-      patchedBody.slice(0, edit.start) +
-      edit.replacement +
-      patchedBody.slice(edit.end);
-  }
-
-  return (
-    documentXml.slice(0, bodyContentStart) +
-    patchedBody +
-    documentXml.slice(bodyCloseIndex)
-  );
+  return applyDocumentXmlEdits(documentXml, edits);
 }

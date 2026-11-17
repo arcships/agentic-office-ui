@@ -160,6 +160,7 @@ const suites = {
       "tests/component/docx-toolbar-state.test.mjs",
       "tests/component/docx-table-editing.test.mjs",
       "tests/component/docx-command-wiring.test.mjs",
+      "tests/component/docx-edit-model-preservation.test.mjs",
       "tests/component/docx-selection-input.test.mjs",
       "tests/component/docx-thumbnail-panel.test.mjs",
       "tests/component/docx-column-pagination.test.mjs",

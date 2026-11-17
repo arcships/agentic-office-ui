@@ -10,6 +10,10 @@ import {
   modelNeedsSectionBreakSerialization
 } from "./section-break-serialization";
 import {
+  applyNoteReferencesToDocumentXml,
+  modelNeedsNoteReferenceSerialization
+} from "./note-reference-serialization";
+import {
   applyFormFieldRequiredToDocumentXml,
   modelNeedsFormFieldRequiredPatch
 } from "./form-field-serialization";
@@ -17,13 +21,18 @@ import { mapsToWasmPackage, wasmModelToDocumentXml, wasmSerializeDocx } from "./
 
 /**
  * All serialization patches rewrite the same document part, so they run in
- * order: preserved section breaks (they live in `w:pPr`), comment range
- * markers derived from character offsets, then required form-field flags.
+ * order: preserved section breaks (they live in `w:pPr`), note reference runs
+ * (they add runs but no text), comment range markers derived from character
+ * offsets, then required form-field flags. Note references go first so the
+ * comment splitter sees the marker run as an opaque run.
  */
 function patchDocumentXml(documentXml: string, model: DocModel): string {
   let patched = documentXml;
   if (modelNeedsSectionBreakSerialization(model)) {
     patched = applyPreservedSectionBreaksToDocumentXml(patched, model);
+  }
+  if (modelNeedsNoteReferenceSerialization(model)) {
+    patched = applyNoteReferencesToDocumentXml(patched, model);
   }
   if (modelNeedsCommentRangeSerialization(model)) {
     patched = applyCommentRangesToDocumentXml(patched, model);
@@ -37,6 +46,7 @@ function patchDocumentXml(documentXml: string, model: DocModel): string {
 function modelNeedsDocumentXmlPatch(model: DocModel): boolean {
   return (
     modelNeedsSectionBreakSerialization(model) ||
+    modelNeedsNoteReferenceSerialization(model) ||
     modelNeedsCommentRangeSerialization(model) ||
     modelNeedsFormFieldRequiredPatch(model)
   );
