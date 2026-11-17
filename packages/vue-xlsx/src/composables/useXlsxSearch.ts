@@ -50,6 +50,8 @@ export interface XlsxSurfaceSearch {
 
 interface UseXlsxSearchOptions {
   scrollToCell?: (cell: XlsxCellAddress) => Promise<void> | void
+  /** Match case exactly. The default mirrors Excel's case-insensitive find. */
+  caseSensitive?: boolean
 }
 
 function cellAddress(cell: XlsxCellAddress): string {
@@ -107,8 +109,9 @@ async function searchWorkbook(
   controller: XlsxViewerController,
   query: string,
   signal: AbortSignal,
+  caseSensitive = false,
 ): Promise<XlsxSearchMatch[]> {
-  const expression = new RegExp(escapeRegExp(query), "iu")
+  const expression = new RegExp(escapeRegExp(query), caseSensitive ? "u" : "iu")
   const matches: XlsxSearchMatch[] = []
 
   for (const [sheetIndex, sheet] of controller.sheets.entries()) {
@@ -204,7 +207,7 @@ export function useXlsxSearch(
   })
   const session = createSurfaceSearchSession<XlsxSearchMatch>({
     search(query, { signal }) {
-      return searchWorkbook(controller(), query, signal)
+      return searchWorkbook(controller(), query, signal, options.caseSensitive === true)
     },
     async activate(match, _index, { signal }) {
       const current = controller()
@@ -221,7 +224,16 @@ export function useXlsxSearch(
   session.subscribe((next) => {
     searchState.value = next
   })
-  watch(controller, () => session.clearSearch())
+  // Results hold cell text captured at search time, so an edit, undo, sort or
+  // reload leaves them stale: re-check the controller identity and its revision
+  // (bumped by every committed mutation) and drop the session when either moves.
+  watch(
+    () => {
+      const current = controller()
+      return [current, current?.revision ?? 0] as const
+    },
+    () => session.clearSearch(),
+  )
 
   const result: XlsxSurfaceSearch = {
     searchState: shallowReadonly(searchState),

@@ -12,19 +12,23 @@ import { decodeHtmlEntities, escapeHtml, mapBorder, resolveInheritedCellStyle } 
 import { coerceUserEnteredValue } from "./internal";
 import type { XlsxControllerContext } from "./internal";
 import { XlsxSourceError } from "@arcships/xlsx-core";
+import {
+  parseClipboardText,
+  serializeClipboardText,
+  writeClipboardPayload
+} from "./clipboard-text";
+import type { ClipboardWriteTargets } from "./clipboard-text";
 
-export { INTERNAL_CLIPBOARD_MIME, escapeHtml };
+export { INTERNAL_CLIPBOARD_MIME, escapeHtml, parseClipboardText };
 export type { ClipboardPayload, ClipboardMatrixCell, ClipboardMerge };
 
-export function parseClipboardText(text: string): string[][] {
-  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const rows = normalized.split("\n");
-
-  if (rows.length > 1 && rows[rows.length - 1] === "") {
-    rows.pop();
-  }
-
-  return rows.map((row) => row.split("\t"));
+/** Resolves the clipboard handles of the current browser; absent ones disable that flavour. */
+function resolveClipboardWriteTargets(mimeType: string): ClipboardWriteTargets {
+  return {
+    mimeType,
+    clipboard: typeof navigator === "undefined" ? undefined : navigator.clipboard,
+    ClipboardItem: typeof ClipboardItem === "function" ? ClipboardItem : undefined
+  };
 }
 
 function downloadBlob(blob: Blob, fileName: string) {
@@ -170,7 +174,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     }
 
     const normalized = normalizeRange(targetRange);
-    const rows: string[] = [];
+    const rows: string[][] = [];
     const htmlRows: string[] = [];
     const payload: ClipboardPayload = {
       cells: [],
@@ -286,14 +290,14 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
         );
       }
 
-      rows.push(textCells.join("\t"));
+      rows.push(textCells);
       htmlRows.push(`<tr>${htmlCells.join("")}</tr>`);
     }
 
     return {
       html: `<table style="border-collapse:collapse">${htmlRows.join("")}</table>`,
       structured: JSON.stringify(payload),
-      text: rows.join("\n")
+      text: serializeClipboardText(rows)
     };
   }
 
@@ -464,22 +468,14 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
 
   async function copySelectionToClipboard() {
     const clipboardData = getClipboardData();
-    if (!clipboardData || typeof navigator === "undefined" || !navigator.clipboard) {
+    if (!clipboardData) {
       return false;
     }
 
-    if (typeof ClipboardItem === "function" && navigator.clipboard.write) {
-      const item = new ClipboardItem({
-        [INTERNAL_CLIPBOARD_MIME]: new Blob([clipboardData.structured], { type: INTERNAL_CLIPBOARD_MIME }),
-        "text/html": new Blob([clipboardData.html], { type: "text/html" }),
-        "text/plain": new Blob([clipboardData.text], { type: "text/plain" })
-      });
-      await navigator.clipboard.write([item]);
-      return true;
-    }
-
-    await navigator.clipboard.writeText(clipboardData.text);
-    return true;
+    return writeClipboardPayload(
+      clipboardData,
+      resolveClipboardWriteTargets(INTERNAL_CLIPBOARD_MIME)
+    );
   }
 
   async function pasteFromClipboard() {

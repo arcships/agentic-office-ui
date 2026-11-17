@@ -74,6 +74,7 @@
         </div>
       </div>
     </div>
+    <XlsxClipboardNotice :message="clipboardNotice" />
   </div>
 </template>
 
@@ -94,6 +95,8 @@ import {
   type XlsxSheetData,
 } from "@arcships/xlsx-core";
 import { GRID_HEADER_HEIGHT_PX, GRID_ROW_HEADER_WIDTH_PX } from "./grid-metrics";
+import XlsxClipboardNotice from "./XlsxClipboardNotice.vue";
+import { useClipboardCopyNotice } from "../composables/useClipboardCopyNotice";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -108,6 +111,8 @@ const emit = defineEmits<{
   cellDoubleClick: [cell: XlsxCellAddress];
   viewportChange: [viewport: { scrollLeft: number; scrollTop: number }];
 }>();
+
+const { notice: clipboardNotice, copySelection } = useClipboardCopyNotice(() => props.controller);
 
 // ── Constants ──────────────────────────────────────────────────────────
 const DEFAULT_ROW_HEIGHT = 24;
@@ -1676,7 +1681,7 @@ function onGridKeydown(event: KeyboardEvent) {
   const active = activeCell.value;
   if (!active) return;
 
-  if ((event.ctrlKey || event.metaKey) && event.key === "c") { event.preventDefault(); props.controller.copySelectionToClipboard(); return; }
+  if ((event.ctrlKey || event.metaKey) && event.key === "c") { event.preventDefault(); void copySelection(); return; }
   if ((event.ctrlKey || event.metaKey) && event.key === "v") { event.preventDefault(); props.controller.pasteFromClipboard(); return; }
 
   const handlers: Record<string, () => void> = {
