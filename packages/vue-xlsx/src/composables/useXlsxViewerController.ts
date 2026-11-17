@@ -1,4 +1,4 @@
-import { ref, computed, watch, onUnmounted, shallowRef } from "vue";
+import { ref, computed, watch, onUnmounted, shallowRef, nextTick } from "vue";
 import {
   createLatestTaskCoordinator,
   createOfficeTaskSequence,
@@ -509,6 +509,41 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     setChartAssets(loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, buildVisibleSheetIndexMap(nextSheets), showHiddenSheets));
     revision.value = revision.value + 1;
   }
+  // Set by switchToSheet(..., { preserveSelection: true }) and consumed by the
+  // tab watcher, which otherwise resets sheet-scoped state on every tab change.
+  // The marker expires with the flush that runs the watcher, so a switch that
+  // never changes the tab cannot leak into a later user tab click.
+  const preservedTabSwitchIndexRef = shallowRef(-1);
+  function consumePreservedTabSwitch(nextTabIndex: number) {
+    const preservedTabIndex = preservedTabSwitchIndexRef.value;
+    if (preservedTabIndex < 0) return false;
+    preservedTabSwitchIndexRef.value = -1;
+    return preservedTabIndex === nextTabIndex;
+  }
+  function resolveSheetTabIndex(visibleSheetIndex: number) {
+    const targetSheet = sheets.value[visibleSheetIndex];
+    if (!targetSheet) return -1;
+    const tabIndexBySheetIndex = tabs.value.findIndex(
+      (tab) => tab.kind === "sheet" && tab.sheetIndex === visibleSheetIndex,
+    );
+    if (tabIndexBySheetIndex >= 0) return tabIndexBySheetIndex;
+    return tabs.value.findIndex(
+      (tab) => tab.kind === "sheet" && tab.workbookSheetIndex === targetSheet.workbookSheetIndex,
+    );
+  }
+  function switchToSheet(visibleSheetIndex: number, options?: { preserveSelection?: boolean }) {
+    if (visibleSheetIndex < 0 || visibleSheetIndex >= sheets.value.length) return;
+    activeSheetIndex.value = visibleSheetIndex;
+    const nextTabIndex = resolveSheetTabIndex(visibleSheetIndex);
+    if (nextTabIndex < 0 || nextTabIndex === activeTabIndex.value) return;
+    if (options?.preserveSelection) {
+      preservedTabSwitchIndexRef.value = nextTabIndex;
+      void nextTick(() => {
+        if (preservedTabSwitchIndexRef.value === nextTabIndex) preservedTabSwitchIndexRef.value = -1;
+      });
+    }
+    activeTabIndex.value = nextTabIndex;
+  }
   function getInternalActiveWorksheet() {
     const activeWorkbook = workbook.value;
     const workbookSheetIndex = activeSheet.value?.workbookSheetIndex;
@@ -970,6 +1005,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     activeZoomTabKey, defaultZoomScale, zoomScale, canZoomIn, canZoomOut,
     readOnly, canResizeReadOnly, displayFileName, visibleSheetIndexByWorkbookSheetIndex,
     refreshWorkbookState, maybeRecalculateWorkbook,
+    switchToSheet, consumePreservedTabSwitch,
     getActiveWorksheet: getInternalActiveWorksheet,
     setChartAssets, setImageAssets, clearImageAssets, clearChartAssets,
     getWorkerClient, disposeWorkerClient, replaceWorkbook, disposeWorkbook, discardWorkbookLoadResult,

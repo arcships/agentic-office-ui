@@ -124,6 +124,7 @@ const suites = {
       "tests/component/docx-page-budget.test.mjs",
       "tests/component/docx-history-budget.test.mjs",
       "tests/component/xlsx-history-budget.test.mjs",
+      "tests/component/xlsx-sheet-sync.test.mjs",
       "tests/component/xlsx-grid-scroll.test.mjs",
       "tests/component/image-decode-state.test.mjs",
     ]),

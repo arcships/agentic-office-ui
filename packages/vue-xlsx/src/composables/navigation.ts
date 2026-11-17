@@ -6,7 +6,13 @@ import {
 import type { XlsxControllerContext } from "./internal";
 
 export function createNavigationDomain(ctx: XlsxControllerContext) {
-  watch(() => ctx.activeTabIndex.value, () => {
+  watch(() => ctx.activeTabIndex.value, (nextTabIndex) => {
+    // A history restore already reinstated the state that belongs to the sheet it
+    // switched to, so this switch must not wipe the selection it just restored.
+    if (ctx.consumePreservedTabSwitch(nextTabIndex)) {
+      return;
+    }
+
     ctx.activeCell.value = null;
     ctx.selection.value = null;
     ctx.selectedChartId.value = null;
@@ -17,17 +23,7 @@ export function createNavigationDomain(ctx: XlsxControllerContext) {
   });
 
   function setActiveSheetIndex(index: number) {
-    ctx.activeSheetIndex.value = (() => {
-      if (index < 0 || index >= ctx.sheets.value.length) {
-        return ctx.activeSheetIndex.value;
-      }
-      const targetSheet = ctx.sheets.value[index];
-      const tabIndex = ctx.tabs.value.findIndex((tab) => tab.kind === "sheet" && tab.workbookSheetIndex === targetSheet?.workbookSheetIndex);
-      if (tabIndex >= 0) {
-        ctx.activeTabIndex.value = tabIndex;
-      }
-      return index;
-    })();
+    ctx.switchToSheet(index);
   }
 
   function setActiveTabIndex(index: number) {

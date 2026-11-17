@@ -401,6 +401,19 @@ export interface XlsxControllerContext {
   visibleSheetIndexByWorkbookSheetIndex: ComputedRef<Map<number, number>>;
 
   // Shared mutation helpers (defined in editing/history domains, referenced widely)
+  /**
+   * Activates a visible sheet together with the tab that renders it, so the grid,
+   * the tab strip and the sheet-scoped overlays cannot point at different
+   * sheets. Chartsheet tabs are never selected. `preserveSelection` keeps the
+   * current selection across the switch instead of letting the tab watcher reset
+   * it; only history restores use it, because they restore selection themselves.
+   */
+  switchToSheet: (visibleSheetIndex: number, options?: { preserveSelection?: boolean }) => void;
+  /**
+   * Consumes the marker set by a `preserveSelection` switch. True means the
+   * pending tab-index change must not reset sheet-scoped state.
+   */
+  consumePreservedTabSwitch: (nextTabIndex: number) => boolean;
   refreshWorkbookState: (targetWorkbook: Workbook) => void;
   maybeRecalculateWorkbook: (targetWorkbook: Workbook) => void;
   getActiveWorksheet: () => ReturnType<Workbook["getSheet"]> | null;
