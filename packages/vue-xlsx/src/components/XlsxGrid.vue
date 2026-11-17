@@ -99,7 +99,7 @@ import { GRID_HEADER_HEIGHT_PX, GRID_ROW_HEADER_WIDTH_PX, gridZoomFactor } from 
 import XlsxClipboardNotice from "./XlsxClipboardNotice.vue";
 import { useClipboardCopyNotice } from "../composables/useClipboardCopyNotice";
 import {
-  conditionalRulesForCell as sortConditionalRulesForCell,
+  sortConditionalRules as orderConditionalRules,
   createConditionalEnvironment,
   resolveColorScaleFill,
   resolveDataBarGeometry,
@@ -107,6 +107,13 @@ import {
   withAlpha,
   type ConditionalEnvironment,
 } from "../render/conditional-format";
+import {
+  cellInNormalizedRange,
+  collectConditionalFormatValues,
+  createScopedCache,
+  normalizeConditionalFormatRanges,
+  type NormalizedRange,
+} from "./conditional-format-stats";
 import { paneAxisContentOffset, paneViewOffset, resolvePaneContentPoint, resolvePaneViewPoint } from "./grid-pane-geometry";
 import {
   MAX_CANVAS_DIMENSION_PX,
@@ -193,7 +200,14 @@ const pendingWorkerBatches = new Map<string, AbortController>();
 let workerCacheSheetIndex: number | null = null;
 let paintedMergeRegions: GridMergeRegion[] = [];
 let paintedMergeAnchors = new Map<string, XlsxCellAddress>();
-let conditionalRuleEnvironments = new Map<XlsxConditionalFormatRule, ConditionalEnvironment>();
+// Conditional-format work is data-sized: a rule range can cover the whole used
+// extent, so its rule order, per-cell bounds, sampled values and resolved
+// environment are cached per sheet revision instead of being rebuilt on every
+// paint. `conditionalFormatScope` changes identity whenever the sheet, the
+// theme or the revision moves, which drops all of these caches at once.
+const conditionalRuleOrder = createScopedCache<XlsxConditionalFormatRule[]>();
+const conditionalRuleRanges = createScopedCache<NormalizedRange[]>();
+const conditionalRuleEnvironments = createScopedCache<ConditionalEnvironment>();
 
 // ── Computed from controller ──────────────────────────────────────────
 const activeSheet = computed(() => props.controller.activeSheet as XlsxSheetData | null);
@@ -229,6 +243,44 @@ const zoomScale = computed(() => props.controller.zoomScale);
 const activeCell = computed(() => props.controller.activeCell);
 const selection = computed(() => props.controller.selection);
 const revision = computed(() => props.controller.revision);
+
+interface ConditionalFormatScope {
+  maxUsedCol: number;
+  maxUsedRow: number;
+  revision: number;
+  rowsRevision: number;
+  themePalette: XlsxSheetData["themePalette"];
+  workbookSheetIndex: number;
+}
+
+let conditionalFormatScope: ConditionalFormatScope | null = null;
+
+/** Identity-stable scope token: cached rule data survives repaints but not edits. */
+function currentConditionalFormatScope(sheet: XlsxSheetData): ConditionalFormatScope {
+  const current = conditionalFormatScope;
+  const revisionValue = revision.value;
+  const rowsRevision = workerRowsRevision.value;
+  if (
+    current
+    && current.workbookSheetIndex === sheet.workbookSheetIndex
+    && current.maxUsedRow === sheet.maxUsedRow
+    && current.maxUsedCol === sheet.maxUsedCol
+    && current.revision === revisionValue
+    && current.rowsRevision === rowsRevision
+    && current.themePalette === sheet.themePalette
+  ) {
+    return current;
+  }
+  conditionalFormatScope = {
+    maxUsedCol: sheet.maxUsedCol,
+    maxUsedRow: sheet.maxUsedRow,
+    revision: revisionValue,
+    rowsRevision,
+    themePalette: sheet.themePalette,
+    workbookSheetIndex: sheet.workbookSheetIndex,
+  };
+  return conditionalFormatScope;
+}
 
 const effectiveColWidths = computed(() => {
   const sheet = activeSheet.value;
@@ -772,40 +824,36 @@ function cssText(value: unknown): string | undefined {
   return typeof value === "string" || typeof value === "number" ? String(value) : undefined;
 }
 
-function conditionalRulesForCell(cell: XlsxCellAddress): XlsxConditionalFormatRule[] {
-  // Sorted by rule priority: index 0 is the rule Excel would apply first.
-  return sortConditionalRulesForCell(activeSheet.value?.conditionalFormatRules ?? [], cell);
+function conditionalRuleBounds(scope: ConditionalFormatScope, rule: XlsxConditionalFormatRule): NormalizedRange[] {
+  return conditionalRuleRanges.resolve(scope, rule, () => normalizeConditionalFormatRanges(rule.ranges ?? []));
 }
 
-function conditionalRangeValues(rule: XlsxConditionalFormatRule): number[] {
+function conditionalRulesForCell(cell: XlsxCellAddress): XlsxConditionalFormatRule[] {
   const sheet = activeSheet.value;
-  if (!sheet) return [];
-  const values: number[] = [];
-  for (const range of rule.ranges) {
-    const endRow = Math.min(range.end.row, Math.max(sheet.maxUsedRow, range.start.row));
-    const endCol = Math.min(range.end.col, Math.max(sheet.maxUsedCol, range.start.col));
-    for (let row = range.start.row; row <= endRow; row++) {
-      for (let col = range.start.col; col <= endCol; col++) {
-        const text = getGridCellDisplayValue({ row, col });
-        if (!text.trim()) continue;
-        const value = Number(text.replace(/[,％%]/g, ""));
-        if (Number.isFinite(value)) values.push(value);
-      }
-    }
-  }
-  return values;
+  const rules = sheet?.conditionalFormatRules ?? [];
+  if (!sheet || !rules.length) return [];
+  const scope = currentConditionalFormatScope(sheet);
+  // Sorted by rule priority once per revision: index 0 is the rule Excel would
+  // apply first, and filtering preserves that order.
+  const ordered = conditionalRuleOrder.resolve(scope, rules, () => orderConditionalRules(rules));
+  return ordered.filter((rule) => conditionalRuleBounds(scope, rule).some((range) => cellInNormalizedRange(cell, range)));
+}
+
+function conditionalRangeValues(scope: ConditionalFormatScope, rule: XlsxConditionalFormatRule): number[] {
+  // Bounded scan: the values feed the cfvo bounds (including percentile), so
+  // they are sampled once per revision instead of once per repaint.
+  return collectConditionalFormatValues(conditionalRuleBounds(scope, rule), scope, getGridCellDisplayValue);
 }
 
 function conditionalEnvironmentFor(rule: XlsxConditionalFormatRule): ConditionalEnvironment {
-  const cached = conditionalRuleEnvironments.get(rule);
-  if (cached) return cached;
-  const environment = createConditionalEnvironment(
+  const sheet = activeSheet.value;
+  if (!sheet) return createConditionalEnvironment(rule, [], () => undefined);
+  const scope = currentConditionalFormatScope(sheet);
+  return conditionalRuleEnvironments.resolve(scope, rule, () => createConditionalEnvironment(
     rule,
-    conditionalRangeValues(rule),
-    (color) => resolveWorkbookColor(color, activeSheet.value?.themePalette) ?? undefined,
-  );
-  conditionalRuleEnvironments.set(rule, environment);
-  return environment;
+    conditionalRangeValues(scope, rule),
+    (color) => resolveWorkbookColor(color, sheet.themePalette) ?? undefined,
+  ));
 }
 
 function conditionalVisual(cell: XlsxCellAddress, valueText: string) {
@@ -1232,11 +1280,20 @@ function paintSelectionBorders(
   }
 }
 
+// One worksheet handle per paint, shared by the body and its frozen strips and
+// released once the whole frame is drawn. The public accessor creates a fresh
+// WASM handle on every call (unlike the controller's internal cached one), so
+// allocating it per section would churn handles at frame rate.
 function paintGrid() {
-  paintBody();
-  paintColHeaders();
-  paintRowHeaders();
-  paintCorner();
+  const worksheet: ActiveWorksheet | null = props.controller.isWorkerBacked ? null : props.controller.getActiveWorksheet();
+  try {
+    paintBody(worksheet);
+    paintColHeaders();
+    paintRowHeaders();
+    paintCorner();
+  } finally {
+    worksheet?.free();
+  }
 }
 
 interface OverflowTextTask {
@@ -1247,7 +1304,7 @@ interface OverflowTextTask {
   y: number;
 }
 
-function paintBody() {
+function paintBody(worksheet: ActiveWorksheet | null) {
   const canvas = bodyCanvasRef.value;
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
@@ -1262,11 +1319,9 @@ function paintBody() {
   const colRange = visibleColRange.value;
   const sheet = activeSheet.value;
   if (!sheet) return;
-  conditionalRuleEnvironments = new Map();
 
   const widths = effectiveColWidths.value;
   const heights = effectiveRowHeights.value;
-  const worksheet = props.controller.isWorkerBacked ? null : props.controller.getActiveWorksheet();
   updatePaintedMergeRegions(props.controller.isWorkerBacked ? sheet.mergedRegions : worksheet?.mergedRegions);
 
   const bgColor = props.isDark ? "#18181b" : "#ffffff";
@@ -1406,10 +1461,9 @@ function paintBody() {
       drawCellText(ctx, task.x, task.y, task.width, task.height, task.state, "#2563eb");
     }
   } finally {
-    worksheet?.free();
     ctx.restore();
   }
-  paintFrozenPanes(ctx, bw, bh, gridColor, selFill, textColor);
+  paintFrozenPanes(ctx, bw, bh, gridColor, selFill, textColor, worksheet);
   paintSelectionBorders(ctx, bw, bh, selBorder);
 }
 
@@ -1420,6 +1474,7 @@ function paintFrozenPanes(
   gridColor: string,
   selectionFill: string,
   textColor: string,
+  worksheet: ActiveWorksheet | null,
 ): void {
   const sheet = activeSheet.value;
   const freezeRow = sheet?.freezePanes?.row ?? 0;
@@ -1441,7 +1496,6 @@ function paintFrozenPanes(
     { length: Math.max(0, visibleColRange.value.end - visibleColRange.value.start + 1) },
     (_, offset) => visibleColRange.value.start + offset,
   ).filter((index) => (displayCols.value[index] ?? 0) >= freezeCol);
-  const worksheet = props.controller.isWorkerBacked ? null : props.controller.getActiveWorksheet();
 
   const paintCell = (displayRow: number, displayCol: number, frozenY: boolean, frozenX: boolean) => {
     const cell = getSheetCell(displayRow, displayCol);
@@ -1473,40 +1527,36 @@ function paintFrozenPanes(
     });
   };
 
-  try {
-    if (frozenRows.length && visibleCols.length) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(frozenWidth, 0, Math.max(0, bodyWidth - frozenWidth), frozenHeight);
-      ctx.clip();
-      for (const row of frozenRows) for (const col of visibleCols) paintCell(row.displayIndex, col, true, false);
-      ctx.restore();
-    }
-    if (frozenCols.length && visibleRows.length) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, frozenHeight, frozenWidth, Math.max(0, bodyHeight - frozenHeight));
-      ctx.clip();
-      for (const row of visibleRows) for (const col of frozenCols) paintCell(row, col.displayIndex, false, true);
-      ctx.restore();
-    }
-    if (frozenRows.length && frozenCols.length) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, 0, frozenWidth, frozenHeight);
-      ctx.clip();
-      for (const row of frozenRows) for (const col of frozenCols) paintCell(row.displayIndex, col.displayIndex, true, true);
-      ctx.restore();
-    }
+  if (frozenRows.length && visibleCols.length) {
     ctx.save();
-    ctx.strokeStyle = props.isDark ? "#71717a" : "#a1a1aa";
-    ctx.lineWidth = 2;
-    if (frozenWidth > 0) { ctx.beginPath(); ctx.moveTo(frozenWidth, 0); ctx.lineTo(frozenWidth, bodyHeight); ctx.stroke(); }
-    if (frozenHeight > 0) { ctx.beginPath(); ctx.moveTo(0, frozenHeight); ctx.lineTo(bodyWidth, frozenHeight); ctx.stroke(); }
+    ctx.beginPath();
+    ctx.rect(frozenWidth, 0, Math.max(0, bodyWidth - frozenWidth), frozenHeight);
+    ctx.clip();
+    for (const row of frozenRows) for (const col of visibleCols) paintCell(row.displayIndex, col, true, false);
     ctx.restore();
-  } finally {
-    worksheet?.free();
   }
+  if (frozenCols.length && visibleRows.length) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, frozenHeight, frozenWidth, Math.max(0, bodyHeight - frozenHeight));
+    ctx.clip();
+    for (const row of visibleRows) for (const col of frozenCols) paintCell(row, col.displayIndex, false, true);
+    ctx.restore();
+  }
+  if (frozenRows.length && frozenCols.length) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, frozenWidth, frozenHeight);
+    ctx.clip();
+    for (const row of frozenRows) for (const col of frozenCols) paintCell(row.displayIndex, col.displayIndex, true, true);
+    ctx.restore();
+  }
+  ctx.save();
+  ctx.strokeStyle = props.isDark ? "#71717a" : "#a1a1aa";
+  ctx.lineWidth = 2;
+  if (frozenWidth > 0) { ctx.beginPath(); ctx.moveTo(frozenWidth, 0); ctx.lineTo(frozenWidth, bodyHeight); ctx.stroke(); }
+  if (frozenHeight > 0) { ctx.beginPath(); ctx.moveTo(0, frozenHeight); ctx.lineTo(bodyWidth, frozenHeight); ctx.stroke(); }
+  ctx.restore();
 }
 
 function paintColHeaders() {

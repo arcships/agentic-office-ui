@@ -83,7 +83,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onMounted, onUnmounted, type CSSProperties } from "vue";
+import { computed, ref, watch, nextTick, onUnmounted, type CSSProperties } from "vue";
 import type { XlsxViewerController, XlsxSheetThumbnail, UseXlsxViewerThumbnailsOptions } from "@arcships/xlsx-core";
 import { useXlsxViewerThumbnails } from "../composables/useXlsxViewerThumbnails";
 
@@ -209,17 +209,6 @@ function tabStyle(index: number): CSSProperties {
     whiteSpace: "nowrap",
   };
 }
-
-onMounted(() => {
-  // Preload thumbnails
-  nextTick(() => {
-    thumbnailComputed.value.forEach((thumb, index) => {
-      const canvas = document.createElement("canvas");
-      thumb.paint(canvas);
-      thumbnailCanvasRefs.value.set(index, canvas);
-    });
-  });
-});
 
 onUnmounted(() => {
   if (popupTimer) clearTimeout(popupTimer);
