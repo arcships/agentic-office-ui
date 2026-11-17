@@ -35,8 +35,16 @@ jobs:
       - name: Install locked JavaScript dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
       - name: Build workspace packages
-        run: pnpm --filter './packages/*' -r build
+        run: pnpm exec turbo run build --filter='./packages/*'
 
       - name: Package the npm candidate
         if: github.event_name == 'push'

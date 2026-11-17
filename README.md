@@ -222,6 +222,14 @@ pnpm build
 pnpm test
 ```
 
+Builds use Turborepo's local cache (`.turbo/`). The first run builds every package; later runs skip unchanged packages:
+
+```bash
+pnpm build           # typecheck + build, cached
+pnpm build:changed   # only packages changed since origin/master
+pnpm build --force   # bypass the cache
+```
+
 Run the full release gate with:
 
 ```bash
