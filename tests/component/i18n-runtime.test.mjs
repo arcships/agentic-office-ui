@@ -24,6 +24,7 @@ const {
   useClipboardCopyNotice,
 } = await importFromDemo("@arcships/vue-xlsx")
 const { PptxViewer, PptxStage } = await importFromDemo("@arcships/vue-pptx")
+const { localizePdfErrorMessage, PdfViewer } = await importFromDemo("@arcships/vue-pdf")
 const {
   OFFICE_I18N_INJECTION_KEY,
   OFFICE_LOCALE_INJECTION_KEY,
@@ -102,9 +103,9 @@ test("DOCX gutter drawer tab follows en and zh-CN copy", async () => {
 })
 
 test("DOCX editor status bar and live region localize command status", async () => {
-  for (const [locale, ready, applied] of [
-    ["en", "Ready", "Applied bullet list"],
-    ["zh-CN", "就绪", "已应用项目符号列表"],
+  for (const [locale, ready, applied, imageStatus, tableStatus, borderStatus] of [
+    ["en", "Ready", "Applied bullet list", "Select an image file", "Cannot delete the table: table not found", "Unsupported: diagonal paragraph borders (diagonal-down)"],
+    ["zh-CN", "就绪", "已应用项目符号列表", "请选择图片文件", "无法删除表格：未找到表格", "不支持：对角线段落边框（diagonal-down）"],
   ]) {
     const scope = vue.effectScope()
     const controller = scope.run(() => useDocxEditor({
@@ -124,6 +125,22 @@ test("DOCX editor status bar and live region localize command status", async () 
       await vue.nextTick()
       assert.equal(textContent(findByTestId(mounted.root, "editor-status")), applied)
       assert.match(textContent(findByTestId(mounted.root, "editor-live-status")), new RegExp(applied, "u"))
+
+      await controller.insertImageFile({ type: "text/plain", name: "notes.txt" })
+      await vue.nextTick()
+      assert.equal(textContent(findByTestId(mounted.root, "editor-status")), imageStatus)
+
+      controller.deleteTable(999)
+      await vue.nextTick()
+      assert.equal(textContent(findByTestId(mounted.root, "editor-status")), tableStatus)
+
+      controller.applyBorderPreset("diagonal-down")
+      await vue.nextTick()
+      assert.equal(textContent(findByTestId(mounted.root, "editor-status")), borderStatus)
+      assert.match(
+        textContent(findByTestId(mounted.root, "editor-live-status")),
+        new RegExp(borderStatus.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"),
+      )
     } finally {
       mounted.app.unmount()
       scope.stop()
@@ -239,6 +256,39 @@ test("XLSX calculation, validation and clipboard notices localize", async () => 
       assert.equal(notice.notice.value, expected)
     } finally {
       scope.stop()
+    }
+  }
+})
+
+test("PDF load errors localize from their codes", async () => {
+  for (const [locale, invalid, tooLarge, encrypted] of [
+    ["en", "The PDF file could not be parsed or rendered.", "PDF file size 12 bytes exceeds the allowed maximum of 10 bytes.", "The PDF document is encrypted and requires a password."],
+    ["zh-CN", "PDF 文件无法解析或渲染。", "PDF 文件大小 12 字节超过允许值 10 字节。", "PDF 文档已加密，需要密码。"],
+  ]) {
+    const messages = message(locale).pdf.errors
+    assert.equal(localizePdfErrorMessage({ code: "INVALID_PDF" }, messages), invalid)
+    assert.equal(
+      localizePdfErrorMessage({ code: "PDF_TOO_LARGE", actual: 12, allowed: 10 }, messages),
+      tooLarge,
+    )
+    assert.equal(localizePdfErrorMessage({ code: "ENCRYPTED" }, messages), encrypted)
+
+    const mounted = await mount(PdfViewer, {
+      src: "file:///tmp/not-a-pdf.pdf",
+      locale,
+      showToolbar: false,
+    })
+    try {
+      await waitFor(
+        () => findByTestId(mounted.root, "load-error") !== undefined,
+        `${locale}: PDF load error`,
+      )
+      assert.match(textContent(findByTestId(mounted.root, "load-error")), new RegExp(
+        message(locale).pdf.errors.sourceNotAllowed.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"),
+        "u",
+      ))
+    } finally {
+      mounted.app.unmount()
     }
   }
 })

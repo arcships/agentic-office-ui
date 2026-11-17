@@ -1,4 +1,5 @@
 import { computed } from "vue";
+import { officeMessagesEn } from "@arcships/office-interaction";
 import type { Workbook } from "@dukelib/sheets-wasm";
 import {
   getSheetsWasmModule,
@@ -473,7 +474,7 @@ export async function resolveWorkbookSource(
     return loadVerifiedXlsxSource(src, urlPolicy, signal, limits);
   }
 
-  throw new Error("Either `file` or `src` must be provided.");
+  throw new Error(officeMessagesEn.xlsx.diagnostics.fileOrSrcRequired);
 }
 
 /** Preserved public helper for callers that only need the loaded bytes. */
@@ -502,7 +503,7 @@ export async function convertCsvBufferToXlsx(buffer: ArrayBuffer): Promise<Array
   try {
     csv = csvTextDecoder(buffer).decode(buffer);
   } catch (cause) {
-    throw new Error("CSV must use UTF-8, or UTF-16 with a BOM.", { cause });
+    throw new Error(officeMessagesEn.xlsx.diagnostics.csvEncoding, { cause });
   }
 
   const wasmModule = await getSheetsWasmModule();
@@ -514,7 +515,7 @@ export async function convertCsvBufferToXlsx(buffer: ArrayBuffer): Promise<Array
     new Uint8Array(output).set(bytes);
     return output;
   } catch (cause) {
-    throw new Error("Unable to parse the CSV file.", { cause });
+    throw new Error(officeMessagesEn.xlsx.diagnostics.csvParseFailed, { cause });
   } finally {
     csvWorkbook?.free();
   }
@@ -539,7 +540,7 @@ export async function convertXlsbBufferToXlsx(buffer: ArrayBuffer): Promise<Arra
     new Uint8Array(output).set(bytes);
     return output;
   } catch (cause) {
-    throw new Error("Unable to parse the XLSB file.", { cause });
+    throw new Error(officeMessagesEn.xlsx.diagnostics.xlsbParseFailed, { cause });
   }
 }
 
@@ -595,7 +596,7 @@ const MACRO_ENABLED_SPREADSHEET = /\.(xlsm|xltm)$/i;
 
 function macroLossWarning(fileName: string) {
   return MACRO_ENABLED_SPREADSHEET.test(fileName.trim())
-    ? "The source workbook is macro-enabled (.xlsm/.xltm); exporting to .xlsx drops VBA macros."
+    ? officeMessagesEn.xlsx.diagnostics.macroLoss
     : null;
 }
 

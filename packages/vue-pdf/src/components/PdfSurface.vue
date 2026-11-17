@@ -14,7 +14,7 @@
     <div v-if="!effectiveSource" class="pdf-surface__empty">{{ m.pdf.surface.noPdf }}</div>
     <div v-else-if="loading" class="pdf-surface__empty">{{ m.pdf.surface.opening }}</div>
     <div v-else-if="loadError" class="pdf-surface__error" :data-error-code="loadError.code">
-      {{ loadError.code }}: {{ loadError.message }}
+      {{ loadError.code }}: {{ loadErrorMessage }}
     </div>
     <div v-else-if="renderDocument" class="pdf-surface__pages" :style="pageStackStyle">
       <div
@@ -163,6 +163,7 @@ import {
 import {
   DEFAULT_PDF_MAX_FILE_SIZE,
   loadVerifiedPdfSource,
+  localizePdfErrorMessage,
   toPdfLoadError,
   type PdfDiagnostic,
   type PdfLoadError,
@@ -395,6 +396,9 @@ const minHeightStyle = computed(() => {
 const renderDpr = ref(currentRenderDpr())
 const loading = ref(false)
 const loadError = ref<PdfLoadError | null>(null)
+const loadErrorMessage = computed(() => loadError.value
+  ? localizePdfErrorMessage(loadError.value, m.value.pdf.errors)
+  : "")
 const renderDocument = ref<PdfRenderDocument | null>(null)
 const printMode = ref(false)
 const verifiedBlob = ref<Blob | null>(null)
@@ -1171,9 +1175,13 @@ async function load(): Promise<void> {
     if (unmounted || !task.isCurrent() || requestId !== latestRequestId || (cause as Error)?.name === "AbortError") return
     const sourceKind = source.kind
     const normalized = toPdfLoadError(cause, sourceKind, sourceKind === "url" ? source.url : undefined)
-    loadError.value = normalized
+    const localizedError = {
+      ...normalized,
+      message: localizePdfErrorMessage(normalized, m.value.pdf.errors),
+    }
+    loadError.value = localizedError
     loading.value = false
-    emit("document-load-error", normalized)
+    emit("document-load-error", localizedError)
   } finally {
     task.finish()
   }

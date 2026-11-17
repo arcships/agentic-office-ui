@@ -193,11 +193,12 @@ test("DOCX editor mirrors its status bar into the shared live region", () => {
   const editor = read(DOCX_EDITOR_PATH);
   assert.match(editor, /import \{ OfficeLiveStatus \} from "@arcships\/vue-ui"/);
   assert.match(editor, /<OfficeLiveStatus test-id="editor-live-status" :message="liveStatusMessage" \/>/);
+  assert.match(editor, /const localizedStatus = computed\(\(\) => String\(controller\.status/);
   const message = computedBody(DOCX_EDITOR_PATH, "liveStatusMessage");
   assert.match(message, /pageLimitError\.value/);
   assert.match(message, /formatOfficeMessage\(m\.value\.common\.page\.indicator/);
   assert.match(message, /m\.value\.docx\.editor\.liveReady/);
-  assert.match(message, /controller\.status/);
+  assert.match(message, /localizedStatus\.value/);
 });
 
 test("PPTX and XLSX viewers use the same shared live region", () => {

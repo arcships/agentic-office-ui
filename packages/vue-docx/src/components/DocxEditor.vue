@@ -89,7 +89,7 @@
         {{ pageIndicator }}
       </span>
       <span class="docx-editor-statusbar-status" data-testid="editor-status">
-        {{ controller.status }}
+        {{ localizedStatus }}
       </span>
       <span v-if="controller.fileName" class="docx-editor-statusbar-file" data-testid="editor-file-name">
         {{ controller.fileName }}
@@ -228,6 +228,7 @@ watch(() => props.showThumbnails, (visible) => { thumbnailPanelVisible.value = v
 
 // The editor status bar is visible but was never announced. Mirror it in a
 // live region so page turns and controller state reach assistive technology.
+const localizedStatus = computed(() => String(controller.status ?? "").trim())
 const liveStatusMessage = computed(() => {
   if (pageLimitError.value) return formatOfficeMessage(m.value.docx.editor.liveError, { message: pageLimitError.value.message })
   const pages = totalPages.value > 0
@@ -236,7 +237,7 @@ const liveStatusMessage = computed(() => {
       total: totalPages.value,
     })
     : ""
-  const status = String(controller.status ?? "").trim()
+  const status = localizedStatus.value
   return [pages, status].filter(Boolean).join("，") || m.value.docx.editor.liveReady
 })
 

@@ -6,6 +6,7 @@
 
 import { h, type VNode } from "vue"
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
+import { officeMessagesEn } from "@arcships/office-interaction"
 import type {
   ParagraphNode,
   TextRunNode,
@@ -837,7 +838,7 @@ export function renderParagraphRuns(
                     code: "IMAGE_DECODE_FAILED",
                     phase: "image-decode",
                     imageKey: numberingKey,
-                    message: "DOCX numbering image could not be decoded.",
+                    message: officeMessagesEn.docx.diagnostics.numberingImageDecodeFailed,
                   })
                 },
                 style: {

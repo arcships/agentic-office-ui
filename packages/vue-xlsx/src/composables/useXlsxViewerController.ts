@@ -1,4 +1,5 @@
 import { ref, computed, watch, onUnmounted, shallowRef, nextTick } from "vue";
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction";
 import {
   createLatestTaskCoordinator,
   createOfficeTaskSequence,
@@ -292,7 +293,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     });
   }
 
-  function reportImageDecodeError(imageId: string, message = "XLSX image could not be decoded.") {
+  function reportImageDecodeError(imageId: string, message = officeMessagesEn.xlsx.diagnostics.imageDecodeFailed) {
     reportDiagnostic({
       type: "image-decode-error",
       requestId: latestLoadRequestId,
@@ -572,7 +573,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
         if (workerChartCount < quickChartCount || hasIncompleteWorkerChartSnapshot(result)) {
           finishWorkerFailure(new XlsxWorkerError(
             "WORKER_FAILED",
-            "XLSX Worker returned incomplete chart data.",
+            officeMessagesEn.xlsx.diagnostics.chartDataIncomplete,
             { phase: "chart" },
           ));
           return;
@@ -587,7 +588,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   function createParseTimeoutError(maxParseMs: number, actual: number) {
     return new XlsxWorkerError(
       "TIMEOUT",
-      `XLSX parsing exceeded ${maxParseMs} ms.`,
+      formatOfficeMessage(officeMessagesEn.xlsx.diagnostics.parseTimeout, { ms: maxParseMs }),
       {
         phase: "parse",
         limit: "maxParseMs",
@@ -816,12 +817,12 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   }
   function calculationMessage(reason: SafeCalculateSkipReason | "recovery-snapshot-unavailable"): string {
     if (reason === "unresolved-sheet-refs") {
-      return "A formula references a sheet that no longer exists; cached values are shown.";
+      return officeMessagesEn.xlsx.calculation.sheetMissing;
     }
     if (reason === "recovery-snapshot-unavailable") {
-      return "The workbook snapshot could not be saved, so recalculation was skipped to protect the current data; cached values are shown.";
+      return officeMessagesEn.xlsx.calculation.snapshotUnavailable;
     }
-    return "Formulas could not be recalculated; cached values are shown. Recalculate manually to retry.";
+    return officeMessagesEn.xlsx.calculation.failed;
   }
   function noteCalculationResult(result: {
     calculated: boolean;
@@ -883,7 +884,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     if (sanitized.error) {
       console.warn("[xlsx] failed to sanitize saved workbook XML", sanitized.error);
       if (reportSanitizationWarning) {
-        setExportWarning("The XML escape repair before export failed; the exported workbook may contain double escaping.");
+        setExportWarning(officeMessagesEn.xlsx.diagnostics.exportXmlEscapeFailed);
       }
     }
     return mergeWorkbookImageAssets(sanitized.bytes, imageAssetsRef.value, sheetOriginsRef.value);
@@ -995,7 +996,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
           // below reports a diagnostic and retries on the main thread.
           throw new XlsxWorkerError(
             "WORKER_FAILED",
-            "XLSX Worker returned incomplete chart data.",
+            officeMessagesEn.xlsx.diagnostics.chartDataIncomplete,
             { phase: "chart" },
           );
         }

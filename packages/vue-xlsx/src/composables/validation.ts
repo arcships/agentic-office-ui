@@ -6,6 +6,7 @@ import type {
   XlsxSheetData
 } from "@arcships/xlsx-core";
 import { rangeContainsCell } from "./selection";
+import { officeMessagesEn } from "@arcships/office-interaction";
 
 /** Resolves list validation sources that live in cells or workbook names. */
 export interface XlsxValidationListResolver {
@@ -261,22 +262,7 @@ function validationMessageKey(validationType: string): XlsxDataValidationMessage
 }
 
 function defaultValidationMessage(validationType: string): string {
-  switch (validationMessageKey(validationType)) {
-    case "list":
-      return "The value is not in the allowed list.";
-    case "whole":
-      return "Enter a valid whole number.";
-    case "decimal":
-      return "Enter a valid number.";
-    case "textLength":
-      return "The text length does not meet the requirement.";
-    case "date":
-      return "Enter a valid date.";
-    case "time":
-      return "Enter a valid time.";
-    default:
-      return "The value does not meet the data validation rule.";
-  }
+  return officeMessagesEn.xlsx.validation[validationMessageKey(validationType)];
 }
 
 function isValidationValueValid(

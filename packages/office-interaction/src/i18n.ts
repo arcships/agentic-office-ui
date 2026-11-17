@@ -197,6 +197,78 @@ export interface OfficeDocxMessages {
       /** Template with a `{count}` placeholder. */
       formattingCleared: string
       formattingClearedOne: string
+      /** Template with a `{feature}` placeholder. */
+      unsupportedFeature: string
+      imageTargetUnavailable: string
+      imageSizePositive: string
+      resizeTargetUnavailable: string
+      lockedImageAnchorResize: string
+      imageOverlapDisabled: string
+      syntheticTextBoxUnavailable: string
+      imageMoveTargetUnavailable: string
+      lockedImageAnchorMove: string
+      sectionImageTargetUnavailable: string
+      dropCapTargetUnavailable: string
+      dropCapFontSizeTargetUnavailable: string
+      dropCapTextTargetUnavailable: string
+      imageMoveSourceUnavailable: string
+      selectImageFile: string
+      imageInsertionCancelled: string
+      /** Template with a `{name}` placeholder. */
+      insertedImage: string
+      /** Template with `{width}` and `{height}` placeholders. */
+      resizedImage: string
+      updatedTextBox: string
+      /** Template with a `{mode}` placeholder. */
+      imageWrapSet: string
+      movedImage: string
+      movedSectionImage: string
+      movedDropCap: string
+      /** Template with a `{size}` placeholder. */
+      dropCapFontSize: string
+      updatedDropCapText: string
+      tableColumnWidthPositive: string
+      tableColumnWidthTargetUnavailable: string
+      cannotInsertRowTableNotFound: string
+      cannotInsertTableRow: string
+      cannotInsertColumnTableNotFound: string
+      cannotInsertTableColumn: string
+      cannotDeleteRowTableNotFound: string
+      cannotDeleteOnlyTableRow: string
+      cannotDeleteColumnTableNotFound: string
+      cannotDeleteOnlyTableColumn: string
+      cannotDeleteTableColumn: string
+      cannotDeleteTableNotFound: string
+      cannotClearCellsTableNotFound: string
+      cannotMergeCellsTableNotFound: string
+      cannotMergeSingleCell: string
+      cannotSplitCellTableNotFound: string
+      cannotSplitCellNotMerged: string
+      cannotMoveTableNotFound: string
+      cannotMoveEmbeddedHostTableNotFound: string
+      cannotMoveEmbeddedHostCellNotFound: string
+      cannotMoveEmbeddedTableNotFound: string
+      insertedTable: string
+      /** Template with a `{direction}` placeholder. */
+      insertedTableRow: string
+      /** Template with a `{direction}` placeholder. */
+      insertedTableColumn: string
+      deletedTableRow: string
+      deletedTableColumn: string
+      deletedTable: string
+      clearedTableCells: string
+      resizedTableColumns: string
+      mergedTableCells: string
+      splitTableCell: string
+      movedTable: string
+      movedEmbeddedTable: string
+      /** Template with a `{preset}` placeholder. */
+      unsupportedDiagonalTableCellBorders: string
+      /** Template with a `{preset}` placeholder. */
+      unsupportedDiagonalParagraphBorders: string
+      revisionLossOne: string
+      /** Template with a `{count}` placeholder. */
+      revisionLossMany: string
     }
     borderPresets: {
       bottom: string
@@ -304,6 +376,10 @@ export interface OfficeDocxMessages {
   }
   dragOverlay: {
     drop: string
+  }
+  diagnostics: {
+    imageDecodeFailed: string
+    numberingImageDecodeFailed: string
   }
 }
 
@@ -444,6 +520,20 @@ export interface OfficeXlsxMessages {
   surface: {
     region: string
   }
+  diagnostics: {
+    imageDecodeFailed: string
+    chartDataIncomplete: string
+    /** Template with a `{ms}` placeholder. */
+    parseTimeout: string
+    exportXmlEscapeFailed: string
+    /** Template with a `{name}` placeholder. */
+    macroLoss: string
+    csvEncoding: string
+    csvParseFailed: string
+    xlsbParseFailed: string
+    fileOrSrcRequired: string
+    sheetNameInvalid: string
+  }
 }
 
 export interface OfficePptxMessages {
@@ -575,6 +665,23 @@ export interface OfficePdfMessages {
     pageAlt: string
     selectionRegion: string
     selectionText: string
+  }
+  errors: {
+    sourceNotAllowed: string
+    fetchFailed: string
+    invalidPdf: string
+    /** Template with `{actual}` and `{allowed}` placeholders. */
+    tooLarge: string
+    aborted: string
+    encrypted: string
+    openFailed: string
+    unknown: string
+  }
+  runtime: {
+    /** Template with a `{label}` placeholder. */
+    cancelled: string
+    /** Template with a `{label}` placeholder. */
+    timedOut: string
   }
 }
 
@@ -784,6 +891,68 @@ export const officeMessagesEn: OfficeMessages = {
         rejectedChange: "Rejected 1 tracked change",
         formattingCleared: " ({count} formatting revisions cleared without reverting; the model keeps no previous formatting)",
         formattingClearedOne: " (1 formatting revision cleared without reverting; the model keeps no previous formatting)",
+        unsupportedFeature: "Unsupported: {feature}",
+        imageTargetUnavailable: "Unsupported: image target is unavailable",
+        imageSizePositive: "Unsupported: image size must be positive",
+        resizeTargetUnavailable: "Unsupported: resize target is unavailable",
+        lockedImageAnchorResize: "Unsupported: locked image anchor cannot be resized",
+        imageOverlapDisabled: "Unsupported: image overlap is disabled for this anchor",
+        syntheticTextBoxUnavailable: "Unsupported: synthetic text box editing is unavailable for this image",
+        imageMoveTargetUnavailable: "Unsupported: image move target is unavailable",
+        lockedImageAnchorMove: "Unsupported: locked image anchor cannot be moved",
+        sectionImageTargetUnavailable: "Unsupported: section image target is unavailable",
+        dropCapTargetUnavailable: "Unsupported: drop cap target is unavailable",
+        dropCapFontSizeTargetUnavailable: "Unsupported: drop cap font size target is unavailable",
+        dropCapTextTargetUnavailable: "Unsupported: drop cap text target is unavailable",
+        imageMoveSourceUnavailable: "Unsupported: image move source is unavailable",
+        selectImageFile: "Select an image file",
+        imageInsertionCancelled: "Image insertion cancelled: document changed",
+        insertedImage: "Inserted image: {name}",
+        resizedImage: "Resized image to {width}×{height}",
+        updatedTextBox: "Updated text box",
+        imageWrapSet: "Set image wrap: {mode}",
+        movedImage: "Moved image",
+        movedSectionImage: "Moved section image",
+        movedDropCap: "Moved drop cap",
+        dropCapFontSize: "Set drop cap font size to {size}pt",
+        updatedDropCapText: "Updated drop cap text",
+        tableColumnWidthPositive: "Unsupported: table column widths must be positive",
+        tableColumnWidthTargetUnavailable: "Unsupported: table column width target is unavailable",
+        cannotInsertRowTableNotFound: "Cannot insert a row: table not found",
+        cannotInsertTableRow: "Cannot insert a table row",
+        cannotInsertColumnTableNotFound: "Cannot insert a column: table not found",
+        cannotInsertTableColumn: "Cannot insert a table column",
+        cannotDeleteRowTableNotFound: "Cannot delete a row: table not found",
+        cannotDeleteOnlyTableRow: "Cannot delete the only table row",
+        cannotDeleteColumnTableNotFound: "Cannot delete a column: table not found",
+        cannotDeleteOnlyTableColumn: "Cannot delete the only table column",
+        cannotDeleteTableColumn: "Cannot delete the table column",
+        cannotDeleteTableNotFound: "Cannot delete the table: table not found",
+        cannotClearCellsTableNotFound: "Cannot clear cells: table not found",
+        cannotMergeCellsTableNotFound: "Cannot merge cells: table not found",
+        cannotMergeSingleCell: "Cannot merge a single cell",
+        cannotSplitCellTableNotFound: "Cannot split a cell: table not found",
+        cannotSplitCellNotMerged: "Cannot split a cell that is not merged",
+        cannotMoveTableNotFound: "Cannot move the table: table not found",
+        cannotMoveEmbeddedHostTableNotFound: "Cannot move the embedded table: host table not found",
+        cannotMoveEmbeddedHostCellNotFound: "Cannot move the embedded table: host cell not found",
+        cannotMoveEmbeddedTableNotFound: "Cannot move the embedded table: table not found",
+        insertedTable: "Inserted table",
+        insertedTableRow: "Inserted table row {direction}",
+        insertedTableColumn: "Inserted table column {direction}",
+        deletedTableRow: "Deleted table row",
+        deletedTableColumn: "Deleted table column",
+        deletedTable: "Deleted table",
+        clearedTableCells: "Cleared table cells",
+        resizedTableColumns: "Resized table columns",
+        mergedTableCells: "Merged table cells",
+        splitTableCell: "Split table cell",
+        movedTable: "Moved table",
+        movedEmbeddedTable: "Moved embedded table",
+        unsupportedDiagonalTableCellBorders: "Unsupported: diagonal table-cell borders ({preset})",
+        unsupportedDiagonalParagraphBorders: "Unsupported: diagonal paragraph borders ({preset})",
+        revisionLossOne: "Tracked changes in an edited paragraph were resolved with the edit",
+        revisionLossMany: "Tracked changes in {count} edited paragraphs were resolved with the edit",
       },
       borderPresets: {
         bottom: "Bottom Border",
@@ -891,6 +1060,10 @@ export const officeMessagesEn: OfficeMessages = {
     },
     dragOverlay: {
       drop: "Drop DOCX file to import",
+    },
+    diagnostics: {
+      imageDecodeFailed: "DOCX image could not be decoded.",
+      numberingImageDecodeFailed: "DOCX numbering image could not be decoded.",
     },
   },
   xlsx: {
@@ -1027,6 +1200,18 @@ export const officeMessagesEn: OfficeMessages = {
     surface: {
       region: "Choose worksheet area",
     },
+    diagnostics: {
+      imageDecodeFailed: "XLSX image could not be decoded.",
+      chartDataIncomplete: "XLSX Worker returned incomplete chart data.",
+      parseTimeout: "XLSX parsing exceeded {ms} ms.",
+      exportXmlEscapeFailed: "The XML escape repair before export failed; the exported workbook may contain double escaping.",
+      macroLoss: "The source workbook is macro-enabled (.xlsm/.xltm); exporting to .xlsx drops VBA macros.",
+      csvEncoding: "CSV must use UTF-8, or UTF-16 with a BOM.",
+      csvParseFailed: "Unable to parse the CSV file.",
+      xlsbParseFailed: "Unable to parse the XLSB file.",
+      fileOrSrcRequired: "Either `file` or `src` must be provided.",
+      sheetNameInvalid: "Worksheet names cannot contain these characters: \\ / : * ? [ ]",
+    },
   },
   pptx: {
     viewer: {
@@ -1141,6 +1326,20 @@ export const officeMessagesEn: OfficeMessages = {
       pageAlt: "Page {page}",
       selectionRegion: "Choose PDF page region",
       selectionText: "PDF page text selection layer",
+    },
+    errors: {
+      sourceNotAllowed: "The PDF URL is outside the allowed policy.",
+      fetchFailed: "Unable to fetch the PDF file.",
+      invalidPdf: "The PDF file could not be parsed or rendered.",
+      tooLarge: "PDF file size {actual} bytes exceeds the allowed maximum of {allowed} bytes.",
+      aborted: "PDF loading was cancelled.",
+      encrypted: "The PDF document is encrypted and requires a password.",
+      openFailed: "Unable to open the PDF file.",
+      unknown: "unknown",
+    },
+    runtime: {
+      cancelled: "{label} cancelled",
+      timedOut: "{label} timed out",
     },
   },
   vueUi: {
@@ -1330,6 +1529,68 @@ export const officeMessagesZhCN: OfficeMessages = {
         rejectedChange: "已拒绝 1 处修订",
         formattingCleared: "（已清除 {count} 处格式修订且未回退；模型未保留旧格式）",
         formattingClearedOne: "（已清除 1 处格式修订且未回退；模型未保留旧格式）",
+        unsupportedFeature: "不支持：{feature}",
+        imageTargetUnavailable: "不支持：图片目标不可用",
+        imageSizePositive: "不支持：图片尺寸必须为正数",
+        resizeTargetUnavailable: "不支持：调整大小的目标不可用",
+        lockedImageAnchorResize: "不支持：锁定的图片锚点不能调整大小",
+        imageOverlapDisabled: "不支持：此锚点不允许图片重叠",
+        syntheticTextBoxUnavailable: "不支持：此图片无法编辑合成文本框",
+        imageMoveTargetUnavailable: "不支持：图片移动目标不可用",
+        lockedImageAnchorMove: "不支持：锁定的图片锚点不能移动",
+        sectionImageTargetUnavailable: "不支持：节图片目标不可用",
+        dropCapTargetUnavailable: "不支持：首字下沉目标不可用",
+        dropCapFontSizeTargetUnavailable: "不支持：首字下沉字号目标不可用",
+        dropCapTextTargetUnavailable: "不支持：首字下沉文本目标不可用",
+        imageMoveSourceUnavailable: "不支持：图片移动源不可用",
+        selectImageFile: "请选择图片文件",
+        imageInsertionCancelled: "图片插入已取消：文档已更改",
+        insertedImage: "已插入图片：{name}",
+        resizedImage: "已将图片调整为 {width}×{height}",
+        updatedTextBox: "已更新文本框",
+        imageWrapSet: "已设置图片环绕方式：{mode}",
+        movedImage: "已移动图片",
+        movedSectionImage: "已移动节图片",
+        movedDropCap: "已移动首字下沉",
+        dropCapFontSize: "已将首字下沉字号设为 {size}pt",
+        updatedDropCapText: "已更新首字下沉文本",
+        tableColumnWidthPositive: "不支持：表格列宽必须为正数",
+        tableColumnWidthTargetUnavailable: "不支持：表格列宽目标不可用",
+        cannotInsertRowTableNotFound: "无法插入行：未找到表格",
+        cannotInsertTableRow: "无法插入表格行",
+        cannotInsertColumnTableNotFound: "无法插入列：未找到表格",
+        cannotInsertTableColumn: "无法插入表格列",
+        cannotDeleteRowTableNotFound: "无法删除行：未找到表格",
+        cannotDeleteOnlyTableRow: "无法删除唯一的表格行",
+        cannotDeleteColumnTableNotFound: "无法删除列：未找到表格",
+        cannotDeleteOnlyTableColumn: "无法删除唯一的表格列",
+        cannotDeleteTableColumn: "无法删除该表格列",
+        cannotDeleteTableNotFound: "无法删除表格：未找到表格",
+        cannotClearCellsTableNotFound: "无法清除单元格：未找到表格",
+        cannotMergeCellsTableNotFound: "无法合并单元格：未找到表格",
+        cannotMergeSingleCell: "无法合并单个单元格",
+        cannotSplitCellTableNotFound: "无法拆分单元格：未找到表格",
+        cannotSplitCellNotMerged: "无法拆分未合并的单元格",
+        cannotMoveTableNotFound: "无法移动表格：未找到表格",
+        cannotMoveEmbeddedHostTableNotFound: "无法移动嵌入表格：未找到宿主表格",
+        cannotMoveEmbeddedHostCellNotFound: "无法移动嵌入表格：未找到宿主单元格",
+        cannotMoveEmbeddedTableNotFound: "无法移动嵌入表格：未找到表格",
+        insertedTable: "已插入表格",
+        insertedTableRow: "已插入表格行（{direction}）",
+        insertedTableColumn: "已插入表格列（{direction}）",
+        deletedTableRow: "已删除表格行",
+        deletedTableColumn: "已删除表格列",
+        deletedTable: "已删除表格",
+        clearedTableCells: "已清除表格单元格",
+        resizedTableColumns: "已调整表格列宽",
+        mergedTableCells: "已合并表格单元格",
+        splitTableCell: "已拆分表格单元格",
+        movedTable: "已移动表格",
+        movedEmbeddedTable: "已移动嵌入表格",
+        unsupportedDiagonalTableCellBorders: "不支持：对角线表格单元格边框（{preset}）",
+        unsupportedDiagonalParagraphBorders: "不支持：对角线段落边框（{preset}）",
+        revisionLossOne: "已编辑段落中的修订已随编辑一起处理",
+        revisionLossMany: "已编辑的 {count} 个段落中的修订已随编辑一起处理",
       },
       borderPresets: {
         bottom: "下边框",
@@ -1437,6 +1698,10 @@ export const officeMessagesZhCN: OfficeMessages = {
     },
     dragOverlay: {
       drop: "拖放 DOCX 文件以导入",
+    },
+    diagnostics: {
+      imageDecodeFailed: "DOCX 图片无法解码。",
+      numberingImageDecodeFailed: "DOCX 编号图片无法解码。",
     },
   },
   xlsx: {
@@ -1573,6 +1838,18 @@ export const officeMessagesZhCN: OfficeMessages = {
     surface: {
       region: "选择工作表区域",
     },
+    diagnostics: {
+      imageDecodeFailed: "XLSX 图片无法解码。",
+      chartDataIncomplete: "XLSX Worker 返回的图表数据不完整。",
+      parseTimeout: "XLSX 解析超过 {ms} 毫秒。",
+      exportXmlEscapeFailed: "导出前的 XML 转义修复失败，导出的工作簿可能包含双重转义。",
+      macroLoss: "源文件为启用宏的工作簿（.xlsm/.xltm），导出的 .xlsx 会丢失 VBA 宏。",
+      csvEncoding: "CSV 必须使用 UTF-8，或带 BOM 的 UTF-16 编码。",
+      csvParseFailed: "无法解析 CSV 文件。",
+      xlsbParseFailed: "无法解析 XLSB 文件。",
+      fileOrSrcRequired: "必须提供 `file` 或 `src`。",
+      sheetNameInvalid: "工作表名称不能包含以下字符：\\ / : * ? [ ]",
+    },
   },
   pptx: {
     viewer: {
@@ -1687,6 +1964,20 @@ export const officeMessagesZhCN: OfficeMessages = {
       pageAlt: "第 {page} 页",
       selectionRegion: "选择 PDF 页面区域",
       selectionText: "PDF 页面文本选择层",
+    },
+    errors: {
+      sourceNotAllowed: "PDF 地址不在允许范围内。",
+      fetchFailed: "无法获取 PDF 文件。",
+      invalidPdf: "PDF 文件无法解析或渲染。",
+      tooLarge: "PDF 文件大小 {actual} 字节超过允许值 {allowed} 字节。",
+      aborted: "PDF 加载已取消。",
+      encrypted: "PDF 文档已加密，需要密码。",
+      openFailed: "无法打开 PDF 文件。",
+      unknown: "未知",
+    },
+    runtime: {
+      cancelled: "{label} 已取消",
+      timedOut: "{label} 已超时",
     },
   },
   vueUi: {

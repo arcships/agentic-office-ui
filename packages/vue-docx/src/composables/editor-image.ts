@@ -7,6 +7,7 @@ import type {
   DocxImageLocation,
   DocxImageWrapMode,
   DocxImageDropTarget,
+  DocxEditorStatusMessages,
   DocxSectionImageLocation,
 } from "@arcships/docx-core"
 import {
@@ -202,8 +203,8 @@ export function createEditorImage(
   ctx: EditorCore,
   applyChange: (updater: (current: DocModel) => DocModel, successStatus?: string) => void,
 ) {
-  const unsupported = (feature: string): void => {
-    ctx.status.value = `Unsupported: ${feature}`
+  const unsupported = (key: keyof DocxEditorStatusMessages): void => {
+    ctx.status.value = ctx.statusMessage(key)
   }
 
   const applyImageChange = (
@@ -212,7 +213,7 @@ export function createEditorImage(
     status: string,
   ): void => {
     if (!locateImage(ctx.modelSnapshot.value, location)) {
-      unsupported(`${status} target is unavailable`)
+      unsupported("imageTargetUnavailable")
       return
     }
     applyChange((current) => {
@@ -227,7 +228,7 @@ export function createEditorImage(
 
   const insertImageFile = async (file: File): Promise<void> => {
     if (!file.type.startsWith("image/")) {
-      ctx.status.value = "Select an image file"
+      ctx.status.value = ctx.statusMessage("selectImageFile")
       return
     }
 
@@ -242,7 +243,7 @@ export function createEditorImage(
     if (documentLoadNonce !== ctx.documentLoadNonce.value) {
       // A different document was loaded while the file bytes were in flight;
       // the captured node indexes no longer identify the user's target.
-      ctx.status.value = "Image insertion cancelled: document changed"
+      ctx.status.value = ctx.statusMessage("imageInsertionCancelled")
       return
     }
     const src = `data:${file.type};base64,${toBase64(bytes)}`
@@ -305,25 +306,25 @@ export function createEditorImage(
       paragraph.sourceXml = undefined
       table.sourceXml = undefined
       return next
-    }, `Inserted image: ${file.name}`)
+    }, ctx.statusMessage("insertedImage", { name: file.name }))
   }
 
   const resizeImage = (
     location: DocxImageLocation, widthPx: number, heightPx: number
   ): void => {
     if (!Number.isFinite(widthPx) || !Number.isFinite(heightPx) || widthPx <= 0 || heightPx <= 0) {
-      unsupported("image size must be positive")
+      unsupported("imageSizePositive")
       return
     }
     const width = Math.max(1, Math.round(widthPx))
     const height = Math.max(1, Math.round(heightPx))
     const located = locateImage(ctx.modelSnapshot.value, location)
     if (!located) {
-      unsupported("resize target is unavailable")
+      unsupported("resizeTargetUnavailable")
       return
     }
     if (located.image.floating?.lockedAnchor) {
-      unsupported("locked image anchor cannot be resized")
+      unsupported("lockedImageAnchorResize")
       return
     }
     if (
@@ -336,13 +337,13 @@ export function createEditorImage(
         height,
       )
     ) {
-      unsupported("image overlap is disabled for this anchor")
+      unsupported("imageOverlapDisabled")
       return
     }
     applyImageChange(location, ({ image }) => {
       image.widthPx = width
       image.heightPx = height
-    }, `Resized image to ${width}×${height}`)
+    }, ctx.statusMessage("resizedImage", { width, height }))
   }
 
   const setSyntheticTextBoxText = (
@@ -350,12 +351,12 @@ export function createEditorImage(
   ): void => {
     const located = locateImage(ctx.modelSnapshot.value, location)
     if (!located?.image.syntheticTextBox) {
-      unsupported("synthetic text box editing is unavailable for this image")
+      unsupported("syntheticTextBoxUnavailable")
       return
     }
     applyImageChange(location, ({ image }) => {
       image.textBoxText = text
-    }, "Updated text box")
+    }, ctx.statusMessage("updatedTextBox"))
   }
 
   const setImageWrapMode = (
@@ -388,7 +389,7 @@ export function createEditorImage(
         floating.behindDocument = false
       }
       image.floating = floating
-    }, `Set image wrap: ${mode}`)
+    }, ctx.statusMessage("imageWrapSet", { mode }))
   }
 
   const moveFloatingImage = (
@@ -397,11 +398,11 @@ export function createEditorImage(
   ): void => {
     const located = locateImage(ctx.modelSnapshot.value, location)
     if (!located) {
-      unsupported("image move target is unavailable")
+      unsupported("imageMoveTargetUnavailable")
       return
     }
     if (located.image.floating?.lockedAnchor) {
-      unsupported("locked image anchor cannot be moved")
+      unsupported("lockedImageAnchorMove")
       return
     }
 
@@ -424,13 +425,13 @@ export function createEditorImage(
         located.image.heightPx ?? 80,
       )
     ) {
-      unsupported("image overlap is disabled for this anchor")
+      unsupported("imageOverlapDisabled")
       return
     }
 
     applyImageChange(location, ({ image }) => {
       image.floating = floating
-    }, "Moved image")
+    }, ctx.statusMessage("movedImage"))
   }
 
   const moveSectionFloatingImage = (
@@ -443,10 +444,10 @@ export function createEditorImage(
       patch,
     )
     if (next === ctx.modelSnapshot.value) {
-      unsupported("section image target is unavailable")
+      unsupported("sectionImageTargetUnavailable")
       return
     }
-    applyChange(() => next, "Moved section image")
+    applyChange(() => next, ctx.statusMessage("movedSectionImage"))
   }
 
   const moveParagraphDropCap = (
@@ -455,7 +456,7 @@ export function createEditorImage(
   ): void => {
     const paragraph = ctx.modelSnapshot.value.nodes[nodeIndex]
     if (paragraph?.type !== "paragraph" || !paragraph.style?.dropCap) {
-      unsupported("drop cap target is unavailable")
+      unsupported("dropCapTargetUnavailable")
       return
     }
     applyChange((current) => {
@@ -465,7 +466,7 @@ export function createEditorImage(
       target.style.dropCap = { ...target.style.dropCap, ...patch }
       target.sourceXml = undefined
       return next
-    }, "Moved drop cap")
+    }, ctx.statusMessage("movedDropCap"))
   }
 
   const setParagraphDropCapFontSizePt = (
@@ -476,7 +477,7 @@ export function createEditorImage(
       ? paragraph.children.find((child) => child.type === "text" && child.text.length > 0)
       : undefined
     if (!textRun || !Number.isFinite(fontSizePt) || fontSizePt <= 0) {
-      unsupported("drop cap font size target is unavailable")
+      unsupported("dropCapFontSizeTargetUnavailable")
       return
     }
     applyChange((current) => {
@@ -488,7 +489,7 @@ export function createEditorImage(
       firstText.style = { ...(firstText.style ?? {}), fontSizePt }
       target.sourceXml = undefined
       return next
-    }, `Set drop cap font size to ${fontSizePt}pt`)
+    }, ctx.statusMessage("dropCapFontSize", { size: fontSizePt }))
   }
 
   const setParagraphDropCapText = (
@@ -499,7 +500,7 @@ export function createEditorImage(
       ? paragraph.children.find((child) => child.type === "text" && child.text.length > 0)
       : undefined
     if (!textRun || text.length === 0) {
-      unsupported("drop cap text target is unavailable")
+      unsupported("dropCapTextTargetUnavailable")
       return
     }
     applyChange((current) => {
@@ -512,14 +513,14 @@ export function createEditorImage(
       firstText.text = text + characters.slice(1).join("")
       target.sourceXml = undefined
       return next
-    }, "Updated drop cap text")
+    }, ctx.statusMessage("updatedDropCapText"))
   }
 
   const moveImage = (
     source: DocxImageLocation, target: DocxImageDropTarget
   ): void => {
     if (!locateImage(ctx.modelSnapshot.value, source)) {
-      unsupported("image move source is unavailable")
+      unsupported("imageMoveSourceUnavailable")
       return
     }
     applyChange((current) => {
@@ -545,7 +546,7 @@ export function createEditorImage(
         }
       }
       if (!targetParagraph) {
-        unsupported("image move target is unavailable")
+        unsupported("imageMoveTargetUnavailable")
         return current
       }
 
@@ -565,7 +566,7 @@ export function createEditorImage(
       if (from.table) from.table.sourceXml = undefined
       if (targetTable) targetTable.sourceXml = undefined
       return next
-    }, "Moved image")
+    }, ctx.statusMessage("movedImage"))
   }
 
   return {

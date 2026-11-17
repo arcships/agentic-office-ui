@@ -33,8 +33,10 @@ function dataUrl(source) {
 }
 
 const selectionUrl = dataUrl(transpile("packages/vue-xlsx/src/composables/selection.ts"));
+const catalogUrl = dataUrl(transpile("packages/office-interaction/src/i18n.ts"));
 const validationSource = transpile("packages/vue-xlsx/src/composables/validation.ts")
-  .replace(/from\s+["']\.\/selection["']/g, `from ${JSON.stringify(selectionUrl)}`);
+  .replace(/from\s+["']\.\/selection["']/g, `from ${JSON.stringify(selectionUrl)}`)
+  .replace(/from\s+["']@arcships\/office-interaction["']/g, `from ${JSON.stringify(catalogUrl)}`);
 const validationUrl = dataUrl(validationSource);
 const selection = await import(selectionUrl);
 const validation = await import(validationUrl);

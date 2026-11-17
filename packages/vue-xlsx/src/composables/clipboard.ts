@@ -13,6 +13,7 @@ import { decodeHtmlEntities, escapeHtml, mapBorder, resolveEffectiveCellNumberFo
 import { DEFAULT_CELL_STYLE_PATCH, localizeFormattedNumber, resolveCellInput } from "./cell-input";
 import type { XlsxControllerContext } from "./internal";
 import { XlsxSourceError } from "@arcships/xlsx-core";
+import { officeMessagesEn } from "@arcships/office-interaction";
 import {
   parseClipboardText,
   serializeClipboardText,
@@ -35,7 +36,7 @@ function resolveClipboardWriteTargets(mimeType: string): ClipboardWriteTargets {
 function downloadBlob(blob: Blob, fileName: string) {
   const ownerDocument = globalThis.document;
   if (!ownerDocument?.body || typeof ownerDocument.createElement !== "function") {
-    throw new Error("Download failed: no document is available in this environment.");
+    throw new Error(officeMessagesEn.xlsx.clipboard.noDocument);
   }
   const anchor = ownerDocument.createElement("a");
   let objectUrl: string | undefined;
@@ -84,21 +85,21 @@ export function downloadUrl(src: string, fileName: string) {
   } catch {
     throw new XlsxSourceError({
       code: "SOURCE_NOT_ALLOWED",
-      message: "The download URL is invalid.",
+      message: officeMessagesEn.xlsx.clipboard.invalidUrl,
       sourceKind: "url",
     });
   }
   if (url.protocol !== "blob:") {
     throw new XlsxSourceError({
       code: "SOURCE_NOT_ALLOWED",
-      message: "Downloads must use a verified Blob URL.",
+      message: officeMessagesEn.xlsx.clipboard.unverifiedBlob,
       sourceKind: "url",
       url: url.href,
     });
   }
   const ownerDocument = globalThis.document;
   if (!ownerDocument?.body || typeof ownerDocument.createElement !== "function") {
-    throw new Error("Download failed: no document is available in this environment.");
+    throw new Error(officeMessagesEn.xlsx.clipboard.noDocument);
   }
   const anchor = ownerDocument.createElement("a");
   try {

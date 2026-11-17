@@ -270,6 +270,48 @@ test("TypeScript sources contain no hard-coded translatable copy", () => {
   }
 })
 
+test("TypeScript status and error assignments use catalog keys", () => {
+  function looksLikeCopy(value) {
+    if (/^[A-Z0-9_]+$/u.test(value)) return false
+    if (!/\s/u.test(value) && /^[A-Z][A-Za-z0-9]*$/u.test(value)) return false
+    if (!/[A-Za-z\u4e00-\u9fff]/u.test(value)) return false
+    return /\s/u.test(value) || /^[A-Z]/u.test(value) || /[\u4e00-\u9fff]/u.test(value)
+  }
+
+  const patterns = [
+    /\b(?:ctx\.)?status(?:\.value)?\s*=\s*(`[^`]*`|"[^"]*"|'[^']*')/gu,
+    /\bstatus\s*:\s*(`[^`]*`|"[^"]*"|'[^']*')/gu,
+    /\bmessage\s*:\s*(`[^`]*`|"[^"]*"|'[^']*')/gu,
+    /\b(?:refuse|unsupported)\(\s*("[^"]*"|'[^']*')/gu,
+  ]
+
+  for (const packageName of SCANNED_PACKAGES) {
+    for (const absolutePath of walk(path.join(ROOT, "packages", packageName, "src"))) {
+      if (!absolutePath.endsWith(".ts")) continue
+      const relativePath = path.relative(ROOT, absolutePath)
+      if (relativePath.endsWith("number-locale.ts")) continue
+      const source = readFileSync(absolutePath, "utf8")
+      for (const pattern of patterns) {
+        for (const match of source.matchAll(pattern)) {
+          const literal = stringLiterals(match[1])[0] ?? ""
+          assert.ok(
+            !looksLikeCopy(literal),
+            `${relativePath} hard-codes a status/message literal: ${JSON.stringify(literal)}`,
+          )
+        }
+      }
+    }
+  }
+
+  const pdfPolicy = read("packages/vue-pdf/src/pdf-url-policy.ts")
+  for (const literal of stringLiterals(pdfPolicy)) {
+    assert.ok(
+      !looksLikeCopy(literal),
+      `pdf-url-policy.ts hard-codes an error message: ${JSON.stringify(literal)}`,
+    )
+  }
+})
+
 test("templates only reference message keys that exist in the shared catalog", () => {
   for (const packageName of SCANNED_PACKAGES) {
     for (const absolutePath of walk(path.join(ROOT, "packages", packageName, "src"))) {
@@ -298,6 +340,10 @@ test("the previously hard-coded strings now resolve through the catalog", () => 
     ["vue-docx", "src/components/DocxNotesSection.vue", "脚注", "m.docx.notes.footnote"],
     ["vue-docx", "src/components/DocxTrackedChangeGutter.vue", "Hide comments", "m.docx.gutter.hideComments"],
     ["vue-docx", "src/components/DocxTrackedChangeGutter.vue", "Show comments", "m.docx.gutter.showComments"],
+    ["vue-docx", "src/composables/editor-image.ts", "Select an image file", "ctx.statusMessage(\"selectImageFile\")"],
+    ["vue-docx", "src/composables/editor-table.ts", "Cannot delete the only table row", "refuse(\"cannotDeleteOnlyTableRow\")"],
+    ["vue-docx", "src/composables/editor-format.ts", "Unsupported: diagonal paragraph borders", "ctx.statusMessage(\"unsupportedDiagonalParagraphBorders\""],
+    ["vue-pdf", "src/pdf-url-policy.ts", "The source is not a verified PDF file.", "messages.invalidPdf"],
     ["vue-pptx", "src/PptxViewer.vue", "上一页", "m.pptx.viewer.previousSlide"],
     ["vue-pptx", "src/PptxThumbnail.vue", "隐藏", "m.pptx.thumbnail.hidden"],
     ["vue-pdf", "src/components/PdfViewer.vue", "搜索 PDF 文本", "m.pdf.viewer.searchLabel"],
