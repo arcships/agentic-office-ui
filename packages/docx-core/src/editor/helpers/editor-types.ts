@@ -34,6 +34,12 @@ export type DocxEditorSelection =
       cellIndex: number;
       /** Runtime key for a cell in a nested table; absent for body tables. */
       tableRuntimeKey?: string;
+      /**
+       * Multi-cell rectangular selection inside this table. `rowIndex` and
+       * `cellIndex` point at the focus (active) cell; `cellRange` carries the
+       * anchor so merge/split and table commands can work on whole ranges.
+       */
+      cellRange?: DocxTableCellSelectionRange;
     };
 
 export interface DocxTableCellLocation {

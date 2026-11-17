@@ -67,6 +67,8 @@
             :data-docx-tracked-change="cellTrackedKind(cell.rowIndex, cell.cellIndex)"
             :data-docx-tracked-change-id="cellTrackedId(cell.rowIndex, cell.cellIndex)"
             :style="cellStyle(cell)"
+            @mousedown="onCellMouseDown(cell.rowIndex, cell.cellIndex, $event)"
+            @mouseenter="onCellMouseEnter(cell.rowIndex, cell.cellIndex, $event)"
             @click.stop="onCellClick(cell.rowIndex, cell.cellIndex, $event)"
           >
             <template v-if="!cell.continuationFallback">
@@ -148,6 +150,7 @@ import {
   type DocxDocumentTheme,
   type DocxEditorController,
   type DocxEditorSelection,
+  type DocxTableCellSelectionRange,
   type NumberingDefinitionSet,
   type ParagraphNode,
   type TableNode,
@@ -595,12 +598,35 @@ function isCellActive(rowIndex: number, cellIndex: number): boolean {
   if (!props.editable || !props.controller) return false
   const sel = props.controller.selection
   if (sel.kind === "table-cell") {
-    return sel.tableIndex === props.tableIndex &&
-      selectionRuntimeKey(sel) === props.tableRuntimeKey &&
-      sel.rowIndex === rowIndex &&
-      sel.cellIndex === cellIndex
+    if (
+      sel.tableIndex !== props.tableIndex ||
+      selectionRuntimeKey(sel) !== props.tableRuntimeKey
+    ) {
+      return false
+    }
+    if (sel.cellRange) {
+      return cellInsideRange(rowIndex, cellIndex, sel.cellRange)
+    }
+    return sel.rowIndex === rowIndex && sel.cellIndex === cellIndex
   }
   return false
+}
+
+function cellInsideRange(
+  rowIndex: number,
+  cellIndex: number,
+  range: DocxTableCellSelectionRange
+): boolean {
+  const minRow = Math.min(range.anchorRowIndex, range.focusRowIndex)
+  const maxRow = Math.max(range.anchorRowIndex, range.focusRowIndex)
+  const minCell = Math.min(range.anchorCellIndex, range.focusCellIndex)
+  const maxCell = Math.max(range.anchorCellIndex, range.focusCellIndex)
+  return (
+    rowIndex >= minRow &&
+    rowIndex <= maxRow &&
+    cellIndex >= minCell &&
+    cellIndex <= maxCell
+  )
 }
 
 function nestedTableRuntimeKey(
@@ -634,7 +660,99 @@ function selectCell(rowIndex: number, cellIndex: number): void {
 // ── Event handlers ─────────────────────────────────────────────────
 function onCellClick(rowIndex: number, cellIndex: number, _event: MouseEvent): void {
   if (!props.editable || !props.controller || isReadOnly.value) return
+  const sel = props.controller.selection
+  if (
+    sel.kind === "table-cell" &&
+    sel.tableIndex === props.tableIndex &&
+    selectionRuntimeKey(sel) === props.tableRuntimeKey &&
+    sel.cellRange &&
+    selectionRangeHasMultipleCells(sel.cellRange) &&
+    cellInsideRange(rowIndex, cellIndex, sel.cellRange)
+  ) {
+    return
+  }
   selectCell(rowIndex, cellIndex)
+}
+
+function selectionRangeHasMultipleCells(range: DocxTableCellSelectionRange): boolean {
+  return (
+    range.anchorRowIndex !== range.focusRowIndex ||
+    range.anchorCellIndex !== range.focusCellIndex
+  )
+}
+
+const rangeAnchor = ref<{ rowIndex: number; cellIndex: number } | null>(null)
+const isRangeSelecting = ref(false)
+let activeRangeMouseUp: (() => void) | undefined
+
+function selectCellRange(
+  anchor: { rowIndex: number; cellIndex: number },
+  focus: { rowIndex: number; cellIndex: number }
+): void {
+  if (!props.controller) return
+  props.controller.selectTableCellRange(props.tableIndex, {
+    tableIndex: props.tableIndex,
+    anchorRowIndex: anchor.rowIndex,
+    anchorCellIndex: anchor.cellIndex,
+    focusRowIndex: focus.rowIndex,
+    focusCellIndex: focus.cellIndex,
+  }, props.tableRuntimeKey)
+}
+
+function finishRangeSelection(): void {
+  isRangeSelecting.value = false
+  rangeAnchor.value = null
+  if (activeRangeMouseUp) {
+    document.removeEventListener("mouseup", activeRangeMouseUp)
+    activeRangeMouseUp = undefined
+  }
+}
+
+function onCellMouseDown(
+  rowIndex: number,
+  cellIndex: number,
+  event: MouseEvent
+): void {
+  if (!props.editable || !props.controller || isReadOnly.value) return
+  if (props.tableRuntimeKey) return
+  if (event.button !== 0) return
+  const target = event.target as HTMLElement | undefined
+  const insideEditable = target?.closest?.("[contenteditable='true']")
+  if (insideEditable && !event.shiftKey) return
+
+  const selection = props.controller.selection
+  const currentRange =
+    selection.kind === "table-cell" &&
+    selection.tableIndex === props.tableIndex &&
+    selectionRuntimeKey(selection) === props.tableRuntimeKey
+      ? selection.cellRange
+      : undefined
+  const anchor = event.shiftKey && currentRange
+    ? { rowIndex: currentRange.anchorRowIndex, cellIndex: currentRange.anchorCellIndex }
+    : { rowIndex, cellIndex }
+
+  event.preventDefault()
+  rangeAnchor.value = anchor
+  isRangeSelecting.value = true
+  selectCellRange(anchor, { rowIndex, cellIndex })
+
+  if (!activeRangeMouseUp) {
+    activeRangeMouseUp = () => finishRangeSelection()
+    document.addEventListener("mouseup", activeRangeMouseUp)
+  }
+}
+
+function onCellMouseEnter(
+  rowIndex: number,
+  cellIndex: number,
+  event: MouseEvent
+): void {
+  if (!isRangeSelecting.value || !rangeAnchor.value) return
+  if (event.buttons === 0) {
+    finishRangeSelection()
+    return
+  }
+  selectCellRange(rangeAnchor.value, { rowIndex, cellIndex })
 }
 
 function onCellInput(
@@ -779,6 +897,7 @@ onBeforeUnmount(() => {
 onUnmounted(() => {
   unregisterDraftFlusher?.()
   unregisterDraftFlusher = undefined
+  finishRangeSelection()
   cleanupColumnResize(false)
 })
 </script>

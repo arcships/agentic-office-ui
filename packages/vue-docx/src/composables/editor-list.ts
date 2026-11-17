@@ -5,7 +5,9 @@
 import type { DocModel, ParagraphNode } from "@arcships/docx-core"
 import type { DocxListType } from "@arcships/docx-core"
 import {
-  cloneDocModel,
+  cloneDocModelShallow,
+  cloneDocNode,
+  cloneNumberingDefinitions,
   ensureListNumberingId,
   getParagraphAtLocation,
   paragraphListType,
@@ -23,6 +25,29 @@ export function createEditorList(
     options?: ApplyModelChangeOptions
   ) => void,
 ) {
+  const cloneModelForListEdit = (
+    current: DocModel,
+    locations: ReturnType<typeof selectedParagraphLocations>
+  ): DocModel => {
+    const nextModel = cloneDocModelShallow(current)
+    const touched = new Set<number>()
+    for (const location of locations) {
+      touched.add(
+        location.kind === "paragraph"
+          ? location.nodeIndex
+          : location.tableIndex
+      )
+    }
+    for (const nodeIndex of touched) {
+      const node = current.nodes[nodeIndex]
+      if (node) nextModel.nodes[nodeIndex] = cloneDocNode(node)
+    }
+    nextModel.metadata.numberingDefinitions = cloneNumberingDefinitions(
+      current.metadata.numberingDefinitions
+    )
+    return nextModel
+  }
+
   const toggleList = (listType: DocxListType): void => {
     applyChange((current) => {
       const locations = selectedParagraphLocations(
@@ -30,7 +55,7 @@ export function createEditorList(
         ctx.selectionSnapshot.value,
         ctx.activeTextRangeSnapshot.value
       )
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForListEdit(current, locations)
       const paragraphs: ParagraphNode[] = []
       for (const location of locations) {
         const { paragraph } = getParagraphAtLocation(nextModel, location)
@@ -88,7 +113,7 @@ export function createEditorList(
     }
 
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneModelForListEdit(current, [loc])
       const nextPara = getParagraphAtLocation(nextModel, loc).paragraph
       if (!nextPara?.style?.numbering) return current
       nextPara.style.numbering = { ...nextPara.style.numbering, ilvl: nextIlvl }

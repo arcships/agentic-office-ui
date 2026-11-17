@@ -339,6 +339,8 @@ export const DEFAULT_TABLE_CONTEXT_MENU_ACTIONS: DocxTableContextMenuAction[] = 
   { id: "insert-column-right", label: "Insert column right" },
   { id: "delete-row", label: "Delete row", destructive: true },
   { id: "delete-column", label: "Delete column", destructive: true },
+  { id: "merge-cells", label: "Merge cells" },
+  { id: "split-cell", label: "Split cell" },
   { id: "delete-table", label: "Delete table", destructive: true },
 ];
 
