@@ -206,6 +206,8 @@ const displayHtml = computed(() => {
     renderWrappedFloatingImages: props.editable,
     noteMarkerLabels: props.noteMarkerLabels,
     skipImageChildIndexes: props.skipImageChildIndexes,
+    imageAltText: m.value.docx.image.alt,
+    imageMissingText: m.value.docx.image.missing,
   }
 
   const vnodes = renderParagraphRuns(

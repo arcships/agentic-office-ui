@@ -17,6 +17,8 @@ export type ChartLabels = {
   other: string;
   /** Template with a `{number}` placeholder. */
   seriesName: string;
+  /** Template with a `{number}` placeholder. */
+  surfaceSeries: string;
 };
 
 export type ChartSvgProps = {

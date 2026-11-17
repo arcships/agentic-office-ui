@@ -35,6 +35,7 @@
             unsupportedType: m.xlsx.chart.unsupportedType,
             other: m.xlsx.chart.other,
             seriesName: m.xlsx.chart.seriesName,
+            surfaceSeries: m.xlsx.chart.surfaceSeries,
           }"
           :rect="item.rect"
           :palette="chartPalette"

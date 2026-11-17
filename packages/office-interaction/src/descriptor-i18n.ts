@@ -24,7 +24,35 @@ export function localizeOfficeDescriptorLabel(
   if (text === "Workbook") return descriptors.workbook
   if (text === "Presentation") return descriptors.presentation
   if (text === "Image") return descriptors.image
+  if (text === "Chart") return descriptors.chart
+  if (text === "Comment") return descriptors.comment
+  if (text === "Group") return descriptors.group
+  if (text === "Object") return descriptors.object
+  if (text === "Shape") return descriptors.shape
+  if (text === "Text box") return descriptors.textBox
   if (text === "PDF") return descriptors.pdf
+  if (text.startsWith("Comment by ")) {
+    return formatOfficeMessage(descriptors.commentBy, { author: text.slice(11) })
+  }
+  if (text.startsWith("Comment: ")) {
+    return formatOfficeMessage(descriptors.commentText, { text: text.slice(9) })
+  }
+  if (text.startsWith("Image: ")) {
+    return formatOfficeMessage(descriptors.imageText, { text: text.slice(7) })
+  }
+  if (text.startsWith("Chart ")) {
+    return formatOfficeMessage(descriptors.chartName, { name: text.slice(6) })
+  }
+  const comment = numberAfter(text, "Comment")
+  if (comment !== undefined) return formatOfficeMessage(descriptors.commentById, { id: comment })
+  const group = numberAfter(text, "Group")
+  if (group !== undefined) return formatOfficeMessage(descriptors.group, { number: group })
+  const shape = /^Shape\s+(.+)$/u.exec(text)
+  if (shape) return formatOfficeMessage(descriptors.shape, { id: shape[1] })
+  const object = /^Object\s+(.+)$/u.exec(text)
+  if (object) return formatOfficeMessage(descriptors.object, { id: object[1] })
+  const textBox = /^Text box\s+(.+)$/u.exec(text)
+  if (textBox) return formatOfficeMessage(descriptors.textBox, { id: textBox[1] })
   if (text === "Selected text") return messages.selectedText
   if (text === "Selected region") return descriptors.selectedRegion
   if (text === "Text range") return descriptors.textRange
@@ -49,6 +77,8 @@ export function localizeOfficeDescriptorLabel(
   if (column) return formatOfficeMessage(descriptors.column, { column: column[1] })
   const regionPage = numberAfter(text, "Region on page")
   if (regionPage !== undefined) return formatOfficeMessage(descriptors.regionOnPage, { number: regionPage })
+  const regionSlide = numberAfter(text, "Region on slide")
+  if (regionSlide !== undefined) return formatOfficeMessage(descriptors.regionOnSlide, { number: regionSlide })
   if (text.startsWith("Region on ")) {
     return formatOfficeMessage(descriptors.regionOnSheet, { name: text.slice(10) })
   }

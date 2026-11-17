@@ -96,6 +96,28 @@ export interface OfficeCommonMessages {
     regionOnPage: string
     /** Template with a `{name}` placeholder. */
     regionOnSheet: string
+    /** Template with a `{number}` placeholder. */
+    regionOnSlide: string
+    comment: string
+    /** Template with a `{id}` placeholder. */
+    commentById: string
+    /** Template with a `{author}` placeholder. */
+    commentBy: string
+    /** Template with a `{text}` placeholder. */
+    commentText: string
+    chart: string
+    /** Template with a `{name}` placeholder. */
+    chartName: string
+    /** Template with a `{number}` placeholder. */
+    group: string
+    /** Template with a `{id}` placeholder. */
+    shape: string
+    /** Template with a `{id}` placeholder. */
+    object: string
+    /** Template with a `{id}` placeholder. */
+    textBox: string
+    /** Template with a `{text}` placeholder. */
+    imageText: string
     /** Template with a `{text}` placeholder. */
     textLabel: string
   }
@@ -380,6 +402,8 @@ export interface OfficeDocxMessages {
     behindTitle: string
     frontTitle: string
     alt: string
+    /** Text shown for an image node without a source. */
+    missing: string
     wrapInline: string
     wrapSquare: string
     wrapTight: string
@@ -513,6 +537,7 @@ export interface OfficeXlsxMessages {
     next: string
     add: string
     remove: string
+    defaultName: string
   }
   contextMenu: {
     label: string
@@ -540,6 +565,8 @@ export interface OfficeXlsxMessages {
     other: string
     /** Template with a `{number}` placeholder. */
     seriesName: string
+    /** Template with a `{number}` placeholder. */
+    surfaceSeries: string
     root: string
   }
   image: {
@@ -889,6 +916,18 @@ export const officeMessagesEn: OfficeMessages = {
       selectedRegion: "Selected region",
       regionOnPage: "Region on page {number}",
       regionOnSheet: "Region on {name}",
+      regionOnSlide: "Region on slide {number}",
+      comment: "Comment",
+      commentById: "Comment {id}",
+      commentBy: "Comment by {author}",
+      commentText: "Comment: {text}",
+      chart: "Chart",
+      chartName: "Chart {name}",
+      group: "Group {number}",
+      shape: "Shape {id}",
+      object: "Object {id}",
+      textBox: "Text box {id}",
+      imageText: "Image: {text}",
       textLabel: "Text: {text}",
     },
   },
@@ -1145,6 +1184,7 @@ export const officeMessagesEn: OfficeMessages = {
       behindTitle: "Behind text",
       frontTitle: "In front of text",
       alt: "Image",
+      missing: "Missing image",
       wrapInline: "In Line with Text",
       wrapSquare: "Square",
       wrapTight: "Tight",
@@ -1273,6 +1313,7 @@ export const officeMessagesEn: OfficeMessages = {
       next: "Next sheet",
       add: "Add sheet",
       remove: "Delete sheet",
+      defaultName: "Sheet",
     },
     contextMenu: {
       label: "Cell menu",
@@ -1298,6 +1339,7 @@ export const officeMessagesEn: OfficeMessages = {
       unsupportedType: "Unsupported chart type: {type}",
       other: "Other",
       seriesName: "Series {number}",
+      surfaceSeries: "Q{number}",
       root: "Root",
     },
     image: {
@@ -1602,6 +1644,18 @@ export const officeMessagesZhCN: OfficeMessages = {
       selectedRegion: "选定区域",
       regionOnPage: "第 {number} 页上的区域",
       regionOnSheet: "{name} 上的区域",
+      regionOnSlide: "第 {number} 张幻灯片上的区域",
+      comment: "批注",
+      commentById: "批注 {id}",
+      commentBy: "{author} 的批注",
+      commentText: "批注：{text}",
+      chart: "图表",
+      chartName: "图表 {name}",
+      group: "组 {number}",
+      shape: "形状 {id}",
+      object: "对象 {id}",
+      textBox: "文本框 {id}",
+      imageText: "图片：{text}",
       textLabel: "文本：{text}",
     },
   },
@@ -1857,6 +1911,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       behindTitle: "衬于文字下方",
       frontTitle: "浮于文字上方",
       alt: "图片",
+      missing: "图片缺失",
       wrapInline: "嵌入文字",
       wrapSquare: "四周环绕",
       wrapTight: "紧密环绕",
@@ -1985,6 +2040,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       next: "下一个工作表",
       add: "添加工作表",
       remove: "删除当前工作表",
+      defaultName: "工作表",
     },
     contextMenu: {
       label: "单元格菜单",
@@ -2010,6 +2066,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       unsupportedType: "不支持的图表类型：{type}",
       other: "其他",
       seriesName: "系列 {number}",
+      surfaceSeries: "第 {number} 季度",
       root: "根节点",
     },
     image: {

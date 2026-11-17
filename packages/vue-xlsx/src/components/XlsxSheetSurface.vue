@@ -621,8 +621,11 @@ defineExpose({
   },
   async resolveReference(reference: OfficeObjectReference): Promise<ResolveReferenceResult> {
     const result = resolveXlsxReference(referenceContext(), reference)
-    emit("referenceResolve", { referenceId: reference.referenceId, result })
-    return result
+    const localized = result.status === "exact" || result.status === "relocated"
+      ? { ...result, descriptor: localizeOfficeObjectDescriptor(result.descriptor, m.value.common) }
+      : result
+    emit("referenceResolve", { referenceId: reference.referenceId, result: localized })
+    return localized
   },
   async scrollToReference(reference: OfficeObjectReference): Promise<void> {
     const result = resolveXlsxReference(referenceContext(), reference)

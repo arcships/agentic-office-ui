@@ -38,6 +38,9 @@ export interface ImageRunRenderExtra {
   imageFilterSuffix?: string
   /** Reports a browser decode failure without exposing document bytes. */
   onImageDecodeError?: (error: DocxImageDecodeError) => void
+  /** Localized alt text and missing-source fallback. */
+  imageAltText?: string
+  imageMissingText?: string
 
   // Section image interaction callbacks
   sectionImageInteraction?: ImageInteraction | undefined
@@ -109,6 +112,8 @@ export interface ImageRunRenderResult {
  */
 export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult {
   const { child, paragraph, key, childIndex, extra } = ctx
+  const imageAltText = extra?.imageAltText ?? officeMessagesEn.docx.image.alt
+  const imageMissingText = extra?.imageMissingText ?? officeMessagesEn.docx.image.missing
 
   const behavesAsDecorativeBehindTextBackground =
     imageBehavesAsDecorativeBehindTextBackground(child, paragraph)
@@ -322,7 +327,7 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
           onPointerdown: onSectionImagePointerDown,
           onClick: onSectionImageClick,
         },
-        "Missing image"
+        imageMissingText
       ),
       isWrappedFloating: isWrappedFloatingImage,
       isAbsoluteFloating: isAbsoluteFloatingImage,
@@ -343,7 +348,7 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
           key,
           ...imageLayoutAttributes,
           role: "img",
-          "aria-label": child.alt ?? officeMessagesEn.docx.image.alt,
+          "aria-label": child.alt ?? imageAltText,
           style: buildPlaceholderStyle(
             frameWidthPx,
             frameHeightPx,
@@ -418,7 +423,7 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
   if (cropLayout) {
     const cropImageVNode = h("img", {
       src: renderableImageSrc,
-      alt: child.alt ?? officeMessagesEn.docx.image.alt,
+      alt: child.alt ?? imageAltText,
       draggable: false,
       loading: "lazy",
       decoding: "async",
@@ -523,7 +528,7 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
         [
           h("img", {
             src: renderableImageSrc,
-            alt: child.alt ?? officeMessagesEn.docx.image.alt,
+            alt: child.alt ?? imageAltText,
             draggable: false,
             loading: "lazy",
             decoding: "async",
@@ -553,7 +558,7 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
       key,
       ...imageLayoutAttributes,
       src: renderableImageSrc,
-      alt: child.alt ?? officeMessagesEn.docx.image.alt,
+      alt: child.alt ?? imageAltText,
       draggable: false,
       loading: "lazy",
       decoding: "async",

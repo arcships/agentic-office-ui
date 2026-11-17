@@ -95,6 +95,9 @@ export interface ParagraphRunRenderOptions {
   noteMarkerLabels?: NoteMarkerLabels
   /** Child indexes rendered by another surface layer (for example a page cover). */
   skipImageChildIndexes?: readonly number[]
+  /** Localized alt text and missing-source fallback for images. */
+  imageAltText?: string
+  imageMissingText?: string
 }
 
 export interface NoteMarkerLabels {
@@ -609,6 +612,8 @@ export function renderParagraphRuns(
       tableCellLayout: options?.tableCellLayout,
       extra: {
         imageFilterSuffix: options?.imageFilterSuffix,
+        imageAltText: options?.imageAltText,
+        imageMissingText: options?.imageMissingText,
         onImageDecodeError: options?.onImageDecodeError,
         sectionImageInteraction: options?.sectionImageInteraction as ImageRunRenderExtra["sectionImageInteraction"],
       },

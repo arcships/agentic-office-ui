@@ -299,6 +299,7 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
       unsupportedType: officeMessagesEn.xlsx.chart.unsupportedType,
       other: officeMessagesEn.xlsx.chart.other,
       seriesName: officeMessagesEn.xlsx.chart.seriesName,
+      surfaceSeries: officeMessagesEn.xlsx.chart.surfaceSeries,
     });
     const renderContent = (): VNode => {
       const { chart, onChartElementDoubleClick, onChartElementPointerDown, palette, rect, selectedChartElement } = props;
@@ -351,7 +352,7 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
             overlay={
               <>
                 {renderSurfaceHitOverlay(chart, layout, selectedChartElement)}
-                {renderSurfaceAxes(chart, layout)}
+                {renderSurfaceAxes(chart, layout, labels.value)}
                 {renderTitle(chart, layout, palette)}
                 {renderLegend(chart, layout, palette)}
               </>
