@@ -67,6 +67,7 @@ export { default as XlsxChartOverlay } from "./components/XlsxChartOverlay.vue"
 /** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxImageLayer } from "./components/XlsxImageLayer.vue"
 /** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
+/** @deprecated Internal overlay layer; compose XlsxSheetSurface instead. */
 export { default as XlsxDrawingLayer } from "./components/XlsxDrawingLayer.vue"
 /** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxSelectionOverlay } from "./components/XlsxSelectionOverlay.vue"
