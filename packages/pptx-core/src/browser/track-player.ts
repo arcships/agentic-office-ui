@@ -248,6 +248,15 @@ export function capturePptxStaticState(
   }
   for (const [target, elements] of index.elements) {
     if (!elements.length) continue
+    const paragraphRange = /#paragraph:(\d+)-(\d+)$/u.exec(target)
+    if (paragraphRange && paragraphRange[1] !== paragraphRange[2]) {
+      // A combined range is a lookup key for range effects; its static state is
+      // the leaf paragraphs' state. Keep capturing element baselines, but do not
+      // replay a representative leaf state that would undo leaf-level hiding.
+      for (const element of elements) stateFor(element)
+      result[target] = Object.freeze({})
+      continue
+    }
     for (const element of elements) stateFor(element)
     // Duplicate keys share one state; the first rendered element settles it.
     result[target] = stateFor(elements[0])

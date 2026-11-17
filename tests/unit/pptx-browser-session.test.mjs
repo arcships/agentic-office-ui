@@ -254,6 +254,7 @@ globalThis.XMLSerializer = XMLSerializer;
 
 const {
   createPptxDocumentSession,
+  createPptxPlaybackController,
 } = await importFromDemo("@arcships/pptx-core/browser");
 
 const NS_P = "http://schemas.openxmlformats.org/presentationml/2006/main";
@@ -373,6 +374,99 @@ test("search results from a previous document cannot highlight the next one", as
     assert.equal(root.querySelectorAll("[data-pptx-search-highlight]").length, 0);
   } finally {
     session.dispose();
+  }
+});
+
+test("paragraph entrance state is not undone by combined range targets", () => {
+  const root = new FakeElement("div");
+  const shape = new FakeElement("div");
+  shape.dataset.pptxObjectKey = "shape:1";
+  root.appendChild(shape);
+  const paragraphs = [0, 1, 2].map((index) => {
+    const paragraph = new FakeElement("div");
+    paragraph.dataset.pptxParagraphIndex = String(index);
+    shape.appendChild(paragraph);
+    return paragraph;
+  });
+  const nodes = {
+    root: {
+      acceleration: 0,
+      autoReverse: false,
+      childIds: ["effect-1"],
+      conditions: [],
+      container: "root",
+      deceleration: 0,
+      delayMs: 0,
+      durationMs: 0,
+      fill: "hold",
+      id: "root",
+      kind: "group",
+      restart: "never",
+    },
+    "effect-1": {
+      acceleration: 0,
+      autoReverse: false,
+      childIds: [],
+      conditions: [{ delayMs: 0, event: "after-previous", source: "start" }],
+      container: "behavior",
+      deceleration: 0,
+      delayMs: 0,
+      durationMs: 0,
+      effect: {
+        id: "animation-1",
+        kind: "fade-in",
+        paragraphRange: { end: 0, start: 0 },
+        presetClass: "entr",
+        targetObjectKey: "shape:1",
+        values: {},
+      },
+      fill: "hold",
+      id: "effect-1",
+      kind: "effect",
+      restart: "never",
+    },
+  };
+  const controller = createPptxPlaybackController({
+    document: {
+      capability: {
+        approximate: 0,
+        discovered: 0,
+        features: [],
+        static: 0,
+        strict: 0,
+        unparsed: 0,
+      },
+      slides: [{
+        actions: [],
+        capability: {
+          approximate: 0,
+          discovered: 0,
+          features: [],
+          static: 0,
+          strict: 0,
+          unparsed: 0,
+        },
+        hidden: false,
+        index: 0,
+        media: [],
+        morphFromPrevious: [],
+        nodes,
+        objects: [],
+        rootNodeId: "root",
+      }],
+    },
+    initialSlideIndex: 0,
+    renderSlide: async () => {},
+    root,
+  }, { autoplay: false });
+
+  try {
+    assert.deepEqual(
+      paragraphs.map((paragraph) => paragraph.style.visibility),
+      ["hidden", "visible", "visible"],
+    );
+  } finally {
+    controller.dispose();
   }
 });
 
