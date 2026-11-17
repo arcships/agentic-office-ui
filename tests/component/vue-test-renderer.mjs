@@ -36,6 +36,10 @@ function createHostNode(type, text = "") {
     dispatchEvent(event) {
       listeners.get(event.type)?.(event);
     },
+    // Focus APIs used by components that move focus after keyboard commits.
+    focus() {},
+    blur() {},
+    select() {},
   };
 }
 
