@@ -481,6 +481,7 @@ export interface OfficePdfMessages {
     searchResult: string
     renderFailed: string
     invalidPdf: string
+    selectionLayer: string
   }
   surface: {
     noPdf: string
@@ -944,6 +945,7 @@ export const officeMessagesEn: OfficeMessages = {
       searchResult: "Result {current} / {total}, page {page}",
       renderFailed: "The PDF page could not be rendered.",
       invalidPdf: "The PDF file could not be parsed or rendered.",
+      selectionLayer: "PDF page text selection layer",
     },
     surface: {
       noPdf: "No PDF loaded",
@@ -1386,6 +1388,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       searchResult: "第 {current} / {total} 项，第 {page} 页",
       renderFailed: "PDF 页面渲染失败。",
       invalidPdf: "PDF 文件无法解析或渲染。",
+      selectionLayer: "PDF 页面文本选择层",
     },
     surface: {
       noPdf: "未加载 PDF",

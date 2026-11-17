@@ -1201,7 +1201,7 @@ defineExpose({
             <div
               class="pdf-viewer__selection-layer"
               data-testid="pdf-selection-layer"
-              aria-label="PDF page text selection layer"
+              :aria-label="m.pdf.viewer.selectionLayer"
               @pointerdown="onSelectionPointerDown"
               @pointermove="onSelectionPointerMove"
               @pointerup="onSelectionPointerUp"
