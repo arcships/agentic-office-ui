@@ -442,3 +442,182 @@ test("DOCX Worker timeout is structured and terminates the blocked Worker", asyn
     runtime.dispose();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Comment collection (issue #30)
+// ---------------------------------------------------------------------------
+
+function commentParagraph(text, sourceXml, extra = {}) {
+  return {
+    type: "paragraph",
+    children: [{ type: "text", text }],
+    sourceXml,
+    ...extra,
+  };
+}
+
+function commentRangeXml(text, commentId) {
+  return `<w:p><w:commentRangeStart w:id="${commentId}"/><w:r><w:t>${text}</w:t></w:r><w:commentRangeEnd w:id="${commentId}"/><w:r><w:commentReference w:id="${commentId}"/></w:r></w:p>`;
+}
+
+function commentModel({
+  nodes,
+  comments,
+  headerSections = [],
+  footerSections = [],
+  sections = undefined,
+}) {
+  return {
+    nodes,
+    metadata: {
+      sourceParts: 1,
+      warnings: [],
+      headerSections,
+      footerSections,
+      paragraphStyles: [],
+      sections,
+      comments,
+    },
+  };
+}
+
+function commentByIdMap(comments) {
+  return new Map(comments.map((comment) => [comment.commentId, comment]));
+}
+
+test("DOCX comment collection includes threaded replies and keeps one anchor per thread", () => {
+  const model = commentModel({
+    nodes: [commentParagraph("Quarterly revenue", commentRangeXml("Quarterly revenue", 0))],
+    comments: [
+      { id: 0, author: "Priya", text: "Please confirm the revenue figure." },
+      { id: 1, author: "Sam", text: "Confirmed against the ledger.", parentId: 0 },
+      { id: 2, author: "Priya", text: "Thanks!", parentId: 0 },
+    ],
+  });
+
+  const comments = core.collectCommentsFromModel(model);
+  assert.deepEqual(comments.map((comment) => comment.commentId), [0, 1, 2]);
+  assert.deepEqual(comments.map((comment) => comment.parentId), [undefined, 0, 0]);
+  for (const comment of comments) {
+    assert.deepEqual(comment.location, { kind: "paragraph", nodeIndex: 0 });
+    assert.equal(comment.anchorText, "Quarterly revenue");
+  }
+});
+
+test("DOCX comment collection includes header and footer comments with a region tag", () => {
+  const headerParagraph = commentParagraph(
+    "Acme Corp",
+    commentRangeXml("Acme Corp", 7),
+  );
+  const footerParagraph = commentParagraph(
+    "Confidential",
+    commentRangeXml("Confidential", 8),
+  );
+  const model = commentModel({
+    nodes: [commentParagraph("Body", undefined)],
+    comments: [
+      { id: 7, author: "Priya", text: "Header note" },
+      { id: 8, author: "Sam", text: "Footer note" },
+    ],
+    headerSections: [{ partName: "word/header1.xml", nodes: [headerParagraph] }],
+    footerSections: [{ partName: "word/footer1.xml", nodes: [footerParagraph] }],
+  });
+
+  const comments = core.collectCommentsFromModel(model);
+  assert.equal(comments.length, 2);
+  const header = comments.find((comment) => comment.commentId === 7);
+  const footer = comments.find((comment) => comment.commentId === 8);
+  assert.equal(header?.region, "header");
+  assert.equal(header?.partName, "word/header1.xml");
+  assert.equal(header?.anchorText, "Acme Corp");
+  assert.equal(footer?.region, "footer");
+  assert.equal(footer?.partName, "word/footer1.xml");
+  assert.equal(footer?.anchorText, "Confidential");
+});
+
+test("DOCX comment collection survives edits that clear paragraph sourceXml", () => {
+  const model = commentModel({
+    nodes: [commentParagraph("Quarterly revenue", commentRangeXml("Quarterly revenue", 0))],
+    comments: [{ id: 0, author: "Priya", text: "Please confirm." }],
+  });
+  assert.equal(core.collectCommentsFromModel(model).length, 1);
+
+  const edited = core.updateParagraphText(model, 0, "Revised revenue summary");
+  assert.equal(edited.nodes[0].sourceXml, undefined);
+
+  const comments = core.collectCommentsFromModel(edited);
+  assert.equal(comments.length, 1);
+  assert.deepEqual(comments[0].location, { kind: "paragraph", nodeIndex: 0 });
+  assert.equal(comments[0].anchorText, "Quarterly revenue");
+});
+
+test("DOCX table comments use non-negative paragraph indexes and stay on the anchored row's page", () => {
+  const nestedTable = {
+    type: "table",
+    rows: [
+      {
+        type: "table-row",
+        cells: [
+          {
+            type: "table-cell",
+            nodes: [
+              commentParagraph(
+                "Nested comment",
+                commentRangeXml("Nested comment", 4),
+              ),
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const model = commentModel({
+    nodes: [
+      {
+        type: "table",
+        rows: [
+          { type: "table-row", cells: [{ type: "table-cell", nodes: [commentParagraph("Top", undefined)] }] },
+          {
+            type: "table-row",
+            cells: [
+              {
+                type: "table-cell",
+                nodes: [commentParagraph("Direct", undefined), nestedTable],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    comments: [{ id: 4, author: "Priya", text: "Nested table note" }],
+  });
+
+  const comments = core.collectCommentsFromModel(model);
+  assert.equal(comments.length, 1);
+  assert.equal(comments[0].location.kind, "table-cell");
+  assert.equal(comments[0].location.rowIndex, 1);
+  assert.ok(comments[0].location.paragraphIndex >= 0);
+  assert.equal(comments[0].anchorText, "Nested comment");
+
+  const resolved = core.getParagraphAtLocation(model, comments[0].location);
+  assert.equal(core.paragraphText(resolved.paragraph), "Nested comment");
+
+  const firstPage = [{ nodeIndex: 0, tableRowRange: { startRowIndex: 0, endRowIndex: 1 } }];
+  const secondPage = [{ nodeIndex: 0, tableRowRange: { startRowIndex: 1, endRowIndex: 2 } }];
+  assert.equal(core.trackedChangeBelongsToPageSegments(comments[0].location, firstPage), false);
+  assert.equal(core.trackedChangeBelongsToPageSegments(comments[0].location, secondPage), true);
+});
+
+test("DOCX resolved comment threads are detected for replies", () => {
+  const model = commentModel({
+    nodes: [commentParagraph("Quarterly revenue", commentRangeXml("Quarterly revenue", 0))],
+    comments: [
+      { id: 0, author: "Priya", text: "Please confirm.", resolved: true },
+      { id: 1, author: "Sam", text: "Confirmed.", parentId: 0 },
+    ],
+  });
+  const comments = core.collectCommentsFromModel(model);
+  const byId = commentByIdMap(comments);
+  assert.equal(core.commentThreadIsResolved(byId.get(0), byId), true);
+  assert.equal(core.commentThreadIsResolved(byId.get(1), byId), true);
+});

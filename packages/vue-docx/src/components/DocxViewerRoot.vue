@@ -71,6 +71,7 @@ import {
   parseSectionLayout,
   parseSectionPageNumberFormat,
   parseSectionPageNumberStartOverride,
+  primeCommentAnchors,
   resolveDocumentSectionsFromMetadata,
   resolveDocumentLayout,
   resolveSectionIndexForNodeIndex,
@@ -337,6 +338,10 @@ const trackedChanges = computed<readonly DocxTrackedChange[]>(() =>
 const comments = computed<readonly DocxComment[]>(() =>
   props.controller?.comments ?? (commentsEnabled.value ? collectCommentsFromModel(props.model) : [])
 )
+
+// Capture comment anchors before any edit clears paragraph sourceXml, even
+// while the comments gutter is hidden.
+watch(() => props.model, (model) => primeCommentAnchors(model), { immediate: true })
 
 function notesForPage(pageIndex: number, kind: "footnote" | "endnote"): DocumentNoteDefinition[] {
   const definitions = kind === "footnote"

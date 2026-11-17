@@ -25,7 +25,11 @@ import {
   compareTextRangeBoundaries,
   normalizeTextRange
 } from "./editor-types";
-import { paragraphText, tableCellParagraphs } from "./paragraph-inspect";
+import {
+  paragraphText,
+  tableCellParagraphAt,
+  tableCellParagraphs,
+} from "./paragraph-inspect";
 import { clampNumber } from "./zoom-utils";
 
 export function sameParagraphLocation(
@@ -464,7 +468,10 @@ export function getParagraphAtLocation(
     return {};
   }
 
-  const paragraph = tableCellParagraphs(cell.nodes)[location.paragraphIndex];
+  const paragraph = tableCellParagraphAt(
+    cell.nodes,
+    location.paragraphIndex
+  );
   if (!paragraph) {
     return {};
   }

@@ -394,6 +394,29 @@ export interface DocumentNoteDefinition {
   nodes?: DocNode[];
 }
 
+export interface DocumentCommentAnchor {
+  /** Region that owns the anchored paragraph. */
+  region: "body" | "header" | "footer";
+  /** OOXML part name for header/footer anchors (e.g. `word/header1.xml`). */
+  partName?: string;
+  /** Index into `model.nodes` (body) or the section's `nodes` array. */
+  nodeIndex: number;
+  /** Row index when the anchor is inside a table cell. */
+  rowIndex?: number;
+  /** Cell index when the anchor is inside a table cell. */
+  cellIndex?: number;
+  /** Paragraph index within the cell, counting nested-table paragraphs. */
+  paragraphIndex?: number;
+  /** UTF-16 offset of the anchor within the paragraph's plain text. */
+  textOffset?: number;
+  /** Index among the paragraph's visible text runs. */
+  runIndex?: number;
+  /** Offset within the anchored text run. */
+  offset?: number;
+  /** Plain-text excerpt covered by the comment range, when available. */
+  anchorText?: string;
+}
+
 export interface DocumentCommentDefinition {
   id: number;
   author?: string;

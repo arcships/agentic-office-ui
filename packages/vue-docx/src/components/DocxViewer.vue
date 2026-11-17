@@ -127,7 +127,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue"
 import type { DocModel, DocxImportResult, DocxRuntime, DocxRuntimeLoader, LayoutOptions } from "@arcships/docx-core"
-import { collectCommentsFromModel, collectTrackedChangesFromModel, createDocxRuntime, DocxImportError } from "@arcships/docx-core"
+import {
+  collectCommentsFromModel,
+  collectTrackedChangesFromModel,
+  createDocxRuntime,
+  DocxImportError,
+  primeCommentAnchors,
+} from "@arcships/docx-core"
 import type { DocxSearchState } from "../composables/useDocxSearch"
 import DocxDocumentSurface from "./DocxDocumentSurface.vue"
 import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
@@ -335,6 +341,7 @@ watch(
     try {
       const result = await loader.load(newFile, { transferBuffer: false })
       if (!active) return
+      primeCommentAnchors(result.model)
       pendingLoadResult.value = result
       parsedModel.value = result.model
     } catch (cause) {
