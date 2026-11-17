@@ -605,6 +605,7 @@ export function buildComboGroups(chart: XlsxChart): ComboRenderableGroup[] {
       axisIds,
       categoryAxis,
       chartType: group.chartType,
+      dataLabels: group.dataLabels,
       gapWidth: group.gapWidth,
       is3d: group.is3d,
       raw: group.raw,

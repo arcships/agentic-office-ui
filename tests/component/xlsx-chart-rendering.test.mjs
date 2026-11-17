@@ -63,6 +63,17 @@ function markerNodes(root, seriesIndex = 0) {
   ));
 }
 
+function dataLabelNodes(root) {
+  return walk(root)
+    .filter((node) => node.type === "text" && node.props?.["pointer-events"] === "none")
+    .map((node) => ({
+      anchor: node.props?.["text-anchor"],
+      text: textContent(node),
+      x: Number(node.props?.x),
+      y: Number(node.props?.y),
+    }));
+}
+
 test("cartesian bar, line, and area charts render value data labels", async () => {
   for (const chartType of ["ColumnClustered", "Line", "Area"]) {
     const root = await renderChart(makeChart({
@@ -248,6 +259,103 @@ test("combo charts sharing a value axis do not render a second axis", async () =
     .filter((node) => node.anchor === "end")
     .map((node) => node.text);
   assert.ok(sharedTickValues.includes("200"), "shared domain covers both column and line values");
+});
+
+function makeComboChart({ columnLabels, lineLabels, secondaryType = "Line", columnSeries, lineSeries, chartLabels } = {}) {
+  const categoryAxis = { axisType: "category", id: 1, position: "b" };
+  const columnAxis = { axisType: "value", id: 2, position: "l" };
+  const lineAxis = { axisType: "value", id: 3, position: "r" };
+  const columns = columnSeries ?? [{
+    categories: ["A", "B"],
+    dataPoints: [],
+    id: "column",
+    name: "Column",
+    values: [10, 20],
+  }];
+  const line = lineSeries ?? [{
+    categories: ["A", "B"],
+    dataPoints: [],
+    id: "line",
+    name: `${secondaryType} series`,
+    values: [100, 200],
+  }];
+  return makeChart({
+    axes: [categoryAxis, columnAxis, lineAxis],
+    categoryAxis,
+    chartType: "Combo",
+    dataLabels: chartLabels,
+    series: [...columns, ...line],
+    typeGroups: [
+      {
+        axisIds: [1, 2],
+        chartType: "ColumnClustered",
+        dataLabels: columnLabels,
+        series: columns,
+      },
+      {
+        axisIds: [1, 3],
+        chartType: secondaryType,
+        dataLabels: lineLabels,
+        series: line,
+      },
+    ],
+    valueAxis: columnAxis,
+  });
+}
+
+test("combo charts use group-level labels for column, line, and area groups", async () => {
+  for (const secondaryType of ["Line", "Area"]) {
+    const root = await renderChart(makeComboChart({
+      columnLabels: { numberFormat: { formatCode: "0.0" }, position: "outEnd", showValue: true },
+      lineLabels: { position: "t", showCategoryName: true, showSeriesName: true, showValue: true },
+      secondaryType,
+    }));
+    const labels = dataLabelNodes(root).map((node) => node.text);
+    assert.ok(labels.includes("10.0"), `${secondaryType} combo column label uses column number format`);
+    assert.ok(labels.includes("20.0"), `${secondaryType} combo column label uses column number format`);
+    assert.ok(
+      labels.includes(`${secondaryType} series, A, 100`),
+      `${secondaryType} combo secondary label uses its group flags`,
+    );
+    assert.ok(
+      labels.includes(`${secondaryType} series, B, 200`),
+      `${secondaryType} combo secondary label uses its group flags`,
+    );
+  }
+});
+
+test("combo charts honour chart-level labels, position, and showPercent", async () => {
+  const fallbackRoot = await renderChart(makeComboChart({
+    chartLabels: { showValue: true },
+  }));
+  const fallbackLabels = dataLabelNodes(fallbackRoot).map((node) => node.text);
+  assert.ok(fallbackLabels.includes("10"), "column labels fall back to chart.dataLabels");
+  assert.ok(fallbackLabels.includes("100"), "secondary labels fall back to chart.dataLabels");
+
+  const outEndRoot = await renderChart(makeComboChart({
+    columnLabels: { numberFormat: { formatCode: "0.0" }, position: "outEnd", showValue: true },
+    lineLabels: { showValue: false },
+  }));
+  const centerRoot = await renderChart(makeComboChart({
+    columnLabels: { numberFormat: { formatCode: "0.0" }, position: "ctr", showValue: true },
+    lineLabels: { showValue: false },
+  }));
+  const firstOutEnd = dataLabelNodes(outEndRoot).find((node) => node.text === "10.0");
+  const firstCenter = dataLabelNodes(centerRoot).find((node) => node.text === "10.0");
+  assert.ok(firstOutEnd && firstCenter, "both combo label positions render");
+  assert.notEqual(firstOutEnd.y, firstCenter.y, "combo bar labels honour the configured position");
+
+  const percentRoot = await renderChart(makeComboChart({
+    columnLabels: { showPercent: true },
+    columnSeries: [
+      { categories: ["A", "B"], dataPoints: [], id: "c1", name: "C1", values: [30, 40] },
+      { categories: ["A", "B"], dataPoints: [], id: "c2", name: "C2", values: [70, 60] },
+    ],
+    lineLabels: { showValue: false },
+  }));
+  const percentLabels = dataLabelNodes(percentRoot).map((node) => node.text);
+  assert.ok(percentLabels.includes("30%"), "combo showPercent uses the category total");
+  assert.ok(percentLabels.includes("70%"), "combo showPercent uses the category total");
 });
 
 test("date axes space points by elapsed time instead of category order", async () => {
