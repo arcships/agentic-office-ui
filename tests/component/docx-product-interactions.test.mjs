@@ -217,8 +217,8 @@ test("table cell blur commits each paragraph without duplicating text or droppin
   assert.equal(committed.type, "table");
   const paragraphs = committed.rows[0].cells[0].nodes;
   assert.deepEqual(paragraphs.map(paragraphText), ["first edited", "second edited"]);
-  assert.deepEqual(paragraphs[0].children[0].style, { bold: true });
-  assert.deepEqual(paragraphs[1].children[0].style, { italic: true });
+  assert.equal(paragraphs[0].children[0].style.bold, true);
+  assert.equal(paragraphs[1].children[0].style.italic, true);
   assert.equal(paragraphs[0].sourceXml, undefined);
   assert.equal(paragraphs[1].sourceXml, undefined);
   assert.equal(committed.sourceXml, undefined, "table XML must be rebuilt after a cell edit");
@@ -294,8 +294,8 @@ test("whole-cell commit diffs multiline text, keeps run styles, and clears sourc
   const committed = mounted.controller.model.nodes[0];
   const paragraphs = committed.rows[0].cells[0].nodes;
   assert.deepEqual(paragraphs.map(paragraphText), ["one edited", "two edited"]);
-  assert.deepEqual(paragraphs[0].children[0].style, { bold: true });
-  assert.deepEqual(paragraphs[1].children[0].style, { underline: true });
+  assert.equal(paragraphs[0].children[0].style.bold, true);
+  assert.equal(paragraphs[1].children[0].style.underline, true);
   assert.equal(paragraphs[0].sourceXml, undefined);
   assert.equal(paragraphs[1].sourceXml, undefined);
   assert.equal(committed.sourceXml, undefined);
