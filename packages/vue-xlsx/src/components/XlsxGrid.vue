@@ -1317,7 +1317,11 @@ function drawCellText(
     ? resolveIconGeometry(conditional.environment, conditional.value, width, height)
     : null;
   const textAreaWidth = conditionalIcon?.textWidth ?? state.overflowWidth ?? width;
-  if (value && !sparkline && (conditional?.kind !== "dataBar" || conditional.showValue)) {
+  // A data-bar or icon-set rule may be configured to hide the cell value while
+  // still drawing its shape. Respect `showValue` for both conditional kinds.
+  const conditionalHidesValue = (conditional?.kind === "dataBar" || conditional?.kind === "iconSet")
+    && conditional.showValue === false;
+  if (value && !sparkline && !conditionalHidesValue) {
     ctx.save();
     ctx.beginPath();
     ctx.rect(x + 2, y + 1, Math.max(0, textAreaWidth - 4), Math.max(0, height - 2));

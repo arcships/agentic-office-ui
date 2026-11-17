@@ -8,6 +8,30 @@ import ts from "../../packages/xlsx-core/node_modules/typescript/lib/typescript.
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const GRID_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/XlsxGrid.vue");
 const GRID_SOURCE = readFileSync(GRID_PATH, "utf8");
+const GRID_SCRIPT = [...GRID_SOURCE.matchAll(/<script(?:\s+setup)?[^>]*>([\s\S]*?)<\/script>/g)]
+  .map((match) => match[1])
+  .join("\n");
+const GRID_AST = ts.createSourceFile(
+  GRID_PATH,
+  GRID_SCRIPT,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TS,
+);
+
+function gridFunctionText(name) {
+  let found;
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name?.text === name) {
+      found = node;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(GRID_AST);
+  assert.ok(found, `missing ${name} in XlsxGrid`);
+  return found.getText(GRID_AST);
+}
 const PAINT_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/grid-paint.ts");
 const PAINT_SOURCE = readFileSync(PAINT_PATH, "utf8");
 const CONDITIONAL_PATH = path.join(ROOT, "packages/vue-xlsx/src/render/conditional-format.ts");
@@ -26,6 +50,19 @@ function loadTsModule(source) {
 
 const paintModule = await loadTsModule(PAINT_SOURCE);
 const conditionalModule = await loadTsModule(CONDITIONAL_SOURCE);
+// `drawCellText` is the shared renderer used by both `drawCellContent` and the
+// overflow pass. Transpile it with a stub icon resolver so the canvas calls can
+// be asserted without a real Canvas implementation.
+const drawTextModule = await loadTsModule([
+  "let __iconGeometry = null;",
+  "function resolveIconGeometry() { return __iconGeometry; }",
+  "export function setIconGeometry(value) { __iconGeometry = value; }",
+  gridFunctionText("truncateText"),
+  gridFunctionText("wrapCellText"),
+  gridFunctionText("drawCellText"),
+  "export { drawCellText };",
+].join("\n"));
+const { drawCellText, setIconGeometry } = drawTextModule;
 
 const {
   MAX_CANVAS_AREA_PX,
@@ -89,6 +126,98 @@ test("Excel text overflow uses neighbour widths only up to the first occupied ce
   assert.equal(resolveOverflowTextWidth(80, []), 80);
   assert.equal(resolveOverflowTextWidth(80, [80, 120]), 280);
   assert.equal(resolveOverflowTextWidth(80, [Number.NaN, -10, 40]), 120);
+});
+
+function createTextContext() {
+  const calls = [];
+  const ctx = {
+    fillStyle: "",
+    font: "",
+    lineWidth: 1,
+    strokeStyle: "",
+    textAlign: "left",
+    textBaseline: "alphabetic",
+    beginPath() {},
+    clip() {},
+    lineTo() {},
+    moveTo() {},
+    restore() {},
+    save() {},
+    stroke() {},
+    rect(x, y, width, height) { calls.push({ type: "rect", x, y, width, height }); },
+    fillText(text, x, y) { calls.push({ type: "fillText", text, x, y }); },
+    measureText(text) { return { width: String(text).length * 6 }; },
+  };
+  return { calls, ctx };
+}
+
+function baseTextState(overrides = {}) {
+  return {
+    conditional: null,
+    style: {
+      alignment: "left",
+      backgroundColor: "#ffffff",
+      color: "#18181b",
+      fontFamily: "Arial",
+      fontSizePx: 12,
+      fontStyle: "normal",
+      fontWeight: "400",
+      strike: false,
+      underline: false,
+      vertical: "bottom",
+      wrap: false,
+    },
+    textColor: "#18181b",
+    value: "Spills across empty cells",
+    ...overrides,
+  };
+}
+
+test("drawCellText spills text across empty neighbours and still clips to the cell", () => {
+  let { ctx, calls } = createTextContext();
+  const value = "Spills across empty cells";
+  drawCellText(ctx, 0, 0, 80, 24, baseTextState({ overflowWidth: 240, value }), "#2563eb");
+  const spillClip = calls.find((call) => call.type === "rect");
+  assert.equal(spillClip.width, 236, "the clip follows the overflow width, not the cell width");
+  assert.equal(
+    calls.find((call) => call.type === "fillText")?.text,
+    value,
+    "the label is not truncated while it fits the spill width",
+  );
+
+  ({ ctx, calls } = createTextContext());
+  drawCellText(ctx, 0, 0, 80, 24, baseTextState({ value }), "#2563eb");
+  assert.equal(calls.find((call) => call.type === "rect").width, 76);
+  assert.match(
+    calls.find((call) => call.type === "fillText")?.text ?? "",
+    /\u2026/,
+    "without an empty neighbour the text still truncates inside its own cell",
+  );
+});
+
+test("icon sets honour showValue and reserve text width for the glyph", () => {
+  setIconGeometry({ bucket: 4, color: "#16a34a", glyph: "\u25b2", iconX: 66, size: 12, textWidth: 62 });
+
+  let { ctx, calls } = createTextContext();
+  drawCellText(ctx, 0, 0, 80, 24, baseTextState({
+    conditional: { environment: {}, kind: "iconSet", showValue: false, value: 100 },
+  }), "#2563eb");
+  assert.deepEqual(
+    calls.filter((call) => call.type === "fillText").map((call) => call.text),
+    ["\u25b2"],
+    "showValue:false draws only the icon",
+  );
+
+  ({ ctx, calls } = createTextContext());
+  drawCellText(ctx, 0, 0, 80, 24, baseTextState({
+    conditional: { environment: {}, kind: "iconSet", showValue: true, value: 100 },
+  }), "#2563eb");
+  assert.equal(calls.filter((call) => call.type === "fillText").length, 2, "the value and icon both draw");
+  assert.equal(
+    calls.find((call) => call.type === "rect").width,
+    58,
+    "value clipping stops before the icon column",
+  );
 });
 
 test("row / column resize divides by the same zoom basis used for painting", () => {
@@ -186,7 +315,8 @@ test("XlsxGrid wires merged clipping, overflow, icon layout, DPR and zoom into p
   assert.match(GRID_SOURCE, /overflowTextTasks/);
   assert.match(GRID_SOURCE, /drawCellText\(ctx, task\.x, task\.y, task\.width, task\.height, task\.state, "#2563eb"\)/);
   assert.match(GRID_SOURCE, /resolveOverflowTextWidth\(/);
-  assert.match(GRID_SOURCE, /style\.alignment !== "left"/);
+  assert.match(GRID_SOURCE, /style\.wrap \|\| style\.alignment !== "left"/);
+  assert.match(GRID_SOURCE, /conditionalHidesValue/);
 
   assert.match(GRID_SOURCE, /resolveIconGeometry\(/);
   assert.match(GRID_SOURCE, /conditionalIcon\?\.textWidth/);
@@ -196,6 +326,8 @@ test("XlsxGrid wires merged clipping, overflow, icon layout, DPR and zoom into p
 
   assert.match(GRID_SOURCE, /resolveCanvasPixelRatio\(/);
   assert.match(GRID_SOURCE, /readDevicePixelRatio\(/);
+  assert.match(GRID_SOURCE, /Math\.min\(MAX_CANVAS_DIMENSION_PX, Math\.ceil\(safeWidth \* pixelRatio\)\)/);
+  assert.match(GRID_SOURCE, /ctx\.setTransform\(pixelRatio, 0, 0, pixelRatio, 0, 0\)/);
   assert.match(GRID_SOURCE, /matchMedia\(`\(resolution: \$\{readDevicePixelRatio\(\)\}dppx\)`\)/);
   assert.match(GRID_SOURCE, /devicePixelRatioRevision\.value \+= 1/);
 
