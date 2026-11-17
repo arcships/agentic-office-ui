@@ -27,6 +27,8 @@ await unlink(sourceWasm);
 await Promise.all([
   unlink(join(distDir, "viewer", "docx-import-worker.js")),
   unlink(join(distDir, "viewer", "docx-import-worker.d.ts")),
+  unlink(join(distDir, "viewer", "docx-export-worker.js")),
+  unlink(join(distDir, "viewer", "docx-export-worker.d.ts")),
 ]);
 
 let rewrittenFiles = 0;

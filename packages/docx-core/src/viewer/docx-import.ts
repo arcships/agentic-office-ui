@@ -17,6 +17,7 @@ import {
   getConfiguredWorkerWasmSource,
   type WorkerWasmSource,
 } from "./wasm-source";
+import { isUiEnvironment } from "./runtime-environment";
 import { bundledDocxWasmUrl } from "./bundled-assets";
 
 export type DocxImportSource = "worker" | "main-thread";
@@ -109,8 +110,9 @@ export interface DocxImportOptions {
   /** A worker-transferable WASM source shared by the caller and Worker. */
   wasmSource?: WorkerWasmSource;
   /**
-   * An opt-in, bounded fallback for environments where a Worker cannot be
-   * created. Worker parse or WASM errors never use this fallback.
+   * Opt-in, bounded fallback for headless hosts without a Worker. UI
+   * environments (document/window) never use it because the synchronous WASM
+   * parse would block the page.
    */
   allowMainThreadFallback?: boolean;
   mainThreadFallbackMaxBytes?: number;
@@ -371,6 +373,12 @@ async function importDocxOnMainThread(
   requestId: string,
   limits: Readonly<DocxRuntimeLimits>,
 ): Promise<DocxImportResult> {
+  if (isUiEnvironment()) {
+    throw new DocxImportError(
+      "WORKER_UNAVAILABLE",
+      "Synchronous main-thread DOCX parsing is disabled in UI environments.",
+    );
+  }
   if (signal?.aborted) {
     throw createAbortError();
   }
@@ -488,6 +496,12 @@ async function handleWorkerUnavailable(
     throw unavailable;
   }
 
+  // A browser has a UI thread that the synchronous WASM parse would block.
+  // Refuse the fallback there even when the caller opted in.
+  if (isUiEnvironment()) {
+    throw unavailable;
+  }
+
   reportDiagnostic(options, {
     type: "main-thread-fallback",
     requestId,
@@ -519,6 +533,20 @@ export async function importDocxBuffer(
   }
 
   if (options.useWorker === false) {
+    if (isUiEnvironment()) {
+      const error = new DocxImportError(
+        "WORKER_UNAVAILABLE",
+        "Synchronous main-thread DOCX parsing is disabled in UI environments; use the default Worker path.",
+      );
+      reportDiagnostic(options, {
+        type: "worker-error",
+        requestId,
+        source: "main-thread",
+        code: error.code,
+        message: error.message,
+      });
+      throw error;
+    }
     reportDiagnostic(options, {
       type: "load-start",
       requestId,

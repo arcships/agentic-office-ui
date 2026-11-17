@@ -7,8 +7,8 @@ import {
   cloneDocModel,
   collectFormFieldsFromModel,
   createDocxRuntime,
+  exportDocxBuffer,
   primeCommentAnchors,
-  serializeDocx,
 } from "@arcships/docx-core"
 import { onScopeDispose, watch } from "vue"
 import type { EditorCore } from "./editor-shared"
@@ -33,6 +33,7 @@ export function createEditorImportExport(ctx: EditorCore) {
     anchor?: HTMLAnchorElement
     objectUrl?: string
     cleanupTimer?: ReturnType<typeof setTimeout>
+    cancelExport?: () => void
     delivered: boolean
     cleaned: boolean
   }
@@ -61,6 +62,16 @@ export function createEditorImportExport(ctx: EditorCore) {
   const cleanupExportTask = (task: ExportTask): void => {
     if (task.cleaned) return
     task.cleaned = true
+
+    const cancelExport = task.cancelExport
+    task.cancelExport = undefined
+    if (cancelExport) {
+      try {
+        cancelExport()
+      } catch {
+        // Cancellation must not prevent the remaining resource cleanup.
+      }
+    }
 
     const cleanupTimer = task.cleanupTimer
     task.cleanupTimer = undefined
@@ -227,6 +238,13 @@ export function createEditorImportExport(ctx: EditorCore) {
 
   // ── exportDocx ───────────────────────────────────────────────────
   const exportDocx = (): void => {
+    // Exporting the starter model while an import is still parsing would save
+    // the wrong document and race the load completion.
+    if (ctx.isImporting.value || activeImport !== undefined) {
+      ctx.status.value = "Wait for the document to finish loading before exporting"
+      return
+    }
+
     // contentEditable hosts buffer keystrokes in local drafts; commit them
     // before reading the model so Ctrl+S never drops the last edit.
     ctx.flushTextDrafts()
@@ -263,10 +281,12 @@ export function createEditorImportExport(ctx: EditorCore) {
     }
 
     const token = Symbol("docx-export")
+    const exportController = new AbortController()
     const task: ExportTask = {
       token,
       documentLoadNonce: ctx.documentLoadNonce.value,
       model: exportModel,
+      cancelExport: () => exportController.abort(),
       delivered: false,
       cleaned: false,
     }
@@ -277,9 +297,17 @@ export function createEditorImportExport(ctx: EditorCore) {
     activeExportToken = token
     activeExport = task
 
+    ctx.status.value = "Exporting DOCX..."
     ;(async () => {
       try {
-        const output = await serializeDocx(exportModel, basePackage)
+        const output = await exportDocxBuffer(exportModel, basePackage, {
+          signal: exportController.signal,
+          limits: runtime.limits,
+          onProgress: (progress) => {
+            if (!isCurrentExport(task)) return
+            ctx.status.value = `Exporting DOCX: ${progress.phase}...`
+          },
+        })
         if (!isCurrentExport(task)) {
           cleanupExportTask(task)
           return

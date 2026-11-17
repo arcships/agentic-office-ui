@@ -8,6 +8,7 @@ export default defineConfig({
     "src/runtime.ts",
     "src/wasm-url.ts",
     "src/viewer/docx-import-worker.ts",
+    "src/viewer/docx-export-worker.ts",
   ],
   format: ["esm"],
   dts: true,
@@ -23,11 +24,15 @@ export default defineConfig({
       new URL("src/engine/generated/docx_wasm_bg.wasm", import.meta.url),
       new URL("dist/docx_wasm_bg.wasm", import.meta.url),
     );
-    // Worker entry is emitted to dist/viewer/, but index.js references it
+    // Worker entries are emitted to dist/viewer/, but index.js references them
     // relative to dist/ — copy to dist root to match the URL resolution.
     copyFileSync(
       new URL("dist/viewer/docx-import-worker.js", import.meta.url),
       new URL("dist/docx-import-worker.js", import.meta.url),
+    );
+    copyFileSync(
+      new URL("dist/viewer/docx-export-worker.js", import.meta.url),
+      new URL("dist/docx-export-worker.js", import.meta.url),
     );
   },
 });

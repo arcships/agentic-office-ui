@@ -72,7 +72,7 @@ export interface DocxRuntimeConfig {
   workerUrl?: string;
   /** Override Worker creation without relying on module-level configuration. */
   createWorker?: () => Worker;
-  /** Disabled by default; fallback also requires a positive byte limit. */
+  /** Headless-only opt-in; UI environments always require a Worker. */
   allowMainThreadFallback?: boolean;
   mainThreadFallbackMaxBytes?: number;
   /** Per-instance source policy; URL loading is disabled when omitted. */

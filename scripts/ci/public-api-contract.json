@@ -43,14 +43,15 @@
         },
         "./assets/docx_wasm_bg.wasm": "./dist/assets/docx_wasm_bg.wasm",
         "./worker": "./dist/docx-import-worker.js",
+        "./export-worker": "./dist/docx-export-worker.js",
         "./package.json": "./package.json"
       },
       "deprecatedSymbols": [
         "setWasmSource"
       ],
       "rootDeclarationFingerprint": {
-        "count": 1216,
-        "sha256": "86c0e6e9b165f2c1567a6b8f27aec309556a268a30b1b4e6073202eb86aa44f1"
+        "count": 1228,
+        "sha256": "7bbf996a0b60e183eed6b0301a84c51e7d4e3636300db1632ff4be2ff87e78a5"
       }
     },
     {

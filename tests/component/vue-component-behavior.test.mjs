@@ -10,7 +10,66 @@ import {
 } from "./vue-test-renderer.mjs";
 
 const { DocxEditor, useDocxEditor } = await importFromDemo("@arcships/vue-docx");
+const { serializeDocx } = await importFromDemo("@arcships/docx-core");
 const nativeSetTimeout = globalThis.setTimeout;
+
+class ImmediateExportWorker {
+  constructor() {
+    this.listeners = new Map();
+    this.terminated = false;
+  }
+
+  addEventListener(type, listener) {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+  }
+
+  removeEventListener(type, listener) {
+    this.listeners.set(
+      type,
+      (this.listeners.get(type) ?? []).filter((candidate) => candidate !== listener),
+    );
+  }
+
+  postMessage(message) {
+    if (!message || message.type !== "export-docx") return;
+    nativeSetTimeout(async () => {
+      if (this.terminated) return;
+      this.emit("message", {
+        id: message.id,
+        type: "progress",
+        phase: "serializing",
+        percent: 10,
+      });
+      try {
+        const bytes = await serializeDocx(message.model, message.basePackage);
+        if (this.terminated) return;
+        this.emit("message", {
+          id: message.id,
+          type: "progress",
+          phase: "finalizing",
+          percent: 90,
+        });
+        this.emit("message", { id: message.id, type: "success", bytes });
+      } catch (error) {
+        this.emit("message", {
+          id: message.id,
+          type: "error",
+          error: { message: error instanceof Error ? error.message : String(error) },
+        });
+      }
+    }, 0);
+  }
+
+  terminate() {
+    this.terminated = true;
+  }
+
+  emit(type, data) {
+    for (const listener of this.listeners.get(type) ?? []) {
+      listener({ data });
+    }
+  }
+}
 
 async function waitUntil(predicate, message, timeoutMs = 5_000) {
   const deadline = Date.now() + timeoutMs;
@@ -36,6 +95,7 @@ async function mountEditorController(fileName = "race.docx") {
 
 function installDownloadEnvironment(t, { clickError, documentAvailable = true } = {}) {
   const originalDocument = globalThis.document;
+  const originalWorker = globalThis.Worker;
   const originalCreateObjectURL = URL.createObjectURL;
   const originalRevokeObjectURL = URL.revokeObjectURL;
   const originalSetTimeout = globalThis.setTimeout;
@@ -69,6 +129,7 @@ function installDownloadEnvironment(t, { clickError, documentAvailable = true } 
   } else {
     delete globalThis.document;
   }
+  globalThis.Worker = ImmediateExportWorker;
 
   URL.createObjectURL = (blob) => {
     blobs.push(blob);
@@ -98,6 +159,8 @@ function installDownloadEnvironment(t, { clickError, documentAvailable = true } 
     restored = true;
     if (originalDocument === undefined) delete globalThis.document;
     else globalThis.document = originalDocument;
+    if (originalWorker === undefined) delete globalThis.Worker;
+    else globalThis.Worker = originalWorker;
     URL.createObjectURL = originalCreateObjectURL;
     URL.revokeObjectURL = originalRevokeObjectURL;
     globalThis.setTimeout = originalSetTimeout;
@@ -111,6 +174,72 @@ function installDownloadEnvironment(t, { clickError, documentAvailable = true } 
 function count(actions, value) {
   return actions.filter((action) => action === value).length;
 }
+
+class HangingImportWorker {
+  constructor() {
+    this.listeners = new Map();
+    this.terminated = false;
+  }
+
+  addEventListener(type, listener) {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+  }
+
+  removeEventListener(type, listener) {
+    this.listeners.set(
+      type,
+      (this.listeners.get(type) ?? []).filter((candidate) => candidate !== listener),
+    );
+  }
+
+  postMessage() {}
+
+  terminate() {
+    this.terminated = true;
+  }
+}
+
+test("DOCX export reports worker progress before downloading", async (t) => {
+  const mounted = await mountEditorController();
+  const environment = installDownloadEnvironment(t);
+
+  mounted.controller.exportDocx();
+  assert.match(mounted.controller.status, /^Exporting DOCX/);
+  await waitUntil(
+    () => mounted.controller.status === "Exported DOCX",
+    "worker-backed DOCX export",
+  );
+  assert.equal(environment.downloads.length, 1);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("DOCX export refuses to run while a document import is in flight", async (t) => {
+  const mounted = await mountEditorController("loading.docx");
+  const environment = installDownloadEnvironment(t);
+  const previousWorker = globalThis.Worker;
+  globalThis.Worker = HangingImportWorker;
+  let loading;
+
+  try {
+    loading = mounted.controller.importDocxFile(
+      new File([new Uint8Array([1, 2, 3])], "loading.docx"),
+    );
+    assert.equal(mounted.controller.isImporting, true);
+
+    mounted.controller.exportDocx();
+    assert.match(mounted.controller.status, /Wait for the document to finish loading/);
+    await new Promise((resolve) => nativeSetTimeout(resolve, 20));
+    assert.equal(environment.downloads.length, 0);
+    assert.equal(environment.blobs.length, 0);
+  } finally {
+    mounted.app.unmount();
+    await loading?.catch(() => undefined);
+    globalThis.Worker = previousWorker;
+    environment.restore();
+  }
+  assert.deepEqual(mounted.warnings, []);
+});
 
 test("DOCX rapid exports allow only the latest task to download and clean once", async (t) => {
   const mounted = await mountEditorController();
