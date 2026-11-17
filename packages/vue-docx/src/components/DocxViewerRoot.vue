@@ -44,6 +44,8 @@
             :footnote-labels="entry.noteLabels.footnote"
             :endnote-labels="entry.noteLabels.endnote"
             :note-marker-labels="entry.noteLabels"
+            :page-background-color="documentBackgroundColor"
+            :page-borders="entry.pageBorders ?? null"
             :theme="theme"
             @measure="onPageMeasure(entry.pageIndex, $event)"
           />
@@ -64,6 +66,7 @@ import type {
   DocumentNoteDefinition,
   DocumentPageNodeSegment,
   DocumentPageNotes,
+  DocumentPageBorders,
   FooterSection,
   HeaderSection,
   LayoutOptions,
@@ -74,9 +77,11 @@ import {
   collectCommentsFromModel,
   collectTrackedChangesFromModel,
   parseSectionLayout,
+  parseSectionPageBorders,
   parseSectionPageNumberFormat,
   parseSectionPageNumberStartOverride,
   primeCommentAnchors,
+  resolveDocumentBackgroundColor,
   resolveDocumentSectionsFromMetadata,
   resolveDocumentLayout,
   resolveSectionIndexForNodeIndex,
@@ -131,6 +136,7 @@ interface VisiblePageEntry {
   footnotes: DocumentNoteDefinition[]
   endnotes: DocumentNoteDefinition[]
   noteLabels: { footnote: Map<number, string>; endnote: Map<number, string> }
+  pageBorders?: DocumentPageBorders
 }
 
 interface PageMeasureEvent {
@@ -165,6 +171,9 @@ const isDragOver = ref(false)
 
 // ── Pagination ─────────────────────────────────────────────────────
 const baseDocumentLayout = computed(() => resolveDocumentLayout(props.model))
+const documentBackgroundColor = computed(() =>
+  resolveDocumentBackgroundColor(props.model.metadata.documentBackgroundColor)
+)
 
 const resolvedLayoutOptions = computed<LayoutOptions>(() => ({
   pageWidth: baseDocumentLayout.value.pageWidthPx,
@@ -285,6 +294,7 @@ const pagePresentations = computed(() => {
       pageLayout,
       pageNumber,
       pageNumberFormat: parseSectionPageNumberFormat(sectionPropertiesXml),
+      pageBorders: parseSectionPageBorders(sectionPropertiesXml),
       headerSection: section
         ? selectSectionVariantForPage(
             section.headerSections,
@@ -447,6 +457,7 @@ const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
           footnote: notesForPage(i).footnoteLabels,
           endnote: notesForPage(i).endnoteLabels,
         },
+        pageBorders: pagePresentations.value[i]?.pageBorders,
       })
     }
   }

@@ -18,6 +18,8 @@ export interface DocumentPageBorderEdge {
   cssBorder?: string;
   offsetPx?: number;
   shadow?: boolean;
+  /** Normalized `#rrggbb` border colour, when the document specifies one. */
+  color?: string;
 }
 
 export interface DocumentPageBorders {
@@ -136,6 +138,18 @@ function normalizeHexColor(value?: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Resolve a document-level page background from the raw `w:background/@w:color`
+ * value. Word writes bare six-digit values (for example `FFF2CC`); CSS needs a
+ * leading `#`. `auto` and malformed values return `undefined` so callers keep
+ * the theme page colour.
+ */
+export function resolveDocumentBackgroundColor(
+  value?: string
+): string | undefined {
+  return normalizeHexColor(value);
+}
+
 function borderTypeToCssStyle(rawType?: string): string | undefined {
   const value = rawType?.trim().toLowerCase();
   if (!value || value === "none" || value === "nil") {
@@ -210,6 +224,7 @@ function parseSectionPageBorderEdge(
     shadow:
       readStringAttribute(edgeTag, "w:shadow")?.trim().toLowerCase() === "1" ||
       readStringAttribute(edgeTag, "w:shadow")?.trim().toLowerCase() === "true",
+    color,
   };
 }
 

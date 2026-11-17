@@ -75,6 +75,7 @@ const props = withDefaults(
     withinHeaderFooter?: boolean
     headerFooterRegion?: "header" | "footer"
     noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
+    skipImageChildIndexes?: readonly number[]
   }>(),
   {
     editable: false,
@@ -133,6 +134,7 @@ const displayHtml = computed(() => {
     skipFloatingImages: props.editable,
     renderWrappedFloatingImages: props.editable,
     noteMarkerLabels: props.noteMarkerLabels,
+    skipImageChildIndexes: props.skipImageChildIndexes,
   }
 
   const vnodes = renderParagraphRuns(
