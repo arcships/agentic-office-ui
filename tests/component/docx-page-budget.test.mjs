@@ -168,7 +168,7 @@ test("DocxViewer prechecks upload size and reports unreadable files", async () =
     const limitError = findByTestId(limited.root, "load-error");
     assert.equal(limitError.props["data-error-code"], "LIMIT_EXCEEDED");
     assert.equal(limitError.props["data-error-limit"], "maxInputBytes");
-    assert.match(textContent(limited.root), /超过允许值 8 字节/);
+    assert.match(textContent(limited.root), /exceeds the allowed maximum of 8 bytes/);
     assert.deepEqual(limited.warnings, []);
   } finally {
     limited.app.unmount();
