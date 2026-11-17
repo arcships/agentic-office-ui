@@ -846,6 +846,8 @@ export function useDocxEditor(
     deleteTableRow: tbl.deleteTableRow,
     deleteTableColumn: tbl.deleteTableColumn,
     deleteTable: tbl.deleteTable,
+    mergeTableCells: tbl.mergeTableCells,
+    splitTableCell: tbl.splitTableCell,
     moveTable: tbl.moveTable,
     moveEmbeddedTableToBody: tbl.moveEmbeddedTableToBody,
     replaceExpandedSelection: txt.replaceExpandedSelection,

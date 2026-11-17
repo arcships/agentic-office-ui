@@ -82,6 +82,8 @@ export * from "./numbering";
 export * from "./table-utils";
 export * from "./table-utils-extra";
 export * from "./table-metrics";
+export * from "./table-structure";
+export * from "./list-numbering";
 export * from "./paragraph-toc";
 export * from "./field-helpers";
 export * from "./synthetic-textbox";
