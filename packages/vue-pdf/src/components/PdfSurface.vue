@@ -802,7 +802,7 @@ async function load(): Promise<void> {
   loading.value = !!source
   loadError.value = null
   await releaseDocument()
-  if (requestId !== latestRequestId || unmounted) return
+  if (unmounted || requestId !== latestRequestId) return
   if (!source) { loading.value = false; return }
 
   const task = pdfLoadCoordinator.start(toOfficeSource(source), {
@@ -815,8 +815,10 @@ async function load(): Promise<void> {
       signal: task.signal,
       maxFileSize: props.maxFileSize,
     })
+    if (unmounted || requestId !== latestRequestId) return
     task.assertCurrent()
     selectedRuntime = await selectRuntime()
+    if (unmounted || requestId !== latestRequestId) return
     task.assertCurrent()
     const content = verified.bytes.buffer.slice(
       verified.bytes.byteOffset,
@@ -827,6 +829,11 @@ async function load(): Promise<void> {
       password: props.password,
       onPassword: props.onPassword,
     })
+    if (unmounted || requestId !== latestRequestId) {
+      await selectedRuntime.closeDocument(openedDocument)
+      openedDocument = undefined
+      return
+    }
     task.assertCurrent()
     if (openedDocument.pageCount <= 0) throw new Error("PDF document contains no pages.")
     runtimeForDocument = selectedRuntime
@@ -845,13 +852,16 @@ async function load(): Promise<void> {
   } catch (cause) {
     if (openedDocument && selectedRuntime) {
       await selectedRuntime.closeDocument(openedDocument)
+      openedDocument = undefined
     }
-    if (!task.isCurrent() || requestId !== latestRequestId || (cause as Error)?.name === "AbortError") return
+    if (unmounted || !task.isCurrent() || requestId !== latestRequestId || (cause as Error)?.name === "AbortError") return
     const sourceKind = source.kind
     const normalized = toPdfLoadError(cause, sourceKind, sourceKind === "url" ? source.url : undefined)
     loadError.value = normalized
     loading.value = false
     emit("document-load-error", normalized)
+  } finally {
+    task.finish()
   }
 }
 
@@ -866,9 +876,13 @@ watch([zoom, rotation], () => {
   scheduleVisibleRender(0)
 })
 
-watch(effectiveSource, () => {
-  void load()
-}, { immediate: true })
+watch(
+  [effectiveSource, () => props.urlPolicy, () => props.maxFileSize, () => props.runtime, () => props.pdfiumWasmUrl],
+  () => {
+    void load()
+  },
+  { immediate: true },
+)
 
 watch(() => props.documentId, () => emit("documentRevisionChange", documentRevision.value))
 
@@ -1854,6 +1868,7 @@ defineExpose({
 
 onBeforeUnmount(async () => {
   unmounted = true
+  latestRequestId += 1
   gestureToken += 1
   cancelScrollFrame()
   cancelScheduledRender()
@@ -1869,6 +1884,8 @@ onBeforeUnmount(async () => {
   element?.removeEventListener("gesturechange", onGestureChange as EventListener)
   element?.removeEventListener("gestureend", onGestureEnd)
   cancelRender()
+  pdfLoadCoordinator.dispose()
+  pdfTaskSequence.dispose()
   surfaceSearch.dispose()
   await releaseDocument()
   if (ownedRuntime) await ownedRuntime.dispose()
