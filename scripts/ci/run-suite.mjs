@@ -238,6 +238,14 @@ const suites = {
         BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-preview-routes"),
       },
     }),
+    command("formal-touch-mobile", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/touch_mobile.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-touch-mobile"),
+      },
+    }),
     command("formal-preview-workflows", process.execPath, [
       "scripts/ci/run-python.mjs",
       "tests/blackbox/e2e_workflows.py",

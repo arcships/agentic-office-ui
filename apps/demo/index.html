@@ -50,6 +50,11 @@
       box-shadow: var(--shadow-sm);
       padding: 0.45rem 0.75rem;
     }
+    @media (pointer: coarse) {
+      .page :is(button, select, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), textarea) {
+        min-height: 44px;
+      }
+    }
     .page :is(button, select):hover:not(:disabled),
     .page input[type="file"]::file-selector-button:hover {
       background: var(--accent);

@@ -59,5 +59,7 @@ has a minimum target of `44 × 44 px`. Desktop sizing is unchanged.
 - `tests/component/touch-interactions.test.mjs` verifies every surface wires the
   shared tracker, keeps `pointercancel` handling, sets `touch-action`, closes
   menus on outside pointer down and ships 44 px coarse-pointer targets.
-- The blackbox mobile profile remains `390 × 844`; touch emulation is a planned
-  extension of `tests/blackbox`.
+- `tests/blackbox/touch_mobile.py` drives Chromium touch emulation on the
+  `390 × 844` / DPR 3 mobile profile across DOCX, XLSX, PPTX and PDF: real CDP
+  long press, double tap, pinch, `touchCancel` and 44 px toolbar targets. It is
+  registered as `formal-touch-mobile` in the `blackbox` suite.
