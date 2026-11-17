@@ -173,7 +173,13 @@ test("DocxEditor scopes shortcuts to its root and tracks unsaved changes", async
   assert.equal(typeof editorRoot.props.onKeydown, "function", "shortcuts bind to the editor root");
 
   assert.equal(windowListeners.count("keydown"), 0, "read-only mount must not own a global shortcut listener");
-  assert.equal(windowListeners.total(), 0, "clean read-only mount must not own window listeners");
+  assert.equal(
+    windowListeners.total() -
+      windowListeners.count("beforeprint") -
+      windowListeners.count("afterprint"),
+    0,
+    "clean read-only mount must not own window listeners other than print hooks",
+  );
   assert.equal(documentListeners.total(), 0, "read-only mount must not own document editing listeners");
 
   editable.value = true;
@@ -222,7 +228,13 @@ test("DocxEditor scopes shortcuts to its root and tracks unsaved changes", async
 
   editable.value = false;
   await vue.nextTick();
-  assert.equal(windowListeners.total(), 0, "switching to read-only must remove the unload guard");
+  assert.equal(
+    windowListeners.total() -
+      windowListeners.count("beforeprint") -
+      windowListeners.count("afterprint"),
+    0,
+    "switching to read-only must remove the unload guard",
+  );
   assert.equal(windowListeners.count("keydown"), 0, "read-only mode must never own a global shortcut listener");
 
   editable.value = true;

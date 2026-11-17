@@ -3,7 +3,16 @@
   "version": "0.6.0",
   "license": "Apache-2.0",
   "description": "Vue 3 XLSX spreadsheet viewer with charts, maps, WebGL, and controller composables",
-  "keywords": ["vue", "vue3", "xlsx", "excel", "spreadsheet", "charts", "map", "webgl"],
+  "keywords": [
+    "vue",
+    "vue3",
+    "xlsx",
+    "excel",
+    "spreadsheet",
+    "charts",
+    "map",
+    "webgl"
+  ],
   "homepage": "https://github.com/arcships/agentic-office-ui#readme",
   "repository": {
     "type": "git",
@@ -49,7 +58,9 @@
     },
     "./style.css": "./dist/style.css"
   },
-  "sideEffects": ["./dist/style.css"],
+  "sideEffects": [
+    "./dist/style.css"
+  ],
   "scripts": {
     "build": "vite build && vue-tsc --declaration --emitDeclarationOnly --outDir dist",
     "prepack": "pnpm run build",
@@ -57,6 +68,7 @@
   },
   "dependencies": {
     "@arcships/office-interaction": "^0.6.0",
+    "@arcships/vue-ui": "^0.6.0",
     "@arcships/xlsx-core": "^0.6.0",
     "@dukelib/sheets-wasm": "0.1.17",
     "d3-geo": "^3.1.1",
@@ -74,7 +86,6 @@
     "vue": ">=3.2.25 <4"
   },
   "devDependencies": {
-    "@arcships/vue-ui": "^0.6.0",
     "@types/d3-geo": "^3.1.0",
     "@types/d3-hierarchy": "^3.1.7",
     "@types/d3-scale": "^4.0.9",
