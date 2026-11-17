@@ -419,6 +419,7 @@ test("descriptor mapping localizes Table, Row, Column and describeReference path
         shape: "Shape 7",
         object: "Object 7",
         lowerShape: "Shape 7",
+        lowerGroup: "Group 7",
         lowerTable: "Table 7",
         lowerChart: "Chart 7",
         lowerImage: "Image 7",
@@ -434,6 +435,7 @@ test("descriptor mapping localizes Table, Row, Column and describeReference path
         shape: "形状 7",
         object: "对象 7",
         lowerShape: "形状 7",
+        lowerGroup: "组 7",
         lowerTable: "表格 7",
         lowerChart: "图表 7",
         lowerImage: "图片 7",
@@ -448,6 +450,7 @@ test("descriptor mapping localizes Table, Row, Column and describeReference path
     assert.equal(localizeOfficeDescriptorLabel("Shape 7", messages), extra.shape)
     assert.equal(localizeOfficeDescriptorLabel("Object 7", messages), extra.object)
     assert.equal(localizeOfficeDescriptorLabel("shape 7", messages), extra.lowerShape)
+    assert.equal(localizeOfficeDescriptorLabel("group 7", messages), extra.lowerGroup)
     assert.equal(localizeOfficeDescriptorLabel("table 7", messages), extra.lowerTable)
     assert.equal(localizeOfficeDescriptorLabel("chart 7", messages), extra.lowerChart)
     assert.equal(localizeOfficeDescriptorLabel("image 7", messages), extra.lowerImage)

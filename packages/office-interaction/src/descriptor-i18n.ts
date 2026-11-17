@@ -55,6 +55,8 @@ export function localizeOfficeDescriptorLabel(
   if (textBox) return formatOfficeMessage(descriptors.textBox, { id: textBox[1] })
   const lowerShape = /^shape\s+(.+)$/u.exec(text)
   if (lowerShape) return formatOfficeMessage(descriptors.shape, { id: lowerShape[1] })
+  const lowerGroup = /^group\s+(.+)$/u.exec(text)
+  if (lowerGroup) return formatOfficeMessage(descriptors.group, { number: lowerGroup[1] })
   const lowerTable = /^table\s+(.+)$/u.exec(text)
   if (lowerTable) return formatOfficeMessage(descriptors.table, { number: lowerTable[1] })
   const lowerChart = /^chart\s+(.+)$/u.exec(text)

@@ -455,7 +455,7 @@ test("core adapter lowercase kind labels stay covered by the descriptor mapper",
   const pptx = read("packages/pptx-core/src/reference-adapter.ts")
   assert.match(pptx, /`\$\{kind\} \$\{identity\.shapeId\}`/u)
   const mapper = read("packages/office-interaction/src/descriptor-i18n.ts")
-  for (const token of ["lowerShape", "lowerTable", "lowerChart", "lowerImage", "lowerTextBox"]) {
+  for (const token of ["lowerShape", "lowerGroup", "lowerTable", "lowerChart", "lowerImage", "lowerTextBox"]) {
     assert.ok(mapper.includes(token), `descriptor mapper must cover ${token}`)
   }
   assert.ok(mapper.includes("status === \"ambiguous\""), "descriptor mapper must localize ambiguous candidates")
