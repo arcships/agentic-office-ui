@@ -82,7 +82,7 @@ const thumbnailsPath = "packages/vue-docx/src/composables/useDocxPageThumbnails.
 const thumbnails = source(thumbnailsPath);
 for (const [name, requiredCall] of [
   ["prefetchPageThumbnailSurface", "renderPageSurface"],
-  ["rerenderAttachedThumbnails", "renderPageThumbnailToCanvas"],
+  ["rerenderAttachedThumbnails", "paintPageThumbnailToCanvas"],
   ["rerender", "paintUnavailableThumbnail"],
 ]) {
   const body = functionBody(thumbnailsPath, thumbnails, name);
@@ -103,7 +103,7 @@ const pageSurface = source("packages/vue-docx/src/components/DocxPageSurface.vue
 addCheck(
   "DOCX_PAGE_SURFACE_PUBLISHER",
   pageSurface.includes("registry.pageElements.set(props.pageIndex, element)") &&
-    pageSurface.includes("notifyDocxViewerPageSurfaceListeners(controller)"),
+    pageSurface.includes("notifyDocxViewerPageSurfaceListeners(controller"),
   "页面 surface 必须向编辑器实例 registry 发布并通知变更。",
 );
 

@@ -9,7 +9,7 @@
  *
  * Long strings (image data URIs can be multiple megabytes) are digested from
  * their length plus head/tail samples instead of being fully hashed, except
- * for media payloads (data:/blob: URIs) where the bytes are the content: those
+ * for media payloads (data and blob URIs) where the bytes are the content: those
  * are hashed in full so two same-sized images never collide.
  *
  * Binary values are hashed byte-for-byte when small and from deterministic
