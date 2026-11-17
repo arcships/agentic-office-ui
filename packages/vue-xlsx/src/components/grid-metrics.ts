@@ -7,6 +7,9 @@ import { GRID_HEADER_HEIGHT, GRID_ROW_HEADER_WIDTH } from "../composables/intern
 export const GRID_HEADER_HEIGHT_PX = GRID_HEADER_HEIGHT;
 /** Width of the grid's row-header gutter, in CSS pixels. */
 export const GRID_ROW_HEADER_WIDTH_PX = GRID_ROW_HEADER_WIDTH;
+/** Grid defaults, matching the fallbacks XlsxGrid paints with. */
+const GRID_DEFAULT_COL_WIDTH_PX = 80;
+const GRID_DEFAULT_ROW_HEIGHT_PX = 24;
 
 /**
  * Absolute box covering the grid body only (headers excluded), used by the
@@ -37,10 +40,17 @@ export function frozenExtent(
   const limit = axis === "column" ? sheet.freezePanes.col : sheet.freezePanes.row;
   const indices = axis === "column" ? sheet.visibleCols : sheet.visibleRows;
   const sizes = axis === "column" ? sheet.colWidths : sheet.rowHeights;
+  const overrides = axis === "column" ? sheet.colWidthOverridesPx : sheet.rowHeightOverridesPx;
   const fallback = axis === "column" ? sheet.defaultColWidthPx : sheet.defaultRowHeightPx;
+  const hardFallback = axis === "column" ? GRID_DEFAULT_COL_WIDTH_PX : GRID_DEFAULT_ROW_HEIGHT_PX;
   const zoom = gridZoomFactor(zoomScale);
   return indices.reduce((total, actualIndex, displayIndex) =>
-    actualIndex < limit ? total + (sizes[displayIndex] || fallback) * zoom : total,
+    // Resolve sizes the way XlsxGrid does (resized columns live in the
+    // override maps), otherwise overlay panes drift from the grid at the
+    // freeze line.
+    actualIndex < limit
+      ? total + (sizes[displayIndex] || overrides?.[actualIndex] || fallback || hardFallback) * zoom
+      : total,
   0);
 }
 

@@ -202,7 +202,7 @@ import {
   normalizeConditionalFormatRanges,
   type NormalizedRange,
 } from "./conditional-format-stats";
-import { paneAxisContentOffset, paneViewOffset, resolvePaneContentPoint, resolvePaneViewPoint } from "./grid-pane-geometry";
+import { paneAxisContentOffset, paneViewOffset, resolvePaneContentPoint, resolvePaneOverlayRect, resolvePaneViewPoint, type PaneOverlayRect } from "./grid-pane-geometry";
 import {
   MAX_CANVAS_DIMENSION_PX,
   intersectsViewport,
@@ -354,22 +354,18 @@ const hoveredComment = computed(() => {
   const comment = commentsByCell.value.get(`${cell.row}:${cell.col}`);
   const display = getDisplayCell(cell);
   if (!comment || !display) return null;
-  const frozen = frozenPaneMetrics();
-  const anchor = resolvePaneViewPoint({
+  const anchor = paneOverlayRect(cell, {
     contentX: getColOffsetSum(display.col + 1),
     contentY: getRowOffsetSum(display.row),
-    displayCol: display.col,
-    displayRow: display.row,
-    frozenCols: frozen.cols,
-    frozenRows: frozen.rows,
-    scrollLeft: scrollLeft.value,
-    scrollTop: scrollTop.value,
+    width: 0,
+    height: 0,
   });
+  if (!anchor) return null;
   return {
     ...comment,
     style: {
-      left: `${ROW_HEADER_WIDTH + anchor.x + 6}px`,
-      top: `${HEADER_HEIGHT + anchor.y + 4}px`,
+      left: `${ROW_HEADER_WIDTH + anchor.left + 6}px`,
+      top: `${HEADER_HEIGHT + anchor.top + 4}px`,
     } as CSSProperties,
   };
 });
@@ -396,12 +392,18 @@ const validationHint = computed(() => {
   if (!validation || !cell || editingCell.value || validation.showInputMessage !== true || !validation.inputMessage?.trim()) return null;
   const display = getDisplayCell(cell);
   if (!display) return null;
+  const anchor = paneOverlayRect(cell, {
+    contentY: getRowOffsetSum(display.row) + (effectiveRowHeights.value[display.row] || DEFAULT_ROW_HEIGHT),
+    width: 0,
+    height: 0,
+  });
+  if (!anchor) return null;
   return {
     message: validation.inputMessage,
     title: validation.inputTitle,
     style: {
-      left: `${ROW_HEADER_WIDTH + getColOffsetSum(display.col) - scrollLeft.value}px`,
-      top: `${HEADER_HEIGHT + getRowOffsetSum(display.row) + (effectiveRowHeights.value[display.row] || DEFAULT_ROW_HEIGHT) - scrollTop.value + 4}px`,
+      left: `${ROW_HEADER_WIDTH + anchor.left}px`,
+      top: `${HEADER_HEIGHT + anchor.top + 4}px`,
     } as CSSProperties,
   };
 });
@@ -409,22 +411,36 @@ const validationDropdownTriggerStyle = computed<CSSProperties | null>(() => {
   if (!activeListValidation.value || validationDropdownOptions.value.length === 0 || editingCell.value) return null;
   const cell = activeCell.value;
   const display = cell ? getDisplayCell(cell) : null;
-  if (!display) return null;
+  if (!cell || !display) return null;
   const rowHeight = effectiveRowHeights.value[display.row] || DEFAULT_ROW_HEIGHT;
   const colWidth = effectiveColWidths.value[display.col] || DEFAULT_COL_WIDTH;
+  const anchor = paneOverlayRect(cell, {
+    contentX: getColOffsetSum(display.col) + colWidth - 20,
+    contentY: getRowOffsetSum(display.row) + Math.max(2, (rowHeight - 18) / 2),
+    width: 20,
+    height: 18,
+  });
+  if (!anchor) return null;
   return {
-    left: `${ROW_HEADER_WIDTH + getColOffsetSum(display.col) + colWidth - scrollLeft.value - 20}px`,
-    top: `${HEADER_HEIGHT + getRowOffsetSum(display.row) - scrollTop.value + Math.max(2, (rowHeight - 18) / 2)}px`,
+    left: `${ROW_HEADER_WIDTH + anchor.left}px`,
+    top: `${HEADER_HEIGHT + anchor.top}px`,
   };
 });
 const validationDropdownStyle = computed<CSSProperties>(() => {
   const cell = activeCell.value;
   const display = cell ? getDisplayCell(cell) : null;
-  if (!display) return {};
+  if (!cell || !display) return {};
+  const rowHeight = effectiveRowHeights.value[display.row] || DEFAULT_ROW_HEIGHT;
+  const colWidth = effectiveColWidths.value[display.col] || DEFAULT_COL_WIDTH;
+  const anchor = paneOverlayRect(cell, {
+    contentY: getRowOffsetSum(display.row) + rowHeight,
+    width: Math.max(120, colWidth),
+    height: 0,
+  });
   return {
-    left: `${ROW_HEADER_WIDTH + getColOffsetSum(display.col) - scrollLeft.value}px`,
-    minWidth: `${Math.max(120, effectiveColWidths.value[display.col] || DEFAULT_COL_WIDTH)}px`,
-    top: `${HEADER_HEIGHT + getRowOffsetSum(display.row) + (effectiveRowHeights.value[display.row] || DEFAULT_ROW_HEIGHT) - scrollTop.value}px`,
+    left: `${ROW_HEADER_WIDTH + (anchor?.left ?? 0)}px`,
+    minWidth: `${Math.max(120, colWidth)}px`,
+    top: `${HEADER_HEIGHT + (anchor?.top ?? 0)}px`,
   };
 });
 const validationFeedbackView = computed(() => {
@@ -432,11 +448,17 @@ const validationFeedbackView = computed(() => {
   if (!feedback) return null;
   const display = getDisplayCell(feedback.cell);
   if (!display) return null;
+  const anchor = paneOverlayRect(feedback.cell, {
+    contentY: getRowOffsetSum(display.row) + (effectiveRowHeights.value[display.row] || DEFAULT_ROW_HEIGHT),
+    width: 0,
+    height: 0,
+  });
+  if (!anchor) return null;
   return {
     ...feedback,
     style: {
-      left: `${ROW_HEADER_WIDTH + getColOffsetSum(display.col) - scrollLeft.value}px`,
-      top: `${HEADER_HEIGHT + getRowOffsetSum(display.row) + (effectiveRowHeights.value[display.row] || DEFAULT_ROW_HEIGHT) - scrollTop.value + 4}px`,
+      left: `${ROW_HEADER_WIDTH + anchor.left}px`,
+      top: `${HEADER_HEIGHT + anchor.top + 4}px`,
     } as CSSProperties,
   };
 });
@@ -689,6 +711,46 @@ function resolvePanePoint(clientX: number, clientY: number) {
     frozen.width,
     frozen.height,
   );
+}
+
+/** Body viewport size the canvases and overlays share (headers excluded). */
+function bodyViewportSize(): { width: number; height: number } {
+  return {
+    width: Math.max(0, containerWidth.value - ROW_HEADER_WIDTH),
+    height: Math.max(0, containerHeight.value - HEADER_HEIGHT),
+  };
+}
+
+/**
+ * Viewport box for a cell-anchored overlay (editor, comment popover,
+ * validation hint/dropdown). The box is mapped into the cell's pane and
+ * clamped there, so an overlay never paints over the frozen strips.
+ * `contentX`/`contentY` default to the cell's top-left corner.
+ */
+function paneOverlayRect(
+  cell: XlsxCellAddress,
+  options: { contentX?: number; contentY?: number; width?: number; height?: number } = {},
+): PaneOverlayRect | null {
+  const display = getDisplayCell(cell);
+  if (!display) return null;
+  const frozen = frozenPaneMetrics();
+  const viewport = bodyViewportSize();
+  return resolvePaneOverlayRect({
+    contentX: options.contentX ?? getColOffsetSum(display.col),
+    contentY: options.contentY ?? getRowOffsetSum(display.row),
+    width: options.width ?? (effectiveColWidths.value[display.col] || DEFAULT_COL_WIDTH),
+    height: options.height ?? (effectiveRowHeights.value[display.row] || DEFAULT_ROW_HEIGHT),
+    displayCol: display.col,
+    displayRow: display.row,
+    frozenCols: frozen.cols,
+    frozenRows: frozen.rows,
+    frozenWidth: frozen.width,
+    frozenHeight: frozen.height,
+    viewportWidth: viewport.width,
+    viewportHeight: viewport.height,
+    scrollLeft: scrollLeft.value,
+    scrollTop: scrollTop.value,
+  });
 }
 
 function captureZoomAnchor(clientX: number, clientY: number): XlsxZoomAnchor | null {
@@ -1536,13 +1598,25 @@ function paintBody(worksheet: ActiveWorksheet | null) {
 
   ctx.fillStyle = bgColor;
   ctx.fillRect(0, 0, bw, bh);
-  if (rowRange.end < rowRange.start || colRange.end < colRange.start) return;
+  const hasVisibleRange = rowRange.end >= rowRange.start && colRange.end >= colRange.start;
+  const frozen = frozenPaneMetrics();
+  const hasFrozenPanes = frozen.width > 0 || frozen.height > 0;
 
   ctx.save();
+  if (hasFrozenPanes) {
+    // The frozen strips are painted last by paintFrozenPanes, at pinned
+    // coordinates. Excluding them from the scrolling pass keeps every pixel
+    // painted once: a translucent selection tint or a soft fill would
+    // otherwise double up wherever the two passes overlap.
+    ctx.beginPath();
+    ctx.rect(0, frozen.height, bw, Math.max(0, bh - frozen.height));
+    ctx.rect(frozen.width, 0, Math.max(0, bw - frozen.width), frozen.height);
+    ctx.clip();
+  }
   ctx.translate(-scrollLeft.value, -scrollTop.value);
 
   // Gridlines
-  if (sheet.showGridLines !== false) {
+  if (hasVisibleRange && sheet.showGridLines !== false) {
     ctx.strokeStyle = gridColor;
     ctx.lineWidth = 1;
     const gridTop = getRowOffsetSum(rowRange.start);
@@ -1634,9 +1708,11 @@ function paintBody(worksheet: ActiveWorksheet | null) {
   };
 
   try {
-    for (let r = rowRange.start; r <= rowRange.end && r < heights.length; r++) {
-      for (let c = colRange.start; c <= colRange.end && c < widths.length; c++) {
-        paintBodyCell(r, c, getSheetCell(r, c));
+    if (hasVisibleRange) {
+      for (let r = rowRange.start; r <= rowRange.end && r < heights.length; r++) {
+        for (let c = colRange.start; c <= colRange.end && c < widths.length; c++) {
+          paintBodyCell(r, c, getSheetCell(r, c));
+        }
       }
     }
 
@@ -2195,6 +2271,9 @@ function onDblClick(event: MouseEvent) {
   }
   editingCell.value = cell;
   editingValue.value = getCellInputValue(cell);
+  // Bring the cell fully into its pane first: an editor opened over a cell
+  // still half-hidden under a frozen strip would sit on the freeze line.
+  scrollToCell(cell);
   emit("cellDoubleClick", cell);
   nextTick(() => { editInputRef.value?.focus(); editInputRef.value?.select(); });
 }
@@ -2267,6 +2346,7 @@ function commitAndTab() {
   props.controller.selectCell(nextCell);
   editingCell.value = nextCell;
   editingValue.value = getCellInputValue(nextCell);
+  scrollToCell(nextCell);
 }
 
 function getAdjacentCell(cell: XlsxCellAddress, rowDelta: number, colDelta: number): XlsxCellAddress | null {
@@ -2297,6 +2377,7 @@ function moveCell(rowDelta: number, colDelta: number, extend: boolean) {
 function startEdit(cell: XlsxCellAddress) {
   editingCell.value = cell;
   editingValue.value = getCellInputValue(cell);
+  scrollToCell(cell);
   nextTick(() => editInputRef.value?.focus());
 }
 
@@ -2312,19 +2393,18 @@ function scrollToCell(cell: XlsxCellAddress) {
   const rowH = effectiveRowHeights.value[displayCell.row] || DEFAULT_ROW_HEIGHT;
   const bodyWidth = Math.max(0, container.clientWidth - ROW_HEADER_WIDTH);
   const bodyHeight = Math.max(0, container.clientHeight - HEADER_HEIGHT);
-  // The scrolling pane is smaller than the body by the frozen strips, and
-  // pinned cells are always on screen — scrolling them into view would jump
-  // the sheet for no reason.
-  const scrollingWidth = Math.max(0, bodyWidth - frozen.width);
-  const scrollingHeight = Math.max(0, bodyHeight - frozen.height);
 
+  // Pinned cells are always on screen — scrolling them into view would jump
+  // the sheet for no reason. In the scrolling pane the freeze line hides the
+  // first frozenWidth pixels, so a cell is only fully visible once its left
+  // edge clears the strip and its right edge clears the body's right edge.
   if (displayCell.col >= frozen.cols) {
-    if (colX < container.scrollLeft) container.scrollLeft = Math.max(0, colX);
-    else if (colX + colW > container.scrollLeft + scrollingWidth) container.scrollLeft = colX + colW - scrollingWidth;
+    if (colX - container.scrollLeft < frozen.width) container.scrollLeft = Math.max(0, colX - frozen.width);
+    else if (colX + colW - container.scrollLeft > bodyWidth) container.scrollLeft = colX + colW - bodyWidth;
   }
   if (displayCell.row >= frozen.rows) {
-    if (rowY < container.scrollTop) container.scrollTop = Math.max(0, rowY);
-    else if (rowY + rowH > container.scrollTop + scrollingHeight) container.scrollTop = rowY + rowH - scrollingHeight;
+    if (rowY - container.scrollTop < frozen.height) container.scrollTop = Math.max(0, rowY - frozen.height);
+    else if (rowY + rowH - container.scrollTop > bodyHeight) container.scrollTop = rowY + rowH - bodyHeight;
   }
   schedulePaint();
 }
@@ -2388,26 +2468,14 @@ const cornerCanvasStyle: CSSProperties = { left: "0px", position: "absolute", to
 
 const editInputStyle = computed<CSSProperties>(() => {
   if (!editingCell.value) return { display: "none" };
-  const cell = editingCell.value;
-  const displayCell = getDisplayCell(cell);
-  if (!displayCell) return { display: "none" };
   const z = gridZoomFactor(zoomScale.value);
-  const frozen = frozenPaneMetrics();
-  const anchor = resolvePaneViewPoint({
-    contentX: getColOffsetSum(displayCell.col),
-    contentY: getRowOffsetSum(displayCell.row),
-    displayCol: displayCell.col,
-    displayRow: displayCell.row,
-    frozenCols: frozen.cols,
-    frozenRows: frozen.rows,
-    scrollLeft: scrollLeft.value,
-    scrollTop: scrollTop.value,
-  });
+  const rect = paneOverlayRect(editingCell.value);
+  if (!rect) return { display: "none" };
   return {
-    left: `${ROW_HEADER_WIDTH + anchor.x}px`,
-    top: `${HEADER_HEIGHT + anchor.y}px`,
-    width: `${effectiveColWidths.value[displayCell.col] || DEFAULT_COL_WIDTH}px`,
-    height: `${effectiveRowHeights.value[displayCell.row] || DEFAULT_ROW_HEIGHT}px`,
+    left: `${ROW_HEADER_WIDTH + rect.left}px`,
+    top: `${HEADER_HEIGHT + rect.top}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
     position: "absolute", zIndex: "10",
     border: "2px solid #2563eb", padding: "2px 4px",
     fontSize: `${12 * z}px`, fontFamily: "inherit", outline: "none",

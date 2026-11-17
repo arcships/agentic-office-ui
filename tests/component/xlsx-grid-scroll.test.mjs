@@ -168,7 +168,7 @@ test("XlsxGrid display indices keep hidden row and column workbook addresses", (
   assert.doesNotMatch(hitTestSource, /container\.scroll(Left|Top)/);
   assert.equal(descendants(functionNode("hitTestCell"), ts.isForStatement).length, 0);
   assert.match(functionNode("paintBody").getText(AST), /getSheetCell\(r, c\)/);
-  assert.match(declaration("editInputStyle").getText(AST), /getDisplayCell\(cell\)/);
+  assert.match(declaration("editInputStyle").getText(AST), /paneOverlayRect\(/);
   assert.match(functionNode("commitAndTab").getText(AST), /getAdjacentCell\(editingCell\.value, 0, 1\)/);
 });
 

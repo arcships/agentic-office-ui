@@ -73,6 +73,17 @@ function gridMetricsFunction(name) {
   )[0];
 }
 
+function gridMetricsConstant(name) {
+  return descendants(
+    GRID_METRICS_AST,
+    (node) =>
+      ts.isVariableStatement(node) &&
+      node.declarationList.declarations.some(
+        (declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === name,
+      ),
+  )[0];
+}
+
 function constantNode(name) {
   return descendants(
     AST,
@@ -102,8 +113,14 @@ async function loadMenuGeometry() {
     assert.ok(node, `grid-metrics 缺少 ${name}`);
     return node.getText(GRID_METRICS_AST);
   });
+  const sharedConstants = ["GRID_DEFAULT_COL_WIDTH_PX", "GRID_DEFAULT_ROW_HEIGHT_PX"].map((name) => {
+    const node = gridMetricsConstant(name);
+    assert.ok(node, `grid-metrics 缺少 ${name}`);
+    return node.getText(GRID_METRICS_AST);
+  });
   const source = [
     paneGeometry,
+    ...sharedConstants,
     ...sharedFunctions,
     ...constants.map((name) => constantNode(name)?.getText(AST)),
     ...functions.map((name) => functionNode(name)?.getText(AST)),
