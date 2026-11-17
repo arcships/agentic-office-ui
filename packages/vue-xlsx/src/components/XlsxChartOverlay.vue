@@ -18,11 +18,14 @@
         :key="item.chart.id"
         class="xlsx-chart-overlay__item"
         data-testid="xlsx-chart-item"
+        tabindex="0"
         :class="{
           'xlsx-chart-overlay__item--selected': item.chart.id === selectedChartId,
+          'xlsx-chart-overlay__item--gesture': interaction.isActive(item.chart.id),
         }"
         :style="item.style"
-        @pointerdown.stop="onChartPointerDown(item.chart, $event)"
+        @pointerdown.stop="onChartPointerDown(item, $event)"
+        @keydown="onChartKeydown(item.chart, $event)"
       >
         <MemoChartSvg
           v-if="item.chart.chartType !== 'Unsupported'"
@@ -42,6 +45,21 @@
         <div v-else class="xlsx-chart-overlay__unsupported">
           📊 不支持的图表类型
         </div>
+        <div
+          v-if="item.chart.id === selectedChartId"
+          class="xlsx-chart-overlay__handles"
+          data-testid="xlsx-chart-handles"
+        >
+          <div
+            v-for="handle in DRAWING_RESIZE_HANDLES"
+            :key="handle"
+            class="xlsx-chart-overlay__handle"
+            data-testid="xlsx-chart-resize-handle"
+            :data-handle="handle"
+            :style="handleStyle(handle)"
+            @pointerdown.stop="onHandlePointerDown(item, handle, $event)"
+          />
+        </div>
       </div>
     </div>
   </div>
@@ -49,9 +67,10 @@
 
 <script setup lang="ts">
 import { computed, type CSSProperties } from "vue";
-import type { XlsxViewerController, XlsxChart, XlsxChartElementSelection, XlsxImageRect } from "@arcships/xlsx-core";
+import type { XlsxViewerController, XlsxChart, XlsxChartElementSelection, XlsxImageRect, XlsxImageResizeHandlePosition } from "@arcships/xlsx-core";
 import { MemoChartSvg } from "../optional/lazy-renderers";
 import { createGridPaneLayout, gridBodyLayerStyle, resolveAnchorRect, type GridPaneKey } from "./grid-metrics";
+import { DRAWING_RESIZE_HANDLES, drawingHandleStyle, useDrawingGestures } from "./drawing-interaction";
 import type { ChartRendererPalette } from "../render/chart-types";
 
 const props = defineProps<{
@@ -85,6 +104,20 @@ const paneLayout = computed(() => createGridPaneLayout(
   props.scrollTop ?? 0,
 ));
 
+const interaction = useDrawingGestures({
+  onSelect: (id) => props.controller.selectChart(id),
+  onMove: (id, deltaX, deltaY) => props.controller.moveChartBy(id, deltaX, deltaY),
+  onResize: (id, handle, deltaX, deltaY) => props.controller.resizeChartBy(id, handle, deltaX, deltaY),
+});
+
+function numericPx(value: string | number | undefined): number {
+  return typeof value === "number" ? value : Number.parseFloat(value ?? "0") || 0;
+}
+
+function handleStyle(handle: XlsxImageResizeHandlePosition): CSSProperties {
+  return drawingHandleStyle(handle);
+}
+
 const chartItems = computed<ChartItem[]>(() => {
   const layout = paneLayout.value;
   return (props.controller.charts as XlsxChart[])
@@ -93,20 +126,23 @@ const chartItems = computed<ChartItem[]>(() => {
       const rect = resolveAnchorRect(chart.anchor, props.controller.activeSheet, props.controller.zoomScale);
       const isSelected = chart.id === selectedChartId.value;
       const placement = layout.place(rect);
-      return {
-        chart,
-        rect,
-        pane: placement.pane,
-        style: {
-          ...placement.style,
-          position: "absolute",
-          pointerEvents: "auto",
-          cursor: "pointer",
-          outline: isSelected ? "2px solid #2563eb" : "none",
-          outlineOffset: "-1px",
-          zIndex: isSelected ? 5 : 1,
-        } satisfies CSSProperties,
+      const preview = interaction.previewFor(chart.id);
+      const style: CSSProperties = {
+        ...placement.style,
+        position: "absolute",
+        pointerEvents: "auto",
+        cursor: isSelected ? "move" : "pointer",
+        outline: isSelected ? "2px solid #2563eb" : "none",
+        outlineOffset: "-1px",
+        zIndex: isSelected ? 5 : 1,
       };
+      if (preview) {
+        style.left = `${numericPx(placement.style.left) + preview.left - rect.left}px`;
+        style.top = `${numericPx(placement.style.top) + preview.top - rect.top}px`;
+        style.width = `${preview.width}px`;
+        style.height = `${preview.height}px`;
+      }
+      return { chart, rect, pane: placement.pane, style };
     });
 });
 
@@ -115,8 +151,12 @@ const panes = computed(() => paneLayout.value.panes.map((pane) => ({
   items: chartItems.value.filter((item) => item.pane === pane.key),
 })));
 
-function onChartPointerDown(chart: XlsxChart, _event: PointerEvent) {
-  props.controller.selectChart(chart.id);
+function onChartPointerDown(item: ChartItem, event: PointerEvent) {
+  interaction.beginMove(item.chart.id, item.rect, event);
+}
+
+function onHandlePointerDown(item: ChartItem, handle: XlsxImageResizeHandlePosition, event: PointerEvent) {
+  interaction.beginResize(item.chart.id, item.rect, handle, event);
 }
 
 function onChartElementPointerDown(selection: XlsxChartElementSelection, _event: PointerEvent) {
@@ -126,22 +166,55 @@ function onChartElementPointerDown(selection: XlsxChartElementSelection, _event:
 function onChartElementDoubleClick(selection: XlsxChartElementSelection, _event: MouseEvent) {
   props.controller.selectChartElement(selection);
 }
+
+function onChartKeydown(chart: XlsxChart, event: KeyboardEvent) {
+  if (props.controller.selectedChartId !== chart.id) {
+    return;
+  }
+  const step = event.shiftKey ? 10 : 1;
+  const nudge: Record<string, [number, number]> = {
+    ArrowLeft: [-1, 0],
+    ArrowRight: [1, 0],
+    ArrowUp: [0, -1],
+    ArrowDown: [0, 1],
+  };
+  const delta = nudge[event.key];
+  if (delta) {
+    event.preventDefault();
+    event.stopPropagation();
+    props.controller.moveChartBy(chart.id, delta[0] * step, delta[1] * step);
+    return;
+  }
+  if (event.key === "Escape") {
+    event.stopPropagation();
+    props.controller.clearSelectedChart();
+  }
+}
 </script>
 
 <style scoped>
 /* Geometry (inset past the headers) comes from `gridBodyLayerStyle`; each
    freeze pane clips its own charts so a scrolled-away chart never paints over
-   frozen panes, the headers, or the host UI around the surface. */
+   frozen panes, the headers, or the host UI around the surface. The layer is
+   its own stacking context so pane/object z-index values cannot escape it. */
 .xlsx-chart-overlay {
   pointer-events: none; position: absolute;
+  isolation: isolate; z-index: 1;
 }
 .xlsx-chart-overlay__pane {
   overflow: hidden; pointer-events: none; position: absolute;
 }
-.xlsx-chart-overlay__item { background: transparent; overflow: hidden; }
+.xlsx-chart-overlay__item { background: transparent; overflow: visible; }
 .xlsx-chart-overlay__item--selected { box-shadow: 0 0 0 1px #2563eb; }
+.xlsx-chart-overlay__item--gesture { cursor: move; }
 .xlsx-chart-overlay__unsupported {
   align-items: center; display: flex; height: 100%;
   justify-content: center; opacity: 0.5; width: 100%;
+}
+.xlsx-chart-overlay__handles { inset: 0; pointer-events: none; position: absolute; }
+.xlsx-chart-overlay__handle {
+  background: #ffffff; border: 1px solid #2563eb; box-sizing: border-box;
+  height: 8px; pointer-events: auto; position: absolute; width: 8px;
+  z-index: 1000000;
 }
 </style>

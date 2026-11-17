@@ -473,6 +473,46 @@ export function parseTransformRect(xfrmNode: Element | null) {
   };
 }
 
+/**
+ * Parse DrawingML `a:srcRect` into normalized crop fractions. Values are
+ * stored as thousandths of a percent (`25000` = 25%) and are clamped so that
+ * at least one percent of the source remains visible on each axis.
+ */
+export function parseImageSourceRect(node: Element): XlsxImage["srcRect"] | undefined {
+  const srcRectNode = getFirstDescendant(node, "srcRect");
+  if (!srcRectNode) {
+    return undefined;
+  }
+
+  const readFraction = (name: string) => {
+    const raw = Number(srcRectNode.getAttribute(name) ?? 0);
+    if (!Number.isFinite(raw) || raw <= 0) {
+      return 0;
+    }
+    return Math.min(0.99, raw / 100000);
+  };
+
+  let left = readFraction("l");
+  let right = readFraction("r");
+  let top = readFraction("t");
+  let bottom = readFraction("b");
+  if (left + right >= 0.99) {
+    const scale = 0.98 / (left + right);
+    left *= scale;
+    right *= scale;
+  }
+  if (top + bottom >= 0.99) {
+    const scale = 0.98 / (top + bottom);
+    top *= scale;
+    bottom *= scale;
+  }
+  if (left === 0 && right === 0 && top === 0 && bottom === 0) {
+    return undefined;
+  }
+
+  return { bottom, left, right, top };
+}
+
 export function applyGroupTransform(rect: DrawingRectEmu, group: GroupTransform): DrawingRectEmu {
   return {
     cx: rect.cx * group.scaleX,

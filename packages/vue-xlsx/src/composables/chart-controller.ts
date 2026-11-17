@@ -1,14 +1,17 @@
 import { computed, watch } from "vue";
 import type { Workbook } from "@dukelib/sheets-wasm";
 import {
+  anchorToAbsoluteRect,
   applyChartSeriesFormula,
   buildChartSeriesFormula,
+  emuToPixels,
   rectToImageAnchor,
   resizeImageRect,
-  resolveContentSheetAxisPixels,
   resolveRenderedSheetAxisPixels,
   resolveSheetColumnWidthPixels,
+  resolveSheetColumnWidthPx,
   resolveSheetRowHeightPixels,
+  resolveSheetRowHeightPx,
   updateWorkbookChartAnchor,
   updateWorkbookChartDefinition,
   updateWorkbookImageAnchor,
@@ -239,7 +242,19 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     ctx.selectedImageId.value = null;
   }
 
+  function zoomFactor() {
+    const scale = ctx.zoomScale.value / 100;
+    return Number.isFinite(scale) ? Math.max(0.1, scale) : 1;
+  }
+
   function getColumnWidthPx(worksheet: ReturnType<Workbook["getSheet"]>, col: number) {
+    const sheet = ctx.activeSheet.value;
+    if (sheet) {
+      // The grid renders with display-order widths, so write-back must use the
+      // same model (`visibleCols` + `colWidths`) instead of the worksheet API.
+      return resolveSheetColumnWidthPx(sheet, col);
+    }
+
     const sheetState = ctx.imageAssetsRef.value?.sheetStatesByWorkbookSheetIndex[ctx.activeSheet.value?.workbookSheetIndex ?? -1] ?? null;
     if (typeof worksheet.isColumnHidden === "function" && worksheet.isColumnHidden(col)) {
       return 0;
@@ -252,7 +267,6 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
         showGridLines
       );
     }
-
     return resolveRenderedSheetAxisPixels(
       sheetState?.colWidthOverridesPx?.[col] ?? sheetState?.defaultColWidthPx ?? DEFAULT_COL_WIDTH,
       showGridLines
@@ -260,6 +274,11 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
   }
 
   function getRowHeightPx(worksheet: ReturnType<Workbook["getSheet"]>, row: number) {
+    const sheet = ctx.activeSheet.value;
+    if (sheet) {
+      return resolveSheetRowHeightPx(sheet, row);
+    }
+
     const sheetState = ctx.imageAssetsRef.value?.sheetStatesByWorkbookSheetIndex[ctx.activeSheet.value?.workbookSheetIndex ?? -1] ?? null;
     if (typeof worksheet.isRowHidden === "function" && worksheet.isRowHidden(row)) {
       return 0;
@@ -269,54 +288,37 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     if (height !== undefined && height !== null) {
       return resolveRenderedSheetAxisPixels(resolveSheetRowHeightPixels(height), showGridLines);
     }
-
     return resolveRenderedSheetAxisPixels(
       sheetState?.rowHeightOverridesPx?.[row] ?? sheetState?.defaultRowHeightPx ?? DEFAULT_ROW_HEIGHT,
       showGridLines
     );
   }
 
-  function resolveAnchoredObjectRect(anchor: XlsxImage["anchor"], worksheet: ReturnType<Workbook["getSheet"]>) {
-    const resolveAxisSum = (
-      index: number,
-      getSize: (target: number) => number
-    ) => {
-      let total = 0;
-      for (let cursor = 0; cursor < index; cursor += 1) {
-        total += getSize(cursor);
-      }
-      return total;
-    };
-
-    if (anchor.kind === "absolute") {
-      return {
-        height: anchor.sizeEmu.cy / 9525,
-        left: GRID_ROW_HEADER_WIDTH + anchor.positionEmu.x / 9525,
-        top: GRID_HEADER_HEIGHT + anchor.positionEmu.y / 9525,
-        width: anchor.sizeEmu.cx / 9525
-      };
-    }
-
-    const left = GRID_ROW_HEADER_WIDTH + resolveAxisSum(anchor.from.col, (col) => getColumnWidthPx(worksheet, col)) + anchor.from.colOffsetEmu / 9525;
-    const top = GRID_HEADER_HEIGHT + resolveAxisSum(anchor.from.row, (row) => getRowHeightPx(worksheet, row)) + anchor.from.rowOffsetEmu / 9525;
-
-    if (anchor.kind === "one-cell") {
-      return {
-        height: anchor.sizeEmu.cy / 9525,
-        left,
-        top,
-        width: anchor.sizeEmu.cx / 9525
-      };
-    }
-
-    const right = GRID_ROW_HEADER_WIDTH + resolveAxisSum(anchor.to.col, (col) => getColumnWidthPx(worksheet, col)) + anchor.to.colOffsetEmu / 9525;
-    const bottom = GRID_HEADER_HEIGHT + resolveAxisSum(anchor.to.row, (row) => getRowHeightPx(worksheet, row)) + anchor.to.rowOffsetEmu / 9525;
-
+  function resolveAnchoredObjectRect(anchor: XlsxImage["anchor"]) {
+    const rect = anchorToAbsoluteRect(anchor, ctx.activeSheet.value);
+    const zoom = zoomFactor();
     return {
-      height: Math.max(1, bottom - top),
-      left,
-      top,
-      width: Math.max(1, right - left)
+      height: Math.max(1, emuToPixels(rect.cy) * zoom),
+      left: GRID_ROW_HEADER_WIDTH + emuToPixels(rect.x) * zoom,
+      top: GRID_HEADER_HEIGHT + emuToPixels(rect.y) * zoom,
+      width: Math.max(1, emuToPixels(rect.cx) * zoom)
+    };
+  }
+
+  /**
+   * Convert an overlay rect (viewer CSS pixels, including zoom) into the
+   * unscaled sheet-pixel space that image anchors are written in.
+   */
+  function toSheetRect(rect: XlsxImageRect): XlsxImageRect {
+    const zoom = zoomFactor();
+    if (zoom === 1) {
+      return rect;
+    }
+    return {
+      height: rect.height / zoom,
+      left: GRID_ROW_HEADER_WIDTH + (rect.left - GRID_ROW_HEADER_WIDTH) / zoom,
+      top: GRID_HEADER_HEIGHT + (rect.top - GRID_HEADER_HEIGHT) / zoom,
+      width: rect.width / zoom
     };
   }
 
@@ -331,8 +333,13 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     if (!worksheet || !currentChart || currentChart.editable === false || currentChart.workbookSheetIndex !== ctx.activeSheet.value.workbookSheetIndex) {
       return;
     }
+    // Validate before snapshotting so a rejected move does not leave an empty
+    // undo entry (and dragging never serialises the workbook per frame).
+    if (!hydratedChartAssets.chartOriginsById.has(id)) {
+      return;
+    }
 
-    const nextAnchor = rectToImageAnchor(rect, currentChart.anchor, {
+    const nextAnchor = rectToImageAnchor(toSheetRect(rect), currentChart.anchor, {
       contentOffsetLeft: GRID_ROW_HEADER_WIDTH,
       contentOffsetTop: GRID_HEADER_HEIGHT,
       getColumnWidthPx: (col) => getColumnWidthPx(worksheet, col),
@@ -340,7 +347,9 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     });
 
     ctx.recordHistoryBeforeMutation();
-    updateWorkbookChartAnchor(ctx.imageAssetsRef.value, hydratedChartAssets, id, nextAnchor);
+    if (!updateWorkbookChartAnchor(ctx.imageAssetsRef.value, hydratedChartAssets, id, nextAnchor)) {
+      return;
+    }
 
     hydratedChartAssets.chartsByWorkbookSheetIndex = hydratedChartAssets.chartsByWorkbookSheetIndex.map((sheetCharts) => (
       sheetCharts.map((chart) => chart.id === id ? { ...chart, anchor: nextAnchor } : chart)
@@ -362,8 +371,13 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     if (!worksheet || !currentImage || currentImage.editable === false || currentImage.workbookSheetIndex !== ctx.activeSheet.value.workbookSheetIndex) {
       return;
     }
+    // Validate before snapshotting so a rejected move does not leave an empty
+    // undo entry (and dragging never serialises the workbook per frame).
+    if (!ctx.imageAssetsRef.value.imageOriginsById.has(id)) {
+      return;
+    }
 
-    const nextAnchor = rectToImageAnchor(rect, currentImage.anchor, {
+    const nextAnchor = rectToImageAnchor(toSheetRect(rect), currentImage.anchor, {
       contentOffsetLeft: GRID_ROW_HEADER_WIDTH,
       contentOffsetTop: GRID_HEADER_HEIGHT,
       getColumnWidthPx: (col) => getColumnWidthPx(worksheet, col),
@@ -385,12 +399,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const worksheet = ctx.getActiveWorksheet();
-    if (!worksheet) {
-      return;
-    }
-
-    const currentRect = resolveAnchoredObjectRect(currentChart.anchor, worksheet);
+    const currentRect = resolveAnchoredObjectRect(currentChart.anchor);
     setChartRect(id, {
       ...currentRect,
       left: currentRect.left + deltaX,
@@ -404,59 +413,11 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const currentRect = (() => {
-      const worksheet = ctx.getActiveWorksheet();
-      if (!worksheet) {
-        return null;
-      }
-
-      const resolveAxisSum = (
-        index: number,
-        getSize: (target: number) => number
-      ) => {
-        let total = 0;
-        for (let cursor = 0; cursor < index; cursor += 1) {
-          total += getSize(cursor);
-        }
-        return total;
-      };
-
-      if (currentImage.anchor.kind === "absolute") {
-        return {
-          height: currentImage.anchor.sizeEmu.cy / 9525,
-          left: GRID_ROW_HEADER_WIDTH + currentImage.anchor.positionEmu.x / 9525,
-          top: GRID_HEADER_HEIGHT + currentImage.anchor.positionEmu.y / 9525,
-          width: currentImage.anchor.sizeEmu.cx / 9525
-        };
-      }
-
-      const left = GRID_ROW_HEADER_WIDTH + resolveAxisSum(currentImage.anchor.from.col, (col) => getColumnWidthPx(worksheet, col)) + currentImage.anchor.from.colOffsetEmu / 9525;
-      const top = GRID_HEADER_HEIGHT + resolveAxisSum(currentImage.anchor.from.row, (row) => getRowHeightPx(worksheet, row)) + currentImage.anchor.from.rowOffsetEmu / 9525;
-
-      if (currentImage.anchor.kind === "one-cell") {
-        return {
-          height: currentImage.anchor.sizeEmu.cy / 9525,
-          left,
-          top,
-          width: currentImage.anchor.sizeEmu.cx / 9525
-        };
-      }
-
-      const right = GRID_ROW_HEADER_WIDTH + resolveAxisSum(currentImage.anchor.to.col, (col) => getColumnWidthPx(worksheet, col)) + currentImage.anchor.to.colOffsetEmu / 9525;
-      const bottom = GRID_HEADER_HEIGHT + resolveAxisSum(currentImage.anchor.to.row, (row) => getRowHeightPx(worksheet, row)) + currentImage.anchor.to.rowOffsetEmu / 9525;
-
-      return {
-        height: Math.max(1, bottom - top),
-        left,
-        top,
-        width: Math.max(1, right - left)
-      };
-    })();
-
-    if (!currentRect) {
+    if (!ctx.getActiveWorksheet()) {
       return;
     }
 
+    const currentRect = resolveAnchoredObjectRect(currentImage.anchor);
     setImageRect(id, {
       ...currentRect,
       left: currentRect.left + deltaX,
@@ -470,12 +431,11 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const worksheet = ctx.getActiveWorksheet();
-    if (!worksheet) {
+    if (!ctx.getActiveWorksheet()) {
       return;
     }
 
-    const currentRect = resolveAnchoredObjectRect(currentChart.anchor, worksheet);
+    const currentRect = resolveAnchoredObjectRect(currentChart.anchor);
     setChartRect(id, resizeImageRect(currentRect, handle, deltaX, deltaY, 48));
   }
 
@@ -485,43 +445,12 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const worksheet = ctx.getActiveWorksheet();
-    if (!worksheet) {
+    if (!ctx.getActiveWorksheet()) {
       return;
     }
 
-    const resolveAxisSum = (
-      index: number,
-      getSize: (target: number) => number
-    ) => {
-      let total = 0;
-      for (let cursor = 0; cursor < index; cursor += 1) {
-        total += getSize(cursor);
-      }
-      return total;
-    };
-
-    const left = currentImage.anchor.kind === "absolute"
-      ? GRID_ROW_HEADER_WIDTH + currentImage.anchor.positionEmu.x / 9525
-      : GRID_ROW_HEADER_WIDTH + resolveAxisSum(currentImage.anchor.from.col, (col) => getColumnWidthPx(worksheet, col)) + currentImage.anchor.from.colOffsetEmu / 9525;
-    const top = currentImage.anchor.kind === "absolute"
-      ? GRID_HEADER_HEIGHT + currentImage.anchor.positionEmu.y / 9525
-      : GRID_HEADER_HEIGHT + resolveAxisSum(currentImage.anchor.from.row, (row) => getRowHeightPx(worksheet, row)) + currentImage.anchor.from.rowOffsetEmu / 9525;
-    const width = currentImage.anchor.kind === "two-cell"
-      ? Math.max(
-          1,
-          GRID_ROW_HEADER_WIDTH + resolveAxisSum(currentImage.anchor.to.col, (col) => getColumnWidthPx(worksheet, col)) + currentImage.anchor.to.colOffsetEmu / 9525 - left
-        )
-      : currentImage.anchor.sizeEmu.cx / 9525;
-    const height = currentImage.anchor.kind === "two-cell"
-      ? Math.max(
-          1,
-          GRID_HEADER_HEIGHT + resolveAxisSum(currentImage.anchor.to.row, (row) => getRowHeightPx(worksheet, row)) + currentImage.anchor.to.rowOffsetEmu / 9525 - top
-        )
-      : currentImage.anchor.sizeEmu.cy / 9525;
-
-    const nextRect = resizeImageRect({ height, left, top, width }, handle, deltaX, deltaY);
-    setImageRect(id, nextRect);
+    const currentRect = resolveAnchoredObjectRect(currentImage.anchor);
+    setImageRect(id, resizeImageRect(currentRect, handle, deltaX, deltaY));
   }
 
   function updateChart(id: string, patch: Partial<XlsxChart>) {

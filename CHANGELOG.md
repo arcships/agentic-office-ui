@@ -19,6 +19,15 @@ All notable changes to the `@arcships` package family are documented in this fil
 - Keep ASCII, high-ANSI, eastAsia and complex-script fonts separately, build a per-glyph font stack and resolve major/minor theme fonts from `theme1.xml` during import.
 - Read `w:lvlJc`/`w:suff` from `numbering.xml`, align list markers accordingly, and add decimalZero, Chinese, ideographic, enclosed and text numbering formats.
 
+### XLSX drawing objects
+
+- Honour picture `zIndex` inside per-pane stacking contexts and render rotation, flip and `srcRect` crop.
+- Add drag, eight-way resize and arrow-key nudge for images and charts; pointer gestures preview locally and commit one history entry.
+- Render shape text from paragraphs and runs with alignment, insets, vertical alignment and flips.
+- Make checkbox and radio controls interactive and write `TRUE`/`FALSE` to their `linkedCell`.
+- Use one visible-column axis model for grid rendering and anchor write-back, including hidden rows and columns.
+- Memoise chart SVG trees so scrolling does not rebuild chart DOM.
+
 ### Cross-format Office references
 
 - Prepare the nine public packages as the `0.6.0` candidate while keeping `0.5.4` as the published stable line.
