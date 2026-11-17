@@ -1,5 +1,5 @@
 <template>
-  <div class="docx-toolbar-shell" data-testid="docx-editor-toolbar">
+  <div class="docx-toolbar-shell" :class="{ 'docx-toolbar-shell--dark': toolbarTheme === 'dark' }" data-testid="docx-editor-toolbar">
     <div class="docx-toolbar-topbar">
       <div class="docx-toolbar-topbar__leading">
         <button
@@ -392,6 +392,8 @@ const props = defineProps<{
   showThumbnails?: boolean
   currentPage?: number
   totalPages?: number
+  /** Toolbar appearance. Defaults to the controller document theme. */
+  theme?: "light" | "dark"
 }>()
 
 const emit = defineEmits<{
@@ -399,6 +401,8 @@ const emit = defineEmits<{
   (e: "toggleThumbnails"): void
   (e: "selectPage", page: number): void
 }>()
+
+const toolbarTheme = computed(() => props.theme ?? props.controller.documentTheme)
 
 // ── Font sizes ──────────────────────────────────────────────────────
 const fontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48]
@@ -817,13 +821,41 @@ function onImport(): void {
   font-weight: 500;
 }
 
-@media (max-width: 900px) {
+.docx-toolbar-shell--dark {
+  background: #18181b;
+  border-bottom-color: #3f3f46;
+  color: #f4f4f5;
+}
+.docx-toolbar-shell--dark .docx-toolbar-topbar { border-bottom-color: #3f3f46; }
+.docx-toolbar-shell--dark .docx-toolbar { background: #18181b; }
+.docx-toolbar-shell--dark .docx-toolbar-page-control { color: #a1a1aa; }
+.docx-toolbar-shell--dark .docx-toolbar-page-control input,
+.docx-toolbar-shell--dark .docx-toolbar-action,
+.docx-toolbar-shell--dark .docx-toolbar-select {
+  background: #27272a;
+  border-color: #3f3f46;
+  color: #f4f4f5;
+}
+.docx-toolbar-shell--dark .docx-toolbar-action:hover,
+.docx-toolbar-shell--dark .docx-toolbar-btn:hover,
+.docx-toolbar-shell--dark .docx-toolbar-color-picker:hover,
+.docx-toolbar-shell--dark .docx-toolbar-toggle:hover { background: #27272a; }
+.docx-toolbar-shell--dark .docx-toolbar-action--primary { background: #f4f4f5; border-color: #f4f4f5; color: #18181b; }
+.docx-toolbar-shell--dark .docx-toolbar-action--primary:hover { background: #d4d4d8; }
+.docx-toolbar-shell--dark .docx-toolbar-btn { color: #d4d4d8; }
+.docx-toolbar-shell--dark .docx-toolbar-btn.active { background: #3f3f46; color: #93c5fd; }
+.docx-toolbar-shell--dark .docx-toolbar-separator { background: #3f3f46; }
+.docx-toolbar-shell--dark .docx-toolbar-readonly { background: #27272a; color: #a1a1aa; }
+.docx-toolbar-shell--dark .docx-toolbar-color-label { color: #d4d4d8; }
+.docx-toolbar-shell--dark .docx-toolbar-toggle-label { color: #a1a1aa; }
+
+@container docx-shell (max-width: 900px) {
   .docx-toolbar-topbar { align-items: stretch; flex-direction: column; gap: 5px; }
   .docx-toolbar-topbar__actions { justify-content: flex-end; overflow-x: auto; }
   .docx-toolbar-filename { flex: 1; max-width: none; }
 }
 
-@media (max-width: 560px) {
+@container docx-shell (max-width: 560px) {
   .docx-toolbar-topbar__actions .docx-toolbar-toggle { display: none; }
   .docx-toolbar-action span { display: none; }
   .docx-toolbar-action { padding: 0; width: 32px; }

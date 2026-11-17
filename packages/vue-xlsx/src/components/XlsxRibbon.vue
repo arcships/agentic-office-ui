@@ -284,7 +284,7 @@ function applyBorders(): void {
 .xlsx-ribbon select:focus-visible,
 .xlsx-ribbon__color:focus-within { outline: 2px solid #2563eb; outline-offset: 2px; }
 
-@media (max-width: 560px) {
+@container xlsx-viewer (max-width: 560px) {
   .xlsx-ribbon__readonly span { display: none; }
 }
 </style>

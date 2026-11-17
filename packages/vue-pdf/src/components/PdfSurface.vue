@@ -2,6 +2,7 @@
   <div
     ref="scrollRef"
     class="pdf-surface"
+    :class="{ 'pdf-surface--dark': props.isDark }"
     data-testid="pdf-surface"
     tabindex="0"
     @scroll.passive="onScroll"
@@ -204,6 +205,8 @@ const props = withDefaults(
     documentId?: string
     selectionMode?: OfficeSelectionMode
     emitReferenceCandidates?: boolean
+    /** Dark viewer chrome and page surround. Defaults to false. */
+    isDark?: boolean
   }>(),
   {
     maxFileSize: DEFAULT_PDF_MAX_FILE_SIZE,
@@ -211,6 +214,7 @@ const props = withDefaults(
     enableGestureZoom: true,
     selectionMode: "content",
     emitReferenceCandidates: false,
+    isDark: false,
   },
 )
 
@@ -1932,11 +1936,17 @@ onBeforeUnmount(async () => {
   overflow-x: auto;
   min-height: 0;
   min-width: 0;
-  background: var(--pdf-surface-bg, #525659);
+  --pdf-surface-bg: #525659;
+  --pdf-surface-page-filter: none;
+  background: var(--pdf-surface-bg);
+}
+.pdf-surface--dark {
+  --pdf-surface-bg: #020617;
+  --pdf-surface-page-filter: var(--pdf-dark-page-filter, invert(1) hue-rotate(180deg));
 }
 .pdf-surface__empty {
   display: flex; align-items: center; justify-content: center;
-  height: 200px; color: #9ca3af; font-size: 14px;
+  min-height: 200px; color: #9ca3af; font-size: 14px;
 }
 .pdf-surface__error {
   padding: 16px; color: #ef4444; font-size: 13px;
@@ -1951,7 +1961,8 @@ onBeforeUnmount(async () => {
   position: relative;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
-.pdf-surface__page-img { display: block; }
+.pdf-surface__page-img { display: block; filter: var(--pdf-surface-page-filter); }
+.pdf-surface--dark .pdf-surface__page-slot { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7); }
 .pdf-surface__overlay,
 .pdf-surface__interaction {
   inset: 0;
@@ -1987,4 +1998,28 @@ onBeforeUnmount(async () => {
   box-sizing: border-box; width: 100%; height: 100%;
 }
 .pdf-surface__page-error { color: #ef4444; }
+
+@media print {
+  .pdf-surface {
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  .pdf-surface__interaction,
+  .pdf-surface__overlay,
+  .pdf-surface__empty,
+  .pdf-surface__error { display: none !important; }
+  .pdf-surface__pages { display: block !important; padding: 0 !important; }
+  .pdf-surface__page-slot {
+    break-after: page;
+    box-shadow: none !important;
+    margin: 0 auto;
+    max-width: 100%;
+  }
+  .pdf-surface__page-img {
+    filter: none !important;
+    height: auto !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+}
 </style>

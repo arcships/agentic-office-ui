@@ -2,7 +2,7 @@
   <div
     ref="editorRootRef"
     class="docx-editor-viewer"
-    :class="className"
+    :class="[className, { 'docx-editor-viewer--dark': isDarkTheme }]"
     data-testid="docx-editor"
     @keydown="onKeydown"
   >
@@ -10,6 +10,7 @@
     <DocxToolbar
       v-if="showToolbar"
       :controller="controller"
+      :theme="isDarkTheme ? 'dark' : 'light'"
       :zoom="zoomPercent"
       :read-only="interactionLocked"
       :show-thumbnails="thumbnailPanelVisible"
@@ -26,6 +27,7 @@
       <DocxThumbnailPanel
         v-if="thumbnailPanelVisible && !pageLimitError"
         :controller="controller"
+        :is-dark="isDarkTheme"
         :current-page="currentPage"
         :total-pages="totalPages"
         :show-toggle="false"
@@ -39,6 +41,7 @@
         :model="renderedModel"
         :controller="controller"
         :editable="editable"
+        :theme="isDarkTheme ? 'dark' : 'light'"
         :zoom-scale="zoomPercent"
         @page-count-change="onPageCountChange"
         @visible-page-range="onVisiblePageRange"
@@ -126,12 +129,15 @@ const props = withDefaults(
     showToolbar?: boolean
     showThumbnails?: boolean
     runtime?: DocxRuntime
+    /** Dark editor shell and document theme. Follows the controller theme when omitted. */
+    isDark?: boolean
   }>(),
-  { editable: true, showToolbar: true, showThumbnails: false }
+  { editable: true, showToolbar: true, showThumbnails: false, isDark: false }
 )
 
 const emit = defineEmits<{
   (event: "load-error", error: Error): void
+  (event: "update:isDark", isDark: boolean): void
 }>()
 
 // ── Controller ─────────────────────────────────────────────────────
@@ -142,6 +148,11 @@ const internalController = !props.editor
     })
   : null
 const controller = props.editor ?? internalController!
+const isDarkTheme = computed(() => props.isDark || controller.documentTheme === "dark")
+watch(
+  () => controller.documentTheme,
+  (theme) => { emit("update:isDark", theme === "dark") },
+)
 const renderedModel = computed(() =>
   !props.editor && !props.editable && props.model
     ? props.model
@@ -412,11 +423,25 @@ onUnmounted(() => {
 
 <style scoped>
 .docx-editor-viewer {
+  --docx-editor-bg: #f3f4f6;
+  --docx-editor-panel: #f9fafb;
+  --docx-editor-border: #e5e7eb;
+  --docx-editor-fg: #374151;
+  --docx-editor-muted: #6b7280;
+  container: docx-shell / inline-size;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: #f3f4f6;
+  background: var(--docx-editor-bg);
+  color: var(--docx-editor-fg);
+}
+.docx-editor-viewer--dark {
+  --docx-editor-bg: #09090b;
+  --docx-editor-panel: #18181b;
+  --docx-editor-border: #3f3f46;
+  --docx-editor-fg: #f4f4f5;
+  --docx-editor-muted: #a1a1aa;
 }
 .docx-editor-body {
   display: flex;
@@ -436,21 +461,39 @@ onUnmounted(() => {
   align-items: center;
   gap: 16px;
   padding: 4px 12px;
-  background: #f9fafb;
-  border-top: 1px solid #e5e7eb;
+  background: var(--docx-editor-panel);
+  border-top: 1px solid var(--docx-editor-border);
   font-size: 12px;
-  color: #6b7280;
+  color: var(--docx-editor-muted);
   flex-shrink: 0;
 }
 .docx-editor-statusbar-page {
   font-weight: 500;
 }
 .docx-editor-statusbar-status {
-  color: #9ca3af;
+  color: var(--docx-editor-muted);
 }
 .docx-editor-statusbar-file {
   margin-left: auto;
-  color: #374151;
+  color: var(--docx-editor-fg);
   font-weight: 500;
+}
+
+@media print {
+  .docx-editor-viewer {
+    background: #fff !important;
+    color: #000 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  .docx-toolbar-shell,
+  .docx-thumbnail-panel,
+  .docx-editor-statusbar,
+  .docx-context-menu-backdrop,
+  .docx-context-menu,
+  .docx-drag-overlay,
+  .docx-editor-limit-error { display: none !important; }
+  .docx-editor-body { display: block !important; overflow: visible !important; }
 }
 </style>

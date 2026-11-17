@@ -55,6 +55,8 @@ import "@arcships/vue-docx/style.css"
 
 `DocxEditor` 可以自己创建编辑控制器，也可以通过 `editor` 传入 `useDocxEditor()` 返回的控制器。传入控制器适合把保存、撤销重做和业务按钮放到组件外部。
 
+编辑器和查看器一样接受 `isDark`。传入 `isDark` 时外壳、工具栏、缩略图和纸张一起切换为深色；不传时跟随 `controller.documentTheme`。打印时工具栏、缩略图和状态栏自动隐藏，并为每页插入分页。
+
 ## 直接使用核心能力
 
 纯数据操作从 `@arcships/docx-core/core` 导入；需要加载文件、Worker 和 WASM 时使用 `@arcships/docx-core/runtime`。

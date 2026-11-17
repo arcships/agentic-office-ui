@@ -23,4 +23,6 @@ export interface PdfViewerProps {
   showToolbar?: boolean
   showDownload?: boolean
   showRotateControls?: boolean
+  /** Dark viewer chrome and page surround. Defaults to false. */
+  isDark?: boolean
 }

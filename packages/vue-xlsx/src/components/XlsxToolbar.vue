@@ -242,7 +242,7 @@ defineExpose({ openSearch });
 .xlsx-toolbar__search-result span { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .xlsx-toolbar__search-result mark { background: #fde047; color: inherit; padding: 0; }
 
-@media (max-width: 620px) {
+@container xlsx-viewer (max-width: 620px) {
   .xlsx-toolbar { align-items: stretch; flex-direction: column; gap: 5px; }
   .xlsx-toolbar__filename { flex: 1; max-width: none; }
   .xlsx-toolbar__actions { justify-content: flex-end; overflow-x: auto; }

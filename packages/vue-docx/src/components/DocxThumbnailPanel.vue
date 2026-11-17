@@ -1,5 +1,5 @@
 <template>
-  <div class="docx-thumbnail-panel" data-testid="docx-thumbnail-panel" :class="{ 'docx-thumbnail-panel--collapsed': collapsed }">
+  <div class="docx-thumbnail-panel" data-testid="docx-thumbnail-panel" :class="{ 'docx-thumbnail-panel--collapsed': collapsed, 'docx-thumbnail-panel--dark': isDark }">
     <!-- Toggle button -->
     <button v-if="showToggle" class="docx-thumbnail-toggle" @click="collapsed = !collapsed" :title="collapsed ? 'Show thumbnails' : 'Hide thumbnails'">
       {{ collapsed ? '▶' : '◀' }}
@@ -96,8 +96,9 @@ const props = withDefaults(
     totalPages?: number
     defaultCollapsed?: boolean
     showToggle?: boolean
+    isDark?: boolean
   }>(),
-  { currentPage: 1, totalPages: 1, defaultCollapsed: false, showToggle: true }
+  { currentPage: 1, totalPages: 1, defaultCollapsed: false, showToggle: true, isDark: false }
 )
 
 const emit = defineEmits<{
@@ -968,6 +969,18 @@ function onSelectPage(pageIndex: number): void {
   position: relative;
   transition: width 150ms ease;
 }
+.docx-thumbnail-panel--dark {
+  background: #18181b;
+  border-right-color: #3f3f46;
+}
+.docx-thumbnail-panel--dark .docx-thumbnail-header { border-bottom-color: #3f3f46; }
+.docx-thumbnail-panel--dark .docx-thumbnail-title { color: #f4f4f5; }
+.docx-thumbnail-panel--dark .docx-thumbnail-count { background: #27272a; color: #a1a1aa; }
+.docx-thumbnail-panel--dark .docx-thumbnail-item:hover { background: #27272a; }
+.docx-thumbnail-panel--dark .docx-thumbnail-item--active { background: #1e3a8a; outline-color: #60a5fa; }
+.docx-thumbnail-panel--dark .docx-thumbnail-label { color: #a1a1aa; }
+.docx-thumbnail-panel--dark .docx-thumbnail-toggle { background: #3f3f46; color: #e4e4e7; }
+.docx-thumbnail-panel--dark .docx-thumbnail-toggle:hover { background: #52525b; }
 .docx-thumbnail-panel--collapsed {
   width: 28px;
 }

@@ -4,6 +4,8 @@
  * Vue 3 UI components for document-centric applications.
  */
 
+import "./print.css"
+
 // Signature pad
 export { default as SignaturePad } from "./components/SignaturePad.vue"
 

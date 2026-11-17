@@ -377,6 +377,7 @@ defineExpose({
 
 <style scoped>
 .xlsx-viewer {
+  container: xlsx-viewer / inline-size;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 12px;
 }
@@ -507,5 +508,22 @@ defineExpose({
 .xlsx-viewer__deferred-button:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 2px;
+}
+
+@media print {
+  .xlsx-viewer {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  .xlsx-toolbar,
+  .xlsx-ribbon,
+  .xlsx-formula-bar,
+  .xlsx-sheet-tabs,
+  .xlsx-context-menu,
+  .xlsx-grid__edit-input,
+  .xlsx-grid__comment-popover,
+  .xlsx-viewer__deferred { display: none !important; }
+  .xlsx-viewer__body { display: block !important; overflow: visible !important; }
 }
 </style>

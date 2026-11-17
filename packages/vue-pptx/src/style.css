@@ -8,6 +8,7 @@
   /* Latin first, then CJK/Japanese/Korean fallbacks; hosts and deck themes can override. */
   --pptx-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "WenQuanYi Micro Hei", "Malgun Gothic", "Yu Gothic UI", sans-serif;
   background: var(--pptx-bg);
+  container: pptx-viewer / inline-size;
   color: var(--pptx-text);
   display: flex;
   flex-direction: column;
@@ -213,7 +214,7 @@
   overflow: hidden;
 }
 
-@media (max-width: 720px) {
+@container pptx-viewer (max-width: 720px) {
   .pptx-viewer__toolbar { align-items: stretch; flex-wrap: wrap; }
   .pptx-viewer__search { flex-basis: 100%; max-width: none; order: 3; }
   .pptx-viewer__sidebar { display: none; }
@@ -221,4 +222,26 @@
   .pptx-viewer--present .pptx-viewer__stage { padding: 0; }
   .pptx-viewer__capability { display: none; }
   .pptx-viewer__playback-controls { overflow-x: auto; }
+}
+
+@media print {
+  .pptx-viewer {
+    background: #fff !important;
+    color: #000 !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  .pptx-viewer__toolbar,
+  .pptx-viewer__sidebar,
+  .pptx-viewer__playback-controls,
+  .pptx-viewer__message { display: none !important; }
+  .pptx-viewer__body,
+  .pptx-viewer__stage-wrap { display: block !important; overflow: visible !important; }
+  .pptx-viewer__stage {
+    inline-size: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
 }
