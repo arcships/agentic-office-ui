@@ -12,6 +12,12 @@ if (args.length === 0) {
   process.exit(2);
 }
 
+const requiredModules = (process.env.RUN_PYTHON_MODULES ?? "playwright")
+  .split(",")
+  .map((module) => module.trim())
+  .filter(Boolean);
+const probeCode = requiredModules.map((module) => `import ${module}`).join("; ");
+
 const candidates = [
   process.env.PYTHON,
   process.env.CONDA_PREFIX && path.join(process.env.CONDA_PREFIX, "bin", "python"),
@@ -23,7 +29,7 @@ const candidates = [
 let selected = null;
 for (const candidate of [...new Set(candidates)]) {
   if (candidate.includes(path.sep) && !existsSync(candidate)) continue;
-  const probe = spawnSync(candidate, ["-c", "import playwright"], {
+  const probe = spawnSync(candidate, ["-c", probeCode], {
     encoding: "utf8",
   });
   if (probe.status === 0) {
@@ -34,7 +40,7 @@ for (const candidate of [...new Set(candidates)]) {
 
 if (!selected) {
   console.error(
-    "No Python interpreter with Playwright was found. Install requirements-ci.txt first.",
+    `No Python interpreter with ${requiredModules.join(", ")} was found. Install requirements-ci.txt first.`,
   );
   process.exit(2);
 }

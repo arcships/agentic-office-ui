@@ -134,7 +134,9 @@ const suites = {
     command("xlsx-export-openpyxl", process.execPath, [
       "scripts/ci/run-python.mjs",
       "tests/blackbox/xlsx_export_openpyxl.py",
-    ]),
+    ], {
+      env: { RUN_PYTHON_MODULES: "openpyxl", NODE: process.execPath },
+    }),
     command("fixture-manifest", process.execPath, [
       "scripts/ci/verify-fixtures.mjs",
     ], {

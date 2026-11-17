@@ -370,7 +370,7 @@ function syncPrintPageSize(): void {
   if (!browserDocument) return;
   const sheet = props.controller.activeSheet;
   if (!sheet || sheet.maxUsedCol < sheet.minUsedCol || sheet.maxUsedRow < sheet.minUsedRow) {
-    printPageStyle?.remove();
+    printPageStyle?.remove?.();
     printPageStyle = undefined;
     return;
   }
@@ -385,7 +385,7 @@ function syncPrintPageSize(): void {
   if (width <= 0 || height <= 0) return;
   if (!printPageStyle) {
     printPageStyle = browserDocument.createElement("style");
-    printPageStyle.dataset.officePrintPage = "xlsx";
+    if (printPageStyle.dataset) printPageStyle.dataset.officePrintPage = "xlsx";
     browserDocument.head.append(printPageStyle);
   }
   printPageStyle.textContent = `@page { size: ${Math.round(width)}px ${Math.round(height)}px; margin: 0; }`;
@@ -510,7 +510,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
-  printPageStyle?.remove();
+  printPageStyle?.remove?.();
   printPageStyle = undefined;
   gestureToken += 1;
   touchGestures.reset();

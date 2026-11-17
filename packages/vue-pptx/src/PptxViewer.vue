@@ -386,16 +386,16 @@ const rootStyle = computed(() => {
 
 function syncPrintPageSize(width?: number, height?: number): void {
   const browserDocument = globalThis.document
-  if (!browserDocument) return
+  if (!browserDocument || typeof browserDocument.createElement !== "function") return
   if (!width || !height || width <= 0 || height <= 0) {
-    printPageStyle.value?.remove()
+    printPageStyle.value?.remove?.()
     printPageStyle.value = undefined
     return
   }
   if (!printPageStyle.value) {
     const style = browserDocument.createElement("style")
-    style.dataset.officePrintPage = "pptx"
-    browserDocument.head.append(style)
+    if (style.dataset) style.dataset.officePrintPage = "pptx"
+    browserDocument.head?.append(style)
     printPageStyle.value = style
   }
   printPageStyle.value.textContent = `@page { size: ${Math.round(width)}px ${Math.round(height)}px; margin: 0; }`
@@ -430,7 +430,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  printPageStyle.value?.remove()
+  printPageStyle.value?.remove?.()
   printPageStyle.value = undefined
   globalThis.document?.removeEventListener?.("fullscreenchange", syncFullscreen)
 })

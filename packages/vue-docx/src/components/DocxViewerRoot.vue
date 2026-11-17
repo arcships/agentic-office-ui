@@ -222,16 +222,16 @@ let printMediaQuery: MediaQueryList | undefined
 let printPageStyle: HTMLStyleElement | undefined
 
 function syncPrintPageSize(widthPx?: number, heightPx?: number): void {
-  if (typeof document === "undefined") return
+  if (typeof document === "undefined" || typeof document.createElement !== "function") return
   if (!Number.isFinite(widthPx) || !Number.isFinite(heightPx) || (widthPx ?? 0) <= 0 || (heightPx ?? 0) <= 0) {
-    printPageStyle?.remove()
+    printPageStyle?.remove?.()
     printPageStyle = undefined
     return
   }
   if (!printPageStyle) {
     printPageStyle = document.createElement("style")
-    printPageStyle.dataset.officePrintPage = "docx"
-    document.head.append(printPageStyle)
+    if (printPageStyle.dataset) printPageStyle.dataset.officePrintPage = "docx"
+    document.head?.append(printPageStyle)
   }
   printPageStyle.textContent = `@page { size: ${Math.round(widthPx!)}px ${Math.round(heightPx!)}px; margin: 0; }`
 }
@@ -1077,7 +1077,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopPrintDetection()
-  printPageStyle?.remove()
+  printPageStyle?.remove?.()
   printPageStyle = undefined
   containerObserver?.disconnect()
   containerObserver = undefined

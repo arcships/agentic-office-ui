@@ -594,10 +594,10 @@ function setPrintMode(enabled: boolean): void {
 }
 
 function syncPrintPageSize(): void {
-  if (typeof document === "undefined") return
+  if (typeof document === "undefined" || typeof document.createElement !== "function") return
   const page = renderDocument.value?.pages[0]
   if (!page || page.width <= 0 || page.height <= 0) {
-    printPageStyle?.remove()
+    printPageStyle?.remove?.()
     printPageStyle = undefined
     return
   }
@@ -606,8 +606,8 @@ function syncPrintPageSize(): void {
   const height = quarterTurns % 2 ? page.width : page.height
   if (!printPageStyle) {
     printPageStyle = document.createElement("style")
-    printPageStyle.dataset.officePrintPage = "pdf"
-    document.head.append(printPageStyle)
+    if (printPageStyle.dataset) printPageStyle.dataset.officePrintPage = "pdf"
+    document.head?.append(printPageStyle)
   }
   printPageStyle.textContent = `@page { size: ${Math.round(width)}px ${Math.round(height)}px; margin: 0; }`
 }
@@ -652,7 +652,7 @@ function setupPrintDetection(): void {
       window.removeEventListener("beforeprint", onBeforePrint)
       window.removeEventListener("afterprint", onAfterPrint)
     }
-    printPageStyle?.remove()
+    printPageStyle?.remove?.()
     printPageStyle = undefined
     clearPrintPages()
   }

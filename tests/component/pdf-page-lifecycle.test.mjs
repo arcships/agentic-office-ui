@@ -111,6 +111,14 @@ function stubDisplayScale(t, initialDpr) {
   globalThis.devicePixelRatio = initialDpr;
   globalThis.window = {
     matchMedia(query) {
+      if (!query.startsWith("(resolution:")) {
+        return {
+          matches: false,
+          media: query,
+          addEventListener() {},
+          removeEventListener() {},
+        };
+      }
       queries.push(query);
       return { matches: true, media: query, ...media };
     },
