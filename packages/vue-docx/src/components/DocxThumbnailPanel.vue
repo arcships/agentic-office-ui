@@ -68,7 +68,14 @@ import type {
   LayoutSnapshotRun,
   LayoutSnapshotTableFragment,
 } from "@arcships/docx-core"
-import { buildLayoutSnapshot, parseSectionLayout, resolveDocumentLayout, resolveDocumentSectionsFromMetadata, resolveSectionPropertiesXmlForNodeIndex } from "@arcships/docx-core"
+import {
+  buildLayoutSnapshot,
+  parseSectionLayout,
+  resolveDocumentBackgroundColor,
+  resolveDocumentLayout,
+  resolveDocumentSectionsFromMetadata,
+  resolveSectionPropertiesXmlForNodeIndex,
+} from "@arcships/docx-core"
 import {
   ensureDocxViewerPageSurfaceRegistry,
   subscribeDocxViewerPageSurfaces,
@@ -121,6 +128,9 @@ const documentLayout = computed(() => {
   const model = resolvedModel.value
   return model ? resolveDocumentLayout(model) : undefined
 })
+const documentBackgroundColor = computed(() =>
+  resolveDocumentBackgroundColor(resolvedModel.value?.metadata.documentBackgroundColor)
+)
 const resolvedLayoutOptions = computed<LayoutOptions>(() => ({
   pageWidth: documentLayout.value?.pageWidthPx ?? 816,
   pageHeight: documentLayout.value?.pageHeightPx ?? 1056,
@@ -592,7 +602,7 @@ function renderVisibleThumbnails(): void {
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      ctx.fillStyle = "#ffffff"
+      ctx.fillStyle = documentBackgroundColor.value ?? "#ffffff"
       ctx.fillRect(0, 0, metric.width, metric.height)
       ctx.strokeStyle = "#d4d4d4"
       ctx.lineWidth = 1

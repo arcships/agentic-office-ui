@@ -1,66 +1,76 @@
 <template>
-  <div ref="imageLayerEl" v-if="floatingImages.length > 0" class="docx-image-layer" :style="layerStyle">
+  <div ref="imageLayerEl" v-if="floatingImages.length > 0" class="docx-image-layer-root">
     <div
-      v-for="image of floatingImages"
-      :key="image.key"
-      class="docx-floating-image-container"
-      data-testid="docx-floating-image"
-      :data-image-node-index="image.nodeIndex"
-      :data-image-child-index="image.childIndex"
-      :data-image-layout="image.flowWrapped ? 'wrapped' : 'absolute'"
-      :class="{
-        'docx-floating-image--selected': image.selected,
-      }"
-      :style="imageContainerStyle(image)"
-      @mousedown="onImageMouseDown(image, $event)"
+      v-for="layer of imageLayers"
+      :key="layer.key"
+      class="docx-image-layer"
+      :class="`docx-image-layer--${layer.key}`"
+      :data-docx-image-layer="layer.key"
+      :style="layerStyle(layer.key)"
     >
       <div
-        v-if="image.selected && editable"
-        class="docx-image-wrap-toolbar"
-        data-testid="docx-image-wrap-toolbar"
-        @mousedown.stop
+        v-for="image of layer.images"
+        :key="image.key"
+        class="docx-floating-image-container"
+        data-testid="docx-floating-image"
+        :data-image-node-index="image.nodeIndex"
+        :data-image-child-index="image.childIndex"
+        :data-image-layout="image.flowWrapped ? 'wrapped' : 'absolute'"
+        :data-image-behind="image.behindDocument ? 'true' : undefined"
+        :class="{
+          'docx-floating-image--selected': image.selected,
+        }"
+        :style="imageContainerStyle(image)"
+        @mousedown="onImageMouseDown(image, $event)"
       >
-        <button type="button" data-testid="docx-image-wrap-inline" title="Inline with text" @click.stop="setWrapMode(image, 'inline')">Inline</button>
-        <button type="button" data-testid="docx-image-wrap-square" title="Wrap text around image" @click.stop="setWrapMode(image, 'square')">Square</button>
-        <button type="button" data-testid="docx-image-wrap-behind" title="Behind text" @click.stop="setWrapMode(image, 'behindText')">Behind</button>
-        <button type="button" data-testid="docx-image-wrap-front" title="In front of text" @click.stop="setWrapMode(image, 'inFrontOfText')">Front</button>
-      </div>
-
-      <!-- Resize handles -->
-      <template v-if="image.selected && editable">
         <div
-          v-for="handle of resizeHandles"
-          :key="handle.position"
-          class="docx-image-resize-handle"
-          data-testid="docx-image-resize-handle"
-          :class="`docx-image-resize-handle--${handle.position}`"
-          :style="handle.style"
-          @mousedown.prevent.stop="onResizeStart(image, handle.position, $event)"
+          v-if="image.selected && editable && !image.behindDocument"
+          class="docx-image-wrap-toolbar"
+          data-testid="docx-image-wrap-toolbar"
+          @mousedown.stop
+        >
+          <button type="button" data-testid="docx-image-wrap-inline" title="Inline with text" @click.stop="setWrapMode(image, 'inline')">Inline</button>
+          <button type="button" data-testid="docx-image-wrap-square" title="Wrap text around image" @click.stop="setWrapMode(image, 'square')">Square</button>
+          <button type="button" data-testid="docx-image-wrap-behind" title="Behind text" @click.stop="setWrapMode(image, 'behindText')">Behind</button>
+          <button type="button" data-testid="docx-image-wrap-front" title="In front of text" @click.stop="setWrapMode(image, 'inFrontOfText')">Front</button>
+        </div>
+
+        <!-- Resize handles -->
+        <template v-if="image.selected && editable && !image.behindDocument">
+          <div
+            v-for="handle of resizeHandles"
+            :key="handle.position"
+            class="docx-image-resize-handle"
+            data-testid="docx-image-resize-handle"
+            :class="`docx-image-resize-handle--${handle.position}`"
+            :style="handle.style"
+            @mousedown.prevent.stop="onResizeStart(image, handle.position, $event)"
+          />
+        </template>
+
+        <img
+          v-if="!image.flowWrapped && image.src && !failedImageKeys.has(image.key)"
+          :src="image.src"
+          :alt="image.alt ?? 'Image'"
+          :draggable="false"
+          :style="imageStyle(image)"
+          class="docx-floating-image"
+          loading="lazy"
+          decoding="async"
+          data-image-state="loading"
+          @load="onImageLoad"
+          @error="onImageError(image, $event)"
         />
-      </template>
 
-      <img
-        v-if="!image.flowWrapped && image.src && !failedImageKeys.has(image.key)"
-        :src="image.src"
-        :alt="image.alt ?? 'Image'"
-        :draggable="false"
-        :style="imageStyle(image)"
-        class="docx-floating-image"
-        loading="lazy"
-        decoding="async"
-        data-image-state="loading"
-        @load="onImageLoad"
-        @error="onImageError(image, $event)"
-      />
-
-      <!-- Fallback for unsupported images -->
-      <div
-        v-else-if="!image.flowWrapped"
-        class="docx-floating-image-fallback"
-        :data-image-state="failedImageKeys.has(image.key) ? 'error' : 'unsupported'"
-        :style="{ width: `${image.widthPx}px`, height: `${image.heightPx}px` }"
-      >
-        {{ image.fallbackLabel ?? "Image" }}
+        <!-- Fallback for unsupported images -->
+        <div
+          v-else-if="!image.flowWrapped"
+          class="docx-floating-image-fallback"
+          :data-image-state="failedImageKeys.has(image.key) ? 'error' : 'unsupported'"
+          :style="{ width: `${image.widthPx}px`, height: `${image.heightPx}px` }"
+        >
+          {{ image.fallbackLabel ?? "Image" }}
+        </div>
       </div>
     </div>
   </div>
@@ -92,6 +102,7 @@ interface FloatingImageEntry {
   xPx: number
   yPx: number
   flowWrapped: boolean
+  behindDocument: boolean
   selected: boolean
   fallbackLabel?: string
 }
@@ -106,6 +117,8 @@ const props = withDefaults(
     pageNodeSegments: DocumentPageNodeSegment[]
     editable?: boolean
     zoomFactor?: number
+    /** Image keys (`nodeIndex:childIndex`) rendered by the page cover layer. */
+    skipImageKeys?: readonly string[]
   }>(),
   { editable: false, zoomFactor: 1 }
 )
@@ -134,6 +147,7 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
   if (!model) return []
 
   const images: FloatingImageEntry[] = []
+  const skippedImageKeys = new Set(props.skipImageKeys ?? [])
   const pageNodeIndexes = new Set(
     props.pageNodeSegments.map((segment) => segment.nodeIndex)
   )
@@ -143,6 +157,7 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
     node.children.forEach((child, childIndex) => {
       if (child.type !== "image") return
       if (!(child as any).floating) return // Only floating images
+      if (skippedImageKeys.has(`${nodeIndex}:${childIndex}`)) return
 
       const run = child as ImageRunNode
       const src = resolveRenderableImageSource(run) ?? undefined
@@ -158,6 +173,7 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
         xPx: run.floating?.xPx ?? 0,
         yPx: run.floating?.yPx ?? 0,
         flowWrapped: shouldRenderWrappedFloatingImage(run),
+        behindDocument: run.floating?.behindDocument === true,
         selected: selection.kind === "paragraph" && selection.nodeIndex === nodeIndex,
         fallbackLabel: undefined,
       })
@@ -167,15 +183,26 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
   return images
 })
 
-const layerStyle = computed(() => ({
-  position: "absolute" as const,
-  left: "0",
-  top: "0",
-  width: `${props.pageWidthPx}px`,
-  height: `${props.pageHeightPx}px`,
-  pointerEvents: "none" as const,
-  zIndex: "20",
-}))
+const imageLayers = computed(() => {
+  const behind = floatingImages.value.filter((image) => image.behindDocument)
+  const front = floatingImages.value.filter((image) => !image.behindDocument)
+  return [
+    { key: "behind" as const, images: behind },
+    { key: "front" as const, images: front },
+  ].filter((layer) => layer.images.length > 0)
+})
+
+function layerStyle(kind: "behind" | "front") {
+  return {
+    position: "absolute" as const,
+    left: "0",
+    top: "0",
+    width: `${props.pageWidthPx}px`,
+    height: `${props.pageHeightPx}px`,
+    pointerEvents: "none" as const,
+    zIndex: kind === "behind" ? "-1" : "20",
+  }
+}
 
 const resizeHandles = [
   { position: "nw", style: { top: "-4px", left: "-4px", cursor: "nw-resize" } },
@@ -207,9 +234,9 @@ function imageContainerStyle(image: FloatingImageEntry): Record<string, string> 
     top: `${topPx}px`,
     width: `${resize?.widthPx ?? flowBox?.width ?? image.widthPx}px`,
     height: `${resize?.heightPx ?? flowBox?.height ?? image.heightPx}px`,
-    pointerEvents: "auto",
-    cursor: "move",
-    outline: image.selected ? "2px solid #3b82f6" : "none",
+    pointerEvents: image.behindDocument ? "none" : "auto",
+    cursor: image.behindDocument ? "default" : "move",
+    outline: image.selected && !image.behindDocument ? "2px solid #3b82f6" : "none",
     outlineOffset: "2px",
   }
 }
@@ -265,7 +292,7 @@ function onImageError(image: FloatingImageEntry, event: Event): void {
 
 // ── Mouse handlers ─────────────────────────────────────────────────
 function onImageMouseDown(image: FloatingImageEntry, event: MouseEvent): void {
-  if (!props.editable) return
+  if (!props.editable || image.behindDocument) return
   event.preventDefault()
   props.controller.selectParagraph(image.nodeIndex)
   draggingImage.value = image
@@ -392,15 +419,20 @@ watch(() => props.editable, (editable) => {
   if (!editable) finishPointerInteraction(false)
 })
 
-watch(
-  () => floatingImages.value.map((image) => [
+const imageGroupsKey = computed(() =>
+  floatingImages.value.map((image) => [
     image.key,
     image.flowWrapped,
+    image.behindDocument,
     image.xPx,
     image.yPx,
     image.widthPx,
     image.heightPx,
-  ].join(":")).join("|"),
+  ].join(":")).join("|")
+)
+
+watch(
+  imageGroupsKey,
   () => {
     void nextTick(() => {
       layoutRevision.value += 1

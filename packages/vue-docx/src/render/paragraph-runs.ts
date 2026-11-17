@@ -81,6 +81,8 @@ export interface ParagraphRunRenderOptions {
    * the raw id, which is not the displayed note number.
    */
   noteMarkerLabels?: NoteMarkerLabels
+  /** Child indexes rendered by another surface layer (for example a page cover). */
+  skipImageChildIndexes?: readonly number[]
 }
 
 export interface NoteMarkerLabels {
@@ -497,6 +499,7 @@ export function renderParagraphRuns(
     key: string,
     childIndex: number
   ): void => {
+    if (options?.skipImageChildIndexes?.includes(childIndex)) return
     if (
       options?.skipFloatingImages &&
       child.floating &&

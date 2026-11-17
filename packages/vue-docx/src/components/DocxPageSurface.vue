@@ -32,7 +32,15 @@
         data-docx-page-border-overlay="true"
         class="docx-page-border-overlay"
         :style="borderStyle"
-      />
+      >
+        <div
+          v-for="line of borderEdgeLines"
+          :key="line.edge"
+          :data-docx-page-border-edge="line.edge"
+          class="docx-page-border-edge"
+          :style="line.style"
+        />
+      </div>
 
       <!-- Body -->
       <DocxPageBody
@@ -50,6 +58,7 @@
         :tracked-changes-enabled="trackedChangesEnabled"
         :comments-enabled="commentsEnabled"
         :note-marker-labels="noteMarkerLabels"
+        :cover-image-child-indexes-by-node="coverImageChildIndexesByNode"
       >
         <template v-if="hasHeader" #header>
           <DocxPageHeader
@@ -113,6 +122,7 @@
         :page-node-segments="pageNodeSegments"
         :editable="editable"
         :zoom-factor="zoomFactor"
+        :skip-image-keys="coverImageKeys"
       />
 
       <!-- Form field layer -->
@@ -167,6 +177,7 @@ import type {
   DocxTrackedChange,
   DocumentNoteDefinition,
   DocumentPageNodeSegment,
+  DocumentPageBorders,
   FooterSection,
   HeaderSection,
   TableCellContentNode,
@@ -176,7 +187,13 @@ import {
   docModelThumbnailMetadataSignature,
   docNodeContentSignature,
   findGutterAnnotationAnchorElementInPage,
+  fullPageCoverAbsoluteFloatingImageStyle,
+  isLikelyFullPageCoverFloatingImage,
+  parseSectionPageBorders,
+  resolveDocumentBackgroundColor,
   resolveDocumentLayout,
+  resolveDocumentSectionPropertiesXml,
+  resolveRenderableImageSource,
   pageMarginPaddingStyle,
 } from "@arcships/docx-core"
 import DocxPageHeader from "./DocxPageHeader.vue"
@@ -220,13 +237,15 @@ interface DocxPageSurfaceProps {
   footnoteLabels?: Map<number, string>
   endnoteLabels?: Map<number, string>
   noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
+  pageBackgroundColor?: string
+  pageBorders?: DocumentPageBorders | null
   theme?: "light" | "dark"
 }
 
 interface CoverEntry {
   key: string
   src: string
-  style: Record<string, string>
+  style: Record<string, string | number | undefined>
 }
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -430,14 +449,110 @@ function activateAnnotation(
 }
 
 const coverEntries = computed<CoverEntry[]>(() => {
-  // Collect full-page cover background images from paragraph segments
-  // Simplified: empty for now — full implementation requires image run detection
-  return []
+  const entries: CoverEntry[] = []
+  const seen = new Set<string>()
+  for (const segment of props.pageNodeSegments) {
+    const node = props.model.nodes[segment.nodeIndex]
+    if (!node || node.type !== "paragraph") continue
+    node.children.forEach((child, childIndex) => {
+      if (child.type !== "image") return
+      if (
+        child.floating?.behindDocument !== true ||
+        !isLikelyFullPageCoverFloatingImage(
+          child,
+          props.pageWidthPx,
+          props.pageLayout.pageHeightPx
+        )
+      ) {
+        return
+      }
+      const src = resolveRenderableImageSource(child)
+      if (!src) return
+      const key = `${segment.nodeIndex}:${childIndex}`
+      if (seen.has(key)) return
+      seen.add(key)
+      entries.push({
+        key,
+        src,
+        style: fullPageCoverAbsoluteFloatingImageStyle(
+          child,
+          props.pageLayout,
+          { anchorToPageSurface: true }
+        ),
+      })
+    })
+  }
+  return entries
+})
+
+const coverImageKeys = computed(() => coverEntries.value.map((entry) => entry.key))
+
+const coverImageChildIndexesByNode = computed<Record<number, number[]>>(() => {
+  const indexes: Record<number, number[]> = {}
+  for (const key of coverImageKeys.value) {
+    const [nodeIndex, childIndex] = key.split(":").map(Number)
+    if (!Number.isFinite(nodeIndex) || !Number.isFinite(childIndex)) continue
+    if (!indexes[nodeIndex]) indexes[nodeIndex] = []
+    indexes[nodeIndex].push(childIndex)
+  }
+  return indexes
+})
+
+type PageBorderEdgeName = "top" | "right" | "bottom" | "left"
+
+interface PageBorderEdgeLine {
+  edge: PageBorderEdgeName
+  style: Record<string, string>
+}
+
+const resolvedPageBorders = computed<DocumentPageBorders | undefined>(() => {
+  if (props.pageBorders !== undefined) {
+    return props.pageBorders ?? undefined
+  }
+  return parseSectionPageBorders(
+    resolveDocumentSectionPropertiesXml(props.model)
+  )
 })
 
 const borderStyle = computed<Record<string, string> | undefined>(() => {
-  // Page border overlay — simplified: no border by default
-  return undefined
+  if (!resolvedPageBorders.value) return undefined
+  return {
+    position: "absolute",
+    inset: "0",
+    pointerEvents: "none",
+    zIndex: "5",
+  }
+})
+
+const borderEdgeLines = computed<PageBorderEdgeLine[]>(() => {
+  const borders = resolvedPageBorders.value
+  if (!borders) return []
+  const lines: PageBorderEdgeLine[] = []
+  for (const edge of ["top", "right", "bottom", "left"] as const) {
+    const border = borders[edge]
+    if (!border?.cssBorder) continue
+    const offset = `${border.offsetPx ?? 0}px`
+    const style: Record<string, string> = { position: "absolute" }
+    if (edge === "top" || edge === "bottom") {
+      style.left = "0"
+      style.right = "0"
+      style.height = "0"
+      style[edge] = offset
+      style[edge === "top" ? "borderTop" : "borderBottom"] = border.cssBorder
+    } else {
+      style.top = "0"
+      style.bottom = "0"
+      style.width = "0"
+      style[edge] = offset
+      style[edge === "left" ? "borderLeft" : "borderRight"] = border.cssBorder
+    }
+    if (border.shadow) {
+      style.color = border.color ?? "#000000"
+      style.filter = "drop-shadow(1px 1px 0 currentColor)"
+    }
+    lines.push({ edge, style })
+  }
+  return lines
 })
 
 const frameStyle = computed(() => ({
@@ -457,10 +572,14 @@ const surfaceStyle = computed(() => ({
   width: `${props.pageWidthPx}px`,
   height: `${props.pageLayout.pageHeightPx}px`,
   overflow: "hidden" as const,
-  backgroundColor: props.theme === "dark" ? "#1f2937" : "#ffffff",
+  backgroundColor:
+    props.pageBackgroundColor ??
+    resolveDocumentBackgroundColor(props.model.metadata.documentBackgroundColor) ??
+    (props.theme === "dark" ? "#1f2937" : "#ffffff"),
   color: props.theme === "dark" ? "#f9fafb" : "#111827",
   position: "relative" as const,
   boxSizing: "border-box" as const,
+  isolation: "isolate" as const,
   // Draw the paper outline inside the box so the content area keeps exactly
   // the page size pagination lays out (border-box height minus margins).
   boxShadow: "inset 0 0 0 1px #d4d4d4, 0 8px 24px rgba(0, 0, 0, 0.08)",
@@ -552,7 +671,7 @@ watch(
   bottom: 0;
   overflow: clip;
   pointer-events: none;
-  z-index: 0;
+  z-index: -1;
 }
 .docx-page-cover-image {
   position: absolute;

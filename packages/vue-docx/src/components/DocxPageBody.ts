@@ -89,6 +89,10 @@ export default defineComponent({
       }>,
       required: false,
     },
+    coverImageChildIndexesByNode: {
+      type: Object as PropType<Record<number, readonly number[]>>,
+      required: false,
+    },
   },
   emits: ["measure"],
   setup(props, { emit, slots }) {
@@ -288,6 +292,8 @@ export default defineComponent({
                 totalPages: props.totalPages,
                 pageNumberFormat: props.pageNumberFormat,
                 noteMarkerLabels: props.noteMarkerLabels,
+                skipImageChildIndexes:
+                  props.coverImageChildIndexesByNode?.[segment.nodeIndex],
                 onTextInput: (nodeIndex: number, text: string) => {
                   props.controller?.commitParagraphText(nodeIndex, text)
                 },

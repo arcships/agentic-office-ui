@@ -53,7 +53,12 @@ function installCanvasEnvironment(t) {
       const context = {
         setTransform: (...args) => record("setTransform", ...args),
         clearRect: (...args) => record("clearRect", ...args),
-        fillRect: (...args) => record("fillRect", ...args),
+        fillRect: (...args) => operations.push({
+          canvas: this,
+          name: "fillRect",
+          args,
+          fillStyle: context.fillStyle,
+        }),
         strokeRect: (...args) => record("strokeRect", ...args),
         save: () => record("save"),
         restore: () => record("restore"),
@@ -139,6 +144,39 @@ test("DOCX thumbnail rail keeps long-document scroll space and paints table text
   assert.equal(visibleItems.at(-1).props["data-thumbnail-page-index"], Math.min(19 + 20, pageCount) - 1);
   const topSpacer = nodesWithClass(mounted.root, "docx-thumbnail-spacer")[0];
   assert.equal(topSpacer.props.style.height, `${19 * 106}px`);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("DOCX thumbnail paints the document page background colour", async (t) => {
+  const operations = installCanvasEnvironment(t);
+  const model = cloneDocModel(defaultStarterModel);
+  model.metadata.documentBackgroundColor = "DDEBF7";
+  model.nodes = [paragraph("Tinted page")];
+
+  const mounted = await mount(DocxThumbnailPanel, {
+    model,
+    layoutOptions: {
+      pageWidth: 200,
+      pageHeight: 100,
+      margin: 10,
+      minLineHeight: 30,
+      paragraphSpacing: 10,
+    },
+    showToggle: false,
+  });
+  await vue.nextTick();
+  await vue.nextTick();
+
+  const firstCanvas = walk(mounted.root).find((node) => node.type === "canvas");
+  assert.equal(firstCanvas.dataset.thumbnailState, "ready");
+  const pageFill = operations.find((operation) =>
+    operation.canvas === firstCanvas &&
+    operation.name === "fillRect" &&
+    operation.fillStyle === "#DDEBF7"
+  );
+  assert.ok(pageFill, "the thumbnail canvas must use the document background colour");
+  assert.deepEqual(pageFill.args.slice(0, 2), [0, 0]);
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });
