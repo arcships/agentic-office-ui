@@ -37,8 +37,8 @@
             :footer-section="entry.footerSection"
             :tracked-changes-enabled="trackedChangesEnabled"
             :comments-enabled="commentsEnabled"
-            :tracked-changes="trackedChanges"
-            :comments="comments"
+            :tracked-changes="pageTrackedChanges(entry.pageIndex)"
+            :comments="pageComments(entry.pageIndex)"
             :footnotes="entry.footnotes"
             :endnotes="entry.endnotes"
             :footnote-labels="entry.noteLabels.footnote"
@@ -85,6 +85,8 @@ import {
   resolveDocumentSectionsFromMetadata,
   resolveDocumentLayout,
   resolveSectionIndexForNodeIndex,
+  groupGutterAnnotationsByPage,
+  trackedChangeDuplicatesInlineMarkup,
   selectSectionVariantForPage,
   DEFAULT_DOC_PAGE_WIDTH,
   DEFAULT_DOC_PAGE_HEIGHT,
@@ -107,6 +109,8 @@ const DOC_PAGE_BREAK_GAP = 28
 const PAGE_OVERSCAN = 2
 const SCROLL_MEASUREMENT_DEBOUNCE_MS = 80
 const PAGE_SIDE_PADDING = 48
+// Shared empty list keeps hidden annotations allocation-free.
+const EMPTY_ANNOTATIONS: readonly never[] = []
 // The scroll container uses `padding: 24px 0`; page offsets are expressed in
 // scroll coordinates so scrollToPage / hit tests line up with the rendered page.
 const PAGE_TOP_PADDING = 24
@@ -121,8 +125,9 @@ export interface DocxViewerRootProps {
   zoomScale?: number
   /** When true, zoom auto-fits page width to container. Overrides zoomScale. */
   fitWidth?: boolean
-  showTrackedChanges?: boolean
-  showComments?: boolean
+  /** `null` follows the controller flag; `false` always hides. */
+  showTrackedChanges?: boolean | null
+  showComments?: boolean | null
 }
 
 interface VisiblePageEntry {
@@ -150,7 +155,7 @@ interface PageMeasureEvent {
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
   defineProps<DocxViewerRootProps>(),
-  { editable: false, zoomScale: 100 }
+  { editable: false, zoomScale: 100, showTrackedChanges: null, showComments: null }
 )
 
 const emit = defineEmits<{
@@ -346,19 +351,50 @@ if (props.controller) {
 
 // ── Theme / feature flags ──────────────────────────────────────────
 const theme = computed(() => props.theme ?? props.controller?.documentTheme ?? "light")
-const trackedChangesEnabled = computed(() => props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false)
-const commentsEnabled = computed(() => props.showComments ?? props.controller?.showComments ?? false)
+// Boolean props default to `false`, so `null` is what marks "not passed":
+// without it the controller fallback below could never apply.
+const trackedChangesEnabled = computed(
+  () => props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false
+)
+const commentsEnabled = computed(
+  () => props.showComments ?? props.controller?.showComments ?? false
+)
 // Visual horizontal space the annotation gutter occupies at the current zoom.
 // Visual horizontal space the annotation gutter occupies in screen px.
 // 0 when annotations are hidden, so no space is reserved. The pane counter-
 // scales, so this footprint does not follow the zoom factor.
 const gutterVisualWidthPx = computed(() => gutterScreenWidthPx.value)
-const trackedChanges = computed<readonly DocxTrackedChange[]>(() =>
-  props.controller?.trackedChanges ?? (trackedChangesEnabled.value ? collectTrackedChangesFromModel(props.model) : [])
+const trackedChanges = computed<readonly DocxTrackedChange[]>(() => {
+  // `showTrackedChanges` gates the collection even when a controller is
+  // present: hidden revisions must not cost a model scan.
+  if (!trackedChangesEnabled.value) return EMPTY_ANNOTATIONS
+  const changes = props.controller?.trackedChanges ?? collectTrackedChangesFromModel(props.model)
+  // Insertions and move-to content are already highlighted inline, so a gutter
+  // card would show the same revision twice.
+  return changes.filter((change) => !trackedChangeDuplicatesInlineMarkup(change))
+})
+const comments = computed<readonly DocxComment[]>(() => {
+  if (!commentsEnabled.value) return EMPTY_ANNOTATIONS
+  return props.controller?.comments ?? collectCommentsFromModel(props.model)
+})
+
+// Each annotation is owned by exactly one page: a change inside row 3 of a
+// table spanning pages — or inside a paragraph split across pages — must not be
+// repeated on every page that renders the node.
+const trackedChangesByPage = computed<readonly (readonly DocxTrackedChange[])[]>(() =>
+  groupGutterAnnotationsByPage(trackedChanges.value, pageNodeSegments.value)
 )
-const comments = computed<readonly DocxComment[]>(() =>
-  props.controller?.comments ?? (commentsEnabled.value ? collectCommentsFromModel(props.model) : [])
+const commentsByPage = computed<readonly (readonly DocxComment[])[]>(() =>
+  groupGutterAnnotationsByPage(comments.value, pageNodeSegments.value)
 )
+
+function pageTrackedChanges(pageIndex: number): readonly DocxTrackedChange[] {
+  return trackedChangesByPage.value[pageIndex] ?? EMPTY_ANNOTATIONS
+}
+
+function pageComments(pageIndex: number): readonly DocxComment[] {
+  return commentsByPage.value[pageIndex] ?? EMPTY_ANNOTATIONS
+}
 
 // Capture comment anchors before any edit clears paragraph sourceXml, even
 // while the comments gutter is hidden.

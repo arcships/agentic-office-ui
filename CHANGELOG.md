@@ -44,6 +44,16 @@ All notable changes to the `@arcships` package family are documented in this fil
 - Add an invisible hit layer to `PdfSurface` that emits `linkActivate` and `annotationActivate`; external links never navigate automatically, and a host `urlPolicy` blocks unapproved targets.
 - Stop the region interaction layer from bubbling Escape to the Surface handler so hosts receive one `selectionCancel` per key press.
 
+### DOCX tracked-change decisions (#41)
+
+- Add `acceptTrackedChange` / `rejectTrackedChange`, row variants and `acceptAllTrackedChanges` / `rejectAllTrackedChanges` to the DOCX editor controller, backed by the pure `applyTrackedChangeDecision` model rewrite in `@arcships/docx-core`. Every decision is one undoable history step.
+- Accepting or rejecting a revision now rewrites the paragraph `sourceXml` envelope instead of dropping it, so remaining revisions stay visible and exportable, rejected deletions come back as ordinary runs, and accepting an insertion no longer needs a second edit pass.
+- Wire per-card Accept/Reject buttons into the revision gutter and Accept all / Reject all into the editor toolbar.
+- Keep the document editable while revisions are shown: the `Edits` toggle is a display choice again, for body paragraphs and table cells alike. Committed text now skips inline deleted/moved-from runs (`readEditableText`), so an edit cannot resurrect rejected content by accident, and edits that still clear revision markup report it on the status line instead of silently dropping the cards.
+- Own each gutter card on exactly one page using `trackedChangeBelongsToPageSegments` and the new `groupGutterAnnotationsByPage`, so a change in row 3 of a table spanning pages (or in a paragraph split across pages) is no longer repeated.
+- Stop duplicating insertions in the gutter (`trackedChangeUsesGutterBalloon`), and stop collecting revisions while they are hidden: `trackedChanges` stays empty and `trackedChangeCount` reports `null` until the markup is shown.
+- Model limitation to be explicit about: run format revisions revert their previous run style and paragraph format revisions revert an explicit alignment, but table/row/cell property revisions only have their markup cleared — the model stores no previous table formatting. Those ids come back in `clearedOnlyChangeIds` and the status line says so.
+
 ### Boundaries
 
 - Keep screenshot bitmap capture and annotation editing outside the built-in Surface implementation; unsupported capture rejects with a structured error.

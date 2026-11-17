@@ -167,8 +167,10 @@
       :page-height-px="annotationPageHeightPx"
       :document-theme="theme"
       :active-annotation-id="activeAnnotationId"
+      :decidable="editable && Boolean(controller)"
       @activate="activateAnnotation($event, { scrollToAnchor: true })"
       @card-height="reportGutterCardHeight"
+      @decide="onGutterDecide"
     />
   </div>
 </template>
@@ -484,6 +486,28 @@ function annotationIdForTarget(target: EventTarget | null): string | undefined {
   }
 
   return undefined
+}
+
+/**
+ * Accept or reject the revision behind a gutter card. The gutter only reports
+ * the annotation id; the owning controller decides how the model is rewritten.
+ */
+function onGutterDecide(
+  annotationId: string,
+  decision: "accept" | "reject"
+): void {
+  const controller = props.controller
+  const annotation = pageAnnotations.value.find(
+    (entry) => entry.id === annotationId
+  )
+  const changeId = annotation?.trackedChange?.id
+  if (!controller || !changeId) return
+
+  if (decision === "accept") {
+    controller.acceptTrackedChange(changeId)
+    return
+  }
+  controller.rejectTrackedChange(changeId)
 }
 
 function activateAnnotation(

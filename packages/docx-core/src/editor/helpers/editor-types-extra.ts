@@ -133,6 +133,11 @@ export interface DocxEditorController {
   activeBorderPresets: DocxBorderPresetState;
   availableParagraphStyles: ParagraphStyleDefinition[];
   trackedChanges: DocxTrackedChange[];
+  /**
+   * Number of collected revisions, or `null` while revisions are hidden and the
+   * collection is intentionally skipped (see `showTrackedChanges`).
+   */
+  trackedChangeCount: number | null;
   showTrackedChanges: boolean;
   comments: DocxComment[];
   showComments: boolean;
@@ -156,6 +161,18 @@ export interface DocxEditorController {
   syncPaginationInfo: (pagination: DocxPaginationInfo) => void;
   toggleShowTrackedChanges: () => void;
   toggleShowComments: () => void;
+  acceptTrackedChange: (changeId: string) => boolean;
+  rejectTrackedChange: (changeId: string) => boolean;
+  acceptTrackedChangesInTableRow: (
+    tableIndex: number,
+    rowIndex: number
+  ) => boolean;
+  rejectTrackedChangesInTableRow: (
+    tableIndex: number,
+    rowIndex: number
+  ) => boolean;
+  acceptAllTrackedChanges: () => boolean;
+  rejectAllTrackedChanges: () => boolean;
   importDocxFile: (file: File) => Promise<void>;
   newDocument: () => void;
   exportDocx: () => void;
@@ -708,6 +725,8 @@ export interface UseDocxFormFieldsResult {
 
 export interface UseDocxTrackChangesResult {
   trackedChanges: DocxTrackedChange[];
+  /** `null` while revisions are hidden, because the collection is skipped. */
+  trackedChangeCount: number | null;
   showTrackedChanges: boolean;
   setShowTrackedChanges: (showTrackedChanges: boolean) => void;
   toggleShowTrackedChanges: () => void;
@@ -715,6 +734,10 @@ export interface UseDocxTrackChangesResult {
   getChangesForLocation: (
     location: DocxTextRangeLocation
   ) => DocxTrackedChange[];
+  acceptTrackedChange: (changeId: string) => boolean;
+  rejectTrackedChange: (changeId: string) => boolean;
+  acceptAllTrackedChanges: () => boolean;
+  rejectAllTrackedChanges: () => boolean;
 }
 
 export interface UseDocxCommentsResult {

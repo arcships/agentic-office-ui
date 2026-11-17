@@ -34,10 +34,14 @@ import {
   collectTrackedChangesFromModel,
   collectCommentsFromModel,
   primeCommentAnchors,
+  applyTrackedChangeDecision,
 } from "@arcships/docx-core"
 
 import type {
   DocModel,
+  DocxTrackedChange,
+  DocxTrackedChangeDecision,
+  DocxTrackedChangeDecisionScope,
   ParagraphNode,
   TextRunNode,
   OoxmlPackage,
@@ -93,6 +97,10 @@ import {
 function typedKeys<T extends object>(obj: T): (keyof T)[] {
   return Object.keys(obj) as (keyof T)[]
 }
+
+// Shared empty result so a hidden revision list keeps a stable identity and
+// never allocates on keystrokes.
+const EMPTY_TRACKED_CHANGES: DocxTrackedChange[] = []
 
 function sameTextRangeLocation(
   left: DocxTextRangeLocation | undefined,
@@ -395,8 +403,22 @@ export function useDocxEditor(
   )
 
   // --- derived: tracked changes / comments ---
-  const trackedChanges = computed(() => collectTrackedChangesFromModel(model.value))
+  // Collecting revisions walks every paragraph and table cell, so it only runs
+  // while the markup is actually rendered. Hidden revisions cost nothing on
+  // keystrokes; `trackedChangeCount` stays `null` until they are shown.
+  const trackedChanges = computed<DocxTrackedChange[]>(() =>
+    showTrackedChanges.value ? collectTrackedChangesFromModel(model.value) : EMPTY_TRACKED_CHANGES
+  )
+  const trackedChangeCount = computed<number | null>(() =>
+    showTrackedChanges.value ? trackedChanges.value.length : null
+  )
   const comments = computed(() => collectCommentsFromModel(model.value))
+
+  // --- edits that silently drop revision markup ---
+  // Every text edit clears `sourceXml`, which is where revisions live. The
+  // transaction dispatcher reports exactly which paragraphs lost their
+  // revision markup (see createEditorTransaction) instead of letting the
+  // gutter cards disappear without explanation.
 
   // --- derived: booleans ---
   const hasUnorderedList = computed(() => selectedListType.value === "unordered")
@@ -604,6 +626,53 @@ export function useDocxEditor(
     pendingRunStyle.value = undefined
   }
 
+  // ── tracked-change decisions ─────────────────────────────────────
+  // Every decision goes through the transaction dispatcher, so accepting or
+  // rejecting a revision is a single undoable step and shares the history
+  // budget with ordinary edits.
+  const decideTrackedChanges = (
+    decision: DocxTrackedChangeDecision,
+    scope?: DocxTrackedChangeDecisionScope
+  ): boolean => {
+    let applied = false
+    dispatchEditorTransaction((current) => {
+      const result = applyTrackedChangeDecision(current.model, decision, scope)
+      if (result.model === current.model) return undefined
+      applied = true
+      const verb = decision === "accept" ? "Accepted" : "Rejected"
+      const count = result.resolvedChangeIds.length
+      const keptFormatting =
+        result.clearedOnlyChangeIds.length > 0
+          ? ` (${result.clearedOnlyChangeIds.length} formatting revision${
+              result.clearedOnlyChangeIds.length === 1 ? "" : "s"
+            } cleared without reverting; the model keeps no previous formatting)`
+          : ""
+      return {
+        model: result.model,
+        status: `${verb} ${count} tracked change${count === 1 ? "" : "s"}${keptFormatting}`,
+        clearSelectedFormField: true,
+      }
+    })
+    return applied
+  }
+
+  const acceptTrackedChange = (changeId: string): boolean =>
+    decideTrackedChanges("accept", { changeIds: [changeId] })
+  const rejectTrackedChange = (changeId: string): boolean =>
+    decideTrackedChanges("reject", { changeIds: [changeId] })
+  const acceptTrackedChangesInTableRow = (tableIndex: number, rowIndex: number): boolean =>
+    decideTrackedChanges("accept", {
+      nodeIndex: tableIndex,
+      tableRowRange: { startRowIndex: rowIndex, endRowIndex: rowIndex + 1 },
+    })
+  const rejectTrackedChangesInTableRow = (tableIndex: number, rowIndex: number): boolean =>
+    decideTrackedChanges("reject", {
+      nodeIndex: tableIndex,
+      tableRowRange: { startRowIndex: rowIndex, endRowIndex: rowIndex + 1 },
+    })
+  const acceptAllTrackedChanges = (): boolean => decideTrackedChanges("accept")
+  const rejectAllTrackedChanges = (): boolean => decideTrackedChanges("reject")
+
   // Browser-originated ranges are already reflected in the DOM. Keep the
   // synchronous snapshot current without issuing a DOM restore request that
   // would fight the user's live selection.
@@ -699,6 +768,7 @@ export function useDocxEditor(
     get activeBorderPresets() { return activeBorderPresets.value },
     get availableParagraphStyles() { return availableParagraphStyles.value },
     get trackedChanges() { return trackedChanges.value },
+    get trackedChangeCount() { return trackedChangeCount.value },
     get showTrackedChanges() { return showTrackedChanges.value },
     get comments() { return comments.value },
     get showComments() { return showComments.value },
@@ -718,6 +788,12 @@ export function useDocxEditor(
     syncPaginationInfo,
     toggleShowTrackedChanges: toggleShowTrackedChangesFn,
     toggleShowComments: toggleShowCommentsFn,
+    acceptTrackedChange,
+    rejectTrackedChange,
+    acceptTrackedChangesInTableRow,
+    rejectTrackedChangesInTableRow,
+    acceptAllTrackedChanges,
+    rejectAllTrackedChanges,
     importDocxFile: ie.importDocxFile,
     newDocument: ie.newDocument,
     exportDocx: ie.exportDocx,

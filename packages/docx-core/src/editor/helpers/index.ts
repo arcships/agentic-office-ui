@@ -45,6 +45,10 @@
 //   tracked-changes.ts     — tracked changes and comments collection
 //   tracked-changes-inline.ts — XML visible-unit ↔ model-child cursor mapping
 //   tracked-changes-table.ts — table/row/cell revision parsing and anchoring
+//   tracked-change-xml.ts   — revision range matching and XML splicing
+//   tracked-change-decisions.ts — accept/reject paragraph revisions (model rewrite)
+//   tracked-change-table-decisions.ts — accept/reject table rows, cells and properties
+//   tracked-change-markup-loss.ts — report revisions an edit dropped
 //   tracked-changes-gutter.ts — tracked-change gutter card layout
 //   selection-helpers.ts   — selection/cursor helpers (paragraph location navigation, core helpers)
 //   selection-helpers-range.ts — range normalization/cloning/selection resolution
@@ -105,6 +109,10 @@ export {
   type TableTrackedRevision,
   type TableTrackedRevisionScope
 } from "./tracked-changes-table";
+export * from "./tracked-change-xml";
+export * from "./tracked-change-decisions";
+export * from "./tracked-change-table-decisions";
+export * from "./tracked-change-markup-loss";
 export * from "./tracked-changes-gutter";
 export * from "./pagination-plan-iterate";
 export * from "./pagination-plan-core";

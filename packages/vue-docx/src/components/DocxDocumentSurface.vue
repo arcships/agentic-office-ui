@@ -107,8 +107,9 @@ const props = withDefaults(
     zoomScale?: number
     enableGestureZoom?: boolean
     fitWidth?: boolean
-    showTrackedChanges?: boolean
-    showComments?: boolean
+    /** `null` follows the controller flag; `false` always hides. */
+    showTrackedChanges?: boolean | null
+    showComments?: boolean | null
     documentId?: string
     selectionMode?: OfficeSelectionMode
     emitReferenceCandidates?: boolean
@@ -119,6 +120,8 @@ const props = withDefaults(
     enableGestureZoom: true,
     selectionMode: "content",
     emitReferenceCandidates: false,
+    showTrackedChanges: null,
+    showComments: null,
   }
 )
 

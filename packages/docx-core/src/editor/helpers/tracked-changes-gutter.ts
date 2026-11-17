@@ -222,6 +222,59 @@ export function resolveGutterAnnotationPageIndex(
   return -1;
 }
 
+/**
+ * Assigns every annotation to exactly one page: the first page whose segments
+ * contain its anchor. Rendering the gutter straight from a page's `nodeIndex`
+ * set repeats an annotation on every page that renders a split paragraph or a
+ * partial table row range, so the viewer uses this single-owner assignment
+ * instead of a per-page membership test.
+ *
+ * `-1` marks annotations that no page segment currently covers.
+ */
+export function resolveGutterAnnotationPageIndexes(
+  annotations: ReadonlyArray<{
+    id: string;
+    location: DocxTextRangeLocation;
+  }>,
+  pageNodeSegmentsByPage: DocumentPageNodeSegment[][]
+): Map<string, number> {
+  const pageIndexById = new Map<string, number>();
+  for (const annotation of annotations) {
+    pageIndexById.set(
+      annotation.id,
+      resolveGutterAnnotationPageIndex(
+        annotation.location,
+        pageNodeSegmentsByPage
+      )
+    );
+  }
+  return pageIndexById;
+}
+
+/**
+ * Buckets annotations by their owning page (see
+ * `resolveGutterAnnotationPageIndexes`). Annotations that no page covers are
+ * dropped, so a page's gutter never repeats or invents entries.
+ */
+export function groupGutterAnnotationsByPage<
+  T extends { id: string; location: DocxTextRangeLocation }
+>(
+  annotations: readonly T[],
+  pageNodeSegmentsByPage: DocumentPageNodeSegment[][]
+): T[][] {
+  const grouped: T[][] = pageNodeSegmentsByPage.map(() => []);
+  const pageIndexById = resolveGutterAnnotationPageIndexes(
+    annotations,
+    pageNodeSegmentsByPage
+  );
+  for (const annotation of annotations) {
+    const pageIndex = pageIndexById.get(annotation.id) ?? -1;
+    const bucket = pageIndex >= 0 ? grouped[pageIndex] : undefined;
+    bucket?.push(annotation);
+  }
+  return grouped;
+}
+
 // ---------------------------------------------------------------------------
 // DOM anchor lookup (upstream 23180-23322)
 // ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ import {
   cloneEditorSelection,
   cloneTextRange,
   cloneTextStyle,
+  countParagraphsLosingRevisionMarkup,
   normalizeEditorCursorStateForModel,
   sameEditorSelection,
   sameTextRange,
@@ -18,6 +19,12 @@ import { trimHistoryEntriesToBudget } from "./history-budget"
 
 function hasOwn(obj: object, prop: string): boolean {
   return Object.prototype.hasOwnProperty.call(obj, prop)
+}
+
+function revisionLossStatus(lostParagraphs: number): string {
+  return lostParagraphs === 1
+    ? "Tracked changes in an edited paragraph were resolved with the edit"
+    : `Tracked changes in ${lostParagraphs} edited paragraphs were resolved with the edit`
 }
 
 export function createEditorTransaction(ctx: EditorCore) {
@@ -131,7 +138,20 @@ export function createEditorTransaction(ctx: EditorCore) {
     }
 
     if (patch.clearSelectedFormField) ctx.selectedFormFieldLocation.value = undefined
-    if (patch.status) ctx.status.value = patch.status
+
+    // Revision markup lives in `sourceXml`, and every text mutation clears it.
+    // Report the paragraphs that lost revisions in this transaction so the
+    // gutter cards never disappear without an explanation.
+    const revisionLossParagraphCount =
+      modelChanged && ctx.showTrackedChanges.value
+        ? countParagraphsLosingRevisionMarkup(currentModel, nextModel)
+        : 0
+
+    if (patch.status) {
+      ctx.status.value = patch.status
+    } else if (revisionLossParagraphCount > 0) {
+      ctx.status.value = revisionLossStatus(revisionLossParagraphCount)
+    }
 
     return true
   }
