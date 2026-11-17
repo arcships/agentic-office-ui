@@ -52,6 +52,8 @@ import {
   annotationGutterLeaderStyle,
   annotationGutterMarkerStyle,
 } from "./gutter-metrics"
+import { formatOfficeMessage } from "@arcships/office-interaction"
+import { useDocxMessages } from "../i18n"
 
 // ── Props ──────────────────────────────────────────────────────────
 // The marker layer lives inside the scaled page, so its geometry is page space
@@ -134,9 +136,14 @@ function leaderStyle(entry: PositionedGutterAnnotation): Record<string, string> 
   }
 }
 
+const m = useDocxMessages()
+
 function markerTitle(entry: PositionedGutterAnnotation): string {
-  const author = entry.annotation.comment?.author
-  return author ? `Comment ${entry.annotation.ordinal} — ${author}` : `Comment ${entry.annotation.ordinal}`
+  const ordinal = entry.annotation.ordinal ?? 0
+  const author = entry.annotation.comment?.author?.trim()
+  return author
+    ? formatOfficeMessage(m.value.docx.gutter.commentMarkerWithAuthor, { ordinal, author })
+    : formatOfficeMessage(m.value.docx.gutter.commentMarker, { ordinal })
 }
 </script>
 

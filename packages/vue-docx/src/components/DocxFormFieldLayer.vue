@@ -103,7 +103,6 @@ import type {
   FormFieldRunNode,
 } from "@arcships/docx-core"
 import {
-  FORM_FIELD_REQUIRED_ERROR,
   formFieldCurrentValue,
   formatFormFieldDateValue,
   isDateFormField,
@@ -212,9 +211,11 @@ function commitFieldValue(
   rawValue: string,
   control: HTMLInputElement | HTMLSelectElement,
 ): void {
-  const result = validateFormFieldValue(field.node, rawValue)
+  const result = validateFormFieldValue(field.node, rawValue, {
+    messages: m.value.docx.formField.errors,
+  })
   if (!result.valid) {
-    setFieldError(field, result.error ?? "Invalid value.")
+    setFieldError(field, result.error ?? m.value.docx.formField.errors.invalidValue)
     // Keep the model untouched and restore the last accepted value.
     control.value = field.control === "date" ? field.dateValue : field.value
     return
@@ -256,9 +257,12 @@ function onFieldBlur(field: FormFieldEntry, event?: Event): void {
   } else {
     value = control?.value ?? formFieldCurrentValue(field.node)
   }
-  const result = validateFormFieldValue(field.node, value, { enforceRequired: true })
+  const result = validateFormFieldValue(field.node, value, {
+    enforceRequired: true,
+    messages: m.value.docx.formField.errors,
+  })
   if (!result.valid) {
-    setFieldError(field, result.error ?? FORM_FIELD_REQUIRED_ERROR)
+    setFieldError(field, result.error ?? m.value.docx.formField.errors.required)
     return
   }
   clearFieldError(field)

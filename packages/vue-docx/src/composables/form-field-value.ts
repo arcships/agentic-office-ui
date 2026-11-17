@@ -6,6 +6,17 @@
 // (and therefore the exported XML).
 
 import type { FormFieldRunNode } from "@arcships/docx-core"
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction"
+
+export interface FormFieldValidationMessages {
+  invalidValue: string
+  required: string
+  noOptions: string
+  chooseValue: string
+  invalidDate: string
+  /** Template with a `{max}` placeholder. */
+  maxLength: string
+}
 
 export interface FormFieldValidationResult {
   valid: boolean
@@ -17,9 +28,17 @@ export interface FormFieldValidationResult {
 export interface FormFieldValidationOptions {
   /** Reject empty required fields. Used on blur and before export. */
   enforceRequired?: boolean
+  /** Localized validation copy; defaults to the English catalog. */
+  messages?: Partial<FormFieldValidationMessages>
 }
 
-export const FORM_FIELD_REQUIRED_ERROR = "This field is required."
+export const FORM_FIELD_REQUIRED_ERROR = officeMessagesEn.docx.formField.errors.required
+
+function validationMessages(
+  options: FormFieldValidationOptions,
+): FormFieldValidationMessages {
+  return { ...officeMessagesEn.docx.formField.errors, ...options.messages }
+}
 
 /** Current model value, normalized for validation and export checks. */
 export function formFieldCurrentValue(field: FormFieldRunNode): string {
@@ -272,13 +291,14 @@ export function formatFormFieldDateValue(
 
 function normalizeDropdownValue(
   field: FormFieldRunNode,
-  value: string
+  value: string,
+  messages: FormFieldValidationMessages,
 ): FormFieldValidationResult {
   const options = field.options ?? []
   if (options.length === 0) {
     return value === ""
       ? { valid: true, value: "" }
-      : { valid: false, value, error: "This dropdown has no options." }
+      : { valid: false, value, error: messages.noOptions }
   }
   const match = options.find(
     (option) =>
@@ -286,7 +306,7 @@ function normalizeDropdownValue(
       option.displayText === value
   )
   if (!match) {
-    return { valid: false, value, error: "Choose a value from the list." }
+    return { valid: false, value, error: messages.chooseValue }
   }
   return { valid: true, value: match.value ?? match.displayText }
 }
@@ -304,13 +324,14 @@ export function validateFormFieldValue(
   options: FormFieldValidationOptions = {}
 ): FormFieldValidationResult {
   const value = typeof rawValue === "string" ? rawValue : ""
+  const messages = validationMessages(options)
 
   if (options.enforceRequired === true && field.required === true) {
     const empty = field.fieldType === "checkbox"
       ? value.trim() !== "1" && value.trim().toLowerCase() !== "true"
       : value.trim() === ""
     if (empty) {
-      return { valid: false, value, error: FORM_FIELD_REQUIRED_ERROR }
+      return { valid: false, value, error: messages.required }
     }
   }
 
@@ -323,14 +344,14 @@ export function validateFormFieldValue(
   }
 
   if (field.fieldType === "dropdown") {
-    return normalizeDropdownValue(field, value)
+    return normalizeDropdownValue(field, value, messages)
   }
 
   if (field.fieldType === "date" || isDateFormField(field)) {
     if (value.trim() === "") return { valid: true, value: "" }
     const iso = isoDateValueForField(field, value)
     if (!iso) {
-      return { valid: false, value, error: "Enter a valid date." }
+      return { valid: false, value, error: messages.invalidDate }
     }
     return { valid: true, value: iso }
   }
@@ -340,7 +361,7 @@ export function validateFormFieldValue(
     return {
       valid: false,
       value,
-      error: `Use at most ${maxLength} character${maxLength === 1 ? "" : "s"}.`,
+      error: formatOfficeMessage(messages.maxLength, { max: maxLength }),
     }
   }
 

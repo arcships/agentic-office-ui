@@ -3,7 +3,7 @@
     ref="viewerRef"
     class="xlsx-viewer"
     data-testid="xlsx-viewer"
-    :data-state="controller.isLoading ? 'loading' : controller.error ? 'error' : controller.isLoadDeferred ? 'deferred' : controller.activeSheet || controller.activeTab?.kind === 'chartsheet' ? 'ready' : 'empty'"
+    :data-state="controller.isLoading ? 'loading' : controller.error || controller.sourceError ? 'error' : controller.isLoadDeferred ? 'deferred' : controller.activeSheet || controller.activeTab?.kind === 'chartsheet' ? 'ready' : 'empty'"
     :style="viewerStyle"
     @keydown="onKeydown"
     tabindex="0"
@@ -59,14 +59,14 @@
         </slot>
       </div>
       <div
-        v-else-if="controller.error"
+        v-else-if="controller.error || controller.sourceError"
         class="xlsx-viewer__error"
       >
         <slot
           name="error"
-          :error="controller.error"
+          :error="localizedError"
         >
-          <span class="xlsx-viewer__error-text">{{ controller.error.message }}</span>
+          <span class="xlsx-viewer__error-text">{{ localizedError?.message }}</span>
         </slot>
       </div>
       <XlsxChartsheetSurface
@@ -214,6 +214,7 @@ import { OfficeLiveStatus } from "@arcships/vue-ui";
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { provideXlsxMessages } from "../i18n";
+import { localizeXlsxLoadError } from "../errors";
 
 const props = withDefaults(
   defineProps<{
@@ -277,6 +278,14 @@ type XlsxDeferredLoadPayload = { fileName: string; bytes: number };
 
 const effectiveReadOnly = computed(() => props.readOnly || props.controller.isEditingLocked === true || props.controller.readOnly);
 const m = provideXlsxMessages(() => props.locale, () => props.messages);
+const localizedError = computed(() => {
+  const sourceError = props.controller.sourceError;
+  if (sourceError) {
+    return { ...sourceError, message: localizeXlsxLoadError(sourceError, m.value.xlsx.errors) };
+  }
+  const error = props.controller.error;
+  return error ? { ...error, message: error.message } : null;
+});
 const calculationMessage = computed(() => {
   const status = props.controller.calculationStatus;
   if (!status) return "";
@@ -325,7 +334,7 @@ watch(
 // selected cell is announced by XlsxSelectionOverlay.
 const liveStatusMessage = computed(() => {
   if (props.controller.isLoading) return m.value.xlsx.viewer.live.loading;
-  if (props.controller.error) return formatOfficeMessage(m.value.xlsx.viewer.live.error, { message: props.controller.error.message });
+  if (props.controller.error || props.controller.sourceError) return formatOfficeMessage(m.value.xlsx.viewer.live.error, { message: localizedError.value?.message ?? props.controller.error?.message ?? "" });
   const sheet = props.controller.activeSheet;
   if (sheet) return formatOfficeMessage(m.value.xlsx.viewer.live.sheetReady, { name: sheet.name });
   if (props.controller.activeTab?.kind === "chartsheet") return m.value.xlsx.viewer.live.chartsheetReady;

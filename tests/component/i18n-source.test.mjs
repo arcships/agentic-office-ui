@@ -270,33 +270,37 @@ test("TypeScript sources contain no hard-coded translatable copy", () => {
   }
 })
 
-test("TypeScript status and error assignments use catalog keys", () => {
+test("TypeScript status, label and error assignments use catalog keys", () => {
   function looksLikeCopy(value) {
+    if (/[\u4e00-\u9fff]/u.test(value)) return true
+    if (!/[A-Za-z]/u.test(value)) return false
     if (/^[A-Z0-9_]+$/u.test(value)) return false
-    if (!/\s/u.test(value) && /^[A-Z][A-Za-z0-9]*$/u.test(value)) return false
-    if (!/[A-Za-z\u4e00-\u9fff]/u.test(value)) return false
-    return /\s/u.test(value) || /^[A-Z]/u.test(value) || /[\u4e00-\u9fff]/u.test(value)
+    if (/^[A-Z][A-Za-z0-9]*(?:Error|Type|Code)$/u.test(value)) return false
+    if (/^[a-z][A-Za-z0-9_.:/%-]*$/u.test(value)) return false
+    return /\s/u.test(value) || /^[A-Z]/u.test(value)
   }
 
   const patterns = [
     /\b(?:ctx\.)?status(?:\.value)?\s*=\s*(`[^`]*`|"[^"]*"|'[^']*')/gu,
-    /\bstatus\s*:\s*(`[^`]*`|"[^"]*"|'[^']*')/gu,
-    /\bmessage\s*:\s*(`[^`]*`|"[^"]*"|'[^']*')/gu,
+    /\b(?:status|message|label|ariaLabel|title)\s*:\s*(`[^`]*`|"[^"]*"|'[^']*')/gu,
     /\b(?:refuse|unsupported)\(\s*("[^"]*"|'[^']*')/gu,
   ]
 
   for (const packageName of SCANNED_PACKAGES) {
     for (const absolutePath of walk(path.join(ROOT, "packages", packageName, "src"))) {
-      if (!absolutePath.endsWith(".ts")) continue
+      const isTs = absolutePath.endsWith(".ts") || absolutePath.endsWith(".tsx")
+      const isVue = absolutePath.endsWith(".vue")
+      if (!isTs && !isVue) continue
       const relativePath = path.relative(ROOT, absolutePath)
       if (relativePath.endsWith("number-locale.ts")) continue
       const source = readFileSync(absolutePath, "utf8")
+      const scanned = isVue ? scriptOf(source) : source
       for (const pattern of patterns) {
-        for (const match of source.matchAll(pattern)) {
+        for (const match of scanned.matchAll(pattern)) {
           const literal = stringLiterals(match[1])[0] ?? ""
           assert.ok(
             !looksLikeCopy(literal),
-            `${relativePath} hard-codes a status/message literal: ${JSON.stringify(literal)}`,
+            `${relativePath} hard-codes a status/label/message literal: ${JSON.stringify(literal)}`,
           )
         }
       }
@@ -309,6 +313,59 @@ test("TypeScript status and error assignments use catalog keys", () => {
       !looksLikeCopy(literal),
       `pdf-url-policy.ts hard-codes an error message: ${JSON.stringify(literal)}`,
     )
+  }
+})
+
+test("TSX and Vue scripts keep JSX copy and aria labels in the catalog", () => {
+  function looksLikeCopy(value) {
+    if (/[\u4e00-\u9fff]/u.test(value)) return true
+    if (!/[A-Za-z]{2,}/u.test(value)) return false
+    if (/^[A-Z0-9_]+$/u.test(value)) return false
+    if (/^[a-z][A-Za-z0-9_.:/%-]*$/u.test(value)) return false
+    return /\s/u.test(value) || /^[A-Z]/u.test(value)
+  }
+
+  for (const packageName of SCANNED_PACKAGES) {
+    for (const absolutePath of walk(path.join(ROOT, "packages", packageName, "src"))) {
+      const relativePath = path.relative(ROOT, absolutePath)
+      if (absolutePath.endsWith(".tsx")) {
+        const source = readFileSync(absolutePath, "utf8")
+        for (const match of source.matchAll(/aria-label=\{([^}]*)\}/gu)) {
+          for (const literal of stringLiterals(match[1])) {
+            assert.ok(
+              !looksLikeCopy(literal),
+              `${relativePath} hard-codes an aria-label literal: ${JSON.stringify(literal)}`,
+            )
+          }
+        }
+        for (const match of source.matchAll(/>\s*\{`([^`]*)`\}\s*</gu)) {
+          const staticText = match[1].replace(/\$\{[^}]*\}/gu, "")
+          assert.ok(
+            !looksLikeCopy(staticText),
+            `${relativePath} hard-codes JSX copy: ${JSON.stringify(match[1])}`,
+          )
+        }
+        for (const match of source.matchAll(/\blabel\s*:\s*(`[^`]*`|"[^"]*"|'[^']*')/gu)) {
+          const literal = stringLiterals(match[1])[0] ?? ""
+          assert.ok(
+            !looksLikeCopy(literal),
+            `${relativePath} hard-codes a label: ${JSON.stringify(literal)}`,
+          )
+        }
+      }
+
+      if (absolutePath.endsWith(".vue")) {
+        const source = readFileSync(absolutePath, "utf8")
+        const script = scriptOf(source)
+        for (const match of script.matchAll(/\bconst\s+\w*(?:label|title|aria|text|message)\w*\s*=\s*(`[^`]*`|"[^"]*"|'[^']*')/giu)) {
+          const literal = stringLiterals(match[1])[0] ?? ""
+          assert.ok(
+            !looksLikeCopy(literal),
+            `${relativePath} hard-codes a UI constant: ${JSON.stringify(literal)}`,
+          )
+        }
+      }
+    }
   }
 })
 
@@ -340,9 +397,20 @@ test("the previously hard-coded strings now resolve through the catalog", () => 
     ["vue-docx", "src/components/DocxNotesSection.vue", "脚注", "m.docx.notes.footnote"],
     ["vue-docx", "src/components/DocxTrackedChangeGutter.vue", "Hide comments", "m.docx.gutter.hideComments"],
     ["vue-docx", "src/components/DocxTrackedChangeGutter.vue", "Show comments", "m.docx.gutter.showComments"],
+    ["vue-docx", "src/components/DocxGutterAnchorMarkers.vue", "Comment ${entry.annotation.ordinal}", "m.docx.gutter.commentMarkerWithAuthor"],
+    ["vue-docx", "src/components/DocxFormFieldLayer.vue", "Invalid value.", "m.value.docx.formField.errors.invalidValue"],
+    ["vue-docx", "src/composables/form-field-value.ts", "This field is required.", "messages.required"],
+    ["vue-docx", "src/composables/useDocxImageWrapMenu.ts", "Move with Text", "messages.moveWithText"],
+    ["vue-docx", "src/components/DocxDocumentSurface.vue", "Unable to confirm DOCX reference.", "common.reference.confirmFailed"],
+    ["vue-pdf", "src/components/PdfSurface.vue", "Unable to confirm PDF reference.", "common.reference.confirmFailed"],
+    ["vue-pptx", "src/PptxStage.vue", "Unable to confirm PPTX reference.", "common.reference.confirmFailed"],
+    ["vue-xlsx", "src/components/XlsxSheetSurface.vue", "Unable to confirm XLSX reference.", "common.reference.confirmFailed"],
+    ["vue-xlsx", "src/components/XlsxSheetSurface.vue", "label: \"Workbook\"", "descriptor(\"workbook\")"],
+    ["vue-xlsx", "src/render/chart-svg-utils.tsx", "Unsupported chart type:", "officeMessagesEn.xlsx.chart.unsupportedType"],
+    ["vue-xlsx", "src/render/chart-renderer.tsx", "?? \"Chart\"", "labels.value.ariaLabel"],
+    ["vue-xlsx", "src/render/surface-regl.tsx", "?? \"Chart\"", "props.chartLabels?.ariaLabel"],
     ["vue-docx", "src/composables/editor-image.ts", "Select an image file", "ctx.statusMessage(\"selectImageFile\")"],
-    ["vue-docx", "src/composables/editor-table.ts", "Cannot delete the only table row", "refuse(\"cannotDeleteOnlyTableRow\")"],
-    ["vue-docx", "src/composables/editor-format.ts", "Unsupported: diagonal paragraph borders", "ctx.statusMessage(\"unsupportedDiagonalParagraphBorders\""],
+    ["vue-docx", "src/composables/editor-table.ts", "Cannot delete the only table row", "refuse(\"cannotDeleteOnlyTableRow\")"],    ["vue-docx", "src/composables/editor-format.ts", "Unsupported: diagonal paragraph borders", "ctx.statusMessage(\"unsupportedDiagonalParagraphBorders\""],
     ["vue-pdf", "src/pdf-url-policy.ts", "The source is not a verified PDF file.", "messages.invalidPdf"],
     ["vue-pptx", "src/PptxViewer.vue", "上一页", "m.pptx.viewer.previousSlide"],
     ["vue-pptx", "src/PptxThumbnail.vue", "隐藏", "m.pptx.thumbnail.hidden"],

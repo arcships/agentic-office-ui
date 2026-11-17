@@ -15,6 +15,8 @@ export type {
 } from "@arcships/office-interaction"
 
 export { useXlsxViewerController } from "./composables"
+export { localizeXlsxLoadError } from "./errors"
+export type { XlsxLoadErrorMessages } from "./errors"
 export { useClipboardCopyNotice } from "./composables/useClipboardCopyNotice"
 export type {
   ClipboardCopyNotice,

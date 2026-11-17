@@ -13,8 +13,11 @@ import {
 
 const {
   DocxEditor,
+  DocxFormFieldLayer,
   DocxTrackedChangeGutter,
+  DocxViewerRoot,
   useDocxEditor,
+  useDocxImageWrapMenu,
   useDocxViewerThumbnails,
 } = await importFromDemo("@arcships/vue-docx")
 const {
@@ -32,7 +35,7 @@ const {
 } = await import(
   new URL("../../packages/office-interaction/src/i18n.ts", import.meta.url)
 )
-const { createBlankDocumentModel } = await importFromDemo("@arcships/docx-core")
+const { createBlankDocumentModel, normalizeDocModel } = await importFromDemo("@arcships/docx-core")
 
 function message(locale) {
   return resolveOfficeMessages(locale)
@@ -73,6 +76,34 @@ function drawerTab(root) {
   return walk(root).find((node) => node.props?.["data-docx-gutter-drawer-tab"] !== undefined)
 }
 
+function docxModelWithComment() {
+  const model = createBlankDocumentModel()
+  model.metadata.comments = [
+    { id: 1, author: "Alex Reviewer", date: "2026-01-02T00:00:00Z", text: "Please confirm." },
+  ]
+  model.nodes = [{
+    type: "paragraph",
+    children: [{ type: "text", text: "Alpha beta gamma" }],
+    commentRanges: [{ commentId: 1, start: 6, end: 10, anchorText: "beta" }],
+  }]
+  return normalizeDocModel(model)
+}
+
+function formFieldModel(overrides = {}) {
+  const model = createBlankDocumentModel()
+  model.nodes = [{
+    type: "paragraph",
+    children: [{
+      type: "form-field",
+      fieldType: "text",
+      required: true,
+      value: "",
+      ...overrides,
+    }],
+  }]
+  return model
+}
+
 test("DOCX gutter drawer tab follows en and zh-CN copy", async () => {
   for (const [locale, titleOpen, label, titleClosed] of [
     ["en", "Hide comments", "Comments", "Show comments"],
@@ -99,6 +130,178 @@ test("DOCX gutter drawer tab follows en and zh-CN copy", async () => {
     } finally {
       mounted.app.unmount()
     }
+  }
+})
+
+test("DOCX gutter anchor markers localize their comment label", async () => {
+  for (const [locale, expected] of [
+    ["en", "Comment 1 — Alex Reviewer"],
+    ["zh-CN", "批注 1 — Alex Reviewer"],
+  ]) {
+    const wrapper = withLocale(locale, DocxViewerRoot, {
+      model: docxModelWithComment(),
+      zoomScale: 100,
+      showComments: true,
+    })
+    const mounted = await mount(wrapper)
+    try {
+      await vue.nextTick()
+      const marker = walk(mounted.root).find(
+        (node) => node.props?.["data-docx-comment-marker"] !== undefined,
+      )
+      assert.ok(marker, `${locale}: comment marker renders`)
+      assert.equal(marker.props.title, expected)
+      assert.equal(marker.props["aria-label"], expected)
+    } finally {
+      mounted.app.unmount()
+    }
+  }
+})
+
+test("DOCX form-field validation alerts localize", async () => {
+  for (const [locale, expected] of [
+    ["en", "This field is required."],
+    ["zh-CN", "此字段为必填项。"],
+  ]) {
+    const scope = vue.effectScope()
+    const controller = scope.run(() => useDocxEditor({ starterModel: formFieldModel() }))
+    const mounted = await mount(withLocale(locale, DocxFormFieldLayer, {
+      pageIndex: 0,
+      controller,
+      pageNodeSegments: [{ nodeIndex: 0 }],
+    }))
+    try {
+      await vue.nextTick()
+      const input = walk(mounted.root).find(
+        (node) => String(node.props?.class ?? "").includes("docx-form-text-input"),
+      )
+      assert.ok(input, `${locale}: form text input renders`)
+      input.props.onBlur({ target: { value: "" } })
+      await vue.nextTick()
+      const alert = walk(mounted.root).find(
+        (node) => String(node.props?.class ?? "").includes("docx-form-error"),
+      )
+      assert.ok(alert, `${locale}: validation alert renders`)
+      assert.equal(alert.props.role, "alert")
+      assert.equal(textContent(alert), expected)
+    } finally {
+      mounted.app.unmount()
+      scope.stop()
+    }
+  }
+})
+
+test("DOCX image wrap menu localizes its labels", () => {
+  for (const [locale, expected] of [
+    ["en", ["Move with Text", "Fix Position on Page", "Edit Wrap Boundary", "More Layout Options...", "In Line with Text"]],
+    ["zh-CN", ["随文字移动", "固定在页面位置", "编辑环绕边界", "更多布局选项…", "嵌入文字"]],
+  ]) {
+    const menu = useDocxImageWrapMenu({
+      context: { kind: "image", image: { floating: {} } },
+      runAction() {},
+    }, message(locale).docx.image)
+    assert.ok(menu, `${locale}: image wrap menu resolves`)
+    assert.deepEqual(
+      [
+        menu.positioningOptions[0].label,
+        menu.positioningOptions[1].label,
+        menu.editWrapBoundaryOption.label,
+        menu.moreLayoutOptionsOption.label,
+        menu.wrapOptions[0].label,
+      ],
+      expected,
+    )
+  }
+})
+
+test("XLSX error text and live region localize from the load error code", async () => {
+  for (const [locale, expected] of [
+    ["en", "The file is not a valid XLSX workbook."],
+    ["zh-CN", "该文件不是有效的 XLSX 工作簿。"],
+  ]) {
+    const error = new Error("raw catalog message")
+    const controller = {
+      activeSheet: null,
+      activeTab: null,
+      canZoomIn: false,
+      canZoomOut: false,
+      displayFileName: "broken.xlsx",
+      error,
+      isEditingLocked: false,
+      isLoading: false,
+      isWorkerBacked: false,
+      readOnly: false,
+      redo() {},
+      revision: 1,
+      sheets: [],
+      sourceError: {
+        code: "INVALID_WORKBOOK",
+        message: "raw catalog message",
+        sourceKind: "file",
+      },
+      tabs: [],
+      undo() {},
+      zoomScale: 100,
+    }
+    const mounted = await mount(XlsxViewer, {
+      controller,
+      locale,
+      showFormulaBar: false,
+      showRibbon: false,
+    })
+    try {
+      await vue.nextTick()
+      assert.match(textContent(mounted.root), new RegExp(expected, "u"))
+      assert.match(textContent(findByTestId(mounted.root, "xlsx-live-status")), new RegExp(expected, "u"))
+    } finally {
+      mounted.app.unmount()
+    }
+  }
+})
+
+test("a mounted viewer switches locale without remounting", async () => {
+  const controller = {
+    activeSheet: null,
+    activeTab: null,
+    canZoomIn: false,
+    canZoomOut: false,
+    displayFileName: "book.xlsx",
+    error: null,
+    isEditingLocked: false,
+    isLoading: false,
+    isWorkerBacked: false,
+    readOnly: false,
+    redo() {},
+    revision: 1,
+    sheets: [],
+    sourceError: null,
+    tabs: [],
+    undo() {},
+    zoomScale: 100,
+  }
+  const locale = vue.ref("en")
+  const Harness = vue.defineComponent({
+    setup() {
+      return () => vue.h(XlsxViewer, {
+        controller,
+        locale: locale.value,
+        showFormulaBar: false,
+        showRibbon: false,
+      })
+    },
+  })
+  const mounted = await mount(Harness)
+  try {
+    await vue.nextTick()
+    assert.match(textContent(mounted.root), /Open an XLSX file to get started/u)
+    assert.equal(findByTestId(mounted.root, "xlsx-search-toggle").props["aria-label"], "Search workbook")
+
+    locale.value = "zh-CN"
+    await vue.nextTick()
+    assert.match(textContent(mounted.root), /打开一个 XLSX 文件开始查看/u)
+    assert.equal(findByTestId(mounted.root, "xlsx-search-toggle").props["aria-label"], "搜索工作簿")
+  } finally {
+    mounted.app.unmount()
   }
 })
 

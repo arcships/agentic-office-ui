@@ -12,6 +12,11 @@ export type ChartRendererPalette = {
 
 export type ChartSvgProps = {
   chart: XlsxChart;
+  chartLabels?: {
+    ariaLabel: string;
+    /** Template with a `{type}` placeholder. */
+    unsupportedType: string;
+  };
   onChartElementDoubleClick?: (selection: XlsxChartElementSelection, event: MouseEvent) => void;
   onChartElementPointerDown?: (selection: XlsxChartElementSelection, event: PointerEvent) => void;
   palette: ChartRendererPalette;

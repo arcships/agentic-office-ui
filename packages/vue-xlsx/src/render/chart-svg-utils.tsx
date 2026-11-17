@@ -2,6 +2,7 @@
 import { symbol as d3Symbol, symbolCircle, symbolCross, symbolDiamond, symbolSquare, symbolStar, symbolTriangle } from "d3-shape";
 import type { XlsxChart } from "@arcships/xlsx-core";
 import { clamp, lightenColor, normalizeRendererHexColor, DEFAULT_CHART_TEXT_COLOR, buildChartFontFamily, truncateSvgText, resolveChartMutedTextColor } from "./chart-shared";
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction";
 import { chartSeriesColor } from "./chart-data";
 import type { ChartRendererPalette, ChartLayout, LegendItem } from "./chart-types";
 
@@ -243,7 +244,7 @@ export function renderTitle(chart: XlsxChart, layout: ChartLayout, palette: Char
 
 // ---- renderUnsupported ----
 
-export function renderUnsupported(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, chartType: string) {
+export function renderUnsupported(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, chartType: string, unsupportedTemplate = officeMessagesEn.xlsx.chart.unsupportedType) {
   return (
     <g>
       <rect
@@ -262,7 +263,7 @@ export function renderUnsupported(chart: XlsxChart, palette: ChartRendererPalett
         x={layout.plot.left + layout.plot.width / 2}
         y={layout.plot.top + layout.plot.height / 2}
       >
-        {`Unsupported chart type: ${chartType}`}
+        {formatOfficeMessage(unsupportedTemplate, { type: chartType })}
       </text>
     </g>
   );
