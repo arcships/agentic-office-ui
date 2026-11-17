@@ -4,6 +4,13 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [Unreleased]
 
+### DOCX annotation gutter
+
+- Position tracked-change and comment cards against their text anchors in page space instead of rendering them as an unpositioned list at a fixed `top: 72px`, with stable document-order ties, collision-free stacking, and measured card heights.
+- Counter-scale the annotation pane so cards keep a fixed screen size at every zoom level, and reserve a constant screen-space footprint beside the paper.
+- Number every comment and draw a numbered marker plus leader line at its anchor, linking the highlighted range to its card; clicking a card, marker, or highlighted range activates the pair.
+- Stop switching the pane to `position: static` below 1100px, which inflated the measured page height and broke multi-page scroll positions.
+
 ### Cross-format Office references
 
 - Prepare the nine public packages as the `0.6.0` candidate while keeping `0.5.4` as the published stable line.

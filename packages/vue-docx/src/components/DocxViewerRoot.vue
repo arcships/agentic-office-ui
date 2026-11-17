@@ -84,16 +84,14 @@ import {
   ensureDocxViewerPageSurfaceRegistry,
   notifyDocxViewerPageSurfaceListeners,
 } from "../composables/page-surface-registry"
+import {
+  annotationGutterReservedWidthPx,
+} from "./gutter-metrics"
 
 // ── Constants ──────────────────────────────────────────────────────
 const DOC_PAGE_BREAK_GAP = 28
 const PAGE_OVERSCAN = 2
 const SCROLL_MEASUREMENT_DEBOUNCE_MS = 80
-// Gutter (tracked changes / comments) sits beside the paper, inside the scaled
-// content. It must enter the horizontal footprint so the paper stays centered
-// and horizontal scroll can reach it.
-const GUTTER_GAP_PX = 16
-const GUTTER_WIDTH_PX = 240
 const PAGE_SIDE_PADDING = 48
 // The scroll container uses `padding: 24px 0`; page offsets are expressed in
 // scroll coordinates so scrollToPage / hit tests line up with the rendered page.
@@ -205,14 +203,15 @@ const FIT_ZOOM_MIN = 0.25
 const FIT_ZOOM_MAX = 2
 const FIT_ZOOM_SIDE_PAD = 48
 
-// Raw horizontal space the annotation gutter occupies before zoom.
-// 0 when annotations are hidden, so no space is reserved.
-const rawGutterWidthPx = computed(() =>
+// Horizontal space the annotation gutter reserves beside the paper, in screen
+// px. The pane counter-scales itself (see gutter-metrics), so this footprint is
+// constant at every zoom level. 0 when annotations are hidden.
+const gutterScreenWidthPx = computed(() =>
   (
     (props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false) ||
     (props.showComments ?? props.controller?.showComments ?? false)
   )
-    ? GUTTER_GAP_PX + GUTTER_WIDTH_PX
+    ? annotationGutterReservedWidthPx()
     : 0
 )
 
@@ -220,11 +219,14 @@ const fitZoom = computed(() => {
   if (!baseDocumentLayout.value) return 1
   const pageWidth = baseDocumentLayout.value.pageWidthPx
   if (!pageWidth || pageWidth <= 0) return 1
-  // The annotation gutter is part of the horizontal footprint; reserve it so
-  // fit-width does not introduce a horizontal scrollbar when it is visible.
-  const footprint = pageWidth + rawGutterWidthPx.value
-  const available = Math.max(200, containerWidth.value - FIT_ZOOM_SIDE_PAD)
-  return Math.min(FIT_ZOOM_MAX, Math.max(FIT_ZOOM_MIN, available / footprint))
+  // The annotation gutter is part of the horizontal footprint; reserve its
+  // screen-space width so fit-width does not introduce a horizontal scrollbar
+  // when it is visible.
+  const available = Math.max(
+    200,
+    containerWidth.value - FIT_ZOOM_SIDE_PAD - gutterScreenWidthPx.value
+  )
+  return Math.min(FIT_ZOOM_MAX, Math.max(FIT_ZOOM_MIN, available / pageWidth))
 })
 
 const zoomFactor = computed(() => {
@@ -325,7 +327,10 @@ const theme = computed(() => props.theme ?? props.controller?.documentTheme ?? "
 const trackedChangesEnabled = computed(() => props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false)
 const commentsEnabled = computed(() => props.showComments ?? props.controller?.showComments ?? false)
 // Visual horizontal space the annotation gutter occupies at the current zoom.
-const gutterVisualWidthPx = computed(() => rawGutterWidthPx.value * zoomFactor.value)
+// Visual horizontal space the annotation gutter occupies in screen px.
+// 0 when annotations are hidden, so no space is reserved. The pane counter-
+// scales, so this footprint does not follow the zoom factor.
+const gutterVisualWidthPx = computed(() => gutterScreenWidthPx.value)
 const trackedChanges = computed<readonly DocxTrackedChange[]>(() =>
   props.controller?.trackedChanges ?? (trackedChangesEnabled.value ? collectTrackedChangesFromModel(props.model) : [])
 )

@@ -166,7 +166,7 @@ export function gutterAnnotationSortTuple(
 
 export function trackedChangeBelongsToPageSegments(
   location: DocxTextRangeLocation,
-  pageSegments: DocumentPageNodeSegment[]
+  pageSegments: readonly DocumentPageNodeSegment[]
 ): boolean {
   if (location.kind === "paragraph") {
     return pageSegments.some(
@@ -221,21 +221,22 @@ export function findTrackedChangeAnchorElementInPage(
   location: DocxTextRangeLocation
 ): HTMLElement | undefined {
   if (location.kind === "paragraph") {
+    // The paragraph host rendered by `DocxParagraphHost` / `DocxPageBody`.
     const paragraphElement = pageElement.querySelector(
-      `[data-docx-paragraph-kind="paragraph"][data-docx-paragraph-node-index="${location.nodeIndex}"]`
+      `[data-docx-paragraph-host="true"][data-docx-paragraph-node-index="${location.nodeIndex}"]`
     ) as HTMLElement | null;
     return paragraphElement ?? undefined;
   }
 
   const paragraphElement = pageElement.querySelector(
-    `[data-docx-paragraph-kind="table-cell"][data-docx-table-index="${location.tableIndex}"][data-docx-row-index="${location.rowIndex}"][data-docx-cell-index="${location.cellIndex}"][data-docx-paragraph-index="${location.paragraphIndex}"]`
+    `[data-docx-table-cell-paragraph-host="true"][data-docx-table-index="${location.tableIndex}"][data-docx-table-row-index="${location.rowIndex}"][data-docx-table-cell-index="${location.cellIndex}"][data-docx-paragraph-index="${location.paragraphIndex}"]`
   ) as HTMLElement | null;
   if (paragraphElement) {
     return paragraphElement;
   }
 
   const cellElement = pageElement.querySelector(
-    `[data-docx-table-cell="true"][data-docx-table-index="${location.tableIndex}"][data-docx-row-index="${location.rowIndex}"][data-docx-cell-index="${location.cellIndex}"]`
+    `[data-docx-table-cell="true"][data-docx-table-index="${location.tableIndex}"][data-docx-table-row-index="${location.rowIndex}"][data-docx-table-cell-index="${location.cellIndex}"]`
   ) as HTMLElement | null;
   return cellElement ?? undefined;
 }
@@ -294,10 +295,152 @@ export interface TrackedChangeAnchorPoint {
  * share the anchor/stacking pipeline so they interleave in document order.
  */
 export interface DocxGutterAnnotation {
+  /** Unique within one page; `comment:`/`change:` prefixed. */
   id: string;
   location: DocxTextRangeLocation;
   trackedChange?: DocxTrackedChange;
   comment?: DocxComment;
+  /** 1-based document-order position on the page (card / marker index). */
+  ordinal?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Page annotation collection (comments + tracked changes)
+// ---------------------------------------------------------------------------
+
+/**
+ * One page's gutter annotations, in stable document order. `ordinal` is the
+ * 1-based position of the annotation inside its page, used as the comment
+ * index shown both on the anchor marker and on the gutter card.
+ */
+export interface PageGutterAnnotationsOptions {
+  pageSegments: readonly DocumentPageNodeSegment[];
+  comments?: readonly DocxComment[];
+  trackedChanges?: readonly DocxTrackedChange[];
+  /** Defaults to true. */
+  showComments?: boolean;
+  /** Defaults to true. */
+  showTrackedChanges?: boolean;
+}
+
+function gutterAnnotationKindRank(annotation: DocxGutterAnnotation): number {
+  // Comments are numbered, so they sort before unnumbered tracked changes when
+  // both anchor to the same paragraph.
+  return annotation.comment ? 0 : 1;
+}
+
+function gutterAnnotationDetailKey(annotation: DocxGutterAnnotation): string {
+  if (annotation.comment) {
+    const commentId = annotation.comment.commentId;
+    return Number.isFinite(commentId)
+      ? `c${String(commentId).padStart(12, "0")}`
+      : `c${annotation.comment.id}`;
+  }
+
+  const change = annotation.trackedChange;
+  if (!change) {
+    return "";
+  }
+
+  return `t${change.kind}:${change.inlineAnchorId ?? change.id}`;
+}
+
+/**
+ * Hosts may hand the gutter a comment/tracked-change record without an
+ * explicit location (only a node index); treat it as a body paragraph so page
+ * membership and anchor lookup still work.
+ */
+function resolveGutterAnnotationLocation(
+  entry: { location?: DocxTextRangeLocation; nodeIndex?: number },
+  fallbackNodeIndex: number
+): DocxTextRangeLocation {
+  if (entry.location) {
+    return entry.location;
+  }
+
+  const nodeIndex = Number.isFinite(entry.nodeIndex)
+    ? (entry.nodeIndex as number)
+    : fallbackNodeIndex;
+  return { kind: "paragraph", nodeIndex };
+}
+
+function compareGutterAnnotations(
+  left: DocxGutterAnnotation,
+  right: DocxGutterAnnotation
+): number {
+  const leftTuple = gutterAnnotationSortTuple(left.location);
+  const rightTuple = gutterAnnotationSortTuple(right.location);
+  for (let index = 0; index < leftTuple.length; index += 1) {
+    const delta = leftTuple[index] - rightTuple[index];
+    if (delta !== 0) {
+      return delta;
+    }
+  }
+
+  const rankDelta =
+    gutterAnnotationKindRank(left) - gutterAnnotationKindRank(right);
+  if (rankDelta !== 0) {
+    return rankDelta;
+  }
+
+  const detailDelta = gutterAnnotationDetailKey(left).localeCompare(
+    gutterAnnotationDetailKey(right)
+  );
+  if (detailDelta !== 0) {
+    return detailDelta;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+/**
+ * Builds the gutter annotation list for a single page: filters the document's
+ * comments and tracked changes down to the nodes rendered on that page, then
+ * orders them by document position (never by kind) and numbers them. The
+ * result is deterministic for a given input, so card order stays stable across
+ * re-renders and while the user pans or zooms.
+ */
+export function buildPageGutterAnnotations(
+  options: PageGutterAnnotationsOptions
+): DocxGutterAnnotation[] {
+  const pageSegments = options.pageSegments;
+  const annotations: DocxGutterAnnotation[] = [];
+
+  if (options.showComments ?? true) {
+    for (const comment of options.comments ?? []) {
+      const location = resolveGutterAnnotationLocation(comment, -1);
+      if (!trackedChangeBelongsToPageSegments(location, pageSegments)) {
+        continue;
+      }
+
+      annotations.push({
+        id: `comment:${comment.id}`,
+        location,
+        comment,
+      });
+    }
+  }
+
+  if (options.showTrackedChanges ?? true) {
+    for (const change of options.trackedChanges ?? []) {
+      const location = resolveGutterAnnotationLocation(change, -1);
+      if (!trackedChangeBelongsToPageSegments(location, pageSegments)) {
+        continue;
+      }
+
+      annotations.push({
+        id: `change:${change.id}`,
+        location: change.location,
+        trackedChange: change,
+      });
+    }
+  }
+
+  annotations.sort(compareGutterAnnotations);
+  annotations.forEach((annotation, index) => {
+    annotation.ordinal = index + 1;
+  });
+  return annotations;
 }
 
 function findFirstElementWithSpaceSeparatedDataValue(
@@ -409,6 +552,57 @@ export function findGutterAnnotationAnchorElementInPage(
 }
 
 // ---------------------------------------------------------------------------
+// Page-space anchor resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves each annotation's anchor point in *page space* (CSS px measured
+ * against the page surface's untransformed box, origin at the page's top-left).
+ *
+ * Page space means the result is independent of the viewer's zoom: the anchor
+ * of a paragraph does not move when the page is scaled, so cards can be laid
+ * out once per page geometry instead of re-deriving positions from client
+ * coordinates at every zoom level.
+ *
+ * Prefers the inline anchor element (the highlighted run / revision markup)
+ * and falls back to the annotation's paragraph or table cell, so a card still
+ * has a position when the paragraph has been edited and the inline markup is
+ * gone.
+ */
+export function resolveGutterAnnotationAnchorsInPage(
+  pageElement: HTMLElement,
+  annotations: readonly DocxGutterAnnotation[]
+): Map<string, TrackedChangeAnchorPoint> {
+  const anchors = new Map<string, TrackedChangeAnchorPoint>();
+  for (const annotation of annotations) {
+    const anchorElement = findGutterAnnotationAnchorElementInPage(
+      pageElement,
+      annotation
+    );
+    if (!anchorElement) {
+      continue;
+    }
+
+    const rect = elementRectWithinContainer(anchorElement, pageElement);
+    if (!rect) {
+      continue;
+    }
+
+    // The left edge (not the right edge) identifies where the anchor starts on
+    // its line, so same-line anchors sort in document order.
+    const x = Math.round(rect.left);
+    const y = Math.round(rect.top);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      continue;
+    }
+
+    anchors.set(annotation.id, { x, y });
+  }
+
+  return anchors;
+}
+
+// ---------------------------------------------------------------------------
 // Positioned annotation & connector-lane assignment (upstream 23368-23440)
 // ---------------------------------------------------------------------------
 
@@ -420,6 +614,13 @@ export interface PositionedGutterAnnotation {
   heightPx: number;
   connectorLane: number;
 }
+
+/**
+ * Vertical bucket used only for ordering cards. Anchors on the same text line
+ * can differ by a pixel or two (run borders, sub/superscript); bucketing keeps
+ * their relative order fixed instead of letting 1px jitter swap two cards.
+ */
+const GUTTER_ANNOTATION_SORT_BUCKET_PX = 4;
 
 export function estimateTrackedChangeCardHeight(
   change: DocxTrackedChange
@@ -497,9 +698,14 @@ export function assignGutterConnectorLanes(
  * card heights, stacks cards vertically with collision avoidance against the
  * page bottom, and assigns connector lanes. Pure with respect to the DOM —
  * callers supply pre-resolved anchor points and optional measured heights.
+ *
+ * All inputs and outputs are in page space (CSS px against the page's
+ * untransformed box), never client/zoomed coordinates: the caller converts the
+ * resulting `top`/`heightPx` for display when the page is rendered under a
+ * scale transform.
  */
 export function layoutTrackedChangesForPage(
-  annotations: DocxGutterAnnotation[],
+  annotations: readonly DocxGutterAnnotation[],
   anchorByChangeId: Map<string, TrackedChangeAnchorPoint>,
   cardHeightsByChangeId: Map<string, number> | undefined,
   pageWidthPx: number,
@@ -513,13 +719,31 @@ export function layoutTrackedChangesForPage(
     18,
     pageHeightPx / Math.max(1, annotations.length + 1)
   );
+  const resolvedAnchors = annotations.map((annotation) =>
+    anchorByChangeId.get(annotation.id)
+  );
+  const hasResolvedAnchor = resolvedAnchors.some(Boolean);
+  // When nothing measured (SSR, a hidden page, or a test renderer) the cards
+  // are spread evenly down the page in document order. When only some anchors
+  // measured, the unresolved ones inherit the nearest measured y instead of
+  // jumping to a synthetic page-wide slot above or below their neighbours.
+  const firstResolvedY = resolvedAnchors.find(Boolean)?.y;
+  let lastResolvedY: number | undefined;
   const withAnchors = annotations.map((annotation, index) => {
     const defaultAnchor = Math.min(
       Math.max(10, Math.round((index + 1) * fallbackStride)),
       Math.max(10, pageHeightPx - 10)
     );
-    const anchorPoint = anchorByChangeId.get(annotation.id);
-    const anchorY = anchorPoint?.y ?? defaultAnchor;
+    const anchorPoint = resolvedAnchors[index];
+    let anchorY: number;
+    if (anchorPoint && Number.isFinite(anchorPoint.y)) {
+      anchorY = anchorPoint.y;
+      lastResolvedY = anchorPoint.y;
+    } else if (hasResolvedAnchor && Number.isFinite(firstResolvedY)) {
+      anchorY = lastResolvedY ?? (firstResolvedY as number);
+    } else {
+      anchorY = defaultAnchor;
+    }
     const anchorX = anchorPoint?.x ?? Math.max(10, pageWidthPx - 10);
     const measuredHeightPx = cardHeightsByChangeId?.get(annotation.id);
     const estimatedHeightPx = annotation.trackedChange
@@ -552,9 +776,17 @@ export function layoutTrackedChangesForPage(
     };
   });
 
+  // Total order: bucketed y, then x, then input (document) order. A comparator
+  // with a tolerance band is not transitive, so it cannot produce a stable sort
+  // and cards would swap places between renders.
+  const orderById = new Map(
+    annotations.map((annotation, index) => [annotation.id, index])
+  );
   withAnchors.sort((left, right) => {
-    const yDelta = left.anchorY - right.anchorY;
-    if (Math.abs(yDelta) > 2) {
+    const yDelta =
+      Math.round(left.anchorY / GUTTER_ANNOTATION_SORT_BUCKET_PX) -
+      Math.round(right.anchorY / GUTTER_ANNOTATION_SORT_BUCKET_PX);
+    if (yDelta !== 0) {
       return yDelta;
     }
 
@@ -563,7 +795,10 @@ export function layoutTrackedChangesForPage(
       return xDelta;
     }
 
-    return left.annotation.id.localeCompare(right.annotation.id);
+    return (
+      (orderById.get(left.annotation.id) ?? 0) -
+      (orderById.get(right.annotation.id) ?? 0)
+    );
   });
 
   const minTopPx = 8;

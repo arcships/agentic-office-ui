@@ -126,16 +126,31 @@
       outside the clipped page surface or it would disappear when annotations
       are enabled.
     -->
+
+    <!--
+      Anchor markers and leader lines sit in the page frame as well: they use
+      page-space coordinates but must be able to draw past the paper edge,
+      which the clipped surface would cut off.
+    -->
+    <DocxGutterAnchorMarkers
+      v-if="showGutter"
+      :positioned="positionedAnnotations"
+      :zoom-factor="annotationZoomFactor"
+      :page-width-px="pageWidthPx"
+      :content-right-px="pageContentRightPx"
+      :document-theme="theme"
+      :active-annotation-id="activeAnnotationId"
+      @activate="activateAnnotation($event, { scrollToAnchor: false })"
+    />
     <DocxTrackedChangeGutter
       v-if="showGutter"
-      :page-index="pageIndex"
-      :page-layout="pageLayout"
-      :controller="controller"
-      :tracked-changes="trackedChanges"
-      :comments="comments"
-      :show-tracked-changes="trackedChangesEnabled"
-      :show-comments="commentsEnabled"
-      :page-node-segments="pageNodeSegments"
+      :positioned="positionedAnnotations"
+      :zoom-factor="annotationZoomFactor"
+      :page-height-px="annotationPageHeightPx"
+      :document-theme="theme"
+      :active-annotation-id="activeAnnotationId"
+      @activate="activateAnnotation($event, { scrollToAnchor: true })"
+      @card-height="reportGutterCardHeight"
     />
   </div>
 </template>
@@ -154,8 +169,10 @@ import type {
   TableCellContentNode,
 } from "@arcships/docx-core"
 import {
+  buildPageGutterAnnotations,
   docModelThumbnailMetadataSignature,
   docNodeContentSignature,
+  findGutterAnnotationAnchorElementInPage,
   resolveDocumentLayout,
   pageMarginPaddingStyle,
 } from "@arcships/docx-core"
@@ -165,7 +182,9 @@ import DocxPageBody from "./DocxPageBody"
 import DocxImageLayer from "./DocxImageLayer.vue"
 import DocxFormFieldLayer from "./DocxFormFieldLayer.vue"
 import DocxTrackedChangeGutter from "./DocxTrackedChangeGutter.vue"
+import DocxGutterAnchorMarkers from "./DocxGutterAnchorMarkers.vue"
 import DocxNotesSection from "./DocxNotesSection.vue"
+import { useDocxGutterLayout } from "../composables/gutter-layout"
 import {
   ensureDocxViewerPageSurfaceRegistry,
   notifyDocxViewerPageSurfaceListeners,
@@ -179,6 +198,7 @@ interface DocxPageSurfaceProps {
   model: DocModel
   controller?: DocxEditorController
   editable?: boolean
+  /** Zoom factor applied to the page subtree; the annotation pane counter-scales. */
   zoomFactor?: number
   pageWidthPx: number
   pageContentWidthPx: number
@@ -207,12 +227,12 @@ const props = withDefaults(
   defineProps<DocxPageSurfaceProps>(),
   {
     editable: true,
-    zoomFactor: 1,
     trackedChangesEnabled: false,
     commentsEnabled: false,
     footnotes: () => [],
     endnotes: () => [],
     theme: "light" as const,
+    zoomFactor: 1,
   }
 )
 
@@ -303,6 +323,103 @@ const showGutter = computed(
   () => props.trackedChangesEnabled || props.commentsEnabled
 )
 
+// ── Annotation gutter ──────────────────────────────────────────────
+// Annotations are numbered and ordered in document order, then placed against
+// their page-space anchors: the DOM resolver measures each anchor inside the
+// page (independent of zoom) and the pure layout stacks the cards from there.
+const pageAnnotations = computed(() =>
+  buildPageGutterAnnotations({
+    comments: props.comments ?? props.controller?.comments ?? [],
+    trackedChanges: props.trackedChanges ?? props.controller?.trackedChanges ?? [],
+    pageSegments: props.pageNodeSegments,
+    showComments: props.commentsEnabled,
+    showTrackedChanges: props.trackedChangesEnabled,
+  })
+)
+
+const pageMeasuredHeightPx = ref(0)
+
+const {
+  positioned: positionedAnnotations,
+  zoomFactor: annotationZoomFactor,
+  reportCardHeight: reportGutterCardHeight,
+  refresh: refreshGutterLayout,
+} = useDocxGutterLayout({
+  pageElement: pageSurfaceRef,
+  annotations: () => pageAnnotations.value,
+  layoutSignal: () =>
+    [props.model, props.pageNodeSegments, props.pageWidthPx, props.theme] as const,
+  pageWidthPx: () => props.pageWidthPx,
+  pageHeightPx: () =>
+    Math.max(props.pageLayout.pageHeightPx, pageMeasuredHeightPx.value),
+  zoomFactor: () => props.zoomFactor,
+})
+
+// Height of the annotation surface in page space; cards clamp and stack
+// against it so they never land outside the paper.
+const annotationPageHeightPx = computed(() =>
+  Math.max(props.pageLayout.pageHeightPx, pageMeasuredHeightPx.value)
+)
+
+const pageContentRightPx = computed(
+  () =>
+    props.pageWidthPx -
+    (props.pageLayout.marginsPx?.right ?? 72)
+)
+
+const activeAnnotationId = ref<string | undefined>()
+
+function annotationIdForTarget(target: EventTarget | null): string | undefined {
+  const element = (target as HTMLElement | null)?.closest?.(
+    "[data-docx-comment-ids], [data-docx-comment-id], [data-docx-tracked-change-id]"
+  ) as HTMLElement | null
+  if (!element) return undefined
+
+  const dataset = element.dataset ?? {}
+  const commentIds = (dataset.docxCommentIds ?? dataset.docxCommentId ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+  for (const commentId of commentIds) {
+    const annotation = pageAnnotations.value.find(
+      (entry) => entry.comment && String(entry.comment.commentId) === commentId
+    )
+    if (annotation) return annotation.id
+  }
+
+  const changeId = dataset.docxTrackedChangeId
+  if (changeId) {
+    const annotation = pageAnnotations.value.find(
+      (entry) =>
+        entry.trackedChange &&
+        (entry.trackedChange.id === changeId ||
+          entry.trackedChange.inlineAnchorId === changeId)
+    )
+    if (annotation) return annotation.id
+  }
+
+  return undefined
+}
+
+function activateAnnotation(
+  annotationId: string,
+  options?: { scrollToAnchor?: boolean }
+): void {
+  activeAnnotationId.value = annotationId
+  if (!options?.scrollToAnchor) return
+
+  const pageElement = pageSurfaceRef.value
+  const annotation = pageAnnotations.value.find(
+    (entry) => entry.id === annotationId
+  )
+  if (!pageElement || !annotation) return
+
+  const anchorElement = findGutterAnnotationAnchorElementInPage(
+    pageElement,
+    annotation
+  )
+  anchorElement?.scrollIntoView?.({ block: "center", inline: "nearest" })
+}
+
 const coverEntries = computed<CoverEntry[]>(() => {
   // Collect full-page cover background images from paragraph segments
   // Simplified: empty for now — full implementation requires image run detection
@@ -341,11 +458,12 @@ const surfaceStyle = computed(() => ({
   ...pageMarginPaddingStyle(props.pageLayout.marginsPx ?? { top: 72, bottom: 72, left: 72, right: 72 }),
 }))
 
-// ── Surface click → select paragraph ───────────────────────────────
+// ── Surface click → select paragraph / focus annotation ────────────
 function onSurfaceClick(event: MouseEvent): void {
-  // Only handle clicks directly on the surface (not on child interactive elements)
-  if (event.target === pageSurfaceRef.value || (event.target as HTMLElement)?.dataset?.docxPageSurface === "true") {
-    // Don't steal focus from form fields or editable elements
+  // Clicks on a commented / revised run link the text to its gutter card.
+  const annotationId = annotationIdForTarget(event.target)
+  if (annotationId) {
+    activateAnnotation(annotationId)
   }
 }
 
@@ -361,6 +479,11 @@ function measurePage(): void {
   // even when the page body has clipped overflowing content.
   const measuredHeight = pageSurfaceRef.value.offsetHeight
   const heightPx = measuredHeight > 0 ? measuredHeight : props.pageLayout.pageHeightPx
+  if (heightPx !== pageMeasuredHeightPx.value) {
+    pageMeasuredHeightPx.value = heightPx
+    // Paragraph anchors move when content reflows; re-measure them.
+    refreshGutterLayout()
+  }
   emit("measure", { heightPx })
 }
 
