@@ -76,6 +76,7 @@ import type {
 import {
   buildLayoutSnapshot,
   buildDocumentPageNotes,
+  ensureDocumentFontInvalidation,
   collectCommentsFromModel,
   collectTrackedChangesFromModel,
   parseSectionLayout,
@@ -824,6 +825,7 @@ let containerObserver: ResizeObserver | undefined
 let stopPrintDetection: () => void = () => {}
 
 onMounted(() => {
+  ensureDocumentFontInvalidation()
   stopPrintDetection = setupPrintDetection()
   if (scrollContainerRef.value) {
     const height = scrollContainerRef.value.clientHeight

@@ -18,16 +18,9 @@ import type {
   TextUnderlineStyle
 } from "./types";
 
-const TAG_PATTERN_CACHE = new Map<string, RegExp>();
-
 function tagPattern(tagName: string): RegExp {
-  let pattern = TAG_PATTERN_CACHE.get(tagName);
-  if (!pattern) {
-    const escaped = tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    pattern = new RegExp(`<(/?)${escaped}(?=[\\s>/])[^>]*>`, "gi");
-    TAG_PATTERN_CACHE.set(tagName, pattern);
-  }
-  return pattern;
+  const escaped = tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`<(/?)${escaped}(?=[\\s>/])[^>]*>`, "gi");
 }
 
 /** Extract the value of an XML attribute from a tag string. */
@@ -181,7 +174,7 @@ export function xmlColorValue(tagXml: string | undefined): string | undefined {
   return raw;
 }
 
-const UNDERLINE_STYLES = new Set<string>([
+const UNDERLINE_STYLES = [
   "single",
   "words",
   "double",
@@ -199,7 +192,7 @@ const UNDERLINE_STYLES = new Set<string>([
   "wave",
   "wavyheavy",
   "wavydouble"
-]);
+] as const;
 
 const UNDERLINE_STYLE_CANONICAL: Record<string, TextUnderlineStyle> = {
   single: "single",
@@ -225,7 +218,7 @@ export function normalizeUnderlineStyle(
   value: string | undefined
 ): TextUnderlineStyle | undefined {
   const normalized = value?.trim().toLowerCase();
-  if (!normalized || !UNDERLINE_STYLES.has(normalized)) {
+  if (!normalized || !UNDERLINE_STYLES.includes(normalized as (typeof UNDERLINE_STYLES)[number])) {
     return undefined;
   }
   return UNDERLINE_STYLE_CANONICAL[normalized];
@@ -501,7 +494,7 @@ export function parseRunTypographyFromRunXml(
     : undefined;
 }
 
-const PARAGRAPH_ALIGNMENTS = new Set<string>([
+const PARAGRAPH_ALIGNMENTS = [
   "left",
   "center",
   "right",
@@ -512,7 +505,7 @@ const PARAGRAPH_ALIGNMENTS = new Set<string>([
   "low",
   "start",
   "end"
-]);
+] as const;
 
 export function parseParagraphAlignmentFromParagraphProperties(
   paragraphPropertiesXml: string
@@ -527,7 +520,7 @@ export function parseParagraphAlignmentFromParagraphProperties(
   if (normalized === "thaidistribute") {
     return "thaiDistribute";
   }
-  return PARAGRAPH_ALIGNMENTS.has(normalized)
+  return PARAGRAPH_ALIGNMENTS.includes(normalized as (typeof PARAGRAPH_ALIGNMENTS)[number])
     ? (normalized as ParagraphAlignment)
     : undefined;
 }

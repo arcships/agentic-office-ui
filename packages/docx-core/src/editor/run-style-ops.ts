@@ -32,7 +32,7 @@ import {
   createSourceXmlIdentifierRegistry,
 } from "./helpers/xml-identifiers";
 import { remapParagraphCommentRanges } from "../engine/comment-ranges";
-import { paragraphText } from "./helpers/paragraph-inspect";
+import { paragraphTextContent } from "../engine/paragraph-text";
 
 /** Returns true when the transform actually changed the run. */
 type TextRunTransform = (run: TextRunNode) => boolean;
@@ -103,7 +103,7 @@ export function replaceText(model: DocModel, searchValue: string | RegExp, repla
   const next = cloneDocModel(model);
   const previousTextByParagraph = new Map<unknown, string>();
   forEachParagraphNode(next, (paragraph) => {
-    previousTextByParagraph.set(paragraph, paragraphText(paragraph));
+    previousTextByParagraph.set(paragraph, paragraphTextContent(paragraph));
   });
 
   mutateParagraphTextRuns(next, (run) => {
@@ -125,7 +125,7 @@ export function replaceText(model: DocModel, searchValue: string | RegExp, repla
     }
     paragraph.commentRanges = remapParagraphCommentRanges(
       previousText,
-      paragraphText(paragraph),
+      paragraphTextContent(paragraph),
       paragraph.commentRanges
     );
   });

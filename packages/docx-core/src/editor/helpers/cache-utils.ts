@@ -11,7 +11,7 @@ import type {
   ParagraphNode,
   TableNode
 } from "../../engine/types";
-import { textMeasurementGeneration } from "../../viewer/font-metrics";
+import { textMeasurementGeneration } from "../../viewer/text-measurement-generation";
 import { XML_CACHE_MAX_ENTRIES } from "./constants";
 
 export const paragraphBreakFlagsBySourceXml = new Map<

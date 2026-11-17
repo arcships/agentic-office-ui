@@ -1,45 +1,21 @@
 /**
- * Text-measurement generation shared by the DOCX layout caches.
+ * Browser hooks for text-measurement invalidation.
  *
- * Width/height estimations are cached per paragraph/run. A cache entry taken
- * before a web font finishes loading is wrong forever unless the caches know
- * that the font set changed; the generation counter is part of every
- * measurement cache key, and `document.fonts` events bump it automatically.
+ * The generation counter itself lives in `text-measurement-generation.ts` so
+ * the pure core graph never imports `document`. Hosts call
+ * `ensureDocumentFontInvalidation()` once before layout.
  */
 
-let textMeasurementGenerationCounter = 0;
+import { invalidateTextMeasurements } from "./text-measurement-generation";
+
+export {
+  invalidateTextMeasurements,
+  onTextMeasurementInvalidated,
+  textMeasurementGeneration,
+} from "./text-measurement-generation";
+
 let documentFontInvalidationInstalled = false;
-const textMeasurementInvalidationListeners = new Set<() => void>();
 
-/** Current measurement generation. Cache keys must include this value. */
-export function textMeasurementGeneration(): number {
-  return textMeasurementGenerationCounter;
-}
-
-/**
- * Invalidate every cached text measurement. Call after a web font loads or the
- * font set otherwise changes. Returns the new generation.
- */
-export function invalidateTextMeasurements(): number {
-  textMeasurementGenerationCounter += 1;
-  for (const listener of [...textMeasurementInvalidationListeners]) {
-    listener();
-  }
-  return textMeasurementGenerationCounter;
-}
-
-/**
- * Subscribe to measurement invalidation (e.g. to drop a caller-owned cache or
- * re-run pagination). Returns an unsubscribe function.
- */
-export function onTextMeasurementInvalidated(
-  listener: () => void
-): () => void {
-  textMeasurementInvalidationListeners.add(listener);
-  return () => {
-    textMeasurementInvalidationListeners.delete(listener);
-  };
-}
 
 /**
  * Install the `document.fonts` hooks once. Safe to call from every measurement

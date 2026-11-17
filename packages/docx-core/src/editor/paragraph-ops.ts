@@ -33,7 +33,7 @@ import {
   shiftDocumentSectionStartNodeIndexes
 } from "../engine/section-break";
 import { remapParagraphCommentRanges } from "../engine/comment-ranges";
-import { paragraphText } from "./helpers/paragraph-inspect";
+import { paragraphTextContent } from "../engine/paragraph-text";
 
 export { cloneParagraph };
 
@@ -834,7 +834,7 @@ export function updateParagraphText(
 
   const paragraph = cloneDocNode(source);
   next.nodes[index] = paragraph;
-  const previousText = paragraphText(paragraph);
+  const previousText = paragraphTextContent(paragraph);
   paragraph.children = distributeTextAcrossParagraphChildren(paragraph, text, options);
   // Comment ranges are character offsets, so they follow the edit instead of
   // being re-derived from `sourceXml`, which this clears.

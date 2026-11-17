@@ -6,10 +6,7 @@ import {
   type LayoutLine,
   type PreparedTextWithSegments,
 } from "@chenglou/pretext";
-import {
-  ensureDocumentFontInvalidation,
-  textMeasurementGeneration,
-} from "./font-metrics";
+import { textMeasurementGeneration } from "./text-measurement-generation";
 
 const fragmentOffsetAdvancesByFragment = new WeakMap<
   PretextLineFragment,
@@ -146,7 +143,6 @@ function measureTextWidthPx(font: string, text: string): number {
     return 0;
   }
 
-  ensureDocumentFontInvalidation();
   const context = getMeasureContext();
   if (!context) {
     // No canvas (SSR, worker without OffscreenCanvas): keep selection offsets
