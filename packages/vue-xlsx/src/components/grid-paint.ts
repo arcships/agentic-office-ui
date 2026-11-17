@@ -67,6 +67,28 @@ export function resolveAxisResizeSize(
   return Math.max(minimum, startSize + deltaPx / resolveZoomFactor(zoomScale));
 }
 
+// ── Per-frame identity keys ────────────────────────────────────────────────
+
+/** XLSX's maximum column count; every cell key packs (row, col) into one number. */
+export const CELL_KEY_STRIDE = 16_384;
+/** XLSX's maximum row count, so (sheet, row, col) also stays one number. */
+export const ROW_KEY_STRIDE = 1_048_576;
+
+/**
+ * Numeric identity for a sheet cell. Repaints resolve merge anchors, comments,
+ * hyperlinks, sparklines and worker snapshots per visible cell; string keys
+ * (`` `${row}:${col}` ``) allocated several throwaway strings per cell per
+ * frame, numbers do not.
+ */
+export function cellKey(row: number, col: number): number {
+  return row * CELL_KEY_STRIDE + col;
+}
+
+/** Numeric identity for a cell that also carries its workbook sheet index. */
+export function sheetCellKey(sheetIndex: number, row: number, col: number): number {
+  return (sheetIndex * ROW_KEY_STRIDE + row) * CELL_KEY_STRIDE + col;
+}
+
 // ── Merged regions ─────────────────────────────────────────────────────────
 
 export interface PixelRect {

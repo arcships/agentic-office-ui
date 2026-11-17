@@ -123,6 +123,10 @@ async function loadInlineEditor(controller) {
     let adjacentCell = null;
     function getAdjacentCell(cell) { return adjacentCell ?? { row: cell.row, col: cell.col + 1 }; }
     function setAdjacentCell(cell) { adjacentCell = cell; }
+    // The editor brings its cell into the pane through the grid's scroll
+    // surface, which this harness does not provide; the assertions below cover
+    // seeding and committing the formula, not scrolling.
+    function scrollToCell() {}
     ${inputValueHelper ? "" : "function getCellInputValue(cell) { return props.controller.getCellDisplayValue(cell); }"}
   `;
   const output = ts.transpileModule(
