@@ -2,6 +2,7 @@ export {
   buildChartSeriesFormula,
   parseChartSeriesFormula,
   applyChartSeriesFormula,
+  refreshChartDataFromWorkbook,
 } from "./chart-series";
 export type { ParsedChartSeriesFormula } from "./chart-series";
 export type { WorkbookChartOrigin, WorkbookChartAssets } from "./chart-types";

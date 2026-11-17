@@ -58,12 +58,12 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ### XLSX chart data
 
-- Render value, series-name, category, and percent data labels on bar, column, line, and area charts, including label position and number format.
+- Render value, series-name, category, and percent data labels on 2D and 3D bar, column, line, and area charts, including label position and number format.
 - Normalize 100 % stacked charts with `Σ|v|`, so mixed positive and negative categories render at their real percentages.
 - Honour logarithmic value axes, smooth line series, marker symbols, shared combo-chart value axes, and date category axes with elapsed-time spacing.
 - Exclude hidden rows and columns from chart series unless the chart explicitly opts out with `plotVisOnly=0`.
 - Keep every level of multi-level category caches instead of only the deepest label.
-- Worker mode still plots the cached chart XML values after an in-worker cell edit until the workbook is reloaded; main-thread mode refreshes the plot from the edited workbook.
+- Refresh chart series from an edited workbook through `refreshChartDataFromWorkbook` and the Worker `refreshCharts` request, so worker-backed charts do not stay on the source file's cached XML values after an in-worker edit.
 
 ### PDF selection and annotation hit layer
 

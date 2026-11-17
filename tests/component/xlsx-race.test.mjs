@@ -565,6 +565,71 @@ test("late worker chart hydration does not overwrite charts refreshed after an e
   assert.deepEqual(mounted.warnings, []);
 });
 
+test("worker-backed charts refresh from the current Worker model after an edit", async (t) => {
+  enableWorkerSupport(t);
+  const worker = new ManualWorker();
+  const mounted = await mountController({
+    createWorker: () => worker,
+    file: sampleBuffer("charts-images.xlsx"),
+    readOnly: true,
+  });
+  t.after(() => mounted.app.unmount());
+
+  await waitFor(
+    () => worker.messages.some((message) => message.type === "load"),
+    "worker load request",
+  );
+  const loadMessage = worker.messages.find((message) => message.type === "load");
+  const firstChart = {
+    axes: [],
+    chartType: "Line",
+    id: "chart-0-0",
+    series: [{
+      categories: ["A", "B"],
+      dataPoints: [],
+      id: "series-1",
+      name: "Series 1",
+      values: [10, 20],
+    }],
+    sheetIndex: 0,
+    workbookSheetIndex: 0,
+    zIndex: 0,
+  };
+  const snapshot = workerSnapshotWithSheet();
+  worker.respond(loadMessage, {
+    ...snapshot,
+    chartsByWorkbookSheetIndex: [[firstChart]],
+  });
+  await waitFor(
+    () => mounted.controller.sourceState === "ready" && mounted.controller.isWorkerBacked,
+    "worker-backed chart workbook",
+  );
+  assert.deepEqual(mounted.controller.getSheetCharts(0)[0].series[0].values, [10, 20]);
+
+  const refreshPromise = mounted.controller.refreshChartData();
+  await waitFor(
+    () => worker.messages.some((message) => message.type === "refreshCharts"),
+    "worker chart refresh request",
+  );
+  const refreshMessage = worker.messages.find((message) => message.type === "refreshCharts");
+  worker.respond(refreshMessage, {
+    chartsByWorkbookSheetIndex: [[{
+      ...firstChart,
+      series: firstChart.series.map((series) => ({ ...series, values: [30, 40] })),
+    }]],
+    chartsheets: [],
+    tabs: snapshot.tabs,
+  });
+
+  assert.equal(await refreshPromise, true);
+  assert.deepEqual(
+    mounted.controller.getSheetCharts(0)[0].series[0].values,
+    [30, 40],
+    "worker-backed charts keep the source cache after an in-worker edit",
+  );
+  assert.deepEqual(mounted.warnings, []);
+});
+
 test("worker-mode sheet thumbnails render snapshot values and widths", () => {
   const sheet = {
     cachedFormulaValues: { A1: "Revenue", B1: "1200" },

@@ -1,10 +1,11 @@
 /** @jsxImportSource vue */
 import type { XlsxChart, XlsxChartElementSelection } from "@arcships/xlsx-core";
-import { clamp, lightenColor, darkenColor, resolveChartAxisTextColor } from "./chart-shared";
+import { clamp, lightenColor, darkenColor, resolveChartAxisTextColor, resolveChartTextColor } from "./chart-shared";
 import { chartElementDataProps, isSelectedChartPointOrSeries, renderSelectionPointHandles } from "./chart-element";
 import { chartSeriesColor, chartSeriesStrokeColor, createChartAxisTickFormatter, normalizeChartMarkerSymbol } from "./chart-data";
 import { markerSymbolPath, toSvgNumber } from "./chart-svg-utils";
 import { resolveAxisDomainWithChartOverrides, formatTickValue } from "./chart-axis";
+import { buildDataLabelText, hasVisibleDataLabels, resolveDataLabelsForPoint, resolveDataLabelPosition } from "./chart-labels";
 import type { ChartRendererPalette, ChartLayout, BarRect } from "./chart-types";
 
 export function resolve3dFrameOffsets(chart: XlsxChart, baseDepthX = 11, baseDepthY = 8) {
@@ -311,7 +312,7 @@ export function renderLineOrAreaChart3d(
   palette: ChartRendererPalette,
   layout: ChartLayout,
   categories: string[],
-  stackedPointsBySeries: Array<Array<{ defined: boolean; y: number | null; y0: number | null; y1: number | null }>>,
+  stackedPointsBySeries: Array<Array<{ defined: boolean; value?: number | null; y: number | null; y0: number | null; y1: number | null }>>,
   minValue: number,
   maxValue: number,
   isAreaChart: boolean,
@@ -408,7 +409,8 @@ export function renderLineOrAreaChart3d(
         depth: top.depth,
         depthBack: topBack?.depth ?? top.depth,
         top,
-        topBack
+        topBack,
+        value: point.value ?? null
       };
     });
   });
@@ -446,7 +448,8 @@ export function renderLineOrAreaChart3d(
       categoryIndex: point.categoryIndex,
       defined: point.defined,
       top: toScreenPoint(point.top),
-      topBack: point.topBack ? toScreenPoint(point.topBack) : null
+      topBack: point.topBack ? toScreenPoint(point.topBack) : null,
+      value: point.value
     })),
     seriesIndex
   })).sort((left, right) => left.averageDepth - right.averageDepth);
@@ -535,6 +538,8 @@ export function renderLineOrAreaChart3d(
           : [];
         const strokeColor = chartSeriesStrokeColor(chart, seriesIndex);
         const fillColor = chartSeriesColor(chart, seriesIndex);
+        const series = chart.series[seriesIndex];
+        const isPercentStacked = chart.chartType === "LinePercentStacked" || chart.chartType === "AreaPercentStacked";
         const markerSymbol = normalizeChartMarkerSymbol(chart.series[seriesIndex]?.markerSymbol);
         const markerPath = markerSymbolPath(markerSymbol, Math.max(4, chart.series[seriesIndex]?.markerSize ?? 6) * 0.52);
         const slabFaces = isAreaChart && isStackedSeries
@@ -667,6 +672,44 @@ export function renderLineOrAreaChart3d(
                   </g>
                 ))
               : null}
+            {definedPoints.map((point) => {
+              const labels = resolveDataLabelsForPoint(chart, point.categoryIndex, series);
+              if (!labels || !hasVisibleDataLabels(labels)) {
+                return null;
+              }
+              const text = buildDataLabelText(chart, series, labels, {
+                categoryLabel: categories[point.categoryIndex],
+                percentValue: isPercentStacked,
+                value: point.value
+              });
+              if (!text) {
+                return null;
+              }
+              const position = resolveDataLabelPosition(labels, "t");
+              const labelY = position === "b"
+                ? point.top.y + 12
+                : position === "ctr"
+                  ? point.top.y + 3
+                  : point.top.y - 6;
+              const labelX = position === "l"
+                ? point.top.x - 6
+                : position === "r"
+                  ? point.top.x + 6
+                  : point.top.x;
+              return (
+                <text
+                  fill={resolveChartTextColor(chart)}
+                  font-size={10}
+                  key={`line3d-data-label-${seriesIndex}-${point.categoryIndex}`}
+                  pointer-events="none"
+                  text-anchor={position === "l" ? "end" : position === "r" ? "start" : "middle"}
+                  x={labelX}
+                  y={labelY}
+                >
+                  {text}
+                </text>
+              );
+            })}
             {definedPoints.map((point) => (
               <circle
                 {...chartElementDataProps(seriesIndex, point.categoryIndex)}
