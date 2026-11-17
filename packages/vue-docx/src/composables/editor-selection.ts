@@ -61,8 +61,15 @@ export function readDocxTextHostText(host: HTMLElement): string {
     // Footnote/endnote markers are display-only: their label is not paragraph text.
     if (element.matches?.("[data-docx-note-marker='true']")) return ""
     if (element.matches?.("[data-docx-image-child-index]")) return ""
+    // Deleted/moved-from runs stay on screen while revisions are shown, but they
+    // are not part of the text the model keeps: skipping them here keeps
+    // selection offsets and committed text in agreement.
+    const trackedChange = element.getAttribute?.("data-docx-tracked-change")
+    if (trackedChange === "deletion" || trackedChange === "move-from") return ""
     if (element.tagName?.toLowerCase() === "br") return "\n"
     if (node.nodeType === 3) return node.textContent ?? ""
+    // Test hosts and other lightweight stand-ins only expose `textContent`.
+    if (!node.childNodes) return node.textContent ?? ""
     return Array.from(node.childNodes).map(readNode).join("")
   }
 

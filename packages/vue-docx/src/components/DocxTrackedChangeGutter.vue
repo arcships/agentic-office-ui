@@ -37,6 +37,32 @@
       <div class="docx-gutter-card-text">
         {{ cardText(entry) }}
       </div>
+      <div
+        v-if="canDecide(entry)"
+        class="docx-gutter-card-actions"
+        @click.stop
+        @keydown.enter.stop
+        @keydown.space.stop
+      >
+        <button
+          type="button"
+          class="docx-gutter-card-action docx-gutter-card-action--accept"
+          data-testid="docx-gutter-accept"
+          title="Accept this revision"
+          @click.stop="emit('decide', entry.annotation.id, 'accept')"
+        >
+          ✓ Accept
+        </button>
+        <button
+          type="button"
+          class="docx-gutter-card-action docx-gutter-card-action--reject"
+          data-testid="docx-gutter-reject"
+          title="Reject this revision"
+          @click.stop="emit('decide', entry.annotation.id, 'reject')"
+        >
+          ✕ Reject
+        </button>
+      </div>
       <div v-if="entry.annotation.comment?.resolved" class="docx-gutter-card-resolved">
         ✓ Resolved
       </div>
@@ -73,14 +99,28 @@ const props = withDefaults(
     pageHeightPx: number
     documentTheme?: DocxDocumentTheme
     activeAnnotationId?: string
+    /** True when the host can accept/reject revisions on the cards. */
+    decidable?: boolean
   }>(),
-  { zoomFactor: 1, pageHeightPx: 0, documentTheme: "light" as DocxDocumentTheme }
+  {
+    zoomFactor: 1,
+    pageHeightPx: 0,
+    documentTheme: "light" as DocxDocumentTheme,
+    decidable: false,
+  }
 )
 
 const emit = defineEmits<{
   activate: [annotationId: string]
   cardHeight: [annotationId: string, heightPx: number]
+  decide: [annotationId: string, decision: "accept" | "reject"]
 }>()
+
+// ── Revision decisions ─────────────────────────────────────────────
+// Only tracked-change cards expose decisions; comment cards stay activate-only.
+function canDecide(entry: PositionedGutterAnnotation): boolean {
+  return props.decidable && Boolean(entry.annotation.trackedChange)
+}
 
 // ── Pane geometry ──────────────────────────────────────────────────
 // Counter-scaled so the pane keeps Word's fixed annotation-pane metrics at
@@ -335,6 +375,33 @@ watch(
   color: #4b5563;
   white-space: pre-wrap;
   word-break: break-word;
+}
+.docx-gutter-card-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+.docx-gutter-card-action {
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  color: #374151;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 1px 6px;
+}
+.docx-gutter-card-action--accept:hover {
+  background: #ecfdf5;
+  border-color: #22c55e;
+}
+.docx-gutter-card-action--reject:hover {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+.docx-gutter-card-action:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
 }
 .docx-gutter-card-resolved {
   color: #22c55e;

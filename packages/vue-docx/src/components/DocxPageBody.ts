@@ -284,7 +284,10 @@ export default defineComponent({
                 key,
                 paragraph: node as ParagraphNode,
                 paragraphIndex: segment.nodeIndex,
-                editable: props.editable && !props.trackedChangesEnabled,
+                // Showing revisions is a display choice: it must not turn the
+                // document read-only, otherwise a document with revisions can
+                // never be edited or cleaned up.
+                editable: props.editable,
                 documentTheme: props.theme,
                 controller: props.controller,
                 showTrackedChanges: props.trackedChangesEnabled,
@@ -313,7 +316,7 @@ export default defineComponent({
                 key,
                 table: node as TableNode,
                 tableIndex: segment.nodeIndex,
-                editable: props.editable && !props.trackedChangesEnabled,
+                editable: props.editable,
                 controller: props.controller,
                 rowRange: segment.tableRowRange,
                 documentTheme: props.theme,

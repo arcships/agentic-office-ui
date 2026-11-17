@@ -41,6 +41,28 @@
           <input type="checkbox" :checked="controller.showComments" @change="controller.toggleShowComments()" />
           <span>Comments</span>
         </label>
+        <button
+          type="button"
+          class="docx-toolbar-action"
+          data-testid="editor-accept-all-changes"
+          title="Accept all tracked changes"
+          :disabled="readOnly || !hasTrackedChanges"
+          @click="controller.acceptAllTrackedChanges()"
+        >
+          <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 13 4 4L19 7" /></svg>
+          <span>Accept all</span>
+        </button>
+        <button
+          type="button"
+          class="docx-toolbar-action"
+          data-testid="editor-reject-all-changes"
+          title="Reject all tracked changes"
+          :disabled="readOnly || !hasTrackedChanges"
+          @click="controller.rejectAllTrackedChanges()"
+        >
+          <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
+          <span>Reject all</span>
+        </button>
         <span v-if="readOnly" class="docx-toolbar-readonly">Read only</span>
         <button type="button" class="docx-toolbar-btn" title="Toggle document theme" @click="controller.setDocumentTheme(controller.documentTheme === 'light' ? 'dark' : 'light')">
           <svg v-if="controller.documentTheme === 'light'" class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -385,6 +407,11 @@ function onPageChange(event: Event): void {
 
 // ── Derived values ──────────────────────────────────────────────────
 const selectedRunStyle = computed(() => props.controller.selectedRunStyle)
+
+// Revisions are only counted while they are visible, so `null` means "unknown"
+// rather than "none": the buttons stay enabled so a document whose edits are
+// currently hidden can still be cleaned up.
+const hasTrackedChanges = computed(() => props.controller.trackedChangeCount !== 0)
 
 const textColorValue = computed(() => {
   const color = selectedRunStyle.value?.color

@@ -154,6 +154,7 @@ import {
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
 import { renderStaticHtml } from "../render/static-html"
+import { readDocxTextHostText } from "../composables/editor-selection"
 import { resolveTableGrid, type TableGridCell } from "./table-grid"
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -260,19 +261,9 @@ function cellParagraphAt(
 }
 
 function readCellParagraphDomText(root: HTMLElement): string {
-  if (!root) return ""
-  if (!root.childNodes) return root.textContent ?? ""
-
-  function readNode(node: Node): string {
-    const element = node as Element
-    if (element.matches?.("[data-docx-numbering-label='true']")) return ""
-    if (element.matches?.("[data-docx-image-child-index]")) return ""
-    if (element.tagName?.toLowerCase() === "br") return "\n"
-    if (node.nodeType === 3) return node.textContent ?? ""
-    return Array.from(node.childNodes ?? []).map(readNode).join("")
-  }
-
-  return readNode(root as unknown as Node)
+  // Shared reader: skips list markers, image children and — while revisions are
+  // on screen — inline deleted/moved-from runs, which must not be committed.
+  return readDocxTextHostText(root)
 }
 
 function commitCellParagraph(
@@ -340,9 +331,9 @@ const isNestedTable = computed(() => Boolean(props.tableRuntimeKey))
 
 const domTableIndex = computed(() => props.tableRuntimeKey ?? props.tableIndex)
 
-const isReadOnly = computed(
-  () => !props.editable || !props.controller || props.controller.showTrackedChanges
-)
+// Visible revisions no longer imply a read-only table: the document stays
+// editable and revisions are resolved through accept/reject.
+const isReadOnly = computed(() => !props.editable || !props.controller)
 
 function selectionRuntimeKey(
   selection: Extract<DocxEditorSelection, { kind: "table-cell" }>
