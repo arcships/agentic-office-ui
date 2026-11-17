@@ -3,7 +3,7 @@
 //
 // Migrated from upstream @extend-ai/react-docx, editor.tsx lines 29582-29668
 
-import type { DocxEditorController, DocxPaginationInfo } from "@arcships/docx-core"
+import type { DocxEditorController, LayoutSnapshot } from "@arcships/docx-core"
 
 // ---------------------------------------------------------------------------
 // Snapshots used by the fast (direct-draw) thumbnail renderer
@@ -70,8 +70,24 @@ export interface DocxViewerPageSurfaceRegistry {
   /** Content signatures per page, synced when pagination or content changes. */
   pageContentKeys: Map<number, string>
 
-  /** Layout-derived page sizes, available for offscreen pages. */
+  /** Page sizes reported by mounted page surfaces. */
   pageSizes: Map<number, DocxViewerPageSurfaceSize>
+
+  /**
+   * Page count from the viewer's pagination pass. Thumbnail consumers use it
+   * instead of re-paginating the document themselves.
+   */
+  layoutPageCount: number
+
+  /**
+   * Layout-derived page sizes for every page, including unmounted ones. Kept
+   * separate from `pageSizes` so unmounting an offscreen surface cannot delete
+   * the size the viewer resolved from section layout.
+   */
+  layoutPageSizes: Map<number, DocxViewerPageSurfaceSize>
+
+  /** Viewer-owned layout snapshot shared with thumbnail consumers. */
+  layoutSnapshot?: LayoutSnapshot
 
   /** Fast-paint draw snapshots for offscreen pages. */
   pageThumbnailSnapshots: Map<number, DocxViewerPageThumbnailSnapshotEntry>
@@ -94,6 +110,8 @@ export function createDocxViewerPageSurfaceRegistry(): DocxViewerPageSurfaceRegi
     pageElements: new Map(),
     pageContentKeys: new Map(),
     pageSizes: new Map(),
+    layoutPageCount: 0,
+    layoutPageSizes: new Map(),
     pageThumbnailSnapshots: new Map(),
     listeners: new Set(),
   }

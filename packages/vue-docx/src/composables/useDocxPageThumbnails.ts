@@ -151,6 +151,7 @@ export function useDocxPageThumbnails(
       entry.resolution.pixelWidthPx * entry.resolution.pixelHeightPx * 4,
   })
   const renderGeneration = new Map<number, number>()
+  const surfaceContentKeys = new Map<number, string>()
   let disposed = false
 
   const updatePageThumbnailState = (
@@ -166,7 +167,7 @@ export function useDocxPageThumbnails(
   }
 
   const resolvePageResolution = (pageIndex: number): DocxPageThumbnailResolution => {
-    const pageSize = registry.pageSizes.get(pageIndex)
+    const pageSize = registry.pageSizes.get(pageIndex) ?? registry.layoutPageSizes.get(pageIndex)
     return thumbnailResolution(
       pageSize?.widthPx ?? options.sourceWidthPx,
       pageSize?.heightPx ?? options.sourceHeightPx,
@@ -254,7 +255,19 @@ export function useDocxPageThumbnails(
   }
 
   const renderTrackedPages = (): void => {
-    surfaceCache.clear()
+    // Invalidate only pages whose source content signature changed. A blanket
+    // clear() here discarded every cached canvas on each surface publish, so a
+    // scroll that mounted/unmounted pages re-rasterized all attached canvases.
+    for (const [pageIndex, contentKey] of registry.pageContentKeys) {
+      if (surfaceContentKeys.get(pageIndex) === contentKey) continue
+      surfaceContentKeys.set(pageIndex, contentKey)
+      surfaceCache.delete(String(pageIndex))
+    }
+    for (const pageIndex of [...surfaceContentKeys.keys()]) {
+      if (registry.pageContentKeys.has(pageIndex)) continue
+      surfaceContentKeys.delete(pageIndex)
+      surfaceCache.delete(String(pageIndex))
+    }
     const trackedPageIndexes = new Set([
       ...attachedCanvasByPage.value.keys(),
       ...(options.prefetchPageIndexes ?? []),
@@ -274,6 +287,7 @@ export function useDocxPageThumbnails(
       disposed = true
       unsubscribe()
       surfaceCache.clear()
+      surfaceContentKeys.clear()
       renderGeneration.clear()
       attachedCanvasByPage.value = new Map()
     })

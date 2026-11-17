@@ -352,8 +352,34 @@ interface DomTextSegment {
   endPoint: DomPoint
 }
 
+interface HighlightRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+  width: number
+  height: number
+}
+
+interface CachedMatchGeometry {
+  hostRect: HighlightRect
+  rects: HighlightRect[]
+}
+
+interface SearchGeometryCache {
+  matches: readonly DocxSearchMatch[]
+  container: HTMLElement
+  scrollTop: number
+  scrollLeft: number
+  rootRect: HighlightRect
+  viewportRect: HighlightRect
+  entries: CachedMatchGeometry[][]
+}
+
 const searchHighlights = shallowRef<SearchHighlight[]>([])
 let highlightFrame = 0
+let pendingReuseGeometry = false
+let searchGeometryCache: SearchGeometryCache | undefined
 let cleanupSearchSubscription: (() => void) | undefined
 let cleanupSearchScrollListener: (() => void) | undefined
 
@@ -474,9 +500,9 @@ function rangesForMatch(match: DocxSearchMatch): Array<{ host: HTMLElement; rang
 }
 
 function intersectionRect(
-  rect: DOMRect,
-  hostRect: DOMRect,
-  viewportRect: DOMRect,
+  rect: HighlightRect,
+  hostRect: HighlightRect,
+  viewportRect: HighlightRect,
 ): { left: number; top: number; right: number; bottom: number } | undefined {
   const left = Math.max(rect.left, hostRect.left, viewportRect.left)
   const top = Math.max(rect.top, hostRect.top, viewportRect.top)
@@ -486,24 +512,82 @@ function intersectionRect(
   return { left, top, right, bottom }
 }
 
-function renderSearchHighlights(): void {
+function highlightRect(rect: DOMRect): HighlightRect {
+  const width = Number.isFinite(rect.width) ? rect.width : rect.right - rect.left
+  const height = Number.isFinite(rect.height) ? rect.height : rect.bottom - rect.top
+  return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width, height }
+}
+
+function cachedSearchGeometry(
+  root: HTMLElement,
+  container: HTMLElement,
+  matches: readonly DocxSearchMatch[],
+): SearchGeometryCache {
+  return {
+    matches,
+    container,
+    scrollTop: container.scrollTop,
+    scrollLeft: container.scrollLeft,
+    rootRect: highlightRect(root.getBoundingClientRect()),
+    viewportRect: highlightRect(container.getBoundingClientRect()),
+    entries: matches.map((match) =>
+      rangesForMatch(match).map(({ host, range }) => ({
+        hostRect: highlightRect(host.getBoundingClientRect()),
+        rects: Array.from(range.getClientRects()).map(highlightRect),
+      }))
+    ),
+  }
+}
+
+/**
+ * Highlight geometry is expensive to collect (selector walk + text segment
+ * collection + getClientRects per range). Cache it and translate the cached
+ * rectangles by the scroll delta while scrolling; only rebuild when the
+ * document, zoom, search state or mounted page window changes.
+ */
+function renderSearchHighlights(reuseGeometry = false): void {
   const root = surfaceRef.value
   const container = viewerRootRef.value?.scrollContainer
   const state = surfaceSearch.getSearchState()
   if (!root || !container || !state.matches.length) {
+    searchGeometryCache = undefined
     searchHighlights.value = []
     return
   }
 
-  const rootRect = root.getBoundingClientRect()
-  const viewportRect = container.getBoundingClientRect()
+  let cache = reuseGeometry
+    && searchGeometryCache?.matches === state.matches
+    && searchGeometryCache.container === container
+    ? searchGeometryCache
+    : undefined
+  if (!cache) {
+    cache = cachedSearchGeometry(root, container, state.matches)
+    searchGeometryCache = cache
+  }
+
+  const deltaX = container.scrollLeft - cache.scrollLeft
+  const deltaY = container.scrollTop - cache.scrollTop
+  const { rootRect, viewportRect } = cache
   const seen = new Set<string>()
   const next: SearchHighlight[] = []
-  state.matches.forEach((match, matchIndex) => {
-    for (const { host, range } of rangesForMatch(match)) {
-      const hostRect = host.getBoundingClientRect()
-      for (const rect of Array.from(range.getClientRects())) {
-        const clipped = intersectionRect(rect, hostRect, viewportRect)
+  cache.entries.forEach((hosts, matchIndex) => {
+    for (const { hostRect, rects } of hosts) {
+      const translatedHost: HighlightRect = {
+        ...hostRect,
+        left: hostRect.left - deltaX,
+        right: hostRect.right - deltaX,
+        top: hostRect.top - deltaY,
+        bottom: hostRect.bottom - deltaY,
+      }
+      for (const cachedRect of rects) {
+        const rect: HighlightRect = {
+          ...cachedRect,
+          left: cachedRect.left - deltaX,
+          right: cachedRect.right - deltaX,
+          top: cachedRect.top - deltaY,
+          bottom: cachedRect.bottom - deltaY,
+        }
+        const clipped = intersectionRect(rect, translatedHost, viewportRect)
         if (!clipped) continue
         const left = clipped.left - rootRect.left
         const top = clipped.top - rootRect.top
@@ -526,17 +610,24 @@ function renderSearchHighlights(): void {
   searchHighlights.value = next
 }
 
-function scheduleSearchHighlights(): void {
-  if (highlightFrame && typeof cancelAnimationFrame === "function") {
-    cancelAnimationFrame(highlightFrame)
-  }
+function scheduleSearchHighlights(reuseGeometry = false): void {
   if (typeof requestAnimationFrame !== "function") {
-    renderSearchHighlights()
+    renderSearchHighlights(reuseGeometry)
     return
+  }
+  if (highlightFrame) {
+    cancelAnimationFrame(highlightFrame)
+    // A forced rebuild scheduled in the same frame must win over a cheap
+    // scroll-only refresh.
+    pendingReuseGeometry = pendingReuseGeometry && reuseGeometry
+  } else {
+    pendingReuseGeometry = reuseGeometry
   }
   highlightFrame = requestAnimationFrame(() => {
     highlightFrame = 0
-    renderSearchHighlights()
+    const reuse = pendingReuseGeometry
+    pendingReuseGeometry = false
+    renderSearchHighlights(reuse)
   })
 }
 
@@ -607,6 +698,7 @@ const surfaceSearch = createSurfaceSearchSession<DocxSearchMatch>({
     return activateSearchMatchInView(match, signal)
   },
   clear() {
+    searchGeometryCache = undefined
     searchHighlights.value = []
   },
 })
@@ -626,7 +718,7 @@ function attachSearchScrollListener(): void {
   cleanupSearchScrollListener?.()
   const container = viewerRootRef.value?.scrollContainer
   if (!container) return
-  const onScroll = () => scheduleSearchHighlights()
+  const onScroll = () => scheduleSearchHighlights(true)
   container.addEventListener("scroll", onScroll, { passive: true })
   cleanupSearchScrollListener = () => container.removeEventListener("scroll", onScroll)
 }

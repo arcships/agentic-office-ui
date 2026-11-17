@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue"
+import { ref, computed, onMounted, onUnmounted, watch, watchEffect } from "vue"
 import type {
   DocModel,
   DocxComment,
@@ -80,6 +80,10 @@ import {
   DEFAULT_DOC_PAGE_HEIGHT,
 } from "@arcships/docx-core"
 import DocxPageSurface from "./DocxPageSurface.vue"
+import {
+  ensureDocxViewerPageSurfaceRegistry,
+  notifyDocxViewerPageSurfaceListeners,
+} from "../composables/page-surface-registry"
 
 // ── Constants ──────────────────────────────────────────────────────
 const DOC_PAGE_BREAK_GAP = 28
@@ -91,6 +95,9 @@ const SCROLL_MEASUREMENT_DEBOUNCE_MS = 80
 const GUTTER_GAP_PX = 16
 const GUTTER_WIDTH_PX = 240
 const PAGE_SIDE_PADDING = 48
+// The scroll container uses `padding: 24px 0`; page offsets are expressed in
+// scroll coordinates so scrollToPage / hit tests line up with the rendered page.
+const PAGE_TOP_PADDING = 24
 
 // ── Types ──────────────────────────────────────────────────────────
 export interface DocxViewerRootProps {
@@ -143,12 +150,12 @@ const scrollTop = ref(0)
 const viewportHeight = ref(800)
 const containerWidth = ref(800)
 
-// Track measured page heights (key: pageIndex, value: px)
-const measuredPageHeights = ref<Record<number, number>>({})
+// Track measured page heights (key: pageIndex). Each entry is tagged with the
+// page layout it was measured for so layout changes invalidate stale values.
+const measuredPageHeights = ref<Record<number, { heightPx: number; layoutKey: string }>>({})
 
 // Drag-over state for file drops
-const dragOverDepth = ref(0)
-const isDragOver = computed(() => dragOverDepth.value > 0)
+const isDragOver = ref(false)
 
 // ── Pagination ─────────────────────────────────────────────────────
 const baseDocumentLayout = computed(() => resolveDocumentLayout(props.model))
@@ -188,7 +195,7 @@ const paginationPlan = computed(() => {
     })
   )
 
-  return { pages: snapshot.pages, pageNodeSegments }
+  return { pages: snapshot.pages, pageNodeSegments, snapshot }
 })
 
 const pages = computed(() => paginationPlan.value.pages)
@@ -198,12 +205,26 @@ const FIT_ZOOM_MIN = 0.25
 const FIT_ZOOM_MAX = 2
 const FIT_ZOOM_SIDE_PAD = 48
 
+// Raw horizontal space the annotation gutter occupies before zoom.
+// 0 when annotations are hidden, so no space is reserved.
+const rawGutterWidthPx = computed(() =>
+  (
+    (props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false) ||
+    (props.showComments ?? props.controller?.showComments ?? false)
+  )
+    ? GUTTER_GAP_PX + GUTTER_WIDTH_PX
+    : 0
+)
+
 const fitZoom = computed(() => {
   if (!baseDocumentLayout.value) return 1
   const pageWidth = baseDocumentLayout.value.pageWidthPx
   if (!pageWidth || pageWidth <= 0) return 1
+  // The annotation gutter is part of the horizontal footprint; reserve it so
+  // fit-width does not introduce a horizontal scrollbar when it is visible.
+  const footprint = pageWidth + rawGutterWidthPx.value
   const available = Math.max(200, containerWidth.value - FIT_ZOOM_SIDE_PAD)
-  return Math.min(FIT_ZOOM_MAX, Math.max(FIT_ZOOM_MIN, available / pageWidth))
+  return Math.min(FIT_ZOOM_MAX, Math.max(FIT_ZOOM_MIN, available / footprint))
 })
 
 const zoomFactor = computed(() => {
@@ -274,17 +295,37 @@ const pagePresentations = computed(() => {
   })
 })
 
+// ── Shared layout for thumbnail consumers ──────────────────────────
+// The thumbnail rail reads the viewer's pagination result instead of running
+// its own buildLayoutSnapshot on every model change.
+if (props.controller) {
+  watchEffect(() => {
+    const controller = props.controller
+    if (!controller) return
+    const plan = paginationPlan.value
+    const presentations = pagePresentations.value
+    const registry = ensureDocxViewerPageSurfaceRegistry(controller)
+    const sizes = new Map<number, { widthPx: number; heightPx: number }>()
+    plan.pages.forEach((page, pageIndex) => {
+      const layout = presentations[pageIndex]?.pageLayout ?? baseDocumentLayout.value
+      sizes.set(pageIndex, {
+        widthPx: layout.pageWidthPx ?? page.pageSizePx.width,
+        heightPx: layout.pageHeightPx ?? page.pageSizePx.height,
+      })
+    })
+    registry.layoutPageCount = plan.pages.length
+    registry.layoutPageSizes = sizes
+    registry.layoutSnapshot = plan.snapshot
+    notifyDocxViewerPageSurfaceListeners(controller)
+  }, { flush: "post" })
+}
+
 // ── Theme / feature flags ──────────────────────────────────────────
 const theme = computed(() => props.theme ?? props.controller?.documentTheme ?? "light")
 const trackedChangesEnabled = computed(() => props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false)
 const commentsEnabled = computed(() => props.showComments ?? props.controller?.showComments ?? false)
 // Visual horizontal space the annotation gutter occupies at the current zoom.
-// 0 when annotations are hidden, so no space is reserved.
-const gutterVisualWidthPx = computed(() =>
-  (trackedChangesEnabled.value || commentsEnabled.value)
-    ? (GUTTER_GAP_PX + GUTTER_WIDTH_PX) * zoomFactor.value
-    : 0
-)
+const gutterVisualWidthPx = computed(() => rawGutterWidthPx.value * zoomFactor.value)
 const trackedChanges = computed<readonly DocxTrackedChange[]>(() =>
   props.controller?.trackedChanges ?? (trackedChangesEnabled.value ? collectTrackedChangesFromModel(props.model) : [])
 )
@@ -315,10 +356,15 @@ function pageFootnotes(pageIndex: number): DocumentNoteDefinition[] { return not
 function pageEndnotes(pageIndex: number): DocumentNoteDefinition[] { return notesForPage(pageIndex, "endnote") }
 
 // ── Page heights ───────────────────────────────────────────────────
+function pageLayoutKey(pageIndex: number): string {
+  const layout = pagePresentations.value[pageIndex]?.pageLayout
+  return layout ? `${layout.pageWidthPx}x${layout.pageHeightPx}` : "default"
+}
+
 function getPageHeight(pageIndex: number): number {
   const measured = measuredPageHeights.value[pageIndex]
-  if (Number.isFinite(measured) && (measured as number) > 0) {
-    return measured as number
+  if (measured && measured.layoutKey === pageLayoutKey(pageIndex) && Number.isFinite(measured.heightPx) && measured.heightPx > 0) {
+    return measured.heightPx
   }
   return pagePresentations.value[pageIndex]?.pageLayout.pageHeightPx ?? DEFAULT_DOC_PAGE_HEIGHT
 }
@@ -326,7 +372,7 @@ function getPageHeight(pageIndex: number): number {
 // ── Page offsets ───────────────────────────────────────────────────
 const pageOffsets = computed(() => {
   const offsets: number[] = []
-  let offset = 0
+  let offset = PAGE_TOP_PADDING
   for (let i = 0; i < pageCount.value; i++) {
     offsets.push(offset)
     offset += getPageHeight(i) * zoomFactor.value + DOC_PAGE_BREAK_GAP
@@ -406,9 +452,11 @@ const spacerStyle = computed(() => ({
 function pageWrapperStyle(entry: VisiblePageEntry): Record<string, string | number> {
   // Wrapper width covers paper + gutter so translateX(-50%) centers the whole
   // footprint instead of just the paper (which would push the gutter off-right).
+  // Offsets are scroll-space values that include the container's top padding;
+  // wrappers are positioned inside the spacer, so subtract that padding again.
   return {
     position: "absolute",
-    top: `${entry.topPx}px`,
+    top: `${Math.max(0, entry.topPx - PAGE_TOP_PADDING)}px`,
     left: "50%",
     transform: "translateX(-50%)",
     height: `${entry.heightPx}px`,
@@ -458,26 +506,41 @@ function onPageMeasure(pageIndex: number, event: PageMeasureEvent): void {
   if (Number.isFinite(event.heightPx) && event.heightPx > 0) {
     measuredPageHeights.value = {
       ...measuredPageHeights.value,
-      [pageIndex]: event.heightPx,
+      [pageIndex]: { heightPx: event.heightPx, layoutKey: pageLayoutKey(pageIndex) },
     }
   }
 }
+
+// A new document (or a new pagination layout) invalidates every cached height:
+// only mounted pages re-measure, so stale values would corrupt offsets for all
+// virtualized pages until each one has been visited.
+watch(
+  () => [props.model, props.controller?.documentLoadNonce, props.layoutOptions] as const,
+  () => { measuredPageHeights.value = {} }
+)
 
 // ── Drag-and-drop file import ──────────────────────────────────────
 function onDragOver(event: DragEvent): void {
   if (!event.dataTransfer) return
   if (props.editable && props.controller && hasDocxFile(event.dataTransfer)) {
-    dragOverDepth.value++
+    // `dragover` fires continuously while inside the element; a counter would
+    // only ever grow because `dragleave` fires once when the pointer leaves.
+    isDragOver.value = true
     event.dataTransfer.dropEffect = "copy"
   }
 }
 
-function onDragLeave(): void {
-  dragOverDepth.value = Math.max(0, dragOverDepth.value - 1)
+function onDragLeave(event?: DragEvent): void {
+  const container = scrollContainerRef.value
+  const related = event?.relatedTarget as Node | null | undefined
+  if (related && container && typeof container.contains === "function" && container.contains(related)) {
+    return
+  }
+  isDragOver.value = false
 }
 
 async function onDrop(event: DragEvent): Promise<void> {
-  dragOverDepth.value = 0
+  isDragOver.value = false
   if (!props.editable || !props.controller) return
   const file = event.dataTransfer?.files?.[0]
   if (file && file.name.endsWith(".docx")) {
@@ -542,7 +605,8 @@ onMounted(() => {
   if (scrollContainerRef.value) {
     const height = scrollContainerRef.value.clientHeight
     if (Number.isFinite(height) && height > 0) viewportHeight.value = height
-    containerWidth.value = scrollContainerRef.value.clientWidth
+    const width = scrollContainerRef.value.clientWidth
+    if (Number.isFinite(width) && width > 0) containerWidth.value = width
   }
   const ResizeObserverConstructor = globalThis.ResizeObserver
   if (typeof ResizeObserverConstructor !== "function") {
