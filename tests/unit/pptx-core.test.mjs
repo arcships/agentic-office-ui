@@ -73,7 +73,7 @@ test("PPTX core root stays browser-free and exposes fixed safe defaults", () => 
   assert.doesNotMatch(source, /\b(?:window|document|DOMParser|Worker)\b/);
 });
 
-test("PPTX Morph only creates strong unique identity matches", () => {
+test("PPTX Morph grades strong identity ahead of name/text geometry matches", () => {
   const object = (key, values = {}) => ({
     key,
     slidePath: key.startsWith("from") ? "ppt/slides/slide1.xml" : "ppt/slides/slide2.xml",
@@ -104,6 +104,51 @@ test("PPTX Morph only creates strong unique identity matches", () => {
       ["from-name", "to-name", "explicit-name", "strong"],
       ["from-creation", "to-creation", "creation-id", "strong"],
     ],
+  );
+
+  const geometric = matchPptxMorphObjects(
+    [
+      object("from-title", {
+        name: "Title 1",
+        geometry: { x: 0, y: 0, width: 400, height: 100 },
+        text: "开局",
+      }),
+      object("from-weak", {
+        name: "old-label",
+        geometry: { x: 0, y: 200, width: 300, height: 100 },
+        text: "季度总结",
+      }),
+    ],
+    [
+      object("to-title", {
+        name: "Title 1",
+        geometry: { x: 40, y: 10, width: 400, height: 100 },
+        text: "收尾",
+      }),
+      object("to-weak", {
+        name: "new-label",
+        geometry: { x: 20, y: 220, width: 300, height: 100 },
+        text: "季度总结",
+      }),
+    ],
+  );
+  assert.deepEqual(
+    geometric.map((match) => [match.from, match.to, match.method, match.confidence]),
+    [
+      ["from-title", "to-title", "name-and-geometry", "medium"],
+      ["from-weak", "to-weak", "text-and-geometry", "weak"],
+    ],
+  );
+  assert.ok(geometric.every((match) => match.unique === true));
+  assert.ok(geometric.every((match) => match.score > 0 && match.score <= 1));
+
+  // 没有几何信息时不会凭空产生中等或弱匹配。
+  assert.deepEqual(
+    matchPptxMorphObjects(
+      [object("from-plain", { name: "Title 1" })],
+      [object("to-plain", { name: "Title 1" })],
+    ),
+    [],
   );
 });
 

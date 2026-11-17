@@ -5,7 +5,19 @@ import json
 from pathlib import Path
 from urllib.parse import quote
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Error as PlaywrightError, sync_playwright
+
+
+def evaluate_probe(page, expression: str, arg: dict) -> dict:
+    """运行探针；Vite 首次发现新依赖会刷新页面，此时重新求值一次。"""
+    for attempt in range(3):
+        try:
+            return page.evaluate(expression, arg)
+        except PlaywrightError as error:
+            if "Execution context was destroyed" not in str(error) or attempt == 2:
+                raise
+            page.wait_for_load_state("networkidle")
+    raise RuntimeError("probe evaluation did not run")
 
 
 def main() -> None:
@@ -37,6 +49,7 @@ def main() -> None:
     parser.add_argument("--duplicate-target-check", action="store_true")
     parser.add_argument("--reset-check", action="store_true")
     parser.add_argument("--media-block-check", action="store_true")
+    parser.add_argument("--morph-check", action="store_true")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
@@ -61,9 +74,8 @@ def main() -> None:
         core_path = workspace / "packages/pptx-core/src/index.ts"
         module_url = args.app_url + "/@fs" + quote(str(module_path), safe="/")
         core_url = args.app_url + "/@fs" + quote(str(core_path), safe="/")
-        result = page.evaluate(
-            """
-            async ({ moduleUrl, coreUrl, sampleUrl, initialSlide, steps, pauseCheck, previousCheck, transitionCheck, approximation, autoAdvanceCheck, mediaCheck, resourceCheck, repeatCheck, indefiniteCheck, hiddenCheck, actionCheck, overlapCheck, paragraphCheck, shapeTriggerCheck, rapidNavigationCheck, searchCacheCheck, effectTimingCheck, duplicateTargetCheck, resetCheck, mediaBlockCheck }) => {
+        result = evaluate_probe(page, """
+            async ({ moduleUrl, coreUrl, sampleUrl, initialSlide, steps, pauseCheck, previousCheck, transitionCheck, approximation, autoAdvanceCheck, mediaCheck, resourceCheck, repeatCheck, indefiniteCheck, hiddenCheck, actionCheck, overlapCheck, paragraphCheck, shapeTriggerCheck, rapidNavigationCheck, searchCacheCheck, effectTimingCheck, duplicateTargetCheck, resetCheck, mediaBlockCheck, morphCheck }) => {
               const api = await import(moduleUrl)
               const core = await import(coreUrl)
               const response = await fetch(sampleUrl)
@@ -93,7 +105,7 @@ def main() -> None:
                   searchCacheLeaked = (await session.highlightSearchResult(staleMatch)) !== null
                 }
                 let playbackResult = {}
-                if (steps > 0 || autoAdvanceCheck || mediaCheck || repeatCheck || indefiniteCheck || hiddenCheck || actionCheck || overlapCheck || paragraphCheck || shapeTriggerCheck || rapidNavigationCheck || effectTimingCheck || duplicateTargetCheck || resetCheck || mediaBlockCheck) {
+                if (steps > 0 || autoAdvanceCheck || mediaCheck || repeatCheck || indefiniteCheck || hiddenCheck || actionCheck || overlapCheck || paragraphCheck || shapeTriggerCheck || rapidNavigationCheck || effectTimingCheck || duplicateTargetCheck || resetCheck || mediaBlockCheck || morphCheck) {
                   const events = []
                   const eventRecords = []
                   let duplicateTargetKey
@@ -130,10 +142,13 @@ def main() -> None:
                     if (mediaCheck) {
                       for (const media of root.querySelectorAll("video,audio")) media.muted = true
                     }
-                    const firstTargetKey = schedule.groups
-                      .flatMap((group) => group.effects)
-                      .map((effect) => effect.effect.targetObjectKey)
+                    // 跳转前读状态时以“下一个单击”要执行的目标为准，避免被按对象触发的组抢占。
+                    const firstTargetKey = (schedule.groups.find((group) => group.key.startsWith("click:")) ?? schedule.groups[0])
+                      ?.effects.map((effect) => effect.effect.targetObjectKey)
                       .find(Boolean)
+                      ?? schedule.groups.flatMap((group) => group.effects)
+                        .map((effect) => effect.effect.targetObjectKey)
+                        .find(Boolean)
                     const firstTarget = [...root.querySelectorAll("[data-pptx-object-key]")]
                       .find((element) => element.dataset.pptxObjectKey === firstTargetKey)
                     const styleState = () => firstTarget ? {
@@ -183,6 +198,49 @@ def main() -> None:
                     let blockedStatus
                     let blockedMediaIds
                     let resumedBlockedStatus
+                    let morphMatches
+                    let morphGranularity
+                    let morphGranularityApplied
+                    let morphGeometryCount
+                    let morphTextCount
+                    let morphLayersDuring
+                    let morphAnimatedObjects
+                    let morphWordSpans
+                    let morphStatusAfter
+                    if (morphCheck) {
+                      if (initialSlide < 1) throw new Error("morph check needs a previous slide")
+                      const morphSlide = playback.slides[initialSlide]
+                      if (morphSlide.transition?.kind !== "morph") {
+                        throw new Error(`morph transition missing: ${morphSlide.transition?.kind}`)
+                      }
+                      morphGranularity = morphSlide.transition.option ?? "byObject"
+                      morphGeometryCount = morphSlide.objects.filter((object) => object.geometry).length
+                      morphTextCount = morphSlide.objects.filter((object) => object.text).length
+                      morphMatches = morphSlide.morphFromPrevious.map((match) => ({
+                        method: match.method,
+                        confidence: match.confidence,
+                        score: match.score,
+                        unique: match.unique,
+                      }))
+                      await controller.goToSlide(initialSlide - 1)
+                      const navigating = controller.goToSlide(initialSlide)
+                      const deadline = performance.now() + 3000
+                      while (controller.snapshot.status !== "transitioning" && performance.now() < deadline) {
+                        await new Promise((resolve) => setTimeout(resolve, 10))
+                      }
+                      if (controller.snapshot.status !== "transitioning") {
+                        throw new Error(`morph transition never started: ${controller.snapshot.status}`)
+                      }
+                      // 状态在渲染新页前就变成 transitioning，等切换层挂载后再采样。
+                      await new Promise((resolve) => setTimeout(resolve, 150))
+                      morphLayersDuring = root.querySelectorAll("[data-pptx-transition-layer]").length
+                      morphAnimatedObjects = [...root.querySelectorAll("[data-pptx-object-key]")]
+                        .filter((element) => element.style.willChange.includes("translate")).length
+                      morphWordSpans = root.querySelectorAll("[data-pptx-morph-word]").length
+                      await navigating
+                      morphStatusAfter = controller.snapshot.status
+                      morphGranularityApplied = morphWordSpans > 0 ? "byWord" : "byObject"
+                    }
                     if (mediaBlockCheck) {
                       const running = controller.play()
                       const deadline = performance.now() + 3000
@@ -360,6 +418,7 @@ def main() -> None:
                     let mediaSourceUrl
                     let mediaVolume
                     let mediaPolicy
+                    let mediaTracks
                     let audioTimeMs
                     let audioPauseDeltaMs
                     let audioResumeDeltaMs
@@ -382,8 +441,21 @@ def main() -> None:
                         trimEndMs: mediaItem.trimEndMs,
                         loop: mediaItem.loop,
                         volume: mediaItem.volume,
+                        autoplay: mediaItem.autoplay,
                         nativeLoop: media.loop,
                       } : null
+                      const compiledMedia = core.compilePptxSlideTracks(playback.slides[initialSlide])
+                      const autoGroup = compiledMedia.groups.find((group) => group.key === "auto")
+                      const mediaKey = mediaItem?.objectKey
+                      const trackPosition = autoGroup && autoGroup.durationMs !== "indefinite"
+                        ? Math.max(1, autoGroup.durationMs)
+                        : 1
+                      const mediaState = autoGroup && mediaKey
+                        ? core.evaluatePptxTriggerGroup(autoGroup, trackPosition)[mediaKey] ?? {}
+                        : {}
+                      mediaTracks = Object.fromEntries(
+                        Object.entries(mediaState).filter(([property]) => property.startsWith("media-")),
+                      )
                       audioTimeMs = audio.currentTime * 1000
                       mediaDiagnostics = {
                         currentSrc: media.currentSrc,
@@ -488,6 +560,7 @@ def main() -> None:
                       mediaSourceUrl,
                       mediaVolume,
                       mediaPolicy,
+                      mediaTracks,
                       audioTimeMs,
                       audioPauseDeltaMs,
                       audioResumeDeltaMs,
@@ -534,6 +607,15 @@ def main() -> None:
                       blockedStatus,
                       blockedMediaIds,
                       resumedBlockedStatus,
+                      morphMatches,
+                      morphGranularity,
+                      morphGranularityApplied,
+                      morphGeometryCount,
+                      morphTextCount,
+                      morphLayersDuring,
+                      morphAnimatedObjects,
+                      morphWordSpans,
+                      morphStatusAfter,
                       eventSequence: eventRecords.map((event) => ({
                         type: event.type,
                         slideIndex: event.slideIndex,
@@ -644,6 +726,7 @@ def main() -> None:
                 "duplicateTargetCheck": args.duplicate_target_check,
                 "resetCheck": args.reset_check,
                 "mediaBlockCheck": args.media_block_check,
+                "morphCheck": args.morph_check,
             },
         )
         browser.close()
@@ -691,8 +774,11 @@ def main() -> None:
             "trimEndMs": 1100,
             "loop": True,
             "volume": 0.7,
+            "autoplay": True,
             "nativeLoop": False,
         }, result
+        assert result["mediaTracks"]["media-playback"] == "play", result
+        assert abs(result["mediaTracks"]["media-volume"] - 0.7) <= 0.0001, result
         assert result["audioTimeMs"] >= 500, result
         assert abs(result["audioPauseDeltaMs"]) <= 40, result
         assert result["audioResumeDeltaMs"] >= 80, result
@@ -700,6 +786,26 @@ def main() -> None:
         assert result["mediaResumeDeltaMs"] >= 80, result
         assert result["bookmarkEffectStarts"] >= 2, result
         assert result["mediaReleasedOnSlide"] is True, result
+    if args.morph_check:
+        matches = result["morphMatches"]
+        assert matches, result
+        assert all(match["unique"] is True for match in matches), result
+        assert all(match["method"] in (
+            "explicit-name", "creation-id", "name-and-geometry", "text-and-geometry",
+        ) for match in matches), result
+        assert any(match["confidence"] in ("strong", "medium") for match in matches), result
+        assert result["morphGranularity"] in ("byObject", "byWord", "byChar"), result
+        assert result["morphLayersDuring"] == 1, result
+        assert result["morphGeometryCount"] >= 1, result
+        assert result["morphTextCount"] >= 1, result
+        assert result["morphAnimatedObjects"] >= 1, result
+        if str(result["morphGranularity"]).lower() == "byword":
+            assert result["morphWordSpans"] > 0, result
+            assert result["morphGranularityApplied"] == "byWord", result
+        else:
+            assert result["morphWordSpans"] == 0, result
+            assert result["morphGranularityApplied"] == "byObject", result
+        assert result["morphStatusAfter"] in ("ready", "waiting"), result
     if args.performance_check:
         assert result["openMs"] <= 2000, result
         assert (result.get("controllerCompileMs") or 0) <= 200, result

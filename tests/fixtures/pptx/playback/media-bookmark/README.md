@@ -7,4 +7,5 @@
 - SHA-256：`5ac2e4132ac5136f151e175d54a2459e860d0dc25247da43a9bd9c51432edcdb`；
 - `expected-events.json`：Chromium 中解析、对象、触发组、事件和能力报告基准；
 
-复测命令由 `scripts/fixtures/capture-pptx-formal-baselines.py` 统一执行。
+复测命令由 `scripts/fixtures/capture-pptx-formal-baselines.py` 统一执行；
+`--check` 只重新捕获并比对，不写入基准。

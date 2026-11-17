@@ -1,11 +1,18 @@
 import type { PptxFiles, PresentationData, SlideData } from "@aiden0z/pptx-renderer"
 
 import { createPptxCapabilityReport } from "../playback/capability"
-import { createPptxObjectKey, matchPptxMorphObjects } from "../playback/identity"
+import {
+  createPptxObjectGeometry,
+  createPptxObjectKey,
+  matchPptxMorphObjects,
+  normalizePptxObjectText,
+} from "../playback/identity"
 import type {
   PptxFeatureDisposition,
   PptxFeatureRecord,
   PptxMediaItem,
+  PptxMorphMatch,
+  PptxObjectGeometry,
   PptxObjectIdentity,
   PptxPlaybackDocument,
   PptxPlaybackEffect,
@@ -103,10 +110,33 @@ function collectObjects(
       explicitMorphName: name?.startsWith("!!") ? name : undefined,
       creationId: localAttr(creation, "id") ?? localAttr(creation, "val"),
       nodeType: objectType(node),
+      // 组合子对象的坐标属于子坐标系，不参与跨页几何匹配。
+      geometry: groupPath.length > 0 ? undefined : objectGeometry(node),
+      text: objectText(node),
     })
     result.push(identity)
     if (node.localName === "grpSp") collectObjects(node, slidePath, [...groupPath, shapeId], result)
   }
+}
+
+function objectGeometry(node: Element): PptxObjectGeometry | undefined {
+  const properties = directChild(node, node.localName === "grpSp" ? "grpSpPr" : "spPr")
+  const transform = directChild(node, "xfrm") ?? (properties ? directChild(properties, "xfrm") : undefined)
+  if (!transform) return undefined
+  const offset = directChild(transform, "off")
+  const extent = directChild(transform, "ext")
+  return createPptxObjectGeometry({
+    x: offset?.getAttribute("x"),
+    y: offset?.getAttribute("y"),
+    cx: extent?.getAttribute("cx"),
+    cy: extent?.getAttribute("cy"),
+  })
+}
+
+function objectText(node: Element): string | undefined {
+  // 组合对象的文字等于子对象文字之和，不作为独立的文字身份。
+  if (node.localName === "grpSp") return undefined
+  return normalizePptxObjectText(elements(node, "t").map((item) => item.textContent ?? "").join(" "))
 }
 
 function parseObjects(document: Document, slidePath: string): readonly PptxObjectIdentity[] {
@@ -636,6 +666,15 @@ function transitionDisposition(kind: string, approximation: PptxApproximationPol
   return approximation === "safe" ? "approximate" : "static"
 }
 
+function morphMatchDescription(method: PptxMorphMatch["method"]): string {
+  switch (method) {
+    case "explicit-name": return "显式名称"
+    case "creation-id": return "创建编号"
+    case "name-and-geometry": return "普通名称与几何"
+    default: return "文字与几何"
+  }
+}
+
 function parseSlide(
   files: PptxFiles,
   presentation: PresentationData,
@@ -748,10 +787,15 @@ export function parsePptxPlaybackDocument(
       slideIndex: index,
       objectKey: match.to,
       feature: `morph:${match.method}`,
-      disposition: options.approximation === "safe" ? "approximate" : "static",
-      reason: options.approximation === "safe"
-        ? `使用${match.method === "explicit-name" ? "显式名称" : "创建编号"}进行强身份匹配。`
-        : "近似播放未开启，保留静态页面。",
+      // 弱匹配只用于调试报告，不进入任何播放模式。
+      disposition: options.approximation === "safe" && match.confidence !== "weak"
+        ? "approximate"
+        : "static",
+      reason: match.confidence === "weak"
+        ? "文字弱匹配只用于调试报告，不执行补间。"
+        : options.approximation === "safe"
+          ? `使用${morphMatchDescription(match.method)}进行${match.confidence === "strong" ? "强" : "中等"}身份匹配，分数 ${match.score}。`
+          : "近似播放未开启，保留静态页面。",
     }))
     return Object.freeze({
       ...slide,

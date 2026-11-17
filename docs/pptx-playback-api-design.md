@@ -32,6 +32,15 @@ export interface PptxObjectIdentity {
   explicitMorphName?: string
   creationId?: string
   nodeType: string
+  geometry?: PptxObjectGeometry
+  text?: string
+}
+
+export interface PptxObjectGeometry {
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 export type PptxMorphMatchMethod =
@@ -51,6 +60,8 @@ export interface PptxMorphMatch {
 ```
 
 同页动画只接受 `PptxObjectIdentity.key` 的精确匹配。`PptxMorphMatch` 只用于相邻页 Morph。
+
+`geometry` 与 `text` 只服务于 Morph 跨页匹配：`geometry` 取顶层对象的 `a:xfrm/a:off`、`a:ext`（EMU），组合子对象因坐标属于子坐标系而不保留；`text` 折叠空白，超过 240 字符时不参与弱匹配。强匹配（`!!` 显式名称、相同创建编号）始终优先；中等匹配要求相同普通名称、对象类型和接近几何，弱匹配要求相同文字、对象类型和接近几何。候选键必须在前后页各自唯一，弱匹配只用于能力报告。
 
 ### 2.3 时间节点
 
