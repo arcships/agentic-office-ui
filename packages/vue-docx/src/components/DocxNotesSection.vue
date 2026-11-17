@@ -77,7 +77,7 @@ function noteLabel(note: DocumentNoteDefinition, noteIndex: number): string {
 .docx-notes-section__note { display: grid; gap: 6px; grid-template-columns: 18px minmax(0, 1fr); margin: 3px 0; }
 .docx-notes-section__marker { font-size: 9px; line-height: 1.4; text-align: right; }
 .docx-notes-section__content { min-width: 0; }
-.docx-notes-section__content :deep(.docx-paragraph-host) { font-size: inherit; line-height: inherit; margin: 0 !important; min-height: 0; }
+.docx-notes-section__content :deep(.docx-paragraph-host) { font-size: inherit !important; line-height: inherit !important; margin: 0 !important; min-height: 0; }
 .docx-notes-section__content :deep(.docx-table-host) { font-size: inherit; line-height: inherit; }
 .docx-notes-section__content :deep(.docx-table-host-table) { width: 100%; border-collapse: collapse; }
 </style>
