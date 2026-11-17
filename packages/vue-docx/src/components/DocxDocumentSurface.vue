@@ -41,7 +41,7 @@
     <div
       v-if="selectionMode === 'region'"
       class="docx-document-surface__region-layer"
-      aria-label="选择文档区域"
+      :aria-label="m.docx.documentSurface.region"
       tabindex="0"
       @pointerdown="onRegionPointerDown"
       @pointermove="onRegionPointerMove"
@@ -104,6 +104,7 @@ import {
   type DocxSearchState,
 } from "../composables/useDocxSearch"
 import DocxViewerRoot from "./DocxViewerRoot.vue"
+import { provideDocxMessages } from "../i18n"
 import { docxTextRangeFromDomSelection } from "../composables/editor-selection"
 
 const props = withDefaults(
@@ -125,6 +126,8 @@ const props = withDefaults(
     documentId?: string
     selectionMode?: OfficeSelectionMode
     emitReferenceCandidates?: boolean
+    locale?: import("@arcships/office-interaction").OfficeLocale
+    messages?: import("@arcships/office-interaction").OfficeMessagesOverride
   }>(),
   {
     editable: false,
@@ -134,6 +137,8 @@ const props = withDefaults(
     emitReferenceCandidates: false,
     showTrackedChanges: null,
     showComments: null,
+    locale: "en",
+    messages: undefined,
   }
 )
 
@@ -155,6 +160,7 @@ const emit = defineEmits<{
 }>()
 
 const surfaceRef = ref<HTMLElement>()
+const m = provideDocxMessages(() => props.locale, () => props.messages)
 const viewerRootRef = ref<InstanceType<typeof DocxViewerRoot>>()
 const effectiveZoomScale = computed(() =>
   props.zoom === undefined ? props.zoomScale : clampSurfaceZoom(props.zoom) * 100
@@ -244,7 +250,7 @@ function onRawSelectionChange(selection: { kind: string; text?: string; pageInde
       path: [
         { kind: "document", label: "Document" },
         ...(selection.pageIndex === undefined ? [] : [{ kind: "page" as const, label: `Page ${selection.pageIndex + 1}` }]),
-        { kind: "text-range", label: "Selected text" },
+        { kind: "text-range", label: m.value.common.selectedText },
       ],
       content: { text: selection.text },
     })

@@ -21,6 +21,18 @@ import "@arcships/vue-xlsx/style.css"
 </template>
 ```
 
+## 本地化
+
+`XlsxViewer` 与 `XlsxSheetSurface` 都接受 `locale`（默认 `"en"`，内置 `"zh-CN"`）与 `messages` 覆盖。用户可见文案、表头和 aria-label 来自 `@arcships/office-interaction` 的共享消息目录：
+
+```vue
+<XlsxViewer
+  :controller="controller"
+  locale="zh-CN"
+  :messages="{ xlsx: { toolbar: { search: '查找单元格' } } }"
+/>
+```
+
 ## 可选入口
 
 ```ts

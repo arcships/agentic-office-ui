@@ -55,7 +55,7 @@
         class="xlsx-viewer__loading"
       >
         <slot name="loading">
-          <span class="xlsx-viewer__loading-text">加载中…</span>
+          <span class="xlsx-viewer__loading-text">{{ m.xlsx.viewer.loading }}</span>
         </slot>
       </div>
       <div
@@ -91,7 +91,7 @@
             class="xlsx-viewer__deferred-card"
             :class="{ 'xlsx-viewer__deferred-card--dark': isDark }"
           >
-            <div class="xlsx-viewer__deferred-title">文件较大，已延迟解析</div>
+            <div class="xlsx-viewer__deferred-title">{{ m.xlsx.viewer.deferredTitle }}</div>
             <div
               class="xlsx-viewer__deferred-file"
               data-testid="xlsx-deferred-file-name"
@@ -102,7 +102,7 @@
               class="xlsx-viewer__deferred-size"
               data-testid="xlsx-deferred-size"
             >
-              文件大小 {{ deferredLoadSizeLabel }}，继续解析会占用更多内存。
+              {{ formatOfficeMessage(m.xlsx.viewer.deferredDetail, { size: deferredLoadSizeLabel }) }}
             </div>
             <div class="xlsx-viewer__deferred-actions">
               <button
@@ -112,7 +112,7 @@
                 :disabled="controller.canLoadDeferred === false"
                 @click="onDeferredResume"
               >
-                继续解析
+                {{ m.xlsx.viewer.resumeParsing }}
               </button>
               <button
                 type="button"
@@ -120,7 +120,7 @@
                 data-testid="xlsx-deferred-cancel"
                 @click="onDeferredCancel"
               >
-                取消
+                {{ m.xlsx.viewer.cancel }}
               </button>
             </div>
           </div>
@@ -131,7 +131,7 @@
         class="xlsx-viewer__empty"
       >
         <slot name="empty">
-          <span class="xlsx-viewer__empty-text">打开一个 XLSX 文件开始查看</span>
+          <span class="xlsx-viewer__empty-text">{{ m.xlsx.viewer.empty }}</span>
         </slot>
       </div>
       <template v-else>
@@ -191,6 +191,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSPro
 import { clampSurfaceZoom } from "@arcships/office-runtime/gesture-zoom";
 import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures";
 import type { XlsxViewerController, XlsxCellAddress, XlsxCellStyleContext } from "@arcships/xlsx-core";
+import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction";
 import XlsxGrid from "./XlsxGrid.vue";
 import XlsxToolbar from "./XlsxToolbar.vue";
 import XlsxRibbon from "./XlsxRibbon.vue";
@@ -205,6 +206,8 @@ import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue";
 import { formatBinaryBytes } from "../composables/formatting";
 import { OfficeLiveStatus } from "@arcships/vue-ui";
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch";
+import { formatOfficeMessage } from "@arcships/office-interaction";
+import { provideXlsxMessages } from "../i18n";
 
 const props = withDefaults(
   defineProps<{
@@ -223,6 +226,8 @@ const props = withDefaults(
     showUpload?: boolean;
     /** Enables trackpad, pinch and double-tap zoom for the composite viewer. */
     enableGestureZoom?: boolean;
+    locale?: OfficeLocale;
+    messages?: OfficeMessagesOverride;
   }>(),
   {
     getCellStyle: null,
@@ -238,6 +243,8 @@ const props = withDefaults(
     showImages: true,
     showUpload: false,
     enableGestureZoom: true,
+    locale: "en",
+    messages: undefined,
   }
 );
 
@@ -254,10 +261,11 @@ const emit = defineEmits<{
 type XlsxDeferredLoadPayload = { fileName: string; bytes: number };
 
 const effectiveReadOnly = computed(() => props.readOnly || props.controller.isEditingLocked === true || props.controller.readOnly);
+const m = provideXlsxMessages(() => props.locale, () => props.messages);
 
 const deferredLoadBytes = computed(() => props.controller.deferredLoadFileSize ?? 0);
 const deferredLoadSizeLabel = computed(() => formatBinaryBytes(deferredLoadBytes.value));
-const deferredLoadFileName = computed(() => props.controller.displayFileName?.trim() || "未命名工作簿");
+const deferredLoadFileName = computed(() => props.controller.displayFileName?.trim() || m.value.xlsx.viewer.deferredUntitled);
 const deferredLoadPayload = computed<XlsxDeferredLoadPayload>(() => ({
   fileName: deferredLoadFileName.value,
   bytes: deferredLoadBytes.value,
@@ -287,12 +295,12 @@ watch(
 // region is the shared Office announcement channel for workbook state; the
 // selected cell is announced by XlsxSelectionOverlay.
 const liveStatusMessage = computed(() => {
-  if (props.controller.isLoading) return "正在加载工作簿";
-  if (props.controller.error) return `无法打开工作簿：${props.controller.error.message}`;
+  if (props.controller.isLoading) return m.value.xlsx.viewer.live.loading;
+  if (props.controller.error) return formatOfficeMessage(m.value.xlsx.viewer.live.error, { message: props.controller.error.message });
   const sheet = props.controller.activeSheet;
-  if (sheet) return `工作表 ${sheet.name} 已就绪`;
-  if (props.controller.activeTab?.kind === "chartsheet") return "图表工作表已就绪";
-  return "没有打开工作簿";
+  if (sheet) return formatOfficeMessage(m.value.xlsx.viewer.live.sheetReady, { name: sheet.name });
+  if (props.controller.activeTab?.kind === "chartsheet") return m.value.xlsx.viewer.live.chartsheetReady;
+  return m.value.xlsx.viewer.live.empty;
 });
 
 type GridInstance = InstanceType<typeof XlsxGrid>;

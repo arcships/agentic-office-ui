@@ -6,9 +6,9 @@
           type="button"
           class="docx-toolbar-btn"
           :class="{ active: showThumbnails }"
-          aria-label="Toggle page thumbnails"
+          :aria-label="m.docx.toolbar.sidebarToggle"
           :aria-pressed="showThumbnails"
-          title="Page thumbnails"
+          :title="m.docx.toolbar.pageThumbnails"
           @click="emit('toggleThumbnails')"
         >
           <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -20,51 +20,51 @@
           {{ controller.fileName || "document.docx" }}
         </span>
         <div class="docx-toolbar-page-control">
-          <span>Page</span>
+          <span>{{ m.common.page.label }}</span>
           <input
             :value="currentPage"
-            aria-label="Current page"
+            :aria-label="m.common.page.current"
             inputmode="numeric"
             :disabled="(totalPages ?? 0) < 1"
             @change="onPageChange"
           />
-          <span>of {{ totalPages || "–" }}</span>
+          <span>{{ m.common.page.of }} {{ totalPages || "–" }}</span>
         </div>
       </div>
 
       <div class="docx-toolbar-topbar__actions">
-        <label class="docx-toolbar-toggle" title="Show tracked changes">
+        <label class="docx-toolbar-toggle" :title="m.docx.toolbar.trackedChanges">
           <input type="checkbox" :checked="controller.showTrackedChanges" @change="controller.toggleShowTrackedChanges()" />
-          <span>Edits</span>
+          <span>{{ m.docx.editor.edits }}</span>
         </label>
-        <label class="docx-toolbar-toggle" title="Show comments">
+        <label class="docx-toolbar-toggle" :title="m.docx.toolbar.comments">
           <input type="checkbox" :checked="controller.showComments" @change="controller.toggleShowComments()" />
-          <span>Comments</span>
+          <span>{{ m.docx.toolbar.comments }}</span>
         </label>
         <button
           type="button"
           class="docx-toolbar-action"
           data-testid="editor-accept-all-changes"
-          title="Accept all tracked changes"
+          :title="m.docx.editor.acceptAllTitle"
           :disabled="readOnly || !hasTrackedChanges"
           @click="controller.acceptAllTrackedChanges()"
         >
           <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 13 4 4L19 7" /></svg>
-          <span>Accept all</span>
+          <span>{{ m.docx.editor.acceptAll }}</span>
         </button>
         <button
           type="button"
           class="docx-toolbar-action"
           data-testid="editor-reject-all-changes"
-          title="Reject all tracked changes"
+          :title="m.docx.editor.rejectAllTitle"
           :disabled="readOnly || !hasTrackedChanges"
           @click="controller.rejectAllTrackedChanges()"
         >
           <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
-          <span>Reject all</span>
+          <span>{{ m.docx.editor.rejectAll }}</span>
         </button>
-        <span v-if="readOnly" class="docx-toolbar-readonly">Read only</span>
-        <button type="button" class="docx-toolbar-btn" title="Toggle document theme" @click="controller.setDocumentTheme(controller.documentTheme === 'light' ? 'dark' : 'light')">
+        <span v-if="readOnly" class="docx-toolbar-readonly">{{ m.common.readOnly }}</span>
+        <button type="button" class="docx-toolbar-btn" :title="m.docx.editor.toggleTheme" @click="controller.setDocumentTheme(controller.documentTheme === 'light' ? 'dark' : 'light')">
           <svg v-if="controller.documentTheme === 'light'" class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5 8.5 8.5 0 1 0 20.5 14.2Z" />
           </svg>
@@ -73,29 +73,29 @@
           </svg>
         </button>
         <span class="docx-toolbar-separator" />
-        <label class="docx-toolbar-zoom" title="Zoom">
+        <label class="docx-toolbar-zoom" :title="m.docx.editor.zoom">
           <select
             data-testid="editor-zoom"
             class="docx-toolbar-select docx-toolbar-select-sm"
             :value="zoomPercent"
             @change="onZoomChange"
-            title="Zoom"
-            aria-label="Zoom"
+            :title="m.docx.editor.zoom"
+            :aria-label="m.docx.editor.zoom"
           >
             <option v-for="z of zoomLevels" :key="z" :value="z">{{ z }}%</option>
           </select>
         </label>
-        <button data-testid="editor-new" type="button" class="docx-toolbar-action" title="New document" :disabled="readOnly" @click="controller.newDocument()">
+        <button data-testid="editor-new" type="button" class="docx-toolbar-action" :title="m.docx.editor.newTitle" :disabled="readOnly" @click="controller.newDocument()">
           <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M12.5 8.5v7" /></svg>
-          <span>New</span>
+          <span>{{ m.docx.editor.new }}</span>
         </button>
-        <button data-testid="editor-import" type="button" class="docx-toolbar-action" title="Import DOCX" :disabled="readOnly" @click="onImport">
+        <button data-testid="editor-import" type="button" class="docx-toolbar-action" :title="m.docx.editor.importTitle" :disabled="readOnly" @click="onImport">
           <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5M5 13v6h14v-6" /></svg>
-          <span>Import</span>
+          <span>{{ m.docx.editor.import }}</span>
         </button>
-        <button data-testid="editor-export" type="button" class="docx-toolbar-action docx-toolbar-action--primary" title="Export DOCX" @click="controller.exportDocx()">
+        <button data-testid="editor-export" type="button" class="docx-toolbar-action docx-toolbar-action--primary" :title="m.docx.editor.exportTitle" @click="controller.exportDocx()">
           <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M7.5 11.5 12 16l4.5-4.5M5 19h14" /></svg>
-          <span>Export</span>
+          <span>{{ m.docx.editor.export }}</span>
         </button>
       </div>
     </div>
@@ -103,10 +103,10 @@
     <fieldset class="docx-toolbar" :disabled="readOnly">
     <!-- Undo/Redo -->
     <div class="docx-toolbar-group">
-      <button data-testid="editor-undo" class="docx-toolbar-btn" :disabled="!controller.canUndo" title="Undo (⌘Z)" @click="controller.undo()">
+      <button data-testid="editor-undo" class="docx-toolbar-btn" :disabled="!controller.canUndo" :title="m.docx.editor.undo" @click="controller.undo()">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5M5 12h8a6 6 0 0 1 6 6" /></svg>
       </button>
-      <button data-testid="editor-redo" class="docx-toolbar-btn" :disabled="!controller.canRedo" title="Redo (⇧⌘Z)" @click="controller.redo()">
+      <button data-testid="editor-redo" class="docx-toolbar-btn" :disabled="!controller.canRedo" :title="m.docx.editor.redo" @click="controller.redo()">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 7 5 5-5 5M19 12h-8a6 6 0 0 0-6 6" /></svg>
       </button>
     </div>
@@ -119,9 +119,9 @@
         class="docx-toolbar-select"
         :value="selectedRunStyle?.fontFamily ?? ''"
         @change="onFontFamilyChange"
-        title="Font Family"
+        :title="m.docx.editor.fontFamily"
       >
-        <option value="">Font</option>
+        <option value="">{{ m.docx.editor.font }}</option>
         <option value="Calibri">Calibri</option>
         <option value="Arial">Arial</option>
         <option value="Times New Roman">Times New Roman</option>
@@ -137,9 +137,9 @@
         class="docx-toolbar-select docx-toolbar-select-sm"
         :value="selectedRunStyle?.fontSizePt ?? ''"
         @change="onFontSizeChange"
-        title="Font Size"
+        :title="m.docx.editor.fontSize"
       >
-        <option value="">Size</option>
+        <option value="">{{ m.docx.editor.size }}</option>
         <option v-for="size of fontSizes" :key="size" :value="size">{{ size }}</option>
       </select>
     </div>
@@ -152,7 +152,7 @@
         data-testid="editor-bold"
         class="docx-toolbar-btn"
         :class="{ active: selectedRunStyle?.bold }"
-        title="Bold (⌘B)"
+        :title="m.docx.editor.bold"
         @click="controller.toggleBold()"
       >
         <strong>B</strong>
@@ -160,7 +160,7 @@
       <button
         class="docx-toolbar-btn"
         :class="{ active: selectedRunStyle?.italic }"
-        title="Italic (⌘I)"
+        :title="m.docx.editor.italic"
         @click="controller.toggleItalic()"
       >
         <em>I</em>
@@ -168,7 +168,7 @@
       <button
         class="docx-toolbar-btn"
         :class="{ active: selectedRunStyle?.underline }"
-        title="Underline (⌘U)"
+        :title="m.docx.editor.underline"
         @click="controller.toggleUnderline()"
       >
         <u>U</u>
@@ -176,7 +176,7 @@
       <button
         class="docx-toolbar-btn"
         :class="{ active: selectedRunStyle?.strike }"
-        title="Strikethrough"
+        :title="m.docx.editor.strikethrough"
         @click="controller.toggleStrike()"
       >
         <s>S</s>
@@ -190,8 +190,8 @@
       <button
         class="docx-toolbar-btn"
         :class="{ active: selectedRunStyle?.verticalAlign === 'superscript' }"
-        title="Superscript"
-        aria-label="Superscript"
+        :title="m.docx.editor.superscript"
+        :aria-label="m.docx.editor.superscript"
         @click="controller.toggleSuperscript()"
       >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 7 7 10M11 7 4 17M15 8c.4-1.3 1.4-2 2.8-2 1.3 0 2.2.7 2.2 1.8 0 1.6-1.7 2.3-4.8 4.2H20" /></svg>
@@ -199,8 +199,8 @@
       <button
         class="docx-toolbar-btn"
         :class="{ active: selectedRunStyle?.verticalAlign === 'subscript' }"
-        title="Subscript"
-        aria-label="Subscript"
+        :title="m.docx.editor.subscript"
+        :aria-label="m.docx.editor.subscript"
         @click="controller.toggleSubscript()"
       >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 7 10M11 6 4 16M15 15c.4-1.3 1.4-2 2.8-2 1.3 0 2.2.7 2.2 1.8 0 1.6-1.7 2.3-4.8 4.2H20" /></svg>
@@ -211,7 +211,7 @@
 
     <!-- Text color + Highlight color -->
     <div class="docx-toolbar-group">
-      <div class="docx-toolbar-color-picker" title="Text Color">
+      <div class="docx-toolbar-color-picker" :title="m.docx.editor.textColor">
         <input
           type="color"
           class="docx-toolbar-color-input"
@@ -220,7 +220,7 @@
         />
         <span class="docx-toolbar-color-label">A</span>
       </div>
-      <div class="docx-toolbar-color-picker" title="Highlight Color">
+      <div class="docx-toolbar-color-picker" :title="m.docx.editor.highlightColor">
         <input
           type="color"
           class="docx-toolbar-color-input"
@@ -238,7 +238,7 @@
       <button
         class="docx-toolbar-btn"
         :class="{ active: !!controller.selectedLink }"
-        title="Link"
+        :title="m.docx.editor.link"
         @click="onLinkClick"
       >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 14.5 14.5 9.5M7.3 16.7l-1 1a3.5 3.5 0 0 1-5-5l4-4a3.5 3.5 0 0 1 5 0M16.7 7.3l1-1a3.5 3.5 0 0 1 5 5l-4 4a3.5 3.5 0 0 1-5 0" /></svg>
@@ -249,16 +249,16 @@
 
     <!-- Alignment -->
     <div class="docx-toolbar-group">
-      <button class="docx-toolbar-btn" title="Align Left" @click="controller.setAlignment('left')">
+      <button class="docx-toolbar-btn" :title="m.docx.editor.alignLeft" @click="controller.setAlignment('left')">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h11M4 14h16M4 18h9" /></svg>
       </button>
-      <button class="docx-toolbar-btn" title="Align Center" @click="controller.setAlignment('center')">
+      <button class="docx-toolbar-btn" :title="m.docx.editor.alignCenter" @click="controller.setAlignment('center')">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 10h10M4 14h16M8 18h8" /></svg>
       </button>
-      <button class="docx-toolbar-btn" title="Align Right" @click="controller.setAlignment('right')">
+      <button class="docx-toolbar-btn" :title="m.docx.editor.alignRight" @click="controller.setAlignment('right')">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M9 10h11M4 14h16M11 18h9" /></svg>
       </button>
-      <button class="docx-toolbar-btn" title="Justify" @click="controller.setAlignment('justify')">
+      <button class="docx-toolbar-btn" :title="m.docx.editor.justify" @click="controller.setAlignment('justify')">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
       </button>
     </div>
@@ -270,8 +270,8 @@
       <button
         class="docx-toolbar-btn"
         :class="{ active: controller.hasUnorderedList }"
-        title="Bullet List"
-        aria-label="Bullet list"
+        :title="m.docx.editor.bulletList"
+        :aria-label="m.docx.editor.bulletList"
         @click="controller.toggleList('unordered')"
       >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="7" r="1" /><circle cx="5" cy="12" r="1" /><circle cx="5" cy="17" r="1" /><path d="M9 7h11M9 12h11M9 17h11" /></svg>
@@ -279,8 +279,8 @@
       <button
         class="docx-toolbar-btn"
         :class="{ active: controller.hasOrderedList }"
-        title="Numbered List"
-        aria-label="Numbered list"
+        :title="m.docx.editor.numberedList"
+        :aria-label="m.docx.editor.numberedList"
         @click="controller.toggleList('ordered')"
       >
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h1v4M3.5 9H6M3.5 13h2L3.5 17H6M10 7h10M10 15h10" /></svg>
@@ -288,8 +288,8 @@
       <button
         data-testid="editor-indent"
         class="docx-toolbar-btn"
-        title="Increase list indent (Tab)"
-        aria-label="Increase list indent"
+        :title="m.docx.editor.increaseIndentTitle"
+        :aria-label="m.docx.editor.increaseIndent"
         :disabled="!canIncreaseListDepth"
         @click="controller.adjustSelectedListDepth(1)"
       >
@@ -298,8 +298,8 @@
       <button
         data-testid="editor-outdent"
         class="docx-toolbar-btn"
-        title="Decrease list indent (Shift+Tab)"
-        aria-label="Decrease list indent"
+        :title="m.docx.editor.decreaseIndentTitle"
+        :aria-label="m.docx.editor.decreaseIndent"
         :disabled="!canDecreaseListDepth"
         @click="controller.adjustSelectedListDepth(-1)"
       >
@@ -315,7 +315,7 @@
         class="docx-toolbar-select docx-toolbar-select-sm"
         :value="lineSpacingValue"
         @change="onLineSpacingChange"
-        title="Line Spacing"
+        :title="m.docx.editor.lineSpacing"
       >
         <option value="1">1.00</option>
         <option value="1.15">1.15</option>
@@ -333,9 +333,9 @@
         class="docx-toolbar-select"
         :value="controller.selectedParagraphStyleId ?? ''"
         @change="onStyleChange"
-        title="Paragraph Style"
+        :title="m.docx.editor.paragraphStyle"
       >
-        <option value="">Normal</option>
+        <option value="">{{ m.docx.editor.normal }}</option>
         <option
           v-for="style of controller.availableParagraphStyles"
           :key="style.id"
@@ -354,9 +354,9 @@
         class="docx-toolbar-select"
         :value="activeBorderPresetValue"
         @change="onBorderPresetChange"
-        title="Borders"
+        :title="m.docx.editor.borders"
       >
-        <option value="">Borders</option>
+        <option value="">{{ m.docx.editor.borders }}</option>
         <option v-for="preset of borderPresets" :key="preset.value" :value="preset.value">
           {{ preset.label }}
         </option>
@@ -367,13 +367,14 @@
 
     <!-- Insert image + Insert table -->
     <div class="docx-toolbar-group">
-      <button class="docx-toolbar-btn" title="Insert Image" @click="onInsertImage">
+      <button class="docx-toolbar-btn" :title="m.docx.editor.insertImage" @click="onInsertImage">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="m5 18 5-5 3 3 2-2 4 4" /></svg>
       </button>
-      <button class="docx-toolbar-btn" title="Insert Table" @click="controller.insertTable()">
+      <button class="docx-toolbar-btn" :title="m.docx.editor.insertTable" @click="controller.insertTable()">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 10h18M3 15h18M9 4v16M15 4v16" /></svg>
       </button>
     </div>
+
 
     </fieldset>
   </div>
@@ -384,6 +385,8 @@ import { computed, ref, watch } from "vue"
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { DocxEditorController, DocxBorderPreset, HeadingLevel } from "@arcships/docx-core"
 import { DOCX_FILE_ACCEPT } from "../composables/docx-file-types"
+import { formatOfficeMessage } from "@arcships/office-interaction"
+import { useDocxMessages } from "../i18n"
 
 const props = defineProps<{
   controller: DocxEditorController
@@ -406,6 +409,7 @@ const toolbarTheme = computed(() => props.theme ?? props.controller.documentThem
 
 // ── Font sizes ──────────────────────────────────────────────────────
 const fontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48]
+const m = useDocxMessages()
 
 // ── Zoom ────────────────────────────────────────────────────────────
 const zoomLevels = [50, 60, 70, 80, 90, 100, 110, 120, 130, 150, 175, 200]
@@ -449,10 +453,10 @@ const highlightColorValue = computed(() => {
 
 const lineSpacingValue = computed(() => {
   const ls = props.controller.selectedLineSpacing
-  const m = ls.multiple
+  const multiple = ls.multiple
   const presets = [1, 1.15, 1.2, 1.5, 2, 2.5, 3]
   const closest = presets.reduce((prev, curr) =>
-    Math.abs(curr - m) < Math.abs(prev - m) ? curr : prev
+    Math.abs(curr - multiple) < Math.abs(prev - multiple) ? curr : prev
   )
   return String(closest)
 })
@@ -468,25 +472,25 @@ const canIncreaseListDepth = computed(
 const canDecreaseListDepth = computed(() => (selectedListLevel.value ?? 0) > 0)
 
 // ── Border presets ──────────────────────────────────────────────────
-const borderPresets: { value: DocxBorderPreset; label: string }[] = [
-  { value: "bottom", label: "Bottom Border" },
-  { value: "top", label: "Top Border" },
-  { value: "left", label: "Left Border" },
-  { value: "right", label: "Right Border" },
-  { value: "none", label: "No Border" },
-  { value: "all", label: "All Borders" },
-  { value: "outside", label: "Outside Borders" },
-  { value: "inside", label: "Inside Borders" },
-  { value: "inside-horizontal", label: "Inside Horizontal" },
-  { value: "inside-vertical", label: "Inside Vertical" },
-  { value: "diagonal-down", label: "Diagonal Down" },
-  { value: "diagonal-up", label: "Diagonal Up" },
-  { value: "horizontal-line", label: "Horizontal Line" },
-]
+const borderPresets = computed<{ value: DocxBorderPreset; label: string }[]>(() => [
+  { value: "bottom", label: m.value.docx.editor.borderPresets.bottom },
+  { value: "top", label: m.value.docx.editor.borderPresets.top },
+  { value: "left", label: m.value.docx.editor.borderPresets.left },
+  { value: "right", label: m.value.docx.editor.borderPresets.right },
+  { value: "none", label: m.value.docx.editor.borderPresets.none },
+  { value: "all", label: m.value.docx.editor.borderPresets.all },
+  { value: "outside", label: m.value.docx.editor.borderPresets.outside },
+  { value: "inside", label: m.value.docx.editor.borderPresets.inside },
+  { value: "inside-horizontal", label: m.value.docx.editor.borderPresets.insideHorizontal },
+  { value: "inside-vertical", label: m.value.docx.editor.borderPresets.insideVertical },
+  { value: "diagonal-down", label: m.value.docx.editor.borderPresets.diagonalDown },
+  { value: "diagonal-up", label: m.value.docx.editor.borderPresets.diagonalUp },
+  { value: "horizontal-line", label: m.value.docx.editor.borderPresets.horizontalLine },
+])
 
 const activeBorderPresetValue = computed(() => {
   const presets = props.controller.activeBorderPresets
-  for (const p of borderPresets) {
+  for (const p of borderPresets.value) {
     if (presets[p.value]) return p.value
   }
   return ""
@@ -517,16 +521,16 @@ function onHighlightColorChange(event: Event): void {
 function onLinkClick(): void {
   const existing = props.controller.selectedLink
   if (existing) {
-    if (confirm(`Remove link "${existing}"?`)) {
+    if (confirm(formatOfficeMessage(m.value.docx.editor.removeLink, { url: existing }))) {
       props.controller.setLink(undefined)
     }
     return
   }
-  const url = window.prompt("Enter URL:", "https://")
+  const url = window.prompt(m.value.docx.editor.enterUrl, "https://")
   if (!url) return
   const safeUrl = sanitizeOfficeLink(url)
   if (!safeUrl) {
-    window.alert("Only http, https, mailto, internal #fragment, and relative links are allowed.")
+    window.alert(m.value.docx.editor.unsupportedLink)
     return
   }
   props.controller.setLink(safeUrl)

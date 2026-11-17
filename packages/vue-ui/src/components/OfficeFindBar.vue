@@ -5,9 +5,9 @@
       class="office-find-bar__input"
       type="search"
       :value="query"
-      :placeholder="placeholder"
+      :placeholder="placeholderText"
       :disabled="disabled"
-      aria-label="查找文档内容"
+      :aria-label="m.common.search.placeholder"
       :data-testid="inputTestId"
       @input="onInput"
       @keydown="onKeydown"
@@ -23,21 +23,21 @@
     >{{ statusText }}</span>
     <button
       type="button"
-      aria-label="上一个搜索结果"
+      :aria-label="m.common.search.previous"
       :disabled="navigationDisabled"
       data-testid="office-find-previous"
       @click="emit('previous')"
     >‹</button>
     <button
       type="button"
-      aria-label="下一个搜索结果"
+      :aria-label="m.common.search.next"
       :disabled="navigationDisabled"
       data-testid="office-find-next"
       @click="emit('next')"
     >›</button>
     <button
       type="button"
-      aria-label="关闭查找"
+      :aria-label="m.common.search.close"
       :disabled="disabled"
       data-testid="office-find-close"
       @click="emit('close')"
@@ -47,6 +47,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
+import { formatOfficeMessage } from "@arcships/office-interaction"
+import { useOfficeUiMessages } from "../i18n"
 
 type SurfaceSearchStatus = "idle" | "searching" | "ready" | "error"
 
@@ -59,7 +61,7 @@ const props = withDefaults(defineProps<{
   inputTestId?: string
   disabled?: boolean
 }>(), {
-  placeholder: "查找",
+  placeholder: undefined,
   inputTestId: "office-find-input",
   disabled: false,
 })
@@ -73,15 +75,20 @@ const emit = defineEmits<{
 
 const inputRef = ref<HTMLInputElement | null>(null)
 const composing = ref(false)
+const m = useOfficeUiMessages()
+const placeholderText = computed(() => props.placeholder ?? m.value.common.search.placeholder)
 const navigationDisabled = computed(() =>
   props.disabled || props.status === "searching" || props.resultCount === 0,
 )
 const statusText = computed(() => {
-  if (props.status === "searching") return "正在搜索"
-  if (props.status === "error") return "搜索失败"
+  if (props.status === "searching") return m.value.common.search.searching
+  if (props.status === "error") return m.value.common.search.error
   if (!props.query) return ""
-  if (!props.resultCount) return "没有结果"
-  return `第 ${props.activeIndex + 1} 项，共 ${props.resultCount} 项`
+  if (!props.resultCount) return m.value.common.search.noResults
+  return formatOfficeMessage(m.value.common.search.resultOf, {
+    current: props.activeIndex + 1,
+    total: props.resultCount,
+  })
 })
 
 function inputValue(event: Event): string {

@@ -62,6 +62,7 @@ function viewerProps(controller, overrides = {}) {
     showFormulaBar: false,
     showImages: false,
     showRibbon: false,
+    locale: "zh-CN",
     ...overrides,
   };
 }

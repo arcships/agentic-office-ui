@@ -13,6 +13,18 @@ import { PptxViewer } from "@arcships/vue-pptx"
 import "@arcships/vue-pptx/style.css"
 ```
 
+## 本地化
+
+`PptxViewer` 接受 `locale`（默认 `"en"`，内置 `"zh-CN"`）与 `messages` 覆盖。用户可见文案和 aria-label 来自 `@arcships/office-interaction` 的共享消息目录：
+
+```vue
+<PptxViewer
+  :source="source"
+  locale="zh-CN"
+  :messages="{ pptx: { viewer: { search: '查找' } } }"
+/>
+```
+
 ## 组件边界
 
 Vue 包负责：

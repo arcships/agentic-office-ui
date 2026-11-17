@@ -13,7 +13,7 @@
     <div
       v-if="selectionMode === 'region'"
       class="pptx-stage__region-layer"
-      aria-label="选择幻灯片区域"
+      :aria-label="m.pptx.stage.region"
       tabindex="0"
       @pointerdown="onRegionPointerDown"
       @pointermove="onRegionPointerMove"
@@ -60,6 +60,7 @@ import {
   type OfficeSelectionMode,
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
+import { usePptxMessages } from "./i18n"
 
 const props = withDefaults(defineProps<{
   /** Controlled zoom factor. 1 = 100%. */
@@ -78,6 +79,7 @@ const props = withDefaults(defineProps<{
 })
 
 const elementRef = ref<HTMLElement | null>(null)
+const m = usePptxMessages()
 const hostRef = ref<HTMLElement | null>(null)
 const selectionMode = computed(() => props.selectionMode)
 const revisionCounter = ref(0)
@@ -367,7 +369,7 @@ function onTextSelectionMouseUp(): void {
     const text = selection.toString()
     confirmDraft(draft, "pointer", {
       label: text.length > 80 ? `${text.slice(0, 77)}…` : text,
-      path: [{ kind: "document", label: "Presentation" }, { kind: "slide", label: `Slide ${slideIndex + 1}` }, { kind: "text-range", label: "Selected text" }],
+      path: [{ kind: "document", label: "Presentation" }, { kind: "slide", label: `Slide ${slideIndex + 1}` }, { kind: "text-range", label: m.value.common.selectedText }],
       content: { text },
     })
     ignoreNextObjectClick = true

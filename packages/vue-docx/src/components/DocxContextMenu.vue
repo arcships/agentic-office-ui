@@ -12,7 +12,7 @@
       class="docx-context-menu"
       role="menu"
       aria-orientation="vertical"
-      aria-label="Editor context menu"
+      :aria-label="m.docx.contextMenu.label"
       tabindex="-1"
       :style="menuStyle"
       @contextmenu.prevent
@@ -27,7 +27,7 @@
         @click="onAction('cut')"
       >
         <span class="docx-context-menu-icon">✂</span>
-        <span>Cut</span>
+        <span>{{ m.docx.contextMenu.cut }}</span>
         <span class="docx-context-menu-shortcut">⌘X</span>
       </button>
       <button
@@ -38,7 +38,7 @@
         @click="onAction('copy')"
       >
         <span class="docx-context-menu-icon">📋</span>
-        <span>Copy</span>
+        <span>{{ m.docx.contextMenu.copy }}</span>
         <span class="docx-context-menu-shortcut">⌘C</span>
       </button>
       <button
@@ -49,7 +49,7 @@
         @click="onAction('paste')"
       >
         <span class="docx-context-menu-icon">📄</span>
-        <span>Paste</span>
+        <span>{{ m.docx.contextMenu.paste }}</span>
         <span class="docx-context-menu-shortcut">⌘V</span>
       </button>
 
@@ -65,7 +65,7 @@
         @click="onAction('bold')"
       >
         <span class="docx-context-menu-icon docx-context-menu-icon--bold">B</span>
-        <span>Bold</span>
+        <span>{{ m.docx.contextMenu.bold }}</span>
         <span class="docx-context-menu-shortcut">⌘B</span>
       </button>
       <button
@@ -77,7 +77,7 @@
         @click="onAction('italic')"
       >
         <span class="docx-context-menu-icon docx-context-menu-icon--italic">I</span>
-        <span>Italic</span>
+        <span>{{ m.docx.contextMenu.italic }}</span>
         <span class="docx-context-menu-shortcut">⌘I</span>
       </button>
       <button
@@ -89,7 +89,7 @@
         @click="onAction('underline')"
       >
         <span class="docx-context-menu-icon docx-context-menu-icon--underline">U</span>
-        <span>Underline</span>
+        <span>{{ m.docx.contextMenu.underline }}</span>
         <span class="docx-context-menu-shortcut">⌘U</span>
       </button>
       <button
@@ -101,13 +101,13 @@
         @click="onAction('strike')"
       >
         <span class="docx-context-menu-icon docx-context-menu-icon--strike">S</span>
-        <span>Strikethrough</span>
+        <span>{{ m.docx.contextMenu.strikethrough }}</span>
       </button>
 
       <div class="docx-context-menu-separator" role="separator" />
 
       <!-- Highlight colors -->
-      <div class="docx-context-menu-section-title" role="presentation">Highlight</div>
+      <div class="docx-context-menu-section-title" role="presentation">{{ m.docx.contextMenu.highlight }}</div>
       <div class="docx-context-menu-color-row">
         <button
           v-for="color of highlightColors"
@@ -126,8 +126,8 @@
           type="button"
           role="menuitem"
           tabindex="-1"
-          aria-label="No highlight"
-          title="No highlight"
+          :aria-label="m.docx.contextMenu.noHighlight"
+          :title="m.docx.contextMenu.noHighlight"
           @click="onAction('highlight', undefined)"
         >
           ✕
@@ -135,7 +135,7 @@
       </div>
 
       <!-- Text colors -->
-      <div class="docx-context-menu-section-title" role="presentation">Text Color</div>
+      <div class="docx-context-menu-section-title" role="presentation">{{ m.docx.contextMenu.textColor }}</div>
       <div class="docx-context-menu-color-row">
         <button
           v-for="color of textColors"
@@ -156,36 +156,36 @@
       <!-- Paragraph actions -->
       <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('splitParagraph')">
         <span class="docx-context-menu-icon">↵</span>
-        <span>Split Paragraph</span>
+        <span>{{ m.docx.contextMenu.splitParagraph }}</span>
       </button>
       <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteParagraph')">
         <span class="docx-context-menu-icon docx-context-menu-icon--danger">🗑</span>
-        <span class="docx-context-menu-item--danger">Delete Paragraph</span>
+        <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteParagraph }}</span>
       </button>
 
       <template v-if="tableContext">
         <div class="docx-context-menu-separator" role="separator" />
-        <div class="docx-context-menu-section-title" role="presentation">Table</div>
+        <div class="docx-context-menu-section-title" role="presentation">{{ m.docx.contextMenu.table }}</div>
         <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertRowAbove')">
-          Insert Row Above
+          {{ m.docx.contextMenu.insertRowAbove }}
         </button>
         <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertRowBelow')">
-          Insert Row Below
+          {{ m.docx.contextMenu.insertRowBelow }}
         </button>
         <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertColumnLeft')">
-          Insert Column Left
+          {{ m.docx.contextMenu.insertColumnLeft }}
         </button>
         <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertColumnRight')">
-          Insert Column Right
+          {{ m.docx.contextMenu.insertColumnRight }}
         </button>
         <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteRow')">
-          <span class="docx-context-menu-item--danger">Delete Row</span>
+          <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteRow }}</span>
         </button>
         <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteColumn')">
-          <span class="docx-context-menu-item--danger">Delete Column</span>
+          <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteColumn }}</span>
         </button>
         <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteTable')">
-          <span class="docx-context-menu-item--danger">Delete Table</span>
+          <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteTable }}</span>
         </button>
       </template>
     </div>
@@ -201,6 +201,7 @@ import type {
 } from "@arcships/docx-core"
 import { compareTextRangeBoundaries, paragraphText } from "@arcships/docx-core"
 import { resolveOfficeMenuKeyCommand } from "@arcships/vue-ui"
+import { useDocxMessages } from "../i18n"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -214,6 +215,7 @@ const props = defineProps<{
   /** Caret offset inside `text` when the menu was opened. */
   caretOffset?: number
 }>()
+const m = useDocxMessages()
 
 const emit = defineEmits<{
   close: []
@@ -279,23 +281,23 @@ const menuStyle = computed(() => {
 })
 
 // ── Colors ─────────────────────────────────────────────────────────
-const highlightColors = [
-  { value: "yellow", label: "Yellow", css: "#fff59d" },
-  { value: "green", label: "Green", css: "#bbf7d0" },
-  { value: "cyan", label: "Cyan", css: "#a5f3fc" },
-  { value: "magenta", label: "Magenta", css: "#f5d0fe" },
-  { value: "blue", label: "Blue", css: "#bfdbfe" },
-  { value: "red", label: "Red", css: "#fecaca" },
-]
+const highlightColors = computed(() => [
+  { value: "yellow", label: m.value.docx.colors.yellow, css: "#fff59d" },
+  { value: "green", label: m.value.docx.colors.green, css: "#bbf7d0" },
+  { value: "cyan", label: m.value.docx.colors.cyan, css: "#a5f3fc" },
+  { value: "magenta", label: m.value.docx.colors.magenta, css: "#f5d0fe" },
+  { value: "blue", label: m.value.docx.colors.blue, css: "#bfdbfe" },
+  { value: "red", label: m.value.docx.colors.red, css: "#fecaca" },
+])
 
-const textColors = [
-  { value: "#111827", label: "Black", css: "#111827" },
-  { value: "#ef4444", label: "Red", css: "#ef4444" },
-  { value: "#f59e0b", label: "Orange", css: "#f59e0b" },
-  { value: "#22c55e", label: "Green", css: "#22c55e" },
-  { value: "#3b82f6", label: "Blue", css: "#3b82f6" },
-  { value: "#8b5cf6", label: "Purple", css: "#8b5cf6" },
-]
+const textColors = computed(() => [
+  { value: "#111827", label: m.value.docx.colors.black, css: "#111827" },
+  { value: "#ef4444", label: m.value.docx.colors.red, css: "#ef4444" },
+  { value: "#f59e0b", label: m.value.docx.colors.orange, css: "#f59e0b" },
+  { value: "#22c55e", label: m.value.docx.colors.green, css: "#22c55e" },
+  { value: "#3b82f6", label: m.value.docx.colors.blue, css: "#3b82f6" },
+  { value: "#8b5cf6", label: m.value.docx.colors.purple, css: "#8b5cf6" },
+])
 
 // ── Actions ────────────────────────────────────────────────────────
 function activeRange() {

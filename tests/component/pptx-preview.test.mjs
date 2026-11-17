@@ -375,6 +375,15 @@ test("PptxStage only consumes controlled gesture zoom wheels", async () => {
   assert.deepEqual(mounted.warnings, []);
 });
 
+test("PptxViewer defaults to English copy and exposes translated aria-labels", async () => {
+  const mounted = await mount(PptxViewer);
+  assert.match(textContent(mounted.root), /Open a PPTX file to get started/);
+  assert.ok(button(mounted.root, "Next slide"));
+  assert.ok(button(mounted.root, "Previous slide"));
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
 test("PptxViewer exposes loading, ready navigation, hidden-page marker and cleanup", async () => {
   const pending = deferred();
   const { calls, session } = createSession({ open: () => pending.promise });
@@ -388,6 +397,7 @@ test("PptxViewer exposes loading, ready navigation, hidden-page marker and clean
     },
     showSearch: false,
     showSidebar: false,
+    locale: "zh-CN",
     onLoadStart: () => events.push("start"),
     onLoadSuccess: (document) => events.push(["success", document.slides.length]),
     onSlideChange: (index) => events.push(["slide", index]),
@@ -489,6 +499,7 @@ test("PptxViewer present mode wires playback controls and forwards playback even
     source: new Uint8Array([7, 8, 9]),
     mode: "present",
     autoplay: false,
+    locale: "zh-CN",
     documentSessionFactory: (_element, options) => {
       sessionOptions = options;
       return playback.session;
@@ -576,6 +587,7 @@ test("PptxViewer keeps the deck reachable when a single slide fails to render", 
     sessionFactory: () => session,
     showSearch: false,
     showSidebar: false,
+    locale: "zh-CN",
     onSlideError: (error, index) => failures.push([index, error.message]),
   });
   await waitFor(
@@ -638,6 +650,7 @@ test("PptxViewer keeps the current slide when switching between browse and prese
         documentSessionFactory: () => playback.session,
         showSearch: false,
         showSidebar: false,
+        locale: "zh-CN",
       });
     },
   });
@@ -708,6 +721,7 @@ test("PptxViewer surfaces a cancelled load instead of spinning forever", async (
     sessionFactory: () => session,
     showSearch: false,
     showSidebar: false,
+    locale: "zh-CN",
   });
 
   await waitFor(
@@ -737,6 +751,7 @@ test("PptxViewer stops loading when a load times out", async () => {
     openTimeoutMs: 20,
     showSearch: false,
     showSidebar: false,
+    locale: "zh-CN",
     onLoadError: (error) => errors.push(error.code),
   });
 
@@ -762,6 +777,7 @@ test("PptxViewer reports document command failures instead of leaking rejections
     sessionFactory: () => session,
     showSearch: false,
     showSidebar: false,
+    locale: "zh-CN",
     onDocumentError: (error) => failures.push(error.message),
   });
   await waitFor(
@@ -796,6 +812,7 @@ test("PptxViewer clears the inline height while fullscreen", async () => {
       sessionFactory: () => session,
       showSearch: false,
       showSidebar: false,
+      locale: "zh-CN",
     });
     await waitFor(
       () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
@@ -840,6 +857,7 @@ test("PptxViewer renders document warnings and lets the host replace them", asyn
     sessionFactory: () => session,
     showSearch: false,
     showSidebar: false,
+    locale: "zh-CN",
   });
   await waitFor(
     () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
@@ -854,6 +872,7 @@ test("PptxViewer renders document warnings and lets the host replace them", asyn
     showSearch: false,
     showSidebar: false,
     showWarnings: false,
+    locale: "zh-CN",
   });
   await waitFor(
     () => findByTestId(hidden.root, "pptx-viewer")?.props["data-state"] === "ready",
@@ -937,6 +956,7 @@ test("PptxViewer windows the sidebar and shares one thumbnail observer", async (
     source: new Uint8Array([1]),
     sessionFactory: () => session,
     showSearch: false,
+    locale: "zh-CN",
   });
   await waitFor(
     () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
@@ -989,6 +1009,7 @@ test("PptxViewer re-measures the stage and thumbnails once per loaded font batch
     source: new Uint8Array([1]),
     sessionFactory: () => session,
     showSearch: false,
+    locale: "zh-CN",
   });
   await waitFor(
     () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
@@ -1032,6 +1053,7 @@ test("PptxViewer refreshes once when webfonts settle through fonts.ready", async
     source: new Uint8Array([1]),
     sessionFactory: () => session,
     showSearch: false,
+    locale: "zh-CN",
   });
   await waitFor(
     () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
@@ -1056,6 +1078,7 @@ test("PptxViewer tolerates sessions without a refresh hook", async (t) => {
     source: new Uint8Array([1]),
     sessionFactory: () => session,
     showSearch: false,
+    locale: "zh-CN",
   });
   await waitFor(
     () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",

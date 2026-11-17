@@ -20,6 +20,7 @@ const RIBBON_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/XlsxRibbon
 const TOOLBAR_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/XlsxToolbar.vue");
 const SHEET_TABS_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/XlsxSheetTabs.vue");
 const EDITING_PATH = path.join(ROOT, "packages/vue-xlsx/src/composables/editing.ts");
+const SEARCH_PATH = path.join(ROOT, "packages/vue-xlsx/src/composables/useXlsxSearch.ts");
 const DEMO_PATH = path.join(ROOT, "apps/demo/src/pages/XlsxViewerPage.vue");
 const CONTEXT_MENU_SOURCE = readFileSync(CONTEXT_MENU_PATH, "utf8");
 const VIEWER_SOURCE = readFileSync(VIEWER_PATH, "utf8");
@@ -27,6 +28,7 @@ const RIBBON_SOURCE = readFileSync(RIBBON_PATH, "utf8");
 const TOOLBAR_SOURCE = readFileSync(TOOLBAR_PATH, "utf8");
 const SHEET_TABS_SOURCE = readFileSync(SHEET_TABS_PATH, "utf8");
 const EDITING_SOURCE = readFileSync(EDITING_PATH, "utf8");
+const SEARCH_SOURCE = readFileSync(SEARCH_PATH, "utf8");
 const DEMO_SOURCE = readFileSync(DEMO_PATH, "utf8");
 const SCRIPT_SOURCE = [...CONTEXT_MENU_SOURCE.matchAll(/<script(?:\s+setup)?[^>]*>([\s\S]*?)<\/script>/g)]
   .map((match) => match[1])
@@ -237,10 +239,10 @@ test("XLSX 只读切换保持同一个控制器和工作簿实例", () => {
 });
 
 test("XLSX 搜索覆盖所有工作表，并在命中后切换到结果工作表", () => {
-  assert.match(TOOLBAR_SOURCE, /Search workbook/);
-  assert.match(TOOLBAR_SOURCE, /for \(const \[sheetIndex, sheet\] of props\.controller\.sheets\.entries\(\)\)/);
-  assert.match(TOOLBAR_SOURCE, /setActiveSheetIndex\(result\.sheetIndex\)/);
-  assert.match(TOOLBAR_SOURCE, /sheetName: sheet\.name/);
+  assert.match(TOOLBAR_SOURCE, /m\.xlsx\.toolbar\.search/);
+  assert.match(SEARCH_SOURCE, /for \(const \[sheetIndex, sheet\] of controller\.sheets\.entries\(\)\)/);
+  assert.match(SEARCH_SOURCE, /setActiveSheetIndex\(match\.sheetIndex\)/);
+  assert.match(SEARCH_SOURCE, /sheetName: sheet\.name/);
 });
 
 test("XLSX 工作表删除有正式入口，并在 UI 和控制器两层保护最后一张", () => {
@@ -248,9 +250,9 @@ test("XLSX 工作表删除有正式入口，并在 UI 和控制器两层保护�
   assert.match(SHEET_TABS_SOURCE, /props\.controller\.sheets\.length > 1/);
   assert.match(SHEET_TABS_SOURCE, /props\.controller\.removeActiveSheet\(\)/);
   assert.match(EDITING_SOURCE, /ctx\.sheets\.value\.length <= 1/);
-  assert.match(SHEET_TABS_SOURCE, /aria-label="上一个工作表"/);
-  assert.match(SHEET_TABS_SOURCE, /aria-label="下一个工作表"/);
-  assert.match(SHEET_TABS_SOURCE, /aria-label="添加工作表"/);
+  assert.match(SHEET_TABS_SOURCE, /:aria-label="m\.xlsx\.sheetTabs\.previous"/);
+  assert.match(SHEET_TABS_SOURCE, /:aria-label="m\.xlsx\.sheetTabs\.next"/);
+  assert.match(SHEET_TABS_SOURCE, /:aria-label="m\.xlsx\.sheetTabs\.add"/);
   assert.match(SHEET_TABS_SOURCE, /<svg viewBox="0 0 24 24"/);
 });
 
@@ -265,6 +267,6 @@ test("XLSX 产品工具栏触发上传，演示页不直接展示原生文件控
   assert.match(TOOLBAR_SOURCE, /data-testid="xlsx-toolbar-upload"/);
   assert.match(VIEWER_SOURCE, /@upload="emit\('upload'\)"/);
   assert.match(DEMO_SOURCE, /class="visually-hidden" data-testid="xlsx-file-input"/);
-  assert.match(DEMO_SOURCE, /<details class="runtime-details">/);
+  assert.match(DEMO_SOURCE, /<details class="runtime-details"[^>]*>/);
   assert.doesNotMatch(DEMO_SOURCE, /<details class="runtime-details" open>/);
 });

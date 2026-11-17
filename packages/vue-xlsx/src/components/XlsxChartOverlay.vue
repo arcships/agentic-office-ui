@@ -43,7 +43,7 @@
           "
         />
         <div v-else class="xlsx-chart-overlay__unsupported">
-          📊 不支持的图表类型
+          📊 {{ m.xlsx.chart.unsupported }}
         </div>
         <div
           v-if="item.chart.id === selectedChartId"
@@ -72,6 +72,7 @@ import { MemoChartSvg } from "../optional/lazy-renderers";
 import { createGridPaneLayout, gridBodyLayerStyle, resolveAnchorRect, type GridPaneKey } from "./grid-metrics";
 import { DRAWING_RESIZE_HANDLES, drawingHandleStyle, useDrawingGestures } from "./drawing-interaction";
 import type { ChartRendererPalette } from "../render/chart-types";
+import { useXlsxMessages } from "../i18n";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -81,6 +82,7 @@ const props = defineProps<{
 }>();
 
 const layerStyle = gridBodyLayerStyle;
+const m = useXlsxMessages();
 const selectedChartId = computed(() => props.controller.selectedChartId);
 
 const chartPalette = computed<ChartRendererPalette>(() => ({

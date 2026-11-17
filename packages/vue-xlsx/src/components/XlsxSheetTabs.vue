@@ -4,8 +4,8 @@
       type="button"
       class="xlsx-sheettabs__nav-btn"
       :disabled="activeTabIndex <= 0"
-      title="上一个工作表"
-      aria-label="上一个工作表"
+      :title="m.xlsx.sheetTabs.previous"
+      :aria-label="m.xlsx.sheetTabs.previous"
       @click="prevTab"
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6" /></svg>
@@ -50,8 +50,8 @@
         type="button"
         class="xlsx-sheettabs__add-btn"
         data-testid="xlsx-add-sheet"
-        title="添加工作表"
-        aria-label="添加工作表"
+        :title="m.xlsx.sheetTabs.add"
+        :aria-label="m.xlsx.sheetTabs.add"
         @click="controller.addSheet()"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
@@ -62,8 +62,8 @@
         class="xlsx-sheettabs__remove-btn"
         data-testid="xlsx-remove-sheet"
         :disabled="!canRemoveActiveSheet"
-        title="删除当前工作表"
-        aria-label="删除当前工作表"
+        :title="m.xlsx.sheetTabs.remove"
+        :aria-label="m.xlsx.sheetTabs.remove"
         @click="removeActiveSheet"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M8 10v8M12 10v8M16 10v8M7 7l1 14h8l1-14" /></svg>
@@ -73,8 +73,8 @@
       type="button"
       class="xlsx-sheettabs__nav-btn"
       :disabled="activeTabIndex >= controller.tabs.length - 1"
-      title="下一个工作表"
-      aria-label="下一个工作表"
+      :title="m.xlsx.sheetTabs.next"
+      :aria-label="m.xlsx.sheetTabs.next"
       @click="nextTab"
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6" /></svg>
@@ -86,6 +86,7 @@
 import { computed, ref, watch, nextTick, onUnmounted, type CSSProperties } from "vue";
 import type { XlsxViewerController, XlsxSheetThumbnail, UseXlsxViewerThumbnailsOptions } from "@arcships/xlsx-core";
 import { useXlsxViewerThumbnails } from "../composables/useXlsxViewerThumbnails";
+import { useXlsxMessages } from "../i18n";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -96,6 +97,7 @@ const props = defineProps<{
 
 const activeTabIndex = computed(() => props.controller.activeTabIndex);
 const isReadOnly = computed(() => props.controller.isEditingLocked === true || props.controller.readOnly || props.readOnly === true);
+const m = useXlsxMessages();
 const canRemoveActiveSheet = computed(() => Boolean(props.controller.activeSheet) && props.controller.sheets.length > 1);
 
 const { thumbnails: thumbnailComputedRaw } = useXlsxViewerThumbnails(

@@ -21,6 +21,18 @@ import "@arcships/vue-docx/style.css"
 </template>
 ```
 
+## 本地化
+
+`DocxViewer`、`DocxEditor` 和 `DocxDocumentSurface` 都接受 `locale`（默认 `"en"`，内置 `"zh-CN"`）与 `messages` 覆盖。用户可见文案和 aria-label 来自 `@arcships/office-interaction` 的共享消息目录：
+
+```vue
+<DocxViewer
+  :model="model"
+  locale="zh-CN"
+  :messages="{ docx: { toolbar: { comments: '备注' } } }"
+/>
+```
+
 ## 组件
 
 - `DocxDocumentSurface` — 最小嵌入渲染区（支持受控文字/页面/区域选择，以及宿主持有的 50%–200% 手势缩放）

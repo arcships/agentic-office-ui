@@ -5,7 +5,7 @@
       data-testid="xlsx-name-box"
       :value="nameBoxValue"
       readonly
-      title="Active cell"
+      :title="m.xlsx.formulaBar.activeCell"
     />
     <span class="xlsx-formula-bar__fx">fx</span>
     <input
@@ -14,7 +14,7 @@
       data-testid="xlsx-formula-input"
       :disabled="!hasFormulaTarget || isReadOnly"
       :value="formulaDraft"
-      placeholder="Enter a formula or value"
+      :placeholder="m.xlsx.formulaBar.placeholder"
       @blur="commitFormula(); focusedField = null"
       @focus="onFormulaFocus"
       @input="onFormulaInput"
@@ -28,6 +28,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch, type CSSProperties } from "vue";
 import type { XlsxViewerController } from "@arcships/xlsx-core";
+import { useXlsxMessages } from "../i18n";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -36,6 +37,7 @@ const props = defineProps<{
 }>();
 
 const formulaInputRef = ref<HTMLInputElement | null>(null);
+const m = useXlsxMessages();
 const formulaDraft = ref("");
 const formulaInitialValue = ref("");
 const focusedField = ref<"formula" | null>(null);

@@ -109,7 +109,7 @@
           :style="validationDropdownTriggerStyle"
           type="button"
           tabindex="-1"
-          aria-label="打开数据验证下拉列表"
+          :aria-label="m.xlsx.grid.openValidation"
           @pointerdown.stop.prevent="openValidationDropdown"
           @dblclick.stop.prevent
         >
@@ -150,7 +150,7 @@
             class="xlsx-grid__validation-dismiss"
             data-testid="xlsx-validation-alert-dismiss"
             type="button"
-            aria-label="关闭验证提示"
+            :aria-label="m.xlsx.grid.closeValidation"
             @pointerdown.stop.prevent
             @click.stop="props.controller.dismissDataValidationFeedback()"
           >
@@ -212,6 +212,8 @@ import {
   resolveOverflowTextWidth,
 } from "./grid-paint";
 import { isDataValidationListDropdownVisible } from "../composables/validation";
+import { formatOfficeMessage } from "@arcships/office-interaction";
+import { useXlsxMessages } from "../i18n";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -221,6 +223,8 @@ const props = defineProps<{
   selectionColor?: string;
   selectionFillColor?: string;
 }>();
+
+const m = useXlsxMessages();
 
 const emit = defineEmits<{
   cellDoubleClick: [cell: XlsxCellAddress];
@@ -310,7 +314,9 @@ const activeSheet = computed(() => props.controller.activeSheet as XlsxSheetData
 const gridA11yId = nextGridA11yId();
 const gridAriaLabel = computed(() => {
   const name = activeSheet.value?.name?.trim();
-  return name ? `工作表 ${name}` : "工作表";
+  return name
+    ? formatOfficeMessage(m.value.xlsx.grid.worksheetNamed, { name })
+    : m.value.xlsx.grid.worksheet;
 });
 const gridAriaReadOnly = computed(() => (props.readOnly ? "true" : "false"));
 // Prefer the worksheet's real size; the display counts include row/column
@@ -328,7 +334,7 @@ const activeCellAria = computed(() => {
   if (!cell) return null;
   const address = `${columnLabel(cell.col)}${cell.row + 1}`;
   const value = props.controller.getCellDisplayValue(cell);
-  const display = value && value.trim() ? value : "空白";
+  const display = value && value.trim() ? value : m.value.xlsx.grid.blank;
   return {
     colIndex: cell.col + 1,
     label: `${address}，${display}`,

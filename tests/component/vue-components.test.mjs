@@ -295,6 +295,24 @@ test("DocxViewer hides upload and download entry points through showUpload and s
   failed.app.unmount();
 });
 
+test("DocxViewer resolves locale and host message overrides for visible copy and aria-labels", async () => {
+  const zh = await mount(DocxViewer, { locale: "zh-CN" });
+  assert.match(textContent(zh.root), /未打开文档/);
+  assert.equal(
+    findByTestId(zh.root, "docx-sidebar-toggle").props["aria-label"],
+    "显示或隐藏页面缩略图",
+  );
+  assert.deepEqual(zh.warnings, []);
+  zh.app.unmount();
+
+  const custom = await mount(DocxViewer, {
+    messages: { docx: { viewer: { emptyTitle: "Nothing open" } } },
+  });
+  assert.match(textContent(custom.root), /Nothing open/);
+  assert.deepEqual(custom.warnings, []);
+  custom.app.unmount();
+});
+
 test("DocxViewer displays model-derived tracked changes and comments without an editor controller", async () => {
   const file = readFileSync(new URL("../../apps/demo/public/samples/review-comments.docx", import.meta.url));
   const bytes = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
@@ -424,9 +442,9 @@ test("DocxViewer aborts an active runtime load when unmounted", async () => {
 
 test("XlsxViewer renders loading, error and empty states and handles undo/redo shortcuts", async () => {
   for (const [controller, expected] of [
-    [xlsxController({ isLoading: true }), "加载中"],
+    [xlsxController({ isLoading: true }), "Loading"],
     [xlsxController({ error: new Error("XLSX failed") }), "XLSX failed"],
-    [xlsxController(), "打开一个 XLSX 文件开始查看"],
+    [xlsxController(), "Open an XLSX file"],
   ]) {
     const current = await mount(XlsxViewer, {
       controller,
@@ -461,6 +479,41 @@ test("XlsxViewer renders loading, error and empty states and handles undo/redo s
   assert.equal(prevented, 2);
   assert.deepEqual(keyboard.warnings, []);
   keyboard.app.unmount();
+});
+
+test("XlsxViewer resolves locale and host message overrides for visible copy and aria-labels", async () => {
+  const controller = xlsxController({
+    canZoomIn: false,
+    canZoomOut: false,
+    displayFileName: "book.xlsx",
+    zoomScale: 100,
+  });
+  const zh = await mount(XlsxViewer, {
+    controller,
+    locale: "zh-CN",
+    showFormulaBar: false,
+    showRibbon: false,
+  });
+  assert.match(textContent(zh.root), /打开一个 XLSX 文件开始查看/);
+  assert.equal(findByTestId(zh.root, "xlsx-search-toggle").props["aria-label"], "搜索工作簿");
+  assert.deepEqual(zh.warnings, []);
+  zh.app.unmount();
+
+  const custom = await mount(XlsxViewer, {
+    controller,
+    messages: {
+      xlsx: {
+        toolbar: { search: "Find cells" },
+        viewer: { empty: "Nothing to show" },
+      },
+    },
+    showFormulaBar: false,
+    showRibbon: false,
+  });
+  assert.match(textContent(custom.root), /Nothing to show/);
+  assert.equal(findByTestId(custom.root, "xlsx-search-toggle").props["aria-label"], "Find cells");
+  assert.deepEqual(custom.warnings, []);
+  custom.app.unmount();
 });
 
 test("XlsxViewer renders and selects a resolved chartsheet chart", async () => {
@@ -924,6 +977,21 @@ test("PdfSurface exposes link and widget hit rectangles and forwards activation"
   mounted.app.unmount();
 });
 
+test("PdfViewer exposes localized toolbar aria-labels and message overrides", async () => {
+  const zh = await mount(PdfViewer, { locale: "zh-CN" });
+  assert.equal(findByTestId(zh.root, "pdf-sidebar-toggle").props["aria-label"], "显示或隐藏缩略图");
+  assert.equal(findByTestId(zh.root, "pdf-page-input").props["aria-label"], "页码");
+  assert.deepEqual(zh.warnings, []);
+  zh.app.unmount();
+
+  const custom = await mount(PdfViewer, {
+    messages: { pdf: { viewer: { toggleThumbnails: "Toggle panel" } } },
+  });
+  assert.equal(findByTestId(custom.root, "pdf-sidebar-toggle").props["aria-label"], "Toggle panel");
+  assert.deepEqual(custom.warnings, []);
+  custom.app.unmount();
+});
+
 test("PdfViewer becomes ready only after the injected runtime opens and renders the PDF", async () => {
   const empty = await mount(PdfViewer, { showToolbar: false });
   assert.equal(findByTestId(empty.root, "pdf-status").props["data-state"], "idle");
@@ -1026,7 +1094,7 @@ test("PdfViewer becomes ready only after the injected runtime opens and renders 
   assert.equal(calls.search[0].query, "needle");
   assert.equal(calls.search[0].document.id, document.id);
   assert.equal(findByTestId(ready.root, "pdf-document").props["data-active-page"], 3);
-  assert.match(textContent(findByTestId(ready.root, "pdf-search-result")), /第 1 \/ 1 项，第 3 页/);
+  assert.match(textContent(findByTestId(ready.root, "pdf-search-result")), /Result 1 \/ 1, page 3/);
   assert.deepEqual(pages, ["count:3", 1, 2, 3]);
   assert.deepEqual(ready.warnings, []);
   ready.app.unmount();
@@ -1075,7 +1143,7 @@ test("PdfViewer exposes source and renderer failures without reporting a false s
   );
   assert.equal(rendererErrors.length, 1);
   assert.equal(rendererErrors[0].code, "INVALID_PDF");
-  assert.match(rendererErrors[0].message, /无法解析或渲染/);
+  assert.match(rendererErrors[0].message, /could not be parsed or rendered/);
   assert.equal(successEvents, 0);
   assert.equal(findByTestId(failed.root, "pdf-page-image"), undefined);
   await waitFor(() => failedRuntime.calls.closeDocument.length === 1, "failed PDF document close");

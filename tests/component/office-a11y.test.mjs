@@ -122,10 +122,10 @@ test("DOCX viewer announces loading, error, page and empty states", () => {
 
   const message = computedBody(DOCX_VIEWER_PATH, "liveStatusMessage");
   assert.match(message, /viewerState\.value === "loading"/);
-  assert.match(message, /正在打开 DOCX 文档/);
-  assert.match(message, /无法打开文档：\$\{error\.value\.message\}/);
-  assert.match(message, /没有打开文档/);
-  assert.match(message, /第 \$\{page\} 页，共 \$\{total\} 页/, "page turns must be announced");
+  assert.match(message, /m\.value\.docx\.viewer\.live\.loading/);
+  assert.match(message, /formatOfficeMessage\(m\.value\.docx\.viewer\.live\.error, \{ message: error\.value\.message \}\)/);
+  assert.match(message, /m\.value\.docx\.viewer\.emptyTitle/);
+  assert.match(message, /formatOfficeMessage\(m\.value\.docx\.viewer\.live\.readyPages, \{ page, total \}\)/, "page turns must be announced");
   assert.match(viewer, /const liveStatusBusy = computed\(\(\) => viewerState\.value === "loading"\)/);
 });
 
@@ -135,7 +135,8 @@ test("DOCX editor mirrors its status bar into the shared live region", () => {
   assert.match(editor, /<OfficeLiveStatus test-id="editor-live-status" :message="liveStatusMessage" \/>/);
   const message = computedBody(DOCX_EDITOR_PATH, "liveStatusMessage");
   assert.match(message, /pageLimitError\.value/);
-  assert.match(message, /第 \$\{[^}]*\} 页，共 \$\{totalPages\.value\} 页/);
+  assert.match(message, /formatOfficeMessage\(m\.value\.common\.page\.indicator/);
+  assert.match(message, /m\.value\.docx\.editor\.liveReady/);
   assert.match(message, /controller\.status/);
 });
 
@@ -144,18 +145,19 @@ test("PPTX and XLSX viewers use the same shared live region", () => {
   assert.match(pptx, /import \{ OfficeLiveStatus \} from "@arcships\/vue-ui"/);
   assert.match(pptx, /<OfficeLiveStatus\s+test-id="pptx-live-status"\s+:message="liveStatusMessage"\s+:busy="state === 'loading'"/);
   const pptxMessage = computedBody(PPTX_VIEWER_PATH, "liveStatusMessage");
-  assert.match(pptxMessage, /没有打开幻灯片文件/);
-  assert.match(pptxMessage, /正在加载幻灯片文件/);
-  assert.match(pptxMessage, /无法打开幻灯片文件/);
-  assert.match(pptxMessage, /第 \$\{activeIndex\.value \+ 1\} 张，共 \$\{total\} 张/, "slide changes must be announced");
+  assert.match(pptxMessage, /m\.value\.pptx\.viewer\.live\.empty/);
+  assert.match(pptxMessage, /m\.value\.pptx\.viewer\.live\.loading/);
+  assert.match(pptxMessage, /formatOfficeMessage\(m\.value\.pptx\.viewer\.live\.error/);
+  assert.match(pptxMessage, /formatOfficeMessage\(m\.value\.pptx\.viewer\.live\.ready, \{/, "slide changes must be announced");
+  assert.match(pptxMessage, /current: activeIndex\.value \+ 1/);
 
   const xlsx = read(XLSX_VIEWER_PATH);
   assert.match(xlsx, /import \{ OfficeLiveStatus \} from "@arcships\/vue-ui"/);
   assert.match(xlsx, /<OfficeLiveStatus\s+test-id="xlsx-live-status"\s+:message="liveStatusMessage"\s+:busy="controller\.isLoading"/);
   const xlsxMessage = computedBody(XLSX_VIEWER_PATH, "liveStatusMessage");
-  assert.match(xlsxMessage, /正在加载工作簿/);
-  assert.match(xlsxMessage, /无法打开工作簿/);
-  assert.match(xlsxMessage, /工作表 \$\{sheet\.name\} 已就绪/);
+  assert.match(xlsxMessage, /m\.value\.xlsx\.viewer\.live\.loading/);
+  assert.match(xlsxMessage, /formatOfficeMessage\(m\.value\.xlsx\.viewer\.live\.error/);
+  assert.match(xlsxMessage, /formatOfficeMessage\(m\.value\.xlsx\.viewer\.live\.sheetReady, \{ name: sheet\.name \}\)/);
 });
 
 test("XLSX canvas grid exposes role=grid and a live active descendant", () => {
@@ -188,7 +190,7 @@ test("XLSX canvas grid exposes role=grid and a live active descendant", () => {
   assert.match(descriptor, /props\.controller\.getCellDisplayValue\(cell\)/);
   assert.match(descriptor, /colIndex: cell\.col \+ 1/);
   assert.match(descriptor, /rowIndex: cell\.row \+ 1/);
-  assert.match(descriptor, /空白/, "empty cells need a spoken placeholder");
+  assert.match(descriptor, /m\.value\.xlsx\.grid\.blank/, "empty cells need a spoken placeholder");
 
   const descendantId = computedBody(XLSX_GRID_PATH, "activeCellDescendantId");
   assert.match(descendantId, /\$\{gridA11yId\}-active-cell/);
@@ -204,7 +206,7 @@ test("XLSX canvas grid exposes role=grid and a live active descendant", () => {
     "a setup()-scoped counter would restart for every mounted grid",
   );
   const label = computedBody(XLSX_GRID_PATH, "gridAriaLabel");
-  assert.match(label, /工作表 \$\{name\}/, "the grid label must name the worksheet");
+  assert.match(label, /formatOfficeMessage\(m\.value\.xlsx\.grid\.worksheetNamed, \{ name \}\)/, "the grid label must name the worksheet");
   assert.match(grid, /const declared = activeSheet\.value\?\.rowCount \?\? 0/);
   assert.match(grid, /const declared = activeSheet\.value\?\.colCount \?\? 0/);
 

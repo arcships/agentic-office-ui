@@ -58,7 +58,7 @@
       >
         <span v-if="item.control.kind === 'checkbox'" class="xlsx-drawing-layer__box">{{ isChecked(item.control) ? '✓' : '' }}</span>
         <span v-else-if="item.control.kind === 'radio'" class="xlsx-drawing-layer__radio">{{ isChecked(item.control) ? '●' : '' }}</span>
-        <button v-else-if="item.control.kind === 'button'" type="button">{{ item.control.label || item.control.name || '按钮' }}</button>
+        <button v-else-if="item.control.kind === 'button'" type="button">{{ item.control.label || item.control.name || m.xlsx.drawing.button }}</button>
         <span v-else>{{ item.control.label || item.control.name || controlLabel(item.control.kind) }}</span>
         <span v-if="item.control.kind === 'checkbox' || item.control.kind === 'radio'">{{ item.control.label || item.control.name }}</span>
       </div>
@@ -78,11 +78,13 @@ import {
   type XlsxViewerController,
 } from "@arcships/xlsx-core"
 import { createGridPaneLayout, gridBodyLayerStyle, resolveAnchorRect, type GridPaneKey } from "./grid-metrics"
+import { useXlsxMessages } from "../i18n"
 
 const props = defineProps<{ controller: XlsxViewerController; scrollLeft?: number; scrollTop?: number }>()
 
 const layerStyle = gridBodyLayerStyle
 const checkedOverrides = ref<Record<string, boolean>>({})
+const m = useXlsxMessages()
 
 const paneLayout = computed(() => createGridPaneLayout(
   props.controller.activeSheet,
@@ -214,7 +216,7 @@ function onControlActivate(control: XlsxFormControl): void {
   writeLinkedCell(control, next)
 }
 
-function controlLabel(kind: XlsxFormControl["kind"]): string { return ({ dropdown: "下拉框", editbox: "输入框", listbox: "列表框", spinner: "微调框", scrollbar: "滚动条", label: "标签", "group-box": "分组框", unknown: "控件" } as Record<string, string>)[kind] || kind }
+function controlLabel(kind: XlsxFormControl["kind"]): string { return ({ dropdown: m.value.xlsx.drawing.dropdown, editbox: m.value.xlsx.drawing.editbox, listbox: m.value.xlsx.drawing.listbox, spinner: m.value.xlsx.drawing.spinner, scrollbar: m.value.xlsx.drawing.scrollbar, label: m.value.xlsx.drawing.label, "group-box": m.value.xlsx.drawing.groupBox, unknown: m.value.xlsx.drawing.unknown } as Record<string, string>)[kind] || kind }
 </script>
 
 <style scoped>

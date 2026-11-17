@@ -8,7 +8,7 @@
         data-testid="xlsx-chartsheet-chart"
         @pointerdown="controller.selectChart(chart.id)"
       >
-        <div v-if="controller.isChartsLoading" class="xlsx-chartsheet__loading">Loading chart…</div>
+        <div v-if="controller.isChartsLoading" class="xlsx-chartsheet__loading">{{ m.xlsx.chart.loading }}</div>
         <MemoChartSvg
           v-else-if="chart.chartType !== 'Unsupported'"
           :chart="chart"
@@ -18,10 +18,10 @@
           :on-chart-element-pointer-down="onChartElementPointerDown"
           :on-chart-element-double-click="onChartElementDoubleClick"
         />
-        <div v-else class="xlsx-chartsheet__empty">This chart type is not available yet.</div>
+        <div v-else class="xlsx-chartsheet__empty">{{ m.xlsx.chart.unavailable }}</div>
       </div>
       <div v-if="charts.length === 0 && !controller.isChartsLoading" class="xlsx-chartsheet__empty">
-        This chart sheet does not expose an embedded chart payload.
+        {{ m.xlsx.chart.noPayload }}
       </div>
     </div>
   </div>
@@ -32,6 +32,7 @@ import { computed } from "vue";
 import type { XlsxChart, XlsxChartElementSelection, XlsxViewerController } from "@arcships/xlsx-core";
 import { MemoChartSvg } from "../optional/lazy-renderers";
 import type { ChartRendererPalette } from "../render/chart-types";
+import { useXlsxMessages } from "../i18n";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -39,6 +40,7 @@ const props = defineProps<{
 }>();
 
 const chartRect = { height: 360, left: 0, top: 0, width: 640 };
+const m = useXlsxMessages();
 const charts = computed(() => props.controller.charts as XlsxChart[]);
 const palette = computed<ChartRendererPalette>(() => ({
   border: props.isDark ? "#52525b" : "#d4d4d8",

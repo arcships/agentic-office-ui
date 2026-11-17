@@ -4,7 +4,7 @@
     class="pptx-thumbnail"
     :class="{ 'pptx-thumbnail--active': active }"
     type="button"
-    :aria-label="`第 ${slide.number} 页${slide.hidden ? '，隐藏页' : ''}`"
+    :aria-label="thumbnailLabel"
     :aria-current="active ? 'page' : undefined"
     :data-pptx-thumbnail-index="slide.index"
     @click="emit('select', slide.index)"
@@ -12,13 +12,13 @@
     <span ref="canvasRef" class="pptx-thumbnail__canvas" />
     <span class="pptx-thumbnail__label">
       <span>{{ slide.number }}</span>
-      <span v-if="slide.hidden" class="pptx-thumbnail__hidden">隐藏</span>
+      <span v-if="slide.hidden" class="pptx-thumbnail__hidden">{{ m.pptx.thumbnail.hidden }}</span>
     </span>
   </button>
 </template>
 
 <script setup lang="ts">
-import { inject, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import type {
   PptxDisposableHandle,
   PptxPreviewSession,
@@ -28,6 +28,8 @@ import {
   PPTX_THUMBNAIL_OBSERVER,
   type PptxThumbnailObserver,
 } from "./composables/thumbnail-observer"
+import { formatOfficeMessage } from "@arcships/office-interaction"
+import { usePptxMessages } from "./i18n"
 
 const props = withDefaults(defineProps<{
   session: PptxPreviewSession
@@ -40,6 +42,11 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{ select: [index: number] }>()
+const m = usePptxMessages()
+const thumbnailLabel = computed(() => formatOfficeMessage(
+  props.slide.hidden ? m.value.pptx.thumbnail.hiddenLabel : m.value.pptx.thumbnail.label,
+  { number: props.slide.number },
+))
 const rootRef = ref<HTMLElement | null>(null)
 const canvasRef = ref<HTMLElement | null>(null)
 /** Shared gate provided by `PptxViewer`; standalone thumbnails observe themselves. */

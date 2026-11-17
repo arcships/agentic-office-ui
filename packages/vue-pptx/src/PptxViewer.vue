@@ -18,12 +18,12 @@
   >
     <header v-if="showToolbar && !isPresent" class="pptx-viewer__toolbar">
       <div class="pptx-viewer__toolbar-group">
-        <button type="button" :disabled="!canGoPrevious" aria-label="上一页" @click="run(() => goTo(activeIndex - 1))">‹</button>
+        <button type="button" :disabled="!canGoPrevious" :aria-label="m.pptx.viewer.previousSlide" @click="run(() => goTo(activeIndex - 1))">‹</button>
         <span class="pptx-viewer__counter" data-testid="pptx-page-counter">
           {{ document ? `${activeIndex + 1} / ${document.slides.length}` : "0 / 0" }}
         </span>
-        <button type="button" :disabled="!canGoNext" aria-label="下一页" @click="run(() => goTo(activeIndex + 1))">›</button>
-        <span v-if="activeSlide?.hidden" class="pptx-viewer__hidden-badge">隐藏页</span>
+        <button type="button" :disabled="!canGoNext" :aria-label="m.pptx.viewer.nextSlide" @click="run(() => goTo(activeIndex + 1))">›</button>
+        <span v-if="activeSlide?.hidden" class="pptx-viewer__hidden-badge">{{ m.pptx.viewer.hiddenSlide }}</span>
       </div>
 
       <form v-if="showSearch" class="pptx-viewer__search" role="search" @submit.prevent="runSearch">
@@ -31,22 +31,22 @@
           ref="searchInputRef"
           v-model="searchQuery"
           type="search"
-          placeholder="搜索幻灯片"
-          aria-label="搜索幻灯片"
+          :placeholder="m.pptx.viewer.searchPlaceholder"
+          :aria-label="m.pptx.viewer.searchPlaceholder"
           @keydown.esc.prevent="closeSearch"
         />
-        <button type="submit" :disabled="state !== 'ready' || !searchQuery.trim()">搜索</button>
+        <button type="submit" :disabled="state !== 'ready' || !searchQuery.trim()">{{ m.pptx.viewer.search }}</button>
         <span v-if="searchResults.length" class="pptx-viewer__search-count">
           {{ searchCursor + 1 }} / {{ searchResults.length }}
         </span>
-        <button v-if="searchResults.length" type="button" aria-label="上一个搜索结果" @click="run(() => moveSearch(-1))">↑</button>
-        <button v-if="searchResults.length" type="button" aria-label="下一个搜索结果" @click="run(() => moveSearch(1))">↓</button>
+        <button v-if="searchResults.length" type="button" :aria-label="m.common.search.previous" @click="run(() => moveSearch(-1))">↑</button>
+        <button v-if="searchResults.length" type="button" :aria-label="m.common.search.next" @click="run(() => moveSearch(1))">↓</button>
       </form>
 
       <div class="pptx-viewer__toolbar-group pptx-viewer__zoom">
-        <button type="button" :disabled="state !== 'ready' || zoom <= 50" aria-label="缩小" @click="run(() => setZoom(zoom - 25))">−</button>
-        <button type="button" :disabled="state !== 'ready'" aria-label="恢复适合窗口" @click="run(() => setZoom(100))">{{ zoom }}%</button>
-        <button type="button" :disabled="state !== 'ready' || zoom >= 200" aria-label="放大" @click="run(() => setZoom(zoom + 25))">＋</button>
+        <button type="button" :disabled="state !== 'ready' || zoom <= 50" :aria-label="m.common.zoom.out" @click="run(() => setZoom(zoom - 25))">−</button>
+        <button type="button" :disabled="state !== 'ready'" :aria-label="m.common.zoom.reset" @click="run(() => setZoom(100))">{{ zoom }}%</button>
+        <button type="button" :disabled="state !== 'ready' || zoom >= 200" :aria-label="m.common.zoom.in" @click="run(() => setZoom(zoom + 25))">＋</button>
       </div>
     </header>
 
@@ -70,7 +70,7 @@
         v-if="showSidebar && !isPresent && document"
         ref="sidebarRef"
         class="pptx-viewer__sidebar"
-        aria-label="幻灯片列表"
+        :aria-label="m.pptx.viewer.sidebar"
         data-testid="pptx-sidebar"
         :style="{ '--pptx-thumbnail-item-height': `${thumbnailItemHeight}px` }"
         @scroll.passive="onSidebarScroll"
@@ -100,21 +100,21 @@
 
       <main ref="stageScrollRef" class="pptx-viewer__stage-wrap">
         <div v-if="state === 'empty'" class="pptx-viewer__message" data-testid="pptx-empty">
-          <slot name="empty">打开一个 PPTX 文件开始查看</slot>
+          <slot name="empty">{{ m.pptx.viewer.empty }}</slot>
         </div>
         <div v-else-if="state === 'waiting'" class="pptx-viewer__message" data-testid="pptx-waiting">
-          <slot name="waiting">正在等待幻灯片舞台…</slot>
+          <slot name="waiting">{{ m.pptx.viewer.waiting }}</slot>
         </div>
         <div v-else-if="state === 'loading'" class="pptx-viewer__message" data-testid="pptx-loading">
-          <slot name="loading">正在加载 PPTX…</slot>
+          <slot name="loading">{{ m.pptx.viewer.loading }}</slot>
         </div>
         <div v-else-if="state === 'cancelled'" class="pptx-viewer__message" data-testid="pptx-cancelled">
-          <slot name="cancelled" :error="error">{{ error?.message ?? "PPTX 加载已取消。" }}</slot>
-          <button type="button" data-testid="pptx-cancelled-retry" @click="run(reopen)">重新加载</button>
+          <slot name="cancelled" :error="error">{{ error?.message ?? m.pptx.viewer.cancelled }}</slot>
+          <button type="button" data-testid="pptx-cancelled-retry" @click="run(reopen)">{{ m.pptx.viewer.reload }}</button>
         </div>
         <div v-else-if="state === 'error'" class="pptx-viewer__message pptx-viewer__message--error" data-testid="pptx-error">
           <slot name="error" :error="error">{{ error?.message }}</slot>
-          <button v-if="props.source" type="button" data-testid="pptx-error-retry" @click="run(reopen)">重试</button>
+          <button v-if="props.source" type="button" data-testid="pptx-error-retry" @click="run(reopen)">{{ m.pptx.viewer.retry }}</button>
         </div>
         <div
           v-if="slideFailure"
@@ -123,11 +123,11 @@
           data-testid="pptx-slide-error"
         >
           <slot name="slide-error" :error="slideFailure.error" :index="slideFailure.index">
-            <span>第 {{ slideFailure.index + 1 }} 页渲染失败：{{ slideFailure.error.message }}</span>
+            <span>{{ formatOfficeMessage(m.pptx.viewer.slideRenderFailed, { page: slideFailure.index + 1, message: slideFailure.error.message }) }}</span>
           </slot>
           <span class="pptx-viewer__slide-error-actions">
-            <button type="button" data-testid="pptx-slide-retry" @click="run(retrySlide)">重试</button>
-            <button type="button" data-testid="pptx-slide-skip" @click="run(skipSlide)">跳过</button>
+            <button type="button" data-testid="pptx-slide-retry" @click="run(retrySlide)">{{ m.pptx.viewer.retry }}</button>
+            <button type="button" data-testid="pptx-slide-skip" @click="run(skipSlide)">{{ m.pptx.viewer.skip }}</button>
           </span>
         </div>
         <PptxStage
@@ -146,31 +146,31 @@
 
     <footer v-if="isPresent && showPlaybackControls" class="pptx-viewer__playback-controls">
       <div class="pptx-viewer__playback-group">
-        <button type="button" :disabled="state !== 'ready'" aria-label="上一步" @click="void invoke(previous)">上一步</button>
+        <button type="button" :disabled="state !== 'ready'" :aria-label="m.pptx.viewer.previousStep" @click="void invoke(previous)">{{ m.pptx.viewer.previousStep }}</button>
         <button type="button" :disabled="state !== 'ready'" :aria-label="playbackToggleLabel" @click="togglePlayback">
           {{ playbackToggleLabel }}
         </button>
-        <button type="button" :disabled="state !== 'ready'" aria-label="下一步" @click="void invoke(next)">下一步</button>
-        <button type="button" :disabled="state !== 'ready'" aria-label="重新播放" @click="void invoke(reset)">重新播放</button>
+        <button type="button" :disabled="state !== 'ready'" :aria-label="m.pptx.viewer.nextStep" @click="void invoke(next)">{{ m.pptx.viewer.nextStep }}</button>
+        <button type="button" :disabled="state !== 'ready'" :aria-label="m.pptx.viewer.replay" @click="void invoke(reset)">{{ m.pptx.viewer.replay }}</button>
       </div>
       <span class="pptx-viewer__playback-status">
         {{ document ? `${activeIndex + 1} / ${document.slides.length}` : "0 / 0" }}
         · {{ playbackStatusText }}
       </span>
       <span v-if="showCapabilityStatus && capability" class="pptx-viewer__capability">
-        精确 {{ capability.strict }}/{{ capability.discovered }}
-        <template v-if="capability.approximate"> · 近似 {{ capability.approximate }}</template>
-        <template v-if="capability.static"> · 静态 {{ capability.static }}</template>
-        <template v-if="capability.unparsed"> · 未解析 {{ capability.unparsed }}</template>
+        {{ formatOfficeMessage(m.pptx.viewer.capability.strict, { count: capability.strict, total: capability.discovered }) }}
+        <template v-if="capability.approximate"> · {{ formatOfficeMessage(m.pptx.viewer.capability.approximate, { count: capability.approximate }) }}</template>
+        <template v-if="capability.static"> · {{ formatOfficeMessage(m.pptx.viewer.capability.static, { count: capability.static }) }}</template>
+        <template v-if="capability.unparsed"> · {{ formatOfficeMessage(m.pptx.viewer.capability.unparsed, { count: capability.unparsed }) }}</template>
       </span>
       <div class="pptx-viewer__playback-group">
         <button
           v-if="playbackSnapshot?.blockedMediaIds.length"
           type="button"
-          aria-label="继续播放媒体"
+          :aria-label="m.pptx.viewer.resumeMediaAction"
           @click="void invoke(() => resumeBlockedMedia())"
-        >继续媒体</button>
-        <button type="button" aria-label="全屏" @click="void invoke(enterFullscreen)">全屏</button>
+        >{{ m.pptx.viewer.resumeMedia }}</button>
+        <button type="button" :aria-label="m.pptx.viewer.fullscreen" @click="void invoke(enterFullscreen)">{{ m.pptx.viewer.fullscreen }}</button>
       </div>
     </footer>
   </section>
@@ -203,6 +203,9 @@ import {
 } from "@arcships/pptx-core/browser"
 import type { PptxSearchState, UsePptxDocumentOptions, PptxStageExpose } from "./headless-types"
 import { OfficeLiveStatus } from "@arcships/vue-ui"
+import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
+import { formatOfficeMessage } from "@arcships/office-interaction"
+import { providePptxMessages } from "./i18n"
 import { usePptxDocument } from "./composables/usePptxDocument"
 import { usePptxPlayback } from "./composables/usePptxPlayback"
 import { watchFontLoading } from "./composables/font-loading"
@@ -235,6 +238,8 @@ const props = withDefaults(defineProps<{
   showToolbar?: boolean
   showWarnings?: boolean
   thumbnailWidth?: number
+  locale?: OfficeLocale
+  messages?: OfficeMessagesOverride
 }>(), {
   source: null,
   mode: "browse",
@@ -257,6 +262,8 @@ const props = withDefaults(defineProps<{
   showToolbar: true,
   showWarnings: true,
   thumbnailWidth: 148,
+  locale: "en",
+  messages: undefined,
 })
 
 const emit = defineEmits<{
@@ -284,6 +291,8 @@ const THUMBNAIL_CHROME_PX = 48
 const THUMBNAIL_MIN_CANVAS_PX = 84
 const SIDEBAR_OVERSCAN_ROWS = 3
 const SIDEBAR_FALLBACK_VIEWPORT_PX = 640
+
+const m = providePptxMessages(() => props.locale, () => props.messages)
 
 const viewerRef = ref<HTMLElement | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
@@ -433,38 +442,49 @@ const visibleSlides = computed(() =>
   document.value?.slides.slice(sidebarWindow.value.start, sidebarWindow.value.end) ?? [],
 )
 
-const playbackToggleLabel = computed(() => playbackSnapshot.value?.status === "running" ? "暂停" : "播放")
+const playbackToggleLabel = computed(() => playbackSnapshot.value?.status === "running"
+  ? m.value.pptx.viewer.pause
+  : m.value.pptx.viewer.play)
 const playbackStatusText = computed(() => {
   const labels: Record<string, string> = {
-    idle: "尚未开始",
-    ready: "已就绪",
-    transitioning: "正在切换",
-    running: "正在播放",
-    waiting: "等待下一步",
-    paused: "已暂停",
-    blocked: "等待媒体授权",
-    ended: "播放结束",
-    disposed: "已关闭",
+    idle: m.value.pptx.viewer.status.idle,
+    ready: m.value.pptx.viewer.status.ready,
+    transitioning: m.value.pptx.viewer.status.transitioning,
+    running: m.value.pptx.viewer.status.running,
+    waiting: m.value.pptx.viewer.status.waiting,
+    paused: m.value.pptx.viewer.status.paused,
+    blocked: m.value.pptx.viewer.status.blocked,
+    ended: m.value.pptx.viewer.status.ended,
+    disposed: m.value.pptx.viewer.status.disposed,
   }
-  return labels[playbackSnapshot.value?.status ?? "idle"] ?? "尚未开始"
+  return labels[playbackSnapshot.value?.status ?? "idle"] ?? m.value.pptx.viewer.status.idle
 })
 
 function requireController(): PptxPlaybackController {
-  if (!controller.value) throw new PptxPlaybackError("PLAYBACK_NOT_READY", "PPTX 播放控制器尚未准备好。")
+  if (!controller.value) throw new PptxPlaybackError("PLAYBACK_NOT_READY", m.value.pptx.viewer.error.controllerNotReady)
   return controller.value
 }
 
 // Slide changes, playback and load failures were visible only to sighted users.
 // One stable live region announces them for assistive technology.
 const liveStatusMessage = computed(() => {
-  if (state.value === "empty") return "没有打开幻灯片文件"
-  if (state.value === "loading") return "正在加载幻灯片文件"
-  if (state.value === "error") return `无法打开幻灯片文件：${error.value?.message ?? "未知错误"}`
+  if (state.value === "empty") return m.value.pptx.viewer.live.empty
+  if (state.value === "loading") return m.value.pptx.viewer.live.loading
+  if (state.value === "error") {
+    return formatOfficeMessage(m.value.pptx.viewer.live.error, {
+      message: error.value?.message ?? m.value.pptx.viewer.live.unknownError,
+    })
+  }
   const total = document.value?.slides.length ?? 0
-  const position = `第 ${activeIndex.value + 1} 张，共 ${total} 张`
-  const hidden = activeSlide.value?.hidden ? "，隐藏页" : ""
-  const playbackStatus = isPresent.value ? `，${playbackStatusText.value}` : ""
-  return `幻灯片已就绪，${position}${hidden}${playbackStatus}`
+  const position = formatOfficeMessage(m.value.pptx.viewer.live.ready, {
+    current: activeIndex.value + 1,
+    total,
+  })
+  const hidden = activeSlide.value?.hidden ? m.value.pptx.viewer.live.hiddenSuffix : ""
+  const playbackStatus = isPresent.value
+    ? formatOfficeMessage(m.value.pptx.viewer.live.playbackSuffix, { status: playbackStatusText.value })
+    : ""
+  return `${position}${hidden}${playbackStatus}`
 })
 
 function toPlaybackError(reason: unknown): PptxPlaybackError {
@@ -472,7 +492,7 @@ function toPlaybackError(reason: unknown): PptxPlaybackError {
     ? reason
     : new PptxPlaybackError(
       "UNSUPPORTED_FEATURE",
-      reason instanceof Error ? reason.message : "PPTX 播放操作失败。",
+      reason instanceof Error ? reason.message : m.value.pptx.viewer.error.operationFailed,
       { cause: reason },
     )
 }
@@ -490,7 +510,7 @@ function toDocumentError(reason: unknown): PptxPreviewError {
     ? reason
     : new PptxPreviewError(
       "RENDER_FAILED",
-      reason instanceof Error ? reason.message : "PPTX 操作失败。",
+      reason instanceof Error ? reason.message : m.value.pptx.viewer.error.documentOperationFailed,
       reason,
     )
 }
@@ -537,7 +557,7 @@ function onPlaybackEvent(event: PptxPlaybackEvent): void {
 
 function requireSession(): PptxPreviewSession {
   const session = pptxDocument.getSession()
-  if (!session) throw new PptxPreviewError("RENDER_FAILED", "PPTX 预览会话尚未准备好。")
+  if (!session) throw new PptxPreviewError("RENDER_FAILED", m.value.pptx.viewer.error.previewNotReady)
   return session
 }
 
@@ -680,12 +700,12 @@ function togglePlayback(): void {
 async function enterFullscreen(): Promise<void> {
   const element = viewerRef.value
   if (!element?.requestFullscreen) {
-    throw new PptxPlaybackError("FULLSCREEN_REJECTED", "当前环境不支持全屏播放。")
+    throw new PptxPlaybackError("FULLSCREEN_REJECTED", m.value.pptx.viewer.error.fullscreenUnsupported)
   }
   try {
     await element.requestFullscreen()
   } catch (reason) {
-    throw new PptxPlaybackError("FULLSCREEN_REJECTED", "浏览器拒绝进入全屏。", { cause: reason })
+    throw new PptxPlaybackError("FULLSCREEN_REJECTED", m.value.pptx.viewer.error.fullscreenEnterRejected, { cause: reason })
   }
 }
 
@@ -695,7 +715,7 @@ async function exitFullscreen(): Promise<void> {
   try {
     await browserDocument.exitFullscreen()
   } catch (reason) {
-    throw new PptxPlaybackError("FULLSCREEN_REJECTED", "浏览器拒绝退出全屏。", { cause: reason })
+    throw new PptxPlaybackError("FULLSCREEN_REJECTED", m.value.pptx.viewer.error.fullscreenExitRejected, { cause: reason })
   }
 }
 

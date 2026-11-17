@@ -15,6 +15,8 @@
 <script setup lang="ts">
 import { computed, type CSSProperties } from "vue";
 import type { XlsxViewerController, XlsxCellAddress } from "@arcships/xlsx-core";
+import { formatOfficeMessage } from "@arcships/office-interaction";
+import { useXlsxMessages } from "../i18n";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -22,6 +24,7 @@ const props = defineProps<{
   selectionColor?: string;
   selectionFillColor?: string;
 }>();
+const m = useXlsxMessages();
 
 // The grid owns the visual selection. This companion layer gives the same
 // selection a stable accessibility announcement without intercepting input.
@@ -30,8 +33,8 @@ const selectionAddress = computed(
 );
 const selectionAnnouncement = computed(() =>
   selectionAddress.value
-    ? `当前选择 ${selectionAddress.value}`
-    : "当前没有选择单元格"
+    ? formatOfficeMessage(m.value.xlsx.selection.current, { address: selectionAddress.value })
+    : m.value.xlsx.selection.none
 );
 </script>
 
