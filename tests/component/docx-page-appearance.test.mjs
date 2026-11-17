@@ -150,6 +150,29 @@ test("DOCX page surface paints document background, pgBorders and a full-page co
   mounted.app.unmount();
 });
 
+test("DOCX page surface paints a patterned background fill", async () => {
+  const model = createBlankDocumentModel();
+  model.metadata.documentBackgroundColor = "DDEBF7";
+  model.metadata.documentBackgroundPattern = {
+    preset: "pct20",
+    foregroundColor: "#2F5597",
+    backgroundColor: "#DDEBF7",
+  };
+  model.nodes = [paragraph([{ type: "text", text: "Patterned page" }])];
+
+  const mounted = await mountSurface(model);
+  const surface = surfaceNode(mounted.root);
+  assert.equal(surface.props.style.backgroundColor, "#DDEBF7");
+  assert.match(
+    surface.props.style.backgroundImage,
+    /^radial-gradient\(circle, #2F5597/
+  );
+  assert.equal(surface.props.style.backgroundSize, "22px 22px");
+  assert.equal(surface.props.style.backgroundRepeat, "repeat");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
 test("DOCX viewer root passes document background and section borders into every page surface", async () => {
   const model = createBlankDocumentModel();
   model.metadata.documentBackgroundColor = "FFF2CC";

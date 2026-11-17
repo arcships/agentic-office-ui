@@ -80,6 +80,8 @@ import {
   resolveSectionIndexForNodeIndex,
   resolveSectionPropertiesXmlForNodeIndex,
   selectSectionVariantForPage,
+  pagePatternPaintStyle,
+  paintPagePatternOnCanvas,
 } from "@arcships/docx-core"
 import {
   ensureDocxViewerPageSurfaceRegistry,
@@ -139,6 +141,12 @@ const documentLayout = computed(() => {
 })
 const documentBackgroundColor = computed(() =>
   resolveDocumentBackgroundColor(resolvedModel.value?.metadata.documentBackgroundColor)
+)
+const documentBackgroundPattern = computed(
+  () => resolvedModel.value?.metadata.documentBackgroundPattern
+)
+const documentPagePatternStyle = computed(() =>
+  pagePatternPaintStyle(documentBackgroundPattern.value)
 )
 const resolvedLayoutOptions = computed<LayoutOptions>(() => ({
   pageWidth: documentLayout.value?.pageWidthPx ?? 816,
@@ -912,8 +920,15 @@ function renderVisibleThumbnails(): void {
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      ctx.fillStyle = documentBackgroundColor.value ?? "#ffffff"
+      ctx.fillStyle =
+        documentPagePatternStyle.value.backgroundColor ??
+        documentBackgroundColor.value ??
+        "#ffffff"
       ctx.fillRect(0, 0, metric.width, metric.height)
+      paintPagePatternOnCanvas(ctx, documentBackgroundPattern.value, {
+        widthPx: metric.width,
+        heightPx: metric.height,
+      })
       ctx.strokeStyle = "#d4d4d4"
       ctx.lineWidth = 1
       ctx.strokeRect(0.5, 0.5, metric.width - 1, metric.height - 1)

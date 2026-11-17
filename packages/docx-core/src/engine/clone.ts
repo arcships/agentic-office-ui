@@ -578,6 +578,9 @@ export function cloneDocModel(model: DocModel): DocModel {
       documentPageCount: model.metadata.documentPageCount,
       documentOpenTag: model.metadata.documentOpenTag,
       documentBackgroundColor: model.metadata.documentBackgroundColor,
+      documentBackgroundPattern: model.metadata.documentBackgroundPattern
+        ? { ...model.metadata.documentBackgroundPattern }
+        : undefined,
       sectionPropertiesXml: model.metadata.sectionPropertiesXml,
       sections: model.metadata.sections?.map((section) => ({
         startNodeIndex: section.startNodeIndex,

@@ -38,6 +38,10 @@ export {
   mergeNoteNumberingProperties,
 } from "./note-properties";
 
+// Page background colour and pattern parsing (w:background)
+export { parseDocumentBackground } from "./page-background";
+export type { ParsedDocumentBackground } from "./page-background";
+
 // WASM bridge: initWasm / setWasmSource / wasmParseDocx / wasmSerializeDocx / ...
 export type { WasmSource, WasmOoxmlPart, WasmOoxmlPackage, LegacyWasmOoxmlPackage } from "./wasm";
 export {

@@ -33,6 +33,9 @@ export * from "./content-signature";
 // Section layout (page margins, borders, twips conversion)
 export * from "./section-layout";
 
+// Page background pattern/shading paint (CSS + canvas)
+export * from "./page-pattern-paint";
+
 // Image rendering (TIFF → PNG, EMF/WMF placeholder)
 export * from "./image-render";
 
