@@ -28,6 +28,7 @@ import type {
   DocxComment,
   DocxPaginationInfo,
   ParagraphLocation,
+  DocxEditorStatusMessages,
 } from "@arcships/docx-core"
 
 export interface ApplyModelChangeOptions {
@@ -65,6 +66,11 @@ export interface EditorCore {
   historyBudget: { maxEntries: number; maxBytes: number }
   estimateHistorySnapshotBytes: (snapshot: DocxHistorySnapshot) => number
   status: Ref<string>
+  /** Resolve a localized editor status message with placeholder values. */
+  statusMessage: (
+    key: keyof DocxEditorStatusMessages,
+    values?: Record<string, string | number>,
+  ) => string
   selectedFormFieldLocation: Ref<DocxFormFieldLocation | undefined>
   documentLoadNonce: Ref<number>
   fileName: Ref<string>

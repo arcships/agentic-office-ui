@@ -317,6 +317,46 @@ export type DocxBorderPreset =
 
 export type DocxBorderPresetState = Record<DocxBorderPreset, boolean>;
 
+/** Status messages emitted by editor commands, keyed for host localization. */
+export interface DocxEditorStatusMessages {
+  ready: string;
+  copied: string;
+  pasted: string;
+  listParagraphNotFound: string;
+  listAppliedBullet: string;
+  listAppliedNumbered: string;
+  /** Template with a `{level}` placeholder. */
+  maximumListLevel: string;
+  discardChanges: string;
+  /** Template with a `{name}` placeholder. */
+  loadingFile: string;
+  /** Template with a `{message}` placeholder. */
+  importFailed: string;
+  unsupportedFile: string;
+  exportCancelledChanged: string;
+  exportNotReady: string;
+  /** Template with a `{message}` placeholder. */
+  exportFailed: string;
+  /** Template with a `{label}` placeholder. */
+  exportRequiredField: string;
+  exportRequiredFieldEmpty: string;
+  exporting: string;
+  /** Template with a `{phase}` placeholder. */
+  exportingPhase: string;
+  exported: string;
+  unknownImportError: string;
+  unknownExportError: string;
+  /** Template with a `{count}` placeholder. */
+  acceptedChanges: string;
+  acceptedChange: string;
+  /** Template with a `{count}` placeholder. */
+  rejectedChanges: string;
+  rejectedChange: string;
+  /** Template with a `{count}` placeholder. */
+  formattingCleared: string;
+  formattingClearedOne: string;
+}
+
 export interface UseDocxEditorOptions {
   /**
    * Model used for `editor.newDocument()` and for the initial empty editor.
@@ -336,6 +376,13 @@ export interface UseDocxEditorOptions {
    * @defaultValue `"Ready"`
    */
   initialStatus?: string;
+  /**
+   * Localized status messages for commands. Can be a getter so a host can
+   * switch locale while the editor stays mounted.
+   */
+  statusMessages?:
+    | Partial<DocxEditorStatusMessages>
+    | (() => Partial<DocxEditorStatusMessages>);
   /**
    * Initial document surface theme.
    *

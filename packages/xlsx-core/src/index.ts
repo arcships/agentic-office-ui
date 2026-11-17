@@ -143,6 +143,7 @@ export type {
   XlsxConditionalIconSetRule,
   XlsxDataValidation,
   XlsxDataValidationFeedback,
+  XlsxDataValidationMessageKey,
   XlsxFileTooLargeRenderProps,
   XlsxFormControl,
   XlsxFormControlInput,

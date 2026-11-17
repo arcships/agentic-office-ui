@@ -6,7 +6,7 @@ export interface UseClipboardCopyNoticeOptions {
   /** How long the failure notice stays visible. */
   durationMs?: number
   /** Message shown when the browser refuses the copy. */
-  failureMessage?: string
+  failureMessage?: string | (() => string)
 }
 
 export interface ClipboardCopyNotice {
@@ -16,7 +16,7 @@ export interface ClipboardCopyNotice {
   clear(): void
 }
 
-const DEFAULT_FAILURE_MESSAGE = "复制失败：当前浏览器不允许写入剪贴板。"
+const DEFAULT_FAILURE_MESSAGE = "Copy failed: this browser does not allow clipboard writes."
 const DEFAULT_DURATION_MS = 3200
 
 /**
@@ -30,7 +30,9 @@ export function useClipboardCopyNotice(
 ): ClipboardCopyNotice {
   const notice = shallowRef("")
   const durationMs = options.durationMs ?? DEFAULT_DURATION_MS
-  const failureMessage = options.failureMessage ?? DEFAULT_FAILURE_MESSAGE
+  const resolveFailureMessage = () => typeof options.failureMessage === "function"
+    ? options.failureMessage()
+    : options.failureMessage ?? DEFAULT_FAILURE_MESSAGE
   let timer: ReturnType<typeof setTimeout> | undefined
 
   function clear() {
@@ -41,7 +43,7 @@ export function useClipboardCopyNotice(
 
   function reportFailure() {
     clear()
-    notice.value = failureMessage
+    notice.value = resolveFailureMessage()
     timer = setTimeout(() => {
       timer = undefined
       notice.value = ""

@@ -126,11 +126,23 @@ export interface XlsxDataValidation {
   value2?: string;
 }
 
+/** Built-in validation message keys that hosts can localize. */
+export type XlsxDataValidationMessageKey =
+  | "list"
+  | "whole"
+  | "decimal"
+  | "textLength"
+  | "date"
+  | "time"
+  | "generic";
+
 /** Feedback produced when user input violates a data validation rule. */
 export interface XlsxDataValidationFeedback {
   cell: XlsxCellAddress;
   kind: "error" | "information" | "warning";
   message: string;
+  /** Set for built-in messages; hosts may localize on this key. */
+  defaultMessageKey?: XlsxDataValidationMessageKey;
   title?: string;
 }
 

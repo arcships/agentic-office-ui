@@ -93,7 +93,7 @@ test("DOCX image decode errors expose a stable state and public callback", () =>
     code: "IMAGE_DECODE_FAILED",
     phase: "image-decode",
     imageKey: "decode-state-run-0",
-    message: "DOCX 图片无法解码。",
+    message: "DOCX image could not be decoded.",
   }]);
 });
 

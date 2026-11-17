@@ -17,6 +17,7 @@ export type {
   // Data validation / freeze panes
   XlsxDataValidation,
   XlsxDataValidationFeedback,
+  XlsxDataValidationMessageKey,
   XlsxFreezePanes,
   XlsxSheetProtection,
   XlsxSheetProtectionAction,

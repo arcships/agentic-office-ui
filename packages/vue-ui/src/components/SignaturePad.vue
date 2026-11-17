@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { useOfficeUiMessages } from "../i18n"
 
 export interface SignaturePadProps {
   width?: number
@@ -16,6 +17,7 @@ const props = withDefaults(defineProps<SignaturePadProps>(), {
   backgroundColor: "transparent",
   className: "",
 })
+const m = useOfficeUiMessages()
 
 const emit = defineEmits<{
   "update:signature": [dataUrl: string | null]
@@ -128,7 +130,7 @@ defineExpose({
         class="rounded-md border border-border bg-background px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
         @click="clearPad"
       >
-        Clear
+        {{ m.vueUi.signaturePad.clear }}
       </button>
     </div>
   </div>

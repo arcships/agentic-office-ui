@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
+import { useOfficeUiMessages } from "../i18n"
 
 export interface LayoutBlock {
   id: string
@@ -32,6 +33,7 @@ export interface LayoutBlocksProps {
 const props = withDefaults(defineProps<LayoutBlocksProps>(), {
   className: "",
 })
+const m = useOfficeUiMessages()
 
 const emit = defineEmits<{
   "block-click": [block: LayoutBlock]
@@ -85,7 +87,7 @@ function selectBlock(block: LayoutBlock) {
     <div class="layout-image-frame">
       <img
         :src="props.file"
-        alt="Layout preview"
+        :alt="m.vueUi.layoutBlocks.imageAlt"
         class="layout-image"
         :style="imageStyle"
       />
@@ -131,7 +133,7 @@ function selectBlock(block: LayoutBlock) {
     </div>
 
     <p v-if="props.output.blocks.length === 0" class="empty-state">
-      No layout blocks detected
+      {{ m.vueUi.layoutBlocks.noBlocks }}
     </p>
   </div>
 </template>

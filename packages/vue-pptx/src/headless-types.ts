@@ -29,11 +29,27 @@ export type PptxStageTarget =
   | Readonly<Ref<HTMLElement | null>>
   | (() => HTMLElement | null)
 
+export interface PptxDocumentErrorMessages {
+  loadFailed: string
+  previewNotReady: string
+  disposed: string
+  staleOpen: string
+  timeout: string
+  /** Template with an `{ms}` placeholder. */
+  timeoutMs: string
+  staleResult: string
+  aborted: string
+  /** Template with a `{message}` placeholder. */
+  slideRenderFailedWithMessage: string
+  slideRenderFailed: string
+}
+
 export interface UsePptxDocumentOptions {
   source?: ValueOrRefOrGetter<PptxPreviewSource | null | undefined>
   initialSlide?: ValueOrRefOrGetter<number | undefined>
   session?: ValueOrRefOrGetter<PptxDocumentSessionOptions | undefined>
   openTimeoutMs?: ValueOrRefOrGetter<number | undefined>
+  messages?: ValueOrRefOrGetter<Partial<PptxDocumentErrorMessages> | undefined>
 }
 
 export type PptxDocumentState =

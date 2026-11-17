@@ -213,7 +213,7 @@ import {
   resolveOverflowTextWidth,
   sheetCellKey,
 } from "./grid-paint";
-import { isDataValidationListDropdownVisible } from "../composables/validation";
+import { isDataValidationListDropdownVisible, localizeDataValidationFeedback } from "../composables/validation";
 import { localizeFormattedNumber, parseDisplayedNumber } from "../composables/cell-input";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { useXlsxMessages } from "../i18n";
@@ -234,7 +234,9 @@ const emit = defineEmits<{
   viewportChange: [viewport: { scrollLeft: number; scrollTop: number; width: number; height: number }];
 }>();
 
-const { notice: clipboardNotice, copySelection } = useClipboardCopyNotice(() => props.controller);
+const { notice: clipboardNotice, copySelection } = useClipboardCopyNotice(() => props.controller, {
+  failureMessage: () => m.value.xlsx.clipboard.copyFailed,
+});
 
 // ── Constants ──────────────────────────────────────────────────────────
 const DEFAULT_ROW_HEIGHT = 24;
@@ -467,6 +469,7 @@ const validationFeedbackView = computed(() => {
   if (!anchor) return null;
   return {
     ...feedback,
+    message: localizeDataValidationFeedback(feedback, m.value.xlsx.validation),
     style: {
       left: `${ROW_HEADER_WIDTH + anchor.left}px`,
       top: `${HEADER_HEIGHT + anchor.top + 4}px`,

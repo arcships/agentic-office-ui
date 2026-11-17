@@ -25,12 +25,12 @@
       class="docx-gutter-drawer-tab"
       data-docx-gutter-drawer-tab="true"
       :aria-expanded="drawerOpen ? 'true' : 'false'"
-      :title="drawerOpen ? 'Hide comments' : 'Show comments'"
+      :title="drawerOpen ? m.docx.gutter.hideComments : m.docx.gutter.showComments"
       @click.stop="toggleDrawer"
       @keydown.stop
     >
       <span class="docx-gutter-drawer-tab-count">{{ positioned.length }}</span>
-      <span class="docx-gutter-drawer-tab-label">{{ drawerOpen ? "Comments" : "" }}</span>
+      <span class="docx-gutter-drawer-tab-label">{{ drawerOpen ? m.docx.gutter.comments : "" }}</span>
     </button>
     <div
       v-for="entry of visibleCards"

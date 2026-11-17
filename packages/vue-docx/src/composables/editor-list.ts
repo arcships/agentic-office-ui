@@ -62,7 +62,7 @@ export function createEditorList(
         if (paragraph) paragraphs.push(paragraph)
       }
       if (paragraphs.length === 0) {
-        ctx.status.value = "Cannot change the list: paragraph not found"
+        ctx.status.value = ctx.statusMessage("listParagraphNotFound")
         return current
       }
 
@@ -90,7 +90,9 @@ export function createEditorList(
         para.sourceXml = undefined
       }
       return nextModel
-    }, listType === "unordered" ? "Applied bullet list" : "Applied numbered list")
+    }, listType === "unordered"
+      ? ctx.statusMessage("listAppliedBullet")
+      : ctx.statusMessage("listAppliedNumbered"))
   }
 
   const adjustSelectedListDepth = (levelDelta: number, _draftText?: string): boolean => {
@@ -107,7 +109,7 @@ export function createEditorList(
     const nextIlvl = Math.max(0, Math.min(maxLevel, currentIlvl + levelDelta))
     if (nextIlvl === currentIlvl) {
       if (levelDelta > 0 && currentIlvl >= maxLevel) {
-        ctx.status.value = `Maximum list level is ${maxLevel + 1}`
+        ctx.status.value = ctx.statusMessage("maximumListLevel", { level: maxLevel + 1 })
       }
       return false
     }

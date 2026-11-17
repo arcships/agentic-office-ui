@@ -14,7 +14,6 @@ import { onScopeDispose, watch } from "vue"
 import type { EditorCore } from "./editor-shared"
 import { isRequiredFormFieldEmpty } from "./form-field-value"
 import {
-  DOCX_UNSUPPORTED_FILE_MESSAGE,
   docxExportFileName,
   docxExportMimeType,
   isSupportedDocxFileName,
@@ -47,7 +46,7 @@ export function createEditorImportExport(ctx: EditorCore) {
     const confirmFn = (globalThis as { confirm?: (message?: string) => boolean }).confirm
     if (typeof confirmFn !== "function") return true
     try {
-      return Boolean(confirmFn("Discard unsaved changes?"))
+      return Boolean(confirmFn(ctx.statusMessage("discardChanges")))
     } catch {
       return false
     }
@@ -115,7 +114,7 @@ export function createEditorImportExport(ctx: EditorCore) {
       const wasPending = !task.delivered
       cleanupExportTask(task)
       if (reason === "document-changed" && wasPending) {
-        ctx.status.value = "Export cancelled: document changed"
+        ctx.status.value = ctx.statusMessage("exportCancelledChanged")
       }
     }
   }
@@ -164,7 +163,7 @@ export function createEditorImportExport(ctx: EditorCore) {
     ctx.pendingRunStyleSnapshot.value = undefined
     ctx.selectedFormFieldLocation.value = undefined
     ctx.importError.value = undefined
-    ctx.status.value = "Ready"
+    ctx.status.value = ctx.statusMessage("ready")
   }
 
   // ── importDocxFile ───────────────────────────────────────────────
@@ -175,7 +174,7 @@ export function createEditorImportExport(ctx: EditorCore) {
 
     if (!isSupportedDocxFileName(file.name)) {
       ctx.isImporting.value = false
-      ctx.status.value = DOCX_UNSUPPORTED_FILE_MESSAGE
+      ctx.status.value = ctx.statusMessage("unsupportedFile")
       return
     }
 
@@ -184,7 +183,7 @@ export function createEditorImportExport(ctx: EditorCore) {
 
     ctx.isImporting.value = true
     ctx.importError.value = undefined
-    ctx.status.value = `Loading ${file.name}...`
+    ctx.status.value = ctx.statusMessage("loadingFile", { name: file.name })
 
     const isCurrentImport = (): boolean => (
       activeImport === importToken
@@ -214,12 +213,12 @@ export function createEditorImportExport(ctx: EditorCore) {
       ctx.pendingRunStyleSnapshot.value = undefined
       ctx.selectedFormFieldLocation.value = undefined
       ctx.importError.value = undefined
-      ctx.status.value = "Ready"
+      ctx.status.value = ctx.statusMessage("ready")
     } catch (error) {
       if (!isCurrentImport()) return
-      const err = error instanceof Error ? error : new Error("Unknown import error")
+      const err = error instanceof Error ? error : new Error(ctx.statusMessage("unknownImportError"))
       ctx.importError.value = err
-      ctx.status.value = `Failed to load file: ${err.message}`
+      ctx.status.value = ctx.statusMessage("importFailed", { message: err.message })
     } finally {
       if (!isCurrentImport()) return
       ctx.isImporting.value = false
@@ -241,7 +240,7 @@ export function createEditorImportExport(ctx: EditorCore) {
     // Exporting the starter model while an import is still parsing would save
     // the wrong document and race the load completion.
     if (ctx.isImporting.value || activeImport !== undefined) {
-      ctx.status.value = "Wait for the document to finish loading before exporting"
+      ctx.status.value = ctx.statusMessage("exportNotReady")
       return
     }
 
@@ -260,8 +259,8 @@ export function createEditorImportExport(ctx: EditorCore) {
         ctx.model.value = exportModel
       }
     } catch (error) {
-      const err = error instanceof Error ? error : new Error("Unknown export error")
-      ctx.status.value = `Export failed: ${err.message}`
+      const err = error instanceof Error ? error : new Error(ctx.statusMessage("unknownExportError"))
+      ctx.status.value = ctx.statusMessage("exportFailed", { message: err.message })
       return
     }
 
@@ -275,8 +274,8 @@ export function createEditorImportExport(ctx: EditorCore) {
         invalidRequiredField.field.title?.trim() ||
         invalidRequiredField.field.tag?.trim()
       ctx.status.value = label
-        ? `Cannot export: required form field "${label}" is empty`
-        : "Cannot export: a required form field is empty"
+        ? ctx.statusMessage("exportRequiredField", { label })
+        : ctx.statusMessage("exportRequiredFieldEmpty")
       return
     }
 
@@ -297,7 +296,7 @@ export function createEditorImportExport(ctx: EditorCore) {
     activeExportToken = token
     activeExport = task
 
-    ctx.status.value = "Exporting DOCX..."
+    ctx.status.value = ctx.statusMessage("exporting")
     ;(async () => {
       try {
         const output = await exportDocxBuffer(exportModel, basePackage, {
@@ -305,7 +304,7 @@ export function createEditorImportExport(ctx: EditorCore) {
           limits: runtime.limits,
           onProgress: (progress) => {
             if (!isCurrentExport(task)) return
-            ctx.status.value = `Exporting DOCX: ${progress.phase}...`
+            ctx.status.value = ctx.statusMessage("exportingPhase", { phase: progress.phase })
           },
         })
         if (!isCurrentExport(task)) {
@@ -348,14 +347,14 @@ export function createEditorImportExport(ctx: EditorCore) {
           return
         }
         ctx.cleanModel.value = exportModel
-        ctx.status.value = "Exported DOCX"
+        ctx.status.value = ctx.statusMessage("exported")
       } catch (error) {
         const shouldReport = isCurrentExport(task)
         cleanupExportTask(task)
         if (!shouldReport) return
         activeExportToken = undefined
-        const err = error instanceof Error ? error : new Error("Unknown export error")
-        ctx.status.value = `Export failed: ${err.message}`
+        const err = error instanceof Error ? error : new Error(ctx.statusMessage("unknownExportError"))
+        ctx.status.value = ctx.statusMessage("exportFailed", { message: err.message })
       }
     })()
   }

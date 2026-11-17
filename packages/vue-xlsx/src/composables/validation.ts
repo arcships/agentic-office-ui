@@ -2,6 +2,7 @@ import type {
   XlsxCellAddress,
   XlsxDataValidation,
   XlsxDataValidationFeedback,
+  XlsxDataValidationMessageKey,
   XlsxSheetData
 } from "@arcships/xlsx-core";
 import { rangeContainsCell } from "./selection";
@@ -220,22 +221,61 @@ function matchesListOption(
   return options.some((option) => option.toLocaleLowerCase() === normalizedValue);
 }
 
-function defaultValidationMessage(validationType: string): string {
+export interface XlsxValidationMessages {
+  list: string;
+  whole: string;
+  decimal: string;
+  textLength: string;
+  date: string;
+  time: string;
+  generic: string;
+}
+
+/** Resolve built-in validation copy for the active locale. */
+export function localizeDataValidationFeedback(
+  feedback: XlsxDataValidationFeedback,
+  messages: XlsxValidationMessages,
+): string {
+  return feedback.defaultMessageKey
+    ? messages[feedback.defaultMessageKey]
+    : feedback.message;
+}
+
+function validationMessageKey(validationType: string): XlsxDataValidationMessageKey {
   switch (validationType.toLowerCase()) {
     case "list":
-      return "输入值不在允许的列表中。";
+      return "list";
     case "whole":
-      return "请输入有效的整数。";
+      return "whole";
     case "decimal":
-      return "请输入有效的数字。";
+      return "decimal";
     case "textlength":
-      return "文本长度不符合要求。";
+      return "textLength";
     case "date":
-      return "请输入有效的日期。";
+      return "date";
     case "time":
-      return "请输入有效的时间。";
+      return "time";
     default:
-      return "输入值不符合数据验证规则。";
+      return "generic";
+  }
+}
+
+function defaultValidationMessage(validationType: string): string {
+  switch (validationMessageKey(validationType)) {
+    case "list":
+      return "The value is not in the allowed list.";
+    case "whole":
+      return "Enter a valid whole number.";
+    case "decimal":
+      return "Enter a valid number.";
+    case "textLength":
+      return "The text length does not meet the requirement.";
+    case "date":
+      return "Enter a valid date.";
+    case "time":
+      return "Enter a valid time.";
+    default:
+      return "The value does not meet the data validation rule.";
   }
 }
 
@@ -283,10 +323,12 @@ function buildValidationFeedback(
   validation: XlsxDataValidation,
   kind: "error" | "information" | "warning"
 ): XlsxDataValidationFeedback {
+  const customMessage = validation.errorMessage?.trim()
   return {
     cell,
     kind,
-    message: validation.errorMessage?.trim() || defaultValidationMessage(validation.validationType),
+    message: customMessage || defaultValidationMessage(validation.validationType),
+    ...(customMessage ? {} : { defaultMessageKey: validationMessageKey(validation.validationType) }),
     title: validation.errorTitle?.trim() || undefined
   };
 }

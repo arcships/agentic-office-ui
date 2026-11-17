@@ -25,7 +25,7 @@
           <img
             v-if="item.image.src && !failedImageIds.has(item.image.id) && permittedImageIds.has(item.image.id)"
             :src="item.image.src"
-            :alt="item.image.name ?? 'image'"
+            :alt="item.image.name ?? m.xlsx.image.alt"
             class="xlsx-image-layer__img"
             :style="imageCropStyle(item.image)"
             draggable="false"
@@ -65,6 +65,7 @@ import { computed, onUnmounted, ref, watch, type CSSProperties } from "vue";
 import type { XlsxViewerController, XlsxImage, XlsxImageRect, XlsxImageResizeHandlePosition } from "@arcships/xlsx-core";
 import { createGridPaneLayout, gridBodyLayerStyle, resolveAnchorRect, type GridPaneKey } from "./grid-metrics";
 import { DRAWING_RESIZE_HANDLES, drawingHandleStyle, useDrawingGestures } from "./drawing-interaction";
+import { useXlsxMessages } from "../i18n";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -76,6 +77,7 @@ const props = defineProps<{
 }>();
 
 const layerStyle = gridBodyLayerStyle;
+const m = useXlsxMessages();
 const selectedImageId = computed(() => props.controller.selectedImageId);
 const failedImageIds = ref(new Set<string>());
 const permittedImageIds = ref(new Set<string>());

@@ -60,7 +60,8 @@ import {
   type OfficeSelectionMode,
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
-import { usePptxMessages } from "./i18n"
+import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
+import { providePptxMessages } from "./i18n"
 
 const props = withDefaults(defineProps<{
   /** Controlled zoom factor. 1 = 100%. */
@@ -71,15 +72,19 @@ const props = withDefaults(defineProps<{
   documentId?: string
   selectionMode?: OfficeSelectionMode
   emitReferenceCandidates?: boolean
+  locale?: OfficeLocale
+  messages?: OfficeMessagesOverride
 }>(), {
   enableGestureZoom: true,
   scrollContainer: null,
   selectionMode: "content",
   emitReferenceCandidates: false,
+  locale: undefined,
+  messages: undefined,
 })
 
 const elementRef = ref<HTMLElement | null>(null)
-const m = usePptxMessages()
+const m = providePptxMessages(() => props.locale, () => props.messages)
 const hostRef = ref<HTMLElement | null>(null)
 const selectionMode = computed(() => props.selectionMode)
 const revisionCounter = ref(0)

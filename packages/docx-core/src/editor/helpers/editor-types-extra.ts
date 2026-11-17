@@ -942,6 +942,11 @@ export interface UseDocxPageThumbnailsOptions {
    * @defaultValue `false`
    */
   disabled?: boolean;
+  /** Localized copy painted or reported when a thumbnail cannot render. */
+  labels?: {
+    unavailableLabel?: string;
+    unavailableReason?: string;
+  };
 }
 
 export type DocxPageThumbnailStatus =

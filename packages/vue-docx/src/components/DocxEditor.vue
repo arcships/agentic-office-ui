@@ -157,6 +157,7 @@ const internalController = !props.editor
   ? useDocxEditor({
       starterModel: props.model,
       initialFileName: props.file ? m.value.docx.editor.importedDocument : m.value.docx.editor.newDocument,
+      statusMessages: () => m.value.docx.editor.status,
     })
   : null
 const controller = props.editor ?? internalController!

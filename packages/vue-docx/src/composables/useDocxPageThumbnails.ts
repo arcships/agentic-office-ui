@@ -1,4 +1,6 @@
 import { getCurrentScope, onScopeDispose, ref } from "vue"
+import { resolveOfficeMessages } from "@arcships/office-interaction"
+import type { OfficeLocale } from "@arcships/office-interaction"
 import {
   blitDocxThumbnailSurface,
   DocxThumbnailSurfaceCache,
@@ -51,6 +53,13 @@ export interface UseDocxPageThumbnailsOptions extends DocxPageThumbnailResolutio
   maxCacheEntries?: number
   /** Approximate pixel byte budget retained by this composable instance. */
   maxCacheBytes?: number
+  /** Localized copy painted or reported when a thumbnail cannot render. */
+  labels?: {
+    unavailableLabel?: string
+    unavailableReason?: string
+  }
+  /** Resolve default thumbnail copy from the shared catalog for this locale. */
+  locale?: OfficeLocale | (() => OfficeLocale | undefined)
 }
 
 export interface UseDocxPageThumbnailsResult {
@@ -80,7 +89,24 @@ type PageSurfaceRenderOutcome =
   | { status: "stale" }
 
 const VIEWER_THUMBNAIL_UNAVAILABLE_MESSAGE =
-  "此缩略图接口没有文档来源，无法渲染。请使用 useDocxPageThumbnails(editor) 或 DocxThumbnailPanel。"
+  resolveOfficeMessages("en").docx.thumbnail.unavailableReason
+
+function resolveThumbnailLocale(
+  locale: UseDocxPageThumbnailsOptions["locale"],
+): OfficeLocale | undefined {
+  return typeof locale === "function" ? locale() : locale
+}
+
+function unavailableLabelFor(options: UseDocxPageThumbnailsOptions): string {
+  return options.labels?.unavailableLabel
+    ?? resolveOfficeMessages(resolveThumbnailLocale(options.locale)).docx.thumbnail.unavailable
+}
+
+function unavailableReasonFor(options: UseDocxPageThumbnailsOptions): string {
+  return options.labels?.unavailableReason
+    ?? resolveOfficeMessages(resolveThumbnailLocale(options.locale)).docx.thumbnail.unavailableReason
+    ?? VIEWER_THUMBNAIL_UNAVAILABLE_MESSAGE
+}
 
 function thumbnailResolution(
   sourceWidthPx: number,
@@ -152,7 +178,7 @@ function paintUnavailableThumbnail(
 }
 
 function normalizeThumbnailError(error: unknown): Error {
-  return error instanceof Error ? error : new Error("DOCX 缩略图渲染失败。")
+  return error instanceof Error ? error : new Error("DOCX thumbnail rendering failed.")
 }
 
 function scheduleMicrotask(callback: () => void): void {
@@ -283,7 +309,11 @@ export function useDocxPageThumbnails(
     const outcome = await renderPageSurface(pageIndex, force)
     if (outcome.status === "stale") return
     if (outcome.status === "unavailable") {
-      paintUnavailableThumbnail(targetCanvas, resolvePageResolution(pageIndex), "缩略图暂不可用")
+      paintUnavailableThumbnail(
+        targetCanvas,
+        resolvePageResolution(pageIndex),
+        unavailableLabelFor(options),
+      )
       return
     }
     blitDocxThumbnailSurface(outcome.entry.surface, targetCanvas, outcome.entry.resolution)
@@ -459,9 +489,12 @@ export function useDocxViewerThumbnails(
   const attachedCanvasByPage = new Map<number, HTMLCanvasElement>()
   const resolution = thumbnailResolution(options.sourceWidthPx, options.sourceHeightPx, options)
 
+  const unavailableReason = unavailableReasonFor(options)
+  const unavailableLabel = unavailableLabelFor(options)
+
   const attachCanvas = (pageIndex: number, canvas: HTMLCanvasElement): void => {
     attachedCanvasByPage.set(pageIndex, canvas)
-    paintUnavailableThumbnail(canvas, resolution, VIEWER_THUMBNAIL_UNAVAILABLE_MESSAGE)
+    paintUnavailableThumbnail(canvas, resolution, unavailableLabel)
   }
 
   const detachCanvas = (pageIndex: number): void => {
@@ -470,13 +503,13 @@ export function useDocxViewerThumbnails(
 
   const rerender = async (): Promise<void> => {
     for (const canvas of attachedCanvasByPage.values()) {
-      paintUnavailableThumbnail(canvas, resolution, VIEWER_THUMBNAIL_UNAVAILABLE_MESSAGE)
+      paintUnavailableThumbnail(canvas, resolution, unavailableLabel)
     }
   }
 
   return {
     availability: "unavailable",
-    unavailableReason: VIEWER_THUMBNAIL_UNAVAILABLE_MESSAGE,
+    unavailableReason,
     attachCanvas,
     detachCanvas,
     rerender,

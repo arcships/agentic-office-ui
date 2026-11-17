@@ -410,7 +410,7 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
       code: "IMAGE_DECODE_FAILED",
       phase: "image-decode",
       imageKey: key,
-      message: "DOCX 图片无法解码。",
+      message: "DOCX image could not be decoded.",
     })
   }
 

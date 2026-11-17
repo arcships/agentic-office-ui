@@ -25,12 +25,14 @@ import {
   type PptxPreviewSessionFactory,
   type PptxPreviewSource,
 } from "@arcships/pptx-core/browser"
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction"
 import type {
   PptxDocumentState,
   PptxOpenOptions,
   PptxSearchState,
   PptxSlideFailure,
   PptxStageTarget,
+  PptxDocumentErrorMessages,
   UsePptxDocumentOptions,
   UsePptxDocumentReturn,
 } from "../headless-types"
@@ -59,12 +61,12 @@ function resolveValue<T>(value: T | Readonly<Ref<T>> | (() => T)): T {
   return isRef(value) ? value.value : value
 }
 
-function toPreviewError(reason: unknown): PptxPreviewError {
+function toPreviewError(reason: unknown, loadFailed: string): PptxPreviewError {
   return reason instanceof PptxPreviewError
     ? reason
     : new PptxPreviewError(
       "PARSE_FAILED",
-      reason instanceof Error ? reason.message : "无法加载 PPTX。",
+      reason instanceof Error ? reason.message : loadFailed,
       reason,
     )
 }
@@ -94,6 +96,14 @@ export function usePptxDocument(
   options: UsePptxDocumentOptions = {},
 ): UsePptxDocumentReturn {
   const internalOptions = options as InternalDocumentOptions
+  const errorMessage = (
+    key: keyof PptxDocumentErrorMessages,
+    values: Record<string, string | number> = {},
+  ): string => formatOfficeMessage(
+    resolveValue(options.messages)?.[key]
+      ?? officeMessagesEn.pptx.documentErrors[key],
+    values,
+  )
   const stateValue = ref<PptxDocumentState>("idle")
   const errorValue = shallowRef<PptxPreviewError | null>(null)
   const documentValue = shallowRef<PptxPreviewDocument | null>(null)
@@ -123,7 +133,7 @@ export function usePptxDocument(
     },
     async activate(match, _index, { signal }) {
       const current = sessionValue.value
-      if (!current) throw new PptxPreviewError("RENDER_FAILED", "PPTX 预览会话尚未准备好。")
+      if (!current) throw new PptxPreviewError("RENDER_FAILED", errorMessage("previewNotReady"))
       await goTo(match.slideIndex)
       if (signal.aborted || sessionValue.value !== current) return
       await current.highlightSearchResult(match)
@@ -164,9 +174,9 @@ export function usePptxDocument(
   }
 
   async function open(source: PptxPreviewSource, openOptions?: PptxOpenOptions): Promise<PptxPreviewDocument> {
-    if (disposed) throw new PptxPreviewError("RENDER_FAILED", "PPTX 文档已经销毁。")
+    if (disposed) throw new PptxPreviewError("RENDER_FAILED", errorMessage("disposed"))
     if (pendingOpen && pendingOpen.source !== source) {
-      pendingOpen.reject(new PptxPreviewError("STALE_RESULT", "PPTX 打开请求已经被替换。"))
+      pendingOpen.reject(new PptxPreviewError("STALE_RESULT", errorMessage("staleOpen")))
       pendingOpen = null
     }
     latestSource = source
@@ -174,12 +184,12 @@ export function usePptxDocument(
     const openTimeoutMs = resolveOpenTimeoutMs(internalOptions)
     if (!element) {
       stateValue.value = "waiting-for-stage"
-      pendingOpen?.reject(new PptxPreviewError("STALE_RESULT", "PPTX 打开请求已经被替换。"))
+      pendingOpen?.reject(new PptxPreviewError("STALE_RESULT", errorMessage("staleOpen")))
       return new Promise<PptxPreviewDocument>((resolve, reject) => {
         const timedOut = (): void => {
           if (pendingOpen !== record) return
           pendingOpen = null
-          const failure = new PptxPreviewError("TIMEOUT", "PPTX 舞台长时间未就绪。")
+          const failure = new PptxPreviewError("TIMEOUT", errorMessage("timeout"))
           if (!disposed && latestSource === source) {
             errorValue.value = failure
             stateValue.value = "error"
@@ -259,14 +269,14 @@ export function usePptxDocument(
             timeoutHandle = setTimeout(() => {
               reject(new PptxPreviewError(
                 "TIMEOUT",
-                `PPTX 加载超过 ${openTimeoutMs} 毫秒仍未完成。`,
+                errorMessage("timeoutMs", { ms: openTimeoutMs }),
               ))
             }, openTimeoutMs)
           }),
         ])
         : await loading
       if (disposed || currentGeneration !== generation || sessionValue.value !== current) {
-        throw new PptxPreviewError("STALE_RESULT", "PPTX 加载结果已经过期。")
+        throw new PptxPreviewError("STALE_RESULT", errorMessage("staleResult"))
       }
       documentValue.value = loaded
       activeIndexValue.value = Math.min(initialSlide, Math.max(loaded.slides.length - 1, 0))
@@ -281,7 +291,7 @@ export function usePptxDocument(
       }
       return loaded
     } catch (reason) {
-      const failure = toPreviewError(reason)
+      const failure = toPreviewError(reason, errorMessage("loadFailed"))
       if (currentGeneration === generation && sessionValue.value === current) {
         errorValue.value = failure
         if (isCancellation(failure)) {
@@ -309,7 +319,7 @@ export function usePptxDocument(
     generation += 1
     navigationGeneration += 1
     latestSource = null
-    pendingOpen?.reject(new PptxPreviewError("ABORTED", "PPTX 打开请求已经取消。"))
+    pendingOpen?.reject(new PptxPreviewError("ABORTED", errorMessage("aborted")))
     pendingOpen = null
     releaseSession()
     documentValue.value = null
@@ -345,8 +355,8 @@ export function usePptxDocument(
           : new PptxPreviewError(
             "RENDER_FAILED",
             reason instanceof Error && reason.message
-              ? `页面渲染失败：${reason.message}`
-              : "页面渲染失败。",
+              ? errorMessage("slideRenderFailedWithMessage", { message: reason.message })
+              : errorMessage("slideRenderFailed"),
             reason,
           )
         // A single broken slide is local to that slide: keep the document ready
@@ -373,7 +383,7 @@ export function usePptxDocument(
     disposed = true
     generation += 1
     navigationGeneration += 1
-    pendingOpen?.reject(new PptxPreviewError("ABORTED", "PPTX 打开请求已经取消。"))
+    pendingOpen?.reject(new PptxPreviewError("ABORTED", errorMessage("aborted")))
     pendingOpen = null
     releaseSession()
     surfaceSearch.dispose()
