@@ -14,7 +14,7 @@ import { parseNoteProperties } from "./note-properties";
 import type { DocModel, DocumentNoteProperties } from "./types";
 
 export * from "./types";
-export { cloneDocModel } from "./clone";
+export { cloneDocModel, cloneDocModelShallow, cloneDocNode } from "./clone";
 export { normalizeDocModel } from "./normalize";
 
 const SETTINGS_PART = "word/settings.xml";

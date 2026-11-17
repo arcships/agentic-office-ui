@@ -14,7 +14,8 @@ import type {
   TextStyle
 } from "../engine/types";
 import {
-  cloneDocModel,
+  cloneDocModelShallow,
+  cloneDocNode,
   cloneFormFieldRun,
   cloneImageRun,
   cloneParagraph,
@@ -685,14 +686,14 @@ export function insertParagraph(
   index = model.nodes.length,
   options?: InsertParagraphOptions
 ): DocModel {
-  const next = cloneDocModel(model);
+  const next = cloneDocModelShallow(model);
   const safeIndex = Math.max(0, Math.min(index, next.nodes.length));
   next.nodes.splice(safeIndex, 0, paragraphFromText(text, options));
   return next;
 }
 
 export function removeParagraph(model: DocModel, index: number): DocModel {
-  const next = cloneDocModel(model);
+  const next = cloneDocModelShallow(model);
   const node = getParagraph(next, index);
   if (!node) {
     return next;
@@ -708,7 +709,7 @@ export function removeParagraph(model: DocModel, index: number): DocModel {
 }
 
 export function duplicateParagraph(model: DocModel, index: number): DocModel {
-  const next = cloneDocModel(model);
+  const next = cloneDocModelShallow(model);
   const node = getParagraph(next, index);
   if (!node) {
     return next;
@@ -727,12 +728,14 @@ export function updateParagraphText(
   text: string,
   options?: UpdateTextOptions
 ): DocModel {
-  const next = cloneDocModel(model);
-  const paragraph = getParagraph(next, index);
-  if (!paragraph) {
+  const next = cloneDocModelShallow(model);
+  const source = getParagraph(model, index);
+  if (!source) {
     return next;
   }
 
+  const paragraph = cloneDocNode(source);
+  next.nodes[index] = paragraph;
   paragraph.children = distributeTextAcrossParagraphChildren(paragraph, text, options);
   paragraph.sourceXml = undefined;
 

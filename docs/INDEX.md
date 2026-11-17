@@ -91,6 +91,7 @@
 | 文档 | 用途 |
 |---|---|
 | [testing/performance-baseline.md](testing/performance-baseline.md) | 已批准的性能环境、数值和比较规则 |
+| [testing/docx-edit-history-performance.md](testing/docx-edit-history-performance.md) | DOCX 编辑写时复制、图片字节共享和历史字节估算的基准与验证记录（issue #37） |
 | [visual-acceptance-handoff.md](visual-acceptance-handoff.md) | 历史视觉口径和专项补充，不替代当前黑盒方案 |
 | [shadcn-components-browser-acceptance.md](shadcn-components-browser-acceptance.md) | 通用组件的专项浏览器检查 |
 | [component-browser-verification-plan.md](component-browser-verification-plan.md) | 组件浏览器验证补充计划 |
