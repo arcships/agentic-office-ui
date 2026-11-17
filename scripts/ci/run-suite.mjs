@@ -94,6 +94,8 @@ const suites = {
       "tests/unit/pdf-source.test.mjs",
       "tests/unit/pdf-render-runtime.test.mjs",
       "tests/unit/pdf-page-viewport.test.mjs",
+      "tests/unit/pdf-bitmap-cache.test.mjs",
+      "tests/unit/pdf-page-raster.test.mjs",
       "tests/unit/pdf-reference-adapter.test.mjs",
       "tests/unit/pptx-core.test.mjs",
       "tests/unit/pptx-media-transitions.test.mjs",
