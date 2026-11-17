@@ -25,6 +25,7 @@
       >
 
 
+
         <div
           v-if="image.selected && editable && !image.behindDocument && !image.lockedAnchor"
           class="docx-image-wrap-toolbar"
@@ -32,10 +33,10 @@
           data-docx-thumbnail-exclude="true"
           @mousedown.stop
         >
-          <button type="button" data-testid="docx-image-wrap-inline" title="Inline with text" @click.stop="setWrapMode(image, 'inline')">Inline</button>
-          <button type="button" data-testid="docx-image-wrap-square" title="Wrap text around image" @click.stop="setWrapMode(image, 'square')">Square</button>
-          <button type="button" data-testid="docx-image-wrap-behind" title="Behind text" @click.stop="setWrapMode(image, 'behindText')">Behind</button>
-          <button type="button" data-testid="docx-image-wrap-front" title="In front of text" @click.stop="setWrapMode(image, 'inFrontOfText')">Front</button>
+          <button type="button" data-testid="docx-image-wrap-inline" :title="m.docx.image.inlineTitle" @click.stop="setWrapMode(image, 'inline')">{{ m.docx.image.inline }}</button>
+          <button type="button" data-testid="docx-image-wrap-square" :title="m.docx.image.squareTitle" @click.stop="setWrapMode(image, 'square')">{{ m.docx.image.square }}</button>
+          <button type="button" data-testid="docx-image-wrap-behind" :title="m.docx.image.behindTitle" @click.stop="setWrapMode(image, 'behindText')">{{ m.docx.image.behind }}</button>
+          <button type="button" data-testid="docx-image-wrap-front" :title="m.docx.image.frontTitle" @click.stop="setWrapMode(image, 'inFrontOfText')">{{ m.docx.image.front }}</button>
         </div>
 
         <!-- Resize handles -->
@@ -55,7 +56,7 @@
         <img
           v-if="!image.flowWrapped && image.src && !failedImageSourceKeys.has(image.failureKey)"
           :src="image.src"
-          :alt="image.alt ?? 'Image'"
+          :alt="image.alt ?? m.docx.image.alt"
           :draggable="false"
           :style="imageStyle(image)"
           class="docx-floating-image"
@@ -66,7 +67,6 @@
           @error="onImageError(image, $event)"
         />
 
-
         <!-- Fallback for unsupported images -->
         <div
           v-else-if="!image.flowWrapped"
@@ -74,9 +74,8 @@
           :data-image-state="failedImageSourceKeys.has(image.failureKey) ? 'error' : 'unsupported'"
           :style="{ width: `${image.widthPx}px`, height: `${image.heightPx}px` }"
         >
-          {{ image.fallbackLabel ?? "Image" }}
+          {{ image.fallbackLabel ?? m.docx.image.alt }}
         </div>
-
       </div>
     </div>
   </div>
@@ -95,6 +94,7 @@ import {
   resolveRenderableImageSource,
   shouldRenderWrappedFloatingImage,
 } from "@arcships/docx-core"
+import { useDocxMessages } from "../i18n"
 
 // ── Types ──────────────────────────────────────────────────────────
 interface FloatingImageEntry {
@@ -137,6 +137,8 @@ const props = withDefaults(
   }>(),
   { editable: false, zoomFactor: 1 }
 )
+
+const m = useDocxMessages()
 
 // ── State ──────────────────────────────────────────────────────────
 const draggingImage = ref<FloatingImageEntry | null>(null)

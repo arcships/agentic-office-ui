@@ -15,7 +15,7 @@
         type="text"
         :value="field.value"
         :maxlength="field.maxLength"
-        :placeholder="field.placeholder ?? 'Enter text...'"
+        :placeholder="field.placeholder ?? m.docx.formField.placeholder"
         :aria-invalid="fieldErrors[field.locationKey] ? 'true' : undefined"
         class="docx-form-text-input"
         @input="onTextInput(field, $event)"
@@ -30,7 +30,7 @@
           type="date"
           :value="field.dateValue"
           :aria-invalid="fieldErrors[field.locationKey] ? 'true' : undefined"
-          :title="field.displayValue || 'Select a date'"
+          :title="field.displayValue || m.docx.formField.selectDate"
           class="docx-form-text-input docx-form-date-input"
           @input="onDateInput(field, $event)"
           @focus="onFieldFocus(field)"
@@ -104,6 +104,7 @@ import {
   validateFormFieldValue,
 } from "../composables/form-field-value"
 import { collectPageFormFields, docxFormFieldLocationKey } from "../composables/docx-form-fields"
+import { useDocxMessages } from "../i18n"
 
 // ── Types ──────────────────────────────────────────────────────────
 type FormFieldControl = "text" | "date" | "checkbox" | "dropdown"
@@ -131,6 +132,7 @@ const props = defineProps<{
   controller: DocxEditorController
   pageNodeSegments: DocumentPageNodeSegment[]
 }>()
+const m = useDocxMessages()
 
 const fieldErrors = ref<Record<string, string>>({})
 

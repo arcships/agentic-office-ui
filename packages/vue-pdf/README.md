@@ -21,6 +21,18 @@ import "@arcships/vue-pdf/style.css"
 </template>
 ```
 
+## 本地化
+
+`PdfViewer` 与 `PdfSurface` 都接受 `locale`（默认 `"en"`，内置 `"zh-CN"`）与 `messages` 覆盖。用户可见文案和 aria-label 来自 `@arcships/office-interaction` 的共享消息目录：
+
+```vue
+<PdfViewer
+  :src="pdfUrl"
+  locale="zh-CN"
+  :messages="{ pdf: { viewer: { download: '保存文件' } } }"
+/>
+```
+
 正常 PDF 支持查看、翻页、缩放、旋转、缩略图、搜索和下载。PDF 唯一的公开文件拒绝上限是整份文件体积 `maxFileSize`，默认 `50 MiB`，宿主可调整。加密 PDF 可通过 `password` 或 `onPassword` 提供密码；无法取得密码时错误码为 `ENCRYPTED`。
 
 `PdfSurface` 提供最小嵌入渲染：全部页面垂直堆叠滚动，无工具栏/缩略图/搜索栏。仅视口附近的页面会栅格化（默认上下各预留 1 页），离开视口的位图立即释放；缩放、旋转和容器尺寸变化只重渲染当前视口，不再重渲染整份文档。滚动与右键命中复用缓存的页面偏移，滚动事件按帧合并并做 100 ms 防抖。宿主可通过 `v-model:zoom` 接入 50%–200% 手势缩放，也可继续使用 expose zoom 和 scrollToPage。

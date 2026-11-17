@@ -1,5 +1,6 @@
 import type { PdfSource, PdfUrlPolicy } from "./pdf-url-policy"
 import type { PdfPasswordHandler, PdfRenderRuntime } from "./pdf/pdf-render-runtime"
+import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
 
 export interface PdfViewerProps {
   src?: string
@@ -25,4 +26,6 @@ export interface PdfViewerProps {
   showRotateControls?: boolean
   /** Dark viewer chrome and page surround. Defaults to false. */
   isDark?: boolean
+  locale?: OfficeLocale
+  messages?: OfficeMessagesOverride
 }

@@ -13,22 +13,22 @@
       data-testid="xlsx-context-menu"
       :style="menuStyle"
       role="menu"
-      aria-label="单元格菜单"
+      :aria-label="m.xlsx.contextMenu.label"
       @keydown="onMenuKeydown"
     >
-      <button class="xlsx-contextmenu__item" role="menuitem" @click="onCopy">复制</button>
+      <button class="xlsx-contextmenu__item" role="menuitem" @click="onCopy">{{ m.xlsx.contextMenu.copy }}</button>
       <button
         v-if="!isReadOnly"
         class="xlsx-contextmenu__item"
         role="menuitem"
         @click="onPaste"
-      >粘贴</button>
+      >{{ m.xlsx.contextMenu.paste }}</button>
       <button
         v-if="!isReadOnly"
         class="xlsx-contextmenu__item"
         role="menuitem"
         @click="onClear"
-      >清除内容</button>
+      >{{ m.xlsx.contextMenu.clear }}</button>
       <template v-if="sortTarget && !isReadOnly">
         <div class="xlsx-contextmenu__separator" role="separator" />
         <button
@@ -36,13 +36,13 @@
           data-testid="xlsx-sort-ascending"
           role="menuitem"
           @click="onSort('ascending')"
-        >按此列升序</button>
+        >{{ m.xlsx.contextMenu.sortAscending }}</button>
         <button
           class="xlsx-contextmenu__item"
           data-testid="xlsx-sort-descending"
           role="menuitem"
           @click="onSort('descending')"
-        >按此列降序</button>
+        >{{ m.xlsx.contextMenu.sortDescending }}</button>
       </template>
       <div class="xlsx-contextmenu__separator" role="separator" />
       <button
@@ -50,13 +50,13 @@
         class="xlsx-contextmenu__item"
         role="menuitem"
         @click="onUndo"
-      >撤销</button>
+      >{{ m.xlsx.contextMenu.undo }}</button>
       <button
         v-if="!isReadOnly"
         class="xlsx-contextmenu__item"
         role="menuitem"
         @click="onRedo"
-      >重做</button>
+      >{{ m.xlsx.contextMenu.redo }}</button>
     </div>
   </Teleport>
   <XlsxClipboardNotice :message="clipboardNotice" />
@@ -70,6 +70,7 @@ import XlsxClipboardNotice from "./XlsxClipboardNotice.vue";
 import { useClipboardCopyNotice } from "../composables/useClipboardCopyNotice";
 import { frozenExtent } from "./grid-metrics";
 import { paneAxisContentOffset } from "./grid-pane-geometry";
+import { useXlsxMessages } from "../i18n";
 
 const DEFAULT_ROW_HEIGHT = 24;
 const DEFAULT_COL_WIDTH = 80;
@@ -87,6 +88,7 @@ const props = defineProps<{
 
 const visible = ref(false);
 const menuRef = ref<HTMLElement | null>(null);
+const m = useXlsxMessages();
 const position = ref({ x: 0, y: 0 });
 const sortTarget = ref<{ columnIndex: number; tableName: string } | null>(null);
 

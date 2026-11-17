@@ -43,6 +43,8 @@
         :editable="editable"
         :theme="isDarkTheme ? 'dark' : 'light'"
         :zoom-scale="zoomPercent"
+        :locale="locale"
+        :messages="messages"
         @page-count-change="onPageCountChange"
         @visible-page-range="onVisiblePageRange"
         @context-menu="onDocumentContextMenu"
@@ -83,7 +85,7 @@
     <OfficeLiveStatus test-id="editor-live-status" :message="liveStatusMessage" />
     <div class="docx-editor-statusbar">
       <span class="docx-editor-statusbar-page">
-        Page {{ currentPage }} of {{ totalPages }}
+        {{ pageIndicator }}
       </span>
       <span class="docx-editor-statusbar-status" data-testid="editor-status">
         {{ controller.status }}
@@ -97,6 +99,8 @@
 
 <script setup lang="ts">
 import { ref, computed, provide, watch, onMounted, onUnmounted } from "vue"
+import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
+import { formatOfficeMessage } from "@arcships/office-interaction"
 import type {
   DocxEditorController,
   DocxContextMenuContext,
@@ -117,6 +121,7 @@ import DocxToolbar from "./DocxToolbar.vue"
 import DocxContextMenu from "./DocxContextMenu.vue"
 import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
 import DocxDragOverlay from "./DocxDragOverlay.vue"
+import { provideDocxMessages } from "../i18n"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
@@ -131,8 +136,10 @@ const props = withDefaults(
     runtime?: DocxRuntime
     /** Dark editor shell and document theme. Follows the controller theme when omitted. */
     isDark?: boolean
+    locale?: OfficeLocale
+    messages?: OfficeMessagesOverride
   }>(),
-  { editable: true, showToolbar: true, showThumbnails: false, isDark: false }
+  { editable: true, showToolbar: true, showThumbnails: false, isDark: false, locale: "en", messages: undefined }
 )
 
 const emit = defineEmits<{
@@ -140,11 +147,13 @@ const emit = defineEmits<{
   (event: "update:isDark", isDark: boolean): void
 }>()
 
+const m = provideDocxMessages(() => props.locale, () => props.messages)
+
 // ── Controller ─────────────────────────────────────────────────────
 const internalController = !props.editor
   ? useDocxEditor({
       starterModel: props.model,
-      initialFileName: props.file ? "(imported document)" : "(new document)",
+      initialFileName: props.file ? m.value.docx.editor.importedDocument : m.value.docx.editor.newDocument,
     })
   : null
 const controller = props.editor ?? internalController!
@@ -199,6 +208,10 @@ const editorRootRef = ref<HTMLElement | undefined>()
 // ── Page tracking ──────────────────────────────────────────────────
 const currentPage = ref(1)
 const totalPages = ref(1)
+const pageIndicator = computed(() => formatOfficeMessage(m.value.common.page.indicator, {
+  current: currentPage.value,
+  total: totalPages.value,
+}))
 const zoomPercent = ref(100)
 const thumbnailPanelVisible = ref(props.showThumbnails)
 
@@ -207,12 +220,15 @@ watch(() => props.showThumbnails, (visible) => { thumbnailPanelVisible.value = v
 // The editor status bar is visible but was never announced. Mirror it in a
 // live region so page turns and controller state reach assistive technology.
 const liveStatusMessage = computed(() => {
-  if (pageLimitError.value) return `文档无法显示：${pageLimitError.value.message}`
+  if (pageLimitError.value) return formatOfficeMessage(m.value.docx.editor.liveError, { message: pageLimitError.value.message })
   const pages = totalPages.value > 0
-    ? `第 ${Math.min(Math.max(currentPage.value, 1), totalPages.value)} 页，共 ${totalPages.value} 页`
+    ? formatOfficeMessage(m.value.common.page.indicator, {
+      current: Math.min(Math.max(currentPage.value, 1), totalPages.value),
+      total: totalPages.value,
+    })
     : ""
   const status = String(controller.status ?? "").trim()
-  return [pages, status].filter(Boolean).join("，") || "文档已就绪"
+  return [pages, status].filter(Boolean).join("，") || m.value.docx.editor.liveReady
 })
 
 function onPageCountChange(count: number): void {
@@ -221,7 +237,7 @@ function onPageCountChange(count: number): void {
     if (!pageLimitError.value) {
       const normalized = new DocxImportError(
         "LIMIT_EXCEEDED",
-        `DOCX 页数 ${count} 超过允许值 ${allowed}。`,
+        formatOfficeMessage(m.value.docx.viewer.pageLimitExceeded, { count, allowed }),
         {
           phase: "layout",
           limit: "maxDocxPages",

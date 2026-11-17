@@ -49,23 +49,23 @@
           type="button"
           class="docx-gutter-card-action docx-gutter-card-action--accept"
           data-testid="docx-gutter-accept"
-          title="Accept this revision"
+          :title="m.docx.gutter.acceptTitle"
           @click.stop="emit('decide', entry.annotation.id, 'accept')"
         >
-          ✓ Accept
+          ✓ {{ m.docx.gutter.accept }}
         </button>
         <button
           type="button"
           class="docx-gutter-card-action docx-gutter-card-action--reject"
           data-testid="docx-gutter-reject"
-          title="Reject this revision"
+          :title="m.docx.gutter.rejectTitle"
           @click.stop="emit('decide', entry.annotation.id, 'reject')"
         >
-          ✕ Reject
+          ✕ {{ m.docx.gutter.reject }}
         </button>
       </div>
       <div v-if="entry.annotation.comment?.resolved" class="docx-gutter-card-resolved">
-        ✓ Resolved
+        ✓ {{ m.docx.trackedChange.resolved }}
       </div>
       <div v-if="dateOf(entry)" class="docx-gutter-card-date">
         {{ formatDate(dateOf(entry)) }}
@@ -79,15 +79,17 @@ import { computed, nextTick, onMounted, watch } from "vue"
 import {
   commentAccentColor,
   trackedChangeAccentColor,
-  trackedChangeKindLabel,
   trackedChangeUsesGutterBalloon,
   type DocxDocumentTheme,
+  type DocxTrackedChange,
   type PositionedGutterAnnotation,
 } from "@arcships/docx-core"
 import {
   annotationGutterCardTopPx,
   annotationGutterPaneStyle,
 } from "./gutter-metrics"
+import { formatOfficeDate } from "@arcships/office-interaction"
+import { useDocxLocale, useDocxMessages } from "../i18n"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
@@ -116,6 +118,8 @@ const emit = defineEmits<{
   cardHeight: [annotationId: string, heightPx: number]
   decide: [annotationId: string, decision: "accept" | "reject"]
 }>()
+const m = useDocxMessages()
+const locale = useDocxLocale()
 
 // ── Revision decisions ─────────────────────────────────────────────
 // Only tracked-change cards expose decisions; comment cards stay activate-only.
@@ -137,6 +141,31 @@ function cardStyle(entry: PositionedGutterAnnotation): Record<string, string> {
 }
 
 // ── Card content ───────────────────────────────────────────────────
+function changeLabel(change: DocxTrackedChange): string {
+  switch (change.kind) {
+    case "insertion":
+      return m.value.docx.trackedChange.inserted
+    case "deletion":
+      return m.value.docx.trackedChange.deleted
+    case "move-from":
+      return m.value.docx.trackedChange.movedFrom
+    case "move-to":
+      return m.value.docx.trackedChange.movedTo
+    case "format-change":
+      return m.value.docx.trackedChange.format
+    case "paragraph-format-change":
+      return m.value.docx.trackedChange.paragraphFormatting
+    case "table-format-change":
+      return m.value.docx.trackedChange.tableFormatting
+    case "row-format-change":
+      return m.value.docx.trackedChange.rowFormatting
+    case "cell-format-change":
+      return m.value.docx.trackedChange.cellFormatting
+    default:
+      return change.kind
+  }
+}
+
 function accentColor(entry: PositionedGutterAnnotation): string {
   if (entry.annotation.comment) {
     return commentAccentColor(
@@ -193,11 +222,11 @@ function cardClasses(entry: PositionedGutterAnnotation): string[] {
 
 function cardTypeLabel(entry: PositionedGutterAnnotation): string {
   if (entry.annotation.comment) {
-    return "Comment"
+    return m.value.docx.trackedChange.comment
   }
 
   const change = entry.annotation.trackedChange
-  return change ? trackedChangeKindLabel(change.kind) : "Annotation"
+  return change ? changeLabel(change) : m.value.docx.trackedChange.annotation
 }
 
 function gutterBalloonFlag(entry: PositionedGutterAnnotation): string | undefined {
@@ -233,8 +262,7 @@ function dateOf(entry: PositionedGutterAnnotation): string | undefined {
 
 function formatDate(dateStr?: string): string {
   if (!dateStr) return ""
-  const date = new Date(dateStr)
-  return Number.isNaN(date.getTime()) ? dateStr : date.toLocaleDateString()
+  return formatOfficeDate(dateStr, locale.value) || dateStr
 }
 
 // ── Card measurement ───────────────────────────────────────────────
@@ -263,6 +291,7 @@ function measureCards(): void {
   for (const [annotationId, element] of cardElements) {
     emit("cardHeight", annotationId, element.offsetHeight)
   }
+
 }
 
 async function measureCardsAfterRender(): Promise<void> {

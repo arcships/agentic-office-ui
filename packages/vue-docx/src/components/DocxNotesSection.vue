@@ -4,7 +4,7 @@
     class="docx-notes-section"
     :class="`docx-notes-section--${kind}`"
     :data-testid="kind === 'footnote' ? 'docx-footnotes' : 'docx-endnotes'"
-    :aria-label="kind === 'footnote' ? '脚注' : '尾注'"
+    :aria-label="kind === 'footnote' ? m.docx.notes.footnote : m.docx.notes.endnote"
   >
     <div class="docx-notes-section__rule" />
     <article
@@ -45,6 +45,7 @@
 import type { DocumentNoteDefinition, NumberingDefinitionSet } from "@arcships/docx-core"
 import DocxParagraphHost from "./DocxParagraphHost.vue"
 import DocxTableHost from "./DocxTableHost.vue"
+import { useDocxMessages } from "../i18n"
 
 const props = withDefaults(defineProps<{
   kind: "footnote" | "endnote"
@@ -68,6 +69,8 @@ function noteLabel(note: DocumentNoteDefinition, noteIndex: number): string {
   if (label) return label
   return String(noteIndex + props.startIndex)
 }
+
+const m = useDocxMessages()
 </script>
 
 <style scoped>

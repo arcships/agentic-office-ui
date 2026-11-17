@@ -10,8 +10,8 @@
     @copy="onCopy"
     @keydown.esc="onSurfaceEscape"
   >
-    <div v-if="!effectiveSource" class="pdf-surface__empty">No PDF loaded</div>
-    <div v-else-if="loading" class="pdf-surface__empty">Opening PDF…</div>
+    <div v-if="!effectiveSource" class="pdf-surface__empty">{{ m.pdf.surface.noPdf }}</div>
+    <div v-else-if="loading" class="pdf-surface__empty">{{ m.pdf.surface.opening }}</div>
     <div v-else-if="loadError" class="pdf-surface__error" :data-error-code="loadError.code">
       {{ loadError.code }}: {{ loadError.message }}
     </div>
@@ -24,15 +24,15 @@
         :style="pageSlotStyle(pageIndex)"
       >
         <div v-if="pageSlots[pageIndex]?.state === 'loading'" class="pdf-surface__page-loading">
-          Rendering page {{ pageIndex + 1 }}…
+          {{ formatOfficeMessage(m.pdf.surface.renderingPage, { page: pageIndex + 1 }) }}
         </div>
         <div v-else-if="pageSlots[pageIndex]?.state === 'error'" class="pdf-surface__page-error">
-          Failed to render page {{ pageIndex + 1 }}
+          {{ formatOfficeMessage(m.pdf.surface.pageRenderFailed, { page: pageIndex + 1 }) }}
         </div>
         <img
           v-else-if="pageSlots[pageIndex]?.url"
           :src="pageSlots[pageIndex].url"
-          :alt="`Page ${pageIndex + 1}`"
+          :alt="formatOfficeMessage(m.pdf.surface.pageAlt, { page: pageIndex + 1 })"
           :style="pageImgStyle(pageIndex)"
           class="pdf-surface__page-img"
           draggable="false"
@@ -66,7 +66,7 @@
         <div
           class="pdf-surface__interaction"
           :data-selection-mode="selectionMode"
-          :aria-label="selectionMode === 'region' ? '选择 PDF 页面区域' : 'PDF page text selection layer'"
+          :aria-label="selectionMode === 'region' ? m.pdf.surface.selectionRegion : m.pdf.surface.selectionText"
           :tabindex="selectionMode === 'region' ? 0 : undefined"
           @pointerdown="onSurfacePointerDown($event, pageIndex)"
           @pointermove="onSurfacePointerMove($event, pageIndex)"
@@ -171,6 +171,8 @@ import {
   type OfficeSelectionMode,
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
+import { formatOfficeMessage } from "@arcships/office-interaction"
+import { providePdfMessages } from "../i18n"
 
 // ── Types ────────────────────────────────────────────────────────────
 interface PageSlot {
@@ -208,6 +210,8 @@ const props = withDefaults(
     emitReferenceCandidates?: boolean
     /** Dark viewer chrome and page surround. Defaults to false. */
     isDark?: boolean
+    locale?: import("@arcships/office-interaction").OfficeLocale
+    messages?: import("@arcships/office-interaction").OfficeMessagesOverride
   }>(),
   {
     maxFileSize: DEFAULT_PDF_MAX_FILE_SIZE,
@@ -216,6 +220,8 @@ const props = withDefaults(
     selectionMode: "content",
     emitReferenceCandidates: false,
     isDark: false,
+    locale: "en",
+    messages: undefined,
   },
 )
 
@@ -258,6 +264,7 @@ const emit = defineEmits<{
 
 // ── Runtime & loading ────────────────────────────────────────────────
 const scrollRef = ref<HTMLElement | null>(null)
+const m = providePdfMessages(() => props.locale, () => props.messages)
 const internalZoom = ref(clampSurfaceZoom(props.defaultZoom))
 const zoom = computed({
   get: () => props.zoom === undefined ? internalZoom.value : clampSurfaceZoom(props.zoom),
@@ -864,7 +871,7 @@ async function load(): Promise<void> {
       return
     }
     task.assertCurrent()
-    if (openedDocument.pageCount <= 0) throw new Error("PDF document contains no pages.")
+    if (openedDocument.pageCount <= 0) throw new Error(m.value.pdf.surface.noPdf)
     runtimeForDocument = selectedRuntime
     renderDocument.value = openedDocument
     revisionCounter.value += 1
@@ -1391,7 +1398,7 @@ async function commitSelection(
         const draft = createPdfTextReferenceDraft(context, next)
         confirmDraft(draft, "pointer", {
           label: next.text.length > 80 ? `${next.text.slice(0, 77)}…` : next.text,
-          path: [{ kind: "document", label: "PDF" }, { kind: "page", label: `Page ${next.range.pageIndex + 1}` }, { kind: "text-range", label: "Selected text" }],
+          path: [{ kind: "document", label: "PDF" }, { kind: "page", label: `Page ${next.range.pageIndex + 1}` }, { kind: "text-range", label: m.value.common.selectedText }],
           content: { text: next.text },
         })
       } catch (reason) {

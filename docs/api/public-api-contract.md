@@ -193,6 +193,8 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 
 引用只保存文档修订、语义、格式定位器、内容指纹和规范化区域，不保存 DOM、Vue 实例、Blob URL 或截图位图。`OfficeInteractionValidationError` 的 `code` 固定为 `INVALID_OFFICE_INTERACTION`，详细原因从结构化 `issues` 读取。该包不解析 Office 文件、不渲染界面、不保存引用集合、不调用 Agent，也不修改文件；格式包负责生成定位器，宿主决定如何组织和使用确认后的引用。
 
+根入口同时提供共享消息目录：`officeMessagesEn`、`officeMessagesZhCN`、`OfficeLocale`、`OfficeMessagesOverride`、`resolveOfficeLocale`、`resolveOfficeMessages`、`formatOfficeMessage`、`formatOfficeDate` 和 `formatOfficeNumber`。`DocxViewer`、`DocxEditor`、`DocxDocumentSurface`、`XlsxViewer`、`XlsxSheetSurface`、`PptxViewer`、`PdfViewer` 与 `PdfSurface` 均接受 `locale`（默认 `"en"`，内置 `"zh-CN"`）和 `messages` 深合并覆盖；用户可见文案和 aria-label 不再写死在组件内。
+
 ### 3.10 统一 Surface 引用选择
 
 `DocxDocumentSurface`、`XlsxSheetSurface`、`PdfSurface` 和 `PptxStage` 统一接受 `documentId?: string`、`selectionMode?: "content" | "object" | "region"` 和 `emitReferenceCandidates?: boolean`。`selectionMode` 是受控输入，只解释下一次选择手势；Surface 不保存确认后的引用。

@@ -1,14 +1,14 @@
 <template>
   <div class="docx-thumbnail-panel" data-testid="docx-thumbnail-panel" :class="{ 'docx-thumbnail-panel--collapsed': collapsed, 'docx-thumbnail-panel--dark': isDark }">
     <!-- Toggle button -->
-    <button v-if="showToggle" class="docx-thumbnail-toggle" @click="collapsed = !collapsed" :title="collapsed ? 'Show thumbnails' : 'Hide thumbnails'">
+    <button v-if="showToggle" class="docx-thumbnail-toggle" @click="collapsed = !collapsed" :title="collapsed ? m.docx.thumbnail.show : m.docx.thumbnail.hide">
       {{ collapsed ? '▶' : '◀' }}
     </button>
 
     <!-- Thumbnails container -->
     <div v-if="!collapsed" class="docx-thumbnail-container">
       <div class="docx-thumbnail-header">
-        <span class="docx-thumbnail-title">Pages</span>
+        <span class="docx-thumbnail-title">{{ m.docx.thumbnail.pages }}</span>
         <span class="docx-thumbnail-count">{{ pageCount }}</span>
       </div>
 
@@ -85,6 +85,7 @@ import {
   ensureDocxViewerPageSurfaceRegistry,
   subscribeDocxViewerPageSurfaces,
 } from "../composables/page-surface-registry"
+import { useDocxMessages } from "../i18n"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
@@ -100,6 +101,8 @@ const props = withDefaults(
   }>(),
   { currentPage: 1, totalPages: 1, defaultCollapsed: false, showToggle: true, isDark: false }
 )
+
+const m = useDocxMessages()
 
 const emit = defineEmits<{
   selectPage: [pageIndex: number]

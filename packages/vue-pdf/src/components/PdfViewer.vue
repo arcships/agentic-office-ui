@@ -25,6 +25,8 @@ import {
 } from "../pdf/pdf-render-runtime"
 import { currentRenderDpr, watchDevicePixelRatio } from "../pdf/pdf-device-pixel-ratio"
 import type { PdfViewerProps } from "../types"
+import { formatOfficeMessage } from "@arcships/office-interaction"
+import { providePdfMessages } from "../i18n"
 
 const props = withDefaults(defineProps<PdfViewerProps>(), {
   src: undefined,
@@ -42,6 +44,8 @@ const props = withDefaults(defineProps<PdfViewerProps>(), {
   showDownload: true,
   showRotateControls: true,
   isDark: false,
+  locale: "en",
+  messages: undefined,
 })
 
 const emit = defineEmits<{
@@ -50,6 +54,8 @@ const emit = defineEmits<{
   "active-page-change": [pageNumber: number]
   diagnostic: [event: PdfDiagnostic]
 }>()
+
+const m = providePdfMessages(() => props.locale, () => props.messages)
 
 const zoomOptions = [0.5, 0.75, 1, 1.25, 1.5, 2]
 const zoom = ref(Math.min(2, Math.max(0.5, props.defaultZoom)))
@@ -474,7 +480,7 @@ async function renderCurrentPage(
   } catch (error) {
     if (controller.signal.aborted || generation !== renderGeneration || requestId !== latestRequestId || isAbortError(error)) return
     pageRenderState.value = "error"
-    pageRenderError.value = "PDF 页面渲染失败。"
+    pageRenderError.value = m.value.pdf.viewer.renderFailed
     // A stale bitmap no longer describes the current page or zoom.
     pendingAnchor = undefined
     replacePageImage()
@@ -541,7 +547,7 @@ async function submitSearch(): Promise<void> {
   if (!document || !runtime) return
   const controller = new AbortController()
   searchAbort = controller
-  searchResult.value = "正在搜索…"
+  searchResult.value = m.value.pdf.viewer.searchSearching
   emitDiagnostic({ type: "search-start" })
   try {
     const hits = await runtime.search(document, query, { signal: controller.signal })
@@ -554,14 +560,18 @@ async function submitSearch(): Promise<void> {
     if (hits.length) {
       searchHitIndex.value = 0
       setActivePage(hits[0].pageIndex + 1)
-      searchResult.value = `第 1 / ${hits.length} 项，第 ${hits[0].pageIndex + 1} 页`
+      searchResult.value = formatOfficeMessage(m.value.pdf.viewer.searchResult, {
+        current: 1,
+        total: hits.length,
+        page: hits[0].pageIndex + 1,
+      })
     } else {
-      searchResult.value = "没有找到"
+      searchResult.value = m.value.pdf.viewer.searchNoResults
     }
     emitDiagnostic({ type: "search-success", matches: hits.length })
   } catch (error) {
     if (controller.signal.aborted || generation !== searchGeneration || isAbortError(error)) return
-    searchResult.value = "搜索失败"
+    searchResult.value = m.value.pdf.viewer.searchError
     const source = effectiveSource.value
     emitDiagnostic({
       type: "search-error",
@@ -578,7 +588,11 @@ function moveSearch(delta: number): void {
   searchHitIndex.value = next
   const hit = searchHits.value[next]
   setActivePage(hit.pageIndex + 1)
-  searchResult.value = `第 ${next + 1} / ${searchHits.value.length} 项，第 ${hit.pageIndex + 1} 页`
+  searchResult.value = formatOfficeMessage(m.value.pdf.viewer.searchResult, {
+    current: next + 1,
+    total: searchHits.value.length,
+    page: hit.pageIndex + 1,
+  })
 }
 
 function toOfficeSource(source: PdfSource): OfficeSource {
@@ -642,7 +656,7 @@ async function load(): Promise<void> {
       onPassword: props.onPassword,
     })
     task.assertCurrent()
-    if (openedDocument.pageCount <= 0) throw new Error("PDF document contains no pages.")
+    if (openedDocument.pageCount <= 0) throw new Error(m.value.pdf.viewer.invalidPdf)
     runtimeForDocument = selectedRuntime
     renderDocument.value = openedDocument
     numPages.value = openedDocument.pageCount
@@ -670,7 +684,7 @@ async function load(): Promise<void> {
     if (!task.isCurrent() || requestId !== latestRequestId || isAbortError(error)) return
     const normalized = toPdfLoadError(error, source.kind, source.kind === "url" ? source.url : undefined)
     const pdfError: PdfLoadError = normalized.code === "INVALID_PDF" && !(error instanceof Error && /来源|文件不是|application\/pdf/.test(error.message))
-      ? { ...normalized, message: "PDF 文件无法解析或渲染。" }
+      ? { ...normalized, message: m.value.pdf.viewer.invalidPdf }
       : normalized
     loadError.value = pdfError
     pageRenderState.value = "error"
@@ -742,13 +756,13 @@ onBeforeUnmount(() => {
         data-testid="pdf-sidebar-toggle"
         type="button"
         :disabled="controlsDisabled"
-        aria-label="显示或隐藏缩略图"
+        :aria-label="m.pdf.viewer.toggleThumbnails"
         :aria-pressed="showThumbnails"
         @click="showThumbnails = !showThumbnails"
       >☰</button>
       <span class="file-name">{{ getDownloadFileName() }}</span>
-      <button data-testid="pdf-first-page" type="button" :disabled="controlsDisabled || activePage <= 1" aria-label="第一页" @click="setActivePage(1)">«</button>
-      <button data-testid="pdf-previous-page" type="button" :disabled="controlsDisabled || activePage <= 1" aria-label="上一页" @click="setActivePage(activePage - 1)">‹</button>
+      <button data-testid="pdf-first-page" type="button" :disabled="controlsDisabled || activePage <= 1" :aria-label="m.common.page.first" @click="setActivePage(1)">«</button>
+      <button data-testid="pdf-previous-page" type="button" :disabled="controlsDisabled || activePage <= 1" :aria-label="m.common.page.previous" @click="setActivePage(activePage - 1)">‹</button>
       <input
         v-model="pageInput"
         data-testid="pdf-page-input"
@@ -757,40 +771,40 @@ onBeforeUnmount(() => {
         min="1"
         :max="numPages || 1"
         :disabled="controlsDisabled"
-        aria-label="页码"
+        :aria-label="m.pdf.viewer.pageInput"
         @change="commitPageInput"
         @keydown.enter.prevent="commitPageInput"
       />
       <span class="page-indicator">/ <span data-testid="pdf-page-count">{{ numPages || '—' }}</span></span>
-      <button data-testid="pdf-next-page" type="button" :disabled="controlsDisabled || activePage >= numPages" aria-label="下一页" @click="setActivePage(activePage + 1)">›</button>
-      <button data-testid="pdf-last-page" type="button" :disabled="controlsDisabled || activePage >= numPages" aria-label="最后一页" @click="setActivePage(numPages)">»</button>
-      <button data-testid="pdf-zoom-out" type="button" :disabled="controlsDisabled || zoom <= zoomOptions[0]" aria-label="缩小" @click="zoomOut">−</button>
-      <select v-model.number="zoom" data-testid="pdf-zoom-select" :disabled="controlsDisabled" aria-label="缩放比例">
+      <button data-testid="pdf-next-page" type="button" :disabled="controlsDisabled || activePage >= numPages" :aria-label="m.common.page.next" @click="setActivePage(activePage + 1)">›</button>
+      <button data-testid="pdf-last-page" type="button" :disabled="controlsDisabled || activePage >= numPages" :aria-label="m.common.page.last" @click="setActivePage(numPages)">»</button>
+      <button data-testid="pdf-zoom-out" type="button" :disabled="controlsDisabled || zoom <= zoomOptions[0]" :aria-label="m.common.zoom.out" @click="zoomOut">−</button>
+      <select v-model.number="zoom" data-testid="pdf-zoom-select" :disabled="controlsDisabled" :aria-label="m.common.zoom.level">
         <option v-for="value in zoomOptions" :key="value" :value="value">{{ Math.round(value * 100) }}%</option>
       </select>
-      <button data-testid="pdf-zoom-in" type="button" :disabled="controlsDisabled || zoom >= zoomOptions[zoomOptions.length - 1]" aria-label="放大" @click="zoomIn">+</button>
-      <button v-if="props.showRotateControls" data-testid="pdf-rotate" type="button" :disabled="controlsDisabled" aria-label="顺时针旋转" @click="rotateClockwise">⟳</button>
+      <button data-testid="pdf-zoom-in" type="button" :disabled="controlsDisabled || zoom >= zoomOptions[zoomOptions.length - 1]" :aria-label="m.common.zoom.in" @click="zoomIn">+</button>
+      <button v-if="props.showRotateControls" data-testid="pdf-rotate" type="button" :disabled="controlsDisabled" :aria-label="m.pdf.viewer.rotateClockwise" @click="rotateClockwise">⟳</button>
       <form class="pdf-search" role="search" @submit.prevent="submitSearch">
         <input
           ref="searchInputRef"
           v-model="searchDraft"
           data-testid="pdf-search-input"
           :disabled="controlsDisabled"
-          aria-label="搜索 PDF 文本"
-          placeholder="搜索文本"
+          :aria-label="m.pdf.viewer.searchLabel"
+          :placeholder="m.pdf.viewer.searchPlaceholder"
           @keydown.esc.prevent="clearSearchAndRestoreFocus"
         />
-        <button data-testid="pdf-search-submit" type="submit" :disabled="controlsDisabled || !searchDraft.trim()">搜索</button>
-        <button data-testid="pdf-search-prev" type="button" :disabled="!searchHits.length" aria-label="上一个搜索结果" @click="moveSearch(-1)">↑</button>
-        <button data-testid="pdf-search-next" type="button" :disabled="!searchHits.length" aria-label="下一个搜索结果" @click="moveSearch(1)">↓</button>
+        <button data-testid="pdf-search-submit" type="submit" :disabled="controlsDisabled || !searchDraft.trim()">{{ m.pdf.viewer.search }}</button>
+        <button data-testid="pdf-search-prev" type="button" :disabled="!searchHits.length" :aria-label="m.common.search.previous" @click="moveSearch(-1)">↑</button>
+        <button data-testid="pdf-search-next" type="button" :disabled="!searchHits.length" :aria-label="m.common.search.next" @click="moveSearch(1)">↓</button>
       </form>
       <span v-if="searchResult" data-testid="pdf-search-result" class="search-result" role="status">{{ searchResult }}</span>
-      <button v-if="props.showDownload" data-testid="pdf-download" type="button" :disabled="!verifiedBlob || !!loadError" aria-label="下载 PDF" @click="handleDownload">⬇</button>
+      <button v-if="props.showDownload" data-testid="pdf-download" type="button" :disabled="!verifiedBlob || !!loadError" :aria-label="m.pdf.viewer.download" @click="handleDownload">⬇</button>
     </div>
 
     <div data-testid="pdf-status" class="pdf-status" :data-state="viewerState" aria-live="polite">{{ viewerState }}</div>
-    <div v-if="!effectiveSource" class="pdf-empty">No PDF loaded</div>
-    <div v-else-if="isLoading && !renderDocument" class="pdf-empty">正在打开 PDF…</div>
+    <div v-if="!effectiveSource" class="pdf-empty">{{ m.pdf.viewer.noPdf }}</div>
+    <div v-else-if="isLoading && !renderDocument" class="pdf-empty">{{ m.pdf.viewer.opening }}</div>
     <div v-else-if="loadError" data-testid="load-error" class="pdf-error" :data-error-code="loadError.code">
       {{ loadError.code }}: {{ loadError.message }}
     </div>
@@ -803,7 +817,7 @@ onBeforeUnmount(() => {
       :data-zoom="zoom"
       :data-rotation="rotation"
     >
-      <aside v-if="showThumbnails" data-testid="pdf-thumbnails" class="pdf-thumbnails" aria-label="页面缩略图">
+      <aside v-if="showThumbnails" data-testid="pdf-thumbnails" class="pdf-thumbnails" :aria-label="m.pdf.viewer.thumbnails">
         <button
           v-for="page in pageLabels"
           :key="page"
@@ -818,10 +832,10 @@ onBeforeUnmount(() => {
             v-if="thumbnailUrls[page]"
             data-testid="pdf-thumbnail-image"
             :src="thumbnailUrls[page]"
-            :alt="`第 ${page} 页缩略图`"
+            :alt="formatOfficeMessage(m.pdf.viewer.thumbnailAlt, { page })"
           />
           <span v-else class="thumbnail-placeholder">{{ page }}</span>
-          <span>第 {{ page }} 页</span>
+          <span>{{ formatOfficeMessage(m.pdf.viewer.pageLabel, { page }) }}</span>
         </button>
       </aside>
       <main ref="frameRef" class="pdf-frame-wrap">
@@ -834,7 +848,7 @@ onBeforeUnmount(() => {
           :data-page-number="activePage"
           :data-render-state="pageRenderState"
         >
-          <div v-if="pageRenderState === 'rendering'" class="page-loading">正在渲染第 {{ activePage }} 页…</div>
+          <div v-if="pageRenderState === 'rendering'" class="page-loading">{{ formatOfficeMessage(m.pdf.viewer.renderingPage, { page: activePage }) }}</div>
           <div v-if="pageRenderError" class="pdf-error page-error">{{ pageRenderError }}</div>
           <div v-if="pageImageUrl" data-testid="pdf-page-render" class="pdf-page-render">
             <img
@@ -843,7 +857,7 @@ onBeforeUnmount(() => {
               class="pdf-page-image"
               :src="pageImageUrl"
               :style="pageImageStyle"
-              :alt="`PDF 第 ${renderedPageNumber} 页`"
+              :alt="formatOfficeMessage(m.pdf.viewer.pageAlt, { page: renderedPageNumber })"
             />
           </div>
         </div>

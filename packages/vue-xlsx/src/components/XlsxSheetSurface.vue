@@ -59,7 +59,7 @@
     <div
       v-if="selectionMode === 'region'"
       class="xlsx-sheet-surface__region-layer"
-      aria-label="选择工作表区域"
+      :aria-label="m.xlsx.surface.region"
       tabindex="0"
       @pointerdown="onRegionPointerDown"
       @pointermove="onRegionPointerMove"
@@ -107,6 +107,7 @@ import XlsxSelectionOverlay from "./XlsxSelectionOverlay.vue"
 import XlsxContextMenu from "./XlsxContextMenu.vue"
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue"
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch"
+import { provideXlsxMessages } from "../i18n"
 
 const props = withDefaults(
   defineProps<{
@@ -123,6 +124,8 @@ const props = withDefaults(
     documentId?: string
     selectionMode?: OfficeSelectionMode
     emitReferenceCandidates?: boolean
+    locale?: import("@arcships/office-interaction").OfficeLocale
+    messages?: import("@arcships/office-interaction").OfficeMessagesOverride
   }>(),
   {
     getCellStyle: null,
@@ -134,6 +137,8 @@ const props = withDefaults(
     enableGestureZoom: true,
     selectionMode: "content",
     emitReferenceCandidates: false,
+    locale: "en",
+    messages: undefined,
   },
 )
 
@@ -164,6 +169,7 @@ type GridZoomAnchor = ReturnType<GridInstance["captureZoomAnchor"]>
 type WebKitGestureEvent = Event & { clientX?: number; clientY?: number; scale?: number }
 
 const surfaceRef = ref<HTMLElement | null>(null)
+const m = provideXlsxMessages(() => props.locale, () => props.messages)
 const gridRef = ref<GridInstance | null>(null)
 const contextMenuRef = ref<{ openAt(clientX: number, clientY: number, target?: unknown): boolean } | null>(null)
 const gridViewport = ref({ scrollLeft: 0, scrollTop: 0 })
