@@ -986,7 +986,7 @@ test("duplicating or pasting a commented paragraph exports one comment anchor, n
   }
 });
 
-test("a rebuilt paragraph keeps its comment range in the export", async () => {
+test("a rebuilt paragraph keeps its comment range and note marker in the export", async () => {
   const { model, package: pkg } = await sampleModelWithComments();
   const anchoredIndex = model.nodes.findIndex(
     (node) =>
@@ -1003,20 +1003,32 @@ test("a rebuilt paragraph keeps its comment range in the export", async () => {
     "Monthly operational report (edited)",
   );
   assert.equal(edited.nodes[anchoredIndex].sourceXml, undefined);
-  // The note reference lives on in the model even though this paragraph is no
-  // longer emitted from its original XML (the WASM serializer has no
-  // note-reference slot yet, so the anchor itself only survives through
-  // `sourceXml`; keeping the model field is what lets a later serializer fix
-  // recover it, and what the renderer draws today).
   assert.deepEqual(
     noteReferencesOf(edited.nodes[anchoredIndex]),
     [{ kind: "footnote", id: 1 }],
   );
 
-  const documentXml = documentXmlFromExport(await core.serializeDocx(edited, pkg));
-  assert.match(documentXml, /<w:commentRangeStart w:id="0"\/>/, "the comment range is still exported");
+  const bytes = await core.serializeDocx(edited, pkg);
+  const documentXml = documentXmlFromExport(bytes);
+  assert.match(documentXml, /<w:commentRangeStart w:id="0"\/>/, "the comment range is exported");
   assert.match(documentXml, /<w:commentRangeEnd w:id="0"\/>/);
   assert.match(documentXml, /Monthly operational report \(edited\)/, "the edited text is exported");
+  assert.match(
+    documentXml,
+    /<w:footnoteReference w:id="1"\/>/,
+    "the note marker is re-emitted into the rebuilt paragraph",
+  );
+
+  // The reference and the note body both come back on re-import.
+  const reimported = await core.buildDocModelFromBytes(bytes);
+  assert.deepEqual(
+    noteReferencesOf(reimported.model.nodes[anchoredIndex]),
+    [{ kind: "footnote", id: 1 }],
+  );
+  assert.deepEqual(
+    reimported.model.metadata.footnotes?.map((note) => note.text),
+    model.metadata.footnotes?.map((note) => note.text),
+  );
 });
 
 // ── Issue proposal: import → change one paragraph → export → re-import ────
@@ -1043,9 +1055,8 @@ test("editing one paragraph leaves every other node field-identical after a roun
       );
     }
 
-    // The edited paragraph itself keeps the anchors that live on the model (the
-    // WASM serializer still has no note-reference slot, so the in-text anchor is
-    // only re-emitted for paragraphs whose `sourceXml` survives).
+    // The edited paragraph keeps the anchors that live on the model, and the
+    // serialization patch re-emits them into the exported file.
     assert.match(
       core.paragraphText(reimported.model.nodes[1]),
       /\(edited\)$/,
@@ -1055,6 +1066,11 @@ test("editing one paragraph leaves every other node field-identical after a roun
       noteReferencesOf(edited.nodes[1]),
       noteReferencesOf(model.nodes[1]),
       `${sample}: the edit keeps the paragraph's note references in the model`,
+    );
+    assert.deepEqual(
+      noteReferencesOf(reimported.model.nodes[1]),
+      noteReferencesOf(model.nodes[1]),
+      `${sample}: the re-imported paragraph still carries its note references`,
     );
   }
 });
@@ -1089,9 +1105,9 @@ test("a global replace leaves comment ranges, revisions and note anchors in the 
 });
 
 test("editing a paragraph with a footnote does not drop its reference", async () => {
-  const imported = await core.importDocxBuffer(arrayBufferFromFile("review-comments.docx"), {
-    useWorker: false,
-  });
+  const imported = await core.buildDocModelFromBytes(
+    arrayBufferFromFile("review-comments.docx"),
+  );
 
   const edited = core.updateParagraphText(imported.model, 1, "Monthly operational report edited");
   const editedParagraph = edited.nodes[1];
@@ -1106,7 +1122,20 @@ test("editing a paragraph with a footnote does not drop its reference", async ()
 
   // Untouched neighbours keep their original XML, so their anchors survive export.
   assert.ok(edited.nodes[2].sourceXml, "the next paragraph keeps its source XML");
-  const documentXml = documentXmlFromExport(await core.wasmSerializeDocx(edited, imported.package));
+  const bytes = await core.serializeDocx(edited, imported.package);
+  const documentXml = documentXmlFromExport(bytes);
+  assert.match(documentXml, /<w:footnoteReference w:id="1"\/>/, "the edited paragraph's anchor is exported");
   assert.match(documentXml, /<w:endnoteReference\b/);
   assert.match(documentXml, /<w:ins\b/);
+
+  const reimported = await core.buildDocModelFromBytes(bytes);
+  assert.deepEqual(
+    core.paragraphNoteReferences(reimported.model.nodes[1]),
+    [{ kind: "footnote", id: 1 }],
+    "the anchor survives export + re-import",
+  );
+  assert.ok(
+    reimported.model.metadata.footnotes?.length > 0,
+    "the note body survives export + re-import",
+  );
 });

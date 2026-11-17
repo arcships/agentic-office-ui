@@ -169,8 +169,6 @@ test("setLink reaches the export and keeps note references and image crops", asy
           ],
         },
       ],
-      // The serializer only emits a note anchor when the document defines it.
-      { footnotes: [{ id: 1, text: "note text" }] },
     ),
   );
   const { controller } = mounted;
@@ -202,9 +200,11 @@ test("setLink reaches the export and keeps note references and image crops", asy
   const rels = await exportDocumentRels(controller.model);
   assert.match(documentXml, /<w:hyperlink r:id="[^"]+">/, "the link is exported");
   assert.match(rels, /https:\/\/example\.com\/linked/, "the relationship carries the target");
-  // The footnote anchor itself needs a document that defines footnotes (the
-  // serializer drops references to undefined notes); the model-level assertion
-  // above plus the unit suite cover that side.
+  assert.match(
+    documentXml,
+    /<w:footnoteReference w:id="1"\/>/,
+    "the note marker is re-emitted into the rebuilt paragraph",
+  );
 
   mounted.app.unmount();
   assert.deepEqual(mounted.warnings, []);
