@@ -1460,11 +1460,11 @@ function readConditionalCellValue(cell: XlsxCellAddress): number | null | undefi
       return undefined;
     }
     if (!cached.value.trim()) return null;
-    return parseDisplayedNumber(localizeFormattedNumber(cached.value, cached.style?.numberFormat, props.controller.locale));
+    return parseDisplayedNumber(localizeFormattedNumber(cached.value, cached.style?.numberFormat, props.controller.locale), props.controller.locale);
   }
   const text = props.controller.getCellDisplayValue(cell);
   if (!text.trim()) return null;
-  return parseDisplayedNumber(text);
+  return parseDisplayedNumber(text, props.controller.locale);
 }
 
 function conditionalEnvironmentFor(rule: XlsxConditionalFormatRule): ConditionalEnvironment {
@@ -1484,7 +1484,7 @@ function conditionalVisual(cell: XlsxCellAddress, valueText: string) {
   if (!rule) return null;
   // Excel leaves blank cells unformatted: no bar, no icon, no scale colour.
   if (!valueText.trim()) return null;
-  const value = parseDisplayedNumber(valueText);
+  const value = parseDisplayedNumber(valueText, props.controller.locale);
   if (value === null) return null;
   const environment = conditionalEnvironmentFor(rule);
   if (rule.kind === "dataBar") {
@@ -1543,7 +1543,7 @@ function drawSparkline(ctx: CanvasRenderingContext2D, sparkline: XlsxSparkline, 
   const values: number[] = [];
   for (let row = sparkline.range.start.row; row <= sparkline.range.end.row; row++) {
     for (let col = sparkline.range.start.col; col <= sparkline.range.end.col; col++) {
-      const value = parseDisplayedNumber(getGridCellDisplayValue({ row, col }));
+      const value = parseDisplayedNumber(getGridCellDisplayValue({ row, col }), props.controller.locale);
       if (value !== null) values.push(value);
     }
   }

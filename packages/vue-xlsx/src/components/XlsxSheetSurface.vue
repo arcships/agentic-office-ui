@@ -150,7 +150,13 @@ const props = withDefaults(
     documentId?: string
     selectionMode?: OfficeSelectionMode
     emitReferenceCandidates?: boolean
+    /**
+     * Locale for the built-in UI copy and, unless `documentLocale` is set, for
+     * number and date formats that name no locale of their own.
+     */
     locale?: import("@arcships/office-interaction").OfficeLocale
+    /** Overrides the number/date locale; defaults to `locale`. */
+    documentLocale?: string
     messages?: import("@arcships/office-interaction").OfficeMessagesOverride
   }>(),
   {
@@ -164,6 +170,7 @@ const props = withDefaults(
     selectionMode: "content",
     emitReferenceCandidates: false,
     locale: "en",
+    documentLocale: undefined,
     messages: undefined,
   },
 )
@@ -196,6 +203,20 @@ type WebKitGestureEvent = Event & { clientX?: number; clientY?: number; scale?: 
 
 const surfaceRef = ref<HTMLElement | null>(null)
 const m = provideXlsxMessages(() => props.locale, () => props.messages)
+
+// Number/date formats without a `[$-…]` section follow the surface locale. A
+// default `"en"` leaves a controller created with its own locale untouched.
+let hasAppliedDocumentLocale = false
+const effectiveDocumentLocale = computed(() => props.documentLocale ?? (props.locale === "en" ? undefined : props.locale))
+watch(
+  effectiveDocumentLocale,
+  (locale) => {
+    if (locale === undefined && !hasAppliedDocumentLocale) return
+    hasAppliedDocumentLocale = locale !== undefined
+    props.controller.setDocumentLocale?.(locale)
+  },
+  { immediate: true },
+)
 const descriptor = (
   key: keyof typeof m.value.common.descriptors,
   values: Record<string, string | number> = {},

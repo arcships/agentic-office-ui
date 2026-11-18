@@ -48,3 +48,5 @@ const controller = useXlsxViewerController({ file: props.bytes })
 自建查找替换界面时，用 `useXlsxSearch()` 维护结果（`search` / `searchNext` / `activateSearchMatch` / `clearSearch`），用 `controller.replaceInSheet(query, replacement, options)` 写入：`options` 支持 `matchCase`、`wholeCell`、`formula`、`sheetIndex`、`range`，以及精确到单处命中的 `occurrence: { cell, start, end }`。一次调用一条撤销记录；返回 `{ replacedCells, replacedOccurrences, changed }` 供宿主回报结果。改变工作簿后 `revision` 会变化，`useXlsxSearch` 会清空旧结果，所以替换后重新 `search()` 即可刷新列表。
 
 剪切是控制器上的状态，不是选区状态：`cutSelection()` 进入剪切、`cutState` 给出 `{ range, sheetIndex }`（没有待处理的移动时为 `null`）、`cancelCut()` 取消。自建网格可以据 `cutState` 画自己的 marquee 和“取消剪切”按钮；`pasteFromClipboard()` 搬移内容并在同一个撤销条目里清空源区域，`copySelectionToClipboard()` 与仅格式的 `pasteSpecialFromClipboard({ mode: "formats" })` 会结束剪切状态。内置网格已经把 `Ctrl/Cmd+X`、`Escape` 和虚线标记接到这套状态上。
+
+自建界面同样可以控制数字/日期区域：在 `useXlsxViewerController({ locale: "de-DE" })` 中设置，运行时用 `controller.setDocumentLocale(tag)` 切换；`controller.locale` 报告当前值。`XlsxSheetSurface` 也接受 `locale`/`documentLocale`。显式 `[$-407]` 格式段优先于查看器区域，`@` 文本格式保持键入内容。

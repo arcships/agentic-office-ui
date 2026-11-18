@@ -117,9 +117,10 @@ export function downloadUrl(src: string, fileName: string) {
 }
 
 export function createClipboardDomain(ctx: XlsxControllerContext) {
-  // Only re-render values that can be a localized number; dates, text and
-  // errors skip the extra style lookup entirely.
-  const localizableDisplayValue = /^[\s($€£¥₹₽₪¢₫₴₦₱₸₺฿]*[+-]?\d/;
+  // A literal prefix such as `"kg"#,##0.00` can put text before the number,
+  // so any value containing a digit is a localization candidate. Text, date and
+  // error formats are returned unchanged by `localizeCellNumber`.
+  const localizableDisplayValue = /\d/;
   // The last copy/cut made inside the viewer. Paste Special uses it so the
   // options apply even where the system clipboard cannot be read.
   let storedClipboard: {

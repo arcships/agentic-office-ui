@@ -112,6 +112,7 @@ const suites = {
       "tests/unit/xlsx-chart-type-edit.test.mjs",
       "tests/unit/xlsx-drawing-fidelity.test.mjs",
       "tests/unit/xlsx-typed-dates.test.mjs",
+      "tests/unit/xlsx-number-locale.test.mjs",
       "tests/unit/xlsx-reference-adapter.test.mjs",
       "tests/unit/xlsx-sheet-rename.test.mjs",
       "tests/unit/xlsx-sheet-order.test.mjs",

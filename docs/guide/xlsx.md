@@ -42,6 +42,8 @@ const controller = useXlsxViewerController({
 | `activeTabIndex` | `number` | 无 | 受控的活动标签下标；不传时由控制器持有 |
 | `showUpload` | `boolean` | `false` | 上传入口 |
 | `getCellStyle` | `function` | 无 | 按单元格补充样式 |
+| `locale` | `string` | `"en"` | 界面文案与数字/日期默认区域；内置 `"en"`、`"zh-CN"` |
+| `documentLocale` | `string` | 跟随 `locale` | 单独覆盖数字/日期区域 |
 
 事件包括 `cellDoubleClick`、`upload`、`update:readOnly`、`tabChange`、`update:activeTabIndex`、`load-deferred`、`deferred-resumed` 和 `deferred-cancel`。打印时 `@page` 尺寸取自活动工作表的 `pageSetup` 纸张与方向；图表工作表使用 16:9 的自适应高度。
 
@@ -56,6 +58,18 @@ const controller = useXlsxViewerController({
 - 输入法组字期间的 `Enter`/`Escape` 由输入法处理，组字结束后只提交一次。
 
 编辑器用一个隐藏的镜像层按当前宽度测量草稿的换行高度：硬换行或自动换行后编辑器向下增高（裁剪在网格可视区内），不会把后续行藏在单行滚动里。提交后的换行会写进单元格值；要让换行在单元格里显示为多行，请启用“自动换行”并给行足够的高度——未启用时与 Excel 一致，只显示第一行。
+
+## 数字、日期与语言区域
+
+查看器的 `locale` 同时决定界面文案和数字/日期的默认区域。数字格式里用 `[$-407]` 这类段显式指定的区域始终优先；没有指定区域的格式跟随查看器区域。需要单独控制数字/日期时，用 `documentLocale` 覆盖 `locale`；使用 `XlsxSheetSurface` 时同样可用这两个属性，或直接在 `useXlsxViewerController({ locale })` 中配置。
+
+```vue
+<XlsxViewer :controller="controller" locale="de-DE" />
+```
+
+- `locale="de-DE"`：键入 `1.234,5` 得到 1234.5（General 单元格会建议 `#,##0.00`），显示为 `1.234,50`；`31.12.2024` 解析为日期并按 `dd.mm.yyyy` 显示。`en-US` 下 `1,234.5` 保持 `1,234.50`。
+- 显式 `@` 文本格式不参与数字转换：`1.234,5` 仍保存为文本。带引号/转义的格式字面量（例如 `"kg"#,##0.00`）保持原样，日期和时间格式的点、冒号不会被替换成数字分隔符。
+- 控制器通过 `controller.locale` 报告当前区域，`controller.setDocumentLocale(tag)` 可在运行时切换并重绘；非法标签回退为 `en-US`。
 
 ## 工作表标签
 

@@ -271,10 +271,18 @@ const props = withDefaults(
     showUpload?: boolean;
     /** Enables trackpad, pinch and double-tap zoom for the composite viewer. */
     enableGestureZoom?: boolean;
+    /**
+     * Locale for the built-in UI copy and, unless `documentLocale` is set, for
+     * number and date formats that name no locale of their own.
+     *
+     * Built-in UI copy ships in `"en"` and `"zh-CN"`; other BCP-47 tags such
+     * as `"de-DE"` keep the English UI copy while formatting numbers and dates
+     * for that locale.
+     */
     locale?: OfficeLocale;
     /**
-     * Locale for number and date formats that name none of their own
-     * (`[$-407]`-style sections win). Defaults to the controller's locale.
+     * Overrides the locale used by number and date formats that name none of
+     * their own (`[$-407]`-style sections always win). Defaults to `locale`.
      */
     documentLocale?: string;
     messages?: OfficeMessagesOverride;
@@ -334,10 +342,20 @@ const calculationMessage = computed(() => {
   return m.value.xlsx.calculation.failed;
 });
 
-// Number/date formats without a `[$-…]` section follow the host locale.
+// Number/date formats without a `[$-…]` section follow the host locale. The
+// dedicated `documentLocale` prop wins; otherwise the viewer locale applies,
+// except for the default "en" so a controller created with its own locale is
+// not reset. Once a locale has been applied, switching back to the default
+// resets the controller to its en-US default.
+let hasAppliedDocumentLocale = false;
+const effectiveDocumentLocale = computed(() => props.documentLocale ?? (props.locale === "en" ? undefined : props.locale));
 watch(
-  () => props.documentLocale,
-  (locale) => { props.controller.setDocumentLocale?.(locale); },
+  effectiveDocumentLocale,
+  (locale) => {
+    if (locale === undefined && !hasAppliedDocumentLocale) return;
+    hasAppliedDocumentLocale = locale !== undefined;
+    props.controller.setDocumentLocale?.(locale);
+  },
   { immediate: true },
 );
 
