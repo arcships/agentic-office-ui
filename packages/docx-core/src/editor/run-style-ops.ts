@@ -12,8 +12,14 @@ import type {
   TextRunNode,
   TextStyle,
 } from "../engine/types";
-import { cloneDocModel, cloneDocModelShallow, cloneDocNode } from "../engine/clone";
 import {
+  cloneDocModel,
+  cloneDocModelShallow,
+  cloneDocNode,
+  cloneDrawingRun,
+  cloneMathRun,
+  cloneTextBoxContent,
+} from "../engine/clone";import {
   invalidateParagraphSourceXml,
   removeSectionPropertiesXmlFromSourceXml,
   shiftDocumentSectionStartNodeIndexes
@@ -322,35 +328,45 @@ export function serializeParagraphsForClipboard(paragraphs: ParagraphNode[]): st
       type: "paragraph",
       style: paragraph.style ?? undefined,
       sourceXml: paragraph.sourceXml,
-      children: paragraph.children.map((run) =>
-        run.type === "text"
-          ? {
-              type: "text" as const,
-              text: run.text,
-              style: run.style ?? undefined,
-              link: run.link,
-              noteReference: run.noteReference ?? undefined
-            }
-          : run.type === "form-field"
-            ? cloneFormFieldRun(run)
-          : {
-              type: "image" as const,
-              src: run.src,
-              alt: run.alt,
-              widthPx: run.widthPx,
-              heightPx: run.heightPx,
-              partName: run.partName,
-              contentType: run.contentType,
-              data: run.data ? Array.from(run.data) : undefined,
-              sourceXml: run.sourceXml,
-              crop: run.crop ? { ...run.crop } : undefined,
-              cssFilter: run.cssFilter,
-              cssOpacity: run.cssOpacity,
-              floating: run.floating ? { ...run.floating } : undefined,
-              syntheticTextBox: run.syntheticTextBox,
-              textBoxText: run.textBoxText
-            }
-      )
+      children: paragraph.children.map((run) => {
+        if (run.type === "text") {
+          return {
+            type: "text" as const,
+            text: run.text,
+            style: run.style ?? undefined,
+            link: run.link,
+            noteReference: run.noteReference ?? undefined
+          };
+        }
+        if (run.type === "form-field") {
+          return cloneFormFieldRun(run);
+        }
+        if (run.type === "drawing") {
+          return cloneDrawingRun(run);
+        }
+        if (run.type === "math") {
+          return cloneMathRun(run);
+        }
+        return {
+          type: "image" as const,
+          src: run.src,
+          alt: run.alt,
+          widthPx: run.widthPx,
+          heightPx: run.heightPx,
+          partName: run.partName,
+          contentType: run.contentType,
+          data: run.data ? Array.from(run.data) : undefined,
+          sourceXml: run.sourceXml,
+          crop: run.crop ? { ...run.crop } : undefined,
+          cssFilter: run.cssFilter,
+          cssOpacity: run.cssOpacity,
+          floating: run.floating ? { ...run.floating } : undefined,
+          syntheticTextBox: run.syntheticTextBox,
+          textBoxText: run.textBoxText,
+          textBox: run.textBox,
+          textBoxSourceXml: run.textBoxSourceXml
+        };
+      })
     }))
   );
 }
@@ -412,7 +428,38 @@ export function parseParagraphsFromClipboard(input: string): ParagraphNode[] | u
             floating: run.floating && typeof run.floating === "object" ? { ...run.floating } : undefined,
             syntheticTextBox: Boolean(run.syntheticTextBox),
             textBoxText:
-              typeof run.textBoxText === "string" ? run.textBoxText : undefined
+              typeof run.textBoxText === "string" ? run.textBoxText : undefined,
+            textBox:
+              run.textBox && typeof run.textBox === "object"
+                ? cloneTextBoxContent(run.textBox)
+                : undefined,
+            textBoxSourceXml:
+              typeof run.textBoxSourceXml === "string"
+                ? run.textBoxSourceXml
+                : undefined
+          });
+          continue;
+        }
+
+        if (run.type === "drawing" && typeof run.sourceXml === "string") {
+          children.push({
+            ...run,
+            type: "drawing",
+            floating:
+              run.floating && typeof run.floating === "object"
+                ? { ...run.floating }
+                : undefined,
+          });
+          continue;
+        }
+
+        if (run.type === "math" && typeof run.sourceXml === "string") {
+          children.push({
+            type: "math",
+            text: typeof run.text === "string" ? run.text : "",
+            display: Boolean(run.display),
+            style: run.style ? { ...run.style } : undefined,
+            sourceXml: run.sourceXml,
           });
           continue;
         }

@@ -143,21 +143,28 @@ function imageBlocks(
 ): DocumentBlock[] {
   const blocks: DocumentBlock[] = [];
   paragraph.children.forEach((child, childIndex) => {
-    if (child.type !== "image") return;
-    const image = child as ImageRunNode;
+    if (child.type !== "image" && child.type !== "drawing" && child.type !== "math") {
+      return;
+    }
+    const figure =
+      child.type === "drawing"
+        ? { alt: child.alt ?? child.name ?? child.kind }
+        : child.type === "math"
+          ? { alt: child.text }
+          : { alt: child.alt };
     const id = docxImageSourceId(paragraphSourceId, childIndex);
     blocks.push({
       object: "block",
       id,
       type: "figure",
-      content: image.alt ?? "",
+      content: figure.alt ?? "",
       details: {
         kind: "figure",
         nodeIndex,
         childIndex,
         modelPath: paragraphPath,
         part: context.part,
-        ...(image.alt ? { alt: image.alt } : {}),
+        ...(figure.alt ? { alt: figure.alt } : {}),
       },
       sourceRefs: [
         {

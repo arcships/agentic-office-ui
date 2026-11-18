@@ -98,6 +98,22 @@ const editor = useDocxEditor({ initialFileName: "document.docx" })
 
 自定义菜单或目录可以直接使用 `@arcships/docx-core` 的 `createDocxBookmarkIndex(model)`（`get` / `has` / `targets`）和 `normalizeDocxBookmarkName()`，无需自己解析 `sourceXml`。
 
+## 图形对象与公式覆盖层
+
+宿主若要自己绘制形状、图表、SmartArt、嵌入对象、3D 模型或公式，可以读取段落的 `children`：`type: "drawing"` 的节点带 `kind`、`widthPx` / `heightPx`、`floating`、`zIndex`、`sourceXml` 和可用内容（`chart` / `shape` / `ole` / `textBox` / `src`），`type: "math"` 的节点带 `text` 与 `sourceXml`。内置渲染器输出下列标记供选择器和自定义样式使用：
+
+| 标记 | 含义 |
+|---|---|
+| `data-docx-drawing` / `data-docx-drawing-kind` | 一个绘图占位框及其对象类型 |
+| `data-docx-drawing-placeholder` | 占位框内的标签（形状、SmartArt、嵌入对象名称） |
+| `data-docx-drawing-preview` | 图表预览或 3D 模型海报图 |
+| `data-docx-drawing-textbox` | 文本框绘制的模型段落 |
+| `data-docx-drawing-behind` | 位于文字下方的对象（负 `z-index`） |
+| `data-docx-math` / `data-docx-math-display` | 公式的线性文本；`display` 为块级公式 |
+| `data-docx-drop-cap` | 首字下沉字母 |
+
+`drawingObjectPlaceholderStyle()`、`drawingObjectFrameStyle()`、`drawingObjectSizePx()`、`chartPlaceholderText()` 和 `chartPreviewDataUri()` 与内置渲染器共用同一套位置/尺寸规则；文案来自 `messages.docx.drawing`（`textBox`、`shape`、`wordArt`、`group`、`smartArt`、`chart`、`oleObject`、`model3d`、`equation`、`embeddedObject`、`chartSeries`）。
+
 ## 文档块/词高亮覆盖层
 
 `DocxBlockHighlights` 和 `DocxWordHighlights` 是独立覆盖层，可以挂在 `DocxViewer`、`DocxEditor` 或 `DocxDocumentSurface` 的根元素上：

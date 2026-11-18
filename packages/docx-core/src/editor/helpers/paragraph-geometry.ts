@@ -24,7 +24,8 @@ import {
 } from "./paragraph-inspect";
 import {
   syntheticTextBoxContainsPictureLayer,
-  syntheticTextBoxParagraphsFromRunXml
+  syntheticTextBoxParagraphsFromRunXml,
+  syntheticTextBoxXml
 } from "./synthetic-textbox";
 import { WORD_IMAGE_Z_INDEX_STEP } from "./constants";
 import type { TableCellContentNode } from "../../engine/types";
@@ -449,20 +450,32 @@ export function normalizeFloatingTextBoxComparisonText(text: string): string {
 export function floatingTextBoxVisibleTextFromImage(
   image: ImageRunNode
 ): string | undefined {
+  const xml = syntheticTextBoxXml(image);
   if (
     !shouldRenderAbsoluteFloatingImage(image) ||
-    !image.sourceXml ||
-    !/<w:txbxContent\b/i.test(image.sourceXml)
+    !xml ||
+    !/<w:txbxContent\b/i.test(xml)
   ) {
     return undefined;
   }
 
-  const paragraphs = syntheticTextBoxParagraphsFromRunXml(image.sourceXml);
-  if (paragraphs.length === 0) {
+  const paragraphs = xml ? syntheticTextBoxParagraphsFromRunXml(xml) : [];
+  const resolvedParagraphs =
+    paragraphs.length > 0
+      ? paragraphs
+      : (image.textBox?.paragraphs.map((paragraph) => ({
+          align: paragraph.align,
+          lineHeightPx: paragraph.lineHeightPx,
+          segments: paragraph.segments.map((segment) => ({
+            text: segment.text,
+            style: segment.style,
+          })),
+        })) ?? []);
+  if (resolvedParagraphs.length === 0) {
     return undefined;
   }
 
-  const text = paragraphs
+  const text = resolvedParagraphs
     .map((paragraph) =>
       paragraph.segments.map((segment) => segment.text).join("")
     )

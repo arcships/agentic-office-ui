@@ -114,6 +114,65 @@ export interface TextRunNode {
   noteReference?: NoteReference;
 }
 
+/**
+ * Anchor, wrap and paint-order of a drawing object (`wp:anchor`), shared by
+ * floating images and the drawing objects this model carries (shapes, charts,
+ * embedded objects).
+ */
+export interface DrawingAnchor {
+  xPx?: number;
+  yPx?: number;
+  horizontalAlign?: "left" | "center" | "right" | "inside" | "outside";
+  verticalAlign?: "top" | "center" | "bottom" | "inside" | "outside";
+  horizontalRelativeTo?: string;
+  verticalRelativeTo?: string;
+  distLPx?: number;
+  distRPx?: number;
+  distTPx?: number;
+  distBPx?: number;
+  wrapType?: "none" | "square" | "tight" | "through" | "topAndBottom";
+  wrapText?: "bothSides" | "left" | "right" | "largest";
+  behindDocument?: boolean;
+  zIndex?: number;
+  /** Whether the anchor is laid out inside its table cell (wp:anchor/@layoutInCell). */
+  layoutInCell?: boolean;
+  /** Whether the anchored object may overlap other floating objects (wp:anchor/@allowOverlap). */
+  allowOverlap?: boolean;
+  /** Whether the editor must not move or resize the anchor (wp:anchor/@locked). */
+  lockedAnchor?: boolean;
+  /** Whether x/y are page-relative simple positions (wp:anchor/@simplePos). */
+  simplePos?: boolean;
+  /** Visual overflow beyond the extent, in CSS pixels (wp:effectExtent). */
+  effectExtent?: {
+    leftPx?: number;
+    topPx?: number;
+    rightPx?: number;
+    bottomPx?: number;
+  };
+}
+
+/** One styled text segment of a text box paragraph. */
+export interface TextBoxRunSegment {
+  text: string;
+  style?: TextStyle;
+}
+
+/**
+ * One paragraph of a text box (`w:txbxContent`). The text box content is part of
+ * the model so it stays editable and renderable after an edit clears the run's
+ * `sourceXml`.
+ */
+export interface TextBoxParagraph {
+  align?: ParagraphAlignment;
+  lineHeightPx: number;
+  segments: TextBoxRunSegment[];
+}
+
+/** Text content of a shape/text box drawing (`w:txbxContent`). */
+export interface TextBoxContent {
+  paragraphs: TextBoxParagraph[];
+}
+
 export interface ImageRunNode {
   type: "image";
   src?: string;
@@ -132,39 +191,24 @@ export interface ImageRunNode {
   };
   cssFilter?: string;
   cssOpacity?: number;
-  floating?: {
-    xPx?: number;
-    yPx?: number;
-    horizontalAlign?: "left" | "center" | "right" | "inside" | "outside";
-    verticalAlign?: "top" | "center" | "bottom" | "inside" | "outside";
-    horizontalRelativeTo?: string;
-    verticalRelativeTo?: string;
-    distLPx?: number;
-    distRPx?: number;
-    distTPx?: number;
-    distBPx?: number;
-    wrapType?: "none" | "square" | "tight" | "through" | "topAndBottom";
-    wrapText?: "bothSides" | "left" | "right" | "largest";
-    behindDocument?: boolean;
-    zIndex?: number;
-    /** Whether the anchor is laid out inside its table cell (wp:anchor/@layoutInCell). */
-    layoutInCell?: boolean;
-    /** Whether the anchored object may overlap other floating objects (wp:anchor/@allowOverlap). */
-    allowOverlap?: boolean;
-    /** Whether the editor must not move or resize the anchor (wp:anchor/@locked). */
-    lockedAnchor?: boolean;
-    /** Whether x/y are page-relative simple positions (wp:anchor/@simplePos). */
-    simplePos?: boolean;
-    /** Visual overflow beyond the extent, in CSS pixels (wp:effectExtent). */
-    effectExtent?: {
-      leftPx?: number;
-      topPx?: number;
-      rightPx?: number;
-      bottomPx?: number;
-    };
-  };
+  floating?: DrawingAnchor;
+  /**
+   * True when the image is a synthetic render of a Word text box / shape.
+   */
   syntheticTextBox?: boolean;
   textBoxText?: string;
+  /**
+   * The text box content parsed at import. The renderer prefers it over
+   * re-parsing `sourceXml`, which an edit clears.
+   */
+  textBox?: TextBoxContent;
+  /**
+   * The original `w:drawing`/`w:pict` markup of a synthetic text box. Editing a
+   * text box clears `sourceXml` (the engine must rebuild the run) but the
+   * drawing itself still has to reach the export; this copy is what the
+   * serializer writes back.
+   */
+  textBoxSourceXml?: string;
 }
 
 export type FormFieldType = "checkbox" | "text" | "date" | "dropdown";
@@ -230,7 +274,97 @@ export interface FormFieldRunNode {
   sourceXml?: string;
 }
 
-export type ParagraphChildNode = TextRunNode | ImageRunNode | FormFieldRunNode;
+/**
+ * The drawing objects a Word document can carry that are not pictures: text
+ * boxes, autoshapes, WordArt, shape groups, SmartArt, charts, embedded OLE
+ * objects and 3D models. Everything is preserved verbatim in `sourceXml` so an
+ * export writes the object back exactly as it was imported.
+ */
+export type DrawingObjectKind =
+  | "textBox"
+  | "shape"
+  | "wordArt"
+  | "group"
+  | "smartArt"
+  | "chart"
+  | "oleObject"
+  | "model3d";
+
+/** One cached chart series (`c:ser`): name, categories and plotted values. */
+export interface ChartSeriesData {
+  name?: string;
+  categories?: string[];
+  values?: Array<number | null>;
+}
+
+/** Chart part data (`word/charts/chartN.xml`) carried by a `chart` drawing. */
+export interface ChartData {
+  /** OOXML plot element, e.g. "barChart", "lineChart" or "pieChart". */
+  chartType?: string;
+  title?: string;
+  categories?: string[];
+  series?: ChartSeriesData[];
+}
+
+/** Fill/stroke a shape placeholder paints with. */
+export interface DrawingObjectShapeStyle {
+  preset?: string;
+  fillColor?: string;
+  strokeColor?: string;
+  strokeWidthPx?: number;
+}
+
+/**
+ * A non-picture drawing object inside a paragraph. Layout uses `widthPx` /
+ * `heightPx` and the optional `floating` anchor; rendering falls back to a
+ * placeholder built from the available content (`textBox`, `chart`, `shape`,
+ * `ole`) because the document model cannot render the object itself.
+ */
+export interface DrawingRunNode {
+  type: "drawing";
+  kind: DrawingObjectKind;
+  name?: string;
+  alt?: string;
+  widthPx?: number;
+  heightPx?: number;
+  /** Anchor and z-order (`wp:anchor`); absent for inline (`wp:inline`) objects. */
+  floating?: DrawingAnchor;
+  /** Paint order derived from Word's `relativeHeight`, when floating. */
+  zIndex?: number;
+  /** Local preview (data URI) when the importer could produce one. */
+  src?: string;
+  textBox?: TextBoxContent;
+  chart?: ChartData;
+  shape?: DrawingObjectShapeStyle;
+  ole?: {
+    progId?: string;
+    drawAspect?: string;
+  };
+  /** Original `w:drawing` / `w:object` / `w:pict` markup, written back on export. */
+  sourceXml: string;
+}
+
+/**
+ * An equation (`m:oMath` / `m:oMathPara`). The linearized `text` keeps the
+ * equation visible when the browser cannot render OMML; `sourceXml` is written
+ * back unchanged on export.
+ */
+export interface MathRunNode {
+  type: "math";
+  /** Linearized equation text, e.g. `x^2 + a/b`. */
+  text: string;
+  /** True for a display equation (`m:oMathPara`). */
+  display?: boolean;
+  style?: TextStyle;
+  sourceXml: string;
+}
+
+export type ParagraphChildNode =
+  | TextRunNode
+  | ImageRunNode
+  | FormFieldRunNode
+  | DrawingRunNode
+  | MathRunNode;
 
 export interface ParagraphNumbering {
   numId: number;

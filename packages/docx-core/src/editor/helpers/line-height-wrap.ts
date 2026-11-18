@@ -343,6 +343,12 @@ function estimateWrappedLineCountForParagraph(
       continue;
     }
 
+    // Drawing objects and equations are measured by the DOM; this estimate only
+    // accumulates text runs and form fields.
+    if (child.type !== "text" && child.type !== "form-field") {
+      continue;
+    }
+
     const text =
       child.type === "text" ? child.text : formFieldDisplayValue(child);
     if (!text) {

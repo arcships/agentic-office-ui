@@ -16,8 +16,6 @@ import type {
 import {
   cloneDocModelShallow,
   cloneDocNode,
-  cloneFormFieldRun,
-  cloneImageRun,
   cloneParagraph,
   cloneParagraphChild,
   cloneTextRun
@@ -395,11 +393,7 @@ export function distributeTextAcrossParagraphChildren(
 
     textGroups.push(currentGroup);
     currentGroup = [];
-    anchors.push(
-      child.type === "form-field"
-        ? cloneFormFieldRun(child)
-        : cloneImageRun(child)
-    );
+    anchors.push(cloneParagraphChild(child) as (typeof anchors)[number]);
   }
   textGroups.push(currentGroup);
 
@@ -484,11 +478,7 @@ export function splitParagraphChildrenAtTextOffsets(
 
     textGroups.push(currentGroup);
     currentGroup = [];
-    anchors.push(
-      child.type === "form-field"
-        ? cloneFormFieldRun(child)
-        : cloneImageRun(child)
-    );
+    anchors.push(cloneParagraphChild(child) as (typeof anchors)[number]);
   }
   textGroups.push(currentGroup);
 

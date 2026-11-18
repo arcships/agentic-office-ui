@@ -650,6 +650,25 @@ export interface OfficeDocxMessages {
     /** Template with a `{feature}` placeholder. */
     unsupportedImageFeature: string
   }
+  /**
+   * Labels for drawing objects the model cannot paint itself (shapes, charts,
+   * SmartArt, embedded objects, 3D models) and the equations it shows as text.
+   */
+  drawing: {
+    textBox: string
+    shape: string
+    wordArt: string
+    group: string
+    smartArt: string
+    chart: string
+    oleObject: string
+    model3d: string
+    equation: string
+    /** Template with a `{progId}` placeholder. */
+    embeddedObject: string
+    /** Template with a `{count}` placeholder. */
+    chartSeries: string
+  }
 }
 
 export interface OfficeXlsxMessages {
@@ -1830,6 +1849,19 @@ export const officeMessagesEn: OfficeMessages = {
       numberingImageDecodeFailed: "DOCX numbering image could not be decoded.",
       unsupportedImageFeature: "DOCX SVG picture uses unsupported {feature} content; showing a placeholder.",
     },
+    drawing: {
+      textBox: "Text box",
+      shape: "Shape",
+      wordArt: "WordArt",
+      group: "Grouped shapes",
+      smartArt: "SmartArt",
+      chart: "Chart",
+      oleObject: "Embedded object",
+      model3d: "3D model",
+      equation: "Equation",
+      embeddedObject: "Embedded object ({progId})",
+      chartSeries: "{count} series",
+    },
   },
   xlsx: {
     viewer: {
@@ -2952,6 +2984,19 @@ export const officeMessagesZhCN: OfficeMessages = {
       imageDecodeFailed: "DOCX 图片无法解码。",
       numberingImageDecodeFailed: "DOCX 编号图片无法解码。",
       unsupportedImageFeature: "DOCX SVG 图片包含不支持的 {feature} 内容，已显示占位符。",
+    },
+    drawing: {
+      textBox: "文本框",
+      shape: "形状",
+      wordArt: "艺术字",
+      group: "组合形状",
+      smartArt: "SmartArt",
+      chart: "图表",
+      oleObject: "嵌入对象",
+      model3d: "3D 模型",
+      equation: "公式",
+      embeddedObject: "嵌入对象（{progId}）",
+      chartSeries: "{count} 个系列",
     },
   },
   xlsx: {
