@@ -117,6 +117,48 @@ test("PDF page parameters swap dimensions for quarter-turn rotations", () => {
   });
 });
 
+test("PDF runtime opens normalized page rotation and applies it once when rendering", async () => {
+  const runtime = pdf.createPdfRenderRuntime({ runtimeId: "normalized-rotation" });
+  const openOptions = [];
+  const renderOptions = [];
+  const native = {
+    id: "normalized-native",
+    pageCount: 1,
+    pages: [{
+      index: 0,
+      size: { width: 595, height: 842 },
+      // @embedpdf/models Rotation.Degree90
+      rotation: 1,
+      objectNumber: 0,
+    }],
+  };
+  runtime.engine = {
+    openDocumentBuffer(_file, options) {
+      openOptions.push(options);
+      return { abort() {}, async toPromise() { return native; } };
+    },
+    renderPage(_document, _page, options) {
+      renderOptions.push(options);
+      return { abort() {}, async toPromise() { return new Blob(["page"], { type: "image/png" }); } };
+    },
+    destroy() {
+      return { abort() {}, async toPromise() { return true; } };
+    },
+  };
+
+  const document = await runtime.openDocument(new ArrayBuffer(8));
+  assert.deepEqual(openOptions, [{ normalizeRotation: true }], "rotation is normalized in the engine");
+  assert.equal(document.pages[0].width, 595);
+  assert.equal(document.pages[0].height, 842);
+  assert.equal(document.pages[0].rotation, 90, "the intrinsic rotation stays available as metadata");
+
+  await runtime.renderPage(document, 0, { scale: 1, rotation: 0, dpr: 1 });
+  assert.equal(renderOptions[0].rotation, 1, "the intrinsic /Rotate 90 is applied exactly once");
+  await runtime.renderPage(document, 0, { scale: 1, rotation: 90, dpr: 1 });
+  assert.equal(renderOptions[1].rotation, 2, "user rotation is added on top of the intrinsic rotation");
+  await runtime.dispose();
+});
+
 test("PDF runtime leaves URL.createObjectURL untouched across ownership lifecycle", async () => {
   const original = URL.createObjectURL;
   const runtime = pdf.createPdfRenderRuntime({ runtimeId: "no-global-patch" });

@@ -99,7 +99,7 @@
     <div
       v-if="loadError"
       class="error"
-      data-testid="pdf-surface-load-error"
+      data-testid="pdf-surface-page-load-error"
       :data-error-code="loadError.code"
     >
       {{ loadError.code }}: {{ loadError.message }}

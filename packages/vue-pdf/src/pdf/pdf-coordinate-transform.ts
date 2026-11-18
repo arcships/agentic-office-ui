@@ -109,34 +109,15 @@ export function pdfDisplayPointToCanonical(
   }
 }
 
-/** Convert an engine search rect, which includes intrinsic page rotation, back to canonical space. */
+/**
+ * The runtime opens documents with `normalizeRotation: true`, so every engine
+ * rect (search hits, annotations) is already in canonical 0-degree page space.
+ * Intrinsic `/Rotate` values are exposed through `page.rotation` for display
+ * math and diagnostics but must not be applied a second time here.
+ */
 export function pdfIntrinsicRectToCanonical(
-  page: PdfRenderPageInfo,
+  _page: PdfRenderPageInfo,
   rect: PdfRenderRect,
 ): PdfRenderRect {
-  switch (page.rotation) {
-    case 90:
-      return {
-        x: rect.y,
-        y: page.height - rect.x - rect.width,
-        width: rect.height,
-        height: rect.width,
-      }
-    case 180:
-      return {
-        x: page.width - rect.x - rect.width,
-        y: page.height - rect.y - rect.height,
-        width: rect.width,
-        height: rect.height,
-      }
-    case 270:
-      return {
-        x: page.width - rect.y - rect.height,
-        y: rect.x,
-        width: rect.height,
-        height: rect.width,
-      }
-    default:
-      return rect
-  }
+  return rect
 }
