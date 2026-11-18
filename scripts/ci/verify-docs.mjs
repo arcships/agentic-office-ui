@@ -56,8 +56,10 @@ const requiredFiles = [
   "scripts/ci/prepare-release-artifact.mjs",
   "test-data/manifest.json",
   "tests/unit/docx-core.test.mjs",
+  "tests/unit/docx-fixture-fidelity.test.mjs",
   "tests/unit/xlsx-core.test.mjs",
   "tests/component/vue-components.test.mjs",
+  "tests/component/docx-fixture-fidelity.test.mjs",
   "tests/component/docx-selection-input.test.mjs",
   "tests/blackbox/browser_evidence.py",
   "tests/blackbox/console_allowlist.json",
@@ -227,6 +229,8 @@ for (const registered of [
   '"material-verification"',
   '"tests/blackbox/pdf_workflows.py"',
   '"tests/blackbox/fidelity_content.py"',
+  '"tests/unit/docx-fixture-fidelity.test.mjs"',
+  '"tests/component/docx-fixture-fidelity.test.mjs"',
   'childSuite("docs", "test:docs")',
 ]) {
   check(`suite registration ${registered}`, runner.includes(registered));
@@ -268,7 +272,7 @@ check(
   ),
 );
 const fixtures = JSON.parse(read("test-data/manifest.json"));
-check("fixture manifest has 23 entries", fixtures.entries?.length === 23, fixtures.entries?.length);
+check("fixture manifest has 26 entries", fixtures.entries?.length === 26, fixtures.entries?.length);
 check("fixture manifest excludes sensitive data", fixtures.containsSensitiveData === false);
 check(
   "consumer template has no source alias",

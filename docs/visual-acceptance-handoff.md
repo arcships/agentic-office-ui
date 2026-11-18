@@ -198,56 +198,119 @@ These gates override the more general page checklist below. A page cannot be acc
 
 ### Shared UI gate
 
-- All visible buttons, selects, inputs, file uploads, tabs, toolbars, cards, tables, badges, and error states use a consistent shadcn/upstream visual language.
-- Focus-visible, hover, active, disabled, selected, loading, empty, success, and error states are visibly distinct.
-- Controls that do nothing are removed, disabled with explanation, or implemented.
-- Keyboard Tab order follows visual order and always shows focus.
+- All visible buttons, selects, inputs, file uploads, tabs, toolbars, cards, tables, badges, and error states use a consistent shadcn/upstream visual language. `G-SHARED-1`
+- Focus-visible, hover, active, disabled, selected, loading, empty, success, and error states are visibly distinct. `G-SHARED-2`
+- Controls that do nothing are removed, disabled with explanation, or implemented. `G-SHARED-3`
+- Keyboard Tab order follows visual order and always shows focus. `G-SHARED-4`
 
 ### Fixture-switching gate
 
 For every dropdown-driven fixture route:
 
-- Switching every valid fixture fully resets stale viewer/editor state.
-- The loaded filename/status, page/sheet count, selection, zoom, error state, and toolbar disabled state match the new fixture.
-- Corrupted fixtures show a clear error state and do not retain stale content from the previous valid fixture.
-- Re-switching from corrupted back to valid fixture recovers without page reload.
+- Switching every valid fixture fully resets stale viewer/editor state. `G-FIXTURE-1`
+- The loaded filename/status, page/sheet count, selection, zoom, error state, and toolbar disabled state match the new fixture. `G-FIXTURE-2`
+- Corrupted fixtures show a clear error state and do not retain stale content from the previous valid fixture. `G-FIXTURE-3`
+- Re-switching from corrupted back to valid fixture recovers without page reload. `G-FIXTURE-4`
 
 ### DOCX Viewer gate
 
-- Multi-page DOCX files render as multiple visible pages or an explicitly accepted equivalent page navigation model.
-- Page count/current page display matches the rendered pages.
-- Scrolling through pages updates visible page/navigation state where such state is shown.
-- Tables, images, headings, CJK text, and page margins remain readable after fixture switching.
-- No footer/status/pagination UI reports impossible or stale values.
-- Source-level DOCX viewer gaps from `docs/upstream-parity-gap-audit.md` are closed or agreed intentional before parity acceptance, including headers/footers, hyperlinks, complex tables, images/fallbacks, sections/columns, notes/comments/revisions visibility, pagination fidelity, dark/night-reader behavior, import depth, and virtualization.
+- Multi-page DOCX files render as multiple visible pages or an explicitly accepted equivalent page navigation model. `G-DOCX-VIEW-1`
+- Page count/current page display matches the rendered pages. `G-DOCX-VIEW-2`
+- Scrolling through pages updates visible page/navigation state where such state is shown. `G-DOCX-VIEW-3`
+- Tables, images, headings, CJK text, and page margins remain readable after fixture switching. `G-DOCX-VIEW-4`
+- No footer/status/pagination UI reports impossible or stale values. `G-DOCX-VIEW-5`
+- Every comment renders one card, anchored to its text, numbered like its inline marker; resolved threads stay hidden until asked for. `G-DOCX-VIEW-6`
+- Tracked changes are listed against the revision they describe, and a deleted table row stays visible, marked, and listed once. `G-DOCX-VIEW-7`
+- Merged and nested tables keep their grid column count and cell text, and `w:tblHeader` rows repeat on the continuation page. `G-DOCX-VIEW-8`
+- A section's header and footer render on every page of that section, with that section's part and page orientation. `G-DOCX-VIEW-9`
+- Footnote and endnote markers print the same numbers as the notes section. `G-DOCX-VIEW-10`
+- The fixture set exercises comment threads, several comments on one paragraph, cross-paragraph ranges, comments in a cell and in a header, a resolved thread, `vMerge`/`gridSpan`/nested tables, repeating header rows, mixed orientation and two-column sections, a text box and a watermark. `G-DOCX-VIEW-11`
+- Source-level DOCX viewer gaps from `docs/upstream-parity-gap-audit.md` are closed or agreed intentional before parity acceptance, including headers/footers, hyperlinks, complex tables, images/fallbacks, sections/columns, notes/comments/revisions visibility, pagination fidelity, dark/night-reader behavior, import depth, and virtualization. `G-DOCX-VIEW-12`
 
 ### DOCX Editor gate
 
-- Editing a paragraph changes only the intended insertion/selection range; typing must not rewrite, duplicate, reorder, or restyle the whole line/block unexpectedly.
-- Bold/italic/underline and heading controls affect only the intended selected/current text block according to the documented editor model.
-- Undo/redo restore the actual edited content and selection-adjacent state, not only toolbar availability.
-- Theme toggling changes the editor surface without losing text, selection, or undo history.
-- Every visible editor toolbar/control is backed by real behavior, undo/redo participation, and export/reimport behavior where applicable; otherwise it is hidden/disabled with explanation.
-- Source-level DOCX editor gaps from `docs/upstream-parity-gap-audit.md` are closed or agreed intentional before parity acceptance, including range selection, font family/size/color/highlight/subscript/superscript, links, lists, paragraph styles, line spacing, borders, table editing, image insertion/wrap, comments, tracked changes, form fields, context menus, thumbnails, WASM import/export, and serialization.
-- If full upstream editor parity is not implemented, the route must be renamed/scoped honestly (for example “DOCX editing demo”) and upstream-missing behaviors must be documented before acceptance.
+- Editing a paragraph changes only the intended insertion/selection range; typing must not rewrite, duplicate, reorder, or restyle the whole line/block unexpectedly. `G-DOCX-EDIT-1`
+- Bold/italic/underline and heading controls affect only the intended selected/current text block according to the documented editor model. `G-DOCX-EDIT-2`
+- Undo/redo restore the actual edited content and selection-adjacent state, not only toolbar availability. `G-DOCX-EDIT-3`
+- Theme toggling changes the editor surface without losing text, selection, or undo history. `G-DOCX-EDIT-4`
+- Every visible editor toolbar/control is backed by real behavior, undo/redo participation, and export/reimport behavior where applicable; otherwise it is hidden/disabled with explanation. `G-DOCX-EDIT-5`
+- Exporting after an edit and importing the result changes only the edited fields. `G-DOCX-EDIT-6`
+- Source-level DOCX editor gaps from `docs/upstream-parity-gap-audit.md` are closed or agreed intentional before parity acceptance, including range selection, font family/size/color/highlight/subscript/superscript, links, lists, paragraph styles, line spacing, borders, table editing, image insertion/wrap, comments, tracked changes, form fields, context menus, thumbnails, WASM import/export, and serialization. `G-DOCX-EDIT-7`
+- If full upstream editor parity is not implemented, the route must be renamed/scoped honestly (for example “DOCX editing demo”) and upstream-missing behaviors must be documented before acceptance. `G-DOCX-EDIT-8`
 
 ### XLSX Viewer gate
 
-- Workbook switching works for all fixtures and clears stale sheet/selection/edit/error state.
-- Sheet tabs switch sheets and update grid content.
-- Single-cell selection, range selection, Shift/Cmd-style extension where implemented, and drag-to-select visibly work.
-- Double-click edit, Enter commit, Escape cancel, Tab commit-and-move, undo, redo, readonly blocking, zoom, upload, and download are either implemented or hidden/disabled with a clear reason.
-- Grid headers, gridlines, active cell, selected range, edited cell, and readonly state are visually clear.
-- Download/export controls generate truthful outputs: source download returns the original workbook source where applicable, XLSX export returns a real openable workbook, and CSV export reflects the active sheet. JSON summaries must not be downloaded with `.xlsx` extensions.
-- Source-level XLSX gaps from `docs/upstream-parity-gap-audit.md` are closed or agreed intentional before parity acceptance, including real workbook/controller engine behavior, worker/deferred loading, formulas/recalculation, persisted styles, merges, frozen panes, clipboard/paste/fill, row/column resizing, tables/sorting, conditional formats, data validation, sparklines, images/charts/chartsheets/shapes/form controls, canvas/virtualized rendering, custom render hooks, thumbnails, URL/file load replacement, and export/reimport.
+- Workbook switching works for all fixtures and clears stale sheet/selection/edit/error state. `G-XLSX-1`
+- Sheet tabs switch sheets and update grid content. `G-XLSX-2`
+- Single-cell selection, range selection, Shift/Cmd-style extension where implemented, and drag-to-select visibly work. `G-XLSX-3`
+- Double-click edit, Enter commit, Escape cancel, Tab commit-and-move, undo, redo, readonly blocking, zoom, upload, and download are either implemented or hidden/disabled with a clear reason. `G-XLSX-4`
+- Grid headers, gridlines, active cell, selected range, edited cell, and readonly state are visually clear. `G-XLSX-5`
+- Download/export controls generate truthful outputs: source download returns the original workbook source where applicable, XLSX export returns a real openable workbook, and CSV export reflects the active sheet. JSON summaries must not be downloaded with `.xlsx` extensions. `G-XLSX-6`
+- Source-level XLSX gaps from `docs/upstream-parity-gap-audit.md` are closed or agreed intentional before parity acceptance, including real workbook/controller engine behavior, worker/deferred loading, formulas/recalculation, persisted styles, merges, frozen panes, clipboard/paste/fill, row/column resizing, tables/sorting, conditional formats, data validation, sparklines, images/charts/chartsheets/shapes/form controls, canvas/virtualized rendering, custom render hooks, thumbnails, URL/file load replacement, and export/reimport. `G-XLSX-7`
 
 ### PDF Viewer gate
 
-- PDF frame has usable height and does not collapse at desktop, laptop, tablet, or mobile widths.
-- Page next/previous and thumbnail clicks actually change the displayed page and the page indicator.
-- Zoom and rotate visibly affect the displayed PDF without breaking layout.
-- Search provides visible result feedback, highlights or otherwise locates matches, and scrolls/navigates to the active result when feasible.
-- Corrupted PDFs show a clear error and do not leave stale thumbnails/page counts/content.
+- PDF frame has usable height and does not collapse at desktop, laptop, tablet, or mobile widths. `G-PDF-1`
+- Page next/previous and thumbnail clicks actually change the displayed page and the page indicator. `G-PDF-2`
+- Zoom and rotate visibly affect the displayed PDF without breaking layout. `G-PDF-3`
+- Search provides visible result feedback, highlights or otherwise locates matches, and scrolls/navigates to the active result when feasible. `G-PDF-4`
+- Corrupted PDFs show a clear error and do not leave stale thumbnails/page counts/content. `G-PDF-5`
+
+## Acceptance coverage map
+
+Every acceptance row above carries an id and appears exactly once in the table
+below. A row is either backed by one or more automated tests (each written as
+`file::test name`, several separated with `; `, all checked by
+`tests/unit/docx-fixture-fidelity.test.mjs`) or explicitly marked `manual`,
+naming the browser suite or document that still has to accept it in the shared
+browser. Nothing in this document is silently treated as verified.
+
+<!-- acceptance-test-map:start -->
+
+| Row | Coverage |
+|---|---|
+| `G-SHARED-1` | manual — `tests/blackbox/ux_parity.py` |
+| `G-SHARED-2` | manual — `tests/blackbox/ux_parity.py` |
+| `G-SHARED-3` | manual — `tests/blackbox/ux_parity.py` |
+| `G-SHARED-4` | manual — `tests/blackbox/ux_parity.py` |
+| `G-FIXTURE-1` | `tests/component/docx-multipage-shell.test.mjs::viewer drops measured page heights when the document changes` |
+| `G-FIXTURE-2` | manual — `tests/blackbox/fidelity_content.py` |
+| `G-FIXTURE-3` | `tests/component/vue-components.test.mjs::DocxViewer exposes empty, loading, success and error states with public events` |
+| `G-FIXTURE-4` | manual — `tests/blackbox/routes_smoke.py` |
+| `G-DOCX-VIEW-1` | `tests/component/docx-fixture-fidelity.test.mjs::each section renders its own header and footer on every page of that section` |
+| `G-DOCX-VIEW-2` | `tests/component/docx-page-overflow.test.mjs::documentPageCount is an advisory target and never overrides the rendered count` |
+| `G-DOCX-VIEW-3` | manual — `tests/blackbox/docx_parity.py` |
+| `G-DOCX-VIEW-4` | manual — `tests/blackbox/fidelity_content.py` |
+| `G-DOCX-VIEW-5` | `tests/component/docx-page-overflow.test.mjs::rendered DOCX pages are exactly one paper tall and clip pagination overflow` |
+| `G-DOCX-VIEW-6` | `tests/component/docx-fixture-fidelity.test.mjs::every visible comment renders exactly one card across the document's pages` |
+| `G-DOCX-VIEW-7` | `tests/component/docx-fixture-fidelity.test.mjs::a deleted row is marked once and a row-height revision is listed against its own row` |
+| `G-DOCX-VIEW-8` | `tests/component/docx-fixture-fidelity.test.mjs::merged and nested tables keep their column count and cell text` |
+| `G-DOCX-VIEW-9` | `tests/component/docx-fixture-fidelity.test.mjs::each section renders its own header and footer on every page of that section` |
+| `G-DOCX-VIEW-10` | `tests/component/docx-fixture-fidelity.test.mjs::footnote and endnote markers match the notes-section numbers` |
+| `G-DOCX-VIEW-11` | `tests/unit/docx-fixture-fidelity.test.mjs::the review fixture carries threads, replies and a resolved thread`; `tests/unit/docx-fixture-fidelity.test.mjs::the table fixture keeps vertical merges, grid spans, nested tables and header rows`; `tests/unit/docx-fixture-fidelity.test.mjs::the section fixture keeps a text box and a behind-text watermark` |
+| `G-DOCX-VIEW-12` | manual — `docs/upstream-parity-gap-audit.md` |
+| `G-DOCX-EDIT-1` | `tests/unit/docx-model-preservation.test.mjs::editing one paragraph leaves every other node field-identical after a round trip` |
+| `G-DOCX-EDIT-2` | manual — `tests/blackbox/docx_editing.py` |
+| `G-DOCX-EDIT-3` | `tests/component/docx-edit-interactions.test.mjs::text and format commands keep inputs immutable and undo/redo restore selection` |
+| `G-DOCX-EDIT-4` | manual — `tests/blackbox/ux_parity.py` |
+| `G-DOCX-EDIT-5` | `tests/component/docx-command-wiring.test.mjs::diagonal border presets report unsupported instead of silently doing nothing` |
+| `G-DOCX-EDIT-6` | `tests/unit/docx-fixture-fidelity.test.mjs::editing one paragraph survives export and re-import without changing other fields` |
+| `G-DOCX-EDIT-7` | manual — `docs/upstream-parity-gap-audit.md` |
+| `G-DOCX-EDIT-8` | manual — `docs/upstream-parity-gap-audit.md` |
+| `G-XLSX-1` | manual — `tests/blackbox/ux_parity.py` |
+| `G-XLSX-2` | manual — `tests/blackbox/ux_parity.py` |
+| `G-XLSX-3` | manual — `tests/blackbox/e2e_workflows.py` |
+| `G-XLSX-4` | manual — `tests/blackbox/e2e_workflows.py` |
+| `G-XLSX-5` | manual — `tests/blackbox/ux_parity.py` |
+| `G-XLSX-6` | manual — `tests/blackbox/fidelity_content.py` |
+| `G-XLSX-7` | manual — `docs/upstream-parity-gap-audit.md` |
+| `G-PDF-1` | manual — `tests/blackbox/pdf_workflows.py` |
+| `G-PDF-2` | manual — `tests/blackbox/pdf_workflows.py` |
+| `G-PDF-3` | manual — `tests/blackbox/pdf_workflows.py` |
+| `G-PDF-4` | manual — `tests/blackbox/pdf_workflows.py` |
+| `G-PDF-5` | manual — `tests/blackbox/pdf_workflows.py` |
+
+<!-- acceptance-test-map:end -->
 
 ## Page mapping
 

@@ -76,6 +76,10 @@
     "bytes": 36885
   },
   {
+    "name": "review-threads.docx",
+    "bytes": 38005
+  },
+  {
     "name": "rotated-pages.pdf",
     "bytes": 2413
   },
@@ -90,5 +94,13 @@
   {
     "name": "scanned-invoice.pdf",
     "bytes": 39398
+  },
+  {
+    "name": "sections-columns.docx",
+    "bytes": 59524
+  },
+  {
+    "name": "table-structures.docx",
+    "bytes": 37067
   }
 ]

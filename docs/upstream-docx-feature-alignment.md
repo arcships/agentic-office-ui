@@ -821,6 +821,10 @@ for p in doc.paragraphs[:5]:
 
 ### 9.3 验收验证
 
+> 本节的验收表是 2026-07-06 的历史计划。当前可自动化的验收行及其测试映射见
+> [`docs/visual-acceptance-handoff.md`](visual-acceptance-handoff.md) 的
+> “Acceptance coverage map”：每一行都指向一个已注册的自动化测试，或显式标注为需要浏览器人工验收。
+
 对照 `docs/visual-acceptance-handoff.md`：
 
 | 路由 | 验证内容 | 通过标准 |
