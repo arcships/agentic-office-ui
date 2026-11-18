@@ -43,7 +43,7 @@ import { hasUnmappedPdfText } from "../pdf/pdf-selection-range"
 import { currentRenderDpr, watchDevicePixelRatio } from "../pdf/pdf-device-pixel-ratio"
 import type { PdfViewerProps } from "../types"
 import { formatOfficeMessage } from "@arcships/office-interaction"
-import { useViewerKeys } from "@arcships/vue-ui"
+import { isEditableViewerTarget, useViewerKeys } from "@arcships/vue-ui"
 import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import { providePdfMessages } from "../i18n"
 
@@ -751,7 +751,10 @@ function clearSearchAndRestoreFocus(): void {
 }
 
 function onViewerKeydown(event: KeyboardEvent): void {
-  // Print is PDF-specific and stays outside the shared page/zoom map.
+  // The print shortcut is PDF-specific, but it still follows the shared
+  // scope rules: never fire from a focused input/textarea/select or when a
+  // child already handled the key.
+  if (event.defaultPrevented || isEditableViewerTarget(event.target)) return
   if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "p") {
     event.preventDefault()
     void printAllPages()

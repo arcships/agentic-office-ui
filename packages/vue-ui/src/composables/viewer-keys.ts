@@ -110,7 +110,14 @@ export function isEditableViewerTarget(target: unknown): boolean {
     }
   }
   if (element.isContentEditable === true) return true
-  const tag = typeof element.tagName === "string" ? element.tagName.toLowerCase() : ""
+  // Real DOM nodes expose `tagName`; lightweight renderers and synthetic
+  // targets often expose only `type`.
+  const name = typeof element.tagName === "string"
+    ? element.tagName
+    : typeof (element as { type?: unknown }).type === "string"
+      ? (element as { type: string }).type
+      : ""
+  const tag = name.toLowerCase()
   return tag === "input" || tag === "textarea" || tag === "select"
 }
 
