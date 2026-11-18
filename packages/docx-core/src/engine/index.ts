@@ -42,6 +42,44 @@ export {
 export { parseDocumentBackground } from "./page-background";
 export type { ParsedDocumentBackground } from "./page-background";
 
+// Document layout inputs from word/settings.xml (compatibility mode, default
+// tab stop) and the paragraph rules that depend on them (HTML auto spacing).
+export {
+  attachDocumentDefaults,
+  parseCompatibilityMode,
+  parseDefaultTabStopTwips,
+  parseParagraphAutoSpacing,
+} from "./document-defaults";
+export type { ParsedParagraphAutoSpacing } from "./document-defaults";
+export {
+  WORD_DEFAULT_TAB_STOP_TWIPS,
+  allowsWrappedLeftTabRefit,
+  documentHonoursAutoSpacing,
+  documentLayoutCacheKey,
+  resolveDefaultTabStopPx,
+  resolveDocumentLayoutDefaults,
+  tabGridLayoutDefaults,
+  twipsToPixelsExact,
+  twipsToWholePixels,
+} from "./layout-defaults";
+export type {
+  DocumentLayoutDefaults,
+  DocumentLayoutDefaultsSource,
+} from "./layout-defaults";
+export {
+  HTML_AUTO_SPACING_PX,
+  HTML_AUTO_SPACING_TWIPS,
+  paragraphsShareListNumbering,
+  paragraphsSuppressAutoSpacing,
+  resolveParagraphAutoSpacingInStory,
+  resolveParagraphAutoSpacingPx,
+  resolveParagraphSpacingPx,
+} from "./paragraph-auto-spacing";
+export type {
+  ParagraphAutoSpacingContext,
+  ParagraphAutoSpacingPx,
+} from "./paragraph-auto-spacing";
+
 // WASM bridge: initWasm / setWasmSource / wasmParseDocx / wasmSerializeDocx / ...
 export type { WasmSource, WasmOoxmlPart, WasmOoxmlPackage, LegacyWasmOoxmlPackage } from "./wasm";
 export {

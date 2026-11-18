@@ -50,6 +50,11 @@ import { resolveNumberingMarkerBoxWidthPx } from "./style-to-css";
 import {
   PAGE_OVERFLOW_TOLERANCE_PX,
 } from "./constants";
+import {
+  allowsWrappedLeftTabRefit,
+  resolveDefaultTabStopPx,
+  type DocumentLayoutDefaults,
+} from "../../engine/layout-defaults";
 
 // ── Wrapped line count cache ──
 
@@ -84,7 +89,8 @@ function rememberWrappedLineCountForParagraph(
 function estimateWrappedLineCountForParagraph(
   paragraph: ParagraphNode,
   availableWidthPx: number,
-  firstLineAvailableWidthPx?: number
+  firstLineAvailableWidthPx?: number,
+  layoutDefaults?: DocumentLayoutDefaults
 ): number {
   const paragraphBaseFontPx = paragraphBaseFontSizePx(paragraph);
   const maxLineWidthPx = Math.max(
@@ -99,13 +105,17 @@ function estimateWrappedLineCountForParagraph(
           Math.round(firstLineAvailableWidthPx as number)
         )
       : maxLineWidthPx;
+  const defaultTabStopPx = resolveDefaultTabStopPx(
+    layoutDefaults?.defaultTabStopTwips
+  );
   const widthCacheKey: number | string =
     firstLineMaxWidthPx === maxLineWidthPx
       ? maxLineWidthPx
       : `${maxLineWidthPx}|${firstLineMaxWidthPx}`;
   // Width keys are cached per paragraph; include the font-measurement
-  // generation so a line count measured before a web font loaded is retired.
-  const cacheKey = `${textMeasurementGeneration()}:${widthCacheKey}`;
+  // generation so a line count measured before a web font loaded is retired,
+  // and the document tab grid because it changes where tabs land.
+  const cacheKey = `${textMeasurementGeneration()}:${defaultTabStopPx}:${widthCacheKey}`;
   const cachedLineCount = cachedWrappedLineCountForParagraph(
     paragraph,
     cacheKey
@@ -121,6 +131,9 @@ function estimateWrappedLineCountForParagraph(
       Math.max(1, Math.round(lineCount))
     );
   const tabStopsPx = resolveParagraphTabStopsPx(paragraph);
+  const wrappedLeftTabRefitPx = allowsWrappedLeftTabRefit(paragraph.style?.tabStops)
+    ? Math.min(maxLineWidthPx, defaultTabStopPx)
+    : 0;
   const useTabLeaderLayout = paragraphUsesTabLeaders(paragraph);
   const anchoredTabLayout = paragraphAnchoredTabLayout(paragraph);
   const useCenterRightTabLayout =
@@ -143,7 +156,9 @@ function estimateWrappedLineCountForParagraph(
     !useAnchoredTabLayout
   ) {
     const pretextPlainLineCount = (() => {
-      const pretextSource = buildParagraphPretextLayoutSource(paragraph);
+      const pretextSource = buildParagraphPretextLayoutSource(paragraph, {
+        defaultTabStopPx,
+      });
       if (!pretextSource) {
         return undefined;
       }
@@ -254,7 +269,8 @@ function estimateWrappedLineCountForParagraph(
         // fall through to treat as regular tab for now.
         const nextTabStopPx = resolveNextTabStopPx(
           currentLineWidthPx,
-          tabStopsPx
+          tabStopsPx,
+          defaultTabStopPx
         );
         if (
           nextTabStopPx > maxLineWidthPx + PAGE_OVERFLOW_TOLERANCE_PX &&
@@ -278,14 +294,19 @@ function estimateWrappedLineCountForParagraph(
 
       const nextTabStopPx = resolveNextTabStopPx(
         currentLineWidthPx,
-        tabStopsPx
+        tabStopsPx,
+        defaultTabStopPx
       );
       if (
         nextTabStopPx > maxLineWidthPx + PAGE_OVERFLOW_TOLERANCE_PX &&
         currentLineWidthPx > 0
       ) {
         lineCount += 1;
-        currentLineWidthPx = 0;
+        // A wrapped left tab re-aligns to the first default stop of the new
+        // line instead of collapsing (Word's wrapped-tab behaviour). The
+        // renderer lets the spacer wrap inline, so the estimate stays on the
+        // conservative side: it never claims less width than the DOM uses.
+        currentLineWidthPx = wrappedLeftTabRefitPx;
       } else {
         currentLineWidthPx = Math.min(maxLineWidthPx, nextTabStopPx);
       }
@@ -346,7 +367,8 @@ function estimateWrappedLineCountForParagraph(
 export function paragraphLineCountWithinWidth(
   paragraph: ParagraphNode,
   availableWidthPx?: number,
-  numberingDefinitions?: NumberingDefinitionSet
+  numberingDefinitions?: NumberingDefinitionSet,
+  layoutDefaults?: DocumentLayoutDefaults
 ): number {
   const textContent = paragraph.children
     .map((child) => {
@@ -411,6 +433,7 @@ export function paragraphLineCountWithinWidth(
   return estimateWrappedLineCountForParagraph(
     paragraph,
     effectiveWidthPx,
-    firstLineWidthPx
+    firstLineWidthPx,
+    layoutDefaults
   );
 }

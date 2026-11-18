@@ -36,12 +36,28 @@ export type ParagraphCssStyle = Record<string, string | number | undefined>
 
 export interface ParagraphStyleCssOptions {
   numberingDefinitions?: NumberingDefinitionSet
+  /**
+   * Resolved `w:beforeAutospacing` / `w:afterAutospacing` pixels. The caller
+   * resolves them with the document compatibility mode and the neighbouring
+   * list items, so the margins match what the paginator measured.
+   */
+  autoSpacingBeforePx?: number
+  autoSpacingAfterPx?: number
 }
 
 const HEADING_FONT_WEIGHT = 700
 
 function pixelValue(value: number | undefined): string | undefined {
   return value === undefined ? undefined : `${value}px`
+}
+
+/**
+ * Pixel string with sub-pixel precision, used where a spacing value is
+ * fractional (Word's 14 pt automatic gap is 18.67 px at 96 dpi).
+ */
+function precisePixelValue(value: number | undefined): string | undefined {
+  if (value === undefined) return undefined
+  return `${Math.round(value * 100) / 100}px`
 }
 
 function nonZeroPixelValue(value: number | undefined): string | undefined {
@@ -152,9 +168,24 @@ export function paragraphStyleToCss(
     paragraphFontFamilyCss(paragraph) ??
     cssFontFamily(DEFAULT_UNSPECIFIED_DOCX_FONT_FAMILY)
 
+  // Automatic (HTML) spacing adds to the explicit `w:before` / `w:after`
+  // exactly like the paginator's `paragraphBeforeSpacingPx`.
+  const autoBeforeSpacingPx = Math.max(0, options.autoSpacingBeforePx ?? 0)
+  const autoAfterSpacingPx = Math.max(0, options.autoSpacingAfterPx ?? 0)
+  const explicitBeforeSpacingPx = twipsToPixels(spacing?.beforeTwips)
+  const explicitAfterSpacingPx = twipsToPixels(spacing?.afterTwips)
+  const beforeSpacingPx =
+    explicitBeforeSpacingPx === undefined && autoBeforeSpacingPx === 0
+      ? undefined
+      : (explicitBeforeSpacingPx ?? 0) + autoBeforeSpacingPx
+  const afterSpacingPx =
+    explicitAfterSpacingPx === undefined && autoAfterSpacingPx === 0
+      ? undefined
+      : (explicitAfterSpacingPx ?? 0) + autoAfterSpacingPx
+
   return {
-    marginTop: pixelValue(twipsToPixels(spacing?.beforeTwips)),
-    marginBottom: pixelValue(twipsToPixels(spacing?.afterTwips)),
+    marginTop: precisePixelValue(beforeSpacingPx),
+    marginBottom: precisePixelValue(afterSpacingPx),
     textAlign: style?.align,
     fontWeight: style?.headingLevel ? HEADING_FONT_WEIGHT : undefined,
     // Keep the DOM base font in sync with the measurement path so line breaks

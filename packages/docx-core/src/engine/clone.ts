@@ -619,6 +619,7 @@ export function cloneDocModel(model: DocModel): DocModel {
         borders: cloneParagraphBorderSet(style.borders),
       })),
       defaultParagraphStyleId: model.metadata.defaultParagraphStyleId,
+      defaultTabStopTwips: model.metadata.defaultTabStopTwips,
       themeFonts: model.metadata.themeFonts
         ? {
             major: model.metadata.themeFonts.major

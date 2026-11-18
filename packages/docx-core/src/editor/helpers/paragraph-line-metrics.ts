@@ -27,6 +27,10 @@ import {
 } from "./line-height";
 import { paragraphAvailableTextWidthPx } from "./paragraph-geometry";
 import {
+  resolveDefaultTabStopPx,
+  type DocumentLayoutDefaults,
+} from "../../engine/layout-defaults";
+import {
   buildParagraphPretextLayoutItems,
   buildParagraphPretextLayoutSource,
   layoutParagraphPretextSource
@@ -53,6 +57,8 @@ export interface ParagraphLineMetricsOptions {
    * layout agrees with it, so pagination never mixes two line counts.
    */
   expectedLineCount?: number;
+  /** Document layout defaults; only the default tab stop moves tabbed text. */
+  layoutDefaults?: DocumentLayoutDefaults;
 }
 
 /**
@@ -95,7 +101,10 @@ export function resolveParagraphLineMetrics(
 
   const source = buildParagraphPretextLayoutSource(paragraph, {
     allowExplicitLineBreakText: true,
-    expandTabsForLayout: true
+    expandTabsForLayout: true,
+    defaultTabStopPx: resolveDefaultTabStopPx(
+      options.layoutDefaults?.defaultTabStopTwips
+    )
   });
   if (!source || !paragraphHasCustomLineMetrics(paragraph, source)) {
     return undefined;
@@ -127,6 +136,7 @@ export function resolveParagraphLineMetrics(
     Math.round(contentWidthPx),
     lineHeightPx,
     docGridLinePitchPx ?? 0,
+    resolveDefaultTabStopPx(options.layoutDefaults?.defaultTabStopTwips),
     Number.isFinite(options.expectedLineCount)
       ? Math.round(options.expectedLineCount as number)
       : -1,

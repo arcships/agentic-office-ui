@@ -67,6 +67,7 @@ Worker 和 WASM 必须来自安装后的真实包。消费项目不得从 demo �
 - 根入口：保留现有模型、布局、序列化、解析和编辑命令，供 `0.x` 兼容使用。新代码如只需要纯数据能力，应改用 `./core`；需要 Worker/WASM 时应改用 `./runtime`。
 - 根入口同时提供 `createDocxTextReferenceDraft`、`createDocxPageReferenceDraft`、`createDocxRegionReferenceDraft`、`resolveDocxReference` 和 `describeDocxReference`。它们只把已有 DOCX 模型选区转换/解析为统一引用，不持有宿主的引用集合。
 - 根入口的 `TextStyle` 继续兼容原有布尔字段，同时新增 underline/strike 变体、`caps`/`smallCaps`、字符间距与缩放、分脚本字体、run 边框、文字阴影/描边和 `direction`；`ParagraphStyle` 新增 `direction`。`paragraphTypographyStyle` 与 `isJustifiedAlignment` 供渲染层统一处理扩展对齐和 RTL。
+- 根入口同时公开段落排版输入：`ParagraphSpacing.beforeAutoSpacing` / `afterAutoSpacing`、`DocumentCompatibilitySettings.compatibilityMode` 与 `metadata.defaultTabStopTwips` 由 `word/settings.xml` 与段落属性导入；`resolveParagraphAutoSpacingPx`、`resolveParagraphSpacingPx`、`resolveDocumentLayoutDefaults`、`resolveDefaultTabStopPx`、`documentLayoutCacheKey` 与 `allowsWrappedLeftTabRefit` 供自定义布局复用同一套规则（自动间距仅在其兼容模式 12/15 生效、同编号列表项之间折叠、默认制表位可换行重排）。（issue #129）
 
 `DocxRuntimeConfig.limits` 使用实例自己的 `DocxRuntimeLimits`。公开限制覆盖输入字节、压缩包条目与解压字节、XML、关系、图片、模型节点、布局页数、解析时间与导出时间；默认值由 `DEFAULT_DOCX_RUNTIME_LIMITS` 给出，`resolveDocxRuntimeLimits` 返回已约束的实例快照。超限会在高成本解析、图片解码或布局之前停止，并通过结构化错误返回实际值与允许值。UI 环境不会回退到主线程同步 WASM 解析。
 

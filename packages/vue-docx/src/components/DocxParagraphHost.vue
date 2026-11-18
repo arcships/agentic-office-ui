@@ -65,6 +65,12 @@ const props = withDefaults(
     controller?: DocxEditorController
     numberingLabel?: string
     numberingDefinitions?: NumberingDefinitionSet
+    /** Resolved `w:beforeAutospacing` gap in CSS pixels (0 when unused). */
+    autoSpacingBeforePx?: number
+    /** Resolved `w:afterAutospacing` gap in CSS pixels (0 when unused). */
+    autoSpacingAfterPx?: number
+    /** Document `w:defaultTabStop` in CSS pixels; 48px (Word) when omitted. */
+    defaultTabStopPx?: number
     showTrackedChanges?: boolean
     showCommentHighlights?: boolean
     pageNumber?: number
@@ -137,6 +143,8 @@ const paragraphStyle = computed<Record<string, any>>(() => {
     "--docx-editor-placeholder": m.value.docx.editor.placeholder,
     ...paragraphStyleToCss(props.paragraph, {
       numberingDefinitions: props.numberingDefinitions,
+      autoSpacingBeforePx: props.autoSpacingBeforePx,
+      autoSpacingAfterPx: props.autoSpacingAfterPx,
     }),
     // Keep the shared paragraph typography (alignment/direction) too.
     ...paragraphTypographyStyle(props.paragraph.style),
@@ -189,6 +197,7 @@ const displayHtml = computed(() => {
     showTrackedChanges: props.showTrackedChanges,
     showCommentHighlights: props.showCommentHighlights,
     numberingDefinitions: props.numberingDefinitions,
+    defaultTabStopPx: props.defaultTabStopPx,
     withinHeaderFooter: props.withinHeaderFooter,
     headerFooterRegion: props.headerFooterRegion,
     pageNumberFormat: props.pageNumberFormat,

@@ -176,7 +176,9 @@ export const ENDNOTE_REFERENCE_XML_PATTERN =
   /<w:endnoteReference\b[^>]*w:id="(-?\d+)"/gi;
 export const XML_CACHE_MAX_ENTRIES = 4000;
 export const TEXT_MEASURE_CACHE_MAX_ENTRIES = 12000;
-export const DEFAULT_TAB_STOP_PX = 48;
+// The canonical value lives with the document defaults that can override it
+// (`w:defaultTabStop`); re-exported here so the helper layer keeps one source.
+export { DEFAULT_TAB_STOP_PX } from "../../engine/layout-defaults";
 export const TAB_LEADER_ZONE_GAP_PX = 20;
 export const EMPTY_PARAGRAPH_EXTRA_HEIGHT_PX = 0;
 export const PARAGRAPH_SEGMENT_TOP_BLEED_PX = 22;

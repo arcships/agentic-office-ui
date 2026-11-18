@@ -20,6 +20,10 @@ import {
   tableEstimatedHeightBySourceXml,
 } from "./cache-utils";
 import {
+  tabGridLayoutDefaults,
+  type DocumentLayoutDefaults,
+} from "../../engine/layout-defaults";
+import {
   MIN_PARAGRAPH_LINE_HEIGHT_PX,
   MIN_TABLE_ROW_SLICE_REMAINING_HEIGHT_PX,
   TABLE_ROW_SLICE_BOUNDARY_TOLERANCE_PX,
@@ -160,10 +164,18 @@ export function estimateTableHeightPx(
   table: TableNode,
   maxAvailableWidthPx?: number,
   numberingDefinitions?: NumberingDefinitionSet,
-  docGridLinePitchPx?: number
+  docGridLinePitchPx?: number,
+  layoutDefaults?: DocumentLayoutDefaults
 ): number {
   const sourceXml = table.sourceXml;
-  const widthKey = heightEstimateCacheKeyPx(maxAvailableWidthPx, docGridLinePitchPx);
+  // Table cells render zero-margin paragraphs: only the tab grid applies.
+  const tableDefaults = tabGridLayoutDefaults(layoutDefaults);
+  const widthKey = heightEstimateCacheKeyPx(
+    maxAvailableWidthPx,
+    docGridLinePitchPx,
+    false,
+    tableDefaults
+  );
   if (sourceXml) {
     const cachedByWidth = tableEstimatedHeightBySourceXml.get(sourceXml);
     const cached = cachedByWidth?.get(widthKey);
@@ -173,7 +185,9 @@ export function estimateTableHeightPx(
     table,
     maxAvailableWidthPx,
     numberingDefinitions,
-    docGridLinePitchPx
+    docGridLinePitchPx,
+    undefined,
+    tableDefaults
   ).reduce(
     (sum, rowHeightPx) =>
       sum + Math.max(MIN_PARAGRAPH_LINE_HEIGHT_PX, rowHeightPx),
@@ -185,7 +199,8 @@ export function estimateTableHeightPx(
   );
   if (sourceXml) {
     const cachedByWidth =
-      tableEstimatedHeightBySourceXml.get(sourceXml) ?? new Map<number, number>();
+      tableEstimatedHeightBySourceXml.get(sourceXml) ??
+      new Map<number | string, number>();
     cachedByWidth.set(widthKey, estimatedHeightPx);
     setCacheEntry(tableEstimatedHeightBySourceXml, sourceXml, cachedByWidth);
   }
@@ -196,7 +211,8 @@ export function estimateDocNodeHeightPx(
   node: DocModel["nodes"][number],
   availableWidthPx?: number,
   numberingDefinitions?: NumberingDefinitionSet,
-  docGridLinePitchPx?: number
+  docGridLinePitchPx?: number,
+  layoutDefaults?: DocumentLayoutDefaults
 ): number {
   return node.type === "paragraph"
     ? estimateParagraphHeightPx(
@@ -204,13 +220,15 @@ export function estimateDocNodeHeightPx(
         availableWidthPx,
         numberingDefinitions,
         docGridLinePitchPx,
-        undefined
+        undefined,
+        layoutDefaults
       )
     : estimateTableHeightPx(
         node,
         availableWidthPx,
         numberingDefinitions,
-        docGridLinePitchPx
+        docGridLinePitchPx,
+        layoutDefaults
       );
 }
 

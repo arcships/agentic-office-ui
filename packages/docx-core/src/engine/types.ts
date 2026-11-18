@@ -242,6 +242,14 @@ export interface ParagraphSpacing {
   afterTwips?: number;
   lineTwips?: number;
   lineRule?: "auto" | "exact" | "atLeast";
+  /**
+   * OOXML `w:spacing/@w:beforeAutospacing`. The amount is consumer-defined, so
+   * the model keeps the flag and layout resolves it (see
+   * `resolveParagraphAutoSpacingPx`).
+   */
+  beforeAutoSpacing?: boolean;
+  /** OOXML `w:spacing/@w:afterAutospacing`; resolved like `beforeAutoSpacing`. */
+  afterAutoSpacing?: boolean;
 }
 
 export interface ParagraphIndent {
@@ -575,6 +583,12 @@ export interface DocumentCompatibilitySettings {
   doNotBreakWrappedTables?: boolean;
   doNotBreakConstrainedForcedTable?: boolean;
   evenAndOddHeaders?: boolean;
+  /**
+   * OOXML `w:compat/w:compatSetting[@w:name='compatibilityMode']/@w:val`:
+   * 11 = Word 2003, 12 = Word 2007, 13 = Word 2010, 14 = Word 2010 (current
+   * default), 15 = Word 2013+. Word honours HTML auto spacing only in 12/15.
+   */
+  compatibilityMode?: number;
 }
 
 export type NoteNumberRestart = "continuous" | "eachSect" | "eachPage";
@@ -622,6 +636,11 @@ export interface DocModel {
     footerSections: FooterSection[];
     paragraphStyles: ParagraphStyleDefinition[];
     defaultParagraphStyleId?: string;
+    /**
+     * OOXML `w:defaultTabStop/@w:val` from word/settings.xml, in twips. The
+     * default is 720 twips (0.5"), which resolves to 48 CSS pixels.
+     */
+    defaultTabStopTwips?: number;
     themeFonts?: DocxThemeFonts;
     numberingDefinitions?: NumberingDefinitionSet;
     compatibility?: DocumentCompatibilitySettings;

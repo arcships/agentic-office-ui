@@ -11,6 +11,10 @@ import type {
   ParagraphNode,
   TableNode
 } from "../../engine/types";
+import {
+  documentLayoutCacheKey,
+  type DocumentLayoutDefaults,
+} from "../../engine/layout-defaults";
 import { textMeasurementGeneration } from "../../viewer/text-measurement-generation";
 import { XML_CACHE_MAX_ENTRIES } from "./constants";
 
@@ -28,10 +32,13 @@ export const paragraphEstimatedHeightBySourceXml = new Map<
   string,
   Map<number | string, number>
 >();
-export const tableEstimatedHeightBySourceXml = new Map<string, Map<number, number>>();
+export const tableEstimatedHeightBySourceXml = new Map<
+  string,
+  Map<number | string, number>
+>();
 export const tableEstimatedRowHeightsByNode = new WeakMap<
   TableNode,
-  Map<number, number[]>
+  Map<number | string, number[]>
 >();
 export const paragraphExplicitIndentBySourceXml = new Map<
   string,
@@ -89,8 +96,9 @@ export function widthCacheKeyPx(widthPx?: number): number {
 export function heightEstimateCacheKeyPx(
   widthPx?: number,
   docGridLinePitchPx?: number,
-  disableDocGridSnap = false
-): number {
+  disableDocGridSnap = false,
+  layoutDefaults?: DocumentLayoutDefaults
+): number | string {
   const widthKey = widthCacheKeyPx(widthPx);
   const docGridKey =
     Number.isFinite(docGridLinePitchPx) && (docGridLinePitchPx as number) > 0
@@ -100,10 +108,13 @@ export function heightEstimateCacheKeyPx(
   // so a stale (typically narrower) estimate can never be reused.
   const measurementGeneration = textMeasurementGeneration() + 1;
 
-  return (
+  const baseKey =
     measurementGeneration * 1_000_000_000 +
     (widthKey + 2) * 10_000 +
     docGridKey * 2 +
-    (disableDocGridSnap ? 1 : 0)
-  );
+    (disableDocGridSnap ? 1 : 0);
+  // Document defaults (compatibility mode, default tab stop) change the same
+  // estimate, so they extend the key instead of producing a second cache.
+  const documentKey = documentLayoutCacheKey(layoutDefaults);
+  return documentKey ? `${baseKey}|${documentKey}` : baseKey;
 }

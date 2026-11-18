@@ -98,6 +98,11 @@ export interface ParagraphRunRenderOptions {
   /** Localized alt text and missing-source fallback for images. */
   imageAltText?: string
   imageMissingText?: string
+  /**
+   * Document `w:defaultTabStop` in CSS pixels; Word's 48px grid when omitted.
+   * Tabs that run past the last explicit stop keep advancing on this grid.
+   */
+  defaultTabStopPx?: number
 }
 
 export interface NoteMarkerLabels {
@@ -215,9 +220,14 @@ export function renderParagraphRuns(
     : 0
 
   const checkboxChoiceRow = paragraphLooksLikeCheckboxChoiceRow(paragraph)
+  const documentTabStopPx =
+    Number.isFinite(options?.defaultTabStopPx) &&
+    (options?.defaultTabStopPx as number) > 0
+      ? Math.max(1, Math.round(options?.defaultTabStopPx as number))
+      : DEFAULT_TAB_STOP_PX
   const fallbackTabWidthPx = checkboxChoiceRow
     ? checkboxChoiceRowTabWidthPx(paragraph)
-    : DEFAULT_TAB_STOP_PX
+    : documentTabStopPx
 
   const tabLeaderLeftTabStopPositionsPx = useTabLeaderLayout
     ? resolveParagraphFirstLineLeftTabStopsPx(paragraph)
