@@ -110,6 +110,7 @@ export {
   resolveWorksheetHiddenRows,
   resolveWorksheetHiddenCols,
   resolveWorksheetMergeMetadata,
+  resolveWorksheetMergedRegions,
   resolveSheetColumnWidthPx,
   resolveSheetRowHeightPx,
   createAnchoredRectCache,

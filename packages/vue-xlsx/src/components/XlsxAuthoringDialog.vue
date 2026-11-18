@@ -375,6 +375,26 @@
           >{{ m.xlsx.authoring.validation.remove }}</button>
         </div>
       </section>
+
+      <!-- Paste special -->
+      <XlsxPasteSpecialSection
+        v-else-if="kind === 'pasteSpecial'"
+        :controller="controller"
+        @applied="emit('close')"
+      />
+
+      <!-- Number format -->
+      <XlsxNumberFormatSection
+        v-else-if="kind === 'numberFormat'"
+        :controller="controller"
+        @applied="emit('close')"
+      />
+
+      <!-- Name manager -->
+      <XlsxNameManagerSection
+        v-else-if="kind === 'names'"
+        :controller="controller"
+      />
     </div>
   </Teleport>
 </template>
@@ -390,6 +410,9 @@ import type {
   XlsxViewerController,
 } from "@arcships/xlsx-core";
 import { useXlsxMessages } from "../i18n";
+import XlsxNameManagerSection from "./XlsxNameManagerSection.vue";
+import XlsxNumberFormatSection from "./XlsxNumberFormatSection.vue";
+import XlsxPasteSpecialSection from "./XlsxPasteSpecialSection.vue";
 import type { XlsxAuthoringDialogKind } from "./authoring-dialog";
 
 const props = defineProps<{
@@ -434,6 +457,12 @@ const dialogTitle = computed(() => {
       return m.value.xlsx.authoring.table.title;
     case "conditional":
       return m.value.xlsx.authoring.conditional.title;
+    case "pasteSpecial":
+      return m.value.xlsx.authoring.pasteSpecial.title;
+    case "numberFormat":
+      return m.value.xlsx.authoring.numberFormat.title;
+    case "names":
+      return m.value.xlsx.authoring.names.title;
     default:
       return m.value.xlsx.authoring.validation.title;
   }
@@ -831,6 +860,34 @@ function removeValidation() {
   }
 }
 </script>
+
+<style>
+/* Shared section controls. The paste-special, number-format and Name Manager
+   sections are child components, so they need these rules unscoped. */
+.xlsx-authoring__field { display: flex; flex-direction: column; font-size: 12px; gap: 4px; }
+.xlsx-authoring__field select,
+.xlsx-authoring__field input,
+.xlsx-authoring__field textarea {
+  background: #ffffff; border: 1px solid #d4d4d8; border-radius: 6px;
+  color: inherit; font: inherit; font-size: 12px; padding: 6px 8px;
+}
+.xlsx-authoring--dark .xlsx-authoring__field select,
+.xlsx-authoring--dark .xlsx-authoring__field input,
+.xlsx-authoring--dark .xlsx-authoring__field textarea { background: #27272a; border-color: #52525b; }
+.xlsx-authoring__check { align-items: center; display: flex; font-size: 12px; gap: 6px; }
+.xlsx-authoring__check input { accent-color: #2563eb; }
+.xlsx-authoring__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.xlsx-authoring__button {
+  background: transparent; border: 1px solid #d4d4d8; border-radius: 6px;
+  color: inherit; cursor: pointer; font: inherit; font-size: 12px; padding: 6px 12px;
+}
+.xlsx-authoring__button--primary { background: #2563eb; border-color: #2563eb; color: #ffffff; }
+.xlsx-authoring__button:disabled { cursor: default; opacity: .5; }
+.xlsx-authoring__hint { color: #71717a; font-size: 12px; margin: 0; }
+.xlsx-authoring__rules { display: flex; flex-direction: column; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.xlsx-authoring__rule { align-items: center; display: flex; font-size: 12px; gap: 8px; justify-content: space-between; }
+.xlsx-authoring__link { background: transparent; border: 0; color: #2563eb; cursor: pointer; font: inherit; font-size: 12px; padding: 0; }
+</style>
 
 <style scoped>
 .xlsx-authoring-backdrop {

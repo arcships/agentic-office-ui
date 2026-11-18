@@ -856,6 +856,41 @@ export interface XlsxDataValidationInput {
 }
 
 /**
+ * A workbook or sheet-scoped defined name (Excel's Name Manager row).
+ *
+ * `refersTo` keeps Excel's A1 syntax, for example `Sheet1!$A$1:$C$3` or
+ * `SUM(Sheet1!$A$1:$A$3)`. Sheet-scoped names set `sheetIndex` to the
+ * zero-based workbook sheet index; workbook-scoped names omit it.
+ */
+export interface XlsxNamedRange {
+  /** Optional comment shown in Excel's Name Manager. */
+  comment?: string;
+  hidden?: boolean;
+  name: string;
+  refersTo: string;
+  /** Zero-based workbook sheet index for a sheet-scoped name. */
+  sheetIndex?: number;
+}
+
+/**
+ * Excel-style paste options for `pasteSpecialFromClipboard` /
+ * `pasteSpecialStructuredData`.
+ *
+ * `all` keeps formulas, values and styles; `values` writes the displayed value
+ * only; `formats` writes only cell styles. `transpose` swaps rows and columns.
+ */
+export interface XlsxPasteSpecialOptions {
+  mode?: "all" | "values" | "formats";
+  transpose?: boolean;
+}
+
+/** Inline-edit request the grid watches; `token` retriggers the same cell. */
+export interface XlsxCellEditRequest {
+  cell: XlsxCellAddress;
+  token: number;
+}
+
+/**
  * Authoring actions for non-cell workbook objects.
  *
  * Implemented by `XlsxViewerController`. Every action mutates the workbook
@@ -863,6 +898,55 @@ export interface XlsxDataValidationInput {
  * exported XLSX bytes.
  */
 export interface XlsxViewerAuthoring {
+  // ── Structure ──────────────────────────────────────────────────────
+  /**
+   * Inserts blank rows at `startRow`, pushing existing rows down.
+   *
+   * Cell values, formulas, styles, merges, row sizes, hyperlinks, comments,
+   * conditional formats, data validations, tables, defined names, frozen panes
+   * and drawing anchors are shifted together so the workbook stays consistent.
+   *
+   * @returns `true` when the workbook changed.
+   */
+  insertRows: (startRow: number, count?: number) => boolean;
+  /** Deletes rows starting at `startRow`, pulling the rows below up. */
+  deleteRows: (startRow: number, count?: number) => boolean;
+  /** Inserts blank columns at `startColumn`, pushing existing columns right. */
+  insertColumns: (startColumn: number, count?: number) => boolean;
+  /** Deletes columns starting at `startColumn`, pulling the columns right left. */
+  deleteColumns: (startColumn: number, count?: number) => boolean;
+  // ── Selection ──────────────────────────────────────────────────────
+  /** Selects a whole row (every displayed column). */
+  selectRow: (row: number) => void;
+  /** Selects a whole column (every displayed row). */
+  selectColumn: (column: number) => void;
+  /** Selects the whole used range. */
+  selectAll: () => void;
+  // ── Clipboard ──────────────────────────────────────────────────────
+  /** Cuts the selection: copies it and clears the source on the next paste. */
+  cutSelection: () => boolean;
+  /**
+   * Pastes the last copied or cut payload with Excel-style paste options.
+   *
+   * `values` writes values only, `formats` writes styles only and `transpose`
+   * swaps rows and columns. Falls back to the system clipboard when nothing was
+   * copied inside the viewer.
+   *
+   * @returns `true` when the workbook changed.
+   */
+  pasteSpecialFromClipboard: (options?: XlsxPasteSpecialOptions) => Promise<boolean>;
+  /** Synchronous paste-special entry point for hosts and tests. */
+  pasteSpecialStructuredData: (payload: string, options?: XlsxPasteSpecialOptions) => boolean;
+  // ── Number formats ─────────────────────────────────────────────────
+  /** Applies one number format to the selection as a single undo step. */
+  setSelectionNumberFormat: (format: XlsxCellNumberFormatInput) => boolean;
+  // ── Defined names ──────────────────────────────────────────────────
+  /** Defined names of the workbook, including sheet-scoped names. */
+  getNamedRanges: () => XlsxNamedRange[];
+  /** Adds or replaces a defined name pointing at an A1 reference. */
+  setNamedRange: (name: string, refersTo: string) => boolean;
+  /** Removes a defined name. */
+  deleteNamedRange: (name: string) => boolean;
   // ── Charts ─────────────────────────────────────────────────────────
   /**
    * Inserts a bar, line or pie chart built from a cell range.
@@ -1004,6 +1088,14 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
   commitCellInput: (cell: XlsxCellAddress, text: string) => boolean;
   continueDeferredLoad: () => void;
   copySelectionToClipboard: () => Promise<boolean>;
+  /** Pending inline-edit request; the grid starts editing when it changes. */
+  editRequest: XlsxCellEditRequest | null;
+  /**
+   * Requests inline editing of a cell (defaults to the active cell).
+   *
+   * @returns `true` when a request was issued.
+   */
+  editCell: (cell?: XlsxCellAddress | null) => boolean;
   dataValidationFeedback: XlsxDataValidationFeedback | null;
   dismissDataValidationFeedback: () => void;
   defaultZoomScale: number;
@@ -1070,6 +1162,11 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
    * this entry stays available for hosts that merge without centring.
    */
   mergeSelection: () => void;
+  /**
+   * Merges every row of the selection across its columns (Excel's Merge
+   * across), leaving each row's alignment untouched.
+   */
+  mergeAcrossSelection: () => void;
   /**
    * Merges the current selection and centres its text both ways.
    *
@@ -1294,11 +1391,27 @@ export interface XlsxViewerEditing {
   defineNamedRange: (name: string, range?: XlsxCellRange | null) => void;
   fillSelection: (targetRange: XlsxCellRange) => void;
   findCells: (query: string) => XlsxCellAddress[];
+  insertRows: (startRow: number, count?: number) => boolean;
+  deleteRows: (startRow: number, count?: number) => boolean;
+  insertColumns: (startColumn: number, count?: number) => boolean;
+  deleteColumns: (startColumn: number, count?: number) => boolean;
+  selectRow: (row: number) => void;
+  selectColumn: (column: number) => void;
+  selectAll: () => void;
+  cutSelection: () => boolean;
+  pasteSpecialFromClipboard: (options?: XlsxPasteSpecialOptions) => Promise<boolean>;
+  pasteSpecialStructuredData: (payload: string, options?: XlsxPasteSpecialOptions) => boolean;
+  setSelectionNumberFormat: (format: XlsxCellNumberFormatInput) => boolean;
+  getNamedRanges: () => XlsxNamedRange[];
+  setNamedRange: (name: string, refersTo: string) => boolean;
+  deleteNamedRange: (name: string) => boolean;
   getClipboardData: () => XlsxClipboardData | null;
   getCellDisplayValue: (cell?: XlsxCellAddress | null) => string;
   getCellFormula: (cell?: XlsxCellAddress | null) => string;
   /** Merges the current selection without touching its alignment. */
   mergeSelection: () => void;
+  /** Merges every row of the selection across its columns. */
+  mergeAcrossSelection: () => void;
   /** Merges the current selection and centres its text both ways. */
   mergeAndCenterSelection: () => void;
   /**

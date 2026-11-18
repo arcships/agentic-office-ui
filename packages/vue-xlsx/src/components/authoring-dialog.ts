@@ -4,4 +4,7 @@ export type XlsxAuthoringDialogKind =
   | "hyperlink"
   | "table"
   | "conditional"
-  | "validation";
+  | "validation"
+  | "pasteSpecial"
+  | "numberFormat"
+  | "names";
