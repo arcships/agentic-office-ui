@@ -9,7 +9,7 @@
 本阶段只扩展现有四类 View 能直接复用当前解析和渲染链路的文件格式：
 
 - XLSX View：增加 Excel 二进制、宏工作簿和模板格式，并保留 CSV 支持。
-- DOCX View：增加 Word 宏文档和模板格式。
+- DOCX View：增加 Word 宏文档和模板格式，以及 OpenDocument 文本（`.odt` 家族）的只读预览。
 - PPTX View：增加 PowerPoint 宏演示、放映和模板格式。
 - PDF View：继续只支持 PDF。
 
@@ -41,9 +41,10 @@ P0 完成后可以进入内部试用。正式对外声明新增格式支持前�
 | `.docm` | 已支持 | 复用 DOCX OOXML 解析链路 | 只读预览，不执行 VBA 宏 |
 | `.dotx` | 已支持 | 复用 DOCX OOXML 解析链路 | 按普通文档预览模板内容 |
 | `.dotm` | 已支持 | 复用 DOCX OOXML 解析链路 | 按普通文档预览，不执行 VBA 宏 |
+| `.odt`、`.ott`、`.odm`、`.otm`、`.oth`、`.fodt` | 只读支持 | 独立的 ODF 文本读取链路 | 解析 `content.xml`/`styles.xml` 或扁平 XML；禁止编辑和导出 DOCX；不执行脚本 |
 | `.md` | 明确不接入 | — | 不提供 Markdown 到 `DocModel` 的转换 |
 | `.txt` | 明确不接入 | — | 不提供纯文本到 `DocModel` 的转换 |
-| `.doc`、`.rtf`、`.odt`、Pages | 不直接支持 | 接入方转换为 `.docx` 或 `.pdf` | 旧格式和第三方格式不进入浏览器端解析链路 |
+| `.doc`、`.rtf`、Pages | 不直接支持 | 接入方转换为 `.docx` 或 `.pdf` | 旧格式和第三方格式不进入浏览器端解析链路 |
 
 ### 2.3 PPTX View
 
@@ -92,6 +93,12 @@ type OfficeSourceFormat =
   | "ppsm"
   | "potx"
   | "potm"
+  | "odt"
+  | "ott"
+  | "odm"
+  | "otm"
+  | "oth"
+  | "fodt"
   | "pdf"
 
 type SourceFormatDetection = {
@@ -111,6 +118,8 @@ type SourceFormatDetection = {
 
 不能只根据扩展名放行文件。OOXML 文件以包内容确定所属 View；不属于目标文件家族时直接拒绝。扩展名、MIME 和实际内容的完整冲突策略不作为本阶段发布阻断项。
 
+OpenDocument 文本的扩展名和 MIME 也会被 `detectSourceFormat` 归入 `docx` 家族，但 ODF 内容不属于 OOXML：`OfficeSourceFormat` 额外包含 `odt`、`ott`、`odm`、`otm`、`oth`、`fodt`。`@arcships/docx-core` 在字节入口单独检查 ODF 的 `mimetype`（压缩包内或扁平 XML 的 `office:mimetype`），命中后读取 `content.xml`、`styles.xml` 和 `Pictures/`，复用与 DOCX 相同的压缩包、XML、图片、模型节点和解析时间预算。OpenDocument 没有 Word 包，因此模型记录 `metadata.sourcePartNames.document = "content.xml"`，并由该标记强制只读。
+
 ## 4. 宏与模板策略
 
 宏格式只提供安全的只读预览能力：
@@ -127,6 +136,14 @@ DOCX 编辑器当前选择“保留容器类型和宏部件”的导出策略：
 - 新建文档按 `.docx` 导出；旧版 `.doc` 不作为可编辑输入。
 
 UI 环境中的 DOCX 导入和导出都在专用 Worker 中执行：导入不会回退到主线程同步 WASM 解析，导出不会在主线程展开图片字节或执行同步序列化；导出支持进度、取消和 `maxExportMs` 超时。
+
+OpenDocument 文本策略：
+
+- `.odt`、`.ott`、`.odm`、`.otm`、`.oth` 和扁平 `.fodt` 都进入 DOCX View，但只提供只读渲染；导入器解析标题、字符格式、链接、项目符号/编号列表、表格、图片、文本框、页眉页脚和页面设置。
+- 导入后显示只读原因（`OpenDocument files are view-only: they cannot be edited or saved as DOCX.`），编辑器不进入 contenteditable，所有会修改模型的编辑命令被拒绝。
+- 不提供 ODF 写入器：`exportDocx()`、`getDocxBytes()` 和查看器下载按钮都拒绝 OpenDocument 模型。
+- ODF 中的脚本、宏、外部链接和嵌入对象不会执行；XML 实体/DOCTYPE、压缩包路径、条目数、解压字节、XML 深度和图片像素沿用现有安全预算。
+- `.docx`、`.docm`、`.dotx`、`.dotm` 的既有解析、编辑和导出行为不变。
 
 模板和放映格式统一复用现有 View：
 
@@ -199,6 +216,6 @@ P1 只作为正式发布前的一次性轻量验收，不进入日常开发或�
 - Markdown 和纯文本预览。
 - 所有图片文件预览，包括单页图片和多页 TIFF。
 - 通用 Image View 或“图片转 PDF”适配层。
-- 浏览器端解析 `.doc`、`.ppt`、`.ods`、`.odt` 等旧格式或第三方格式。
+- 浏览器端解析 `.doc`、`.ppt`、`.ods` 等旧格式或其他第三方格式；OpenDocument 文本（`.odt` 家族）仅按上文提供只读渲染，不在此排除项内。
 - 执行宏或编辑宏；DOCX 导出保留宏/模板容器类型和宏部件，但不提供宏编辑能力。
 - 自动调用第三方转换服务；如需要格式转换，由接入方在文件进入本项目之前完成。

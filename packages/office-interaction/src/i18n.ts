@@ -156,6 +156,8 @@ export interface OfficeDocxMessages {
     unsupportedFile: string
     /** Template with `{actual}` and `{allowed}` placeholders. */
     fileTooLarge: string
+    /** Shown for OpenDocument text, which has no DOCX writer. */
+    viewOnlyReason: string
     live: {
       loading: string
       error: string
@@ -280,6 +282,10 @@ export interface OfficeDocxMessages {
       /** Template with a `{message}` placeholder. */
       importFailed: string
       unsupportedFile: string
+      /** Shown when an OpenDocument file is opened (view-only). */
+      viewOnly: string
+      /** Template with a `{name}` placeholder for an OpenDocument import. */
+      loadedViewOnly: string
       exportCancelledChanged: string
       exportNotReady: string
       /** Template with a `{message}` placeholder. */
@@ -1477,8 +1483,9 @@ export const officeMessagesEn: OfficeMessages = {
       emptyDetail: "Upload or provide a DOCX file to start.",
       chooseFile: "Choose Word file",
       parseError: "Unknown DOCX parse error",
-      unsupportedFile: "Only .docx, .docm, .dotx and .dotm files are supported",
+      unsupportedFile: "Only Word (.docx, .docm, .dotx, .dotm) and OpenDocument text (.odt, .ott, .odm, .otm, .oth, .fodt) files are supported",
       fileTooLarge: "DOCX file size {actual} bytes exceeds the allowed maximum of {allowed} bytes.",
+      viewOnlyReason: "OpenDocument files are view-only: they cannot be edited or saved as DOCX.",
       live: {
         loading: "Opening DOCX document",
         error: "Unable to open document: {message}",
@@ -1587,7 +1594,9 @@ export const officeMessagesEn: OfficeMessages = {
         discardChanges: "Discard unsaved changes?",
         loadingFile: "Loading {name}...",
         importFailed: "Failed to load file: {message}",
-        unsupportedFile: "Only .docx, .docm, .dotx and .dotm files are supported",
+        unsupportedFile: "Only Word (.docx, .docm, .dotx, .dotm) and OpenDocument text (.odt, .ott, .odm, .otm, .oth, .fodt) files are supported",
+        viewOnly: "OpenDocument files are view-only: they cannot be edited or saved as DOCX.",
+        loadedViewOnly: "Loaded {name} (view-only)",
         exportCancelledChanged: "Export cancelled: document changed",
         exportNotReady: "Wait for the document to finish loading before exporting",
         exportFailed: "Export failed: {message}",
@@ -2675,8 +2684,9 @@ export const officeMessagesZhCN: OfficeMessages = {
       emptyDetail: "上传或提供 DOCX 文件开始查看。",
       chooseFile: "选择 Word 文件",
       parseError: "未知的 DOCX 解析错误",
-      unsupportedFile: "仅支持 .docx、.docm、.dotx 和 .dotm 文件",
+      unsupportedFile: "仅支持 Word（.docx、.docm、.dotx、.dotm）和 OpenDocument 文本（.odt、.ott、.odm、.otm、.oth、.fodt）文件",
       fileTooLarge: "DOCX 文件大小 {actual} 字节超过允许值 {allowed} 字节。",
+      viewOnlyReason: "OpenDocument 文件为只读：无法编辑，也无法另存为 DOCX。",
       live: {
         loading: "正在打开 DOCX 文档",
         error: "无法打开文档：{message}",
@@ -2784,7 +2794,9 @@ export const officeMessagesZhCN: OfficeMessages = {
         discardChanges: "放弃未保存的更改？",
         loadingFile: "正在加载 {name}…",
         importFailed: "文件加载失败：{message}",
-        unsupportedFile: "仅支持 .docx、.docm、.dotx 和 .dotm 文件",
+        unsupportedFile: "仅支持 Word（.docx、.docm、.dotx、.dotm）和 OpenDocument 文本（.odt、.ott、.odm、.otm、.oth、.fodt）文件",
+        viewOnly: "OpenDocument 文件为只读：无法编辑，也无法另存为 DOCX。",
+        loadedViewOnly: "已加载 {name}（只读）",
         exportCancelledChanged: "导出已取消：文档已更改",
         exportNotReady: "请等待文档加载完成后再导出",
         exportFailed: "导出失败：{message}",

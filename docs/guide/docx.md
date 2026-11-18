@@ -1,6 +1,6 @@
 # DOCX 使用指南
 
-`DocxViewer` 支持 `.docx`、`.docm`、`.dotx` 和 `.dotm`。宏文档和宏模板只用于安全预览，VBA 不会执行；模板按普通文档打开。`DocxEditor` 的原格式编辑和宏保留不在本次支持范围内。
+`DocxViewer` 支持 Word OOXML（`.docx`、`.docm`、`.dotx`、`.dotm`）和 OpenDocument 文本（`.odt`、`.ott`、`.odm`、`.otm`、`.oth`、`.fodt`）。宏文档和宏模板只用于安全预览，VBA 不会执行；模板按普通文档打开。OpenDocument 文本只读显示，不能编辑，也不能导出为 DOCX。`DocxEditor` 的原格式编辑和宏保留不在本次支持范围内，OpenDocument 文本在编辑器中同样强制只读。
 
 ## 查看文档
 
@@ -27,7 +27,7 @@ import "@arcships/vue-docx/style.css"
 
 | 属性 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `file` | `ArrayBuffer` | 无 | DOCX、DOCM、DOTX 或 DOTM 字节 |
+| `file` | `ArrayBuffer` | 无 | Word OOXML 或 OpenDocument 文本字节 |
 | `model` | `DocModel` | 无 | 已解析文档模型 |
 | `runtime` | `DocxRuntime` | 组件创建 | 调用方持有的 Runtime |
 | `showToolbar` | `boolean` | `true` | 显示查看工具栏 |
@@ -47,6 +47,18 @@ import "@arcships/vue-docx/style.css"
 
 主要事件为 `load-start`、`load-success`、`load-error`、`file-selected`、`update:isDark`、`update:showTrackedChanges`、`update:revisionDisplay`、`update:showComments`、`update:viewMode` 和 `update:fitMode`。
 
+### OpenDocument 文本（只读）
+
+`.odt`、`.ott`、`.odm`、`.otm`、`.oth` 和扁平 `.fodt` 走与 DOCX 相同的文件选择器和拖放入口，由 `@arcships/docx-core` 的 OpenDocument 读取器建立 `DocModel`。模型没有 Word 包，`isOpenDocumentModel(model)` 为 `true`，`metadata.sourcePartNames.document` 为 `content.xml`。查看器渲染标题、字符格式、链接、项目符号/编号列表、表格、图片、文本框、页眉页脚和页面设置，并在工具栏下方显示 `docx-view-only-reason` 只读提示；根元素带 `data-view-only="true"`，下载按钮禁用。
+
+OpenDocument 没有写入器，因此：
+
+- `DocxEditor` 不进入 contenteditable，所有会修改模型的编辑命令都返回原模型并在状态栏显示只读原因。
+- `DocxEditorController.viewOnlyReason` 返回当前语言下的原因；`exportDocx()`、`getDocxBytes()` 和 `getDocxBlob()` 拒绝执行并保持原模型。
+- `.docx`、`.docm`、`.dotx`、`.dotm` 的解析、编辑、下载和导出行为不变。
+
+宿主可以导入 `OPEN_DOCUMENT_VIEW_ONLY_REASON`、`isOpenDocumentTextFileName()`、`isSupportedDocumentFileName()` 和 `isOpenDocumentModel()` 做同样的只读判断。
+
 ### 页面布局与缩放
 
 工具栏提供三个页面布局按钮和两个适配按钮（`data-testid` 依次为 `docx-view-mode-continuous`、`docx-view-mode-single`、`docx-view-mode-spread`、`docx-fit-width`、`docx-fit-page`），也都可以由属性控制：
@@ -63,7 +75,7 @@ import "@arcships/vue-docx/style.css"
 
 ### 拖放导入
 
-把 `.docx`、`.docm`、`.dotx` 或 `.dotm` 拖到查看器上，会走与“导入”按钮相同的 `controller.importDocxFile(file)` 路径；拖入时页面出现虚线轮廓，拖离、放下或拖拽在窗口其他位置结束后都会清除。不支持的类型（例如旧版 `.doc`）不会导入，并在状态栏显示本地化提示。
+把 Word OOXML 或 OpenDocument 文本文件拖到查看器上，会走与“导入”按钮相同的 `controller.importDocxFile(file)` 路径；拖入时页面出现虚线轮廓，拖离、放下或拖拽在窗口其他位置结束后都会清除。不支持的类型（例如旧版 `.doc`、`.ods`、`.odp`）不会导入，并在状态栏显示本地化提示。
 
 ## 修订显示方式
 

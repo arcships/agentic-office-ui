@@ -8,6 +8,7 @@
     :data-state="viewerState"
     :data-show-tracked-changes="String(effectiveShowTrackedChanges)"
     :data-show-comments="String(effectiveShowComments)"
+    :data-view-only="viewOnlyReason ? 'true' : undefined"
     tabindex="0"
     @keydown="onViewerKeydown"
   >
@@ -28,7 +29,7 @@
     <DocxViewerToolbar
       v-if="showToolbar"
       ref="toolbarRef"
-      :can-download="Boolean(effectiveFile)"
+      :can-download="Boolean(effectiveFile) && !viewOnlyReason"
       :current-page="currentPage"
       :disabled="isLoading || Boolean(error) || !renderableModel"
       :file-name="displayFileName"
@@ -70,6 +71,15 @@
       @update:fit-mode="setFitMode"
       @upload="uploadInputRef?.click()"
     />
+
+    <div
+      v-if="viewOnlyReason"
+      class="docx-viewer__view-only"
+      data-testid="docx-view-only-reason"
+      role="note"
+    >
+      {{ viewOnlyReason }}
+    </div>
 
     <div class="docx-viewer__body">
       <DocxThumbnailPanel
@@ -161,6 +171,7 @@ import {
   collectTrackedChangesFromModel,
   createDocxRuntime,
   DocxImportError,
+  isOpenDocumentModel,
   primeCommentAnchors,
 } from "@arcships/docx-core"
 import type { DocxSearchOptions, DocxSearchState } from "../composables/useDocxSearch"
@@ -328,6 +339,11 @@ const resolvedModel = computed(() => props.model ?? parsedModel.value)
 const renderableModel = computed(() => layoutLimitExceeded.value ? undefined : resolvedModel.value)
 const displayFileName = computed(() => internalFileName.value || props.fileName)
 const effectiveEmptyState = computed(() => props.emptyState ?? m.value.docx.viewer.emptyDetail)
+const viewOnlyReason = computed(() =>
+  renderableModel.value && isOpenDocumentModel(renderableModel.value)
+    ? m.value.docx.viewer.viewOnlyReason
+    : undefined
+)
 const effectiveShowTrackedChanges = computed(() => props.showTrackedChanges ?? internalShowTrackedChanges.value)
 const effectiveShowComments = computed(() => props.showComments ?? internalShowComments.value)
 const effectiveRevisionDisplay = computed(
@@ -701,6 +717,7 @@ async function onUploadChange(event: Event): Promise<void> {
 }
 
 function downloadFile(): void {
+  if (viewOnlyReason.value) return
   const bytes = effectiveFile.value
   if (!bytes) return
   const extension = /\.([^.]+)$/.exec(displayFileName.value)?.[1]?.toLowerCase()
@@ -808,6 +825,20 @@ defineExpose({
 }
 .docx-viewer--dark:focus-visible { outline-color: #60a5fa; }
 .docx-viewer__file-input { display: none; }
+.docx-viewer__view-only {
+  background: #fff7ed;
+  border-bottom: 1px solid #fed7aa;
+  color: #9a3412;
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 14px;
+}
+.docx-viewer--dark .docx-viewer__view-only {
+  background: #431407;
+  border-bottom-color: #7c2d12;
+  color: #fdba74;
+}
 .docx-viewer__body { display: flex; flex: 1; min-height: 0; min-width: 0; }
 .docx-viewer__content { display: flex; flex: 1; min-height: 0; min-width: 0; position: relative; }
 .docx-viewer-state {
@@ -869,6 +900,7 @@ defineExpose({
     overflow: visible !important;
   }
   .docx-viewer__file-input,
+  .docx-viewer__view-only,
   .docx-viewer-toolbar,
   .docx-thumbnail-panel { display: none !important; }
   .docx-viewer__body,

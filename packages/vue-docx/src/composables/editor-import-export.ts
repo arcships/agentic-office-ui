@@ -15,6 +15,7 @@ import {
   createDocxRuntime,
   DocxExportError,
   exportDocxBuffer,
+  isOpenDocumentModel,
   primeCommentAnchors,
 } from "@arcships/docx-core"
 import { onScopeDispose, toRaw, watch } from "vue"
@@ -27,7 +28,7 @@ import {
   isSupportedDocxFileName,
 } from "./docx-file-types"
 
-type EditorExportFailureReason = "not-ready" | "required-field"
+type EditorExportFailureReason = "not-ready" | "required-field" | "view-only"
 
 /**
  * Controller-level refusal that still carries the reason `exportDocx()` needs
@@ -303,7 +304,9 @@ export function createEditorImportExport(ctx: EditorCore) {
       ctx.pendingRunStyleSnapshot.value = undefined
       ctx.selectedFormFieldLocation.value = undefined
       ctx.importError.value = undefined
-      ctx.status.value = ctx.statusMessage("ready")
+      ctx.status.value = isOpenDocumentModel(parsedModel)
+        ? ctx.statusMessage("loadedViewOnly", { name: file.name })
+        : ctx.statusMessage("ready")
     } catch (error) {
       if (!isCurrentImport()) return
       const err = error instanceof Error ? error : new Error(ctx.statusMessage("unknownImportError"))
@@ -327,6 +330,14 @@ export function createEditorImportExport(ctx: EditorCore) {
 
   // ── shared export preparation / serialization ────────────────────
   const prepareExportModel = (): DocModel => {
+    // OpenDocument text has no Word package to serialize. Refuse before any
+    // image or model preparation work and tell the user why.
+    if (isOpenDocumentModel(ctx.model.value)) {
+      const message = ctx.statusMessage("viewOnly")
+      ctx.status.value = message
+      throw new EditorExportError("view-only", message)
+    }
+
     // Exporting the starter model while an import is still parsing would save
     // the wrong document and race the load completion.
     if (ctx.isImporting.value || activeImport !== undefined) {
@@ -380,6 +391,10 @@ export function createEditorImportExport(ctx: EditorCore) {
   /** Map a preparation/serialization failure to the editor's status message. */
   const reportExportFailure = (error: unknown): void => {
     if (error instanceof EditorExportError && error.reason === "not-ready") {
+      ctx.status.value = error.message
+      return
+    }
+    if (error instanceof EditorExportError && error.reason === "view-only") {
       ctx.status.value = error.message
       return
     }

@@ -27,6 +27,9 @@ export * from "./thumbnail-cache";
 // DOCX import (main thread + worker dual path)
 export * from "./docx-import";
 
+// OpenDocument text detection (view-only models built without a Word package)
+export { isOpenDocumentModel, OPEN_DOCUMENT_VIEW_ONLY_REASON } from "./open-document";
+
 // DOCX export (dedicated Worker; headless inline fallback)
 export * from "./docx-export";
 

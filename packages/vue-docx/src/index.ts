@@ -148,6 +148,24 @@ export {
 
 // ---- Composables ----
 
+export {
+  DOCX_FILE_ACCEPT,
+  DOCX_FILE_EXTENSIONS,
+  DOCX_FILE_MIME_TYPES,
+  DOCX_UNSUPPORTED_FILE_MESSAGE,
+  OPEN_DOCUMENT_FILE_EXTENSIONS,
+  OPEN_DOCUMENT_FILE_MIME_TYPES,
+  OPEN_DOCUMENT_VIEW_ONLY_REASON,
+  SUPPORTED_DOCUMENT_FILE_EXTENSIONS,
+  SUPPORTED_DOCUMENT_FILE_MIME_TYPES,
+  docxExportFileName,
+  docxExportMimeType,
+  docxFileExtension,
+  isOpenDocumentTextFileName,
+  isSupportedDocxFileName,
+  isSupportedDocumentFileName,
+  isWordFileName,
+} from "./composables/docx-file-types"
 export { useDocxEditor } from "./composables/useDocxEditor"
 export {
   useDocxDocumentTheme,

@@ -157,6 +157,14 @@ export interface DocxEditorController {
   model: DocModel;
   /** True when the model differs from the last loaded/new/exported model. */
   isDirty: boolean;
+  /**
+   * Why this document cannot be edited or exported, if it cannot.
+   *
+   * OpenDocument text opened by the editor has no Word package and no writer,
+   * so every edit command and both export paths refuse it. `undefined` for
+   * ordinary DOCX documents.
+   */
+  viewOnlyReason?: string;
   documentLoadNonce: number;
   fileName: string;
   status: string;

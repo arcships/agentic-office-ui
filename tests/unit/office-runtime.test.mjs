@@ -373,6 +373,29 @@ test("source format detection uses signatures for PDF and legacy XLS", () => {
     { family: xls?.family, format: xls?.format, confidence: xls?.confidence },
     { family: "xlsx", format: "xls", confidence: "medium" },
   );
+
+  for (const [fileName, format, contentType] of [
+    ["a.odt", "odt", "application/vnd.oasis.opendocument.text"],
+    ["a.ott", "ott", "application/vnd.oasis.opendocument.text-template"],
+    ["a.odm", "odm", "application/vnd.oasis.opendocument.text-master"],
+    ["a.otm", "otm", "application/vnd.oasis.opendocument.text-master-template"],
+    ["a.oth", "oth", "application/vnd.oasis.opendocument.text-web"],
+    ["a.fodt", "fodt", "application/vnd.oasis.opendocument.text-flat-xml"],
+  ]) {
+    const detected = runtime.detectSourceFormat({
+      fileName,
+      contentType,
+    });
+    assert.deepEqual(
+      { family: detected?.family, format: detected?.format, confidence: detected?.confidence },
+      { family: "docx", format, confidence: "medium" },
+    );
+  }
+  assert.equal(
+    runtime.detectSourceFormat({ fileName: "sheet.ods" }),
+    undefined,
+    "ODF spreadsheet names stay outside the DOCX family",
+  );
 });
 
 test("PPTX archive validation accepts the real playback fixture", () => {

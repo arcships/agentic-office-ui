@@ -19,6 +19,7 @@ import {
 } from "./wasm-source";
 import { isUiEnvironment } from "./runtime-environment";
 import { bundledDocxWasmUrl } from "./bundled-assets";
+import { importOpenDocumentBuffer, isOpenDocumentBytes } from "./open-document";
 
 export type DocxImportSource = "worker" | "main-thread";
 
@@ -400,6 +401,31 @@ async function importDocxOnMainThread(
   };
   try {
     assertWithinBudget();
+    if (isOpenDocumentBytes(buffer)) {
+      const openDocument = await importOpenDocumentBuffer(buffer, limits, deadline.signal);
+      assertWithinBudget();
+      const finishedAt = performanceNow();
+      assertDocxModelBudget(openDocument.model, limits);
+      assertDocxParseTime(finishedAt - startedAt, limits);
+      const openDocumentResult: DocxImportResult = {
+        package: openDocument.package,
+        model: openDocument.model,
+        source: "main-thread",
+        timings: {
+          totalMs: finishedAt - startedAt,
+          parseMs: finishedAt - startedAt,
+          buildModelMs: 0,
+        },
+      };
+      reportDiagnostic(options, {
+        type: "main-thread-success",
+        requestId,
+        source: "main-thread",
+        wasmUrl: typeof wasmSource === "string" ? wasmSource : undefined,
+        timings: openDocumentResult.timings,
+      });
+      return openDocumentResult;
+    }
     validateOfficeArchive(buffer, limits, { format: "docx", signal: deadline.signal });
     assertWithinBudget();
     const [{ parseDocx }, { buildDocModel }] = await Promise.all([

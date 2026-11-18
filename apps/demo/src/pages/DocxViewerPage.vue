@@ -2,8 +2,8 @@
   <div class="page" data-testid="docx-viewer-page">
     <header class="product-header">
       <div>
-        <h2>Word 文档查看器</h2>
-        <p class="desc">打开文档后，可翻页、缩放、查看缩略图和下载原文件。</p>
+        <h2>Word / OpenDocument 文档查看器</h2>
+        <p class="desc">打开 Word 或 OpenDocument 文本文档后，可翻页、缩放、查看缩略图和下载原文件；OpenDocument 以只读方式打开，不提供 DOCX 导出。</p>
       </div>
       <div class="controls control-panel product-actions">
         <label>
@@ -25,7 +25,7 @@
         </label>
         <label class="file-action">
           打开本地文件
-          <input data-testid="docx-file-input" type="file" accept=".docx,.docm,.dotx,.dotm" @change="onFileChange" />
+          <input data-testid="docx-file-input" type="file" :accept="DOCX_FILE_ACCEPT" @change="onFileChange" />
         </label>
       </div>
     </header>
@@ -86,7 +86,7 @@
         @load-error="onViewerLoadError"
       />
       <div v-else class="empty">
-        <p>选择示例或打开本地 Word 文档、模板文件。</p>
+        <p>选择示例或打开本地 Word / OpenDocument 文本文档、模板文件。</p>
       </div>
     </div>
 
@@ -131,7 +131,11 @@ import {
   type DocxImportDiagnostic,
   type DocxImportResult,
 } from "@arcships/docx-core"
-import { DocxViewer } from "@arcships/vue-docx"
+import {
+  DOCX_FILE_ACCEPT,
+  DocxViewer,
+  isSupportedDocumentFileName,
+} from "@arcships/vue-docx"
 
 const samples = [
   { file: "demo.docx", label: "Demo — master services agreement" },
@@ -272,10 +276,10 @@ function onFileChange(event: Event): void {
   const file = input.files?.[0]
   if (!file) return
   const request = beginPageLoad("file", file.name)
-  if (!/\.(?:docx|docm|dotx|dotm)$/i.test(file.name)) {
+  if (!isSupportedDocumentFileName(file.name)) {
     if (isCurrentPageLoad(request)) {
       activePageLoad = undefined
-      setError("Please select a supported Word document", "PARSE_FAILED")
+      setError("Please select a supported Word or OpenDocument text document", "PARSE_FAILED")
       recordPageLoadDiagnostic("page-load-error", request)
     }
     return

@@ -111,11 +111,11 @@
             <option v-for="z of zoomSelectOptions" :key="z" :value="z">{{ z }}%</option>
           </select>
         </label>
-        <button data-testid="editor-new" type="button" class="docx-toolbar-action" :title="m.docx.editor.newTitle" :disabled="readOnly" @click="controller.newDocument()">
+        <button data-testid="editor-new" type="button" class="docx-toolbar-action" :title="m.docx.editor.newTitle" :disabled="readOnly && !controller.viewOnlyReason" @click="controller.newDocument()">
           <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M12.5 8.5v7" /></svg>
           <span>{{ m.docx.editor.new }}</span>
         </button>
-        <button data-testid="editor-import" type="button" class="docx-toolbar-action" :title="m.docx.editor.importTitle" :disabled="readOnly" @click="onImport">
+        <button data-testid="editor-import" type="button" class="docx-toolbar-action" :title="m.docx.editor.importTitle" :disabled="readOnly && !controller.viewOnlyReason" @click="onImport">
           <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5M5 13v6h14v-6" /></svg>
           <span>{{ m.docx.editor.import }}</span>
         </button>

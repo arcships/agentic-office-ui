@@ -42,7 +42,7 @@ function onApiMapToggle(event: Event) {
 
 const navItems = [
   { path: "/docx-surface", title: "DOCX Surface", desc: "最小分页文档面：宿主持有工具栏、选择模式与确认后的引用。", status: "Ready", statusClass: "ready" },
-  { path: "/docx-viewer", title: "DOCX Viewer", desc: "View .docx files with pagination and thumbnails", status: "Ready", statusClass: "ready" },
+  { path: "/docx-viewer", title: "DOCX Viewer", desc: "View Word and OpenDocument text files with pagination and thumbnails", status: "Ready", statusClass: "ready" },
   { path: "/docx-editor", title: "DOCX Editor", desc: "Edit DOCX text, formatting, tables and positioned images with undo and redo", status: "Ready", statusClass: "ready" },
   { path: "/xlsx-surface", title: "XLSX Surface", desc: "最小工作表网格：选择单元格、范围、行列、图表或区域。", status: "Ready", statusClass: "ready" },
   { path: "/xlsx-viewer", title: "XLSX Viewer", desc: "View and edit workbooks with formulas, formatting, search, charts, tables and sheet tabs", status: "Ready", statusClass: "ready" },

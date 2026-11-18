@@ -7,6 +7,7 @@ import {
   type DocxRuntimeLimits,
 } from "../resource-limits";
 import { isUiEnvironment } from "./runtime-environment";
+import { isOpenDocumentModel, OPEN_DOCUMENT_VIEW_ONLY_REASON } from "./open-document";
 import type { WorkerWasmSource } from "./wasm-source";
 
 export type DocxExportErrorCode =
@@ -240,6 +241,9 @@ export async function exportDocxBuffer(
   basePackage?: OoxmlPackage,
   options: DocxExportOptions = {},
 ): Promise<ArrayBuffer> {
+  if (isOpenDocumentModel(model)) {
+    throw new DocxExportError("INVALID_MODEL", OPEN_DOCUMENT_VIEW_ONLY_REASON);
+  }
   const limits = resolveDocxRuntimeLimits(options.limits);
   if (options.signal?.aborted) {
     throw createAbortError();
