@@ -45,6 +45,7 @@
         @controller-ready="onControllerReady"
         @diagnostic="onDiagnostic"
         @upload="openFilePicker"
+        @file-drop="onViewerFileDrop"
         @update:read-only="onReadOnlyChange"
       />
       <div v-else class="empty"><p>请选择工作簿、拖入本地文件或输入地址。</p></div>
@@ -52,7 +53,7 @@
 
     <div class="status-grid info-grid verification-section">
       <div><strong>状态：</strong><span data-testid="page-status" :data-state="pageState">{{ pageState }}</span></div>
-      <div><strong>文件：</strong><span data-testid="loaded-file">{{ displayName || "未打开" }}</span></div>
+      <div><strong>文件：</strong><span data-testid="loaded-file">{{ controller?.displayFileName || displayName || "未打开" }}</span></div>
       <div><strong>来源：</strong>{{ sourceKind }}</div>
       <div><strong>模式：</strong>{{ readOnly ? "只读" : "可编辑" }}</div>
       <div><strong>请求 Worker：</strong><span data-testid="xlsx-worker-requested">{{ useWorker ? "开启" : "关闭" }}</span></div>
@@ -93,6 +94,7 @@
 <script setup lang="ts">
 import { computed, defineComponent, h, onBeforeUnmount, onMounted, ref, shallowRef, type PropType } from "vue"
 import {
+  isSupportedXlsxFileName,
   useXlsxViewerController,
   XlsxViewer,
   type XlsxDiagnostic,
@@ -111,7 +113,7 @@ const XlsxViewerWrapper = defineComponent({
     deferLoadingAboveBytes: { type: Number, default: 0 },
     urlPolicy: { type: Object as PropType<XlsxUrlPolicy>, required: true },
   },
-  emits: ["controller-ready", "diagnostic", "update:readOnly", "upload"],
+  emits: ["controller-ready", "diagnostic", "update:readOnly", "upload", "file-drop"],
   setup(props, { emit }) {
     const controller: XlsxViewerController = useXlsxViewerController({
       file: props.file,
@@ -131,6 +133,7 @@ const XlsxViewerWrapper = defineComponent({
       showUpload: true,
       style: { height: "100%" },
       onUpload: () => emit("upload"),
+      onFileDrop: (file: File) => emit("file-drop", file),
       "onUpdate:readOnly": (value: boolean) => emit("update:readOnly", value),
     })
   },
@@ -183,7 +186,9 @@ const urlPolicy = computed<XlsxUrlPolicy>(() => ({
 
 const viewerKey = computed(() => {
   if (!src.value && !fileBuffer.value) return ""
-  return `${sourceKind.value}:${displayName.value}-${loadCounter.value}-${useWorker.value}-${deferLoadingAboveBytes.value}`
+  // Only a source change remounts the wrapper: a dropped file loads through the
+  // controller, and the page only mirrors its name and origin in the label.
+  return `${loadCounter.value}-${useWorker.value}-${deferLoadingAboveBytes.value}`
 })
 const pageState = computed(() => {
   if (inputError.value) return "error"
@@ -237,7 +242,7 @@ function loadUrl() {
 
 function processFile(file: File) {
   const requestId = invalidateFileRead()
-  if (!file.name.toLowerCase().match(/\.(xlsx|xls|xlsb|xlsm|xltx|xltm|csv)$/)) {
+  if (!isSupportedXlsxFileName(file.name)) {
     inputError.value = { code: "INVALID_WORKBOOK", message: "请选择受支持的 Excel 或 CSV 文件。", sourceKind: "file" }
     return
   }
@@ -272,6 +277,20 @@ function openFilePicker() {
 
 function onControllerReady(nextController: XlsxViewerController) {
   controller.value = nextController
+}
+
+// The dropped workbook is already loading through `controller.loadFile()`; the
+// page only mirrors its name and origin so the status grid stays truthful and
+// a later remount keeps the dropped bytes.
+function onViewerFileDrop(file: File) {
+  invalidateFileRead()
+  inputError.value = null
+  sourceKind.value = "拖放文件"
+  displayName.value = file.name
+  void file.arrayBuffer().then((buffer) => {
+    src.value = null
+    fileBuffer.value = buffer
+  })
 }
 
 function onReadOnlyChange(value: boolean) {

@@ -5,8 +5,13 @@
     :class="{ 'xlsx-viewer--print-preview': controller.isPrintPreviewOpen }"
     data-testid="xlsx-viewer"
     :data-state="controller.isLoading ? 'loading' : controller.error || controller.sourceError ? 'error' : controller.isLoadDeferred ? 'deferred' : controller.activeSheet || controller.activeTab?.kind === 'chartsheet' ? 'ready' : 'empty'"
+    :data-file-drop-active="isDragOver ? 'true' : undefined"
     :style="viewerStyle"
     @keydown="onKeydown"
+    @dragenter="onDragEnter"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
     tabindex="0"
   >
     <XlsxToolbar
@@ -51,6 +56,14 @@
       :message="liveStatusMessage"
       :busy="controller.isLoading"
     />
+    <div
+      v-if="dropError"
+      class="xlsx-viewer__drop-error"
+      data-testid="xlsx-drop-error"
+      role="alert"
+    >
+      {{ dropError }}
+    </div>
     <div ref="bodyRef" class="xlsx-viewer__body">
       <div
         v-if="controller.isLoading"
@@ -250,6 +263,8 @@ import type { XlsxAuthoringDialogKind } from "./authoring-dialog";
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue";
 import { formatBinaryBytes } from "../composables/formatting";
 import { OfficeLiveStatus } from "@arcships/vue-ui";
+import { FILE_DROP_OUTLINE, useFileDrop } from "@arcships/vue-ui";
+import { XLSX_FILE_EXTENSIONS, XLSX_FILE_MIME_TYPES } from "../composables/xlsx-file-types";
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { provideXlsxMessages } from "../i18n";
@@ -329,6 +344,12 @@ const props = withDefaults(
 const emit = defineEmits<{
   cellDoubleClick: [cell: XlsxCellAddress];
   upload: [];
+  /**
+   * A supported workbook was dropped on the viewer. The controller has already
+   * started loading it through the same pipeline as the file picker; hosts
+   * listen to refresh their own file label.
+   */
+  fileDrop: [file: File];
   /** Committed tab switch: `tab` is the full entry, so `kind` stays readable. */
   tabChange: [tab: XlsxWorkbookTab];
   "update:activeTabIndex": [index: number];
@@ -343,6 +364,26 @@ type XlsxDeferredLoadPayload = { fileName: string; bytes: number };
 
 const effectiveReadOnly = computed(() => props.readOnly || props.controller.isEditingLocked === true || props.controller.readOnly);
 const m = provideXlsxMessages(() => props.locale, () => props.messages);
+
+// ── Drag-and-drop file import ──────────────────────────────────────
+// Dropping a workbook replaces the current source through
+// `controller.loadFile()`, so size limits, URL policy and the Worker path all
+// stay identical to a file chosen in the dialog.
+const dropError = ref("");
+const fileDrop = useFileDrop({
+  accept: { extensions: XLSX_FILE_EXTENSIONS, mimeTypes: XLSX_FILE_MIME_TYPES },
+  onFile: async (file) => {
+    dropError.value = "";
+    emit("fileDrop", file);
+    await props.controller.loadFile?.(file);
+  },
+  onReject: () => {
+    dropError.value = m.value.xlsx.viewer.unsupportedDrop;
+  },
+});
+const { isDragOver, onDragEnter, onDragOver, onDragLeave, onDrop } = fileDrop;
+// A host-driven load replaces whatever the last rejected drop reported.
+watch(() => props.controller.displayFileName, () => { dropError.value = ""; });
 const localizedError = computed(() => {
   const sourceError = props.controller.sourceError;
   if (sourceError) {
@@ -558,7 +599,7 @@ const viewerStyle = computed<CSSProperties>(() => ({
   width: "100%",
   backgroundColor: props.isDark ? "#18181b" : "#ffffff",
   color: props.isDark ? "#e4e4e7" : "#18181b",
-  outline: "none",
+  outline: isDragOver.value ? FILE_DROP_OUTLINE : "none",
 }));
 
 let printPageStyle: HTMLStyleElement | undefined;
@@ -869,6 +910,15 @@ defineExpose({
 .xlsx-viewer__calculation-status {
   background: rgba(245, 158, 11, 0.12);
   border-block-end: 1px solid rgba(245, 158, 11, 0.35);
+  color: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 6px 12px;
+}
+
+.xlsx-viewer__drop-error {
+  background: rgba(220, 38, 38, 0.12);
+  border-block-end: 1px solid rgba(220, 38, 38, 0.35);
   color: inherit;
   font-size: 12px;
   line-height: 1.4;

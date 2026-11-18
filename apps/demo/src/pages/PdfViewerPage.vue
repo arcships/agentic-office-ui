@@ -93,6 +93,7 @@
         @document-load-error="onLoadError"
         @active-page-change="activePage = $event"
         @diagnostic="onDiagnostic"
+        @file-drop="onDropFile"
       />
       <div v-else class="empty">
         <p>请选择 PDF 文件或输入地址。</p>
@@ -211,6 +212,12 @@ function onFileChange(event: Event) {
   if (!file) return
   resetLoadState("本地文件", file.name)
   source.value = { kind: "blob", blob: file, fileName: file.name }
+}
+
+// The viewer loads the dropped PDF itself; the page mirrors the label and
+// resets the counters, then follows the load through its diagnostic events.
+function onDropFile(file: File) {
+  resetLoadState("拖放文件", file.name)
 }
 
 function onLoadSuccess(pages: number) {

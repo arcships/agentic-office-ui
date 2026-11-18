@@ -57,6 +57,20 @@ export type {
   ViewerKeySwitch,
 } from "./composables/viewer-keys"
 
+// Shared drag-and-drop file import (DOCX / XLSX / PDF / PPTX)
+export {
+  FILE_DROP_OUTLINE,
+  fileDropExtension,
+  isSupportedDropFile,
+  useFileDrop,
+} from "./composables/file-drop"
+export type {
+  FileDropAccept,
+  FileDropCandidate,
+  UseFileDropOptions,
+  UseFileDropReturn,
+} from "./composables/file-drop"
+
 // Office selection primitives
 export { default as OfficeObjectOutlineLayer } from "./components/OfficeObjectOutlineLayer.vue"
 export { default as OfficeRegionSelector } from "./components/OfficeRegionSelector.vue"

@@ -181,6 +181,7 @@ DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注
 
 - `XlsxViewer`。
 - `useXlsxViewerController`、`useXlsxViewerThumbnails`。
+- `XLSX_FILE_EXTENSIONS`、`XLSX_FILE_MIME_TYPES`、`XLSX_FILE_ACCEPT`、`xlsxFileExtension`、`isSupportedXlsxFileName`（上传入口和拖放共用的类型策略）。
 - `XlsxFileSizeLimitExceededError`。
 - `XlsxDiagnostic`、`XlsxLoadError`、`XlsxLoadErrorCode`、`XlsxSourceKind`、`XlsxSourceState`、`XlsxUrlPolicy`。
 - 样式：`@arcships/vue-xlsx/style.css`。
@@ -188,6 +189,7 @@ DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注
 - 工作表缩略图：`useXlsxViewerThumbnails` 只在需要时读取单元格（首次悬停或显式预热），`prefetchThumbnails` 在空闲时预热指定工作表、按 `revision` 去重、单次最多 3 张，`paintThumbnail` 随后只绘制。
 - 历史记录：控制器选项 `historyMaxEntries` 和 `historyMaxBytes` 同时生效，默认最多 100 条、估算 32 MiB。
 - 图表数据：`refreshChartData()` 在主线程工作簿或 Worker 当前工作簿上重新解析图表分类和值，用于源单元格编辑后刷新绘图。
+- 重新加载本地工作簿：`XlsxViewerController.loadFile(source: XlsxLoadFileSource, fileName?)` 接受 `ArrayBuffer` 或任何带 `arrayBuffer()` 的 `File`/`Blob`。`XlsxViewer` 的拖放导入调用它，与 `file` 选项共用大小上限、URL 规则、延迟解析阈值和 Worker 路径；原来的 URL 来源被替换，加载结束前 `displayFileName`、`sourceState` 和 `sourceError` 与普通加载一致地更新。
 - 编写入口：`XlsxViewer` 的功能区与右键菜单打开 `XlsxAuthoringDialog`（图表、批注、超链接、表格、条件格式、数据验证）。宿主也可以直接挂载该组件，或只调用控制器上的 `insertChart`、`setCellComment`、`setCellHyperlink`、`addConditionalFormatRule`、`updateConditionalFormatRule`、`deleteConditionalFormatRule`、`createTable`、`removeTable`、`setSelectionDataValidation`、`setFreezePanes`、`toggleFreezePanesAtActiveCell`。每个操作都写入工作簿模型、记录撤销条目，并随导出的 XLSX 一起保存；`XlsxViewerAuthoring` 汇总这些方法的说明。直接读取/清空用 `getCellComment`、`getCellHyperlink`、`getConditionalFormatRules`、`getTableAtCell`、`freezePanes`。
 - 编写限制：这些命令需要可修改的主线程工作簿（Worker 只用于强制只读的大文件），在 `readOnly`、受保护工作表或 Worker 只读模式下返回 `false`/`null`。
 - 查找替换（issue #113）：`replaceInSheet(query, replacement, { matchCase, wholeCell, formula, sheetIndex, range, occurrence })` 在同一工作表内替换值和公式文本，`formula` 默认开启，非活动工作表会先被激活，整批写入只占一条撤销记录，返回 `XlsxReplaceResult`（`replacedCells`、`replacedOccurrences`、`changed`）。只读/受保护/Worker 只读模式不改工作簿，返回 `changed: false`。搜索与替换面板、`useXlsxSearch()` 与 `OfficeFindBar` 的替换行复用同一个控制器命令。
@@ -218,11 +220,15 @@ AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurfa
 
 ### 3.6 `@arcships/vue-ui`
 
-稳定入口为 `OfficeObjectOutlineLayer`、`OfficeRegionSelector`、`SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`、`OfficeFindBar`、`OfficeLiveStatus`、`useOfficeMenuKeyboard`、`resolveOfficeMenuKeyCommand`、`useViewerKeys`、`resolveViewerKeyCommand`、`isEditableViewerTarget`、`isInteractiveViewerTarget` 和 `VIEWER_KEYBOARD_SHORTCUTS`，以及根入口导出的属性和事件类型。新代码使用 `@arcships/vue-ui/style.css`。
+稳定入口为 `OfficeObjectOutlineLayer`、`OfficeRegionSelector`、`SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`、`OfficeFindBar`、`OfficeLiveStatus`、`useOfficeMenuKeyboard`、`resolveOfficeMenuKeyCommand`、`useViewerKeys`、`resolveViewerKeyCommand`、`isEditableViewerTarget`、`isInteractiveViewerTarget`、`VIEWER_KEYBOARD_SHORTCUTS`、`useFileDrop`、`isSupportedDropFile`、`fileDropExtension` 和 `FILE_DROP_OUTLINE`，以及根入口导出的属性和事件类型。新代码使用 `@arcships/vue-ui/style.css`。
 
 `OfficeLiveStatus` 是所有 Office 视图共享的单一 `role=status` / `aria-live` 区域：视图只改文本，不改节点，因此加载、错误、页码和幻灯片切换都能被辅助技术重新播报。`useOfficeMenuKeyboard` 统一 DOCX 与 XLSX 右键菜单的键盘语义：打开时把焦点放到第一个 `menuitem`，上下方向键、`Home`、`End` 在菜单项之间循环，`Escape` / `Tab` 关闭菜单并把焦点还给打开它的表面；`resolveOfficeMenuKeyCommand` 是可单测的纯函数版本。
 
 `useViewerKeys` 统一 DOCX、PDF 和 PPTX 的键盘映射：`PageUp`/`PageDown`、`Home`/`End`、`Ctrl/Cmd` + `+`/`=`/`-`/`0`、`Ctrl/Cmd + F` 和 `Escape`；`mode: "present"` 时才额外接管方向键和 `Space`。组合函数在可编辑目标（`input`、`textarea`、`select`、`contenteditable`）内不拦截按键，只有宿主处理了命令才调用 `preventDefault()`。`resolveViewerKeyCommand` 是可单测的纯函数版本，`VIEWER_KEYBOARD_SHORTCUTS` 是导出的映射清单。
+
+`useFileDrop` 是四个查看器共用的拖放导入合同：`accept`（`extensions` + `mimeTypes`，忽略大小写）决定可接受的文件，`onFile` 只收到第一个匹配文件，`onReject` 收到全部未匹配文件，`enabled` 支持布尔值或 getter。组合函数返回 `onDragEnter`/`onDragOver`/`onDragLeave`/`onDrop`/`reset` 和 `isDragOver`；深度只由 `dragenter`/`dragleave` 的嵌套层级维护，`dragover` 只设置 `dropEffect`，因此不会复现 #27 的轮廓卡滞。`FILE_DROP_OUTLINE` 是约定的虚线轮廓（`3px dashed #2563eb`），`isSupportedDropFile` 与 `fileDropExtension` 是可单独复用的纯函数。
+
+各查看器在根元素绑定该组合函数，并在命中时抛出 `fileDrop(file)` 事件；拖入时根元素带 `data-file-drop-active="true"`。不支持的类型不会进入加载管线：DOCX 通过 `controller.setStatus()` 提示，XLSX/PDF/PPTX 在查看器上方渲染 `role="alert"` 条（文案来自 `xlsx.viewer.unsupportedDrop`、`pdf.viewer.unsupportedDrop`、`pptx.viewer.unsupportedDrop`）。`@arcships/vue-xlsx` 还导出 `XLSX_FILE_EXTENSIONS`、`XLSX_FILE_MIME_TYPES`、`XLSX_FILE_ACCEPT` 和 `isSupportedXlsxFileName`，`@arcships/vue-pdf`/`@arcships/vue-pptx` 提供同名的 `PDF_*`/`PPTX_*` 常量与判断函数。
 
 两个 Office 选择原语依赖 `@arcships/office-interaction` 的公开类型。它们只消费规范化几何和受控临时状态：不解析 Office 文件，不从 DOM 猜测格式对象，也不保存引用集合。轮廓层负责候选可视化和键盘事件；区域框负责 `0..1` 坐标中的拖选与键盘调整。确认后的工具栏、引用列表和 Agent 工作流由宿主实现。
 

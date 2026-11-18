@@ -45,6 +45,10 @@ import "@arcships/vue-pptx/style.css"
 
 模板引用公开 `getController()`、`next()`、`previous()`、`play()`、`pause()`、`resume()`、`reset()`、`goToSlide()`、`enterFullscreen()` 和 `exitFullscreen()`。
 
+### 拖放导入
+
+把 `.pptx`、`.pptm`、`.ppsx`、`.ppsm`、`.potx` 或 `.potm` 拖到查看器上会直接打开，走与 `source` 属性相同的 `usePptxDocument` 会话管线；宿主更新 `source` 后，属性来源重新优先。`PptxViewer` 同时抛出 `fileDrop(file)` 事件。拖入时根元素出现虚线轮廓，拖离、放下或拖拽在窗口其他位置结束后清除；其他扩展名不会打开，并在查看器上方显示本地化的拒绝提示（`pptx.viewer.unsupportedDrop`）。`isSupportedPptxFileName()` 与 `PPTX_FILE_ACCEPT` 可用于自建上传入口。
+
 ## 界面状态
 
 `data-state` 暴露当前视图状态：`empty`、`waiting`（舞台尚未挂载）、`loading`、`ready`、`cancelled` 和 `error`。

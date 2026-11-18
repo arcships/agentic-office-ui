@@ -28,6 +28,7 @@
       @load-error="status = $event.message"
       @load-start="status = '正在加载…'"
       @load-success="status = `已加载 ${$event.slides.length} 页`"
+      @file-drop="onDropFile"
       @media-request="status = `媒体 ${$event} 等待用户继续`"
       @playback-state-change="status = `演示状态：${$event.status}，第 ${$event.slideIndex + 1} 页`"
       @playback-error="status = `演示错误：${$event.message}`"
@@ -50,6 +51,13 @@ function onFileChange(event: Event): void {
   source.value = file
   fileName.value = file?.name ?? ""
   if (!file) status.value = "请选择一个 PowerPoint 文件。"
+}
+
+// The viewer opens the dropped deck itself; the page mirrors its name and the
+// loading status that follows through the load events above.
+function onDropFile(file: File): void {
+  fileName.value = file.name
+  status.value = "正在加载…"
 }
 </script>
 

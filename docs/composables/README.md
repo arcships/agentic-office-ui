@@ -13,12 +13,32 @@
 | PPTX | `usePptxDocument` | 文档加载、纵向滚动跳页/单页跳转、缩放和会话生命周期 |
 | PPTX | `usePptxPlayback` | 动画步骤、播放状态和媒体 |
 | 通用 | `useViewerKeys` | DOCX/PDF/PPTX 共享键盘映射、页面/缩放/搜索/Escape 命令 |
+| 通用 | `useFileDrop` | DOCX/XLSX/PDF/PPTX 共享拖放导入：类型校验、嵌套 drag 深度、轮廓和拒绝反馈 |
 
 - [DOCX 组合函数](docx.md)
 - [XLSX 组合函数](xlsx.md)
 - [PPTX 组合函数](pptx.md)
 - [查看器键盘导航](../guide/viewer-keyboard.md)
 - [Runtime 与资源所有权](runtime.md)
+
+## 拖放导入
+
+`useFileDrop` 把四个查看器的拖放行为收拢到一处，宿主也可以拿它在自定义 Surface 上复用：
+
+```ts
+import { useFileDrop } from "@arcships/vue-ui"
+
+const drop = useFileDrop({
+  accept: { extensions: [".xlsx"], mimeTypes: ["text/csv"] },
+  onFile: (file) => controller.loadFile(file),
+  onReject: () => (message.value = "仅支持 .xlsx 和 .csv 文件"),
+})
+```
+
+- `accept` 同时匹配扩展名和 MIME 类型（忽略大小写）；`onFile` 只会收到第一个匹配的文件。
+- `onDragEnter`/`onDragOver`/`onDragLeave`/`onDrop` 直接绑定到落点根元素。深度来自 `dragenter`/`dragleave` 的嵌套层级，`dragover` 只更新 `dropEffect`，重复触发不会把轮廓“卡住”（对应 DOCX 多页外壳的轮廓缺陷 #27）。
+- `isDragOver` 用于绘制 `FILE_DROP_OUTLINE`；放下、拖离、`dragend` 或在窗口其他位置放下都会清除。
+- `enabled` 可以是布尔值或 getter，用于“只有可编辑时才接受拖入”这类条件。
 
 ## 共同规则
 
