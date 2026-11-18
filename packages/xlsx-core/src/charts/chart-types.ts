@@ -121,6 +121,53 @@ export function resolveScatterChartType(scatterStyle: string | null | undefined)
   }
 }
 
+function readTypeNodeAttribute(typeNode: Element, localName: string) {
+  return getLocalChildren(typeNode, localName)[0]?.getAttribute("val") ?? null;
+}
+
+/**
+ * Resolve the XlsxChart `chartType` label from a `c:barChart`/`c:lineChart`/…
+ * plot-area node. Used when a chart part is discovered from the package rather
+ * than from the workbook engine, for example a chart the viewer just inserted.
+ */
+export function resolveChartTypeFromTypeNode(typeNode: Element | null) {
+  if (!typeNode) {
+    return null;
+  }
+  const grouping = readTypeNodeAttribute(typeNode, "grouping");
+  switch (typeNode.localName) {
+    case "barChart": {
+      const horizontal = readTypeNodeAttribute(typeNode, "barDir") === "bar";
+      const prefix = horizontal ? "Bar" : "Column";
+      if (grouping === "stacked") return `${prefix}Stacked`;
+      if (grouping === "percentStacked") return `${prefix}PercentStacked`;
+      return `${prefix}Clustered`;
+    }
+    case "lineChart":
+      if (grouping === "stacked") return "LineStacked";
+      if (grouping === "percentStacked") return "LinePercentStacked";
+      return "Line";
+    case "areaChart":
+      if (grouping === "stacked") return "AreaStacked";
+      if (grouping === "percentStacked") return "AreaPercentStacked";
+      return "Area";
+    case "pieChart":
+      return "Pie";
+    case "pie3DChart":
+      return "Pie3D";
+    case "doughnutChart":
+      return "Doughnut";
+    case "radarChart":
+      return "Radar";
+    case "bubbleChart":
+      return "Bubble";
+    case "scatterChart":
+      return resolveScatterChartType(readTypeNodeAttribute(typeNode, "scatterStyle"));
+    default:
+      return null;
+  }
+}
+
 function normalizeChartExLegend(raw: unknown): XlsxChartLegend | null {
   if (!raw || typeof raw !== "object") {
     return null;

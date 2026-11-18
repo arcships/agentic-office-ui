@@ -23,6 +23,7 @@
       :controller="controller"
       :is-dark="isDark ?? false"
       :read-only="effectiveReadOnly"
+      @authoring="openAuthoring"
       @update:read-only="onReadOnlyChange"
     />
     <XlsxFormulaBar
@@ -180,9 +181,17 @@
           :controller="controller"
           :target-element="gridElement"
           :suppress-context-menu="touchGestures.shouldSuppressContextMenu"
+          @authoring="openAuthoring"
         />
       </template>
     </div>
+    <XlsxAuthoringDialog
+      v-if="authoringKind"
+      :controller="controller"
+      :kind="authoringKind"
+      :is-dark="isDark ?? false"
+      @close="authoringKind = null"
+    />
     <XlsxSheetTabs
       v-if="controller.tabs.length > 0"
       :controller="controller"
@@ -208,6 +217,8 @@ import XlsxImageLayer from "./XlsxImageLayer.vue";
 import XlsxDrawingLayer from "./XlsxDrawingLayer.vue";
 import XlsxSelectionOverlay from "./XlsxSelectionOverlay.vue";
 import XlsxContextMenu from "./XlsxContextMenu.vue";
+import XlsxAuthoringDialog from "./XlsxAuthoringDialog.vue";
+import type { XlsxAuthoringDialogKind } from "./authoring-dialog";
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue";
 import { formatBinaryBytes } from "../composables/formatting";
 import { OfficeLiveStatus } from "@arcships/vue-ui";
@@ -348,6 +359,11 @@ const toolbarRef = ref<InstanceType<typeof XlsxToolbar> | null>(null);
 const gridRef = ref<GridInstance | null>(null);
 const contextMenuRef = ref<{ openAt(clientX: number, clientY: number, target?: unknown): boolean } | null>(null);
 const gridViewport = ref({ height: 0, scrollLeft: 0, scrollTop: 0, width: 0 });
+const authoringKind = ref<XlsxAuthoringDialogKind | null>(null);
+
+function openAuthoring(kind: XlsxAuthoringDialogKind) {
+  authoringKind.value = kind;
+}
 const gridElement = computed<HTMLElement | null>(() => gridRef.value?.scrollContainer ?? null);
 const surfaceSearch = useXlsxSearch(
   () => props.controller,

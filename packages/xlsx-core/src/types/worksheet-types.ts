@@ -1,5 +1,5 @@
 import type { Workbook, Worksheet } from "@dukelib/sheets-wasm";
-import type { XlsxChart, XlsxChartElementSelection, XlsxChartsheet } from "./chart-types";
+import type { XlsxChart, XlsxChartElementSelection, XlsxChartFamily, XlsxChartsheet } from "./chart-types";
 import type { XlsxThemePalette } from "./theme-types";
 import type {
   XlsxFormControl,
@@ -748,7 +748,172 @@ export interface UseXlsxViewerControllerOptions {
   workerUrl?: string;
 }
 
-export interface XlsxViewerController {
+
+// ── Authoring inputs ─────────────────────────────────────────────────────
+
+/** Comment text a host wants to store on a cell. */
+export interface XlsxCellCommentInput {
+  /** Optional author name shown in the note. */
+  author?: string;
+  /** Comment body. Leading/trailing whitespace is trimmed. */
+  text: string;
+}
+
+/** Hyperlink a host wants to store on a cell. */
+export interface XlsxCellHyperlinkInput {
+  /** Absolute URL, `mailto:` address or `#Sheet!A1` internal reference. */
+  target: string;
+  /** Optional tooltip shown on hover. */
+  tooltip?: string;
+}
+
+/**
+ * Host-facing description of a conditional-format rule.
+ *
+ * The controller fills in thresholds, colours and priorities, so a host only
+ * describes what the user picked.
+ */
+export interface XlsxConditionalFormatDraft {
+  /** Rule kind to author. */
+  kind: "colorScale" | "dataBar" | "iconSet";
+  /** Colour stops as `RRGGBB`/`AARRGGBB`/`#RRGGBB`; 2–3 for a scale, one for a bar. */
+  colors?: string[];
+  /** Built-in icon set name such as `3TrafficLights1`. */
+  iconSet?: string;
+  /** Target ranges; the current selection is used when omitted. */
+  ranges?: XlsxCellRange[];
+  reverse?: boolean;
+  showValue?: boolean;
+  /** Thresholds for each stop, in order. Defaults to min/percentile/max. */
+  thresholds?: Array<{ type: string; value?: number | string }>;
+}
+
+/** Chart a host wants to insert from a cell range. */
+export interface XlsxChartInsertInput {
+  /** Chart family to generate. Defaults to `"bar"` (clustered column). */
+  family?: XlsxChartFamily;
+  /** First column of the range holds category labels. Defaults to `true`. */
+  hasHeaderColumn?: boolean;
+  /** First row of the range holds series names. Defaults to `true`. */
+  hasHeaderRow?: boolean;
+  /** Source range. Defaults to the current selection, then the used range. */
+  range?: XlsxCellRange;
+  /** Optional chart title. */
+  title?: string;
+}
+
+/** ListObject table a host wants to create from a cell range. */
+export interface XlsxTableCreateInput {
+  /** First row of the range holds the column headers. Defaults to `true`. */
+  hasHeaders?: boolean;
+  /** Table name; Excel requires a unique, identifier-like name. */
+  name?: string;
+  /** Source range. Defaults to the current selection. */
+  range?: XlsxCellRange;
+  /** Built-in table style such as `TableStyleMedium2`. */
+  styleName?: string;
+}
+
+/** Data-validation rule a host wants to apply to the selection. */
+export interface XlsxDataValidationInput {
+  allowBlank?: boolean;
+  errorMessage?: string;
+  inputMessage?: string;
+  /** Inline list (`"a,b,c"`), range reference (`A1:A5`) or formula for list rules. */
+  listSource?: string;
+  operator?: string;
+  /** Target ranges; the current selection is used when omitted. */
+  ranges?: XlsxCellRange[];
+  showDropdown?: boolean;
+  validationType: "list" | "whole" | "decimal" | "date" | "textLength";
+  value1?: string;
+  value2?: string;
+}
+
+/**
+ * Authoring actions for non-cell workbook objects.
+ *
+ * Implemented by `XlsxViewerController`. Every action mutates the workbook
+ * model, re-renders the viewer, records an undo entry and is written into
+ * exported XLSX bytes.
+ */
+export interface XlsxViewerAuthoring {
+  // ── Charts ─────────────────────────────────────────────────────────
+  /**
+   * Inserts a bar, line or pie chart built from a cell range.
+   *
+   * @returns The inserted chart, or `null` when the range is empty, the sheet
+   * part is unavailable, or editing is locked.
+   */
+  insertChart: (input?: XlsxChartInsertInput | null) => XlsxChart | null;
+  // ── Freeze panes ───────────────────────────────────────────────────
+  /** Frozen rows/columns of the active sheet. */
+  readonly freezePanes: XlsxFreezePanes | null;
+  /**
+   * Freezes rows/columns above and left of `freeze`, or clears the frozen pane
+   * when both counts are zero or `null` is passed.
+   *
+   * @returns `true` when the workbook changed.
+   */
+  setFreezePanes: (freeze: XlsxFreezePanes | null) => boolean;
+  /**
+   * Freezes panes at the active cell, or unfreezes when that cell is already
+   * the freeze origin.
+   *
+   * @returns `true` when the workbook changed.
+   */
+  toggleFreezePanesAtActiveCell: () => boolean;
+  // ── Comments ───────────────────────────────────────────────────────
+  /** Comment on a cell, or `null`. Defaults to the active cell. */
+  getCellComment: (cell?: XlsxCellAddress | null) => XlsxCellComment | null;
+  /**
+   * Creates, edits or deletes the note on a cell. Pass `null` to delete.
+   *
+   * @returns `true` when the workbook changed.
+   */
+  setCellComment: (cell: XlsxCellAddress, input: XlsxCellCommentInput | null) => boolean;
+  // ── Hyperlinks ─────────────────────────────────────────────────────
+  /** Hyperlink on a cell, or `null`. Defaults to the active cell. */
+  getCellHyperlink: (cell?: XlsxCellAddress | null) => XlsxCellHyperlink | null;
+  /**
+   * Creates, edits or removes the hyperlink on a cell. Pass `null` to remove.
+   *
+   * @returns `true` when the workbook changed.
+   */
+  setCellHyperlink: (cell: XlsxCellAddress, input: XlsxCellHyperlinkInput | null) => boolean;
+  // ── Conditional formatting ─────────────────────────────────────────
+  /** Conditional-format rules of the active sheet, in priority order. */
+  getConditionalFormatRules: () => XlsxConditionalFormatRule[];
+  /**
+   * Adds a conditional-format rule to the active sheet.
+   *
+   * @returns `true` when the rule was written.
+   */
+  addConditionalFormatRule: (draft: XlsxConditionalFormatDraft) => boolean;
+  /** Replaces the rule at `index`; `draft.ranges` default to the rule's ranges. */
+  updateConditionalFormatRule: (index: number, draft: XlsxConditionalFormatDraft) => boolean;
+  /** Deletes the rule at `index`. */
+  deleteConditionalFormatRule: (index: number) => boolean;
+  // ── Tables ─────────────────────────────────────────────────────────
+  /**
+   * Creates a ListObject table from a range (defaults to the selection).
+   *
+   * @returns The created table, or `null` when the range or name is invalid.
+   */
+  createTable: (input?: XlsxTableCreateInput | null) => XlsxTable | null;
+  /** Removes a table definition from the active sheet. */
+  removeTable: (name: string) => boolean;
+  /** Table whose range contains `cell`. Defaults to the active cell. */
+  getTableAtCell: (cell?: XlsxCellAddress | null) => XlsxTable | null;
+  // ── Data validation ────────────────────────────────────────────────
+  /**
+   * Applies a data-validation rule to the selection, replacing rules on the
+   * same cells. Pass `null` to remove validations from the selection.
+   */
+  setSelectionDataValidation: (input: XlsxDataValidationInput | null) => boolean;
+}
+
+export interface XlsxViewerController extends XlsxViewerAuthoring {
   activeCell: XlsxCellAddress | null;
   activeCellAddress: string | null;
   activeSheet: XlsxSheetData | null;

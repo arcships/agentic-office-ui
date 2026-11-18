@@ -580,10 +580,13 @@ function ensureContentTypeOverride(
 }
 
 function removeDrawingReferences(sheetDocument: XMLDocument, relDocument: XMLDocument) {
-  getLocalElements(sheetDocument, "drawing").forEach((node) => node.remove());
+  // `Element.remove()` is DOM-only; xml parsers used in tests/Node expose just
+  // the parent-relative removeChild API.
+  const detach = (node: Element) => node.parentNode?.removeChild(node);
+  getLocalElements(sheetDocument, "drawing").forEach(detach);
   getLocalElements(relDocument, "Relationship")
     .filter((node) => node.getAttribute("Type") === DRAWING_REL_TYPE)
-    .forEach((node) => node.remove());
+    .forEach(detach);
 }
 
 function nextRelationshipId(relDocument: XMLDocument) {

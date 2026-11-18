@@ -60,8 +60,16 @@
         :controller="controller"
         :target-element="gridElement"
         :suppress-context-menu="touchGestures.shouldSuppressContextMenu"
+        @authoring="openAuthoring"
       />
     </template>
+    <XlsxAuthoringDialog
+      v-if="authoringKind"
+      :controller="controller"
+      :kind="authoringKind"
+      :is-dark="isDark ?? false"
+      @close="authoringKind = null"
+    />
     <div
       v-if="selectionMode === 'region'"
       class="xlsx-sheet-surface__region-layer"
@@ -111,6 +119,8 @@ import XlsxImageLayer from "./XlsxImageLayer.vue"
 import XlsxDrawingLayer from "./XlsxDrawingLayer.vue"
 import XlsxSelectionOverlay from "./XlsxSelectionOverlay.vue"
 import XlsxContextMenu from "./XlsxContextMenu.vue"
+import XlsxAuthoringDialog from "./XlsxAuthoringDialog.vue"
+import type { XlsxAuthoringDialogKind } from "./authoring-dialog"
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue"
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch"
 import { provideXlsxMessages } from "../i18n"
@@ -185,6 +195,11 @@ const confirmFailed = () => formatOfficeMessage(m.value.common.reference.confirm
 const gridRef = ref<GridInstance | null>(null)
 const contextMenuRef = ref<{ openAt(clientX: number, clientY: number, target?: unknown): boolean } | null>(null)
 const gridViewport = ref({ height: 0, scrollLeft: 0, scrollTop: 0, width: 0 })
+const authoringKind = ref<XlsxAuthoringDialogKind | null>(null)
+
+function openAuthoring(kind: XlsxAuthoringDialogKind) {
+  authoringKind.value = kind
+}
 const effectiveReadOnly = computed(() => props.readOnly || props.controller.isEditingLocked === true || props.controller.readOnly)
 const selectionMode = computed(() => props.selectionMode)
 const gridElement = computed<HTMLElement | null>(() => gridRef.value?.scrollContainer ?? null)

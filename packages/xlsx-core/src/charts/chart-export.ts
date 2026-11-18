@@ -669,7 +669,7 @@ export function updateAnchorNode(anchorNode: Element, anchor: XlsxImageAnchor) {
 export function setChartTitle(chartNode: Element, value: string | undefined) {
   const existing = getFirstLocalChild(chartNode, "title");
   if (!value) {
-    existing?.remove();
+    if (existing?.parentNode) existing.parentNode.removeChild(existing);
     return;
   }
 
@@ -787,7 +787,7 @@ export function updateAxisNode(axisNode: Element | null, axis: XlsxChartAxis | n
     if (axis.majorGridlines && !gridlines) {
       axisNode.appendChild(axisNode.ownerDocument.createElementNS(CHART_NS, "c:majorGridlines"));
     } else if (!axis.majorGridlines) {
-      gridlines?.remove();
+      if (gridlines?.parentNode) gridlines.parentNode.removeChild(gridlines);
     }
   }
   if (axis.minorGridlines !== undefined) {
@@ -795,7 +795,7 @@ export function updateAxisNode(axisNode: Element | null, axis: XlsxChartAxis | n
     if (axis.minorGridlines && !gridlines) {
       axisNode.appendChild(axisNode.ownerDocument.createElementNS(CHART_NS, "c:minorGridlines"));
     } else if (!axis.minorGridlines) {
-      gridlines?.remove();
+      if (gridlines?.parentNode) gridlines.parentNode.removeChild(gridlines);
     }
   }
   if (axis.majorTickMark) {

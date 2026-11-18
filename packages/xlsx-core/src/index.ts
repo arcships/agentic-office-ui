@@ -63,6 +63,7 @@ export {
   resolveSheetRowHeightPx,
   createAnchoredRectCache,
   parseA1CellReference,
+  parseWorksheetFreezePanesDocument,
   resolveRenderedSheetAxisPixels,
   resolveContentSheetAxisPixels,
   anchorToAbsoluteRect,
@@ -86,6 +87,8 @@ export {
   applyChartSeriesFormula,
   refreshChartDataFromWorkbook,
   loadWorkbookChartAssets,
+  insertWorkbookChart,
+  resolveChartTypeForFamily,
   updateWorkbookChartAnchor,
   updateWorkbookChartDefinition,
   deleteWorkbookChart,
@@ -94,7 +97,30 @@ export type {
   ParsedChartSeriesFormula,
   WorkbookChartOrigin,
   WorkbookChartAssets,
+  XlsxChartFamily,
+  XlsxChartInsertResult,
+  XlsxChartInsertSpec,
 } from "./charts";
+
+export {
+  addWorkbookConditionalFormatRule,
+  addWorkbookTable,
+  createConditionalFormatRuleFromDraft,
+  deleteWorkbookConditionalFormatRule,
+  deleteWorkbookTable,
+  mergeWorkbookSheetAuthoringAssets,
+  readWorkbookSheetAuthoringState,
+  setWorkbookCellComment,
+  setWorkbookCellHyperlink,
+  setWorkbookDataValidation,
+  setWorkbookFreezePanes,
+  updateWorkbookConditionalFormatRule,
+} from "./authoring";
+export type {
+  WorkbookAuthoringAssets,
+  WorkbookSheetAuthoringState,
+  XlsxTableInsertInput,
+} from "./authoring";
 
 // Types — all data model types
 export type {
@@ -118,6 +144,8 @@ export type {
   XlsxCellRange,
   XlsxCellHyperlink,
   XlsxCellComment,
+  XlsxCellCommentInput,
+  XlsxCellHyperlinkInput,
   XlsxCellStyleColorInput,
   XlsxCellStyleContext,
   XlsxCellStyleInput,
@@ -140,6 +168,7 @@ export type {
   XlsxConditionalFormatIcon,
   XlsxConditionalFormatRule,
   XlsxConditionalFormatValueObject,
+  XlsxConditionalFormatDraft,
   XlsxConditionalIconSetRule,
   XlsxDataValidation,
   XlsxDataValidationFeedback,
@@ -180,6 +209,10 @@ export type {
   XlsxTableStyleDefinition,
   XlsxTableStyleInfo,
   XlsxThemePalette,
+  XlsxChartInsertInput,
+  XlsxTableCreateInput,
+  XlsxDataValidationInput,
+  XlsxViewerAuthoring,
   XlsxWorkbookTab,
   XlsxViewerController,
   XlsxViewerEditing,

@@ -38,6 +38,7 @@ import {
   validateXlsxArchive,
   loadWorkbookChartAssets,
   mergeWorkbookImageAssets,
+  mergeWorkbookSheetAuthoringAssets,
   revokeWorkbookImageAssets,
   safeCalculate,
   trackXlsxWorkbookLifetime,
@@ -80,6 +81,7 @@ import {
   createHistoryDomain
 } from "./workbook-state";
 import { createEditingDomain } from "./editing";
+import { createAuthoringDomain } from "./authoring";
 import { createClipboardDomain } from "./clipboard";
 import {
   createChartImageDomain,
@@ -887,7 +889,15 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
         setExportWarning(officeMessagesEn.xlsx.diagnostics.exportXmlEscapeFailed);
       }
     }
-    return mergeWorkbookImageAssets(sanitized.bytes, imageAssetsRef.value, sheetOriginsRef.value);
+    // Authored objects (freeze pane, comments, hyperlinks, conditional formats,
+    // data validations, tables) live in the source archive; the engine's saved
+    // bytes carry the authoritative cells, so merge the authoring fragments in
+    // before the drawing parts are rebuilt.
+    const authored = mergeWorkbookSheetAuthoringAssets(
+      sanitized.bytes,
+      imageAssetsRef.value?.archive ?? null
+    );
+    return mergeWorkbookImageAssets(authored, imageAssetsRef.value, sheetOriginsRef.value);
   }
   function captureCellMutationState(cell: XlsxCellAddress) {
     const worksheet = getInternalActiveWorksheet();
@@ -1432,6 +1442,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const chartImageDomain = createChartImageDomain(ctx);
   const historyDomain = createHistoryDomain(ctx);
   const editingDomain = createEditingDomain(ctx);
+  const authoringDomain = createAuthoringDomain(ctx);
 
   // Replace placeholder with actual implementation from chart domain
   _setChartSeriesFormula = chartImageDomain.setChartSeriesFormula;
@@ -1514,6 +1525,22 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get activeTab() { return activeTab.value; },
     get activeTabIndex() { return activeTabIndex.value; },
     addSheet: editingDomain.addSheet,
+    addConditionalFormatRule: authoringDomain.addConditionalFormatRule,
+    createTable: authoringDomain.createTable,
+    deleteConditionalFormatRule: authoringDomain.deleteConditionalFormatRule,
+    get freezePanes() { return authoringDomain.freezePanes.value; },
+    getCellComment: authoringDomain.getCellComment,
+    getCellHyperlink: authoringDomain.getCellHyperlink,
+    getConditionalFormatRules: authoringDomain.getConditionalFormatRules,
+    getTableAtCell: authoringDomain.getTableAtCell,
+    insertChart: authoringDomain.insertChart,
+    removeTable: authoringDomain.removeTable,
+    setCellComment: authoringDomain.setCellComment,
+    setCellHyperlink: authoringDomain.setCellHyperlink,
+    setFreezePanes: authoringDomain.setFreezePanes,
+    setSelectionDataValidation: authoringDomain.setSelectionDataValidation,
+    toggleFreezePanesAtActiveCell: authoringDomain.toggleFreezePanesAtActiveCell,
+    updateConditionalFormatRule: authoringDomain.updateConditionalFormatRule,
     get canRedo() { return canRedo.value; },
     get canDownload() { return sourceState.value === "ready" && sourceBufferRef.value !== null; },
     get canExport() {

@@ -4,6 +4,14 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### XLSX authoring surface (#102)
+
+- Add a ribbon group, context-menu entries and an `XlsxAuthoringDialog` for charts, comments, hyperlinks, tables, conditional formatting, data validation and freeze panes; `XlsxViewer` renders the dialog and hosts can mount it directly.
+- Public controller commands mutate the workbook and are undoable: `insertChart`, `getCellComment`/`setCellComment`, `getCellHyperlink`/`setCellHyperlink`, `getConditionalFormatRules`/`addConditionalFormatRule`/`updateConditionalFormatRule`/`deleteConditionalFormatRule`, `createTable`/`removeTable`/`getTableAtCell`, `setSelectionDataValidation`, `freezePanes`/`setFreezePanes`/`toggleFreezePanesAtActiveCell`.
+- Authoring writes OOXML on the source archive (worksheet `pane`, `hyperlinks`, `conditionalFormatting`, `dataValidations`, `legacyDrawing`, `tableParts`, plus comments/VML/table/chart/drawing parts) because the WASM model exposes no setters and its save pass drops most of them.
+- `mergeWorkbookSheetAuthoringAssets()` merges those fragments into every saved workbook (export and undo snapshots) in schema order, keeps conditional-format rules the editor cannot model, and copies comments, tables and inserted charts; `insertWorkbookChart()` generates bar/line/pie chart parts plus their drawing and relationships, and chart type now reads from the chart XML instead of defaulting to column.
+- Fix `mergeWorkbookImageAssets` crashing with `node.remove is not a function` when the engine re-emits a drawing, by using `parentNode.removeChild` in the image and chart export paths.
+
 ### DOCX annotation gutter
 
 - Position tracked-change and comment cards against their text anchors in page space instead of rendering them as an unpositioned list at a fixed `top: 72px`, with stable document-order ties, collision-free stacking, and measured card heights.

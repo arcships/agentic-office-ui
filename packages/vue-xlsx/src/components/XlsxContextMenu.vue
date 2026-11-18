@@ -48,6 +48,63 @@
       <button
         v-if="!isReadOnly"
         class="xlsx-contextmenu__item"
+        data-testid="xlsx-context-comment"
+        role="menuitem"
+        @click="onAuthoring('comment')"
+      >{{ commentAtCell ? m.xlsx.authoring.context.editComment : m.xlsx.authoring.context.insertComment }}</button>
+      <button
+        v-if="!isReadOnly"
+        class="xlsx-contextmenu__item"
+        data-testid="xlsx-context-hyperlink"
+        role="menuitem"
+        @click="onAuthoring('hyperlink')"
+      >{{ hyperlinkAtCell ? m.xlsx.authoring.context.editHyperlink : m.xlsx.authoring.context.insertHyperlink }}</button>
+      <button
+        v-if="!isReadOnly"
+        class="xlsx-contextmenu__item"
+        data-testid="xlsx-context-chart"
+        role="menuitem"
+        @click="onAuthoring('chart')"
+      >{{ m.xlsx.authoring.context.insertChart }}</button>
+      <button
+        v-if="!isReadOnly"
+        class="xlsx-contextmenu__item"
+        data-testid="xlsx-context-conditional"
+        role="menuitem"
+        @click="onAuthoring('conditional')"
+      >{{ m.xlsx.authoring.context.conditional }}</button>
+      <button
+        v-if="!isReadOnly"
+        class="xlsx-contextmenu__item"
+        data-testid="xlsx-context-validation"
+        role="menuitem"
+        @click="onAuthoring('validation')"
+      >{{ m.xlsx.authoring.context.validation }}</button>
+      <button
+        v-if="!isReadOnly && !tableAtCell"
+        class="xlsx-contextmenu__item"
+        data-testid="xlsx-context-table"
+        role="menuitem"
+        @click="onAuthoring('table')"
+      >{{ m.xlsx.authoring.context.createTable }}</button>
+      <button
+        v-if="!isReadOnly && tableAtCell"
+        class="xlsx-contextmenu__item"
+        data-testid="xlsx-context-table-remove"
+        role="menuitem"
+        @click="onRemoveTable"
+      >{{ m.xlsx.authoring.context.removeTable }}</button>
+      <button
+        v-if="!isReadOnly"
+        class="xlsx-contextmenu__item"
+        data-testid="xlsx-context-freeze"
+        role="menuitem"
+        @click="onToggleFreeze"
+      >{{ isFrozen ? m.xlsx.authoring.context.unfreeze : m.xlsx.authoring.context.freezeHere }}</button>
+      <div class="xlsx-contextmenu__separator" role="separator" />
+      <button
+        v-if="!isReadOnly"
+        class="xlsx-contextmenu__item"
         role="menuitem"
         @click="onUndo"
       >{{ m.xlsx.contextMenu.undo }}</button>
@@ -71,6 +128,7 @@ import { useClipboardCopyNotice } from "../composables/useClipboardCopyNotice";
 import { frozenExtent } from "./grid-metrics";
 import { paneAxisContentOffset } from "./grid-pane-geometry";
 import { useXlsxMessages } from "../i18n";
+import type { XlsxAuthoringDialogKind } from "./authoring-dialog";
 
 const DEFAULT_ROW_HEIGHT = 24;
 const DEFAULT_COL_WIDTH = 80;
@@ -86,6 +144,10 @@ const props = defineProps<{
   suppressContextMenu?: ((clientX: number, clientY: number) => boolean) | null;
 }>();
 
+const emit = defineEmits<{
+  authoring: [kind: XlsxAuthoringDialogKind];
+}>();
+
 const visible = ref(false);
 const menuRef = ref<HTMLElement | null>(null);
 const m = useXlsxMessages();
@@ -93,6 +155,19 @@ const position = ref({ x: 0, y: 0 });
 const sortTarget = ref<{ columnIndex: number; tableName: string } | null>(null);
 
 const isReadOnly = computed(() => props.controller.isEditingLocked ?? props.controller.readOnly);
+const commentAtCell = computed(() => {
+  props.controller.revision;
+  return Boolean(props.controller.getCellComment?.());
+});
+const hyperlinkAtCell = computed(() => {
+  props.controller.revision;
+  return Boolean(props.controller.getCellHyperlink?.());
+});
+const tableAtCell = computed(() => {
+  props.controller.revision;
+  return props.controller.getTableAtCell?.() ?? null;
+});
+const isFrozen = computed(() => Boolean(props.controller.freezePanes));
 const { notice: clipboardNotice, copySelection } = useClipboardCopyNotice(() => props.controller, {
   failureMessage: () => m.value.xlsx.clipboard.copyFailed,
 });
@@ -216,6 +291,24 @@ function onPaste() { props.controller.pasteFromClipboard(); close(); }
 function onClear() { props.controller.clearSelectedCells(); close(); }
 function onUndo() { props.controller.undo(); close(); }
 function onRedo() { props.controller.redo(); close(); }
+function onAuthoring(kind: XlsxAuthoringDialogKind) {
+  close();
+  emit("authoring", kind);
+}
+
+function onRemoveTable() {
+  const table = tableAtCell.value;
+  if (!table || isReadOnly.value) return;
+  props.controller.removeTable?.(table.name);
+  close();
+}
+
+function onToggleFreeze() {
+  if (isReadOnly.value) return;
+  props.controller.toggleFreezePanesAtActiveCell?.();
+  close();
+}
+
 function onSort(direction: "ascending" | "descending") {
   const target = sortTarget.value;
   if (!target || isReadOnly.value) return;

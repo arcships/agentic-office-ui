@@ -2,6 +2,9 @@ import type { XlsxImageAnchor, XlsxImageRect } from "./image-types";
 
 // ── Chart reference / data labels ────────────────────────────────────────
 
+/** Chart family a host can insert from a cell range. */
+export type XlsxChartFamily = "bar" | "line" | "pie";
+
 export interface XlsxChartReference {
   formula?: string;
   refType?: string;

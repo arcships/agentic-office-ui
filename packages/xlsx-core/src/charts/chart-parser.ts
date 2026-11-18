@@ -75,6 +75,7 @@ import {
   buildChartExParetoLineSeries,
   resolveChartExTextFormula,
   PRIMARY_CHART_TYPE_LOCAL_NAMES,
+  resolveChartTypeFromTypeNode,
 } from "./chart-types";
 
 import {
@@ -308,7 +309,7 @@ function buildClassicChartFallbackFromOrigin(
     ),
   }));
   return {
-    chartType: "ColumnClustered",
+    chartType: resolveChartTypeFromTypeNode(chartTypeNode) ?? "ColumnClustered",
     name: title ?? `Chart ${chartIndex + 1}`,
     series,
     title,
