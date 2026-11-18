@@ -54,6 +54,8 @@ import { isEditableViewerTarget, useViewerKeys, useFileDrop, FILE_DROP_OUTLINE }
 import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import { providePdfMessages } from "../i18n"
 import { PDF_FILE_EXTENSIONS, PDF_FILE_MIME_TYPES } from "../pdf-file-types"
+import { usePdfThumbnails } from "../composables/use-pdf-thumbnails"
+import PdfThumbnailStrip from "./PdfThumbnailStrip.vue"
 
 const props = withDefaults(defineProps<PdfViewerProps>(), {
   src: undefined,
@@ -127,7 +129,10 @@ const pageRenderState = ref<"idle" | "rendering" | "rendered" | "error">("idle")
 const renderedPageNumber = ref(0)
 const renderedZoom = ref(1)
 const renderedRotation = ref<PdfRotation>(0)
-const thumbnailUrls = ref<Record<number, string>>({})
+const thumbnailPipeline = usePdfThumbnails({
+  onRevoke: () => emitDiagnostic({ type: "object-url-revoked" }),
+})
+const thumbnailUrls = thumbnailPipeline.urls
 const printPageUrls = ref<Record<number, string>>({})
 const printMode = ref(false)
 const selectionState = ref<PdfSelectionState>({ kind: "none" })
@@ -163,10 +168,8 @@ let latestRequestId = 0
 let latestTaskId: string | undefined
 let renderGeneration = 0
 let searchGeneration = 0
-let thumbnailGeneration = 0
 let renderAbort: AbortController | undefined
 let searchAbort: AbortController | undefined
-let thumbnailAbort: AbortController | undefined
 let printAbort: AbortController | undefined
 let printGeneration = 0
 let printMediaQuery: MediaQueryList | undefined
@@ -216,7 +219,7 @@ const viewerState = computed(() => {
   return renderDocument.value && pageImageUrl.value ? "ready" : "idle"
 })
 const controlsDisabled = computed(() => !renderDocument.value || !!loadError.value)
-const pageLabels = computed(() => Array.from({ length: numPages.value }, (_, index) => index + 1))
+const pdfPageLabels = ref<readonly string[]>([])
 const currentSearchHit = computed(() => searchHits.value[searchHitIndex.value])
 const pageImageStyle = computed(() => {
   const document = renderDocument.value
@@ -862,8 +865,7 @@ function replacePageImage(nextUrl = ""): void {
 }
 
 function clearThumbnails(): void {
-  for (const url of Object.values(thumbnailUrls.value)) revokeObjectUrl(url)
-  thumbnailUrls.value = {}
+  thumbnailPipeline.clear()
 }
 
 function clearPrintPages(): void {
@@ -1011,9 +1013,6 @@ function cancelRenderWork(): void {
   searchGeneration++
   searchAbort?.abort()
   searchAbort = undefined
-  thumbnailGeneration++
-  thumbnailAbort?.abort()
-  thumbnailAbort = undefined
 }
 
 function resetSearch(): void {
@@ -1125,6 +1124,7 @@ async function releaseCurrentDocument(options: { closeDocument?: boolean } = {})
   replaceFacingImage()
   facingPageState.value = "idle"
   clearThumbnails()
+  pdfPageLabels.value = []
   clearPrintPages()
   pageRenderState.value = "idle"
   pageRenderError.value = ""
@@ -1399,41 +1399,20 @@ async function renderCurrentPage(
   }
 }
 
-async function renderThumbnails(requestId: number): Promise<void> {
-  const document = renderDocument.value
-  const runtime = runtimeForDocument
-  if (!document || !runtime) return
-  const generation = ++thumbnailGeneration
-  thumbnailAbort?.abort()
-  const controller = new AbortController()
-  thumbnailAbort = controller
-  let nextIndex = 0
-  const worker = async () => {
-    while (nextIndex < document.pageCount) {
-      const pageIndex = nextIndex++
-      let url = ""
-      try {
-        const blob = await runtime.renderThumbnail(document, pageIndex, { signal: controller.signal })
-        if (
-          controller.signal.aborted ||
-          generation !== thumbnailGeneration ||
-          requestId !== latestRequestId ||
-          document.id !== renderDocument.value?.id
-        ) return
-        url = URL.createObjectURL(blob)
-        thumbnailUrls.value = { ...thumbnailUrls.value, [pageIndex + 1]: url }
-        url = ""
-      } catch (error) {
-        if (!controller.signal.aborted && !isAbortError(error)) {
-          // A failed thumbnail must not hide an otherwise usable page.
-        }
-      } finally {
-        if (url) revokeObjectUrl(url)
-      }
-    }
+async function loadPdfNavigation(
+  runtime: PdfRenderRuntime,
+  document: PdfRenderDocument,
+  requestId: number,
+): Promise<void> {
+  pdfPageLabels.value = []
+  if (typeof runtime.getPageLabels !== "function") return
+  try {
+    const labels = await runtime.getPageLabels(document)
+    if (requestId !== latestRequestId || document.id !== renderDocument.value?.id) return
+    pdfPageLabels.value = labels
+  } catch {
+    // Page labels are a navigation aid; a document without them still renders.
   }
-  await Promise.all([worker(), worker()])
-  if (thumbnailAbort === controller) thumbnailAbort = undefined
 }
 
 async function submitSearch(): Promise<void> {
@@ -1581,7 +1560,8 @@ async function load(): Promise<void> {
       pageNumber: 1,
       pageCount: openedDocument.pageCount,
     })
-    void renderThumbnails(requestId)
+    void thumbnailPipeline.load(selectedRuntime, openedDocument)
+    void loadPdfNavigation(selectedRuntime, openedDocument, requestId)
     if (printMode.value) void renderPrintPages(requestId)
   } catch (error) {
     if (openedDocument && selectedRuntime) {
@@ -1672,6 +1652,7 @@ onBeforeUnmount(() => {
   latestTaskId = undefined
   pdfLoadCoordinator.dispose()
   pdfTaskSequence.dispose()
+  thumbnailPipeline.dispose()
   const runtime = ownedRuntime
   ownedRuntime = undefined
   const closeDocument = !runtime || runtimeForDocument !== runtime
@@ -1780,27 +1761,17 @@ defineExpose({
       :data-zoom="zoom"
       :data-rotation="rotation"
     >
-      <aside v-if="showThumbnails" data-testid="pdf-thumbnails" class="pdf-thumbnails" :aria-label="m.pdf.viewer.thumbnails">
-        <button
-          v-for="page in pageLabels"
-          :key="page"
-          data-testid="pdf-thumbnail"
-          type="button"
-          :data-page-number="page"
-          :aria-current="page === activePage ? 'page' : undefined"
-          :class="['thumbnail', { active: page === activePage }]"
-          @click="setActivePage(page)"
-        >
-          <img
-            v-if="thumbnailUrls[page]"
-            data-testid="pdf-thumbnail-image"
-            :src="thumbnailUrls[page]"
-            :alt="formatOfficeMessage(m.pdf.viewer.thumbnailAlt, { page })"
-          />
-          <span v-else class="thumbnail-placeholder">{{ page }}</span>
-          <span>{{ formatOfficeMessage(m.pdf.viewer.pageLabel, { page }) }}</span>
-        </button>
-      </aside>
+      <PdfThumbnailStrip
+        v-if="showThumbnails"
+        :pageCount="numPages"
+        :labels="pdfPageLabels"
+        :urls="thumbnailUrls"
+        :activePage="activePage"
+        :label="m.pdf.viewer.thumbnails"
+        :thumbnailAlt="m.pdf.viewer.thumbnailAlt"
+        :pageLabel="m.pdf.viewer.pageLabel"
+        @select="setActivePage"
+      />
       <main
         ref="frameRef"
         class="pdf-frame-wrap"
@@ -1954,7 +1925,7 @@ defineExpose({
 .pdf-toolbar { display: flex; align-items: center; gap: 7px; min-height: 48px; padding: 8px; border-bottom: 1px solid var(--pdf-border); flex-wrap: wrap; }
 .pdf-toolbar button, .pdf-toolbar select, .pdf-toolbar input { height: 32px; border: 1px solid var(--pdf-control-border); border-radius: 6px; background: var(--pdf-control-bg); color: inherit; padding: 0 8px; }
 .pdf-toolbar button { cursor: pointer; }
-.pdf-toolbar button:focus-visible, .pdf-toolbar select:focus-visible, .pdf-toolbar input:focus-visible, .thumbnail:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+.pdf-toolbar button:focus-visible, .pdf-toolbar select:focus-visible, .pdf-toolbar input:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
 .pdf-toolbar button:disabled, .pdf-toolbar input:disabled, .pdf-toolbar select:disabled { opacity: .45; cursor: not-allowed; }
 .file-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; margin-right: auto; }
 .page-input { width: 58px; text-align: center; }
@@ -1968,11 +1939,6 @@ defineExpose({
 .pdf-error, .download-error { color: #b91c1c; }
 .download-error { padding: 8px 12px; font-size: 12px; border-top: 1px solid var(--pdf-border); }
 .pdf-body { display: flex; min-height: 0; flex: 1; min-width: 0; background: var(--pdf-canvas-bg); }
-.pdf-thumbnails { width: 150px; flex: 0 0 150px; overflow: auto; border-right: 1px solid var(--pdf-border); padding: 10px; background: var(--pdf-panel-bg); }
-.thumbnail { display: flex; width: 100%; min-height: 118px; margin-bottom: 10px; padding: 6px; align-items: center; justify-content: center; flex-direction: column; gap: 5px; overflow: hidden; border: 2px solid transparent; border-radius: 6px; background: transparent; color: var(--pdf-muted); font-size: 11px; cursor: pointer; }
-.thumbnail img { display: block; max-width: 106px; max-height: 86px; object-fit: contain; border: 1px solid var(--pdf-control-border); background: var(--pdf-control-bg); box-shadow: 0 1px 3px rgb(0 0 0 / 12%); filter: var(--pdf-page-filter); }
-.thumbnail-placeholder { display: grid; place-items: center; width: 74px; height: 84px; border: 1px solid var(--pdf-control-border); background: var(--pdf-control-bg); color: var(--pdf-muted); }
-.thumbnail.active { border-color: #2563eb; background: color-mix(in srgb, #2563eb 12%, var(--pdf-panel-bg)); color: var(--pdf-link); font-weight: 700; }
 .pdf-frame-wrap { flex: 1; min-width: 0; min-height: 0; overflow: auto; position: relative; padding: 24px; touch-action: pan-x pan-y; }
 /* Single-page mode paints one stage exactly like before; the stack wrapper only
    exists so continuous and spread modes share the same template. */
@@ -2018,8 +1984,6 @@ defineExpose({
 .pdf-print-pages { display: none; }
 @container pdf-viewer (max-width: 760px) {
   .pdf-body { flex-direction: column; }
-  .pdf-thumbnails { width: auto; flex-basis: auto; display: flex; gap: 8px; border-right: 0; border-bottom: 1px solid var(--pdf-border); }
-  .thumbnail { width: 108px; min-height: 104px; flex: 0 0 auto; margin-bottom: 0; }
   .pdf-frame-wrap { padding: 12px; }
   .pdf-search { order: 3; width: 100%; }
   .pdf-search input { flex: 1; width: auto; }

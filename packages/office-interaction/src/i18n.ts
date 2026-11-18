@@ -1282,6 +1282,8 @@ export interface OfficePdfMessages {
     pageAlt: string
     selectionRegion: string
     selectionText: string
+    /** Accessible name of the bookmark/outline navigation panel. */
+    outline: string
   }
   errors: {
     sourceNotAllowed: string
@@ -1302,6 +1304,7 @@ export interface OfficePdfMessages {
     workerStartup: string
     textSearch: string
     textExtraction: string
+    outline: string
     documentClose: string
     runtimeDestroy: string
   }
@@ -2485,6 +2488,7 @@ export const officeMessagesEn: OfficeMessages = {
       pageAlt: "Page {page}",
       selectionRegion: "Choose PDF page region",
       selectionText: "PDF page text selection layer",
+      outline: "Document outline",
     },
     errors: {
       sourceNotAllowed: "The PDF URL is outside the allowed policy.",
@@ -2502,6 +2506,7 @@ export const officeMessagesEn: OfficeMessages = {
       workerStartup: "PDF Worker startup and document open",
       textSearch: "PDF text search",
       textExtraction: "PDF text extraction",
+      outline: "PDF outline",
       documentClose: "PDF document close",
       runtimeDestroy: "PDF runtime destroy",
     },
@@ -3665,6 +3670,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       pageAlt: "第 {page} 页",
       selectionRegion: "选择 PDF 页面区域",
       selectionText: "PDF 页面文本选择层",
+      outline: "文档大纲",
     },
     errors: {
       sourceNotAllowed: "PDF 地址不在允许范围内。",
@@ -3682,6 +3688,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       workerStartup: "PDF Worker 启动和文档打开",
       textSearch: "PDF 文本搜索",
       textExtraction: "PDF 文本提取",
+      outline: "PDF 大纲",
       documentClose: "PDF 文档关闭",
       runtimeDestroy: "PDF 运行时销毁",
     },
