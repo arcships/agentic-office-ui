@@ -227,6 +227,7 @@ const suites = {
       "tests/component/docx-tracked-changes.test.mjs",
       "tests/component/docx-revision-display.test.mjs",
       "tests/component/docx-context-menu-form-fields.test.mjs",
+      "tests/component/docx-host-render-hooks.test.mjs",
       "tests/component/docx-image-layer-order.test.mjs",
       "tests/component/docx-editor-affordances.test.mjs",
       "tests/component/docx-table-floating.test.mjs",

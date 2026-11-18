@@ -57,6 +57,8 @@ import "@arcships/vue-docx/style.css"
 
 DOM 选区使用显示文本偏移，控制器区间使用源模型偏移：写入选区前会把 DOM 的显示偏移映射回源偏移，恢复 DOM 选区和右键菜单定位时再把控制器/源区间映射回显示偏移。正文、表格单元格、页眉页脚和脚注/尾注段落都可以复用 `paragraphDisplayOffsetToSourceOffset()` / `paragraphSourceOffsetToDisplayOffset()`；因此删除内容隐藏后，光标仍落在 Word 最终文本对应的源位置，撤销/重做也能恢复到正确的可见位置。
 
+只读编辑器（`editable=false`）或正在展示修订（编辑锁定）时，右键菜单仍会打开，但只保留“复制”一项，见 `docx-context-menu-read-only`；批注卡和修订卡也可以由宿主替换成自己的按钮，见[宿主渲染钩子](../custom-components/docx.md#宿主渲染钩子批注卡修订卡与右键菜单)。未提供渲染函数时，卡片和菜单与默认外观完全一致。
+
 ## SVG 图片
 
 DOCX 中的 `image/svg+xml` 图片按矢量渲染，支持直接引用 SVG 的 `a:blip` 和 Word 常见的 `asvg:svgBlip` + PNG 回退结构（此时取 SVG）。图片保持 `wp:extent` 的锚定尺寸，缩放或 200% 预览时仍按显示分辨率重新栅格化，不会被替换成位图。

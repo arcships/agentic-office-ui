@@ -85,6 +85,8 @@
         :zoom-scale="zoomPercent"
         :locale="locale"
         :messages="messages"
+        :render-comment-card="renderCommentCard"
+        :render-tracked-change-card="renderTrackedChangeCard"
         @page-count-change="onPageCountChange"
         @visible-page-range="onVisiblePageRange"
         @context-menu="onDocumentContextMenu"
@@ -108,13 +110,16 @@
 
     <!-- Context menu -->
     <DocxContextMenu
-      v-if="!interactionLocked && contextMenu.visible.value"
+      v-if="contextMenu.visible.value"
       :context="contextMenu.context.value"
       :controller="controller"
       :x="contextMenu.x.value"
       :y="contextMenu.y.value"
       :text="contextMenu.text.value"
       :caret-offset="contextMenu.caretOffset.value"
+      :read-only="interactionLocked"
+      :render-context-menu="renderContextMenu"
+      :render-table-context-menu="renderTableContextMenu"
       @close="contextMenu.hide()"
     />
 
@@ -270,6 +275,32 @@ const props = withDefaults(
     showStylePreview?: boolean
     /** Drag handle that reorders body paragraphs/tables. Default `true`. */
     showNodeReorder?: boolean
+    /**
+     * Host renderer that replaces comment cards in the page gutter. Omit to
+     * keep the built-in card.
+     */
+    renderCommentCard?: (
+      props: import("@arcships/docx-core").DocxCommentCardRenderProps
+    ) => unknown
+    /**
+     * Host renderer that replaces tracked-change cards in the page gutter.
+     * Omit to keep the built-in card.
+     */
+    renderTrackedChangeCard?: (
+      props: import("@arcships/docx-core").DocxTrackedChangeCardRenderProps
+    ) => unknown
+    /**
+     * Host renderer that replaces the text, image and table context menus.
+     * Omit to keep the built-in menu. Read-only editing sessions still open a
+     * Copy-only default menu.
+     */
+    renderContextMenu?: (
+      props: import("@arcships/docx-core").DocxContextMenuRenderProps
+    ) => unknown
+    /** Host renderer for table context menus; wins over `renderContextMenu`. */
+    renderTableContextMenu?: (
+      props: import("@arcships/docx-core").DocxTableContextMenuRenderProps
+    ) => unknown
   }>(),
   { editable: true, showToolbar: true, showThumbnails: false, minHeight: undefined, isDark: false, locale: "en", messages: undefined, commentAuthor: undefined, commentInitials: undefined, showLinkCard: true, showFormFieldDialog: true, showStylePreview: true, showNodeReorder: true }
 )
@@ -490,8 +521,6 @@ const contextMenu = {
 }
 
 function onDocumentContextMenu(payload: DocumentContextMenuEvent): void {
-  if (interactionLocked.value) return
-
   const root = viewerRootRef.value?.scrollContainer
   if (root) {
     syncDomSelectionToEditor(controller, root, undefined, {

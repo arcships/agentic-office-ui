@@ -6,263 +6,307 @@
       @pointerdown="close"
       @contextmenu.prevent="close"
     />
+    <!--
+      Host-rendered menu. The editor still owns the backdrop, pointer position
+      and closing, so a custom menu behaves like the built-in one.
+    -->
     <div
-      v-if="visible"
+      v-if="visible && customMenu"
+      class="docx-context-menu-host"
+      data-testid="docx-context-menu-host"
+      :data-docx-context-menu-kind="context?.kind"
+      :style="menuStyle"
+      @contextmenu.prevent
+      @keydown.esc.stop.prevent="close"
+    >
+      <HostMenu :render="customMenu.render" :render-props="customMenu.renderProps" />
+    </div>
+    <div
+      v-if="visible && !customMenu"
       ref="menuRef"
       class="docx-context-menu"
       role="menu"
       aria-orientation="vertical"
       :aria-label="m.docx.contextMenu.label"
+      :data-docx-context-menu-read-only="readOnly ? 'true' : undefined"
       tabindex="-1"
       :style="menuStyle"
       @contextmenu.prevent
       @keydown="onMenuKeydown"
     >
-      <!-- Clipboard actions -->
-      <button
-        class="docx-context-menu-item"
-        type="button"
-        role="menuitem"
-        tabindex="-1"
-        @click="onAction('cut')"
-      >
-        <span class="docx-context-menu-icon">✂</span>
-        <span>{{ m.docx.contextMenu.cut }}</span>
-        <span class="docx-context-menu-shortcut">⌘X</span>
-      </button>
-      <button
-        class="docx-context-menu-item"
-        type="button"
-        role="menuitem"
-        tabindex="-1"
-        @click="onAction('copy')"
-      >
-        <span class="docx-context-menu-icon">📋</span>
-        <span>{{ m.docx.contextMenu.copy }}</span>
-        <span class="docx-context-menu-shortcut">⌘C</span>
-      </button>
-      <button
-        class="docx-context-menu-item"
-        type="button"
-        role="menuitem"
-        tabindex="-1"
-        @click="onAction('paste')"
-      >
-        <span class="docx-context-menu-icon">📄</span>
-        <span>{{ m.docx.contextMenu.paste }}</span>
-        <span class="docx-context-menu-shortcut">⌘V</span>
-      </button>
-
-      <div class="docx-context-menu-separator" role="separator" />
-
-      <!-- Text formatting -->
-      <button
-        class="docx-context-menu-item"
-        type="button"
-        role="menuitem"
-        tabindex="-1"
-        :class="{ 'docx-context-menu-item--active': selectedRunStyle?.bold }"
-        @click="onAction('bold')"
-      >
-        <span class="docx-context-menu-icon docx-context-menu-icon--bold">B</span>
-        <span>{{ m.docx.contextMenu.bold }}</span>
-        <span class="docx-context-menu-shortcut">⌘B</span>
-      </button>
-      <button
-        class="docx-context-menu-item"
-        type="button"
-        role="menuitem"
-        tabindex="-1"
-        :class="{ 'docx-context-menu-item--active': selectedRunStyle?.italic }"
-        @click="onAction('italic')"
-      >
-        <span class="docx-context-menu-icon docx-context-menu-icon--italic">I</span>
-        <span>{{ m.docx.contextMenu.italic }}</span>
-        <span class="docx-context-menu-shortcut">⌘I</span>
-      </button>
-      <button
-        class="docx-context-menu-item"
-        type="button"
-        role="menuitem"
-        tabindex="-1"
-        :class="{ 'docx-context-menu-item--active': selectedRunStyle?.underline }"
-        @click="onAction('underline')"
-      >
-        <span class="docx-context-menu-icon docx-context-menu-icon--underline">U</span>
-        <span>{{ m.docx.contextMenu.underline }}</span>
-        <span class="docx-context-menu-shortcut">⌘U</span>
-      </button>
-      <button
-        class="docx-context-menu-item"
-        type="button"
-        role="menuitem"
-        tabindex="-1"
-        :class="{ 'docx-context-menu-item--active': selectedRunStyle?.strike }"
-        @click="onAction('strike')"
-      >
-        <span class="docx-context-menu-icon docx-context-menu-icon--strike">S</span>
-        <span>{{ m.docx.contextMenu.strikethrough }}</span>
-      </button>
-
-      <div class="docx-context-menu-separator" role="separator" />
-
-      <!-- Highlight colors -->
-      <div class="docx-context-menu-section-title" role="presentation">{{ m.docx.contextMenu.highlight }}</div>
-      <div class="docx-context-menu-color-row">
+      <!--
+        Read-only documents keep a Copy menu: selecting text must stay
+        copyable even though every editing command is hidden.
+      -->
+      <template v-if="readOnly">
         <button
-          v-for="color of highlightColors"
-          :key="color.value"
-          class="docx-context-menu-color-btn"
-          type="button"
-          role="menuitem"
-          tabindex="-1"
-          :aria-label="color.label"
-          :style="{ backgroundColor: color.css }"
-          :title="color.label"
-          @click="onAction('highlight', color.value)"
-        />
-        <button
-          class="docx-context-menu-color-btn docx-context-menu-color-btn--none"
-          type="button"
-          role="menuitem"
-          tabindex="-1"
-          :aria-label="m.docx.contextMenu.noHighlight"
-          :title="m.docx.contextMenu.noHighlight"
-          @click="onAction('highlight', undefined)"
-        >
-          ✕
-        </button>
-      </div>
-
-      <!-- Text colors -->
-      <div class="docx-context-menu-section-title" role="presentation">{{ m.docx.contextMenu.textColor }}</div>
-      <div class="docx-context-menu-color-row">
-        <button
-          v-for="color of textColors"
-          :key="color.value"
-          class="docx-context-menu-color-btn"
-          type="button"
-          role="menuitem"
-          tabindex="-1"
-          :aria-label="color.label"
-          :style="{ backgroundColor: color.css }"
-          :title="color.label"
-          @click="onAction('textColor', color.value)"
-        />
-      </div>
-
-      <div class="docx-context-menu-separator" role="separator" />
-
-      <!-- Paragraph actions -->
-      <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('splitParagraph')">
-        <span class="docx-context-menu-icon">↵</span>
-        <span>{{ m.docx.contextMenu.splitParagraph }}</span>
-      </button>
-      <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteParagraph')">
-        <span class="docx-context-menu-icon docx-context-menu-icon--danger">🗑</span>
-        <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteParagraph }}</span>
-      </button>
-
-      <template v-if="tableContext">
-        <div class="docx-context-menu-separator" role="separator" />
-        <div class="docx-context-menu-section-title" role="presentation">{{ m.docx.contextMenu.table }}</div>
-        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertRowAbove')">
-          {{ m.docx.contextMenu.insertRowAbove }}
-        </button>
-        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertRowBelow')">
-          {{ m.docx.contextMenu.insertRowBelow }}
-        </button>
-        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertColumnLeft')">
-          {{ m.docx.contextMenu.insertColumnLeft }}
-        </button>
-        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertColumnRight')">
-          {{ m.docx.contextMenu.insertColumnRight }}
-        </button>
-        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteRow')">
-          <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteRow }}</span>
-        </button>
-        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteColumn')">
-          <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteColumn }}</span>
-        </button>
-        <button
-          data-testid="docx-context-menu-merge-cells"
+          data-testid="docx-context-menu-copy"
           class="docx-context-menu-item"
           type="button"
           role="menuitem"
           tabindex="-1"
-          :disabled="!canMergeTableCells"
-          @click="onAction('mergeCells')"
+          @click="onAction('copy')"
         >
-          {{ m.docx.contextMenu.mergeCells }}
-        </button>
-        <button
-          data-testid="docx-context-menu-split-cell"
-          class="docx-context-menu-item"
-          type="button"
-          role="menuitem"
-          tabindex="-1"
-          :disabled="!canSplitTableCell"
-          @click="onAction('splitCell')"
-        >
-          {{ m.docx.contextMenu.splitCell }}
-        </button>
-        <button
-          data-testid="docx-context-menu-select-table"
-          class="docx-context-menu-item"
-          type="button"
-          role="menuitem"
-          tabindex="-1"
-          @click="onAction('selectTable')"
-        >
-          {{ m.docx.contextMenu.selectTable }}
-        </button>
-        <button
-          data-testid="docx-context-menu-clear-cells"
-          class="docx-context-menu-item"
-          type="button"
-          role="menuitem"
-          tabindex="-1"
-          :disabled="!canClearTableCells"
-          @click="onAction('clearTableCells')"
-        >
-          <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.clearContents }}</span>
-        </button>
-        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteTable')">
-          <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteTable }}</span>
+          <span class="docx-context-menu-icon">📋</span>
+          <span>{{ m.docx.contextMenu.copy }}</span>
+          <span class="docx-context-menu-shortcut">⌘C</span>
         </button>
       </template>
-
-      <template v-if="imageContext">
-        <div class="docx-context-menu-separator" role="separator" />
-        <div class="docx-context-menu-section-title" role="presentation">{{ m.docx.contextMenu.layer }}</div>
+      <template v-else>
+        <!-- Clipboard actions -->
         <button
-          v-for="action of imageLayerActions"
-          :key="action.actionId"
-          :data-testid="action.testId"
           class="docx-context-menu-item"
           type="button"
           role="menuitem"
           tabindex="-1"
-          :disabled="action.disabled"
-          @click="onAction(action.command)"
+          @click="onAction('cut')"
         >
-          {{ action.label }}
+          <span class="docx-context-menu-icon">✂</span>
+          <span>{{ m.docx.contextMenu.cut }}</span>
+          <span class="docx-context-menu-shortcut">⌘X</span>
         </button>
+        <button
+          class="docx-context-menu-item"
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          @click="onAction('copy')"
+        >
+          <span class="docx-context-menu-icon">📋</span>
+          <span>{{ m.docx.contextMenu.copy }}</span>
+          <span class="docx-context-menu-shortcut">⌘C</span>
+        </button>
+        <button
+          class="docx-context-menu-item"
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          @click="onAction('paste')"
+        >
+          <span class="docx-context-menu-icon">📄</span>
+          <span>{{ m.docx.contextMenu.paste }}</span>
+          <span class="docx-context-menu-shortcut">⌘V</span>
+        </button>
+
+        <div class="docx-context-menu-separator" role="separator" />
+
+        <!-- Text formatting -->
+        <button
+          class="docx-context-menu-item"
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          :class="{ 'docx-context-menu-item--active': selectedRunStyle?.bold }"
+          @click="onAction('bold')"
+        >
+          <span class="docx-context-menu-icon docx-context-menu-icon--bold">B</span>
+          <span>{{ m.docx.contextMenu.bold }}</span>
+          <span class="docx-context-menu-shortcut">⌘B</span>
+        </button>
+        <button
+          class="docx-context-menu-item"
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          :class="{ 'docx-context-menu-item--active': selectedRunStyle?.italic }"
+          @click="onAction('italic')"
+        >
+          <span class="docx-context-menu-icon docx-context-menu-icon--italic">I</span>
+          <span>{{ m.docx.contextMenu.italic }}</span>
+          <span class="docx-context-menu-shortcut">⌘I</span>
+        </button>
+        <button
+          class="docx-context-menu-item"
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          :class="{ 'docx-context-menu-item--active': selectedRunStyle?.underline }"
+          @click="onAction('underline')"
+        >
+          <span class="docx-context-menu-icon docx-context-menu-icon--underline">U</span>
+          <span>{{ m.docx.contextMenu.underline }}</span>
+          <span class="docx-context-menu-shortcut">⌘U</span>
+        </button>
+        <button
+          class="docx-context-menu-item"
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          :class="{ 'docx-context-menu-item--active': selectedRunStyle?.strike }"
+          @click="onAction('strike')"
+        >
+          <span class="docx-context-menu-icon docx-context-menu-icon--strike">S</span>
+          <span>{{ m.docx.contextMenu.strikethrough }}</span>
+        </button>
+
+        <div class="docx-context-menu-separator" role="separator" />
+
+        <!-- Highlight colors -->
+        <div class="docx-context-menu-section-title" role="presentation">{{ m.docx.contextMenu.highlight }}</div>
+        <div class="docx-context-menu-color-row">
+          <button
+            v-for="color of highlightColors"
+            :key="color.value"
+            class="docx-context-menu-color-btn"
+            type="button"
+            role="menuitem"
+            tabindex="-1"
+            :aria-label="color.label"
+            :style="{ backgroundColor: color.css }"
+            :title="color.label"
+            @click="onAction('highlight', color.value)"
+          />
+          <button
+            class="docx-context-menu-color-btn docx-context-menu-color-btn--none"
+            type="button"
+            role="menuitem"
+            tabindex="-1"
+            :aria-label="m.docx.contextMenu.noHighlight"
+            :title="m.docx.contextMenu.noHighlight"
+            @click="onAction('highlight', undefined)"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Text colors -->
+        <div class="docx-context-menu-section-title" role="presentation">{{ m.docx.contextMenu.textColor }}</div>
+        <div class="docx-context-menu-color-row">
+          <button
+            v-for="color of textColors"
+            :key="color.value"
+            class="docx-context-menu-color-btn"
+            type="button"
+            role="menuitem"
+            tabindex="-1"
+            :aria-label="color.label"
+            :style="{ backgroundColor: color.css }"
+            :title="color.label"
+            @click="onAction('textColor', color.value)"
+          />
+        </div>
+
+        <div class="docx-context-menu-separator" role="separator" />
+
+        <!-- Paragraph actions -->
+        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('splitParagraph')">
+          <span class="docx-context-menu-icon">↵</span>
+          <span>{{ m.docx.contextMenu.splitParagraph }}</span>
+        </button>
+        <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteParagraph')">
+          <span class="docx-context-menu-icon docx-context-menu-icon--danger">🗑</span>
+          <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteParagraph }}</span>
+        </button>
+
+        <template v-if="tableContext">
+          <div class="docx-context-menu-separator" role="separator" />
+          <div class="docx-context-menu-section-title" role="presentation">{{ m.docx.contextMenu.table }}</div>
+          <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertRowAbove')">
+            {{ m.docx.contextMenu.insertRowAbove }}
+          </button>
+          <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertRowBelow')">
+            {{ m.docx.contextMenu.insertRowBelow }}
+          </button>
+          <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertColumnLeft')">
+            {{ m.docx.contextMenu.insertColumnLeft }}
+          </button>
+          <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('insertColumnRight')">
+            {{ m.docx.contextMenu.insertColumnRight }}
+          </button>
+          <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteRow')">
+            <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteRow }}</span>
+          </button>
+          <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteColumn')">
+            <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteColumn }}</span>
+          </button>
+          <button
+            data-testid="docx-context-menu-merge-cells"
+            class="docx-context-menu-item"
+            type="button"
+            role="menuitem"
+            tabindex="-1"
+            :disabled="!canMergeTableCells"
+            @click="onAction('mergeCells')"
+          >
+            {{ m.docx.contextMenu.mergeCells }}
+          </button>
+          <button
+            data-testid="docx-context-menu-split-cell"
+            class="docx-context-menu-item"
+            type="button"
+            role="menuitem"
+            tabindex="-1"
+            :disabled="!canSplitTableCell"
+            @click="onAction('splitCell')"
+          >
+            {{ m.docx.contextMenu.splitCell }}
+          </button>
+          <button
+            data-testid="docx-context-menu-select-table"
+            class="docx-context-menu-item"
+            type="button"
+            role="menuitem"
+            tabindex="-1"
+            @click="onAction('selectTable')"
+          >
+            {{ m.docx.contextMenu.selectTable }}
+          </button>
+          <button
+            data-testid="docx-context-menu-clear-cells"
+            class="docx-context-menu-item"
+            type="button"
+            role="menuitem"
+            tabindex="-1"
+            :disabled="!canClearTableCells"
+            @click="onAction('clearTableCells')"
+          >
+            <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.clearContents }}</span>
+          </button>
+          <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteTable')">
+            <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteTable }}</span>
+          </button>
+        </template>
+
+        <template v-if="imageContext">
+          <div class="docx-context-menu-separator" role="separator" />
+          <div class="docx-context-menu-section-title" role="presentation">{{ m.docx.contextMenu.layer }}</div>
+          <button
+            v-for="action of imageLayerActions"
+            :key="action.actionId"
+            :data-testid="action.testId"
+            class="docx-context-menu-item"
+            type="button"
+            role="menuitem"
+            tabindex="-1"
+            :disabled="action.disabled"
+            @click="onAction(action.command)"
+          >
+            {{ action.label }}
+          </button>
+        </template>
       </template>
     </div>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from "vue"
+import { computed, defineComponent, nextTick, ref, watch } from "vue"
+import type { PropType, VNodeChild } from "vue"
 import type {
+  DocxContextMenuAction,
+  DocxContextMenuActionId,
+  DocxContextMenuRenderProps,
   DocxEditorController,
   DocxContextMenuContext,
   DocxImageLayerOrderCommand,
+  DocxTableContextMenuAction,
+  DocxTableContextMenuActionId,
   DocxTableContextMenuContext,
+  DocxTableContextMenuRenderProps,
 } from "@arcships/docx-core"
 import {
   compareTextRangeBoundaries,
+  docxImageLayerOrderCommandFromActionId,
   getParagraphAtLocation,
   paragraphText,
   resolveDocxImageLayerOrderMenuActions,
@@ -287,12 +331,55 @@ const props = defineProps<{
   text?: string
   /** Caret offset inside `text` when the menu was opened. */
   caretOffset?: number
+  /**
+   * True when the document is read-only (or editing is locked). The built-in
+   * menu then only offers Copy.
+   */
+  readOnly?: boolean
+  /**
+   * Host renderer that replaces the built-in text, image and table menu.
+   * Omit to keep the default menu.
+   */
+  renderContextMenu?: (props: DocxContextMenuRenderProps) => unknown
+  /** Host renderer for table menus; wins over `renderContextMenu`. */
+  renderTableContextMenu?: (
+    props: DocxTableContextMenuRenderProps
+  ) => unknown
 }>()
 const m = useDocxMessages()
 
 const emit = defineEmits<{
   close: []
 }>()
+
+// ── Host menu ──────────────────────────────────────────────────────
+// A host renderer returns whatever it wants to show; wrapping it in a
+// component keeps strings, arrays and VNodes all renderable.
+type HostMenuRenderer =
+  | ((props: DocxContextMenuRenderProps) => unknown)
+  | ((props: DocxTableContextMenuRenderProps) => unknown)
+
+const HostMenu = defineComponent({
+  name: "DocxContextMenuHost",
+  props: {
+    render: {
+      type: Function as PropType<HostMenuRenderer>,
+      required: true,
+    },
+    renderProps: {
+      type: Object as PropType<
+        DocxContextMenuRenderProps | DocxTableContextMenuRenderProps
+      >,
+      required: true,
+    },
+  },
+  setup(menu) {
+    return () =>
+      (menu.render as unknown as (props: unknown) => VNodeChild)(
+        menu.renderProps
+      )
+  },
+})
 
 // ── Constants ──────────────────────────────────────────────────────
 const MENU_FALLBACK_WIDTH = 240
@@ -356,6 +443,142 @@ const imageLayerActions = computed(() =>
   )
 )
 
+// ── Built-in actions for host menus ────────────────────────────────
+// Host renderers receive the same commands the default menu shows, with ids
+// that `runAction()` understands. Kebab-case ids match `DocxContextMenuActionId`;
+// color entries use `highlight-<color>` and `text-color-<css color>`.
+const ACTION_COMMANDS: Record<string, string> = {
+  cut: "cut",
+  copy: "copy",
+  paste: "paste",
+  bold: "bold",
+  italic: "italic",
+  underline: "underline",
+  strike: "strike",
+  "split-paragraph": "splitParagraph",
+  "delete-paragraph": "deleteParagraph",
+  "insert-row-above": "insertRowAbove",
+  "insert-row-below": "insertRowBelow",
+  "insert-column-left": "insertColumnLeft",
+  "insert-column-right": "insertColumnRight",
+  "delete-row": "deleteRow",
+  "delete-column": "deleteColumn",
+  "merge-cells": "mergeCells",
+  "split-cell": "splitCell",
+  "select-table": "selectTable",
+  "clear-table-cells": "clearTableCells",
+  "delete-table": "deleteTable",
+}
+
+const HIGHLIGHT_ACTION_PATTERN = /^highlight-(yellow|green|cyan|magenta|blue|red)$/u
+const TEXT_COLOR_ACTION_PATTERN = /^text-color-(#[0-9a-f]{3,8})$/iu
+
+function highlightColorActions(): DocxContextMenuAction[] {
+  return highlightColors.value.map((color) => ({
+    id: `highlight-${color.value}`,
+    label: color.label,
+  }))
+}
+
+function textColorActions(): DocxContextMenuAction[] {
+  return textColors.value.map((color) => ({
+    id: `text-color-${color.value}`,
+    label: color.label,
+  }))
+}
+
+const tableMenuActions = computed<DocxTableContextMenuAction[]>(() => {
+  const menu = m.value.docx.contextMenu
+  return [
+    { id: "insert-row-above", label: menu.insertRowAbove },
+    { id: "insert-row-below", label: menu.insertRowBelow },
+    { id: "insert-column-left", label: menu.insertColumnLeft },
+    { id: "insert-column-right", label: menu.insertColumnRight },
+    { id: "delete-row", label: menu.deleteRow, destructive: true },
+    { id: "delete-column", label: menu.deleteColumn, destructive: true },
+    { id: "merge-cells", label: menu.mergeCells },
+    { id: "split-cell", label: menu.splitCell },
+    { id: "select-table", label: menu.selectTable },
+    { id: "clear-table-cells", label: menu.clearContents },
+    { id: "delete-table", label: menu.deleteTable, destructive: true },
+  ]
+})
+
+const builtInActions = computed<DocxContextMenuAction[]>(() => {
+  const menu = m.value.docx.contextMenu
+  const readOnly = Boolean(props.readOnly)
+  const actions: DocxContextMenuAction[] = []
+  if (!readOnly) {
+    actions.push({ id: "cut", label: menu.cut, shortcut: "⌘X" })
+  }
+  actions.push({ id: "copy", label: menu.copy, shortcut: "⌘C" })
+  if (readOnly) return actions
+
+  actions.push({ id: "paste", label: menu.paste, shortcut: "⌘V" })
+  const runStyle = selectedRunStyle.value
+  actions.push(
+    {
+      id: "bold",
+      label: menu.bold,
+      shortcut: "⌘B",
+      separatorBefore: true,
+      checked: Boolean(runStyle?.bold),
+    },
+    {
+      id: "italic",
+      label: menu.italic,
+      shortcut: "⌘I",
+      checked: Boolean(runStyle?.italic),
+    },
+    {
+      id: "underline",
+      label: menu.underline,
+      shortcut: "⌘U",
+      checked: Boolean(runStyle?.underline),
+    },
+    {
+      id: "strike",
+      label: menu.strikethrough,
+      checked: Boolean(runStyle?.strike),
+    },
+    {
+      id: "highlight",
+      label: menu.highlight,
+      separatorBefore: true,
+      children: highlightColorActions(),
+    },
+    { id: "text-color", label: menu.textColor, children: textColorActions() },
+    {
+      id: "split-paragraph",
+      label: menu.splitParagraph,
+      separatorBefore: true,
+    },
+    { id: "delete-paragraph", label: menu.deleteParagraph, destructive: true }
+  )
+
+  if (tableContext.value) {
+    actions.push(
+      ...tableMenuActions.value.map((action, index) => ({
+        ...action,
+        separatorBefore: index === 0,
+      }))
+    )
+  }
+
+  if (imageContext.value) {
+    actions.push(
+      ...imageLayerActions.value.map((action, index) => ({
+        id: action.actionId,
+        label: action.label,
+        disabled: action.disabled,
+        separatorBefore: index === 0,
+      }))
+    )
+  }
+
+  return actions
+})
+
 const selectedTableSelection = computed(() => {
   const selection = props.controller.selection
   const context = tableContext.value
@@ -418,6 +641,53 @@ const menuStyle = computed(() => {
     top: `${posY}px`,
     zIndex: 10000,
   }
+})
+
+interface CustomMenuEntry {
+  render: HostMenuRenderer
+  renderProps: DocxContextMenuRenderProps | DocxTableContextMenuRenderProps
+}
+
+// A host renderer replaces the whole menu body. The table-specific hook wins
+// for table targets; other targets fall back to the general hook.
+const customMenu = computed<CustomMenuEntry | undefined>(() => {
+  const context = props.context
+  if (!context) return undefined
+  const position = { x: anchorX.value, y: anchorY.value }
+  const documentTheme = props.controller.documentTheme
+
+  if (!props.readOnly && tableContext.value && props.renderTableContextMenu) {
+    return {
+      render: props.renderTableContextMenu,
+      renderProps: {
+        context: tableContext.value,
+        actions: tableMenuActions.value,
+        runAction: (actionId: DocxTableContextMenuActionId) => {
+          runAction(actionId)
+        },
+        closeMenu: close,
+        position,
+        documentTheme,
+      } satisfies DocxTableContextMenuRenderProps,
+    }
+  }
+
+  if (props.renderContextMenu) {
+    return {
+      render: props.renderContextMenu,
+      renderProps: {
+        context,
+        actions: builtInActions.value,
+        runAction,
+        closeMenu: close,
+        position,
+        documentTheme,
+        readOnly: Boolean(props.readOnly),
+      } satisfies DocxContextMenuRenderProps,
+    }
+  }
+
+  return undefined
 })
 
 // ── Colors ─────────────────────────────────────────────────────────
@@ -525,6 +795,31 @@ function deleteParagraph(): void {
       end: { location: start, offset: sourceText.length },
     })
   }
+}
+
+/**
+ * Runs a built-in action by its public id. Host menus use this instead of the
+ * editor's internal command names; `closeMenu()` is called once the command
+ * finishes, matching the default menu.
+ */
+function runAction(actionId: DocxContextMenuActionId | (string & {})): void {
+  const id = String(actionId)
+  const highlight = HIGHLIGHT_ACTION_PATTERN.exec(id)
+  if (highlight) {
+    void onAction("highlight", highlight[1])
+    return
+  }
+  const textColor = TEXT_COLOR_ACTION_PATTERN.exec(id)
+  if (textColor) {
+    void onAction("textColor", textColor[1])
+    return
+  }
+  const layerCommand = docxImageLayerOrderCommandFromActionId(id)
+  if (layerCommand) {
+    void onAction(layerCommand)
+    return
+  }
+  void onAction(ACTION_COMMANDS[id] ?? id)
 }
 
 async function onAction(action: string, value?: string): Promise<void> {
@@ -758,6 +1053,11 @@ function onMenuKeydown(event: KeyboardEvent): void {
   position: fixed;
   inset: 0;
   z-index: 9999;
+}
+/* The host menu owns its own visuals; this layer only anchors it at the
+   pointer and lets the backdrop close it. */
+.docx-context-menu-host {
+  outline: none;
 }
 .docx-context-menu {
   min-width: 200px;

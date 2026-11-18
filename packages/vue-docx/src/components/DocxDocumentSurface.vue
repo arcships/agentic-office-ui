@@ -21,6 +21,8 @@
       :show-tracked-changes="showTrackedChanges"
       :revision-display="revisionDisplay"
       :show-comments="showComments"
+      :render-comment-card="renderCommentCard"
+      :render-tracked-change-card="renderTrackedChangeCard"
       @page-count-change="onPageCountChange"
       @visible-page-range="onVisiblePageRange"
       @context-menu="emit('contextMenu', $event)"
@@ -67,10 +69,12 @@ import {
 } from "@arcships/office-runtime"
 import type {
   DocModel,
+  DocxCommentCardRenderProps,
   DocxDocumentTheme,
   DocxEditorController,
   DocxRevisionDisplay,
   DocxTextRangeLocation,
+  DocxTrackedChangeCardRenderProps,
   LayoutOptions,
 } from "@arcships/docx-core"
 import {
@@ -146,6 +150,12 @@ const props = withDefaults(
     emitReferenceCandidates?: boolean
     locale?: import("@arcships/office-interaction").OfficeLocale
     messages?: import("@arcships/office-interaction").OfficeMessagesOverride
+    /** Host renderer that replaces every comment card in the gutter. */
+    renderCommentCard?: (props: DocxCommentCardRenderProps) => unknown
+    /** Host renderer that replaces every tracked-change card in the gutter. */
+    renderTrackedChangeCard?: (
+      props: DocxTrackedChangeCardRenderProps
+    ) => unknown
   }>(),
   {
     editable: false,

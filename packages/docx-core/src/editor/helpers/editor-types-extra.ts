@@ -613,6 +613,8 @@ export type DocxTableContextMenuActionId =
   | "delete-column"
   | "merge-cells"
   | "split-cell"
+  | "select-table"
+  | "clear-table-cells"
   | "delete-table";
 
 export type DocxContextMenuActionId =
@@ -737,6 +739,11 @@ export interface DocxContextMenuRenderProps {
   };
   /** Current document theme, useful for custom menu styling. */
   documentTheme: DocxDocumentTheme;
+  /**
+   * True when the document is read-only. `actions` then only contains
+   * non-mutating commands (Copy), and a custom menu should follow suit.
+   */
+  readOnly?: boolean;
 }
 
 export interface DocxPageVirtualizationOptions {
@@ -941,6 +948,18 @@ export interface DocxTrackedChangeCardRenderProps {
   pageIndex: number;
   /** Positioning style computed by the viewer. Apply this to the card root. */
   style: Record<string, string | number | undefined>;
+  /**
+   * True when the host may accept/reject this revision. Read-only surfaces and
+   * locked editing sessions report `false`, so a custom card can hide (or
+   * disable) its decision buttons without duplicating that rule.
+   */
+  canDecide?: boolean;
+  /** Selects the revision's anchored text, like clicking the card. */
+  activate: () => void;
+  /** Accepts the revision. No-op when the owning surface cannot decide. */
+  accept: () => void;
+  /** Rejects the revision. No-op when the owning surface cannot decide. */
+  reject: () => void;
 }
 
 export interface DocxCommentCardRenderProps {
@@ -958,6 +977,15 @@ export interface DocxCommentCardRenderProps {
   pageIndex: number;
   /** Positioning style computed by the viewer. Apply this to the card root. */
   style: Record<string, string | number | undefined>;
+  /**
+   * True when the host may resolve/reopen the thread. Read-only surfaces and
+   * locked editing sessions report `false`.
+   */
+  canModify?: boolean;
+  /** Selects the comment's anchored text, like clicking the card. */
+  activate: () => void;
+  /** Resolves (`true`) or reopens (`false`) the comment thread. */
+  setResolved: (resolved: boolean) => void;
 }
 
 export type DocxEditorViewerMode = "edit" | "read-only";
