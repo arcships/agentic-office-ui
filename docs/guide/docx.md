@@ -147,6 +147,27 @@ editor.replaceAll("needle", "pin", { wholeWord: true }) // { replaced, skipped }
 
 `replaceMatch(target, text)` 返回是否真的改动了模型；`replaceAll(query, text, options?)` 返回 `{ replaced, skipped }`，`skipped` 是无法替换的页眉/页脚/注释结果数量。替换后段落与所属表格的 `sourceXml` 失效，导出会按模型重新写入文字；批注范围的字符偏移（`commentRanges`）也会随替换一起平移。
 
+## 内部书签导航
+
+Word 的目录、交叉引用和 `w:hyperlink/@w:anchor` 会导入为 `#书签` 内部链接。查看器从 `w:bookmarkStart` 建立“书签名 → 正文节点”索引：点击目录项会滚动到书签所在页和段落，短暂高亮目标段落，并在可编辑表面上把光标放到目标段落。页眉、页脚、脚注、尾注和表格单元格中的内部链接走同一条路径。
+
+书签查找不区分大小写，接受 `#Name`、`Name` 和 URL 转义（`#My%20Bookmark`）。`_GoBack` 等 Word 自动书签不是导航目标。
+
+宿主也可以直接调用导航方法：
+
+```ts
+const surface = surfaceRef.value
+const result = await surface.revealBookmark("#Section_1")
+// { status: "revealed", name: "Section_1", nodeIndex: 12, pageIndex: 3, text: "..." }
+
+const missing = await surface.revealBookmark("No_Such_Bookmark")
+// { status: "missing", name: "No_Such_Bookmark" }
+```
+
+`DocxViewer`、`DocxEditor` 和 `DocxDocumentSurface` 都暴露 `revealBookmark(name)`。查看器需要挂载另一页时发出 `requestPageReveal(pageIndex)`；找不到书签时不抛错，而是在文档上显示一条非阻塞提示，并发出 `bookmarkMissing(name)`。
+
+需要自己实现导航时，`@arcships/docx-core` 的 `createDocxBookmarkIndex(model)` 返回 `get(name)` / `has(name)` / `targets`，`normalizeDocxBookmarkName()` 提供与查看器一致的大小写、`#` 和 URL 转义处理。
+
 ## 编辑辅助操作
 
 `DocxEditor` 默认启用下列编辑辅助操作。不需要时用属性关闭；关闭后不会渲染对应界面，也不改变文档或控制器行为。
@@ -163,7 +184,7 @@ editor.replaceAll("needle", "pin", { wholeWord: true }) // { replaced, skipped }
 
 表单域的值只有在符合字段约束时才会写入模型：下拉值必须来自选项列表，日期必须是有效日期，文本遵守最大长度；被拒绝的保存不会修改文档，撤销栈也不增加。
 
-链接卡片对外部地址调用 `window.open(..., "noopener,noreferrer")`；文档内部书签（`#name`）不会被当作 URL 打开，而是通过 `link-open` 事件交给宿主处理，便于宿主滚动到自己的书签位置。
+链接卡片对外部地址调用 `window.open(..., "noopener,noreferrer")`；文档内部书签（`#name`）不会被当作 URL 打开，而是由查看器滚动并高亮目标段落，同时仍发出 `link-open` 事件供宿主记录或自行处理。
 
 ## 文档块、词与高亮
 

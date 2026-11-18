@@ -38,6 +38,7 @@
         :floating-page-origin-px="floatingPageOriginPx"
         :within-header-footer="true"
         header-footer-region="header"
+        :on-internal-link-click="onInternalLinkClick"
         @text-input="(_nodeIndex: number, text: string) => emit('textInput', ni, text)"
       />
       <DocxTableHost
@@ -65,6 +66,7 @@
         :within-header-footer="true"
         header-footer-region="header"
         :max-available-width-px="pageContentWidthPx"
+        :on-internal-link-click="onInternalLinkClick"
       />
     </template>
   </div>
@@ -122,6 +124,8 @@ const props = defineProps<{
   headerDistancePx?: number
   /** Render header paragraphs as content-editable (active header editing). */
   editable?: boolean
+  /** Internal `#bookmark` link clicked in the header story. */
+  onInternalLinkClick?: (bookmarkName: string) => void
 }>()
 
 const emit = defineEmits<{

@@ -45,6 +45,7 @@ import {
   restoreDomSelectionFromTextRange,
   syncDomSelectionToEditor,
 } from "../composables/editor-selection"
+import type { DocxBookmarkTargetHighlight } from "../composables/docx-bookmarks"
 
 // ── Types ──────────────────────────────────────────────────────────
 interface PageLayoutInfo {
@@ -145,6 +146,16 @@ export default defineComponent({
     },
     headerReservePx: { type: Number, default: 0 },
     footerReservePx: { type: Number, default: 0 },
+    /** Internal `#bookmark` link clicked in a paragraph or table cell. */
+    onInternalLinkClick: {
+      type: Function as PropType<(bookmarkName: string) => void>,
+      required: false,
+    },
+    /** Transient bookmark highlight for this page's body. */
+    bookmarkTarget: {
+      type: Object as PropType<DocxBookmarkTargetHighlight>,
+      required: false,
+    },
   },
   emits: ["measure", "paragraphMeasure", "tableRowMeasure", "contentMeasure"],
   setup(props, { emit, slots }) {
@@ -412,6 +423,8 @@ export default defineComponent({
             segment.nodeIndex,
             node as ParagraphNode
           )
+          const bookmarkTarget = props.bookmarkTarget?.nodeIndex === segment.nodeIndex &&
+            props.bookmarkTarget?.tableRowIndex === undefined
           children.push(
             h(DocxParagraphHost, {
               key,
@@ -453,6 +466,8 @@ export default defineComponent({
               onClick: (nodeIndex: number, _event: MouseEvent) => {
                 ensureParagraphSelection(nodeIndex)
               },
+              onInternalLinkClick: props.onInternalLinkClick,
+              bookmarkTarget,
               onMeasure: (nodeIndex: number, heightPx: number) => {
                 emit("paragraphMeasure", nodeIndex, heightPx)
               },
@@ -487,6 +502,16 @@ export default defineComponent({
                   ? props.columnLayout?.widthsPx?.[columnIndex]
                   : undefined) ?? props.pageContentWidthPx,
               noteMarkerLabels: props.noteMarkerLabels,
+              onInternalLinkClick: props.onInternalLinkClick,
+              bookmarkTarget: props.bookmarkTarget?.nodeIndex === segment.nodeIndex,
+              bookmarkCell: props.bookmarkTarget?.nodeIndex === segment.nodeIndex &&
+                props.bookmarkTarget?.tableRowIndex !== undefined &&
+                props.bookmarkTarget?.tableCellIndex !== undefined
+                ? {
+                    rowIndex: props.bookmarkTarget.tableRowIndex,
+                    cellIndex: props.bookmarkTarget.tableCellIndex,
+                  }
+                : undefined,
               onMeasure: (tableIndex: number, rowHeightsPx: number[]) => {
                 emit("tableRowMeasure", tableIndex, rowHeightsPx)
               },

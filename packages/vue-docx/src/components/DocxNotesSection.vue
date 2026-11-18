@@ -28,6 +28,7 @@
               :document-theme="theme"
               :numbering-definitions="numberingDefinitions"
               :default-tab-stop-px="defaultTabStopPx"
+              :on-internal-link-click="onInternalLinkClick"
             />
             <DocxTableHost
               v-else-if="node.type === 'table'"
@@ -39,6 +40,7 @@
               :document-theme="theme"
               :numbering-definitions="numberingDefinitions"
               :default-tab-stop-px="defaultTabStopPx"
+              :on-internal-link-click="onInternalLinkClick"
             />
           </template>
         </template>
@@ -73,6 +75,8 @@ const props = withDefaults(defineProps<{
   labels?: Map<number, string>
   startIndex?: number
   theme?: "light" | "dark"
+  /** Internal `#bookmark` link clicked in a note body. */
+  onInternalLinkClick?: (bookmarkName: string) => void
 }>(), {
   startIndex: 1,
   theme: "light",

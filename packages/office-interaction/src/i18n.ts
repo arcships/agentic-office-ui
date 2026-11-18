@@ -165,6 +165,8 @@ export interface OfficeDocxMessages {
     }
     /** Template with `{count}` and `{allowed}` placeholders. */
     pageLimitExceeded: string
+    /** Template with a `{name}` placeholder for an unresolved internal link. */
+    bookmarkMissing: string
   }
   toolbar: {
     sidebarToggle: string
@@ -1368,6 +1370,7 @@ export const officeMessagesEn: OfficeMessages = {
       },
       pageLimitExceeded:
         "DOCX page count {count} exceeds the allowed maximum of {allowed}.",
+      bookmarkMissing: "Bookmark \"{name}\" was not found in this document.",
     },
     toolbar: {
       sidebarToggle: "Toggle page thumbnails",
@@ -2480,6 +2483,7 @@ export const officeMessagesZhCN: OfficeMessages = {
         readyPages: "文档已就绪，第 {page} 页，共 {total} 页",
       },
       pageLimitExceeded: "DOCX 页数 {count} 超过允许值 {allowed}。",
+      bookmarkMissing: "未找到书签“{name}”。",
     },
     toolbar: {
       sidebarToggle: "显示或隐藏页面缩略图",

@@ -5,6 +5,7 @@
     :class="{
       'docx-paragraph-host--editable': editable,
       'docx-paragraph-host--active': isActiveParagraph,
+      'docx-paragraph-host--bookmark-target': bookmarkTarget,
     }"
     :contenteditable="editable ? 'true' : undefined"
     :data-docx-paragraph-host="true"
@@ -57,6 +58,7 @@ import {
   syncDomSelectionToEditor,
   readDocxTextHostText,
 } from "../composables/editor-selection"
+import { docxBookmarkNameFromClick } from "../composables/docx-bookmarks"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
@@ -112,6 +114,10 @@ const props = withDefaults(
       totalLineCount: number
       lineHeightPx: number
     }
+    /** Internal `#bookmark` link clicked in this paragraph. */
+    onInternalLinkClick?: (bookmarkName: string) => void
+    /** Transient highlight after the viewer revealed this bookmark target. */
+    bookmarkTarget?: boolean
   }>(),
   {
     editable: false,
@@ -258,7 +264,7 @@ const displayHtml = computed(() => {
     `p-${props.paragraphIndex}`,
     theme,
     props.numberingLabel ? { label: props.numberingLabel } as any : undefined,
-    undefined,
+    props.onInternalLinkClick,
     props.floatingPageOriginPx,
     undefined,
     props.pageNumber,
@@ -467,7 +473,13 @@ function onInput(_event: Event): void {
   syncCurrentSelection({ preservePendingRunStyle: true })
 }
 
-function onPointerDown(): void {
+function onPointerDown(event?: Event): void {
+  if (docxBookmarkNameFromClick(event?.target)) {
+    // An internal link is navigation, not a caret move: keep the click from
+    // collapsing the selection onto the table-of-contents entry.
+    event?.preventDefault()
+    return
+  }
   if (!props.editable || !props.controller || isSectionStory.value) return
   props.controller.beginSelectionSession("pointer", { settleAfterMs: 250 })
 }
@@ -543,6 +555,13 @@ function onKeyup(_event: KeyboardEvent): void {
 }
 
 function onClick(event: MouseEvent): void {
+  const bookmarkName = docxBookmarkNameFromClick(event.target)
+  if (bookmarkName && props.onInternalLinkClick) {
+    event.preventDefault()
+    event.stopPropagation()
+    props.onInternalLinkClick(bookmarkName)
+    return
+  }
   syncCurrentSelection()
   emit("click", props.paragraphIndex, event)
 }
@@ -711,5 +730,11 @@ defineExpose({
 }
 .docx-paragraph-host--active {
   background: rgba(59, 130, 246, 0.04);
+}
+.docx-paragraph-host--bookmark-target {
+  background: rgba(250, 204, 21, 0.22);
+  box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.55);
+  border-radius: 2px;
+  transition: background-color 120ms ease-out;
 }
 </style>

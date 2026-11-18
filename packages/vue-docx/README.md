@@ -41,6 +41,8 @@ import "@arcships/vue-docx/style.css"
 - `DocxBlockHighlights` — 文档块高亮覆盖层（按块、块 id 或页码）
 - `DocxWordHighlights` — 词/文字范围高亮覆盖层（按词或 `{ blockId, start, end }`）
 
+`DocxViewer`、`DocxEditor` 和 `DocxDocumentSurface` 暴露 `revealBookmark(name)`：点击目录、交叉引用或其它 `#书签` 内部链接时，查看器会滚动到书签所在页与段落、短暂高亮目标，并在可编辑表面上放置光标。书签名可写成 `Name` 或 `#Name`，不区分大小写；找不到书签时只显示非阻塞提示，不会抛错。
+
 ## 组合函数
 
 - `useDocxEditor` — 编辑器状态与命令
@@ -56,6 +58,8 @@ import "@arcships/vue-docx/style.css"
 | `load-error` | `Error`（可读 `code`） |
 
 `DocxDocumentSurface` 统一支持 `documentId`、`selectionMode`、`emitReferenceCandidates`，并发出 `referenceConfirm`、`regionDraftChange`、`selectionCancel`、`referenceResolve` 和 `referenceError`。组件 expose 可描述、解析和滚动到引用；`getDocumentBlocks()`、`confirmBlockReference()` 和 `confirmWordReference()` 可以把块/词作为统一引用确认。组件不保存引用集合，也不调用 Agent。
+
+书签导航需要挂载新的虚拟化页面时发出 `requestPageReveal(pageIndex)`；内部链接指向不存在的书签时发出 `bookmarkMissing(name)`。
 
 ## 文档
 

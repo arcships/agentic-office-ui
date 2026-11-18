@@ -20,6 +20,15 @@
   >
     <div :style="spacerStyle">
       <div
+        v-if="bookmarkNotice && !isPrinting"
+        class="docx-bookmark-notice"
+        role="status"
+        data-testid="docx-bookmark-notice"
+        :style="bookmarkNoticeStyle"
+      >
+        {{ bookmarkNotice }}
+      </div>
+      <div
         v-for="entry of visiblePageEntries"
         :key="`page-${entry.pageIndex}`"
         :data-docx-page-wrapper="true"
@@ -65,6 +74,8 @@
             :page-borders="entry.pageBorders ?? null"
             :theme="theme"
             :annotation-drawer-mode="annotationDrawerMode"
+            :on-internal-link-click="revealBookmark"
+            :bookmark-target="bookmarkTarget"
             @measure="onPageMeasure(entry.pageIndex, $event)"
             @paragraph-measure="onParagraphMeasure"
             @table-row-measure="onTableRowMeasure"
@@ -77,7 +88,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, watchEffect } from "vue"
+import { ref, computed, nextTick, onMounted, onUnmounted, watch, watchEffect } from "vue"
 import { createTouchGestureTracker } from "@arcships/office-runtime/touch-gestures"
 import { findDocxSearchTargetPage, type DocxSearchPageTarget } from "../composables/docx-search-page"
 import type {
@@ -118,12 +129,20 @@ import {
   resolvePaginationScrollAnchor,
   resolvePaginationScrollTop,
   reuseUnchangedPaginationItems,
+  createDocxBookmarkIndex,
+  type DocxBookmarkTarget,
   type PaginationMeasurementFeedback,
   type PaginationScrollAnchor,
   DEFAULT_DOC_PAGE_WIDTH,
   DEFAULT_DOC_PAGE_HEIGHT,
 } from "@arcships/docx-core"
 import DocxPageSurface from "./DocxPageSurface.vue"
+import { useDocxMessages } from "../i18n"
+import { formatOfficeMessage } from "@arcships/office-interaction"
+import type {
+  DocxBookmarkRevealResult,
+  DocxBookmarkTargetHighlight,
+} from "../composables/docx-bookmarks"
 import {
   DOCX_UNSUPPORTED_FILE_MESSAGE,
   isSupportedDocxFileName,
@@ -216,9 +235,14 @@ const emit = defineEmits<{
   visiblePageRange: [range: { startPageIndex: number; endPageIndex: number }]
   contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number; target?: EventTarget | null }]
   selectionChange: [sel: { kind: string; text?: string; pageIndex?: number }]
+  /** A bookmark reveal needs `pageIndex` mounted/visible in the host. */
+  requestPageReveal: [pageIndex: number]
+  /** An internal link named a bookmark this document does not contain. */
+  bookmarkMissing: [name: string]
 }>()
 
 // ── State ──────────────────────────────────────────────────────────
+const m = useDocxMessages()
 const scrollContainerRef = ref<HTMLElement | undefined>()
 const scrollTop = ref(0)
 const viewportHeight = ref(800)
@@ -1175,6 +1199,207 @@ function updateVisibleRange(): void {
   })
 }
 
+// ── Bookmark navigation ────────────────────────────────────────────
+const BOOKMARK_HIGHLIGHT_DURATION_MS = 2400
+const BOOKMARK_NOTICE_DURATION_MS = 4000
+const BOOKMARK_TARGET_LOOKUP_ATTEMPTS = 6
+
+const bookmarkIndex = computed(() => createDocxBookmarkIndex(props.model))
+const bookmarkTarget = ref<DocxBookmarkTargetHighlight | undefined>()
+const bookmarkNotice = ref<string | undefined>()
+const bookmarkNoticeStyle = computed<Record<string, string>>(() => ({
+  alignItems: "center",
+  background: theme.value === "dark" ? "#1f2937" : "#111827",
+  borderRadius: "999px",
+  boxShadow: "0 10px 25px rgba(15, 23, 42, 0.28)",
+  color: "#ffffff",
+  display: "flex",
+  fontSize: "13px",
+  gap: "8px",
+  left: "50%",
+  maxWidth: "min(560px, calc(100% - 48px))",
+  padding: "10px 18px",
+  pointerEvents: "none",
+  position: "sticky",
+  top: "16px",
+  transform: "translateX(-50%)",
+  width: "fit-content",
+  zIndex: "20",
+}))
+let bookmarkRevealNonce = 0
+let bookmarkHighlightTimer: ReturnType<typeof setTimeout> | undefined
+let bookmarkNoticeTimer: ReturnType<typeof setTimeout> | undefined
+
+function pageIndexForNodeIndex(nodeIndex: number): number | undefined {
+  const pageIndex = pageNodeSegments.value.findIndex((segments) =>
+    segments.some((segment) => segment.nodeIndex === nodeIndex)
+  )
+  return pageIndex >= 0 ? pageIndex : undefined
+}
+
+function scrollPageIntoView(pageIndex: number, behavior: ScrollBehavior = "smooth"): void {
+  const container = scrollContainerRef.value
+  if (!container || pageIndex < 0 || pageIndex >= pageCount.value) return
+  const top = pageOffsets.value[pageIndex] ?? 0
+  // The browser's scroll event is asynchronous, but a bookmark target page has
+  // to mount before the DOM lookup below can find its paragraph. Publishing the
+  // final offset immediately keeps virtualization in step with the scroll.
+  scrollTop.value = top
+  scrollContainerTo(container, top, behavior)
+}
+
+function scheduleBookmarkHighlightClear(): void {
+  if (bookmarkHighlightTimer !== undefined) clearTimeout(bookmarkHighlightTimer)
+  bookmarkHighlightTimer = setTimeout(() => {
+    bookmarkHighlightTimer = undefined
+    bookmarkTarget.value = undefined
+  }, BOOKMARK_HIGHLIGHT_DURATION_MS)
+}
+
+function showBookmarkMissing(name: string): void {
+  const label = name.trim() || "#"
+  bookmarkNotice.value = formatOfficeMessage(
+    m.value.docx.viewer.bookmarkMissing,
+    { name: label }
+  )
+  if (bookmarkNoticeTimer !== undefined) clearTimeout(bookmarkNoticeTimer)
+  bookmarkNoticeTimer = setTimeout(() => {
+    bookmarkNoticeTimer = undefined
+    bookmarkNotice.value = undefined
+  }, BOOKMARK_NOTICE_DURATION_MS)
+  emit("bookmarkMissing", label)
+}
+
+function bookmarkCellSelector(highlight: DocxBookmarkTargetHighlight): string | undefined {
+  if (highlight.tableRowIndex === undefined || highlight.tableCellIndex === undefined) {
+    return undefined
+  }
+  return (
+    `[data-docx-table-cell-paragraph-host="true"]` +
+    `[data-docx-table-node-index="${highlight.nodeIndex}"]` +
+    `[data-docx-table-row-index="${highlight.tableRowIndex}"]` +
+    `[data-docx-table-cell-index="${highlight.tableCellIndex}"]`
+  )
+}
+
+function bookmarkTargetElement(
+  highlight: DocxBookmarkTargetHighlight
+): HTMLElement | undefined {
+  const container = scrollContainerRef.value
+  if (!container || typeof container.querySelector !== "function") return undefined
+  // Query the cell before the table: a selector list returns whichever element
+  // comes first in document order, and the table host is the cell's ancestor.
+  const cellSelector = bookmarkCellSelector(highlight)
+  const cell = cellSelector ? container.querySelector(cellSelector) : null
+  if (cell) return cell as HTMLElement
+  const paragraph = container.querySelector(
+    `[data-docx-paragraph-node-index="${highlight.nodeIndex}"]`
+  )
+  if (paragraph) return paragraph as HTMLElement
+  return (container.querySelector(
+    `[data-docx-table-host="true"][data-docx-table-node-index="${highlight.nodeIndex}"]`
+  ) as HTMLElement | null) ?? undefined
+}
+
+function bookmarkLookupFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    const raf = (globalThis as { requestAnimationFrame?: (callback: () => void) => unknown })
+      .requestAnimationFrame
+    if (typeof raf === "function") raf(() => resolve())
+    else setTimeout(resolve, 16)
+  })
+}
+
+async function waitForBookmarkTarget(
+  highlight: DocxBookmarkTargetHighlight
+): Promise<HTMLElement | undefined> {
+  for (let attempt = 0; attempt < BOOKMARK_TARGET_LOOKUP_ATTEMPTS; attempt += 1) {
+    const element = bookmarkTargetElement(highlight)
+    if (element) return element
+    await nextTick()
+    await bookmarkLookupFrame()
+  }
+  return bookmarkTargetElement(highlight)
+}
+
+function selectBookmarkTarget(target: DocxBookmarkTarget): void {
+  const controller = props.controller
+  if (!controller) return
+  if (target.tableCell) {
+    controller.selectTableCell(
+      target.nodeIndex,
+      target.tableCell.rowIndex,
+      target.tableCell.cellIndex
+    )
+    return
+  }
+  controller.selectParagraph(target.nodeIndex)
+}
+
+function focusBookmarkTarget(element: HTMLElement): void {
+  // A read-only surface has no caret; the highlight and scroll are the whole
+  // navigation. An editable target paragraph takes the caret at its start.
+  if (!props.editable) return
+  element.focus?.()
+}
+
+/**
+ * Scrolls to the bookmark named `name`, highlights its target and places the
+ * caret there. Missing bookmarks surface a non-blocking notice instead of
+ * throwing, so a stale table of contents cannot break the viewer.
+ */
+async function revealBookmark(name: string): Promise<DocxBookmarkRevealResult> {
+  const requested = typeof name === "string" ? name.trim() : ""
+  const target = bookmarkIndex.value.get(requested)
+  if (!target) {
+    const label = requested.replace(/^#/, "").trim()
+    showBookmarkMissing(label)
+    return { status: "missing", name: label }
+  }
+
+  const pageIndex = pageIndexForNodeIndex(target.nodeIndex)
+  const highlight: DocxBookmarkTargetHighlight = {
+    nodeIndex: target.nodeIndex,
+    tableRowIndex: target.tableCell?.rowIndex,
+    tableCellIndex: target.tableCell?.cellIndex,
+    nonce: (bookmarkRevealNonce += 1),
+  }
+  bookmarkTarget.value = highlight
+  scheduleBookmarkHighlightClear()
+  selectBookmarkTarget(target)
+  if (pageIndex !== undefined) {
+    const pageVisible = visiblePageEntries.value.some(
+      (entry) => entry.pageIndex === pageIndex
+    )
+    if (!pageVisible) {
+      emit("requestPageReveal", pageIndex)
+      // Instant page jump: the paragraph-level smooth scroll below finishes the
+      // motion, and the target page stays mounted while we look it up.
+      scrollPageIntoView(pageIndex, "auto")
+    }
+  }
+
+  const element = await waitForBookmarkTarget(highlight)
+  if (element) {
+    element.scrollIntoView?.({ block: "center", behavior: "smooth" })
+    focusBookmarkTarget(element)
+  }
+
+  return {
+    status: "revealed",
+    name: target.name,
+    nodeIndex: target.nodeIndex,
+    pageIndex,
+    ...(target.tableCell
+      ? {
+          tableRowIndex: target.tableCell.rowIndex,
+          tableCellIndex: target.tableCell.cellIndex,
+        }
+      : undefined),
+    text: target.text,
+  }
+}
+
 // ── Page measurement ───────────────────────────────────────────────
 function onPageMeasure(pageIndex: number, event: PageMeasureEvent): void {
   if (Number.isFinite(event.heightPx) && event.heightPx > 0) {
@@ -1501,6 +1726,10 @@ onUnmounted(() => {
   containerObserver?.disconnect()
   containerObserver = undefined
   if (scrollTimer !== null) clearTimeout(scrollTimer)
+  if (bookmarkHighlightTimer !== undefined) clearTimeout(bookmarkHighlightTimer)
+  if (bookmarkNoticeTimer !== undefined) clearTimeout(bookmarkNoticeTimer)
+  bookmarkHighlightTimer = undefined
+  bookmarkNoticeTimer = undefined
   if (measurementFlushHandle !== undefined) clearTimeout(measurementFlushHandle)
   measurementFlushHandle = undefined
   touchGestures.reset()
@@ -1525,9 +1754,15 @@ function scrollContainerTo(container: HTMLElement, top: number, behavior: Scroll
 
 defineExpose({
   scrollToPage(pageIndex: number): void {
-    if (!scrollContainerRef.value || pageIndex < 0 || pageIndex >= pageCount.value)
-      return
-    scrollContainerTo(scrollContainerRef.value, pageOffsets.value[pageIndex] ?? 0, "smooth")
+    scrollPageIntoView(pageIndex)
+  },
+  /**
+   * Reveals the bookmark named `name`: scrolls its page/paragraph into view,
+   * highlights the target and places the caret. Missing bookmarks resolve to
+   * `{ status: "missing" }` and show a non-blocking notice.
+   */
+  revealBookmark(name: string): Promise<DocxBookmarkRevealResult> {
+    return revealBookmark(name)
   },
   scrollToNode(nodeIndex: number, options?: ScrollToOptions): void {
     const pageIndex = pageNodeSegments.value.findIndex((segments) =>

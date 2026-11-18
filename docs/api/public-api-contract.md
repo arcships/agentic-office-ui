@@ -89,6 +89,8 @@ Worker 和 WASM 必须来自安装后的真实包。消费项目不得从 demo �
 
 根入口公开 DOCX 图片图层顺序（issue #145）：`DocxEditorController` 新增 `bringToFront(location)`、`bringForward(location)`、`sendBackward(location)` 与 `sendToBack(location)`，每条命令占一个撤销条目并清除图片/段落/表格的 `sourceXml`，导出时重新写入 `wp:anchor/@relativeHeight`。`resolveDocxImageLayerOrderState(floating)` 返回当前截断后的 `zIndex` 与四个 `can*` 可用标志，`resolveDocxImageLayerOrderMenuActions(floating)` 把 `DEFAULT_CONTEXT_MENU_IMAGE_LAYER_ACTIONS` 展开为带禁用状态的四个菜单项，`resolveDocxImageLayerOrderPatch(command, floating)` 给出单个命令的模型补丁；非浮动图片没有图层顺序。`resolveFloatingImageStackingZIndex(floating)` 供自定义渲染层复用与 `DocxImageLayer` 相同的 CSS 叠放规则。
 
+根入口公开 DOCX 书签导航（issue #148）：`createDocxBookmarkIndex(model)` 从 `w:bookmarkStart` 建立书签名到正文节点的索引，`get(name)` / `has(name)` 接受 `#Name`、任意大小写和 URL 转义，`targets` 按文档顺序给出 `{ name, nodeIndex, text, tableCell? }`；`normalizeDocxBookmarkName(name)` 是同一套归一化规则。`_GoBack` 等 Word 自动书签不参与索引；重复书签名以第一个目标为准。
+
 推荐实例写法：
 
 ```ts
@@ -153,6 +155,7 @@ DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注
 - 状态与命令：`useDocxEditor`、`useDocxModel`。
 - 公共能力组合函数：文档主题、段落样式、图片环绕、行距、边框、表单域、修订、批注、页面布局、分页和 `useDocxPageThumbnails`。
 - 编辑辅助界面（issue #101）：`DocxFormFieldDialog`、`DocxLinkHoverCard`、`DocxStylePreviewPopover` 及其纯函数 `docxStylePreviewCss`、`resolveFormFieldAt`、`parseDocxFormFieldLocationKey`；拖拽排序的 `useDocxNodeReorder` 与 `resolveDocxReorderInsertionIndex`、`resolveDocxReorderTarget`、`docxReorderNodeIndexFromElement`。它们只通过 `DocxEditorController` 读写文档，`DocxEditor` 用 `show-form-field-dialog`、`show-link-card`、`show-style-preview`、`show-node-reorder` 四个属性控制是否渲染。
+- 书签导航（issue #148）：`DocxViewer`、`DocxEditor` 和 `DocxDocumentSurface` 暴露 `revealBookmark(name)`，返回 `DocxBookmarkRevealResult`（`{ status: "revealed", name, nodeIndex, pageIndex?, text }` 或 `{ status: "missing", name }`）；找不到书签时只显示非阻塞提示，不抛错。查看器需要挂载新页时发出 `requestPageReveal(pageIndex)`，找不到书签时发出 `bookmarkMissing(name)`。链接悬浮卡片的“打开”对内部链接走同一导航，并保留 `link-open`。
 - 类型：`DocModel`、`DocxEditorController`、`DocxFormFieldUpdate`、编辑选区、图片、表格、分页、修订、批注及上述组合函数的公开类型。
 - 样式：`@arcships/vue-docx/style.css`。
 - 历史记录：`UseDocxEditorOptions.historyMaxEntries` 和 `historyMaxBytes` 同时生效；Vue 编辑器默认保留最多 100 条、估算 32 MiB，超过后优先淘汰最旧记录。
