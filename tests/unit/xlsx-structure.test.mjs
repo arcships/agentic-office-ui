@@ -16,6 +16,9 @@ globalThis.DOMParser ??= XmlDomParser;
 globalThis.Node ??= XmlNode;
 globalThis.XMLSerializer ??= XmlSerializer;
 
+const { strFromU8, strToU8, unzipSync, zipSync } = await import(
+  pathToFileURL(requireFromXlsxCore.resolve("fflate")).href
+);
 const core = await import(
   pathToFileURL(requireFromXlsxCore.resolve("@arcships/xlsx-core")).href
 );
@@ -89,6 +92,11 @@ test("A1 references follow Excel semantics for insertions, deletions, anchors an
     core.remapA1References("='Data'!B2", insertRow(0), { sheetName: "Data" }),
     "='Data'!B3",
     "quoted references to the edited sheet move",
+  );
+  assert.equal(
+    core.remapA1References("=A5+'Data'!A5", insertRow(0), { sheetName: "Data", skipUnqualified: true }),
+    "=A5+'Data'!A6",
+    "another sheet's unqualified references stay put while qualified ones move",
   );
   assert.equal(
     core.remapA1References('=IF(A1="B2",LOG10(A1),A1)', insertRow(0)),
@@ -213,6 +221,38 @@ test("shiftWorkbookSheetStructure moves links, notes, ranges and tables in the a
   assert.equal(tableState.tables[0].reference, "A1:H183");
   core.shiftWorkbookSheetStructure(tableAssets, 0, deleteRow(5, 2), { sheetName: "Sales Data" });
   assert.equal(core.readWorkbookSheetAuthoringState(tableAssets, 0).tables[0].reference, "A1:H181");
+});
+
+function workbookWithUnmodeledRule(bytes) {
+  const archive = unzipSync(bytes);
+  const sheetPath = "xl/worksheets/sheet1.xml";
+  const xml = strFromU8(archive[sheetPath]);
+  archive[sheetPath] = strToU8(xml.replace(
+    "</worksheet>",
+    '<conditionalFormatting sqref="A11:A12"><cfRule type="expression" dxfId="0" priority="10"><formula>$A11&gt;0</formula></cfRule></conditionalFormatting></worksheet>',
+  ));
+  return zipSync(archive);
+}
+
+function sheetXml(assets) {
+  return strFromU8(assets.archive["xl/worksheets/sheet1.xml"]);
+}
+
+test("unmodeled conditional-format rules shift their sqref and formula", () => {
+  const assets = core.parseWorkbookImageAssets(workbookWithUnmodeledRule(sampleBytes()));
+  assert.match(sheetXml(assets), /sqref="A11:A12"/);
+  assert.equal(
+    core.shiftWorkbookSheetStructure(assets, 0, insertRow(11), { sheetName: "Dashboard" }),
+    true,
+  );
+  assert.match(sheetXml(assets), /conditionalFormatting sqref="A11:A13"/);
+  assert.match(sheetXml(assets), /<formula>\$A11&gt;0<\/formula>/);
+
+  assert.equal(
+    core.shiftWorkbookSheetStructure(assets, 0, deleteRow(10, 3), { sheetName: "Dashboard" }),
+    true,
+  );
+  assert.doesNotMatch(sheetXml(assets), /type="expression"/, "a rule whose range is deleted disappears");
 });
 
 test("defined names round-trip through saved workbook bytes", () => {

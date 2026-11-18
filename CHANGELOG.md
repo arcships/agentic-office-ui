@@ -27,6 +27,7 @@ All notable changes to the `@arcships` package family are documented in this fil
 - Add a Format Cells dialog with decimal places, thousands separator, currency/percent/date/text categories and a custom Excel format code (`setSelectionNumberFormat`).
 - Add a Name Manager dialog backed by `getNamedRanges`/`setNamedRange`/`deleteNamedRange`; deleted names are written out of `xl/workbook.xml` on export because the engine cannot remove a defined name.
 - Upgrade the cell context menu to Excel's item set (cut/copy/paste/paste special submenu, edit cell, clear contents, insert/delete row and column, merge & center/across/cells/unmerge, sort, select row/column/all) with shortcut hints, checked selection state and `↑`/`↓`/`Home`/`End`/type-ahead/`←`/`→`/`Esc` keyboard semantics. Row and column headers now open their own menu, and hovering a header exposes a column/row menu trigger in the grid.
+- Follow-up audit fixes: loaded defined names (from `workbook.xml`) now shift even though the engine rejects redefining them, the Name Manager overlay carries the new reference through export/reload; unmodeled conditional-format rules (`expression`, `cellIs`, `top10`, …) get their `sqref` and `<formula>` rewritten on structure edits; formulas on other sheets that reference the edited sheet are rewritten (unqualified references on those sheets stay untouched); and both new structure test files are registered in `scripts/ci/run-suite.mjs`.
 
 ### XLSX authoring surface (#102)
 

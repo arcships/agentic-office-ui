@@ -28,6 +28,7 @@ import {
   setWorkbookCellComment,
   setWorkbookCellHyperlink,
   setWorkbookFreezePanes,
+  updateWorkbookConditionalFormatSqrefs,
   updateWorkbookTableRange,
   type WorkbookAuthoringAssets,
 } from "./sheet-authoring";
@@ -365,6 +366,12 @@ function sameSheetName(left: string, right: string) {
 type ReferenceRemapOptions = {
   /** Only references to this sheet are adjusted. */
   sheetName?: string;
+  /**
+   * Leave unqualified references alone. Formulas on another sheet use this so
+   * only their `EditedSheet!A1` references move; their bare `A1` references
+   * belong to their own sheet.
+   */
+  skipUnqualified?: boolean;
 };
 
 type ParsedReference = {
@@ -531,12 +538,22 @@ export function remapA1References(
     if (reference) {
       const rangeColon = text[index + reference.token.length];
       let end = index + reference.token.length;
-      let replacement = remapSingleReference(reference, normalized);
       if (rangeColon === ":") {
         const rangeEnd = readCellReference(text, end + 1);
         if (rangeEnd) {
-          replacement = remapRangeReferences(reference, rangeEnd, normalized);
           end = end + 1 + rangeEnd.token.length;
+        }
+      }
+      if (options.skipUnqualified) {
+        result += text.slice(index, end);
+        index = end;
+        continue;
+      }
+      let replacement = remapSingleReference(reference, normalized);
+      if (rangeColon === ":") {
+        const rangeEnd = readCellReference(text, index + reference.token.length + 1);
+        if (rangeEnd) {
+          replacement = remapRangeReferences(reference, rangeEnd, normalized);
         }
       }
       result += replacement;
@@ -598,6 +615,14 @@ export function shiftWorkbookSheetStructure(
     const next = remapConditionalFormatRuleForStructure(rule, normalized);
     return next ? [next] : [];
   });
+  // Raw (unmodeled) rules are preserved by the XML writer, so their sqref and
+  // formulas have to be shifted before the modeled rules are rewritten.
+  updateWorkbookConditionalFormatSqrefs(
+    assets,
+    workbookSheetIndex,
+    (ranges) => remapRangesForStructure(ranges, normalized),
+    (formula) => remapA1References(formula, normalized, { sheetName: options.sheetName })
+  );
   replaceWorkbookConditionalFormatRules(assets, workbookSheetIndex, rules);
 
   const validations = state.dataValidations.flatMap((validation) => {
