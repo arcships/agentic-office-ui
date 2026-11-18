@@ -12,6 +12,14 @@ All notable changes to the `@arcships` package family are documented in this fil
 - `mergeWorkbookSheetAuthoringAssets()` merges those fragments into every saved workbook (export and undo snapshots) in schema order, keeps conditional-format rules the editor cannot model, and copies comments, tables and inserted charts; `insertWorkbookChart()` generates bar/line/pie chart parts plus their drawing and relationships, and chart type now reads from the chart XML instead of defaulting to column.
 - Fix `mergeWorkbookImageAssets` crashing with `node.remove is not a function` when the engine re-emits a drawing, by using `parentNode.removeChild` in the image and chart export paths.
 
+### DOCX measure-driven pagination iteration (#99)
+
+- Run the full estimate → render → measure → repaginate loop in the viewer: rendered paragraph heights and table row heights feed back into `buildDocumentPageNodeSegments`, bounded by three passes with a tolerance-based convergence check and a signature history that stops oscillation.
+- Replace the ad-hoc viewer feedback counter with `PaginationMeasurementLoop`, which reports `repaginating`, `converged`, `oscillating` or `exhausted` plus the iteration count.
+- Treat `documentPageCount` as an advisory target (`LayoutSnapshot.pageCountTarget`, `enforced: false`); drop the default 1.02–1.3 virtual-page scaling candidates and keep the deprecated reconciliation/merge helpers for `0.x` compatibility only.
+- Keep page surfaces on unchanged pages by reusing their segment/column arrays and render entries when only other pages repaginate, and restore the reader's page offset after a measurement pass moves page positions.
+- Add the measurement loop, page reuse, scroll anchor and legal/invoice fixture acceptance tests (nine pages for `legal-contract.docx`, one for `invoice-table.docx`, every page exactly one paper tall).
+
 ### DOCX annotation gutter
 
 - Position tracked-change and comment cards against their text anchors in page space instead of rendering them as an unpositioned list at a fixed `top: 72px`, with stable document-order ties, collision-free stacking, and measured card heights.

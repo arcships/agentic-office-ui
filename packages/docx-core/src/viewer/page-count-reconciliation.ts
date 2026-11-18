@@ -1,9 +1,16 @@
+/**
+ * @deprecated Page-count alignment by scaling the virtual page height is no
+ * longer part of pagination (#99). The viewer measures rendered heights and
+ * repaginates; `documentPageCount` is an advisory target. These exports stay
+ * for 0.x compatibility and now refuse to grow the virtual page by default.
+ */
 export interface PageCountCandidate<TPage> {
   pageCount: number;
   pages: TPage[];
   scale: number;
 }
 
+/** @deprecated See {@link PageCountCandidate}; use the measure→repaginate loop (#99). */
 export interface PageCountReconciliationOptions<TPage> {
   initialPages: TPage[];
   targetPageCount: number;
@@ -161,12 +168,20 @@ function isBetterCandidate<TPage>(
   );
 }
 
+/** @deprecated Use the measure→repaginate loop (#99); this wrapper only returns the deprecated scaled pages. */
 export function reconcilePagesToTargetCountByScalingHeight<TPage>(
   options: PageCountReconciliationOptions<TPage>
 ): TPage[] {
   return reconcilePageCountCandidateToTargetCountByScalingHeight(options).pages;
 }
 
+/**
+ * @deprecated The default candidate scales only shrink the content budget
+ * (0.98…0.2); the former 1.02–1.3 “grow the virtual page” candidates were
+ * removed in #99 because they overfill the physical paper. Use
+ * `iteratePaginationWithMeasurements` and treat `documentPageCount` as a soft
+ * target instead.
+ */
 export function reconcilePageCountCandidateToTargetCountByScalingHeight<TPage>(
   options: PageCountReconciliationOptions<TPage>
 ): PageCountCandidate<TPage> {
@@ -207,10 +222,7 @@ export function reconcilePageCountCandidateToTargetCountByScalingHeight<TPage>(
           0.5, 0.48, 0.46, 0.44, 0.42, 0.4, 0.38, 0.36, 0.34, 0.32, 0.3, 0.28,
           0.26, 0.24, 0.22, 0.2,
         ]
-        : [
-          1.02, 1.04, 1.06, 1.08, 1.1, 1.12, 1.14, 1.16, 1.18, 1.2, 1.22, 1.24,
-          1.26, 1.28, 1.3,
-        ];
+      : [];
   const buildCandidateAtScale = (scale: number): PageCountCandidate<TPage> => {
     const pages = buildPagesAtScale(scale);
     return {

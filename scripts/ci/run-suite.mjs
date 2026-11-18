@@ -77,6 +77,7 @@ const suites = {
       "tests/unit/docx-line-metrics.test.mjs",
       "tests/unit/docx-pagination-fidelity.test.mjs",
       "tests/unit/docx-pagination-completion.test.mjs",
+      "tests/unit/docx-pagination-measure-loop.test.mjs",
       "tests/unit/docx-section-break.test.mjs",
       "tests/unit/docx-floating-image.test.mjs",
       "tests/unit/docx-reference-adapter.test.mjs",

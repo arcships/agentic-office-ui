@@ -1032,6 +1032,12 @@ export function buildDocumentPageNodeSegmentsFromLastRenderedPageBreakHints(
 // Trailing page merge
 // ---------------------------------------------------------------------------
 
+/**
+ * @deprecated Trailing-page merging forces `documentPageCount` as a hard
+ * constraint and hides real pagination. The viewer now feeds measured heights
+ * back through the measure→repaginate loop and reports the stored count as an
+ * advisory target (#99). Kept for 0.x compatibility.
+ */
 export function mergeTrailingPagesToTargetCount(
   pages: DocumentPageNodeSegment[][],
   targetPageCount: number

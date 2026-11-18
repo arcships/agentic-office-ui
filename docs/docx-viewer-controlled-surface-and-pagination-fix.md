@@ -106,7 +106,7 @@ B 路径已经计算段落行范围和表格行范围：
 > - `LayoutSnapshotParagraphFragment.paragraphLineRange` 与 `LayoutSnapshotTableFragment.tableRowRange` 会把分段范围带给 `DocxViewerRoot`，`DocxViewerRoot` 不再丢弃它们；`DocxTableHost` 已按 `tableRowRange` 渲染，因此跨页表格不再重复整表。
 > - 段落行切分（`allowParagraphLineSplitting`）暂时关闭：`DocxParagraphHost` 还不会按 `paragraphLineRange` 裁剪，开启会把同一段落重复渲染到两页。这是本设计后续要补的渲染能力。
 > - 脚注/尾注预留高度（`reserveNoteHeight`，默认开启）与 `lastRenderedPageBreak` 段首提示已进入该链路；`tests/unit/docx-pagination-runtime.test.mjs` 用显式页数 + 页首节点索引固定了硬分页符、section break、跨页表格、脚注四种 fixture。
-> - 仍待接入：页数校验收缩（`page-count-reconciliation`）尚未接入 viewer 运行时。
+> - 页数校准：`page-count-reconciliation` 仍保留导出（0.x 兼容），但不再驱动 viewer；默认候选也不再包含 1.02–1.3 的“放大虚拟页”缩放。#99 后 `documentPageCount` 只作为测量迭代的目标提示，页数以实际测量/分页结果为准。
 
 ### 2.4 页面高度存在双重缩放
 
