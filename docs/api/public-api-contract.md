@@ -258,6 +258,8 @@ AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurfa
 
 诊断只提供执行信息，不得包含文档正文、压缩包内容或未脱敏的输入地址。诊断回调抛错不得改变加载结果。
 
+DOCX 剪贴板公开合同：`copy()` / `paste()` 以及 `writeSelectionToClipboardData()` / `pasteClipboardData()` 使用四种 clipboard flavour——内部 MIME `application/x-arcships-docx-fragment+json`（payload 版本 1，携带来源 `DocxTextRange` 与选中的 runs）、带内联 run 样式的 `text/html`、面向只接受 RTF 的编辑器的 `text/rtf`，以及 `text/plain`。粘贴顺序固定为内部 payload → `text/html` → `text/rtf` → `text/plain`；RTF 侧只解析段落、字符格式、颜色表、`HYPERLINK` 域和 Word 列表标记，无法解析时回退纯文本；外部 HTML 只保留白名单内联声明与 `b/strong/i/em/u/s/strike/del/a/font/span`、`h1`–`h6`、`ul/ol/li`，链接必须通过 `sanitizeOfficeLink`，`script/style/iframe/object/embed/svg` 内容整段丢弃。单次 payload、HTML、RTF、段落和 run 数量都有上限（512 KiB × 3、2000、20000），超限的 flavour 会被忽略而不是解析；组合写入被拒绝时仍回退到 `writeText`。
+
 ### 4.2 XLSX
 
 | 来源 | 事件或诊断 | 参数或关键字段 |

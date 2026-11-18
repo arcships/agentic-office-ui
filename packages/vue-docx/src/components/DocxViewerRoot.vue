@@ -14,6 +14,8 @@
     @drop.prevent="onDrop"
     @contextmenu.prevent="onContextMenu"
     @mouseup="onMouseUp"
+    @copy="onCopy"
+    @cut="onCut"
   >
     <div :style="spacerStyle">
       <div
@@ -1327,6 +1329,27 @@ async function onDrop(event: DragEvent): Promise<void> {
   }
 
   props.controller.setStatus(DOCX_UNSUPPORTED_FILE_MESSAGE)
+}
+
+// ── Copy / cut ────────────────────────────────────────────────────
+// The native contentEditable copy only carries the rendered DOM; writing the
+// model runs here also gives consumers the internal payload and inline styles
+// that survive a paste into Word. A false return leaves the event untouched so
+// the browser's own copy still runs.
+function onCopy(event: ClipboardEvent): void {
+  if (!props.controller || event.defaultPrevented || !event.clipboardData) return
+  if (props.controller.writeSelectionToClipboardData(event.clipboardData)) {
+    event.preventDefault()
+  }
+}
+
+function onCut(event: ClipboardEvent): void {
+  if (!props.editable || !props.controller || event.defaultPrevented || !event.clipboardData) {
+    return
+  }
+  if (!props.controller.writeSelectionToClipboardData(event.clipboardData)) return
+  event.preventDefault()
+  props.controller.deleteExpandedSelection()
 }
 
 // ── Context menu ─────────────────────────────────────────────────────

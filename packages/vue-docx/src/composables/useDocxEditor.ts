@@ -610,7 +610,10 @@ export function useDocxEditor(
   const lst = createEditorList(ctx, applyModelChange)
 
   // 10. editor-clipboard
-  const clp = createEditorClipboard(ctx, txt.insertTextAtSelection)
+  const clp = createEditorClipboard(ctx, {
+    insertTextAtSelection: txt.insertTextAtSelection,
+    insertClipboardParagraphsAtSelection: txt.insertClipboardParagraphsAtSelection,
+  })
 
   // 11. editor-import-export
   const ie = createEditorImportExport(ctx)
@@ -902,6 +905,8 @@ export function useDocxEditor(
     commitTableCellParagraphTextByRuntimeKey: txt.commitTableCellParagraphTextByRuntimeKey,
     commitTableCellParagraphTextRecursive: txt.commitTableCellParagraphTextRecursive,
     commitSectionParagraphText: txt.commitSectionParagraphText,
+    writeSelectionToClipboardData: clp.writeSelectionToClipboardData,
+    pasteClipboardData: async (sources) => clp.pasteClipboardData(sources),
     copy: clp.copy,
     paste: clp.paste,
   }
