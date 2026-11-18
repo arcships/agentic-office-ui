@@ -24,6 +24,7 @@
         :read-only="effectiveReadOnly"
         :selection-color="selectionColor"
         :selection-fill-color="selectionFillColor"
+        :render-mode="renderMode"
         @cell-double-click="emit('cellDoubleClick', $event)"
         @viewport-change="gridViewport = $event"
       >
@@ -160,6 +161,8 @@ const props = withDefaults(
     readOnly?: boolean
     selectionColor?: string
     selectionFillColor?: string
+    /** Grid body renderer: canvas (default) or the DOM fallback. */
+    renderMode?: import("./grid-dom").XlsxGridRenderMode
     showImages?: boolean
     /** Controlled zoom factor. 1 = 100%. */
     zoom?: number
@@ -182,6 +185,7 @@ const props = withDefaults(
     readOnly: false,
     selectionColor: undefined,
     selectionFillColor: undefined,
+    renderMode: "canvas",
     showImages: true,
     enableGestureZoom: true,
     selectionMode: "content",

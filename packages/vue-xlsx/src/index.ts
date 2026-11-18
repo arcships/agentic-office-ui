@@ -15,6 +15,7 @@ export type {
 } from "@arcships/office-interaction"
 
 export { useXlsxViewerController } from "./composables"
+export type { XlsxGridRenderMode } from "./components/grid-dom"
 export { resolveChartAriaLabel } from "./render/chart-shared"
 export { localizeXlsxLoadError } from "./errors"
 export type { XlsxLoadErrorMessages } from "./errors"
