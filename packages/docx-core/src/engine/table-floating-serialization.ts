@@ -19,7 +19,7 @@
 // from the base package by this engine build, so they keep their stored markup
 // (and their own `w:tblpPr`) without help.
 
-import type { DocModel, DocNode, TableStyle } from "./types";
+import type { DocModel, DocNode, DocumentNoteDefinition, TableStyle } from "./types";
 import type { OoxmlPackage, OoxmlPart } from "./ooxml-core";
 import {
   applyDocumentXmlEdits,
