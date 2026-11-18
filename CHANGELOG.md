@@ -4,6 +4,13 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### XLSX preset shape geometry and connector decorations (#143)
+
+- Worksheet drawings no longer collapse every non-ellipse `a:prstGeom` to a rectangle. `xlsx-core` now carries the ECMA-376 preset geometry table (right/left/up/down arrows, chevrons, stars, wedge/border/distinct callouts, flow-chart shapes, braces/brackets, moons, clouds, gears, arcs, chords, funnels and the rest), and `buildPresetShapePath(geometry, adjustments, { width, height })` returns `{ path, viewBox }` in the shape's pixel space. `a:avLst` guides are fed in as DrawingML 1/100000 values, so `adj1`/`adj2` resize an arrow exactly like Excel.
+- `XlsxShape.geometry` keeps the raw `prst` name, and parsed shapes now also carry `svgPath`/`svgViewBox` for preset geometry (custom `a:custGeom` keeps its own path and view box). `XlsxDrawingLayer` rebuilds the preset path from the live rect (including zoom and resize previews) instead of stretching a stale path, so arrows, stars, callouts and flow-chart shapes stay recognisable at any size; only an unknown `prst` falls back to a rectangle.
+- Connectors are open paths and are never filled (`isStrokeOnlyShapeGeometry()` covers `line`, `straightConnector1`, `bentConnector2`–`5`, `curvedConnector2`–`5`, arcs, braces and brackets). `a:ln@w`, `a:prstDash` (`dash`, `dot`, `lgDash`, `lgDashDot`, `sysDash`, `sysDashDot(–Dot)`, …) and `a:headEnd` / `a:tailEnd` (`triangle`, `stealth`, `arrow`, `diamond`, `oval`) now render as SVG dash arrays and start/end markers scaled with the line width.
+- Add unit coverage in `tests/unit/xlsx-drawing-fidelity.test.mjs` (rightArrow/chevron/star5/callout1/flowChartDecision paths, guide overrides, aliases, case-insensitive names, invalid/zero-size inputs, parser-emitted `svgPath`/`svgViewBox` and connector dash/arrow/stroke-only state) and component coverage in `tests/component/xlsx-drawing-fidelity.test.mjs` (live preset path and view box, no rect fallback, `stroke-dasharray`, marker ids/orientation/fill and the unfilled connector body); document the behaviour in the XLSX guide and the public API contract.
+
 ### XLSX cell text rotation and shrink-to-fit (#141)
 
 - Cell text rotation and shrink-to-fit were parsed into `styleById[*].alignment` but never used, so 45°/90°/180° headers stayed horizontal and long values overflowed narrow columns. `parseSheetState()` now records the cells whose explicit style carries `textRotation` or `shrinkToFit` in `WorkbookSheetState.cellTextLayouts` (A1 keyed) and passes it through both the main-thread and Worker sheet lists.

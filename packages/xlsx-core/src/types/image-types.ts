@@ -117,7 +117,9 @@ export interface XlsxShape {
   fill?: XlsxShapeFill;
   flipH?: boolean;
   flipV?: boolean;
+  /** `a:prstGeom@prst` (or `custom` for `a:custGeom`); matched case-insensitively. */
   geometry: string;
+  /** Raw `a:avLst/a:gd@fmla` values in DrawingML 1/100000 units. */
   geometryAdjustments?: Record<string, number>;
   hidden?: boolean;
   hyperlink?: string;
@@ -128,7 +130,9 @@ export interface XlsxShape {
   scaleX?: number;
   scaleY?: number;
   sheetIndex: number;
+  /** SVG path for custom geometry or the resolved preset (see `buildPresetShapePath`). */
   svgPath?: string;
+  /** Coordinate space of `svgPath`; the preset path uses the shape's pixel extents. */
   svgViewBox?: {
     height: number;
     width: number;
