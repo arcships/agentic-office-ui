@@ -79,6 +79,36 @@ function onTabChange(tab: XlsxWorkbookTab) {
 - 宿主自己写入 `activeTabIndex` 引起的切换不会回发 `tabChange`，避免路由或日志出现回环。
 - 拖拽排序活动标签时它的 `index` 会变化但没有切换工作表：只发 `update:activeTabIndex`，不发 `tabChange`。
 
+## 查找与替换
+
+工具栏的放大镜按钮打开查找面板。搜索覆盖工作簿所有工作表（值和公式），命中后切到对应工作表并选中单元格；大小写/全字/正则开关与结果列表都在同一个面板里。
+
+面板同时提供替换：输入替换文字后可点“替换”（仅改写当前选中结果）或“全部替换”（改写当前工作表范围内的所有命中）。下方两个复选项控制替换范围：
+
+- “匹配整个单元格”：只有单元格文本与查询完全相等才替换。
+- “包含公式”：默认开启，公式单元格按公式文本替换（例如 `=B2*22%` → `=B2*25%`）；公式单元格的缓存值不会被当成普通文字替换。关闭后只替换普通值。
+
+替换命令在控制器上，宿主可以绕开内置面板直接调用：
+
+```ts
+const result = controller.replaceInSheet("PDF Viewer", "PDF Reader", {
+  matchCase: false,   // 默认 false，与 Excel 一致
+  wholeCell: false,   // 默认 false：替换单元格内的子串
+  formula: true,      // 默认 true：同时替换公式文本
+  sheetIndex: 0,      // 默认活动工作表；非活动表会先被激活
+  range: { start: { row: 1, col: 0 }, end: { row: 40, col: 7 } }, // 默认整张已用区域
+})
+// result: { sheetIndex, workbookSheetIndex, replacedCells, replacedOccurrences, changed }
+```
+
+每次调用只写一条撤销记录：一次“全部替换”无论改了多少单元格，撤销一次即可全部还原，重做重新应用。替换后的值按键入规则转换（数字写回数字），并随 `exportXlsx()` 写入导出文件；`readOnly`、受保护工作表和 Worker 只读大文件模式不改动工作簿，直接返回 `changed: false`。`occurrence` 选项可精确到搜索结果报告的那一处：
+
+```ts
+controller.replaceInSheet("PDF Viewer", "PDF Reader", {
+  occurrence: { cell: { row: 4, col: 2 }, start: 0, end: 10 },
+})
+```
+
 ## 打印与分页
 
 工作表的 `pageSetup`、`printOptions`、`pageMargins`、`rowBreaks`/`colBreaks` 以及 `_xlnm.Print_Area`/`_xlnm.Print_Titles` 会解析进 `XlsxSheetData`。分页在 `@arcships/xlsx-core` 内完成，Vue 层只消费页面结果，不从 DOM 高度推导分页：

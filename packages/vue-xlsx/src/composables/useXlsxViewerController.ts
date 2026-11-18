@@ -85,6 +85,7 @@ import {
   createHistoryDomain
 } from "./workbook-state";
 import { createEditingDomain } from "./editing";
+import { createReplaceDomain } from "./replace";
 import { createSheetOrderDomain } from "./sheet-order";
 import { createSheetVisibilityDomain } from "./sheet-visibility";
 import { createStructureDomain } from "./structure";
@@ -1529,6 +1530,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const chartImageDomain = createChartImageDomain(ctx);
   const historyDomain = createHistoryDomain(ctx);
   const editingDomain = createEditingDomain(ctx);
+  const replaceDomain = createReplaceDomain(ctx);
   const sheetOrderDomain = createSheetOrderDomain(ctx);
   const sheetVisibilityDomain = createSheetVisibilityDomain(ctx);
   const structureDomain = createStructureDomain(ctx);
@@ -1790,6 +1792,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     setCellFormula: editingDomain.setCellFormula,
     setCellStyle: editingDomain.setCellStyle,
     setCellValue: editingDomain.setCellValue,
+    replaceInSheet: replaceDomain.replaceInSheet,
     commitCellInput: editingDomain.commitCellInput,
     setRangeStyle: editingDomain.setRangeStyle,
     setSelectionBorders: editingDomain.setSelectionBorders,

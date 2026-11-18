@@ -191,6 +191,18 @@ export {
 } from "./composables/useDocxSearch"
 export { findDocxSearchTargetPage } from "./composables/docx-search-page"
 export type { DocxSearchPageTarget } from "./composables/docx-search-page"
+export {
+  canReplaceDocxSearchMatch,
+  docxReplaceTargetFromMatch,
+  type DocxFindReplaceSurface,
+  type DocxReplaceController,
+} from "./composables/editor-search-replace"
+export {
+  useDocxFindReplace,
+  type DocxFindReplaceApi,
+  type DocxFindReplaceUiState,
+  type DocxReplaceFeedback,
+} from "./composables/useDocxFindReplace"
 
 export { useDocxPageSetup } from "./composables/useDocxPageSetup"
 export type {

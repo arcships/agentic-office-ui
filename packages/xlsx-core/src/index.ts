@@ -270,6 +270,8 @@ export type {
   XlsxPrintPageGridAxis,
   XlsxPrintPageGrid,
   XlsxResolvedCellStyle,
+  XlsxReplaceInSheetOptions,
+  XlsxReplaceResult,
   XlsxScrollerRenderProps,
   XlsxShape,
   XlsxShapeFill,

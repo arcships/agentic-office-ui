@@ -221,6 +221,51 @@ export interface DocxEditorTransactionPatch {
 
 export type ParagraphLocation = DocxTextRangeLocation;
 
+/** Story that owns a search result. */
+export type DocxReplaceRegion =
+  | "body"
+  | "header"
+  | "footer"
+  | "footnote"
+  | "endnote";
+
+/**
+ * One search result handed to `replaceMatch()`.
+ *
+ * `location` points at the paragraph, `start`/`end` are UTF-16 offsets into
+ * that paragraph's plain text. `region` is advisory: only `body` results can be
+ * replaced, so a header/footer/note result is rejected instead of silently
+ * rewriting a read-only story.
+ */
+export interface DocxReplaceTarget {
+  region: DocxReplaceRegion;
+  location: DocxTextRangeLocation | {
+    kind: "nested-table-cell";
+    tableIndex: number;
+    path: readonly { rowIndex: number; cellIndex: number; contentIndex: number }[];
+    rowIndex: number;
+    cellIndex: number;
+    paragraphIndex: number;
+  };
+  start: number;
+  end: number;
+}
+
+/** Query options shared by replace-all and the search session. */
+export interface DocxReplaceAllOptions {
+  caseSensitive?: boolean;
+  wholeWord?: boolean;
+  regex?: boolean;
+}
+
+/** What one replace command actually changed. */
+export interface DocxReplaceSummary {
+  /** Number of occurrences replaced. */
+  replaced: number;
+  /** Matches skipped because their story is not editable. */
+  skipped: number;
+}
+
 export type DocxImageLocation = ParagraphLocation & {
   childIndex: number;
 };
@@ -488,6 +533,9 @@ export interface DocxEditorStatusMessages {
   pageSizeUpdated: string;
   headerAdded: string;
   footerAdded: string;
+  /** Template with a `{count}` placeholder. */
+  replacedMatches: string;
+  replaceTargetUnavailable: string;
 }
 
 export interface UseDocxEditorOptions {

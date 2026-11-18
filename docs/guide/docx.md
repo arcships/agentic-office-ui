@@ -83,6 +83,30 @@ if (inspection && !inspection.supported) {
 
 编辑器和查看器一样接受 `isDark` 和 `minHeight`。传入 `isDark` 时外壳、工具栏、缩略图和纸张一起切换为深色；不传时跟随 `controller.documentTheme`。`minHeight` 可选，数字按 px；不传时组件不设置最小高度。打印时工具栏、缩略图和状态栏自动隐藏，为每页插入分页，并按文档页面尺寸设置 `@page`。
 
+## 查找与替换
+
+编辑器工具栏右侧的放大镜（或 `Ctrl/Cmd + F`）打开查找栏。查找语义与查看器一致：默认忽略大小写、按字面量匹配，可分别打开区分大小写、全字匹配和正则表达式。输入即搜索，`Enter`/`Shift+Enter` 或 `‹`/`›` 切换结果，`Esc` 关闭。
+
+查找栏第二行是替换框与“替换”“全部替换”按钮：
+
+- “替换”只改写当前结果。匹配跨多个文本 run 时按一段文字处理，未命中的文字与图片、表单域保持原位；替换文字继承被替换文字的字号、粗斜体、颜色和超链接等 run 样式。
+- “全部替换”对正文（含普通表格与嵌套表格）中当前查询的每一处命中各替换一次，整个操作只写一条撤销记录。撤销一次即可还原全部替换，重做重新应用。
+- 页眉、页脚、脚注和尾注中的结果仍会出现在查找列表里，但不参与替换：页眉页脚通过页面上的可编辑带（见页边距/纸张设置一节）修改，脚注尾注只读。正文之外的结果会被跳过并保持原文不变。
+
+同样的命令可直接在控制器上调用，适合宿主自己的查找界面：
+
+```ts
+import { docxReplaceTargetFromMatch, findDocxSearchMatches } from "@arcships/vue-docx"
+
+const matches = findDocxSearchMatches(editor.model, "needle")
+const target = docxReplaceTargetFromMatch(matches[0]) // 非正文结果返回 undefined
+if (target) editor.replaceMatch(target, "pin")        // 一条撤销记录
+
+editor.replaceAll("needle", "pin", { wholeWord: true }) // { replaced, skipped }
+```
+
+`replaceMatch(target, text)` 返回是否真的改动了模型；`replaceAll(query, text, options?)` 返回 `{ replaced, skipped }`，`skipped` 是无法替换的页眉/页脚/注释结果数量。替换后段落与所属表格的 `sourceXml` 失效，导出会按模型重新写入文字；批注范围的字符偏移（`commentRanges`）也会随替换一起平移。
+
 ## 编辑辅助操作
 
 `DocxEditor` 默认启用下列编辑辅助操作。不需要时用属性关闭；关闭后不会渲染对应界面，也不改变文档或控制器行为。

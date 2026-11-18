@@ -100,6 +100,7 @@ import { createEditorList } from "./editor-list"
 import { createEditorClipboard } from "./editor-clipboard"
 import { createEditorImportExport } from "./editor-import-export"
 import { createEditorComments } from "./editor-comments"
+import { createEditorSearchReplace } from "./editor-search-replace"
 import {
   DEFAULT_DOCX_HISTORY_MAX_BYTES,
   estimateHistoryEntryBytes,
@@ -637,6 +638,9 @@ export function useDocxEditor(
     clock: options.commentClock ?? (() => new Date()),
   })
 
+  // 13. editor-search-replace (find & replace over search results)
+  const repl = createEditorSearchReplace(ctx, applyModelChange)
+
   // ═══════════════════════════════════════════════════════════════════
   // Thin wrappers (state accessors + trivial dispatch calls)
   // ═══════════════════════════════════════════════════════════════════
@@ -967,6 +971,8 @@ export function useDocxEditor(
     moveEmbeddedTableToBody: tbl.moveEmbeddedTableToBody,
     replaceExpandedSelection: txt.replaceExpandedSelection,
     deleteExpandedSelection: txt.deleteExpandedSelection,
+    replaceMatch: repl.replaceMatch,
+    replaceAll: repl.replaceAll,
     commitParagraphText: txt.commitParagraphText,
     commitTableCellText: txt.commitTableCellText,
     commitTableCellTextByRuntimeKey: txt.commitTableCellTextByRuntimeKey,

@@ -33,6 +33,19 @@
       </div>
 
       <div class="docx-toolbar-topbar__actions">
+        <slot name="find" />
+        <button
+          type="button"
+          class="docx-toolbar-btn"
+          data-testid="editor-find-toggle"
+          :class="{ active: findOpen }"
+          :aria-pressed="findOpen"
+          :aria-label="m.docx.editor.find"
+          :title="m.docx.editor.find"
+          @click="emit('toggleFind')"
+        >
+          <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></svg>
+        </button>
         <label class="docx-toolbar-toggle" :title="m.docx.toolbar.trackedChanges">
           <input type="checkbox" :checked="controller.showTrackedChanges" @change="controller.toggleShowTrackedChanges()" />
           <span>{{ m.docx.editor.edits }}</span>
@@ -564,6 +577,8 @@ const props = withDefaults(
     theme?: "light" | "dark"
     /** Hovering the paragraph-style picker previews each style. */
     showStylePreview?: boolean
+    /** True while the host renders the find & replace bar in the `find` slot. */
+    findOpen?: boolean
   }>(),
   { showStylePreview: true }
 )
@@ -572,6 +587,7 @@ const emit = defineEmits<{
   (e: "update:zoom", value: number): void
   (e: "toggleThumbnails"): void
   (e: "selectPage", page: number): void
+  (e: "toggleFind"): void
 }>()
 
 const toolbarTheme = computed(() => props.theme ?? props.controller.documentTheme)

@@ -1252,6 +1252,55 @@ export interface XlsxViewerAuthoring {
   setSelectionDataValidation: (input: XlsxDataValidationInput | null) => boolean;
 }
 
+/**
+ * Options for {@link XlsxViewerController.replaceInSheet}.
+ *
+ * The defaults mirror Excel's Find and Replace: case-insensitive literal
+ * matching over the whole used range of one sheet, values and formulas.
+ */
+export interface XlsxReplaceInSheetOptions {
+  /** Match case exactly. Defaults to `false`. */
+  matchCase?: boolean;
+  /** Only replace a cell whose entire text equals the query. Defaults to `false`. */
+  wholeCell?: boolean;
+  /**
+   * Replace inside formulas as well. Defaults to `true` so replace covers the
+   * same cells the search session reports. A formula cell is edited through its
+   * formula text, never through the cached value it calculates.
+   */
+  formula?: boolean;
+  /** Visible sheet index (a `sheets` index). Defaults to the active sheet. */
+  sheetIndex?: number;
+  /** Limit the scan to this range. Defaults to the sheet's used range. */
+  range?: XlsxCellRange;
+  /**
+   * Replace only this occurrence instead of every match in each cell.
+   *
+   * Spreadsheet search reports one match per cell plus the offsets of the
+   * matched text, so the Replace button passes the active match here while
+   * Replace All omits it.
+   */
+  occurrence?: {
+    cell: XlsxCellAddress;
+    start: number;
+    end: number;
+  };
+}
+
+/** What {@link XlsxViewerController.replaceInSheet} changed. */
+export interface XlsxReplaceResult {
+  /** Visible sheet index the command ran against. */
+  sheetIndex: number;
+  /** Workbook sheet index of the same sheet, as used by the engine. */
+  workbookSheetIndex: number;
+  /** Number of cells written. */
+  replacedCells: number;
+  /** Number of matched occurrences replaced (a cell can hold several). */
+  replacedOccurrences: number;
+  /** True when the workbook changed and one undo entry was recorded. */
+  changed: boolean;
+}
+
 export interface XlsxViewerController extends XlsxViewerAuthoring {
   activeCell: XlsxCellAddress | null;
   activeCellAddress: string | null;
@@ -1462,6 +1511,27 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
   resizeColumn: (col: number, widthPx: number) => void;
   resizeRow: (row: number, heightPx: number) => void;
   redo: () => void;
+  /**
+   * Replaces `query` with `replacement` in one worksheet.
+   *
+   * Covers both cell values and formulas (see
+   * {@link XlsxReplaceInSheetOptions}), optionally limited to a range or to one
+   * previously reported search occurrence. Everything the command writes is
+   * recorded as a *single* undo entry, and a sheet other than the active one is
+   * activated first so the history entry and the visible grid agree.
+   *
+   * Read-only viewers, protected sheets and worker-backed (read-only) loads
+   * return an empty result without touching the workbook.
+   *
+   * @param query Literal text to find.
+   * @param replacement Text written in place of every match.
+   * @param options Case/whole-cell/formula switches, sheet and range scoping.
+   */
+  replaceInSheet: (
+    query: string,
+    replacement: string,
+    options?: XlsxReplaceInSheetOptions
+  ) => XlsxReplaceResult;
   pasteFromClipboard: () => Promise<boolean>;
   pasteStructuredClipboardData: (payload: string) => boolean;
   pasteText: (text: string) => boolean;

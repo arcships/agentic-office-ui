@@ -50,8 +50,8 @@
         "setWasmSource"
       ],
       "rootDeclarationFingerprint": {
-        "count": 1404,
-        "sha256": "f6cb279dff803ecba5fedcfd5b138a2cb452c0602250491882ca7c506bb53aec"
+        "count": 1416,
+        "sha256": "17d339f620877ab58cb53d95a089cadedb1ad4f9ddf688c34fec82a50c88db0a"
       }
     },
     {
@@ -89,8 +89,8 @@
         "getSheetsWasmModule"
       ],
       "rootDeclarationFingerprint": {
-        "count": 309,
-        "sha256": "54fa146b47d5ff556c2b045eef0ef7875e65fd09f7e4db1ccdfaa20329469643"
+        "count": 311,
+        "sha256": "a122f86f34084df8eed411d80598cb5e8dd673c393a28e8d0b924717a057a6bc"
       }
     },
     {
@@ -132,8 +132,8 @@
         "notifyDocxViewerPageSurfaceListeners"
       ],
       "rootDeclarationFingerprint": {
-        "count": 176,
-        "sha256": "ee53680b895c1040a9886a14c347f3012bb7ac02e2e496fbf7a8d572ce3be87e"
+        "count": 184,
+        "sha256": "0835ac7b000a1b820e5f54d1c30ad2ee02c904c6e6141a12f3f8891205396271"
       }
     },
     {

@@ -102,6 +102,18 @@ export {
   setParagraphAlignment,
   toggleRunStyleFlag,
 } from "./editor/run-style-ops";
+export type {
+  DocxParagraphTextReplacement,
+  DocxReplaceNestedTableStep,
+  DocxReplaceParagraphLocation,
+  DocxReplaceParagraphLocationInNestedTableCell,
+  DocxReplaceParagraphResult,
+} from "./editor/search-replace-ops";
+export {
+  replaceTextInDocxParagraphs,
+  replaceTextInParagraphLocation,
+  replaceTextRangeInParagraph,
+} from "./editor/search-replace-ops";
 export {
   updateTableCellParagraphText,
   updateTableCellText,

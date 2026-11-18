@@ -27,6 +27,15 @@ const editor = useDocxEditor({ initialFileName: "document.docx" })
 
 只读自定义界面优先使用 `DocxViewer` 的属性和事件。需要从字节得到模型但不显示界面时使用 `useDocxModel()`。
 
+需要自建查找替换界面时，控制器的两个命令足以完成全部操作：
+
+| 命令 | 说明 |
+|---|---|
+| `replaceMatch(target, text)` | 替换一条搜索结果；`target` 由 `findDocxSearchMatches()` 的命中项经 `docxReplaceTargetFromMatch()` 转换得到（页眉/页脚/注释结果返回 `undefined`）。一条撤销记录。 |
+| `replaceAll(query, text, options?)` | 替换正文中全部命中，`options` 与搜索选项相同（`caseSensitive` / `wholeWord` / `regex`）；返回 `{ replaced, skipped }`，整批一条撤销记录。 |
+
+内置查找栏本身也是普通 Vue 组合（`useDocxFindReplace`）加 `DocxToolbar` 的 `find` 插槽；宿主可以复用 `OfficeFindBar`，也可以只调控制器命令自己绘制界面。
+
 ## 复用内置编辑辅助界面
 
 五个编辑辅助能力也单独导出，自定义表面可以只挂其中几个，全部通过同一个 `DocxEditorController` 工作：

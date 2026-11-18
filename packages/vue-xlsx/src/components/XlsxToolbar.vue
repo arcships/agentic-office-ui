@@ -52,14 +52,42 @@
             :case-sensitive="searchCaseSensitive ?? false"
             :whole-word="searchWholeWord ?? false"
             :regex="searchRegex ?? false"
+            :show-replace="!controller.readOnly"
+            :replacement="replaceText"
+            :replace-disabled="!canReplace"
+            :replace-all-disabled="!canReplaceAll"
+            :replace-status="replaceStatus"
             @update:query="onSearchQuery"
             @update:case-sensitive="onSearchOption('caseSensitive', $event)"
             @update:whole-word="onSearchOption('wholeWord', $event)"
             @update:regex="onSearchOption('regex', $event)"
+            @update:replacement="replaceText = $event"
             @previous="selectRelativeResult(-1)"
             @next="selectRelativeResult(1)"
             @close="closeSearch"
+            @replace="replaceActiveMatch"
+            @replace-all="replaceAllMatches"
           />
+          <div v-if="searchOpen && !controller.readOnly" class="xlsx-toolbar__replace-options">
+            <label class="xlsx-toolbar__replace-option">
+              <input
+                type="checkbox"
+                data-testid="xlsx-replace-whole-cell"
+                :checked="replaceWholeCell"
+                @change="replaceWholeCell = ($event.target as HTMLInputElement).checked"
+              />
+              <span>{{ m.common.search.wholeCell }}</span>
+            </label>
+            <label class="xlsx-toolbar__replace-option">
+              <input
+                type="checkbox"
+                data-testid="xlsx-replace-formulas"
+                :checked="replaceFormulas"
+                @change="replaceFormulas = ($event.target as HTMLInputElement).checked"
+              />
+              <span>{{ m.common.search.formulas }}</span>
+            </label>
+          </div>
           <div v-if="results.length" class="xlsx-toolbar__search-results">
             <button
               v-for="(result, index) in results"
@@ -115,6 +143,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
+import { formatOfficeMessage } from "@arcships/office-interaction";
 import type { XlsxViewerController } from "@arcships/xlsx-core";
 import { OfficeFindBar } from "@arcships/vue-ui";
 import { useXlsxSearch, type XlsxSearchOptions, type XlsxSurfaceSearch } from "../composables/useXlsxSearch";
@@ -150,6 +179,60 @@ const effectiveSearch = computed(() => props.search ?? ownedSearch);
 const searchState = computed(() => effectiveSearch.value.searchState.value);
 const results = computed(() => searchState.value.matches);
 
+const replaceText = ref("");
+const replaceWholeCell = ref(false);
+const replaceFormulas = ref(true);
+const replaceStatus = ref("");
+const activeMatch = computed(() => {
+  const match = searchState.value.matches[searchState.value.activeIndex];
+  return match;
+});
+const canReplace = computed(
+  () => !props.controller.readOnly && Boolean(activeMatch.value),
+);
+const canReplaceAll = computed(
+  () => !props.controller.readOnly && results.value.length > 0,
+);
+
+function replaceMessage(count: number): string {
+  if (count <= 0) return m.value.common.search.noResults;
+  return formatOfficeMessage(m.value.common.search.replaced, { count });
+}
+
+/** Re-run the query so the result list follows the cells the command rewrote. */
+async function refreshAfterReplace(): Promise<void> {
+  // `useXlsxSearch` drops its results as soon as the workbook revision moves,
+  // so wait for that flush and then search again.
+  await nextTick();
+  if (!searchQuery.value.trim()) return;
+  await effectiveSearch.value.search(searchQuery.value, searchOptions.value).catch(() => undefined);
+}
+
+async function replaceActiveMatch(): Promise<void> {
+  const match = activeMatch.value;
+  if (!match || props.controller.readOnly) return;
+  const result = props.controller.replaceInSheet(searchQuery.value, replaceText.value, {
+    matchCase: searchCaseSensitive.value === true,
+    wholeCell: replaceWholeCell.value,
+    formula: replaceFormulas.value,
+    sheetIndex: match.sheetIndex,
+    occurrence: { cell: match.cell, start: match.start, end: match.end },
+  });
+  replaceStatus.value = replaceMessage(result.replacedOccurrences);
+  await refreshAfterReplace();
+}
+
+async function replaceAllMatches(): Promise<void> {
+  if (props.controller.readOnly || !searchQuery.value.trim()) return;
+  const result = props.controller.replaceInSheet(searchQuery.value, replaceText.value, {
+    matchCase: searchCaseSensitive.value === true,
+    wholeCell: replaceWholeCell.value,
+    formula: replaceFormulas.value,
+  });
+  replaceStatus.value = replaceMessage(result.replacedOccurrences);
+  await refreshAfterReplace();
+}
+
 const displayFileName = computed(() => props.controller.displayFileName);
 const zoomPercent = computed(() => Math.round(props.controller.zoomScale));
 function onZoomChange(event: Event): void {
@@ -170,12 +253,15 @@ function openSearch(): void {
 function closeSearch(): void {
   searchOpen.value = false;
   searchQuery.value = "";
+  replaceText.value = "";
+  replaceStatus.value = "";
   effectiveSearch.value.clearSearch();
   emit("searchClose");
 }
 
 function onSearchQuery(query: string): void {
   searchQuery.value = query;
+  replaceStatus.value = "";
   void effectiveSearch.value.search(query, searchOptions.value).catch(() => undefined);
 }
 
@@ -299,6 +385,10 @@ defineExpose({ openSearch });
 .xlsx-toolbar__search-result strong { flex: 0 0 96px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .xlsx-toolbar__search-result span { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .xlsx-toolbar__search-result mark { background: #fde047; color: inherit; padding: 0; }
+.xlsx-toolbar__replace-options { display: flex; flex-wrap: wrap; gap: 10px; padding-top: 8px; }
+.xlsx-toolbar__replace-option { align-items: center; display: flex; flex-direction: row; font-size: 11px; gap: 5px; }
+.xlsx-toolbar__search-panel .xlsx-toolbar__replace-option { flex-direction: row; }
+.xlsx-toolbar__replace-option input { height: 14px; width: 14px; }
 
 @container xlsx-viewer (max-width: 620px) {
   .xlsx-toolbar { align-items: stretch; flex-direction: column; gap: 5px; }

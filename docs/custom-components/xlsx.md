@@ -44,3 +44,5 @@ const controller = useXlsxViewerController({ file: props.bytes })
 `showSheetTabs=false` 只隐藏底部标签条，网格、功能区、公式栏和控制器状态都还在；活动标签由 `activeTab` 控制（`undefined` 时由控制器持有），`tabChange` 在每次提交的切换后返回完整标签（含 `kind`）。`activeTabIndex` 是 `controller.tabs` 的下标，不是 `controller.sheets` 的下标。
 
 不要用已经弃用的 `XlsxGrid`、`XlsxFormulaBar` 和浮层组件重新拼装查看器。它们依赖大量内部协调状态。需要缩略图时，从同一个控制器调用 `useXlsxViewerThumbnails()`。
+
+自建查找替换界面时，用 `useXlsxSearch()` 维护结果（`search` / `searchNext` / `activateSearchMatch` / `clearSearch`），用 `controller.replaceInSheet(query, replacement, options)` 写入：`options` 支持 `matchCase`、`wholeCell`、`formula`、`sheetIndex`、`range`，以及精确到单处命中的 `occurrence: { cell, start, end }`。一次调用一条撤销记录；返回 `{ replacedCells, replacedOccurrences, changed }` 供宿主回报结果。改变工作簿后 `revision` 会变化，`useXlsxSearch` 会清空旧结果，所以替换后重新 `search()` 即可刷新列表。

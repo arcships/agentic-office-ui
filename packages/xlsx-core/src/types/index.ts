@@ -95,6 +95,8 @@ export type {
   XlsxLoadError,
   XlsxDiagnostic,
   XlsxViewerController,
+  XlsxReplaceInSheetOptions,
+  XlsxReplaceResult,
   XlsxViewerSelection,
   XlsxViewerZoom,
   XlsxViewerEditing,
