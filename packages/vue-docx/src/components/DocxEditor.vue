@@ -89,6 +89,8 @@
         @visible-page-range="onVisiblePageRange"
         @context-menu="onDocumentContextMenu"
         @search-state-change="find.syncSearchState"
+        @request-page-reveal="emit('requestPageReveal', $event)"
+        @bookmark-missing="emit('bookmarkMissing', $event)"
       />
       <div
         v-else
@@ -230,6 +232,7 @@ import DocxDragOverlay from "./DocxDragOverlay.vue"
 import DocxLinkHoverCard from "./DocxLinkHoverCard.vue"
 import DocxFormFieldDialog from "./DocxFormFieldDialog.vue"
 import { provideDocxMessages } from "../i18n"
+import type { DocxBookmarkRevealResult } from "../composables/docx-bookmarks"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
@@ -273,6 +276,10 @@ const emit = defineEmits<{
    * scroll to the anchor it resolves.
    */
   (event: "link-open", href: string): void
+  /** A bookmark reveal needs `pageIndex` mounted/visible in the host. */
+  (event: "requestPageReveal", pageIndex: number): void
+  /** An internal link named a bookmark this document does not contain. */
+  (event: "bookmarkMissing", name: string): void
 }>()
 
 const m = provideDocxMessages(() => props.locale, () => props.messages)
@@ -621,9 +628,10 @@ function selectHoveredLink(): boolean {
 
 function onLinkCardOpen(href: string): void {
   hideLinkCard()
-  // Internal bookmarks are document navigation, not a URL to open: expose the
-  // action to the host instead of silently doing nothing.
+  // Internal bookmarks are document navigation: reveal the target locally and
+  // still expose the action to the host for its own routing.
   if (href.startsWith("#")) {
+    void viewerRootRef.value?.revealBookmark(href)
     emit("link-open", href)
     return
   }
@@ -881,6 +889,14 @@ onUnmounted(() => {
   cancelLinkCardHide()
   detachReorderListeners()
   ownedLimitRuntime.dispose()
+})
+
+defineExpose({
+  /** Reveals an internal `#bookmark` target in this document. */
+  revealBookmark(name: string): Promise<DocxBookmarkRevealResult> {
+    return viewerRootRef.value?.revealBookmark(name) ??
+      Promise.resolve({ status: "missing", name: name.replace(/^#/, "") })
+  },
 })
 </script>
 

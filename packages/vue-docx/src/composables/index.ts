@@ -97,3 +97,8 @@ export {
 } from "./useDocxFindReplace"
 export { findDocxSearchTargetPage } from "./docx-search-page"
 export type { DocxSearchPageTarget } from "./docx-search-page"
+export { docxBookmarkNameFromClick } from "./docx-bookmarks"
+export type {
+  DocxBookmarkRevealResult,
+  DocxBookmarkTargetHighlight,
+} from "./docx-bookmarks"

@@ -4,6 +4,12 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### DOCX bookmark navigation (#148)
+
+- Add `createDocxBookmarkIndex(model)` and `normalizeDocxBookmarkName(name)` to `@arcships/docx-core`. The index maps every `w:bookmarkStart` name to the body node — and table cell — that carries it, reusing the `BOOKMARK_START_XML_PATTERN` scan the REF/PAGEREF field resolvers already use. Lookups accept `#Name`, any case and URL-escaped names; `_GoBack` and duplicate names follow Word's behavior. REF/PAGEREF now resolve table-cell bookmarks through the same index.
+- Internal `#bookmark` links now navigate. Clicking a table-of-contents entry or cross-reference in a paragraph, table cell, header/footer or note scrolls to the bookmark's page and paragraph, briefly highlights the target and places the caret on editable surfaces. `DocxViewer`, `DocxEditor` and `DocxDocumentSurface` expose `revealBookmark(name)` and return `DocxBookmarkRevealResult` (`{ status: "revealed", name, nodeIndex, pageIndex?, text }` or `{ status: "missing", name }`); the viewer emits `requestPageReveal(pageIndex)` when a virtualized target page has to mount, and missing bookmarks show a localized non-blocking notice plus a `bookmarkMissing(name)` event instead of throwing. The link hover card's open action follows the same path while still emitting `link-open`.
+- Add `tests/unit/docx-bookmarks.test.mjs` and `tests/component/docx-bookmarks.test.mjs` (registered in `scripts/ci/run-suite.mjs`), covering the import path (`w:anchor` → `#name`, `w:bookmarkStart` → target), normalization, table-cell targets, page/paragraph scrolling, target highlight, caret placement, missing-bookmark notices, read-only paragraph/table hosts and the `DocxViewer`/`DocxEditor` APIs; document the behavior in `docs/guide/docx.md`, `docs/custom-components/docx.md` and the public API contract.
+
 ### DOCX image layer order (#145)
 
 - Add `bringToFront(location)`, `bringForward(location)`, `sendBackward(location)` and `sendToBack(location)` to `DocxEditorController`. They rewrite the floating image's `floating.zIndex` — Word's `wp:anchor/@relativeHeight` — with the same clamping as Word (`0` … `251658240`, one `65536` step per "forward"/"backward"), clear the stale `sourceXml` of the image, paragraph and table, and record exactly one undo entry. Non-floating images are refused because inline images have no paint order.

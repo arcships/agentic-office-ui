@@ -76,6 +76,8 @@
         :cover-image-child-indexes-by-node="coverImageChildIndexesByNode"
         :header-reserve-px="pageFurnitureReservePx.header"
         :footer-reserve-px="pageFurnitureReservePx.footer"
+        :on-internal-link-click="onInternalLinkClick"
+        :bookmark-target="bookmarkTarget"
         @paragraph-measure="(nodeIndex: number, heightPx: number) => emit('paragraphMeasure', nodeIndex, heightPx)"
         @table-row-measure="(nodeIndex: number, rowHeightsPx: number[]) => emit('tableRowMeasure', nodeIndex, rowHeightsPx)"
         @content-measure="(heightPx: number) => emit('contentMeasure', heightPx)"
@@ -88,6 +90,7 @@
             :model="model"
             :numbering-definitions="model.metadata.numberingDefinitions"
             :theme="theme"
+            :on-internal-link-click="onInternalLinkClick"
           />
         </template>
         <template v-if="endnotes.length" #endnotes>
@@ -98,6 +101,7 @@
             :model="model"
             :numbering-definitions="model.metadata.numberingDefinitions"
             :theme="theme"
+            :on-internal-link-click="onInternalLinkClick"
           />
         </template>
       </DocxPageBody>
@@ -124,6 +128,7 @@
           :comments-enabled="commentsEnabled"
           :header-distance-px="pageLayout.headerDistancePx"
           :editable="headerEditing"
+          :on-internal-link-click="onInternalLinkClick"
           @text-input="onHeaderTextInput"
         />
       </template>
@@ -149,6 +154,7 @@
           :comments-enabled="commentsEnabled"
           :footer-distance-px="pageLayout.footerDistancePx"
           :editable="footerEditing"
+          :on-internal-link-click="onInternalLinkClick"
           @text-input="onFooterTextInput"
         />
       </template>
@@ -315,6 +321,7 @@ import DocxNotesSection from "./DocxNotesSection.vue"
 import { useDocxGutterLayout } from "../composables/gutter-layout"
 import { useDocxMessages } from "../i18n"
 import { createDocxFieldResolvers } from "../composables/docx-field-resolvers"
+import type { DocxBookmarkTargetHighlight } from "../composables/docx-bookmarks"
 import {
   ensureDocxViewerPageSurfaceRegistry,
   notifyDocxViewerPageSurfaceListeners,
@@ -366,6 +373,10 @@ interface DocxPageSurfaceProps {
   pageBackgroundColor?: string
   pageBorders?: DocumentPageBorders | null
   theme?: "light" | "dark"
+  /** Internal `#bookmark` link clicked anywhere on this page. */
+  onInternalLinkClick?: (bookmarkName: string) => void
+  /** Transient highlight after the viewer revealed a bookmark on this page. */
+  bookmarkTarget?: DocxBookmarkTargetHighlight
 }
 
 interface CoverEntry {

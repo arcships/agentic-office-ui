@@ -24,6 +24,8 @@
       @visible-page-range="onVisiblePageRange"
       @context-menu="emit('contextMenu', $event)"
       @selection-change="onRawSelectionChange"
+      @request-page-reveal="emit('requestPageReveal', $event)"
+      @bookmark-missing="emit('bookmarkMissing', $event)"
     />
     <div class="docx-document-surface__search-layer" aria-hidden="true">
       <div
@@ -115,6 +117,7 @@ import {
 } from "../composables/useDocxSearch"
 import DocxViewerRoot from "./DocxViewerRoot.vue"
 import { provideDocxMessages } from "../i18n"
+import type { DocxBookmarkRevealResult } from "../composables/docx-bookmarks"
 import { formatOfficeMessage, localizeOfficeObjectDescriptor, localizeOfficeResolveResult } from "@arcships/office-interaction"
 import { docxTextRangeFromDomSelection } from "../composables/editor-selection"
 
@@ -168,6 +171,10 @@ const emit = defineEmits<{
   selectionCancel: [event: { mode: OfficeSelectionMode; reason: "escape" | "pointer-cancel" | "programmatic" }]
   referenceResolve: [event: { referenceId: string; result: ResolveReferenceResult }]
   referenceError: [error: OfficeReferenceError]
+  /** A bookmark reveal needs `pageIndex` mounted/visible in the host. */
+  requestPageReveal: [pageIndex: number]
+  /** An internal link named a bookmark this document does not contain. */
+  bookmarkMissing: [name: string]
 }>()
 
 const surfaceRef = ref<HTMLElement>()
@@ -1335,6 +1342,16 @@ defineExpose({
   },
   scrollToNode(nodeIndex: number, options?: ScrollToOptions): void {
     viewerRootRef.value?.scrollToNode(nodeIndex, options)
+  },
+  /**
+   * Reveals the bookmark named `name` (internal `#bookmark` link target):
+   * scrolls its page/paragraph into view, highlights the target and places the
+   * caret. Missing bookmarks resolve to `{ status: "missing" }` and show a
+   * non-blocking notice.
+   */
+  revealBookmark(name: string): Promise<DocxBookmarkRevealResult> {
+    return viewerRootRef.value?.revealBookmark(name) ??
+      Promise.resolve({ status: "missing", name: name.replace(/^#/, "") })
   },
   search: (query: string, options?: DocxSearchOptions): Promise<DocxSearchState> =>
     surfaceSearch.search(query, options),

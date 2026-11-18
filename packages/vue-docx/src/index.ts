@@ -199,6 +199,10 @@ export {
 } from "./composables/useDocxSearch"
 export { findDocxSearchTargetPage } from "./composables/docx-search-page"
 export type { DocxSearchPageTarget } from "./composables/docx-search-page"
+export type {
+  DocxBookmarkRevealResult,
+  DocxBookmarkTargetHighlight,
+} from "./composables/docx-bookmarks"
 export {
   canReplaceDocxSearchMatch,
   docxReplaceTargetFromMatch,

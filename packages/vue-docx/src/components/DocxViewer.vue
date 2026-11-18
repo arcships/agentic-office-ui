@@ -133,6 +133,8 @@
           @page-count-change="onPageCountChange"
           @visible-page-range="onVisiblePageRange"
           @search-state-change="onSearchStateChange"
+          @request-page-reveal="emit('requestPageReveal', $event)"
+          @bookmark-missing="emit('bookmarkMissing', $event)"
           @update:zoom="zoomPercent = Math.round($event * 100)"
         />
       </main>
@@ -163,6 +165,7 @@ import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
 import DocxViewerToolbar from "./DocxViewerToolbar.vue"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import { provideDocxMessages } from "../i18n"
+import type { DocxBookmarkRevealResult } from "../composables/docx-bookmarks"
 
 const props = withDefaults(
   defineProps<{
@@ -216,6 +219,10 @@ const emit = defineEmits<{
   (event: "update:showTrackedChanges", visible: boolean): void
   (event: "update:showComments", visible: boolean): void
   (event: "searchStateChange", state: DocxSearchState): void
+  /** A bookmark reveal needs `pageIndex` mounted/visible in the host. */
+  (event: "requestPageReveal", pageIndex: number): void
+  /** An internal link named a bookmark this document does not contain. */
+  (event: "bookmarkMissing", name: string): void
 }>()
 
 const DOCX_ZOOM_OPTIONS = [50, 75, 100, 125, 150, 175, 200]
@@ -632,6 +639,14 @@ function errorNumber(value: Error, key: "actual" | "allowed"): number | undefine
   const detail = (value as Error & Record<typeof key, unknown>)[key]
   return typeof detail === "number" ? detail : undefined
 }
+
+defineExpose({
+  /** Reveals an internal `#bookmark` target in this document. */
+  revealBookmark(name: string): Promise<DocxBookmarkRevealResult> {
+    return documentSurfaceRef.value?.revealBookmark(name) ??
+      Promise.resolve({ status: "missing", name: name.replace(/^#/, "") })
+  },
+})
 </script>
 
 <style scoped>

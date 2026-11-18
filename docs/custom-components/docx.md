@@ -79,6 +79,14 @@ const editor = useDocxEditor({ initialFileName: "document.docx" })
 
 只要宿主自己渲染手柄，就可以关闭 `DocxEditor` 的对应属性（`show-node-reorder`、`show-style-preview` 等），不会出现两套控件。
 
+## 内部书签导航
+
+`DocxViewer`、`DocxEditor` 和 `DocxDocumentSurface` 都用 `revealBookmark(name)` 暴露内部链接导航：滚动到书签所在页和段落、短暂高亮目标，并在可编辑表面上放置光标。`name` 可写成 `Name` 或 `#Name`，查找不区分大小写并接受 URL 转义；返回 `{ status: "revealed", nodeIndex, pageIndex, text }` 或 `{ status: "missing", name }`。
+
+查看器需要挂载新页时向上发出 `requestPageReveal(pageIndex)`；书签不存在时不抛错，而是显示非阻塞提示并发出 `bookmarkMissing(name)`。链接悬浮卡片的“打开”动作对内部链接也调用同一导航，并保留 `link-open` 事件。
+
+自定义菜单或目录可以直接使用 `@arcships/docx-core` 的 `createDocxBookmarkIndex(model)`（`get` / `has` / `targets`）和 `normalizeDocxBookmarkName()`，无需自己解析 `sourceXml`。
+
 ## 文档块/词高亮覆盖层
 
 `DocxBlockHighlights` 和 `DocxWordHighlights` 是独立覆盖层，可以挂在 `DocxViewer`、`DocxEditor` 或 `DocxDocumentSurface` 的根元素上：

@@ -45,6 +45,16 @@ function linkedParagraph(text, link) {
   };
 }
 
+function bookmarkParagraph(name, text) {
+  return {
+    type: "paragraph",
+    sourceXml:
+      `<w:p><w:bookmarkStart w:id="9" w:name="${name}"/>` +
+      `<w:r><w:t>${text}</w:t></w:r><w:bookmarkEnd w:id="9"/></w:p>`,
+    children: [{ type: "text", text }],
+  };
+}
+
 function tableNode(rows = 2) {
   return {
     type: "table",
@@ -649,6 +659,43 @@ test("the link card opens external links and defers internal bookmarks to the ho
   await vue.nextTick();
   assert.deepEqual(openedLinks, ["https://example.com", "#introduction"]);
   assert.equal(env.opened.length, 1, "an internal bookmark is not opened as a URL");
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("the link card's internal open action navigates the document and still notifies the host", async (t) => {
+  const env = installDomEnvironment();
+  const openedLinks = [];
+  const mounted = await mountEditor(
+    modelWithNodes([
+      linkedParagraph("Jump", "#Target_Heading"),
+      bookmarkParagraph("Target_Heading", "Destination"),
+    ]),
+    { onLinkOpen: (href) => openedLinks.push(href) }
+  );
+  cleanupAfterTest(t, env, mounted);
+  const root = editorRoot(mounted.root);
+
+  root.props.onPointerover({
+    target: fakeAnchor({ href: "#Target_Heading", start: 0, end: 4 }),
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "docx-link-card-open"),
+    "the card for an internal link"
+  );
+  findByTestId(mounted.root, "docx-link-card-open").props.onClick();
+
+  await waitFor(
+    () => mounted.controller.selection.kind === "paragraph" &&
+      mounted.controller.selection.nodeIndex === 1,
+    "the bookmark target to take the caret"
+  );
+  assert.deepEqual(openedLinks, ["#Target_Heading"]);
+  assert.equal(env.opened.length, 0, "the bookmark is not opened as an external URL");
+
+  const revealed = await mounted.editor.revealBookmark("Target_Heading");
+  assert.equal(revealed.status, "revealed");
+  assert.equal(revealed.nodeIndex, 1);
+  assert.equal(revealed.text, "Destination");
   assert.deepEqual(mounted.warnings, []);
 });
 

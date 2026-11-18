@@ -5,10 +5,12 @@
     :class="{
       'docx-table-host--editable': editable && !isReadOnly,
       'docx-table-host--active': isActiveTable,
+      'docx-table-host--bookmark-target': bookmarkTarget,
     }"
     :style="wrapperStyle"
     :data-docx-table-host="true"
     :data-docx-table-index="domTableIndex"
+    :data-docx-table-node-index="tableIndex"
     :data-docx-table-runtime-key="tableRuntimeKey"
     :data-docx-table-nesting-path="tableNestingPath || undefined"
     @pointerenter="onTablePointerEnter"
@@ -90,6 +92,7 @@
               'docx-table-cell--contain-floating': cellContainsLayoutInCellFloatingImage(cell),
               'docx-table-cell--insertion': cellTrackedKind(cell.rowIndex, cell.cellIndex) === 'insertion',
               'docx-table-cell--deletion': cellTrackedKind(cell.rowIndex, cell.cellIndex) === 'deletion',
+              'docx-table-cell--bookmark-target': isBookmarkTargetCell(cell.rowIndex, cell.cellIndex),
             }"
             :data-docx-tracked-change="cellTrackedKind(cell.rowIndex, cell.cellIndex)"
             :data-docx-tracked-change-id="cellTrackedId(cell.rowIndex, cell.cellIndex)"
@@ -109,6 +112,7 @@
                 :contenteditable="editable && controller && !isReadOnly ? 'true' : undefined"
                 :data-docx-table-cell-paragraph-host="true"
                 :data-docx-table-index="domTableIndex"
+                :data-docx-table-node-index="tableIndex"
                 :data-docx-source-id="cellParagraphSourceId(cell, pi)"
                 :data-docx-table-runtime-key="tableRuntimeKey"
                 :data-docx-table-row-index="cell.rowIndex"
@@ -147,6 +151,7 @@
                 :max-available-width-px="cellContentWidthPx(cell)"
                 :note-marker-labels="noteMarkerLabels"
                 :floating-page-origin-px="floatingPageOriginPx"
+                :on-internal-link-click="onInternalLinkClick"
               />
             </template>
             </template>
@@ -205,6 +210,7 @@ import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/p
 import { renderStaticHtml } from "../render/static-html"
 import { readDocxTextHostText } from "../composables/editor-selection"
 import { useDocxMessages } from "../i18n"
+import { docxBookmarkNameFromClick } from "../composables/docx-bookmarks"
 import { resolveTableGrid, type TableGridCell } from "./table-grid"
 
 // ── Constants ──────────────────────────────────────────────────────
@@ -275,6 +281,12 @@ const props = withDefaults(
     floatingPageOriginPx?: DocxFloatingPageOriginPx
     /** Row resize handles; hosts that manage row heights themselves set false. */
     showRowResizeHandles?: boolean
+    /** Internal `#bookmark` link clicked inside a cell paragraph. */
+    onInternalLinkClick?: (bookmarkName: string) => void
+    /** Transient highlight after the viewer revealed a bookmark in this table. */
+    bookmarkTarget?: boolean
+    /** Cell coordinates of a table bookmark, when known. */
+    bookmarkCell?: { rowIndex: number; cellIndex: number }
   }>(),
   {
     editable: false,
@@ -828,7 +840,7 @@ function cellParagraphHtml(
     `table-${domTableIndex.value}-r${cell.rowIndex}-c${cell.cellIndex}-p${pi}`,
     props.documentTheme,
     undefined,
-    undefined,
+    props.onInternalLinkClick,
     props.floatingPageOriginPx,
     undefined,
     props.pageNumber,
@@ -837,6 +849,15 @@ function cellParagraphHtml(
   )
   const nodes = Array.isArray(rendered) ? rendered : [rendered]
   return nodes.map((node) => renderStaticHtml(node)).join("")
+}
+
+function isBookmarkTargetCell(rowIndex: number, cellIndex: number): boolean {
+  return Boolean(
+    props.bookmarkTarget &&
+    props.bookmarkCell &&
+    props.bookmarkCell.rowIndex === rowIndex &&
+    props.bookmarkCell.cellIndex === cellIndex,
+  )
 }
 
 function isCellActive(rowIndex: number, cellIndex: number): boolean {
@@ -903,7 +924,14 @@ function selectCell(rowIndex: number, cellIndex: number): void {
 }
 
 // ── Event handlers ─────────────────────────────────────────────────
-function onCellClick(rowIndex: number, cellIndex: number, _event: MouseEvent): void {
+function onCellClick(rowIndex: number, cellIndex: number, event: MouseEvent): void {
+  const bookmarkName = docxBookmarkNameFromClick(event?.target)
+  if (bookmarkName && props.onInternalLinkClick) {
+    event.preventDefault()
+    event.stopPropagation()
+    props.onInternalLinkClick(bookmarkName)
+    return
+  }
   if (!props.editable || !props.controller || isReadOnly.value) return
   const sel = props.controller.selection
   if (
@@ -958,6 +986,10 @@ function onCellMouseDown(
   cellIndex: number,
   event: MouseEvent
 ): void {
+  if (docxBookmarkNameFromClick(event?.target)) {
+    event.preventDefault()
+    return
+  }
   if (!props.editable || !props.controller || isReadOnly.value) return
   if (props.tableRuntimeKey) return
   if (event.button !== 0) return
@@ -1320,6 +1352,14 @@ onUnmounted(() => {
 }
 .docx-table-cell--active {
   background: rgba(59, 130, 246, 0.04);
+}
+.docx-table-cell--bookmark-target {
+  background: rgba(250, 204, 21, 0.22);
+  box-shadow: inset 0 0 0 2px rgba(250, 204, 21, 0.55);
+}
+.docx-table-host--bookmark-target .docx-table-host-table {
+  outline: 2px solid rgba(250, 204, 21, 0.55);
+  outline-offset: 2px;
 }
 .docx-table-row--insertion .docx-table-cell {
   box-shadow: inset 0 2px 0 rgba(220, 38, 38, 0.55);

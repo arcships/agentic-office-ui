@@ -30,6 +30,7 @@
 //   table-utils-extra.ts   — table utilities (part 2)
 //   table-metrics.ts       — shared table/column width metrics for render + pagination
 //   paragraph-toc.ts       — paragraph table-of-contents leaf (cycle-breaker)
+//   bookmarks.ts           — bookmark-name -> body node navigation index
 //   field-helpers.ts       — form-field helpers
 //   synthetic-textbox.ts   — synthetic textbox
 //   paragraph-geometry.ts  — paragraph geometry / wrap calculation
@@ -89,6 +90,7 @@ export * from "./table-metrics";
 export * from "./table-structure";
 export * from "./list-numbering";
 export * from "./paragraph-toc";
+export * from "./bookmarks";
 export * from "./field-helpers";
 export * from "./synthetic-textbox";
 export * from "./paragraph-geometry";

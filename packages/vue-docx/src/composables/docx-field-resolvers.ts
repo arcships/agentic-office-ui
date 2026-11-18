@@ -6,7 +6,7 @@
 // docx-core field parsing stays platform-neutral.
 
 import {
-  paragraphBookmarkNames,
+  createDocxBookmarkIndex,
   paragraphText,
   type DocModel,
   type ParagraphNode,
@@ -43,23 +43,7 @@ export function createDocxFieldResolvers(
     pageNumberByNodeIndex?: ReadonlyMap<number, number>
   },
 ): DocxFieldResolvers {
-  const bookmarkByName = new Map<
-    string,
-    { nodeIndex: number; text: string }
-  >()
-
-  model.nodes.forEach((node, nodeIndex) => {
-    if (node.type !== "paragraph") return
-    const names = paragraphBookmarkNames(node)
-    if (names.length === 0) return
-    const text = paragraphText(node).trim()
-    for (const name of names) {
-      const key = name.trim().toLowerCase()
-      if (key && !bookmarkByName.has(key)) {
-        bookmarkByName.set(key, { nodeIndex, text })
-      }
-    }
-  })
+  const bookmarkIndex = createDocxBookmarkIndex(model)
 
   function resolveStyleRefFieldValue(
     target: string,
@@ -97,11 +81,11 @@ export function createDocxFieldResolvers(
   }
 
   function resolveBookmarkFieldValue(target: string): string | undefined {
-    return bookmarkByName.get(target.trim().toLowerCase())?.text
+    return bookmarkIndex.get(target)?.text
   }
 
   function resolveBookmarkPageNumber(target: string): number | undefined {
-    const bookmark = bookmarkByName.get(target.trim().toLowerCase())
+    const bookmark = bookmarkIndex.get(target)
     if (!bookmark) return undefined
     return options?.pageNumberByNodeIndex?.get(bookmark.nodeIndex)
   }
