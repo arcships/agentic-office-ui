@@ -581,6 +581,13 @@ export interface OfficeXlsxMessages {
     renameApostrophe: string
     renameFailed: string
     moveFailed: string
+    menuLabel: string
+    hide: string
+    hideFailed: string
+    unhide: string
+    unhideFailed: string
+    hiddenTab: string
+    noHiddenSheets: string
   }
   contextMenu: {
     label: string
@@ -1590,6 +1597,13 @@ export const officeMessagesEn: OfficeMessages = {
       renameApostrophe: "Sheet names cannot start or end with an apostrophe.",
       renameFailed: "The sheet could not be renamed.",
       moveFailed: "The sheet could not be moved.",
+      menuLabel: "Sheet menu",
+      hide: "Hide",
+      hideFailed: "The sheet could not be hidden.",
+      unhide: "Unhide…",
+      unhideFailed: "The sheet could not be unhidden.",
+      hiddenTab: "Hidden sheet",
+      noHiddenSheets: "No hidden sheets.",
     },
     contextMenu: {
       label: "Cell menu",
@@ -2545,6 +2559,13 @@ export const officeMessagesZhCN: OfficeMessages = {
       renameApostrophe: "工作表名称不能以撇号开头或结尾。",
       renameFailed: "无法重命名该工作表。",
       moveFailed: "无法移动该工作表。",
+      menuLabel: "工作表菜单",
+      hide: "隐藏",
+      hideFailed: "无法隐藏该工作表。",
+      unhide: "取消隐藏…",
+      unhideFailed: "无法取消隐藏该工作表。",
+      hiddenTab: "隐藏的工作表",
+      noHiddenSheets: "没有隐藏的工作表。",
     },
     contextMenu: {
       label: "单元格菜单",

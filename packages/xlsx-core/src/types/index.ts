@@ -76,6 +76,7 @@ export type {
   XlsxViewerAuthoring,
   // Workbook tab
   XlsxWorkbookTab,
+  XlsxHiddenSheet,
   // Worksheet name rules
   XlsxSheetNameIssue,
   // Formula target

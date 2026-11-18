@@ -14,6 +14,7 @@ import type {
   XlsxChartWall,
   XlsxChartsheet,
   XlsxImageAnchor,
+  XlsxSheetVisibility,
   XlsxThemePalette,
   XlsxWorkbookTab,
 } from "../types";
@@ -435,6 +436,21 @@ export function normalizeChartsheet(raw: unknown, index: number): XlsxChartsheet
   };
 }
 
+/**
+ * Whether a worksheet belongs in the parsed sheet list and the tab strip.
+ *
+ * `veryHidden` sheets never do, even when hidden sheets are requested: Excel
+ * keeps them out of its Unhide dialog and tab strip too, so the only way to
+ * bring one back is the controller API. Plain `hidden` sheets are listed only
+ * when the caller asks for them.
+ */
+export function isWorksheetTabListed(
+  visibility: XlsxSheetVisibility,
+  showHiddenSheets = false
+) {
+  return visibility === "visible" || (showHiddenSheets && visibility === "hidden");
+}
+
 export function buildTabs(
   workbook: Workbook,
   chartsheets: XlsxChartsheet[],
@@ -446,7 +462,7 @@ export function buildTabs(
     return workbook.sheetNames.flatMap((name, index) => {
       const worksheet = workbook.getSheet(index);
       const visibility = normalizeWorksheetVisibility(worksheet.visibility);
-      if (!showHiddenSheets && visibility !== "visible") {
+      if (!isWorksheetTabListed(visibility, showHiddenSheets)) {
         return [];
       }
 
@@ -478,7 +494,7 @@ export function buildTabs(
 
     const worksheet = workbook.getSheet(slotIndex);
     const visibility = normalizeWorksheetVisibility(worksheet.visibility);
-    if (!showHiddenSheets && visibility !== "visible") {
+    if (!isWorksheetTabListed(visibility, showHiddenSheets)) {
       return [];
     }
 

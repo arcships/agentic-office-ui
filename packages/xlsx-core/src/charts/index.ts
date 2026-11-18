@@ -24,4 +24,4 @@ export {
   resolveChartTypeOption,
 } from "./chart-type-options";
 export { changeWorkbookChartType, ensureModernChartStyles } from "./chart-type-edit";
-export { updateWorkbookChartAnchor, updateWorkbookChartDefinition, deleteWorkbookChart } from "./chart-export";
+export { updateWorkbookChartAnchor, updateWorkbookChartDefinition, deleteWorkbookChart, isWorksheetTabListed } from "./chart-export";

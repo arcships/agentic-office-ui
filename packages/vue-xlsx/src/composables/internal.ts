@@ -414,7 +414,10 @@ export interface XlsxControllerContext {
   maxFileSizeBytes: number;
   deferLoadingAboveBytes: number;
   skipXmlParsing: boolean;
+  /** Current hidden-tab mode; reads the runtime ref, not a parse-time snapshot. */
   showHiddenSheets: boolean;
+  /** Updates the hidden-tab mode; callers rebuild the sheet model themselves. */
+  setShowHiddenSheetsMode: (includeHidden: boolean) => void;
   workerSupported: boolean;
   shouldDeferLoading: boolean;
   canUseWorkerForRequestedReadOnly: boolean;

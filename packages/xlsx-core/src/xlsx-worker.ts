@@ -6,7 +6,7 @@ import {
 } from "@xmldom/xmldom";
 import { strFromU8, unzipSync } from "fflate";
 import { OfficeLoadError } from "@arcships/office-runtime";
-import { loadWorkbookChartAssets, refreshChartDataFromWorkbook } from "./charts";
+import { loadWorkbookChartAssets, isWorksheetTabListed, refreshChartDataFromWorkbook } from "./charts";
 import {
   parseWorkbookChartStyleAssets,
   parseWorkbookImageAssets,
@@ -301,7 +301,7 @@ function buildVisibleSheetIndexByWorkbookSheetIndex(nextWorkbook: Workbook, show
   for (let workbookSheetIndex = 0; workbookSheetIndex < nextWorkbook.sheetCount; workbookSheetIndex += 1) {
     const worksheet = nextWorkbook.getSheet(workbookSheetIndex);
     const visibility = normalizeWorksheetVisibility(worksheet.visibility);
-    if (!showHiddenSheets && visibility !== "visible") {
+    if (!isWorksheetTabListed(visibility, showHiddenSheets)) {
       continue;
     }
     mapping.set(workbookSheetIndex, visibleIndex);
@@ -523,7 +523,7 @@ function buildSheetList(
       sheetState?.defaultRowHeightPx ?? DEFAULT_ROW_HEIGHT
     );
     const visibility = normalizeWorksheetVisibility(worksheet.visibility);
-    if (!showHiddenSheets && visibility !== "visible") {
+    if (!isWorksheetTabListed(visibility, showHiddenSheets)) {
       continue;
     }
 
