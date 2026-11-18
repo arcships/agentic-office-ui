@@ -45,6 +45,18 @@ const controller = useXlsxViewerController({
 
 事件包括 `cellDoubleClick`、`upload`、`update:readOnly`、`tabChange`、`update:activeTabIndex`、`load-deferred`、`deferred-resumed` 和 `deferred-cancel`。打印时 `@page` 尺寸取自活动工作表的 `pageSetup` 纸张与方向；图表工作表使用 16:9 的自适应高度。
 
+## 单元格编辑
+
+双击单元格、按 `Enter` 或 `F2` 打开内联编辑器。编辑器是 `textarea`，可以输入多行：
+
+- `Enter` 提交；`Alt+Enter`（macOS 为 `Option+Enter`）在光标处插入硬换行，编辑器保持打开。
+- `Escape` 放弃草稿，单元格保持原值；`Tab` 提交并移到右侧单元格继续编辑。
+- 草稿没有硬换行时，`↑`/`↓` 提交并上下移动选区；有硬换行时方向键在草稿的行间移动光标。
+- 粘贴多行文本会保留换行（`CRLF` 统一为 `LF`）；单行粘贴仍走浏览器原生路径。
+- 输入法组字期间的 `Enter`/`Escape` 由输入法处理，组字结束后只提交一次。
+
+编辑器用一个隐藏的镜像层按当前宽度测量草稿的换行高度：硬换行或自动换行后编辑器向下增高（裁剪在网格可视区内），不会把后续行藏在单行滚动里。提交后的换行会写进单元格值；要让换行在单元格里显示为多行，请启用“自动换行”并给行足够的高度——未启用时与 Excel 一致，只显示第一行。
+
 ## 工作表标签
 
 `showSheetTabs` 设为 `false` 只移除底部标签条：网格、功能区、公式栏和控制器状态都不变，`Ctrl/Cmd+PageUp/PageDown` 仍然可以切换工作表。此时切换只能通过宿主自己的界面调用 `controller.setActiveTabIndex(index)`。需要完全自定义的导航界面时，直接用 `XlsxSheetSurface` + `useXlsxViewerController`（见[自定义 XLSX 界面](../custom-components/xlsx.md)）。

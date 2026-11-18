@@ -4,6 +4,12 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### XLSX multi-line cell editing (#136)
+
+- The inline cell editor is a `<textarea>` with a hidden mirror (`data-testid="xlsx-cell-editor-mirror"`) instead of a single-line `<input>`. Enter still commits, Alt+Enter (Option+Enter on macOS) inserts a hard line break at the caret without closing the editor, Escape drops the draft and restores the original cell, Tab commits and moves right, and ↑/↓ commit and move out when the draft has no hard line break (a multi-line draft keeps the arrows for caret movement). Pasting multi-line text keeps its line breaks and normalizes CRLF to LF; single-line pastes stay on the browser's native path. IME composition keeps ownership of Enter/Escape, still defers the commit to `compositionend`, and composing Alt+Enter no longer injects a break.
+- The mirror carries the draft with the textarea's width, typography, padding and border, so its measured height is the editor box height: the editor grows over the rows below for soft-wrapped and hard-broken lines (still clipped to its freeze pane) instead of scrolling the first line away. `data-editor-lines` exposes the hard line count. Committed line breaks stay in the cell value, and `wrapCellText()` now splits on hard newlines, soft-wraps inside each hard line and shows only the first line while wrap text is off.
+- Add `tests/component/xlsx-cell-editor-multiline.test.mjs`, extend `tests/component/xlsx-cell-editing.test.mjs` (line breaks survive the real workbook commit and one undo restores the cell) and `tests/component/xlsx-grid-fidelity.test.mjs` (hard-break wrapping and first-line-only display), register the existing IME test, and document the keymap and editor growth in `docs/guide/xlsx.md`.
+
 ### DOCX host render hooks (#151)
 
 - Add `renderCommentCard` and `renderTrackedChangeCard` to `DocxEditor` and `DocxViewer` (forwarded through `DocxDocumentSurface`, `DocxViewerRoot` and `DocxPageSurface`), and `renderContextMenu` / `renderTableContextMenu` to `DocxEditor` and `DocxContextMenu`. They use the render-prop shapes already published by `@arcships/docx-core`, so a host can replace the body of comment and revision cards and the whole right-click menu without forking the components. Without a renderer every card and menu keeps its previous DOM, classes and behavior, and the gutter still owns anchoring, activation, drawer mode and height measurement.

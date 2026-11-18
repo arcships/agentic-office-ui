@@ -60,9 +60,9 @@ const drawTextModule = await loadTsModule([
   gridFunctionText("truncateText"),
   gridFunctionText("wrapCellText"),
   gridFunctionText("drawCellText"),
-  "export { drawCellText };",
+  "export { drawCellText, wrapCellText };",
 ].join("\n"));
-const { drawCellText, setIconGeometry } = drawTextModule;
+const { drawCellText, setIconGeometry, wrapCellText } = drawTextModule;
 
 const {
   MAX_CANVAS_AREA_PX,
@@ -172,6 +172,49 @@ function baseTextState(overrides = {}) {
     ...overrides,
   };
 }
+
+test("cell text honours hard line breaks from Alt+Enter", () => {
+  const { ctx, calls } = createTextContext();
+  assert.deepEqual(
+    wrapCellText(ctx, "first\nsecond", 70, 3),
+    ["first", "second"],
+    "wrap text breaks at the hard newline and keeps every line",
+  );
+  assert.deepEqual(
+    wrapCellText(ctx, "first\nsecond", 70, 1),
+    ["first"],
+    "without wrap text only the first hard line is visible",
+  );
+  assert.deepEqual(
+    wrapCellText(ctx, "abcdefghijklmnop\nsecond", 30, 3),
+    ["abcde", "fghij", "k"],
+    "soft wrapping applies inside each hard line and the line cap still wins",
+  );
+  assert.deepEqual(
+    wrapCellText(ctx, "a\n", 70, 3),
+    ["a", ""],
+    "a trailing hard break keeps its empty line",
+  );
+
+  // The renderer draws the hard lines one below the other when wrap text is on.
+  let state = baseTextState({ style: { ...baseTextState().style, wrap: true }, value: "first\nsecond" });
+  drawCellText(ctx, 0, 0, 80, 40, state, "#2563eb");
+  assert.deepEqual(
+    calls.filter((call) => call.type === "fillText").map((call) => call.text),
+    ["first", "second"],
+    "both hard lines reach the canvas",
+  );
+
+  // Wrap text off is Excel's first-line-only display.
+  const plain = createTextContext();
+  state = baseTextState({ value: "first\nsecond" });
+  drawCellText(plain.ctx, 0, 0, 80, 24, state, "#2563eb");
+  assert.deepEqual(
+    plain.calls.filter((call) => call.type === "fillText").map((call) => call.text),
+    ["first"],
+    "a cell without wrap text shows only the first line",
+  );
+});
 
 test("drawCellText spills text across empty neighbours and still clips to the cell", () => {
   let { ctx, calls } = createTextContext();
