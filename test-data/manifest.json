@@ -184,6 +184,15 @@
       "sha256": "9e8d1852f7cde12e83bd91d0452a2941fff5b4b55f901235d1ba5c22f1f60e09"
     },
     {
+      "file": "review-threads.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "render comment threads with replies, resolved threads, two comments on one paragraph, a cross-paragraph range, a cell comment, a header comment, row deletion and row-height revisions",
+      "bytes": 38005,
+      "sha256": "28c5029ab40dae32ed8f73a4fe33aaa5ecf0f8d5308e71a9ee5d1c77b228b3b3"
+    },
+    {
       "file": "rotated-pages.pdf",
       "type": "pdf",
       "category": "boundary",
@@ -218,6 +227,24 @@
       "expected": "open image-only scanned pages without a native text layer",
       "bytes": 39398,
       "sha256": "f68a038d6c88558d6057b82be14d8b29491112f36cbbe56638b8792d0c5dea26"
+    },
+    {
+      "file": "sections-columns.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "render portrait, landscape and two-column sections with per-section headers, a text box and a behind-text watermark",
+      "bytes": 59524,
+      "sha256": "c4c1b8ad5f7ab70f4b2d8c7e572a1492b2d614149f80ddcff7041b514a9b994a"
+    },
+    {
+      "file": "table-structures.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "render vertical merges, grid spans, nested tables, multi-paragraph cells and repeating tblHeader rows",
+      "bytes": 37067,
+      "sha256": "92cce3459b52837507e19a6c466a8af6ecc723f2b58232f8966dee4e4f65d97d"
     }
   ]
 }

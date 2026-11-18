@@ -147,6 +147,152 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
             "表格搜索高亮没有覆盖目标段落",
         )
         page.screenshot(path=str(attempt_dir / "docx-table-search.png"), full_page=True)
+
+        # Issue #53: merged/nested tables and per-section headers were never
+        # asserted. Both are document semantics a browser can check exactly.
+        page.locator('[data-testid="docx-sample-select"]').select_option("table-structures.docx")
+        page.wait_for_function(
+            """() => document.querySelector('[data-testid="loaded-file"]')?.textContent?.includes('table-structures.docx')
+              && document.querySelector('[data-testid="docx-viewer"]')?.dataset.state === 'ready'""",
+            timeout=30_000,
+        )
+        table_structure = page.evaluate(
+            """() => {
+              const hosts = [...document.querySelectorAll('[data-docx-table-host="true"]')];
+              const outer = hosts.find((host) => !host.closest('[data-docx-table-cell="true"]'));
+              if (!outer) return null;
+              const table = outer.querySelector('table');
+              if (!table) return null;
+              const rows = [...table.tBodies[0].rows];
+              const body = rows[0] ? [...rows[0].cells] : [];
+              const vertical = table.querySelector('td[rowspan="3"]');
+              const spanned = table.querySelector('td[colspan="2"]');
+              const nested = [...table.querySelectorAll('td table')];
+              const multiParagraph = [...table.querySelectorAll('td')].some(
+                (cell) => cell.querySelectorAll('[data-docx-table-cell-paragraph-host="true"]').length === 3
+              );
+              return {
+                columnCount: table.querySelectorAll('colgroup > col').length,
+                headerCellCount: body.length,
+                rowCount: rows.length,
+                verticalMergeText: vertical ? vertical.innerText.trim() : null,
+                northRegionCount: (table.innerText.match(/North region/g) || []).length,
+                gridSpanText: spanned ? spanned.innerText.trim() : null,
+                nestedTables: nested.length,
+                nestedText: nested.map((node) => node.innerText).join(' '),
+                multiParagraphCell: multiParagraph,
+              };
+            }"""
+        )
+        expect(table_structure is not None, "table-structures.docx 没有渲染表格")
+        assert table_structure is not None
+        expect(table_structure["columnCount"] == 4, f"合并表格列数应为 4: {table_structure}")
+        expect(table_structure["headerCellCount"] == 4, f"表头单元格数应为 4: {table_structure}")
+        expect(
+            table_structure["northRegionCount"] == 1,
+            f"纵向合并单元格文本只能绘制一次: {table_structure}",
+        )
+        expect(
+            (table_structure["verticalMergeText"] or "").startswith("North region"),
+            f"rowspan=3 单元格不是合并后的单元格: {table_structure}",
+        )
+        expect(
+            (table_structure["gridSpanText"] or "").startswith("Q1+Q2 combined"),
+            f"colspan=2 单元格内容错误: {table_structure}",
+        )
+        expect(table_structure["nestedTables"] == 1, f"嵌套表格缺失: {table_structure}")
+        expect(
+            all(marker in table_structure["nestedText"] for marker in ["N1", "N2", "N3", "N4"]),
+            f"嵌套表格单元格失失: {table_structure}",
+        )
+        expect(
+            table_structure["multiParagraphCell"],
+            f"多段落单元格未渲染三段段落: {table_structure}",
+        )
+        page.screenshot(path=str(attempt_dir / "docx-table-structures.png"), full_page=True)
+
+        page.locator('[data-testid="docx-sample-select"]').select_option("sections-columns.docx")
+        page.wait_for_function(
+            """() => document.querySelector('[data-testid="loaded-file"]')?.textContent?.includes('sections-columns.docx')
+              && document.querySelector('[data-testid="docx-viewer"]')?.dataset.state === 'ready'""",
+            timeout=30_000,
+        )
+        # The viewer only mounts the pages inside its scroll viewport, so the
+        # pages are collected, the container is scrolled to the end, and the two
+        # observations are merged by page index.
+        def collect_sections() -> list[dict]:
+            return page.evaluate(
+                """() => {
+                  const pages = [...document.querySelectorAll('[data-docx-page-wrapper="true"]')];
+                  return pages.map((page) => {
+                    const surface = page.querySelector('[data-docx-page-surface]');
+                    const header = page.querySelector('[data-docx-page-header]');
+                    const footer = page.querySelector('[data-docx-page-footer]');
+                    const watermarks = header
+                      ? [...header.querySelectorAll('img')].filter((img) => /z-index:\\s*-\\d+/.test(img.getAttribute('style') || '')).length
+                      : 0;
+                    return {
+                      index: Number(page.getAttribute('data-docx-page-index')),
+                      width: surface ? Math.round(surface.getBoundingClientRect().width) : 0,
+                      header: header ? header.innerText.trim() : '',
+                      footer: footer ? footer.innerText.trim() : '',
+                      watermarks,
+                    };
+                  });
+                }"""
+            )
+
+        observed_pages: dict[int, dict] = {}
+        for entry in collect_sections():
+            observed_pages[entry["index"]] = entry
+        page.evaluate(
+            """() => {
+              const viewer = document.querySelector('[data-testid="docx-viewer"]');
+              const candidates = [...(viewer ? viewer.querySelectorAll('*') : [])]
+                .filter((element) => element.scrollHeight > element.clientHeight + 200);
+              candidates.sort((left, right) => right.scrollHeight - left.scrollHeight);
+              if (candidates[0]) candidates[0].scrollTop = candidates[0].scrollHeight;
+            }"""
+        )
+        page.wait_for_timeout(600)
+        for entry in collect_sections():
+            observed_pages.setdefault(entry["index"], entry)
+        sections = [observed_pages[index] for index in sorted(observed_pages)]
+        expect(len(sections) == 4, f"sections-columns.docx 应渲染 4 页: {sections}")
+        expect(
+            [page_info["header"] for page_info in sections]
+            == [
+                "Section One Header",
+                "Section One Header",
+                "Section Two Landscape Header",
+                "Section Three Two Column Header",
+            ],
+            f"每页必须渲染其所属节的页眉: {sections}",
+        )
+        expect(
+            [page_info["footer"] for page_info in sections]
+            == [
+                "Section One Footer",
+                "Section One Footer",
+                "Section Two Footer",
+                "Section Three Footer",
+            ],
+            f"每页必须渲染其所属节的页脚: {sections}",
+        )
+        expect(
+            sections[2]["width"] > sections[0]["width"],
+            f"横向节的页面必须比纵向节宽: {sections}",
+        )
+        expect(
+            sections[3]["width"] == sections[0]["width"],
+            f"分栏节回到纵向: {sections}",
+        )
+        expect(
+            [page_info["watermarks"] for page_info in sections]
+            == [1, 1, 0, 0],
+            f"水印必须只出现在第一节且每页重复: {sections}",
+        )
+        page.screenshot(path=str(attempt_dir / "docx-sections.png"), full_page=True)
         evidence.assert_clean()
         return {
             "status": "PASS",
@@ -156,6 +302,8 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
             "tableSearchStatus": table_search_status,
             "searchHighlight": search_highlight,
             "tableSearchHighlight": table_highlight,
+            "tableStructure": table_structure,
+            "sections": sections,
         }
     finally:
         evidence.save(attempt_dir)

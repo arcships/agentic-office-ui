@@ -4,6 +4,14 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### DOCX fixture and acceptance coverage (#53)
+
+- Add three DOCX fixtures that carry the structures the reported defects live in: `review-threads.docx` (comment threads with replies and a resolved thread, two comments on one paragraph, a range crossing three paragraphs, comments anchored in a table cell and in the header, a deleted table row, a row-height `trPrChange`, two footnotes and two endnotes), `table-structures.docx` (`vMerge` restart/continuation cells, `gridSpan`, a nested table, multi-paragraph cells and a `tblHeader` row that repeats across pages), and `sections-columns.docx` (portrait/landscape/two-column sections with their own headers and footers, a text box and a behind-text watermark).
+- `scripts/generate_test_materials.py` gained `--only`, so a new fixture can be regenerated without rebuilding the unrelated binaries with a different toolchain; `scripts/verify_test_materials.py` now fails when a regenerated fixture loses its comments, threading, merges, header rows or sections.
+- Add `tests/unit/docx-fixture-fidelity.test.mjs` and `tests/component/docx-fixture-fidelity.test.mjs` (registered in `scripts/ci/run-suite.mjs`): they assert comment threads and anchors, cross-paragraph ranges, one gutter card per comment per page with card numbers matching their inline markers, cards placed within one line of their anchor, deleted rows marked and listed once, row-height revisions anchored to their own row, merged/nested table column counts and cell text, repeating header rows, per-section headers/footers, note numbering, and an import → edit → export → re-import field diff that changes only the edited paragraph.
+- Add the “Acceptance coverage map” to `docs/visual-acceptance-handoff.md`: every acceptance row carries an id and maps either to a real CI-registered test or to the browser suite that still has to accept it; the unit suite verifies the mapping so an unverified claim cannot read as accepted.
+- `tests/blackbox/docx_annotations.py` and `tests/blackbox/fidelity_content.py` now check gutter placement against the anchor markers, thread visibility, merged/nested tables and per-section headers instead of only asserting that a card or a notes section exists.
+
 ### XLSX page setup and printing (#20)
 
 - Parse `pageSetup`, `printOptions`, `pageMargins`, `rowBreaks`/`colBreaks`, `sheetPr/pageSetUpPr` and the `_xlnm.Print_Area`/`_xlnm.Print_Titles` defined names into `XlsxSheetData`, with an engine fallback for `skipXmlParsing` sources.

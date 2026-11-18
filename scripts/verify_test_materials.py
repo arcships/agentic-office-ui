@@ -29,6 +29,10 @@ valid_docx = [
     "invoice-table.docx",
     "report-with-image.docx",
     "chinese-mixed.docx",
+    "review-comments.docx",
+    "review-threads.docx",
+    "table-structures.docx",
+    "sections-columns.docx",
 ]
 valid_pdf = [
     "sample.pdf",
@@ -112,6 +116,124 @@ for name in valid_docx:
         "bytes": path.stat().st_size,
     }
     expect(len(doc.paragraphs) > 0, f"{name}: expected at least one paragraph")
+
+
+# ---------------------------------------------------------------------------
+# DOCX feature fixtures (issue #53)
+#
+# The manifest pins bytes and hashes, and python-docx proves the package opens.
+# Neither detects a fixture that lost the feature it exists to test: a comment
+# fixture with a single comment, a table fixture without a vMerge continuation,
+# a section fixture with one section. These checks read the raw parts and fail
+# when a regenerated fixture silently loses its review structure.
+# ---------------------------------------------------------------------------
+
+def docx_part(name: str, part: str) -> str:
+    with zipfile.ZipFile(SAMPLES / name) as archive:
+        try:
+            return archive.read(part).decode("utf-8")
+        except KeyError:
+            return ""
+
+
+review_threads = "review-threads.docx"
+review_document = docx_part(review_threads, "word/document.xml")
+review_comments = docx_part(review_threads, "word/comments.xml")
+review_extended = docx_part(review_threads, "word/commentsExtended.xml")
+review_header = docx_part(review_threads, "word/header1.xml")
+review_report = {
+    "comments": review_comments.count("<w:comment w:id="),
+    "replies": review_extended.count("w15:paraIdParent"),
+    "resolvedThreads": review_extended.count('w15:done="1"'),
+    "bodyRanges": review_document.count("<w:commentRangeStart"),
+    "headerRanges": review_header.count("<w:commentRangeStart"),
+    "deletedRows": review_document.count("<w:trPr><w:del ") + review_document.count("<w:trPr><w:del/>"),
+    "rowHeightRevisions": review_document.count("<w:trPrChange"),
+}
+report["docx"][f"{review_threads}#features"] = review_report
+expect(review_report["comments"] == 11, f"{review_threads}: expected 11 comments, got {review_report['comments']}")
+expect(review_report["replies"] == 3, f"{review_threads}: expected 3 threaded replies, got {review_report['replies']}")
+expect(
+    review_report["resolvedThreads"] == 1,
+    f"{review_threads}: expected one resolved thread, got {review_report['resolvedThreads']}",
+)
+expect(
+    review_document.count('<w:commentRangeStart w:id="3"/>') == 1
+    and review_document.count('<w:commentRangeStart w:id="4"/>') == 1,
+    f"{review_threads}: expected two comment ranges on the same paragraph",
+)
+# Comment 5 starts in one paragraph and ends in a later one.
+start_index = review_document.find('<w:commentRangeStart w:id="5"/>')
+end_index = review_document.find('<w:commentRangeEnd w:id="5"/>')
+expect(
+    start_index != -1
+    and end_index != -1
+    and review_document[start_index:end_index].count("</w:p>") >= 2,
+    f"{review_threads}: comment 5 must span more than one paragraph",
+)
+expect(review_report["headerRanges"] == 1, f"{review_threads}: expected a header comment anchor")
+expect(review_report["deletedRows"] == 1, f"{review_threads}: expected one deleted table row")
+expect(
+    review_report["rowHeightRevisions"] == 1,
+    f"{review_threads}: expected one row-height revision",
+)
+expect(
+    docx_part(review_threads, "word/footnotes.xml").count("<w:footnote w:id=") == 2,
+    f"{review_threads}: expected two footnotes",
+)
+expect(
+    docx_part(review_threads, "word/endnotes.xml").count("<w:endnote w:id=") == 2,
+    f"{review_threads}: expected two endnotes",
+)
+
+table_structures = "table-structures.docx"
+table_document = docx_part(table_structures, "word/document.xml")
+table_report = {
+    "tables": table_document.count("<w:tbl>"),
+    "verticalMerges": table_document.count('<w:vMerge w:val="restart"/>'),
+    "verticalContinuations": len(
+        [m for m in table_document.split("<w:vMerge/>")[1:]]
+    ),
+    "gridSpans": table_document.count("<w:gridSpan "),
+    "headerRows": table_document.count("<w:tblHeader/>"),
+}
+report["docx"][f"{table_structures}#features"] = table_report
+expect(table_report["tables"] == 3, f"{table_structures}: expected 3 tables including the nested one, got {table_report['tables']}")
+expect(
+    table_report["verticalMerges"] == 1,
+    f"{table_structures}: expected one vMerge restart cell, got {table_report['verticalMerges']}",
+)
+expect(
+    table_report["verticalContinuations"] == 2,
+    f"{table_structures}: expected two vMerge continuation cells, got {table_report['verticalContinuations']}",
+)
+expect(table_report["gridSpans"] == 1, f"{table_structures}: expected one gridSpan cell")
+expect(table_report["headerRows"] == 1, f"{table_structures}: expected one tblHeader row")
+
+sections_columns = "sections-columns.docx"
+sections_document = docx_part(sections_columns, "word/document.xml")
+section_header = docx_part(sections_columns, "word/header1.xml")
+sections_report = {
+    "sections": sections_document.count("<w:sectPr"),
+    "landscape": sections_document.count('w:orient="landscape"'),
+    "twoColumnSections": sections_document.count('<w:cols w:num="2"'),
+    "textBoxes": sections_document.count("<w:txbxContent>"),
+    "watermarks": section_header.count('behindDoc="1"'),
+}
+report["docx"][f"{sections_columns}#features"] = sections_report
+expect(sections_report["sections"] == 3, f"{sections_columns}: expected 3 sections, got {sections_report['sections']}")
+expect(sections_report["landscape"] == 1, f"{sections_columns}: expected one landscape section")
+expect(
+    sections_report["twoColumnSections"] == 1,
+    f"{sections_columns}: expected one two-column section",
+)
+expect(sections_report["textBoxes"] == 1, f"{sections_columns}: expected one text box")
+expect(sections_report["watermarks"] == 1, f"{sections_columns}: expected one behind-text watermark")
+with zipfile.ZipFile(SAMPLES / sections_columns) as archive:
+    expect(
+        "word/media/watermark.png" in archive.namelist(),
+        f"{sections_columns}: watermark image part is missing",
+    )
 
 for name in valid_pdf:
     path = SAMPLES / name

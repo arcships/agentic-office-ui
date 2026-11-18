@@ -166,6 +166,9 @@ const samples = [
   { file: "report-with-image.docx", label: "Report with image and rich text" },
   { file: "chinese-mixed.docx", label: "Chinese + English mixed text" },
   { file: "review-comments.docx", label: "Review — 修订、批注、脚注、尾注与搜索" },
+  { file: "review-threads.docx", label: "Review threads — 批注线程、跨段范围、表格修订" },
+  { file: "table-structures.docx", label: "Table structures — vMerge、嵌套表、重复表头" },
+  { file: "sections-columns.docx", label: "Sections — 纵横混排、分栏、文本框、水印" },
 ]
 
 // ── State ────────────────────────────────────────────────────────────
