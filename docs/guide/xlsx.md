@@ -208,6 +208,16 @@ const runs = controller.getCellRuns({ row: 0, col: 0 })
 - 网格、工作表标签缩略图和打印预览共用同一套旋转/缩放规则；缩放比例（例如 100% 与 200%）只影响基础字号，0.4 倍下限和旋转角度保持 Excel 语义。
 - `controller.activeSheet.cellTextLayouts` 以 A1 地址列出显式样式里需要旋转或缩小适应的单元格；行/列样式仍按原有继承规则生效。自建渲染器可复用 `packages/vue-xlsx/src/components/grid-paint.ts` 里的同一套纯函数（`resolveSpreadsheetTextRotation()`、`resolveCellTextLayout()`、`resolveRotatedTextBounds()`、`resolveRotatedTextCenter()`、`resolveRotatedTextFitWidth()`、`resolveShrinkToFitFontSize()`）；它们只接收尺寸和测量回调，不依赖 Canvas。
 
+## 从右到左 (RTL) 工作表
+
+工作表的 `<sheetView rightToLeft="1">` 解析为 `XlsxSheetData.rightToLeft`，网格按 Excel 的右到左视图绘制，但单元格地址和数据模型不变：
+
+- 列 A 固定在最右侧，列顺序整体镜像；列头画在对应单元格上方。行号仍停在左侧，行方向不镜像。
+- 冻结列固定在右侧而不是左侧，冻结行仍在顶部；滚动窗格从冻结列左侧开始，滚动条走到最右时显示列 A 一侧，走到最左时显示最后一列一侧。
+- 点击、拖选、双击编辑、列头点击/拖拽调整宽度都按镜像后的坐标命中；`hitTestSheetPoint()` 返回的 `xOffset` 仍是从视觉左边缘量起的 0–1 比例。键盘 `←`/`→` 跟随视觉方向，`Tab` 按阅读顺序向右（在 RTL 中即下一个更高列号）。
+- 文本的常规左对齐在 RTL 中变为右对齐（显式 `center` 不变），溢出文字向左溢出；内联编辑器、批注浮层、数据验证提示和筛选按钮都经过同一套面板几何，不会跑到冻结列另一侧。
+- 纯几何规则集中在 `packages/vue-xlsx/src/components/grid-pane-geometry.ts` 的 `axisLayoutOffset()`、`axisLayoutBoundary()`、`axisLayoutScroll()`、`mirrorBodyOffset()` 和 RTL 感知的 `resolvePaneOverlayRect()`，自建网格可复用同一套计算。
+
 ## 工作表标签
 
 `showSheetTabs` 设为 `false` 只移除底部标签条：网格、功能区、公式栏和控制器状态都不变，`Ctrl/Cmd+PageUp/PageDown` 仍然可以切换工作表。此时切换只能通过宿主自己的界面调用 `controller.setActiveTabIndex(index)`。需要完全自定义的导航界面时，直接用 `XlsxSheetSurface` + `useXlsxViewerController`（见[自定义 XLSX 界面](../custom-components/xlsx.md)）。

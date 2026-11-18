@@ -26,6 +26,7 @@ import type {
 } from "../playback/types"
 import type { PptxApproximationPolicy } from "../browser-types"
 import { withAutoplayMedia } from "../playback/media-command"
+import { collectPptxTextDirectionFeatures } from "../playback/text-direction"
 import { repeatCountNote, repeatCountValue } from "../playback/timing-values"
 
 export interface PptxPlaybackParserOptions {
@@ -748,6 +749,7 @@ function parseSlide(
     reason: "SmartArt 内部动画尚未保留语义对象身份。",
   }))
   const actions = parseActions(document, slide, presentation, objectKeys)
+  features.push(...collectPptxTextDirectionFeatures(document, slide.index))
   for (const action of actions) features.push(Object.freeze({
     id: action.id,
     slideIndex: slide.index,

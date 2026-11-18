@@ -176,11 +176,15 @@ test("XLSX headers paint a pinned strip and a scrolling strip", () => {
   const columns = functionText("paintColHeaders");
   assert.match(
     columns,
-    /paneViewOffset\(getColOffsetSum\(displayIndex\), scrollLeft\.value, displayIndex < frozen\.cols\)/,
-    "a frozen column label must ignore scrollLeft",
+    /const x = getColLayoutX\(displayIndex\)/,
+    "labels share the cells' mirrored layout",
   );
-  assert.doesNotMatch(columns, /translate\(-scrollLeft/, "the strip can no longer shift as a whole");
-  assert.match(columns, /ctx\.rect\(frozen\.width, 0, Math\.max\(0, cw - frozen\.width\), HEADER_HEIGHT\)/);
+  assert.match(
+    columns,
+    /ctx\.translate\(-getColLayoutScroll\(cw\), 0\)/,
+    "only the scrolling strip moves with scrollLeft",
+  );
+  assert.match(columns, /isRightToLeft\.value \? 0 : frozen\.width/, "the scrolling strip excludes the pinned columns");
   assert.match(columns, /for \(let c = 0; c < frozen\.cols && c < widths\.length; c\+\+\) paintColumn\(c\);?/);
   assert.match(columns, /Math\.max\(colRange\.start, frozen\.cols\)/);
   assert.equal(
@@ -229,7 +233,8 @@ test("XLSX frozen panes reuse the full cell renderer", () => {
 
   const frozen = functionText("paintFrozenPanes");
   assert.match(frozen, /drawCellContent\(ctx, x, y, width, height/, "the frozen pass uses the shared renderer");
-  assert.match(frozen, /paneViewOffset\(getColOffsetSum\(displayCol\), scrollLeft\.value, frozenX\)/);
+  assert.match(frozen, /getColLayoutX\(displayCol\)/, "the frozen pass uses the mirrored column layout");
+  assert.match(frozen, /ctx\.translate\(-getColLayoutScroll\(bodyWidth\), 0\)/);
   assert.match(frozen, /paneViewOffset\(getRowOffsetSum\(displayRow\), scrollTop\.value, frozenY\)/);
   assert.match(
     frozen,
@@ -254,7 +259,7 @@ test("XLSX selection outlines are painted per freeze pane", () => {
   assert.match(borders, /ctx\.clip\(\)/);
   assert.match(
     borders,
-    /translate\(pane\.scrollX \? -scrollLeft\.value : 0, pane\.scrollY \? -scrollTop\.value : 0\)/,
+    /translateX = pane\.scrollX\s*\? -getColLayoutScroll\(bodyWidth\)\s*: isRightToLeft\.value \? -\(columnLayoutWidth\.value - bodyWidth\) : 0/,
     "each pane translates only the axes that scroll",
   );
   assert.doesNotMatch(
@@ -742,7 +747,9 @@ test("XLSX frozen rows stay pinned while the columns scroll", async (t) => {
     (operation) => operation.name === "fillText" && operation.args[0] === "D1",
   );
   assert.equal(frozenRowText.length, 1, "the pinned row repaints its scrolled columns once");
-  assert.equal(frozenRowText[0].args[1], 3 * COL_WIDTH - SCROLL_X + 5);
+  // Paint calls use layout coordinates; the pane translate applies scrollLeft
+  // to the canvas, so the recorded x is the un-scrolled column offset.
+  assert.equal(frozenRowText[0].args[1], 3 * COL_WIDTH + 5);
   assert.equal(frozenRowText[0].args[2], 14, "the pinned row keeps its y");
 });
 
@@ -757,7 +764,7 @@ test("XLSX column headers stay above their pinned column while scrolled", async 
   assert.equal(pinned.args[1], COL_WIDTH / 2, "the pinned label ignores scrollLeft");
   const scrolled = labels.find((operation) => operation.args[0] === "F");
   assert.ok(scrolled, "column F is painted in the scrolling strip");
-  assert.equal(scrolled.args[1], 5 * COL_WIDTH - SCROLL_X + COL_WIDTH / 2);
+  assert.equal(scrolled.args[1], 5 * COL_WIDTH + COL_WIDTH / 2, "layout x; the strip translates by scrollLeft");
 });
 
 test("XLSX row headers stay beside their pinned row while scrolled", async (t) => {

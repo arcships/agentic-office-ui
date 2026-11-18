@@ -139,6 +139,7 @@
                 :data-docx-table-cell-index="cell.cellIndex"
                 :data-docx-paragraph-index="cellParagraphIndex(cell.cell.nodes, pi)"
                 :suppresscontenteditablewarning="editable && controller ? 'true' : undefined"
+                :dir="node.style?.direction"
                 :style="{ ...cellParagraphStyle(node), ...cellParagraphSliceStyle(cell.rowIndex) }"
                 @input="onCellInput(tableIndex, cell.rowIndex, cell.cellIndex, cellParagraphIndex(cell.cell.nodes, pi), $event)"
                 @focus="onCellFocus(tableIndex, cell.rowIndex, cell.cellIndex, cellParagraphIndex(cell.cell.nodes, pi))"

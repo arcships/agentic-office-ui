@@ -12,6 +12,7 @@
     :data-auto-filter-trigger-count="autoFilterTriggers.length"
     :data-hidden-auto-filter-row-count="controller.hiddenAutoFilterRows?.length ?? 0"
     :data-worker-backed="String(Boolean(controller.isWorkerBacked))"
+    :data-right-to-left="isRightToLeft ? 'true' : undefined"
     :data-cut-range="cutRangeAddress || undefined"
     :data-formula-reference-count="formulaReferenceRanges.length || undefined"
     :data-formula-reference-ranges="formulaReferenceRangeList || undefined"
@@ -341,7 +342,7 @@ import {
   normalizeConditionalFormatRanges,
   type NormalizedRange,
 } from "./conditional-format-stats";
-import { paneAxisContentOffset, paneViewOffset, resolvePaneContentPoint, resolvePaneOverlayRect, resolvePaneViewPoint, type PaneOverlayRect } from "./grid-pane-geometry";
+import { axisLayoutBoundary, axisLayoutOffset, axisLayoutScroll, mirrorBodyOffset, paneAxisContentOffset, paneViewOffset, resolvePaneContentPoint, resolvePaneOverlayRect, resolvePaneViewPoint, type PaneOverlayRect } from "./grid-pane-geometry";
 import {
   AUTOFIT_CELL_PADDING_PX,
   AUTOFIT_SCAN_LIMIT,
@@ -943,6 +944,17 @@ const displayRows = computed(() => resolveDisplayIndices(displayVisibleRows.valu
 const sheetColToDisplayIndex = computed(() => createSheetToDisplayIndex(displayCols.value));
 const sheetRowToDisplayIndex = computed(() => createSheetToDisplayIndex(displayRows.value));
 
+/**
+ * `sheetView/@rightToLeft`: Excel mirrors the whole column axis — column A sits
+ * at the right edge, frozen columns pin to the right and scrolling starts
+ * there. Rows are never mirrored.
+ */
+const isRightToLeft = computed(() => activeSheet.value?.rightToLeft === true);
+/** Total width of every display column, in layout space. */
+const columnLayoutWidth = computed(
+  () => colOffsets.value[effectiveColWidths.value.length] ?? 0,
+);
+
 const visibleRowRange = computed(() => {
   const bodyHeight = Math.max(0, containerHeight.value - HEADER_HEIGHT);
   return resolveVisibleRange(
@@ -954,9 +966,11 @@ const visibleRowRange = computed(() => {
 
 const visibleColRange = computed(() => {
   const bodyWidth = Math.max(0, containerWidth.value - ROW_HEADER_WIDTH);
+  // Column indices follow content offsets; the mirrored layout is applied when
+  // painting, so the visible content interval is always [scrollLeft, +body].
   return resolveVisibleRange(
     colOffsets.value,
-    scrollLeft.value - OVERSCAN,
+    Math.max(0, scrollLeft.value - OVERSCAN),
     scrollLeft.value + bodyWidth + OVERSCAN,
   );
 });
@@ -968,6 +982,69 @@ function getColOffsetSum(col: number): number {
 
 function getRowOffsetSum(row: number): number {
   return rowOffsets.value[Math.max(0, Math.min(row, effectiveRowHeights.value.length))] ?? 0;
+}
+
+/**
+ * Left edge of a display column in layout space. Columns are mirrored for an
+ * RTL sheet, so the left edge is `total - rightOffset`; LTR keeps the content
+ * offset. Painting and hit testing use the same mapping.
+ */
+function getColLayoutX(displayCol: number): number {
+  return axisLayoutOffset(
+    getColOffsetSum(displayCol),
+    getColOffsetSum(displayCol + 1),
+    columnLayoutWidth.value,
+    isRightToLeft.value,
+  );
+}
+
+/** Layout x of a vertical column boundary (gridline or header divider). */
+function getColLayoutBoundary(boundary: number): number {
+  return axisLayoutBoundary(
+    getColOffsetSum(boundary),
+    columnLayoutWidth.value,
+    isRightToLeft.value,
+  );
+}
+
+/** Layout-space scroll translation of the column axis for a body width. */
+function getColLayoutScroll(bodyWidth: number): number {
+  return axisLayoutScroll(
+    scrollLeft.value,
+    bodyWidth,
+    columnLayoutWidth.value,
+    isRightToLeft.value,
+  );
+}
+
+/**
+ * Viewport x of a cell edge (or any content-space x) inside its pane. The
+ * frozen strip is pinned; the scrolling pane follows scrollLeft. RTL mirrors
+ * the result so the cell's content-left edge is drawn on the correct side.
+ */
+function paneCellViewX(contentX: number, width: number, frozen: boolean): number {
+  if (!isRightToLeft.value) {
+    return paneViewOffset(contentX, scrollLeft.value, frozen);
+  }
+  const bodyWidth = bodyViewportSize().width;
+  return bodyWidth - paneViewOffset(contentX + width, scrollLeft.value, frozen);
+}
+
+/** Whether a cell box is fully inside its pane (frozen strip pinned at right for RTL). */
+function paneCellFullyVisible(
+  viewX: number,
+  width: number,
+  frozen: boolean,
+  viewportWidth: number,
+): boolean {
+  if (frozen) {
+    return isRightToLeft.value
+      ? viewX >= viewportWidth - frozenPaneMetrics().width && viewX + width <= viewportWidth
+      : viewX >= 0 && viewX + width <= frozenPaneMetrics().width;
+  }
+  return isRightToLeft.value
+    ? viewX >= 0 && viewX + width <= viewportWidth - frozenPaneMetrics().width
+    : viewX >= frozenPaneMetrics().width && viewX + width <= viewportWidth;
 }
 
 function getSheetCell(displayRow: number, displayCol: number): XlsxCellAddress | null {
@@ -1031,13 +1108,19 @@ function frozenPaneMetrics(): FrozenPaneMetrics {
  * Grid-body-local point (headers excluded) mapped into sheet content space.
  * Frozen strips keep content coordinates; the scrolling pane adds the live
  * scroll offset, so a click on a pinned cell resolves to that cell instead
- * of whatever scrolled underneath it.
+ * of whatever scrolled underneath it. RTL mirrors the horizontal offset, so
+ * the same pane helper answers for the pinned right-hand strip.
  */
 function resolvePanePoint(clientX: number, clientY: number) {
   const container = containerRef.value;
   if (!container) return null;
   const rect = container.getBoundingClientRect();
-  const localX = clientX - rect.left - ROW_HEADER_WIDTH;
+  const bodyWidth = Math.max(0, rect.width - ROW_HEADER_WIDTH);
+  const localX = mirrorBodyOffset(
+    clientX - rect.left - ROW_HEADER_WIDTH,
+    bodyWidth,
+    isRightToLeft.value,
+  );
   const localY = clientY - rect.top - HEADER_HEIGHT;
   if (localX < 0 || localY < 0) return null;
   const frozen = frozenPaneMetrics();
@@ -1090,9 +1173,14 @@ const pageBreakOverlay = computed<{
     if (page.colPage > 0) {
       const displayCol = sheetColToDisplayIndex.value.get(page.range.start.col);
       if (displayCol !== undefined) {
-        const contentX = getColOffsetSum(displayCol);
-        const x = paneViewOffset(contentX, scrollLeft.value, displayCol < frozen.cols);
-        if (displayCol >= frozen.cols && x < frozen.width) continue;
+        // A page starts at the column's leading edge: its left edge in LTR and
+        // its right edge on a mirrored RTL sheet.
+        const contentX = isRightToLeft.value
+          ? getColOffsetSum(displayCol + 1)
+          : getColOffsetSum(displayCol);
+        const frozenCol = displayCol < frozen.cols;
+        const x = paneCellViewX(contentX, 0, frozenCol);
+        if (!frozenCol && (isRightToLeft.value ? x > viewport.width - frozen.width : x < frozen.width)) continue;
         const key = `column:${Math.round(x)}`;
         if (!lines.has(key)) {
           lines.set(key, {
@@ -1129,14 +1217,18 @@ const pageBreakOverlay = computed<{
     const displayRow = sheetRowToDisplayIndex.value.get(page.range.start.row);
     const displayCol = sheetColToDisplayIndex.value.get(page.range.start.col);
     if (displayRow === undefined || displayCol === undefined) continue;
-    const x = paneViewOffset(getColOffsetSum(displayCol), scrollLeft.value, displayCol < frozen.cols);
+    const contentX = isRightToLeft.value
+      ? getColOffsetSum(displayCol + 1)
+      : getColOffsetSum(displayCol);
+    const frozenCol = displayCol < frozen.cols;
+    const x = paneCellViewX(contentX, 0, frozenCol);
     const y = paneViewOffset(getRowOffsetSum(displayRow), scrollTop.value, displayRow < frozen.rows);
-    if (displayCol >= frozen.cols && x < frozen.width) continue;
+    if (!frozenCol && (isRightToLeft.value ? x > viewport.width - frozen.width : x < frozen.width)) continue;
     if (displayRow >= frozen.rows && y < frozen.height) continue;
     if (x > viewport.width || y > viewport.height || x < -120 || y < -60) continue;
     labels.push({
       style: {
-        left: `${ROW_HEADER_WIDTH + Math.max(0, x) + 6}px`,
+        left: `${ROW_HEADER_WIDTH + Math.min(Math.max(0, x) + 6, Math.max(0, viewport.width - 24))}px`,
         top: `${HEADER_HEIGHT + Math.max(0, y) + 4}px`,
       },
       text: String(page.pageNumber),
@@ -1175,6 +1267,7 @@ function paneOverlayRect(
     viewportHeight: viewport.height,
     scrollLeft: scrollLeft.value,
     scrollTop: scrollTop.value,
+    rtl: isRightToLeft.value,
   });
 }
 
@@ -1183,7 +1276,16 @@ const columnMenuTriggerStyle = computed<CSSProperties | null>(() => {
   if (!axis || axis.kind !== "column") return null;
   const anchor = paneOverlayRect(
     { col: axis.actualIndex, row: 0 },
-    { contentX: getColOffsetSum(axis.displayIndex + 1), contentY: 0, height: 0, width: 0 },
+    {
+      // LTR pins the trigger to the column's right edge, RTL to its right edge
+      // in visual order (the leading edge in the mirrored layout).
+      contentX: getColOffsetSum(
+        isRightToLeft.value ? axis.displayIndex : axis.displayIndex + 1,
+      ),
+      contentY: 0,
+      height: 0,
+      width: 0,
+    },
   );
   if (!anchor) return null;
   return {
@@ -1239,18 +1341,26 @@ const fillHandleStyle = computed<CSSProperties | null>(() => {
   const frozen = frozenPaneMetrics();
   const frozenX = display.col < frozen.cols;
   const frozenY = display.row < frozen.rows;
-  const cornerX = paneViewOffset(getColOffsetSum(display.col + 1), scrollLeft.value, frozenX);
+  // The handle sits on the selection's bottom corner in reading order: the
+  // right edge in LTR, the mirrored left edge in RTL.
+  const cornerX = paneCellViewX(getColOffsetSum(display.col + 1), 0, frozenX);
   const cornerY = paneViewOffset(getRowOffsetSum(display.row + 1), scrollTop.value, frozenY);
   if (frozenX
-    ? cornerX < 0 || cornerX > frozen.width
-    : cornerX < frozen.width || cornerX > viewport.width) return null;
+    ? isRightToLeft.value
+      ? cornerX < viewport.width - frozen.width || cornerX > viewport.width
+      : cornerX < 0 || cornerX > frozen.width
+    : isRightToLeft.value
+      ? cornerX < 0 || cornerX > viewport.width - frozen.width
+      : cornerX < frozen.width || cornerX > viewport.width) return null;
   if (frozenY
     ? cornerY < 0 || cornerY > frozen.height
     : cornerY < frozen.height || cornerY > viewport.height) return null;
 
   const box = resolveFillHandleBox(cornerX, cornerY);
   const anchor = paneOverlayRect(range.end, {
-    contentX: box.left,
+    contentX: isRightToLeft.value
+      ? viewport.width - box.left - FILL_HANDLE_SIZE_PX + (frozenX ? 0 : scrollLeft.value)
+      : box.left,
     contentY: box.top,
     height: FILL_HANDLE_SIZE_PX,
     width: FILL_HANDLE_SIZE_PX,
@@ -1342,10 +1452,10 @@ const autoFilterTriggers = computed<AutoFilterTrigger[]>(() => {
       const colContentX = getColOffsetSum(displayCol);
       const colWidth = effectiveColWidths.value[displayCol] || DEFAULT_COL_WIDTH;
       const colFrozen = displayCol < frozen.cols;
-      const colX = paneViewOffset(colContentX, scrollLeft.value, colFrozen);
-      const colVisible = colFrozen
-        ? colX >= 0 && (viewport.width === 0 || colX + colWidth <= frozen.width)
-        : colX >= frozen.width && (viewport.width === 0 || colX + colWidth <= viewport.width);
+      const colX = paneCellViewX(colContentX, colWidth, colFrozen);
+      const colVisible = viewport.width === 0
+        ? colX >= 0
+        : paneCellFullyVisible(colX, colWidth, colFrozen, viewport.width);
       if (!colVisible) continue;
 
       const columnIndex = col - range.start.col;
@@ -1367,7 +1477,9 @@ const autoFilterTriggers = computed<AutoFilterTrigger[]>(() => {
       const hasValueFilter = Boolean(activeColumn);
       const table = range.tableName ? tableByName.get(range.tableName) ?? null : null;
       const triggerStyle: CSSProperties = {
-        left: `${ROW_HEADER_WIDTH + Math.max(0, colX) + Math.max(0, colWidth) - 16}px`,
+        left: isRightToLeft.value
+          ? `${ROW_HEADER_WIDTH + Math.max(0, colX) + 2}px`
+          : `${ROW_HEADER_WIDTH + Math.max(0, colX) + Math.max(0, colWidth) - 16}px`,
         top: `${HEADER_HEIGHT + Math.max(0, rowY) + 2}px`,
       };
       const sortAscending = () => {
@@ -1467,7 +1579,12 @@ function captureZoomAnchor(clientX: number, clientY: number): XlsxZoomAnchor | n
   const rect = container.getBoundingClientRect();
   const localX = clientX - rect.left;
   const localY = clientY - rect.top;
-  const bodyX = localX - ROW_HEADER_WIDTH;
+  const bodyWidth = Math.max(0, rect.width - ROW_HEADER_WIDTH);
+  const bodyX = mirrorBodyOffset(
+    localX - ROW_HEADER_WIDTH,
+    bodyWidth,
+    isRightToLeft.value,
+  );
   const bodyY = localY - HEADER_HEIGHT;
   const frozen = frozenPaneMetrics();
   const scrollX = localX > ROW_HEADER_WIDTH && bodyX >= frozen.width;
@@ -1512,7 +1629,12 @@ function restoreZoomAnchor(anchor: XlsxZoomAnchor): void {
     if (displayCol !== undefined) {
       const contentX = getColOffsetSum(displayCol)
         + (effectiveColWidths.value[displayCol] || 0) * anchor.colRatio;
-      container.scrollLeft = contentX - (anchor.clientX - rect.left - ROW_HEADER_WIDTH);
+      const bodyX = mirrorBodyOffset(
+        anchor.clientX - rect.left - ROW_HEADER_WIDTH,
+        Math.max(0, rect.width - ROW_HEADER_WIDTH),
+        isRightToLeft.value,
+      );
+      container.scrollLeft = contentX - bodyX;
     }
   }
   if (anchor.scrollY && anchor.row !== undefined) {
@@ -1692,9 +1814,9 @@ function drawRangeBorder(
   const start = style.displayed ? normalized.start : getDisplayCell(normalized.start);
   const end = style.displayed ? normalized.end : getDisplayCell(normalized.end);
   if (!start || !end) return;
-  const x = getColOffsetSum(start.col);
+  const x = isRightToLeft.value ? getColLayoutX(end.col) : getColOffsetSum(start.col);
   const y = getRowOffsetSum(start.row);
-  const width = getColOffsetSum(end.col + 1) - x;
+  const width = getColOffsetSum(end.col + 1) - getColOffsetSum(start.col);
   const height = getRowOffsetSum(end.row + 1) - y;
   const inset = style.inset ?? 1;
   ctx.save();
@@ -1797,10 +1919,13 @@ function hitTestSheetPoint(clientX: number, clientY: number): { row: number; col
   const top = getRowOffsetSum(displayRow);
   const width = Math.max(1, effectiveColWidths.value[displayCol] || DEFAULT_COL_WIDTH);
   const height = Math.max(1, effectiveRowHeights.value[displayRow] || DEFAULT_ROW_HEIGHT);
+  // `contentX` runs from the cell's right edge on an RTL sheet, so flip the
+  // fraction to keep `xOffset` a visual left-to-right position.
+  const fractionX = Math.max(0, Math.min(1, (point.contentX - left) / width));
   return {
     row: cell.row,
     col: cell.col,
-    xOffset: Math.max(0, Math.min(1, (point.contentX - left) / width)),
+    xOffset: isRightToLeft.value ? 1 - fractionX : fractionX,
     yOffset: Math.max(0, Math.min(1, (point.contentY - top) / height)),
   };
 }
@@ -2050,9 +2175,14 @@ function resolveCanvasCellStyleInto(
   const alignment = asStyleRecord(workbookStyle?.alignment);
   const fillStyle = resolveWorkbookFillStyle(fill, sheet?.themePalette);
   const fontColor = resolveWorkbookColor(asStyleRecord(font?.color), sheet?.themePalette);
-  target.alignment = alignment?.horizontal === "center" || alignment?.horizontal === "right"
+  const horizontalAlignment = alignment?.horizontal === "center" || alignment?.horizontal === "right"
     ? alignment.horizontal
     : "left";
+  // RTL mirrors horizontal alignment the way Excel does: general/left text
+  // starts at the cell's right edge and right-aligned text at its left edge.
+  target.alignment = isRightToLeft.value && horizontalAlignment !== "center"
+    ? horizontalAlignment === "left" ? "right" : "left"
+    : horizontalAlignment;
   target.backgroundColor = fillStyle.backgroundColor || (props.isDark ? "#18181b" : "#ffffff");
   target.border = asStyleRecord(workbookStyle?.border) as Record<string, Record<string, unknown>> | undefined;
   target.color = fontColor || (props.isDark ? "#e4e4e7" : "#18181b");
@@ -2992,11 +3122,12 @@ function paintSelectionBorders(
   if (!ranges.length && !cut && !fillDragTarget.value && formulaReferenceRanges.value.length === 0) return;
 
   const frozen = frozenPaneMetrics();
+  const frozenStripX = isRightToLeft.value ? bodyWidth - frozen.width : 0;
   const panes = [
-    { x: 0, y: 0, width: frozen.width, height: frozen.height, scrollX: false, scrollY: false },
-    { x: 0, y: frozen.height, width: frozen.width, height: Math.max(0, bodyHeight - frozen.height), scrollX: false, scrollY: true },
-    { x: frozen.width, y: 0, width: Math.max(0, bodyWidth - frozen.width), height: frozen.height, scrollX: true, scrollY: false },
-    { x: frozen.width, y: frozen.height, width: Math.max(0, bodyWidth - frozen.width), height: Math.max(0, bodyHeight - frozen.height), scrollX: true, scrollY: true },
+    { x: frozenStripX, y: 0, width: frozen.width, height: frozen.height, scrollX: false, scrollY: false },
+    { x: frozenStripX, y: frozen.height, width: frozen.width, height: Math.max(0, bodyHeight - frozen.height), scrollX: false, scrollY: true },
+    { x: isRightToLeft.value ? 0 : frozen.width, y: 0, width: Math.max(0, bodyWidth - frozen.width), height: frozen.height, scrollX: true, scrollY: false },
+    { x: isRightToLeft.value ? 0 : frozen.width, y: frozen.height, width: Math.max(0, bodyWidth - frozen.width), height: Math.max(0, bodyHeight - frozen.height), scrollX: true, scrollY: true },
   ];
   for (const pane of panes) {
     if (pane.width <= 0 || pane.height <= 0) continue;
@@ -3004,7 +3135,10 @@ function paintSelectionBorders(
     ctx.beginPath();
     ctx.rect(pane.x, pane.y, pane.width, pane.height);
     ctx.clip();
-    ctx.translate(pane.scrollX ? -scrollLeft.value : 0, pane.scrollY ? -scrollTop.value : 0);
+    const translateX = pane.scrollX
+      ? -getColLayoutScroll(bodyWidth)
+      : isRightToLeft.value ? -(columnLayoutWidth.value - bodyWidth) : 0;
+    ctx.translate(translateX, pane.scrollY ? -scrollTop.value : 0);
     for (const range of ranges) drawSelectionBorder(ctx, range, color);
     const dragTarget = fillDragTarget.value;
     if (dragTarget) {
@@ -3117,10 +3251,15 @@ function paintBody(worksheet: ActiveWorksheet | null) {
     // otherwise double up wherever the two passes overlap.
     ctx.beginPath();
     ctx.rect(0, frozen.height, bw, Math.max(0, bh - frozen.height));
-    ctx.rect(frozen.width, 0, Math.max(0, bw - frozen.width), frozen.height);
+    ctx.rect(
+      isRightToLeft.value ? 0 : frozen.width,
+      0,
+      Math.max(0, bw - frozen.width),
+      frozen.height,
+    );
     ctx.clip();
   }
-  ctx.translate(-scrollLeft.value, -scrollTop.value);
+  ctx.translate(-getColLayoutScroll(bw), -scrollTop.value);
 
   // Gridlines
   if (hasVisibleRange && sheet.showGridLines !== false) {
@@ -3128,10 +3267,10 @@ function paintBody(worksheet: ActiveWorksheet | null) {
     ctx.lineWidth = 1;
     const gridTop = getRowOffsetSum(rowRange.start);
     const gridBottom = getRowOffsetSum(rowRange.end + 1);
-    const gridLeft = getColOffsetSum(colRange.start);
-    const gridRight = getColOffsetSum(colRange.end + 1);
+    const gridLeft = getColLayoutBoundary(colRange.start);
+    const gridRight = getColLayoutBoundary(colRange.end + 1);
     for (let c = colRange.start; c <= colRange.end + 1 && c <= widths.length; c += 1) {
-      const x = getColOffsetSum(c);
+      const x = getColLayoutBoundary(c);
       ctx.beginPath(); ctx.moveTo(x, gridTop); ctx.lineTo(x, gridBottom); ctx.stroke();
     }
     for (let r = rowRange.start; r <= rowRange.end + 1 && r <= heights.length; r += 1) {
@@ -3165,7 +3304,9 @@ function paintBody(worksheet: ActiveWorksheet | null) {
     const cellWidth = widths[displayCol] || 0;
     // Rotated text and shrink-to-fit stay inside their cell: spilling them
     // would paint over the neighbour that hit-testing still attributes to it.
-    if (merge || style.wrap || style.rotation != null || style.shrinkToFit || style.alignment !== "left" || conditional?.kind === "iconSet") return cellWidth;
+    // Text spills in the direction it is aligned to: left in LTR, right in RTL.
+    const trailingAlignment = isRightToLeft.value ? "right" : "left";
+    if (merge || style.wrap || style.rotation != null || style.shrinkToFit || style.alignment !== trailingAlignment || conditional?.kind === "iconSet") return cellWidth;
     if (!value || sparkline || (conditional?.kind === "dataBar" && !conditional.showValue)) return cellWidth;
     overflowNeighbourWidths.length = 0;
     for (let nextCol = displayCol + 1; nextCol < widths.length; nextCol += 1) {
@@ -3195,7 +3336,9 @@ function paintBody(worksheet: ActiveWorksheet | null) {
     const rowHResolved = mergeEnd
       ? getRowOffsetSum(mergeEnd.row + 1) - getRowOffsetSum(displayRow)
       : heights[displayRow] || 0;
-    const colX = getColOffsetSum(displayCol);
+    const colX = mergeEnd && isRightToLeft.value
+      ? getColLayoutX(mergeEnd.col)
+      : getColLayoutX(displayCol);
     const rowY = getRowOffsetSum(displayRow);
     const value = getGridCellDisplayValue(cell);
     const style = resolveCanvasCellStyleInto(
@@ -3231,12 +3374,14 @@ function paintBody(worksheet: ActiveWorksheet | null) {
       state.skipText = true;
       drawCellContent(ctx, colX, rowY, colW, rowHResolved, state);
       // The task outlives this cell, so it owns a snapshot of the two objects
-      // the shared state points at.
+      // the shared state points at. RTL text grows towards the left, so the
+      // deferred box starts before the cell and keeps its visual bounds.
+      const overflowExtra = overflowWidth - colW;
       overflowTextTasks.push({
         height: rowHResolved,
         state: { ...state, conditional: snapshotConditionalVisual(conditional), style: { ...style } },
-        width: colW,
-        x: colX,
+        width: overflowWidth,
+        x: isRightToLeft.value ? colX - overflowExtra : colX,
         y: rowY,
       });
     } else {
@@ -3262,7 +3407,7 @@ function paintBody(worksheet: ActiveWorksheet | null) {
       if (!start || !end) continue;
       const regionX = getColOffsetSum(start.col);
       const regionY = getRowOffsetSum(start.row);
-      const regionWidth = getColOffsetSum(end.col + 1) - regionX;
+      const regionWidth = getColOffsetSum(end.col + 1) - getColOffsetSum(start.col);
       const regionHeight = getRowOffsetSum(end.row + 1) - regionY;
       if (!intersectsViewport(
         { height: regionHeight, left: regionX, top: regionY, width: regionWidth },
@@ -3316,7 +3461,7 @@ function paintFrozenPanes(
   paintState.themePalette = sheet.themePalette;
   const styleScratch = createCanvasCellStyleScratch();
 
-  const paintCell = (displayRow: number, displayCol: number, frozenY: boolean, frozenX: boolean) => {
+  const paintCell = (displayRow: number, displayCol: number, frozenY: boolean) => {
     const cell = getSheetCell(displayRow, displayCol);
     if (!cell || paintedMergeAnchors.has(cellKey(cell.row, cell.col))) return;
     const merge = mergeRegionAtAnchor(cell);
@@ -3327,7 +3472,9 @@ function paintFrozenPanes(
     const height = mergeEnd
       ? getRowOffsetSum(mergeEnd.row + 1) - getRowOffsetSum(displayRow)
       : effectiveRowHeights.value[displayRow] || 0;
-    const x = paneViewOffset(getColOffsetSum(displayCol), scrollLeft.value, frozenX);
+    const x = mergeEnd && isRightToLeft.value
+      ? getColLayoutX(mergeEnd.col)
+      : getColLayoutX(displayCol);
     const y = paneViewOffset(getRowOffsetSum(displayRow), scrollTop.value, frozenY);
     const value = getGridCellDisplayValue(cell);
     const cellKeyValue = cellKey(cell.row, cell.col);
@@ -3360,31 +3507,54 @@ function paintFrozenPanes(
   if (frozenRows.length && visibleCols.length) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(frozenWidth, 0, Math.max(0, bodyWidth - frozenWidth), frozenHeight);
+    ctx.rect(
+      isRightToLeft.value ? 0 : frozenWidth,
+      0,
+      Math.max(0, bodyWidth - frozenWidth),
+      frozenHeight,
+    );
     ctx.clip();
-    for (const row of frozenRows) for (const col of visibleCols) paintCell(row.displayIndex, col, true, false);
+    // The pinned rows keep their y; their columns still scroll horizontally.
+    ctx.translate(-getColLayoutScroll(bodyWidth), 0);
+    for (const row of frozenRows) for (const col of visibleCols) paintCell(row.displayIndex, col, true);
     ctx.restore();
   }
   if (frozenCols.length && visibleRows.length) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, frozenHeight, frozenWidth, Math.max(0, bodyHeight - frozenHeight));
+    ctx.rect(
+      isRightToLeft.value ? bodyWidth - frozenWidth : 0,
+      frozenHeight,
+      frozenWidth,
+      Math.max(0, bodyHeight - frozenHeight),
+    );
     ctx.clip();
-    for (const row of visibleRows) for (const col of frozenCols) paintCell(row, col.displayIndex, false, true);
+    // The pinned columns keep their x; their rows still scroll vertically.
+    if (isRightToLeft.value) ctx.translate(-(columnLayoutWidth.value - bodyWidth), 0);
+    for (const row of visibleRows) for (const col of frozenCols) paintCell(row, col.displayIndex, false);
     ctx.restore();
   }
   if (frozenRows.length && frozenCols.length) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, 0, frozenWidth, frozenHeight);
+    ctx.rect(
+      isRightToLeft.value ? bodyWidth - frozenWidth : 0,
+      0,
+      frozenWidth,
+      frozenHeight,
+    );
     ctx.clip();
-    for (const row of frozenRows) for (const col of frozenCols) paintCell(row.displayIndex, col.displayIndex, true, true);
+    if (isRightToLeft.value) ctx.translate(-(columnLayoutWidth.value - bodyWidth), 0);
+    for (const row of frozenRows) for (const col of frozenCols) paintCell(row.displayIndex, col.displayIndex, true);
     ctx.restore();
   }
   ctx.save();
   ctx.strokeStyle = props.isDark ? "#71717a" : "#a1a1aa";
   ctx.lineWidth = 2;
-  if (frozenWidth > 0) { ctx.beginPath(); ctx.moveTo(frozenWidth, 0); ctx.lineTo(frozenWidth, bodyHeight); ctx.stroke(); }
+  if (frozenWidth > 0) {
+    const dividerX = isRightToLeft.value ? bodyWidth - frozenWidth : frozenWidth;
+    ctx.beginPath(); ctx.moveTo(dividerX, 0); ctx.lineTo(dividerX, bodyHeight); ctx.stroke();
+  }
   if (frozenHeight > 0) { ctx.beginPath(); ctx.moveTo(0, frozenHeight); ctx.lineTo(bodyWidth, frozenHeight); ctx.stroke(); }
   ctx.restore();
 }
@@ -3418,9 +3588,9 @@ function paintColHeaders() {
 
   const paintColumn = (displayIndex: number) => {
     const colW = widths[displayIndex] || 0;
-    // The frozen strip pins its labels above the pinned cells; only the
-    // scrolling strip follows scrollLeft.
-    const x = paneViewOffset(getColOffsetSum(displayIndex), scrollLeft.value, displayIndex < frozen.cols);
+    // Labels use the same mirrored layout as the cells, so column A sits above
+    // its pinned right-hand column on an RTL sheet.
+    const x = getColLayoutX(displayIndex);
     const sheetCol = displayCols.value[displayIndex] ?? displayIndex;
     const selectedCol = activeCell.value?.col === sheetCol || Boolean(selected &&
       sheetCol >= Math.min(selected.start.col, selected.end.col) &&
@@ -3438,8 +3608,14 @@ function paintColHeaders() {
 
   ctx.save();
   ctx.beginPath();
-  ctx.rect(frozen.width, 0, Math.max(0, cw - frozen.width), HEADER_HEIGHT);
+  ctx.rect(
+    isRightToLeft.value ? 0 : frozen.width,
+    0,
+    Math.max(0, cw - frozen.width),
+    HEADER_HEIGHT,
+  );
   ctx.clip();
+  ctx.translate(-getColLayoutScroll(cw), 0);
   for (let c = Math.max(colRange.start, frozen.cols); c <= colRange.end && c < widths.length; c++) {
     paintColumn(c);
   }
@@ -3448,15 +3624,22 @@ function paintColHeaders() {
   if (frozen.width > 0) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(0, 0, frozen.width, HEADER_HEIGHT);
+    ctx.rect(
+      isRightToLeft.value ? cw - frozen.width : 0,
+      0,
+      frozen.width,
+      HEADER_HEIGHT,
+    );
     ctx.clip();
+    if (isRightToLeft.value) ctx.translate(-(columnLayoutWidth.value - cw), 0);
     for (let c = 0; c < frozen.cols && c < widths.length; c++) paintColumn(c);
     ctx.restore();
+    const dividerX = isRightToLeft.value ? cw - frozen.width : frozen.width;
     ctx.strokeStyle = dividerColor;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(frozen.width - 0.5, 0);
-    ctx.lineTo(frozen.width - 0.5, HEADER_HEIGHT);
+    ctx.moveTo(dividerX - 0.5, 0);
+    ctx.lineTo(dividerX - 0.5, HEADER_HEIGHT);
     ctx.stroke();
   }
 }
@@ -3627,7 +3810,17 @@ function hitTestAxis(clientX: number, clientY: number): AxisHit | null {
   }
   if (localY <= HEADER_HEIGHT && localX > ROW_HEADER_WIDTH) {
     const frozen = frozenPaneMetrics();
-    const contentX = paneAxisContentOffset(localX - ROW_HEADER_WIDTH, container.scrollLeft, frozen.width);
+    // Column headers mirror with the body, so the pointer's content position is
+    // measured from the header strip's right edge on an RTL sheet.
+    const contentX = paneAxisContentOffset(
+      mirrorBodyOffset(
+        localX - ROW_HEADER_WIDTH,
+        Math.max(0, rect.width - ROW_HEADER_WIDTH),
+        isRightToLeft.value,
+      ),
+      container.scrollLeft,
+      frozen.width,
+    );
     const hitDisplayIndex = findDisplayIndexAtOffset(colOffsets.value, contentX);
     if (hitDisplayIndex < 0) return null;
     const startBoundary = getColOffsetSum(hitDisplayIndex);
@@ -3789,7 +3982,10 @@ function onPointerMove(event: PointerEvent) {
   const resizing = resizePreview.value;
   if (resizing) {
     const position = resizing.kind === "column" ? event.clientX : event.clientY;
-    const delta = position - resizing.startPosition;
+    // A mirrored column grows towards the left, so the pointer delta is
+    // negated before it reaches the width.
+    const delta = (position - resizing.startPosition)
+      * (resizing.kind === "column" && isRightToLeft.value ? -1 : 1);
     if (!resizing.moved && Math.abs(delta) < AXIS_RESIZE_DRAG_THRESHOLD) return;
     const minimum = resizing.kind === "column" ? 32 : 18;
     resizing.moved = true;
@@ -4221,9 +4417,25 @@ function scrollToCell(cell: XlsxCellAddress) {
   // the sheet for no reason. In the scrolling pane the freeze line hides the
   // first frozenWidth pixels, so a cell is only fully visible once its left
   // edge clears the strip and its right edge clears the body's right edge.
+  // RTL mirrors the axis: the pinned strip is on the right and the scrolling
+  // pane ends at `bodyWidth - frozen.width`.
   if (displayCell.col >= frozen.cols) {
-    if (colX - container.scrollLeft < frozen.width) container.scrollLeft = Math.max(0, colX - frozen.width);
-    else if (colX + colW - container.scrollLeft > bodyWidth) container.scrollLeft = colX + colW - bodyWidth;
+    if (isRightToLeft.value) {
+      const maxScroll = Math.max(0, columnLayoutWidth.value - bodyWidth);
+      // The scrolling pane ends at the freeze line on the right, so a cell's
+      // right edge must stay left of `bodyWidth - frozen.width`.
+      const minVisibleScroll = colX + colW - bodyWidth;
+      const maxVisibleScroll = colX - frozen.width;
+      if (container.scrollLeft < minVisibleScroll) {
+        container.scrollLeft = Math.min(maxScroll, minVisibleScroll);
+      } else if (container.scrollLeft > maxVisibleScroll) {
+        container.scrollLeft = Math.max(0, Math.min(maxScroll, maxVisibleScroll));
+      }
+    } else if (colX - container.scrollLeft < frozen.width) {
+      container.scrollLeft = Math.max(0, colX - frozen.width);
+    } else if (colX + colW - container.scrollLeft > bodyWidth) {
+      container.scrollLeft = colX + colW - bodyWidth;
+    }
   }
   if (displayCell.row >= frozen.rows) {
     if (rowY - container.scrollTop < frozen.height) container.scrollTop = Math.max(0, rowY - frozen.height);
@@ -4261,8 +4473,10 @@ function onGridKeydown(event: KeyboardEvent) {
   const handlers: Record<string, () => void> = {
     ArrowUp: () => moveCell(-1, 0, event.shiftKey),
     ArrowDown: () => moveCell(1, 0, event.shiftKey),
-    ArrowLeft: () => moveCell(0, -1, event.shiftKey),
-    ArrowRight: () => moveCell(0, 1, event.shiftKey),
+    ArrowLeft: () => moveCell(0, isRightToLeft.value ? 1 : -1, event.shiftKey),
+    ArrowRight: () => moveCell(0, isRightToLeft.value ? -1 : 1, event.shiftKey),
+    // Tab follows reading order, which is leftwards on an RTL sheet: the next
+    // display column is still `+1`.
     Tab: () => { event.preventDefault(); moveCell(0, 1, false); },
     Enter: () => { if (!editingLocked.value) startEdit(active); },
     Delete: () => { if (!editingLocked.value) props.controller.clearSelectedCells(); },

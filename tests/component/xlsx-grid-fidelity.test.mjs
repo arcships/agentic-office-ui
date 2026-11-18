@@ -380,7 +380,7 @@ test("XlsxGrid wires merged clipping, overflow, icon layout, DPR and zoom into p
   assert.match(GRID_SOURCE, /resolveOverflowTextWidth\(/);
   assert.match(
     GRID_SOURCE,
-    /style\.wrap \|\| style\.rotation != null \|\| style\.shrinkToFit \|\| style\.alignment !== "left"/,
+    /style\.wrap \|\| style\.rotation != null \|\| style\.shrinkToFit \|\| style\.alignment !== trailingAlignment/,
   );
   assert.match(GRID_SOURCE, /conditionalHidesValue/);
 
