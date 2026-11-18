@@ -153,6 +153,14 @@ export { default as XlsxAuthoringDialog } from "./components/XlsxAuthoringDialog
  */
 export { default as XlsxPrintPreview } from "./components/XlsxPrintPreview.vue"
 
+export {
+  XLSX_FILE_ACCEPT,
+  XLSX_FILE_EXTENSIONS,
+  XLSX_FILE_MIME_TYPES,
+  isSupportedXlsxFileName,
+  xlsxFileExtension,
+} from "./composables/xlsx-file-types"
+
 export const XlsxViewer = XlsxViewerComponent
 
 /**

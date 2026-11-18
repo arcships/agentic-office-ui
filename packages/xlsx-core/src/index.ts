@@ -346,6 +346,7 @@ export type {
   XlsxHiddenSheet,
   XlsxSheetNameIssue,
   XlsxViewerController,
+  XlsxLoadFileSource,
   XlsxViewerEditing,
   XlsxViewerImages,
   XlsxViewerCharts,

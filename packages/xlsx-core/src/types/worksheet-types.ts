@@ -1532,6 +1532,17 @@ export interface XlsxReplaceResult {
   changed: boolean;
 }
 
+/**
+ * A local workbook handed to `XlsxViewerController.loadFile`.
+ *
+ * Plain bytes carry no display name; a `File`/`Blob` supplies one through
+ * `arrayBuffer()` and its optional `name`. The object shape stays DOM-free so
+ * the controller type works in a Worker or Node typecheck.
+ */
+export type XlsxLoadFileSource =
+  | ArrayBuffer
+  | { arrayBuffer(): Promise<ArrayBuffer>; name?: string };
+
 export interface XlsxViewerController extends XlsxViewerAuthoring {
   activeCell: XlsxCellAddress | null;
   activeCellAddress: string | null;
@@ -1708,6 +1719,17 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
    * source starts loading.
    */
   lastExportWarning: string | null;
+  /**
+   * Loads a new local workbook through the same pipeline as the `file` option.
+   *
+   * Drag-and-drop import uses this so a dropped file goes through the same
+   * size limits, deferred-load threshold and Worker path as one chosen in the
+   * file dialog. The previous workbook the viewer converted is replaced.
+   *
+   * @param source Local workbook bytes or any `File`/`Blob` with them.
+   * @param fileName Display name; defaults to the `File` name when present.
+   */
+  loadFile: (source: XlsxLoadFileSource, fileName?: string) => Promise<void>;
   /** Locale used for number and date formats that do not name one. */
   locale: string;
   maxConcurrentImageDecodes?: number;

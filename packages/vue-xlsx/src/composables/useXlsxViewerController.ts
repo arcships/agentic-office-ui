@@ -29,6 +29,7 @@ import type {
   XlsxTable,
   XlsxTableSortState,
   XlsxLoadError,
+  XlsxLoadFileSource,
   XlsxSourceState,
   XlsxViewerController,
   XlsxWorkbookTab,
@@ -219,12 +220,22 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const showHiddenSheetsMode = ref(configuredShowHiddenSheets ?? xlsxRuntime.parseOptions.showHiddenSheets ?? false);
   const skipXmlParsing = configuredSkipXmlParsing ?? xlsxRuntime.parseOptions.skipXmlParsing ?? false;
 
+  // The initial source is captured once, but drag-and-drop import replaces it
+  // later. Keeping it in refs lets `loadFile()` reuse the exact load watcher
+  // below instead of growing a second loading path.
+  const sourceFile = shallowRef<ArrayBuffer | undefined>(file);
+  const sourceUrl = ref<string | undefined>(src);
+  const sourceFileName = ref<string | undefined>(fileName);
+  // Bumped when the same bytes are loaded again, so a repeated `loadFile()`
+  // still reloads instead of silently matching the previous shallow ref.
+  const sourceRevision = ref(0);
+
   // ═══════════════════════════════════════════════════════════════════
   // State
   // ═══════════════════════════════════════════════════════════════════
-  const isLoading = ref(Boolean(file ?? src));
+  const isLoading = ref(Boolean(sourceFile.value ?? sourceUrl.value));
   const error = ref<Error | null>(null);
-  const sourceState = ref<XlsxSourceState>(file || src ? "loading" : "idle");
+  const sourceState = ref<XlsxSourceState>(sourceFile.value || sourceUrl.value ? "loading" : "idle");
   const sourceError = ref<XlsxLoadError | null>(null);
   const workbook = ref<Workbook | null>(null);
   const sheets = ref<XlsxSheetData[]>([]);
@@ -312,7 +323,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     reportDiagnostic({
       type: "export-warning",
       requestId: latestLoadRequestId,
-      sourceKind: src ? "url" : "file",
+      sourceKind: sourceUrl.value ? "url" : "file",
       message,
     });
   }
@@ -321,12 +332,12 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     reportDiagnostic({
       type: "image-decode-error",
       requestId: latestLoadRequestId,
-      sourceKind: src ? "url" : "file",
+      sourceKind: sourceUrl.value ? "url" : "file",
       imageId,
       error: {
         code: "IMAGE_DECODE_FAILED",
         message,
-        sourceKind: src ? "url" : "file",
+        sourceKind: sourceUrl.value ? "url" : "file",
         phase: "image-decode",
       },
     });
@@ -346,7 +357,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   // ═══════════════════════════════════════════════════════════════════
   // Computed
   // ═══════════════════════════════════════════════════════════════════
-  const displayFileName = computed(() => resolveDisplayFileName(src, fileName));
+  const displayFileName = computed(() => resolveDisplayFileName(sourceUrl.value, sourceFileName.value));
   const shouldDeferLoading = deferLoadingAboveBytes > 0;
   // Read through the options object so hosts may provide a reactive getter.
   // Plain boolean options retain the existing one-time configuration behavior.
@@ -581,9 +592,9 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       reportDiagnostic({
         type: "worker-error",
         requestId: latestLoadRequestId,
-        sourceKind: src ? "url" : "file",
-        url: src,
-        error: toXlsxLoadError(error, src ? "url" : "file", src),
+        sourceKind: sourceUrl.value ? "url" : "file",
+        url: sourceUrl.value,
+        error: toXlsxLoadError(error, sourceUrl.value ? "url" : "file", sourceUrl.value),
       });
     };
     const runMainThreadFallback = () => {
@@ -702,9 +713,9 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       reportDiagnostic({
         type: "worker-error",
         requestId: latestLoadRequestId,
-        sourceKind: src ? "url" : "file",
-        url: src,
-        error: toXlsxLoadError(error, src ? "url" : "file", src),
+        sourceKind: sourceUrl.value ? "url" : "file",
+        url: sourceUrl.value,
+        error: toXlsxLoadError(error, sourceUrl.value ? "url" : "file", sourceUrl.value),
       });
       return false;
     }
@@ -1343,7 +1354,10 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   // ═══════════════════════════════════════════════════════════════════
   // Loading watcher
   // ═══════════════════════════════════════════════════════════════════
-  watch(() => [file, src], (_value, _oldValue, onCleanup) => {
+  watch([sourceFile, sourceUrl, sourceRevision], (_value, _oldValue, onCleanup) => {
+    const file = sourceFile.value;
+    const src = sourceUrl.value;
+    const fileName = sourceFileName.value;
     if (!file && !src) {
       latestLoadRequestId += 1;
       xlsxLoadCoordinator.cancel();
@@ -1500,7 +1514,10 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   });
 
   const ctx = {
-    file, src, fileName, maxFileSizeBytes, deferLoadingAboveBytes, skipXmlParsing,
+    get file() { return sourceFile.value; },
+    get src() { return sourceUrl.value; },
+    get fileName() { return sourceFileName.value; },
+    maxFileSizeBytes, deferLoadingAboveBytes, skipXmlParsing,
     get showHiddenSheets() { return showHiddenSheetsMode.value; },
     setShowHiddenSheetsMode: (includeHidden: boolean) => { showHiddenSheetsMode.value = includeHidden; },
     workerSupported, shouldDeferLoading, canUseWorkerForRequestedReadOnly, requestedReadOnly: initialRequestedReadOnly,
@@ -1636,8 +1653,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     reportDiagnostic({
       type: "download",
       requestId: latestLoadRequestId,
-      sourceKind: src ? "url" : "file",
-      url: src,
+      sourceKind: sourceUrl.value ? "url" : "file",
+      url: sourceUrl.value,
       bytes: sourceBuffer.byteLength,
     });
   }
@@ -1695,6 +1712,27 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     return chartImageDomain.getChartSeriesFormula(selectedChartElement.value.chartId, selectedChartElement.value.seriesIndex);
   });
   const selectedFormula = computed(() => selectedChartFormula.value ?? selectedCellFormula.value);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Replace the source (drag-and-drop import)
+  // ═══════════════════════════════════════════════════════════════════
+  /**
+   * Loads a new local workbook through the same pipeline as the `file` option.
+   *
+   * Drag-and-drop import calls this with the dropped `File`, so the dropped
+   * workbook goes through the same size limits, URL policy, deferred-load
+   * threshold and Worker path as one picked in the file dialog.
+   */
+  async function loadFile(source: XlsxLoadFileSource, name?: string): Promise<void> {
+    const buffer = source instanceof ArrayBuffer ? source : await source.arrayBuffer();
+    const declaredName = source instanceof ArrayBuffer ? undefined : source.name;
+    sourceFileName.value = name ?? (typeof declaredName === "string" ? declaredName : sourceFileName.value);
+    // Dropping a file replaces a URL source; clearing the URL and setting the
+    // bytes in one tick makes the loading watcher run exactly once.
+    sourceUrl.value = undefined;
+    sourceFile.value = buffer;
+    sourceRevision.value += 1;
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // Return composed controller
@@ -1795,7 +1833,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     getSheetFormControls: chartImageDomain.getSheetFormControls,
     getSheetImages: chartImageDomain.getSheetImages,
     getSheetShapes: chartImageDomain.getSheetShapes,
-    file,
+    get file() { return sourceFile.value; },
     getClipboardData: clipboardDomain.getClipboardData,
     findCells: (query: string) => {
       const sheet = activeSheet.value
@@ -1845,6 +1883,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get isChartsLoading() { return isChartsLoading.value; },
     get isWorkerBacked() { return isWorkerBacked.value; },
     get lastExportWarning() { return lastExportWarning.value; },
+    loadFile,
     get maxConcurrentImageDecodes() { return xlsxRuntime.limits?.maxConcurrentImageDecodes ?? 4; },
     get sourceState() { return sourceState.value; },
     get sourceError() { return sourceError.value; },
@@ -1931,7 +1970,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     setSelectedCellValue: editingDomain.setSelectedCellValue,
     get sheets() { return sheets.value; },
     get shapes() { return chartImageDomain.shapes.value; },
-    src,
+    get src() { return sourceUrl.value; },
     get sortState() { return sortState.value; },
     sortTable: historyDomain.sortTable,
     get autoFilterRanges() { return autoFilterDomain.autoFilterRanges.value; },

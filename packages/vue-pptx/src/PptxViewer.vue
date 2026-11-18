@@ -8,6 +8,7 @@
     }"
     :style="rootStyle"
     :data-state="state"
+    :data-file-drop-active="isDragOver ? 'true' : undefined"
     :data-playback-status="playbackSnapshot?.status"
     :data-slide-index="activeIndex"
     :data-slide-error="slideFailure?.index"
@@ -15,6 +16,10 @@
     data-testid="pptx-viewer"
     tabindex="0"
     @keydown="onKeydown"
+    @dragenter="onDragEnter"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
   >
     <header v-if="showToolbar && !isPresent" class="pptx-viewer__toolbar">
       <div class="pptx-viewer__toolbar-group">
@@ -59,6 +64,10 @@
           class="pptx-viewer__warning"
         >{{ warning.message }}</p>
       </slot>
+    </div>
+
+    <div v-if="dropError" class="pptx-viewer__drop-error" data-testid="pptx-drop-error" role="alert">
+      {{ dropError }}
     </div>
 
     <div class="pptx-viewer__body">
@@ -115,7 +124,7 @@
         </div>
         <div v-else-if="state === 'error'" class="pptx-viewer__message pptx-viewer__message--error" data-testid="pptx-error">
           <slot name="error" :error="error">{{ error?.message }}</slot>
-          <button v-if="props.source" type="button" data-testid="pptx-error-retry" @click="run(reopen)">{{ m.pptx.viewer.retry }}</button>
+          <button v-if="effectiveSource" type="button" data-testid="pptx-error-retry" @click="run(reopen)">{{ m.pptx.viewer.retry }}</button>
         </div>
         <div
           v-if="slideFailure"
@@ -180,7 +189,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, provide, ref, watch } from "vue"
+import { computed, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch } from "vue"
 import {
   PptxPlaybackError,
   PptxPreviewError,
@@ -205,11 +214,12 @@ import {
   type PptxPreviewSource,
 } from "@arcships/pptx-core/browser"
 import type { PptxSearchState, UsePptxDocumentOptions, PptxStageExpose } from "./headless-types"
-import { OfficeLiveStatus, isEditableViewerTarget, isInteractiveViewerTarget, useViewerKeys } from "@arcships/vue-ui"
+import { OfficeLiveStatus, isEditableViewerTarget, isInteractiveViewerTarget, useFileDrop, useViewerKeys, FILE_DROP_OUTLINE } from "@arcships/vue-ui"
 import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import { providePptxMessages } from "./i18n"
+import { PPTX_FILE_EXTENSIONS, PPTX_FILE_MIME_TYPES } from "./pptx-file-types"
 import { usePptxDocument } from "./composables/usePptxDocument"
 import { usePptxPlayback } from "./composables/usePptxPlayback"
 import { watchFontLoading } from "./composables/font-loading"
@@ -289,6 +299,8 @@ const emit = defineEmits<{
   searchStateChange: [state: PptxSearchState]
   slideError: [error: PptxPreviewError, slideIndex: number]
   documentError: [error: PptxPreviewError]
+  /** A supported presentation was dropped; the viewer opened it through `usePptxDocument`. */
+  fileDrop: [file: File]
 }>()
 
 type ViewerState = "empty" | "waiting" | "loading" | "ready" | "cancelled" | "error"
@@ -300,6 +312,30 @@ const SIDEBAR_OVERSCAN_ROWS = 3
 const SIDEBAR_FALLBACK_VIEWPORT_PX = 640
 
 const m = providePptxMessages(() => props.locale, () => props.messages)
+
+// ── Drag-and-drop file import ──────────────────────────────────────
+// A dropped presentation becomes the effective source; `usePptxDocument`
+// opens it through the same session pipeline as the `source` prop.
+const droppedSource = shallowRef<PptxPreviewSource | null>(null)
+const dropError = ref("")
+const effectiveSource = computed<PptxPreviewSource | null>(() => droppedSource.value ?? props.source ?? null)
+const fileDrop = useFileDrop({
+  accept: { extensions: PPTX_FILE_EXTENSIONS, mimeTypes: PPTX_FILE_MIME_TYPES },
+  onFile: (file) => {
+    dropError.value = ""
+    emit("fileDrop", file)
+    droppedSource.value = file
+  },
+  onReject: () => {
+    dropError.value = m.value.pptx.viewer.unsupportedDrop
+  },
+})
+const { isDragOver, onDragEnter, onDragOver, onDragLeave, onDrop } = fileDrop
+
+// A host-owned source supersedes a file dropped earlier. This watcher is
+// registered before `usePptxDocument` opens its own source watcher below, so
+// the dropped source is already cleared when that one reads the new value.
+watch(() => props.source, () => { droppedSource.value = null; dropError.value = "" })
 
 const viewerRef = ref<HTMLElement | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
@@ -321,7 +357,7 @@ const stopFontLoadingWatcher = watchFontLoading(() => {
 onBeforeUnmount(stopFontLoadingWatcher)
 
 const documentOptions = {
-  source: () => props.source,
+  source: () => effectiveSource.value,
   initialSlide: () => props.initialSlide,
   openTimeoutMs: () => props.openTimeoutMs,
   messages: () => m.value.pptx.documentErrors,
@@ -382,8 +418,10 @@ function toCssLength(value: string | number | undefined): string | undefined {
 }
 
 const rootStyle = computed(() => {
-  if (isFullscreen.value) return undefined
+  const outline = isDragOver.value ? FILE_DROP_OUTLINE : undefined
+  if (isFullscreen.value) return outline ? { outline } : undefined
   const style: Record<string, string> = { height: props.height, maxHeight: props.height }
+  if (outline) style.outline = outline
   const minHeight = toCssLength(props.minHeight)
   if (minHeight) style.minHeight = minHeight
   return style
@@ -688,7 +726,7 @@ async function goTo(index: number): Promise<void> {
 }
 
 async function reopen(): Promise<void> {
-  const source = props.source
+  const source = effectiveSource.value
   if (!source) return
   await pptxDocument.open(source, { initialSlide: pptxDocument.activeIndex.value })
 }
@@ -950,7 +988,7 @@ watch(() => props.initialSlide, (index) => {
 })
 
 watch(() => props.mode, () => {
-  const source = props.source
+  const source = effectiveSource.value
   const index = pptxDocument.activeIndex.value
   resetSearch()
   if (!source) return

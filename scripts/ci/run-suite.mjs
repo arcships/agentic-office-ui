@@ -193,6 +193,7 @@ const suites = {
       "--test-concurrency=1",
       "tests/component/vue-component-behavior.test.mjs",
       "tests/component/vue-components.test.mjs",
+      "tests/component/file-drop-import.test.mjs",
       "tests/component/pdf-page-lifecycle.test.mjs",
       "tests/component/i18n-source.test.mjs",
       "tests/component/i18n-runtime.test.mjs",

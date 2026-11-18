@@ -102,6 +102,7 @@ export type {
   XlsxTableHeaderMenuRenderProps,
   // Viewer controller
   XlsxRuntimeLike,
+  XlsxLoadFileSource,
   UseXlsxViewerControllerOptions,
   XlsxUrlPolicy,
   XlsxSourceKind,

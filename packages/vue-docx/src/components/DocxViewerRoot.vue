@@ -10,9 +10,10 @@
     :data-docx-pagination-target-reached="paginationTargetReached ? 'true' : 'false'"
     :style="rootStyle"
     @scroll.passive="onScroll"
-    @dragover.prevent="onDragOver"
+    @dragenter="onDragEnter"
+    @dragover="onDragOver"
     @dragleave="onDragLeave"
-    @drop.prevent="onDrop"
+    @drop="onDrop"
     @contextmenu.prevent="onContextMenu"
     @mouseup="onMouseUp"
     @copy="onCopy"
@@ -148,13 +149,14 @@ import {
 import DocxPageSurface from "./DocxPageSurface.vue"
 import { useDocxMessages } from "../i18n"
 import { formatOfficeMessage } from "@arcships/office-interaction"
+import { useFileDrop } from "@arcships/vue-ui"
 import type {
   DocxBookmarkRevealResult,
   DocxBookmarkTargetHighlight,
 } from "../composables/docx-bookmarks"
 import {
-  DOCX_UNSUPPORTED_FILE_MESSAGE,
-  isSupportedDocxFileName,
+  DOCX_FILE_EXTENSIONS,
+  DOCX_FILE_MIME_TYPES,
 } from "../composables/docx-file-types"
 import {
   ensureDocxViewerPageSurfaceRegistry,
@@ -315,8 +317,20 @@ let measurementFlushHandle: ReturnType<typeof setTimeout> | undefined
 // the reader's viewport keeps the same page position.
 let pendingPaginationScrollAnchor: PaginationScrollAnchor | undefined
 
-// Drag-over state for file drops
-const isDragOver = ref(false)
+// ── Drag-over state for file drops ──────────────────────────────────
+// The viewer root is the drop target; the shared composable owns the accept
+// list, the nesting depth and the outline reset. Imports through the editor
+// controller so the dropped file follows the same path as the picker.
+const fileDrop = useFileDrop({
+  accept: {
+    extensions: DOCX_FILE_EXTENSIONS,
+    mimeTypes: DOCX_FILE_MIME_TYPES,
+  },
+  enabled: () => props.editable && !!props.controller,
+  onFile: (file) => props.controller?.importDocxFile(file),
+  onReject: () => props.controller?.setStatus(m.value.docx.viewer.unsupportedFile),
+})
+const { isDragOver, onDragEnter, onDragOver, onDragLeave, onDrop } = fileDrop
 
 // ── Print mode ─────────────────────────────────────────────────────
 // Printing must include every page, not only the virtualized window that is
@@ -1621,41 +1635,8 @@ watch(
 )
 
 // ── Drag-and-drop file import ──────────────────────────────────────
-function onDragOver(event: DragEvent): void {
-  if (!event.dataTransfer) return
-  if (props.editable && props.controller && hasDocxFile(event.dataTransfer)) {
-    // `dragover` fires continuously while inside the element; a counter would
-    // only ever grow because `dragleave` fires once when the pointer leaves.
-    isDragOver.value = true
-    event.dataTransfer.dropEffect = "copy"
-  }
-}
-
-function onDragLeave(event?: DragEvent): void {
-  const container = scrollContainerRef.value
-  const related = event?.relatedTarget as Node | null | undefined
-  if (related && container && typeof container.contains === "function" && container.contains(related)) {
-    return
-  }
-  isDragOver.value = false
-}
-
-async function onDrop(event: DragEvent): Promise<void> {
-  isDragOver.value = false
-  if (!props.editable || !props.controller) return
-
-  const files = event.dataTransfer?.files
-  if (!files || files.length === 0) return
-
-  for (let i = 0; i < files.length; i++) {
-    if (isSupportedDocxFileName(files[i].name)) {
-      await props.controller.importDocxFile(files[i])
-      return
-    }
-  }
-
-  props.controller.setStatus(DOCX_UNSUPPORTED_FILE_MESSAGE)
-}
+// `useFileDrop` (see the declaration above) owns the handlers, so dropped
+// files follow the controller's import path and the outline always clears.
 
 // ── Copy / cut ────────────────────────────────────────────────────
 // The native contentEditable copy only carries the rendered DOM; writing the
@@ -1741,15 +1722,6 @@ function onMouseUp(): void {
     if (clickY >= top && clickY < bottom) { pageIndex = i; break }
   }
   emit("selectionChange", { kind: "text", text, pageIndex })
-}
-
-function hasDocxFile(dataTransfer: DataTransfer): boolean {
-  if (dataTransfer.types.includes("Files")) {
-    for (let i = 0; i < dataTransfer.files.length; i++) {
-      if (isSupportedDocxFileName(dataTransfer.files[i].name)) return true
-    }
-  }
-  return false
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────

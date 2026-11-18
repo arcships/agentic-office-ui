@@ -38,7 +38,11 @@ import "@arcships/vue-pdf/style.css"
 
 `PdfSurface` 也接受 `isDark` 和 `minHeight`。打印时工具栏、缩略图和状态层会自动隐藏，PDF 会在打印前一次性栅格化全部页面（而不是只打印当前页或占位符），并按文档首页尺寸设置 `@page`。
 
-事件包括 `document-load-success`、`document-load-error`、`active-page-change`、`selectionChange` 和 `diagnostic`。当前页支持拖选文字、双击选词、`Ctrl/Cmd+C` 复制和 `Escape` 清除；`clearSelection()` 与 `getSelectionState()` 通过组件实例暴露。位图上方还渲染真实 DOM 文本层（每个 glyph 一个透明 span，随缩放/旋转应用 CSS matrix），可由屏幕阅读器、浏览器查找和 CJK 提取读取；文本层不拦截指针，拖选、链接/表单命中与区域选择行为不变。错误处理使用 `PdfLoadError.code`，不要通过错误文案判断类型。加密文档在无密码可用时返回 `ENCRYPTED`；`load-start` 诊断中的 URL 已去除查询串、片段和凭据。
+事件包括 `document-load-success`、`document-load-error`、`active-page-change`、`selectionChange`、`fileDrop` 和 `diagnostic`。当前页支持拖选文字、双击选词、`Ctrl/Cmd+C` 复制和 `Escape` 清除；`clearSelection()` 与 `getSelectionState()` 通过组件实例暴露。位图上方还渲染真实 DOM 文本层（每个 glyph 一个透明 span，随缩放/旋转应用 CSS matrix），可由屏幕阅读器、浏览器查找和 CJK 提取读取；文本层不拦截指针，拖选、链接/表单命中与区域选择行为不变。错误处理使用 `PdfLoadError.code`，不要通过错误文案判断类型。加密文档在无密码可用时返回 `ENCRYPTED`；`load-start` 诊断中的 URL 已去除查询串、片段和凭据。
+
+### 拖放导入
+
+把 `.pdf` 拖到查看器上会作为新的有效来源，走与 `source` 属性相同的 `load()` 流程，因此大小上限、URL 规则、密码回调和诊断事件都保持一致；再次拖入会替换当前文档。宿主更新 `source`/`src` 后，属性来源重新优先。`PdfViewer` 同时抛出 `fileDrop(file)` 事件。拖入时根元素出现虚线轮廓，拖离、放下或拖拽在窗口其他位置结束后清除；不是 `.pdf` 的文件不会加载，并在查看器上方显示本地化的拒绝提示（`pdf.viewer.unsupportedDrop`）。
 
 ## 键盘导航
 

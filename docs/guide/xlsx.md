@@ -45,7 +45,13 @@ const controller = useXlsxViewerController({
 | `locale` | `string` | `"en"` | 界面文案与数字/日期默认区域；内置 `"en"`、`"zh-CN"` |
 | `documentLocale` | `string` | 跟随 `locale` | 单独覆盖数字/日期区域 |
 
-事件包括 `cellDoubleClick`、`upload`、`update:readOnly`、`tabChange`、`update:activeTabIndex`、`load-deferred`、`deferred-resumed` 和 `deferred-cancel`。打印时 `@page` 尺寸取自活动工作表的 `pageSetup` 纸张与方向；图表工作表使用 16:9 的自适应高度。
+事件包括 `cellDoubleClick`、`upload`、`fileDrop`、`update:readOnly`、`tabChange`、`update:activeTabIndex`、`load-deferred`、`deferred-resumed` 和 `deferred-cancel`。打印时 `@page` 尺寸取自活动工作表的 `pageSetup` 纸张与方向；图表工作表使用 16:9 的自适应高度。
+
+### 拖放导入
+
+将本地工作簿拖到查看器上会直接加载：先按 `.xlsx`、`.xls`、`.xlsm`、`.xlsb`、`.xltx`、`.xltm` 和 `.csv` 判断类型（`isSupportedXlsxFileName()` 与 `XLSX_FILE_ACCEPT` 可用于自建上传入口），命中的文件交给 `controller.loadFile(file)`。该入口与 `file` 选项共用大小上限、URL 规则、延迟解析阈值和 Worker 路径，因此拖放不会绕过任何加载限制。
+
+`XlsxViewer` 在加载开始时同时抛出 `fileDrop(file)` 事件，宿主可据此更新自己的文件名和状态区。拖入时查看器根元素出现虚线轮廓；拖离、放下或拖拽在窗口其他位置结束后都会清除，不依赖会一直累加的 `dragover` 计数。不支持的扩展名不会加载，查看器上方显示本地化的拒绝提示（`xlsx.viewer.unsupportedDrop`）。
 
 ## 单元格编辑
 

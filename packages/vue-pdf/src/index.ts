@@ -37,6 +37,13 @@ export { default as PdfViewer } from "./components/PdfViewer.vue"
  */
 export { default as PdfSurface } from "./components/PdfSurface.vue"
 export {
+  PDF_FILE_ACCEPT,
+  PDF_FILE_EXTENSIONS,
+  PDF_FILE_MIME_TYPES,
+  isSupportedPdfFileName,
+  pdfFileExtension,
+} from "./pdf-file-types"
+export {
   DEFAULT_PDF_MAX_FILE_SIZE,
   PdfSourceError,
   loadVerifiedPdfSource,

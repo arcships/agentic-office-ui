@@ -43,6 +43,10 @@ import "@arcships/vue-docx/style.css"
 
 主要事件为 `load-start`、`load-success`、`load-error`、`file-selected`、`update:isDark`、`update:showTrackedChanges`、`update:revisionDisplay` 和 `update:showComments`。
 
+### 拖放导入
+
+把 `.docx`、`.docm`、`.dotx` 或 `.dotm` 拖到查看器上，会走与“导入”按钮相同的 `controller.importDocxFile(file)` 路径；拖入时页面出现虚线轮廓，拖离、放下或拖拽在窗口其他位置结束后都会清除。不支持的类型（例如旧版 `.doc`）不会导入，并在状态栏显示本地化提示。
+
 ## 修订显示方式
 
 `revisionDisplay` 只改变页面如何绘制修订，不修改模型：导出、接受/拒绝和重新打开仍保留全部修订。

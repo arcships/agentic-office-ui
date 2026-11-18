@@ -681,6 +681,8 @@ export interface OfficeXlsxMessages {
     deferredDetail: string
     resumeParsing: string
     cancel: string
+    /** Rejected drop: the file type is outside the workbook accept list. */
+    unsupportedDrop: string
     live: {
       loading: string
       error: string
@@ -1120,6 +1122,8 @@ export interface OfficePptxMessages {
     loading: string
     waiting: string
     cancelled: string
+    /** Rejected drop: the file type is not a PowerPoint presentation. */
+    unsupportedDrop: string
     reload: string
     retry: string
     skip: string
@@ -1224,6 +1228,8 @@ export interface OfficePdfMessages {
     searchResult: string
     renderFailed: string
     invalidPdf: string
+    /** Rejected drop: the file type is not a PDF document. */
+    unsupportedDrop: string
     selectionLayer: string
   }
   surface: {
@@ -1886,6 +1892,7 @@ export const officeMessagesEn: OfficeMessages = {
       deferredDetail: "File size {size}. Resuming parsing uses more memory.",
       resumeParsing: "Resume parsing",
       cancel: "Cancel",
+      unsupportedDrop: "Only .xlsx, .xls, .xlsm, .xlsb, .xltx, .xltm and .csv files are supported",
       live: {
         loading: "Loading workbook",
         error: "Unable to open workbook: {message}",
@@ -2308,6 +2315,7 @@ export const officeMessagesEn: OfficeMessages = {
       loading: "Loading PPTX…",
       waiting: "Waiting for the slide stage…",
       cancelled: "PPTX loading was cancelled.",
+      unsupportedDrop: "Only .pptx, .pptm, .ppsx, .ppsm, .potx and .potm files are supported",
       reload: "Reload",
       retry: "Retry",
       skip: "Skip",
@@ -2399,6 +2407,7 @@ export const officeMessagesEn: OfficeMessages = {
       searchResult: "Result {current} / {total}, page {page}",
       renderFailed: "The PDF page could not be rendered.",
       invalidPdf: "The PDF file could not be parsed or rendered.",
+      unsupportedDrop: "Only PDF files are supported",
       selectionLayer: "PDF page text selection layer",
     },
     surface: {
@@ -3035,6 +3044,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       deferredDetail: "文件大小 {size}，继续解析会占用更多内存。",
       resumeParsing: "继续解析",
       cancel: "取消",
+      unsupportedDrop: "仅支持 .xlsx、.xls、.xlsm、.xlsb、.xltx、.xltm 和 .csv 文件",
       live: {
         loading: "正在加载工作簿",
         error: "无法打开工作簿：{message}",
@@ -3457,6 +3467,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       loading: "正在加载 PPTX…",
       waiting: "正在等待幻灯片舞台…",
       cancelled: "PPTX 加载已取消。",
+      unsupportedDrop: "仅支持 .pptx、.pptm、.ppsx、.ppsm、.potx 和 .potm 文件",
       reload: "重新加载",
       retry: "重试",
       skip: "跳过",
@@ -3548,6 +3559,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       searchResult: "第 {current} / {total} 项，第 {page} 页",
       renderFailed: "PDF 页面渲染失败。",
       invalidPdf: "PDF 文件无法解析或渲染。",
+      unsupportedDrop: "仅支持 PDF 文件",
       selectionLayer: "PDF 页面文本选择层",
     },
     surface: {

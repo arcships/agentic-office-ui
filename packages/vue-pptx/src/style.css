@@ -103,6 +103,15 @@
 
 .pptx-viewer__warning { margin: 0; }
 
+.pptx-viewer__drop-error {
+  background: color-mix(in srgb, #dc2626 14%, var(--pptx-panel));
+  border-bottom: 1px solid var(--pptx-border);
+  color: var(--pptx-text);
+  flex: 0 0 auto;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
 .pptx-viewer__slide-error {
   align-items: center;
   background: color-mix(in srgb, #f59e0b 22%, var(--pptx-panel));

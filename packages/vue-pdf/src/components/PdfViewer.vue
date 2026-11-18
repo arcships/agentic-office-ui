@@ -43,9 +43,10 @@ import { hasUnmappedPdfText } from "../pdf/pdf-selection-range"
 import { currentRenderDpr, watchDevicePixelRatio } from "../pdf/pdf-device-pixel-ratio"
 import type { PdfViewerProps } from "../types"
 import { formatOfficeMessage } from "@arcships/office-interaction"
-import { isEditableViewerTarget, useViewerKeys } from "@arcships/vue-ui"
+import { isEditableViewerTarget, useViewerKeys, useFileDrop, FILE_DROP_OUTLINE } from "@arcships/vue-ui"
 import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import { providePdfMessages } from "../i18n"
+import { PDF_FILE_EXTENSIONS, PDF_FILE_MIME_TYPES } from "../pdf-file-types"
 
 const props = withDefaults(defineProps<PdfViewerProps>(), {
   src: undefined,
@@ -74,6 +75,8 @@ const emit = defineEmits<{
   "active-page-change": [pageNumber: number]
   diagnostic: [event: PdfDiagnostic]
   selectionChange: [selection: PdfSelectionState]
+  /** A supported PDF was dropped; the viewer loaded it through `load()`. */
+  fileDrop: [file: File]
 }>()
 
 const m = providePdfMessages(() => props.locale, () => props.messages)
@@ -95,6 +98,9 @@ const searchResult = ref("")
 const searchHits = ref<readonly PdfSearchHit[]>([])
 const searchHitIndex = ref(-1)
 const loadError = ref<PdfLoadError | null>(null)
+/** A file dropped on the viewer; wins over the `source`/`src` props until they change. */
+const droppedSource = ref<PdfSource | null>(null)
+const dropError = ref("")
 const loadErrorMessage = computed(() => loadError.value
   ? localizePdfErrorMessage(loadError.value, m.value.pdf.errors)
   : "")
@@ -170,10 +176,28 @@ const pdfTaskSequence = createOfficeTaskSequence(pdfRuntimeId)
 const pdfLoadCoordinator = createLatestTaskCoordinator(pdfTaskSequence)
 
 const effectiveSource = computed<PdfSource | undefined>(() => {
+  if (droppedSource.value) return droppedSource.value
   if (props.source) return props.source
   if (props.src) return { kind: "url", url: props.src }
   return undefined
 })
+
+// ── Drag-and-drop file import ──────────────────────────────────────
+// A dropped PDF becomes the effective source, so it loads through the same
+// `load()` pipeline as the `source`/`src` props and the file picker.
+const fileDrop = useFileDrop({
+  accept: { extensions: PDF_FILE_EXTENSIONS, mimeTypes: PDF_FILE_MIME_TYPES },
+  onFile: (file) => {
+    dropError.value = ""
+    emit("fileDrop", file)
+    droppedSource.value = { kind: "blob", blob: file, fileName: file.name }
+  },
+  onReject: () => {
+    dropError.value = m.value.pdf.viewer.unsupportedDrop
+  },
+})
+const { isDragOver, onDragEnter, onDragOver, onDragLeave, onDrop } = fileDrop
+
 const viewerState = computed(() => {
   if (!effectiveSource.value) return "idle"
   if (isLoading.value || pageRenderState.value === "rendering") return "loading"
@@ -199,8 +223,11 @@ const printPageEntries = computed(() =>
 )
 const viewerMinHeightStyle = computed(() => {
   const value = props.minHeight
-  if (value === undefined) return undefined
-  return { minHeight: typeof value === "number" ? `${value}px` : value }
+  const outline = isDragOver.value ? FILE_DROP_OUTLINE : undefined
+  if (value === undefined) return outline ? { outline } : undefined
+  const style: Record<string, string> = { minHeight: typeof value === "number" ? `${value}px` : value }
+  if (outline) style.outline = outline
+  return style
 })
 
 function cn(...classes: (string | undefined | null | false)[]): string {
@@ -1233,6 +1260,7 @@ async function load(): Promise<void> {
   latestTaskId = undefined
   isLoading.value = !!source
   loadError.value = null
+  dropError.value = ""
   downloadError.value = ""
   rotation.value = 0
   zoom.value = Math.min(2, Math.max(0.5, props.defaultZoom))
@@ -1320,8 +1348,14 @@ async function load(): Promise<void> {
   }
 }
 
+// A host-owned source supersedes a file dropped earlier; the load watcher below
+// then picks up the props path again.
 watch(
-  () => [props.src, props.source, props.urlPolicy, props.runtime, props.pdfiumWasmUrl, props.maxFileSize],
+  () => [props.src, props.source],
+  () => { droppedSource.value = null },
+)
+watch(
+  () => [effectiveSource.value, props.urlPolicy, props.runtime, props.pdfiumWasmUrl, props.maxFileSize],
   () => void load(),
   { immediate: true },
 )
@@ -1383,10 +1417,15 @@ defineExpose({
     ref="viewerRef"
     :class="cn('pdf-viewer', props.isDark && 'pdf-viewer--dark', printMode && 'pdf-viewer--print', props.className)"
     :style="viewerMinHeightStyle"
+    :data-file-drop-active="isDragOver ? 'true' : undefined"
     data-testid="pdf-viewer"
     tabindex="0"
     @keydown="onViewerKeydown"
     @copy="onViewerCopy"
+    @dragenter="onDragEnter"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
   >
     <div v-if="props.showToolbar" data-testid="pdf-toolbar" class="pdf-toolbar">
       <button
@@ -1440,6 +1479,7 @@ defineExpose({
     </div>
 
     <div data-testid="pdf-status" class="pdf-status" :data-state="viewerState" role="status" aria-live="polite" aria-atomic="true">{{ viewerState }}</div>
+    <div v-if="dropError" data-testid="pdf-drop-error" class="pdf-drop-error" role="alert">{{ dropError }}</div>
     <div v-if="!effectiveSource" class="pdf-empty">{{ m.pdf.viewer.noPdf }}</div>
     <div v-else-if="isLoading && !renderDocument" class="pdf-empty">{{ m.pdf.viewer.opening }}</div>
     <div v-else-if="loadError" data-testid="load-error" class="pdf-error" :data-error-code="loadError.code">
@@ -1598,6 +1638,7 @@ defineExpose({
 .pdf-search input { width: 150px; }
 .search-result { font-size: 12px; color: var(--pdf-link); white-space: nowrap; }
 .pdf-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+.pdf-drop-error { padding: 8px 12px; font-size: 12px; color: #b91c1c; border-bottom: 1px solid var(--pdf-border); background: rgba(220, 38, 38, 0.08); }
 .pdf-empty, .pdf-error { display: grid; place-items: center; flex: 1; min-height: 0; color: var(--pdf-muted); }
 .pdf-error, .download-error { color: #b91c1c; }
 .download-error { padding: 8px 12px; font-size: 12px; border-top: 1px solid var(--pdf-border); }
