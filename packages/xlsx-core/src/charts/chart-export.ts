@@ -95,6 +95,7 @@ export function normalizeChartAxis(raw: unknown): XlsxChartAxis | null {
     max: typeof axis.max === "number" ? axis.max : undefined,
     min: typeof axis.min === "number" ? axis.min : undefined,
     majorGridlines: typeof axis.majorGridlines === "boolean" ? axis.majorGridlines : undefined,
+    majorGridlineColor: typeof axis.majorGridlineColor === "string" ? axis.majorGridlineColor : undefined,
     majorTickMark: typeof axis.majorTickMark === "string" ? axis.majorTickMark : undefined,
     minorUnit: typeof axis.minorUnit === "number" ? axis.minorUnit : undefined,
     minorGridlines: typeof axis.minorGridlines === "boolean" ? axis.minorGridlines : undefined,
@@ -123,7 +124,7 @@ export function mergeChartAxis(target: XlsxChartAxis | null | undefined, patch: 
   };
 }
 
-export function readChartAxisFromXml(axisNode: Element | null): Partial<XlsxChartAxis> | null {
+export function readChartAxisFromXml(axisNode: Element | null, themePalette?: XlsxThemePalette | null): Partial<XlsxChartAxis> | null {
   if (!axisNode) {
     return null;
   }
@@ -154,6 +155,14 @@ export function readChartAxisFromXml(axisNode: Element | null): Partial<XlsxChar
     minorTimeUnit: getFirstLocalChild(axisNode, "minorTimeUnit")?.getAttribute("val") ?? undefined,
     orientation: getFirstLocalChild(scalingNode ?? axisNode, "orientation")?.getAttribute("val") ?? undefined,
     majorGridlines: Boolean(getFirstLocalChild(axisNode, "majorGridlines")),
+    majorGridlineColor: (() => {
+      const gridlines = getFirstLocalChild(axisNode, "majorGridlines");
+      if (!gridlines) {
+        return undefined;
+      }
+      const style = resolveChartLineStyle(getFirstLocalChild(gridlines, "spPr"), themePalette);
+      return style.hidden ? "transparent" : style.color ?? undefined;
+    })(),
     majorTickMark: getFirstLocalChild(axisNode, "majorTickMark")?.getAttribute("val") ?? undefined,
     majorUnit: readChartNumericAttribute(axisNode, "majorUnit"),
     max: readChartNumericAttribute(scalingNode, "max"),

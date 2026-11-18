@@ -504,6 +504,7 @@ function applyChartStyleFromXml(
   };
   const applyRelationshipStyles = () => {
     chart.chartColorPalette = readChartColorPalette(archive, relationships.get(CHART_COLOR_STYLE_REL_TYPE), themePalette);
+    chart.raw = { ...chart.raw, hasCustomChartColorStyle: Boolean(chart.chartColorPalette?.length) };
     const styleAppearance = readChartStyleAppearance(
       archive,
       relationships.get(CHART_STYLE_REL_TYPE),
@@ -942,20 +943,20 @@ function applyChartStyleFromXml(
       return position === "l" || position === "r";
     }) ?? valueAxisNodes[1] ?? valueAxisNodes[0];
   }
-  chart.categoryAxis = mergeChartAxis(chart.categoryAxis, readChartAxisFromXml(categoryAxisNode));
-  chart.valueAxis = mergeChartAxis(chart.valueAxis, readChartAxisFromXml(valueAxisNode));
-  chart.seriesAxis = mergeChartAxis(chart.seriesAxis, readChartAxisFromXml(seriesAxisNode));
+  chart.categoryAxis = mergeChartAxis(chart.categoryAxis, readChartAxisFromXml(categoryAxisNode, themePalette));
+  chart.valueAxis = mergeChartAxis(chart.valueAxis, readChartAxisFromXml(valueAxisNode, themePalette));
+  chart.seriesAxis = mergeChartAxis(chart.seriesAxis, readChartAxisFromXml(seriesAxisNode, themePalette));
   chart.axes = chart.axes.length > 0
     ? chart.axes.map((axis, index) => (
       index === 0 && categoryAxisNode
-        ? { ...axis, ...readChartAxisFromXml(categoryAxisNode) }
+        ? { ...axis, ...readChartAxisFromXml(categoryAxisNode, themePalette) }
         : index === 1 && valueAxisNode
-          ? { ...axis, ...readChartAxisFromXml(valueAxisNode) }
+          ? { ...axis, ...readChartAxisFromXml(valueAxisNode, themePalette) }
           : axis
     ))
     : chart.axes;
   if (seriesAxisNode) {
-    const seriesAxis = readChartAxisFromXml(seriesAxisNode);
+    const seriesAxis = readChartAxisFromXml(seriesAxisNode, themePalette);
     if (seriesAxis && !chart.axes.some((axis) => axis.id != null && axis.id === seriesAxis.id)) {
       chart.axes = [...chart.axes, seriesAxis as XlsxChartAxis];
     }

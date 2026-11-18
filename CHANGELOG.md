@@ -4,6 +4,12 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### XLSX built-in chart style palettes (#142)
+
+- Classic charts that carry a `<c:style>` value (1–48, or 101–148 from Excel 2010+) now use Excel's built-in series palette instead of always falling back to theme accent1–6. A new `builtin-chart-styles` module resolves the style to its theme-colour palette, applies DrawingML tint/shade in linear RGB, and reproduces the grayscale, six-grey, monochrome-accent and colourful variants (including the extra brightness groups for charts with more than six series).
+- Built-in palettes are used only when the chart has no `chartColorStyle` part (`raw.hasCustomChartColorStyle`); explicit series `spPr` fills still win, and series/points that carry a `fillImage` keep their picture fill. The selected palette feeds `chartColorPalette` and every series/marker default, and type groups keep their own offset. 3-D surface charts keep their dedicated contour palette while 3-D style 34–40 walls, floors and major gridlines now come from the same built-in surface style; `XlsxChartAxis.majorGridlineColor` carries the resulting gridline colour to custom renderers.
+- Add `tests/unit/xlsx-chart-builtin-styles.test.mjs` (style 2/34/41/102 palettes, grayscale theme, six-grey sequences, custom color-style precedence, explicit series fills, surface walls/gridlines and export/reload through both the chart parts and the engine save path); register it in `scripts/ci/run-suite.mjs` and document the behaviour in the XLSX guide.
+
 ### XLSX cell text rotation and shrink-to-fit (#141)
 
 - Cell text rotation and shrink-to-fit were parsed into `styleById[*].alignment` but never used, so 45°/90°/180° headers stayed horizontal and long values overflowed narrow columns. `parseSheetState()` now records the cells whose explicit style carries `textRotation` or `shrinkToFit` in `WorkbookSheetState.cellTextLayouts` (A1 keyed) and passes it through both the main-thread and Worker sheet lists.

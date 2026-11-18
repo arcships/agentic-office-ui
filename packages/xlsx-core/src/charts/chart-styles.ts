@@ -1,5 +1,5 @@
 import { strFromU8 } from "fflate";
-import type { XlsxChart, XlsxChartPointStyle, XlsxThemePalette } from "../types";
+import type { XlsxChart, XlsxChartPointStyle, XlsxChartSeries, XlsxThemePalette } from "../types";
 
 import {
   CHART_NS,
@@ -48,6 +48,12 @@ import {
 } from "./chart-xml-utils";
 
 import type { ChartStyleAppearance } from "./chart-types";
+
+import {
+  getBuiltinChartColor,
+  getBuiltinChartSurfaceStyle,
+  resolveBuiltinChartColor,
+} from "./builtin-chart-styles";
 
 export type FallbackSeriesStyle = {
   color?: string;
@@ -403,7 +409,7 @@ export function getBuiltinSurfacePalette(styleId: number | undefined, wireframe:
   return null;
 }
 
-export function applyBuiltinSurfaceDefaults(chart: XlsxChart) {
+export function applyBuiltinSurfaceDefaults(chart: XlsxChart, themePalette?: XlsxThemePalette | null) {
   if (chart.chartType !== "Surface") {
     return;
   }
@@ -413,23 +419,36 @@ export function applyBuiltinSurfaceDefaults(chart: XlsxChart) {
     chart.chartColorPalette = builtinPalette;
   }
 
-  const wallFill = chart.wireframe ? "#d0d0d0" : "#d9d9df";
+  const builtin = chart.raw?.hasCustomChartColorStyle !== true
+    ? getBuiltinChartSurfaceStyle(chart.chartStyleId)
+    : undefined;
+  const colors = themePalette?.colorsByIndex ?? {};
+  const wallFill = resolveBuiltinChartColor(builtin?.wall.fill, colors)
+    ?? (chart.wireframe ? "#d0d0d0" : "#d9d9df");
+  const floorFill = resolveBuiltinChartColor(builtin?.floor.fill, colors) ?? wallFill;
+  const gridlineColor = resolveBuiltinChartColor(builtin?.majorGridline, colors);
+  for (const axis of [chart.categoryAxis, chart.valueAxis, chart.seriesAxis]) {
+    if (axis && !axis.majorGridlineColor) {
+      axis.majorGridlineColor = gridlineColor;
+    }
+  }
   const wallLine = chart.wireframe ? "#a6a6a6" : "#a8adb7";
-  chart.floor = {
-    ...(chart.floor ?? {}),
-    fillColor: chart.floor?.fillColor ?? wallFill,
-    lineColor: chart.floor?.lineColor ?? wallLine
-  };
-  chart.sideWall = {
-    ...(chart.sideWall ?? {}),
-    fillColor: chart.sideWall?.fillColor ?? wallFill,
-    lineColor: chart.sideWall?.lineColor ?? wallLine
-  };
-  chart.backWall = {
-    ...(chart.backWall ?? {}),
-    fillColor: chart.backWall?.fillColor ?? wallFill,
-    lineColor: chart.backWall?.lineColor ?? wallLine
-  };
+  const previousDefaults = chart.raw?.builtinSurfaceDefaults as Record<string, { fillColor?: string; lineColor?: string }> | undefined;
+  const nextDefaults: Record<string, { fillColor?: string; lineColor?: string }> = {};
+  for (const key of ["floor", "sideWall", "backWall"] as const) {
+    const wall = chart[key] ?? {};
+    const previous = previousDefaults?.[key];
+    const fillIsDefault = wall.fillColor === undefined || wall.fillColor === previous?.fillColor;
+    const lineIsDefault = wall.lineColor === undefined || wall.lineColor === previous?.lineColor;
+    const fillColor = fillIsDefault ? (key === "floor" ? floorFill : wallFill) : wall.fillColor;
+    const lineColor = lineIsDefault ? wallLine : wall.lineColor;
+    chart[key] = { ...wall, fillColor, lineColor };
+    nextDefaults[key] = {
+      fillColor: fillIsDefault ? fillColor : undefined,
+      lineColor: lineIsDefault ? lineColor : undefined
+    };
+  }
+  chart.raw = { ...(chart.raw ?? {}), builtinSurfaceDefaults: nextDefaults };
   if (!chart.surfaceMaterial && chart.wireframe !== true) {
     chart.surfaceMaterial = "flat";
   }
@@ -459,40 +478,105 @@ export function applyBuiltinChartDefaults(chart: XlsxChart, themePalette?: XlsxT
   chart.fontFamily = chart.fontFamily ?? minorTypeface;
   chart.titleFontFamily = chart.titleFontFamily ?? chart.fontFamily ?? minorTypeface;
 
-  const seriesPalette = chart.chartColorPalette && chart.chartColorPalette.length > 0
-    ? chart.chartColorPalette
-    : buildThemeSeriesPalette(themePalette);
-  if (!chart.chartColorPalette || chart.chartColorPalette.length === 0) {
-    chart.chartColorPalette = seriesPalette;
-  }
+  const themeColors = themePalette?.colorsByIndex;
+  const useBuiltin = chart.raw?.hasCustomChartColorStyle !== true
+    && themeColors
+    && getBuiltinChartColor(chart.chartStyleId, 0, 1) !== undefined;
+  const colorCount = Math.max(
+    1,
+    chart.series.length,
+    chart.typeGroups?.reduce((total, group) => total + group.series.length, 0) ?? 0
+  );
+  const seriesPalette = useBuiltin && chart.chartType !== "Surface"
+    ? Array.from({ length: colorCount }, (_, index) => (
+        resolveBuiltinChartColor(getBuiltinChartColor(chart.chartStyleId, index, colorCount), themeColors)
+        ?? SERIES_COLORS[index % SERIES_COLORS.length]
+      ))
+    : chart.chartColorPalette && chart.chartColorPalette.length > 0
+      ? chart.chartColorPalette
+      : buildThemeSeriesPalette(themePalette);
+  chart.chartColorPalette = seriesPalette;
+  chart.raw = { ...(chart.raw ?? {}), builtinThemeColors: useBuiltin ? themeColors : undefined };
 
-  chart.series = chart.series.map((series, index) => {
+  type SeriesColorKey = "color" | "lineColor" | "markerColor" | "markerLineColor";
+  const applySeriesDefaults = (series: XlsxChartSeries, index: number, fallbackFillImage?: string) => {
     const fallbackColor = seriesPalette[index % seriesPalette.length];
-    const pictureFilled = Boolean(series.fillImage);
+    const pictureFilled = Boolean(series.fillImage ?? fallbackFillImage);
+    const properties = series.shapeProperties ?? {};
+    const previous = properties.builtinDefaultColors as Partial<Record<SeriesColorKey, string>> | undefined;
+    const generated: Partial<Record<SeriesColorKey, string>> = {};
+    const resolveColor = (key: SeriesColorKey, explicit: unknown, fallback: string | undefined) => {
+      const value = series[key];
+      if (
+        !explicit
+        && (
+          value == null
+          || value === previous?.[key]
+          || ((key === "color" || key === "lineColor") && useBuiltin && chart.raw?.xmlChartType)
+        )
+      ) {
+        if (fallback !== undefined) {
+          generated[key] = fallback;
+        }
+        return fallback;
+      }
+      return value ?? fallback;
+    };
+    const explicitFill = properties.xmlFillColor ?? properties.solidFillHex ?? properties.xmlFillHidden;
+    const explicitLine = properties.xmlLineColor ?? properties.lineColorHex ?? properties.xmlLineHidden;
+    const color = pictureFilled
+      ? undefined
+      : explicitFill
+        ? series.color ?? series.lineColor ?? fallbackColor
+        : explicitLine
+          ? series.lineColor ?? series.color ?? fallbackColor
+          : resolveColor("color", false, fallbackColor);
+    const lineColor = pictureFilled
+      ? series.lineColor ?? series.color ?? fallbackColor
+      : explicitLine
+        ? series.lineColor ?? color
+        : explicitFill
+          ? color
+          : resolveColor("lineColor", false, color ?? fallbackColor);
+    const markerColor = pictureFilled
+      ? undefined
+      : resolveColor(
+          "markerColor",
+          properties.xmlMarkerFillColor ?? properties.xmlMarkerFillHidden,
+          color ?? lineColor ?? fallbackColor
+        );
+    const markerLineColor = pictureFilled
+      ? series.markerLineColor ?? series.lineColor ?? series.color ?? fallbackColor
+      : resolveColor(
+          "markerLineColor",
+          properties.xmlMarkerLineColor ?? properties.xmlMarkerLineHidden,
+          lineColor ?? color ?? fallbackColor
+        );
     return {
       ...series,
-      color: pictureFilled ? undefined : series.color ?? series.lineColor ?? fallbackColor,
-      lineColor: series.lineColor ?? series.color ?? fallbackColor,
-      markerColor: pictureFilled ? undefined : series.markerColor ?? series.color ?? series.lineColor ?? fallbackColor,
-      markerLineColor: series.markerLineColor ?? series.lineColor ?? series.color ?? fallbackColor
+      color,
+      lineColor,
+      markerColor,
+      markerLineColor,
+      shapeProperties: { ...properties, builtinDefaultColors: generated }
     };
+  };
+
+  chart.series = chart.series.map((series, index) => applySeriesDefaults(series, index));
+  const canonicalSeries = chart.id.startsWith("chart-ex-")
+    ? null
+    : new Map(chart.series.map((series) => [series.id, series]));
+  let groupSeriesOffset = 0;
+  chart.typeGroups = chart.typeGroups?.map((group) => {
+    const series = group.series.map((entry, index) => {
+      const globalIndex = groupSeriesOffset + index;
+      const canonical = canonicalSeries?.get(entry.id);
+      return canonical ?? applySeriesDefaults(entry, globalIndex, chart.series[globalIndex]?.fillImage);
+    });
+    groupSeriesOffset += group.series.length;
+    return { ...group, series };
   });
-  chart.typeGroups = chart.typeGroups?.map((group, groupIndex) => ({
-    ...group,
-    series: group.series.map((series, seriesIndex) => {
-      const globalIndex = groupIndex + seriesIndex;
-      const fallbackColor = seriesPalette[globalIndex % seriesPalette.length];
-      const pictureFilled = Boolean(series.fillImage ?? chart.series[globalIndex]?.fillImage);
-      return {
-        ...series,
-        color: pictureFilled ? undefined : series.color ?? series.lineColor ?? fallbackColor,
-        lineColor: series.lineColor ?? series.color ?? fallbackColor,
-        markerColor: pictureFilled ? undefined : series.markerColor ?? series.color ?? series.lineColor ?? fallbackColor,
-        markerLineColor: series.markerLineColor ?? series.lineColor ?? series.color ?? fallbackColor
-      };
-    })
-  }));
-  applyBuiltinSurfaceDefaults(chart);
+  applyBuiltinSurfaceDefaults(chart, themePalette);
 }
 
 export function parseChartPointStyles(
