@@ -5,12 +5,16 @@ import {
   anchorToAbsoluteRect,
   applyChartSeriesFormula,
   buildChartSeriesFormula,
+  changeWorkbookChartType,
+  chartTypeUnavailable,
   deleteWorkbookChart,
   deleteWorkbookFormControl,
   deleteWorkbookImage,
   deleteWorkbookShape,
   emuToPixels,
+  loadWorkbookChartAssets,
   rectToImageAnchor,
+  resolveChartTypeOption,
   resizeImageRect,
   resolveRenderedSheetAxisPixels,
   resolveSheetColumnWidthPixels,
@@ -704,6 +708,55 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     return true;
   }
 
+  /**
+   * Rewrites an existing chart as another chart type and re-reads the charts
+   * from the archive so the viewer shows the rewritten plot immediately.
+   */
+  function changeChartType(id: string, type: string) {
+    const currentChart = getChartById(id);
+    const hydratedChartAssets = ctx.ensureChartAssetsHydrated(ctx.workbook.value, ctx.sheets.value);
+    if (
+      ctx.isEditingLocked.value
+      || !ctx.workbook.value
+      || !ctx.imageAssetsRef.value
+      || !hydratedChartAssets
+      || !currentChart
+      || currentChart.editable === false
+    ) {
+      return false;
+    }
+    const option = resolveChartTypeOption(type);
+    if (!option || chartTypeUnavailable(currentChart, option)) {
+      return false;
+    }
+    const origin = hydratedChartAssets.chartOriginsById.get(id);
+    if (!origin?.chartPath) {
+      return false;
+    }
+
+    ctx.recordHistoryBeforeMutation();
+    if (!changeWorkbookChartType(ctx.imageAssetsRef.value, hydratedChartAssets, id, type)) {
+      return false;
+    }
+
+    // Rebuild the chart list from the archive: a classic ↔ chartEx migration
+    // changes the chart id, so re-select by the part both models share.
+    const nextChartAssets = loadWorkbookChartAssets(
+      ctx.workbook.value,
+      ctx.imageAssetsRef.value,
+      ctx.visibleSheetIndexByWorkbookSheetIndex.value,
+      ctx.showHiddenSheets
+    );
+    ctx.setChartAssets(nextChartAssets);
+    const nextChart = nextChartAssets.chartsByWorkbookSheetIndex
+      .flat()
+      .find((chart) => chart.chartPath === origin.chartPath) ?? null;
+    ctx.selectedChartId.value = nextChart?.id ?? null;
+    ctx.selectedChartElement.value = nextChart ? { chartId: nextChart.id, kind: "chart" } : null;
+    ctx.revision.value = ctx.revision.value + 1;
+    return Boolean(nextChart);
+  }
+
   function getChartSeriesFormula(chartId: string, seriesIndex: number) {
   return (
     buildChartSeriesFormula(getChartById(chartId), seriesIndex)
@@ -752,6 +805,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     updateFormControl,
     removeFormControl,
     updateChart,
+    changeChartType,
     setChartSeriesFormula,
     getChartSeriesFormula
   };

@@ -149,6 +149,7 @@
         />
         <XlsxChartOverlay
           :controller="controller"
+          @chart-context-menu="onChartContextMenu"
           :is-dark="isDark ?? false"
           :scroll-left="gridViewport.scrollLeft"
           :scroll-top="gridViewport.scrollTop"
@@ -357,7 +358,10 @@ const viewerRef = ref<HTMLElement | null>(null);
 const bodyRef = ref<HTMLElement | null>(null);
 const toolbarRef = ref<InstanceType<typeof XlsxToolbar> | null>(null);
 const gridRef = ref<GridInstance | null>(null);
-const contextMenuRef = ref<{ openAt(clientX: number, clientY: number, target?: unknown): boolean } | null>(null);
+const contextMenuRef = ref<{
+  openAt(clientX: number, clientY: number, target?: unknown): boolean
+  openForChart(chartId: string, clientX: number, clientY: number): boolean
+} | null>(null);
 const gridViewport = ref({ height: 0, scrollLeft: 0, scrollTop: 0, width: 0 });
 const authoringKind = ref<XlsxAuthoringDialogKind | null>(null);
 
@@ -501,6 +505,10 @@ const touchGestures = createTouchGestureTracker({
     contextMenuRef.value?.openAt(pointer.clientX, pointer.clientY, pointer.target);
   },
 });
+
+function onChartContextMenu(payload: { chartId: string; clientX: number; clientY: number }): void {
+  contextMenuRef.value?.openForChart(payload.chartId, payload.clientX, payload.clientY);
+}
 
 function onTouchPointerDown(event: PointerEvent): void { touchGestures.pointerDown(event); }
 function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMove(event); }

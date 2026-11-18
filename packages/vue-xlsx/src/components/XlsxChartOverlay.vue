@@ -25,6 +25,7 @@
         }"
         :style="item.style"
         @pointerdown.stop="onChartPointerDown(item, $event)"
+        @contextmenu.prevent.stop="onChartContextMenu(item, $event)"
         @keydown="onChartKeydown(item.chart, $event)"
       >
         <MemoChartSvg
@@ -80,6 +81,10 @@ import { createGridPaneLayout, gridBodyLayerStyle, resolveAnchorRect, type GridP
 import { DRAWING_RESIZE_HANDLES, drawingHandleStyle, useDrawingGestures } from "./drawing-interaction";
 import type { ChartRendererPalette } from "../render/chart-types";
 import { useXlsxMessages } from "../i18n";
+
+const emit = defineEmits<{
+  chartContextMenu: [payload: { chartId: string; clientX: number; clientY: number }];
+}>();
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -171,6 +176,15 @@ function onChartPointerDown(item: ChartItem, event: PointerEvent) {
 
 function onHandlePointerDown(item: ChartItem, handle: XlsxImageResizeHandlePosition, event: PointerEvent) {
   interaction.beginResize(item.chart.id, item.rect, handle, event);
+}
+
+function onChartContextMenu(item: ChartItem, event: MouseEvent) {
+  props.controller.selectChart(item.chart.id);
+  emit("chartContextMenu", {
+    chartId: item.chart.id,
+    clientX: event.clientX,
+    clientY: event.clientY,
+  });
 }
 
 function onChartElementPointerDown(selection: XlsxChartElementSelection, _event: PointerEvent) {

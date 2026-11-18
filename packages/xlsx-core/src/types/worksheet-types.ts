@@ -871,6 +871,22 @@ export interface XlsxViewerAuthoring {
    * part is unavailable, or editing is locked.
    */
   insertChart: (input?: XlsxChartInsertInput | null) => XlsxChart | null;
+  /**
+   * Switches an existing chart to another chart type.
+   *
+   * The chart part is rewritten in place: classic families rebuild the plot
+   * area while keeping series names, colours, data labels and axis formatting,
+   * modern families rebuild the part as a chartEx chart (with the style parts
+   * it needs), and migrations between the two also update the drawing
+   * relationship, the `mc:AlternateContent` wrapper and the content type.
+   * The mutation is recorded in undo history and is written into exported XLSX
+   * bytes.
+   *
+   * @param id Chart id, as returned by `getSheetCharts()` or `insertChart()`.
+   * @param type Chart type option id, for example `"Pie3D"` or `"Treemap"`.
+   * @returns `true` when the chart part was rewritten.
+   */
+  changeChartType: (id: string, type: string) => boolean;
   // ── Freeze panes ───────────────────────────────────────────────────
   /** Frozen rows/columns of the active sheet. */
   readonly freezePanes: XlsxFreezePanes | null;
@@ -1416,6 +1432,7 @@ export interface XlsxViewerCharts {
   activeTabIndex: number;
   charts: XlsxChart[];
   chartsheets: XlsxChartsheet[];
+  changeChartType: (id: string, type: string) => boolean;
   clearSelectedChart: () => void;
   clearSelectedChartElement: () => void;
   getChartById: (id: string) => XlsxChart | null;

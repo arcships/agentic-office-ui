@@ -416,6 +416,14 @@ export function buildChartExHistogramSeries(
   rawSeries: unknown,
   sortByFrequency: boolean
 ) {
+  // The chart loader bins the series once; a second pass over an already binned
+  // series would re-bin the counts and destroy the histogram.
+  const existingRaw = series.raw && typeof series.raw === "object"
+    ? series.raw as Record<string, unknown>
+    : null;
+  if (Array.isArray(existingRaw?.chartExHistogramBins)) {
+    return series;
+  }
   const layout = resolveChartExSeriesLayout(rawSeries);
   const rawRecord = rawSeries && typeof rawSeries === "object" ? rawSeries as Record<string, unknown> : null;
   const hasBinning = Boolean(
@@ -833,7 +841,17 @@ export function normalizeChartExChart(
     name: chartTitle,
     overlap: undefined,
     plotVisibleOnly: undefined,
-    raw: chart,
+    raw: {
+      ...chart,
+      // The normalized model collapses point-series layouts (treemap, funnel,
+      // waterfall, …) to the series that is actually plotted. Keep the series
+      // the part declares so a later chart-type switch can restore all of them.
+      // A `paretoLine` series is derived from its histogram column, so it is not
+      // a source series.
+      chartExSourceSeries: normalizedSeries.filter(
+        (_, seriesIndex) => seriesLayouts[seriesIndex] !== "paretoLine"
+      )
+    },
     radarStyle: undefined,
     scatterStyle: undefined,
     roundedCorners: undefined,

@@ -28,6 +28,7 @@
       />
       <XlsxChartOverlay
         :controller="controller"
+        @chart-context-menu="onChartContextMenu"
         :is-dark="isDark ?? false"
         :scroll-left="gridViewport.scrollLeft"
         :scroll-top="gridViewport.scrollTop"
@@ -193,7 +194,10 @@ const descriptor = (
 ) => formatOfficeMessage(m.value.common.descriptors[key], values)
 const confirmFailed = () => formatOfficeMessage(m.value.common.reference.confirmFailed, { format: "XLSX" })
 const gridRef = ref<GridInstance | null>(null)
-const contextMenuRef = ref<{ openAt(clientX: number, clientY: number, target?: unknown): boolean } | null>(null)
+const contextMenuRef = ref<{
+  openAt(clientX: number, clientY: number, target?: unknown): boolean
+  openForChart(chartId: string, clientX: number, clientY: number): boolean
+} | null>(null)
 const gridViewport = ref({ height: 0, scrollLeft: 0, scrollTop: 0, width: 0 })
 const authoringKind = ref<XlsxAuthoringDialogKind | null>(null)
 
@@ -458,6 +462,10 @@ function onGestureChange(event: WebKitGestureEvent): void {
 
 function onGestureEnd(): void {
   webkitGestureActive = false
+}
+
+function onChartContextMenu(payload: { chartId: string; clientX: number; clientY: number }): void {
+  contextMenuRef.value?.openForChart(payload.chartId, payload.clientX, payload.clientY);
 }
 
 function emitContextMenuAt(clientX: number, clientY: number): void {

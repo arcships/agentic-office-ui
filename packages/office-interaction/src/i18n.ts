@@ -559,6 +559,7 @@ export interface OfficeXlsxMessages {
     sortDescending: string
     undo: string
     redo: string
+    changeChartType: string
   }
   formulaBar: {
     activeCell: string
@@ -1478,6 +1479,7 @@ export const officeMessagesEn: OfficeMessages = {
       sortDescending: "Sort descending",
       undo: "Undo",
       redo: "Redo",
+      changeChartType: "Change Chart Type",
     },
     formulaBar: {
       activeCell: "Active cell",
@@ -2343,6 +2345,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       sortDescending: "按此列降序",
       undo: "撤销",
       redo: "重做",
+      changeChartType: "更改图表类型",
     },
     formulaBar: {
       activeCell: "活动单元格",
