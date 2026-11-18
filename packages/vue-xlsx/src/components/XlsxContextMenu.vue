@@ -74,13 +74,13 @@
         </div>
         <div class="xlsx-contextmenu__separator" role="separator" />
         <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-copy" role="menuitem" @click="onDrawingCopy">
-          <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+C</kbd>
+          <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_COPY }}</kbd>
         </button>
         <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-cut" role="menuitem" :disabled="isReadOnly" @click="onDrawingCut">
-          <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+X</kbd>
+          <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_CUT }}</kbd>
         </button>
         <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-paste" role="menuitem" :disabled="isReadOnly" @click="onDrawingPaste">
-          <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+V</kbd>
+          <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_PASTE }}</kbd>
         </button>
         <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-duplicate" role="menuitem" :disabled="isReadOnly" @click="onDrawingDuplicate">{{ m.xlsx.contextMenu.duplicate }}</button>
         <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-delete" role="menuitem" :disabled="isReadOnly" @click="onDrawingDelete">{{ m.xlsx.contextMenu.delete }}</button>
@@ -90,13 +90,13 @@
       </template>
       <template v-else-if="drawingTarget">
         <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-copy" role="menuitem" @click="onDrawingCopy">
-          <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+C</kbd>
+          <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_COPY }}</kbd>
         </button>
         <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-cut" role="menuitem" :disabled="isReadOnly" @click="onDrawingCut">
-          <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+X</kbd>
+          <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_CUT }}</kbd>
         </button>
         <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-paste" role="menuitem" :disabled="isReadOnly" @click="onDrawingPaste">
-          <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+V</kbd>
+          <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_PASTE }}</kbd>
         </button>
         <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-duplicate" role="menuitem" :disabled="isReadOnly" @click="onDrawingDuplicate">{{ m.xlsx.contextMenu.duplicate }}</button>
         <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-delete" role="menuitem" :disabled="isReadOnly" @click="onDrawingDelete">{{ m.xlsx.contextMenu.delete }}</button>
@@ -106,10 +106,10 @@
       </template>
       <template v-else>
       <button class="xlsx-contextmenu__item" data-testid="xlsx-context-cut" role="menuitem" :disabled="isReadOnly" @click="onCut">
-        <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+X</kbd>
+        <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_CUT }}</kbd>
       </button>
       <button class="xlsx-contextmenu__item" data-testid="xlsx-context-copy" role="menuitem" @click="onCopy">
-        <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+C</kbd>
+        <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_COPY }}</kbd>
       </button>
       <button
         v-if="!isReadOnly"
@@ -118,7 +118,7 @@
         role="menuitem"
         @click="onPaste"
       >
-        <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+V</kbd>
+        <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="xlsx-contextmenu__shortcut">{{ SHORTCUT_PASTE }}</kbd>
       </button>
       <button
         v-if="!isReadOnly"
@@ -362,6 +362,9 @@ const DEFAULT_ROW_HEIGHT = 24;
 const DEFAULT_COL_WIDTH = 80;
 const HEADER_HEIGHT = 24;
 const ROW_HEADER_WIDTH = 48;
+const SHORTCUT_COPY = "Ctrl+C";
+const SHORTCUT_CUT = "Ctrl+X";
+const SHORTCUT_PASTE = "Ctrl+V";
 const MIN_DISPLAY_ROWS = 200;
 const MIN_DISPLAY_COLS = 50;
 

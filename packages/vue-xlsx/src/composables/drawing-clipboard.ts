@@ -17,6 +17,7 @@ import {
   type XlsxSheetData,
   type XlsxShape,
 } from "@arcships/xlsx-core";
+import { officeMessagesEn } from "@arcships/office-interaction";
 import type { ClipboardPayload, XlsxControllerContext } from "./internal";
 import type { ClipboardWritePayload } from "./clipboard-text";
 
@@ -37,18 +38,18 @@ const DUPLICATE_OFFSET_PX = 20;
 function drawingLabel(kind: XlsxDrawingClipboardKind, model: XlsxChart | XlsxImage | XlsxShape) {
   if (kind === "chart") {
     const chart = model as XlsxChart;
-    return chart.title || chart.name || "Chart";
+    return chart.title || chart.name || officeMessagesEn.xlsx.chart.ariaLabel;
   }
   if (kind === "image") {
     const image = model as XlsxImage;
-    return image.name || image.description || "Image";
+    return image.name || image.description || officeMessagesEn.common.descriptors.image;
   }
   const shape = model as XlsxShape;
   const text = shape.paragraphs
     .flatMap((paragraph) => paragraph.runs.map((run) => run.text))
     .join(" ")
     .trim();
-  return shape.name || text || "Shape";
+  return shape.name || text || officeMessagesEn.docx.drawing.shape;
 }
 
 function escapeHtml(value: string) {
