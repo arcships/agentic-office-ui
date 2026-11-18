@@ -44,6 +44,8 @@
             :total-pages="pageCount"
             :section-pages="entry.sectionPages"
             :page-number-format="entry.pageNumberFormat"
+            :page-label="entry.pageLabel"
+            :parity-blank-page="entry.parityBlankPage"
             :header-section="entry.headerSection"
             :footer-section="entry.footerSection"
             :section-index="entry.sectionIndex"
@@ -100,13 +102,11 @@ import {
   collectTrackedChangesFromModel,
   parseSectionLayout,
   parseSectionPageBorders,
-  parseSectionPageNumberFormat,
-  parseSectionPageNumberStartOverride,
+  createSectionPageNumberTracker,
   primeCommentAnchors,
   resolveDocumentBackgroundColor,
   resolveDocumentSectionsFromMetadata,
   resolveDocumentLayout,
-  resolveSectionIndexForNodeIndex,
   resolveSectionVariantReferenceTypeForPage,
   groupGutterAnnotationsByPage,
   trackedChangeDuplicatesInlineMarkup,
@@ -174,6 +174,10 @@ interface VisiblePageEntry {
   pageContentWidthPx: number
   pageNumber: number
   pageNumberFormat?: string
+  /** Label Word shows for the page (`iv`, `12`); `w:fmt="none"` → empty. */
+  pageLabel: string
+  /** True when the page only exists so a section starts on an even/odd page. */
+  parityBlankPage: boolean
   sectionPages: number
   sectionIndex: number
   /** Header/footer `w:type` variant this page looks for. */
@@ -523,29 +527,38 @@ const zoomFactor = computed(() => {
 watch(pageCount, (count) => emit("pageCountChange", count), { immediate: true })
 
 // ── Document layout ────────────────────────────────────────────────
+// Per-section page numbering: `w:pgNumType` restart/format, `SECTIONPAGES` and
+// the parity blank page a `w:type="oddPage"/"evenPage"` break inserts. The
+// tracker owns the page → section attribution too, so the page numbers, the
+// section headers/footers and the thumbnail labels cannot drift apart.
+const sectionPageNumbers = computed(() => {
+  const documentSectionPropertiesXml = props.model.metadata.sectionPropertiesXml
+  return createSectionPageNumberTracker({
+    sections: resolveDocumentSectionsFromMetadata(props.model.metadata).map(
+      (section) => ({
+        startNodeIndex: section.startNodeIndex,
+        // A section without its own `w:sectPr` inherits the document's.
+        sectionPropertiesXml:
+          section.sectionPropertiesXml ?? documentSectionPropertiesXml,
+      })
+    ),
+    pages: pageNodeSegments.value.map((segments) => ({
+      startNodeIndex: segments[0]?.nodeIndex,
+    })),
+    nodeCount: props.model.nodes.length,
+  })
+})
+
 const pagePresentations = computed(() => {
   const sections = resolveDocumentSectionsFromMetadata(props.model.metadata)
   const firstPageBySection = new Map<number, number>()
   const evenAndOddHeaders = props.model.metadata.compatibility?.evenAndOddHeaders ?? false
-  let previousSectionIndex = 0
-  let previousNodeIndex = 0
-  let nextPageNumber = 1
+  const tracker = sectionPageNumbers.value
 
   return pageNodeSegments.value.map((segments, pageIndex) => {
-    const firstNodeIndex = segments[0]?.nodeIndex ?? previousNodeIndex
-    previousNodeIndex = firstNodeIndex
-    const sectionIndex = resolveSectionIndexForNodeIndex(
-      sections,
-      firstNodeIndex,
-      previousSectionIndex
-    )
-    previousSectionIndex = sectionIndex
+    const sectionIndex = tracker.sectionIndexForPage(pageIndex) ?? 0
     if (!firstPageBySection.has(sectionIndex)) {
       firstPageBySection.set(sectionIndex, pageIndex)
-      const sectionStart = parseSectionPageNumberStartOverride(
-        sections[sectionIndex]?.sectionPropertiesXml
-      )
-      if (sectionStart !== undefined) nextPageNumber = sectionStart
     }
 
     const section = sections[sectionIndex]
@@ -564,16 +577,17 @@ const pagePresentations = computed(() => {
       documentPageIndex: pageIndex,
       evenAndOddHeaders,
     })
-    const pageNumber = nextPageNumber
-    nextPageNumber += 1
+    const pageNumber = tracker.pageNumberForPage(pageIndex) ?? pageIndex + 1
 
     return {
       sectionIndex,
       pageLayout,
       pageNumber,
+      pageLabel: tracker.pageLabelForPage(pageIndex) ?? String(pageNumber),
+      parityBlankPage: tracker.isParityBlankPage(pageIndex),
       headerReferenceType: variantReferenceType,
       footerReferenceType: variantReferenceType,
-      pageNumberFormat: parseSectionPageNumberFormat(sectionPropertiesXml),
+      pageNumberFormat: tracker.pageNumberFormatForPage(pageIndex),
       pageBorders: parseSectionPageBorders(sectionPropertiesXml),
       columnLayout: {
         count: pages.value[pageIndex]?.columnCount ?? 1,
@@ -602,16 +616,6 @@ const pagePresentations = computed(() => {
   })
 })
 
-const sectionPageCounts = computed(() => {
-  const counts = new Map<number, number>()
-  for (const presentation of pagePresentations.value) {
-    counts.set(
-      presentation.sectionIndex,
-      (counts.get(presentation.sectionIndex) ?? 0) + 1,
-    )
-  }
-  return counts
-})
 // The thumbnail rail reads the viewer's pagination result instead of running
 // its own buildLayoutSnapshot on every model change.
 if (props.controller) {
@@ -632,6 +636,8 @@ if (props.controller) {
     registry.layoutPageCount = plan.pages.length
     registry.layoutPageSizes = sizes
     registry.layoutSnapshot = plan.snapshot
+    // The rail labels pages with the same per-section numbers the pages show.
+    registry.pageNumberTracker = sectionPageNumbers.value
     notifyDocxViewerPageSurfaceListeners(controller)
   }, { flush: "post" })
 }
@@ -888,6 +894,8 @@ function sameVisiblePageContent(
     previous.pageContentWidthPx === next.pageContentWidthPx &&
     previous.pageNumber === next.pageNumber &&
     previous.pageNumberFormat === next.pageNumberFormat &&
+    previous.pageLabel === next.pageLabel &&
+    previous.parityBlankPage === next.parityBlankPage &&
     previous.sectionPages === next.sectionPages &&
     previous.segmentationKey === next.segmentationKey &&
     samePageLayout(previous.pageLayout, next.pageLayout) &&
@@ -961,9 +969,12 @@ function buildVisiblePageEntry(
     ),
     pageNumber: presentation?.pageNumber ?? pageIndex + 1,
     pageNumberFormat: presentation?.pageNumberFormat,
+    pageLabel: presentation?.pageLabel ?? String(pageIndex + 1),
+    parityBlankPage: presentation?.parityBlankPage ?? false,
     sectionPages:
-      sectionPageCounts.value.get(presentation?.sectionIndex ?? 0) ??
-      pageCount.value,
+      presentation === undefined
+        ? pageCount.value
+        : sectionPageNumbers.value.sectionPagesForPage(pageIndex) ?? pageCount.value,
     sectionIndex: presentation?.sectionIndex ?? 0,
     headerReferenceType: presentation?.headerReferenceType ?? "default",
     footerReferenceType: presentation?.footerReferenceType ?? "default",

@@ -226,6 +226,7 @@ For every dropdown-driven fixture route:
 - Footnote and endnote markers print the same numbers as the notes section. `G-DOCX-VIEW-10`
 - The fixture set exercises comment threads, several comments on one paragraph, cross-paragraph ranges, comments in a cell and in a header, a resolved thread, `vMerge`/`gridSpan`/nested tables, repeating header rows, a table inside a page header, mixed orientation and two-column sections, a text box and a watermark. `G-DOCX-VIEW-11`
 - Source-level DOCX viewer gaps from `docs/upstream-parity-gap-audit.md` are closed or agreed intentional before parity acceptance, including headers/footers, hyperlinks, complex tables, images/fallbacks, sections/columns, notes/comments/revisions visibility, pagination fidelity, dark/night-reader behavior, import depth, and virtualization. `G-DOCX-VIEW-12`
+- Page labels follow the section's `w:pgNumType` (restart on `w:start`, format from `w:fmt`), `PAGE`/`NUMPAGES`/`SECTIONPAGES` agree with the label, and a `w:type="oddPage"/"evenPage"` break inserts a blank page that keeps the ending section's footer and numbering. `G-DOCX-VIEW-13`
 
 ### DOCX Editor gate
 
@@ -289,6 +290,7 @@ browser. Nothing in this document is silently treated as verified.
 | `G-DOCX-VIEW-10` | `tests/component/docx-fixture-fidelity.test.mjs::footnote and endnote markers match the notes-section numbers` |
 | `G-DOCX-VIEW-11` | `tests/unit/docx-fixture-fidelity.test.mjs::the review fixture carries threads, replies and a resolved thread`; `tests/unit/docx-fixture-fidelity.test.mjs::the table fixture keeps vertical merges, grid spans, nested tables and header rows`; `tests/unit/docx-fixture-fidelity.test.mjs::the table fixture's page header carries a table of its own`; `tests/unit/docx-fixture-fidelity.test.mjs::the section fixture keeps a text box and a behind-text watermark` |
 | `G-DOCX-VIEW-12` | manual — `docs/upstream-parity-gap-audit.md` |
+| `G-DOCX-VIEW-13` | `tests/component/docx-section-page-numbers.test.mjs::the viewer labels pages per section and marks the parity blank page`; `tests/component/docx-section-page-numbers.test.mjs::header/footer fields resolve from the per-section tracker`; `tests/unit/docx-section-page-numbers.test.mjs::a decimal section followed by a lowerRoman restart on an odd page labels like Word` |
 | `G-DOCX-EDIT-1` | `tests/unit/docx-model-preservation.test.mjs::editing one paragraph leaves every other node field-identical after a round trip` |
 | `G-DOCX-EDIT-2` | manual — `tests/blackbox/docx_editing.py` |
 | `G-DOCX-EDIT-3` | `tests/component/docx-edit-interactions.test.mjs::text and format commands keep inputs immutable and undo/redo restore selection` |

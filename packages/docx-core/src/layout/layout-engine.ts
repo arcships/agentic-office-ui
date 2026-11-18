@@ -595,22 +595,29 @@ export function layoutDocument(model: DocModel, options: LayoutOptions = {}): La
 
   applyLayoutBounds();
 
-  const startSectionPage = (parity?: SectionStartPageParity): void => {
-    startPage();
+  const startSectionPage = (
+    parity: SectionStartPageParity | undefined,
+    previousSectionIndex: number,
+    previousLayout: DocumentLayoutMetrics
+  ): void => {
     if (parity) {
-      const nextPageNumber = pages.length;
+      // The number the new section's first page would get without a blank page.
+      const nextPageNumber = pages.length + 1;
       const startsOnEvenPage = nextPageNumber % 2 === 0;
       if (startsOnEvenPage !== (parity === "even")) {
-        // Word inserts a blank page so an `evenPage`/`oddPage` section starts
-        // on the required page-number parity.
+        // Word inserts a blank page at the end of the section that ends here, so
+        // the page keeps that section's header/footer and continues its
+        // numbering; the new section's first content page then lands on the
+        // required parity.
         pages.push({
-          number: pages.length + 1,
+          number: nextPageNumber,
           blocks: [],
-          sectionIndex: currentSectionIndex,
-          layout: layoutPageGeometry(currentLayout)
+          sectionIndex: previousSectionIndex,
+          layout: layoutPageGeometry(previousLayout)
         });
       }
     }
+    startPage();
   };
 
   startPage();
@@ -623,6 +630,7 @@ export function layoutDocument(model: DocModel, options: LayoutOptions = {}): La
     );
     if (sectionIndex !== currentSectionIndex) {
       const previousLayout = currentLayout;
+      const previousSectionIndex = currentSectionIndex;
       const nextSection = sections[sectionIndex];
       currentSectionIndex = sectionIndex;
       currentLayout = nextSection.layout;
@@ -631,7 +639,11 @@ export function layoutDocument(model: DocModel, options: LayoutOptions = {}): La
         layoutSectionGeometryChanged(previousLayout, currentLayout);
       if (startsNewPage) {
         if (pages[pages.length - 1].blocks.length > 0) {
-          startSectionPage(nextSection.parity);
+          startSectionPage(
+            nextSection.parity,
+            previousSectionIndex,
+            previousLayout
+          );
         } else {
           pages[pages.length - 1].sectionIndex = currentSectionIndex;
           pages[pages.length - 1].layout = layoutPageGeometry(currentLayout);

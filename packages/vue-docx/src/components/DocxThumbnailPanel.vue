@@ -23,10 +23,15 @@
           v-for="pageIndex of renderedPageRange"
           :key="pageIndex"
           class="docx-thumbnail-item"
-          :class="{ 'docx-thumbnail-item--active': pageIndex + 1 === currentPage }"
+          :class="{
+            'docx-thumbnail-item--active': pageIndex + 1 === currentPage,
+            'docx-thumbnail-item--blank': isParityBlankPage(pageIndex),
+          }"
           data-testid="docx-thumbnail"
           :aria-current="pageIndex + 1 === currentPage ? 'page' : undefined"
           :data-thumbnail-page-index="pageIndex"
+          :data-thumbnail-page-label="pageLabel(pageIndex)"
+          :data-thumbnail-parity-blank="isParityBlankPage(pageIndex) ? 'true' : 'false'"
           @click="onSelectPage(pageIndex)"
         >
           <!-- Thumbnail canvas -->
@@ -40,9 +45,9 @@
             />
           </div>
 
-          <!-- Page number label -->
-          <div class="docx-thumbnail-label">
-            {{ pageIndex + 1 }}
+          <!-- Page number label: the number Word shows (per-section restart/format) -->
+          <div class="docx-thumbnail-label" data-testid="docx-thumbnail-label">
+            {{ pageLabel(pageIndex) }}
           </div>
         </div>
         <div
@@ -62,6 +67,7 @@ import type {
   DocModel,
   DocNode,
   DocxEditorController,
+  DocxSectionPageNumberTracker,
   DocumentNoteDefinition,
   LayoutOptions,
   LayoutSnapshot,
@@ -72,12 +78,12 @@ import type {
 } from "@arcships/docx-core"
 import {
   buildLayoutSnapshot,
+  createSectionPageNumberTracker,
   nodeReferencedNoteIds,
   parseSectionLayout,
   resolveDocumentBackgroundColor,
   resolveDocumentLayout,
   resolveDocumentSectionsFromMetadata,
-  resolveSectionIndexForNodeIndex,
   resolveSectionPropertiesXmlForNodeIndex,
   selectSectionVariantForPage,
   pagePatternPaintStyle,
@@ -191,6 +197,42 @@ interface PagePresentation {
   endnotes: DocumentNoteDefinition[]
 }
 
+/**
+ * Per-section page numbering for the rail's labels.
+ *
+ * The viewer publishes its tracker so the rail shows exactly the numbers the
+ * pages themselves show; a standalone panel (no controller) resolves the same
+ * tracker from its own pagination.
+ */
+const pageNumberTracker = computed<DocxSectionPageNumberTracker | undefined>(() => {
+  const model = resolvedModel.value
+  const snapshot = layoutSnapshot.value
+  if (!model || !snapshot) return undefined
+  registryRevision.value
+  if (props.controller) {
+    const shared = ensureDocxViewerPageSurfaceRegistry(props.controller).pageNumberTracker
+    if (shared) return shared
+  }
+  return createSectionPageNumberTracker({
+    sections: resolveDocumentSectionsFromMetadata(model.metadata).map((section) => ({
+      startNodeIndex: section.startNodeIndex,
+      // A section without its own `w:sectPr` inherits the document's.
+      sectionPropertiesXml:
+        section.sectionPropertiesXml ?? model.metadata.sectionPropertiesXml,
+    })),
+    pages: snapshot.pages.map((page) => ({ startNodeIndex: pageFirstNodeIndex(page) })),
+    nodeCount: model.nodes.length,
+  })
+})
+
+function pageLabel(pageIndex: number): string {
+  return pageNumberTracker.value?.pageLabelForPage(pageIndex) ?? String(pageIndex + 1)
+}
+
+function isParityBlankPage(pageIndex: number): boolean {
+  return pageNumberTracker.value?.isParityBlankPage(pageIndex) ?? false
+}
+
 const pagePresentations = computed<PagePresentation[]>(() => {
   const model = resolvedModel.value
   const snapshot = layoutSnapshot.value
@@ -201,21 +243,10 @@ const pagePresentations = computed<PagePresentation[]>(() => {
   const evenAndOddHeaders = metadata.compatibility?.evenAndOddHeaders ?? false
   const footnotesById = new Map((metadata.footnotes ?? []).map((note) => [note.id, note]))
   const firstPageBySection = new Map<number, number>()
-  let previousSectionIndex = 0
-  let previousNodeIndex = 0
+  const tracker = pageNumberTracker.value
 
   return snapshot.pages.map((page, pageIndex) => {
-    const sourceNodeIndex = page.blocks.find(
-      (block) => typeof block.source?.nodeIndex === "number"
-    )?.source?.nodeIndex
-    const firstNodeIndex = sourceNodeIndex ?? previousNodeIndex
-    previousNodeIndex = firstNodeIndex
-    const sectionIndex = resolveSectionIndexForNodeIndex(
-      sections,
-      firstNodeIndex,
-      previousSectionIndex
-    )
-    previousSectionIndex = sectionIndex
+    const sectionIndex = tracker?.sectionIndexForPage(pageIndex) ?? 0
     if (!firstPageBySection.has(sectionIndex)) {
       firstPageBySection.set(sectionIndex, pageIndex)
     }
@@ -1075,6 +1106,15 @@ function onSelectPage(pageIndex: number): void {
   border-radius: 2px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   background: #fff;
+}
+/* A blank page a section's parity inserted stays an empty sheet; the dashed
+   edge keeps it from reading as a page that failed to render. */
+.docx-thumbnail-item--blank .docx-thumbnail-canvas-wrapper {
+  outline: 1px dashed #cbd5e1;
+  outline-offset: -1px;
+}
+.docx-thumbnail-panel--dark .docx-thumbnail-item--blank .docx-thumbnail-canvas-wrapper {
+  outline-color: #52525b;
 }
 .docx-thumbnail-canvas {
   display: block;

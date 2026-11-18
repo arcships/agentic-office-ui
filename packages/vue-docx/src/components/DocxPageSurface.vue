@@ -1,5 +1,10 @@
 <template>
-  <div class="docx-page-frame" :style="frameStyle">
+  <div
+    class="docx-page-frame"
+    :style="frameStyle"
+    :data-docx-page-label="pageLabel ?? pageNumber"
+    :data-docx-page-parity-blank="parityBlankPage ? 'true' : 'false'"
+  >
     <div
       ref="pageSurfaceRef"
       data-docx-page-surface="true"
@@ -337,6 +342,10 @@ interface DocxPageSurfaceProps {
   totalPages: number
   sectionPages?: number
   pageNumberFormat?: string
+  /** Label Word shows for the page (`iv`, `12`); `w:fmt="none"` → empty. */
+  pageLabel?: string
+  /** True when the page only exists so a section starts on an even/odd page. */
+  parityBlankPage?: boolean
   headerSection?: HeaderSection
   footerSection?: FooterSection
   /** Section this page belongs to; header/footer authoring targets it. */

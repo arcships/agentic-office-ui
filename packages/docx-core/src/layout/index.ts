@@ -54,6 +54,7 @@ export * from "./pagination-stability";
 export * from "./pagination-target";
 export * from "./page-segmentation-core";
 export * from "./page-segmentation-table";
+export * from "./section-page-numbers";
 // `pagination-layout` is intentionally not re-exported: it is the adapter that
 // wires `buildDocumentPageNodeSegments` into `buildLayoutSnapshot`, not new
 // public API surface.
