@@ -11,6 +11,8 @@
     :data-docx-table-index="domTableIndex"
     :data-docx-table-runtime-key="tableRuntimeKey"
     :data-docx-table-nesting-path="tableNestingPath || undefined"
+    @pointerenter="onTablePointerEnter"
+    @pointerleave="onTablePointerLeave"
   >
     <!-- Column resize handles -->
     <div
@@ -24,6 +26,23 @@
         class="docx-table-column-handle"
         :style="{ left: `${boundary}px` }"
         @mousedown.prevent="onColumnResizeStart(ci, $event)"
+      />
+    </div>
+
+    <!-- Row resize handles -->
+    <div
+      v-if="showRowHandles"
+      class="docx-table-row-handles"
+      data-docx-thumbnail-exclude="true"
+      data-docx-table-row-handles="true"
+    >
+      <div
+        v-for="boundary of rowBoundaries"
+        :key="`row-handle-${boundary.rowIndex}`"
+        class="docx-table-row-handle"
+        :data-docx-table-row-handle="boundary.rowIndex"
+        :style="{ top: `${boundary.bottomPx}px` }"
+        @mousedown.prevent="onRowResizeStart(boundary.rowIndex, $event)"
       />
     </div>
 
@@ -190,6 +209,8 @@ const HIGHLIGHT_TO_CSS: Record<string, string> = {
 const SCRIPT_FONT_SCALE = 0.65
 const DEFAULT_COLUMN_WIDTH = 100
 const MIN_COLUMN_WIDTH = 48
+const MIN_ROW_HEIGHT_PX = 20
+const FALLBACK_ROW_HEIGHT_PX = 24
 
 defineOptions({ name: "DocxTableHost" })
 
@@ -238,10 +259,13 @@ const props = withDefaults(
     noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
     /** Page-relative origin used to place margin/page/column anchored images. */
     floatingPageOriginPx?: DocxFloatingPageOriginPx
+    /** Row resize handles; hosts that manage row heights themselves set false. */
+    showRowResizeHandles?: boolean
   }>(),
   {
     editable: false,
     documentTheme: "light" as DocxDocumentTheme,
+    showRowResizeHandles: true,
   }
 )
 
@@ -273,6 +297,16 @@ const resizeStartWidths = ref<number[]>([])
 const localColumnWidths = ref<number[] | null>(null)
 let activeColumnMouseMove: ((event: MouseEvent) => void) | undefined
 let activeColumnMouseUp: (() => void) | undefined
+
+// Local row height overrides (from user resizing) and the measured row heights
+// the row handles are positioned from.
+const localRowHeights = ref<Record<number, number>>({})
+const measuredRowHeights = ref<number[]>([])
+const tableOffsetTopPx = ref(0)
+const isRowResizing = ref(false)
+let activeRowMouseMove: ((event: MouseEvent) => void) | undefined
+let activeRowMouseUp: (() => void) | undefined
+let rowResizeTarget: { rowIndex: number; heightPx: number } | undefined
 
 // Cell text drafts. Each editable cell paragraph keeps its uncommitted DOM
 // text here until blur, export, or unmount; committing the whole cell's
@@ -474,6 +508,43 @@ const showColumnHandles = computed(
     (hovered.value || isActiveTable.value)
 )
 
+const showRowHandles = computed(
+  () =>
+    props.showRowResizeHandles !== false &&
+    props.editable &&
+    !isReadOnly.value &&
+    !isNestedTable.value &&
+    (hovered.value || isActiveTable.value)
+)
+
+/**
+ * Bottom edge of every rendered row, in table-host coordinates. Measured row
+ * heights win over the model's `w:trHeight`, because a row that grew to fit its
+ * content is taller than the height stored in the document.
+ */
+const rowBoundaries = computed<Array<{ rowIndex: number; bottomPx: number; heightPx: number }>>(
+  () => {
+    let top = tableOffsetTopPx.value
+    return gridRows.value.map((row) => {
+      const measured = measuredRowHeights.value[row.rowIndex]
+      const modelHeightPx = twipsToPixels(row.row.style?.heightTwips)
+      const heightPx = Math.max(
+        MIN_ROW_HEIGHT_PX,
+        Math.round(
+          localRowHeights.value[row.rowIndex] ??
+            (Number.isFinite(measured) && (measured as number) > 0
+              ? (measured as number)
+              : Number.isFinite(modelHeightPx) && (modelHeightPx as number) > 0
+                ? (modelHeightPx as number)
+                : FALLBACK_ROW_HEIGHT_PX)
+        )
+      )
+      top += heightPx
+      return { rowIndex: row.rowIndex, bottomPx: top, heightPx }
+    })
+  }
+)
+
 const gridRows = computed(() => {
   const range = props.rowRange
   const bodyRows = resolveTableGrid(props.table, {
@@ -574,6 +645,12 @@ function rowStyle(
   const explicitHeightPx = twipsToPixels(row.style?.heightTwips)
   const heightCss = resolveTableRowHeightCss(row, explicitHeightPx)
   if (heightCss) Object.assign(style, heightCss)
+  const draggedHeightPx = localRowHeights.value[rowIndex]
+  if (draggedHeightPx !== undefined) {
+    // Live drag feedback only; the committed height comes from the model.
+    style.height = `${Math.round(draggedHeightPx)}px`
+    style.minHeight = `${Math.round(draggedHeightPx)}px`
+  }
   if (row.style?.backgroundColor) style.backgroundColor = row.style.backgroundColor
   if (row.style?.cantSplit) style.breakInside = "avoid"
   const trackedKind = rowTrackedKind(rowIndex)
@@ -697,6 +774,8 @@ function cellParagraphHtml(
     imageAltText: m.value.docx.image.alt,
     imageMissingText: m.value.docx.image.missing,
     defaultTabStopPx: documentTabStopPx.value,
+    emitLinkRangeAttributes:
+      props.editable && !isReadOnly.value && !props.withinHeaderFooter,
   }
   const rendered = renderParagraphRuns(
     para,
@@ -939,6 +1018,15 @@ function onCellBlur(
   props.controller.endTextCommitBurst?.()
 }
 
+function onTablePointerEnter(): void {
+  if (!props.editable) return
+  hovered.value = true
+}
+
+function onTablePointerLeave(): void {
+  hovered.value = false
+}
+
 function onColumnResizeStart(boundaryIndex: number, event: MouseEvent): void {
   if (!props.editable || !props.controller || isReadOnly.value) return
   cleanupColumnResize(false)
@@ -991,6 +1079,55 @@ function cleanupColumnResize(commit: boolean): void {
   if (shouldCommit) props.controller!.setTableColumnWidths(props.tableIndex, widths)
 }
 
+function onRowResizeStart(rowIndex: number, event: MouseEvent): void {
+  if (!props.editable || !props.controller || isReadOnly.value) return
+  cleanupRowResize(false)
+  const startHeight =
+    rowBoundaries.value.find((boundary) => boundary.rowIndex === rowIndex)?.heightPx ??
+    FALLBACK_ROW_HEIGHT_PX
+  const startY = event.clientY
+  isRowResizing.value = true
+  rowResizeTarget = { rowIndex, heightPx: startHeight }
+
+  activeRowMouseMove = (e: MouseEvent) => {
+    if (!isRowResizing.value) return
+    const heightPx = Math.max(
+      MIN_ROW_HEIGHT_PX,
+      Math.round(startHeight + (e.clientY - startY))
+    )
+    // A drag that grows the row also has to grow the host, otherwise the
+    // measured table height wins and the row snaps back mid-drag.
+    localRowHeights.value = { ...localRowHeights.value, [rowIndex]: heightPx }
+    rowResizeTarget = { rowIndex, heightPx }
+  }
+
+  activeRowMouseUp = () => cleanupRowResize(true)
+
+  document.addEventListener("mousemove", activeRowMouseMove)
+  document.addEventListener("mouseup", activeRowMouseUp)
+}
+
+function cleanupRowResize(commit: boolean): void {
+  if (activeRowMouseMove) {
+    document.removeEventListener("mousemove", activeRowMouseMove)
+  }
+  if (activeRowMouseUp) {
+    document.removeEventListener("mouseup", activeRowMouseUp)
+  }
+  activeRowMouseMove = undefined
+  activeRowMouseUp = undefined
+
+  const target = rowResizeTarget
+  const shouldCommit =
+    commit && isRowResizing.value && target && props.controller && !props.tableRuntimeKey
+  isRowResizing.value = false
+  rowResizeTarget = undefined
+  localRowHeights.value = {}
+  if (shouldCommit && target) {
+    props.controller!.setTableRowHeight(props.tableIndex, target.rowIndex, target.heightPx)
+  }
+}
+
 function onAddRow(): void {
   const lastRowIndex = Math.max(0, props.table.rows.length - 1)
   props.controller?.insertTableRow(props.tableIndex, lastRowIndex, "below")
@@ -1005,7 +1142,10 @@ watch(
 )
 
 watch([() => props.editable, isReadOnly], ([editable, readOnly]) => {
-  if (!editable || readOnly) cleanupColumnResize(false)
+  if (!editable || readOnly) {
+    cleanupColumnResize(false)
+    cleanupRowResize(false)
+  }
 })
 
 function emitMeasuredRowHeights(): void {
@@ -1021,7 +1161,11 @@ function emitMeasuredRowHeights(): void {
         rowHeightsPx[rowIndex] = Math.round(heightPx)
       }
     })
+  const tableElement = root.querySelector?.("table") as HTMLElement | null | undefined
+  const offsetTop = tableElement?.offsetTop
+  if (Number.isFinite(offsetTop)) tableOffsetTopPx.value = Math.max(0, Math.round(offsetTop as number))
   if (rowHeightsPx.some((heightPx) => Number.isFinite(heightPx) && heightPx > 0)) {
+    measuredRowHeights.value = rowHeightsPx
     emit("measure", props.tableIndex, rowHeightsPx)
   }
 }
@@ -1053,6 +1197,7 @@ onUnmounted(() => {
   unregisterDraftFlusher = undefined
   finishRangeSelection()
   cleanupColumnResize(false)
+  cleanupRowResize(false)
 })
 </script>
 
@@ -1090,6 +1235,29 @@ onUnmounted(() => {
   background: transparent;
 }
 .docx-table-column-handle:hover {
+  background: #3b82f6;
+}
+
+.docx-table-row-handles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+.docx-table-row-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 5px;
+  margin-top: -2px;
+  cursor: row-resize;
+  pointer-events: auto;
+  background: transparent;
+}
+.docx-table-row-handle:hover {
   background: #3b82f6;
 }
 

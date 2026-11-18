@@ -107,6 +107,12 @@ export interface ParagraphRunRenderOptions {
    * Tabs that run past the last explicit stop keep advancing on this grid.
    */
   defaultTabStopPx?: number
+  /**
+   * Emit `data-docx-link-start`/`data-docx-link-end` (paragraph text offsets) on
+   * hyperlink anchors. Editable text hosts use them so the link hover card can
+   * select exactly the linked characters before editing or removing the link.
+   */
+  emitLinkRangeAttributes?: boolean
 }
 
 export interface NoteMarkerLabels {
@@ -224,6 +230,17 @@ export function renderParagraphRuns(
     : 0
 
   const checkboxChoiceRow = paragraphLooksLikeCheckboxChoiceRow(paragraph)
+
+  // Character offset of every child in `paragraphText()`. Hyperlink anchors use
+  // it to report the exact range the link covers.
+  const childTextOffsets: number[] = []
+  if (options?.emitLinkRangeAttributes) {
+    let textOffset = 0
+    paragraph.children.forEach((child) => {
+      childTextOffsets.push(textOffset)
+      if (child.type === "text") textOffset += child.text.length
+    })
+  }
   const documentTabStopPx =
     Number.isFinite(options?.defaultTabStopPx) &&
     (options?.defaultTabStopPx as number) > 0
@@ -523,7 +540,7 @@ export function renderParagraphRuns(
     // text
     renderTextInline(
       target, child, key, textOverride, annotationAttributes,
-      trackedInlineChange
+      trackedInlineChange, childIndex
     )
   }
 
@@ -650,7 +667,8 @@ export function renderParagraphRuns(
     key: string,
     textOverride: string | undefined,
     annotationAttributes: Record<string, string>,
-    trackedInlineChange: ParagraphTrackedInlineChange | undefined
+    trackedInlineChange: ParagraphTrackedInlineChange | undefined,
+    childIndex: number
   ): void => {
     const baseTextStyle = trackedInlineStyle(
       runStyleToCss(child.style, documentTheme),
@@ -698,9 +716,20 @@ export function renderParagraphRuns(
     const linkHref = child.link ? sanitizeOfficeLink(child.link) : undefined
     if (linkHref) {
       const isInternalLink = linkHref.startsWith("#")
+      const startOffset = childTextOffsets[childIndex]
+      const linkRange =
+        options?.emitLinkRangeAttributes &&
+        startOffset !== undefined &&
+        effectiveText === child.text
+          ? {
+              "data-docx-link-start": String(startOffset),
+              "data-docx-link-end": String(startOffset + child.text.length),
+            }
+          : undefined
       target.push(
         h("a", {
           key, ...annotationAttributes,
+          ...linkRange,
           href: linkHref,
           target: isInternalLink ? undefined : "_blank",
           rel: isInternalLink ? undefined : "noreferrer noopener",

@@ -345,6 +345,14 @@ export interface OfficeDocxMessages {
       splitTableCell: string
       movedTable: string
       movedEmbeddedTable: string
+      resizedTableRow: string
+      tableRowHeightPositive: string
+      tableRowHeightTargetUnavailable: string
+      movedBodyNode: string
+      cannotMoveBodyNodeNotFound: string
+      updatedFormField: string
+      formFieldTargetUnavailable: string
+      formFieldOptionsRequired: string
       /** Template with a `{preset}` placeholder. */
       unsupportedDiagonalTableCellBorders: string
       /** Template with a `{preset}` placeholder. */
@@ -495,6 +503,57 @@ export interface OfficeDocxMessages {
       /** Template with a `{max}` placeholder. */
       maxLength: string
     }
+  }
+  formFieldDialog: {
+    title: string
+    fieldType: string
+    name: string
+    namePlaceholder: string
+    value: string
+    placeholder: string
+    required: string
+    checked: string
+    options: string
+    option: string
+    optionValue: string
+    addOption: string
+    removeOption: string
+    maxLength: string
+    save: string
+    cancel: string
+    close: string
+    noOptions: string
+    types: {
+      text: string
+      checkbox: string
+      dropdown: string
+      date: string
+    }
+  }
+  linkCard: {
+    label: string
+    open: string
+    edit: string
+    remove: string
+    save: string
+    cancel: string
+    url: string
+    urlPlaceholder: string
+    internal: string
+  }
+  stylePreview: {
+    label: string
+    sample: string
+    apply: string
+    normal: string
+    heading: string
+  }
+  nodeDrag: {
+    handle: string
+    handleTitle: string
+    moveUp: string
+    moveDown: string
+    dropBefore: string
   }
   notes: {
     footnote: string
@@ -1448,6 +1507,14 @@ export const officeMessagesEn: OfficeMessages = {
         splitTableCell: "Split table cell",
         movedTable: "Moved table",
         movedEmbeddedTable: "Moved embedded table",
+        resizedTableRow: "Resized table row",
+        tableRowHeightPositive: "Unsupported: row height must be positive",
+        tableRowHeightTargetUnavailable: "Unsupported: table row target unavailable",
+        movedBodyNode: "Moved paragraph or table",
+        cannotMoveBodyNodeNotFound: "Cannot move: paragraph or table not found",
+        updatedFormField: "Updated form field",
+        formFieldTargetUnavailable: "Unsupported: form field target unavailable",
+        formFieldOptionsRequired: "Unsupported: a dropdown needs at least one option",
         unsupportedDiagonalTableCellBorders: "Unsupported: diagonal table-cell borders ({preset})",
         unsupportedDiagonalParagraphBorders: "Unsupported: diagonal paragraph borders ({preset})",
         revisionLossOne: "Tracked changes in an edited paragraph were resolved with the edit",
@@ -1592,6 +1659,57 @@ export const officeMessagesEn: OfficeMessages = {
         invalidDate: "Enter a valid date.",
         maxLength: "Use at most {max} characters.",
       },
+    },
+    formFieldDialog: {
+      title: "Form field properties",
+      fieldType: "Type",
+      name: "Name",
+      namePlaceholder: "Field name",
+      value: "Value",
+      placeholder: "Placeholder",
+      required: "Required",
+      checked: "Checked",
+      options: "Options",
+      option: "Display text",
+      optionValue: "Value",
+      addOption: "Add option",
+      removeOption: "Remove option",
+      maxLength: "Maximum length",
+      save: "Save",
+      cancel: "Cancel",
+      close: "Close form field properties",
+      noOptions: "This dropdown has no options yet.",
+      types: {
+        text: "Text",
+        checkbox: "Check box",
+        dropdown: "Dropdown",
+        date: "Date",
+      },
+    },
+    linkCard: {
+      label: "Link actions",
+      open: "Open link",
+      edit: "Edit link",
+      remove: "Remove link",
+      save: "Save link",
+      cancel: "Cancel link edit",
+      url: "Address",
+      urlPlaceholder: "https://example.com",
+      internal: "Links to a place in this document",
+    },
+    stylePreview: {
+      label: "Paragraph styles",
+      sample: "The quick brown fox jumps over the lazy dog",
+      apply: "Apply {style}",
+      normal: "Normal",
+      heading: "Heading",
+    },
+    nodeDrag: {
+      handle: "Reorder",
+      handleTitle: "Drag to move this paragraph or table",
+      moveUp: "Move up",
+      moveDown: "Move down",
+      dropBefore: "Drop here",
     },
     notes: {
       footnote: "Footnotes",
@@ -2485,6 +2603,14 @@ export const officeMessagesZhCN: OfficeMessages = {
         splitTableCell: "已拆分表格单元格",
         movedTable: "已移动表格",
         movedEmbeddedTable: "已移动嵌入表格",
+        resizedTableRow: "已调整表格行高",
+        tableRowHeightPositive: "不支持：表格行高必须为正数",
+        tableRowHeightTargetUnavailable: "不支持：表格行目标不可用",
+        movedBodyNode: "已移动段落或表格",
+        cannotMoveBodyNodeNotFound: "无法移动：未找到段落或表格",
+        updatedFormField: "已更新表单域",
+        formFieldTargetUnavailable: "不支持：表单域目标不可用",
+        formFieldOptionsRequired: "不支持：下拉框至少需要一个选项",
         unsupportedDiagonalTableCellBorders: "不支持：对角线表格单元格边框（{preset}）",
         unsupportedDiagonalParagraphBorders: "不支持：对角线段落边框（{preset}）",
         revisionLossOne: "已编辑段落中的修订已随编辑一起处理",
@@ -2629,6 +2755,57 @@ export const officeMessagesZhCN: OfficeMessages = {
         invalidDate: "请输入有效的日期。",
         maxLength: "最多使用 {max} 个字符。",
       },
+    },
+    formFieldDialog: {
+      title: "表单域属性",
+      fieldType: "类型",
+      name: "名称",
+      namePlaceholder: "字段名称",
+      value: "值",
+      placeholder: "占位提示",
+      required: "必填",
+      checked: "已选中",
+      options: "选项",
+      option: "显示文本",
+      optionValue: "值",
+      addOption: "添加选项",
+      removeOption: "删除选项",
+      maxLength: "最大长度",
+      save: "保存",
+      cancel: "取消",
+      close: "关闭表单域属性",
+      noOptions: "此下拉框还没有选项。",
+      types: {
+        text: "文本",
+        checkbox: "复选框",
+        dropdown: "下拉框",
+        date: "日期",
+      },
+    },
+    linkCard: {
+      label: "链接操作",
+      open: "打开链接",
+      edit: "编辑链接",
+      remove: "删除链接",
+      save: "保存链接",
+      cancel: "取消编辑链接",
+      url: "地址",
+      urlPlaceholder: "https://example.com",
+      internal: "链接到本文档中的位置",
+    },
+    stylePreview: {
+      label: "段落样式",
+      sample: "敏捷的棕色狐狸跳过懒狗",
+      apply: "应用{style}",
+      normal: "正文",
+      heading: "标题",
+    },
+    nodeDrag: {
+      handle: "重新排序",
+      handleTitle: "拖动以移动此段落或表格",
+      moveUp: "上移",
+      moveDown: "下移",
+      dropBefore: "放置到此处",
     },
     notes: {
       footnote: "脚注",

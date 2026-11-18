@@ -243,6 +243,9 @@ const displayHtml = computed(() => {
     skipImageChildIndexes: props.skipImageChildIndexes,
     imageAltText: m.value.docx.image.alt,
     imageMissingText: m.value.docx.image.missing,
+    // Editable body paragraphs expose the link range so the link hover card can
+    // select the linked text before editing or removing the link.
+    emitLinkRangeAttributes: props.editable && Boolean(props.controller) && !props.withinHeaderFooter,
   }
 
   const vnodes = renderParagraphRuns(

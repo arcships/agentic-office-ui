@@ -7,6 +7,7 @@ import {
   collectFormFieldsFromModel,
   type DocxEditorController,
   type DocxFormFieldLocation,
+  type DocxFormFieldUpdate,
   type DocxSelectedFormField,
   type FormFieldRunNode,
 } from "@arcships/docx-core"
@@ -25,6 +26,12 @@ export interface UseDocxFormFieldsResult {
   updateSelectedFormFieldWidget: (
     patch: Partial<NonNullable<FormFieldRunNode["widget"]>>
   ) => void
+  /** Value + configuration update in one undo entry (the properties dialog). */
+  updateFormField: (
+    location: DocxFormFieldLocation,
+    patch: DocxFormFieldUpdate
+  ) => boolean
+  updateSelectedFormField: (patch: DocxFormFieldUpdate) => boolean
 }
 
 export function useDocxFormFields(
@@ -37,6 +44,7 @@ export function useDocxFormFields(
     | "toggleFormCheckbox"
     | "endFormFieldEdit"
     | "updateFormFieldWidget"
+    | "updateFormField"
   >
 ): UseDocxFormFieldsResult {
   const updateSelectedFormFieldWidget = (
@@ -44,6 +52,11 @@ export function useDocxFormFields(
   ): void => {
     if (!editor.selectedFormField) return
     editor.updateFormFieldWidget(editor.selectedFormField.location, patch)
+  }
+
+  const updateSelectedFormField = (patch: DocxFormFieldUpdate): boolean => {
+    if (!editor.selectedFormField) return false
+    return editor.updateFormField(editor.selectedFormField.location, patch)
   }
 
   return {
@@ -55,5 +68,7 @@ export function useDocxFormFields(
     endFormFieldEdit: editor.endFormFieldEdit,
     updateFormFieldWidget: editor.updateFormFieldWidget,
     updateSelectedFormFieldWidget,
+    updateFormField: editor.updateFormField,
+    updateSelectedFormField,
   }
 }

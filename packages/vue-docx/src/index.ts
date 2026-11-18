@@ -81,6 +81,23 @@ export type {
 export { default as DocxThumbnailPanel } from "./components/DocxThumbnailPanel.vue"
 /** @deprecated Since 0.2.0. Use `DocxEditor`. Earliest removal: 1.0.0. */
 export { default as DocxDragOverlay } from "./components/DocxDragOverlay.vue"
+/**
+ * Form-field properties dialog: edits a field's value and configuration
+ * (type, name, placeholder, required, dropdown options, maximum length) through
+ * one `controller.updateFormField()` call, so a save is one undo entry.
+ */
+export { default as DocxFormFieldDialog } from "./components/DocxFormFieldDialog.vue"
+/**
+ * Link hover card: open/edit/remove actions for the link under the pointer.
+ * Edit and remove select the linked characters before calling
+ * `controller.setLink()`. Used by `DocxEditor`; exported for custom surfaces.
+ */
+export { default as DocxLinkHoverCard } from "./components/DocxLinkHoverCard.vue"
+/**
+ * Paragraph-style preview popover: renders a sample paragraph with the hovered
+ * style's own run/paragraph properties.
+ */
+export { default as DocxStylePreviewPopover } from "./components/DocxStylePreviewPopover.vue"
 
 // ---- Render ----
 
@@ -139,6 +156,26 @@ export {
 
 export { useDocxModel } from "./composables/useDocxModel"
 export {
+  useDocxNodeReorder,
+  docxReorderNodeIndexFromElement,
+  resolveDocxReorderInsertionIndex,
+  resolveDocxReorderTarget,
+  DOCX_REORDER_NODE_SELECTOR,
+  type DocxReorderFrame,
+  type DocxReorderHover,
+  type DocxReorderRect,
+  type UseDocxNodeReorderOptions,
+  type UseDocxNodeReorderResult,
+} from "./composables/useDocxNodeReorder"
+export {
+  docxStylePreviewCss,
+  type DocxStylePreview,
+} from "./composables/docx-style-preview"
+export {
+  parseDocxFormFieldLocationKey,
+  resolveFormFieldAt,
+} from "./composables/docx-form-fields"
+export {
   findDocxSearchMatches,
   type DocxNestedTableStep,
   type DocxSearchBoundary,
@@ -195,6 +232,7 @@ export type {
   DocxTextRangeLocation,
   DocxDocumentTheme,
   DocxFormFieldLocation,
+  DocxFormFieldUpdate,
   DocxSelectedFormField,
   DocxImageLocation,
   DocxImageDropTarget,

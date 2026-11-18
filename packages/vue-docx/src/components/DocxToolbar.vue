@@ -393,11 +393,20 @@
     </div>
 
     <!-- Heading styles -->
-    <div class="docx-toolbar-group">
+    <div
+      ref="stylePickerEl"
+      class="docx-toolbar-group docx-toolbar-style-picker"
+      data-testid="editor-paragraph-style-picker"
+      @pointerenter="onStylePickerEnter"
+      @pointerleave="onStylePickerLeave"
+    >
       <select
         class="docx-toolbar-select"
+        data-testid="editor-paragraph-style"
         :value="controller.selectedParagraphStyleId ?? ''"
         @change="onStyleChange"
+        @mousedown="closeStylePreview"
+        @focus="closeStylePreview"
         :title="m.docx.editor.paragraphStyle"
       >
         <option value="">{{ m.docx.editor.normal }}</option>
@@ -409,6 +418,20 @@
           {{ style.name }}
         </option>
       </select>
+      <DocxStylePreviewPopover
+        v-if="showStylePreview !== false && stylePreviewOpen"
+        :open="stylePreviewOpen"
+        :styles="controller.availableParagraphStyles"
+        :preview-style-id="stylePreviewStyleId"
+        :document-theme="toolbarTheme"
+        :x="stylePreviewPosition.x"
+        :y="stylePreviewPosition.y"
+        @hover="stylePreviewStyleId = $event"
+        @select="onStylePreviewSelect"
+        @close="closeStylePreview"
+        @pointerenter="cancelStylePreviewClose"
+        @pointerleave="scheduleStylePreviewClose"
+      />
     </div>
 
     <div class="docx-toolbar-separator" />
@@ -518,7 +541,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue"
+import { computed, onUnmounted, ref, watch } from "vue"
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { DocxEditorController, DocxBorderPreset, HeadingLevel } from "@arcships/docx-core"
 import { DOCX_FILE_ACCEPT } from "../composables/docx-file-types"
@@ -527,17 +550,23 @@ import { useDocxMessages } from "../i18n"
 import DocxPageSetupDialog from "./DocxPageSetupDialog.vue"
 import { useDocxPageSetup } from "../composables/useDocxPageSetup"
 import type { DocxPageSetupApplyPatch } from "./page-setup-dialog-types"
+import DocxStylePreviewPopover from "./DocxStylePreviewPopover.vue"
 
-const props = defineProps<{
-  controller: DocxEditorController
-  zoom?: number
-  readOnly?: boolean
-  showThumbnails?: boolean
-  currentPage?: number
-  totalPages?: number
-  /** Toolbar appearance. Defaults to the controller document theme. */
-  theme?: "light" | "dark"
-}>()
+const props = withDefaults(
+  defineProps<{
+    controller: DocxEditorController
+    zoom?: number
+    readOnly?: boolean
+    showThumbnails?: boolean
+    currentPage?: number
+    totalPages?: number
+    /** Toolbar appearance. Defaults to the controller document theme. */
+    theme?: "light" | "dark"
+    /** Hovering the paragraph-style picker previews each style. */
+    showStylePreview?: boolean
+  }>(),
+  { showStylePreview: true }
+)
 
 const emit = defineEmits<{
   (e: "update:zoom", value: number): void
@@ -546,6 +575,67 @@ const emit = defineEmits<{
 }>()
 
 const toolbarTheme = computed(() => props.theme ?? props.controller.documentTheme)
+
+// ── Paragraph style preview ─────────────────────────────────────────
+// A native <select> cannot show what a style looks like: hovering the picker
+// opens a preview list whose sample text follows the hovered style. Clicking the
+// select (or an item) applies it; the select stays the keyboard/simple path.
+const stylePickerEl = ref<HTMLElement | undefined>()
+const stylePreviewOpen = ref(false)
+const stylePreviewStyleId = ref<string | undefined>()
+const stylePreviewPosition = ref({ x: 0, y: 0 })
+let stylePreviewHideTimer: ReturnType<typeof setTimeout> | undefined
+
+function cancelStylePreviewClose(): void {
+  if (stylePreviewHideTimer !== undefined) clearTimeout(stylePreviewHideTimer)
+  stylePreviewHideTimer = undefined
+}
+
+function scheduleStylePreviewClose(): void {
+  cancelStylePreviewClose()
+  stylePreviewHideTimer = setTimeout(() => {
+    stylePreviewOpen.value = false
+    stylePreviewHideTimer = undefined
+  }, 160)
+}
+
+function openStylePreview(): void {
+  cancelStylePreviewClose()
+  if (stylePreviewOpen.value) return
+  stylePreviewStyleId.value = props.controller.selectedParagraphStyleId
+  const rect = stylePickerEl.value?.getBoundingClientRect?.()
+  if (rect) {
+    stylePreviewPosition.value = {
+      x: Math.round(rect.left),
+      y: Math.round(rect.bottom + 6),
+    }
+  } else {
+    stylePreviewPosition.value = { x: 0, y: 0 }
+  }
+  stylePreviewOpen.value = true
+}
+
+function closeStylePreview(): void {
+  cancelStylePreviewClose()
+  stylePreviewOpen.value = false
+  stylePreviewStyleId.value = undefined
+}
+
+function onStylePickerEnter(): void {
+  if (props.showStylePreview === false) return
+  openStylePreview()
+}
+
+function onStylePickerLeave(): void {
+  scheduleStylePreviewClose()
+}
+
+function onStylePreviewSelect(styleId: string | undefined): void {
+  applyParagraphStyleId(styleId)
+  closeStylePreview()
+}
+
+onUnmounted(cancelStylePreviewClose)
 
 // ── Comment authoring ───────────────────────────────────────────────
 // A new comment needs a selection (or a caret) in the document; the composer
@@ -817,9 +907,7 @@ function onBorderPresetChange(event: Event): void {
   if (target.value) props.controller.applyBorderPreset(target.value as DocxBorderPreset)
 }
 
-function onStyleChange(event: Event): void {
-  const target = event.target as HTMLSelectElement
-  const value = target.value || undefined
+function applyParagraphStyleId(value: string | undefined): void {
   if (value && value.startsWith("Heading")) {
     const level = parseInt(value.replace("Heading ", ""))
     if (level >= 1 && level <= 6) {
@@ -830,6 +918,11 @@ function onStyleChange(event: Event): void {
   } else {
     props.controller.setParagraphStyle(value)
   }
+}
+
+function onStyleChange(event: Event): void {
+  const target = event.target as HTMLSelectElement
+  applyParagraphStyleId(target.value || undefined)
 }
 
 function onInsertImage(): void {
