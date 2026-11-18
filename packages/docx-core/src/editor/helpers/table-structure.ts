@@ -586,17 +586,79 @@ export function deleteTableColumn(
   return true;
 }
 
-interface GridRectangle {
+export interface TableGridRectangle {
   minRow: number;
   maxRow: number;
   minColumn: number;
   maxColumn: number;
 }
 
+/**
+ * Resolves the physical grid rectangle covered by a table-cell selection.
+ *
+ * The anchor and focus address model cells, but the visible selection covers
+ * their grid spans and every merge that intersects that rectangle. A stored
+ * `gridRange` widens the column span without changing the anchor/focus cells
+ * (whole-table selections use it).
+ */
+export function tableSelectionGridRectangle(
+  table: TableNode,
+  range: DocxTableCellSelectionRange
+): TableGridRectangle | undefined {
+  const anchor = tableCellGridRef(
+    table,
+    range.anchorRowIndex,
+    range.anchorCellIndex
+  );
+  const focus = tableCellGridRef(
+    table,
+    range.focusRowIndex,
+    range.focusCellIndex
+  );
+  if (!anchor || !focus) {
+    return undefined;
+  }
+
+  const anchorStart = anchor.startColumn;
+  const anchorEnd = anchor.startColumn + anchor.span - 1;
+  const focusStart = focus.startColumn;
+  const focusEnd = focus.startColumn + focus.span - 1;
+  const storedStart = Number.isFinite(range.gridRange?.startColumnIndex)
+    ? Math.trunc(range.gridRange!.startColumnIndex)
+    : undefined;
+  const storedEnd = Number.isFinite(range.gridRange?.endColumnIndex)
+    ? Math.trunc(range.gridRange!.endColumnIndex)
+    : undefined;
+  const minColumn = Math.max(
+    0,
+    Math.min(
+      anchorStart,
+      anchorEnd,
+      focusStart,
+      focusEnd,
+      storedStart ?? Number.POSITIVE_INFINITY
+    )
+  );
+  const maxColumn = Math.max(
+    anchorStart,
+    anchorEnd,
+    focusStart,
+    focusEnd,
+    storedEnd ?? Number.NEGATIVE_INFINITY
+  );
+
+  return expandRectangleForMerges(table, {
+    minRow: Math.min(range.anchorRowIndex, range.focusRowIndex),
+    maxRow: Math.max(range.anchorRowIndex, range.focusRowIndex),
+    minColumn,
+    maxColumn,
+  });
+}
+
 function expandRectangleForMerges(
   table: TableNode,
-  rectangle: GridRectangle
-): GridRectangle {
+  rectangle: TableGridRectangle
+): TableGridRectangle {
   let next = { ...rectangle };
   let changed = true;
   let guard = 0;
@@ -665,30 +727,10 @@ export function mergeTableCells(
   table: TableNode,
   range: DocxTableCellSelectionRange
 ): TableCellPosition | undefined {
-  const anchor = tableCellGridRef(
-    table,
-    range.anchorRowIndex,
-    range.anchorCellIndex
-  );
-  const focus = tableCellGridRef(
-    table,
-    range.focusRowIndex,
-    range.focusCellIndex
-  );
-  if (!anchor || !focus) {
+  const rectangle = tableSelectionGridRectangle(table, range);
+  if (!rectangle) {
     return undefined;
   }
-
-  const rectangle = expandRectangleForMerges(table, {
-    minRow: Math.min(range.anchorRowIndex, range.focusRowIndex),
-    maxRow: Math.max(range.anchorRowIndex, range.focusRowIndex),
-    minColumn: Math.min(anchor.startColumn, focus.startColumn),
-    maxColumn:
-      Math.max(
-        anchor.startColumn + anchor.span,
-        focus.startColumn + focus.span
-      ) - 1,
-  });
 
   const width = rectangle.maxColumn - rectangle.minColumn + 1;
   const height = rectangle.maxRow - rectangle.minRow + 1;

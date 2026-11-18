@@ -10,7 +10,7 @@ import {
   walk,
 } from "./vue-test-renderer.mjs";
 
-const { DocxContextMenu, DocxTableHost, DocxToolbar, useDocxEditor } =
+const { DocxContextMenu, DocxEditor, DocxTableHost, DocxToolbar, useDocxEditor } =
   await importFromDemo("@arcships/vue-docx");
 const { createBlankDocumentModel } = await importFromDemo("@arcships/docx-core");
 
@@ -556,6 +556,7 @@ test("table host drag selection exposes a multi-cell range and keeps it active",
       anchorCellIndex: 0,
       focusRowIndex: 0,
       focusCellIndex: 1,
+      gridRange: { startColumnIndex: 0, endColumnIndex: 1 },
     },
   });
   assert.deepEqual(
@@ -584,6 +585,7 @@ test("table host drag selection exposes a multi-cell range and keeps it active",
     anchorCellIndex: 0,
     focusRowIndex: 1,
     focusCellIndex: 1,
+    gridRange: { startColumnIndex: 0, endColumnIndex: 1 },
   });
 
   // A text range inside the selected rectangle must not collapse the range.
@@ -598,6 +600,294 @@ test("table host drag selection exposes a multi-cell range and keeps it active",
     anchorCellIndex: 0,
     focusRowIndex: 1,
     focusCellIndex: 1,
+    gridRange: { startColumnIndex: 0, endColumnIndex: 1 },
+  });
+
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("dragging across a 2x3 rectangle highlights every cell", async (t) => {
+  const fakeDocument = installFakeDocument(t);
+  const source = deepFreeze(starterModel([
+    tableNode([
+      { type: "table-row", cells: [cell("A"), cell("B"), cell("C")] },
+      { type: "table-row", cells: [cell("D"), cell("E"), cell("F")] },
+    ], [1000, 1000, 1000]),
+  ]));
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: source });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[0],
+        tableIndex: 0,
+        editable: true,
+        controller,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+
+  await tableCellHostAt(mounted.root, 0, 0).props.onMousedown({
+    button: 0,
+    shiftKey: false,
+    target: null,
+    preventDefault() {},
+  });
+  await vue.nextTick();
+  await tableCellHostAt(mounted.root, 1, 2).props.onMouseenter({ buttons: 1 });
+  await vue.nextTick();
+
+  assert.deepEqual(controller.selectedTableCellRange, {
+    tableIndex: 0,
+    anchorRowIndex: 0,
+    anchorCellIndex: 0,
+    focusRowIndex: 1,
+    focusCellIndex: 2,
+    gridRange: { startColumnIndex: 0, endColumnIndex: 2 },
+  });
+  assert.deepEqual(
+    tableCellHosts(mounted.root)
+      .filter((node) =>
+        String(node.props?.class || "")
+          .split(/\s+/)
+          .includes("docx-table-cell--range-selected")
+      )
+      .map((node) => [
+        node.props["data-docx-table-row-index"],
+        node.props["data-docx-table-cell-index"],
+      ]),
+    [[0, 0], [0, 1], [0, 2], [1, 0], [1, 1], [1, 2]]
+  );
+
+  fakeDocument.dispatch("mouseup");
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("table range formatting, copy and clear cover every highlighted cell", async () => {
+  const source = deepFreeze(starterModel([
+    tableNode([
+      { type: "table-row", cells: [cell("A"), cell("B"), cell("C")] },
+      { type: "table-row", cells: [cell("D"), cell("E"), cell("F")] },
+    ], [1000, 1000, 1000]),
+  ]));
+  const mounted = await mountController(source);
+  const { controller } = mounted;
+
+  controller.selectTableCellRange(0, {
+    tableIndex: 0,
+    anchorRowIndex: 0,
+    anchorCellIndex: 0,
+    focusRowIndex: 1,
+    focusCellIndex: 2,
+  });
+  await vue.nextTick();
+  assert.deepEqual(controller.selectedTableCellRange?.gridRange, {
+    startColumnIndex: 0,
+    endColumnIndex: 2,
+  });
+
+  // Bold applies to every paragraph under the rectangle, not only the focus.
+  controller.toggleBold();
+  await vue.nextTick();
+  const table = controller.model.nodes[0];
+  for (const row of table.rows) {
+    for (const tableCell of row.cells) {
+      for (const paragraph of tableCell.nodes) {
+        assert.equal(paragraph.children[0]?.style?.bold, true);
+      }
+    }
+  }
+
+  // Copy writes the selected matrix as TSV plus an HTML table.
+  const clipboard = new Map();
+  assert.equal(
+    controller.writeSelectionToClipboardData({
+      setData(type, value) {
+        clipboard.set(type, value);
+      },
+    }),
+    true
+  );
+  assert.equal(clipboard.get("text/plain"), "A\tB\tC\nD\tE\tF");
+  assert.match(clipboard.get("text/html"), /^<table><tr><td>A<\/td>/);
+
+  // Clearing the range empties all six cells through one undo entry.
+  assert.equal(controller.clearTableSelection(), true);
+  await vue.nextTick();
+  const cleared = controller.model.nodes[0];
+  for (const row of cleared.rows) {
+    for (const tableCell of row.cells) {
+      assert.deepEqual(cellTexts(tableCell), [""]);
+    }
+  }
+
+  controller.undo();
+  await vue.nextTick();
+  const restored = controller.model.nodes[0];
+  assert.deepEqual(
+    restored.rows.map((row) => row.cells.map((tableCell) => cellTexts(tableCell)[0])),
+    [["A", "B", "C"], ["D", "E", "F"]]
+  );
+
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("whole-table selection spans the physical grid and highlights merged cells", async () => {
+  const source = deepFreeze(starterModel([
+    tableNode([
+      { type: "table-row", cells: [cell("A", { gridSpan: 2 }), cell("C")] },
+      { type: "table-row", cells: [cell("D"), cell("E"), cell("F")] },
+    ], [1000, 1000, 1000]),
+  ]));
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: source });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[0],
+        tableIndex: 0,
+        editable: true,
+        controller,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+
+  controller.selectTableCell(0, 1, 2);
+  await vue.nextTick();
+  controller.selectWholeTable();
+  await vue.nextTick();
+  assert.deepEqual(controller.selectedTableCellRange, {
+    tableIndex: 0,
+    anchorRowIndex: 0,
+    anchorCellIndex: 0,
+    focusRowIndex: 1,
+    focusCellIndex: 2,
+    gridRange: { startColumnIndex: 0, endColumnIndex: 2 },
+  });
+
+  const highlighted = tableCellHosts(mounted.root).filter((node) =>
+    String(node.props?.class || "")
+      .split(/\s+/)
+      .includes("docx-table-cell--range-selected")
+  );
+  assert.deepEqual(
+    highlighted.map((node) => [
+      node.props["data-docx-table-row-index"],
+      node.props["data-docx-table-cell-index"],
+    ]),
+    [[0, 0], [0, 1], [1, 0], [1, 1], [1, 2]]
+  );
+  const focusHighlights = tableCellHosts(mounted.root).filter((node) =>
+    String(node.props?.class || "")
+      .split(/\s+/)
+      .includes("docx-table-cell--range-focus")
+  );
+  assert.deepEqual(
+    focusHighlights.map((node) => [
+      node.props["data-docx-table-row-index"],
+      node.props["data-docx-table-cell-index"],
+    ]),
+    [[1, 2]]
+  );
+
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("Escape collapses a table range to its anchor and Delete clears it", async (t) => {
+  const originalWindow = globalThis.window;
+  globalThis.window = {
+    innerWidth: 1024,
+    innerHeight: 768,
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  t.after(() => {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  });
+
+  const source = deepFreeze(starterModel([
+    tableNode([
+      { type: "table-row", cells: [cell("A"), cell("B")] },
+      { type: "table-row", cells: [cell("C"), cell("D")] },
+    ], [1000, 1000]),
+  ]));
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: source });
+      return () => vue.h(DocxEditor, {
+        editor: controller,
+        editable: true,
+        showToolbar: false,
+        showThumbnails: false,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  const editorRoot = findByTestId(mounted.root, "docx-editor");
+  assert.ok(editorRoot, "the editor root renders");
+
+  let prevented = 0;
+  const keydown = (key) => editorRoot.props.onKeydown({
+    key,
+    ctrlKey: false,
+    metaKey: false,
+    shiftKey: false,
+    isComposing: false,
+    defaultPrevented: false,
+    target: { tagName: "DIV" },
+    preventDefault() { prevented += 1; },
+  });
+
+  controller.selectTableCellRange(0, {
+    tableIndex: 0,
+    anchorRowIndex: 1,
+    anchorCellIndex: 1,
+    focusRowIndex: 0,
+    focusCellIndex: 0,
+  });
+  await vue.nextTick();
+  keydown("Escape");
+  await vue.nextTick();
+  assert.equal(prevented, 1);
+  assert.deepEqual(controller.selection, {
+    kind: "table-cell",
+    tableIndex: 0,
+    rowIndex: 1,
+    cellIndex: 1,
+  });
+
+  controller.selectTableCellRange(0, {
+    tableIndex: 0,
+    anchorRowIndex: 0,
+    anchorCellIndex: 0,
+    focusRowIndex: 1,
+    focusCellIndex: 1,
+  });
+  await vue.nextTick();
+  keydown("Delete");
+  await vue.nextTick();
+  assert.equal(prevented, 2);
+  const table = controller.model.nodes[0];
+  for (const row of table.rows) {
+    for (const tableCell of row.cells) {
+      assert.deepEqual(cellTexts(tableCell), [""]);
+    }
+  }
+  assert.deepEqual(controller.selection.cellRange, {
+    tableIndex: 0,
+    anchorRowIndex: 0,
+    anchorCellIndex: 0,
+    focusRowIndex: 1,
+    focusCellIndex: 1,
+    gridRange: { startColumnIndex: 0, endColumnIndex: 1 },
   });
 
   mounted.app.unmount();
@@ -627,9 +917,14 @@ test("context menu merges a selected range and splits the merged cell", async ()
 
   const mergeButton = findByTestId(body, "docx-context-menu-merge-cells");
   const splitButton = findByTestId(body, "docx-context-menu-split-cell");
+  const selectTableButton = findByTestId(body, "docx-context-menu-select-table");
+  const clearButton = findByTestId(body, "docx-context-menu-clear-cells");
   assert.ok(mergeButton, "context menu must expose Merge cells");
   assert.ok(splitButton, "context menu must expose Split cell");
+  assert.ok(selectTableButton, "context menu must expose Select table");
+  assert.ok(clearButton, "context menu must expose Clear contents");
   assert.equal(mergeButton.props.disabled, true, "merge needs a multi-cell range");
+  assert.equal(clearButton.props.disabled, true, "clear needs a multi-cell range");
 
   controller.selectTableCellRange(0, {
     tableIndex: 0,
@@ -640,6 +935,17 @@ test("context menu merges a selected range and splits the merged cell", async ()
   });
   await vue.nextTick();
   assert.equal(mergeButton.props.disabled, false);
+  assert.equal(clearButton.props.disabled, false);
+  await selectTableButton.props.onClick();
+  await vue.nextTick();
+  assert.deepEqual(controller.selectedTableCellRange, {
+    tableIndex: 0,
+    anchorRowIndex: 0,
+    anchorCellIndex: 0,
+    focusRowIndex: 1,
+    focusCellIndex: 1,
+    gridRange: { startColumnIndex: 0, endColumnIndex: 1 },
+  });
   await mergeButton.props.onClick();
   await vue.nextTick();
 
@@ -674,6 +980,36 @@ test("toolbar exposes row, column, merge and split commands for a table selectio
   controller.selectTableCell(0, 0, 0);
   await vue.nextTick();
   assert.ok(findByTestId(toolbar.root, "editor-table-actions"), "table actions appear for a table selection");
+  assert.ok(findByTestId(toolbar.root, "editor-table-select-all"));
+  const clearButton = findByTestId(toolbar.root, "editor-table-clear");
+  assert.equal(clearButton.props.disabled, true, "clear needs a multi-cell range");
+
+  await findByTestId(toolbar.root, "editor-table-select-all").props.onClick();
+  await vue.nextTick();
+  assert.deepEqual(controller.selectedTableCellRange, {
+    tableIndex: 0,
+    anchorRowIndex: 0,
+    anchorCellIndex: 0,
+    focusRowIndex: 1,
+    focusCellIndex: 1,
+    gridRange: { startColumnIndex: 0, endColumnIndex: 1 },
+  });
+  assert.equal(clearButton.props.disabled, false);
+  await clearButton.props.onClick();
+  await vue.nextTick();
+  assert.deepEqual(
+    controller.model.nodes[0].rows.map((row) => row.cells.map((tableCell) => cellTexts(tableCell)[0])),
+    [["", ""], ["", ""]]
+  );
+  controller.undo();
+  await vue.nextTick();
+  assert.deepEqual(
+    controller.model.nodes[0].rows.map((row) => row.cells.map((tableCell) => cellTexts(tableCell)[0])),
+    [["A", "B"], ["C", "D"]]
+  );
+
+  controller.selectTableCell(0, 0, 0);
+  await vue.nextTick();
 
   await findByTestId(toolbar.root, "editor-table-row-below").props.onClick();
   await vue.nextTick();

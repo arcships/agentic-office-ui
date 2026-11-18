@@ -208,6 +208,26 @@ const missing = await surface.revealBookmark("No_Such_Bookmark")
 
 链接卡片对外部地址调用 `window.open(..., "noopener,noreferrer")`；文档内部书签（`#name`）不会被当作 URL 打开，而是由查看器滚动并高亮目标段落，同时仍发出 `link-open` 事件供宿主记录或自行处理。
 
+## 表格区域选择
+
+可在表格内拖拽或按住 `Shift` 单击建立矩形选区；选区跨合并单元格时按物理网格高亮整个单元格（`gridRange` 记录 `startColumnIndex` / `endColumnIndex`）。工具栏和右键菜单提供“选择整个表格”和“清除内容”；字符/段落格式、复制和清除都作用于矩形内的全部单元格。按 `Delete`/`Backspace` 清空选区，按 `Esc` 折叠到锚点单元格。
+
+```ts
+editor.selectTableCellRange(0, {
+  tableIndex: 0,
+  anchorRowIndex: 0,
+  anchorCellIndex: 0,
+  focusRowIndex: 1,
+  focusCellIndex: 2,
+})
+editor.selectedTableCellRange // { …, gridRange: { startColumnIndex: 0, endColumnIndex: 2 } }
+editor.selectWholeTable(0)     // 整个表格一条矩形选区
+editor.clearTableSelection()   // 清空矩形内所有单元格，一条撤销记录
+editor.collapseTableCellSelection() // Esc 的控制器等价命令
+```
+
+`clearTableSelection()` 复用 `clearTableCellContents(tableIndex, cells[])`，整个矩形只写一条撤销记录；复制时按行输出制表符分隔的文本，并附带一个 `<table>` HTML 片段。嵌套表格的选区通过 `tableRuntimeKey` 区分，按钮状态只使用普通正文表格。
+
 ## 文档块、词与高亮
 
 `@arcships/docx-core` 把已解析的文档模型拆成可寻址的文档块和词：表格、单元格、页眉页脚、脚注尾注、图片也都包含在块树里。每个块带一个稳定的 source id，查看器把同一个 id 渲染为 `data-docx-source-id`，因此几何解析不需要按文字猜位置。

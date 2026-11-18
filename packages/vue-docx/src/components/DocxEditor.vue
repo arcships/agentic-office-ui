@@ -820,6 +820,23 @@ function onKeydown(event: KeyboardEvent): void {
   if (inField) return
   if (target?.closest?.(".docx-toolbar-shell")) return
 
+  // A table range has no caret of its own. Escape returns to its anchor cell
+  // (the cell the drag or Shift+click started from) and Delete/Backspace clears
+  // every highlighted cell through `clearTableSelection()`.
+  if (event.key === "Escape" && controller.collapseTableCellSelection()) {
+    event.preventDefault()
+    return
+  }
+  if (
+    !mod &&
+    !interactionLocked.value &&
+    (key === "delete" || key === "backspace") &&
+    controller.clearTableSelection()
+  ) {
+    event.preventDefault()
+    return
+  }
+
   if (!mod) return
 
   if (key === "s") {

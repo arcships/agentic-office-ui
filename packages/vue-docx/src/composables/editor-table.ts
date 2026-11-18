@@ -28,6 +28,8 @@ import {
   splitParagraphChildrenAtTextOffsets,
   splitParagraphStyleWithDefaultSpacing,
   splitTableCell as splitTableCellOnGrid,
+  tableCellSelectionRangeCells,
+  tableCellSelectionRangeHasMultipleCells,
   tableColumnCount,
 } from "@arcships/docx-core"
 import type { ApplyModelChangeOptions, EditorCore } from "./editor-shared"
@@ -358,6 +360,35 @@ export function createEditorTable(
     }, ctx.statusMessage("clearedTableCells"))
   }
 
+  /**
+   * Clears every cell covered by the active table range through
+   * `clearTableCellContents(tableIndex, cells[])`, so a rectangular selection
+   * clears as one undo entry. Returns false when no multi-cell range is active
+   * or the table is nested (nested ranges are addressed by runtime key, not by
+   * body-table coordinates).
+   */
+  const clearTableSelection = (): boolean => {
+    const selection = ctx.selectionSnapshot.value
+    if (
+      selection.kind !== "table-cell" ||
+      selection.tableRuntimeKey ||
+      !selection.cellRange ||
+      !tableCellSelectionRangeHasMultipleCells(selection.cellRange)
+    ) {
+      return false
+    }
+    const table = ctx.modelSnapshot.value.nodes[selection.tableIndex]
+    if (!table || table.type !== "table") {
+      return false
+    }
+    const cells = tableCellSelectionRangeCells(table, selection.cellRange)
+    if (cells.length === 0) {
+      return false
+    }
+    clearTableCellContents(selection.tableIndex, cells)
+    return true
+  }
+
   const setTableColumnWidths = (tableIndex: number, widthsPx: number[]): void => {
     if (
       widthsPx.length === 0 ||
@@ -589,6 +620,7 @@ export function createEditorTable(
     deleteTableColumn,
     deleteTable,
     clearTableCellContents,
+    clearTableSelection,
     setTableColumnWidths,
     setTableRowHeight,
     mergeTableCells,

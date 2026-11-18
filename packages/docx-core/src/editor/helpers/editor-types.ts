@@ -67,6 +67,20 @@ export interface DocxTableCellSelectionRange {
   anchorCellIndex: number;
   focusRowIndex: number;
   focusCellIndex: number;
+  /**
+   * Physical table-grid columns covered by the rectangle, after merged cells
+   * and their grid spans are taken into account. 0-based and inclusive.
+   *
+   * Anchor/focus address model cells; this range addresses the drawn grid, so
+   * a cell that spans two columns stays inside a selection that only touches
+   * one of them. Commands, highlighting and clipboard export all use it.
+   */
+  gridRange?: DocxTableCellGridRange;
+}
+
+export interface DocxTableCellGridRange {
+  startColumnIndex: number;
+  endColumnIndex: number;
 }
 
 export interface ParagraphLocationInBody {

@@ -474,6 +474,8 @@ export interface OfficeDocxMessages {
     deleteTable: string
     mergeCells: string
     splitCell: string
+    selectTable: string
+    clearContents: string
     layer: string
     bringToFront: string
     bringForward: string
@@ -1653,6 +1655,8 @@ export const officeMessagesEn: OfficeMessages = {
       deleteTable: "Delete Table",
       mergeCells: "Merge cells",
       splitCell: "Split cell",
+      selectTable: "Select table",
+      clearContents: "Clear contents",
       layer: "Layer",
       bringToFront: "Bring to Front",
       bringForward: "Bring Forward",
@@ -2770,6 +2774,8 @@ export const officeMessagesZhCN: OfficeMessages = {
       deleteTable: "删除表格",
       mergeCells: "合并单元格",
       splitCell: "拆分单元格",
+      selectTable: "选择整个表格",
+      clearContents: "清除内容",
       layer: "图层",
       bringToFront: "置于顶层",
       bringForward: "上移一层",

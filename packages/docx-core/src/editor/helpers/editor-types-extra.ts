@@ -163,6 +163,8 @@ export interface DocxEditorController {
   isImporting: boolean;
   documentTheme: DocxDocumentTheme;
   selection: DocxEditorSelection;
+  /** Multi-cell rectangle of the active table selection, if any. */
+  selectedTableCellRange?: DocxTableCellSelectionRange;
   activeTextRange?: DocxTextRange;
   historyRestoreRequest?: DocxHistoryRestoreRequest;
   selectedFormField?: DocxSelectedFormField;
@@ -405,6 +407,10 @@ export interface DocxEditorController {
     range: DocxTableCellSelectionRange,
     tableRuntimeKey?: string
   ) => void;
+  /** Selects the whole table as one rectangular range; defaults to the table of the current cell selection. */
+  selectWholeTable: (tableIndex?: number) => void;
+  /** Collapses a multi-cell range to its anchor cell; false when none. */
+  collapseTableCellSelection: () => boolean;
   selectTableCellByRuntimeKey: (
     tableRuntimeKey: string,
     rowIndex: number,
@@ -414,6 +420,12 @@ export interface DocxEditorController {
     tableIndex: number,
     cells: Array<{ rowIndex: number; cellIndex: number }>
   ) => void;
+  /**
+   * Clears every cell in the active table range through
+   * `clearTableCellContents(tableIndex, cells[])`. Returns false when there is
+   * no table range to clear.
+   */
+  clearTableSelection: () => boolean;
   setTableColumnWidths: (tableIndex: number, widthsPx: number[]) => void;
   /**
    * Sets a row's height in CSS pixels ('atLeast' rule) as one undo entry.

@@ -558,6 +558,19 @@
         :disabled="!canSplitSelectedTableCell"
         @click="splitSelectedTableCell()"
       >⧅</button>
+      <button
+        data-testid="editor-table-select-all"
+        class="docx-toolbar-btn"
+        :title="m.docx.contextMenu.selectTable"
+        @click="selectWholeTable()"
+      >▦</button>
+      <button
+        data-testid="editor-table-clear"
+        class="docx-toolbar-btn"
+        :title="m.docx.contextMenu.clearContents"
+        :disabled="!canClearSelectedTableCells"
+        @click="clearSelectedTableCells()"
+      >⌫</button>
       <button data-testid="editor-table-delete" class="docx-toolbar-btn" :title="m.docx.contextMenu.deleteTable" @click="deleteSelectedTable()">T×</button>
     </div>
 
@@ -790,6 +803,15 @@ const canMergeSelectedTableCells = computed(() => {
   )
 })
 
+const canClearSelectedTableCells = computed(() => {
+  const range = selectedTableRange.value
+  return Boolean(
+    range &&
+      (range.anchorRowIndex !== range.focusRowIndex ||
+        range.anchorCellIndex !== range.focusCellIndex)
+  )
+})
+
 const canSplitSelectedTableCell = computed(() => {
   const selection = selectedTableCell.value
   if (!selection) return false
@@ -866,6 +888,16 @@ function deleteSelectedTable(): void {
   const selection = selectedTableCell.value
   if (!selection) return
   props.controller.deleteTable(selection.tableIndex)
+}
+
+function selectWholeTable(): void {
+  const selection = selectedTableCell.value
+  if (!selection) return
+  props.controller.selectWholeTable(selection.tableIndex)
+}
+
+function clearSelectedTableCells(): void {
+  props.controller.clearTableSelection()
 }
 
 // ── Border presets ──────────────────────────────────────────────────

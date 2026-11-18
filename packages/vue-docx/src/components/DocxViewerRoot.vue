@@ -1655,7 +1655,11 @@ function onCut(event: ClipboardEvent): void {
   }
   if (!props.controller.writeSelectionToClipboardData(event.clipboardData)) return
   event.preventDefault()
-  props.controller.deleteExpandedSelection()
+  if (props.controller.selection.kind === "table-cell") {
+    props.controller.clearTableSelection()
+  } else {
+    props.controller.deleteExpandedSelection()
+  }
 }
 
 // ── Context menu ─────────────────────────────────────────────────────
