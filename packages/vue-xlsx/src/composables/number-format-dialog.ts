@@ -35,6 +35,9 @@ export function clampNumberFormatDecimals(value: unknown) {
  * exported XLSX shows exactly the precision the user picked instead of Excel's
  * "General" fallback.
  */
+const GENERAL_FORMAT_CODE = "General";
+const TEXT_FORMAT_CODE = "Text";
+
 export function buildNumberFormatPattern(options: XlsxNumberFormatOptions) {
   const decimals = clampNumberFormatDecimals(options.decimals);
   const digits = decimals > 0 ? `0.${"0".repeat(decimals)}` : "0";
@@ -50,7 +53,7 @@ export function buildNumberFormatPattern(options: XlsxNumberFormatOptions) {
       return "@";
     case "custom": {
       const pattern = options.customPattern?.trim() ?? "";
-      return pattern || "General";
+      return pattern || GENERAL_FORMAT_CODE;
     }
     case "number":
     default:
@@ -94,9 +97,9 @@ export function buildNumberFormatPreview(options: XlsxNumberFormatOptions) {
     case "date":
       return "3/14/2026";
     case "text":
-      return "Text";
+      return TEXT_FORMAT_CODE;
     case "custom":
-      return options.customPattern?.trim() || "General";
+      return options.customPattern?.trim() || GENERAL_FORMAT_CODE;
     case "number":
     default:
       return new Intl.NumberFormat("en-US", {

@@ -4,10 +4,10 @@
     <div
       ref="menuRef"
       class="xlsx-headermenu"
-      :data-testid="kind === 'column' ? 'xlsx-column-menu-list' : 'xlsx-row-menu-list'"
+      :data-testid="isColumn ? 'xlsx-column-menu-list' : 'xlsx-row-menu-list'"
       :style="menuStyle"
       role="menu"
-      :aria-label="kind === 'column' ? m.xlsx.contextMenu.selectColumn : m.xlsx.contextMenu.selectRow"
+      :aria-label="isColumn ? m.xlsx.contextMenu.selectColumn : m.xlsx.contextMenu.selectRow"
       @keydown="onKeydown"
     >
       <button
@@ -150,6 +150,7 @@ const items = computed<HeaderMenuItem[]>(() => {
     }
   ];
 });
+const isColumn = computed(() => props.kind === "column")
 
 function run(item: HeaderMenuItem) {
   if (props.controller.isEditingLocked ?? props.controller.readOnly) {
