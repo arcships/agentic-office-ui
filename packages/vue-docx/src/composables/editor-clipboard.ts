@@ -1,15 +1,55 @@
 // editor-clipboard.ts — copy/paste operations
 //
 // Extracted from useDocxEditor.ts.
+//
+// Copy writes three flavours: the internal structured payload (exact runs +
+// source `DocxTextRange`), `text/html` with inline run styles so Word and other
+// editors keep bold/links/lists, and `text/plain`. Paste prefers them in that
+// order and falls back to the plain-text insert, so a plain-text clipboard and
+// a clipboard from an app we cannot parse still paste.
 
-import type { DocxTextRange } from "@arcships/docx-core"
-import { paragraphText } from "@arcships/docx-core"
+import type {
+  DocxClipboardParagraph,
+  DocxClipboardSources,
+  DocxTextRange
+} from "@arcships/docx-core"
+import {
+  DOCX_CLIPBOARD_MIME,
+  compareTextRangeBoundaries,
+  createDocxClipboardPayload,
+  docxClipboardParagraphsForRange,
+  paragraphText,
+  parseDocxClipboardHtml,
+  parseDocxClipboardPayload,
+  parseDocxClipboardRtf,
+  renderDocxClipboardHtml,
+  renderDocxClipboardRtf,
+  serializeDocxClipboardPayload
+} from "@arcships/docx-core"
+import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { EditorCore } from "./editor-shared"
+import {
+  resolveDocxClipboardWriteTargets,
+  writeDocxClipboardDataSink,
+  writeDocxClipboardPayload
+} from "./editor-clipboard-io"
 
-export function createEditorClipboard(
-  ctx: EditorCore,
-  insertTextAtSelection: (text: string, range?: DocxTextRange) => DocxTextRange | undefined,
-) {
+export interface EditorClipboardOperations {
+  insertTextAtSelection: (text: string, range?: DocxTextRange) => DocxTextRange | undefined
+  insertClipboardParagraphsAtSelection: (
+    paragraphs: DocxClipboardParagraph[],
+    range?: DocxTextRange
+  ) => DocxTextRange | undefined
+}
+
+interface ClipboardPayloadFlavours {
+  internal: string
+  html: string
+  rtf: string
+  text: string
+}
+
+export function createEditorClipboard(ctx: EditorCore, operations: EditorClipboardOperations) {
   // ── resolveSelectedTextForRange ──────────────────────────────────
   function resolveSelectedTextForRange(range?: DocxTextRange): string {
     if (!range) return ""
@@ -92,44 +132,157 @@ export function createEditorClipboard(
     return ""
   }
 
+  // ── payload builders ─────────────────────────────────────────────
+  function richFlavoursForRange(range: DocxTextRange): ClipboardPayloadFlavours | undefined {
+    const paragraphs = docxClipboardParagraphsForRange(ctx.model.value, range)
+    if (!paragraphs || paragraphs.length === 0) return undefined
+    const payload = createDocxClipboardPayload({ paragraphs, range })
+    const text = payload.text
+    if (!text) return undefined
+    return {
+      internal: serializeDocxClipboardPayload(payload),
+      html: renderDocxClipboardHtml(paragraphs, { sanitizeLink: sanitizeOfficeLink }),
+      rtf: renderDocxClipboardRtf(paragraphs, { sanitizeLink: sanitizeOfficeLink }),
+      text
+    }
+  }
+
   // ── copy ─────────────────────────────────────────────────────────
   const copy = async (): Promise<void> => {
     const activeRange = ctx.activeTextRange.value
     if (!activeRange) return
 
-    const text = resolveSelectedTextForRange(activeRange)
-    if (!text) return
+    const flavours = richFlavoursForRange(activeRange) ?? {
+      text: resolveSelectedTextForRange(activeRange)
+    }
+    if (!flavours.text) return
 
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(text)
-        ctx.status.value = ctx.statusMessage("copied")
-      } catch {
-        // Clipboard write failed — silently ignore
+    const wrote = await writeDocxClipboardPayload(flavours, resolveDocxClipboardWriteTargets())
+    if (wrote) {
+      ctx.status.value = ctx.statusMessage("copied")
+    }
+  }
+
+  // ── writeSelectionToClipboardData ────────────────────────────────
+  // Copy/cut events must fill `event.clipboardData` synchronously; the async
+  // clipboard API cannot be awaited inside the handler.
+  const writeSelectionToClipboardData = (data: {
+    setData(type: string, value: string): void
+  }): boolean => {
+    const activeRange = ctx.activeTextRange.value
+    if (!activeRange) return false
+    if (compareTextRangeBoundaries(activeRange.start, activeRange.end) >= 0) return false
+
+    const flavours = richFlavoursForRange(activeRange) ?? {
+      text: resolveSelectedTextForRange(activeRange)
+    }
+    if (!flavours.text) return false
+    return writeDocxClipboardDataSink(flavours, data)
+  }
+
+  // ── pasteClipboardData ───────────────────────────────────────────
+  // Prefers the internal payload, then `text/html`, then `text/rtf`, then
+  // `text/plain`. Reports success only when the model actually changed.
+  const pasteClipboardData = (sources: DocxClipboardSources): boolean => {
+    const internal = sources.internal
+    if (internal) {
+      const payload = parseDocxClipboardPayload(internal, {
+        sanitizeLink: sanitizeOfficeLink
+      })
+      if (payload && operations.insertClipboardParagraphsAtSelection(payload.paragraphs)) {
+        ctx.status.value = ctx.statusMessage("pasted")
+        return true
       }
     }
+
+    if (sources.html) {
+      const paragraphs = parseDocxClipboardHtml(sources.html, {
+        sanitizeLink: sanitizeOfficeLink
+      })
+      if (
+        paragraphs.length > 0 &&
+        operations.insertClipboardParagraphsAtSelection(paragraphs)
+      ) {
+        ctx.status.value = ctx.statusMessage("pasted")
+        return true
+      }
+    }
+
+    if (sources.rtf) {
+      const paragraphs = parseDocxClipboardRtf(sources.rtf, {
+        sanitizeLink: sanitizeOfficeLink
+      })
+      if (
+        paragraphs.length > 0 &&
+        operations.insertClipboardParagraphsAtSelection(paragraphs)
+      ) {
+        ctx.status.value = ctx.statusMessage("pasted")
+        return true
+      }
+    }
+
+    if (!sources.text) return false
+    if (!operations.insertTextAtSelection(sources.text)) return false
+    ctx.status.value = ctx.statusMessage("pasted")
+    return true
   }
 
   // ── paste ────────────────────────────────────────────────────────
-  // Inserts clipboard text at the active caret/selection. Reports success
-  // only when the model actually changed.
   const paste = async (): Promise<void> => {
-    if (typeof navigator === "undefined" || !navigator.clipboard?.readText) return
-
-    let text = ""
-    try {
-      text = await navigator.clipboard.readText()
-    } catch {
-      // Clipboard read failed — silently ignore
-      return
-    }
-    if (!text) return
-
-    const replaced = insertTextAtSelection(text)
-    if (!replaced) return
-
-    ctx.status.value = ctx.statusMessage("pasted")
+    const sources = await readClipboardSources()
+    if (!sources) return
+    pasteClipboardData(sources)
   }
 
-  return { copy, paste, resolveSelectedTextForRange }
+  return {
+    copy,
+    paste,
+    pasteClipboardData,
+    writeSelectionToClipboardData,
+    resolveSelectedTextForRange
+  }
+}
+
+interface ClipboardItemLike {
+  types: readonly string[]
+  getType(type: string): Promise<Blob>
+}
+
+/** Reads every flavour we understand from the async clipboard. */
+async function readClipboardSources(): Promise<DocxClipboardSources | undefined> {
+  if (typeof navigator === "undefined" || !navigator.clipboard) return undefined
+  const clipboard = navigator.clipboard
+
+  if (typeof clipboard.read === "function") {
+    try {
+      const items = (await clipboard.read()) as ClipboardItemLike[]
+      const sources: DocxClipboardSources = {}
+      for (const item of items) {
+        const types = item.types ?? []
+        if (!sources.internal && types.includes(DOCX_CLIPBOARD_MIME)) {
+          sources.internal = await (await item.getType(DOCX_CLIPBOARD_MIME)).text()
+        }
+        if (!sources.html && types.includes("text/html")) {
+          sources.html = await (await item.getType("text/html")).text()
+        }
+        if (!sources.rtf && types.includes("text/rtf")) {
+          sources.rtf = await (await item.getType("text/rtf")).text()
+        }
+        if (!sources.text && types.includes("text/plain")) {
+          sources.text = await (await item.getType("text/plain")).text()
+        }
+      }
+      if (sources.internal || sources.html || sources.rtf || sources.text) return sources
+    } catch {
+      // Permission denied or an unreadable item — fall back to readText().
+    }
+  }
+
+  if (typeof clipboard.readText !== "function") return undefined
+  try {
+    const text = await clipboard.readText()
+    return text ? { text } : undefined
+  } catch {
+    return undefined
+  }
 }

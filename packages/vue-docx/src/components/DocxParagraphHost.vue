@@ -40,6 +40,7 @@ import type {
   DocxDocumentTheme,
 } from "@arcships/docx-core"
 import {
+  DOCX_CLIPBOARD_MIME,
   compareTextRangeBoundaries,
   paragraphText,
   paragraphIsList,
@@ -520,59 +521,49 @@ function onCompositionEnd(_event: Event): void {
   props.controller?.clearSelectionSession("composition")
 }
 
-function clipboardHtmlToText(html: string): string {
-  if (!html) return ""
-  if (typeof DOMParser !== "undefined") {
-    const parsed = new DOMParser().parseFromString(html, "text/html")
-    parsed.querySelectorAll("script,style").forEach((node) => node.remove())
-    parsed.querySelectorAll("br").forEach((node) => node.replaceWith("\n"))
-    parsed.querySelectorAll("p,div,li,tr,h1,h2,h3,h4,h5,h6,blockquote").forEach((node) => {
-      node.append("\n")
-    })
-    return parsed.body?.textContent ?? ""
+function clipboardSourcesFromEvent(event: ClipboardEvent): {
+  internal: string
+  html: string
+  rtf: string
+  text: string
+} {
+  const clipboard = event.clipboardData
+  return {
+    internal: clipboard?.getData(DOCX_CLIPBOARD_MIME) ?? "",
+    html: clipboard?.getData("text/html") ?? "",
+    rtf: clipboard?.getData("text/rtf") ?? "",
+    text: clipboard?.getData("text/plain") ?? "",
   }
-  return html
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
 }
 
 function onPaste(event: ClipboardEvent): void {
   if (!props.editable || !props.controller) return
-  const clipboard = event.clipboardData
-  const html = clipboard?.getData("text/html") ?? ""
-  const plain = clipboard?.getData("text/plain") ?? ""
-  const text = html ? clipboardHtmlToText(html) || plain : plain
-  if (!text) {
+  const sources = clipboardSourcesFromEvent(event)
+  if (!sources.internal && !sources.html && !sources.rtf && !sources.text) {
     // Leave file/image clipboards to the browser instead of swallowing them.
     return
   }
 
   event.preventDefault()
-  const currentText = readCurrentDomText()
-  const offsets = currentSelectionOffsets(currentText.length)
   const controller = props.controller
 
-  // Use the model range for cross-paragraph selections; the local paragraph
-  // offsets can only describe a selection contained in this host.
-  const activeRange = controller.activeTextRange
-  if (activeRange && compareTextRangeBoundaries(activeRange.start, activeRange.end) < 0) {
-    syncDraftFromDom()
-    commitDraft(true)
-    const nextRange = controller.replaceExpandedSelection(text, activeRange)
-    if (nextRange) restoreControllerSelection()
-    return
-  }
+  // Flush the live draft first so the model matches the DOM the caret was
+  // measured against, then let the controller paste every flavour it received.
+  syncDraftFromDom()
+  commitDraft(true)
+  const currentText = readCurrentDomText()
+  currentSelectionOffsets(currentText.length)
 
-  const caretOffset = offsets.end + text.length
-  const nextText = `${currentText.slice(0, offsets.end)}${text}${currentText.slice(offsets.end)}`
-  if (nextText === currentText) return
-  clearDraft()
-  controller.commitParagraphText(props.paragraphIndex, nextText)
-  void nextTick(() => {
-    controller.setActiveTextRange(localTextRange(caretOffset, caretOffset))
-    restoreControllerSelection()
-  })
+  void controller
+    .pasteClipboardData({
+      internal: sources.internal || undefined,
+      html: sources.html || undefined,
+      rtf: sources.rtf || undefined,
+      text: sources.text || undefined,
+    })
+    .then((changed) => {
+      if (changed) restoreControllerSelection()
+    })
 }
 
 // ── Watch for model changes (clears draft when paragraph changes externally) ─

@@ -83,6 +83,32 @@ export interface DocxTextRange {
   end: DocxTextRangeBoundary;
 }
 
+/**
+ * Clipboard flavours a paste event or the async clipboard API can provide.
+ *
+ * Paste prefers the internal structured payload, then `text/html`, then
+ * `text/rtf`, then `text/plain`.
+ */
+export interface DocxClipboardSources {
+  /** Internal structured DOCX fragment (`DOCX_CLIPBOARD_MIME`). */
+  internal?: string;
+  /** `text/html` flavour, e.g. copied from Word. */
+  html?: string;
+  /** `text/rtf` flavour, for editors that only take RTF. */
+  rtf?: string;
+  /** `text/plain` flavour; always usable as the last resort. */
+  text?: string;
+}
+
+/**
+ * Minimal `DataTransfer` surface the copy path writes into.
+ *
+ * Declared structurally so the editor does not depend on DOM lib types.
+ */
+export interface DocxClipboardDataSink {
+  setData(type: string, value: string): void;
+}
+
 // Range-comparison helpers (upstream editor.tsx:3413-3480). Pure functions
 // colocated with the range types; consumed by selection-helpers and the
 // pagination/normalize paths.

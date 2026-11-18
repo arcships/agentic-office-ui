@@ -18,6 +18,8 @@ import type {
   DocxBorderContext,
   DocxBorderPreset,
   DocxBorderPresetState,
+  DocxClipboardDataSink,
+  DocxClipboardSources,
   DocxComment,
   DocxDocumentTheme,
   DocxEditorSelection,
@@ -367,6 +369,20 @@ export interface DocxEditorController {
     location: DocxSectionParagraphLocation,
     text: string
   ) => void;
+  /**
+   * Writes the active selection into a copy/cut event's clipboard sink.
+   *
+   * Synchronous by design: a `copy`/`cut` handler must fill
+   * `event.clipboardData` before the event returns. Returns false when the
+   * selection is empty, so the browser's own copy can proceed.
+   */
+  writeSelectionToClipboardData: (data: DocxClipboardDataSink) => boolean;
+  /**
+   * Pastes clipboard flavours captured from a paste event or the async
+   * clipboard API. Prefers the internal payload, then `text/html`, then
+   * `text/rtf`, then `text/plain`; reports whether the model changed.
+   */
+  pasteClipboardData: (sources: DocxClipboardSources) => Promise<boolean>;
   copy: () => Promise<void>;
   paste: () => Promise<void>;
 }
