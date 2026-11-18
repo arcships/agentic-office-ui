@@ -18,8 +18,28 @@
         @focusin="onTabFocus(index)"
         @mouseenter="onTabHover(index, $event)"
         @mouseleave="onTabLeave"
+        @contextmenu="onTabContextMenu(index, $event)"
       >
+        <input
+          v-if="renamingTabIndex === index"
+          ref="renameInputRef"
+          class="xlsx-sheettabs__rename-input"
+          data-testid="xlsx-sheet-rename-input"
+          type="text"
+          :aria-invalid="renameError ? 'true' : 'false'"
+          :aria-label="m.xlsx.sheetTabs.renameLabel"
+          :maxlength="maxSheetNameLength"
+          :style="renameInputStyle(index)"
+          :value="renameDraft"
+          @blur="onRenameBlur"
+          @click.stop
+          @dblclick.stop
+          @input="onRenameInput"
+          @keydown.enter.prevent.stop="commitRename"
+          @keydown.esc.prevent.stop="cancelRename"
+        />
         <button
+          v-else
           class="xlsx-sheettabs__tab"
           data-testid="xlsx-sheet-tab"
           :data-sheet-name="tab.name"
@@ -31,11 +51,12 @@
           :style="tabStyle(index)"
           @click="onTabClick(index)"
           @dblclick="onTabDblClick(tab, index)"
+          @keydown="onTabKeydown(index, tab, $event)"
         >
           <span class="xlsx-sheettabs__tab-name">{{ tab.name }}</span>
         </button>
         <div
-          v-if="hoveredTabIndex === index && thumbnailComputed[index]"
+          v-if="hoveredTabIndex === index && renamingTabIndex !== index && thumbnailComputed[index]"
           class="xlsx-sheettabs__thumbnail"
           :style="thumbnailPopupStyle"
         >
@@ -80,12 +101,54 @@
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6" /></svg>
     </button>
+    <div
+      v-if="renameError"
+      class="xlsx-sheettabs__rename-error"
+      data-testid="xlsx-sheet-rename-error"
+      role="alert"
+      :style="renameErrorStyle"
+    >
+      {{ renameError }}
+    </div>
+    <div
+      v-if="tabMenu"
+      class="xlsx-sheettabs__menu-backdrop"
+      data-testid="xlsx-sheet-tab-menu-backdrop"
+      @contextmenu.prevent="closeTabMenu"
+      @pointerdown="closeTabMenu"
+    />
+    <div
+      v-if="tabMenu"
+      class="xlsx-sheettabs__menu"
+      data-testid="xlsx-sheet-tab-menu"
+      role="menu"
+      :aria-label="m.xlsx.sheetTabs.rename"
+      :style="tabMenuStyle"
+      @keydown.esc="closeTabMenu"
+    >
+      <button
+        type="button"
+        class="xlsx-sheettabs__menu-item"
+        data-testid="xlsx-rename-sheet"
+        role="menuitem"
+        @click="renameFromMenu"
+      >
+        {{ m.xlsx.sheetTabs.rename }}
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onUnmounted, type CSSProperties } from "vue";
-import type { XlsxViewerController, XlsxSheetThumbnail, UseXlsxViewerThumbnailsOptions } from "@arcships/xlsx-core";
+import type {
+  XlsxSheetNameIssue,
+  XlsxViewerController,
+  XlsxWorkbookTab,
+  XlsxSheetThumbnail,
+  UseXlsxViewerThumbnailsOptions,
+} from "@arcships/xlsx-core";
+import { XLSX_MAX_SHEET_NAME_LENGTH } from "@arcships/xlsx-core";
 import { useXlsxViewerThumbnails } from "../composables/useXlsxViewerThumbnails";
 import { useXlsxMessages } from "../i18n";
 
@@ -98,8 +161,11 @@ const props = defineProps<{
 
 const activeTabIndex = computed(() => props.controller.activeTabIndex);
 const isReadOnly = computed(() => props.controller.isEditingLocked === true || props.controller.readOnly || props.readOnly === true);
+// Renaming a protected sheet is allowed, like Excel; only read-only mode blocks it.
+const canRenameSheets = computed(() => props.controller.readOnly !== true && props.readOnly !== true);
 const m = useXlsxMessages();
 const canRemoveActiveSheet = computed(() => Boolean(props.controller.activeSheet) && props.controller.sheets.length > 1);
+const maxSheetNameLength = XLSX_MAX_SHEET_NAME_LENGTH;
 
 const { prefetchThumbnails, thumbnails: thumbnailComputedRaw } = useXlsxViewerThumbnails(
   () => props.controller,
@@ -113,6 +179,23 @@ const thumbnailCanvasRefs = ref<Map<number, HTMLCanvasElement | null>>(new Map()
 const popupX = ref(0);
 const popupY = ref(0);
 let popupTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Inline rename state. The tab id, not the index, identifies the editor so a
+// sheet added or removed underneath the input cannot retarget the commit.
+const renamingTabId = ref<string | null>(null);
+const renamingTabIndex = computed(() => {
+  if (renamingTabId.value === null) return -1;
+  return props.controller.tabs.findIndex((tab) => tab.id === renamingTabId.value);
+});
+const renameDraft = ref("");
+const renameError = ref<string | null>(null);
+// The message is positioned against the editor and fixed to the viewport, so
+// the scrollable tab list cannot clip it.
+const renameAnchor = ref<{ left: number; top: number } | null>(null);
+// Vue collects element refs inside `v-for` into an array, so the single
+// inline editor is read back through this helper.
+const renameInputRef = ref<HTMLInputElement | HTMLInputElement[] | null>(null);
+const tabMenu = ref<{ tabId: string; x: number; y: number } | null>(null);
 
 // Prefetch tuning: one pending idle warm-up at most, for the hovered tab and
 // its immediate neighbours. Sweeping the pointer across the strip cancels the
@@ -205,8 +288,135 @@ function onTabClick(index: number) {
   props.controller.setActiveTabIndex(index);
 }
 
-function onTabDblClick(_tab: unknown, _index: number) {
-  // Future: rename sheet
+function onTabDblClick(tab: XlsxWorkbookTab, index: number) {
+  startRename(tab, index);
+}
+
+function renameErrorMessage(issue: XlsxSheetNameIssue) {
+  const messages = m.value.xlsx;
+  switch (issue) {
+    case "empty":
+      return messages.sheetTabs.renameEmpty;
+    case "too-long":
+      return messages.sheetTabs.renameTooLong;
+    case "duplicate":
+      return messages.sheetTabs.renameDuplicate;
+    case "apostrophe":
+      return messages.sheetTabs.renameApostrophe;
+    case "invalid-characters":
+    default:
+      return messages.diagnostics.sheetNameInvalid;
+  }
+}
+
+function closeRename() {
+  renamingTabId.value = null;
+  renameDraft.value = "";
+  renameError.value = null;
+  renameAnchor.value = null;
+}
+
+function refreshRenameAnchor() {
+  const target = renameInputRef.value;
+  const input = Array.isArray(target) ? target[0] : target;
+  const rect = input?.getBoundingClientRect?.();
+  renameAnchor.value = rect ? { left: rect.left, top: rect.top } : null;
+}
+
+function showRenameError(message: string) {
+  renameError.value = message;
+  refreshRenameAnchor();
+}
+
+function startRename(tab: XlsxWorkbookTab, index: number) {
+  if (!canRenameSheets.value || tab.kind !== "sheet" || typeof tab.sheetIndex !== "number") {
+    return;
+  }
+  closeTabMenu();
+  props.controller.setActiveTabIndex(index);
+  renamingTabId.value = tab.id;
+  renameDraft.value = tab.name;
+  renameError.value = null;
+  void nextTick(() => {
+    const target = renameInputRef.value;
+    const input = Array.isArray(target) ? target[0] : target;
+    input?.focus();
+    input?.select();
+    refreshRenameAnchor();
+  });
+}
+
+function commitRename() {
+  const index = renamingTabIndex.value;
+  const tab = index >= 0 ? props.controller.tabs[index] : null;
+  if (!tab || tab.kind !== "sheet" || typeof tab.sheetIndex !== "number") {
+    closeRename();
+    return;
+  }
+  const issue = props.controller.getSheetNameError(renameDraft.value, tab.sheetIndex);
+  if (issue) {
+    showRenameError(renameErrorMessage(issue));
+    return;
+  }
+  if (!props.controller.renameSheet(tab.sheetIndex, renameDraft.value)) {
+    showRenameError(m.value.xlsx.sheetTabs.renameFailed);
+    return;
+  }
+  closeRename();
+}
+
+function cancelRename() {
+  closeRename();
+}
+
+function onRenameInput(event: Event) {
+  renameDraft.value = (event.target as HTMLInputElement | null)?.value ?? "";
+  renameError.value = null;
+}
+
+function onRenameBlur() {
+  // Blur commits, matching Excel; a rejected name keeps the editor open with
+  // the reason visible instead of dropping the edit silently.
+  if (renamingTabId.value === null) return;
+  commitRename();
+}
+
+function onTabContextMenu(index: number, event: MouseEvent) {
+  const tab = props.controller.tabs[index];
+  if (!tab || tab.kind !== "sheet" || !canRenameSheets.value) {
+    closeTabMenu();
+    return;
+  }
+  event.preventDefault();
+  props.controller.setActiveTabIndex(index);
+  tabMenu.value = { tabId: tab.id, x: event.clientX, y: event.clientY };
+}
+
+function onTabKeydown(index: number, tab: XlsxWorkbookTab, event: KeyboardEvent) {
+  // Keyboard users reach the same menu with the ContextMenu key or Shift+F10.
+  if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) {
+    return;
+  }
+  if (!canRenameSheets.value || tab.kind !== "sheet") {
+    return;
+  }
+  event.preventDefault();
+  const rect = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect?.();
+  props.controller.setActiveTabIndex(index);
+  tabMenu.value = { tabId: tab.id, x: rect?.left ?? 0, y: rect?.bottom ?? 0 };
+}
+
+function closeTabMenu() {
+  tabMenu.value = null;
+}
+
+function renameFromMenu() {
+  const menu = tabMenu.value;
+  closeTabMenu();
+  if (!menu) return;
+  const index = props.controller.tabs.findIndex((tab) => tab.id === menu.tabId);
+  const tab = index >= 0 ? props.controller.tabs[index] : null;
+  if (tab) startRename(tab, index);
 }
 
 function removeActiveSheet() {
@@ -259,6 +469,59 @@ function tabStyle(index: number): CSSProperties {
   };
 }
 
+function renameInputStyle(index: number): CSSProperties {
+  return {
+    ...tabStyle(index),
+    cursor: "text",
+    fontFamily: "inherit",
+    minWidth: "72px",
+    outline: `2px solid ${props.isDark ? "#60a5fa" : "#2563eb"}`,
+    outlineOffset: "-1px",
+  };
+}
+
+const renameErrorStyle = computed<CSSProperties>(() => ({
+  backgroundColor: "#b91c1c",
+  borderRadius: "4px",
+  color: "#ffffff",
+  fontSize: "11px",
+  left: `${renameAnchor.value?.left ?? 0}px`,
+  maxWidth: "260px",
+  padding: "4px 8px",
+  position: "fixed",
+  top: `${renameAnchor.value?.top ?? 0}px`,
+  transform: "translateY(calc(-100% - 8px))",
+  whiteSpace: "normal",
+  zIndex: 9998,
+}));
+
+const tabMenuStyle = computed<CSSProperties>(() => ({
+  backgroundColor: props.isDark ? "#27272a" : "#ffffff",
+  border: `1px solid ${props.isDark ? "#3f3f46" : "#e4e4e7"}`,
+  borderRadius: "8px",
+  boxShadow: "0 4px 16px rgba(0,0,0,0.16)",
+  left: `${tabMenu.value?.x ?? 0}px`,
+  padding: "4px",
+  position: "fixed",
+  top: `${tabMenu.value?.y ?? 0}px`,
+  zIndex: 9999,
+}));
+
+// A sheet added or removed under the editor must not leave it pointing at a
+// different tab, and a rebuilt tab strip closes a stale context menu.
+watch(renamingTabIndex, (index) => {
+  if (index < 0 && renamingTabId.value !== null) closeRename();
+});
+watch(() => props.controller.tabs, () => closeTabMenu());
+// Losing edit rights (the host flips readOnly mid-edit) must not leave a live
+// editor that can only fail on commit.
+watch(canRenameSheets, (allowed) => {
+  if (!allowed) {
+    closeRename();
+    closeTabMenu();
+  }
+});
+
 onUnmounted(() => {
   cancelScheduledPrefetch();
   if (popupTimer) clearTimeout(popupTimer);
@@ -300,6 +563,49 @@ onUnmounted(() => {
 .xlsx-sheettabs__tab-name {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.xlsx-sheettabs__rename-input {
+  box-sizing: border-box;
+}
+
+.xlsx-sheettabs__rename-error {
+  background: #b91c1c;
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 11px;
+  max-width: 260px;
+  padding: 4px 8px;
+  white-space: normal;
+  z-index: 9998;
+}
+
+.xlsx-sheettabs__menu-backdrop {
+  inset: 0;
+  position: fixed;
+  z-index: 9998;
+}
+
+.xlsx-sheettabs__menu {
+  min-width: 140px;
+}
+
+.xlsx-sheettabs__menu-item {
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: inherit;
+  cursor: pointer;
+  display: block;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.xlsx-sheettabs__menu-item:hover {
+  background: rgba(128, 128, 128, 0.15);
 }
 
 .xlsx-sheettabs__thumbnail {

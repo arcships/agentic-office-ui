@@ -951,11 +951,17 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       cellValue.free();
     }
   }
-  function recordHistoryBeforeMutation() {
+  /**
+   * Records the pre-mutation workbook as one undo step.
+   *
+   * `precomputedBytes` lets a mutation that already serialized the workbook
+   * reuse those bytes instead of saving a second identical snapshot.
+   */
+  function recordHistoryBeforeMutation(precomputedBytes?: Uint8Array) {
     if (isApplyingHistoryRef.value || !workbook.value) return;
     pushHistoryEntry(undoStackRef.value, {
       kind: "snapshot", activeCell: activeCell.value, activeSheetIndex: activeSheetIndex.value,
-      bytes: createSavedWorkbookBytes(workbook.value), selection: selection.value
+      bytes: precomputedBytes ?? createSavedWorkbookBytes(workbook.value), selection: selection.value
     }, historyBudget);
     redoStackRef.value = [];
     historyRevision.value = historyRevision.value + 1;
@@ -1713,6 +1719,9 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     pasteStructuredClipboardData: clipboardDomain.pasteStructuredClipboardData,
     pasteText: clipboardDomain.pasteText,
     removeActiveSheet: editingDomain.removeActiveSheet,
+    renameSheet: editingDomain.renameSheet,
+    renameActiveSheet: editingDomain.renameActiveSheet,
+    getSheetNameError: editingDomain.getSheetNameError,
     get readOnly() { return readOnly.value; },
     get locale() { return documentLocale.value; },
     setDocumentLocale,

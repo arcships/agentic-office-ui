@@ -138,9 +138,11 @@ export type {
 export {
   XLSX_MAX_COLUMNS,
   XLSX_MAX_ROWS,
+  XLSX_MAX_SHEET_NAME_LENGTH,
   addWorkbookConditionalFormatRule,
   addWorkbookTable,
   applyWorkbookDefinedNames,
+  applyWorkbookSheetRename,
   createConditionalFormatRuleFromDraft,
   deleteWorkbookConditionalFormatRule,
   deleteWorkbookTable,
@@ -160,6 +162,7 @@ export {
   remapRangesForStructure,
   remapSparklineForStructure,
   remapTableForStructure,
+  renameSheetInFormula,
   replaceWorkbookConditionalFormatRules,
   replaceWorkbookDataValidations,
   setWorkbookCellComment,
@@ -169,6 +172,7 @@ export {
   shiftWorkbookSheetStructure,
   updateWorkbookConditionalFormatRule,
   updateWorkbookTableRange,
+  validateWorksheetName,
 } from "./authoring";
 export type {
   WorkbookAuthoringAssets,
@@ -290,6 +294,7 @@ export type {
   XlsxDataValidationInput,
   XlsxViewerAuthoring,
   XlsxWorkbookTab,
+  XlsxSheetNameIssue,
   XlsxViewerController,
   XlsxViewerEditing,
   XlsxViewerImages,

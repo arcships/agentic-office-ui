@@ -19,6 +19,8 @@ const requiredMethods = [
   "resizeRow",
   "pasteText",
   "fillSelection",
+  "renameSheet",
+  "renameActiveSheet",
 ];
 
 let failures = 0;
@@ -120,6 +122,12 @@ for (const name of requiredMethods) {
         break;
       case "fillSelection":
         fn({ start: { row: 0, col: 0 }, end: { row: 1, col: 1 } });
+        break;
+      case "renameSheet":
+        fn(0, "Renamed");
+        break;
+      case "renameActiveSheet":
+        fn("Renamed");
         break;
     }
     console.log("  callable:", name);

@@ -76,6 +76,8 @@ export type {
   XlsxViewerAuthoring,
   // Workbook tab
   XlsxWorkbookTab,
+  // Worksheet name rules
+  XlsxSheetNameIssue,
   // Formula target
   XlsxFormulaTarget,
   // Cell style context

@@ -551,7 +551,7 @@ export interface XlsxControllerContext {
   setValidationFeedback: (feedback: XlsxDataValidationFeedback | null) => void;
   dismissValidationFeedback: () => void;
   setExportWarning: (message: string | null) => void;
-  recordHistoryBeforeMutation: () => void;
+  recordHistoryBeforeMutation: (precomputedBytes?: Uint8Array) => void;
   recordCellEditHistory: (cell: XlsxCellAddress, before: CellMutationState, after: CellMutationState) => void;
   recordRangeEditHistory: (mutations: RangeCellMutation[], selectionAfter: XlsxCellRange | null, activeCellAfter: XlsxCellAddress | null, before?: SelectionSnapshot) => void;
   setChartSeriesFormula: (chartId: string, seriesIndex: number, formula: string) => boolean;

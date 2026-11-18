@@ -4,13 +4,23 @@ import type {
   XlsxCellAddress,
   XlsxCellNumberFormatInput,
   XlsxCellRange,
-  XlsxCellStyleInput
+  XlsxCellStyleInput,
+  XlsxSheetNameIssue
 } from "@arcships/xlsx-core";
-import { loadWorkbookChartAssets, resolveWorksheetMergedRegions } from "@arcships/xlsx-core";
+import {
+  applyWorkbookSheetRename,
+  loadWorkbookChartAssets,
+  resolveWorksheetMergedRegions,
+  revokeWorkbookImageAssets,
+  safeCalculate,
+  trackXlsxWorkbookLifetime,
+  validateWorksheetName
+} from "@arcships/xlsx-core";
 import { officeMessagesEn } from "@arcships/office-interaction";
 import { cellAddressToA1, normalizeRange, rangeContainsCell, rangeToA1 } from "./selection";
 import { shiftFormulaReferences } from "./formula-references";
 import { buildSelectionBorderPlan, resolveBorderEdge } from "./border-presets";
+import { loadWorkbookImageAssets } from "./image-assets";
 import {
   applyCellMutationState,
   cloneCellStyle,
@@ -685,6 +695,141 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     ctx.revision.value = ctx.revision.value + 1;
   }
 
+  function takenSheetNames(workbook: Workbook, ignoredWorkbookSheetIndex: number) {
+    const names = workbook.sheetNames.filter((_, index) => index !== ignoredWorkbookSheetIndex);
+    for (const chartsheet of ctx.chartsheets.value) {
+      if (chartsheet.name) names.push(chartsheet.name);
+    }
+    return names;
+  }
+
+  /**
+   * Explains why a worksheet name would be rejected before anything changes.
+   *
+   * The sheet at `index` is left out of the uniqueness check so Excel's
+   * case-only rename (`Sheet1` → `SHEET1`) stays possible.
+   */
+  function getSheetNameError(name: string, index?: number): XlsxSheetNameIssue | null {
+    const workbook = ctx.workbook.value;
+    if (!workbook || typeof name !== "string") {
+      return null;
+    }
+    const ignoredWorkbookSheetIndex = index === undefined
+      ? -1
+      : ctx.sheets.value[index]?.workbookSheetIndex ?? -1;
+    return validateWorksheetName(name, takenSheetNames(workbook, ignoredWorkbookSheetIndex));
+  }
+
+  /**
+   * Renames a worksheet and keeps the workbook model, the tab strip and the
+   * exported bytes in agreement.
+   *
+   * The engine exposes no rename setter, so the rename is written into the
+   * saved workbook (name plus every formula, defined name and link that points
+   * at the sheet) and parsed back into a fresh workbook instance. The previous
+   * workbook is already a history snapshot, so undo restores it unchanged.
+   */
+  function renameSheet(index: number, name: string): boolean {
+    const workbook = ctx.workbook.value;
+    const targetSheet = ctx.sheets.value[index];
+    if (
+      !workbook
+      || !targetSheet
+      || ctx.readOnly.value
+      || ctx.isApplyingHistoryRef.value
+      || typeof name !== "string"
+    ) {
+      return false;
+    }
+
+    const nextName = name.trim();
+    if (getSheetNameError(nextName, index)) {
+      return false;
+    }
+
+    const workbookSheetIndex = targetSheet.workbookSheetIndex;
+    if (workbook.sheetNames[workbookSheetIndex] === nextName) {
+      return true;
+    }
+
+    const originalBytes = ctx.createSavedWorkbookBytes(workbook);
+    const renamedBytes = applyWorkbookSheetRename(originalBytes, workbookSheetIndex, nextName);
+    if (!renamedBytes) {
+      return false;
+    }
+
+    const WorkbookConstructor = workbook.constructor as typeof Workbook;
+    let nextWorkbook: Workbook | null = null;
+    let nextImageAssets: ReturnType<typeof loadWorkbookImageAssets> | null = null;
+    let nextSheets: ReturnType<typeof buildSheetList>;
+    let nextChartAssets: ReturnType<typeof loadWorkbookChartAssets>;
+    let calculation: ReturnType<typeof safeCalculate>;
+    try {
+      nextWorkbook = trackXlsxWorkbookLifetime(WorkbookConstructor.fromBytes(renamedBytes));
+      calculation = safeCalculate(nextWorkbook, {
+        reparse: () => trackXlsxWorkbookLifetime(WorkbookConstructor.fromBytes(renamedBytes))
+      });
+      if (calculation.workbook !== nextWorkbook) {
+        try {
+          nextWorkbook.free();
+        } catch {
+          // A trapped WASM workbook may reject cleanup; it is never reused.
+        }
+        nextWorkbook = calculation.workbook;
+      }
+      nextImageAssets = loadWorkbookImageAssets(renamedBytes, nextWorkbook);
+      nextSheets = buildSheetList(
+        nextWorkbook,
+        nextImageAssets.sheetStatesByWorkbookSheetIndex,
+        nextImageAssets.themePalette,
+        nextImageAssets.styleById,
+        nextImageAssets.namedCellStyleByName,
+        nextImageAssets.tableStyleByName,
+        ctx.showHiddenSheets
+      );
+      nextChartAssets = loadWorkbookChartAssets(
+        nextWorkbook,
+        nextImageAssets,
+        buildVisibleSheetIndexMap(nextSheets),
+        ctx.showHiddenSheets
+      );
+    } catch {
+      revokeWorkbookImageAssets(nextImageAssets);
+      if (nextWorkbook) {
+        try {
+          nextWorkbook.free();
+        } catch {
+          // Best-effort cleanup for an instance that was never committed.
+        }
+      }
+      return false;
+    }
+
+    ctx.noteCalculationResult({ calculated: calculation.calculated, skipReason: calculation.skipReason });
+    if (calculation.calculated) {
+      ctx.resumeAutoCalculate();
+    }
+
+    // The pre-rename bytes are the history entry, so the undo snapshot and the
+    // rename share one save instead of re-serializing the workbook twice.
+    ctx.recordHistoryBeforeMutation(originalBytes);
+    ctx.setImageAssets(nextImageAssets);
+    ctx.replaceWorkbook(nextWorkbook);
+    ctx.sheets.value = nextSheets;
+    ctx.setChartAssets(nextChartAssets);
+    ctx.revision.value = ctx.revision.value + 1;
+    return true;
+  }
+
+  /** Renames the worksheet behind the active tab; chartsheet tabs never rename. */
+  function renameActiveSheet(name: string): boolean {
+    const activeTab = ctx.tabs.value[ctx.activeTabIndex.value];
+    if (!activeTab || activeTab.kind !== "sheet" || typeof activeTab.sheetIndex !== "number") {
+      return false;
+    }
+    return renameSheet(activeTab.sheetIndex, name);
+  }
+
   function defineNamedRange(name: string, range?: XlsxCellRange | null) {
     if (ctx.readOnly.value || !ctx.workbook.value) {
       return;
@@ -728,6 +873,9 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     unmergeSelection,
     addSheet,
     removeActiveSheet,
+    renameSheet,
+    renameActiveSheet,
+    getSheetNameError,
     defineNamedRange
   };
 }
