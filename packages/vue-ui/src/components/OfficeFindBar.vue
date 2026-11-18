@@ -23,6 +23,39 @@
     >{{ statusText }}</span>
     <button
       type="button"
+      class="office-find-bar__option"
+      :class="{ 'office-find-bar__option--active': caseSensitive }"
+      :aria-label="m.common.search.caseSensitive"
+      :title="m.common.search.caseSensitive"
+      :aria-pressed="caseSensitive"
+      :disabled="disabled"
+      data-testid="office-find-case-sensitive"
+      @click="emit('update:caseSensitive', !caseSensitive)"
+    >&#65;&#97;</button>
+    <button
+      type="button"
+      class="office-find-bar__option"
+      :class="{ 'office-find-bar__option--active': wholeWord }"
+      :aria-label="m.common.search.wholeWord"
+      :title="m.common.search.wholeWord"
+      :aria-pressed="wholeWord"
+      :disabled="disabled"
+      data-testid="office-find-whole-word"
+      @click="emit('update:wholeWord', !wholeWord)"
+    >&#97;&#98;|</button>
+    <button
+      type="button"
+      class="office-find-bar__option"
+      :class="{ 'office-find-bar__option--active': regex }"
+      :aria-label="m.common.search.regex"
+      :title="m.common.search.regex"
+      :aria-pressed="regex"
+      :disabled="disabled"
+      data-testid="office-find-regex"
+      @click="emit('update:regex', !regex)"
+    >.*</button>
+    <button
+      type="button"
       :aria-label="m.common.search.previous"
       :disabled="navigationDisabled"
       data-testid="office-find-previous"
@@ -60,14 +93,23 @@ const props = withDefaults(defineProps<{
   placeholder?: string
   inputTestId?: string
   disabled?: boolean
+  caseSensitive?: boolean
+  wholeWord?: boolean
+  regex?: boolean
 }>(), {
   placeholder: undefined,
   inputTestId: "office-find-input",
   disabled: false,
+  caseSensitive: false,
+  wholeWord: false,
+  regex: false,
 })
 
 const emit = defineEmits<{
   "update:query": [query: string]
+  "update:caseSensitive": [value: boolean]
+  "update:wholeWord": [value: boolean]
+  "update:regex": [value: boolean]
   next: []
   previous: []
   close: []
@@ -162,6 +204,18 @@ defineExpose({
 
 .office-find-bar button:hover:not(:disabled) {
   background: #f4f4f5;
+}
+
+.office-find-bar button.office-find-bar__option {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.office-find-bar button.office-find-bar__option--active {
+  background: #e0e7ff;
+  border-color: #818cf8;
+  color: #312e81;
 }
 
 .office-find-bar button:disabled {

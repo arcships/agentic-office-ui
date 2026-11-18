@@ -49,7 +49,13 @@
             :result-count="results.length"
             input-test-id="xlsx-search-input"
             :placeholder="m.xlsx.toolbar.searchPlaceholder"
+            :case-sensitive="searchCaseSensitive ?? false"
+            :whole-word="searchWholeWord ?? false"
+            :regex="searchRegex ?? false"
             @update:query="onSearchQuery"
+            @update:case-sensitive="onSearchOption('caseSensitive', $event)"
+            @update:whole-word="onSearchOption('wholeWord', $event)"
+            @update:regex="onSearchOption('regex', $event)"
             @previous="selectRelativeResult(-1)"
             @next="selectRelativeResult(1)"
             @close="closeSearch"
@@ -111,7 +117,7 @@
 import { computed, nextTick, ref, watch } from "vue";
 import type { XlsxViewerController } from "@arcships/xlsx-core";
 import { OfficeFindBar } from "@arcships/vue-ui";
-import { useXlsxSearch, type XlsxSurfaceSearch } from "../composables/useXlsxSearch";
+import { useXlsxSearch, type XlsxSearchOptions, type XlsxSurfaceSearch } from "../composables/useXlsxSearch";
 import { useXlsxMessages } from "../i18n";
 
 const props = defineProps<{
@@ -131,6 +137,14 @@ const m = useXlsxMessages();
 const searchOpen = ref(false);
 const findBarRef = ref<InstanceType<typeof OfficeFindBar> | null>(null);
 const searchQuery = ref("");
+const searchCaseSensitive = ref<boolean | undefined>();
+const searchWholeWord = ref<boolean | undefined>();
+const searchRegex = ref<boolean | undefined>();
+const searchOptions = computed<XlsxSearchOptions>(() => ({
+  ...(searchCaseSensitive.value === undefined ? {} : { caseSensitive: searchCaseSensitive.value }),
+  ...(searchWholeWord.value === undefined ? {} : { wholeWord: searchWholeWord.value }),
+  ...(searchRegex.value === undefined ? {} : { regex: searchRegex.value }),
+}));
 const ownedSearch = useXlsxSearch(() => props.controller);
 const effectiveSearch = computed(() => props.search ?? ownedSearch);
 const searchState = computed(() => effectiveSearch.value.searchState.value);
@@ -162,7 +176,17 @@ function closeSearch(): void {
 
 function onSearchQuery(query: string): void {
   searchQuery.value = query;
-  void effectiveSearch.value.search(query).catch(() => undefined);
+  void effectiveSearch.value.search(query, searchOptions.value).catch(() => undefined);
+}
+
+function onSearchOption(
+  key: "caseSensitive" | "wholeWord" | "regex",
+  value: boolean,
+): void {
+  if (key === "caseSensitive") searchCaseSensitive.value = value;
+  else if (key === "wholeWord") searchWholeWord.value = value;
+  else searchRegex.value = value;
+  if (searchQuery.value.trim()) onSearchQuery(searchQuery.value);
 }
 
 function selectRelativeResult(direction: 1 | -1): void {

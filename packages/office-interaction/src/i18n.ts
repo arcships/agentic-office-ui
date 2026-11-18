@@ -27,6 +27,12 @@ export interface OfficeSearchMessages {
   searching: string
   error: string
   noResults: string
+  /** Toggle label: match case exactly. */
+  caseSensitive: string
+  /** Toggle label: match whole words only. */
+  wholeWord: string
+  /** Toggle label: treat the query as a regular expression. */
+  regex: string
   /** Template with `{current}` and `{total}` placeholders. */
   resultOf: string
 }
@@ -1108,6 +1114,9 @@ export const officeMessagesEn: OfficeMessages = {
       searching: "Searching…",
       error: "Search failed",
       noResults: "No results",
+      caseSensitive: "Match case",
+      wholeWord: "Match whole word",
+      regex: "Use regular expression",
       resultOf: "{current} of {total}",
     },
     zoom: {
@@ -2064,6 +2073,9 @@ export const officeMessagesZhCN: OfficeMessages = {
       searching: "正在搜索",
       error: "搜索失败",
       noResults: "没有结果",
+      caseSensitive: "区分大小写",
+      wholeWord: "全字匹配",
+      regex: "使用正则表达式",
       resultOf: "第 {current} 项，共 {total} 项",
     },
     zoom: {

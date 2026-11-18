@@ -10,6 +10,7 @@
     :data-docx-table-host="true"
     :data-docx-table-index="domTableIndex"
     :data-docx-table-runtime-key="tableRuntimeKey"
+    :data-docx-table-nesting-path="tableNestingPath || undefined"
   >
     <!-- Column resize handles -->
     <div
@@ -99,6 +100,7 @@
                 :table="node"
                 :table-index="tableIndex"
                 :table-runtime-key="nestedTableRuntimeKey(cell.rowIndex, cell.cellIndex, pi)"
+                :nesting-path="nestedTableNestingPath(cell.rowIndex, cell.cellIndex, pi)"
                 :editable="editable && !isReadOnly"
                 :controller="controller"
                 :document-theme="documentTheme"
@@ -199,6 +201,12 @@ const props = withDefaults(
     editable?: boolean
     controller?: DocxEditorController
     tableRuntimeKey?: string
+    /**
+     * Slash-separated `rowIndex-cellIndex-contentIndex` steps from the
+     * top-level table to this nested table. Search uses it to project matches
+     * into the DOM independently of the page-specific runtime key.
+     */
+    nestingPath?: string
     rowRange?: TableRowRange
     /** Partial row slice produced by the pagination engine. */
     rowSlice?: {
@@ -391,6 +399,17 @@ type RuntimeKeyTableCellController = {
 const isNestedTable = computed(() => Boolean(props.tableRuntimeKey))
 
 const domTableIndex = computed(() => props.tableRuntimeKey ?? props.tableIndex)
+
+const tableNestingPath = computed(() => props.nestingPath ?? "")
+
+function nestedTableNestingPath(
+  rowIndex: number,
+  cellIndex: number,
+  contentIndex: number,
+): string {
+  const step = `${rowIndex}-${cellIndex}-${contentIndex}`
+  return tableNestingPath.value ? `${tableNestingPath.value}/${step}` : step
+}
 
 // Visible revisions no longer imply a read-only table: the document stays
 // editable and revisions are resolved through accept/reject.

@@ -1,5 +1,18 @@
 export type SurfaceSearchStatus = "idle" | "searching" | "ready" | "error"
 
+/**
+ * Query options shared by every office surface search (DOCX, XLSX, …).
+ *
+ * Defaults mirror Word/Excel: literal matching, case-insensitive, matching
+ * inside words. `regex` treats the query as a JavaScript regular expression
+ * and composes with `wholeWord`/`caseSensitive`.
+ */
+export interface SurfaceSearchOptions {
+  caseSensitive?: boolean
+  wholeWord?: boolean
+  regex?: boolean
+}
+
 export interface SurfaceSearchError {
   code: "SEARCH_FAILED" | "ACTIVATION_FAILED"
   message: string
@@ -14,7 +27,13 @@ export interface SurfaceSearchState<M> {
 }
 
 export interface SurfaceSearchApi<M> {
-  search(query: string): Promise<SurfaceSearchState<M>>
+  search(query: string, options?: SurfaceSearchOptions): Promise<SurfaceSearchState<M>>
+  /**
+   * Re-run the active query against the current surface content and keep the
+   * active match index where possible. Hosts call this after an edit replaces
+   * the model so the result list and highlights survive the edit.
+   */
+  refreshSearch(): Promise<SurfaceSearchState<M>>
   activateSearchMatch(index: number): Promise<void>
   searchNext(): Promise<void>
   searchPrevious(): Promise<void>
@@ -30,6 +49,7 @@ export interface SurfaceSearchAdapter<M> {
   search(
     query: string,
     context: SurfaceSearchTaskContext,
+    options: Readonly<SurfaceSearchOptions>,
   ): Promise<readonly M[]> | readonly M[]
   activate(
     match: M,
@@ -61,6 +81,30 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+export function escapeSurfaceSearchPattern(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+/**
+ * Build the regular expression used by a surface search.
+ *
+ * Offsets stay UTF-16 code-unit offsets in the source text, matching DOM
+ * Range's offset model. `wholeWord` uses Unicode letter/number/underscore
+ * boundaries instead of `\b`, which misclassifies CJK text and combining
+ * marks.
+ */
+export function createSurfaceSearchExpression(
+  query: string,
+  options: Readonly<SurfaceSearchOptions> = {},
+): RegExp {
+  const flags = options.caseSensitive ? "gu" : "giu"
+  const pattern = options.regex ? query : escapeSurfaceSearchPattern(query)
+  const bounded = options.wholeWord
+    ? `(?<![\\p{L}\\p{N}_])(?:${pattern})(?![\\p{L}\\p{N}_])`
+    : pattern
+  return new RegExp(bounded, flags)
+}
+
 export function createSurfaceSearchSession<M>(
   adapter: SurfaceSearchAdapter<M>,
 ): SurfaceSearchSession<M> {
@@ -75,6 +119,7 @@ export function createSurfaceSearchSession<M>(
   let requestedActiveIndex = -1
   let searchController: AbortController | undefined
   let activationController: AbortController | undefined
+  let activeQuery: { query: string; options: SurfaceSearchOptions } | undefined
   let disposed = false
   const listeners = new Set<(value: SurfaceSearchState<M>) => void>()
 
@@ -151,62 +196,91 @@ export function createSurfaceSearchSession<M>(
     }
   }
 
-  const session: SurfaceSearchSession<M> = {
-    async search(rawQuery) {
-      assertUsable()
-      const query = rawQuery.trim()
-      if (!query) {
-        session.clearSearch()
-        return state
-      }
+  async function runSearch(
+    rawQuery: string,
+    options: SurfaceSearchOptions,
+    preserveActiveIndex: boolean,
+  ): Promise<SurfaceSearchState<M>> {
+    assertUsable()
+    const query = rawQuery.trim()
+    if (!query) {
+      session.clearSearch()
+      return state
+    }
 
-      const currentRequest = ++requestVersion
-      searchController?.abort()
-      cancelActivation()
-      const controller = new AbortController()
-      searchController = controller
-      requestedActiveIndex = -1
-      commit({ status: "searching", query, matches: [], activeIndex: -1 })
+    const previousMatches = preserveActiveIndex ? state.matches : []
+    const previousActiveIndex = preserveActiveIndex
+      ? Math.max(0, state.activeIndex)
+      : -1
+    activeQuery = { query, options: { ...options } }
 
-      let matches: readonly M[]
-      try {
-        matches = await adapter.search(query, { signal: controller.signal })
-      } catch (error) {
-        if (
-          isAbortError(error)
-          || controller.signal.aborted
-          || currentRequest !== requestVersion
-        ) {
-          throw createAbortError()
-        }
-        commit({
-          status: "error",
-          query,
-          matches: [],
-          activeIndex: -1,
-          error: { code: "SEARCH_FAILED", message: errorMessage(error) },
-        })
-        throw error
-      } finally {
-        if (searchController === controller) searchController = undefined
-      }
+    const currentRequest = ++requestVersion
+    searchController?.abort()
+    cancelActivation()
+    const controller = new AbortController()
+    searchController = controller
+    requestedActiveIndex = previousActiveIndex
+    commit({
+      status: "searching",
+      query,
+      matches: previousMatches,
+      activeIndex: previousActiveIndex,
+    })
 
-      if (disposed || controller.signal.aborted || currentRequest !== requestVersion) {
+    let matches: readonly M[]
+    try {
+      matches = await adapter.search(query, { signal: controller.signal }, { ...options })
+    } catch (error) {
+      if (
+        isAbortError(error)
+        || controller.signal.aborted
+        || currentRequest !== requestVersion
+      ) {
         throw createAbortError()
       }
-      commit({ status: "ready", query, matches: [...matches], activeIndex: -1 })
-      if (matches.length) {
-        // The implicit first-match activation is a convenience for hosts that
-        // type into a search box. A superseded or failed activation is already
-        // reflected in `state`, so resolve with the latest state instead of
-        // leaking an AbortError or activation failure to the host.
-        try {
-          await activate(0, currentRequest, false)
-        } catch {
-          // `state` already carries ACTIVATION_FAILED.
-        }
+      commit({
+        status: "error",
+        query,
+        matches: previousMatches,
+        activeIndex: previousActiveIndex,
+        error: { code: "SEARCH_FAILED", message: errorMessage(error) },
+      })
+      throw error
+    } finally {
+      if (searchController === controller) searchController = undefined
+    }
+
+    if (disposed || controller.signal.aborted || currentRequest !== requestVersion) {
+      throw createAbortError()
+    }
+    commit({ status: "ready", query, matches: [...matches], activeIndex: -1 })
+    if (matches.length) {
+      // The implicit activation is a convenience for hosts that type into a
+      // search box. A refresh keeps the previously active result (clamped to
+      // the new list); a new query activates the first result. A superseded or
+      // failed activation is already reflected in `state`, so resolve with the
+      // latest state instead of leaking an AbortError or activation failure.
+      const preferredIndex = preserveActiveIndex
+        ? Math.min(previousActiveIndex, matches.length - 1)
+        : 0
+      try {
+        await activate(preferredIndex, currentRequest, false)
+      } catch {
+        // `state` already carries ACTIVATION_FAILED.
       }
-      return state
+    }
+    return state
+  }
+
+  const session: SurfaceSearchSession<M> = {
+    search(rawQuery, options = {}) {
+      return runSearch(rawQuery, options, false)
+    },
+
+    refreshSearch() {
+      assertUsable()
+      if (!activeQuery) return Promise.resolve(state)
+      return runSearch(activeQuery.query, activeQuery.options, true)
     },
 
     activateSearchMatch(index) {
@@ -234,6 +308,7 @@ export function createSurfaceSearchSession<M>(
       searchController = undefined
       cancelActivation()
       requestedActiveIndex = -1
+      activeQuery = undefined
       adapter.clear?.()
       commit({ status: "idle", query: "", matches: [], activeIndex: -1 })
     },

@@ -4,6 +4,14 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### DOCX search coverage and options (#49)
+
+- Add a shared `SurfaceSearchOptions` (`caseSensitive`, `wholeWord`, optional `regex`) to `@arcships/office-runtime`; `createSurfaceSearchExpression` builds the Unicode-aware literal/whole-word/regex matcher, and both DOCX and XLSX searches consume it. DOCX and XLSX toolbars now expose match-case, whole-word and regex toggles.
+- DOCX search walks tables recursively: text inside nested tables is matched with a `nested-table-cell` location (`path` + the viewer's stable `data-docx-table-nesting-path`), while direct cell/body ranges keep the existing `DocxTextRange` shape. Header, footer, footnote and endnote stories are searched too, tagged with `region` plus `partName`/`noteId`, using the section-level header/footer parts the viewer actually renders (rendered part wins over the editing fallback, and shared parts are searched once).
+- Search navigation resolves header/footer parts and note bodies to the page that renders them (`DocxViewerRoot.searchTargetPage`, `findDocxSearchTargetPage`) and scrolls there; highlights are scoped to the header/footer/note DOM story so identical text in another story cannot be highlighted.
+- The search session gained `refreshSearch()`: editing a paragraph (a clone-on-write model replacement) re-runs the active query against the new model, updates match offsets, keeps the result list and preserves/clamps the active result index instead of clearing the search. `DocxDocumentSurface` exposes the options-aware `search()` plus `refreshSearch()`.
+- Tests: nested-table, header/footer/note region, rendered-section preference, case/whole-word/regex, session refresh (offsets + active index), page lookup, surface model-refresh, toolbar toggles and XLSX per-call options.
+
 ### DOCX fixture and acceptance coverage (#53)
 
 - Add three DOCX fixtures that carry the structures the reported defects live in: `review-threads.docx` (comment threads with replies and a resolved thread, two comments on one paragraph, a range crossing three paragraphs, comments anchored in a table cell and in the header, a deleted table row, a row-height `trPrChange`, two footnotes and two endnotes), `table-structures.docx` (`vMerge` restart/continuation cells, `gridSpan`, a nested table, multi-paragraph cells, a `tblHeader` row that repeats across pages and a two-row table inside the page header), and `sections-columns.docx` (portrait/landscape/two-column sections with their own headers and footers, a text box and a behind-text watermark).

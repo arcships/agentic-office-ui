@@ -4,6 +4,7 @@ export { useXlsxViewerController } from "./composables/useXlsxViewerController";
 export { useXlsxSearch } from "./composables/useXlsxSearch";
 export type {
   XlsxSearchMatch,
+  XlsxSearchOptions,
   XlsxSearchState,
   XlsxSearchStatus,
   XlsxSurfaceSearch,

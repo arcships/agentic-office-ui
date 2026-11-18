@@ -73,6 +73,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, watchEffect } from "vue"
 import { createTouchGestureTracker } from "@arcships/office-runtime/touch-gestures"
+import { findDocxSearchTargetPage, type DocxSearchPageTarget } from "../composables/docx-search-page"
 import type {
   DocModel,
   DocxComment,
@@ -1490,6 +1491,10 @@ defineExpose({
       top: targetTop,
       behavior: options?.behavior ?? "smooth",
     })
+  },
+  /** Page rendering a header/footer part or a note body, for search navigation. */
+  searchTargetPage(target: DocxSearchPageTarget): number | undefined {
+    return findDocxSearchTargetPage(target, pagePresentations.value, pageNotes.value)
   },
   get scrollContainer() {
     return scrollContainerRef.value

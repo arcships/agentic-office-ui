@@ -8,6 +8,7 @@ import {
   type ShallowRef,
 } from "vue"
 import {
+  createSurfaceSearchExpression,
   createSurfaceSearchSession,
 } from "@arcships/office-runtime"
 import type { XlsxCellAddress, XlsxSheetData, XlsxViewerController } from "@arcships/xlsx-core"
@@ -37,9 +38,17 @@ export interface XlsxSearchState {
   }
 }
 
+/** Query options accepted by the XLSX search session. */
+export interface XlsxSearchOptions {
+  caseSensitive?: boolean
+  wholeWord?: boolean
+  regex?: boolean
+}
+
 export interface XlsxSurfaceSearch {
   readonly searchState: Readonly<ShallowRef<XlsxSearchState>>
-  search(query: string): Promise<XlsxSearchState>
+  search(query: string, options?: XlsxSearchOptions): Promise<XlsxSearchState>
+  refreshSearch(): Promise<XlsxSearchState>
   activateSearchMatch(index: number): Promise<void>
   searchNext(): Promise<void>
   searchPrevious(): Promise<void>
@@ -48,10 +57,8 @@ export interface XlsxSurfaceSearch {
   dispose(): void
 }
 
-interface UseXlsxSearchOptions {
+interface UseXlsxSearchOptions extends XlsxSearchOptions {
   scrollToCell?: (cell: XlsxCellAddress) => Promise<void> | void
-  /** Match case exactly. The default mirrors Excel's case-insensitive find. */
-  caseSensitive?: boolean
 }
 
 function cellAddress(cell: XlsxCellAddress): string {
@@ -81,21 +88,21 @@ function normalizeMergedCell(sheet: XlsxSheetData, cell: XlsxCellAddress): XlsxC
   return merged ? { row: merged.start.row, col: merged.start.col } : cell
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^\${}()|[\]\\]/g, "\\$&")
-}
-
 function matchedText(value: string, formula: string, expression: RegExp): {
   text: string
   start: number
   end: number
 } | undefined {
+  // The shared search expression is global; reset lastIndex per cell text so a
+  // match in the formatted value does not skip the formula (or the next cell).
+  expression.lastIndex = 0
   const valueMatch = expression.exec(value)
   if (valueMatch) return {
     text: value,
     start: valueMatch.index,
     end: valueMatch.index + valueMatch[0].length,
   }
+  expression.lastIndex = 0
   const formulaMatch = expression.exec(formula)
   if (formulaMatch) return {
     text: formula,
@@ -109,9 +116,9 @@ async function searchWorkbook(
   controller: XlsxViewerController,
   query: string,
   signal: AbortSignal,
-  caseSensitive = false,
+  options: XlsxSearchOptions = {},
 ): Promise<XlsxSearchMatch[]> {
-  const expression = new RegExp(escapeRegExp(query), caseSensitive ? "u" : "iu")
+  const expression = createSurfaceSearchExpression(query, options)
   const matches: XlsxSearchMatch[] = []
 
   for (const [sheetIndex, sheet] of controller.sheets.entries()) {
@@ -206,8 +213,12 @@ export function useXlsxSearch(
     activeIndex: -1,
   })
   const session = createSurfaceSearchSession<XlsxSearchMatch>({
-    search(query, { signal }) {
-      return searchWorkbook(controller(), query, signal, options.caseSensitive === true)
+    search(query, { signal }, searchOptions) {
+      return searchWorkbook(controller(), query, signal, {
+        caseSensitive: searchOptions.caseSensitive ?? options.caseSensitive,
+        wholeWord: searchOptions.wholeWord ?? options.wholeWord,
+        regex: searchOptions.regex ?? options.regex,
+      })
     },
     async activate(match, _index, { signal }) {
       const current = controller()
@@ -237,7 +248,8 @@ export function useXlsxSearch(
 
   const result: XlsxSurfaceSearch = {
     searchState: shallowReadonly(searchState),
-    search: (query) => session.search(query),
+    search: (query, searchOptions) => session.search(query, searchOptions),
+    refreshSearch: () => session.refreshSearch(),
     activateSearchMatch: (index) => session.activateSearchMatch(index),
     searchNext: () => session.searchNext(),
     searchPrevious: () => session.searchPrevious(),

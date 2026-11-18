@@ -54,6 +54,39 @@
           @keydown.enter.prevent="onSearchEnter"
           @keydown.esc.prevent="emit('searchClose')"
         />
+        <button
+          type="button"
+          class="docx-viewer-toolbar__search-option"
+          :class="{ 'docx-viewer-toolbar__search-option--active': searchCaseSensitive }"
+          data-testid="docx-search-case-sensitive"
+          :aria-label="m.common.search.caseSensitive"
+          :title="m.common.search.caseSensitive"
+          :aria-pressed="searchCaseSensitive"
+          :disabled="disabled"
+          @click="emit('update:searchCaseSensitive', !searchCaseSensitive)"
+        >&#65;&#97;</button>
+        <button
+          type="button"
+          class="docx-viewer-toolbar__search-option"
+          :class="{ 'docx-viewer-toolbar__search-option--active': searchWholeWord }"
+          data-testid="docx-search-whole-word"
+          :aria-label="m.common.search.wholeWord"
+          :title="m.common.search.wholeWord"
+          :aria-pressed="searchWholeWord"
+          :disabled="disabled"
+          @click="emit('update:searchWholeWord', !searchWholeWord)"
+        >&#97;&#98;|</button>
+        <button
+          type="button"
+          class="docx-viewer-toolbar__search-option"
+          :class="{ 'docx-viewer-toolbar__search-option--active': searchRegex }"
+          data-testid="docx-search-regex"
+          :aria-label="m.common.search.regex"
+          :title="m.common.search.regex"
+          :aria-pressed="searchRegex"
+          :disabled="disabled"
+          @click="emit('update:searchRegex', !searchRegex)"
+        >.*</button>
         <span
           data-testid="docx-search-status"
           role="status"
@@ -204,10 +237,13 @@ const props = withDefaults(
     searchQuery: string
     searchResultCount: number
     searchResultIndex: number
+    searchCaseSensitive?: boolean
+    searchWholeWord?: boolean
+    searchRegex?: boolean
     showUpload?: boolean
     showDownload?: boolean
   }>(),
-  { showUpload: true, showDownload: true },
+  { showUpload: true, showDownload: true, searchCaseSensitive: false, searchWholeWord: false, searchRegex: false },
 )
 
 const emit = defineEmits<{
@@ -220,6 +256,9 @@ const emit = defineEmits<{
   selectPage: [page: number]
   "update:zoom": [zoom: number]
   "update:searchQuery": [query: string]
+  "update:searchCaseSensitive": [value: boolean]
+  "update:searchWholeWord": [value: boolean]
+  "update:searchRegex": [value: boolean]
   searchNext: []
   searchPrevious: []
   searchClose: []
@@ -352,6 +391,19 @@ defineExpose({
 .docx-viewer-toolbar__search { align-items: center; display: flex; gap: 2px; margin-right: 4px; }
 .docx-viewer-toolbar__search input { background: #fff; border: 1px solid #d4d4d8; border-radius: 7px; color: #18181b; font: inherit; font-size: 12px; height: 32px; padding: 0 8px; width: 132px; }
 .docx-viewer-toolbar__search span { color: #71717a; font-size: 11px; min-width: 30px; text-align: center; }
+.docx-viewer-toolbar__search .docx-viewer-toolbar__search-option {
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  height: 26px;
+  line-height: 1;
+  width: 26px;
+}
+.docx-viewer-toolbar__search .docx-viewer-toolbar__search-option--active {
+  background: #e0e7ff;
+  border-color: #818cf8;
+  color: #312e81;
+}
 .docx-viewer-toolbar__search button { background: transparent; border: 1px solid transparent; border-radius: 5px; color: inherit; cursor: pointer; font-size: 20px; height: 28px; line-height: 20px; padding: 0; width: 24px; }
 .docx-viewer-toolbar__search button:hover:not(:disabled) { background: #f4f4f5; }
 .docx-viewer-toolbar__search button:disabled { opacity: .3; }
