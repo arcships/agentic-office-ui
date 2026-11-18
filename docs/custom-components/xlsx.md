@@ -50,3 +50,5 @@ const controller = useXlsxViewerController({ file: props.bytes })
 剪切是控制器上的状态，不是选区状态：`cutSelection()` 进入剪切、`cutState` 给出 `{ range, sheetIndex }`（没有待处理的移动时为 `null`）、`cancelCut()` 取消。自建网格可以据 `cutState` 画自己的 marquee 和“取消剪切”按钮；`pasteFromClipboard()` 搬移内容并在同一个撤销条目里清空源区域，`copySelectionToClipboard()` 与仅格式的 `pasteSpecialFromClipboard({ mode: "formats" })` 会结束剪切状态。内置网格已经把 `Ctrl/Cmd+X`、`Escape` 和虚线标记接到这套状态上。
 
 自建界面同样可以控制数字/日期区域：在 `useXlsxViewerController({ locale: "de-DE" })` 中设置，运行时用 `controller.setDocumentLocale(tag)` 切换；`controller.locale` 报告当前值。`XlsxSheetSurface` 也接受 `locale`/`documentLocale`。显式 `[$-407]` 格式段优先于查看器区域，`@` 文本格式保持键入内容。
+
+公式引用高亮可以接到自建公式输入框上：用 `useFormulaReferenceEditing(controller)` 的 `begin(owner, text, caret)` / `update(...)` / `end(owner)` 维护瞬态编辑会话，内置网格会按会话内容描出当前工作表的引用；`collectFormulaReferences()`、`formulaReferenceSegments()`、`FORMULA_REFERENCE_COLORS` 和 `createNamedRangeResolver(controller)` 负责解析、着色和名称解析。会话只保存草稿文本与光标，不改工作簿；提交或取消时调用 `end()` 即可清除边框。

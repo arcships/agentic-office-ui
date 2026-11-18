@@ -59,6 +59,18 @@ const controller = useXlsxViewerController({
 
 编辑器用一个隐藏的镜像层按当前宽度测量草稿的换行高度：硬换行或自动换行后编辑器向下增高（裁剪在网格可视区内），不会把后续行藏在单行滚动里。提交后的换行会写进单元格值；要让换行在单元格里显示为多行，请启用“自动换行”并给行足够的高度——未启用时与 Excel 一致，只显示第一行。
 
+## 公式引用高亮
+
+编辑公式时，内联编辑器和公式栏都会解析光标处的公式文本，并用 Excel 的引用颜色标出目标：
+
+- 支持单元格（`B2`、`$B$2`）、区域（`A1:A3`）、整列（`A:A`）、整行（`3:3`）、跨表引用（`Sheet2!A1`、`'My Sheet'!$A$1:$B$2`）以及名称管理器中已定义的名称（`=SUM(Total)`）。字符串字面量、函数名、外部工作簿引用和无法解析的名称保持普通文本。
+- 每个不同引用按固定调色板着色，重复引用沿用第一次的颜色；光标所在的引用在公式栏加下划线，网格里同时用同色边框描出该区域，活动引用的边框更粗。
+- 跨表引用只在公式栏着色；网格只描当前工作表上的目标。
+- 移动光标会立即切换活动引用；`Enter` 提交、`Escape` 取消、失焦或关闭编辑器后颜色和边框一起清除。整个高亮过程只读，不会修改工作簿、撤销记录或导出内容。
+- `XlsxSheetSurface` 的内联编辑器同样生效；使用 `XlsxViewer` 时网格与公式栏共享同一个编辑会话。
+
+自建公式栏可以复用导出的规则：`collectFormulaReferences(formula, caret, { activeSheetName, resolveName })` 返回引用、目标区域和调色板颜色，`formulaReferenceSegments()` 把公式切成普通/引用文本段，`FORMULA_REFERENCE_COLORS` 是 Excel 调色板；`useFormulaReferenceEditing(controller)` 让自定义输入框驱动内置网格的边框。
+
 ## 数字、日期与语言区域
 
 查看器的 `locale` 同时决定界面文案和数字/日期的默认区域。数字格式里用 `[$-407]` 这类段显式指定的区域始终优先；没有指定区域的格式跟随查看器区域。需要单独控制数字/日期时，用 `documentLocale` 覆盖 `locale`；使用 `XlsxSheetSurface` 时同样可用这两个属性，或直接在 `useXlsxViewerController({ locale })` 中配置。

@@ -111,6 +111,16 @@ async function loadInlineEditor(controller) {
     const props = { controller: null, readOnly: false };
     const editingCell = { value: null };
     const editingValue = { value: "" };
+    // Formula-reference highlighting is exercised by its own component test;
+    // this harness only needs the editing hooks to exist and stay the same
+    // no-op places the real session would end/update.
+    const editorCaret = { value: 0 };
+    const FORMULA_REFERENCE_OWNER_GRID = "grid";
+    const formulaReferenceEditing = {
+      begin() {},
+      update() {},
+      end() {},
+    };
     const isEditComposing = { value: false };
     let commitEditOnCompositionEnd = false;
     const editInputRef = { value: { focus() {}, select() {} } };
