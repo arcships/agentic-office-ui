@@ -80,6 +80,7 @@ saveXlsxBytes()                 # 引擎提供权威单元格数据
 - 控制器把 `XlsxConditionalFormatDraft`（kind、`colors`、`iconSet`、`thresholds`）转换成持久规则；
 - 阈值即 cfvo：`min` / `max` / `num` / `percent` / `percentile` / `formula`；
 - 三色/两色色阶、数据条、3–5 个图标集都有默认值，列表顺序即优先级（1 = 最高）；
+- 颜色在模型里保持与解析结果一致的 CSS `#rrggbb`，写入 OOXML 时转换为 `ST_HexColorRGB` 要求的 8 位 ARGB（`FFRRGGBB`）。主题色、索引色和自动色分别写成 `theme`/`indexed`/`auto`，不再把 CSS 十六进制直接塞进 `rgb`（LibreOffice/Excel 会把它读成黑色）；
 - 编辑/删除只重写“可建模”的规则，其他规则原样保留。
 
 ### 4.5 表格（ListObject）

@@ -263,6 +263,10 @@ test("controller authoring actions mutate the model, are undoable and survive ex
   assert.match(xml, /<legacyDrawing\b/);
   assert.match(xml, /<hyperlinks/g);
   assert.match(xml, /<conditionalFormatting /);
+  assert.match(xml, /<color rgb="FFF8696B"\/>/);
+  assert.match(xml, /<color rgb="FFFFEB84"\/>/);
+  assert.match(xml, /<color rgb="FF63BE7B"\/>/);
+  assert.doesNotMatch(xml, /<color[^>]*rgb="#/, "exported colours are ARGB, not CSS hex");
   assert.match(xml, /<dataValidations /);
   assert.match(xml, /<tableParts /);
   assert.match(xml, /<drawing /);

@@ -961,23 +961,84 @@ function createCfvoElement(
   return node;
 }
 
+/**
+ * Normalise a colour value to the eight-digit `AARRGGBB` form ST_HexColorRGB
+ * requires.
+ *
+ * The in-memory model keeps CSS-style `#rrggbb` (that is what the XML reader
+ * returns and what the renderer resolves), but OOXML `rgb` attributes are
+ * ARGB: writing `#rrggbb` verbatim makes Excel and LibreOffice read the colour
+ * as black.
+ *
+ * @param value `#rrggbb`, `rrggbb`, `#aarrggbb` or `aarrggbb`.
+ * @returns Uppercase `AARRGGBB`, or `null` when the value is not a hex colour.
+ */
+function toOoxmlArgbHex(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const hex = value.trim().replace(/^#/, "");
+  if (/^[0-9a-fA-F]{8}$/.test(hex)) {
+    return hex.toUpperCase();
+  }
+  if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+    return `FF${hex.toUpperCase()}`;
+  }
+  return null;
+}
+
+function readSpreadsheetNumber(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+/**
+ * Write an OOXML spreadsheet colour element (`<color/>`).
+ *
+ * Handles every representation the workbook model can carry:
+ * `rgb`/`argb`/`hex` (converted to ARGB), `theme` with an optional `tint`,
+ * `indexed`, and `auto`. `theme` and `indexed` win over a hex value, matching
+ * how Excel resolves a colour element that carries several attributes.
+ */
 function applySpreadsheetColor(node: Element, color: Record<string, unknown> | undefined) {
   if (!color) {
     return;
   }
-  for (const [rawKey, rawValue] of Object.entries(color)) {
-    const key = rawKey === "colorType" ? null : rawKey;
-    if (!key || rawValue === undefined || rawValue === null || typeof rawValue === "object") {
-      continue;
+  const auto = color.auto === true || color.colorType === "auto";
+  const tint = readSpreadsheetNumber(color.tint);
+  const theme = readSpreadsheetNumber(color.theme);
+  const indexed = readSpreadsheetNumber(color.indexed);
+  if (auto) {
+    node.setAttribute("auto", "1");
+    return;
+  }
+  if (theme !== null) {
+    node.setAttribute("theme", String(theme));
+    if (tint !== null) {
+      node.setAttribute("tint", String(tint));
     }
-    if (typeof rawValue === "boolean") {
-      node.setAttribute(key, rawValue ? "1" : "0");
-      continue;
+    return;
+  }
+  if (indexed !== null) {
+    node.setAttribute("indexed", String(indexed));
+    if (tint !== null) {
+      node.setAttribute("tint", String(tint));
     }
-    if (typeof rawValue === "number" && !Number.isFinite(rawValue)) {
-      continue;
-    }
-    node.setAttribute(key, String(rawValue));
+    return;
+  }
+  const rgb = toOoxmlArgbHex(color.rgb ?? color.argb ?? color.hex);
+  if (!rgb) {
+    return;
+  }
+  node.setAttribute("rgb", rgb);
+  if (tint !== null) {
+    node.setAttribute("tint", String(tint));
   }
 }
 
