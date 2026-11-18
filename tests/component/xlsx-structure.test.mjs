@@ -29,7 +29,10 @@ globalThis.XMLSerializer ??= XmlSerializer;
 globalThis.Document ??= class Document {};
 globalThis.ShadowRoot ??= class ShadowRoot {};
 
-const { setWasmSource } = await importFromDemo("@arcships/xlsx-core");
+const { applyWorkbookDefinedNames, setWasmSource } = await importFromDemo("@arcships/xlsx-core");
+const { strFromU8, strToU8, unzipSync, zipSync } = await import(
+  pathToFileURL(requireFromXlsxCore.resolve("fflate")).href
+);
 const {
   XlsxAuthoringDialog,
   XlsxContextMenu,
@@ -333,6 +336,110 @@ test("paste special writes values, formats and transposed blocks", async () => {
     assert.equal(controller.pasteSpecialStructuredData(cutPayload, { mode: "all" }), true);
     assert.equal(cell(controller, 50, 0), "1");
     assert.equal(cell(controller, 40, 0), "", "cut clears the source cell");
+  } finally {
+    app.unmount();
+  }
+});
+
+test("loaded defined names follow structure edits and survive export", async (t) => {
+  const downloads = installDownloadCapture(t);
+  const source = applyWorkbookDefinedNames(new Uint8Array(sampleBuffer()), [
+    { name: "LoadedRange", refersTo: "'Dashboard'!$A$12:$B$12" },
+  ]);
+  const { app, controller } = await mountController({
+    file: source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength),
+  });
+  try {
+    controller.setCellValue({ row: 11, col: 0 }, "marker");
+    assert.equal(
+      controller.getNamedRanges().find((entry) => entry.name === "LoadedRange")?.refersTo,
+      "'Dashboard'!$A$12:$B$12",
+      "the loaded name is visible before the structure edit",
+    );
+    assert.equal(controller.insertRows(11), true);
+    assert.equal(
+      controller.getNamedRanges().find((entry) => entry.name === "LoadedRange")?.refersTo,
+      "'Dashboard'!$A$13:$B$13",
+      "a name loaded from workbook.xml follows the inserted row",
+    );
+    assert.equal(controller.deleteRows(11), true);
+    assert.equal(
+      controller.getNamedRanges().find((entry) => entry.name === "LoadedRange")?.refersTo,
+      "'Dashboard'!$A$12:$B$12",
+      "the loaded name moves back on delete",
+    );
+    assert.equal(controller.insertRows(11), true);
+
+    const bytes = await exportedBytes(downloads, controller);
+    const reloaded = await mountController({ file: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) });
+    try {
+      assert.equal(
+        reloaded.controller.getNamedRanges().find((entry) => entry.name === "LoadedRange")?.refersTo,
+        "'Dashboard'!$A$13:$B$13",
+        "the shifted loaded name survives export/reload",
+      );
+    } finally {
+      reloaded.app.unmount();
+    }
+  } finally {
+    app.unmount();
+  }
+});
+
+test("formulas on other sheets follow edits to the referenced sheet", async () => {
+  const { app, controller } = await mountController({ file: sampleBuffer("financial-model.xlsx") });
+  try {
+    controller.setActiveSheetIndex(0);
+    controller.setCellValue({ row: 11, col: 0 }, "twelve");
+    controller.setActiveSheetIndex(1);
+    controller.setCellFormula({ row: 40, col: 0 }, "='Assumptions'!A12");
+    controller.setCellFormula({ row: 41, col: 0 }, "=A2");
+    controller.setCellFormula({ row: 42, col: 0 }, "=Assumptions!A12");
+    controller.setActiveSheetIndex(0);
+    controller.setCellFormula({ row: 42, col: 0 }, "='P&L'!A1");
+
+    assert.equal(controller.insertRows(11), true);
+
+    controller.setActiveSheetIndex(1);
+    assert.equal(formula(controller, 40, 0), "='Assumptions'!A13", "the cross-sheet reference moves");
+    assert.equal(formula(controller, 41, 0), "=A2", "unqualified references on the other sheet stay put");
+    assert.equal(formula(controller, 42, 0), "=Assumptions!A13", "unquoted sheet references also move");
+
+    controller.setActiveSheetIndex(0);
+    assert.equal(formula(controller, 42, 0), "='P&L'!A1", "references to another sheet stay put");
+
+    controller.deleteRows(11);
+    controller.setActiveSheetIndex(1);
+    assert.equal(formula(controller, 40, 0), "='Assumptions'!A12", "the cross-sheet reference moves back");
+  } finally {
+    app.unmount();
+  }
+});
+
+function workbookWithUnmodeledRule(bytes) {
+  const archive = unzipSync(bytes);
+  const sheetPath = "xl/worksheets/sheet1.xml";
+  const xml = strFromU8(archive[sheetPath]);
+  archive[sheetPath] = strToU8(xml.replace(
+    "</worksheet>",
+    '<conditionalFormatting sqref="A11:A12"><cfRule type="expression" dxfId="0" priority="10"><formula>$A11&gt;0</formula></cfRule></conditionalFormatting></worksheet>',
+  ));
+  return zipSync(archive);
+}
+
+test("unmodeled conditional-format rules keep a remapped sqref after export", async (t) => {
+  const downloads = installDownloadCapture(t);
+  const source = workbookWithUnmodeledRule(new Uint8Array(sampleBuffer()));
+  const { app, controller } = await mountController({
+    file: source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength),
+  });
+  try {
+    controller.setCellValue({ row: 11, col: 0 }, "marker");
+    assert.equal(controller.insertRows(11), true);
+    const bytes = await exportedBytes(downloads, controller);
+    const xml = strFromU8(unzipSync(bytes)["xl/worksheets/sheet1.xml"]);
+    assert.match(xml, /conditionalFormatting sqref="A11:A13"/);
+    assert.match(xml, /type="expression"/, "the unmodeled rule survives export");
   } finally {
     app.unmount();
   }

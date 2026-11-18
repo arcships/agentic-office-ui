@@ -1105,6 +1105,70 @@ export function replaceWorkbookConditionalFormatRules(
   return mutateConditionalFormatRules(assets, workbookSheetIndex, () => rules);
 }
 
+/**
+ * Shifts every `conditionalFormatting@sqref` and unmodeled rule formula.
+ *
+ * Structure edits rewrite the rules this editor models from the in-memory
+ * state, but `expression`, `cellIs`, `top10` and similar rules are preserved
+ * as raw XML. Without this pass their `sqref` keeps pointing at the old rows
+ * and columns after an insert or delete.
+ *
+ * @param remapRanges Maps the container's parsed ranges; an empty result
+ *   removes the whole container.
+ * @param remapFormula Optional formula rewrite for unmodeled rule formulas.
+ * @returns `true` when a container was rewritten.
+ */
+export function updateWorkbookConditionalFormatSqrefs(
+  assets: WorkbookAuthoringAssets,
+  workbookSheetIndex: number,
+  remapRanges: (ranges: XlsxCellRange[]) => XlsxCellRange[],
+  remapFormula?: (formula: string) => string
+): boolean {
+  const sheet = readSheetDocument(assets, workbookSheetIndex);
+  if (!sheet) {
+    return false;
+  }
+  const { document, sheetPath } = sheet;
+  let changed = false;
+  for (const container of [...getLocalElements(document, "conditionalFormatting")]) {
+    const sqref = container.getAttribute("sqref") ?? "";
+    const ranges = sqref.split(/\s+/).flatMap((token) => {
+      const range = token ? parseA1RangeReference(token) : null;
+      return range ? [range] : [];
+    });
+    if (ranges.length === 0) {
+      continue;
+    }
+    const nextRanges = remapRanges(ranges);
+    if (nextRanges.length === 0) {
+      container.parentNode?.removeChild(container);
+      changed = true;
+      continue;
+    }
+    const nextSqref = nextRanges.map(rangeReference).join(" ");
+    if (nextSqref !== sqref) {
+      container.setAttribute("sqref", nextSqref);
+      changed = true;
+    }
+    if (remapFormula) {
+      for (const rule of getChildElements(container, "cfRule")) {
+        for (const formula of getChildElements(rule, "formula")) {
+          const current = formula.textContent ?? "";
+          const next = remapFormula(current);
+          if (next !== current) {
+            formula.textContent = next;
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+  if (changed) {
+    writeSheetDocument(assets, sheetPath, document);
+  }
+  return changed;
+}
+
 function mutateConditionalFormatRules(
   assets: WorkbookAuthoringAssets,
   workbookSheetIndex: number,

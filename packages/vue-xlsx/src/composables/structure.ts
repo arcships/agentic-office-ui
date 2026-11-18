@@ -227,21 +227,47 @@ export function createStructureDomain(ctx: XlsxControllerContext) {
     }
   }
 
-  function rewriteFormulas(worksheet: Worksheet, change: XlsxStructureChange, sheetName: string) {
-    const formulas = Array.isArray(worksheet.formulaCells) ? worksheet.formulaCells : [];
-    for (const entry of formulas) {
-      if (!entry || typeof entry.row !== "number" || typeof entry.col !== "number") {
-        continue;
-      }
-      const formula = typeof entry.formula === "string"
-        ? entry.formula
-        : worksheet.getFormulaAt(entry.row, entry.col) ?? "";
-      if (!formula.startsWith("=")) {
-        continue;
-      }
-      const next = remapA1References(formula, change, { sheetName });
-      if (next !== formula) {
-        worksheet.setFormula(cellAddressToA1({ col: entry.col, row: entry.row }), next);
+  /**
+   * Rewrites formulas on every sheet that reference the edited sheet.
+   *
+   * The active sheet also shifts its unqualified references; other sheets only
+   * shift `'Edited Sheet'!A1` references, because their bare `A1` addresses
+   * belong to themselves.
+   */
+  function rewriteFormulas(
+    workbook: Workbook,
+    activeWorkbookSheetIndex: number,
+    activeWorksheet: Worksheet,
+    change: XlsxStructureChange,
+    sheetName: string,
+  ) {
+    for (let index = 0; index < workbook.sheetCount; index += 1) {
+      const isActive = index === activeWorkbookSheetIndex;
+      const worksheet = isActive ? activeWorksheet : workbook.getSheet(index);
+      try {
+        const formulas = Array.isArray(worksheet.formulaCells) ? worksheet.formulaCells : [];
+        const options = isActive
+          ? { sheetName }
+          : { sheetName, skipUnqualified: true };
+        for (const entry of formulas) {
+          if (!entry || typeof entry.row !== "number" || typeof entry.col !== "number") {
+            continue;
+          }
+          const formula = typeof entry.formula === "string"
+            ? entry.formula
+            : worksheet.getFormulaAt(entry.row, entry.col) ?? "";
+          if (!formula.startsWith("=")) {
+            continue;
+          }
+          const next = remapA1References(formula, change, options);
+          if (next !== formula) {
+            worksheet.setFormula(cellAddressToA1({ col: entry.col, row: entry.row }), next);
+          }
+        }
+      } finally {
+        if (!isActive) {
+          worksheet.free();
+        }
       }
     }
   }
@@ -371,22 +397,34 @@ export function createStructureDomain(ctx: XlsxControllerContext) {
   function shiftDefinedNames(workbook: Workbook, change: XlsxStructureChange, sheetName: string) {
     const overrides = ctx.definedNameOverridesRef.value;
     const engineNames = normalizeWorkbookDefinedNames(workbook.namedRanges);
-    for (const entry of engineNames) {
-      const nextRefersTo = remapA1References(entry.refersTo, change, { sheetName });
-      if (nextRefersTo !== entry.refersTo) {
-        try {
-          workbook.defineName(entry.name, nextRefersTo);
-        } catch {
-          // A rename that Excel rejects must not abort the structure edit.
-        }
-      }
-    }
     const nextOverrides: typeof overrides = {};
     for (const [key, entry] of Object.entries(overrides)) {
       nextOverrides[key] = {
         ...entry,
         refersTo: remapA1References(entry.refersTo, change, { sheetName })
       };
+    }
+    for (const entry of engineNames) {
+      const key = entry.name.toLowerCase();
+      const override = overrides[key];
+      const currentRefersTo = override?.refersTo ?? entry.refersTo;
+      const nextRefersTo = remapA1References(currentRefersTo, change, { sheetName });
+      if (nextRefersTo !== currentRefersTo || override) {
+        // Loaded names are redefined by the engine only on a best-effort basis;
+        // the Name Manager overlay is authoritative because `defineName` may
+        // reject an existing loaded name. Export writes the effective list.
+        nextOverrides[key] = {
+          ...(override ?? entry),
+          refersTo: nextRefersTo
+        };
+      }
+      if (nextRefersTo !== entry.refersTo) {
+        try {
+          workbook.defineName(entry.name, nextRefersTo);
+        } catch {
+          // A redefinition Excel rejects must not abort the structure edit.
+        }
+      }
     }
     ctx.definedNameOverridesRef.value = nextOverrides;
   }
@@ -464,10 +502,10 @@ export function createStructureDomain(ctx: XlsxControllerContext) {
     for (const range of nextMerges) {
       worksheet.mergeCells(rangeToA1(range));
     }
-    rewriteFormulas(worksheet, change, sheet.name);
+    const workbookSheetIndex = activeWorkbookSheetIndex();
+    rewriteFormulas(workbook, workbookSheetIndex, worksheet, change, sheet.name);
 
     const assets = ctx.imageAssetsRef.value;
-    const workbookSheetIndex = activeWorkbookSheetIndex();
     if (assets && workbookSheetIndex >= 0) {
       shiftWorkbookSheetStructure(assets, workbookSheetIndex, change, { sheetName: sheet.name });
     }
