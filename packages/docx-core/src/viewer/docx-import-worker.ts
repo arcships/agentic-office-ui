@@ -1,6 +1,7 @@
 import { buildDocModel } from "../engine/doc-model";
 import { parseDocx } from "../engine/ooxml-core";
 import { setWasmSource } from "../engine/wasm";
+import { importOpenDocumentBuffer, isOpenDocumentBytes } from "./open-document";
 import {
   OfficeLoadError,
   validateOfficeArchive,
@@ -86,6 +87,25 @@ self.addEventListener(
         setWasmSource(request.wasmSource);
       }
       const startedAt = performanceNow();
+      if (isOpenDocumentBytes(request.buffer)) {
+        const openDocument = await importOpenDocumentBuffer(request.buffer, request.limits);
+        const finishedAt = performanceNow();
+        assertDocxModelBudget(openDocument.model, request.limits);
+        assertDocxParseTime(finishedAt - startedAt, request.limits);
+        const response: DocxImportWorkerResponse = {
+          id: request.id,
+          type: "success",
+          package: openDocument.package,
+          model: openDocument.model,
+          timings: {
+            totalMs: finishedAt - startedAt,
+            parseMs: finishedAt - startedAt,
+            buildModelMs: 0,
+          },
+        };
+        self.postMessage(response);
+        return;
+      }
       validateOfficeArchive(request.buffer, request.limits, { format: "docx" });
       const pkg = await parseDocx(request.buffer);
       validateDocxImageAssets(pkg, request.limits);

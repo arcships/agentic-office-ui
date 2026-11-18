@@ -1,6 +1,6 @@
 # @arcships/vue-docx
 
-Vue 3 Word 文档组件。Viewer 支持 DOCX、DOCM、DOTX、DOTM 安全预览；Editor 的原格式编辑仍以 DOCX 为主，宏内容不会执行。从 DOCM/DOTX/DOTM 导入后导出会保留原容器类型和宏部件。导入和导出都在专用 Worker 中执行，不会在 UI 主线程同步解析或序列化。
+Vue 3 Word 文档组件。Viewer 支持 DOCX、DOCM、DOTX、DOTM 安全预览，以及 OpenDocument 文本（ODT、OTT、ODM、OTM、OTH、FODT）的只读预览；Editor 的原格式编辑仍以 DOCX 为主，宏内容不会执行。OpenDocument 文本没有 Word 包和写入器，打开后会显示只读原因，编辑命令和导出都会被拒绝。从 DOCM/DOTX/DOTM 导入后导出会保留原容器类型和宏部件。导入和导出都在专用 Worker 中执行，不会在 UI 主线程同步解析或序列化。
 
 ## 安装
 
@@ -45,7 +45,8 @@ import "@arcships/vue-docx/style.css"
 
 ## 组合函数
 
-- `useDocxEditor` — 编辑器状态与命令
+- `useDocxEditor` — 编辑器状态与命令（OpenDocument 模型的 `viewOnlyReason` 非空）
+- 文件类型策略导出 `DOCX_FILE_ACCEPT`、`SUPPORTED_DOCUMENT_FILE_EXTENSIONS`、`SUPPORTED_DOCUMENT_FILE_MIME_TYPES`、`isWordFileName()`、`isOpenDocumentTextFileName()`、`isSupportedDocumentFileName()` 和 `OPEN_DOCUMENT_VIEW_ONLY_REASON`
 - `useDocxModel` — 文档模型访问
 - `useDocxPageThumbnails` — 页面缩略图
 

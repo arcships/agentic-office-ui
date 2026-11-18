@@ -446,6 +446,10 @@ export interface DocxEditorStatusMessages {
   /** Template with a `{message}` placeholder. */
   importFailed: string;
   unsupportedFile: string;
+  /** OpenDocument text view-only refusal (also used as the banner label). */
+  viewOnly: string;
+  /** Template with a `{name}` placeholder for an OpenDocument import. */
+  loadedViewOnly: string;
   exportCancelledChanged: string;
   exportNotReady: string;
   /** Template with a `{message}` placeholder. */

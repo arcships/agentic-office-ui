@@ -3,7 +3,7 @@
     <header class="product-header">
       <div>
         <h2>DOCX 编辑器</h2>
-        <p class="desc">直接选择文字并编辑格式；支持撤销、缩放、缩略图、导入和导出。</p>
+        <p class="desc">直接选择文字并编辑格式；支持撤销、缩放、缩略图、导入和导出。OpenDocument 文本只能只读查看，不能编辑或导出。</p>
       </div>
       <div class="controls control-panel product-actions">
         <label class="toggle-label">

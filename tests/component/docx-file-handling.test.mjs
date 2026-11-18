@@ -16,14 +16,32 @@ const {
 } = await importFromDemo("@arcships/vue-docx");
 const { createBlankDocumentModel } = await importFromDemo("@arcships/docx-core");
 
-const UNSUPPORTED_MESSAGE = "Only .docx, .docm, .dotx and .dotm files are supported";
-const SUPPORTED_EXTENSIONS = [".docx", ".docm", ".dotx", ".dotm"];
+const UNSUPPORTED_MESSAGE =
+  "Only Word (.docx, .docm, .dotx, .dotm) and OpenDocument text (.odt, .ott, .odm, .otm, .oth, .fodt) files are supported";
+const SUPPORTED_EXTENSIONS = [
+  ".docx",
+  ".docm",
+  ".dotx",
+  ".dotm",
+  ".odt",
+  ".ott",
+  ".odm",
+  ".otm",
+  ".oth",
+  ".fodt",
+];
 const ACCEPT_ATTRIBUTE = [
   ...SUPPORTED_EXTENSIONS,
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "application/vnd.ms-word.document.macroEnabled.12",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.template",
   "application/vnd.ms-word.template.macroEnabled.12",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.oasis.opendocument.text-template",
+  "application/vnd.oasis.opendocument.text-master",
+  "application/vnd.oasis.opendocument.text-master-template",
+  "application/vnd.oasis.opendocument.text-web",
+  "application/vnd.oasis.opendocument.text-flat-xml",
 ].join(",");
 
 const nativeSetTimeout = globalThis.setTimeout;
@@ -170,7 +188,7 @@ test("New falls back to the starter display name without an initialFileName", as
   }
 });
 
-test("the importer accepts every OOXML Word extension and rejects legacy .doc", async (t) => {
+test("the importer accepts every Word and OpenDocument text extension and rejects legacy .doc", async (t) => {
   installSuccessfulWorker(t);
   const mounted = await mountController({ initialFileName: "starter.docx" });
 
@@ -184,7 +202,7 @@ test("the importer accepts every OOXML Word extension and rejects legacy .doc", 
     await mounted.controller.importDocxFile(sampleFile("legacy.doc"));
     assert.equal(mounted.controller.status, UNSUPPORTED_MESSAGE);
     assert.equal(mounted.controller.isImporting, false);
-    assert.equal(mounted.controller.fileName, "sample.dotm");
+    assert.equal(mounted.controller.fileName, `sample${SUPPORTED_EXTENSIONS.at(-1)}`);
   } finally {
     mounted.app.unmount();
   }

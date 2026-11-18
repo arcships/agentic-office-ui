@@ -1,6 +1,6 @@
 # @arcships/docx-core
 
-DOCX、DOCM、DOTX、DOTM 文档模型与只读输入，布局引擎、DOCX 编辑命令，以及带 Worker/WASM 支持的实例级 Runtime。宏内容不会执行。
+DOCX、DOCM、DOTX、DOTM 文档模型与只读输入，OpenDocument 文本（`.odt`、`.ott`、`.odm`、`.otm`、`.oth`、`.fodt`）的只读导入，布局引擎、DOCX 编辑命令，以及带 Worker/WASM 支持的实例级 Runtime。宏内容不会执行；OpenDocument 模型没有 Word 包，不能序列化回 DOCX。
 
 ## 安装
 
@@ -45,7 +45,7 @@ UI 环境中的导入和导出都必须在专用 Worker 中执行：导入不会
 
 ## 资源限制
 
-实例级限制覆盖输入字节、压缩包条目、解压字节、XML、关系、图片、模型节点、布局页数、解析时间与导出时间。超限返回结构化错误（含 `actual` / `allowed`），默认值由 `DEFAULT_DOCX_RUNTIME_LIMITS` 给出。
+实例级限制覆盖输入字节、压缩包条目、解压字节、XML、关系、图片、模型节点、布局页数、解析时间与导出时间；OpenDocument 导入复用同一组压缩包、XML、图片和模型预算。超限返回结构化错误（含 `actual` / `allowed`），默认值由 `DEFAULT_DOCX_RUNTIME_LIMITS` 给出。
 
 ## 文字、页面与区域引用
 

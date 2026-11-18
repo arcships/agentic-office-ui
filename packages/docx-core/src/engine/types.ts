@@ -827,6 +827,12 @@ export interface DocModel {
   nodes: DocNode[];
   metadata: {
     sourceParts: number;
+    /**
+     * Source part names when the model did not come from a Word package.
+     * OpenDocument text records `{ document: "content.xml" }` here; the
+     * presence of that value is what makes such a model view-only.
+     */
+    sourcePartNames?: Record<string, string>;
     warnings: string[];
     documentPageCount?: number;
     documentOpenTag?: string;

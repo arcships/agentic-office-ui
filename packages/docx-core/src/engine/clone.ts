@@ -638,6 +638,9 @@ export function cloneDocModel(model: DocModel): DocModel {
     nodes: model.nodes.map((node) => cloneDocNode(node, COPY_IMAGE_BYTES)),
     metadata: {
       sourceParts: model.metadata.sourceParts,
+      sourcePartNames: model.metadata.sourcePartNames
+        ? { ...model.metadata.sourcePartNames }
+        : undefined,
       warnings: [...model.metadata.warnings],
       documentPageCount: model.metadata.documentPageCount,
       documentOpenTag: model.metadata.documentOpenTag,

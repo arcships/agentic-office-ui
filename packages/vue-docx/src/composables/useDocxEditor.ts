@@ -24,6 +24,7 @@ import {
   cloneTableCellSelectionRange,
   normalizeTableCellSelectionRange,
   tableCellSelectionRangeHasMultipleCells,
+  isOpenDocumentModel,
 } from "@arcships/docx-core"
 import {
   firstRunStyle,
@@ -931,6 +932,9 @@ export function useDocxEditor(
   return {
     get model() { return model.value },
     get isDirty() { return isDirty.value },
+    get viewOnlyReason() {
+      return isOpenDocumentModel(model.value) ? statusMessage("viewOnly") : undefined
+    },
     get documentLoadNonce() { return documentLoadNonce.value },
     get fileName() { return fileName.value },
     get status() { return status.value },

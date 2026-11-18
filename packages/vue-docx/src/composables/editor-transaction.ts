@@ -18,6 +18,7 @@ import {
   normalizeEditorCursorStateForModel,
   sameEditorSelection,
   sameTextRange,
+  isOpenDocumentModel,
 } from "@arcships/docx-core"
 import type { ApplyModelChangeOptions, EditorCore } from "./editor-shared"
 import { trimHistoryEntriesToBudget } from "./history-budget"
@@ -103,6 +104,13 @@ export function createEditorTransaction(ctx: EditorCore) {
       pendingRunStyle: currentPendingRunStyle,
     })
     if (!patch) return false
+
+    // OpenDocument text has no Word package behind it and no writer. Keep the
+    // model exactly as imported; report why the edit did nothing.
+    if (patch.model && patch.model !== currentModel && isOpenDocumentModel(currentModel)) {
+      ctx.status.value = ctx.statusMessage("viewOnly")
+      return false
+    }
 
     const nextModel = patch.model ?? currentModel
     const hasExplicitRange = hasOwn(patch, "activeTextRange")

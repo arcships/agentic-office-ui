@@ -159,8 +159,8 @@ import type {
   DocxBookmarkTargetHighlight,
 } from "../composables/docx-bookmarks"
 import {
-  DOCX_FILE_EXTENSIONS,
-  DOCX_FILE_MIME_TYPES,
+  SUPPORTED_DOCUMENT_FILE_EXTENSIONS,
+  SUPPORTED_DOCUMENT_FILE_MIME_TYPES,
 } from "../composables/docx-file-types"
 import {
   ensureDocxViewerPageSurfaceRegistry,
@@ -365,8 +365,8 @@ let pendingPaginationScrollAnchor: PaginationScrollAnchor | undefined
 // controller so the dropped file follows the same path as the picker.
 const fileDrop = useFileDrop({
   accept: {
-    extensions: DOCX_FILE_EXTENSIONS,
-    mimeTypes: DOCX_FILE_MIME_TYPES,
+    extensions: SUPPORTED_DOCUMENT_FILE_EXTENSIONS,
+    mimeTypes: SUPPORTED_DOCUMENT_FILE_MIME_TYPES,
   },
   enabled: () => props.editable && !!props.controller,
   onFile: (file) => props.controller?.importDocxFile(file),

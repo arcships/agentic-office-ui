@@ -61,6 +61,15 @@
       </template>
     </DocxToolbar>
 
+    <div
+      v-if="controller.viewOnlyReason"
+      class="docx-editor-view-only"
+      data-testid="docx-editor-view-only-reason"
+      role="note"
+    >
+      {{ controller.viewOnlyReason }}
+    </div>
+
     <!-- Editor body (thumbnails + viewer root) -->
     <div class="docx-editor-body">
       <!-- Thumbnail panel -->
@@ -80,7 +89,7 @@
         ref="viewerRootRef"
         :model="renderedModel"
         :controller="controller"
-        :editable="editable"
+        :editable="editable && !controller.viewOnlyReason"
         :theme="isDarkTheme ? 'dark' : 'light'"
         :zoom-scale="zoomPercent"
         :locale="locale"
@@ -367,7 +376,7 @@ watch(
 )
 
 const interactionLocked = computed(
-  () => !props.editable || controller.showTrackedChanges
+  () => !props.editable || controller.showTrackedChanges || Boolean(controller.viewOnlyReason)
 )
 
 // ── Import file ────────────────────────────────────────────────────
@@ -994,6 +1003,20 @@ defineExpose({
   --docx-editor-fg: #f4f4f5;
   --docx-editor-muted: #a1a1aa;
 }
+.docx-editor-view-only {
+  background: #fff7ed;
+  border-bottom: 1px solid #fed7aa;
+  color: #9a3412;
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 14px;
+}
+.docx-editor-viewer--dark .docx-editor-view-only {
+  background: #431407;
+  border-bottom-color: #7c2d12;
+  color: #fdba74;
+}
 .docx-editor-body {
   display: flex;
   flex: 1;
@@ -1072,6 +1095,7 @@ defineExpose({
   .docx-context-menu-backdrop,
   .docx-context-menu,
   .docx-drag-overlay,
+  .docx-editor-view-only,
   .docx-editor-limit-error { display: none !important; }
   .docx-editor-body { display: block !important; overflow: visible !important; }
 }
