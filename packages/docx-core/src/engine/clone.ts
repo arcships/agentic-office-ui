@@ -1,10 +1,12 @@
 import type {
   DocModel,
   DocNode,
+  DrawingRunNode,
   FooterSection,
   FormFieldRunNode,
   HeaderSection,
   ImageRunNode,
+  MathRunNode,
   NumberingDefinitionSet,
   ParagraphBorderSet,
   ParagraphBorderStyle,
@@ -20,6 +22,7 @@ import type {
   TableCellContentNode,
   TableNode,
   TableStyle,
+  TextBoxContent,
   TextRunNode,
   TextStyle,
 } from "./types";
@@ -255,6 +258,22 @@ export function cloneFormFieldRun(run: FormFieldRunNode): FormFieldRunNode {
   };
 }
 
+/** Clone a text box content, keeping paragraph and run styles. */
+export function cloneTextBoxContent(
+  content?: TextBoxContent,
+): TextBoxContent | undefined {
+  if (!content) return undefined;
+  return {
+    paragraphs: content.paragraphs.map((paragraph) => ({
+      ...paragraph,
+      segments: paragraph.segments.map((segment) => ({
+        ...segment,
+        style: cloneTextStyle(segment.style),
+      })),
+    })),
+  };
+}
+
 /** Clone an image run, keeping crop/original XML and every other image field. */
 export function cloneImageRun(
   run: ImageRunNode,
@@ -270,6 +289,38 @@ export function cloneImageRun(
     floating: run.floating ? { ...run.floating } : undefined,
     syntheticTextBox: run.syntheticTextBox,
     textBoxText: run.textBoxText,
+    textBox: cloneTextBoxContent(run.textBox),
+    textBoxSourceXml: run.textBoxSourceXml,
+  };
+}
+
+/** Clone a drawing object run (shapes, charts, embedded objects, 3D models). */
+export function cloneDrawingRun(run: DrawingRunNode): DrawingRunNode {
+  return {
+    ...run,
+    floating: run.floating ? { ...run.floating } : undefined,
+    textBox: cloneTextBoxContent(run.textBox),
+    chart: run.chart
+      ? {
+          ...run.chart,
+          categories: run.chart.categories ? [...run.chart.categories] : undefined,
+          series: run.chart.series?.map((series) => ({
+            ...series,
+            categories: series.categories ? [...series.categories] : undefined,
+            values: series.values ? [...series.values] : undefined,
+          })),
+        }
+      : undefined,
+    shape: run.shape ? { ...run.shape } : undefined,
+    ole: run.ole ? { ...run.ole } : undefined,
+  };
+}
+
+/** Clone an equation run. */
+export function cloneMathRun(run: MathRunNode): MathRunNode {
+  return {
+    ...run,
+    style: cloneTextStyle(run.style),
   };
 }
 
@@ -284,6 +335,14 @@ export function cloneParagraphChild(
 
   if (child.type === "form-field") {
     return cloneFormFieldRun(child);
+  }
+
+  if (child.type === "drawing") {
+    return cloneDrawingRun(child);
+  }
+
+  if (child.type === "math") {
+    return cloneMathRun(child);
   }
 
   return cloneImageRun(child, options);

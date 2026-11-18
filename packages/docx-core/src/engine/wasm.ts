@@ -116,9 +116,18 @@ function toUint8Array(value: number[] | Uint8Array): Uint8Array {
 }
 
 export function docModelToWasmJson(model: unknown): string {
-  return JSON.stringify(model, (_key, value) => {
+  return JSON.stringify(model, (key, value) => {
     if (value instanceof Uint8Array) {
       return Array.from(value);
+    }
+    // The engine model has no slot for the drawing objects this library
+    // carries (shapes, charts, embedded objects, equations). They are preserved
+    // in `sourceXml` and written back by the post-serialization patch, so they
+    // must not cross the WASM boundary. `children` is only used by paragraphs.
+    if (key === "children" && Array.isArray(value)) {
+      return value.filter((child: { type?: unknown } | undefined) =>
+        child?.type !== "drawing" && child?.type !== "math",
+      );
     }
     return value;
   });

@@ -97,6 +97,7 @@ export * from "./synthetic-textbox";
 export * from "./paragraph-geometry";
 export * from "./image-layer-order";
 export * from "./drop-cap";
+export * from "./drawing-objects";
 export * from "./letterhead";
 export * from "./line-height";
 export * from "./line-height-wrap";

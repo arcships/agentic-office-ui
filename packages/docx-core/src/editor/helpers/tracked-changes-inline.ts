@@ -129,7 +129,9 @@ function unitMatchesChild(
   child: ParagraphNode["children"][number]
 ): boolean {
   if (unit.kind === "image") {
-    return child.type === "image";
+    // A shape / chart / embedded object is written as `w:drawing` in the stored
+    // markup and modelled as a drawing node.
+    return child.type === "image" || child.type === "drawing";
   }
   if (child.type !== "text") {
     return false;

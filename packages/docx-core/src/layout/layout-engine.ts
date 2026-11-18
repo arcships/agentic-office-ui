@@ -205,7 +205,7 @@ export function paragraphToLayout(
         text: child.text,
         style: child.style,
         link: child.link
-      };
+      } as LayoutRun;
     }
 
     if (child.type === "form-field") {
@@ -218,6 +218,12 @@ export function paragraphToLayout(
       };
     }
 
+    // Drawing objects and equations are not part of the layout model yet; the
+    // renderer paints them from their model node.
+    if (child.type !== "image") {
+      return undefined;
+    }
+
     return {
       kind: "image",
       id: `${idPrefix}-run-${runIndex}`,
@@ -228,8 +234,8 @@ export function paragraphToLayout(
       contentType: child.contentType,
       data: shareImageData(child.data),
       floating: Boolean(child.floating)
-    };
-  });
+    } as LayoutRun;
+  }).filter((run): run is LayoutRun => run !== undefined);
 
   return {
     kind: "paragraph",

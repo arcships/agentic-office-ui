@@ -233,6 +233,26 @@ editor.collapseTableCellSelection() // Esc 的控制器等价命令
 
 `clearTableSelection()` 复用 `clearTableCellContents(tableIndex, cells[])`，整个矩形只写一条撤销记录；复制时按行输出制表符分隔的文本，并附带一个 `<table>` HTML 片段。嵌套表格的选区通过 `tableRuntimeKey` 区分，按钮状态只使用普通正文表格。
 
+## 图形对象、图表与公式
+
+模型不再丢弃文本框以外的图形内容。导入时，`@arcships/docx-core` 把每个段落里的非图片绘图对象补成新的段落子节点：
+
+- `DrawingRunNode`（`type: "drawing"`）覆盖 `textBox`、`shape`、`wordArt`、`group`、`smartArt`、`chart`、`oleObject` 和 `model3d`。节点带 `widthPx` / `heightPx`、`floating`（`wp:anchor` 的锚点、环绕与 `relativeHeight` 派生的 `zIndex`）、`sourceXml`，以及能解析出来的内容：`chart` 缓存数据（标题、图表类型、分类、每个系列的数值）、`shape` 填充/描边、`ole.progId`、3D 模型的海报图 `src`。
+- `MathRunNode`（`type: "math"`）表示 `m:oMath` / `m:oMathPara`，`text` 是线性化后的公式（`a/b+x^2`），`sourceXml` 是原始 OMML。
+- 文本框继续沿用已有的合成图片表示（`ImageRunNode.syntheticTextBox`），但内容现在也存在模型里：`ImageRunNode.textBox` 是解析后的段落/文字块，`textBoxSourceXml` 保留原始绘图 XML，因此编辑文本框文字后导出仍能写回文本框。
+
+渲染器对无法直接绘制的对象画占位框而不是留白：`data-docx-drawing`、`data-docx-drawing-kind`、`data-docx-drawing-placeholder`，背后文字的对象额外带 `data-docx-drawing-behind` 和负 `z-index`。图表用缓存数据画一个 SVG 预览（`data-docx-drawing-preview`），3D 模型画海报图，文本框绘制模型里的文字段落（`data-docx-drawing-textbox`），公式按线性文本渲染（`data-docx-math`）。
+
+导出时，仍带 `sourceXml` 的段落原样写出；被编辑重建的段落由序列化补丁把每个对象的原始标记插回它所在的文字位置，所以编辑同一段里别的文字不会丢掉图形/图表/公式。段落数量与部件不一致时补丁放弃该部件，而不是插到错误位置。`w:drawing`、`w:object`、`w:pict` 会包回 `w:r`，`m:oMath` 作为段落内容直接插入；文本框文字被编辑过时，补丁把新文字写进 `w:txbxContent`（`mc:Choice` 与 `mc:Fallback` 两处都写）。
+
+```ts
+import { parseChartData, linearizeOmml, drawingObjectPlaceholderStyle } from "@arcships/docx-core"
+
+linearizeOmml("<m:oMath>…</m:oMath>") // "a/b+x^2"
+```
+
+段落带 `w:framePr/@w:dropCap` 时，首字母按 `resolveDropCapFontSizePx()` / `resolveDropCapVisualHeightPx()` 解析出的字号和行高浮动显示（`data-docx-drop-cap`、`data-docx-drop-cap-lines`），其余文字照常排版；直接调用 `renderParagraphRuns()` 的宿主可以传 `renderDropCaps: false` 关闭。
+
 ## 文档块、词与高亮
 
 `@arcships/docx-core` 把已解析的文档模型拆成可寻址的文档块和词：表格、单元格、页眉页脚、脚注尾注、图片也都包含在块树里。每个块带一个稳定的 source id，查看器把同一个 id 渲染为 `data-docx-source-id`，因此几何解析不需要按文字猜位置。

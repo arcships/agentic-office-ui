@@ -15,6 +15,7 @@ import {
   cloneFormFieldRun,
   cloneFormFieldWidget,
   cloneImageRun,
+  cloneParagraphChild,
   cloneTextRun,
 } from "../../engine/clone";
 import type {
@@ -128,13 +129,7 @@ export function mergeAdjacentTextRuns(
       continue;
     }
 
-    merged.push(
-      child.type === "text"
-        ? cloneTextRun(child)
-        : child.type === "form-field"
-        ? cloneFormFieldRun(child)
-        : cloneImageRun(child)
-    );
+    merged.push(cloneParagraphChild(child));
   }
 
   return merged;
@@ -452,11 +447,7 @@ export function mutateParagraphTextStyleInRange(
 
   for (const child of paragraph.children) {
     if (child.type !== "text") {
-      if (child.type === "form-field") {
-        nextChildren.push(cloneFormFieldRun(child));
-      } else {
-        nextChildren.push(cloneImageRun(child));
-      }
+      nextChildren.push(cloneParagraphChild(child));
       continue;
     }
 
@@ -529,11 +520,7 @@ export function mutateParagraphLinkInRange(
 
   for (const child of paragraph.children) {
     if (child.type !== "text") {
-      if (child.type === "form-field") {
-        nextChildren.push(cloneFormFieldRun(child));
-      } else {
-        nextChildren.push(cloneImageRun(child));
-      }
+      nextChildren.push(cloneParagraphChild(child));
       continue;
     }
 

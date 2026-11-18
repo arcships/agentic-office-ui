@@ -919,6 +919,7 @@ function cellParagraphHtml(
     tableCellLayout: { widthPx: cellContentWidthPx(cell) },
     imageAltText: m.value.docx.image.alt,
     imageMissingText: m.value.docx.image.missing,
+    drawingLabels: m.value.docx.drawing,
     defaultTabStopPx: documentTabStopPx.value,
     emitLinkRangeAttributes:
       props.editable && !isReadOnly.value && !props.withinHeaderFooter,

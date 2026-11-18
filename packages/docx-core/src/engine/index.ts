@@ -31,6 +31,43 @@ export {
 // DocModel construction (buildDocModel / buildDocModelFromBytes)
 export { buildDocModel, buildDocModelFromBytes } from "./doc-model";
 
+// Drawing objects and equations: import enrichment + export preservation.
+// The WASM model builder has no node type for shapes, charts, SmartArt,
+// embedded OLE objects, 3D models or equations; these modules attach them to
+// the model after parsing and write their stored markup back on export.
+export {
+  enrichDocModelDrawingObjects,
+  mediaPartDataUri,
+  relationshipPartName,
+  storyRelationshipTargets,
+} from "./drawing-object-model";
+export type { DrawingObjectEnrichmentContext } from "./drawing-object-model";
+export {
+  classifyDrawingXml,
+  drawingExtentPx,
+  mathIsDisplay,
+  mathTextFromXml,
+  paragraphDrawingObjects,
+  parseChartData,
+  parseDrawingAnchor,
+  parseDrawingShapeStyle,
+  parseTextBoxContent,
+  textBoxContentText,
+} from "./drawing-objects";
+export type { ParagraphDrawingObject } from "./drawing-objects";
+export { linearizeOmml } from "./omml";
+export {
+  applyObjectsToParagraphContent,
+  applyPreservedDrawingObjectsToDocumentXml,
+  applyPreservedDrawingObjectsToPackage,
+  applyPreservedDrawingObjectsToPartContent,
+  applyPreservedDrawingObjectsToStoryXml,
+  applyTextBoxTextToXml,
+  collectPreservedDrawingObjects,
+  modelNeedsDrawingObjectSerialization,
+  storyParagraphCount,
+} from "./drawing-object-serialization";
+
 // Note numbering/placement properties (w:footnotePr / w:endnotePr)
 export {
   parseNoteNumberingProperties,

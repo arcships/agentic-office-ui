@@ -49,9 +49,19 @@ import {
   attachTextToPreviousCheckbox,
   shouldRenderWrappedFloatingImage,
   isJustifiedAlignment,
+  paragraphDropCap,
+  resolveDropCapFontSizePx,
+  resolveDropCapVisualHeightPx,
+  estimateParagraphLineHeightPx,
 } from "@arcships/docx-core"
 import type { ImageRunRenderExtra } from "./paragraph-runs-image"
 import { renderImageRun } from "./paragraph-runs-image"
+import {
+  type DocxDrawingLabels,
+  dropCapFirstTextChild,
+  renderDrawingRun,
+  renderMathRun,
+} from "./paragraph-runs-drawing"
 import {
   type FieldResolutionContext,
   type FieldResolutionState,
@@ -128,6 +138,10 @@ export interface ParagraphRunRenderOptions {
   emitTextRangeAttributes?: boolean
   /** Source id of the owning paragraph; figures inherit it for geometry. */
   paragraphSourceId?: string
+  /** Localized labels for drawing-object placeholders and equations. */
+  drawingLabels?: DocxDrawingLabels
+  /** Set to false to render a drop-cap paragraph as plain text. */
+  renderDropCaps?: boolean
 }
 
 export interface NoteMarkerLabels {
@@ -172,6 +186,32 @@ export function renderParagraphRuns(
   // The display model drops deleted model runs in balloons/none mode before
   // any tab, field or revision layout reads the paragraph's children.
   paragraph = reviewDisplayParagraph(paragraph, revisionDisplay)
+
+  // Drop caps (`w:framePr/@w:dropCap`) are a layout instruction on the
+  // paragraph: the first letter floats over the following lines, scaled to
+  // `w:lines`. The model already resolves the frame; paint the letter as a
+  // floated span so a drop-cap paragraph is not plain text.
+  const dropCap = options?.renderDropCaps === false ? undefined : paragraphDropCap(paragraph)
+  const dropCapSplit = dropCap ? dropCapFirstTextChild(paragraph) : undefined
+  const dropCapMetrics = (() => {
+    if (!dropCap || !dropCapSplit) return undefined
+    const firstStyle = paragraph.children[dropCapSplit.childIndex]
+    const style = firstStyle?.type === "text" ? firstStyle.style : undefined
+    const lineHeightPx = estimateParagraphLineHeightPx(paragraph)
+    const lines = Math.max(1, Math.round(dropCap.lines ?? 2))
+    const heightPx = resolveDropCapVisualHeightPx(style, lineHeightPx, lines)
+    return {
+      // `resolveDropCapFontSizePx` keeps an explicitly sized run, which a drop
+      // cap usually is not; the letter still has to fill the frame it spans.
+      fontSizePx: Math.max(
+        resolveDropCapFontSizePx(style, lineHeightPx, lines),
+        Math.round(heightPx * 0.85)
+      ),
+      heightPx,
+      lines,
+      style,
+    }
+  })()
 
   const runs: VNode[] = []
   const runsLeft: VNode[] = []
@@ -580,6 +620,34 @@ export function renderParagraphRuns(
     // image
     if (child.type === "image") {
       renderImageInline(target, child, key, childIndex)
+      return
+    }
+
+    // drawing object (shape, chart, SmartArt, OLE object, 3D model)
+    if (child.type === "drawing") {
+      target.push(
+        renderDrawingRun({
+          drawing: child,
+          key,
+          childIndex,
+          labels: options?.drawingLabels,
+          paragraphSourceId: options?.paragraphSourceId,
+          documentTheme,
+        })
+      )
+      return
+    }
+
+    // equation
+    if (child.type === "math") {
+      target.push(
+        renderMathRun({
+          math: child,
+          key,
+          childIndex,
+          paragraphSourceId: options?.paragraphSourceId,
+        })
+      )
       return
     }
 
@@ -1070,6 +1138,36 @@ export function renderParagraphRuns(
   }
 
   if (!useAnchoredTabLayout) {
+    let dropCapRendered = false
+    const renderDropCap = (target: VNode[]): void => {
+      if (dropCapRendered || !dropCapMetrics || !dropCapSplit) return
+      dropCapRendered = true
+      target.push(
+        h(
+          "span",
+          {
+            key: `${keyPrefix}-drop-cap`,
+            "data-docx-drop-cap": "true",
+            "data-docx-drop-cap-type": dropCap?.type,
+            "data-docx-drop-cap-lines": String(dropCapMetrics.lines),
+            "aria-hidden": true,
+            style: {
+              float: "left",
+              fontSize: `${dropCapMetrics.fontSizePx}px`,
+              lineHeight: `${dropCapMetrics.heightPx}px`,
+              height: `${dropCapMetrics.heightPx}px`,
+              marginRight: 4,
+              marginTop: 2,
+              fontFamily: dropCapMetrics.style?.fontFamily,
+              fontWeight: dropCapMetrics.style?.bold ? 700 : undefined,
+              color: themedRunColor(dropCapMetrics.style?.color, documentTheme),
+            },
+          },
+          dropCapSplit.firstChar
+        )
+      )
+    }
+
     paragraph.children.forEach((child, childIndex) => {
       const key = `${keyPrefix}-run-${childIndex}`
       const target = useTabLeaderLayout
@@ -1094,7 +1192,25 @@ export function renderParagraphRuns(
       }
 
       if (child.type === "text") {
-        const resolvedText = resolveFieldText(child.text, fieldCtx, fieldState)
+        const isDropCapChild =
+          dropCapSplit !== undefined && dropCapSplit.childIndex === childIndex
+        if (isDropCapChild) {
+          renderDropCap(target)
+          // The floated letter is painted separately; the remaining text starts
+          // one character later, and the text-range attributes say so.
+          if (dropCapSplit && childTextOffsets[childIndex] !== undefined) {
+            childTextOffsets[childIndex] += dropCapSplit.firstChar.length
+          }
+        }
+        const resolvedText = resolveFieldText(
+          isDropCapChild && dropCapSplit ? dropCapSplit.remainder : child.text,
+          fieldCtx,
+          fieldState
+        )
+        if (isDropCapChild && resolvedText.length === 0) {
+          consumeTrackedVisibleChild(child)
+          return
+        }
         renderRun(
           target, child, key,
           attachTextToPreviousCheckbox(paragraph, childIndex, resolvedText),

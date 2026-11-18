@@ -33,6 +33,12 @@ import {
 } from "./section-parts-serialization";
 import { prepareModelForSerialization } from "./prepare-model";
 import {
+  applyPreservedDrawingObjectsToDocumentXml,
+  applyPreservedDrawingObjectsToPackage,
+  applyPreservedDrawingObjectsToPartContent,
+  modelNeedsDrawingObjectSerialization
+} from "./drawing-object-serialization";
+import {
   applyTableRowMergesToDocumentXml,
   applyTableRowMergesToPackage,
   applyTableRowMergesToPartContent,
@@ -92,6 +98,11 @@ function patchDocumentXml(
   // keeps its `w:tblpPr` (drop position, anchors and wrap distances).
   if (modelNeedsTableFloatingSerialization(model)) {
     patched = applyTableFloatingToDocumentXml(patched, model);
+  }
+  // Shapes, charts, embedded objects and equations live only in the stored
+  // markup; a paragraph an edit rebuilt has to get them back.
+  if (modelNeedsDrawingObjectSerialization(model)) {
+    patched = applyPreservedDrawingObjectsToDocumentXml(patched, model);
   }
   return patched;
 }
@@ -175,7 +186,8 @@ function modelNeedsDocumentXmlPatch(model: DocModel): boolean {
     modelNeedsCommentRangeSerialization(model) ||
     modelNeedsFormFieldRequiredPatch(model) ||
     modelNeedsTableRowMergeSerialization(model) ||
-    modelNeedsTableFloatingSerialization(model)
+    modelNeedsTableFloatingSerialization(model) ||
+    modelNeedsDrawingObjectSerialization(model)
   );
 }
 
@@ -267,6 +279,7 @@ function patchSerializedDocxBytes(
   const needsSectionParts = modelHasSectionParts(model);
   const needsMerges = modelNeedsTableRowMergeSerialization(model);
   const needsFloating = modelNeedsTableFloatingSerialization(model);
+  const needsDrawingObjects = modelNeedsDrawingObjectSerialization(model);
   if (!needsDocumentPatch && !needsComments && !needsSectionParts) {
     return bytes;
   }
@@ -323,6 +336,22 @@ function patchSerializedDocxBytes(
       }
     }
   }
+  if (needsDrawingObjects) {
+    // The body part was patched above; headers, footers and notes are rebuilt
+    // by the same engine path and need the same treatment.
+    for (const name of Object.keys(archive)) {
+      if (name.toLowerCase() === "word/document.xml") continue;
+      if (!/^word\/(?:header|footer)\d+\.xml$|^word\/(?:footnotes|endnotes)\.xml$/i.test(name)) {
+        continue;
+      }
+      const text = strFromU8(archive[name]);
+      const patched = applyPreservedDrawingObjectsToPartContent(name, text, model);
+      if (patched !== text) {
+        archive[name] = strToU8(patched);
+        changed = true;
+      }
+    }
+  }
   if (sectionParts.relationshipsXml) {
     archive[DOCX_DOCUMENT_RELATIONSHIPS_PART] = strToU8(sectionParts.relationshipsXml);
     changed = true;
@@ -365,9 +394,12 @@ export async function serializeDocModel(
   );
   const { parseDocx } = await import("./ooxml-core");
   return applyCommentsToPackage(
-    applyTableFloatingToPackage(
-      applyTableRowMergesToPackage(
-        patchPackageDocumentXml(await parseDocx(bytes), prepared),
+    applyPreservedDrawingObjectsToPackage(
+      applyTableFloatingToPackage(
+        applyTableRowMergesToPackage(
+          patchPackageDocumentXml(await parseDocx(bytes), prepared),
+          prepared
+        ),
         prepared
       ),
       prepared
