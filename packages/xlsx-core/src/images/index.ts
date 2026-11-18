@@ -84,6 +84,17 @@ export {
   enrichFormControlsWithHiddenShapes,
 } from "./drawing-parser";
 
+// Clipboard cloning for drawings
+export {
+  type WorkbookDrawingCloneOptions,
+  type WorkbookDrawingCloneResult,
+  type WorkbookDrawingCloneSource,
+  cloneWorkbookDrawing,
+  createDrawingClipboardGroup,
+  createDrawingClipboardItem,
+  removeWorkbookDrawing,
+} from "./drawing-clipboard";
+
 // Color and theme
 export {
   type ThemeState,

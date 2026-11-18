@@ -73,6 +73,34 @@
           </div>
         </div>
         <div class="xlsx-contextmenu__separator" role="separator" />
+        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-copy" role="menuitem" @click="onDrawingCopy">
+          <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+C</kbd>
+        </button>
+        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-cut" role="menuitem" :disabled="isReadOnly" @click="onDrawingCut">
+          <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+X</kbd>
+        </button>
+        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-paste" role="menuitem" :disabled="isReadOnly" @click="onDrawingPaste">
+          <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+V</kbd>
+        </button>
+        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-duplicate" role="menuitem" :disabled="isReadOnly" @click="onDrawingDuplicate">{{ m.xlsx.contextMenu.duplicate }}</button>
+        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-delete" role="menuitem" :disabled="isReadOnly" @click="onDrawingDelete">{{ m.xlsx.contextMenu.delete }}</button>
+        <div class="xlsx-contextmenu__separator" role="separator" />
+        <button class="xlsx-contextmenu__item" role="menuitem" @click="onUndo">{{ m.xlsx.contextMenu.undo }}</button>
+        <button class="xlsx-contextmenu__item" role="menuitem" @click="onRedo">{{ m.xlsx.contextMenu.redo }}</button>
+      </template>
+      <template v-else-if="drawingTarget">
+        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-copy" role="menuitem" @click="onDrawingCopy">
+          <span>{{ m.xlsx.contextMenu.copy }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+C</kbd>
+        </button>
+        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-cut" role="menuitem" :disabled="isReadOnly" @click="onDrawingCut">
+          <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+X</kbd>
+        </button>
+        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-paste" role="menuitem" :disabled="isReadOnly" @click="onDrawingPaste">
+          <span>{{ m.xlsx.contextMenu.paste }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+V</kbd>
+        </button>
+        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-duplicate" role="menuitem" :disabled="isReadOnly" @click="onDrawingDuplicate">{{ m.xlsx.contextMenu.duplicate }}</button>
+        <button class="xlsx-contextmenu__item" data-testid="xlsx-context-drawing-delete" role="menuitem" :disabled="isReadOnly" @click="onDrawingDelete">{{ m.xlsx.contextMenu.delete }}</button>
+        <div class="xlsx-contextmenu__separator" role="separator" />
         <button class="xlsx-contextmenu__item" role="menuitem" @click="onUndo">{{ m.xlsx.contextMenu.undo }}</button>
         <button class="xlsx-contextmenu__item" role="menuitem" @click="onRedo">{{ m.xlsx.contextMenu.redo }}</button>
       </template>
@@ -355,12 +383,22 @@ const position = ref({ x: 0, y: 0 });
 const sortTarget = ref<{ columnIndex: number; tableName: string } | null>(null);
 /** Chart the menu was opened on, or `null` for the cell menu. */
 const chartTargetId = ref<string | null>(null);
+/** Image or shape the menu was opened on, or `null`. */
+const drawingTargetId = ref<string | null>(null);
+const drawingTargetKind = ref<"image" | "shape" | null>(null);
 const chartTypeMenuOpen = ref(false);
 const openChartFamily = ref<string | null>(null);
 const chartFamilies = chartTypeFamilies();
 const chartTarget = computed(() => {
   props.controller.revision;
   return chartTargetId.value ? props.controller.getChartById?.(chartTargetId.value) ?? null : null;
+});
+const drawingTarget = computed(() => {
+  props.controller.revision;
+  if (!drawingTargetId.value) return null;
+  return drawingTargetKind.value === "image"
+    ? props.controller.getImageById?.(drawingTargetId.value) ?? null
+    : props.controller.getShapeById?.(drawingTargetId.value) ?? null;
 });
 
 const menuKind = ref<"cell" | "row" | "column" | "corner">("cell");
@@ -548,6 +586,8 @@ function openAt(clientX: number, clientY: number, eventTarget?: unknown): boolea
 
   const cell = resolveGridCell(target, sheet, props.controller.zoomScale, clientX, clientY);
   chartTargetId.value = null;
+  drawingTargetId.value = null;
+  drawingTargetKind.value = null;
   closeChartTypeMenu();
   if (cell) {
     menuKind.value = "cell";
@@ -604,7 +644,35 @@ function openAt(clientX: number, clientY: number, eventTarget?: unknown): boolea
 function openForChart(chartId: string, clientX: number, clientY: number): boolean {
   const chart = props.controller.getChartById?.(chartId) ?? null;
   if (!chart) return false;
+  props.controller.selectChart?.(chartId);
   chartTargetId.value = chartId;
+  drawingTargetId.value = null;
+  drawingTargetKind.value = null;
+  sortTarget.value = null;
+  closeChartTypeMenu();
+  position.value = { x: clientX, y: clientY };
+  menuKeyboard.captureInvoker();
+  visible.value = true;
+  void nextTick(() => menuKeyboard.focusFirst());
+  return true;
+}
+
+/** Opens the drawing menu for an image or shape. */
+function openForDrawing(
+  kind: "image" | "shape",
+  drawingId: string,
+  clientX: number,
+  clientY: number,
+): boolean {
+  const drawing = kind === "image"
+    ? props.controller.getImageById?.(drawingId) ?? null
+    : props.controller.getShapeById?.(drawingId) ?? null;
+  if (!drawing) return false;
+  if (kind === "image") props.controller.selectImage?.(drawingId);
+  else props.controller.selectShape?.(drawingId);
+  chartTargetId.value = null;
+  drawingTargetId.value = drawingId;
+  drawingTargetKind.value = kind;
   sortTarget.value = null;
   closeChartTypeMenu();
   position.value = { x: clientX, y: clientY };
@@ -653,9 +721,16 @@ function close() {
   visible.value = false;
   sortTarget.value = null;
   chartTargetId.value = null;
+  drawingTargetId.value = null;
+  drawingTargetKind.value = null;
   closeChartTypeMenu();
   submenu.value = null;
 }
+function onDrawingCopy() { void copySelection(); close(); }
+function onDrawingCut() { props.controller.cutSelection?.(); close(); }
+function onDrawingPaste() { void props.controller.pasteFromClipboard?.(); close(); }
+function onDrawingDuplicate() { props.controller.duplicateDrawing?.(); close(); }
+function onDrawingDelete() { props.controller.deleteSelectedDrawing?.(); close(); }
 function onCopy() { void copySelection(); close(); }
 function onCut() { props.controller.cutSelection?.(); close(); }
 function onPaste() { props.controller.pasteFromClipboard(); close(); }
@@ -831,7 +906,7 @@ onUnmounted(() => {
   boundTarget = null;
 });
 
-defineExpose({ openAt, close, openForChart });
+defineExpose({ openAt, close, openForChart, openForDrawing });
 </script>
 
 <style scoped>

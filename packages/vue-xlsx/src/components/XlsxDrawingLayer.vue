@@ -27,6 +27,7 @@
         }"
         :style="item.style"
         @pointerdown.stop="onShapePointerDown(item, $event)"
+        @contextmenu.prevent.stop="onShapeContextMenu(item, $event)"
         @keydown="onShapeKeydown(item.shape, $event)"
       >
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
@@ -112,6 +113,10 @@ const props = defineProps<{
   scrollTop?: number
   viewportWidth?: number
   viewportHeight?: number
+}>()
+
+const emit = defineEmits<{
+  drawingContextMenu: [payload: { id: string; kind: "shape"; clientX: number; clientY: number }]
 }>()
 
 const layerStyle = gridBodyLayerStyle
@@ -208,6 +213,16 @@ function onShapePointerDown(item: { shape: XlsxShape; rect: XlsxImageRect }, eve
   interaction.beginMove(item.shape.id, item.rect, event)
 }
 
+function onShapeContextMenu(item: { shape: XlsxShape; rect: XlsxImageRect }, event: MouseEvent) {
+  props.controller.selectShape(item.shape.id)
+  emit("drawingContextMenu", {
+    id: item.shape.id,
+    kind: "shape",
+    clientX: event.clientX,
+    clientY: event.clientY,
+  })
+}
+
 function onShapeHandlePointerDown(
   item: { shape: XlsxShape; rect: XlsxImageRect },
   handle: XlsxImageResizeHandlePosition,
@@ -218,6 +233,30 @@ function onShapeHandlePointerDown(
 
 function onShapeKeydown(shape: XlsxShape, event: KeyboardEvent) {
   if (props.controller.selectedShapeId !== shape.id) {
+    return
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+    event.preventDefault()
+    event.stopPropagation()
+    void props.controller.copySelectionToClipboard?.()
+    return
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "x") {
+    event.preventDefault()
+    event.stopPropagation()
+    props.controller.cutSelection?.()
+    return
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+    event.preventDefault()
+    event.stopPropagation()
+    void props.controller.pasteFromClipboard?.()
+    return
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
+    event.preventDefault()
+    event.stopPropagation()
+    props.controller.duplicateDrawing?.()
     return
   }
   const step = event.shiftKey ? 10 : 1
@@ -242,6 +281,7 @@ function onShapeKeydown(shape: XlsxShape, event: KeyboardEvent) {
   }
   if (event.key === "Escape") {
     event.stopPropagation()
+    if (props.controller.cancelCut?.()) return
     props.controller.clearSelectedShape()
   }
 }

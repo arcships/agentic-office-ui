@@ -607,6 +607,20 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     return true;
   }
 
+  /** Deletes whichever chart, image or shape is currently selected. */
+  function deleteSelectedDrawing() {
+    if (ctx.selectedChartId.value) {
+      return deleteChart(ctx.selectedChartId.value);
+    }
+    if (ctx.selectedImageId.value) {
+      return deleteImage(ctx.selectedImageId.value);
+    }
+    if (ctx.selectedShapeId.value) {
+      return deleteShape(ctx.selectedShapeId.value);
+    }
+    return false;
+  }
+
   function addFormControl(input: XlsxFormControlInput) {
     const assets = ctx.imageAssetsRef.value;
     const sheet = ctx.activeSheet.value;
@@ -801,6 +815,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     deleteChart,
     deleteImage,
     deleteShape,
+    deleteSelectedDrawing,
     addFormControl,
     updateFormControl,
     removeFormControl,

@@ -10,6 +10,7 @@ import type {
   XlsxChartsheet,
   XlsxDataValidation,
   XlsxDataValidationFeedback,
+  XlsxDrawingClipboardItem,
   XlsxFormControl,
   XlsxImage,
   XlsxNamedRange,
@@ -182,6 +183,8 @@ export type ClipboardMerge = {
 export type ClipboardPayload = {
   cells: ClipboardMatrixCell[];
   cols: number;
+  /** Drawings copied from the sheet; drawings paste without a cell matrix. */
+  drawings?: XlsxDrawingClipboardItem[];
   merges: ClipboardMerge[];
   /**
    * Top-left cell the payload was copied from. Paste uses it to shift relative

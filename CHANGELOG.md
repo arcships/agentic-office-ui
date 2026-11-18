@@ -4,6 +4,13 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### XLSX drawing clipboard (#125)
+
+- Charts, images and shapes now share a drawing clipboard. `Ctrl/Cmd+C`, `Ctrl/Cmd+X`, `Ctrl/Cmd+V` and `Ctrl/Cmd+D` work while a chart, picture or shape is selected, and the drawing context menu offers Copy, Cut, Paste, Duplicate and Delete (charts keep their Change Chart Type submenu above those actions).
+- The internal clipboard payload gains `drawings`: each item carries `kind`, the JSON `model`, the source `anchor`, `relativeAnchor` (EMU offset inside the copied group), `size` (EMU) and `sourceSheetId`/`sourceId`. Cell payloads keep their existing shape, so older hosts still paste them verbatim.
+- Paste clones the DrawingML anchor on the target sheet instead of reusing the source object: pictures and shapes get fresh model ids and relationship ids, charts get a new chart part (`xl/charts/chartClipboardN.xml`) with remapped series ids, and the target sheet gains a drawing part when it had none. A cut-paste removes the source object in the same undo entry; duplicate copies in place with a small offset. Adding a worksheet now re-materializes the package so a drawing can be pasted onto the new sheet immediately.
+- Add `cloneWorkbookDrawing()`, `removeWorkbookDrawing()`, `createDrawingClipboardItem()` and `createDrawingClipboardGroup()` to `xlsx-core`, expose `copyDrawing()`, `cutDrawing()`, `pasteDrawing()`, `duplicateDrawing()` and `deleteSelectedDrawing()` on the controller, and cover cross-sheet paste of an image, a chart and a shape through `tests/unit/xlsx-drawing-clipboard.test.mjs` and `tests/component/xlsx-drawing-clipboard.test.mjs` (undo/redo and export round-trip included).
+
 ### XLSX multi-line cell editing (#136)
 
 - The inline cell editor is a `<textarea>` with a hidden mirror (`data-testid="xlsx-cell-editor-mirror"`) instead of a single-line `<input>`. Enter still commits, Alt+Enter (Option+Enter on macOS) inserts a hard line break at the caret without closing the editor, Escape drops the draft and restores the original cell, Tab commits and moves right, and ↑/↓ commit and move out when the draft has no hard line break (a multi-line draft keeps the arrows for caret movement). Pasting multi-line text keeps its line breaks and normalizes CRLF to LF; single-line pastes stay on the browser's native path. IME composition keeps ownership of Enter/Escape, still defers the commit to `compositionend`, and composing Alt+Enter no longer injects a break.

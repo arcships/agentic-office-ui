@@ -19,6 +19,7 @@
         }"
         :style="item.style"
         @pointerdown.stop="onImagePointerDown(item, $event)"
+        @contextmenu.prevent.stop="onImageContextMenu(item, $event)"
         @keydown="onImageKeydown(item.image, $event)"
       >
         <div class="xlsx-image-layer__content">
@@ -74,6 +75,10 @@ const props = defineProps<{
   scrollTop?: number;
   viewportWidth?: number;
   viewportHeight?: number;
+}>();
+
+const emit = defineEmits<{
+  drawingContextMenu: [payload: { id: string; kind: "image"; clientX: number; clientY: number }];
 }>();
 
 const layerStyle = gridBodyLayerStyle;
@@ -256,12 +261,46 @@ function onImagePointerDown(item: ImageItem, event: PointerEvent) {
   interaction.beginMove(item.image.id, item.rect, event);
 }
 
+function onImageContextMenu(item: ImageItem, event: MouseEvent) {
+  props.controller.selectImage(item.image.id);
+  emit("drawingContextMenu", {
+    id: item.image.id,
+    kind: "image",
+    clientX: event.clientX,
+    clientY: event.clientY,
+  });
+}
+
 function onHandlePointerDown(item: ImageItem, handle: XlsxImageResizeHandlePosition, event: PointerEvent) {
   interaction.beginResize(item.image.id, item.rect, handle, event);
 }
 
 function onImageKeydown(image: XlsxImage, event: KeyboardEvent) {
   if (props.controller.selectedImageId !== image.id) {
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+    event.preventDefault();
+    event.stopPropagation();
+    void props.controller.copySelectionToClipboard?.();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "x") {
+    event.preventDefault();
+    event.stopPropagation();
+    props.controller.cutSelection?.();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+    event.preventDefault();
+    event.stopPropagation();
+    void props.controller.pasteFromClipboard?.();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
+    event.preventDefault();
+    event.stopPropagation();
+    props.controller.duplicateDrawing?.();
     return;
   }
   const step = event.shiftKey ? 10 : 1;
@@ -286,6 +325,7 @@ function onImageKeydown(image: XlsxImage, event: KeyboardEvent) {
   }
   if (event.key === "Escape") {
     event.stopPropagation();
+    if (props.controller.cancelCut?.()) return;
     props.controller.clearSelectedImage();
   }
 }

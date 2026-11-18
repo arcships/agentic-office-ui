@@ -3070,11 +3070,13 @@ function onGridKeydown(event: KeyboardEvent) {
   // A pending cut is a grid mode, not a selection: Escape leaves the selection
   // alone and only drops the marquee (Excel's cancel-cut). The check is on the
   // controller, not on this sheet's marquee, so a cut made on another sheet is
-  // still cancellable from here.
-  if (event.key === "Escape" && props.controller.cutState) {
-    event.preventDefault();
-    props.controller.cancelCut?.();
-    return;
+  // still cancellable from here; drawings carry their own pending cut with no
+  // cell range, so the return value decides whether Escape was consumed.
+  if (event.key === "Escape") {
+    if (props.controller.cancelCut?.()) {
+      event.preventDefault();
+      return;
+    }
   }
 
   const active = activeCell.value;

@@ -24,6 +24,8 @@ import {
 } from "./clipboard-text";
 import type { ClipboardWriteTargets } from "./clipboard-text";
 
+import { createDrawingClipboardDomain } from "./drawing-clipboard";
+
 export { INTERNAL_CLIPBOARD_MIME, escapeHtml, parseClipboardText };
 export type { ClipboardPayload, ClipboardMatrixCell, ClipboardMerge };
 
@@ -131,10 +133,12 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
   // The cut that is still waiting for its paste. It outlives the payload store
   // so hosts can render a marquee, and it is the state Escape cancels.
   const cutState = shallowRef<XlsxClipboardCutState | null>(null);
+  const drawingClipboard = createDrawingClipboardDomain(ctx);
 
   function resetClipboardState() {
     storedClipboard = null;
     cutState.value = null;
+    drawingClipboard.clear();
   }
 
   // A restarted workbook (new file, sheet rebuild) invalidates both the payload
@@ -222,6 +226,10 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
   }
 
   function getClipboardData(): XlsxClipboardData | null {
+    const drawingData = drawingClipboard.getClipboardData();
+    if (drawingData) {
+      return drawingData;
+    }
     const worksheet = ctx.getActiveWorksheet();
     const targetRange = ctx.selection.value ?? (ctx.activeCell.value ? { start: ctx.activeCell.value, end: ctx.activeCell.value } : null);
     if (!worksheet || !targetRange) {
@@ -379,6 +387,14 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
   let pasteHistorySuppressed = false;
 
   function storeSelectionForPaste(cut: boolean) {
+    const drawingData = cut ? drawingClipboard.cutDrawing() : drawingClipboard.copyDrawing();
+    if (drawingData) {
+      // Drawings own their own stored payload; the cell payload store stays
+      // empty so a later cell paste cannot consume the drawing clipboard.
+      storedClipboard = null;
+      cutState.value = null;
+      return drawingData;
+    }
     const data = getClipboardData();
     if (!data) {
       return null;
@@ -571,6 +587,9 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     } catch {
       return false;
     }
+    if (Array.isArray(payload.drawings) && payload.drawings.length > 0) {
+      return drawingClipboard.paste(payload, { cut: drawingClipboard.matchesStored(payload) });
+    }
     if (!Array.isArray(payload.cells) || payload.cells.length === 0) {
       return false;
     }
@@ -608,6 +627,9 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
   async function pasteSpecialFromClipboard(options: XlsxPasteSpecialOptions = {}) {
     if (ctx.isEditingLocked.value) {
       return false;
+    }
+    if (drawingClipboard.hasStored()) {
+      return drawingClipboard.pasteStored();
     }
     if (storedClipboard) {
       return pasteSpecialStructuredData(JSON.stringify(storedClipboard.payload), options);
@@ -737,6 +759,10 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
       payload = JSON.parse(serializedPayload) as ClipboardPayload;
     } catch {
       return false;
+    }
+
+    if (Array.isArray(payload.drawings) && payload.drawings.length > 0) {
+      return drawingClipboard.paste(payload, { cut: drawingClipboard.matchesStored(payload) });
     }
 
     if (!Array.isArray(payload.cells) || payload.cells.length === 0) {
@@ -909,8 +935,9 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
    * to the system clipboard and behaves like an ordinary copy.
    */
   function cancelCut() {
+    const drawingCancelled = drawingClipboard.cancelCut();
     if (!cutState.value) {
-      return false;
+      return drawingCancelled;
     }
     resetClipboardState();
     return true;
@@ -919,6 +946,9 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
   async function pasteFromClipboard() {
     if (ctx.isEditingLocked.value) {
       return false;
+    }
+    if (drawingClipboard.hasStored()) {
+      return drawingClipboard.pasteStored();
     }
     // A cut stays pending in the internal store: the next paste is the move,
     // even when the host clipboard cannot be read back.
@@ -953,12 +983,16 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
 
   return {
     cancelCut,
+    copyDrawing: drawingClipboard.copyDrawing,
     copySelectionToClipboard,
+    cutDrawing: drawingClipboard.cutDrawing,
     cutSelection,
     cutState,
+    duplicateDrawing: drawingClipboard.duplicate,
     getCellDisplayValue,
     getCellFormula,
     getClipboardData,
+    pasteDrawing: drawingClipboard.pasteStored,
     pasteFromClipboard,
     pasteSpecialFromClipboard,
     pasteSpecialStructuredData,

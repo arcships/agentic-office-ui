@@ -73,6 +73,10 @@ export {
   updateWorkbookShapeAnchor,
   deleteWorkbookImage,
   deleteWorkbookShape,
+  cloneWorkbookDrawing,
+  createDrawingClipboardGroup,
+  createDrawingClipboardItem,
+  removeWorkbookDrawing,
   addWorkbookFormControl,
   updateWorkbookFormControl,
   deleteWorkbookFormControl,
@@ -105,6 +109,9 @@ export type {
   WorkbookStructureAssets,
   WorkbookSheetState,
   WorkbookChartStyleAssets,
+  WorkbookDrawingCloneOptions,
+  WorkbookDrawingCloneResult,
+  WorkbookDrawingCloneSource,
 } from "./images";
 
 export {
@@ -232,6 +239,8 @@ export type {
   XlsxChartsheet,
   XlsxClipboardData,
   XlsxClipboardCutState,
+  XlsxDrawingClipboardItem,
+  XlsxDrawingClipboardKind,
   XlsxConditionalColorScaleRule,
   XlsxConditionalDataBarRule,
   XlsxConditionalFormatIcon,

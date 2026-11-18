@@ -306,9 +306,9 @@ function createExtNode(document: XMLDocument, anchor: { cx: number; cy: number }
   return ext;
 }
 
-function updateAnchorNode(anchorNode: Element, anchor: XlsxImage["anchor"]) {
+export function updateAnchorNode(anchorNode: Element, anchor: XlsxImage["anchor"]): Element {
   const document = anchorNode.ownerDocument as XMLDocument | null;
-  if (!document) return;
+  if (!document) return anchorNode;
   const desiredName = anchor.kind === "two-cell"
     ? "twoCellAnchor"
     : anchor.kind === "one-cell"
@@ -355,6 +355,7 @@ function updateAnchorNode(anchorNode: Element, anchor: XlsxImage["anchor"]) {
   for (const part of parts) {
     target.insertBefore(part, firstChild);
   }
+  return target;
 }
 
 function findNonVisualObject(root: Element, objectId: string, objectKind?: string): Element | null {

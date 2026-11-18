@@ -212,6 +212,12 @@ import { XlsxAuthoringDialog, XlsxViewer } from "@arcships/vue-xlsx"
 
 控制器接口：`cutSelection()` 返回是否进入剪切状态，`cutState` 给出 `{ range, sheetIndex }`（源区域和它所在的工作簿工作表），`cancelCut()` 返回是否真的取消了剪切。跨工作表剪切是允许的：虚线只画在源工作表上，粘贴到其他工作表后仍然清空源区域。重新加载或重建工作簿（撤销快照、重命名、换文件）会自动清除剪切状态，不会把旧文件的数据粘到新文件里。
 
+## 复制、剪切与创建绘图副本
+
+选中图表、图片或形状后，图层接收 `Ctrl/Cmd+C`、`Ctrl/Cmd+X`、`Ctrl/Cmd+V` 和 `Ctrl/Cmd+D`，右键菜单也提供“复制”“剪切”“粘贴”“创建副本”“删除”。绘图与单元格共用 `copySelectionToClipboard()`、`cutSelection()`、`pasteFromClipboard()`；另有 `copyDrawing()`、`cutDrawing()`、`pasteDrawing()`、`duplicateDrawing()` 和 `deleteSelectedDrawing()` 供宿主直接调用。
+
+内部载荷的 `drawings` 数组为每个对象记录 `kind`、`model`、`anchor`、`relativeAnchor`、`size`、`sourceSheetId` 和 `sourceId`。粘贴会在当前活动工作表的活动单元格处克隆 DrawingML 锚点：图片/形状获得新的模型 id 和关系 id，图表获得新的 `xl/charts/chartClipboardN.xml` 图表部件和系列 id；目标工作表没有绘图部件时会自动创建。跨工作表粘贴、剪切移动（源对象在同一个撤销条目里删除）以及导出后重新加载都会保留对象；`Escape`/`cancelCut()` 同样会取消待定的绘图剪切。
+
 ## 单元格格式
 
 功能区的合并与边框组对应 Excel 的同一组操作：

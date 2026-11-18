@@ -14,6 +14,7 @@ export { XlsxFileSizeLimitExceededError } from "./composables/formatting";
 // Re-export domain helpers for direct consumers
 export { createEditingDomain } from "./composables/editing";
 export { createClipboardDomain } from "./composables/clipboard";
+export { createDrawingClipboardDomain } from "./composables/drawing-clipboard";
 export { createChartImageDomain } from "./composables/chart-controller";
 export { createNavigationDomain } from "./composables/navigation";
 export { createHistoryDomain } from "./composables/workbook-state";
