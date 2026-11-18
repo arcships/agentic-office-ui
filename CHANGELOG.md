@@ -4,6 +4,13 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### XLSX sheet tab strip navigation and semantics (#11)
+
+- Keep the active sheet tab in view. `XlsxSheetTabs` scrolls the newly active tab with `scrollIntoView({ block: "nearest", inline: "nearest" })` and `scroll-behavior: smooth` on the strip, so a switch from the arrows, `setActiveTabIndex()`, a restored document or undo reveals its tab without scrolling the page or the grid viewport.
+- `Ctrl/Cmd+PageUp` / `Ctrl/Cmd+PageDown` switch to the previous/next tab, clamped at the ends and `preventDefault()`ed; read-only viewers keep the shortcut, while an open inline cell editor owns it. The same editor guard now keeps `Ctrl/Cmd+Z`/`Ctrl/Cmd+Y` from reaching the workbook while the cell editor is open.
+- The tab strip is a real tab widget: `role="tablist"` with a label, roving `tabindex` (`0` on the focused/active tab, `-1` elsewhere), `ArrowLeft`/`ArrowRight`/`Home`/`End` move focus, `Enter`/`Space` activate, focus follows the active tab after a strip switch, and each tab carries an `id` plus `aria-controls` pointing at the viewer's grid. All tabs keep the `data-testid="xlsx-sheet-tab"` contract.
+- Add `tests/component/xlsx-sheet-tabs.test.mjs` (registered in `scripts/ci/run-suite.mjs`) and extend `tests/component/xlsx-sheet-order.test.mjs` with the active/visible tab state assertions.
+
 ### Viewer keyboard navigation (#116)
 
 - Add `useViewerKeys()` and the pure `resolveViewerKeyCommand()` to `@arcships/vue-ui`, with a documented map for page navigation (`PageUp`/`PageDown`, `Home`/`End`), zoom (`Ctrl/Cmd` + `+`/`=`/`-`/`0`), search (`Ctrl/Cmd + F`) and `Escape`. The composable refuses inputs, textareas, selects and `contenteditable` targets, keeps `Shift`/`Alt` navigation native, and only calls `preventDefault()` when the host actually handled the command.

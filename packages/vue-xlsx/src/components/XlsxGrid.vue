@@ -317,6 +317,9 @@ const containerHeight = ref(0);
 
 const editingCell = ref<XlsxCellAddress | null>(null);
 const editingValue = ref("");
+// Exposed so the viewer can keep sheet-level shortcuts (undo, Ctrl+PageUp/Down)
+// out of an open inline editor.
+const isEditingCell = computed(() => editingCell.value !== null);
 const isEditComposing = ref(false);
 let commitEditOnCompositionEnd = false;
 const hoveredCell = ref<XlsxCellAddress | null>(null);
@@ -2888,6 +2891,7 @@ defineExpose({
   hitTestCell,
   hitTestAxis,
   hitTestSheetPoint,
+  isEditingCell,
   get scrollContainer() {
     return containerRef.value;
   },
