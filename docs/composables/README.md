@@ -12,10 +12,12 @@
 | XLSX | `useXlsxViewerThumbnails` | 从控制器生成工作表缩略图 |
 | PPTX | `usePptxDocument` | 文档加载、纵向滚动跳页/单页跳转、缩放和会话生命周期 |
 | PPTX | `usePptxPlayback` | 动画步骤、播放状态和媒体 |
+| 通用 | `useViewerKeys` | DOCX/PDF/PPTX 共享键盘映射、页面/缩放/搜索/Escape 命令 |
 
 - [DOCX 组合函数](docx.md)
 - [XLSX 组合函数](xlsx.md)
 - [PPTX 组合函数](pptx.md)
+- [查看器键盘导航](../guide/viewer-keyboard.md)
 - [Runtime 与资源所有权](runtime.md)
 
 ## 共同规则

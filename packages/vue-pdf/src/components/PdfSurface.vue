@@ -9,7 +9,7 @@
     @scroll.passive="onScroll"
     @contextmenu.prevent="onContextMenu"
     @copy="onCopy"
-    @keydown.esc="onSurfaceEscape"
+    @keydown="onSurfaceKeydown"
   >
     <div v-if="!effectiveSource" class="pdf-surface__empty">{{ m.pdf.surface.noPdf }}</div>
     <div v-else-if="loading" class="pdf-surface__empty">{{ m.pdf.surface.opening }}</div>
@@ -255,6 +255,8 @@ import {
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
 import { formatOfficeMessage } from "@arcships/office-interaction"
+import { useViewerKeys } from "@arcships/vue-ui"
+import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import { providePdfMessages } from "../i18n"
 
 // ── Types ────────────────────────────────────────────────────────────
@@ -721,6 +723,8 @@ let bitmapCache: PdfBitmapCache = createPdfBitmapCache({ maxBytes: props.maxBitm
 let pageLayoutCache: { key: string; offsets: number[]; heights: number[] } | undefined
 let renderedRange: PdfPageRange = { first: 0, last: -1 }
 let visiblePageIndex = -1
+/** Last page reached with the keyboard; reset when a scroll changes the page. */
+let keyPageIndex = -1
 let renderTimer: ReturnType<typeof setTimeout> | undefined
 let resizeTimer: ReturnType<typeof setTimeout> | undefined
 let scrollFrame: number | undefined
@@ -2217,6 +2221,7 @@ function flushScrollFrame(): void {
   )
   if (pageIndex !== visiblePageIndex) {
     visiblePageIndex = pageIndex
+    keyPageIndex = -1
     emit("visible-page-change", pageIndex)
     prefetchPageGeometry(pageIndex)
     prefetchPageAnnotations(pageIndex)
@@ -2438,7 +2443,7 @@ function scrollToPage(pageIndex: number): void {
   const el = scrollRef.value
   if (!el) return
   const slot = el.querySelector(`[data-page-index="${pageIndex}"]`) as HTMLElement | null
-  slot?.scrollIntoView({ behavior: "smooth", block: "start" })
+  slot?.scrollIntoView?.({ behavior: "smooth", block: "start" })
   // Programmatic scrolling may not emit a scroll event (already at the target,
   // reduced motion); rasterize whichever page ends up in the viewport anyway.
   scheduleVisibleRender()
@@ -2448,6 +2453,81 @@ function onSurfaceEscape(event?: KeyboardEvent): void {
   if (event?.defaultPrevented) return
   clearSelection()
   if (selectionMode.value !== "content") emit("selectionCancel", { mode: selectionMode.value, reason: "escape" })
+}
+
+/**
+ * PDF Surface keyboard map: PageDown/PageUp move one page, Home/End jump to
+ * the first/last page, Ctrl/Cmd +/−/0 zoom, Escape cancels the active
+ * selection or region. There is no search field in the minimal surface.
+ */
+const surfaceKeys = useViewerKeys({
+  pageNavigation: true,
+  zoom: true,
+  escape: true,
+  onCommand: onSurfaceKeyCommand,
+})
+
+function onSurfaceKeydown(event: KeyboardEvent): void {
+  surfaceKeys.onKeydown(event)
+}
+
+function visibleSurfacePageIndex(): number {
+  const count = renderDocument.value?.pageCount ?? 0
+  if (count <= 0) return 0
+  if (visiblePageIndex >= 0) return Math.min(visiblePageIndex, count - 1)
+  const { offsets, heights } = pageLayout()
+  return pageIndexAtPosition(offsets, heights, scrollTopPx() + viewportHeightPx.value / 2)
+}
+
+function surfacePageIndex(): number {
+  return keyPageIndex >= 0 ? keyPageIndex : visibleSurfacePageIndex()
+}
+
+function goToSurfacePage(pageIndex: number): boolean {
+  const count = renderDocument.value?.pageCount ?? 0
+  if (count <= 0) return false
+  const target = Math.min(count - 1, Math.max(0, pageIndex))
+  if (target === surfacePageIndex()) return false
+  keyPageIndex = target
+  scrollToPage(target)
+  return true
+}
+
+function stepSurfaceZoom(direction: 1 | -1): boolean {
+  const steps = [0.5, 0.75, 1, 1.25, 1.5, 2]
+  const next = direction > 0
+    ? steps.find((value) => value > zoom.value)
+    : [...steps].reverse().find((value) => value < zoom.value)
+  if (next === undefined) return false
+  zoom.value = next
+  return true
+}
+
+function onSurfaceKeyCommand(command: ViewerKeyCommand): boolean {
+  switch (command) {
+    case "page-next":
+      return goToSurfacePage(surfacePageIndex() + 1)
+    case "page-previous":
+      return goToSurfacePage(surfacePageIndex() - 1)
+    case "page-first":
+      return goToSurfacePage(0)
+    case "page-last":
+      return goToSurfacePage((renderDocument.value?.pageCount ?? 1) - 1)
+    case "zoom-in":
+      return stepSurfaceZoom(1)
+    case "zoom-out":
+      return stepSurfaceZoom(-1)
+    case "zoom-reset":
+      if (zoom.value === 1) return false
+      zoom.value = 1
+      return true
+    case "escape":
+      if (selectionState.value.kind === "none" && selectionMode.value === "content") return false
+      onSurfaceEscape()
+      return true
+    default:
+      return false
+  }
 }
 
 defineExpose({
@@ -2541,6 +2621,8 @@ onBeforeUnmount(async () => {
   --pdf-surface-bg: #020617;
   --pdf-surface-page-filter: var(--pdf-dark-page-filter, invert(1) hue-rotate(180deg));
 }
+/* The scroll surface is focusable for keyboard paging; keep the ring visible. */
+.pdf-surface:focus-visible { outline: 2px solid #60a5fa; outline-offset: -2px; }
 .pdf-surface__empty {
   display: flex; align-items: center; justify-content: center;
   min-height: 200px; color: #9ca3af; font-size: 14px;

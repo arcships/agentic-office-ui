@@ -39,6 +39,24 @@ export type {
   OfficeMenuKeyboardOptions,
 } from "./composables/office-menu-keyboard"
 
+// Shared viewer keyboard map (DOCX / PDF / PPTX)
+export {
+  VIEWER_KEYBOARD_SHORTCUTS,
+  isEditableViewerTarget,
+  isInteractiveViewerTarget,
+  resolveViewerKeyCommand,
+  useViewerKeys,
+} from "./composables/viewer-keys"
+export type {
+  ViewerKeyCommand,
+  ViewerKeyEvent,
+  ViewerKeyboard,
+  ViewerKeyMapOptions,
+  ViewerKeyMode,
+  ViewerKeyOptions,
+  ViewerKeySwitch,
+} from "./composables/viewer-keys"
+
 // Office selection primitives
 export { default as OfficeObjectOutlineLayer } from "./components/OfficeObjectOutlineLayer.vue"
 export { default as OfficeRegionSelector } from "./components/OfficeRegionSelector.vue"

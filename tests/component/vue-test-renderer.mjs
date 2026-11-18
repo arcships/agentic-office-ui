@@ -127,6 +127,39 @@ const renderer = vue.createRenderer({
   },
 });
 
+/**
+ * Build a real cancelable `Event` shaped like a KeyboardEvent.
+ *
+ * Node has no global `KeyboardEvent`, but `Event` is real: the viewer handler
+ * sees a genuine event object whose `defaultPrevented` flips when the viewer
+ * calls `preventDefault()`. The returned counter tracks those calls.
+ */
+export function keydownEvent(key, init = {}) {
+  const event = new Event("keydown", { cancelable: true });
+  for (const [name, value] of Object.entries({
+    key,
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    shiftKey: false,
+    target: null,
+    ...init,
+  })) {
+    if (name === "preventDefault") continue;
+    Object.defineProperty(event, name, { configurable: true, value });
+  }
+  let prevented = 0;
+  const nativePreventDefault = event.preventDefault.bind(event);
+  Object.defineProperty(event, "preventDefault", {
+    configurable: true,
+    value() {
+      prevented += 1;
+      nativePreventDefault();
+    },
+  });
+  return { event, preventedCount: () => prevented };
+}
+
 export function walk(node, result = []) {
   result.push(node);
   for (const child of node.children || []) walk(child, result);

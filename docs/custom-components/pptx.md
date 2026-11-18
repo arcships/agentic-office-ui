@@ -97,6 +97,6 @@ async function onStageClick(event: MouseEvent) {
 
 每个播放器各自调用两个组合函数。不要让多个舞台共享同一个文档组合函数，也不要在播放期间用 `document.nextSlide()` 代替 `playback.next()`。
 
-左右方向键和页面切换属于播放模式。普通 Surface 使用纵向滚动，以及上/下方向键或 PageUp/PageDown。
+左右方向键和页面切换属于播放模式。普通 Surface/浏览模式使用纵向滚动，`↑`/`↓`、`PageUp`/`PageDown`、`Home`/`End` 和 `Space` 交给列表滚动，不会切换幻灯片；完整键盘映射见[查看器键盘导航](../guide/viewer-keyboard.md)。
 
 全屏属于外层业务界面，可以对包含舞台和工具栏的元素调用浏览器 Fullscreen API。

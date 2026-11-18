@@ -36,6 +36,8 @@
   --pptx-muted: #b3b3b8;
   background: #050505;
 }
+/* The viewer root is focusable for keyboard navigation; show where focus is. */
+.pptx-viewer:focus-visible { outline: 2px solid var(--pptx-accent); outline-offset: -2px; }
 
 /* The inline height keeps the demo's "calc(100vh - 190px)" box in the page;
    fullscreen must fill the screen instead of leaving black bars. */

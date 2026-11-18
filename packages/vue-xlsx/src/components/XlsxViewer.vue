@@ -627,6 +627,8 @@ defineExpose({
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 12px;
 }
+/* The viewer root is focusable for keyboard users; keep that focus visible. */
+.xlsx-viewer:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; }
 
 .xlsx-viewer__body {
   display: flex;

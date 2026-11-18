@@ -16,6 +16,7 @@
 | [guide/xlsx.md](guide/xlsx.md) | XLSX 查看器、控制器和可选功能 |
 | [guide/pdf.md](guide/pdf.md) | PDF 来源、属性、事件和 Runtime |
 | [guide/pptx.md](guide/pptx.md) | PPTX 纵向浏览、Surface 事件、播放和自定义播放器 |
+| [guide/viewer-keyboard.md](guide/viewer-keyboard.md) | DOCX/PDF/PPTX 共享键盘映射、各组件快捷键和焦点环 |
 | [guide/reference-selection.md](guide/reference-selection.md) | 四种 Surface 的统一选择模式、确认事件、expose 与宿主状态边界 |
 | [guide/surface-migration-guide.md](guide/surface-migration-guide.md) | 接入 0.5.3 最小 Surface 与手势缩放指南 |
 | [components/README.md](components/README.md) | 推荐高层组件与基础 UI 组件 |

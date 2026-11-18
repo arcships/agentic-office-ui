@@ -40,4 +40,8 @@ import "@arcships/vue-pdf/style.css"
 
 事件包括 `document-load-success`、`document-load-error`、`active-page-change`、`selectionChange` 和 `diagnostic`。当前页支持拖选文字、双击选词、`Ctrl/Cmd+C` 复制和 `Escape` 清除；`clearSelection()` 与 `getSelectionState()` 通过组件实例暴露。位图上方还渲染真实 DOM 文本层（每个 glyph 一个透明 span，随缩放/旋转应用 CSS matrix），可由屏幕阅读器、浏览器查找和 CJK 提取读取；文本层不拦截指针，拖选、链接/表单命中与区域选择行为不变。错误处理使用 `PdfLoadError.code`，不要通过错误文案判断类型。加密文档在无密码可用时返回 `ENCRYPTED`；`load-start` 诊断中的 URL 已去除查询串、片段和凭据。
 
+## 键盘导航
+
+`PdfViewer` 的快捷键与 DOCX 共用同一套映射：`PageDown`/`PageUp` 翻一页，`Home`/`End` 跳到第一页/最后一页，`Ctrl/Cmd` + `+`/`=`、`-`、`0` 缩放或重置到 100%，`Ctrl/Cmd + F` 聚焦搜索框，`Escape` 先取消搜索再清除选择；`Ctrl/Cmd + P` 保留为打印。`PdfSurface` 的 `PageDown`/`PageUp`、`Home`/`End` 按页滚动连续页面，`Ctrl/Cmd` 缩放通过受控 `update:zoom` 通知宿主，`Escape` 取消选择或区域。焦点在输入框、文本域、下拉框或 `contenteditable` 内时，查看器不会拦截这些按键。完整映射见[查看器键盘导航](viewer-keyboard.md)。
+
 需要完全控制 Runtime 时，可以使用 `createPdfRenderRuntime()`。调用方传入的 Runtime 必须由调用方销毁。单页渲染会在进入 PDFium 前校验 `scale`、`dpr` 和旋转，并按 `maxRenderPixels`（默认 32 兆像素）拒绝超出预算的请求，避免一次渲染耗尽内存。

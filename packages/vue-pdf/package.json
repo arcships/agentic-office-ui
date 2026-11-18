@@ -43,6 +43,7 @@
   },
   "dependencies": {
     "@arcships/office-interaction": "^0.7.0",
+    "@arcships/vue-ui": "^0.7.0",
     "@embedpdf/core": "2.14.4",
     "@embedpdf/models": "2.14.4"
   },

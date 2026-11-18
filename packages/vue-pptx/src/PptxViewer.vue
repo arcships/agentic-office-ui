@@ -205,7 +205,8 @@ import {
   type PptxPreviewSource,
 } from "@arcships/pptx-core/browser"
 import type { PptxSearchState, UsePptxDocumentOptions, PptxStageExpose } from "./headless-types"
-import { OfficeLiveStatus } from "@arcships/vue-ui"
+import { OfficeLiveStatus, isEditableViewerTarget, isInteractiveViewerTarget, useViewerKeys } from "@arcships/vue-ui"
+import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import { providePptxMessages } from "./i18n"
@@ -806,44 +807,142 @@ async function moveSearch(direction: 1 | -1): Promise<void> {
 }
 
 function onKeydown(event: KeyboardEvent): void {
-  if (
-    !isPresent.value
-    && props.showToolbar
-    && props.showSearch
-    && (event.ctrlKey || event.metaKey)
-    && event.key.toLocaleLowerCase() === "f"
-  ) {
-    event.preventDefault()
-    searchInputRef.value?.focus()
-    return
+  if (handleBrowseScrollKey(event)) return
+  viewerKeys.onKeydown(event)
+}
+
+const BROWSE_PAGE_SCROLL_RATIO = 0.9
+const BROWSE_LINE_SCROLL_PX = 48
+const BROWSE_SCROLL_KEYS = new Set([
+  "PageDown",
+  "PageUp",
+  "Home",
+  "End",
+  "ArrowDown",
+  "ArrowUp",
+  " ",
+  "Space",
+  "Spacebar",
+])
+
+/**
+ * PPTX keyboard map:
+ * - browse: arrows/PageUp/PageDown/Home/End/Space scroll the slide list; the
+ *   shared map adds Ctrl/Cmd zoom, Ctrl/Cmd+F search and Escape.
+ * - present: PageUp/PageDown/Home/End and arrows/Space navigate slides; Escape
+ *   leaves fullscreen; Ctrl/Cmd +/−/0 zoom.
+ */
+const viewerKeys = useViewerKeys({
+  mode: () => (isPresent.value ? "present" : "browse"),
+  pageNavigation: () => isPresent.value,
+  zoom: true,
+  search: () => !isPresent.value && props.showToolbar && props.showSearch,
+  escape: true,
+  onCommand: onViewerKeyCommand,
+})
+
+function onViewerKeyCommand(command: ViewerKeyCommand): boolean {
+  switch (command) {
+    case "page-next":
+      void invoke(next)
+      return true
+    case "page-previous":
+      void invoke(previous)
+      return true
+    case "page-first":
+      void invoke(() => goToSlide(0))
+      return true
+    case "page-last":
+      void invoke(() => goToSlide(Math.max((document.value?.slides.length ?? 1) - 1, 0)))
+      return true
+    case "zoom-in":
+      if (zoom.value >= 200) return false
+      run(() => setZoom(zoom.value + 25))
+      return true
+    case "zoom-out":
+      if (zoom.value <= 50) return false
+      run(() => setZoom(zoom.value - 25))
+      return true
+    case "zoom-reset":
+      if (zoom.value === 100) return false
+      run(() => setZoom(100))
+      return true
+    case "search":
+      if (isPresent.value || !props.showToolbar || !props.showSearch) return false
+      searchInputRef.value?.focus()
+      return true
+    case "escape":
+      if (isPresent.value) {
+        void invoke(exitFullscreen)
+        return true
+      }
+      if (searchQuery.value || searchResults.value.length) {
+        closeSearch()
+        return true
+      }
+      return false
+    default:
+      return false
   }
-  const target = event.target
-  if (
-    (typeof HTMLInputElement !== "undefined" && target instanceof HTMLInputElement)
-    || (typeof HTMLTextAreaElement !== "undefined" && target instanceof HTMLTextAreaElement)
-  ) return
-  if (isPresent.value && event.key === "Escape") {
-    event.preventDefault()
-    void invoke(exitFullscreen)
-  } else if (isPresent.value && event.key === "Home") {
-    event.preventDefault()
-    void invoke(() => goToSlide(0))
-  } else if (isPresent.value && event.key === "End") {
-    event.preventDefault()
-    void invoke(() => goToSlide(Math.max((document.value?.slides.length ?? 1) - 1, 0)))
-  } else if ((isPresent.value && event.key === "ArrowLeft") || event.key === "ArrowUp" || event.key === "PageUp") {
-    event.preventDefault()
-    void invoke(previous)
-  } else if ((isPresent.value && event.key === "ArrowRight") || event.key === "ArrowDown" || event.key === "PageDown" || isPresent.value && event.key === " ") {
-    event.preventDefault()
-    void invoke(next)
-  } else if (!isPresent.value && (event.ctrlKey || event.metaKey) && (event.key === "+" || event.key === "=")) {
-    event.preventDefault()
-    run(() => setZoom(zoom.value + 25))
-  } else if ((event.ctrlKey || event.metaKey) && event.key === "-") {
-    event.preventDefault()
-    run(() => setZoom(zoom.value - 25))
+}
+
+/** Browse mode owns scrolling, not slide navigation. */
+function handleBrowseScrollKey(event: KeyboardEvent): boolean {
+  if (isPresent.value || state.value !== "ready" || event.defaultPrevented) return false
+  if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return false
+  if (!BROWSE_SCROLL_KEYS.has(event.key) || isEditableViewerTarget(event.target)) return false
+  const space = event.key === " " || event.key === "Space" || event.key === "Spacebar"
+  if (space && isInteractiveViewerTarget(event.target)) return false
+  const container = stageScrollRef.value
+  if (!container) return false
+  const viewport = typeof container.clientHeight === "number" ? container.clientHeight : 0
+  if (event.key !== "Home" && event.key !== "End" && event.key !== "ArrowDown" && event.key !== "ArrowUp" && viewport <= 0) {
+    return false
   }
+  const pageStep = Math.max(1, Math.round(viewport * BROWSE_PAGE_SCROLL_RATIO))
+  switch (event.key) {
+    case "PageDown":
+    case " ":
+    case "Space":
+    case "Spacebar":
+      scrollBrowseBy(pageStep)
+      break
+    case "PageUp":
+      scrollBrowseBy(-pageStep)
+      break
+    case "Home":
+      setBrowseScrollTop(0)
+      break
+    case "End":
+      setBrowseScrollTop(Number.MAX_SAFE_INTEGER)
+      break
+    case "ArrowDown":
+      scrollBrowseBy(BROWSE_LINE_SCROLL_PX)
+      break
+    case "ArrowUp":
+      scrollBrowseBy(-BROWSE_LINE_SCROLL_PX)
+      break
+    default:
+      return false
+  }
+  event.preventDefault?.()
+  return true
+}
+
+function setBrowseScrollTop(top: number): void {
+  const container = stageScrollRef.value
+  if (!container) return
+  const scrollHeight = typeof container.scrollHeight === "number" ? container.scrollHeight : 0
+  const clientHeight = typeof container.clientHeight === "number" ? container.clientHeight : 0
+  const max = Math.max(0, scrollHeight - clientHeight)
+  container.scrollTop = Math.min(max, Math.max(0, top))
+}
+
+function scrollBrowseBy(delta: number): void {
+  const container = stageScrollRef.value
+  if (!container) return
+  const top = typeof container.scrollTop === "number" ? container.scrollTop : 0
+  setBrowseScrollTop(top + delta)
 }
 
 watch(() => props.initialSlide, (index) => {
