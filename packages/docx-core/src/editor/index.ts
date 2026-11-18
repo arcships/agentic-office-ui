@@ -1,9 +1,10 @@
-// editor barrel — paragraph, table, run-style, section-break and clipboard
-// editing operations.
+// editor barrel — paragraph, table, run-style, section-break, comment and
+// clipboard editing operations.
 export * from "./paragraph-ops";
 export * from "./table-ops";
 export * from "./run-style-ops";
 export * from "./section-break-ops";
+export * from "./comment-ops";
 
 // Clipboard: the structured payload, the `text/html` render/parse pair and the
 // paste insertion op. Parser internals (attribute/CSS stack machine, internal

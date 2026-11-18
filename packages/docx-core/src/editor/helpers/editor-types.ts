@@ -310,6 +310,21 @@ export interface DocxComment {
 
 export type DocxLineSpacingRule = "auto" | "exact" | "atLeast";
 
+/**
+ * State of the inline comment editor: a new comment on a selection, or a reply
+ * to an existing comment. The composer owns no model state until it is
+ * submitted, so cancelling it leaves the document and its history untouched.
+ */
+export interface DocxCommentComposer {
+  mode: "new" | "reply";
+  /** Reply target, set when `mode` is `"reply"`. */
+  commentId?: number;
+  /** Selection to anchor the new comment to, set when `mode` is `"new"`. */
+  range?: DocxTextRange;
+  /** Start location of `range`, used to place the editor beside its page. */
+  anchor?: DocxTextRangeLocation;
+}
+
 export type DocxSelectionSessionKind =
   | "idle"
   | "pointer"
@@ -375,6 +390,14 @@ export interface DocxEditorStatusMessages {
   /** Template with a `{count}` placeholder. */
   acceptedChanges: string;
   acceptedChange: string;
+  commentAdded: string;
+  commentReplied: string;
+  commentResolved: string;
+  commentReopened: string;
+  commentDeleted: string;
+  /** The selection or comment the command targets is gone. */
+  commentTargetMissing: string;
+  commentTextRequired: string;
   /** Template with a `{count}` placeholder. */
   rejectedChanges: string;
   rejectedChange: string;
@@ -499,6 +522,19 @@ export interface UseDocxEditorOptions {
    * @defaultValue `false`
    */
   initialShowComments?: boolean;
+  /**
+   * Author name stored on comments created through the editor commands.
+   *
+   * @defaultValue `"Author"`
+   */
+  commentAuthor?: string;
+  /** Comment initials; derived from `commentAuthor` when omitted. */
+  commentInitials?: string;
+  /**
+   * Clock used for a new comment's `w:date`. Hosts can pin it for
+   * reproducible exports and deterministic tests.
+   */
+  commentClock?: () => Date;
   /**
    * Maximum number of undo and redo snapshots retained by this editor
    * instance.

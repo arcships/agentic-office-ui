@@ -21,6 +21,7 @@ import type {
   DocxClipboardDataSink,
   DocxClipboardSources,
   DocxComment,
+  DocxCommentComposer,
   DocxDocumentTheme,
   DocxEditorSelection,
   DocxFormFieldLocation,
@@ -60,6 +61,7 @@ export type {
   DocxTrackedChangeKind,
   DocxTrackedChange,
   DocxComment,
+  DocxCommentComposer,
   DocxLineSpacingRule,
   DocxSelectionSessionKind,
   DocxLineSpacingInfo,
@@ -144,6 +146,8 @@ export interface DocxEditorController {
   showTrackedChanges: boolean;
   comments: DocxComment[];
   showComments: boolean;
+  /** Open inline comment editor (new comment or reply), if any. */
+  commentComposer?: DocxCommentComposer;
   currentPage: number;
   totalPages: number;
   hasUnorderedList: boolean;
@@ -166,6 +170,27 @@ export interface DocxEditorController {
   setDocumentTheme: (theme: DocxDocumentTheme) => void;
   setShowTrackedChanges: (showTrackedChanges: boolean) => void;
   setShowComments: (showComments: boolean) => void;
+  /**
+   * Opens the inline editor for a comment on `range` (defaults to the live
+   * selection). Returns false when there is no selection to anchor to.
+   */
+  beginComment: (range?: DocxTextRange) => boolean;
+  /** Opens the inline editor for a reply to `commentId`. */
+  beginCommentReply: (commentId: number) => boolean;
+  cancelCommentComposer: () => void;
+  /** Submits the open composer; false keeps it open (for example empty text). */
+  submitCommentComposer: (text: string) => boolean;
+  /** Creates a comment and returns its id, or undefined when it cannot. */
+  addComment: (
+    range: DocxTextRange | undefined,
+    text: string
+  ) => number | undefined;
+  /** Replies to a comment and returns the new id, or undefined. */
+  replyToComment: (commentId: number, text: string) => number | undefined;
+  /** Resolves (or reopens) the thread that owns `commentId`. */
+  resolveComment: (commentId: number, resolved?: boolean) => boolean;
+  /** Deletes a comment and its replies; true when the model changed. */
+  deleteComment: (commentId: number) => boolean;
   syncPaginationInfo: (pagination: DocxPaginationInfo) => void;
   toggleShowTrackedChanges: () => void;
   toggleShowComments: () => void;

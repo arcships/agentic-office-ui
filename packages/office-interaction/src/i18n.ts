@@ -231,6 +231,10 @@ export interface OfficeDocxMessages {
     acceptAllTitle: string
     rejectAll: string
     rejectAllTitle: string
+    addComment: string
+    addCommentTitle: string
+    /** Default author name stored on comments created without one. */
+    commentAuthor: string
     status: {
       ready: string
       copied: string
@@ -262,6 +266,14 @@ export interface OfficeDocxMessages {
       /** Template with a `{count}` placeholder. */
       acceptedChanges: string
       acceptedChange: string
+      commentAdded: string
+      commentReplied: string
+      commentResolved: string
+      commentReopened: string
+      commentDeleted: string
+      /** The selection or comment a comment command targets is gone. */
+      commentTargetMissing: string
+      commentTextRequired: string
       /** Template with a `{count}` placeholder. */
       rejectedChanges: string
       rejectedChange: string
@@ -470,6 +482,20 @@ export interface OfficeDocxMessages {
     commentMarker: string
     /** Template with `{ordinal}` and `{author}` placeholders. */
     commentMarkerWithAuthor: string
+    reply: string
+    replyTitle: string
+    resolve: string
+    resolveTitle: string
+    reopen: string
+    reopenTitle: string
+    delete: string
+    deleteTitle: string
+    composerTitle: string
+    composerReplyTitle: string
+    composerPlaceholder: string
+    composerReplyPlaceholder: string
+    composerSubmit: string
+    composerCancel: string
   }
   dragOverlay: {
     drop: string
@@ -1277,6 +1303,9 @@ export const officeMessagesEn: OfficeMessages = {
       acceptAllTitle: "Accept all tracked changes",
       rejectAll: "Reject all",
       rejectAllTitle: "Reject all tracked changes",
+      addComment: "New comment",
+      addCommentTitle: "Comment on the selection",
+      commentAuthor: "Author",
       status: {
         ready: "Ready",
         copied: "Copied to clipboard",
@@ -1301,6 +1330,13 @@ export const officeMessagesEn: OfficeMessages = {
         unknownExportError: "Unknown export error",
         acceptedChanges: "Accepted {count} tracked changes",
         acceptedChange: "Accepted 1 tracked change",
+        commentAdded: "Comment added",
+        commentReplied: "Reply added",
+        commentResolved: "Comment thread resolved",
+        commentReopened: "Comment thread reopened",
+        commentDeleted: "Comment deleted",
+        commentTargetMissing: "Unsupported: the comment or selection is no longer available",
+        commentTextRequired: "Unsupported: a comment needs text",
         rejectedChanges: "Rejected {count} tracked changes",
         rejectedChange: "Rejected 1 tracked change",
         formattingCleared: " ({count} formatting revisions cleared without reverting; the model keeps no previous formatting)",
@@ -1493,6 +1529,20 @@ export const officeMessagesEn: OfficeMessages = {
       comments: "Comments",
       commentMarker: "Comment {ordinal}",
       commentMarkerWithAuthor: "Comment {ordinal} — {author}",
+      reply: "Reply",
+      replyTitle: "Reply to this comment",
+      resolve: "Resolve",
+      resolveTitle: "Resolve this comment thread",
+      reopen: "Reopen",
+      reopenTitle: "Reopen this comment thread",
+      delete: "Delete",
+      deleteTitle: "Delete this comment",
+      composerTitle: "New comment",
+      composerReplyTitle: "Reply",
+      composerPlaceholder: "Write a comment…",
+      composerReplyPlaceholder: "Write a reply…",
+      composerSubmit: "Comment",
+      composerCancel: "Cancel",
     },
     dragOverlay: {
       drop: "Drop DOCX file to import",
@@ -2243,6 +2293,9 @@ export const officeMessagesZhCN: OfficeMessages = {
       acceptAllTitle: "接受所有修订",
       rejectAll: "全部拒绝",
       rejectAllTitle: "拒绝所有修订",
+      addComment: "新建批注",
+      addCommentTitle: "为所选内容添加批注",
+      commentAuthor: "批注人",
       status: {
         ready: "就绪",
         copied: "已复制到剪贴板",
@@ -2267,6 +2320,13 @@ export const officeMessagesZhCN: OfficeMessages = {
         unknownExportError: "未知导出错误",
         acceptedChanges: "已接受 {count} 处修订",
         acceptedChange: "已接受 1 处修订",
+        commentAdded: "已添加批注",
+        commentReplied: "已添加回复",
+        commentResolved: "批注已标记为已解决",
+        commentReopened: "批注已重新打开",
+        commentDeleted: "已删除批注",
+        commentTargetMissing: "不支持：批注或选区已不存在",
+        commentTextRequired: "不支持：批注内容不能为空",
         rejectedChanges: "已拒绝 {count} 处修订",
         rejectedChange: "已拒绝 1 处修订",
         formattingCleared: "（已清除 {count} 处格式修订且未回退；模型未保留旧格式）",
@@ -2459,6 +2519,20 @@ export const officeMessagesZhCN: OfficeMessages = {
       comments: "批注",
       commentMarker: "批注 {ordinal}",
       commentMarkerWithAuthor: "批注 {ordinal} — {author}",
+      reply: "回复",
+      replyTitle: "回复此批注",
+      resolve: "标记为已解决",
+      resolveTitle: "将此批注标记为已解决",
+      reopen: "重新打开",
+      reopenTitle: "重新打开此批注",
+      delete: "删除",
+      deleteTitle: "删除此批注",
+      composerTitle: "新建批注",
+      composerReplyTitle: "回复",
+      composerPlaceholder: "输入批注…",
+      composerReplyPlaceholder: "输入回复…",
+      composerSubmit: "批注",
+      composerCancel: "取消",
     },
     dragOverlay: {
       drop: "拖放 DOCX 文件以导入",

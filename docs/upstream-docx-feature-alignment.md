@@ -300,7 +300,8 @@ resolver(ctx) → patch {model?, selection?, range?, pendingRunStyle?, status?}
 | 表格 | insert/delete row/column、resize（pointer 事件）、跨页切分 |
 | 图片 | insert/resize/move/wrap mode、浮动定位、首字下沉 |
 | 表单域 | checkbox/text/date/dropdown，SDT + legacy 两种来源 |
-| 修订/评论 | **从 model 只读派生**（`collectTrackedChangesFromModel`/`collectCommentsFromModel`） |
+| 修订 | **从 model 只读派生**（`collectTrackedChangesFromModel`） |
+| 评论 | 读取派生（`collectCommentsFromModel`）+ 写入命令（`addDocumentComment`/`replyToDocumentComment`/`resolveDocumentComment`/`deleteDocumentComment`，导出 `comments.xml`/`commentsExtended.xml`；issue #96） |
 | 列表 | toggleList、adjustDepth、numbering labels |
 | 撤销/重做 | 快照式，每次 model 变化一个快照 |
 | 复制/粘贴 | 富文本：`text/html`（内联 run 样式、链接、列表）+ `text/rtf` + 内部 MIME 片段（`DocxTextRange` + runs）+ `text/plain`；粘贴按“内部片段 → `text/html` → `text/rtf` → 纯文本”降级，外部 HTML/RTF 经净化后映射回 run |
