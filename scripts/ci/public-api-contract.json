@@ -132,8 +132,8 @@
         "notifyDocxViewerPageSurfaceListeners"
       ],
       "rootDeclarationFingerprint": {
-        "count": 132,
-        "sha256": "eb2ae72d7a71a339ddf85c90f09428b9c60f02545177be474ebdf475e890403e"
+        "count": 142,
+        "sha256": "f8e133eaa267a4042e11d01f9f2d3939962d02caf0367518c9060b8455f7ce79"
       }
     },
     {
@@ -181,8 +181,8 @@
         "XlsxContextMenu"
       ],
       "rootDeclarationFingerprint": {
-        "count": 54,
-        "sha256": "53280214e82719aa0e15d5842ac3bad79f10f31965c5eabab23360f0c5907adf"
+        "count": 55,
+        "sha256": "123c558909fcceab447c8d527f5a1cdd067e89b7380f1c5e632de153171d567e"
       }
     },
     {

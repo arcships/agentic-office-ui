@@ -64,4 +64,18 @@ export type {
 export { useDocxModel } from "./useDocxModel"
 export type { UseDocxModelState } from "./useDocxModel"
 export { findDocxSearchMatches } from "./useDocxSearch"
-export type { DocxSearchMatch, DocxSearchState, DocxSearchStatus } from "./useDocxSearch"
+export type {
+  DocxNestedTableStep,
+  DocxSearchBoundary,
+  DocxSearchLocation,
+  DocxSearchMatch,
+  DocxSearchOptions,
+  DocxSearchRange,
+  DocxSearchRegion,
+  DocxSearchState,
+  DocxSearchStatus,
+  ParagraphLocationInNestedTableCell,
+  ParagraphLocationInNoteText,
+} from "./useDocxSearch"
+export { findDocxSearchTargetPage } from "./docx-search-page"
+export type { DocxSearchPageTarget } from "./docx-search-page"

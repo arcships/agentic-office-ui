@@ -32,6 +32,7 @@ export { useXlsxViewerThumbnails } from "./composables/useXlsxViewerThumbnails"
 export { useXlsxSearch } from "./composables/useXlsxSearch"
 export type {
   XlsxSearchMatch,
+  XlsxSearchOptions,
   XlsxSearchState,
   XlsxSearchStatus,
   XlsxSurfaceSearch,

@@ -101,6 +101,7 @@ import {
 import {
   findDocxSearchMatches,
   type DocxSearchMatch,
+  type DocxSearchOptions,
   type DocxSearchState,
 } from "../composables/useDocxSearch"
 import DocxViewerRoot from "./DocxViewerRoot.vue"
@@ -731,9 +732,55 @@ function preferredSearchCandidate(
   })[0]
 }
 
-function selectorForLocation(location: DocxTextRangeLocation): string {
+function selectorForMatch(match: DocxSearchMatch): string {
+  const location = match.range.start.location
+  if (location.kind === "note-text") return `[data-docx-note-text="true"]`
+
   if (location.kind === "paragraph") {
-    return `[data-docx-paragraph-node-index="${location.nodeIndex}"]`
+    if (match.region === "header") {
+      return `[data-docx-paragraph-host="true"][data-docx-header-node-index="${location.nodeIndex}"]`
+    }
+    if (match.region === "footer") {
+      return `[data-docx-paragraph-host="true"][data-docx-footer-node-index="${location.nodeIndex}"]`
+    }
+    if (match.region === "footnote" || match.region === "endnote") {
+      return `[data-docx-paragraph-host="true"][data-docx-note-node-index="${location.nodeIndex}"]`
+    }
+    return `[data-docx-paragraph-host="true"][data-docx-paragraph-node-index="${location.nodeIndex}"]`
+  }
+
+  const paragraphSelector = [
+    `[data-docx-table-cell-paragraph-host="true"]`,
+    `[data-docx-table-row-index="${location.rowIndex}"]`,
+    `[data-docx-table-cell-index="${location.cellIndex}"]`,
+    `[data-docx-paragraph-index="${location.paragraphIndex}"]`,
+  ].join("")
+
+  if (location.kind === "nested-table-cell") {
+    const nestedTable = [
+      `[data-docx-table-host="true"]`,
+      `[data-docx-table-nesting-path="${cssAttributeValue(location.nestingPath)}"]`,
+    ].join("")
+    if (match.region === "header") {
+      return `[data-docx-table-host="true"][data-docx-header-node-index="${location.tableIndex}"] ${nestedTable} ${paragraphSelector}`
+    }
+    if (match.region === "footer") {
+      return `[data-docx-table-host="true"][data-docx-footer-node-index="${location.tableIndex}"] ${nestedTable} ${paragraphSelector}`
+    }
+    if (match.region === "footnote" || match.region === "endnote") {
+      return `[data-docx-table-host="true"][data-docx-note-node-index="${location.tableIndex}"] ${nestedTable} ${paragraphSelector}`
+    }
+    return `[data-docx-table-host="true"][data-docx-table-index="${location.tableIndex}"] ${nestedTable} ${paragraphSelector}`
+  }
+
+  if (match.region === "header") {
+    return `[data-docx-table-host="true"][data-docx-header-node-index="${location.tableIndex}"] ${paragraphSelector}`
+  }
+  if (match.region === "footer") {
+    return `[data-docx-table-host="true"][data-docx-footer-node-index="${location.tableIndex}"] ${paragraphSelector}`
+  }
+  if (match.region === "footnote" || match.region === "endnote") {
+    return `[data-docx-table-host="true"][data-docx-note-node-index="${location.tableIndex}"] ${paragraphSelector}`
   }
   return [
     `[data-docx-table-cell-paragraph-host="true"]`,
@@ -742,6 +789,32 @@ function selectorForLocation(location: DocxTextRangeLocation): string {
     `[data-docx-table-cell-index="${location.cellIndex}"]`,
     `[data-docx-paragraph-index="${location.paragraphIndex}"]`,
   ].join("")
+}
+
+function cssAttributeValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, "\\\"")
+}
+
+/** Header/footer/note matches live in a story container; body matches do not. */
+function regionRootsForMatch(match: DocxSearchMatch): HTMLElement[] {
+  const root = surfaceRef.value
+  if (!root) return []
+  if (match.region === "body") return [root]
+
+  let selector: string
+  if (match.region === "header") {
+    selector = match.partName
+      ? `[data-docx-header-part-name="${cssAttributeValue(match.partName)}"]`
+      : `[data-docx-page-header="true"]`
+  } else if (match.region === "footer") {
+    selector = match.partName
+      ? `[data-docx-footer-part-name="${cssAttributeValue(match.partName)}"]`
+      : `[data-docx-page-footer="true"]`
+  } else {
+    selector = `[data-docx-notes-kind="${match.region}"]`
+    if (match.noteId !== undefined) selector += ` [data-docx-note-id="${match.noteId}"]`
+  }
+  return Array.from(root.querySelectorAll<HTMLElement>(selector))
 }
 
 function isExcludedTextElement(element: Element): boolean {
@@ -823,13 +896,15 @@ function rangeForHost(host: HTMLElement, match: DocxSearchMatch): Range | undefi
 }
 
 function rangesForMatch(match: DocxSearchMatch): Array<{ host: HTMLElement; range: Range }> {
-  const root = surfaceRef.value
-  if (!root) return []
-  const selector = selectorForLocation(match.range.start.location)
+  const roots = regionRootsForMatch(match)
+  if (!roots.length) return []
+  const selector = selectorForMatch(match)
   const ranges: Array<{ host: HTMLElement; range: Range }> = []
-  for (const host of root.querySelectorAll<HTMLElement>(selector)) {
-    const range = rangeForHost(host, match)
-    if (range) ranges.push({ host, range })
+  for (const root of roots) {
+    for (const host of root.querySelectorAll<HTMLElement>(selector)) {
+      const range = rangeForHost(host, match)
+      if (range) ranges.push({ host, range })
+    }
   }
   return ranges
 }
@@ -991,7 +1066,12 @@ async function activateSearchMatchInView(match: DocxSearchMatch, signal: AbortSi
     // The match lives on a virtualized page that is not mounted yet. Ask the
     // viewer to scroll it into range and retry on the next frame or as soon as
     // the visible page range changes.
-    viewerRootRef.value?.scrollToNode(match.nodeIndex, { behavior: "auto" })
+    if (match.region === "body") {
+      viewerRootRef.value?.scrollToNode(match.nodeIndex, { behavior: "auto" })
+    } else {
+      const pageIndex = viewerRootRef.value?.searchTargetPage(match)
+      if (pageIndex !== undefined) viewerRootRef.value?.scrollToPage(pageIndex)
+    }
     await nextTick()
     await waitForActivationRetry(signal)
   }
@@ -1000,9 +1080,15 @@ async function activateSearchMatchInView(match: DocxSearchMatch, signal: AbortSi
   )
 }
 
+function ignoreSearchRefreshFailure(error: unknown): void {
+  // A refresh superseded by a newer edit/query is expected; genuine failures
+  // are already published through `searchStateChange`.
+  if (error instanceof Error && error.name === "AbortError") return
+}
+
 const surfaceSearch = createSurfaceSearchSession<DocxSearchMatch>({
-  search(query, { signal }) {
-    return findDocxSearchMatches(props.model, query, signal)
+  search(query, { signal }, options) {
+    return findDocxSearchMatches(props.model, query, signal, options)
   },
   activate(match, _index, { signal }) {
     return activateSearchMatchInView(match, signal)
@@ -1191,7 +1277,14 @@ watch(() => props.model, () => {
   gestureToken += 1
   pendingAnchor = undefined
   pendingZoom = undefined
-  surfaceSearch.clearSearch()
+  // Every edit replaces the model object (clone-on-write). Re-run the active
+  // query against the new model instead of dropping results and highlights;
+  // the session keeps the active result index where possible.
+  if (surfaceSearch.getSearchState().query) {
+    void surfaceSearch.refreshSearch().catch(ignoreSearchRefreshFailure)
+  } else {
+    surfaceSearch.clearSearch()
+  }
 }, { immediate: true })
 
 watch(() => props.documentId, () => emit("documentRevisionChange", documentRevision.value))
@@ -1234,7 +1327,9 @@ defineExpose({
   scrollToNode(nodeIndex: number, options?: ScrollToOptions): void {
     viewerRootRef.value?.scrollToNode(nodeIndex, options)
   },
-  search: (query: string): Promise<DocxSearchState> => surfaceSearch.search(query),
+  search: (query: string, options?: DocxSearchOptions): Promise<DocxSearchState> =>
+    surfaceSearch.search(query, options),
+  refreshSearch: (): Promise<DocxSearchState> => surfaceSearch.refreshSearch(),
   activateSearchMatch: (index: number) => surfaceSearch.activateSearchMatch(index),
   searchNext: () => surfaceSearch.searchNext(),
   searchPrevious: () => surfaceSearch.searchPrevious(),

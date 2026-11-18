@@ -250,7 +250,7 @@ test("copy selection escapes the text flavour and reports the clipboard outcome"
   }
 });
 
-function searchFixture() {
+function searchFixture(values = ["Needle", "needle"]) {
   const sheet = {
     name: "Data",
     workbookSheetIndex: 0,
@@ -262,7 +262,6 @@ function searchFixture() {
     visibleCols: [0, 1],
     mergedRegions: [],
   };
-  const values = ["Needle", "needle"];
   const worksheet = {
     getFormattedValueAt: (_row, col) => values[col] ?? "",
     getFormulaAt: () => "",
@@ -304,6 +303,34 @@ test("useXlsxSearch keeps the case-insensitive default and honours caseSensitive
   const exactUpper = await sensitiveSearch.search("Needle");
   assert.deepEqual(exactUpper.matches.map((match) => match.text), ["Needle"]);
   sensitiveScope.stop();
+});
+
+test("useXlsxSearch accepts per-call whole-word and regular-expression options", async () => {
+  const words = searchFixture(["cat", "category"]);
+  const wordScope = vue.effectScope();
+  const wordSearch = wordScope.run(() => useXlsxSearch(() => words.controller));
+  const loose = await wordSearch.search("cat");
+  assert.equal(loose.matches.length, 2);
+  const whole = await wordSearch.search("cat", { wholeWord: true });
+  assert.deepEqual(whole.matches.map((match) => match.text), ["cat"]);
+  assert.equal(whole.matches[0].address, "A1");
+  wordScope.stop();
+
+  const versions = searchFixture(["1.2.3", "Version 4.5.6"]);
+  const versionScope = vue.effectScope();
+  const versionSearch = versionScope.run(() => useXlsxSearch(() => versions.controller));
+  const regex = await versionSearch.search("\\d+\\.\\d+\\.\\d+", { regex: true });
+  assert.deepEqual(regex.matches.map((match) => match.text), ["1.2.3", "Version 4.5.6"]);
+  const exact = await versionSearch.search("VERSION\\s+4", { regex: true, caseSensitive: true });
+  assert.equal(exact.matches.length, 0);
+  const insensitive = await versionSearch.search("VERSION\\s+4", { regex: true });
+  assert.equal(insensitive.matches.length, 1);
+  assert.equal(insensitive.matches[0].address, "B1");
+  await assert.rejects(
+    versionSearch.search("(", { regex: true }),
+    /Invalid regular expression/u,
+  );
+  versionScope.stop();
 });
 
 test("useXlsxSearch drops stale matches when the workbook revision changes", async () => {

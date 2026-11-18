@@ -258,3 +258,30 @@ test("DocxViewerToolbar keeps a focused page draft while currentPage changes", a
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });
+
+test("DocxViewerToolbar exposes and toggles the search options", async () => {
+  const mounted = await mount(DocxViewer, { model: styledModel() });
+  const options = [
+    ["docx-search-case-sensitive", "Match case"],
+    ["docx-search-whole-word", "Match whole word"],
+    ["docx-search-regex", "Use regular expression"],
+  ];
+  for (const [testId, label] of options) {
+    const button = findByTestId(mounted.root, testId);
+    assert.ok(button, `${testId} must render`);
+    assert.equal(button.props["aria-pressed"], false);
+    assert.equal(button.props["aria-label"], label);
+  }
+
+  const caseSensitive = findByTestId(mounted.root, "docx-search-case-sensitive");
+  caseSensitive.props.onClick();
+  await vue.nextTick();
+  assert.equal(
+    findByTestId(mounted.root, "docx-search-case-sensitive").props["aria-pressed"],
+    true,
+    "clicking the option must update the viewer's search options",
+  );
+
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});

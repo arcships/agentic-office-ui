@@ -135,7 +135,7 @@ function workerResult(request, marker) {
   };
 }
 
-test("DOCX surface search returns exact UTF-16 ranges for body and direct table paragraphs", () => {
+test("DOCX surface search returns exact UTF-16 ranges for body, direct and nested table paragraphs", () => {
   const paragraph = (text) => ({
     type: "paragraph",
     children: [{ type: "text", text }],
@@ -180,13 +180,22 @@ test("DOCX surface search returns exact UTF-16 ranges for body and direct table 
   assert.deepEqual(bodyMatches[0].range.start.location, { kind: "paragraph", nodeIndex: 0 });
 
   const tableMatches = vueDocx.findDocxSearchMatches(model, "a.b");
-  assert.equal(tableMatches.length, 2);
+  assert.equal(tableMatches.length, 3);
   assert.deepEqual(tableMatches[0].range.start.location, {
     kind: "table-cell",
     tableIndex: 1,
     rowIndex: 0,
     cellIndex: 0,
     paragraphIndex: 0,
+  });
+  assert.deepEqual(tableMatches[2].range.start.location, {
+    kind: "nested-table-cell",
+    tableIndex: 1,
+    path: [{ rowIndex: 0, cellIndex: 0, contentIndex: 1 }],
+    rowIndex: 0,
+    cellIndex: 0,
+    paragraphIndex: 0,
+    nestingPath: "0-0-1",
   });
   assert.equal(tableMatches.every((match) => match.nodeIndex === 1), true);
 });

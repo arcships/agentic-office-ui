@@ -3,6 +3,7 @@
     v-if="section && section.nodes.length > 0"
     ref="headerEl"
     data-docx-page-header="true"
+    :data-docx-header-part-name="section.partName"
     class="docx-page-header docx-page-section--header"
     :style="headerStyle"
   >

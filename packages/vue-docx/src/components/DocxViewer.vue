@@ -43,6 +43,9 @@
       :total-pages="totalPages"
       :zoom="zoomPercent"
       :search-query="searchQuery"
+      :search-case-sensitive="searchOptions.caseSensitive"
+      :search-whole-word="searchOptions.wholeWord"
+      :search-regex="searchOptions.regex"
       :search-result-count="searchState.matches.length"
       :search-result-index="searchState.activeIndex"
       @download="downloadFile"
@@ -51,6 +54,9 @@
       @toggle-tracked-changes="toggleTrackedChanges"
       @toggle-comments="toggleComments"
       @update:search-query="searchQuery = $event"
+      @update:search-case-sensitive="setSearchOption('caseSensitive', $event)"
+      @update:search-whole-word="setSearchOption('wholeWord', $event)"
+      @update:search-regex="setSearchOption('regex', $event)"
       @search-next="selectSearchResult(1)"
       @search-previous="selectSearchResult(-1)"
       @search-close="closeSearch"
@@ -144,7 +150,7 @@ import {
   DocxImportError,
   primeCommentAnchors,
 } from "@arcships/docx-core"
-import type { DocxSearchState } from "../composables/useDocxSearch"
+import type { DocxSearchOptions, DocxSearchState } from "../composables/useDocxSearch"
 import {
   DOCX_FILE_ACCEPT,
   isSupportedDocxFileName,
@@ -239,6 +245,11 @@ const minHeightStyle = computed(() => {
 const internalShowTrackedChanges = ref(props.defaultShowTrackedChanges)
 const internalShowComments = ref(props.defaultShowComments)
 const searchQuery = ref("")
+const searchOptions = ref<Required<DocxSearchOptions>>({
+  caseSensitive: false,
+  wholeWord: false,
+  regex: false,
+})
 const searchState = shallowRef<DocxSearchState>({
   status: "idle",
   query: "",
@@ -309,14 +320,20 @@ watch(() => props.defaultShowComments, (value) => {
 })
 
 watch(
-  [searchQuery, renderableModel],
-  async ([query, model], _previous, onCleanup) => {
+  [
+    searchQuery,
+    () => searchOptions.value.caseSensitive,
+    () => searchOptions.value.wholeWord,
+    () => searchOptions.value.regex,
+    () => Boolean(renderableModel.value),
+  ],
+  async ([query], _previous, onCleanup) => {
     let current = true
     onCleanup(() => { current = false })
     await nextTick()
     if (!current) return
     const surface = documentSurfaceRef.value
-    if (!surface || !model) {
+    if (!surface || !renderableModel.value) {
       searchState.value = { status: "idle", query: "", matches: [], activeIndex: -1 }
       return
     }
@@ -324,10 +341,17 @@ watch(
       surface.clearSearch()
       return
     }
-    void surface.search(query).catch(ignoreReplacedSearch)
+    // Model edits are refreshed by the surface itself (which keeps the active
+    // result); this watcher only restarts the search when the query/options
+    // change or the document first becomes available.
+    void surface.search(query, searchOptions.value).catch(ignoreReplacedSearch)
   },
   { flush: "post" },
 )
+
+function setSearchOption(key: keyof DocxSearchOptions, value: boolean): void {
+  searchOptions.value = { ...searchOptions.value, [key]: value }
+}
 
 function ignoreReplacedSearch(error: unknown): void {
   if (error instanceof Error && error.name === "AbortError") return

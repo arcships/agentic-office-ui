@@ -4,6 +4,7 @@
     class="docx-notes-section"
     :class="`docx-notes-section--${kind}`"
     :data-testid="kind === 'footnote' ? 'docx-footnotes' : 'docx-endnotes'"
+    :data-docx-notes-kind="kind"
     :aria-label="kind === 'footnote' ? m.docx.notes.footnote : m.docx.notes.endnote"
   >
     <div class="docx-notes-section__rule" />
@@ -21,6 +22,7 @@
               v-if="node.type === 'paragraph'"
               :paragraph="node"
               :paragraph-index="-(note.id * 1000 + nodeIndex + 1)"
+              :data-docx-note-node-index="nodeIndex"
               :editable="false"
               :document-theme="theme"
               :numbering-definitions="numberingDefinitions"
@@ -30,6 +32,7 @@
               v-else-if="node.type === 'table'"
               :table="node"
               :table-index="-(note.id * 1000 + nodeIndex + 1)"
+              :data-docx-note-node-index="nodeIndex"
               :editable="false"
               :document-theme="theme"
               :numbering-definitions="numberingDefinitions"
@@ -37,7 +40,7 @@
             />
           </template>
         </template>
-        <span v-else>{{ note.text }}</span>
+        <span v-else data-docx-note-text="true">{{ note.text }}</span>
       </div>
     </article>
   </section>

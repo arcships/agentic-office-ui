@@ -128,11 +128,16 @@ export type {
   OfficeDiagnostic,
   OfficeDiagnosticType,
 } from "./diagnostics";
-export { createSurfaceSearchSession } from "./surface-search";
+export {
+  createSurfaceSearchExpression,
+  createSurfaceSearchSession,
+  escapeSurfaceSearchPattern,
+} from "./surface-search";
 export type {
   SurfaceSearchAdapter,
   SurfaceSearchApi,
   SurfaceSearchError,
+  SurfaceSearchOptions,
   SurfaceSearchSession,
   SurfaceSearchState,
   SurfaceSearchStatus,

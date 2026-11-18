@@ -133,10 +133,20 @@ export {
 export { useDocxModel } from "./composables/useDocxModel"
 export {
   findDocxSearchMatches,
+  type DocxNestedTableStep,
+  type DocxSearchBoundary,
+  type DocxSearchLocation,
   type DocxSearchMatch,
+  type DocxSearchOptions,
+  type DocxSearchRange,
+  type DocxSearchRegion,
   type DocxSearchState,
   type DocxSearchStatus,
+  type ParagraphLocationInNestedTableCell,
+  type ParagraphLocationInNoteText,
 } from "./composables/useDocxSearch"
+export { findDocxSearchTargetPage } from "./composables/docx-search-page"
+export type { DocxSearchPageTarget } from "./composables/docx-search-page"
 
 export { useDocxPageThumbnails } from "./composables/useDocxPageThumbnails"
 /**

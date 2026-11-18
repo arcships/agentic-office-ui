@@ -3,6 +3,7 @@
     v-if="section && section.nodes.length > 0"
     ref="footerEl"
     data-docx-page-footer="true"
+    :data-docx-footer-part-name="section.partName"
     class="docx-page-footer docx-page-section--footer"
     :style="footerStyle"
   >
