@@ -1,5 +1,5 @@
 <template>
-  <div class="xlsx-sheettabs" :style="tabsStyle">
+  <div ref="stripRef" class="xlsx-sheettabs" :style="tabsStyle">
     <button
       type="button"
       class="xlsx-sheettabs__nav-btn"
@@ -10,7 +10,12 @@
     >
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6" /></svg>
     </button>
-    <div class="xlsx-sheettabs__list">
+    <div
+      class="xlsx-sheettabs__list"
+      role="tablist"
+      aria-orientation="horizontal"
+      :aria-label="m.xlsx.sheetTabs.tabListLabel"
+    >
       <div
         v-for="(tab, index) in controller.tabs"
         :key="tab.id ?? index"
@@ -27,6 +32,7 @@
         @drop="onTabDrop(index, $event)"
         @dragend="cancelDrag"
         @focusin="onTabFocus(index)"
+        @focusout="onTabFocusOut(index)"
         @keydown="onTabDragKeydown"
         @mouseenter="onTabHover(index, $event)"
         @mouseleave="onTabLeave"
@@ -60,12 +66,16 @@
         />
         <button
           v-else
+          :ref="(el) => setTabButtonRef(index, el)"
+          :id="tabDomId(index)"
           class="xlsx-sheettabs__tab"
           data-testid="xlsx-sheet-tab"
           :data-sheet-name="tab.name"
           :data-visibility="tab.kind === 'sheet' ? tab.visibility ?? 'visible' : undefined"
           role="tab"
           :aria-selected="index === activeTabIndex"
+          :aria-controls="panelId"
+          :tabindex="tabStopIndex(index)"
           :class="{
             'xlsx-sheettabs__tab--active': index === activeTabIndex,
             'xlsx-sheettabs__tab--hidden': tab.kind === 'sheet' && tab.visibility === 'hidden',
@@ -253,11 +263,14 @@ import type {
 import { XLSX_MAX_SHEET_NAME_LENGTH } from "@arcships/xlsx-core";
 import { useXlsxViewerThumbnails } from "../composables/useXlsxViewerThumbnails";
 import { useXlsxMessages } from "../i18n";
+import { nextXlsxDomId } from "./dom-ids";
 
 const props = defineProps<{
   controller: XlsxViewerController;
   isDark?: boolean;
   readOnly?: boolean;
+  /** DOM id of the worksheet panel this tab strip controls, used by `aria-controls`. */
+  panelId?: string;
   thumbnailOptions?: UseXlsxViewerThumbnailsOptions;
 }>();
 
@@ -272,6 +285,13 @@ const canMoveSheets = computed(() => canRenameSheets.value && props.controller.t
 const m = useXlsxMessages();
 const canRemoveActiveSheet = computed(() => Boolean(props.controller.activeSheet) && props.controller.sheets.length > 1);
 const maxSheetNameLength = XLSX_MAX_SHEET_NAME_LENGTH;
+
+// Accessibility state. `focusedTabIndex` is the roving tab stop; `null` means
+// the strip does not own focus, so the active tab is the tab stop instead.
+const stripRef = ref<HTMLElement | null>(null);
+const focusedTabIndex = ref<number | null>(null);
+const tabButtonRefs = ref<Map<number, HTMLElement>>(new Map());
+const tabIdPrefix = nextXlsxDomId("xlsx-sheet-tab");
 
 const { prefetchThumbnails, thumbnails: thumbnailComputedRaw } = useXlsxViewerThumbnails(
   () => props.controller,
@@ -405,9 +425,68 @@ function onTabHover(index: number, event: MouseEvent) {
   });
 }
 
+function setTabButtonRef(index: number, el: unknown) {
+  const element = el as HTMLElement | null;
+  if (element) {
+    tabButtonRefs.value.set(index, element);
+  } else {
+    tabButtonRefs.value.delete(index);
+  }
+}
+
+function tabDomId(index: number): string {
+  return `${tabIdPrefix}-${index}`;
+}
+
+/** Roving tabindex: one tab is in the page tab order, the one holding focus. */
+function tabStopIndex(index: number): number {
+  const tabCount = props.controller.tabs.length;
+  const stop = focusedTabIndex.value ?? activeTabIndex.value;
+  const normalized = stop >= 0 && stop < tabCount ? stop : 0;
+  return index === normalized ? 0 : -1;
+}
+
+function focusTab(index: number) {
+  tabButtonRefs.value.get(index)?.focus?.();
+}
+
+function activeElementIsInStrip(): boolean {
+  // Only a tab that received focus arms the follow-focus rule; the prev/next
+  // arrow buttons live in the same strip but must keep their own focus.
+  if (focusedTabIndex.value === null) return false;
+  const root = stripRef.value;
+  if (!root || typeof root.contains !== "function") return true;
+  const active = typeof document !== "undefined" ? document.activeElement : null;
+  return !active || root.contains(active);
+}
+
+/**
+ * After a switch, the roving tab stop follows the newly active tab. Focus only
+ * moves when the strip already owns it — Ctrl+PageDown from the grid must not
+ * pull keyboard focus out of the sheet.
+ */
+function syncFocusWithActiveTab(index: number) {
+  if (!activeElementIsInStrip()) return;
+  focusedTabIndex.value = index;
+  focusTab(index);
+}
+
+/** Scroll only the strip: `nearest` on both axes keeps the page and grid still. */
+function scrollTabIntoView(index: number) {
+  if (index < 0) return;
+  tabWrapperRefs.value.get(index)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+}
+
 function onTabFocus(index: number) {
+  focusedTabIndex.value = index;
   // Keyboard users reach the same preview; warm it without opening the popup.
   scheduleHoverPrefetch(index);
+}
+
+function onTabFocusOut(index: number) {
+  // A focusin on the next tab arrives right after this focusout and restores
+  // the roving stop; focus moving to the strip arrows leaves it cleared.
+  if (focusedTabIndex.value === index) focusedTabIndex.value = null;
 }
 
 function onTabLeave() {
@@ -631,18 +710,55 @@ function onTabContextMenu(index: number, event: MouseEvent) {
 
 function onTabKeydown(index: number, tab: XlsxWorkbookTab, event: KeyboardEvent) {
   // Keyboard users reach the same menu with the ContextMenu key or Shift+F10.
-  if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) {
+  if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+    if (!canRenameSheets.value || tab.kind !== "sheet") {
+      return;
+    }
+    event.preventDefault();
+    const rect = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect?.();
+    props.controller.setActiveTabIndex(index);
+    unhideMenuOpen.value = false;
+    visibilityError.value = null;
+    tabMenu.value = { tabId: tab.id, x: rect?.left ?? 0, y: rect?.bottom ?? 0 };
     return;
   }
-  if (!canRenameSheets.value || tab.kind !== "sheet") {
-    return;
+
+  // Arrow keys move the roving focus without changing the sheet; Enter/Space
+  // commit the choice. Modifier combinations stay with the browser.
+  if (event.altKey || event.ctrlKey || event.metaKey) return;
+  const tabCount = props.controller.tabs.length;
+  if (tabCount === 0) return;
+
+  let targetIndex: number | null = null;
+  switch (event.key) {
+    case "ArrowLeft":
+      targetIndex = index === 0 ? tabCount - 1 : index - 1;
+      break;
+    case "ArrowRight":
+      targetIndex = index === tabCount - 1 ? 0 : index + 1;
+      break;
+    case "Home":
+      targetIndex = 0;
+      break;
+    case "End":
+      targetIndex = tabCount - 1;
+      break;
+    case "Enter":
+    case " ":
+    case "Spacebar":
+    case "Space":
+      event.preventDefault();
+      focusedTabIndex.value = index;
+      props.controller.setActiveTabIndex(index);
+      focusTab(index);
+      return;
+    default:
+      return;
   }
+
   event.preventDefault();
-  const rect = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect?.();
-  props.controller.setActiveTabIndex(index);
-  unhideMenuOpen.value = false;
-  visibilityError.value = null;
-  tabMenu.value = { tabId: tab.id, x: rect?.left ?? 0, y: rect?.bottom ?? 0 };
+  focusedTabIndex.value = targetIndex;
+  focusTab(targetIndex);
 }
 
 function closeTabMenu() {
@@ -841,6 +957,16 @@ const tabMenuStyle = computed<CSSProperties>(() => ({
   zIndex: 9999,
 }));
 
+// A switch can come from the strip, the prev/next arrows, the controller, or a
+// restored workbook. Keep the active tab visible inside the strip and keep the
+// roving tab stop on it without stealing focus from the grid.
+watch(activeTabIndex, (index) => {
+  void nextTick(() => {
+    scrollTabIntoView(index);
+    syncFocusWithActiveTab(index);
+  });
+}, { immediate: true });
+
 // A sheet added or removed under the editor must not leave it pointing at a
 // different tab, and a rebuilt tab strip closes a stale context menu.
 watch(renamingTabIndex, (index) => {
@@ -877,6 +1003,7 @@ onUnmounted(() => {
   flex: 1;
   gap: 2px;
   overflow-x: auto;
+  scroll-behavior: smooth;
 }
 
 .xlsx-sheettabs__tab-wrapper {

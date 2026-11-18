@@ -616,6 +616,12 @@ test("dragging a tab past another tab reorders the strip and shows an insertion 
     assert.deepEqual(controller.tabs.map((tab) => tab.name), ["P&L", "Assumptions", "Notes"]);
     assert.equal(controller.activeTabIndex, 1);
     assert.equal(controller.activeTab?.name, "Assumptions");
+    const activeTab = tabButton(root, "Assumptions");
+    assert.equal(activeTab.props["aria-selected"], true, "the moved tab is marked selected");
+    assert.equal(activeTab.props["data-visibility"], "visible");
+    assert.match(activeTab.props.class, /xlsx-sheettabs__tab--active/);
+    assert.equal(activeTab.props.tabindex, 0, "the active tab is the roving tab stop");
+    assert.equal(tabButton(root, "P&L").props["aria-selected"], false);
   } finally {
     app.unmount();
   }

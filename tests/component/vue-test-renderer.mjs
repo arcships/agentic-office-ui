@@ -40,6 +40,12 @@ function createHostNode(type, text = "") {
     focus() {},
     blur() {},
     select() {},
+    // Scroll APIs used by components that keep the active tab in view. Tests
+    // can inspect the recorded calls or replace the method with their own spy.
+    scrollIntoViewCalls: [],
+    scrollIntoView(options) {
+      this.scrollIntoViewCalls.push(options);
+    },
   };
 }
 

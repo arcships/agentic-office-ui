@@ -139,6 +139,7 @@
       <template v-else>
         <XlsxGrid
           ref="gridRef"
+          :id="gridId"
           :controller="controller"
           :get-cell-style="getCellStyle"
           :is-dark="isDark ?? false"
@@ -205,6 +206,7 @@
       :controller="controller"
       :is-dark="isDark ?? false"
       :read-only="effectiveReadOnly"
+      :panel-id="controller.activeSheet ? gridId : undefined"
     />
   </div>
 </template>
@@ -235,6 +237,7 @@ import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearc
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { provideXlsxMessages } from "../i18n";
 import { localizeXlsxLoadError } from "../errors";
+import { nextXlsxDomId } from "./dom-ids";
 
 const props = withDefaults(
   defineProps<{
@@ -372,6 +375,8 @@ const contextMenuRef = ref<{
 } | null>(null);
 const gridViewport = ref({ height: 0, scrollLeft: 0, scrollTop: 0, width: 0 });
 const authoringKind = ref<XlsxAuthoringDialogKind | null>(null);
+// The tab strip points `aria-controls` at this id; both are unique per viewer.
+const gridId = nextXlsxDomId("xlsx-grid");
 
 function openAuthoring(kind: XlsxAuthoringDialogKind) {
   authoringKind.value = kind;
@@ -461,6 +466,19 @@ watch(
   { immediate: true },
 );
 
+/** True while the inline cell editor owns the keyboard. */
+function isCellEditorOpen(event: KeyboardEvent): boolean {
+  const grid = gridRef.value as (GridInstance & { isEditingCell?: boolean }) | null;
+  if (grid?.isEditingCell === true) return true;
+  const target = event.target as { closest?: (selector: string) => unknown } | null;
+  if (!target || typeof target.closest !== "function") return false;
+  try {
+    return Boolean(target.closest('[data-testid="xlsx-cell-editor"]'));
+  } catch {
+    return false;
+  }
+}
+
 function onKeydown(event: KeyboardEvent) {
   if (event.key === "Escape" && props.controller.isPrintPreviewOpen) {
     event.preventDefault();
@@ -477,7 +495,23 @@ function onKeydown(event: KeyboardEvent) {
     return;
   }
 
-  if (!props.controller || effectiveReadOnly.value) return;
+  if (!props.controller) return;
+
+  // Excel's sheet-switching shortcut. It is a navigation key, so read-only
+  // viewers keep it, but an open cell editor owns every key including this one.
+  if ((event.ctrlKey || event.metaKey) && (event.key === "PageUp" || event.key === "PageDown")) {
+    const tabs = props.controller.tabs ?? [];
+    if (tabs.length === 0 || isCellEditorOpen(event)) return;
+    event.preventDefault();
+    const offset = event.key === "PageDown" ? 1 : -1;
+    const current = props.controller.activeTabIndex;
+    const next = Math.min(Math.max(current + offset, 0), tabs.length - 1);
+    if (next !== current) props.controller.setActiveTabIndex(next);
+    return;
+  }
+
+  if (effectiveReadOnly.value) return;
+  if (isCellEditorOpen(event)) return;
 
   if ((event.ctrlKey || event.metaKey) && event.key === "z") {
     event.preventDefault();

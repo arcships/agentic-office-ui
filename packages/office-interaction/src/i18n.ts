@@ -588,6 +588,7 @@ export interface OfficeXlsxMessages {
     unhideFailed: string
     hiddenTab: string
     noHiddenSheets: string
+    tabListLabel: string
   }
   contextMenu: {
     label: string
@@ -1604,6 +1605,7 @@ export const officeMessagesEn: OfficeMessages = {
       unhideFailed: "The sheet could not be unhidden.",
       hiddenTab: "Hidden sheet",
       noHiddenSheets: "No hidden sheets.",
+      tabListLabel: "Sheets",
     },
     contextMenu: {
       label: "Cell menu",
@@ -2566,6 +2568,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       unhideFailed: "无法取消隐藏该工作表。",
       hiddenTab: "隐藏的工作表",
       noHiddenSheets: "没有隐藏的工作表。",
+      tabListLabel: "工作表标签",
     },
     contextMenu: {
       label: "单元格菜单",
