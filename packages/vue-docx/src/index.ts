@@ -228,6 +228,30 @@ export type {
   UseDocxPageSetupResult,
 } from "./composables/useDocxPageSetup"
 
+/** Page layout modes and their row geometry, shared with custom surfaces. */
+export {
+  DOCX_VIEW_MODES,
+  docxPageAtPoint,
+  docxPageRows,
+  docxRowIndexAtOffset,
+  docxRowIndexForPage,
+  docxRowsInViewport,
+  docxSnapTopForRow,
+  docxSpreadStepPage,
+  isDocxSpreadMode,
+  normalizeDocxFitMode,
+  normalizeDocxViewMode,
+  resolveDocxViewLayout,
+} from "./composables/docx-view-mode"
+export type {
+  DocxFitMode,
+  DocxPageDimension,
+  DocxPageRowLayout,
+  DocxViewLayout,
+  DocxViewLayoutOptions,
+  DocxViewMode,
+} from "./composables/docx-view-mode"
+
 export { useDocxPageThumbnails } from "./composables/useDocxPageThumbnails"
 /**
  * @deprecated Since 0.2.0. Use `useDocxPageThumbnails`. Kept throughout 0.x;

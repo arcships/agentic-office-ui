@@ -31,6 +31,38 @@
         <span v-if="activeSlide?.hidden" class="pptx-viewer__hidden-badge">{{ m.pptx.viewer.hiddenSlide }}</span>
       </div>
 
+      <div class="pptx-viewer__toolbar-group pptx-viewer__view-modes" role="group" :aria-label="m.pptx.viewer.viewMode">
+        <button
+          type="button"
+          class="pptx-viewer__view-mode"
+          :class="{ 'pptx-viewer__view-mode--active': !isSorter }"
+          data-testid="pptx-view-mode-single"
+          :aria-label="m.pptx.viewer.viewModeSingle"
+          :title="m.pptx.viewer.viewModeSingle"
+          :aria-pressed="!isSorter"
+          :disabled="state !== 'ready'"
+          @click="setViewMode('single')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="1" /></svg>
+        </button>
+        <button
+          type="button"
+          class="pptx-viewer__view-mode"
+          :class="{ 'pptx-viewer__view-mode--active': isSorter }"
+          data-testid="pptx-view-mode-sorter"
+          :aria-label="m.pptx.viewer.viewModeSorter"
+          :title="m.pptx.viewer.viewModeSorter"
+          :aria-pressed="isSorter"
+          :disabled="state !== 'ready'"
+          @click="setViewMode('sorter')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="2" y="2.5" width="9" height="8" rx="1" /><rect x="13" y="2.5" width="9" height="8" rx="1" />
+            <rect x="2" y="13.5" width="9" height="8" rx="1" /><rect x="13" y="13.5" width="9" height="8" rx="1" />
+          </svg>
+        </button>
+      </div>
+
       <form v-if="showSearch" class="pptx-viewer__search" role="search" @submit.prevent="runSearch">
         <input
           ref="searchInputRef"
@@ -77,7 +109,7 @@
         :busy="state === 'loading'"
       />
       <aside
-        v-if="showSidebar && !isPresent && document"
+        v-if="showSidebar && !isPresent && !isSorter && document"
         ref="sidebarRef"
         class="pptx-viewer__sidebar"
         :aria-label="m.pptx.viewer.sidebar"
@@ -144,7 +176,7 @@
           ref="stageRef"
           class="pptx-viewer__stage"
           :style="stageStyle"
-          :aria-hidden="state !== 'ready'"
+          :aria-hidden="state !== 'ready' || isSorter"
           :zoom="zoom / 100"
           :enable-gesture-zoom="!isPresent"
           :locale="locale"
@@ -154,6 +186,51 @@
           @click="run(() => onStageClick($event))"
         />
       </main>
+
+      <div
+        v-if="sorterVisible"
+        ref="sorterRef"
+        class="pptx-viewer__sorter"
+        data-testid="pptx-sorter"
+        role="listbox"
+        :aria-label="m.pptx.viewer.sorter"
+        :style="{ '--pptx-sorter-item-height': `${sorterItemHeight}px` }"
+        @scroll.passive="onSorterScroll"
+      >
+        <div
+          class="pptx-viewer__sorter-spacer"
+          :style="{ height: `${sorterWindow.startRow * sorterItemHeight}px` }"
+          aria-hidden="true"
+        />
+        <div
+          class="pptx-viewer__sorter-grid"
+          :style="{ gridTemplateColumns: `repeat(${sorterColumns}, minmax(0, 1fr))` }"
+        >
+          <div
+            v-for="slide in sorterSlides"
+            :key="`${loadGeneration}:${thumbnailFontEpoch}:${slide.index}`"
+            class="pptx-viewer__sorter-item"
+            data-testid="pptx-sorter-item"
+            :data-slide-index="slide.index"
+            :data-active="slide.index === activeIndex ? 'true' : 'false'"
+            role="option"
+            :aria-selected="slide.index === activeIndex"
+          >
+            <PptxThumbnail
+              :session="requireSession()"
+              :slide="slide"
+              :active="slide.index === activeIndex"
+              :width="sorterThumbnailWidth"
+              @select="run(() => goTo($event))"
+            />
+          </div>
+        </div>
+        <div
+          class="pptx-viewer__sorter-spacer"
+          :style="{ height: `${Math.max(0, sorterRowCount - sorterWindow.endRow) * sorterItemHeight}px` }"
+          aria-hidden="true"
+        />
+      </div>
     </div>
 
     <footer v-if="isPresent && showPlaybackControls" class="pptx-viewer__playback-controls">
@@ -189,7 +266,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch } from "vue"
+import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, shallowRef, watch } from "vue"
 import {
   PptxPlaybackError,
   PptxPreviewError,
@@ -254,6 +331,10 @@ const props = withDefaults(defineProps<{
   showToolbar?: boolean
   showWarnings?: boolean
   thumbnailWidth?: number
+  /** Browse layout: one slide list (`single`) or a slide-sorter grid (`sorter`). */
+  viewMode?: "single" | "sorter" | null
+  /** Browse layout used while `viewMode` is uncontrolled. Defaults to single. */
+  defaultViewMode?: "single" | "sorter"
   locale?: OfficeLocale
   messages?: OfficeMessagesOverride
 }>(), {
@@ -279,6 +360,8 @@ const props = withDefaults(defineProps<{
   showToolbar: true,
   showWarnings: true,
   thumbnailWidth: 148,
+  viewMode: null,
+  defaultViewMode: "single" as "single" | "sorter",
   locale: "en",
   messages: undefined,
 })
@@ -301,6 +384,8 @@ const emit = defineEmits<{
   documentError: [error: PptxPreviewError]
   /** A supported presentation was dropped; the viewer opened it through `usePptxDocument`. */
   fileDrop: [file: File]
+  /** The browse layout toggle changed; hosts can drive the `viewMode` prop. */
+  "update:viewMode": [mode: "single" | "sorter"]
 }>()
 
 type ViewerState = "empty" | "waiting" | "loading" | "ready" | "cancelled" | "error"
@@ -411,6 +496,121 @@ const slideFailure = computed(() => pptxDocument.slideError.value)
 
 const isFullscreen = ref(false)
 const printPageStyle = ref<HTMLStyleElement | undefined>()
+
+// ── Browse layout (single slide list / slide sorter) ────────────────
+// The sorter reuses the sidebar thumbnails in a windowed grid. The stage stays
+// mounted (a hidden overlay covers it) because the document session renders
+// into it; that is also what keeps the current slide across mode switches.
+const SORTER_MIN_COLUMNS = 2
+const SORTER_MAX_COLUMNS = 5
+const SORTER_FALLBACK_COLUMNS = 3
+const SORTER_GRID_GAP_PX = 12
+const SORTER_OVERSCAN_ROWS = 1
+const SORTER_FALLBACK_VIEWPORT_PX = 640
+const internalViewMode = ref<"single" | "sorter">(
+  props.defaultViewMode === "sorter" ? "sorter" : "single",
+)
+const effectiveViewMode = computed<"single" | "sorter">(() =>
+  props.viewMode === "sorter" || props.viewMode === "single"
+    ? props.viewMode
+    : internalViewMode.value,
+)
+const isSorter = computed(() => !isPresent.value && effectiveViewMode.value === "sorter")
+const sorterVisible = computed(
+  () => isSorter.value && state.value === "ready" && document.value !== null,
+)
+
+const sorterRef = ref<HTMLElement | null>(null)
+const sorterScrollTop = ref(0)
+const sorterViewportHeight = ref(SORTER_FALLBACK_VIEWPORT_PX)
+const sorterViewportWidth = ref(0)
+const sorterItemWidth = computed(() => Math.max(120, props.thumbnailWidth))
+const sorterThumbnailWidth = computed(() => Math.max(96, sorterItemWidth.value - 16))
+const sorterItemHeight = computed(() => {
+  const slideshow = document.value
+  const ratio = slideshow && slideshow.width > 0 ? slideshow.height / slideshow.width : 9 / 16
+  return Math.max(THUMBNAIL_MIN_CANVAS_PX, Math.round(sorterThumbnailWidth.value * ratio)) + THUMBNAIL_CHROME_PX
+})
+const sorterColumns = computed(() => {
+  const width = sorterViewportWidth.value
+  if (!(width > 0)) return SORTER_FALLBACK_COLUMNS
+  const columns = Math.floor((width - 24 + SORTER_GRID_GAP_PX) / (sorterItemWidth.value + SORTER_GRID_GAP_PX))
+  return Math.min(SORTER_MAX_COLUMNS, Math.max(SORTER_MIN_COLUMNS, columns))
+})
+const sorterRowCount = computed(() => {
+  const count = document.value?.slides.length ?? 0
+  return Math.ceil(count / sorterColumns.value)
+})
+const sorterWindow = computed(() => {
+  const count = document.value?.slides.length ?? 0
+  const columns = sorterColumns.value
+  const rowHeight = sorterItemHeight.value
+  const firstVisible = Math.floor(Math.max(0, sorterScrollTop.value) / Math.max(1, rowHeight))
+  const visibleRows = Math.ceil(sorterViewportHeight.value / Math.max(1, rowHeight)) + 1
+  const startRow = Math.max(0, Math.min(firstVisible, Math.max(0, sorterRowCount.value - 1)) - SORTER_OVERSCAN_ROWS)
+  const endRow = Math.min(
+    sorterRowCount.value,
+    Math.max(startRow, firstVisible + visibleRows + SORTER_OVERSCAN_ROWS),
+  )
+  return {
+    start: startRow * columns,
+    end: Math.min(count, endRow * columns),
+    startRow,
+    endRow,
+  }
+})
+const sorterSlides = computed(() =>
+  document.value?.slides.slice(sorterWindow.value.start, sorterWindow.value.end) ?? [],
+)
+
+function measureSorter(): void {
+  const element = sorterRef.value
+  if (!element) return
+  const height = typeof element.clientHeight === "number" ? element.clientHeight : 0
+  if (height > 0) sorterViewportHeight.value = height
+  const width = typeof element.clientWidth === "number" ? element.clientWidth : 0
+  if (width > 0) sorterViewportWidth.value = width
+}
+
+function setSorterScrollTop(value: number): void {
+  sorterScrollTop.value = Math.max(0, value)
+  const element = sorterRef.value
+  if (element && typeof element.scrollTop === "number") element.scrollTop = sorterScrollTop.value
+}
+
+function revealSorterSlide(index: number): void {
+  const element = sorterRef.value
+  if (!element) return
+  measureSorter()
+  const columns = sorterColumns.value
+  const row = Math.floor(Math.max(0, index) / Math.max(1, columns))
+  const top = row * sorterItemHeight.value
+  const bottom = top + sorterItemHeight.value
+  const current = sorterScrollTop.value
+  const viewport = sorterViewportHeight.value
+  const next = top < current ? top : bottom > current + viewport ? bottom - viewport : current
+  if (next !== current) setSorterScrollTop(next)
+}
+
+function onSorterScroll(event: Event): void {
+  const target = event.target as { scrollTop?: unknown; clientHeight?: unknown; clientWidth?: unknown } | null
+  if (typeof target?.scrollTop === "number") sorterScrollTop.value = Math.max(0, target.scrollTop)
+  if (typeof target?.clientHeight === "number" && target.clientHeight > 0) {
+    sorterViewportHeight.value = target.clientHeight
+  }
+  if (typeof target?.clientWidth === "number" && target.clientWidth > 0) {
+    sorterViewportWidth.value = target.clientWidth
+  }
+}
+
+function setViewMode(mode: "single" | "sorter"): void {
+  const next = mode === "sorter" ? "sorter" : "single"
+  if (next === effectiveViewMode.value) return
+  if (props.viewMode == null) internalViewMode.value = next
+  emit("update:viewMode", next)
+  // Switching back to the single view must not lose the selected slide.
+  if (next === "sorter") void nextTick(() => revealSorterSlide(activeIndex.value))
+}
 
 function toCssLength(value: string | number | undefined): string | undefined {
   if (value === undefined) return undefined
@@ -696,7 +896,23 @@ watch(document, () => {
 watch(activeIndex, (index) => {
   measureSidebar()
   revealSidebarSlide(index)
+  if (isSorter.value) revealSorterSlide(index)
 }, { flush: "post" })
+
+// The sorter is a windowed grid; measure it once it is actually on screen so
+// the column count matches the width the host gave the viewer.
+watch(sorterVisible, (visible) => {
+  if (!visible) return
+  void nextTick(() => {
+    measureSorter()
+    revealSorterSlide(activeIndex.value)
+  })
+})
+
+watch(() => props.viewMode, (mode) => {
+  if (mode !== "single" && mode !== "sorter") return
+  if (mode === "sorter") void nextTick(() => revealSorterSlide(activeIndex.value))
+})
 
 watch(thumbnailItemHeight, () => {
   revealSidebarSlide(activeIndex.value)
@@ -931,7 +1147,8 @@ function handleBrowseScrollKey(event: KeyboardEvent): boolean {
   if (!BROWSE_SCROLL_KEYS.has(event.key) || isEditableViewerTarget(event.target)) return false
   const space = event.key === " " || event.key === "Space" || event.key === "Spacebar"
   if (space && isInteractiveViewerTarget(event.target)) return false
-  const container = stageScrollRef.value
+  // The sorter owns scrolling while it is open; the slide stage is hidden behind it.
+  const container = isSorter.value ? sorterRef.value : stageScrollRef.value
   if (!container) return false
   const viewport = typeof container.clientHeight === "number" ? container.clientHeight : 0
   if (event.key !== "Home" && event.key !== "End" && event.key !== "ArrowDown" && event.key !== "ArrowUp" && viewport <= 0) {
@@ -968,6 +1185,14 @@ function handleBrowseScrollKey(event: KeyboardEvent): boolean {
 }
 
 function setBrowseScrollTop(top: number): void {
+  if (isSorter.value) {
+    const element = sorterRef.value
+    const scrollHeight = typeof element?.scrollHeight === "number" ? element.scrollHeight : 0
+    const clientHeight = typeof element?.clientHeight === "number" ? element.clientHeight : 0
+    const max = Math.max(0, scrollHeight - clientHeight)
+    setSorterScrollTop(Math.min(max, Math.max(0, top)))
+    return
+  }
   const container = stageScrollRef.value
   if (!container) return
   const scrollHeight = typeof container.scrollHeight === "number" ? container.scrollHeight : 0
@@ -977,6 +1202,10 @@ function setBrowseScrollTop(top: number): void {
 }
 
 function scrollBrowseBy(delta: number): void {
+  if (isSorter.value) {
+    setBrowseScrollTop(sorterScrollTop.value + delta)
+    return
+  }
   const container = stageScrollRef.value
   if (!container) return
   const top = typeof container.scrollTop === "number" ? container.scrollTop : 0

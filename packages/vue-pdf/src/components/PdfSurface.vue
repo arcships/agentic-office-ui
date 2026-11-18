@@ -5,6 +5,7 @@
     :class="{ 'pdf-surface--dark': props.isDark }"
     :style="minHeightStyle"
     data-testid="pdf-surface"
+    :data-page-layout="pageLayoutMode"
     tabindex="0"
     @scroll.passive="onScroll"
     @contextmenu.prevent="onContextMenu"
@@ -27,6 +28,7 @@
         :key="`page-${pageIndex}`"
         class="pdf-surface__page-slot"
         :data-page-index="pageIndex"
+        :data-page-number="pageIndex + 1"
         :style="pageSlotStyle(pageIndex)"
       >
         <div v-if="pageSlots[pageIndex]?.state === 'loading'" class="pdf-surface__page-loading">
@@ -212,7 +214,6 @@ import {
 } from "../pdf/pdf-page-raster"
 import {
   DEFAULT_PAGE_OVERSCAN,
-  computePageOffsets,
   pageIndexAtPosition,
   pageRangeEquals,
   planPageRenders,
@@ -221,6 +222,14 @@ import {
   type PdfPageRange,
   type PdfPageSlotSnapshot,
 } from "../pdf/pdf-page-viewport"
+import {
+  normalizePdfPageLayout,
+  pdfPageAtPoint,
+  pdfPageIndexAtOffset,
+  pdfSnapTopForRow,
+  resolvePdfPageLayoutMetrics,
+  type PdfPageLayout,
+} from "../pdf/pdf-page-layout"
 import {
   hasUnmappedPdfText,
   joinSelectionTexts,
@@ -292,6 +301,12 @@ const props = withDefaults(
     enableGestureZoom?: boolean
     /** When true, zoom auto-fits the widest page to container width. */
     fitWidth?: boolean
+    /**
+     * Page layout: `continuous` scrolling, `single` page at a time, or
+     * two-page `spread`s. Page offsets and the rasterization window follow the
+     * mode, so switching modes keeps the page the reader is on.
+     */
+    pageLayout?: PdfPageLayout
     documentId?: string
     selectionMode?: OfficeSelectionMode
     emitReferenceCandidates?: boolean
@@ -325,6 +340,7 @@ const props = withDefaults(
     messages: undefined,
     maxBitmapBytes: DEFAULT_PDF_BITMAP_BUDGET_BYTES,
     maxPagePixels: DEFAULT_MAX_PAGE_RASTER_PIXELS,
+    pageLayout: "continuous",
   },
 )
 
@@ -699,6 +715,7 @@ const pdfLoadCoordinator = createLatestTaskCoordinator(pdfTaskSequence)
 // stays a correctly sized placeholder until scrolling reaches it, so zoom,
 // rotation and resize re-rasterize the visible window instead of every page.
 const PDF_PAGE_GAP_PX = 8
+const PDF_SPREAD_GAP_PX = 8
 const PDF_PAGES_PADDING_TOP_PX = 16
 const PDF_FALLBACK_PAGE_HEIGHT_PX = 200
 /** Pages kept rasterized above and below the viewport. */
@@ -707,10 +724,8 @@ const PDF_PAGE_OVERSCAN = DEFAULT_PAGE_OVERSCAN
 const PDF_SCROLL_RENDER_DEBOUNCE_MS = 100
 /** Debounce so a resize drag re-measures and re-renders once, not every frame. */
 const PDF_RESIZE_RENDER_DEBOUNCE_MS = 120
-const pageStackStyle = {
-  gap: `${PDF_PAGE_GAP_PX}px`,
-  paddingTop: `${PDF_PAGES_PADDING_TOP_PX}px`,
-}
+/** Ignore sub-pixel drift so single-page snapping cannot fight smooth scrolling. */
+const PDF_SINGLE_PAGE_SNAP_TOLERANCE_PX = 6
 
 const pageSlots = reactive<Record<number, PageSlot>>({})
 const viewportHeightPx = ref(0)
@@ -720,7 +735,6 @@ const viewportHeightPx = ref(0)
  * keeps the object URL and the cache only records its byte footprint.
  */
 let bitmapCache: PdfBitmapCache = createPdfBitmapCache({ maxBytes: props.maxBitmapBytes })
-let pageLayoutCache: { key: string; offsets: number[]; heights: number[] } | undefined
 let renderedRange: PdfPageRange = { first: 0, last: -1 }
 let visiblePageIndex = -1
 /** Last page reached with the keyboard; reset when a scroll changes the page. */
@@ -756,45 +770,48 @@ function markPageBitmapsStale(): void {
   visiblePageIndex = -1
 }
 
-function invalidatePageLayout(): void {
-  pageLayoutCache = undefined
-}
-
-function pageLayoutKey(): string {
-  const doc = renderDocument.value
-  if (!doc) return "none"
-  return `${doc.id}:${doc.pageCount}:${zoom.value}:${rotation.value}`
-}
-
 /** Bitmaps are only valid for the zoom/rotation/DPR they were rasterized at. */
 function pageRenderKey(): string {
   return `${zoom.value}:${rotation.value}:${renderDpr.value}`
 }
 
+const pageLayoutMode = computed<PdfPageLayout>(() => normalizePdfPageLayout(props.pageLayout))
+
 /**
- * Cached page offsets for the current document / zoom / rotation.
+ * Cached page offsets for the current document / zoom / rotation and mode.
  *
- * Slot widths and heights are inline styles and the stack gap/padding are part
- * of this component's own layout, so offsets are derived arithmetically once
- * per layout change instead of reading one DOM node per page on every scroll.
+ * Slot widths, heights and the grid gap are inline styles of this component,
+ * so offsets are derived arithmetically once per layout change instead of
+ * reading one DOM node per page on every scroll. A spread row gives both of
+ * its pages the same offset, which is what keeps page navigation sticky.
  */
+const pageLayoutMetrics = computed(() => {
+  const doc = renderDocument.value
+  const pageCount = doc?.pageCount ?? 0
+  return resolvePdfPageLayoutMetrics({
+    pageCount,
+    layout: pageLayoutMode.value,
+    pageSize: (pageIndex) => pageDisplaySize(pageIndex) ?? { width: 1, height: PDF_FALLBACK_PAGE_HEIGHT_PX },
+    rowGap: PDF_PAGE_GAP_PX,
+    columnGap: PDF_SPREAD_GAP_PX,
+    paddingTop: PDF_PAGES_PADDING_TOP_PX,
+    print: printMode.value,
+  })
+})
+
+const pageStackStyle = computed<Record<string, string>>(() => {
+  const metrics = pageLayoutMetrics.value
+  return {
+    gridTemplateColumns: metrics.columnWidths.map((width) => `${Math.max(0, width)}px`).join(" "),
+    columnGap: `${metrics.columnGapPx}px`,
+    rowGap: `${metrics.rowGapPx}px`,
+    paddingTop: `${metrics.paddingTopPx}px`,
+  }
+})
+
 function pageLayout(): { offsets: number[]; heights: number[] } {
-  const key = pageLayoutKey()
-  if (pageLayoutCache?.key === key) return pageLayoutCache
-  const pageCount = renderDocument.value?.pageCount ?? 0
-  const heights: number[] = []
-  for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
-    heights.push(pageDisplaySize(pageIndex)?.height ?? PDF_FALLBACK_PAGE_HEIGHT_PX)
-  }
-  pageLayoutCache = {
-    key,
-    offsets: computePageOffsets(heights, {
-      gap: PDF_PAGE_GAP_PX,
-      paddingTop: PDF_PAGES_PADDING_TOP_PX,
-    }),
-    heights,
-  }
-  return pageLayoutCache
+  const metrics = pageLayoutMetrics.value
+  return { offsets: metrics.pageOffsets, heights: metrics.pageHeights }
 }
 
 function measureViewportHeight(): void {
@@ -814,11 +831,21 @@ function currentRenderRange(): PdfPageRange {
   // print snapshot, so print mode replaces the lazy viewport window entirely.
   if (printMode.value) return { first: 0, last: doc.pageCount - 1 }
   const { offsets, heights } = pageLayout()
-  return visiblePageRange(offsets, heights, {
+  const range = visiblePageRange(offsets, heights, {
     scrollTop: scrollTopPx(),
     viewportHeight: viewportHeightPx.value,
-    overscanPages: PDF_PAGE_OVERSCAN,
+    overscanPages: pageLayoutMode.value === "single" ? 0 : PDF_PAGE_OVERSCAN,
   })
+  if (pageLayoutMode.value !== "single") return range
+  // Single-page mode keeps exactly one page rasterized: the page the reader
+  // has snapped to, never a neighbour that is only partly visible.
+  const pageIndex = pdfPageIndexAtOffset(
+    pageLayoutMetrics.value.rows,
+    scrollTopPx(),
+    viewportHeightPx.value,
+  )
+  if (pageIndex < 0 || pageIndex >= doc.pageCount) return range
+  return { first: pageIndex, last: pageIndex }
 }
 
 /** Revoke a slot's bitmap and drop it back to a placeholder. */
@@ -1035,7 +1062,6 @@ async function releaseDocument(): Promise<void> {
   }
   bitmapCache.clear()
   for (const key of Object.keys(pageSlots)) delete pageSlots[Number(key)]
-  invalidatePageLayout()
   renderedRange = { first: 0, last: -1 }
   visiblePageIndex = -1
   const doc = renderDocument.value
@@ -1188,8 +1214,7 @@ async function load(): Promise<void> {
     initPageSlots()
     emit("document-load-success", openedDocument.pageCount)
     loading.value = false
-    invalidatePageLayout()
-    measureViewportHeight()
+      measureViewportHeight()
     scheduleVisibleRender(0)
     prefetchPageGeometry(0)
     prefetchPageAnnotations(0)
@@ -1223,7 +1248,6 @@ watch([zoom, rotation, renderDpr], () => {
   // Bitmaps cached outside the window cannot be reused at the new scale and are
   // released, so the cache never holds pixels from two scales at once.
   markPageBitmapsStale()
-  invalidatePageLayout()
   scheduleVisibleRender(0)
 })
 watch([renderDocument, rotation], syncPrintPageSize, { immediate: true })
@@ -1261,9 +1285,15 @@ function pageDisplaySize(pageIndex: number): { width: number; height: number } |
 function pageSlotStyle(pageIndex: number): Record<string, string> | undefined {
   const size = pageDisplaySize(pageIndex)
   if (!size) return undefined
+  const metrics = pageLayoutMetrics.value
+  const column = metrics.pageGridColumns[pageIndex] ?? 1
+  const row = metrics.pageGridRows[pageIndex] ?? pageIndex + 1
   return {
     width: `${size.width}px`,
     height: `${size.height}px`,
+    gridRow: String(row),
+    // A lone page in a spread spans both columns so it stays centered.
+    gridColumn: column === 0 ? "1 / -1" : String(column),
   }
 }
 
@@ -2213,12 +2243,11 @@ function flushScrollFrame(): void {
   // A container without a ResizeObserver keeps its mount-time height; re-read it
   // once there is no cached value instead of on every frame.
   if (viewportHeightPx.value <= 0) measureViewportHeight()
-  const { offsets, heights } = pageLayout()
-  const pageIndex = pageIndexAtPosition(
-    offsets,
-    heights,
-    scrollTopPx() + viewportHeightPx.value / 2,
-  )
+  // The page under the viewport centre is the page single-page mode snaps to,
+  // so it is read before snapping and published even while the browser settles
+  // on the snapped offset.
+  const pageIndex = currentVisiblePageIndex()
+  snapSinglePage()
   if (pageIndex !== visiblePageIndex) {
     visiblePageIndex = pageIndex
     keyPageIndex = -1
@@ -2232,13 +2261,53 @@ function flushScrollFrame(): void {
   }
 }
 
+/** Page (or spread's left page) the reader is looking at. */
+function currentVisiblePageIndex(): number {
+  if (pageLayoutMode.value === "spread") {
+    return pdfPageIndexAtOffset(
+      pageLayoutMetrics.value.rows,
+      scrollTopPx(),
+      viewportHeightPx.value,
+    )
+  }
+  const { offsets, heights } = pageLayout()
+  return pageIndexAtPosition(offsets, heights, scrollTopPx() + viewportHeightPx.value / 2)
+}
+
+/**
+ * Snap the scroll offset to the nearest page in `single` mode.
+ *
+ * Returns true when the offset moved, so the caller can wait for the next
+ * scroll event instead of publishing a page the reader is leaving.
+ */
+function snapSinglePage(): void {
+  if (printMode.value || pageLayoutMode.value !== "single") return
+  const el = scrollRef.value
+  if (!el) return
+  const top = scrollTopPx()
+  const metrics = pageLayoutMetrics.value
+  const target = pdfSnapTopForRow(metrics.rows, top, viewportHeightPx.value)
+  if (target === undefined) return
+  const maxScroll = Math.max(0, metrics.totalHeightPx - viewportHeightPx.value)
+  const clamped = Math.min(Math.max(0, target), maxScroll)
+  if (Math.abs(top - clamped) <= PDF_SINGLE_PAGE_SNAP_TOLERANCE_PX) return
+  if (typeof el.scrollTo === "function") el.scrollTo({ top: clamped, behavior: "auto" })
+  else el.scrollTop = clamped
+}
+
 function emitContextMenuAt(clientX: number, clientY: number): void {
   const el = scrollRef.value
   if (!el || !renderDocument.value) return
   const rect = el.getBoundingClientRect()
   const clickY = clientY - rect.top + el.scrollTop
-  const { offsets, heights } = pageLayout()
-  const pageIndex = pageIndexAtPosition(offsets, heights, clickY)
+  const metrics = pageLayoutMetrics.value
+  // A spread resolves the left/right page by x; the other modes ignore x.
+  const contentWidth = Math.max(el.clientWidth ?? 0, metrics.maxRowWidthPx + PDF_PAGES_PADDING_TOP_PX)
+  const pageIndex = pdfPageAtPoint(metrics.rows, {
+    x: clientX - rect.left + (el.scrollLeft ?? 0),
+    y: clickY,
+    contentWidth,
+  }) ?? 0
   emit("contextMenu", {
     pageIndex,
     clientX,
@@ -2449,6 +2518,15 @@ function scrollToPage(pageIndex: number): void {
   scheduleVisibleRender()
 }
 
+// Switching page layout keeps the reader on the same page. A spread shifts the
+// row offsets, so the scroll position is realigned with the page that was
+// current before the switch instead of keeping the raw offset.
+watch(pageLayoutMode, (next, previous) => {
+  if (next === previous) return
+  const pageIndex = visiblePageIndex >= 0 ? visiblePageIndex : 0
+  void nextTick(() => scrollToPage(pageIndex))
+})
+
 function onSurfaceEscape(event?: KeyboardEvent): void {
   if (event?.defaultPrevented) return
   clearSelection()
@@ -2631,9 +2709,12 @@ onBeforeUnmount(async () => {
   padding: 16px; color: #ef4444; font-size: 13px;
 }
 .pdf-surface__pages {
-  display: flex; flex-direction: column; align-items: center;
-  /* Vertical gap and top padding are bound inline from PDF_PAGE_GAP_PX /
-     PDF_PAGES_PADDING_TOP_PX so the cached page offsets cannot drift. */
+  display: grid;
+  justify-content: center;
+  justify-items: center;
+  align-items: start;
+  /* Column template, gap and top padding are bound inline from the page layout
+     metrics so the cached offsets cannot drift from the painted grid. */
   padding: 0 8px 16px;
 }
 .pdf-surface__page-slot {

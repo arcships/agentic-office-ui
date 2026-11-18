@@ -40,8 +40,26 @@ import "@arcships/vue-docx/style.css"
 | `revisionDisplay` | `"inline" \| "balloons" \| "none" \| null` | `null` | 受控选择修订显示方式；`null` 跟随内部状态 |
 | `defaultRevisionDisplay` | `"inline" \| "balloons" \| "none"` | `"balloons"` | 未受控时的初始修订显示方式 |
 | `showComments` | `boolean \| null` | `null` | 受控显示批注 |
+| `viewMode` | `"continuous" \| "single" \| "spread" \| null` | `null` | 受控页面布局；`null` 跟随内部状态 |
+| `defaultViewMode` | `"continuous" \| "single" \| "spread"` | `"continuous"` | 未受控时的初始页面布局 |
+| `fitMode` | `"width" \| "page" \| null` | `null` | 受控适配方式（适应宽度/适应整页）；`null` 跟随内部状态 |
+| `defaultFitMode` | `"none" \| "width" \| "page"` | `"none"` | 未受控时的初始适配方式 |
 
-主要事件为 `load-start`、`load-success`、`load-error`、`file-selected`、`update:isDark`、`update:showTrackedChanges`、`update:revisionDisplay` 和 `update:showComments`。
+主要事件为 `load-start`、`load-success`、`load-error`、`file-selected`、`update:isDark`、`update:showTrackedChanges`、`update:revisionDisplay`、`update:showComments`、`update:viewMode` 和 `update:fitMode`。
+
+### 页面布局与缩放
+
+工具栏提供三个页面布局按钮和两个适配按钮（`data-testid` 依次为 `docx-view-mode-continuous`、`docx-view-mode-single`、`docx-view-mode-spread`、`docx-fit-width`、`docx-fit-page`），也都可以由属性控制：
+
+- `continuous`（默认）：连续纵向滚动，一页一行，就是原来的行为。
+- `single`：一次只挂载一页；滚动停止后自动吸附到最近的页边界，翻页可用工具栏页码、`PageUp`/`PageDown`、`Home`/`End` 或缩略图。
+- `spread`：两页并排，按 (1,2)、(3,4) 分组；行高取两页中较高的一页，页数落单时最后一页居中占满整个跨页宽度。每页保留自己的页码（`data-docx-page-number`）。
+
+三种模式共用同一套滚动坐标（页面偏移、分页锚点、书签和搜索定位都不变），所以切换模式会停留在当前页，选择和光标也不重置；`DocxViewer` 在布局变化后按当前页重新定位滚动位置。
+
+`fitWidth` 保留为兼容入口；`fitMode="width"` 等价，`fitMode="page"` 同时受页面高度约束，适合单页或双页阅读。选择具体缩放比例或捏合缩放会把模式切回 `none`，由缩放百分比接管。
+
+自建表面用 `DocxDocumentSurface` 的 `viewMode`/`fitMode` 属性得到同样行为；需要自己排版时使用根入口导出的纯函数 `resolveDocxViewLayout()`、`docxPageRows()`、`docxRowIndexAtOffset()`、`docxSnapTopForRow()`、`docxPageAtPoint()`、`docxRowsInViewport()`、`normalizeDocxViewMode()`、`normalizeDocxFitMode()`、`docxSpreadStepPage()`、`isDocxSpreadMode()` 和 `DOCX_VIEW_MODES`，类型为 `DocxViewMode`、`DocxFitMode`、`DocxViewLayout`、`DocxPageRowLayout`、`DocxViewLayoutOptions`、`DocxPageDimension`。`DocxViewerRoot` 根元素暴露 `data-docx-view-mode`、`data-docx-fit-mode`，每个页容器暴露 `data-docx-page-index`、`data-docx-page-number` 和 `data-docx-page-row-index`。
 
 ### 拖放导入
 

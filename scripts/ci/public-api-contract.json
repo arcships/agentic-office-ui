@@ -132,8 +132,8 @@
         "notifyDocxViewerPageSurfaceListeners"
       ],
       "rootDeclarationFingerprint": {
-        "count": 196,
-        "sha256": "6182fd2b3a179f17d45d6c6160b393a31eee2ec04175a8a584169b132315bb85"
+        "count": 214,
+        "sha256": "d3cb29359d1b7cc0bac7f2f5ccefa1fd5324de8de3f4e7ec04f12482d9457e96"
       }
     },
     {
@@ -199,8 +199,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 79,
-        "sha256": "671ce752b36688f29a433094a722f86edc0828ace8c9fb3b3e43bce8fed44348"
+        "count": 96,
+        "sha256": "ad9bc942f2d904bc2efa72f40d3c05b036b5cf2695edfa1ee321030a82618975"
       }
     },
     {

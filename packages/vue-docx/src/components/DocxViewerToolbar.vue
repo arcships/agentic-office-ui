@@ -39,6 +39,89 @@
     </div>
 
     <div class="docx-viewer-toolbar__actions">
+      <div
+        class="docx-viewer-toolbar__view-modes"
+        role="group"
+        :aria-label="m.docx.toolbar.viewMode"
+      >
+        <button
+          type="button"
+          class="docx-viewer-toolbar__segment"
+          :class="{ 'docx-viewer-toolbar__segment--active': viewMode === 'continuous' }"
+          data-testid="docx-view-mode-continuous"
+          :aria-label="m.docx.toolbar.viewModeContinuous"
+          :title="m.docx.toolbar.viewModeContinuous"
+          :aria-pressed="viewMode === 'continuous'"
+          :disabled="disabled"
+          @click="emit('update:viewMode', 'continuous')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="5" y="2.5" width="14" height="8" rx="1" /><rect x="5" y="13.5" width="14" height="8" rx="1" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="docx-viewer-toolbar__segment"
+          :class="{ 'docx-viewer-toolbar__segment--active': viewMode === 'single' }"
+          data-testid="docx-view-mode-single"
+          :aria-label="m.docx.toolbar.viewModeSingle"
+          :title="m.docx.toolbar.viewModeSingle"
+          :aria-pressed="viewMode === 'single'"
+          :disabled="disabled"
+          @click="emit('update:viewMode', 'single')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="4" y="3" width="16" height="18" rx="1" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="docx-viewer-toolbar__segment"
+          :class="{ 'docx-viewer-toolbar__segment--active': viewMode === 'spread' }"
+          data-testid="docx-view-mode-spread"
+          :aria-label="m.docx.toolbar.viewModeSpread"
+          :title="m.docx.toolbar.viewModeSpread"
+          :aria-pressed="viewMode === 'spread'"
+          :disabled="disabled"
+          @click="emit('update:viewMode', 'spread')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="2" y="4" width="9" height="16" rx="1" /><rect x="13" y="4" width="9" height="16" rx="1" />
+          </svg>
+        </button>
+      </div>
+      <div class="docx-viewer-toolbar__view-modes" role="group" :aria-label="m.common.zoom.level">
+        <button
+          type="button"
+          class="docx-viewer-toolbar__segment"
+          :class="{ 'docx-viewer-toolbar__segment--active': fitMode === 'width' }"
+          data-testid="docx-fit-width"
+          :aria-label="m.docx.toolbar.fitWidth"
+          :title="m.docx.toolbar.fitWidth"
+          :aria-pressed="fitMode === 'width'"
+          :disabled="disabled"
+          @click="emit('update:fitMode', fitMode === 'width' ? 'none' : 'width')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 7h18M3 17h18M7 7v10M17 7v10" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="docx-viewer-toolbar__segment"
+          :class="{ 'docx-viewer-toolbar__segment--active': fitMode === 'page' }"
+          data-testid="docx-fit-page"
+          :aria-label="m.docx.toolbar.fitPage"
+          :title="m.docx.toolbar.fitPage"
+          :aria-pressed="fitMode === 'page'"
+          :disabled="disabled"
+          @click="emit('update:fitMode', fitMode === 'page' ? 'none' : 'page')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="5" y="3" width="14" height="18" rx="1" /><path d="M9 7h6M9 17h6" />
+          </svg>
+        </button>
+      </div>
       <div class="docx-viewer-toolbar__search" role="search">
         <input
           ref="searchInputRef"
@@ -248,6 +331,10 @@ const props = withDefaults(
     currentPage: number
     totalPages: number
     zoom: number
+    /** Current page layout mode; the toolbar renders it as a segmented control. */
+    viewMode?: import("../composables/docx-view-mode").DocxViewMode
+    /** Current fit mode; `none` means the zoom factor is authoritative. */
+    fitMode?: import("../composables/docx-view-mode").DocxFitMode | "none"
     searchQuery: string
     searchResultCount: number
     searchResultIndex: number
@@ -257,7 +344,7 @@ const props = withDefaults(
     showUpload?: boolean
     showDownload?: boolean
   }>(),
-  { showUpload: true, showDownload: true, searchCaseSensitive: false, searchWholeWord: false, searchRegex: false },
+  { showUpload: true, showDownload: true, searchCaseSensitive: false, searchWholeWord: false, searchRegex: false, viewMode: "continuous", fitMode: "none" },
 )
 
 const emit = defineEmits<{
@@ -270,6 +357,8 @@ const emit = defineEmits<{
   "update:revisionDisplay": [display: import("@arcships/docx-core").DocxRevisionDisplay]
   selectPage: [page: number]
   "update:zoom": [zoom: number]
+  "update:viewMode": [mode: import("../composables/docx-view-mode").DocxViewMode]
+  "update:fitMode": [mode: import("../composables/docx-view-mode").DocxFitMode | "none"]
   "update:searchQuery": [query: string]
   "update:searchCaseSensitive": [value: boolean]
   "update:searchWholeWord": [value: boolean]
@@ -485,6 +574,33 @@ defineExpose({
 .docx-viewer-toolbar__toggle-button[aria-pressed="true"] { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
 .docx-viewer-toolbar__toggle-button:disabled { cursor: default; opacity: .35; }
 .docx-viewer-toolbar__toggle-button svg { fill: none; height: 15px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: 15px; }
+/* Segmented view-mode and fit-mode controls. */
+.docx-viewer-toolbar__view-modes {
+  align-items: center;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  display: inline-flex;
+  gap: 1px;
+  overflow: hidden;
+  padding: 1px;
+}
+.docx-viewer-toolbar__segment {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  width: 30px;
+}
+.docx-viewer-toolbar__segment:hover:not(:disabled) { background: #f4f4f5; }
+.docx-viewer-toolbar__segment--active { background: #eff6ff; color: #1d4ed8; }
+.docx-viewer-toolbar__segment:disabled { cursor: default; opacity: .35; }
+.docx-viewer-toolbar__segment svg { fill: none; height: 15px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.6; width: 15px; }
 .docx-viewer-toolbar__revision-select {
   background: transparent;
   border: 0;

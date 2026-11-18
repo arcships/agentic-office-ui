@@ -31,6 +31,8 @@ import "@arcships/vue-pptx/style.css"
 | `autoplay` | `true` | 演示模式自动执行非点击步骤 |
 | `showHiddenSlides` | `false` | 播放时包含隐藏页 |
 | `showToolbar` | `true` | 浏览工具栏 |
+| `viewMode` | `null` | 浏览布局：`single` 或 `sorter`；`null` 跟随内部工具栏状态 |
+| `defaultViewMode` | `single` | 未受控时的初始浏览布局 |
 | `showSidebar` | `true` | 缩略图侧栏 |
 | `showSearch` | `true` | 搜索框 |
 | `showPlaybackControls` | `true` | 播放控制条 |
@@ -44,6 +46,15 @@ import "@arcships/vue-pptx/style.css"
 `limits` 支持完整的归档预算：`maxInputBytes`、`maxArchiveEntries`、`maxSingleEntryBytes`、`maxUncompressedBytes`、`maxMediaBytes`、`maxCompressionRatio`、`maxArchivePathLength`、`maxXmlBytes`、`maxSingleXmlBytes`、`maxXmlDepth`、`maxXmlAttributeBytes`、`maxTextNodeBytes`、`maxRelationships` 和 `maxConcurrency`。宿主只能收紧默认值，不能放宽硬上限。
 
 模板引用公开 `getController()`、`next()`、`previous()`、`play()`、`pause()`、`resume()`、`reset()`、`goToSlide()`、`enterFullscreen()` 和 `exitFullscreen()`。
+
+### 幻灯片浏览（Sorter）
+
+浏览模式支持两种布局，工具栏左侧的两个按钮（`data-testid="pptx-view-mode-single"`、`pptx-view-mode-sorter"`）切换，也可以由 `viewMode` 属性控制：
+
+- `single`（默认）：保持原来的纵向幻灯片列表。
+- `sorter`：网格缩略图，与侧栏共用同一套 `PptxThumbnail` 与懒加载门控；网格只挂载可视行附近的缩略图（上方和下方有等高占位块），滚动与 `PageUp`/`PageDown`/`Home`/`End` 只滚动网格，不切换当前页；点击缩略图会切到该页但网格保持打开，选中项保持高亮。网格打开时隐藏侧栏，舞台仍然挂载（会话仍渲染到它）但在网格下方。
+
+两种布局共用同一个活动页（`data-slide-index`），切换布局时保持当前页与选中项；`sorter` 打开时会把当前页滚到可视区域。演示模式始终使用单页舞台，不显示布局按钮。事件新增 `update:viewMode`，网格根节点为 `data-testid="pptx-sorter"`，每个格子为 `data-testid="pptx-sorter-item"` 并带 `data-slide-index` 与 `data-active`。
 
 ### 拖放导入
 

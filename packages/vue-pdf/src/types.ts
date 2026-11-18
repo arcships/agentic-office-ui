@@ -1,5 +1,6 @@
 import type { PdfSource, PdfUrlPolicy } from "./pdf-url-policy"
 import type { PdfPasswordHandler, PdfRenderRuntime } from "./pdf/pdf-render-runtime"
+import type { PdfPageLayout } from "./pdf/pdf-page-layout"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
 
 export interface PdfViewerProps {
@@ -20,6 +21,13 @@ export interface PdfViewerProps {
   onPassword?: PdfPasswordHandler
   fileName?: string
   defaultZoom?: number
+  /**
+   * Page layout: `continuous` scrolling, `single` page at a time, or two-page
+   * `spread`s. Defaults to `single`. Switching modes keeps the active page.
+   */
+  pageLayout?: PdfPageLayout | null
+  /** Page layout used while `pageLayout` is uncontrolled. Defaults to single. */
+  defaultPageLayout?: PdfPageLayout
   className?: string
   showToolbar?: boolean
   showDownload?: boolean

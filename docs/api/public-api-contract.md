@@ -171,6 +171,7 @@ DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注
 - 图形对象与公式（issue #33）：`DrawingRunNode`（`type: "drawing"`，`kind` 为 `textBox` / `shape` / `wordArt` / `group` / `smartArt` / `chart` / `oleObject` / `model3d`）与 `MathRunNode`（`type: "math"`）是新的段落子节点类型；`ImageRunNode` 新增 `textBox` / `textBoxSourceXml`。导入侧的 `paragraphDrawingObjects()`、`classifyDrawingXml()`、`parseChartData()`、`linearizeOmml()`、`parseDrawingAnchor()` 和导出侧的 `applyPreservedDrawingObjectsToDocumentXml()` / `...ToPartContent()` / `...ToPackage()`、`collectPreservedDrawingObjects()` 都是公开的纯函数，与内置序列化补丁共用。`@arcships/docx-core` 导出 `drawingObjectPlaceholderStyle()`、`drawingObjectFrameStyle()`、`drawingObjectSizePx()`、`chartPlaceholderText()`、`chartPreviewDataUri()` 供自定义绘图层使用；文案在 `messages.docx.drawing` 下。`renderParagraphRuns()` 新增 `renderDropCaps`（默认 `true`）和 `drawingLabels` 选项。
 - 类型：`DocModel`、`DocxEditorController`、`DocxFormFieldUpdate`、编辑选区、图片、表格、分页、修订、批注及上述组合函数的公开类型。
 - 样式：`@arcships/vue-docx/style.css`。
+- 页面布局（issue #110）：`DocxViewer`、`DocxDocumentSurface` 和 `DocxViewerRoot` 接受 `viewMode`（`continuous` / `single` / `spread`）与 `fitMode`（`width` / `page`）；`DocxViewer` 另有 `defaultViewMode`、`defaultFitMode`，并抛出 `update:viewMode`、`update:fitMode`。`fitWidth` 保留为兼容入口。根入口导出几何纯函数 `resolveDocxViewLayout`、`docxPageRows`、`docxRowIndexAtOffset`、`docxRowIndexForPage`、`docxRowsInViewport`、`docxSnapTopForRow`、`docxPageAtPoint`、`docxSpreadStepPage`、`isDocxSpreadMode`、`normalizeDocxViewMode`、`normalizeDocxFitMode` 与常量 `DOCX_VIEW_MODES`，类型 `DocxViewMode`、`DocxFitMode`、`DocxViewLayout`、`DocxViewLayoutOptions`、`DocxPageRowLayout`、`DocxPageDimension`。三种模式共用同一套滚动坐标，页面偏移、分页锚点、书签和搜索定位不变。
 - 历史记录：`UseDocxEditorOptions.historyMaxEntries` 和 `historyMaxBytes` 同时生效；Vue 编辑器默认保留最多 100 条、估算 32 MiB，超过后优先淘汰最旧记录。
 
 页面、段落、表格、图片、工具栏和浮层的单独组件虽然在旧版本已经导出，但不再作为新功能的接入点。它们的兼容期限见第 6 节。
@@ -210,6 +211,8 @@ PDF Runtime 只接收已经取得并验证的 `ArrayBuffer`，不会再次请求
 
 PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 MiB`，宿主可公开调整，不叠加第二层隐藏硬上限。本地 Blob 在读取前检查声明大小；URL 有可信 `Content-Length` 时先检查响应头，否则在取得正文后、创建 PDF 引擎前检查实际字节。超过当前值返回 `PDF_TOO_LARGE`，包含 `actual` 和 `allowed`，并且不显示旧页面或创建新页面。页数、单页像素、总内存和并发页不是公开拒绝条件。
 
+页面布局（issue #110）：`PdfViewer` 和 `PdfSurface` 共用 `pageLayout`（`continuous` / `single` / `spread`）属性；`PdfViewer` 另有 `defaultPageLayout`，并抛出 `update:pageLayout`（工具栏下拉框驱动未受控状态），默认仍为 `single`。两种模式切换都保留当前页；`single` 只保留当前页位图，`continuous`/`spread` 按可视行懒加载，`spread` 把对页作为独立位图渲染并保留各自页码。根入口导出 `resolvePdfPageLayoutMetrics`、`pdfPageLayoutRows`、`pdfRowIndexAtOffset`、`pdfPageIndexAtOffset`、`pdfSnapTopForRow`、`pdfPageAtPoint`、`pdfRowsInViewport`、`pdfSpreadPagePair`、`pdfSpreadStepPage`、`normalizePdfPageLayout`、`isPdfSpreadLayout`、`PDF_PAGE_LAYOUTS` 及类型 `PdfPageLayout`、`PdfPageLayoutMetrics`、`PdfPageLayoutRow`、`PdfPageLayoutOptions`、`PdfPageDisplaySize`。
+
 文本选择可以跨页：`PdfSelectionState` 的 `text` 是完整选区文字（多页用 `\n` 连接），`range`/`rects` 仍描述第一页，`segments` 按文档顺序给出每页的 `PdfSelectionSegment`。多页选区只用于选择和复制；PDF 引用仍是单页文本范围。`PdfRenderRuntime.getPageAnnotations?` 是可选能力，返回 `PdfRenderAnnotation`（链接、表单控件和其他批注的规范化矩形、链接目标、字段名和批注文字）。`PdfSurface` 据此渲染不可见的链接/控件命中层，并在点击时发出 `linkActivate`（`url`、`targetPageIndex`、`blocked`）或 `annotationActivate`（`kind`、`fieldName`、`fieldValue`、`contents`）。链接只接受绝对 `http`、`https`、`mailto` 地址并去掉内嵌凭据；提供了 `urlPolicy` 时还会按该策略再次校验，未通过的链接以 `blocked: true` 上报而不会自动跳转。
 
 AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurface` 为文本、复选框、单选框、下拉框和列表框渲染原生控件，提交后调用 Runtime、刷新页面位图并发出 `formFieldChange`（失败为 `formFieldError`）。`resolvePdfFormFieldValue()` 把 `PdfFormFieldValue`（字符串或布尔值）转换成 PDFium 表单值：文本字段接受字符串，复选框接受布尔值，单选与选择字段接受选项标签或索引。只读字段仍显示控件但被禁用；无法写入的 Runtime 不渲染控件，避免出现看似可编辑但实际无效的输入框。
@@ -244,7 +247,7 @@ AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurfa
 
 ### 3.8 `@arcships/vue-pptx`
 
-稳定入口为 `PptxViewer`、`PptxThumbnail`、`PptxStage`、`usePptxDocument`、`usePptxPlayback`、`PptxStageSelection`、`PptxStageObjectClick`、`PptxStageContextMenu` 和其他公开类型。`PptxViewer` 默认纵向连续浏览；`mode="present"` 使用单页舞台并提供下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏。自定义静态 Surface 使用 `PptxStage` + `usePptxDocument(renderMode: "list")`，自定义播放器增加 `usePptxPlayback` 并使用 `renderMode: "slide"`。样式从 `@arcships/vue-pptx/style.css` 导入。
+稳定入口为 `PptxViewer`、`PptxThumbnail`、`PptxStage`、`usePptxDocument`、`usePptxPlayback`、`PptxStageSelection`、`PptxStageObjectClick`、`PptxStageContextMenu` 和其他公开类型。`PptxViewer` 默认纵向连续浏览；`mode="present"` 使用单页舞台并提供下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏。浏览布局由 `viewMode`（`single` / `sorter`，未受控时由工具栏控制）选择，另有 `defaultViewMode` 和 `update:viewMode`（issue #110）：`sorter` 是懒加载的缩略图网格，只挂载可视行附近的格子，点击格子切页但保持网格打开，两种布局共享同一个活动页。自定义静态 Surface 使用 `PptxStage` + `usePptxDocument(renderMode: "list")`，自定义播放器增加 `usePptxPlayback` 并使用 `renderMode: "slide"`。样式从 `@arcships/vue-pptx/style.css` 导入。
 
 ### 3.9 `@arcships/office-interaction`
 
