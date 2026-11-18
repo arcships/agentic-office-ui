@@ -188,6 +188,7 @@ expect(
 
 table_structures = "table-structures.docx"
 table_document = docx_part(table_structures, "word/document.xml")
+table_header = docx_part(table_structures, "word/header1.xml")
 table_report = {
     "tables": table_document.count("<w:tbl>"),
     "verticalMerges": table_document.count('<w:vMerge w:val="restart"/>'),
@@ -196,6 +197,8 @@ table_report = {
     ),
     "gridSpans": table_document.count("<w:gridSpan "),
     "headerRows": table_document.count("<w:tblHeader/>"),
+    "headerTables": table_header.count("<w:tbl>"),
+    "headerTableRows": table_header.count("<w:tr>"),
 }
 report["docx"][f"{table_structures}#features"] = table_report
 expect(table_report["tables"] == 3, f"{table_structures}: expected 3 tables including the nested one, got {table_report['tables']}")
@@ -209,6 +212,20 @@ expect(
 )
 expect(table_report["gridSpans"] == 1, f"{table_structures}: expected one gridSpan cell")
 expect(table_report["headerRows"] == 1, f"{table_structures}: expected one tblHeader row")
+# The running head carries a table of its own; without it the "table inside a
+# page header" case cannot be exercised at all.
+expect(
+    table_report["headerTables"] == 1,
+    f"{table_structures}: expected one table inside the page header, got {table_report['headerTables']}",
+)
+expect(
+    table_report["headerTableRows"] == 2,
+    f"{table_structures}: expected the header table to have two rows, got {table_report['headerTableRows']}",
+)
+expect(
+    "Table Register" in table_header and "Register" in table_header,
+    f"{table_structures}: the header table lost its cell text",
+)
 
 sections_columns = "sections-columns.docx"
 sections_document = docx_part(sections_columns, "word/document.xml")

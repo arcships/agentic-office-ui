@@ -158,7 +158,7 @@ P0/P1 整改必须同时提供一个只使用公开接口的测试消费页。�
 
 | 类型 | 材料 |
 |---|---|
-| DOCX | `demo.docx`、`legal-contract.docx`、`invoice-table.docx`、`report-with-image.docx`、`chinese-mixed.docx`、`review-comments.docx`、`review-threads.docx`（批注线程/跨段范围/表格修订）、`table-structures.docx`（vMerge/嵌套表/重复表头）、`sections-columns.docx`（纵横混排/分栏/文本框/水印）、`corrupted.docx` |
+| DOCX | `demo.docx`、`legal-contract.docx`、`invoice-table.docx`、`report-with-image.docx`、`chinese-mixed.docx`、`review-comments.docx`、`review-threads.docx`（批注线程/跨段范围/表格修订）、`table-structures.docx`（vMerge/嵌套表/重复表头/页眉表格）、`sections-columns.docx`（纵横混排/分栏/文本框/水印）、`corrupted.docx` |
 | XLSX | `financial-model.xlsx`、`sales-table.xlsx`、`charts-images.xlsx`、`large-grid.xlsx`、`corrupted.xlsx` |
 | PDF | `sample.pdf`、`scanned-invoice.pdf`、`rotated-pages.pdf`、`large-contract.pdf`、`cjk-report.pdf`、`encrypted.pdf`、`corrupted.pdf` |
 | 图像与结构数据 | `invoice.png`、`contract-page.png`、`ocr-layout.json`、`field-citations.json` |

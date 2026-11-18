@@ -371,6 +371,49 @@ test("the table fixture keeps vertical merges, grid spans, nested tables and hea
   );
 });
 
+test("the table fixture's page header carries a table of its own", async () => {
+  const model = await modelOf("table-structures.docx");
+  const header = model.metadata.sections[0]?.headerSections[0];
+  assert.ok(header, "the fixture declares a page header");
+  assert.equal(header.partName, "word/header1.xml");
+
+  const headerTables = header.nodes.filter((node) => node.type === "table");
+  assert.equal(headerTables.length, 1, "the header holds exactly one table");
+  assert.deepEqual(
+    headerTables[0].rows.map((row) =>
+      row.cells.map((cell) => core.paragraphText(cellParagraphs(cell)[0])),
+    ),
+    [
+      ["Register", "Period", "Owner"],
+      ["Table Register", "FY2026", "O. North"],
+    ],
+    "the header table keeps its cells and text",
+  );
+  assert.equal(
+    headerTables[0].rows[0].style?.isHeader,
+    true,
+    "the header table's first row repeats as a header row",
+  );
+  // The table is a header node, not a flattened body table.
+  assert.ok(
+    header.nodes.some(
+      (node) =>
+        node.type === "paragraph" &&
+        core.paragraphText(node) === "Table Structures Fixture",
+    ),
+    "the header keeps its running-head paragraph above the table",
+  );
+  assert.equal(
+    model.nodes.filter((node) => node.type === "table").length,
+    2,
+    "the header table is not counted as a body table",
+  );
+  assert.ok(
+    core.buildLayoutSnapshot(model, {}).pages.length >= 2,
+    "the document still spans more than one page",
+  );
+});
+
 // ── Sections, columns, text box and watermark ──────────────────────
 test("the section fixture keeps portrait, landscape and two-column sections", async () => {
   const model = await modelOf("sections-columns.docx");
