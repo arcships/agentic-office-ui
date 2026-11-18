@@ -35,6 +35,18 @@ export interface OfficeSearchMessages {
   regex: string
   /** Template with `{current}` and `{total}` placeholders. */
   resultOf: string
+  /** Placeholder of the replace field. */
+  replacePlaceholder: string
+  /** Replace the active result. */
+  replace: string
+  /** Replace every result of the query. */
+  replaceAll: string
+  /** Template with a `{count}` placeholder: summary after a replace. */
+  replaced: string
+  /** Toggle label: match the whole cell instead of a substring. */
+  wholeCell: string
+  /** Toggle label: include formulas in the search and replace. */
+  formulas: string
 }
 
 export interface OfficeZoomMessages {
@@ -188,6 +200,7 @@ export interface OfficeDocxMessages {
     exportTitle: string
     edits: string
     toggleTheme: string
+    find: string
     undo: string
     redo: string
     fontFamily: string
@@ -364,6 +377,9 @@ export interface OfficeDocxMessages {
       pageSizeUpdated: string
       headerAdded: string
       footerAdded: string
+      /** Template with a `{count}` placeholder. */
+      replacedMatches: string
+      replaceTargetUnavailable: string
     }
     borderPresets: {
       bottom: string
@@ -1260,6 +1276,12 @@ export const officeMessagesEn: OfficeMessages = {
       wholeWord: "Match whole word",
       regex: "Use regular expression",
       resultOf: "{current} of {total}",
+      replacePlaceholder: "Replace with",
+      replace: "Replace",
+      replaceAll: "Replace all",
+      replaced: "Replaced {count}",
+      wholeCell: "Match entire cell",
+      formulas: "Include formulas",
     },
     zoom: {
       in: "Zoom in",
@@ -1369,6 +1391,7 @@ export const officeMessagesEn: OfficeMessages = {
       exportTitle: "Export DOCX",
       edits: "Edits",
       toggleTheme: "Toggle document theme",
+      find: "Find and replace",
       undo: "Undo (⌘Z)",
       redo: "Redo (⇧⌘Z)",
       fontFamily: "Font family",
@@ -1523,6 +1546,8 @@ export const officeMessagesEn: OfficeMessages = {
         pageSizeUpdated: "Paper size and orientation updated",
         headerAdded: "Header added",
         footerAdded: "Footer added",
+        replacedMatches: "Replaced {count}",
+        replaceTargetUnavailable: "Unsupported: this result is in a header, footer or note and cannot be replaced",
       },
       borderPresets: {
         bottom: "Bottom Border",
@@ -2357,6 +2382,12 @@ export const officeMessagesZhCN: OfficeMessages = {
       wholeWord: "全字匹配",
       regex: "使用正则表达式",
       resultOf: "第 {current} 项，共 {total} 项",
+      replacePlaceholder: "替换为",
+      replace: "替换",
+      replaceAll: "全部替换",
+      replaced: "已替换 {count} 处",
+      wholeCell: "匹配整个单元格",
+      formulas: "包含公式",
     },
     zoom: {
       in: "放大",
@@ -2465,6 +2496,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       exportTitle: "导出 DOCX",
       edits: "修订",
       toggleTheme: "切换文档主题",
+      find: "查找和替换",
       undo: "撤销 (⌘Z)",
       redo: "重做 (⇧⌘Z)",
       fontFamily: "字体",
@@ -2619,6 +2651,8 @@ export const officeMessagesZhCN: OfficeMessages = {
         pageSizeUpdated: "已更新纸张大小与方向",
         headerAdded: "已添加页眉",
         footerAdded: "已添加页脚",
+        replacedMatches: "已替换 {count} 处",
+        replaceTargetUnavailable: "不支持：该结果位于页眉、页脚或注释中，无法替换",
       },
       borderPresets: {
         bottom: "下边框",

@@ -23,10 +23,43 @@
       :show-style-preview="showStylePreview"
       :current-page="currentPage"
       :total-pages="totalPages"
+      :find-open="findState.open"
       @update:zoom="zoomPercent = $event"
       @toggle-thumbnails="thumbnailPanelVisible = !thumbnailPanelVisible"
       @select-page="onSelectPage($event - 1)"
-    />
+      @toggle-find="find.toggleFind()"
+    >
+      <template #find>
+        <OfficeFindBar
+          v-if="findState.open"
+          ref="findBarRef"
+          :query="findState.query"
+          :status="findState.status"
+          :active-index="findState.activeIndex"
+          :result-count="findState.matches.length"
+          :placeholder="m.docx.toolbar.searchPlaceholder"
+          input-test-id="docx-editor-search-input"
+          :case-sensitive="findState.caseSensitive"
+          :whole-word="findState.wholeWord"
+          :regex="findState.regex"
+          :show-replace="!interactionLocked"
+          :replacement="findState.replacement"
+          :replace-disabled="!find.canReplace.value"
+          :replace-all-disabled="!find.canReplaceAll.value"
+          :replace-status="findReplaceStatus"
+          @update:query="find.setQuery"
+          @update:replacement="find.setReplacement"
+          @update:case-sensitive="find.setOption('caseSensitive', $event)"
+          @update:whole-word="find.setOption('wholeWord', $event)"
+          @update:regex="find.setOption('regex', $event)"
+          @previous="find.searchPrevious()"
+          @next="find.searchNext()"
+          @close="find.closeFind()"
+          @replace="find.replaceActive()"
+          @replace-all="find.replaceAll()"
+        />
+      </template>
+    </DocxToolbar>
 
     <!-- Editor body (thumbnails + viewer root) -->
     <div class="docx-editor-body">
@@ -55,6 +88,7 @@
         @page-count-change="onPageCountChange"
         @visible-page-range="onVisiblePageRange"
         @context-menu="onDocumentContextMenu"
+        @search-state-change="find.syncSearchState"
       />
       <div
         v-else
@@ -153,7 +187,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, provide, watch, onMounted, onUnmounted } from "vue"
+import { ref, computed, provide, watch, nextTick, onMounted, onUnmounted } from "vue"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import type {
@@ -166,7 +200,9 @@ import type {
 } from "@arcships/docx-core"
 import { createDocxRuntime, DocxImportError } from "@arcships/docx-core"
 import { OfficeLiveStatus } from "@arcships/vue-ui"
+import { OfficeFindBar } from "@arcships/vue-ui"
 import { useDocxEditor } from "../composables/useDocxEditor"
+import { useDocxFindReplace } from "../composables/useDocxFindReplace"
 import {
   docxTableContextFromNode,
   docxTextHostFromNode,
@@ -295,6 +331,28 @@ watch(
 
 // ── Viewer root ref ────────────────────────────────────────────────
 const viewerRootRef = ref<InstanceType<typeof DocxDocumentSurface> | undefined>()
+
+// ── Find & replace ─────────────────────────────────────────────────
+// The surface owns the search session; the composable owns the bar's inputs and
+// turns Replace / Replace All into the controller's one-undo-entry commands.
+const findBarRef = ref<InstanceType<typeof OfficeFindBar> | undefined>()
+const find = useDocxFindReplace({
+  controller: () => controller,
+  surface: () => viewerRootRef.value,
+})
+const findState = computed(() => find.state.value)
+const findReplaceStatus = computed(() => {
+  const feedback = findState.value.feedback
+  if (!feedback) return ""
+  if (feedback.kind === "unavailable") return m.value.common.search.noResults
+  if (feedback.count === 0) return ""
+  return formatOfficeMessage(m.value.common.search.replaced, { count: feedback.count })
+})
+
+watch(
+  () => findState.value.open,
+  (open) => { if (open) void nextTick(() => findBarRef.value?.focus()) },
+)
 
 // Root element ref keeps context-menu/selection scoping explicit.
 const editorRootRef = ref<HTMLElement | undefined>()
@@ -691,17 +749,33 @@ function onEditorPointerLeave(): void {
 // instances never see these shortcuts. Commands are also suppressed while the
 // document is read-only or while tracked-changes review locks editing.
 function onKeydown(event: KeyboardEvent): void {
-  if (!props.editable || event.defaultPrevented || event.isComposing) return
+  if (event.defaultPrevented || event.isComposing) return
 
   const target = event.target as HTMLElement | null
   const tagName = target?.tagName?.toLowerCase()
-  if (tagName === "input" || tagName === "textarea" || tagName === "select") return
+  const inField = tagName === "input" || tagName === "textarea" || tagName === "select"
+
+  // Ctrl/Cmd + F opens the find bar even in a read-only editor: searching is
+  // always allowed, only the replace half is disabled.
+  const mod = event.metaKey || event.ctrlKey
+  const key = event.key.toLowerCase()
+  if (mod && key === "f" && props.showToolbar && !inField) {
+    event.preventDefault()
+    find.openFind()
+    return
+  }
+  if (event.key === "Escape" && findState.value.open) {
+    event.preventDefault()
+    find.closeFind()
+    return
+  }
+
+  if (!props.editable) return
+  if (inField) return
   if (target?.closest?.(".docx-toolbar-shell")) return
 
-  const mod = event.metaKey || event.ctrlKey
   if (!mod) return
 
-  const key = event.key.toLowerCase()
   if (key === "s") {
     event.preventDefault()
     controller.exportDocx()
@@ -770,6 +844,9 @@ watch(
 
 onMounted(() => {
   syncBeforeUnload()
+  // The surface exists now, so a query typed before mount (or a model restored
+  // from a cache) can resolve its results.
+  void find.refresh()
 })
 
 onUnmounted(() => {

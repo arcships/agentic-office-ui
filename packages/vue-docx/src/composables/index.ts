@@ -83,5 +83,17 @@ export type {
   ParagraphLocationInNestedTableCell,
   ParagraphLocationInNoteText,
 } from "./useDocxSearch"
+export {
+  canReplaceDocxSearchMatch,
+  docxReplaceTargetFromMatch,
+  type DocxFindReplaceSurface,
+  type DocxReplaceController,
+} from "./editor-search-replace"
+export {
+  useDocxFindReplace,
+  type DocxFindReplaceApi,
+  type DocxFindReplaceUiState,
+  type DocxReplaceFeedback,
+} from "./useDocxFindReplace"
 export { findDocxSearchTargetPage } from "./docx-search-page"
 export type { DocxSearchPageTarget } from "./docx-search-page"

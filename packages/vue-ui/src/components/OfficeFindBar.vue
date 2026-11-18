@@ -75,6 +75,47 @@
       data-testid="office-find-close"
       @click="emit('close')"
     >×</button>
+    <div v-if="showReplace" class="office-find-bar__replace">
+      <input
+        ref="replaceInputRef"
+        class="office-find-bar__input office-find-bar__input--replace"
+        type="text"
+        :value="replacement"
+        :placeholder="m.common.search.replacePlaceholder"
+        :aria-label="m.common.search.replacePlaceholder"
+        :disabled="disabled"
+        data-testid="office-find-replace-input"
+        @input="onReplaceInput"
+        @compositionstart="replaceComposing = true"
+        @compositionend="onReplaceCompositionEnd"
+        @keydown.enter.prevent="emit('replace')"
+      />
+      <button
+        type="button"
+        class="office-find-bar__action"
+        :disabled="replaceDisabled"
+        :aria-label="m.common.search.replace"
+        :title="m.common.search.replace"
+        data-testid="office-find-replace"
+        @click="emit('replace')"
+      >{{ m.common.search.replace }}</button>
+      <button
+        type="button"
+        class="office-find-bar__action"
+        :disabled="replaceAllDisabled"
+        :aria-label="m.common.search.replaceAll"
+        :title="m.common.search.replaceAll"
+        data-testid="office-find-replace-all"
+        @click="emit('replaceAll')"
+      >{{ m.common.search.replaceAll }}</button>
+      <span
+        v-if="replaceStatus"
+        class="office-find-bar__replace-status"
+        role="status"
+        aria-live="polite"
+        data-testid="office-find-replace-status"
+      >{{ replaceStatus }}</span>
+    </div>
   </div>
 </template>
 
@@ -96,6 +137,14 @@ const props = withDefaults(defineProps<{
   caseSensitive?: boolean
   wholeWord?: boolean
   regex?: boolean
+  /** Render the replace row (input plus Replace / Replace All). */
+  showReplace?: boolean
+  /** Current text of the replace field. */
+  replacement?: string
+  replaceDisabled?: boolean
+  replaceAllDisabled?: boolean
+  /** Localized summary of the last replace command. */
+  replaceStatus?: string
 }>(), {
   placeholder: undefined,
   inputTestId: "office-find-input",
@@ -103,6 +152,11 @@ const props = withDefaults(defineProps<{
   caseSensitive: false,
   wholeWord: false,
   regex: false,
+  showReplace: false,
+  replacement: "",
+  replaceDisabled: false,
+  replaceAllDisabled: false,
+  replaceStatus: undefined,
 })
 
 const emit = defineEmits<{
@@ -110,13 +164,18 @@ const emit = defineEmits<{
   "update:caseSensitive": [value: boolean]
   "update:wholeWord": [value: boolean]
   "update:regex": [value: boolean]
+  "update:replacement": [value: string]
   next: []
   previous: []
   close: []
+  replace: []
+  replaceAll: []
 }>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
+const replaceInputRef = ref<HTMLInputElement | null>(null)
 const composing = ref(false)
+const replaceComposing = ref(false)
 const m = useOfficeUiMessages()
 const placeholderText = computed(() => props.placeholder ?? m.value.common.search.placeholder)
 const navigationDisabled = computed(() =>
@@ -146,6 +205,15 @@ function onCompositionEnd(event: CompositionEvent): void {
   emit("update:query", inputValue(event))
 }
 
+function onReplaceInput(event: Event): void {
+  if (!replaceComposing.value) emit("update:replacement", inputValue(event))
+}
+
+function onReplaceCompositionEnd(event: CompositionEvent): void {
+  replaceComposing.value = false
+  emit("update:replacement", inputValue(event))
+}
+
 function onKeydown(event: KeyboardEvent): void {
   if (event.key === "Enter" && !navigationDisabled.value) {
     event.preventDefault()
@@ -159,11 +227,19 @@ function onKeydown(event: KeyboardEvent): void {
 
 defineExpose({
   focus: () => inputRef.value?.focus(),
+  focusReplace: () => replaceInputRef.value?.focus(),
 })
 </script>
 
 <style scoped>
 .office-find-bar {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.office-find-bar__replace {
   align-items: center;
   display: inline-flex;
   gap: 4px;
@@ -226,5 +302,27 @@ defineExpose({
 .office-find-bar :focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 2px;
+}
+
+.office-find-bar button.office-find-bar__action {
+  border-color: #d4d4d8;
+  font-size: 12px;
+  height: 28px;
+  padding: 0 8px;
+  width: auto;
+}
+
+.office-find-bar button.office-find-bar__action:hover:not(:disabled) {
+  background: #f4f4f5;
+}
+
+.office-find-bar__input--replace {
+  width: 132px;
+}
+
+.office-find-bar__replace-status {
+  color: #71717a;
+  font-size: 11px;
+  white-space: nowrap;
 }
 </style>

@@ -3,6 +3,7 @@
 export * from "./paragraph-ops";
 export * from "./table-ops";
 export * from "./run-style-ops";
+export * from "./search-replace-ops";
 export * from "./section-break-ops";
 export * from "./comment-ops";
 

@@ -33,6 +33,9 @@ import type {
   DocxImageLocation,
   DocxLineSpacingInfo,
   DocxListType,
+  DocxReplaceAllOptions,
+  DocxReplaceSummary,
+  DocxReplaceTarget,
   DocxSectionImageLocation,
   DocxSectionParagraphLocation,
   DocxSectionRegion,
@@ -85,6 +88,9 @@ export type {
   DocxBorderContext,
   DocxBorderPreset,
   DocxBorderPresetState,
+  DocxReplaceAllOptions,
+  DocxReplaceSummary,
+  DocxReplaceTarget,
   UseDocxEditorOptions
 } from "./editor-types";
 
@@ -427,6 +433,30 @@ export interface DocxEditorController {
     text: string,
     range?: DocxTextRange
   ) => DocxTextRange | undefined;
+  /**
+   * Replaces one search result with `text`.
+   *
+   * The match's own offsets are used, so text that spans several runs is
+   * replaced as one edit and the surrounding run styles survive. One undo entry
+   * is recorded. Returns false when the target is not editable (header, footer
+   * or note body), no longer exists, or the replacement would not change the
+   * text.
+   */
+  replaceMatch: (target: DocxReplaceTarget, text: string) => boolean;
+  /**
+   * Replaces every occurrence of `query` in the editable body with `text`.
+   *
+   * The query uses the same options as the search session (literal,
+   * case-insensitive by default; `caseSensitive`, `wholeWord` and `regex`
+   * narrow it). Matches in headers, footers and notes are counted in `skipped`
+   * because those stories are read-only here. The whole operation is one undo
+   * entry, even though it may touch many paragraphs.
+   */
+  replaceAll: (
+    query: string,
+    text: string,
+    options?: DocxReplaceAllOptions
+  ) => DocxReplaceSummary;
   deleteExpandedSelection: (range?: DocxTextRange) => DocxTextRange | undefined;
   commitParagraphText: (nodeIndex: number, text: string) => void;
   commitTableCellText: (
