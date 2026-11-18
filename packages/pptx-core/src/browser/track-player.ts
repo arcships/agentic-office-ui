@@ -1,4 +1,12 @@
 import type { PptxObjectPropertyState, PptxObjectStateMap, PptxTrackValue } from "../playback/track-compiler"
+import {
+  parsePptxCharacterTarget,
+  parsePptxTableCellTarget,
+  pptxParagraphTarget,
+  pptxTargetObjectKey,
+} from "../playback/targets"
+import { pptxRenderedTableCells } from "./table-targets"
+import { resolvePptxTextRange } from "./text-runs"
 
 /**
  * Element targets resolved from the rendered slide. The controller rebuilds this when a
@@ -6,6 +14,8 @@ import type { PptxObjectPropertyState, PptxObjectStateMap, PptxTrackValue } from
  */
 export interface PptxTrackTargets {
   readonly elements: ReadonlyMap<string, readonly HTMLElement[]>
+  /** Fine-grained target keys the index was built for. */
+  readonly requested?: readonly string[]
   /** Representative element; once it is detached the slide was rendered again. */
   readonly probe?: HTMLElement
 }
@@ -186,9 +196,14 @@ function elementState(element: HTMLElement): Readonly<PptxObjectPropertyState> {
 
 /**
  * Resolves every animation target key once per render: shapes by object key, then
- * paragraph runs and paragraph ranges. Duplicate keys keep all of their elements.
+ * table cells, paragraph runs and character ranges. Duplicate keys keep all of
+ * their elements. `requestedTargets` carries the fine-grained keys from the
+ * slide model so character boxes are created only for text that really animates.
  */
-export function createPptxTrackTargets(root: HTMLElement): PptxTrackTargets {
+export function createPptxTrackTargets(
+  root: HTMLElement,
+  requestedTargets: readonly string[] = [],
+): PptxTrackTargets {
   const objects = new Map<string, HTMLElement[]>()
   for (const element of root.querySelectorAll<HTMLElement>("[data-pptx-object-key]")) {
     const objectKey = element.dataset.pptxObjectKey
@@ -197,39 +212,113 @@ export function createPptxTrackTargets(root: HTMLElement): PptxTrackTargets {
     list.push(element)
     objects.set(objectKey, list)
   }
+  const requestedByObject = new Map<string, string[]>()
+  for (const target of requestedTargets) {
+    const objectKey = pptxTargetObjectKey(target)
+    const list = requestedByObject.get(objectKey) ?? []
+    list.push(target)
+    requestedByObject.set(objectKey, list)
+  }
   const elements = new Map<string, readonly HTMLElement[]>()
   for (const [objectKey, matches] of objects) {
     elements.set(objectKey, Object.freeze([...matches]))
-    const paragraphs = new Map<number, HTMLElement[]>()
-    for (const element of matches) {
-      for (const paragraph of element.querySelectorAll<HTMLElement>("[data-pptx-paragraph-index]")) {
-        const index = Number(paragraph.dataset.pptxParagraphIndex)
-        if (!Number.isInteger(index)) continue
-        const list = paragraphs.get(index) ?? []
-        list.push(paragraph)
-        paragraphs.set(index, list)
+    const tableCells = matches.flatMap((element) => pptxRenderedTableCells(element))
+    if (tableCells.length) {
+      for (const cell of tableCells) {
+        elements.set(`${objectKey}#cell:${cell.row}:${cell.column}`, Object.freeze([cell.element]))
       }
-    }
-    const indices = [...paragraphs.keys()].sort((left, right) => left - right)
-    for (const index of indices) {
-      elements.set(`${objectKey}#paragraph:${index}-${index}`, Object.freeze(paragraphs.get(index) ?? []))
-    }
-    for (let start = 0; start < indices.length; start += 1) {
-      for (let end = start + 1; end < indices.length; end += 1) {
-        const range: HTMLElement[] = []
-        for (let index = start; index <= end; index += 1) {
-          range.push(...(paragraphs.get(indices[index]) ?? []))
+      // Table paragraphs are numbered in row-major cell order, matching `pRg`.
+      registerParagraphTargets(elements, objectKey, tableCells.flatMap((cell) => cell.paragraphs))
+    } else {
+      const paragraphs = new Map<number, HTMLElement[]>()
+      for (const element of matches) {
+        for (const paragraph of element.querySelectorAll<HTMLElement>("[data-pptx-paragraph-index]")) {
+          const index = Number(paragraph.dataset.pptxParagraphIndex)
+          if (!Number.isInteger(index)) continue
+          const list = paragraphs.get(index) ?? []
+          list.push(paragraph)
+          paragraphs.set(index, list)
         }
-        elements.set(`${objectKey}#paragraph:${indices[start]}-${indices[end]}`, Object.freeze(range))
       }
+      const indices = [...paragraphs.keys()].sort((left, right) => left - right)
+      for (const index of indices) {
+        elements.set(pptxParagraphTarget(objectKey, { start: index, end: index }), Object.freeze(paragraphs.get(index) ?? []))
+      }
+      for (let start = 0; start < indices.length; start += 1) {
+        for (let end = start + 1; end < indices.length; end += 1) {
+          const range: HTMLElement[] = []
+          for (let index = start; index <= end; index += 1) {
+            range.push(...(paragraphs.get(indices[index]) ?? []))
+          }
+          elements.set(pptxParagraphTarget(objectKey, { start: indices[start], end: indices[end] }), Object.freeze(range))
+        }
+      }
+    }
+    for (const target of requestedByObject.get(objectKey) ?? []) {
+      if (elements.has(target) || target === objectKey) continue
+      const resolved: HTMLElement[] = []
+      for (const object of matches) resolved.push(...resolveRequestedTarget(target, object))
+      if (resolved.length) elements.set(target, Object.freeze([...new Set(resolved)]))
     }
   }
-  return Object.freeze({ elements, probe: elements.values().next().value?.[0] })
+  return Object.freeze({ elements, requested: Object.freeze([...requestedTargets]), probe: elements.values().next().value?.[0] })
+}
+
+function registerParagraphTargets(
+  elements: Map<string, readonly HTMLElement[]>,
+  objectKey: string,
+  paragraphs: readonly HTMLElement[],
+): void {
+  const indices = paragraphs.keys()
+  for (const index of indices) {
+    elements.set(pptxParagraphTarget(objectKey, { start: index, end: index }), Object.freeze([paragraphs[index]]))
+  }
+  const count = paragraphs.length
+  for (let start = 0; start < count; start += 1) {
+    for (let end = start + 1; end < count; end += 1) {
+      elements.set(
+        pptxParagraphTarget(objectKey, { start, end }),
+        Object.freeze(paragraphs.slice(start, end + 1)),
+      )
+    }
+  }
+}
+
+function resolveRequestedTarget(
+  target: string,
+  object: HTMLElement,
+): readonly HTMLElement[] {
+  const characterRange = parsePptxCharacterTarget(target)
+  if (characterRange) return resolvePptxTextRange(object, characterRange)
+  const cell = parsePptxTableCellTarget(target)
+  if (cell) {
+    const match = pptxRenderedTableCells(object).find(
+      (candidate) => candidate.row === cell.row && candidate.column === cell.column,
+    )
+    return match ? [match.element] : []
+  }
+  const chart = /#chart:([^:@]+)(?::([^@]+))?(?:@(.+))?$/u.exec(target)
+  if (chart) {
+    // Whole-chart targets address the rendered chart frame; series, category and
+    // data-point targets have no per-element DOM in the pinned renderer.
+    return chart[1] === "chart" ? [object] : []
+  }
+  const graphic = /#graphic:([^:@]+)(?::([^@]+))?(?:@(.+))?$/u.exec(target)
+  if (!graphic) return []
+  const children = [...object.querySelectorAll<HTMLElement>("[data-pptx-node-id]")]
+  const sourceId = graphic[2]
+  if (sourceId !== undefined) {
+    const match = children.find((child) => child.dataset.pptxNodeId === sourceId)
+    return match ? [match] : []
+  }
+  const index = Number(graphic[3] ?? 0)
+  const match = Number.isInteger(index) && index >= 0 ? children[index] : undefined
+  return match ? [match] : []
 }
 
 function currentTargets(root: HTMLElement, targets: PptxTrackTargets | undefined): PptxTrackTargets {
   if (targets && (targets.probe === undefined || targets.probe.isConnected !== false)) return targets
-  return createPptxTrackTargets(root)
+  return createPptxTrackTargets(root, targets?.requested)
 }
 
 export function capturePptxStaticState(
@@ -300,11 +389,21 @@ function applyElementState(element: HTMLElement, state: Readonly<PptxObjectPrope
 }
 
 const paragraphRangeTarget = /#paragraph:(\d+)-(\d+)$/u
+const characterRangeTarget = /#text:(\d+)-(\d+)$/u
+const tableCellTarget = /#cell:\d+:\d+$/u
 
-/** 应用顺序：对象级 → 段落范围（从宽到窄）→ 单段，具体的状态后写。 */
+/**
+ * 应用顺序：对象级 → 单元格/元素目标 → 段落范围（从宽到窄）→ 单段 → 字符范围。
+ * 具体的状态后写，范围状态不能盖掉已经准备好的叶子状态。
+ */
 function targetOrder(target: string): number {
-  const match = paragraphRangeTarget.exec(target)
-  return match ? 1_000_000 - (Number(match[2]) - Number(match[1])) : -1
+  if (tableCellTarget.test(target)) return 500_000
+  const character = characterRangeTarget.exec(target)
+  if (character) return 2_000_000 - (Number(character[2]) - Number(character[1]))
+  const paragraph = paragraphRangeTarget.exec(target)
+  if (paragraph) return 1_000_000 - (Number(paragraph[2]) - Number(paragraph[1]))
+  if (/#(?:chart|graphic):/u.test(target)) return 500_000
+  return -1
 }
 
 export function applyPptxObjectState(

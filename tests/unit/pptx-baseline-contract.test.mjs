@@ -136,10 +136,20 @@ function checkBaseline(entry) {
 
 test("PPTX browser baselines keep the parsed model, morph and media contract", () => {
   assert.ok(Array.isArray(manifest.entries) && manifest.entries.length >= 13, "manifest entries");
+  const readyEntries = manifest.entries.filter((entry) => entry.status === "ready");
+  const controlledEntries = manifest.entries.filter((entry) => entry.status === "controlled");
+  assert.ok(readyEntries.length >= 13, `ready manifest entries: ${readyEntries.length}`);
+  for (const entry of controlledEntries) {
+    assert.ok(entry.file.endsWith(".pptx"), `${entry.file} controlled extension`);
+    assert.match(entry.source, /generate-pptx-v2-fixtures\.mjs/u, `${entry.file} controlled source`);
+    assert.ok(Number.isInteger(entry.focusSlideIndex), `${entry.file} controlled focusSlideIndex`);
+    assert.ok(Array.isArray(entry.expectations) && entry.expectations.length > 0, `${entry.file} controlled expectations`);
+    assert.ok(Array.isArray(entry.xmlMarkers) && entry.xmlMarkers.length > 0, `${entry.file} controlled xml markers`);
+  }
   const fixtures = new Set();
   const mediaFixtures = [];
   const morphFixtures = [];
-  for (const entry of manifest.entries) {
+  for (const entry of readyEntries) {
     assert.equal(entry.status, "ready", `${entry.file} status`);
     assert.equal(entry.baseline, `${entry.file.replace(/\.pptx$/u, "")}/expected-events.json`, `${entry.file} baseline path`);
     assert.ok(!fixtures.has(entry.file), `${entry.file} duplicate manifest entry`);

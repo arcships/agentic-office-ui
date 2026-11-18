@@ -104,16 +104,49 @@ const expectedFixtures = [
   "trigger-shape-click.pptx",
   "wipe-scale-rotate.pptx",
 ];
+const expectedControlledFixtures = [
+  "chart-series.pptx",
+  "table-cells.pptx",
+  "text-by-word.pptx",
+  "transition-sound.pptx",
+];
 const fixtureManifest = readJson("tests/fixtures/pptx/playback/manifest.json");
 const entries = Array.isArray(fixtureManifest.entries) ? fixtureManifest.entries : [];
 const fixtureNames = entries.map((entry) => entry.file).sort();
+const readyNames = entries.filter((entry) => entry.status === "ready").map((entry) => entry.file).sort();
+const controlledNames = entries.filter((entry) => entry.status === "controlled").map((entry) => entry.file).sort();
 check(fixtureManifest.version === 1, "PPTX 素材清单版本必须为 1。");
 check(
-  JSON.stringify(fixtureNames) === JSON.stringify(expectedFixtures),
+  JSON.stringify(readyNames) === JSON.stringify(expectedFixtures),
   "PPTX 最小素材清单与兼容验收设计不一致。",
+);
+check(
+  JSON.stringify(controlledNames) === JSON.stringify(expectedControlledFixtures),
+  "PPTX controlled 素材清单与第二版设计不一致。",
+);
+check(
+  readyNames.length + controlledNames.length === fixtureNames.length,
+  "PPTX 素材清单包含未知状态。",
 );
 check(new Set(fixtureNames).size === fixtureNames.length, "PPTX 素材清单存在重复文件名。");
 for (const entry of entries) {
+  if (entry.status === "controlled") {
+    const fixtureRelative = `tests/fixtures/pptx/playback/${entry.file}`;
+    const fixtureAbsolute = path.join(root, fixtureRelative);
+    check(typeof entry.source === "string" && entry.source.includes("generate-pptx-v2-fixtures.mjs"), `${entry.file} 缺少 controlled 来源。`);
+    check(typeof entry.license === "string" && entry.license.length > 0, `${entry.file} 缺少许可。`);
+    check(/^[a-f0-9]{64}$/u.test(entry.sha256 ?? ""), `${entry.file} 缺少有效 SHA-256。`);
+    check(Number.isInteger(entry.focusSlideIndex), `${entry.file} 缺少焦点页。`);
+    check(Array.isArray(entry.expectations) && entry.expectations.length > 0, `${entry.file} 缺少预期能力码。`);
+    check(Array.isArray(entry.xmlMarkers) && entry.xmlMarkers.length > 0, `${entry.file} 缺少 XML 标记。`);
+    check(existsSync(fixtureAbsolute), `缺少 controlled 素材：${entry.file}`);
+    if (existsSync(fixtureAbsolute)) {
+      const prefix = readFileSync(fixtureAbsolute).subarray(0, 4);
+      check(prefix.equals(Buffer.from([0x50, 0x4b, 0x03, 0x04])), `${entry.file} 不是有效的 PPTX 压缩包。`);
+      check(sha256(fixtureRelative) === entry.sha256, `${entry.file} 的 SHA-256 与清单不一致。`);
+    }
+    continue;
+  }
   const fixtureRelative = `tests/fixtures/pptx/playback/${entry.file}`;
   const stem = path.parse(entry.file).name;
   const fixtureAbsolute = path.join(root, fixtureRelative);
@@ -186,4 +219,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`PASS: PPTX 开发准备检查通过，正式源码 ${formalSource.length} 个，正式素材 ${entries.length} 个。`);
+console.log(`PASS: PPTX 开发准备检查通过，正式源码 ${formalSource.length} 个，正式素材 ${readyNames.length} 个，controlled 素材 ${controlledNames.length} 个。`);

@@ -253,6 +253,8 @@ AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurfa
 
 无法精确执行的 PPTX 内容通过能力报告标记为近似、静态或未解析；公开说明不得宣称完整兼容 PowerPoint 全部动画。
 
+播放 v2 的 `PptxPlaybackEffect` 新增 `characterRange`/`characterGranularity`（按词/按字）、`tableCell`、`chartElement` 和 `graphicElement`；`PptxSlideTransition` 新增 `sound`。对应能力码固定为 `text:by-word`、`text:by-character`、`text:character-range-unavailable`、`table:cell`、`table-build:<mode>`、`chart:element`、`chart:series`/`chart:category`/`chart:point`、`smartart:node`/`smartart:level`、`group:sub-shape`、`transition:sound` 和 `transition:3d:<kind>`。`blockedMediaIds` 同时包含被浏览器阻止的媒体和切换声音，`resumeBlockedMedia()` 统一重试。
+
 浏览器入口还提供 `loadPptxArchive`、`PPTX_ARCHIVE_READER` 和 `resolvePptxExternalMediaUrl`。`PptxPreviewLimits` 覆盖完整的归档预算（压缩比、路径长度、XML 总量与单部件、嵌套层数、标签与文本节点、关系数）。每次加载只解压一次：`inspectOfficeArchive` 只读中央目录，渲染器完成唯一一次解压，共享校验器直接检查已解码的部件。外部媒体默认禁用；`externalMedia: "allowed"` 必须同时配合 `externalMediaUrlPolicy`，目标 URL 经协议和来源校验后才加载。
 
 ### 3.8 `@arcships/vue-pptx`

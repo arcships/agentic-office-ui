@@ -60,13 +60,15 @@ pnpm capture:pptx-baselines
 
 ## 5. 素材规则
 
-`tests/fixtures/pptx/playback/manifest.json` 是正式最小素材清单。13 份素材均为 `ready`，每份都包含：
+`tests/fixtures/pptx/playback/manifest.json` 是正式最小素材清单。13 份素材为 `ready`，每份都包含：
 
 - 桌面版 PowerPoint 版本；
 - 来源和使用许可；
 - SHA-256；
 - 预期对象、单击次数和事件顺序；
 - 浏览器解析、时间安排、事件和能力报告基准。
+
+另有 4 份 `controlled` 素材覆盖第二版新增分支：`text-by-word.pptx`（按词 `charRg`）、`chart-series.pptx`（整图/按系列 `oleChartEl`）、`table-cells.pptx`（表格逐单元格 `pRg`）和 `transition-sound.pptx`（切换声音与三维 `cube` 切换）。它们由 `node scripts/fixtures/generate-pptx-v2-fixtures.mjs` 从 `text-by-paragraph.pptx` 确定性派生，登记哈希、焦点页、预期能力码和 XML 标记；送入桌面版 PowerPoint 另存前不得升级为 `ready`。
 
 仓库还包含一份代码回归用的组合素材 `tests/fixtures/pptx/playback-controlled.pptx`。它覆盖普通单击、对象单击、有限和无限重复、自动往返、透明度强调、直线运动、旋转、对象擦除、淡化、页面推进和擦除、自动换页、隐藏页、内部跳页、外部链接、强身份 Morph、音视频命令、媒体裁剪、循环、音量、媒体书签、同属性冲突和文字逐段播放；SHA-256 为 `0e98ea7bd47b8c5150a25d11836d2da1431a894b7634897c750d405f7a99f19a`。可用下面的命令重新生成：
 

@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import test from "node:test";
 
 import { importFromDemo } from "../component/vue-test-renderer.mjs";
+import { createTsModuleLoader } from "./ts-source-loader.mjs";
 
 const requireFromPptxCore = createRequire(
   new URL("../../packages/pptx-core/package.json", import.meta.url),
@@ -33,20 +34,13 @@ const {
   resolvePptxExternalMediaUrl,
 } = await importFromDemo("@arcships/pptx-core/browser");
 const typescript = requireFromPptxCore("typescript");
-const trackPlayer = await import(`data:text/javascript;base64,${Buffer.from(
-  typescript.transpileModule(
-    readFileSync(
-      new URL("../../packages/pptx-core/src/browser/track-player.ts", import.meta.url),
-      "utf8",
-    ),
-    {
-      compilerOptions: {
-        module: typescript.ModuleKind.ES2022,
-        target: typescript.ScriptTarget.ES2022,
-      },
-    },
-  ).outputText,
-).toString("base64")}`);
+// The track index is not part of the public bundle, so load its small source
+// graph through data URLs instead of relying on Node's TypeScript loader.
+const loadSource = createTsModuleLoader(
+  new URL("../../packages/pptx-core/src/", import.meta.url),
+  typescript,
+);
+const trackPlayer = await import(loadSource("browser/track-player.ts"));
 
 test("PPTX core root stays browser-free and exposes fixed safe defaults", () => {
   assert.equal(Object.isFrozen(DEFAULT_PPTX_PREVIEW_LIMITS), true);
