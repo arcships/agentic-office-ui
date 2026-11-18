@@ -6,7 +6,7 @@
 // Each module is framework-agnostic (React types replaced with plain
 // equivalents) and kept ≤1000 lines per the migration hard constraints.
 //
-// Completed modules (37):
+// Completed modules (38):
 //   constants.ts           — global constants + theme/handle/wrap-mode tables
 //   performance.ts         — import performance tracing
 //   cache-utils.ts         — shared cache Maps/WeakMaps + cache helpers
@@ -18,6 +18,7 @@
 //   default-model.ts       — defaultStarterModel / createBlankDocumentModel
 //   state.ts               — editor state machine
 //   page-measurement.ts    — page height measurement
+//   body-measurement.ts    — clipped body rects for page height feedback
 //   xml-parsing.ts         — XML parsing (part 1: run-style, tracked tokens, image transforms)
 //   xml-parsing-extra.ts   — XML parsing (part 2: paragraph indent extraction, list indent resolution)
 //   style-to-css.ts        — runStyleToCss (part 1)
@@ -73,6 +74,7 @@ export * from "./default-model";
 export * from "./model-validation";
 export * from "./state";
 export * from "./page-measurement";
+export * from "./body-measurement";
 export * from "./xml-parsing";
 export * from "./xml-parsing-extra";
 export * from "./style-to-css";

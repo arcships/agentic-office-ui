@@ -1,0 +1,67 @@
+{
+  "description": "Page whose last block is a table cell with an exact row height. The renderer writes that slice as `height` + `overflow: hidden` (DocxTableHost.tableCellSliceStyle), so paragraphs that do not fit are clipped instead of growing the page. Geometry is in screen pixels at zoom 1; the page surface is one 816x1056 paper with 72px margins.",
+  "zoomFactor": 1,
+  "expected": {
+    "cellVisibleBottomPx": 850,
+    "surfaceVisibleContentBottomPx": 984,
+    "unclippedSurfaceContentBottomPx": 1400,
+    "bodyVisibleContentBottomPx": 778,
+    "bodyUnclippedContentBottomPx": 1328,
+    "bodyClientHeightPx": 912,
+    "bodyScrollHeightPx": 1400,
+    "bodyMeasuredContentHeightPx": 912,
+    "pageMeasuredHeightPx": 1056,
+    "nextPageOffsetPx": 1084
+  },
+  "root": {
+    "name": "page-surface",
+    "rect": { "top": 0, "left": 0, "right": 816, "bottom": 1056 },
+    "overflow": "hidden",
+    "children": [
+      {
+        "name": "page-body",
+        "rect": { "top": 72, "left": 72, "right": 744, "bottom": 984 },
+        "overflow": "hidden",
+        "clientHeightPx": 912,
+        "scrollHeightPx": 1400,
+        "children": [
+          {
+            "name": "paragraph: intro",
+            "rect": { "top": 72, "left": 72, "right": 744, "bottom": 596 }
+          },
+          {
+            "name": "table",
+            "rect": { "top": 600, "left": 72, "right": 744, "bottom": 850 },
+            "children": [
+              {
+                "name": "row",
+                "rect": { "top": 600, "left": 72, "right": 744, "bottom": 850 },
+                "children": [
+                  {
+                    "name": "cell (exact height slice)",
+                    "rect": { "top": 600, "left": 72, "right": 744, "bottom": 850 },
+                    "overflow": "hidden",
+                    "children": [
+                      {
+                        "name": "cell paragraph 1",
+                        "rect": { "top": 610, "left": 82, "right": 734, "bottom": 1000 }
+                      },
+                      {
+                        "name": "cell paragraph 2",
+                        "rect": { "top": 1010, "left": 82, "right": 734, "bottom": 1200 }
+                      },
+                      {
+                        "name": "cell paragraph 3",
+                        "rect": { "top": 1210, "left": 82, "right": 734, "bottom": 1400 }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

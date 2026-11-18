@@ -22,6 +22,14 @@ All notable changes to the `@arcships` package family are documented in this fil
 - Keep page surfaces on unchanged pages by reusing their segment/column arrays and render entries when only other pages repaginate, and restore the reader's page offset after a measurement pass moves page positions.
 - Add the measurement loop, page reuse, scroll anchor and legal/invoice fixture acceptance tests (nine pages for `legal-contract.docx`, one for `invoice-table.docx`, every page exactly one paper tall).
 
+### DOCX clipped page measurement (#135)
+
+- Port the clipped body-rect reader from upstream (`createClippedBodyRectReader`): every measured element intersects the box of each ancestor whose overflow clips it (`hidden`, `clip`, `auto`, `scroll`, `overlay`), results are cached per element for the measurement pass, and screen-space rects are converted back to unscaled layout pixels so the values match `offsetHeight` at any zoom.
+- Add `collectPageContentMeasurementDescendants` (skips `data-docx-pagination-ignore` subtrees), `resolveClippedBodyRenderedBottomPx` (the first caller of `resolveMeasuredBodyRenderedBottomPx`) and `resolveClippedMeasuredHeightPx` (clipped bottom first, box height as the fallback) to the root `@arcships/docx-core` entry.
+- Use the clipped bottom for `DocxPageSurface`'s page measurement (`onPageMeasure`), `DocxPageWrapper`'s measured height and the `DocxPageBody` content measurement, so a table cell or fixed-height container that clips overflowing paragraphs no longer reports a taller page; `offsetHeight` stays the fallback when nothing can be measured and a page never drops below one paper.
+- Mark the page's cover, border, floating-image and form-field overlay layers as `data-docx-pagination-ignore`, so page chrome can never extend the measured content height.
+- Add the clipped-cell fixture and the reader/overlay unit tests plus viewer, wrapper and page-body measurement tests (measured height equals the visible height and the next page starts one paper plus the page-break gap below).
+
 ### XLSX formatting ribbon (#120)
 
 - Add the missing ribbon formatting controls: a border preset dropdown (All / Outside / Left / Right / Top / Bottom / None) with a border colour picker, while the existing All-borders button stays as a shortcut. Border presets are drawn through the existing style command, so each edge is written to `styles.xml` and survives export and reload; `outside` patches only the perimeter cells, so the inside of the selection keeps its own borders and colours.

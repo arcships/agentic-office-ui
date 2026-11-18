@@ -12,6 +12,7 @@
       <div
         v-if="coverEntries.length > 0"
         data-docx-page-cover-layer="true"
+        :data-docx-pagination-ignore="true"
         class="docx-page-cover-layer"
       >
         <img
@@ -30,6 +31,7 @@
       <div
         v-if="borderStyle"
         data-docx-page-border-overlay="true"
+        :data-docx-pagination-ignore="true"
         class="docx-page-border-overlay"
         :style="borderStyle"
       >
@@ -45,6 +47,7 @@
       <!-- Body -->
       <DocxPageBody
         :page-index="pageIndex"
+        :zoom-factor="zoomFactor"
         :page-node-segments="pageNodeSegments"
         :page-columns="pageColumns"
         :column-layout="columnLayout"
@@ -144,6 +147,7 @@
       <!-- Floating image layer -->
       <DocxImageLayer
         v-if="editable && controller"
+        :data-docx-pagination-ignore="true"
         :page-index="pageIndex"
         :page-width-px="pageWidthPx"
         :page-height-px="pageLayout.pageHeightPx"
@@ -157,6 +161,7 @@
       <!-- Form field layer -->
       <DocxFormFieldLayer
         v-if="editable && controller && hasFormFields"
+        :data-docx-pagination-ignore="true"
         :page-index="pageIndex"
         :controller="controller"
         :page-node-segments="pageNodeSegments"
@@ -226,6 +231,8 @@ import {
   resolveDocumentLayout,
   resolveDocumentLayoutDefaults,
   resolveDocumentSectionPropertiesXml,
+  resolveClippedBodyRenderedBottomPx,
+  resolveClippedMeasuredHeightPx,
   resolveFooterPaginationReservePx,
   resolveFloatingPageOriginPx,
   resolveHeaderPaginationReservePx,
@@ -745,14 +752,25 @@ function onSurfaceClick(event: MouseEvent): void {
 let resizeObserver: ResizeObserver | null = null
 
 function measurePage(): void {
-  if (!pageSurfaceRef.value) return
+  const surface = pageSurfaceRef.value
+  if (!surface) return
   // offsetHeight is layout height, unaffected by ancestor CSS transforms.
   // getBoundingClientRect().height would already include scale(zoomFactor),
   // causing a double scale when the viewer multiplies by zoomFactor again.
-  // The surface has a fixed paper height, so this measurement stays stable
-  // even when the page body has clipped overflowing content.
-  const measuredHeight = pageSurfaceRef.value.offsetHeight
-  const heightPx = measuredHeight > 0 ? measuredHeight : props.pageLayout.pageHeightPx
+  const fallbackHeightPx =
+    surface.offsetHeight > 0 ? surface.offsetHeight : props.pageLayout.pageHeightPx
+  // Measure what the page shows, not its scroll area: content that a clipping
+  // ancestor (the page body, a sliced table cell, a column) cuts off must not
+  // inflate the height the viewer uses for page offsets and thumbnails.
+  const heightPx =
+    resolveClippedMeasuredHeightPx({
+      // A page is never shorter than one paper, even when its content is.
+      minimumHeightPx: props.pageLayout.pageHeightPx,
+      fallbackHeightPx,
+      clippedContentBottomPx: resolveClippedBodyRenderedBottomPx(surface, {
+        zoomFactor: props.zoomFactor,
+      }),
+    }) ?? fallbackHeightPx
   if (heightPx !== pageMeasuredHeightPx.value) {
     pageMeasuredHeightPx.value = heightPx
     // Paragraph anchors move when content reflows; re-measure them.
@@ -763,13 +781,13 @@ function measurePage(): void {
 
 onMounted(() => {
   publishPageSurface()
+  measurePage()
   const ResizeObserverConstructor = globalThis.ResizeObserver
   if (pageSurfaceRef.value && typeof ResizeObserverConstructor === "function") {
     resizeObserver = new ResizeObserverConstructor(() => {
       measurePage()
     })
     resizeObserver.observe(pageSurfaceRef.value)
-    measurePage()
   }
 })
 
