@@ -66,6 +66,13 @@ export type {
   XlsxClipboardData,
   XlsxClipboardCutState,
   // Tables
+  XlsxAutoFilterColumn,
+  XlsxAutoFilterColumnState,
+  XlsxAutoFilterRange,
+  XlsxAutoFilterRowData,
+  XlsxAutoFilterSnapshot,
+  XlsxAutoFilterState,
+  XlsxAutoFilterValueOption,
   XlsxTableColumn,
   XlsxTableStyleInfo,
   XlsxTable,

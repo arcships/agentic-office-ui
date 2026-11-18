@@ -332,3 +332,41 @@ test("XLSX worker: cell snapshots carry the resolved number format", async () =>
   });
   assert.equal(snapshot.formula, "");
 });
+
+test("XLSX worker: AutoFilter rows expose formatted values and honour the row cap", async () => {
+  const loaded = await loadWorkbook("sales-table.xlsx");
+  assert.deepEqual(
+    loaded.sheets[0].autoFilterRanges.map((range) => [range.reference, range.source, range.tableName]),
+    [["A1:H181", "table", "SalesRecords"]],
+  );
+
+  const capped = await workerScope.request("getAutoFilterRows", {
+    endCol: 2,
+    endRow: 4,
+    maxRows: 2,
+    startCol: 0,
+    startRow: 1,
+    workbookSheetIndex: 0,
+  }).response;
+  assert.equal(capped.success, true, `AutoFilter rows failed: ${JSON.stringify(capped)}`);
+  assert.equal(capped.result.truncated, true);
+  assert.deepEqual(capped.result.rows, [
+    { row: 1, values: ["North", "Rep 2", "XLSX Engine"] },
+    { row: 2, values: ["South", "Rep 3", "Doc Extract"] },
+  ]);
+
+  const complete = await workerScope.request("getAutoFilterRows", {
+    endCol: 0,
+    endRow: 3,
+    maxRows: 10,
+    startCol: 0,
+    startRow: 1,
+    workbookSheetIndex: 0,
+  }).response;
+  assert.equal(complete.success, true);
+  assert.equal(complete.result.truncated, false);
+  assert.deepEqual(
+    complete.result.rows.map((row) => row.values[0]),
+    ["North", "South", "APAC"],
+  );
+});

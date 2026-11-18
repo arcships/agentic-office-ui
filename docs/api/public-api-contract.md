@@ -300,6 +300,8 @@ XLSX 剪切合同：`cutSelection()` 把选区写入内部/系统剪贴板并进
 
 XLSX 绘图剪贴板合同：图表、图片和形状共用同一套内部剪贴板载荷。选中绘图后 `Ctrl/Cmd+C`/`X`/`V`/`D` 以及绘图右键菜单的复制、剪切、粘贴、创建副本、删除分别调用 `copySelectionToClipboard()`/`cutSelection()`/`pasteFromClipboard()`/`duplicateDrawing()`/`deleteSelectedDrawing()`。载荷的 `drawings` 数组为每个绘图携带 `kind`、`model`、`anchor`、`relativeAnchor`、`size`、`sourceSheetId` 和 `sourceId`；粘贴在同工作簿的目标工作表上克隆 DrawingML 锚点，生成新的模型 id、关系 id、图表部件（`xl/charts/chartClipboardN.xml`）和必要的绘图部件，因此支持跨工作表粘贴、一个撤销条目内完成的剪切移动以及导出/重新加载。`copyDrawing()`、`cutDrawing()`、`pasteDrawing()` 和 `duplicateDrawing()` 是同一流程的可编程入口。
 
+XLSX 自动筛选合同：`controller.autoFilterRanges` 汇总工作表 `<autoFilter ref>` 和表部件的 `<autoFilter>`（`{ reference, start, end, headerRowCount, dataEndRow, columns, source, tableName? }`，同一区域以表定义优先）；`autoFilterStates` 给出当前列条件及 `hiddenRows`，`hiddenAutoFilterRows` 是所有条件隐藏的绝对行号。`applyAutoFilterValues(reference, columnIndex, values, { includeBlank })` 应用或移除单列筛选，`clearAutoFilter(reference?)` 清除一个/全部范围，二者只改视图、不改单元格、合并区域或冻结窗格；`getAutoFilterColumnValues(range, columnIndex)` 返回去重后的显示值（含空白）。`sortAutoFilter(reference, columnIndex, direction)` 是一次可撤销的范围编辑，只读/受保护工作表或数据区有合并时返回 `false`。筛选条件在导出时写回工作表或表部件的 `autoFilter`，重开工作簿后仍生效。`XlsxTableHeaderMenuRenderProps` 增加 `autoFilter`、`applyFilter`、`clearFilter`、`filterValues`、`getValueOptions`、`hasFilter`、`hasValueFilter`，`table` 在纯工作表筛选时为 `null`；`XlsxViewer`/`XlsxSheetSurface`/`XlsxGrid` 通过 `#table-header-menu` 插槽把参数交给宿主替换内置 `▾` 触发器。
+
 ### 4.3 `vue-pdf`
 
 | 组件 | 事件 | 参数 |

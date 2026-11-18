@@ -821,6 +821,16 @@ export interface OfficeXlsxMessages {
     selectColumn: string
     selectAll: string
   }
+  autoFilter: {
+    label: string
+    apply: string
+    blanks: string
+    clear: string
+    filterByValue: string
+    noValues: string
+    openMenu: string
+    selectAll: string
+  }
   formulaBar: {
     activeCell: string
     placeholder: string
@@ -2015,6 +2025,16 @@ export const officeMessagesEn: OfficeMessages = {
       selectColumn: "Select column",
       selectAll: "Select all",
     },
+    autoFilter: {
+      label: "Filter",
+      apply: "Apply",
+      blanks: "(Blanks)",
+      clear: "Clear filter",
+      filterByValue: "Filter by value",
+      noValues: "No values to filter.",
+      openMenu: "Filter column {column}",
+      selectAll: "Select all",
+    },
     formulaBar: {
       activeCell: "Active cell",
       placeholder: "Enter a formula or value",
@@ -3152,6 +3172,16 @@ export const officeMessagesZhCN: OfficeMessages = {
       unmerge: "取消合并",
       selectRow: "选择整行",
       selectColumn: "选择整列",
+      selectAll: "全选",
+    },
+    autoFilter: {
+      label: "筛选",
+      apply: "应用",
+      blanks: "（空白）",
+      clear: "清除筛选",
+      filterByValue: "按值筛选",
+      noValues: "没有可筛选的值。",
+      openMenu: "筛选 {column} 列",
       selectAll: "全选",
     },
     formulaBar: {

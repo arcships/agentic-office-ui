@@ -22,6 +22,7 @@ import {
   safeCalculate,
   trackXlsxWorkbookLifetime,
   type SafeCalculateSkipReason,
+  type XlsxAutoFilterRange,
   type XlsxCellRange,
   type XlsxCellTextRun,
   type XlsxCellHyperlink,
@@ -62,9 +63,7 @@ import {
   createAbortError,
   isAbortError,
   pushHistoryEntry,
-  type CellMutationState,
   type HistoryEntry,
-  type RangeCellMutation,
   type SnapshotHistoryEntry,
   type CellEditHistoryEntry,
   type RangeEditHistoryEntry
@@ -74,13 +73,13 @@ import {
   XlsxFileSizeLimitExceededError,
   cloneBytes,
   createWorkbookTooLargeError,
-  decodeHtmlEntities,
   fileStem,
   pxToSheetRowHeight,
   preflightWorkbookBuffer,
   resolveDisplayFileName
 } from "./formatting";
 import { applyCellMutationState, resolveCellFallbackStyle } from "./internal";
+import { captureSortableRows, sortSortableRows, sortableRowsMoved, writeSortedRows } from "./sorting";
 import { loadWorkbookImageAssets } from "./image-assets";
 import { downloadArrayBuffer, downloadBytes, downloadText } from "./clipboard";
 import type { XlsxControllerContext } from "./internal";
@@ -198,6 +197,7 @@ function hasCellTextLayouts(
 export function buildSheetList(
   workbook: Workbook,
   sheetStatesByWorkbookSheetIndex?: Array<{
+    autoFilterRanges?: XlsxAutoFilterRange[];
     cachedFormulaValues?: Record<string, string>;
     cellTextLayouts?: Record<string, { shrinkToFit?: boolean; textRotation?: number }>;
     columnWidthCharacterWidthPx?: number;
@@ -264,6 +264,7 @@ export function buildSheetList(
       const usedRange = worksheet.usedRange() as [number, number, number, number] | null;
       if (!usedRange) {
         sheets.push({
+          autoFilterRanges: sheetState?.autoFilterRanges ?? [],
           cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
           cellTextLayouts: hasCellTextLayouts(sheetState?.cellTextLayouts),
           columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
@@ -342,6 +343,7 @@ export function buildSheetList(
       });
 
       sheets.push({
+        autoFilterRanges: sheetState?.autoFilterRanges ?? [],
         cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
         cellTextLayouts: hasCellTextLayouts(sheetState?.cellTextLayouts),
         columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
@@ -948,95 +950,28 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const rows: Array<{
-      cells: CellMutationState[];
-      index: number;
-      sortBoolean: boolean | undefined;
-      sortEmpty: boolean;
-      sortNumber: number | undefined;
-      sortText: string;
-    }> = [];
-
-    for (let row = dataStartRow; row <= dataEndRow; row += 1) {
-      const cells: CellMutationState[] = [];
-      for (let col = startCol; col <= endCol; col += 1) {
-        const cellValue = worksheet.getCellAt(row, col);
-        try {
-          cells.push({
-            formula: worksheet.getFormulaAt(row, col) ?? null,
-            style: worksheet.getCellStyleAt(row, col),
-            value: cellValue.toJs()
-          });
-        } finally {
-          cellValue.free();
-        }
-      }
-
-      const calculated = worksheet.getCalculatedValueAt(row, sortCol);
-      const formatted = decodeHtmlEntities(worksheet.getFormattedValueAt(row, sortCol) ?? "");
-      try {
-        rows.push({
-          cells,
-          index: row,
-          sortBoolean: calculated.is_boolean ? calculated.asBoolean() : undefined,
-          sortEmpty: calculated.is_empty || formatted.length === 0,
-          sortNumber: calculated.is_number ? calculated.asNumber() : undefined,
-          sortText: calculated.is_text ? (calculated.asText() ?? formatted) : formatted
-        });
-      } finally {
-        calculated.free();
-      }
-    }
-
-    const sortedRows = [...rows].sort((left, right) => {
-      if (left.sortEmpty !== right.sortEmpty) {
-        return left.sortEmpty ? 1 : -1;
-      }
-
-      if (left.sortNumber !== undefined && right.sortNumber !== undefined) {
-        return direction === "ascending" ? left.sortNumber - right.sortNumber : right.sortNumber - left.sortNumber;
-      }
-
-      if (left.sortBoolean !== undefined && right.sortBoolean !== undefined) {
-        const leftValue = left.sortBoolean ? 1 : 0;
-        const rightValue = right.sortBoolean ? 1 : 0;
-        return direction === "ascending" ? leftValue - rightValue : rightValue - leftValue;
-      }
-
-      const comparedText = left.sortText.localeCompare(right.sortText, undefined, { numeric: true, sensitivity: "base" });
-      return direction === "ascending" ? comparedText : -comparedText;
+    const rows = captureSortableRows(worksheet, {
+      startRow: dataStartRow,
+      endRow: dataEndRow,
+      startCol,
+      endCol,
+      sortCol
     });
+    const sortedRows = sortSortableRows(rows, direction);
 
-    if (sortedRows.every((row, index) => row.index === rows[index]?.index)) {
+    if (!sortableRowsMoved(rows, sortedRows)) {
       ctx.sortState.value = { columnIndex, direction, tableName: targetTable.name };
       return;
     }
 
-    const mutations: RangeCellMutation[] = [];
-    for (let rowOffset = 0; rowOffset < rows.length; rowOffset += 1) {
-      const targetRow = dataStartRow + rowOffset;
-      const sourceRow = sortedRows[rowOffset];
-      const beforeRow = rows[rowOffset];
-      if (!sourceRow || !beforeRow) {
-        continue;
-      }
-
-      for (let colOffset = 0; colOffset <= endCol - startCol; colOffset += 1) {
-        const before = beforeRow.cells[colOffset];
-        const after = sourceRow.cells[colOffset];
-        if (!before || !after) {
-          continue;
-        }
-
-        const cell = { row: targetRow, col: startCol + colOffset };
-        applyCellMutationState(worksheet, cell, after, resolveCellFallbackStyle(ctx.activeSheet.value));
-        mutations.push({
-          after,
-          before,
-          cell
-        });
-      }
-    }
+    const mutations = writeSortedRows(
+      worksheet,
+      rows,
+      sortedRows,
+      { startCol, endCol },
+      dataStartRow,
+      resolveCellFallbackStyle(ctx.activeSheet.value)
+    );
 
     if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
       ctx.refreshWorkbookState(ctx.workbook.value);

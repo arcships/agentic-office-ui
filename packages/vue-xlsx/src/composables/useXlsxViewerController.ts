@@ -94,6 +94,7 @@ import { createStructureDomain } from "./structure";
 import { createPrintDomain } from "./print";
 import { createAuthoringDomain } from "./authoring";
 import { createClipboardDomain } from "./clipboard";
+import { createAutoFilterDomain } from "./auto-filter";
 import {
   createChartImageDomain,
   loadWorkbookImageAssets,
@@ -967,9 +968,12 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     // deletions in particular) are written into the saved workbook part.
     const hasNameEdits = Object.keys(definedNameOverridesRef.value).length > 0
       || removedDefinedNamesRef.value.length > 0;
-    return hasNameEdits
+    const named = hasNameEdits
       ? applyWorkbookDefinedNames(merged, resolveEffectiveNamedRanges(targetWorkbook))
       : merged;
+    // AutoFilter criteria are view state until export; writing them here is
+    // what keeps an applied or cleared filter on the next reload.
+    return autoFilterDomain.applyToSavedBytes(named);
   }
   function resolveEffectiveNamedRanges(targetWorkbook: Workbook | null): XlsxNamedRange[] {
     if (!targetWorkbook) return [];
@@ -1537,6 +1541,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   // Initialize domains (order matters — navigation registers watchers, editing depends on ctx)
   const navigationDomain = createNavigationDomain(ctx);
   const clipboardDomain = createClipboardDomain(ctx);
+  const autoFilterDomain = createAutoFilterDomain(ctx, clipboardDomain.getCellDisplayValue);
   const chartImageDomain = createChartImageDomain(ctx);
   const historyDomain = createHistoryDomain(ctx);
   const editingDomain = createEditingDomain(ctx);
@@ -1929,6 +1934,13 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     src,
     get sortState() { return sortState.value; },
     sortTable: historyDomain.sortTable,
+    get autoFilterRanges() { return autoFilterDomain.autoFilterRanges.value; },
+    get autoFilterStates() { return autoFilterDomain.autoFilterStates.value; },
+    get hiddenAutoFilterRows() { return autoFilterDomain.hiddenRows.value; },
+    getAutoFilterColumnValues: autoFilterDomain.getAutoFilterColumnValues,
+    applyAutoFilterValues: autoFilterDomain.applyAutoFilterValues,
+    clearAutoFilter: autoFilterDomain.clearAutoFilter,
+    sortAutoFilter: autoFilterDomain.sortAutoFilter,
     get tabs() { return tabs.value; },
     get tables() { return historyDomain.tables.value; },
     undo: historyDomain.undo,

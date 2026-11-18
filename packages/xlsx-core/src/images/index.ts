@@ -150,6 +150,7 @@ export {
   parseWorksheetFreezePanesDocument,
   parseWorkbookStructureAssetsFromArchive,
   normalizeWorkbookTableMetadata,
+  composeAutoFilterRanges,
 } from "./grid-render";
 
 // Rich text runs

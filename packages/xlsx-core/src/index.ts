@@ -8,6 +8,7 @@ export { normalizeTypedDateCells, parseIsoDateCell } from "./typed-dates";
 export { trackXlsxWorkbookLifetime } from "./workbook-lifetime";
 
 export { XlsxWorkerClient, XlsxWorkerError, createBundledXlsxWorker } from "./worker-client";
+export type { WorkbookAutoFilterOverrides } from "./authoring";
 export type { XlsxWorkerClientOptions, XlsxWorkerErrorCode } from "./worker-client";
 export { createXlsxRuntime } from "./runtime/xlsx-runtime";
 export {
@@ -68,6 +69,7 @@ export {
   parseWorkbookChartStyleAssets,
   parseWorkbookImageAssets,
   normalizeWorkbookTableMetadata,
+  composeAutoFilterRanges,
   validateXlsxImageAssets,
   updateWorkbookImageAnchor,
   updateWorkbookShapeAnchor,
@@ -154,6 +156,7 @@ export {
   addWorkbookConditionalFormatRule,
   addWorkbookTable,
   applyWorkbookDefinedNames,
+  applyWorkbookAutoFilterOverrides,
   applyWorkbookSheetOrder,
   applyWorkbookSheetRename,
   applyWorkbookSheetVisibility,
@@ -305,6 +308,13 @@ export type {
   XlsxSheetThumbnailResolution,
   XlsxSheetVisibility,
   XlsxSparkline,
+  XlsxAutoFilterColumn,
+  XlsxAutoFilterColumnState,
+  XlsxAutoFilterRange,
+  XlsxAutoFilterRowData,
+  XlsxAutoFilterSnapshot,
+  XlsxAutoFilterState,
+  XlsxAutoFilterValueOption,
   XlsxTable,
   XlsxTableColumn,
   XlsxTableHeaderMenuRenderProps,

@@ -1,5 +1,7 @@
 import { resolveWorkbookColor } from "../colors";
 import type {
+  XlsxAutoFilterColumn,
+  XlsxAutoFilterRange,
   XlsxCellAddress,
   XlsxCellTextRun,
   XlsxConditionalDataBarRule,
@@ -88,6 +90,11 @@ type WorkbookSheetInfo = {
 };
 
 export type WorkbookSheetState = {
+  /**
+   * `<autoFilter>` definitions of the worksheet. Table filters are appended by
+   * `composeAutoFilterRanges` once the table parts are parsed.
+   */
+  autoFilterRanges?: XlsxAutoFilterRange[];
   cachedFormulaValues: Record<string, string>;
   /**
    * Cells whose explicit style carries rotation or shrink-to-fit alignment,
@@ -160,6 +167,7 @@ type ParseWorkbookStructureOptions = {
 };
 
 export type WorkbookTableMetadata = {
+  autoFilter?: XlsxAutoFilterRange;
   columns?: XlsxTable["columns"];
   displayName?: string;
   end?: XlsxCellAddress;
@@ -782,6 +790,7 @@ export function parseSheetState(
   }
 
   const includeCachedFormulaValues = options?.includeCachedFormulaValues ?? true;
+  const autoFilterRanges = parseWorksheetAutoFilter(document);
   const cachedFormulaValues: Record<string, string> = {};
   const conditionalFormatRules = parseConditionalFormatRules(document);
   const dataValidations = parseSheetDataValidations(document);
@@ -939,6 +948,7 @@ export function parseSheetState(
   });
 
   return {
+    autoFilterRanges,
     cachedFormulaValues,
     cellTextLayouts: Object.keys(cellTextLayouts).length > 0 ? cellTextLayouts : undefined,
     freezePanes,
@@ -1029,6 +1039,140 @@ function parseWorkbookTableFlag(value: string | null, fallback = false): boolean
   return value === "1" || value.toLowerCase() === "true";
 }
 
+function formatAutoFilterCellReference(cell: XlsxCellAddress) {
+  let letters = "";
+  let col = cell.col;
+  do {
+    letters = String.fromCharCode(65 + (col % 26)) + letters;
+    col = Math.floor(col / 26) - 1;
+  } while (col >= 0);
+  return `${letters}${cell.row + 1}`;
+}
+
+function formatAutoFilterRangeReference(range: XlsxCellRange) {
+  return `${formatAutoFilterCellReference(range.start)}:${formatAutoFilterCellReference(range.end)}`;
+}
+
+/**
+ * Reads the `filterColumn` children of one `<autoFilter>` element.
+ *
+ * Value filters contribute their allowed values and the `blank` flag. Custom
+ * filters keep their literal operands so the header menu can show the stored
+ * criterion; the first version does not evaluate comparison operators.
+ */
+function parseAutoFilterColumns(node: Element): XlsxAutoFilterColumn[] {
+  return getChildElements(node, "filterColumn").flatMap((columnNode, index) => {
+    const rawColumnId = columnNode.getAttribute("colId");
+    const parsedColumnId = rawColumnId === null ? index : Number.parseInt(rawColumnId, 10);
+    const columnIndex = Number.isFinite(parsedColumnId) && parsedColumnId >= 0 ? parsedColumnId : index;
+    const filtersNode = getChildElements(columnNode, "filters")[0];
+    const customFiltersNode = getChildElements(columnNode, "customFilters")[0];
+    const values: string[] = [];
+    let includeBlank = false;
+    if (filtersNode) {
+      for (const filterNode of getChildElements(filtersNode, "filter")) {
+        const value = filterNode.getAttribute("val");
+        if (value !== null) {
+          values.push(value);
+        }
+      }
+      includeBlank = parseWorkbookTableFlag(filtersNode.getAttribute("blank"));
+    }
+    if (customFiltersNode) {
+      for (const customFilter of getChildElements(customFiltersNode, "customFilter")) {
+        const value = customFilter.getAttribute("val");
+        if (value !== null) {
+          values.push(value);
+        }
+      }
+    }
+    return [{
+      columnIndex,
+      includeBlank,
+      showButton: parseWorkbookTableFlag(
+        columnNode.getAttribute("showButton"),
+        !parseWorkbookTableFlag(columnNode.getAttribute("hiddenButton"))
+      ),
+      values: [...new Set(values)]
+    }];
+  });
+}
+
+function parseAutoFilterDefinition(
+  node: Element,
+  fallbackRange: XlsxCellRange,
+  options: {
+    dataEndRow: number;
+    headerRowCount: number;
+    source: "table" | "worksheet";
+    tableName?: string;
+  }
+): XlsxAutoFilterRange[] {
+  const declaredRanges = parseSqrefRanges(node.getAttribute("ref"));
+  const ranges = declaredRanges.length > 0 ? declaredRanges : [fallbackRange];
+  const columns = parseAutoFilterColumns(node);
+  return ranges.map((range, index) => ({
+    columns: index === 0 ? columns : [],
+    dataEndRow: Math.min(options.dataEndRow, range.end.row),
+    end: range.end,
+    headerRowCount: options.headerRowCount,
+    reference: formatAutoFilterRangeReference(range),
+    source: options.source,
+    start: range.start,
+    ...(options.tableName ? { tableName: options.tableName } : {})
+  }));
+}
+
+function parseWorksheetAutoFilter(document: Document): XlsxAutoFilterRange[] {
+  const nodes = getLocalElements(document, "autoFilter");
+  return nodes.flatMap((node) => {
+    const reference = node.getAttribute("ref") ?? "";
+    const declaredRange = parseSqrefRanges(reference)[0] ?? null;
+    if (!declaredRange) {
+      return [];
+    }
+    return parseAutoFilterDefinition(node, declaredRange, {
+      dataEndRow: declaredRange.end.row,
+      headerRowCount: 1,
+      source: "worksheet"
+    });
+  });
+}
+
+/**
+ * Appends each table's `<autoFilter>` to the ranges a sheet already declares.
+ *
+ * A worksheet and its table can describe the same filter range; the table
+ * definition wins because it carries the table name the sort and header menu
+ * need.
+ */
+export function composeAutoFilterRanges(
+  worksheetRanges: readonly XlsxAutoFilterRange[] | null | undefined,
+  tables: readonly { autoFilter?: XlsxAutoFilterRange; name?: string }[] | null | undefined
+): XlsxAutoFilterRange[] {
+  const composed: XlsxAutoFilterRange[] = [];
+  const byReference = new Set<string>();
+  for (const table of tables ?? []) {
+    if (!table.autoFilter || byReference.has(table.autoFilter.reference)) {
+      continue;
+    }
+    byReference.add(table.autoFilter.reference);
+    composed.push({
+      ...table.autoFilter,
+      source: "table",
+      ...(table.name ?? table.autoFilter.tableName ? { tableName: table.name ?? table.autoFilter.tableName } : {})
+    });
+  }
+  for (const range of worksheetRanges ?? []) {
+    if (byReference.has(range.reference)) {
+      continue;
+    }
+    byReference.add(range.reference);
+    composed.push(range);
+  }
+  return composed;
+}
+
 export function parseWorksheetTableMetadata(
   archive: ArchiveEntries,
   sheetPath: string
@@ -1065,14 +1209,32 @@ export function parseWorksheetTableMetadata(
     );
     const styleNode = getLocalElements(tableNode, "tableStyleInfo")[0];
     const name = tableNode.getAttribute("name") ?? `Table${tables.length + 1}`;
+    const headerRowCount = parseWorkbookTableCount(
+      tableNode.getAttribute("headerRowCount"),
+      1
+    );
+    const totalsRowCount = parseWorkbookTableCount(
+      tableNode.getAttribute("totalsRowCount"),
+      0
+    );
+    const totalsRowShown = parseWorkbookTableFlag(
+      tableNode.getAttribute("totalsRowShown")
+    );
+    const autoFilterNode = getChildElements(tableNode, "autoFilter")[0];
+    const autoFilter = autoFilterNode
+      ? parseAutoFilterDefinition(autoFilterNode, range, {
+          dataEndRow: range.end.row - (totalsRowShown ? Math.max(totalsRowCount, 1) : 0),
+          headerRowCount,
+          source: "table",
+          tableName: name
+        })[0]
+      : undefined;
     tables.push({
+      autoFilter,
       columns,
       displayName: tableNode.getAttribute("displayName") ?? name,
       end: range.end,
-      headerRowCount: parseWorkbookTableCount(
-        tableNode.getAttribute("headerRowCount"),
-        1
-      ),
+      headerRowCount,
       headerRowCellStyle: tableNode.getAttribute("headerRowCellStyle") ?? undefined,
       name,
       reference,
@@ -1086,13 +1248,8 @@ export function parseWorksheetTableMetadata(
             showRowStripes: parseWorkbookTableFlag(styleNode.getAttribute("showRowStripes")),
           }
         : undefined,
-      totalsRowCount: parseWorkbookTableCount(
-        tableNode.getAttribute("totalsRowCount"),
-        0
-      ),
-      totalsRowShown: parseWorkbookTableFlag(
-        tableNode.getAttribute("totalsRowShown")
-      ),
+      totalsRowCount,
+      totalsRowShown,
     });
   }
   return tables;
@@ -1109,6 +1266,7 @@ export function normalizeWorkbookTableMetadata(
     if (!range) return [];
     const columnCount = Math.max(1, range.end.col - range.start.col + 1);
     return [{
+      autoFilter: table.autoFilter,
       columns: table.columns?.length
         ? table.columns
         : Array.from({ length: columnCount }, (_, columnIndex) => ({
@@ -1167,16 +1325,26 @@ export function parseWorkbookStructureAssetsFromArchive(
     themePalette,
     sharedStringRuns
   }));
+  const tableMetadataByWorkbookSheetIndex = worksheetSheets.map((sheet) =>
+    parseWorksheetTableMetadata(archive, sheet.path)
+  );
   return {
     contentTypes,
     namedCellStyleByName,
     sheetStatesByWorkbookSheetIndex: sheetStates.map((state, worksheetIndex) =>
-      state ? { ...state, ...printMetadata[worksheetTabIndexes[worksheetIndex]] } : state
+      state
+        ? {
+            ...state,
+            ...printMetadata[worksheetTabIndexes[worksheetIndex]],
+            autoFilterRanges: composeAutoFilterRanges(
+              state.autoFilterRanges,
+              tableMetadataByWorkbookSheetIndex[worksheetIndex]
+            )
+          }
+        : state
     ),
     styleById,
-    tableMetadataByWorkbookSheetIndex: worksheetSheets.map((sheet) =>
-      parseWorksheetTableMetadata(archive, sheet.path)
-    ),
+    tableMetadataByWorkbookSheetIndex,
     tableStyleByName,
     theme,
     themePalette,

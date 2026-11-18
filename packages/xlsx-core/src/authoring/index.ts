@@ -57,3 +57,5 @@ export {
 } from "./sheet-rename";
 export type { XlsxConditionalFormatDraft } from "../types";
 export { mergeWorkbookSheetAuthoringAssets } from "./sheet-merge";
+export { applyWorkbookAutoFilterOverrides } from "./auto-filter";
+export type { WorkbookAutoFilterOverrides } from "./auto-filter";

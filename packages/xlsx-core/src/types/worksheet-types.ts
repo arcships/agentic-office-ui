@@ -458,6 +458,7 @@ export type XlsxSheetNameIssue =
 export interface XlsxSheetData {
   cachedFormulaValues: Record<string, string>;
   /**
+<<<<<<< HEAD
    * Rotation and shrink-to-fit alignment of cells whose style overrides the
    * row/column alignment, keyed by A1 address.
    *
@@ -466,6 +467,13 @@ export interface XlsxSheetData {
    * out rotated headers and long values without reading the workbook again.
    */
   cellTextLayouts?: Record<string, { shrinkToFit?: boolean; textRotation?: number }>;
+=======
+   * AutoFilter ranges of the sheet, composed from the worksheet's own
+   * `<autoFilter>` and every table part's filter. Empty when the sheet has no
+   * filter or when the viewer skipped XML parsing.
+   */
+  autoFilterRanges?: XlsxAutoFilterRange[];
+>>>>>>> fix/133
   /**
    * Rich-text runs of every cell that stores more than one formatted run,
    * keyed by A1 address. Cells without an entry render their plain `value`.
@@ -769,6 +777,80 @@ export interface XlsxTableColumn {
   name: string;
 }
 
+/**
+ * One `<filterColumn>` of an AutoFilter definition.
+ *
+ * `columnIndex` is relative to the filter range's first column, matching the
+ * `colId` attribute in the sheet XML. `values` holds the allowed display
+ * values of a value filter; `includeBlank` keeps empty cells visible.
+ */
+export interface XlsxAutoFilterColumn {
+  columnIndex: number;
+  includeBlank: boolean;
+  showButton: boolean;
+  values: string[];
+}
+
+/**
+ * A parsed `<autoFilter>` definition from a worksheet or a table part.
+ *
+ * Excel stores the filter range next to the criteria that created it; the
+ * viewer turns each definition into a header menu and a view-level filter.
+ */
+export interface XlsxAutoFilterRange {
+  /** Filter columns declared by the definition, keyed by relative column. */
+  columns: XlsxAutoFilterColumn[];
+  /** Last data row, already excluding a table's totals row. */
+  dataEndRow: number;
+  end: XlsxCellAddress;
+  /** Header rows inside the range; worksheet filters always have one. */
+  headerRowCount: number;
+  reference: string;
+  source: "table" | "worksheet";
+  start: XlsxCellAddress;
+  /** Owning table name when `source` is `table`. */
+  tableName?: string;
+}
+
+/** A filter value offered by an AutoFilter header menu. */
+export interface XlsxAutoFilterValueOption {
+  blank: boolean;
+  label: string;
+  value: string;
+}
+
+/** One active column filter of an AutoFilter range. */
+export interface XlsxAutoFilterColumnState {
+  columnIndex: number;
+  includeBlank: boolean;
+  values: string[];
+}
+
+/** Active view-level filter state of one AutoFilter range. */
+export interface XlsxAutoFilterState {
+  columns: XlsxAutoFilterColumnState[];
+  /** Absolute worksheet rows hidden by this range's filters. */
+  hiddenRows: number[];
+  reference: string;
+}
+
+/** One data row of an AutoFilter range, as read by the Worker viewer. */
+export interface XlsxAutoFilterRowData {
+  row: number;
+  values: string[];
+}
+
+/**
+ * Display values of an AutoFilter range.
+ *
+ * Worker-backed (read-only) viewers have no main-thread workbook, so the Worker
+ * returns the formatted values the header menu needs to list and filter.
+ */
+export interface XlsxAutoFilterSnapshot {
+  rows: XlsxAutoFilterRowData[];
+  truncated: boolean;
+}
+
 export interface XlsxTableStyleInfo {
   name?: string;
   showColumnStripes?: boolean;
@@ -778,6 +860,8 @@ export interface XlsxTableStyleInfo {
 }
 
 export interface XlsxTable {
+  /** AutoFilter declared by the table part, when it has one. */
+  autoFilter?: XlsxAutoFilterRange;
   columns: XlsxTableColumn[];
   displayName: string;
   end: XlsxCellAddress;
@@ -796,7 +880,10 @@ export type XlsxTableSortDirection = "ascending" | "descending";
 export interface XlsxTableSortState {
   columnIndex: number;
   direction: XlsxTableSortDirection;
+  /** Table name, or the AutoFilter range reference for a worksheet filter. */
   tableName: string;
+  /** Set when the sort came from an AutoFilter header menu. */
+  rangeReference?: string;
 }
 
 // ── Workbook tab ─────────────────────────────────────────────────────────
@@ -870,14 +957,28 @@ export interface XlsxTableHeaderMenuRenderProps {
   cell: XlsxCellAddress;
   /** Table column metadata for the active header. */
   column: XlsxTableColumn;
+  /** The AutoFilter range backing this header, when the sheet has one. */
+  autoFilter?: XlsxAutoFilterRange;
+  /** Applies a value filter to this AutoFilter column. */
+  applyFilter?: (values: string[], options?: { includeBlank?: boolean }) => void;
+  /** Removes this range's filter and restores its hidden rows. */
+  clearFilter?: () => void;
   /** Current sort direction for this column, or `null` when unsorted. */
   direction: XlsxTableSortDirection | null;
+  /** Filter values currently selected for this column, if any. */
+  filterValues?: string[];
+  /** Resolves the distinct display values of the column and the blanks flag. */
+  getValueOptions?: () => XlsxAutoFilterValueOption[];
+  /** Whether this range currently hides rows. */
+  hasFilter?: boolean;
+  /** Whether this column has an active value filter. */
+  hasValueFilter?: boolean;
   /** Sorts the table by this column in ascending order. */
   sortAscending: () => void;
   /** Sorts the table by this column in descending order. */
   sortDescending: () => void;
-  /** Table metadata for the active header. */
-  table: XlsxTable;
+  /** Table metadata for the active header; absent for a worksheet filter. */
+  table: XlsxTable | null;
   /** Built-in trigger text/icon. Useful when composing your own trigger button. */
   triggerIcon: string;
   /** Props that must be applied to your menu trigger button so grid selection does not receive the click. */
@@ -1815,6 +1916,47 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
   src?: string;
   sortState: XlsxTableSortState | null;
   sortTable: (tableName: string, columnIndex: number, direction: XlsxTableSortDirection) => void;
+  /** AutoFilter ranges of the active sheet, in sheet order. */
+  autoFilterRanges: XlsxAutoFilterRange[];
+  /** Active view-level filters of the active sheet. */
+  autoFilterStates: XlsxAutoFilterState[];
+  /** Absolute rows hidden by the active sheet's AutoFilter menus. */
+  hiddenAutoFilterRows: number[];
+  /**
+   * Distinct display values of one AutoFilter column, blanks included.
+   *
+   * The list is capped (the menu reports the remainder) and never mutates the
+   * workbook.
+   */
+  getAutoFilterColumnValues: (range: XlsxAutoFilterRange, columnIndex: number) => XlsxAutoFilterValueOption[];
+  /**
+   * Applies a value filter to one AutoFilter column.
+   *
+   * Passing `null` or an empty list removes that column's filter. Rows that do
+   * not match every filtered column are hidden; the criterion is view state, so
+   * no cell, merge or frozen pane is modified. Returns `false` when the range
+   * or column does not exist.
+   */
+  applyAutoFilterValues: (
+    reference: string,
+    columnIndex: number,
+    values: string[] | null,
+    options?: { includeBlank?: boolean }
+  ) => boolean;
+  /**
+   * Removes the filters of one range, or every AutoFilter filter of the sheet
+   * when `reference` is omitted, restoring the hidden rows.
+   */
+  clearAutoFilter: (reference?: string) => boolean;
+  /**
+   * Sorts the rows of one AutoFilter range by a column.
+   *
+   * The sort is a normal undoable range edit: one entry restores the previous
+   * row order. It is refused in read-only/protected sheets and when a merged
+   * region intersects the data rows, because moving those rows would corrupt
+   * the merge.
+   */
+  sortAutoFilter: (reference: string, columnIndex: number, direction: XlsxTableSortDirection) => boolean;
   setChartSeriesFormula: (chartId: string, seriesIndex: number, formula: string) => boolean;
   selectImage: (id: string | null) => void;
   setChartRect: (id: string, rect: XlsxImageRect) => void;
@@ -2131,6 +2273,18 @@ export interface XlsxViewerEditing {
 }
 
 export interface XlsxViewerTables {
+  autoFilterRanges: XlsxAutoFilterRange[];
+  autoFilterStates: XlsxAutoFilterState[];
+  applyAutoFilterValues: (
+    reference: string,
+    columnIndex: number,
+    values: string[] | null,
+    options?: { includeBlank?: boolean }
+  ) => boolean;
+  clearAutoFilter: (reference?: string) => boolean;
+  getAutoFilterColumnValues: (range: XlsxAutoFilterRange, columnIndex: number) => XlsxAutoFilterValueOption[];
+  hiddenAutoFilterRows: number[];
+  sortAutoFilter: (reference: string, columnIndex: number, direction: XlsxTableSortDirection) => boolean;
   sortState: XlsxTableSortState | null;
   sortTable: (tableName: string, columnIndex: number, direction: XlsxTableSortDirection) => void;
   tables: XlsxTable[];
