@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import test from "node:test";
 
 import {
@@ -12,6 +13,47 @@ import {
 
 const { getSheetsWasmModule, setWasmSource } = await importFromDemo("@arcships/xlsx-core");
 const { XlsxRibbon, XlsxViewer, useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
+
+// The composite viewer mounts the real grid. Only the browser globals that its
+// render/paint paths touch are stubbed; the component renderer supplies nodes.
+const requireFromXlsxCore = createRequire(
+  new URL("../../packages/xlsx-core/package.json", import.meta.url),
+);
+const {
+  DOMParser: XmlDomParser,
+  Node: XmlNode,
+  XMLSerializer: XmlSerializer,
+} = requireFromXlsxCore("@xmldom/xmldom");
+globalThis.DOMParser ??= XmlDomParser;
+globalThis.Node ??= XmlNode;
+globalThis.XMLSerializer ??= XmlSerializer;
+globalThis.Document ??= class Document {};
+globalThis.ShadowRoot ??= class ShadowRoot {};
+globalThis.ResizeObserver ??= class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+globalThis.requestAnimationFrame ??= (callback) => setTimeout(() => callback(Date.now()), 0);
+globalThis.cancelAnimationFrame ??= (handle) => clearTimeout(handle);
+if (typeof Object.prototype.getContext !== "function") {
+  Object.defineProperty(Object.prototype, "getContext", {
+    configurable: true,
+    value: () => null,
+  });
+}
+globalThis.window ??= {
+  addEventListener() {},
+  cancelAnimationFrame: globalThis.cancelAnimationFrame,
+  clearInterval: globalThis.clearInterval,
+  clearTimeout: globalThis.clearTimeout,
+  devicePixelRatio: 1,
+  getComputedStyle: () => ({ getPropertyValue: () => "" }),
+  removeEventListener() {},
+  requestAnimationFrame: globalThis.requestAnimationFrame,
+  setInterval: globalThis.setInterval,
+  setTimeout: globalThis.setTimeout,
+};
 
 function configureWasm() {
   const bytes = readFileSync(
@@ -52,6 +94,46 @@ async function mountWorkbookController(options = {}) {
   );
   assert.ifError(controller.error);
   return { ...mounted, controller };
+}
+
+/** Mounts the real composite viewer and returns a writable locale prop. */
+async function mountViewerController(options = {}, viewerProps = {}) {
+  const wasm = await getSheetsWasmModule();
+  const source = wasm.Workbook.fromCsvString("a,b,c\n");
+  const bytes = source.saveXlsxBytes();
+  source.free();
+  const file = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+
+  let controller;
+  const locale = vue.ref(viewerProps.locale ?? "en");
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useXlsxViewerController({
+        file,
+        fileName: "number-locale.xlsx",
+        skipXmlParsing: true,
+        useWorker: false,
+        ...options,
+      });
+      return () => vue.h(XlsxViewer, {
+        controller,
+        documentLocale: viewerProps.documentLocale,
+        locale: locale.value,
+        showDefaultToolbar: false,
+        showFormulaBar: false,
+        showImages: false,
+        showRibbon: false,
+        showSheetTabs: false,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(
+    () => controller.sourceState === "ready" || controller.error,
+    "XLSX viewer controller",
+  );
+  assert.ifError(controller.error);
+  return { ...mounted, controller, locale };
 }
 
 function readCell(controller, cell) {
@@ -336,4 +418,83 @@ test("XlsxViewer forwards documentLocale to its controller", async (t) => {
 
   assert.deepEqual(calls, ["de-DE"]);
   assert.deepEqual(mounted.warnings, []);
+});
+
+test("XlsxViewer locale drives number display and typed input", async (t) => {
+  const { app, controller, locale } = await mountViewerController({}, { locale: "de-DE" });
+  t.after(() => app.unmount());
+  await vue.nextTick();
+  assert.equal(controller.locale, "de-DE");
+
+  // Typing a German-grouped number in a General cell picks an Excel number
+  // format and renders it with the viewer's separators.
+  const numberCell = { col: 0, row: 1 };
+  controller.setCellValue(numberCell, "1.234,5");
+  await vue.nextTick();
+  assert.equal(readCell(controller, numberCell).value, 1234.5);
+  assert.equal(readCell(controller, numberCell).numberFormat?.formatString, "#,##0.00");
+  assert.equal(controller.getCellDisplayValue(numberCell), "1.234,50");
+
+  // An explicit `@` format is still text: the typed string is not coerced.
+  const textCell = { col: 1, row: 1 };
+  await applyNumberFormat(controller, textCell, "@");
+  controller.setCellValue(textCell, "1.234,5");
+  await vue.nextTick();
+  assert.equal(readCell(controller, textCell).value, "1.234,5");
+  assert.equal(controller.getCellDisplayValue(textCell), "1.234,5");
+
+  // Dates follow the same locale.
+  const dateCell = { col: 2, row: 1 };
+  controller.setCellValue(dateCell, "31.12.2024");
+  await vue.nextTick();
+  assert.equal(typeof readCell(controller, dateCell).value, "number");
+  assert.equal(controller.getCellDisplayValue(dateCell), "31.12.2024");
+
+  // Switching the prop repaints existing formats and changes parsing.
+  locale.value = "en-US";
+  await vue.nextTick();
+  assert.equal(controller.locale, "en-US");
+  assert.equal(controller.getCellDisplayValue(numberCell), "1,234.50");
+
+  const usCell = { col: 0, row: 2 };
+  controller.setCellValue(usCell, "1,234.5");
+  await vue.nextTick();
+  assert.equal(readCell(controller, usCell).value, 1234.5);
+  assert.equal(controller.getCellDisplayValue(usCell), "1,234.50");
+
+  // The issue's en-US wording keeps one decimal when the cell asks for one.
+  const oneDecimalCell = { col: 1, row: 2 };
+  await applyNumberFormat(controller, oneDecimalCell, "#,##0.0");
+  controller.setCellValue(oneDecimalCell, "1,234.5");
+  await vue.nextTick();
+  assert.equal(readCell(controller, oneDecimalCell).value, 1234.5);
+  assert.equal(controller.getCellDisplayValue(oneDecimalCell), "1,234.5");
+});
+
+test("a viewer without a locale keeps the controller's locale", async (t) => {
+  const { app, controller } = await mountViewerController({ locale: "de-DE" });
+  t.after(() => app.unmount());
+  await vue.nextTick();
+
+  assert.equal(controller.locale, "de-DE");
+});
+
+test("documentLocale overrides the viewer locale for numbers", async (t) => {
+  const { app, controller } = await mountViewerController(
+    {},
+    { documentLocale: "en-US", locale: "de-DE" },
+  );
+  t.after(() => app.unmount());
+  await vue.nextTick();
+  assert.equal(controller.locale, "en-US");
+
+  const cell = { col: 0, row: 1 };
+  await applyNumberFormat(controller, cell, "#,##0.00");
+  const worksheet = controller.getActiveWorksheet();
+  try {
+    worksheet.setCell("A2", 1234.5);
+  } finally {
+    worksheet.free();
+  }
+  assert.equal(controller.getCellDisplayValue(cell), "1,234.50");
 });

@@ -238,7 +238,7 @@ AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurfa
 
 引用只保存文档修订、语义、格式定位器、内容指纹和规范化区域，不保存 DOM、Vue 实例、Blob URL 或截图位图。`OfficeInteractionValidationError` 的 `code` 固定为 `INVALID_OFFICE_INTERACTION`，详细原因从结构化 `issues` 读取。该包不解析 Office 文件、不渲染界面、不保存引用集合、不调用 Agent，也不修改文件；格式包负责生成定位器，宿主决定如何组织和使用确认后的引用。
 
-根入口同时提供共享消息目录：`officeMessagesEn`、`officeMessagesZhCN`、`OfficeLocale`、`OfficeMessagesOverride`、`resolveOfficeLocale`、`resolveOfficeMessages`、`formatOfficeMessage`、`formatOfficeDate` 和 `formatOfficeNumber`。`DocxViewer`、`DocxEditor`、`DocxDocumentSurface`、`XlsxViewer`、`XlsxSheetSurface`、`PptxViewer`、`PdfViewer` 与 `PdfSurface` 均接受 `locale`（默认 `"en"`，内置 `"zh-CN"`）和 `messages` 深合并覆盖；用户可见文案和 aria-label 不再写死在组件内。
+根入口同时提供共享消息目录：`officeMessagesEn`、`officeMessagesZhCN`、`OfficeLocale`、`OfficeMessagesOverride`、`resolveOfficeLocale`、`resolveOfficeMessages`、`formatOfficeMessage`、`formatOfficeDate` 和 `formatOfficeNumber`。`DocxViewer`、`DocxEditor`、`DocxDocumentSurface`、`XlsxViewer`、`XlsxSheetSurface`、`PptxViewer`、`PdfViewer` 与 `PdfSurface` 均接受 `locale`（默认 `"en"`，内置 `"zh-CN"`）和 `messages` 深合并覆盖；`XlsxViewer`/`XlsxSheetSurface` 的 `locale` 同时作为数字和日期格式的默认区域（可用 `documentLocale` 单独覆盖），键入 `1.234,5` 在 `de-DE` 下解析为 1234.5 并显示为 `1.234,50`，`[$-407]` 等格式内置区域始终优先，显式 `@` 文本格式保持原样；用户可见文案、aria-label 和数字/日期显示不再与查看器语言脱节。
 
 ### 3.10 统一 Surface 引用选择
 

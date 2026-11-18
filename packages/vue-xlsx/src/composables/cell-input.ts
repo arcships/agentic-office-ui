@@ -1,14 +1,22 @@
 import type { XlsxCellNumberFormatInput } from "@arcships/xlsx-core";
 import {
+  CURRENCY_SYMBOLS,
+  classifyNumberFormatCode,
+  localizeCellNumber,
   normalizeNumberDigits,
   parseDisplayedNumber,
   parseLocaleDate,
+  parseLocaleNumber,
   resolveFormatLocale,
   resolveNumberSeparators,
+  stripFormatLiterals,
+  type NumberFormatCategory,
   type NumberFormatLocale
 } from "./number-locale";
 
 export { parseDisplayedNumber };
+export { classifyNumberFormatCode, stripFormatLiterals };
+export type { NumberFormatCategory };
 
 /**
  * Value typing and number-format helpers for XLSX cell input.
@@ -17,17 +25,6 @@ export { parseDisplayedNumber };
  * pure, unit-testable description of how typed/pasted text becomes a cell
  * value and how a number format is reported to the UI.
  */
-
-export type NumberFormatCategory =
-  | "general"
-  | "text"
-  | "number"
-  | "currency"
-  | "percent"
-  | "date"
-  | "time"
-  | "scientific"
-  | "fraction";
 
 export type CellInputOptions = {
   /** Number format of the target cell (explicit style or inherited row/column style). */
@@ -52,10 +49,8 @@ export type CellInputResolution =
       numberFormat?: XlsxCellNumberFormatInput;
     };
 
-const CURRENCY_SYMBOLS = "$€£¥₹₽₩₪¢₫₴₦₱₸₺฿";
 const CURRENCY_PREFIX = new RegExp(`^([${CURRENCY_SYMBOLS}])\\s*`);
 const CURRENCY_SUFFIX = new RegExp(`\\s*([${CURRENCY_SYMBOLS}])$`);
-const CURRENCY_SYMBOL_TEST = new RegExp(`[${CURRENCY_SYMBOLS}]`);
 
 const MS_PER_DAY = 86_400_000;
 const EXCEL_1900_EPOCH_UTC = Date.UTC(1899, 11, 30);
@@ -171,15 +166,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" ? value as Record<string, unknown> : null;
 }
 
-const BRACKET_CURRENCY = /\[[^\]]*[€£¥₹₽₩₪¢₫₴₦₱₸₺฿][^\]]*\]/;
-
-function hasCurrencySymbol(code: string): boolean {
-  if (BRACKET_CURRENCY.test(code)) {
-    return true;
-  }
-  return CURRENCY_SYMBOL_TEST.test(code.replace(/\[[^\]]*\]/g, ""));
-}
-
 /** Resolve a number-format descriptor (custom string or built-in id) to its code. */
 export function resolveNumberFormatCode(format: unknown): string {
   const record = asRecord(format);
@@ -202,63 +188,6 @@ export function resolveNumberFormatCode(format: unknown): string {
   }
 
   return "";
-}
-
-/**
- * Remove quoted literals, escaped characters, colour/condition/locale
- * sections and padding directives so only format codes remain. This is what
- * keeps `#,##0.00_);[Red](#,##0.00)` from looking like a date.
- */
-export function stripFormatLiterals(code: string): string {
-  return code
-    .replace(/"[^"]*"/g, "")
-    .replace(/\\./g, "")
-    .replace(/\[[^\]]*\]/g, "")
-    .replace(/[_*]./g, "")
-    .toLowerCase();
-}
-
-/** Classify a format code into the category the ribbon and coercion rules need. */
-export function classifyNumberFormatCode(code: string): NumberFormatCategory {
-  const trimmed = code.trim();
-  if (!trimmed || /^general$/i.test(trimmed)) {
-    return "general";
-  }
-
-  // Currency symbols stay visible inside `[$€-407]` sections, so bracket
-  // sections are checked directly. `[$-409]`-style sections only carry a
-  // locale id and must not be read as a dollar format.
-  if (hasCurrencySymbol(trimmed)) {
-    return "currency";
-  }
-
-  const stripped = stripFormatLiterals(trimmed);
-  if (stripped.includes("%")) {
-    return "percent";
-  }
-  if (stripped.includes("e+") || stripped.includes("e-")) {
-    return "scientific";
-  }
-  if (/[yd]/.test(stripped)) {
-    return "date";
-  }
-  if (/[hs]/.test(stripped)) {
-    return "time";
-  }
-  if (stripped.includes("m")) {
-    return "date";
-  }
-  if (/[0#?]\s*\/\s*[0#?]/.test(stripped)) {
-    return "fraction";
-  }
-  if (!stripped) {
-    return "general";
-  }
-  if (!/[0#?]/.test(stripped)) {
-    return stripped.includes("@") ? "text" : "general";
-  }
-
-  return "number";
 }
 
 /** Classify a resolved style's number format. */
@@ -453,8 +382,10 @@ function parseNumberInput(raw: string, locale: NumberFormatLocale | null): Parse
     return null;
   }
 
-  const parsed = Number(normalized);
-  if (!Number.isFinite(parsed)) {
+  // Locale-aware parsing is the single gate for typed numbers: it knows the
+  // locale's decimal/group marks and handles both-marks strings unambiguously.
+  const parsed = scientific ? Number(normalized) : parseLocaleNumber(text, locale);
+  if (parsed === null || !Number.isFinite(parsed)) {
     return null;
   }
 
@@ -500,58 +431,20 @@ function suggestDateFormat(parsed: ParsedDateInput, locale: NumberFormatLocale |
   return buildFormat(parsed.hasTime ? `${dateCode} h:mm` : dateCode);
 }
 
-const NUMERIC_PREFIX = "[\\s($€£¥₹₽₪¢₫₴₦₱₸₺฿]*";
-const NUMERIC_SUFFIX = "[\\s)%€£¥₹₽₪¢₫₴₦₱₸₺฿]*";
-const LOCALIZABLE_NUMBER = new RegExp(
-  `^(${NUMERIC_PREFIX})([+-]?\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?|[+-]?\\d+(?:\\.\\d+)?)(${NUMERIC_SUFFIX})$`
-);
-
-function groupDigits(digits: string, separator: string) {
-  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, separator);
-}
-
 /**
  * Render a formatted number with the separators the cell's locale asks for.
  *
  * The workbook engine matches the format code but always emits en-US
  * separators, so `[$-407]#,##0.00` comes back as `1,234.56` and is rewritten to
- * `1.234,56`. Dates, times, text and errors never match the numeric shape and
- * are returned unchanged.
+ * `1.234,56`. Dates, times, text, literals and errors are protected by
+ * `localizeCellNumber` and returned unchanged.
  */
 export function localizeFormattedNumber(
   formatted: string,
   numberFormat: unknown,
   fallbackLocale?: string
 ): string {
-  if (!formatted) {
-    return formatted;
-  }
-  const code = resolveNumberFormatCode(numberFormat);
-  const category = classifyNumberFormatCode(code);
-  if (category !== "number" && category !== "currency" && category !== "percent" && category !== "scientific") {
-    return formatted;
-  }
-  // A `[$-…]` section wins; otherwise the host locale applies.
-  const locale = resolveFormatLocale(code, fallbackLocale);
-  if (!locale || (locale.decimalSeparator === "." && locale.groupSeparator === ",")) {
-    return formatted;
-  }
-
-  const match = LOCALIZABLE_NUMBER.exec(formatted);
-  if (!match) {
-    return formatted;
-  }
-
-  const [, prefix, digits, suffix] = match;
-  const sign = /^[+-]/.test(digits) ? digits[0] : "";
-  const unsigned = sign ? digits.slice(1) : digits;
-  const [integerPart = "", fractionPart] = unsigned.split(".");
-  const usesGrouping = integerPart.includes(",");
-  const nextInteger = usesGrouping
-    ? groupDigits(integerPart.replace(/,/g, ""), locale.groupSeparator)
-    : integerPart;
-  const nextNumber = `${sign}${nextInteger}${fractionPart === undefined ? "" : `${locale.decimalSeparator}${fractionPart}`}`;
-  return `${prefix}${nextNumber}${suffix}`;
+  return localizeCellNumber(formatted, resolveNumberFormatCode(numberFormat), fallbackLocale);
 }
 
 /** True when `text[start..end)` is a standalone cell reference and not part of a name, function call, or sheet prefix. */

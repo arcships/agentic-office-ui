@@ -167,6 +167,34 @@ test("every viewer accepts locale/messages props and provides the shared catalog
   }
 })
 
+test("the XLSX locale also selects number and date formatting", () => {
+  // #104's acceptance covers text, aria-labels and formatted values: the same
+  // `locale` prop is the fallback locale for numbers and dates, and the number
+  // rules expose the two named helpers from the upstream gap report.
+  const viewer = read("packages/vue-xlsx/src/components/XlsxViewer.vue")
+  assert.match(
+    viewer,
+    /props\.documentLocale\s*\?\?\s*\(props\.locale/u,
+    "XlsxViewer must fall back from documentLocale to the viewer locale",
+  )
+  assert.match(viewer, /setDocumentLocale\?\./u, "XlsxViewer must forward the resolved locale")
+
+  const surface = read("packages/vue-xlsx/src/components/XlsxSheetSurface.vue")
+  assert.match(
+    surface,
+    /props\.documentLocale\s*\?\?\s*\(props\.locale/u,
+    "XlsxSheetSurface must fall back from documentLocale to the viewer locale",
+  )
+
+  const controller = read("packages/vue-xlsx/src/composables/useXlsxViewerController.ts")
+  assert.match(controller, /locale:\s*configuredLocale/u, "the controller must accept a locale option")
+  assert.match(controller, /get locale\(\)/u, "the controller must expose its locale")
+
+  const numberLocale = read("packages/vue-xlsx/src/composables/number-locale.ts")
+  assert.match(numberLocale, /export function localizeCellNumber\(/u)
+  assert.match(numberLocale, /export function parseLocaleNumber\(/u)
+})
+
 test("templates contain no hard-coded labels or translatable copy", () => {
   for (const packageName of SCANNED_PACKAGES) {
     for (const absolutePath of walk(path.join(ROOT, "packages", packageName, "src"))) {
