@@ -30,6 +30,7 @@ import "@arcships/vue-pptx/style.css"
 | `initialSlide` | `0` | 初始页，从零开始 |
 | `autoplay` | `true` | 演示模式自动执行非点击步骤 |
 | `showHiddenSlides` | `false` | 播放时包含隐藏页 |
+| `showNotes` | `false` | 显示演讲者备注面板；演示模式下变为演讲者视图（当前页备注 + 下一页缩略图 + 计时） |
 | `showToolbar` | `true` | 浏览工具栏 |
 | `viewMode` | `null` | 浏览布局：`single` 或 `sorter`；`null` 跟随内部工具栏状态 |
 | `defaultViewMode` | `single` | 未受控时的初始浏览布局 |
@@ -69,6 +70,19 @@ import "@arcships/vue-pptx/style.css"
 ### 拖放导入
 
 把 `.pptx`、`.pptm`、`.ppsx`、`.ppsm`、`.potx` 或 `.potm` 拖到查看器上会直接打开，走与 `source` 属性相同的 `usePptxDocument` 会话管线；宿主更新 `source` 后，属性来源重新优先。`PptxViewer` 同时抛出 `fileDrop(file)` 事件。拖入时根元素出现虚线轮廓，拖离、放下或拖拽在窗口其他位置结束后清除；其他扩展名不会打开，并在查看器上方显示本地化的拒绝提示（`pptx.viewer.unsupportedDrop`）。`isSupportedPptxFileName()` 与 `PPTX_FILE_ACCEPT` 可用于自建上传入口。
+
+### 演讲者备注与演讲者视图
+
+加载时会读取每页的备注部件（`ppt/notesSlides/notesSlide*.xml`），并按段落换行写入 `PptxPreviewDocument.slides[i].notes`。没有备注部件的页面不带该字段，空备注也不会产生空字符串。幻灯片图像、页码、页眉/页脚和日期占位符不算备注内容；备注只解析一次，且只解压备注部件本身，幻灯片 XML 和媒体不会再次解码。
+
+- `showNotes`（默认 `false`）打开备注面板：浏览模式显示当前页备注，演示模式显示完整演讲者视图。两种模式共用同一个面板根节点 `data-testid="pptx-presenter"`，由 `data-presenter-mode="browse"|"present"` 区分。
+- 演讲者视图包含当前页备注（`pptx-presenter-notes`）、下一页缩略图（`showHiddenSlides=false` 时跳过隐藏页；最后一页显示 `pptx-presenter-last`）和从开始演示算起的计时（`pptx-presenter-timer`，`mm:ss`，超过一小时为 `h:mm:ss`）。
+- 备注面板可用 `notes` 插槽整体替换，插槽参数为 `{ notes, slide }`。没有备注的页面显示本地化的空状态。
+- 备注部件损坏时只影响该页备注，不会阻止演示文稿打开；但超过 XML 预算或加载被取消仍会使打开失败。
+
+```vue
+<PptxViewer :source="file" mode="present" :show-notes="true" height="100vh" />
+```
 
 ## 界面状态
 
@@ -121,7 +135,26 @@ type PptxStageContextMenu = Position & (
 
 无法精确执行的 PowerPoint 内容会报告为近似、静态或未解析。本库不会用静态显示冒充动画完全兼容。程序可以监听 `capability`、`playback-warning` 和 `playback-error`。
 
-宏格式加载后会通过文档 `warnings` 报告宏已忽略，演讲者备注目前同样以 `NOTES_UNSUPPORTED` 报告。`PptxViewer` 默认在工具栏下方显示这些警告；自定义界面可读取 `usePptxDocument` 返回的 `document.warnings`。
+宏格式加载后会通过文档 `warnings` 报告宏已忽略。演讲者备注已经解析，不再产生 `NOTES_UNSUPPORTED` 警告（该代码保留在类型中，方便既有消费方继续编译）。`PptxViewer` 默认在工具栏下方显示这些警告；自定义界面可读取 `usePptxDocument` 返回的 `document.warnings`。
+
+### 页面切换效果
+
+页面切换按 `<p:transition>` 的子元素名分派。以下效果按 PowerPoint 语义渲染：
+
+| 效果 | 说明 |
+|---|---|
+| `cut` / `fade` | 直接切换 / 透明度交叉淡入淡出 |
+| `push` | 新旧页按源边缘方向同时平移；支持 `l`/`r`/`u`/`d` 与四角方向 |
+| `cover` | 新页盖住静止的旧页 |
+| `uncover` | 旧页移开露出新页 |
+| `wipe` | 从源边缘逐条显示新页；支持 `l`/`r`/`u`/`d`、`lu`/`ld`/`ru`/`rd` |
+| `split` | `orient` 决定分割线方向（缺省 `vert` 左右、`horz` 上下），`dir="out"` 从中间向外展开、`dir="in"` 从两侧向内收拢 |
+
+`dissolve` 以交叉淡入淡出近似（像素级溶解无法用 CSS 复现），`morph` 依赖对象身份匹配；两者都属于近似效果，只有在 `approximation="safe"` 时才执行，否则按静态页面处理。未知效果同样只在 `approximation="safe"` 时以淡入淡出显示。能力报告用 `transition:<效果名>` 记录处置：`cover`、`uncover`、`split` 和所有方向的 `wipe` 为 `strict`，`dissolve` 为 `approximate`（默认 `static`）。`morph byWord`/`byChar` 按词补间，对象级 Morph 按对象补间。
+
+三维切换（`cube`、`gallery`、`pan` 等）固定报告为 `transition:3d:<效果名>` 并保持静态页面，即使开启 `approximation="safe"` 也不会退化成二维淡入；切换声音照常由独立的音频层播放，被阻止时进入 `blockedMediaIds`。
+
+`pptx-core` 根入口公开同一套能力判断：`pptxTransitionCapability()`、`isPptxTransitionExecutable()`，以及方向、擦除裁剪、分割遮罩换算和进度换算工具（`pptxTransitionDirection()`、`pptxTransitionWipeInsets()`、`pptxTransitionWipeClip()`、`pptxTransitionSplitMask()`、`pptxTransitionProgress()`），宿主自建播放器时可直接复用。
 
 ### 从右到左 (RTL) 段落
 

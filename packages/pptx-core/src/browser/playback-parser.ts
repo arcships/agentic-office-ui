@@ -799,6 +799,7 @@ function parseTransition(
   return Object.freeze({
     kind: effect?.localName ?? "cut",
     direction: effect?.getAttribute("dir") ?? effect?.getAttribute("orient") ?? undefined,
+    orientation: effect?.getAttribute("orient") ?? undefined,
     option: effect?.getAttribute("option") ?? undefined,
     durationMs: duration === "indefinite" ? fallback : duration,
     advanceOnClick: node.getAttribute("advClick") !== "0",

@@ -26,6 +26,19 @@ export {
 export {
   compilePptxSlideSchedule,
 } from "./playback/time-tree"
+export {
+  isPptxTransitionExecutable,
+  pptxTransitionCapability,
+  pptxTransitionDirection,
+  pptxTransitionProgress,
+  pptxTransitionSplitMask,
+  pptxTransitionWipeClip,
+  pptxTransitionWipeInsets,
+} from "./playback/transitions"
+export type {
+  PptxTransitionCapability,
+  PptxTransitionDirection,
+} from "./playback/transitions"
 export type {
   PptxScheduledEffect,
   PptxSlideSchedule,

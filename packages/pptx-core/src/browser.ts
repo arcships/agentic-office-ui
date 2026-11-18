@@ -26,7 +26,9 @@ import {
 } from "@arcships/office-runtime/limits"
 
 import { DEFAULT_PPTX_PREVIEW_LIMITS } from "./index"
-import { loadPptxArchive, toOfficeLimits, type PptxArchiveZipLimits } from "./archive"
+import { loadPptxArchive, type PptxArchiveZipLimits } from "./archive"
+import { toOfficeLimits } from "./limits"
+import { readPptxSpeakerNotes } from "./notes"
 import { resolvePptxExternalMediaUrl } from "./media-policy"
 import { applyPptxObjectMarkers } from "./browser/renderer-markers"
 import { parsePptxPlaybackDocument } from "./browser/playback-parser"
@@ -344,6 +346,16 @@ export function createPptxDocumentSession(
           lazySlides: openOptions.lazySlides ?? options.lazySlides ?? true,
         })
         task.assertCurrent()
+        // Speaker notes live in parts the renderer does not read. They are read
+        // from the same bytes after the deck parsed: a notes part can never
+        // block or break the slides, and a deck without notes pays one
+        // central-directory scan and no inflation at all.
+        const speakerNotes = await readPptxSpeakerNotes(
+          resolved.buffer,
+          presentation.slides.map((slide, index) => ({ slideIndex: index, slidePath: slide.slidePath })),
+          { slideRels: files.slideRels, limits, signal: task.signal },
+        )
+        task.assertCurrent()
         const playbackDocument = parsePptxPlaybackDocument(files, presentation, {
           approximation: options.approximation ?? "off",
           externalMedia: options.externalMedia ?? "disabled",
@@ -395,16 +407,16 @@ export function createPptxDocumentSession(
           fileName: resolved.fileName,
           width: presentation.width,
           height: presentation.height,
-          slides: Object.freeze(presentation.slides.map((slide, index) => Object.freeze({
-            index,
-            number: index + 1,
-            hidden: playbackDocument.slides[index]?.hidden ?? slide.hidden === true,
-          }))),
+          slides: Object.freeze(presentation.slides.map((slide, index) => {
+            const notes = speakerNotes.get(index)
+            return Object.freeze({
+              index,
+              number: index + 1,
+              hidden: playbackDocument.slides[index]?.hidden ?? slide.hidden === true,
+              ...(notes ? { notes } : {}),
+            })
+          })),
           warnings: Object.freeze([
-            Object.freeze({
-              code: "NOTES_UNSUPPORTED" as const,
-              message: "当前静态底座尚未解析演讲者备注。",
-            }),
             ...(isMacroEnabledOfficeFormat(archive.validation.sourceFormat)
               ? [Object.freeze({
                   code: "UNSUPPORTED_CONTENT" as const,
@@ -543,6 +555,17 @@ export function createPptxPreviewSession(
 
 export { createPptxPlaybackController } from "./browser/controller"
 export type { PptxPlaybackControllerHost } from "./browser/controller"
+export {
+  PPTX_NOTES_ARCHIVE_READER,
+  parsePptxNotesXml,
+  pptxNotesPartPath,
+  readPptxSpeakerNotes,
+} from "./notes"
+export type {
+  PptxNotesArchiveReader,
+  PptxSpeakerNoteSlide,
+  ReadPptxSpeakerNotesOptions,
+} from "./notes"
 export { loadPptxArchive, PPTX_ARCHIVE_READER } from "./archive"
 export type {
   LoadedPptxArchive,

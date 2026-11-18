@@ -99,6 +99,8 @@ async function onStageClick(event: MouseEvent) {
 
 每个播放器各自调用两个组合函数。不要让多个舞台共享同一个文档组合函数，也不要在播放期间用 `document.nextSlide()` 代替 `playback.next()`。
 
+自建演讲者视图时，备注已经随文档解析完毕：`document.document.slides[activeIndex].notes` 是当前页备注文本（每行一段），没有备注部件的页面为 `undefined`。下一页预览可以把下一个可见页交给 `PptxThumbnail`，计时则由宿主自己维护；不想自己实现时直接用 `PptxViewer` 的 `showNotes`。
+
 左右方向键和页面切换属于播放模式。普通 Surface/浏览模式使用纵向滚动，`↑`/`↓`、`PageUp`/`PageDown`、`Home`/`End` 和 `Space` 交给列表滚动，不会切换幻灯片；完整键盘映射见[查看器键盘导航](../guide/viewer-keyboard.md)。
 
 全屏属于外层业务界面，可以对包含舞台和工具栏的元素调用浏览器 Fullscreen API。

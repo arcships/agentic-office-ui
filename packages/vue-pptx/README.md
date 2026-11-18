@@ -44,7 +44,9 @@ Vue 包不负责：
 
 `PptxViewer` 默认以纵向连续页面浏览。传入 `mode="present"` 后切换为单页播放，并可使用下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏；模板引用也暴露同一组公开方法。切换浏览/演示模式会保留当前页，全屏时自动占满屏幕，演示模式按幻灯片比例等比缩放并留黑边。
 
-界面状态通过 `data-state` 暴露：`empty`、`waiting`、`loading`、`ready`、`cancelled` 和 `error`。单页渲染失败不再锁死查看器：上一页保持可见，顶部提示失败页并提供“重试/跳过”；加载超时或取消会进入可重试状态。文档 `warnings`（如不支持的演讲者备注）显示在提示条中，可用 `warnings` 插槽替换，或用 `showWarnings=false` 隐藏。
+界面状态通过 `data-state` 暴露：`empty`、`waiting`、`loading`、`ready`、`cancelled` 和 `error`。单页渲染失败不再锁死查看器：上一页保持可见，顶部提示失败页并提供“重试/跳过”；加载超时或取消会进入可重试状态。文档 `warnings`（例如已忽略的 VBA 宏）显示在提示条中，可用 `warnings` 插槽替换，或用 `showWarnings=false` 隐藏。
+
+传入 `showNotes` 后，当前页的演讲者备注会显示在舞台旁的面板中；`mode="present"` 时同一面板变成演讲者视图：当前页备注、下一页缩略图（跳过隐藏页）和计时。备注文本来自 `PptxPreviewDocument.slides[i].notes`，没有备注的页面显示本地化空状态，面板也可用 `notes` 插槽换掉。
 
 ## 最小组合方式
 
@@ -89,6 +91,8 @@ async function onStageClick(event: MouseEvent) {
 - `usePptxDocument` 负责打开文件、滚动跳页、缩放和销毁；`renderMode: "list"` 用于纵向 surface，`renderMode: "slide"` 用于播放舞台；
 - `usePptxPlayback` 负责动画步骤、播放状态和播放事件；
 - `PptxStage` 不持有文档或播放状态，但会从渲染标记派生统一 Surface 事件；也可以换成普通 `<div>` 并自行处理这些事件。
+
+自建演讲者界面时直接读 `document.document.slides[activeIndex].notes`（每行一段）即可，不需要额外请求：备注在打开文档时已经随幻灯片一起解析。
 
 `PptxStage` 还提供完整的 surface 交互事件：
 

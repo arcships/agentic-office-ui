@@ -10,6 +10,7 @@ import {
   type OfficeLimits,
 } from "@arcships/office-runtime"
 
+import { toOfficeLimits } from "./limits"
 import type { PptxPreviewLimits } from "./types"
 
 /**
@@ -79,25 +80,6 @@ export interface LoadedPptxArchive {
   readonly files: unknown
   readonly summary: PptxArchiveSummary
   readonly validation: PptxArchiveValidation
-}
-
-/** Map every documented PPTX budget onto the shared office limits. */
-export function toOfficeLimits(limits: PptxPreviewLimits | undefined): OfficeLimits {
-  return {
-    maxInputBytes: limits?.maxInputBytes,
-    maxArchiveEntries: limits?.maxArchiveEntries,
-    maxSingleEntryBytes: limits?.maxSingleEntryBytes,
-    maxUncompressedBytes: limits?.maxUncompressedBytes,
-    maxTotalImageBytes: limits?.maxMediaBytes,
-    maxCompressionRatio: limits?.maxCompressionRatio,
-    maxArchivePathLength: limits?.maxArchivePathLength,
-    maxXmlBytes: limits?.maxXmlBytes,
-    maxSingleXmlBytes: limits?.maxSingleXmlBytes,
-    maxXmlDepth: limits?.maxXmlDepth,
-    maxXmlAttributeBytes: limits?.maxXmlAttributeBytes,
-    maxTextNodeBytes: limits?.maxTextNodeBytes,
-    maxRelationships: limits?.maxRelationships,
-  }
 }
 
 /**

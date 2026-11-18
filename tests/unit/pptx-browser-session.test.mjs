@@ -267,9 +267,12 @@ const emptySlide = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 const textSlide = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <p:sld xmlns:p="${NS_P}" xmlns:a="${NS_A}" xmlns:r="${NS_R}"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="TextBox 1"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="1000000" y="1000000"/><a:ext cx="2000000" cy="1000000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="zh-CN"/><a:t>切换文字</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`;
 
-function deck({ text = false } = {}) {
+function deck({ text = false, slideExtras = {}, notes = {} } = {}) {
+  const notesContentTypes = Object.keys(notes)
+    .map((index) => `<Override PartName="/ppt/notesSlides/notesSlide${Number(index) + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/>`)
+    .join("");
   const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/><Override PartName="/ppt/slides/slide2.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>`;
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/><Override PartName="/ppt/slides/slide2.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>${notesContentTypes}</Types>`;
   const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="${NS_REL}"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>`;
   const presentation = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -278,16 +281,35 @@ function deck({ text = false } = {}) {
 <Relationships xmlns="${NS_REL}"><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide2.xml"/></Relationships>`;
   const emptyRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="${NS_REL}"></Relationships>`;
-  return zipSync({
+  const withExtras = (xml, index) => slideExtras[index]
+    ? xml.replace("</p:sld>", `${slideExtras[index]}</p:sld>`)
+    : xml;
+  const slideRels = (index) => notes[index]
+    ? `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="${NS_REL}"><Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide${index + 1}.xml"/></Relationships>`
+    : emptyRels;
+  const entries = {
     "[Content_Types].xml": strToU8(contentTypes),
     "_rels/.rels": strToU8(rootRels),
     "ppt/presentation.xml": strToU8(presentation),
     "ppt/_rels/presentation.xml.rels": strToU8(presentationRels),
-    "ppt/slides/slide1.xml": strToU8(emptySlide),
-    "ppt/slides/slide2.xml": strToU8(text ? textSlide : emptySlide),
-    "ppt/slides/_rels/slide1.xml.rels": strToU8(emptyRels),
-    "ppt/slides/_rels/slide2.xml.rels": strToU8(emptyRels),
-  });
+    "ppt/slides/slide1.xml": strToU8(withExtras(emptySlide, 0)),
+    "ppt/slides/slide2.xml": strToU8(withExtras(text ? textSlide : emptySlide, 1)),
+    "ppt/slides/_rels/slide1.xml.rels": strToU8(slideRels(0)),
+    "ppt/slides/_rels/slide2.xml.rels": strToU8(slideRels(1)),
+  };
+  for (const [index, paragraphs] of Object.entries(notes)) {
+    entries[`ppt/notesSlides/notesSlide${Number(index) + 1}.xml`] = strToU8(notesSlide(paragraphs));
+  }
+  return zipSync(entries);
+}
+
+function notesSlide(paragraphs) {
+  const body = paragraphs
+    .map((paragraph) => `<a:p><a:r><a:rPr lang="en-US"/><a:t>${paragraph}</a:t></a:r></a:p>`)
+    .join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:notes xmlns:p="${NS_P}" xmlns:a="${NS_A}"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="Notes Placeholder"/><p:cNvSpPr/><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>${body}</p:txBody></p:sp></p:spTree></p:cSld></p:notes>`;
 }
 
 function createRoot({ failOnRender = false } = {}) {
@@ -482,5 +504,92 @@ test("a fresh session stays empty after a failed open", async () => {
     assert.equal(session.playbackDocument, null);
   } finally {
     session.dispose();
+  }
+});
+
+test("speaker notes are parsed into the preview document", async () => {
+  const session = createPptxDocumentSession(createRoot(), {
+    lazyMedia: true,
+    lazySlides: true,
+    renderMode: "slide",
+  });
+  try {
+    const loaded = await session.open(
+      deck({ notes: { 0: ["Open with the quarter", "Then pause for the chart."] } }),
+      { initialSlide: 0 },
+    );
+    assert.equal(loaded.slides[0].notes, "Open with the quarter\nThen pause for the chart.");
+    assert.equal(loaded.slides[1].notes, undefined, "a slide without a notes part reports no notes");
+    assert.deepEqual(loaded.warnings, [], "notes are no longer reported as unsupported");
+  } finally {
+    session.dispose();
+  }
+});
+
+test("notes parts that break the XML budget fail the open request", async () => {
+  const session = createPptxDocumentSession(createRoot(), {
+    lazyMedia: true,
+    lazySlides: true,
+    renderMode: "slide",
+    limits: { maxSingleXmlBytes: 512 },
+  });
+  try {
+    await assert.rejects(
+      session.open(deck({ notes: { 0: ["x".repeat(2_000)] } }), { initialSlide: 0 }),
+      (error) => error.code === "LIMIT_EXCEEDED",
+    );
+  } finally {
+    session.dispose();
+  }
+});
+
+test("transitions beyond cut/fade/push/wipe reach the capability report", async () => {
+  const transitions = {
+    0: '<p:transition spd="fast"><p:cover dir="u"/></p:transition>',
+    1: '<p:transition spd="fast"><p:split orient="horz" dir="out"/></p:transition>',
+  };
+  const session = createPptxDocumentSession(createRoot(), {
+    lazyMedia: true,
+    lazySlides: true,
+    renderMode: "slide",
+  });
+  try {
+    await session.open(deck({ slideExtras: transitions }), { initialSlide: 0 });
+    const report = session.capabilityReport;
+    const dispositions = report.features
+      .filter((feature) => feature.feature.startsWith("transition:"))
+      .map((feature) => [feature.feature, feature.disposition]);
+    assert.deepEqual(dispositions, [
+      ["transition:cover", "strict"],
+      ["transition:split", "strict"],
+    ]);
+  } finally {
+    session.dispose();
+  }
+});
+
+test("dissolve is reported as static by default and approximate with approximation: safe", async () => {
+  const dissolve = { 0: "<p:transition spd=\"fast\"><p:dissolve/></p:transition>" };
+  const strictSession = createPptxDocumentSession(createRoot(), {
+    lazyMedia: true,
+    lazySlides: true,
+    renderMode: "slide",
+  });
+  const safeSession = createPptxDocumentSession(createRoot(), {
+    lazyMedia: true,
+    lazySlides: true,
+    renderMode: "slide",
+    approximation: "safe",
+  });
+  const transitionDisposition = (session) => session.capabilityReport.features
+    .find((feature) => feature.feature === "transition:dissolve")?.disposition;
+  try {
+    await strictSession.open(deck({ slideExtras: dissolve }), { initialSlide: 0 });
+    assert.equal(transitionDisposition(strictSession), "static");
+    await safeSession.open(deck({ slideExtras: dissolve }), { initialSlide: 0 });
+    assert.equal(transitionDisposition(safeSession), "approximate");
+  } finally {
+    strictSession.dispose();
+    safeSession.dispose();
   }
 });

@@ -1189,6 +1189,21 @@ export interface OfficePptxMessages {
       /** Template with a `{count}` placeholder. */
       unparsed: string
     }
+    notes: {
+      /** Accessible name of the speaker-notes panel in browse mode. */
+      panel: string
+      /** Accessible name of the presenter rail in presentation mode. */
+      presenter: string
+      title: string
+      /** Shown when the current slide has no notes. */
+      empty: string
+      /** Heading above the next-slide preview. */
+      next: string
+      /** Shown when the current slide is the last one. */
+      noNext: string
+      /** Accessible name of the elapsed-time readout. */
+      timer: string
+    }
     status: {
       idle: string
       ready: string
@@ -2415,6 +2430,15 @@ export const officeMessagesEn: OfficeMessages = {
         static: "Static {count}",
         unparsed: "Unparsed {count}",
       },
+      notes: {
+        panel: "Speaker notes",
+        presenter: "Presenter view",
+        title: "Notes",
+        empty: "No speaker notes for this slide.",
+        next: "Next slide",
+        noNext: "Last slide",
+        timer: "Elapsed time",
+      },
       status: {
         idle: "Not started",
         ready: "Ready",
@@ -3602,6 +3626,15 @@ export const officeMessagesZhCN: OfficeMessages = {
         approximate: "近似 {count}",
         static: "静态 {count}",
         unparsed: "未解析 {count}",
+      },
+      notes: {
+        panel: "演讲者备注",
+        presenter: "演讲者视图",
+        title: "备注",
+        empty: "当前幻灯片没有演讲者备注。",
+        next: "下一页",
+        noNext: "已是最后一页",
+        timer: "已用时间",
       },
       status: {
         idle: "尚未开始",
