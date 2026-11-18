@@ -34,6 +34,42 @@ export interface XlsxCellComment {
   text: string;
 }
 
+/**
+ * Formatting of one inline run inside a rich-text cell.
+ *
+ * The fields mirror the OOXML `rPr` element: they are per-run overrides, so a
+ * field that is absent inherits from the cell style.
+ */
+export interface XlsxCellTextRunFont {
+  bold?: boolean;
+  /** Raw spreadsheet color record; resolve with `resolveWorkbookColor`. */
+  color?: Record<string, unknown>;
+  italic?: boolean;
+  /** Font family name from `rFont`/`name`, when the run overrides it. */
+  name?: string;
+  /** Font size in points, when the run overrides the cell size. */
+  sizePt?: number;
+  strikethrough?: boolean;
+  underline?: string;
+  /** OOXML `vertAlign`: `superscript`, `subscript` or `baseline`. */
+  verticalAlign?: string;
+}
+
+/**
+ * One inline run of a rich-text cell.
+ *
+ * A cell that stores several runs with their own fonts (for example a bold
+ * title with a red word and a superscript footnote marker) keeps them here so
+ * renderers can draw each run with its own formatting. The cell's plain
+ * `value` stays the concatenation of every run and remains the text used for
+ * formulas, search and clipboard.
+ */
+export interface XlsxCellTextRun {
+  text: string;
+  /** Per-run formatting; absent means the run uses the cell style as-is. */
+  font?: XlsxCellTextRunFont;
+}
+
 // ── Theme / styles ───────────────────────────────────────────────────────
 
 export interface XlsxResolvedCellStyle {
@@ -369,6 +405,11 @@ export type XlsxSheetNameIssue =
 
 export interface XlsxSheetData {
   cachedFormulaValues: Record<string, string>;
+  /**
+   * Rich-text runs of every cell that stores more than one formatted run,
+   * keyed by A1 address. Cells without an entry render their plain `value`.
+   */
+  richTextCells?: Record<string, XlsxCellTextRun[]>;
   colWidthOverridesPx: Record<number, number>;
   colStyleIds: Record<number, number>;
   hiddenCols?: number[];
@@ -1427,12 +1468,22 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
   getSheetShapes: (sheetIndex?: number) => XlsxShape[];
   getClipboardData: () => XlsxClipboardData | null;
   getCellDisplayValue: (cell?: XlsxCellAddress | null) => string;
+  /**
+   * Rich-text runs of a cell, or `undefined` when the cell has none.
+   *
+   * The runs concatenate to `getCellDisplayValue(cell)`. They are dropped once
+   * the cell value no longer matches the parsed runs (an edit or recalculation
+   * replaced the rich string), so a host can render them without checking.
+   */
+  getCellRuns: (cell?: XlsxCellAddress | null) => XlsxCellTextRun[] | undefined;
   getCellFormula: (cell?: XlsxCellAddress | null) => string;
   getCellSnapshotAsync?: (workbookSheetIndex: number, row: number, col: number, signal?: AbortSignal) => Promise<{
     displayValue: string;
     formula: string;
     /** Resolved number format of the cell, so the viewer can localize it. */
     numberFormat?: XlsxCellNumberFormatInput | null;
+    /** Rich-text runs, so Worker-backed viewers keep per-run formatting. */
+    runs?: XlsxCellTextRun[];
   }>;
   /** Flat print layout of the active sheet, or `null` when none is loaded. */
   getPrintLayout: () => XlsxPrintLayout | null;

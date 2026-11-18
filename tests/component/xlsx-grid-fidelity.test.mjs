@@ -37,32 +37,48 @@ const PAINT_SOURCE = readFileSync(PAINT_PATH, "utf8");
 const CONDITIONAL_PATH = path.join(ROOT, "packages/vue-xlsx/src/render/conditional-format.ts");
 const CONDITIONAL_SOURCE = readFileSync(CONDITIONAL_PATH, "utf8");
 
-function loadTsModule(source) {
-  return import(
-    `data:text/javascript;base64,${Buffer.from(ts.transpileModule(source, {
-      compilerOptions: {
-        module: ts.ModuleKind.ESNext,
-        target: ts.ScriptTarget.ES2022,
-      },
-    }).outputText).toString("base64")}`
-  );
+function transpileModuleSource(source) {
+  return ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
 }
+
+function dataUrl(source) {
+  return `data:text/javascript;base64,${Buffer.from(transpileModuleSource(source)).toString("base64")}`;
+}
+
+function loadTsModule(source) {
+  return import(dataUrl(source));
+}
+
+const RICH_TEXT_LAYOUT_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/rich-text-layout.ts");
+const RICH_TEXT_LAYOUT_SOURCE = readFileSync(RICH_TEXT_LAYOUT_PATH, "utf8");
 
 const paintModule = await loadTsModule(PAINT_SOURCE);
 const conditionalModule = await loadTsModule(CONDITIONAL_SOURCE);
+const richTextModule = await loadTsModule(RICH_TEXT_LAYOUT_SOURCE);
 // `drawCellText` is the shared renderer used by both `drawCellContent` and the
-// overflow pass. Transpile it with a stub icon resolver so the canvas calls can
-// be asserted without a real Canvas implementation.
+// overflow pass. Transpile it with a stub icon resolver and a colour stub so the
+// canvas calls can be asserted without a real Canvas implementation.
 const drawTextModule = await loadTsModule([
   "let __iconGeometry = null;",
   "function resolveIconGeometry() { return __iconGeometry; }",
   "export function setIconGeometry(value) { __iconGeometry = value; }",
+  `import { wrapRichTextRuns, measureRichTextSegments, richTextBaselineOffset, richTextFontScale } from "${dataUrl(RICH_TEXT_LAYOUT_SOURCE)}";`,
+  "function resolveWorkbookColor(color) { return color?.rgb ? `#${String(color.rgb).slice(2)}` : null; }",
   gridFunctionText("truncateText"),
   gridFunctionText("wrapCellText"),
+  gridFunctionText("baseCellFont"),
+  gridFunctionText("richTextRunFont"),
+  gridFunctionText("drawRichTextRuns"),
   gridFunctionText("drawCellText"),
   "export { drawCellText, wrapCellText };",
 ].join("\n"));
 const { drawCellText, setIconGeometry, wrapCellText } = drawTextModule;
+const { truncateRichTextRuns, wrapRichTextRuns } = richTextModule;
 
 const {
   MAX_CANVAS_AREA_PX,

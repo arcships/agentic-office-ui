@@ -1724,6 +1724,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     },
     getCellDisplayValue: clipboardDomain.getCellDisplayValue,
     getCellFormula: clipboardDomain.getCellFormula,
+    getCellRuns: clipboardDomain.getCellRuns,
     getCellDataValidation,
     getDataValidationListOptions,
     get getCellSnapshotAsync() { return isWorkerBacked.value ? historyDomain.getCellSnapshotAsync : undefined; },

@@ -5,6 +5,7 @@ import type {
   XlsxCellEditRequest,
   XlsxCellNumberFormatInput,
   XlsxCellRange,
+  XlsxCellTextRun,
   XlsxChart,
   XlsxChartElementSelection,
   XlsxChartsheet,
@@ -481,7 +482,7 @@ export interface XlsxControllerContext {
   chartDisplayFallbackCleanupRef: ShallowRef<(() => void) | null>;
   sheetOriginsRef: ShallowRef<Array<WorkbookImageSheetOrigin | null>>;
   workerClientRef: ShallowRef<XlsxWorkerClient | null>;
-  workerCellSnapshotCacheRef: ShallowRef<Map<string, { displayValue: string; formula: string; numberFormat?: XlsxCellNumberFormatInput | null }>>;
+  workerCellSnapshotCacheRef: ShallowRef<Map<string, { displayValue: string; formula: string; numberFormat?: XlsxCellNumberFormatInput | null; runs?: XlsxCellTextRun[] }>>;
 
   // Derived computeds defined in the orchestrator
   activeTab: ComputedRef<XlsxWorkbookTab | null>;

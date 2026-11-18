@@ -78,7 +78,14 @@
                     :rowspan="cell.rowSpan"
                     :colspan="cell.colSpan"
                     :style="cell.style"
-                  >{{ cell.text }}</td>
+                  ><span
+                    v-if="cell.runs"
+                    class="xlsx-print-page__rich-text"
+                  ><span
+                    v-for="(run, runIndex) in cell.runs"
+                    :key="`run-${runIndex}`"
+                    :style="run.style"
+                  >{{ run.text }}</span></span><template v-else>{{ cell.text }}</template></td>
                 </tr>
               </tbody>
             </table>
@@ -94,16 +101,20 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from "vue";
 import {
   buildPrintPageGrid,
+  resolveRichTextRuns,
   resolveWorkbookColor,
   resolveWorkbookFillStyle,
   type XlsxPrintLayout,
   type XlsxPrintPage,
+  type XlsxCellTextRun,
   type XlsxResolvedCellStyle,
   type XlsxThemePalette,
   type XlsxViewerController,
 } from "@arcships/xlsx-core";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { useXlsxMessages } from "../i18n";
+import { cellAddressToA1 } from "../composables/selection";
+import { RICH_TEXT_VERTICAL_ALIGN_SCALE } from "./rich-text-layout";
 
 const props = withDefaults(defineProps<{
   controller: XlsxViewerController;
@@ -124,9 +135,17 @@ let workerHydrationToken = 0;
 const workerCellValues = new Map<string, string>();
 const workerValuesRevision = ref(0);
 
+/** One rich-text run of a printed cell, styled for the page scale. */
+interface PrintRunView {
+  style: CSSProperties;
+  text: string;
+}
+
 interface PrintCellView {
   col: number;
   colSpan: number;
+  /** Rich-text runs of the cell, `undefined` for plain text. */
+  runs?: PrintRunView[];
   row: number;
   rowSpan: number;
   style: CSSProperties;
@@ -193,6 +212,46 @@ function borderEdge(edge: unknown, themePalette: XlsxThemePalette): string | und
   const width = rawStyle.startsWith("medium") ? 2 : rawStyle === "thick" ? 3 : 1;
   const color = resolveWorkbookColor(asRecord(style.color), themePalette) ?? "#52525b";
   return `${width}px ${cssStyle} ${color}`;
+}
+
+/**
+ * CSS of one inline run.
+ *
+ * The DOM path keeps the same shape as the canvas path: the cell style resolves
+ * the base font and the run only carries its overrides, while a
+ * superscript/subscript run shrinks by the shared scale and shifts its baseline
+ * through `vertical-align`.
+ */
+function runView(run: XlsxCellTextRun, scale: number): PrintRunView {
+  const font = run.font;
+  if (!font) return { style: {}, text: run.text };
+  const decoration = [
+    font.underline ? "underline" : "",
+    font.strikethrough ? "line-through" : "",
+  ].filter(Boolean).join(" ");
+  const verticalAlign = font.verticalAlign?.toLocaleLowerCase();
+  const shrink = verticalAlign === "superscript" || verticalAlign === "subscript";
+  return {
+    style: {
+      color: resolveWorkbookColor(font.color, props.controller.activeSheet?.themePalette) ?? undefined,
+      fontFamily: font.name?.trim() ? font.name : undefined,
+      // The page scale shrinks the whole page, so a run size in points has to
+      // be scaled like the cell font it overrides.
+      fontSize: font.sizePt
+        ? `${((font.sizePt * 4 / 3) * scale / 100).toFixed(2)}px`
+        : shrink ? `${RICH_TEXT_VERTICAL_ALIGN_SCALE}em` : undefined,
+      fontStyle: font.italic ? "italic" : undefined,
+      fontWeight: font.bold ? "700" : undefined,
+      textDecoration: decoration || undefined,
+      verticalAlign: verticalAlign === "superscript"
+        ? "super"
+        : verticalAlign === "subscript" ? "sub" : undefined,
+      // `<sup>`/`<sub>` already shrink in browsers; match the canvas scale so
+      // the DOM line breaks at the same place the grid does.
+      lineHeight: shrink ? String(RICH_TEXT_VERTICAL_ALIGN_SCALE) : undefined,
+    },
+    text: run.text,
+  };
 }
 
 function cellStyle(
@@ -271,6 +330,21 @@ function cellKey(row: number, col: number) {
   return `${row}:${col}`;
 }
 
+/**
+ * Runs of a printed cell.
+ *
+ * The runs have to describe the text this preview actually draws: in a
+ * Worker-backed viewer that text comes from the hydrated snapshot, so the guard
+ * compares against it rather than the live worksheet handle.
+ */
+function resolveCellRuns(row: number, col: number): XlsxCellTextRun[] | undefined {
+  const runs = props.controller.activeSheet?.richTextCells?.[cellAddressToA1({ col, row })];
+  if (!runs || runs.length < 2) return undefined;
+  const text = workerCellValues.get(cellKey(row, col))
+    ?? props.controller.getCellDisplayValue({ col, row });
+  return resolveRichTextRuns(runs, text);
+}
+
 const pageViews = computed<PrintPageView[]>(() => {
   const current = layout.value;
   const sheet = props.controller.activeSheet;
@@ -292,6 +366,7 @@ const pageViews = computed<PrintPageView[]>(() => {
         colSpan: cell.colSpan,
         row: cell.row,
         rowSpan: cell.rowSpan,
+        runs: resolveCellRuns(cell.row, cell.col)?.map((run) => runView(run, page.scale)),
         style: cellStyle(cell.row, cell.col, page.scale, gridLines, sheet, worksheet),
         text: workerCellValues.get(cellKey(cell.row, cell.col))
           ?? props.controller.getCellDisplayValue({ col: cell.col, row: cell.row }),

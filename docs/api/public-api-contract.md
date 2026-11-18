@@ -124,6 +124,7 @@ try {
 - 图表：`refreshChartDataFromWorkbook(workbook, chartsByWorkbookSheetIndex, chartsheets)` 从编辑后的工作簿重新解析图表分类和值，保留图表定义与锚点；Worker 客户端也提供 `refreshCharts()`，不会重新解析源文件字节。
 - 更改图表类型：`changeWorkbookChartType(assets, chartAssets, chartId, type)` 重写图表部件（经典 `c:plotArea` 或 chartEx `cx:chartSpace`），保留系列名称、颜色、数据标签和坐标轴格式；经典与 chartEx 互转时同步 drawing 关系、`mc:AlternateContent` 包裹和内容类型。`chartTypeOptions`、`chartTypeFamilies()`、`resolveChartTypeOption()`、`matchesChartType()`、`chartTypeUnavailable()` 提供菜单目录和可用性判断；`XlsxViewerController.changeChartType(id, type)` 是其控制器入口。
 - 根入口同时提供工作表、单元格、A1 范围、整行、整列、图表和人工 sheet 区域的 `createXlsx*ReferenceDraft`、`resolveXlsxReference` 与 `describeXlsxReference`。适配器优先使用 sheet id 和 drawing id；名称/类型证据只有唯一时才用于迁移。
+- 富文本单元格（issue #138）：`XlsxCellTextRun` / `XlsxCellTextRunFont` 描述单元格内每一段文字的文本与字体覆盖（粗体、斜体、下划线、删除线、颜色、字号、字体族、`vertAlign` 上标/下标），`XlsxSheetData.richTextCells` 以 A1 地址保存多段单元格，`controller.getCellRuns(cell)` 返回当前单元格的段（值变化后自动不再返回）。`parseRichTextRuns`、`parseInlineRichTextCell`、`parseSharedStringRichText`、`richTextRunsToPlainText` 与 `resolveRichTextRuns` 供自定义渲染复用同一套解析与"文本仍匹配"校验；单元格的纯文本 `value` 始终是各段拼接，公式、搜索和剪贴板继续使用它。
 
 `XlsxRuntimeConfig.limits` 使用实例自己的 `XlsxRuntimeLimits`。公开限制除通用输入、压缩包、XML、关系、图片和解析时间外，还覆盖工作表 XML、共享字符串、行列、工作表数量和公式数量。`DEFAULT_XLSX_RUNTIME_LIMITS` 是默认值，`resolveXlsxRuntimeLimits` 返回实例快照；`validateXlsxArchive` 可在创建工作簿前执行同一套检查。
 

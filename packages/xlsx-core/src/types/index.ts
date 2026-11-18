@@ -4,6 +4,9 @@ export type {
   XlsxCellRange,
   XlsxCellHyperlink,
   XlsxCellComment,
+  // Rich text
+  XlsxCellTextRun,
+  XlsxCellTextRunFont,
   // Theme / styles
   XlsxResolvedCellStyle,
   XlsxTableStyleDefinition,

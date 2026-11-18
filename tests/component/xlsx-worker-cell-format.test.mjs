@@ -28,7 +28,7 @@ function workbookBuffer() {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
-function workerSnapshotWithSheet() {
+function workerSnapshotWithSheet(overrides = {}) {
   return {
     chartsByWorkbookSheetIndex: [[]],
     chartsheets: [],
@@ -38,6 +38,7 @@ function workerSnapshotWithSheet() {
       visibility: "visible",
       workbookSheetIndex: 0,
       zoomScale: 100,
+      ...overrides,
     }],
     tablesByWorkbookSheetIndex: [[]],
     tabs: [{
@@ -90,7 +91,7 @@ function enableWorkerSupport(t) {
   });
 }
 
-async function mountWorkerController(t, options = {}) {
+async function mountWorkerController(t, options = {}, sheetOverrides = {}) {
   enableWorkerSupport(t);
   const worker = new ManualWorker();
   let controller;
@@ -113,7 +114,7 @@ async function mountWorkerController(t, options = {}) {
   await waitFor(() => worker.messages.length > 0, "worker load request");
   const loadMessage = worker.messages.find((message) => message.type === "load");
   assert.ok(loadMessage, "worker received a load request");
-  worker.respond(loadMessage, workerSnapshotWithSheet());
+  worker.respond(loadMessage, workerSnapshotWithSheet(sheetOverrides));
   await waitFor(
     () => controller.sourceState === "ready" || controller.error,
     "worker-backed XLSX ready state",
@@ -151,6 +152,65 @@ test("worker cell snapshots carry the number format so the formula bar localizes
   );
   assert.equal(controller.getCellDisplayValue(cell), "1.234,56");
   assert.equal(controller.getCellFormula(cell), "");
+});
+
+test("worker-backed viewers keep rich-text runs from the sheet state and snapshots", async (t) => {
+  const richRuns = [
+    { text: "Quarter", font: { bold: true } },
+    { text: "ly", font: { color: { rgb: "#ff0000" } } },
+  ];
+  const { controller, worker } = await mountWorkerController(t, {}, {
+    richTextCells: { A1: richRuns },
+  });
+
+  const cell = { col: 0, row: 0 };
+  assert.deepEqual(
+    controller.getCellRuns(cell),
+    richRuns,
+    "a read-only Worker load exposes the runs parsed from the same bytes",
+  );
+  assert.equal(controller.getCellRuns({ col: 1, row: 0 }), undefined);
+
+  controller.selectCell(cell);
+  await waitFor(
+    () => worker.messages.some((message) => message.type === "getCellSnapshot"),
+    "worker cell snapshot request",
+  );
+  const request = worker.messages.find((message) => message.type === "getCellSnapshot");
+  worker.respond(request, {
+    displayValue: "Quarterly",
+    formula: "",
+    runs: richRuns,
+  });
+  await waitFor(
+    () => controller.getCellDisplayValue(cell) === "Quarterly",
+    "worker snapshot value",
+  );
+  assert.deepEqual(controller.getCellRuns(cell), richRuns, "the snapshot keeps the runs");
+
+  // A snapshot whose text no longer matches the runs (the cell was rewritten
+  // in the Worker) must not paint the old formatting.
+  const second = { col: 1, row: 0 };
+  controller.selectCell(second);
+  await waitFor(
+    () => worker.messages.filter((message) => message.type === "getCellSnapshot").length > 1,
+    "second worker cell snapshot request",
+  );
+  const secondRequest = worker.messages.filter((message) => message.type === "getCellSnapshot").at(-1);
+  worker.respond(secondRequest, {
+    displayValue: "Edited",
+    formula: "",
+    runs: richRuns,
+  });
+  await waitFor(
+    () => controller.getCellDisplayValue(second) === "Edited",
+    "second worker snapshot value",
+  );
+  assert.equal(
+    controller.getCellRuns(second),
+    undefined,
+    "runs that no longer describe the cell text are dropped",
+  );
 });
 
 test("worker snapshots without a format keep the engine's display string", async (t) => {
