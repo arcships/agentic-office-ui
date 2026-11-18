@@ -16,6 +16,7 @@
       :layout-options="layoutOptions"
       :theme="theme"
       :zoom-scale="effectiveZoomScale"
+      :document-id="documentRevision.documentId"
       :fit-width="zoom === undefined ? fitWidth : false"
       :show-tracked-changes="showTrackedChanges"
       :show-comments="showComments"
@@ -69,16 +70,24 @@ import type {
   LayoutOptions,
 } from "@arcships/docx-core"
 import {
+  createDocxBlockReferenceDraft,
   createDocxCommentReferenceDraft,
   createDocxImageReferenceDraft,
   createDocxPageReferenceDraft,
   createDocxRegionReferenceDraft,
   createDocxTableReferenceDraft,
   createDocxTextReferenceDraft,
+  createDocxWordReferenceDraft,
   docNodeContentSignature,
+  extractDocumentBlocks,
   resolveDocxReference,
   type DocxOfficeReference,
   type DocxReferenceContext,
+  type DocxWordRange,
+  type DocumentBlock,
+  type DocumentWord,
+  type ExtractDocumentBlocksOptions,
+  type StructuredDocument,
 } from "@arcships/docx-core"
 import {
   confirmOfficeReferenceDraft,
@@ -1342,6 +1351,34 @@ defineExpose({
     return viewerRootRef.value?.scrollContainer
   },
   getDocumentRevision: (): OfficeDocumentRevision => documentRevision.value,
+  /** Extracts the document block tree (body, headers/footers, notes). */
+  getDocumentBlocks(
+    options: Omit<ExtractDocumentBlocksOptions, "documentId"> = {},
+  ): Promise<StructuredDocument> {
+    return extractDocumentBlocks(props.model, {
+      ...options,
+      documentId: documentRevision.value.documentId,
+    })
+  },
+  /** Confirms a block through the unified reference contract. */
+  confirmBlockReference(
+    block: DocumentBlock,
+    trigger: "pointer" | "keyboard" | "touch" | "programmatic" = "programmatic",
+  ) {
+    const draft = createDocxBlockReferenceDraft(referenceContext(), block)
+    confirmDraft(draft, trigger)
+    return draft
+  },
+  /** Confirms a word/range through the unified reference contract. */
+  confirmWordReference(
+    block: DocumentBlock,
+    word: DocumentWord | DocxWordRange,
+    trigger: "pointer" | "keyboard" | "touch" | "programmatic" = "programmatic",
+  ) {
+    const draft = createDocxWordReferenceDraft(referenceContext(), block, word)
+    confirmDraft(draft, trigger)
+    return draft
+  },
   hitTest,
   async describeReference(reference: OfficeObjectReference, signal?: AbortSignal) {
     if (signal?.aborted) {
@@ -1379,7 +1416,12 @@ defineExpose({
       const first = locator.value.paragraphPath.find((segment) => segment.kind === "paragraph" || segment.kind === "node")
       if (first) viewerRootRef.value?.scrollToNode(first.index, { behavior: "smooth" })
     } else if (locator.value.kind === "structure") {
-      const first = locator.value.path.find((segment) => segment.kind === "table" || segment.kind === "node")
+      const first = locator.value.path.find(
+        (segment) =>
+          segment.kind === "table" ||
+          segment.kind === "node" ||
+          segment.kind === "paragraph",
+      )
       if (first) viewerRootRef.value?.scrollToNode(first.index, { behavior: "smooth" })
     } else if (locator.value.kind === "comment" && locator.value.anchorPath) {
       const first = locator.value.anchorPath.find((segment) => segment.kind === "paragraph" || segment.kind === "node")

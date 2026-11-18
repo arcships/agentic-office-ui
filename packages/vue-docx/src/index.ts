@@ -98,6 +98,14 @@ export { default as DocxLinkHoverCard } from "./components/DocxLinkHoverCard.vue
  * style's own run/paragraph properties.
  */
 export { default as DocxStylePreviewPopover } from "./components/DocxStylePreviewPopover.vue"
+/** Absolute highlight boxes for document blocks on the mounted pages. */
+export { default as DocxBlockHighlights } from "./components/DocxBlockHighlights.vue"
+/** Absolute highlight boxes for word ranges on the mounted pages. */
+export { default as DocxWordHighlights } from "./components/DocxWordHighlights.vue"
+export type {
+  DocxBlockHighlightsProps,
+  DocxWordHighlightsProps,
+} from "./components/block-highlight-types"
 
 // ---- Render ----
 

@@ -76,3 +76,37 @@ const editor = useDocxEditor({ initialFileName: "document.docx" })
 `DocxFormFieldDialog`、`DocxLinkHoverCard` 和 `DocxStylePreviewPopover` 与 `DocxEditor` 使用同一份文案库（`provideDocxMessages`），在 `DocxEditor` 内部挂载时自动跟随 `locale`/`messages`。
 
 只要宿主自己渲染手柄，就可以关闭 `DocxEditor` 的对应属性（`show-node-reorder`、`show-style-preview` 等），不会出现两套控件。
+
+## 文档块/词高亮覆盖层
+
+`DocxBlockHighlights` 和 `DocxWordHighlights` 是独立覆盖层，可以挂在 `DocxViewer`、`DocxEditor` 或 `DocxDocumentSurface` 的根元素上：
+
+```vue
+<DocxBlockHighlights
+  :root="viewerRoot"
+  :blocks="blocks"
+  :block-ids="blockIds"
+  :page-index="pageIndex"
+  :color-for-block="(block) => block.type === 'table' ? '#0ea5e9' : '#2563eb'"
+  @geometry="(map) => (geometry = map)"
+/>
+<DocxWordHighlights
+  :root="viewerRoot"
+  :words="words"
+  :word="activeWord"
+  :word-ranges="wordRanges"
+/>
+```
+
+| 属性 | 组件 | 说明 |
+|---|---|---|
+| `root` | 两者 | 含 `[data-docx-page-surface]` 的查看器根元素 |
+| `block` / `blocks` / `blockIds` | `DocxBlockHighlights` | 强调块、待绘制块，或只按 source id 选择 |
+| `word` / `words` / `wordRanges` | `DocxWordHighlights` | 强调词、待绘制词，或 `{ blockId, start, end }` 偏移 |
+| `pageIndex` | 两者 | 只绘制指定 0 基页 |
+| `color` / `colorForBlock` | 两者 | 边框与底色；底色用 8 位十六进制透明度 |
+| `onGeometry` | 两者 | 每次测量后回调页内几何 |
+
+盒子通过 Teleport 进入页面表面，因此自动复用页面缩放，不需要宿主换算 zoom。几何在页面挂载、重分页、字体加载、滚动和窗口缩放后自动刷新；`onGeometry` 可以用来保存引用预览或调试。
+
+`DocxDocumentSurface` 的 `getDocumentBlocks()` 返回带 source id 的块树，`confirmBlockReference(block)` 和 `confirmWordReference(block, word)` 会以统一引用契约发出 `reference-confirm`，可直接用于引用条或引用列表。

@@ -69,6 +69,10 @@ const result = resolveDocxReference(context, { ...draft, referenceId })
 
 同修订会验证模型路径和文字指纹；修订变化后，唯一文字引用可迁移，重复文字返回 `ambiguous`，删除返回 `not-found`。DOCX 页面和人工区域受重排版影响，跨修订不会仅凭页码自动恢复。适配器不保存引用集合，也不决定确认后的产品动作。
 
+## 文档块、词与几何
+
+`extractDocumentBlocks(model, { includeWords: true })` 返回可寻址的块树（段落、标题、列表、表格/单元格、图片、页眉页脚与脚注），并可用 `resolveDocxBlockGeometries()` / `resolveDocxWordGeometries()` 把块和词的范围换算成页面 CSS 像素坐标。`createDocxBlockReferenceDraft()` 与 `createDocxWordReferenceDraft()` 把块和词接入统一引用契约。几何需要已渲染的查看器 DOM；语义提取不需要浏览器。
+
 ## 文档
 
 - [DOCX 使用指南](https://github.com/arcships/agentic-office-ui/blob/master/docs/guide/docx.md)

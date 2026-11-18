@@ -326,8 +326,22 @@ test("DocxDocumentSurface emits declared resolve, describe and capture error cod
   await assert.rejects(api.describeReference(missingPage))
   assert.equal(errors.at(-1).code, "DESCRIBE_FAILED")
 
+  const paragraphStructure = structuredClone(confirmed)
+  paragraphStructure.kind = "paragraph"
+  paragraphStructure.locator.value = {
+    kind: "structure",
+    part: { kind: "body" },
+    path: [{ kind: "paragraph", index: 0 }],
+  }
+  assert.equal((await api.resolveReference(paragraphStructure)).status, "relocated")
+
   const unsupported = structuredClone(confirmed)
-  unsupported.locator.value = { kind: "structure", part: { kind: "body" }, path: [{ kind: "paragraph", index: 0 }] }
+  unsupported.locator.value = {
+    kind: "behavior",
+    behavior: "bookmark",
+    owner: { scope: "document" },
+    instanceId: "bookmark-1",
+  }
   await api.resolveReference(unsupported)
   assert.equal(errors.at(-1).code, "RESOLVE_FAILED")
 

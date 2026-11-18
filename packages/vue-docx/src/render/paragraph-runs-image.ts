@@ -93,6 +93,8 @@ export interface ImageRunRenderContext {
   child: ImageRunNode
   key: string
   childIndex: number
+  /** Source id of the owning paragraph; figures expose it for geometry. */
+  paragraphSourceId?: string
   pageNumber?: number
   totalPages?: number
   pageNumberFormat?: string
@@ -171,6 +173,9 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
 
   const imageLayoutAttributes: Record<string, string> = {
     "data-docx-image-child-index": String(childIndex),
+    ...(ctx.paragraphSourceId
+      ? { "data-docx-source-id": `${ctx.paragraphSourceId}/child/${childIndex}` }
+      : {}),
     "data-docx-image-layout": isWrappedFloatingImage
       ? "wrapped"
       : isAbsoluteFloatingImage

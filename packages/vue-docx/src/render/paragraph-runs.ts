@@ -113,6 +113,14 @@ export interface ParagraphRunRenderOptions {
    * select exactly the linked characters before editing or removing the link.
    */
   emitLinkRangeAttributes?: boolean
+  /**
+   * Emit `data-docx-text-start`/`data-docx-text-end` (paragraph text offsets) on
+   * text spans so block/word geometry can map DOM text ranges back to the
+   * document model.
+   */
+  emitTextRangeAttributes?: boolean
+  /** Source id of the owning paragraph; figures inherit it for geometry. */
+  paragraphSourceId?: string
 }
 
 export interface NoteMarkerLabels {
@@ -232,15 +240,29 @@ export function renderParagraphRuns(
   const checkboxChoiceRow = paragraphLooksLikeCheckboxChoiceRow(paragraph)
 
   // Character offset of every child in `paragraphText()`. Hyperlink anchors use
-  // it to report the exact range the link covers.
+  // it to report the exact range the link covers; text spans use it to expose
+  // the offsets block/word geometry resolves against.
   const childTextOffsets: number[] = []
-  if (options?.emitLinkRangeAttributes) {
+  if (options?.emitLinkRangeAttributes || options?.emitTextRangeAttributes) {
     let textOffset = 0
     paragraph.children.forEach((child) => {
       childTextOffsets.push(textOffset)
       if (child.type === "text") textOffset += child.text.length
     })
   }
+
+  const textRangeAttributes = (
+    start: number | undefined,
+    length: number | undefined
+  ): Record<string, string> =>
+    options?.emitTextRangeAttributes &&
+    start !== undefined &&
+    length !== undefined
+      ? {
+          "data-docx-text-start": String(start),
+          "data-docx-text-end": String(start + length),
+        }
+      : {}
   const documentTabStopPx =
     Number.isFinite(options?.defaultTabStopPx) &&
     (options?.defaultTabStopPx as number) > 0
@@ -632,6 +654,7 @@ export function renderParagraphRuns(
       child,
       key,
       childIndex,
+      paragraphSourceId: options?.paragraphSourceId,
       pageNumber,
       totalPages,
       pageNumberFormat: options?.pageNumberFormat,
@@ -703,10 +726,13 @@ export function renderParagraphRuns(
       return
     }
 
+    const startOffset = childTextOffsets[childIndex]
+
     // Tab
     if (effectiveText === "\t" && !useTabLeaderLayout && !useAnchoredTabLayout) {
       target.push(h("span", {
         key, ...annotationAttributes,
+        ...textRangeAttributes(startOffset, child.text.length),
         style: tabTextStyle(child.style, singleUnitTextStyle),
       }, "\u00a0"))
       return
@@ -716,7 +742,6 @@ export function renderParagraphRuns(
     const linkHref = child.link ? sanitizeOfficeLink(child.link) : undefined
     if (linkHref) {
       const isInternalLink = linkHref.startsWith("#")
-      const startOffset = childTextOffsets[childIndex]
       const linkRange =
         options?.emitLinkRangeAttributes &&
         startOffset !== undefined &&
@@ -726,10 +751,14 @@ export function renderParagraphRuns(
               "data-docx-link-end": String(startOffset + child.text.length),
             }
           : undefined
+      const linkTextRange = effectiveText === child.text
+        ? textRangeAttributes(startOffset, child.text.length)
+        : {}
       target.push(
         h("a", {
           key, ...annotationAttributes,
           ...linkRange,
+          ...linkTextRange,
           href: linkHref,
           target: isInternalLink ? undefined : "_blank",
           rel: isInternalLink ? undefined : "noreferrer noopener",
@@ -751,6 +780,12 @@ export function renderParagraphRuns(
                 {
                   key: `${key}-comment-${segment.start}`,
                   ...commentAttributesForIds(segment.commentIds),
+                  ...(effectiveText === child.text
+                    ? textRangeAttributes(
+                        startOffset === undefined ? undefined : startOffset + segment.start,
+                        segment.end - segment.start
+                      )
+                    : {}),
                   style: commentStyleForIds(segment.commentIds),
                 },
                 effectiveText.slice(segment.start, segment.end)
@@ -766,7 +801,8 @@ export function renderParagraphRuns(
     // Plain text with soft-break control
     appendPlainTextWithSoftBreakControl(
       target, key, effectiveText, textStyle,
-      child.style, annotationAttributes, commentTextRanges
+      child.style, annotationAttributes, commentTextRanges,
+      effectiveText === child.text ? startOffset : undefined
     )
   }
 
@@ -778,7 +814,8 @@ export function renderParagraphRuns(
     style: Record<string, string | number | undefined>,
     measureStyle?: TextRunNode["style"] | FormFieldRunNode["style"],
     spanAttributes?: Record<string, string>,
-    commentTextRanges?: readonly ParagraphCommentTextRange[]
+    commentTextRanges?: readonly ParagraphCommentTextRange[],
+    textOffset?: number
   ): void => {
     // Exact comment windows: emit one span per run of identically-commented
     // characters, so a range covering half a run highlights only that half.
@@ -789,6 +826,10 @@ export function renderParagraphRuns(
             key: `${keySeed}-comment-${segment.start}`,
             ...spanAttributes,
             ...commentAttributesForIds(segment.commentIds),
+            ...textRangeAttributes(
+              textOffset === undefined ? undefined : textOffset + segment.start,
+              segment.end - segment.start
+            ),
             style: { ...style, ...commentStyleForIds(segment.commentIds) },
           }, text.slice(segment.start, segment.end))
         )
@@ -800,28 +841,37 @@ export function renderParagraphRuns(
     const shouldControlSoftBreakStretch =
       isJustifiedAlignment(paragraph.style?.align) && text.includes("\n")
     if (!shouldControlSoftBreakStretch) {
-      target.push(h("span", { key: keySeed, ...spanAttributes, style }, text))
+      target.push(h("span", {
+        key: keySeed,
+        ...spanAttributes,
+        ...textRangeAttributes(textOffset, text.length),
+        style,
+      }, text))
       trackTextAdvance(text, measureStyle)
       return
     }
 
     const segments = text.split("\n")
+    let segmentOffset = textOffset
     segments.forEach((segment, segmentIndex) => {
       const isLastSegment = segmentIndex === segments.length - 1
       if (segmentIndex > 0) {
         target.push(h("br", { key: `${keySeed}-soft-break-${segmentIndex}` }))
+        segmentOffset = segmentOffset === undefined ? undefined : segmentOffset + 1
       }
       if (segment.length > 0) {
         target.push(
           h("span", {
             key: `${keySeed}-segment-${segmentIndex}`,
             ...spanAttributes,
+            ...textRangeAttributes(segmentOffset, segment.length),
             style: isLastSegment
               ? { ...style, display: "inline-block", maxWidth: "100%", whiteSpace: "pre-wrap", verticalAlign: "baseline" }
               : style,
           }, segment)
         )
       }
+      segmentOffset = segmentOffset === undefined ? undefined : segmentOffset + segment.length
       trackTextAdvance(segment, measureStyle)
       if (!isLastSegment) approximateLineWidthPx = 0
     })

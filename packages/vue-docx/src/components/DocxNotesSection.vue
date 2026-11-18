@@ -22,6 +22,7 @@
               v-if="node.type === 'paragraph'"
               :paragraph="node"
               :paragraph-index="-(note.id * 1000 + nodeIndex + 1)"
+              :source-id="noteNodeSourceId(note.id, nodeIndex)"
               :data-docx-note-node-index="nodeIndex"
               :editable="false"
               :document-theme="theme"
@@ -32,6 +33,7 @@
               v-else-if="node.type === 'table'"
               :table="node"
               :table-index="-(note.id * 1000 + nodeIndex + 1)"
+              :source-id="noteNodeSourceId(note.id, nodeIndex)"
               :data-docx-note-node-index="nodeIndex"
               :editable="false"
               :document-theme="theme"
@@ -52,6 +54,7 @@ import type { DocModel, DocumentNoteDefinition, NumberingDefinitionSet } from "@
 import {
   resolveDefaultTabStopPx,
   resolveDocumentLayoutDefaults,
+  docxNoteNodeSourceId,
 } from "@arcships/docx-core"
 import DocxParagraphHost from "./DocxParagraphHost.vue"
 import DocxTableHost from "./DocxTableHost.vue"
@@ -83,6 +86,10 @@ function noteLayoutDefaults() {
 const defaultTabStopPx = computed(() =>
   resolveDefaultTabStopPx(noteLayoutDefaults().defaultTabStopTwips)
 )
+
+function noteNodeSourceId(noteId: number, nodeIndex: number): string {
+  return docxNoteNodeSourceId(props.kind, noteId, nodeIndex)
+}
 
 function noteLabel(note: DocumentNoteDefinition, noteIndex: number): string {
   const label = props.labels?.get(note.id)

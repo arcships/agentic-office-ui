@@ -1046,6 +1046,7 @@ watch(
 
 <style scoped>
 .docx-page-surface {
+  position: relative;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;

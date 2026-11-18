@@ -38,6 +38,8 @@ import "@arcships/vue-docx/style.css"
 - `DocxDocumentSurface` — 最小嵌入渲染区（支持受控文字/页面/区域选择，以及宿主持有的 50%–200% 手势缩放）
 - `DocxViewer` — 文档查看器
 - `DocxEditor` — 文档编辑器
+- `DocxBlockHighlights` — 文档块高亮覆盖层（按块、块 id 或页码）
+- `DocxWordHighlights` — 词/文字范围高亮覆盖层（按词或 `{ blockId, start, end }`）
 
 ## 组合函数
 
@@ -53,7 +55,7 @@ import "@arcships/vue-docx/style.css"
 | `load-success` | `DocxImportResult` |
 | `load-error` | `Error`（可读 `code`） |
 
-`DocxDocumentSurface` 统一支持 `documentId`、`selectionMode`、`emitReferenceCandidates`，并发出 `referenceConfirm`、`regionDraftChange`、`selectionCancel`、`referenceResolve` 和 `referenceError`。组件 expose 可描述、解析和滚动到引用；组件不保存引用集合，也不调用 Agent。
+`DocxDocumentSurface` 统一支持 `documentId`、`selectionMode`、`emitReferenceCandidates`，并发出 `referenceConfirm`、`regionDraftChange`、`selectionCancel`、`referenceResolve` 和 `referenceError`。组件 expose 可描述、解析和滚动到引用；`getDocumentBlocks()`、`confirmBlockReference()` 和 `confirmWordReference()` 可以把块/词作为统一引用确认。组件不保存引用集合，也不调用 Agent。
 
 ## 文档
 
