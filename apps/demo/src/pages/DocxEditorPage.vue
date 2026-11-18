@@ -44,9 +44,11 @@
         <button data-testid="editor-test-format-range" class="btn-secondary" @click="formatAcceptanceRange">格式化中间文字</button>
         <button data-testid="editor-test-insert-table" class="btn-secondary" @click="insertAcceptanceTable">插入并扩展表格</button>
         <button data-testid="editor-test-insert-image" class="btn-secondary" @click="insertAcceptanceImage">插入并定位图片</button>
+        <button data-testid="editor-test-export-bytes" class="btn-secondary" @click="exportAcceptanceBytes">读取导出字节</button>
       </div>
       <pre data-testid="editor-selection-snapshot" class="acceptance-snapshot">{{ selectionSnapshot }}</pre>
       <pre data-testid="editor-model-snapshot" class="acceptance-snapshot">{{ modelSnapshot }}</pre>
+      <pre data-testid="editor-export-bytes-state" :data-state="exportBytesState" class="acceptance-snapshot">{{ exportBytesSnapshot }}</pre>
     </details>
   </div>
 </template>
@@ -329,6 +331,29 @@ async function insertAcceptanceImage(): Promise<void> {
 
 // ── UI toggles ───────────────────────────────────────────────────────
 const isReadOnly = ref(false)
+
+const exportBytesState = ref<"idle" | "running" | "ready" | "error">("idle")
+const exportBytesSnapshot = ref("")
+
+async function exportAcceptanceBytes(): Promise<void> {
+  exportBytesState.value = "running"
+  try {
+    const bytes = await editor.getDocxBytes()
+    const blob = await editor.getDocxBlob()
+    exportBytesSnapshot.value = JSON.stringify({
+      bytes: bytes.byteLength,
+      signature: Array.from(new Uint8Array(bytes).slice(0, 4)),
+      blobType: blob.type,
+      blobSize: blob.size,
+    })
+    exportBytesState.value = "ready"
+  } catch (error) {
+    exportBytesState.value = "error"
+    exportBytesSnapshot.value = error instanceof Error
+      ? `${error.name}: ${error.message}`
+      : String(error)
+  }
+}
 </script>
 
 <style scoped>

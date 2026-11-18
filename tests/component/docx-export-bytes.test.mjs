@@ -141,28 +141,29 @@ class RecordingExportWorker {
   }
 
   postMessage(message) {
-    this.messages.push(message);
+    const safeMessage = structuredClone(message);
+    this.messages.push(safeMessage);
     nativeSetTimeout(async () => {
       if (this.terminated) return;
       this.emit("message", {
-        id: message.id,
+        id: safeMessage.id,
         type: "progress",
         phase: "serializing",
         percent: 10,
       });
       try {
-        const bytes = await core.serializeDocx(message.model, message.basePackage);
+        const bytes = await core.serializeDocx(safeMessage.model, safeMessage.basePackage);
         if (this.terminated) return;
         this.emit("message", {
-          id: message.id,
+          id: safeMessage.id,
           type: "progress",
           phase: "finalizing",
           percent: 90,
         });
-        this.emit("message", { id: message.id, type: "success", bytes });
+        this.emit("message", { id: safeMessage.id, type: "success", bytes });
       } catch (error) {
         this.emit("message", {
-          id: message.id,
+          id: safeMessage.id,
           type: "error",
           error: { message: error instanceof Error ? error.message : String(error) },
         });
@@ -203,7 +204,7 @@ class HangingExportWorker {
   }
 
   postMessage(message) {
-    this.messages.push(message);
+    this.messages.push(structuredClone(message));
   }
 
   terminate() {
@@ -219,10 +220,11 @@ class HangingExportWorker {
 
 class FailingExportWorker extends HangingExportWorker {
   postMessage(message) {
-    this.messages.push(message);
+    const safeMessage = structuredClone(message);
+    this.messages.push(safeMessage);
     queueMicrotask(() => {
       this.emit("message", {
-        id: message.id,
+        id: safeMessage.id,
         type: "error",
         error: { code: "EXPORT_FAILED", message: "synthetic serializer failure" },
       });
@@ -321,6 +323,66 @@ test("getDocxBytes applies the pending export model transformer", async (t) => {
     );
   } finally {
     mounted.app.unmount();
+  }
+});
+
+test("getDocxBytes posts a clone-safe base package", async (t) => {
+  const basePackage = core.createMinimalDocxPackage();
+  const importedModel = await core.buildDocModel(basePackage);
+  const originalWorker = globalThis.Worker;
+
+  class SuccessfulImportWorker {
+    constructor() {
+      this.listeners = new Map();
+    }
+    addEventListener(type, listener) {
+      this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+    }
+    removeEventListener() {}
+    postMessage(request) {
+      queueMicrotask(() => {
+        for (const listener of this.listeners.get("message") ?? []) {
+          listener({
+            data: {
+              id: request.id,
+              type: "success",
+              package: basePackage,
+              model: importedModel,
+              timings: { totalMs: 1, parseMs: 1, buildModelMs: 0 },
+            },
+          });
+        }
+      });
+    }
+    terminate() {}
+  }
+
+  globalThis.Worker = SuccessfulImportWorker;
+  const mounted = await mountController();
+  try {
+    await mounted.controller.importDocxFile(
+      new File([new Uint8Array([1, 2, 3])], "package-export.docx"),
+    );
+    assert.equal(mounted.controller.fileName, "package-export.docx");
+
+    if (Array.isArray(RecordingExportWorker.instances)) {
+      RecordingExportWorker.instances.length = 0;
+    }
+    globalThis.Worker = RecordingExportWorker;
+    const bytes = await mounted.controller.getDocxBytes();
+    assert.deepEqual(
+      [...new Uint8Array(bytes).slice(0, 4)],
+      [0x50, 0x4b, 0x03, 0x04],
+    );
+    assert.equal(RecordingExportWorker.instances.length, 1);
+    assert.ok(
+      RecordingExportWorker.instances[0].messages[0].basePackage.parts instanceof Map,
+      "the Worker message must contain a plain Map, not a reactive proxy",
+    );
+  } finally {
+    mounted.app.unmount();
+    if (originalWorker === undefined) delete globalThis.Worker;
+    else globalThis.Worker = originalWorker;
   }
 });
 

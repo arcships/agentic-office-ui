@@ -326,6 +326,14 @@ const suites = {
         BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-docx-editing"),
       },
     }),
+    command("formal-docx-export-bytes", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/docx_export_bytes.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-docx-export-bytes"),
+      },
+    }),
     // The only automated coverage for the DOCX comment/revision gutter.
     command("formal-docx-annotations", process.execPath, [
       "scripts/ci/run-python.mjs",

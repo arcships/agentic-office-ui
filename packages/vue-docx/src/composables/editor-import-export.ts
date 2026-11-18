@@ -6,6 +6,8 @@ import type {
   DocModel,
   DocxExportProgress,
   DocxFormFieldLocation,
+  OoxmlPackage,
+  OoxmlPart,
 } from "@arcships/docx-core"
 import {
   cloneDocModel,
@@ -15,7 +17,7 @@ import {
   exportDocxBuffer,
   primeCommentAnchors,
 } from "@arcships/docx-core"
-import { onScopeDispose, watch } from "vue"
+import { onScopeDispose, toRaw, watch } from "vue"
 import type { EditorCore } from "./editor-shared"
 import { isRequiredFormFieldEmpty } from "./form-field-value"
 import {
@@ -391,6 +393,25 @@ export function createEditorImportExport(ctx: EditorCore) {
     ctx.status.value = ctx.statusMessage("exportFailed", { message: err.message })
   }
 
+  /**
+   * `Worker.postMessage` structured-clones its payload; Vue refs expose
+   * reactive Proxy objects that cannot cross that boundary. Copy the package
+   * into plain Maps/objects before posting. Binary assets are cloneable typed
+   * arrays and are shared rather than copied.
+   */
+  const cloneExportPackage = (pkg: OoxmlPackage | undefined): OoxmlPackage | undefined => {
+    if (!pkg) return undefined
+    const parts = new Map<string, OoxmlPart>()
+    for (const [name, part] of pkg.parts) {
+      parts.set(name, { name: part.name, content: part.content })
+    }
+    const binaryAssets = new Map<string, Uint8Array>()
+    for (const [name, bytes] of pkg.binaryAssets) {
+      binaryAssets.set(name, toRaw(bytes))
+    }
+    return { parts, binaryAssets }
+  }
+
   const createByteTask = (
     exportModel: DocModel,
     options: GetDocxBytesOptions,
@@ -428,9 +449,14 @@ export function createEditorImportExport(ctx: EditorCore) {
     validateExportModel(exportModel)
 
     const basePackage = ctx.basePackage.value
+    const usesWorker = typeof Worker !== "undefined"
+    // `cloneDocModel` also deep-copies the model graph, so nested reactive
+    // values cannot surface as Proxy objects inside the Worker message.
+    const messageModel = usesWorker ? cloneDocModel(toRaw(exportModel)) : exportModel
+    const messageBasePackage = usesWorker ? cloneExportPackage(basePackage) : basePackage
     const task = createByteTask(exportModel, options)
     try {
-      const output = await exportDocxBuffer(exportModel, basePackage, {
+      const output = await exportDocxBuffer(messageModel, messageBasePackage, {
         signal: task.controller.signal,
         limits: runtime.limits,
         onProgress: (progress) => {
