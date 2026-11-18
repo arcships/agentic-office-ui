@@ -27,6 +27,13 @@
         @cell-double-click="emit('cellDoubleClick', $event)"
         @viewport-change="gridViewport = $event"
       />
+      <XlsxRangeHighlightLayer
+        :controller="controller"
+        :scroll-left="gridViewport.scrollLeft"
+        :scroll-top="gridViewport.scrollTop"
+        :viewport-width="gridViewport.width"
+        :viewport-height="gridViewport.height"
+      />
       <XlsxChartOverlay
         :controller="controller"
         @chart-context-menu="onChartContextMenu"
@@ -124,6 +131,7 @@ import {
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
 import XlsxGrid from "./XlsxGrid.vue"
+import XlsxRangeHighlightLayer from "./XlsxRangeHighlightLayer.vue"
 import XlsxChartOverlay from "./XlsxChartOverlay.vue"
 import XlsxImageLayer from "./XlsxImageLayer.vue"
 import XlsxDrawingLayer from "./XlsxDrawingLayer.vue"

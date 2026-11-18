@@ -149,6 +149,13 @@
           @cell-double-click="onCellDoubleClick"
           @viewport-change="gridViewport = $event"
         />
+        <XlsxRangeHighlightLayer
+          :controller="controller"
+          :scroll-left="gridViewport.scrollLeft"
+          :scroll-top="gridViewport.scrollTop"
+          :viewport-width="gridViewport.width"
+          :viewport-height="gridViewport.height"
+        />
         <XlsxChartOverlay
           :controller="controller"
           @chart-context-menu="onChartContextMenu"
@@ -224,6 +231,7 @@ import XlsxToolbar from "./XlsxToolbar.vue";
 import XlsxRibbon from "./XlsxRibbon.vue";
 import XlsxFormulaBar from "./XlsxFormulaBar.vue";
 import XlsxSheetTabs from "./XlsxSheetTabs.vue";
+import XlsxRangeHighlightLayer from "./XlsxRangeHighlightLayer.vue";
 import XlsxChartOverlay from "./XlsxChartOverlay.vue";
 import XlsxImageLayer from "./XlsxImageLayer.vue";
 import XlsxDrawingLayer from "./XlsxDrawingLayer.vue";

@@ -29,6 +29,31 @@ export {
 } from "./composables/validation"
 export type { XlsxValidationMessages } from "./composables/validation"
 export {
+  CHART_SOURCE_HIGHLIGHT_COLOR_BY_ROLE,
+  XLSX_RANGE_HIGHLIGHT_DEFAULT_COLOR,
+  chartRangeCellAt,
+  collectChartRangeHighlights,
+  normalizeHighlightRange,
+  parseChartSourceA1Range,
+  parseChartSourceRange,
+} from "./composables/chart-range-highlight"
+export type {
+  ChartSourceHighlightRole,
+  ChartSourceRange,
+  ChartSourceSheet,
+  CollectChartRangeHighlightsOptions,
+  ParseChartSourceRangeOptions,
+} from "./composables/chart-range-highlight"
+export {
+  createRangeHighlightLayout,
+  rangeHighlightStyle,
+} from "./components/range-highlight-geometry"
+export type {
+  RangeHighlightLayout,
+  RangeHighlightSegment,
+  RangeHighlightViewport,
+} from "./components/range-highlight-geometry"
+export {
   FORMULA_REFERENCE_COLORS,
   collectFormulaReferences,
   formulaReferenceColor,
@@ -112,6 +137,8 @@ export { default as XlsxImageLayer } from "./components/XlsxImageLayer.vue"
 export { default as XlsxDrawingLayer } from "./components/XlsxDrawingLayer.vue"
 /** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxSelectionOverlay } from "./components/XlsxSelectionOverlay.vue"
+/** Range-highlight overlay used internally by `XlsxViewer` / `XlsxSheetSurface`. */
+export { default as XlsxRangeHighlightLayer } from "./components/XlsxRangeHighlightLayer.vue"
 /** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxContextMenu } from "./components/XlsxContextMenu.vue"
 /**

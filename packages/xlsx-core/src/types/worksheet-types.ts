@@ -22,6 +22,58 @@ export interface XlsxCellRange {
   start: XlsxCellAddress;
 }
 
+/**
+ * Reason a range is highlighted.
+ *
+ * `category`, `value` and `bubbleSize` are derived from a selected chart
+ * element, so the viewer can paint the chart's data sources with a colour per
+ * role. `seriesName` is reserved for chart name references and `custom` marks
+ * ranges a host highlighted through `XlsxViewerController.highlightRanges`.
+ */
+export type XlsxRangeHighlightRole = "category" | "value" | "bubbleSize" | "seriesName" | "custom";
+
+/**
+ * One range painted by the viewer's range-highlight layer.
+ *
+ * Ranges are always normalized (`start` is the top-left cell) and refer to a
+ * visible worksheet index, matching the `sheetIndex` used by charts and
+ * images. The controller returns a fresh, read-only snapshot from
+ * `highlightedRanges`; calling `highlightRanges` again replaces the ranges a
+ * host supplied, while chart source ranges follow the chart selection.
+ */
+export interface XlsxRangeHighlight {
+  /** CSS colour used for the translucent fill and its outline. */
+  color: string;
+  /** Optional stable identity for host diffing. */
+  id?: string;
+  /** Optional description a host can show next to the highlight. */
+  label?: string;
+  /** Normalized zero-based range inside `sheetIndex`. */
+  range: XlsxCellRange;
+  /** Why the range is highlighted. */
+  role?: XlsxRangeHighlightRole;
+  /** Visible worksheet index the range belongs to. */
+  sheetIndex: number;
+  /** Zero-based chart series index when the range feeds a chart series. */
+  seriesIndex?: number;
+  /** Chart series name, so a highlighted range can be tied to its legend entry. */
+  seriesName?: string;
+}
+
+/** Options for {@link XlsxViewerController.highlightRanges}. */
+export interface XlsxHighlightRangesOptions {
+  /** CSS colour shared by every range in the call; defaults to amber. */
+  color?: string;
+  /** Optional stable id shared by the highlighted ranges. */
+  id?: string;
+  /** Optional description copied to every highlighted range. */
+  label?: string;
+  /** Defaults to `"custom"`. */
+  role?: XlsxRangeHighlightRole;
+  /** Visible worksheet index; defaults to the active sheet. */
+  sheetIndex?: number;
+}
+
 export interface XlsxCellHyperlink {
   cell: XlsxCellAddress;
   target: string;
@@ -1446,6 +1498,30 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
   download: () => void;
   charts: XlsxChart[];
   chartsheets: XlsxChartsheet[];
+  /**
+   * Ranges currently painted by the viewer's highlight layer.
+   *
+   * The list merges ranges sourced from the selected chart element with the
+   * ranges supplied through {@link highlightRanges}. It is reactive and
+   * read-only; mutate it through those methods.
+   */
+  highlightedRanges: XlsxRangeHighlight[];
+  /**
+   * Highlights one or more cell ranges in the built-in overlay layer.
+   *
+   * Ranges are normalized (start = top-left). The call replaces the previous
+   * host-supplied ranges, defaults to the active worksheet and to the amber
+   * custom colour, and is read-only: no workbook mutation, undo entry or
+   * exported byte changes. Chart source highlights are derived from the chart
+   * selection and are not replaced. Highlights follow scrolling, zoom and
+   * freeze panes.
+   *
+   * @param ranges Zero-based A1-less ranges on one worksheet.
+   * @param options Colour, worksheet index, role and optional identity.
+   */
+  highlightRanges: (ranges: readonly XlsxCellRange[], options?: XlsxHighlightRangesOptions) => void;
+  /** Removes the ranges supplied through {@link highlightRanges}. */
+  clearHighlightedRanges: () => void;
   exportCsv: () => void;
   exportXlsx: () => void;
   findCells: (query: string) => XlsxCellAddress[];
