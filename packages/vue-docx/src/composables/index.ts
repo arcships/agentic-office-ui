@@ -8,6 +8,13 @@ export { useDocxEditor } from "./useDocxEditor"
 export { createEditorTransaction } from "./editor-transaction"
 export { createEditorHistory } from "./editor-history"
 export { createEditorSelection } from "./editor-selection"
+export {
+  displayTextRangeToSourceTextRange,
+  effectiveControllerRevisionDisplay,
+  paragraphDisplayOffsetToSourceOffset,
+  paragraphSourceOffsetToDisplayOffset,
+  sourceTextRangeToDisplayTextRange,
+} from "./editor-selection"
 export { createEditorFormat } from "./editor-format"
 export { createEditorTextInput } from "./editor-text-input"
 export { createEditorTable } from "./editor-table"

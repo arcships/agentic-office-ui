@@ -263,11 +263,18 @@ import type {
 } from "@arcships/docx-core"
 import {
   compareTextRangeBoundaries,
+  getParagraphAtLocation,
   paragraphText,
   resolveDocxImageLayerOrderMenuActions,
+  reviewDisplayParagraph,
 } from "@arcships/docx-core"
 import { resolveOfficeMenuKeyCommand } from "@arcships/vue-ui"
 import { useDocxMessages } from "../i18n"
+import {
+  effectiveControllerRevisionDisplay,
+  paragraphDisplayOffsetToSourceOffset,
+  paragraphSourceOffsetToDisplayOffset,
+} from "../composables/editor-selection"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = defineProps<{
@@ -437,16 +444,37 @@ function activeRange() {
   return props.controller.activeTextRange ?? props.context?.activeTextRange
 }
 
+function revisionMode() {
+  return effectiveControllerRevisionDisplay(props.controller)
+}
+
+function activeParagraph() {
+  const range = activeRange()
+  if (!range) return undefined
+  return getParagraphAtLocation(props.controller.model, range.start.location).paragraph
+}
+
 function currentParagraphCaret(): number | undefined {
   const range = activeRange()
-  if (!range || range.start.location.kind !== "paragraph") return undefined
-  return range.start.offset
+  const paragraph = activeParagraph()
+  if (!range || !paragraph || range.start.location.kind !== "paragraph") return undefined
+  return paragraphSourceOffsetToDisplayOffset(
+    paragraph,
+    revisionMode(),
+    range.start.offset
+  )
+}
+
+function displayParagraphText(paragraph: ReturnType<typeof activeParagraph>): string {
+  return paragraph
+    ? paragraphText(reviewDisplayParagraph(paragraph, revisionMode()))
+    : ""
 }
 
 function splitParagraph(): void {
   const ctrl = props.controller
   const paragraph = ctrl.selectedParagraph
-  const draftText = props.text ?? (paragraph ? paragraphText(paragraph) : "")
+  const draftText = props.text ?? displayParagraphText(paragraph)
   const caret = props.caretOffset ?? currentParagraphCaret() ?? draftText.length
   ctrl.splitParagraphAtSelection(draftText, caret, caret)
 }
@@ -464,9 +492,15 @@ function deleteParagraph(): void {
   const paragraph = ctrl.model.nodes[location.nodeIndex]
   if (!paragraph || paragraph.type !== "paragraph") return
 
-  const text = props.text ?? paragraphText(paragraph)
-  const rawCaret = props.caretOffset ?? range?.start.offset ?? text.length
-  const caret = Math.max(0, Math.min(Math.round(rawCaret), text.length))
+  const sourceText = paragraphText(paragraph)
+  const displayText = props.text ?? displayParagraphText(paragraph)
+  const rawCaret = props.caretOffset ?? currentParagraphCaret() ?? displayText.length
+  const displayCaret = Math.max(0, Math.min(Math.round(rawCaret), displayText.length))
+  const caret = paragraphDisplayOffsetToSourceOffset(
+    paragraph,
+    revisionMode(),
+    displayCaret
+  )
   const start = { kind: "paragraph" as const, nodeIndex: location.nodeIndex }
   const nextNode = ctrl.model.nodes[location.nodeIndex + 1]
 
@@ -480,15 +514,15 @@ function deleteParagraph(): void {
     return
   }
 
-  if (caret < text.length) {
+  if (caret < sourceText.length) {
     ctrl.deleteExpandedSelection({
       start: { location: start, offset: caret },
-      end: { location: start, offset: text.length },
+      end: { location: start, offset: sourceText.length },
     })
-  } else if (text.length > 0) {
+  } else if (sourceText.length > 0) {
     ctrl.deleteExpandedSelection({
       start: { location: start, offset: 0 },
-      end: { location: start, offset: text.length },
+      end: { location: start, offset: sourceText.length },
     })
   }
 }

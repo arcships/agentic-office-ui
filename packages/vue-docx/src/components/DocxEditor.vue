@@ -215,7 +215,9 @@ import {
   docxTableContextFromNode,
   docxTextHostFromNode,
   docxTextLocationForNode,
+  effectiveControllerRevisionDisplay,
   readDocxTextHostText,
+  sourceTextRangeToDisplayTextRange,
   syncDomSelectionToEditor,
   textOffsetAtDomPoint,
 } from "../composables/editor-selection"
@@ -491,7 +493,11 @@ function onDocumentContextMenu(payload: DocumentContextMenuEvent): void {
   if (interactionLocked.value) return
 
   const root = viewerRootRef.value?.scrollContainer
-  if (root) syncDomSelectionToEditor(controller, root)
+  if (root) {
+    syncDomSelectionToEditor(controller, root, undefined, {
+      revisionDisplay: effectiveControllerRevisionDisplay(controller),
+    })
+  }
 
   const target = typeof Node !== "undefined" && payload.target instanceof Node
     ? payload.target
@@ -529,7 +535,13 @@ function onDocumentContextMenu(payload: DocumentContextMenuEvent): void {
     text = readDocxTextHostText(textHost)
     caretOffset = textOffsetAtDomPoint(textHost, payload.clientX, payload.clientY)
     if (caretOffset === undefined && range) {
-      caretOffset = range.start.offset
+      // The context menu and its text are display-space; controller ranges are
+      // source-space. Convert the fallback before comparing it to `text`.
+      caretOffset = sourceTextRangeToDisplayTextRange(
+        controller.model,
+        effectiveControllerRevisionDisplay(controller),
+        range
+      ).start.offset
     }
     if (caretOffset === undefined) caretOffset = text.length
   }

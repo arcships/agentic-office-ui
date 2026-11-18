@@ -231,6 +231,7 @@ export default defineComponent({
       if (!props.editable || !props.controller || !root) return
       syncDomSelectionToEditor(props.controller, root, undefined, {
         preserveExpandedSelection: toolbarPointerDown,
+        revisionDisplay: effectiveRevisionDisplay.value,
       })
     }
 
@@ -275,6 +276,8 @@ export default defineComponent({
         const restored = restoreDomSelectionFromTextRange(root, range, {
           focus,
           owner: bodyElement.value,
+          sourceModel: controller.model,
+          revisionDisplay: effectiveRevisionDisplay.value,
         })
         if (restored) {
           // Focusing a contenteditable can synchronously collapse its native
@@ -282,7 +285,9 @@ export default defineComponent({
           // emits selectionchange. Confirm the restored DOM range back into
           // the public controller immediately so undo/redo never exposes that
           // transient collapsed range as the final editor state.
-          syncDomSelectionToEditor(controller, root)
+          syncDomSelectionToEditor(controller, root, undefined, {
+            revisionDisplay: effectiveRevisionDisplay.value,
+          })
         }
       })
     }

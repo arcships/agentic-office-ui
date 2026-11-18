@@ -59,6 +59,8 @@ import {
   restoreDomSelectionFromTextRange,
   syncDomSelectionToEditor,
   readDocxTextHostText,
+  displayTextRangeToSourceTextRange,
+  paragraphSourceOffsetToDisplayOffset,
 } from "../composables/editor-selection"
 import { docxBookmarkNameFromClick } from "../composables/docx-bookmarks"
 
@@ -232,6 +234,24 @@ const isSectionStory = computed(
   () => props.withinHeaderFooter === true && typeof props.headerFooterPartName === "string"
 )
 
+/** Source paragraph for revision offsets; the rendered prop may be a display clone. */
+const sourceParagraph = computed<ParagraphNode>(() => {
+  const controller = props.controller
+  if (isSectionStory.value) {
+    const partName = props.headerFooterPartName
+    const region = props.headerFooterRegion
+    const nodeIndex = props.sectionStoryNodeIndex
+    if (controller && partName && region && nodeIndex !== undefined) {
+      const node = findDocumentSectionNodes(controller.model, region, partName)?.[nodeIndex]
+      if (node?.type === "paragraph") return node
+    }
+  } else {
+    const node = controller?.model.nodes[props.paragraphIndex]
+    if (node?.type === "paragraph") return node
+  }
+  return props.paragraph
+})
+
 function sectionStoryParagraphText(): string | undefined {
   const controller = props.controller
   const partName = props.headerFooterPartName
@@ -384,7 +404,10 @@ function syncCurrentSelection(options?: { preservePendingRunStyle?: boolean }): 
   if (isSectionStory.value) return
   const root = selectionRoot()
   if (!root || !props.controller) return
-  syncDomSelectionToEditor(props.controller, root, undefined, options)
+  syncDomSelectionToEditor(props.controller, root, undefined, {
+    ...options,
+    revisionDisplay: effectiveRevisionDisplay.value,
+  })
 }
 
 function currentSelectionOffsets(textLength: number): { start: number; end: number } {
@@ -396,8 +419,28 @@ function currentSelectionOffsets(textLength: number): { start: number; end: numb
     range.end.location.nodeIndex === props.paragraphIndex
   if (range && startsHere && endsHere) {
     return {
-      start: Math.max(0, Math.min(range.start.offset, textLength)),
-      end: Math.max(0, Math.min(range.end.offset, textLength)),
+      start: Math.max(
+        0,
+        Math.min(
+          paragraphSourceOffsetToDisplayOffset(
+            sourceParagraph.value,
+            effectiveRevisionDisplay.value,
+            range.start.offset
+          ),
+          textLength
+        )
+      ),
+      end: Math.max(
+        0,
+        Math.min(
+          paragraphSourceOffsetToDisplayOffset(
+            sourceParagraph.value,
+            effectiveRevisionDisplay.value,
+            range.end.offset
+          ),
+          textLength
+        )
+      ),
     }
   }
   return { start: textLength, end: textLength }
@@ -409,7 +452,11 @@ function restoreControllerSelection(focus = true): void {
   const range = controller?.activeTextRange
   if (!controller || !root || !range) return
   void nextTick(() => {
-    restoreDomSelectionFromTextRange(root, range, { focus })
+    restoreDomSelectionFromTextRange(root, range, {
+      focus,
+      sourceModel: controller.model,
+      revisionDisplay: effectiveRevisionDisplay.value,
+    })
   })
 }
 
@@ -427,7 +474,11 @@ function deleteExpandedRange(): boolean {
   const offsets = currentSelectionOffsets(currentText.length)
   let range: DocxTextRange | undefined
   if (offsets.start < offsets.end) {
-    range = localTextRange(offsets.start, offsets.end)
+    range = displayTextRangeToSourceTextRange(
+      props.controller.model,
+      effectiveRevisionDisplay.value,
+      localTextRange(offsets.start, offsets.end)
+    )
   } else {
     syncCurrentSelection()
     const activeRange = props.controller.activeTextRange
@@ -474,7 +525,7 @@ function deleteAdjacentParagraph(direction: "backward" | "forward"): boolean {
     : {
         start: {
           location: { kind: "paragraph" as const, nodeIndex: props.paragraphIndex },
-          offset: currentText.length,
+          offset: paragraphText(sourceParagraph.value).length,
         },
         end: {
           location: { kind: "paragraph" as const, nodeIndex: adjacentIndex },

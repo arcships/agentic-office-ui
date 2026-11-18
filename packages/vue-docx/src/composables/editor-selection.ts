@@ -5,14 +5,26 @@
 // are defined inline in useDocxEditor since they're thin dispatch calls.
 
 import type {
+  DocModel,
   DocxEditorController,
   DocxImageLocation,
+  DocxRevisionDisplay,
   DocxSelectionSessionKind,
   DocxTableContextMenuContext,
   DocxTextRange,
   DocxTextRangeLocation,
+  ParagraphNode,
 } from "@arcships/docx-core"
-import { compareTextRangeBoundaries, sameTextRange } from "@arcships/docx-core"
+import {
+  compareTextRangeBoundaries,
+  displayTextOffsetForSourceOffset,
+  getParagraphAtLocation,
+  hiddenParagraphTextRanges,
+  paragraphText,
+  reviewDisplayParagraph,
+  sameTextRange,
+  sourceTextOffsetForDisplayOffset,
+} from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
 
 const PARAGRAPH_HOST_SELECTOR = "[data-docx-paragraph-host='true']"
@@ -29,6 +41,11 @@ type SelectionSyncOptions = {
   preserveExpandedSelection?: boolean
   /** Typing extends the active range; keep the caret's pending run style. */
   preservePendingRunStyle?: boolean
+  /**
+   * Review mode the DOM was rendered with. Defaults to the controller's
+   * effective mode (final text while revisions are hidden).
+   */
+  revisionDisplay?: DocxRevisionDisplay
 }
 
 function elementForNode(node: Node | null): HTMLElement | undefined {
@@ -200,6 +217,100 @@ function locationForHost(host: SelectionHost): DocxTextRangeLocation | undefined
     hostAttribute(host, "data-docx-paragraph-node-index")
   )
   return nodeIndex === undefined ? undefined : { kind: "paragraph", nodeIndex }
+}
+
+function clampOffset(offset: number, length: number): number {
+  return Math.max(0, Math.min(Math.round(offset), Math.max(0, length)))
+}
+
+/**
+ * Review mode the page was actually rendered with. Hidden revisions render
+ * final text even when the preferred mode is `inline`.
+ */
+export function effectiveControllerRevisionDisplay(
+  editor: Pick<DocxEditorController, "showTrackedChanges" | "revisionDisplay">
+): DocxRevisionDisplay {
+  return editor.showTrackedChanges ? editor.revisionDisplay : "none"
+}
+
+/**
+ * Maps a paragraph's display-text offset (the DOM/caret space) to the source
+ * model offset. Works for body, table, header, footer and note paragraphs.
+ */
+export function paragraphDisplayOffsetToSourceOffset(
+  paragraph: ParagraphNode,
+  display: DocxRevisionDisplay,
+  offset: number
+): number {
+  if (display === "inline") return clampOffset(offset, paragraphText(paragraph).length)
+  const displayText = paragraphText(reviewDisplayParagraph(paragraph, display))
+  const ranges = hiddenParagraphTextRanges(paragraph, display)
+  return clampOffset(
+    sourceTextOffsetForDisplayOffset(ranges, clampOffset(offset, displayText.length)),
+    paragraphText(paragraph).length
+  )
+}
+
+/**
+ * Maps a paragraph's source-model offset back to the display text the DOM and
+ * caret use. Works for every story; callers that already hold the paragraph do
+ * not need a range location.
+ */
+export function paragraphSourceOffsetToDisplayOffset(
+  paragraph: ParagraphNode,
+  display: DocxRevisionDisplay,
+  offset: number
+): number {
+  if (display === "inline") return clampOffset(offset, paragraphText(paragraph).length)
+  const displayText = paragraphText(reviewDisplayParagraph(paragraph, display))
+  const ranges = hiddenParagraphTextRanges(paragraph, display)
+  return clampOffset(
+    displayTextOffsetForSourceOffset(ranges, clampOffset(offset, paragraphText(paragraph).length)),
+    displayText.length
+  )
+}
+
+function paragraphAtRangeLocation(
+  model: DocModel,
+  location: DocxTextRangeLocation
+): ParagraphNode | undefined {
+  return getParagraphAtLocation(model, location).paragraph
+}
+
+/** Translate DOM display offsets into source-model offsets before writing. */
+export function displayTextRangeToSourceTextRange(
+  model: DocModel,
+  display: DocxRevisionDisplay,
+  range: DocxTextRange
+): DocxTextRange {
+  const mapBoundary = (boundary: DocxTextRange["start"]): DocxTextRange["start"] => {
+    const paragraph = paragraphAtRangeLocation(model, boundary.location)
+    return {
+      location: { ...boundary.location },
+      offset: paragraph
+        ? paragraphDisplayOffsetToSourceOffset(paragraph, display, boundary.offset)
+        : boundary.offset,
+    }
+  }
+  return { start: mapBoundary(range.start), end: mapBoundary(range.end) }
+}
+
+/** Translate source-model offsets into the DOM display offsets on restore. */
+export function sourceTextRangeToDisplayTextRange(
+  model: DocModel,
+  display: DocxRevisionDisplay,
+  range: DocxTextRange
+): DocxTextRange {
+  const mapBoundary = (boundary: DocxTextRange["start"]): DocxTextRange["start"] => {
+    const paragraph = paragraphAtRangeLocation(model, boundary.location)
+    return {
+      location: { ...boundary.location },
+      offset: paragraph
+        ? paragraphSourceOffsetToDisplayOffset(paragraph, display, boundary.offset)
+        : boundary.offset,
+    }
+  }
+  return { start: mapBoundary(range.start), end: mapBoundary(range.end) }
 }
 
 // Elements that are rendered in a text host but are not part of its text model
@@ -389,8 +500,14 @@ export function syncDomSelectionToEditor(
   const currentSelection = selection ?? root.ownerDocument?.getSelection?.() ??
     (typeof window !== "undefined" ? window.getSelection() : null)
   if (!currentSelection) return undefined
-  const range = docxTextRangeFromDomSelection(currentSelection, root)
-  if (!range) return undefined
+  const displayRange = docxTextRangeFromDomSelection(currentSelection, root)
+  if (!displayRange) return undefined
+  const revisionDisplay = options.revisionDisplay ?? effectiveControllerRevisionDisplay(editor)
+  const range = displayTextRangeToSourceTextRange(
+    editor.model,
+    revisionDisplay,
+    displayRange
+  )
   if (
     currentSelection.isCollapsed &&
     expandedRange(editor.activeTextRange) &&
@@ -410,19 +527,33 @@ export function syncDomSelectionToEditor(
 export function restoreDomSelectionFromTextRange(
   root: HTMLElement,
   range: DocxTextRange,
-  options: { focus?: boolean; owner?: HTMLElement } = {}
+  options: {
+    focus?: boolean
+    owner?: HTMLElement
+    /** Source model used to translate source offsets back to display text. */
+    sourceModel?: DocModel
+    /** Review mode the DOM was rendered with. */
+    revisionDisplay?: DocxRevisionDisplay
+  } = {}
 ): boolean {
   const selection = root.ownerDocument?.getSelection?.() ??
     (typeof window !== "undefined" ? window.getSelection() : null)
   if (!selection) return false
-  const startHost = hostForLocation(root, range.start.location)
-  const endHost = hostForLocation(root, range.end.location)
+  const displayRange = options.sourceModel
+    ? sourceTextRangeToDisplayTextRange(
+        options.sourceModel,
+        options.revisionDisplay ?? "inline",
+        range
+      )
+    : range
+  const startHost = hostForLocation(root, displayRange.start.location)
+  const endHost = hostForLocation(root, displayRange.end.location)
   if (!startHost || !endHost) return false
   if (options.owner && !options.owner.contains(startHost)) return false
 
   try {
-    const start = domPositionForTextOffset(startHost, range.start.offset)
-    const end = domPositionForTextOffset(endHost, range.end.offset)
+    const start = domPositionForTextOffset(startHost, displayRange.start.offset)
+    const end = domPositionForTextOffset(endHost, displayRange.end.offset)
     const nativeRange = root.ownerDocument.createRange()
     nativeRange.setStart(start.node, start.offset)
     nativeRange.setEnd(end.node, end.offset)
