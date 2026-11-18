@@ -31,6 +31,8 @@ import {
   applyParagraphBorderPresetForRangeEntry,
   paragraphRangePresetActive,
   paragraphRangeForMutate,
+  tableCellSelectionRangeHasMultipleCells,
+  tableCellSelectionRangeParagraphEntries,
 } from "@arcships/docx-core"
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { EditorCore } from "./editor-shared"
@@ -69,6 +71,53 @@ export function createEditorFormat(
     patch: Partial<TextRunNode["style"]>,
     replace?: Partial<TextRunNode["style"]>
   ): void {
+    const selection = ctx.selectionSnapshot.value
+    const tableRange =
+      selection.kind === "table-cell" &&
+      !selection.tableRuntimeKey &&
+      selection.cellRange &&
+      tableCellSelectionRangeHasMultipleCells(selection.cellRange)
+        ? selection.cellRange
+        : undefined
+
+    if (tableRange && selection.kind === "table-cell") {
+      // A rectangular table selection has no text range of its own. Apply the
+      // character style to every paragraph under the highlighted cells so the
+      // command means the same thing as it does for a multi-paragraph range.
+      dispatch((txCtx) => {
+        const nextModel = cloneDocModelNodes(txCtx.model, [
+          selection.tableIndex,
+        ])
+        const table = nextModel.nodes[selection.tableIndex]
+        if (!table || table.type !== "table") return undefined
+
+        let touched = false
+        for (const { paragraph } of tableCellSelectionRangeParagraphEntries(
+          table,
+          tableRange
+        )) {
+          const length = paragraphText(paragraph).length
+          if (
+            !mutateParagraphTextStyleInRange(
+              paragraph,
+              0,
+              length,
+              (currentStyle) => mergeRunStylePatch(currentStyle, patch, replace)
+            )
+          ) {
+            continue
+          }
+          touched = true
+          paragraph.sourceXml = undefined
+        }
+
+        if (!touched) return undefined
+        table.sourceXml = undefined
+        return { model: nextModel, pendingRunStyle: undefined }
+      })
+      return
+    }
+
     const rng = ctx.activeTextRangeSnapshot.value
     const normalizedRange = rng ? normalizeTextRange(rng) : undefined
     const hasExpandedRange = Boolean(

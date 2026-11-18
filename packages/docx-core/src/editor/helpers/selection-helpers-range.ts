@@ -7,6 +7,8 @@
 import type {
   DocModel,
   ParagraphNode,
+  TableCellNode,
+  TableNode,
 } from "../../engine/types";
 import type {
   DocxEditorSelection,
@@ -22,6 +24,10 @@ import {
   normalizeTextRange
 } from "./editor-types";
 import { paragraphText, tableCellParagraphs } from "./paragraph-inspect";
+import {
+  tableRowGridCells,
+  tableSelectionGridRectangle,
+} from "./table-structure";
 import { clampNumber } from "./zoom-utils";
 import {
   cloneTextRangeLocation,
@@ -203,13 +209,219 @@ export function cloneEditorSelection(
 export function cloneTableCellSelectionRange(
   range: DocxTableCellSelectionRange
 ): DocxTableCellSelectionRange {
-  return {
+  const cloned: DocxTableCellSelectionRange = {
     tableIndex: range.tableIndex,
     anchorRowIndex: range.anchorRowIndex,
     anchorCellIndex: range.anchorCellIndex,
     focusRowIndex: range.focusRowIndex,
     focusCellIndex: range.focusCellIndex,
   };
+  if (range.gridRange) {
+    cloned.gridRange = {
+      startColumnIndex: range.gridRange.startColumnIndex,
+      endColumnIndex: range.gridRange.endColumnIndex,
+    };
+  }
+  return cloned;
+}
+
+function sameTableGridRange(
+  a: DocxTableCellSelectionRange["gridRange"],
+  b: DocxTableCellSelectionRange["gridRange"]
+): boolean {
+  if (!a || !b) {
+    return a === b;
+  }
+  return (
+    a.startColumnIndex === b.startColumnIndex &&
+    a.endColumnIndex === b.endColumnIndex
+  );
+}
+
+/** True when the range covers more than one model cell. */
+export function tableCellSelectionRangeHasMultipleCells(
+  range: DocxTableCellSelectionRange
+): boolean {
+  return (
+    range.anchorRowIndex !== range.focusRowIndex ||
+    range.anchorCellIndex !== range.focusCellIndex
+  );
+}
+
+/** Anchor cell of a table range, which Escape and Shift+click extend from. */
+export function tableCellSelectionAnchor(range: DocxTableCellSelectionRange): {
+  rowIndex: number;
+  cellIndex: number;
+} {
+  return {
+    rowIndex: range.anchorRowIndex,
+    cellIndex: range.anchorCellIndex,
+  };
+}
+
+/**
+ * Normalizes a table-cell range against the model table.
+ *
+ * Anchor and focus are clamped to existing cells, then the physical grid span
+ * is resolved through `tableSelectionGridRectangle` and stored on the range.
+ * Returns undefined when either endpoint no longer exists.
+ */
+export function normalizeTableCellSelectionRange(
+  table: TableNode,
+  range: DocxTableCellSelectionRange
+): DocxTableCellSelectionRange | undefined {
+  const anchorCell =
+    table.rows[range.anchorRowIndex]?.cells[range.anchorCellIndex];
+  const focusCell = table.rows[range.focusRowIndex]?.cells[range.focusCellIndex];
+  if (!anchorCell || !focusCell) {
+    return undefined;
+  }
+
+  const normalized = cloneTableCellSelectionRange({
+    ...range,
+    gridRange: undefined,
+  });
+  const rectangle = tableSelectionGridRectangle(table, normalized);
+  if (!rectangle) {
+    return undefined;
+  }
+  normalized.gridRange = {
+    startColumnIndex: rectangle.minColumn,
+    endColumnIndex: rectangle.maxColumn,
+  };
+  return normalized;
+}
+
+/**
+ * Cells whose physical grid rectangle intersects the selection rectangle.
+ * Includes cells reached only through a grid span or a vertical merge, so
+ * formatting, copying and clearing cover everything the highlight covers.
+ */
+export function tableCellSelectionRangeCells(
+  table: TableNode,
+  range: DocxTableCellSelectionRange
+): Array<{ rowIndex: number; cellIndex: number }> {
+  const rectangle = tableSelectionGridRectangle(table, range);
+  if (!rectangle) {
+    return [];
+  }
+
+  const cells: Array<{ rowIndex: number; cellIndex: number }> = [];
+  for (
+    let rowIndex = rectangle.minRow;
+    rowIndex <= rectangle.maxRow;
+    rowIndex += 1
+  ) {
+    const row = table.rows[rowIndex];
+    if (!row) {
+      continue;
+    }
+    for (const ref of tableRowGridCells(row)) {
+      const refEnd = ref.startColumn + ref.span - 1;
+      if (
+        refEnd >= rectangle.minColumn &&
+        ref.startColumn <= rectangle.maxColumn
+      ) {
+        cells.push({ rowIndex, cellIndex: ref.cellIndex });
+      }
+    }
+  }
+  return cells;
+}
+
+/**
+ * True when a model cell is inside the selection rectangle. A cell that only
+ * partially overlaps through `gridSpan` still counts: Word highlights the
+ * whole cell rather than half of it.
+ */
+export function isCellWithinTableSelectionRange(
+  table: TableNode,
+  range: DocxTableCellSelectionRange,
+  rowIndex: number,
+  cellIndex: number
+): boolean {
+  const rectangle = tableSelectionGridRectangle(table, range);
+  if (!rectangle) {
+    return false;
+  }
+  if (rowIndex < rectangle.minRow || rowIndex > rectangle.maxRow) {
+    return false;
+  }
+  const row = table.rows[rowIndex];
+  if (!row) {
+    return false;
+  }
+  const ref = tableRowGridCells(row).find(
+    (candidate) => candidate.cellIndex === cellIndex
+  );
+  if (!ref) {
+    return false;
+  }
+  const refEnd = ref.startColumn + ref.span - 1;
+  return refEnd >= rectangle.minColumn && ref.startColumn <= rectangle.maxColumn;
+}
+
+/**
+ * True when the selection points at this cell. Single-cell selections match
+ * exactly; range selections are tested against the physical grid so merged and
+ * spanning cells highlight as a whole. Pass the table to make the grid test
+ * exact; without it the model row/cell bounds are used as a fallback.
+ */
+export function isCellSelected(
+  selection: DocxEditorSelection,
+  tableIndex: number,
+  rowIndex: number,
+  cellIndex: number,
+  table?: TableNode
+): boolean {
+  if (selection.kind !== "table-cell" || selection.tableIndex !== tableIndex) {
+    return false;
+  }
+  if (!selection.cellRange) {
+    return selection.rowIndex === rowIndex && selection.cellIndex === cellIndex;
+  }
+  if (table) {
+    return isCellWithinTableSelectionRange(
+      table,
+      selection.cellRange,
+      rowIndex,
+      cellIndex
+    );
+  }
+  return cellIsInsideSelectionRange({ rowIndex, cellIndex }, selection.cellRange);
+}
+
+/** Cell paragraphs covered by a multi-cell table selection. */
+export function tableCellSelectionRangeParagraphEntries(
+  table: TableNode,
+  range: DocxTableCellSelectionRange
+): Array<{
+  rowIndex: number;
+  cellIndex: number;
+  cell: TableCellNode;
+  paragraph: ParagraphNode;
+  paragraphIndex: number;
+}> {
+  const entries: Array<{
+    rowIndex: number;
+    cellIndex: number;
+    cell: TableCellNode;
+    paragraph: ParagraphNode;
+    paragraphIndex: number;
+  }> = [];
+  for (const { rowIndex, cellIndex } of tableCellSelectionRangeCells(
+    table,
+    range
+  )) {
+    const cell = table.rows[rowIndex]?.cells[cellIndex];
+    if (!cell) {
+      continue;
+    }
+    tableCellParagraphs(cell.nodes).forEach((paragraph, paragraphIndex) => {
+      entries.push({ rowIndex, cellIndex, cell, paragraph, paragraphIndex });
+    });
+  }
+  return entries;
 }
 
 function sameTableCellSelectionRange(
@@ -224,7 +436,8 @@ function sameTableCellSelectionRange(
     a.anchorRowIndex === b.anchorRowIndex &&
     a.anchorCellIndex === b.anchorCellIndex &&
     a.focusRowIndex === b.focusRowIndex &&
-    a.focusCellIndex === b.focusCellIndex
+    a.focusCellIndex === b.focusCellIndex &&
+    sameTableGridRange(a.gridRange, b.gridRange)
   );
 }
 
@@ -555,13 +768,29 @@ export function normalizeSelectionForModel(
     selection.kind === "table-cell" &&
     selection.cellRange &&
     normalizedSelection.kind === "table-cell" &&
-    normalizedSelection.tableIndex === selection.tableIndex &&
-    cellIsInsideSelectionRange(normalizedSelection, selection.cellRange)
+    normalizedSelection.tableIndex === selection.tableIndex
   ) {
-    return {
-      ...normalizedSelection,
-      cellRange: cloneTableCellSelectionRange(selection.cellRange),
-    };
+    const table = model.nodes[selection.tableIndex];
+    const normalizedRange =
+      table?.type === "table"
+        ? normalizeTableCellSelectionRange(table, selection.cellRange)
+        : cloneTableCellSelectionRange(selection.cellRange);
+    const insideRange =
+      normalizedRange &&
+      (table?.type === "table"
+        ? isCellWithinTableSelectionRange(
+            table,
+            normalizedRange,
+            normalizedSelection.rowIndex,
+            normalizedSelection.cellIndex
+          )
+        : cellIsInsideSelectionRange(normalizedSelection, normalizedRange));
+    if (normalizedRange && insideRange) {
+      return {
+        ...normalizedSelection,
+        cellRange: normalizedRange,
+      };
+    }
   }
 
   return normalizedSelection;

@@ -21,6 +21,9 @@ import {
   tableBorderPresetState,
   paragraphBorderPresetState,
   parseEmbeddedTableRuntimeKey,
+  cloneTableCellSelectionRange,
+  normalizeTableCellSelectionRange,
+  tableCellSelectionRangeHasMultipleCells,
 } from "@arcships/docx-core"
 import {
   firstRunStyle,
@@ -810,24 +813,97 @@ export function useDocxEditor(
     range: DocxTableCellSelectionRange,
     tableRuntimeKey?: string
   ): void => {
+    const table = model.value.nodes[tableIndex]
+    const normalized =
+      !tableRuntimeKey && table?.type === "table"
+        ? normalizeTableCellSelectionRange(table, range)
+        : cloneTableCellSelectionRange(range)
+    if (!normalized) return
+    normalized.tableIndex = tableIndex
     clearPendingRunStyle()
     dispatchEditorTransaction(() => ({
       selection: {
         kind: "table-cell",
         tableIndex,
-        rowIndex: range.focusRowIndex,
-        cellIndex: range.focusCellIndex,
+        rowIndex: normalized.focusRowIndex,
+        cellIndex: normalized.focusCellIndex,
         ...(tableRuntimeKey ? { tableRuntimeKey } : undefined),
-        cellRange: {
-          tableIndex,
-          anchorRowIndex: range.anchorRowIndex,
-          anchorCellIndex: range.anchorCellIndex,
-          focusRowIndex: range.focusRowIndex,
-          focusCellIndex: range.focusCellIndex,
-        },
+        cellRange: normalized,
       },
       activeTextRange: undefined,
     }))
+  }
+  /**
+   * Selects every cell of the table as one rectangular range. The anchor is
+   * the top-left cell and the focus is the bottom-right cell; normalization
+   * expands the grid span over merged cells.
+   */
+  const selectWholeTable = (tableIndex?: number): void => {
+    const selection = selectionSnapshot
+    const targetTableIndex =
+      tableIndex ??
+      (selection.kind === "table-cell" ? selection.tableIndex : undefined)
+    if (targetTableIndex === undefined) return
+    const table = model.value.nodes[targetTableIndex]
+    if (!table || table.type !== "table" || table.rows.length === 0) return
+    let focusRowIndex = table.rows.length - 1
+    while (focusRowIndex >= 0 && (table.rows[focusRowIndex]?.cells.length ?? 0) === 0) {
+      focusRowIndex -= 1
+    }
+    if (focusRowIndex < 0) return
+    let anchorRowIndex = 0
+    while (anchorRowIndex <= focusRowIndex && (table.rows[anchorRowIndex]?.cells.length ?? 0) === 0) {
+      anchorRowIndex += 1
+    }
+    if (anchorRowIndex > focusRowIndex) return
+    const columnCount = table.rows.reduce(
+      (max, row) =>
+        Math.max(
+          max,
+          row.cells.reduce(
+            (count, cell) => count + (cell.style?.gridSpan ?? 1),
+            0
+          )
+        ),
+      0
+    )
+    selectTableCellRange(targetTableIndex, {
+      tableIndex: targetTableIndex,
+      anchorRowIndex,
+      anchorCellIndex: 0,
+      focusRowIndex,
+      focusCellIndex: (table.rows[focusRowIndex]?.cells.length ?? 1) - 1,
+      gridRange: {
+        startColumnIndex: 0,
+        endColumnIndex: Math.max(0, columnCount - 1),
+      },
+    })
+  }
+  /** Collapses a multi-cell range to its anchor cell. Returns true if it did. */
+  const collapseTableCellSelection = (): boolean => {
+    const selection = selectionSnapshot
+    if (
+      selection.kind !== "table-cell" ||
+      !selection.cellRange ||
+      !tableCellSelectionRangeHasMultipleCells(selection.cellRange)
+    ) {
+      return false
+    }
+    const range = selection.cellRange
+    clearPendingRunStyle()
+    dispatchEditorTransaction(() => ({
+      selection: {
+        kind: "table-cell",
+        tableIndex: selection.tableIndex,
+        rowIndex: range.anchorRowIndex,
+        cellIndex: range.anchorCellIndex,
+        ...(selection.tableRuntimeKey
+          ? { tableRuntimeKey: selection.tableRuntimeKey }
+          : undefined),
+      },
+      activeTextRange: undefined,
+    }))
+    return true
   }
   const selectTableCellByRuntimeKey = (
     tableRuntimeKey: string,
@@ -862,6 +938,11 @@ export function useDocxEditor(
     get isImporting() { return isImporting.value },
     get documentTheme() { return documentTheme.value },
     get selection() { return selection.value },
+    get selectedTableCellRange() {
+      return selection.value.kind === "table-cell"
+        ? selection.value.cellRange
+        : undefined
+    },
     get activeTextRange() { return activeTextRange.value },
     get historyRestoreRequest() { return historyRestoreRequest.value },
     get selectedFormField() { return selectedFormField.value },
@@ -970,8 +1051,11 @@ export function useDocxEditor(
     selectParagraph,
     selectTableCell,
     selectTableCellRange,
+    selectWholeTable,
+    collapseTableCellSelection,
     selectTableCellByRuntimeKey,
     clearTableCellContents: tbl.clearTableCellContents,
+    clearTableSelection: tbl.clearTableSelection,
     setTableColumnWidths: tbl.setTableColumnWidths,
     setTableRowHeight: tbl.setTableRowHeight,
     insertTableRow: tbl.insertTableRow,

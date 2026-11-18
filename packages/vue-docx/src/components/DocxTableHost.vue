@@ -88,6 +88,8 @@
             class="docx-table-cell"
             :class="{
               'docx-table-cell--active': isCellActive(cell.rowIndex, cell.cellIndex),
+              'docx-table-cell--range-selected': isCellInSelectedRange(cell.rowIndex, cell.cellIndex),
+              'docx-table-cell--range-focus': isCellRangeFocus(cell.rowIndex, cell.cellIndex),
               'docx-table-cell--merge-fallback': cell.continuationFallback,
               'docx-table-cell--contain-floating': cellContainsLayoutInCellFloatingImage(cell),
               'docx-table-cell--insertion': cellTrackedKind(cell.rowIndex, cell.cellIndex) === 'insertion',
@@ -201,6 +203,9 @@ import {
   type TableRowRange,
   paragraphText,
   paragraphTypographyStyle,
+  isCellSelected,
+  isCellWithinTableSelectionRange,
+  tableCellSelectionRangeHasMultipleCells,
   resolveDefaultTabStopPx,
   resolveTableTrackedMarkup,
   docxTableCellSourceId,
@@ -877,19 +882,50 @@ function isBookmarkTargetCell(rowIndex: number, cellIndex: number): boolean {
 function isCellActive(rowIndex: number, cellIndex: number): boolean {
   if (!props.editable || !props.controller) return false
   const sel = props.controller.selection
-  if (sel.kind === "table-cell") {
-    if (
-      sel.tableIndex !== props.tableIndex ||
-      selectionRuntimeKey(sel) !== props.tableRuntimeKey
-    ) {
-      return false
-    }
-    if (sel.cellRange) {
-      return cellInsideRange(rowIndex, cellIndex, sel.cellRange)
-    }
-    return sel.rowIndex === rowIndex && sel.cellIndex === cellIndex
+  if (sel.kind !== "table-cell") return false
+  if (
+    sel.tableIndex !== props.tableIndex ||
+    selectionRuntimeKey(sel) !== props.tableRuntimeKey
+  ) {
+    return false
   }
-  return false
+  return isCellSelected(sel, props.tableIndex, rowIndex, cellIndex, props.table)
+}
+
+/** True for every cell the current multi-cell range highlights. */
+function isCellInSelectedRange(rowIndex: number, cellIndex: number): boolean {
+  if (!props.editable || !props.controller) return false
+  const sel = props.controller.selection
+  if (
+    sel.kind !== "table-cell" ||
+    sel.tableIndex !== props.tableIndex ||
+    selectionRuntimeKey(sel) !== props.tableRuntimeKey ||
+    !sel.cellRange ||
+    !tableCellSelectionRangeHasMultipleCells(sel.cellRange)
+  ) {
+    return false
+  }
+  return isCellWithinTableSelectionRange(
+    props.table,
+    sel.cellRange,
+    rowIndex,
+    cellIndex
+  )
+}
+
+/** The active (focus) cell of a multi-cell range. */
+function isCellRangeFocus(rowIndex: number, cellIndex: number): boolean {
+  if (!props.editable || !props.controller) return false
+  const sel = props.controller.selection
+  return Boolean(
+    sel.kind === "table-cell" &&
+      sel.tableIndex === props.tableIndex &&
+      selectionRuntimeKey(sel) === props.tableRuntimeKey &&
+      sel.cellRange &&
+      tableCellSelectionRangeHasMultipleCells(sel.cellRange) &&
+      sel.cellRange.focusRowIndex === rowIndex &&
+      sel.cellRange.focusCellIndex === cellIndex
+  )
 }
 
 function cellInsideRange(
@@ -897,15 +933,11 @@ function cellInsideRange(
   cellIndex: number,
   range: DocxTableCellSelectionRange
 ): boolean {
-  const minRow = Math.min(range.anchorRowIndex, range.focusRowIndex)
-  const maxRow = Math.max(range.anchorRowIndex, range.focusRowIndex)
-  const minCell = Math.min(range.anchorCellIndex, range.focusCellIndex)
-  const maxCell = Math.max(range.anchorCellIndex, range.focusCellIndex)
-  return (
-    rowIndex >= minRow &&
-    rowIndex <= maxRow &&
-    cellIndex >= minCell &&
-    cellIndex <= maxCell
+  return isCellWithinTableSelectionRange(
+    props.table,
+    range,
+    rowIndex,
+    cellIndex
   )
 }
 
@@ -962,10 +994,7 @@ function onCellClick(rowIndex: number, cellIndex: number, event: MouseEvent): vo
 }
 
 function selectionRangeHasMultipleCells(range: DocxTableCellSelectionRange): boolean {
-  return (
-    range.anchorRowIndex !== range.focusRowIndex ||
-    range.anchorCellIndex !== range.focusCellIndex
-  )
+  return tableCellSelectionRangeHasMultipleCells(range)
 }
 
 const rangeAnchor = ref<{ rowIndex: number; cellIndex: number } | null>(null)
@@ -1005,21 +1034,34 @@ function onCellMouseDown(
     return
   }
   if (!props.editable || !props.controller || isReadOnly.value) return
-  if (props.tableRuntimeKey) return
   if (event.button !== 0) return
+  // Nested cell mousedowns bubble to the host table; keep the range anchor in
+  // the table whose cell the pointer is actually over.
+  event.stopPropagation?.()
   const target = event.target as HTMLElement | undefined
   const insideEditable = target?.closest?.("[contenteditable='true']")
   if (insideEditable && !event.shiftKey) return
 
   const selection = props.controller.selection
-  const currentRange =
+  const selectionMatchesTable =
     selection.kind === "table-cell" &&
     selection.tableIndex === props.tableIndex &&
     selectionRuntimeKey(selection) === props.tableRuntimeKey
+  const currentRange =
+    selectionMatchesTable && selection.kind === "table-cell"
       ? selection.cellRange
       : undefined
-  const anchor = event.shiftKey && currentRange
-    ? { rowIndex: currentRange.anchorRowIndex, cellIndex: currentRange.anchorCellIndex }
+  // Shift extends from the range anchor, or from the single active cell when
+  // no rectangle exists yet. Clicking a cell without Shift starts a new anchor.
+  const anchor = event.shiftKey
+    ? currentRange
+      ? {
+          rowIndex: currentRange.anchorRowIndex,
+          cellIndex: currentRange.anchorCellIndex,
+        }
+      : selectionMatchesTable && selection.kind === "table-cell"
+        ? { rowIndex: selection.rowIndex, cellIndex: selection.cellIndex }
+        : { rowIndex, cellIndex }
     : { rowIndex, cellIndex }
 
   event.preventDefault()
@@ -1076,6 +1118,21 @@ function onCellFocus(
   paragraphIndex: number
 ): void {
   if (!props.editable || !props.controller || isReadOnly.value) return
+  // Focusing a cell inside the selected rectangle must not collapse it: the
+  // click that completes a drag or a Shift+click lands in the focus cell and
+  // would otherwise discard the range before the next command runs.
+  const selection = props.controller.selection
+  if (
+    selection.kind === "table-cell" &&
+    selection.tableIndex === props.tableIndex &&
+    selectionRuntimeKey(selection) === props.tableRuntimeKey &&
+    selection.cellRange &&
+    tableCellSelectionRangeHasMultipleCells(selection.cellRange) &&
+    cellInsideRange(rowIndex, cellIndex, selection.cellRange)
+  ) {
+    emit("cellFocus", tableIndex, rowIndex, cellIndex, paragraphIndex)
+    return
+  }
   selectCell(rowIndex, cellIndex)
   emit("cellFocus", tableIndex, rowIndex, cellIndex, paragraphIndex)
 }
@@ -1366,6 +1423,12 @@ onUnmounted(() => {
 }
 .docx-table-cell--active {
   background: rgba(59, 130, 246, 0.04);
+}
+.docx-table-cell--range-selected {
+  background: rgba(59, 130, 246, 0.16);
+}
+.docx-table-cell--range-focus {
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.55);
 }
 .docx-table-cell--bookmark-target {
   background: rgba(250, 204, 21, 0.22);

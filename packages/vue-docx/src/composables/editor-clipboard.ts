@@ -11,6 +11,7 @@
 import type {
   DocxClipboardParagraph,
   DocxClipboardSources,
+  DocxTableCellSelectionRange,
   DocxTextRange
 } from "@arcships/docx-core"
 import {
@@ -18,13 +19,17 @@ import {
   compareTextRangeBoundaries,
   createDocxClipboardPayload,
   docxClipboardParagraphsForRange,
+  escapeClipboardHtml,
   paragraphText,
   parseDocxClipboardHtml,
   parseDocxClipboardPayload,
   parseDocxClipboardRtf,
   renderDocxClipboardHtml,
   renderDocxClipboardRtf,
-  serializeDocxClipboardPayload
+  serializeDocxClipboardPayload,
+  tableCellParagraphs,
+  tableCellSelectionRangeCells,
+  tableCellSelectionRangeHasMultipleCells
 } from "@arcships/docx-core"
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { EditorCore } from "./editor-shared"
@@ -147,15 +152,77 @@ export function createEditorClipboard(ctx: EditorCore, operations: EditorClipboa
     }
   }
 
+  // ── table range payload ──────────────────────────────────────────
+  // A rectangular table selection has no text range. Copy it as a tab/line
+  // separated matrix so spreadsheet and text targets keep the cell layout.
+  function tableRangeFlavours(
+    range: DocxTableCellSelectionRange
+  ): ClipboardPayloadFlavours | undefined {
+    const table = ctx.model.value.nodes[range.tableIndex]
+    if (!table || table.type !== "table") return undefined
+    const cells = tableCellSelectionRangeCells(table, range)
+    if (cells.length === 0) return undefined
+
+    const rows = new Map<number, string[]>()
+    for (const { rowIndex, cellIndex } of cells) {
+      const cell = table.rows[rowIndex]?.cells[cellIndex]
+      if (!cell) continue
+      const cellText = tableCellParagraphs(cell.nodes)
+        .map((paragraph) => paragraphText(paragraph))
+        .join("\n")
+      const row = rows.get(rowIndex) ?? []
+      row.push(cellText)
+      rows.set(rowIndex, row)
+    }
+    if (rows.size === 0) return undefined
+
+    const orderedRows = [...rows.keys()].sort((a, b) => a - b)
+    const text = orderedRows
+      .map((rowIndex) => (rows.get(rowIndex) ?? []).join("\t"))
+      .join("\n")
+    const html = `<table>${orderedRows
+      .map((rowIndex) => {
+        const rowCells = rows.get(rowIndex) ?? []
+        return `<tr>${rowCells
+          .map(
+            (cellText) =>
+              `<td>${escapeClipboardHtml(cellText).replace(/\n/g, "<br>")}</td>`
+          )
+          .join("")}</tr>`
+      })
+      .join("")}</table>`
+
+    return { internal: "", html, rtf: "", text }
+  }
+
+  function selectedTableRange(): DocxTableCellSelectionRange | undefined {
+    const selection = ctx.selectionSnapshot.value
+    if (
+      selection.kind !== "table-cell" ||
+      selection.tableRuntimeKey ||
+      !selection.cellRange ||
+      !tableCellSelectionRangeHasMultipleCells(selection.cellRange)
+    ) {
+      return undefined
+    }
+    return selection.cellRange
+  }
+
   // ── copy ─────────────────────────────────────────────────────────
   const copy = async (): Promise<void> => {
-    const activeRange = ctx.activeTextRange.value
-    if (!activeRange) return
-
-    const flavours = richFlavoursForRange(activeRange) ?? {
-      text: resolveSelectedTextForRange(activeRange)
-    }
-    if (!flavours.text) return
+    const tableRange = selectedTableRange()
+    const activeRange = tableRange ? undefined : ctx.activeTextRange.value
+    const flavours = activeRange
+      ? richFlavoursForRange(activeRange) ?? {
+          internal: "",
+          html: "",
+          rtf: "",
+          text: resolveSelectedTextForRange(activeRange)
+        }
+      : tableRange
+        ? tableRangeFlavours(tableRange)
+        : undefined
+    if (!flavours?.text) return
 
     const wrote = await writeDocxClipboardPayload(flavours, resolveDocxClipboardWriteTargets())
     if (wrote) {
@@ -169,11 +236,22 @@ export function createEditorClipboard(ctx: EditorCore, operations: EditorClipboa
   const writeSelectionToClipboardData = (data: {
     setData(type: string, value: string): void
   }): boolean => {
+    const tableRange = selectedTableRange()
+    if (tableRange) {
+      const flavours = tableRangeFlavours(tableRange)
+      if (!flavours) return false
+      return writeDocxClipboardDataSink(flavours, data)
+    }
+
     const activeRange = ctx.activeTextRange.value
-    if (!activeRange) return false
-    if (compareTextRangeBoundaries(activeRange.start, activeRange.end) >= 0) return false
+    if (!activeRange || compareTextRangeBoundaries(activeRange.start, activeRange.end) >= 0) {
+      return false
+    }
 
     const flavours = richFlavoursForRange(activeRange) ?? {
+      internal: "",
+      html: "",
+      rtf: "",
       text: resolveSelectedTextForRange(activeRange)
     }
     if (!flavours.text) return false

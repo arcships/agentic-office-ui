@@ -48,6 +48,17 @@ await fetch(`/api/documents/${id}`, { method: "PUT", body: bytes })
 
 需要自建图片图层菜单时，`bringToFront(location)`、`bringForward(location)`、`sendBackward(location)`、`sendToBack(location)` 分别对应 Word 的四个叠放命令；`resolveDocxImageLayerOrderState(floating)` 和 `resolveDocxImageLayerOrderMenuActions(floating)` 给出与内置菜单相同的可用/禁用状态。每个命令是一条撤销记录，导出时写成 `wp:anchor/@relativeHeight`。
 
+需要自建表格选区界面时，控制器暴露同一套矩形选区 API：
+
+| 命令/属性 | 说明 |
+|---|---|
+| `selectedTableCellRange` | 当前多单元格矩形；`cellRange.gridRange` 给出物理网格列范围，跨 `gridSpan` / `vMerge` 时已展开。 |
+| `selectTableCellRange(tableIndex, range, tableRuntimeKey?)` | 设置锚点/焦点矩形；普通正文表格会按模型网格归一化，嵌套表格用 `tableRuntimeKey` 区分。 |
+| `selectWholeTable(tableIndex?)` | 选中整张表。 |
+| `clearTableSelection()` | 通过 `clearTableCellContents(tableIndex, cells[])` 清空矩形内所有单元格，返回是否执行；整个矩形一条撤销记录。 |
+| `collapseTableCellSelection()` | 把矩形折叠到锚点单元格（内置编辑器里是 `Esc`），返回是否执行。 |
+| `isCellSelected(selection, tableIndex, rowIndex, cellIndex, table?)` | 判断单元格是否在选区中；传入 `table` 时按物理网格处理合并单元格，否则退回模型行列范围。 |
+
 ## 复用内置编辑辅助界面
 
 五个编辑辅助能力也单独导出，自定义表面可以只挂其中几个，全部通过同一个 `DocxEditorController` 工作：

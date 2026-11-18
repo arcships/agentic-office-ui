@@ -607,20 +607,6 @@ export function isParagraphSelected(
   return selection.kind === "paragraph" && selection.nodeIndex === nodeIndex;
 }
 
-export function isCellSelected(
-  selection: DocxEditorSelection,
-  tableIndex: number,
-  rowIndex: number,
-  cellIndex: number
-): boolean {
-  return (
-    selection.kind === "table-cell" &&
-    selection.tableIndex === tableIndex &&
-    selection.rowIndex === rowIndex &&
-    selection.cellIndex === cellIndex
-  );
-}
-
 export function paragraphLocationKey(location: ParagraphLocation): string {
   if (location.kind === "paragraph") {
     return `p:${location.nodeIndex}`;

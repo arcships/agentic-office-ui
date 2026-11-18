@@ -93,6 +93,8 @@ Worker 和 WASM 必须来自安装后的真实包。消费项目不得从 demo �
 
 根入口公开 DOCX 书签导航（issue #148）：`createDocxBookmarkIndex(model)` 从 `w:bookmarkStart` 建立书签名到正文节点的索引，`get(name)` / `has(name)` 接受 `#Name`、任意大小写和 URL 转义，`targets` 按文档顺序给出 `{ name, nodeIndex, text, tableCell? }`；`normalizeDocxBookmarkName(name)` 是同一套归一化规则。`_GoBack` 等 Word 自动书签不参与索引；重复书签名以第一个目标为准。
 
+根入口公开 DOCX 表格矩形选区（issue #146）：`DocxTableCellSelectionRange` 增加可选 `gridRange: { startColumnIndex, endColumnIndex }`，表示合并单元格展开后的物理网格列范围。`DocxEditorController` 增加 `selectedTableCellRange`、`selectWholeTable(tableIndex?)`、`collapseTableCellSelection()` 与 `clearTableSelection()`；`clearTableSelection()` 复用 `clearTableCellContents(tableIndex, cells[])`，整个矩形一条撤销记录。`@arcships/docx-core` 同时导出 `isCellWithinTableSelectionRange`、`tableCellSelectionRangeCells`、`tableCellSelectionRangeParagraphEntries`、`tableCellSelectionRangeHasMultipleCells`、`tableCellSelectionAnchor` 与 `tableSelectionGridRectangle`，供自定义表面复用高亮、格式、复制和清除的同一套网格判定。`isCellSelected(selection, tableIndex, rowIndex, cellIndex, table?)` 增加可选 `table` 参数，按物理网格判断合并单元格是否在选区内。
+
 推荐实例写法：
 
 ```ts

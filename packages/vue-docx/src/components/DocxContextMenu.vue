@@ -206,6 +206,27 @@
         >
           {{ m.docx.contextMenu.splitCell }}
         </button>
+        <button
+          data-testid="docx-context-menu-select-table"
+          class="docx-context-menu-item"
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          @click="onAction('selectTable')"
+        >
+          {{ m.docx.contextMenu.selectTable }}
+        </button>
+        <button
+          data-testid="docx-context-menu-clear-cells"
+          class="docx-context-menu-item"
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          :disabled="!canClearTableCells"
+          @click="onAction('clearTableCells')"
+        >
+          <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.clearContents }}</span>
+        </button>
         <button class="docx-context-menu-item" type="button" role="menuitem" tabindex="-1" @click="onAction('deleteTable')">
           <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteTable }}</span>
         </button>
@@ -348,6 +369,8 @@ const canMergeTableCells = computed(() => {
   )
 })
 
+const canClearTableCells = computed(() => canMergeTableCells.value)
+
 const canSplitTableCell = computed(() => {
   const context = tableContext.value
   const selection = selectedTableSelection.value
@@ -475,10 +498,14 @@ async function onAction(action: string, value?: string): Promise<void> {
   switch (action) {
     case "cut": {
       const range = activeRange()
-      if (!range || compareTextRangeBoundaries(range.start, range.end) >= 0) break
-      ctrl.setActiveTextRange(range)
-      await ctrl.copy()
-      ctrl.deleteExpandedSelection(range)
+      if (range && compareTextRangeBoundaries(range.start, range.end) < 0) {
+        ctrl.setActiveTextRange(range)
+        await ctrl.copy()
+        ctrl.deleteExpandedSelection(range)
+      } else if (selectedTableRange.value) {
+        await ctrl.copy()
+        ctrl.clearTableSelection()
+      }
       break
     }
     case "copy": await ctrl.copy(); break
@@ -565,6 +592,14 @@ async function onAction(action: string, value?: string): Promise<void> {
           selection?.cellIndex ?? tableContext.value.cellIndex
         )
       }
+      break
+    case "selectTable":
+      if (tableContext.value) {
+        ctrl.selectWholeTable(tableContext.value.tableIndex)
+      }
+      break
+    case "clearTableCells":
+      ctrl.clearTableSelection()
       break
     case "deleteTable":
       if (tableContext.value) {
