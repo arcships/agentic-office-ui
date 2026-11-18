@@ -507,6 +507,13 @@ function hasRichTextCells(runs: Record<string, XlsxCellTextRun[]> | undefined) {
   return runs && Object.keys(runs).length > 0 ? runs : undefined;
 }
 
+/** Per-cell rotation/shrink flags, or `undefined` when every cell inherits. */
+function hasCellTextLayouts(
+  layouts: Record<string, { shrinkToFit?: boolean; textRotation?: number }> | undefined,
+) {
+  return layouts && Object.keys(layouts).length > 0 ? layouts : undefined;
+}
+
 function buildSheetList(
   nextWorkbook: Workbook,
   structureAssets?: WorkbookStructureAssets | null,
@@ -560,6 +567,7 @@ function buildSheetList(
     if (!usedRange) {
       sheetsByWorkbookSheetIndex.push({
         cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
+        cellTextLayouts: hasCellTextLayouts(sheetState?.cellTextLayouts),
         columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
         colCount: 0,
         richTextCells: hasRichTextCells(sheetState?.richTextCells),
@@ -629,6 +637,7 @@ function buildSheetList(
 
     sheetsByWorkbookSheetIndex.push({
       cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
+      cellTextLayouts: hasCellTextLayouts(sheetState?.cellTextLayouts),
       columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
       colCount: visibleCols.length,
       richTextCells: hasRichTextCells(sheetState?.richTextCells),

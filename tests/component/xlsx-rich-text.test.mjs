@@ -42,6 +42,8 @@ const {
 const ROOT = path.resolve(import.meta.dirname, "../..");
 const GRID_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/XlsxGrid.vue");
 const RICH_TEXT_LAYOUT_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/rich-text-layout.ts");
+const GRID_PAINT_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/grid-paint.ts");
+const GRID_PAINT_SOURCE = readFileSync(GRID_PAINT_PATH, "utf8");
 const RICH_TEXT_PLAIN = "Quarterly2";
 const RICH_TEXT_RUNS_XML = [
   "<r><rPr><b/></rPr><t>Quarter</t></r>",
@@ -178,6 +180,7 @@ const drawTextModule = await import(dataUrl([
   "let __iconGeometry = null;",
   "function resolveIconGeometry() { return __iconGeometry; }",
   `import { wrapRichTextRuns, measureRichTextSegments, richTextBaselineOffset, richTextFontScale } from "${dataUrl(readFileSync(RICH_TEXT_LAYOUT_PATH, "utf8"))}";`,
+  `import { resolveRotatedTextBounds, resolveRotatedTextCenter, resolveRotatedTextFitWidth, resolveShrinkToFitFontSize } from "${dataUrl(GRID_PAINT_SOURCE)}";`,
   "function resolveWorkbookColor(color) {",
   "  const value = color?.rgb;",
   "  if (!value) return null;",
@@ -189,6 +192,9 @@ const drawTextModule = await import(dataUrl([
   gridFunctionText("baseCellFont"),
   gridFunctionText("richTextRunFont"),
   gridFunctionText("drawRichTextRuns"),
+  gridFunctionText("richTextNaturalWidth"),
+  gridFunctionText("drawRotatedPlainCellText"),
+  gridFunctionText("drawRotatedRichTextRuns"),
   gridFunctionText("drawCellText"),
   "export { drawCellText, wrapCellText };",
 ].join("\n")));

@@ -188,10 +188,18 @@ function hasRichTextCells(runs: Record<string, XlsxCellTextRun[]> | undefined) {
   return runs && Object.keys(runs).length > 0 ? runs : undefined;
 }
 
+/** Per-cell rotation/shrink flags, or `undefined` when every cell inherits. */
+function hasCellTextLayouts(
+  layouts: Record<string, { shrinkToFit?: boolean; textRotation?: number }> | undefined,
+) {
+  return layouts && Object.keys(layouts).length > 0 ? layouts : undefined;
+}
+
 export function buildSheetList(
   workbook: Workbook,
   sheetStatesByWorkbookSheetIndex?: Array<{
     cachedFormulaValues?: Record<string, string>;
+    cellTextLayouts?: Record<string, { shrinkToFit?: boolean; textRotation?: number }>;
     columnWidthCharacterWidthPx?: number;
     colWidthOverridesPx?: Record<number, number>;
     colStyleIds?: Record<number, number>;
@@ -257,6 +265,7 @@ export function buildSheetList(
       if (!usedRange) {
         sheets.push({
           cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
+          cellTextLayouts: hasCellTextLayouts(sheetState?.cellTextLayouts),
           columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
           richTextCells: hasRichTextCells(sheetState?.richTextCells),
           colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
@@ -334,6 +343,7 @@ export function buildSheetList(
 
       sheets.push({
         cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
+        cellTextLayouts: hasCellTextLayouts(sheetState?.cellTextLayouts),
         columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
         richTextCells: hasRichTextCells(sheetState?.richTextCells),
         colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},

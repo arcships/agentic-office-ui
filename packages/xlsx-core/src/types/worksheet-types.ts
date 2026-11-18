@@ -458,6 +458,15 @@ export type XlsxSheetNameIssue =
 export interface XlsxSheetData {
   cachedFormulaValues: Record<string, string>;
   /**
+   * Rotation and shrink-to-fit alignment of cells whose style overrides the
+   * row/column alignment, keyed by A1 address.
+   *
+   * The values are the raw OOXML alignment flags (`textRotation` 0–180 and
+   * `shrinkToFit`), so both main-thread and Worker-backed renderers can lay
+   * out rotated headers and long values without reading the workbook again.
+   */
+  cellTextLayouts?: Record<string, { shrinkToFit?: boolean; textRotation?: number }>;
+  /**
    * Rich-text runs of every cell that stores more than one formatted run,
    * keyed by A1 address. Cells without an entry render their plain `value`.
    */

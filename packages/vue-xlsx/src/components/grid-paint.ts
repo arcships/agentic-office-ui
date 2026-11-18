@@ -180,3 +180,153 @@ export function resolveOverflowTextWidth(
   }
   return width;
 }
+
+// ── Text rotation and shrink-to-fit ────────────────────────────────────────
+
+/**
+ * Parsed text-layout flags of a cell's alignment.
+ *
+ * `rotation` is the canvas angle: Excel stores 0–90 for counter-clockwise
+ * rotation and 91–180 for clockwise rotation, while canvas `rotate()` treats
+ * positive angles as clockwise. `null` means horizontal text.
+ */
+export interface CellTextLayout {
+  rotation: number | null;
+  shrinkToFit: boolean;
+}
+
+/**
+ * Converts OOXML `textRotation` to the angle passed to `CanvasRenderingContext2D.rotate`.
+ *
+ * Excel measures rotation counter-clockwise, so 45° becomes -45 canvas
+ * degrees; values above 90° mean clockwise rotation, e.g. 180° is +90 canvas
+ * degrees (top-to-bottom vertical text). Values outside 0–180 (including the
+ * legacy 255 vertical-stack marker) are horizontal text.
+ */
+export function resolveSpreadsheetTextRotation(textRotation: unknown): number | null {
+  if (typeof textRotation !== "number" || !Number.isFinite(textRotation)) return null;
+  if (textRotation < 0 || textRotation > 180) return null;
+  const excelDegrees = textRotation > 90 ? 90 - textRotation : textRotation;
+  return excelDegrees === 0 ? null : -excelDegrees;
+}
+
+/**
+ * Text-layout flags of a resolved cell style.
+ *
+ * The workbook engine reports `alignment.rotation` while the OOXML parser
+ * keeps the raw `alignment.textRotation`; both spellings must render.
+ */
+export function resolveCellTextLayout(
+  alignment: Record<string, unknown> | undefined,
+): CellTextLayout {
+  return {
+    rotation: resolveSpreadsheetTextRotation(alignment?.rotation ?? alignment?.textRotation),
+    shrinkToFit: alignment?.shrinkToFit === true,
+  };
+}
+
+/** Axis-aligned bounds of a `width × height` box rotated by `degrees`. */
+export function resolveRotatedTextBounds(width: number, height: number, degrees: number): {
+  height: number;
+  width: number;
+} {
+  const radians = degrees * Math.PI / 180;
+  const cos = Math.abs(Math.cos(radians));
+  const sin = Math.abs(Math.sin(radians));
+  const safeWidth = Number.isFinite(width) ? Math.max(0, width) : 0;
+  const safeHeight = Number.isFinite(height) ? Math.max(0, height) : 0;
+  return {
+    height: Math.abs(safeWidth * sin) + Math.abs(safeHeight * cos),
+    width: Math.abs(safeWidth * cos) + Math.abs(safeHeight * sin),
+  };
+}
+
+/**
+ * Longest single line that keeps a rotated text box inside the cell.
+ *
+ * Rotation swaps the space text can occupy: at 90° the line may be as tall as
+ * the cell, and at 45° both the cell's width and height constrain the rotated
+ * bounds. Callers that shrink text use this as the target width; normal
+ * rotated text is clipped to the same cell rectangle, so it never paints over
+ * a neighbour.
+ */
+export function resolveRotatedTextFitWidth(
+  cellWidth: number,
+  cellHeight: number,
+  degrees: number,
+  lineHeight: number,
+): number {
+  const width = Number.isFinite(cellWidth) ? Math.max(0, cellWidth) : 0;
+  const height = Number.isFinite(cellHeight) ? Math.max(0, cellHeight) : 0;
+  const line = Number.isFinite(lineHeight) ? Math.max(0, lineHeight) : 0;
+  const radians = degrees * Math.PI / 180;
+  const cos = Math.abs(Math.cos(radians));
+  const sin = Math.abs(Math.sin(radians));
+  let maxWidth = Number.POSITIVE_INFINITY;
+  if (cos > 1e-6) maxWidth = Math.min(maxWidth, (width - line * sin) / cos);
+  if (sin > 1e-6) maxWidth = Math.min(maxWidth, (height - line * cos) / sin);
+  return Number.isFinite(maxWidth) ? Math.max(0, maxWidth) : width;
+}
+
+/**
+ * Centre of a rotated text block, positioned the way Excel anchors it.
+ *
+ * The rotated bounds — not the unrotated text size — decide the distance from
+ * the left/right and top/bottom edges, which is what swaps the occupied
+ * width/height at 90°.
+ */
+export function resolveRotatedTextCenter(
+  rect: PixelRect,
+  bounds: { height: number; width: number },
+  alignment: "left" | "center" | "right",
+  vertical: "top" | "middle" | "bottom",
+): { x: number; y: number } {
+  return {
+    x: alignment === "right"
+      ? rect.left + rect.width - bounds.width / 2
+      : alignment === "center"
+        ? rect.left + rect.width / 2
+        : rect.left + bounds.width / 2,
+    y: vertical === "top"
+      ? rect.top + bounds.height / 2
+      : vertical === "middle"
+        ? rect.top + rect.height / 2
+        : rect.top + rect.height - bounds.height / 2,
+  };
+}
+
+/**
+ * Largest font size at or below `baseFontSizePx` whose measured width still
+ * fits `availableWidth`.
+ *
+ * Excel's shrink-to-fit never goes below 0.4× the base font; the binary search
+ * stops within a quarter pixel, which is enough for the canvas to round the
+ * same way the measure pass did. Text that is still too wide at the floor
+ * returns the floor so the caller can clip or ellipsize it.
+ */
+export function resolveShrinkToFitFontSize(
+  baseFontSizePx: number,
+  availableWidth: number,
+  measureText: (fontSizePx: number) => number,
+  minimumScale = 0.4,
+): number {
+  const base = Number.isFinite(baseFontSizePx) ? Math.max(1, baseFontSizePx) : 1;
+  if (!Number.isFinite(availableWidth) || availableWidth <= 0) return base;
+  if (measureText(base) <= availableWidth) return base;
+
+  const scale = Number.isFinite(minimumScale) ? Math.min(1, Math.max(0.01, minimumScale)) : 0.4;
+  const minimum = Math.max(1, base * scale);
+  if (measureText(minimum) > availableWidth) return minimum;
+
+  let lower = minimum;
+  let upper = base;
+  while (upper - lower > 0.25) {
+    const candidate = (lower + upper) / 2;
+    if (measureText(candidate) <= availableWidth) {
+      lower = candidate;
+    } else {
+      upper = candidate;
+    }
+  }
+  return Math.min(base, lower);
+}

@@ -124,6 +124,15 @@ const runs = controller.getCellRuns({ row: 0, col: 0 })
 
 `controller.activeSheet.richTextCells` 以 A1 地址保存整张工作表的段落；`getCellRuns` 会在单元格的值被改写（编辑、粘贴、重新计算）后自动不再返回旧段落，因此宿主不需要自己比对。需要自己渲染时，用 `@arcships/xlsx-core` 的 `resolveRichTextRuns(runs, value)`、`richTextRunsToPlainText(runs)` 做同样的“文本仍匹配”校验。导出的 `.xlsx` 会保留段落格式，重新打开后仍按段渲染。
 
+## 文字旋转与缩小适应
+
+单元格的 `textRotation` 和 `shrinkToFit` 会参与实际绘制，而不只是保留在样式里：
+
+- Excel 的 0–90° 表示逆时针旋转，91–180° 表示顺时针旋转；查看器会把 45° 画成 −45°、90° 画成 −90°、180° 画成 +90°（自上而下）。旋转后的文字按旋转后的包围盒定位，90° 时占用的宽高互换；文字被裁剪在单元格矩形内，不会覆盖相邻单元格，也不会改变点击命中的单元格。
+- 启用“缩小以适应”时，画布会从当前字号向下二分查找，直到文字宽度放进可用宽度；最小字号是基础字号的 0.4 倍。富文本单元格会按同一比例缩放每段字体，普通单元格保完整文本，不会先用省略号截断。
+- 网格、工作表标签缩略图和打印预览共用同一套旋转/缩放规则；缩放比例（例如 100% 与 200%）只影响基础字号，0.4 倍下限和旋转角度保持 Excel 语义。
+- `controller.activeSheet.cellTextLayouts` 以 A1 地址列出显式样式里需要旋转或缩小适应的单元格；行/列样式仍按原有继承规则生效。自建渲染器可复用 `packages/vue-xlsx/src/components/grid-paint.ts` 里的同一套纯函数（`resolveSpreadsheetTextRotation()`、`resolveCellTextLayout()`、`resolveRotatedTextBounds()`、`resolveRotatedTextCenter()`、`resolveRotatedTextFitWidth()`、`resolveShrinkToFitFontSize()`）；它们只接收尺寸和测量回调，不依赖 Canvas。
+
 ## 工作表标签
 
 `showSheetTabs` 设为 `false` 只移除底部标签条：网格、功能区、公式栏和控制器状态都不变，`Ctrl/Cmd+PageUp/PageDown` 仍然可以切换工作表。此时切换只能通过宿主自己的界面调用 `controller.setActiveTabIndex(index)`。需要完全自定义的导航界面时，直接用 `XlsxSheetSurface` + `useXlsxViewerController`（见[自定义 XLSX 界面](../custom-components/xlsx.md)）。
