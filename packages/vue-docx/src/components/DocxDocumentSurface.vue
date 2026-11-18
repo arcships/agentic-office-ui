@@ -18,6 +18,8 @@
       :zoom-scale="effectiveZoomScale"
       :document-id="documentRevision.documentId"
       :fit-width="zoom === undefined ? fitWidth : false"
+      :fit-mode="zoom === undefined ? fitMode : null"
+      :view-mode="viewMode"
       :show-tracked-changes="showTrackedChanges"
       :revision-display="revisionDisplay"
       :show-comments="showComments"
@@ -140,6 +142,10 @@ const props = withDefaults(
     zoomScale?: number
     enableGestureZoom?: boolean
     fitWidth?: boolean
+    /** Fit the whole page instead of the page width. Controlled zoom wins. */
+    fitMode?: "width" | "page" | null
+    /** Continuous scroll, single page, or two-page spreads. */
+    viewMode?: import("../composables/docx-view-mode").DocxViewMode
     /** `null` follows the controller flag; `false` always hides. */
     showTrackedChanges?: boolean | null
     /** `null` follows the controller; defaults to `balloons`. */
@@ -166,6 +172,8 @@ const props = withDefaults(
     showTrackedChanges: null,
     revisionDisplay: null,
     showComments: null,
+    fitMode: null,
+    viewMode: "continuous",
     locale: "en",
     messages: undefined,
   }

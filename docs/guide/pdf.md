@@ -30,6 +30,8 @@ import "@arcships/vue-pdf/style.css"
 | `password` | `string` | 无 | 加密 PDF 的初始密码 |
 | `onPassword` | `(request) => string \| Promise<string \| undefined>` | 无 | 需要密码时调用；返回 `undefined` 表示取消 |
 | `defaultZoom` | `number` | `1` | 初始缩放倍率，范围由组件约束 |
+| `pageLayout` | `"continuous" \| "single" \| "spread" \| null` | `null` | 页面布局；`null` 跟随内部工具栏状态 |
+| `defaultPageLayout` | `"continuous" \| "single" \| "spread"` | `"single"` | 未受控时的初始页面布局 |
 | `showToolbar` | `boolean` | `true` | 工具栏 |
 | `showDownload` | `boolean` | `true` | 下载按钮 |
 | `showRotateControls` | `boolean` | `true` | 旋转按钮 |
@@ -38,7 +40,19 @@ import "@arcships/vue-pdf/style.css"
 
 `PdfSurface` 也接受 `isDark` 和 `minHeight`。打印时工具栏、缩略图和状态层会自动隐藏，PDF 会在打印前一次性栅格化全部页面（而不是只打印当前页或占位符），并按文档首页尺寸设置 `@page`。
 
-事件包括 `document-load-success`、`document-load-error`、`active-page-change`、`selectionChange`、`fileDrop` 和 `diagnostic`。当前页支持拖选文字、双击选词、`Ctrl/Cmd+C` 复制和 `Escape` 清除；`clearSelection()` 与 `getSelectionState()` 通过组件实例暴露。位图上方还渲染真实 DOM 文本层（每个 glyph 一个透明 span，随缩放/旋转应用 CSS matrix），可由屏幕阅读器、浏览器查找和 CJK 提取读取；文本层不拦截指针，拖选、链接/表单命中与区域选择行为不变。错误处理使用 `PdfLoadError.code`，不要通过错误文案判断类型。加密文档在无密码可用时返回 `ENCRYPTED`；`load-start` 诊断中的 URL 已去除查询串、片段和凭据。
+### 页面布局
+
+`PdfViewer` 和 `PdfSurface` 共用同一个 `pageLayout` 属性：
+
+- `single`（查看器默认）：一次只显示一页，适合逐页阅读。
+- `continuous`：整份文档纵向堆叠、按可视窗口懒加载。`PdfSurface` 一直是这个模式。
+- `spread`：两页并排，按 (1,2)、(3,4) 分组；行高取两页中较高的一页，落单的最后一页居中占满整个跨页宽度。两部分都把对页栅格化成独立位图，每页保留自己的页码（`data-page-number`、`alt` 文案）。
+
+切换布局不会丢失当前页：新布局会把滚动位置对齐到当前页所在的行。`PdfViewer` 工具栏的下拉框（`data-testid="pdf-page-layout"`）驱动未受控的布局，并抛出 `update:pageLayout`；`PdfSurface` 只接受受控属性。渲染窗口按模式收敛：`single` 只保留当前页的位图，`continuous`/`spread` 按可视行懒加载。
+
+需要自建 PDF 表面时使用根入口导出的纯函数 `resolvePdfPageLayoutMetrics()`、`pdfPageLayoutRows()`、`pdfRowIndexAtOffset()`、`pdfPageIndexAtOffset()`、`pdfSnapTopForRow()`、`pdfPageAtPoint()`、`pdfRowsInViewport()`、`pdfSpreadPagePair()`、`pdfSpreadStepPage()`、`normalizePdfPageLayout()`、`isPdfSpreadLayout()` 和 `PDF_PAGE_LAYOUTS`，类型为 `PdfPageLayout`、`PdfPageLayoutMetrics`、`PdfPageLayoutRow`、`PdfPageLayoutOptions`、`PdfPageDisplaySize`。
+
+事件包括 `document-load-success`、`document-load-error`、`active-page-change`、`update:pageLayout`、`selectionChange`、`fileDrop` 和 `diagnostic`。当前页支持拖选文字、双击选词、`Ctrl/Cmd+C` 复制和 `Escape` 清除；`clearSelection()` 与 `getSelectionState()` 通过组件实例暴露。位图上方还渲染真实 DOM 文本层（每个 glyph 一个透明 span，随缩放/旋转应用 CSS matrix），可由屏幕阅读器、浏览器查找和 CJK 提取读取；文本层不拦截指针，拖选、链接/表单命中与区域选择行为不变。错误处理使用 `PdfLoadError.code`，不要通过错误文案判断类型。加密文档在无密码可用时返回 `ENCRYPTED`；`load-start` 诊断中的 URL 已去除查询串、片段和凭据。
 
 ### 拖放导入
 

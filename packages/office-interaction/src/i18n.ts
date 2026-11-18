@@ -189,6 +189,14 @@ export interface OfficeDocxMessages {
     revisionDisplayInline: string
     revisionDisplayBalloons: string
     revisionDisplayNone: string
+    /** Page layout control: continuous scroll, one page, or spreads. */
+    viewMode: string
+    viewModeContinuous: string
+    viewModeSingle: string
+    viewModeSpread: string
+    /** Fit-to-viewport toggles. */
+    fitWidth: string
+    fitPage: string
     lightThemeAction: string
     darkThemeAction: string
     lightDocument: string
@@ -1135,6 +1143,12 @@ export interface OfficePptxMessages {
     previousSlide: string
     nextSlide: string
     hiddenSlide: string
+    /** Browse layout control: single slide list or slide-sorter grid. */
+    viewMode: string
+    viewModeSingle: string
+    viewModeSorter: string
+    /** Accessible name of the slide-sorter grid. */
+    sorter: string
     searchPlaceholder: string
     search: string
     sidebar: string
@@ -1226,6 +1240,11 @@ export interface OfficePdfMessages {
     noPdf: string
     opening: string
     toggleThumbnails: string
+    /** Page layout control label and its three modes. */
+    pageLayout: string
+    pageLayoutContinuous: string
+    pageLayoutSingle: string
+    pageLayoutSpread: string
     pageInput: string
     rotateClockwise: string
     searchLabel: string
@@ -1459,6 +1478,12 @@ export const officeMessagesEn: OfficeMessages = {
       revisionDisplayInline: "All markup",
       revisionDisplayBalloons: "Balloons",
       revisionDisplayNone: "No markup",
+      viewMode: "Page layout",
+      viewModeContinuous: "Continuous scroll",
+      viewModeSingle: "Single page",
+      viewModeSpread: "Two-page spread",
+      fitWidth: "Fit width",
+      fitPage: "Fit page",
       lightThemeAction: "Use light document theme",
       darkThemeAction: "Use dark document theme",
       lightDocument: "Light document",
@@ -2342,6 +2367,10 @@ export const officeMessagesEn: OfficeMessages = {
       previousSlide: "Previous slide",
       nextSlide: "Next slide",
       hiddenSlide: "Hidden slide",
+      viewMode: "Browse layout",
+      viewModeSingle: "Single slide view",
+      viewModeSorter: "Slide sorter",
+      sorter: "Slide sorter",
       searchPlaceholder: "Search slides",
       search: "Search",
       sidebar: "Slides",
@@ -2424,6 +2453,10 @@ export const officeMessagesEn: OfficeMessages = {
       noPdf: "No PDF loaded",
       opening: "Opening PDF…",
       toggleThumbnails: "Show or hide thumbnails",
+      pageLayout: "Page layout",
+      pageLayoutContinuous: "Continuous scroll",
+      pageLayoutSingle: "Single page",
+      pageLayoutSpread: "Two-page spread",
       pageInput: "Page number",
       rotateClockwise: "Rotate clockwise",
       searchLabel: "Search PDF text",
@@ -2625,6 +2658,12 @@ export const officeMessagesZhCN: OfficeMessages = {
       revisionDisplayInline: "所有标记",
       revisionDisplayBalloons: "批注框",
       revisionDisplayNone: "无标记",
+      viewMode: "页面布局",
+      viewModeContinuous: "连续滚动",
+      viewModeSingle: "单页",
+      viewModeSpread: "双页",
+      fitWidth: "适应宽度",
+      fitPage: "适应页面",
       lightThemeAction: "使用浅色文档主题",
       darkThemeAction: "使用深色文档主题",
       lightDocument: "浅色文档",
@@ -3508,6 +3547,10 @@ export const officeMessagesZhCN: OfficeMessages = {
       previousSlide: "上一页",
       nextSlide: "下一页",
       hiddenSlide: "隐藏页",
+      viewMode: "浏览布局",
+      viewModeSingle: "单页视图",
+      viewModeSorter: "幻灯片浏览",
+      sorter: "幻灯片浏览",
       searchPlaceholder: "搜索幻灯片",
       search: "搜索",
       sidebar: "幻灯片列表",
@@ -3590,6 +3633,10 @@ export const officeMessagesZhCN: OfficeMessages = {
       noPdf: "未加载 PDF",
       opening: "正在打开 PDF…",
       toggleThumbnails: "显示或隐藏缩略图",
+      pageLayout: "页面布局",
+      pageLayoutContinuous: "连续滚动",
+      pageLayoutSingle: "单页",
+      pageLayoutSpread: "双页",
       pageInput: "页码",
       rotateClockwise: "顺时针旋转",
       searchLabel: "搜索 PDF 文本",

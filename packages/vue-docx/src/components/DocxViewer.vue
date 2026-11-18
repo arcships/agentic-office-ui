@@ -43,6 +43,8 @@
       :comment-count="viewerComments.length"
       :total-pages="totalPages"
       :zoom="zoomPercent"
+      :view-mode="effectiveViewMode"
+      :fit-mode="fitMode"
       :search-query="searchQuery"
       :search-case-sensitive="searchOptions.caseSensitive"
       :search-whole-word="searchOptions.wholeWord"
@@ -63,7 +65,9 @@
       @search-previous="selectSearchResult(-1)"
       @search-close="closeSearch"
       @toggle-theme="toggleTheme"
-      @update:zoom="zoomPercent = $event"
+      @update:zoom="applyToolbarZoom"
+      @update:view-mode="setViewMode"
+      @update:fit-mode="setFitMode"
       @upload="uploadInputRef?.click()"
     />
 
@@ -126,7 +130,9 @@
           :model="renderableModel"
           :layout-options="layoutOptions"
           :theme="darkTheme ? 'dark' : 'light'"
-          :zoom="zoomPercent / 100"
+          :zoom="fitMode === 'none' ? zoomPercent / 100 : undefined"
+          :fit-mode="fitMode === 'none' ? null : fitMode"
+          :view-mode="effectiveViewMode"
           :editable="false"
           :show-tracked-changes="effectiveShowTrackedChanges"
           :revision-display="effectiveRevisionDisplay"
@@ -140,7 +146,7 @@
           @search-state-change="onSearchStateChange"
           @request-page-reveal="emit('requestPageReveal', $event)"
           @bookmark-missing="emit('bookmarkMissing', $event)"
-          @update:zoom="zoomPercent = Math.round($event * 100)"
+          @update:zoom="onSurfaceZoom"
         />
       </main>
     </div>
@@ -166,6 +172,12 @@ import { OfficeLiveStatus, useViewerKeys } from "@arcships/vue-ui"
 import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
 import DocxDocumentSurface from "./DocxDocumentSurface.vue"
+import {
+  normalizeDocxFitMode,
+  normalizeDocxViewMode,
+  type DocxFitMode,
+  type DocxViewMode,
+} from "../composables/docx-view-mode"
 import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
 import DocxViewerToolbar from "./DocxViewerToolbar.vue"
 import { formatOfficeMessage } from "@arcships/office-interaction"
@@ -200,6 +212,17 @@ const props = withDefaults(
     revisionDisplay?: DocxRevisionDisplay | null
     showTrackedChanges?: boolean | null
     showComments?: boolean | null
+    /**
+     * Page layout: `continuous` scrolling, `single` page at a time, or
+     * two-page `spread`s. `null` follows the internal toolbar state.
+     */
+    viewMode?: import("../composables/docx-view-mode").DocxViewMode | null
+    /** View mode used while `viewMode` is uncontrolled. Defaults to continuous. */
+    defaultViewMode?: import("../composables/docx-view-mode").DocxViewMode
+    /** Fit the paper to the viewport instead of using the zoom factor. */
+    fitMode?: import("../composables/docx-view-mode").DocxFitMode | null
+    /** Fit mode used while `fitMode` is uncontrolled. Defaults to `none` (zoom factor). */
+    defaultFitMode?: import("../composables/docx-view-mode").DocxFitMode | "none"
     locale?: OfficeLocale
     messages?: OfficeMessagesOverride
     /** Host renderer that replaces comment cards in the page gutter. */
@@ -227,6 +250,10 @@ const props = withDefaults(
     revisionDisplay: null,
     showTrackedChanges: null,
     showComments: null,
+    viewMode: null,
+    defaultViewMode: "continuous" as import("../composables/docx-view-mode").DocxViewMode,
+    fitMode: null,
+    defaultFitMode: "none" as const,
     locale: "en",
     messages: undefined,
   },
@@ -242,6 +269,8 @@ const emit = defineEmits<{
   (event: "update:showComments", visible: boolean): void
   (event: "update:revisionDisplay", display: DocxRevisionDisplay): void
   (event: "searchStateChange", state: DocxSearchState): void
+  (event: "update:viewMode", mode: DocxViewMode): void
+  (event: "update:fitMode", mode: DocxFitMode | "none"): void
   /** A bookmark reveal needs `pageIndex` mounted/visible in the host. */
   (event: "requestPageReveal", pageIndex: number): void
   /** An internal link named a bookmark this document does not contain. */
@@ -277,6 +306,10 @@ const internalShowComments = ref(props.defaultShowComments)
 const internalRevisionDisplay = ref<DocxRevisionDisplay>(
   props.defaultRevisionDisplay
 )
+const internalViewMode = ref<DocxViewMode>(normalizeDocxViewMode(props.defaultViewMode))
+const internalFitMode = ref<DocxFitMode | "none">(
+  normalizeDocxFitMode(props.defaultFitMode) ?? "none"
+)
 const searchQuery = ref("")
 const searchOptions = ref<Required<DocxSearchOptions>>({
   caseSensitive: false,
@@ -299,6 +332,14 @@ const effectiveShowTrackedChanges = computed(() => props.showTrackedChanges ?? i
 const effectiveShowComments = computed(() => props.showComments ?? internalShowComments.value)
 const effectiveRevisionDisplay = computed(
   () => props.revisionDisplay ?? internalRevisionDisplay.value
+)
+const effectiveViewMode = computed<DocxViewMode>(() =>
+  props.viewMode == null ? internalViewMode.value : normalizeDocxViewMode(props.viewMode)
+)
+const fitMode = computed<DocxFitMode | "none">(() =>
+  props.fitMode === null || props.fitMode === undefined
+    ? internalFitMode.value
+    : normalizeDocxFitMode(props.fitMode) ?? "none"
 )
 const viewerTrackedChanges = computed(() => renderableModel.value ? collectTrackedChangesFromModel(renderableModel.value) : [])
 const viewerComments = computed(() => renderableModel.value ? collectCommentsFromModel(renderableModel.value) : [])
@@ -357,6 +398,13 @@ watch(() => props.defaultShowComments, (value) => {
 watch(() => props.defaultRevisionDisplay, (value) => {
   if (props.revisionDisplay == null) internalRevisionDisplay.value = value
 })
+watch(() => props.defaultViewMode, (value) => {
+  if (props.viewMode == null) internalViewMode.value = normalizeDocxViewMode(value)
+})
+watch(() => props.defaultFitMode, (value) => {
+  if (props.fitMode == null) internalFitMode.value = normalizeDocxFitMode(value) ?? "none"
+})
+watch(effectiveViewMode, () => { void nextTick(keepCurrentPageVisible) })
 
 watch(
   [
@@ -442,7 +490,8 @@ function onViewerKeyCommand(command: ViewerKeyCommand): boolean {
     case "zoom-out":
       return stepZoom(-1)
     case "zoom-reset":
-      if (zoomPercent.value === 100) return false
+      if (fitMode.value === "none" && zoomPercent.value === 100) return false
+      if (fitMode.value !== "none") setFitMode("none")
       zoomPercent.value = 100
       return true
     case "search":
@@ -471,6 +520,8 @@ function stepZoom(direction: 1 | -1): boolean {
     ? DOCX_ZOOM_OPTIONS.find((option) => option > zoomPercent.value)
     : [...DOCX_ZOOM_OPTIONS].reverse().find((option) => option < zoomPercent.value)
   if (next === undefined) return false
+  // Zooming by keyboard leaves fit mode, exactly like the toolbar control.
+  if (fitMode.value !== "none") setFitMode("none")
   zoomPercent.value = next
   return true
 }
@@ -555,7 +606,48 @@ function onPageCountChange(count: number): void {
 
 function onVisiblePageRange(range: { startPageIndex: number; endPageIndex: number }): void {
   if (range.endPageIndex < range.startPageIndex) return
+  if (effectiveViewMode.value === "spread") {
+    // A spread always renders a page pair; keep the page the reader selected
+    // as long as it is part of the visible pair.
+    const pageIndex = currentPage.value - 1
+    if (pageIndex >= range.startPageIndex && pageIndex <= range.endPageIndex) return
+    currentPage.value = range.startPageIndex + 1
+    return
+  }
   currentPage.value = Math.floor((range.startPageIndex + range.endPageIndex) / 2) + 1
+}
+
+function keepCurrentPageVisible(): void {
+  if (totalPages.value < 1) return
+  const pageIndex = Math.min(Math.max(0, currentPage.value - 1), totalPages.value - 1)
+  documentSurfaceRef.value?.scrollToPage(pageIndex)
+}
+
+function setViewMode(mode: DocxViewMode): void {
+  const next = normalizeDocxViewMode(mode)
+  if (next === effectiveViewMode.value) return
+  if (props.viewMode == null) internalViewMode.value = next
+  emit("update:viewMode", next)
+  // The row layout changes; stay on the page the reader was looking at.
+  void nextTick(keepCurrentPageVisible)
+}
+
+function setFitMode(mode: DocxFitMode | "none"): void {
+  const next = mode === "width" || mode === "page" ? mode : "none"
+  if (next === fitMode.value) return
+  if (props.fitMode == null) internalFitMode.value = next
+  emit("update:fitMode", next)
+}
+
+/** Toolbar zoom is the new truth: leaving fit mode applies the chosen factor. */
+function applyToolbarZoom(value: number): void {
+  if (fitMode.value !== "none") setFitMode("none")
+  zoomPercent.value = value
+}
+
+function onSurfaceZoom(zoom: number): void {
+  if (fitMode.value !== "none") setFitMode("none")
+  zoomPercent.value = Math.round(zoom * 100)
 }
 
 function selectPage(page: number): void {

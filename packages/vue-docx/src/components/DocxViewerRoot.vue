@@ -8,6 +8,8 @@
     :data-docx-pagination-state="paginationState"
     :data-docx-pagination-iterations="paginationIterations"
     :data-docx-pagination-target-reached="paginationTargetReached ? 'true' : 'false'"
+    :data-docx-view-mode="viewMode"
+    :data-docx-fit-mode="fitMode ?? 'none'"
     :style="rootStyle"
     @scroll.passive="onScroll"
     @dragenter="onDragEnter"
@@ -34,6 +36,8 @@
         :key="`page-${entry.pageIndex}`"
         :data-docx-page-wrapper="true"
         :data-docx-page-index="entry.pageIndex"
+        :data-docx-page-number="entry.pageNumber"
+        :data-docx-page-row-index="entry.rowIndex"
         :data-docx-page-segmentation-key="entry.segmentationKey"
         :data-docx-page-revision="pageRenderRevision(entry.pageIndex)"
         :style="pageWrapperStyle(entry)"
@@ -166,11 +170,27 @@ import {
   annotationGutterReservedWidthPx,
   annotationGutterUsesDrawer,
 } from "./gutter-metrics"
+import {
+  docxPageAtPoint,
+  docxRowIndexAtOffset,
+  docxRowsInViewport,
+  docxSnapTopForRow,
+  normalizeDocxFitMode,
+  normalizeDocxViewMode,
+  resolveDocxViewLayout,
+  type DocxFitMode,
+  type DocxPageRowLayout,
+  type DocxViewMode,
+} from "../composables/docx-view-mode"
 
 // ── Constants ──────────────────────────────────────────────────────
 const DOC_PAGE_BREAK_GAP = 28
 const PAGE_OVERSCAN = 2
 const SCROLL_MEASUREMENT_DEBOUNCE_MS = 80
+/** Horizontal gap between the two pages of a spread. */
+const SPREAD_COLUMN_GAP = 24
+/** Ignore sub-pixel drift so single-page snapping cannot fight smooth scrolling. */
+const SINGLE_PAGE_SNAP_TOLERANCE_PX = 8
 const PAGE_SIDE_PADDING = 48
 // Shared empty list keeps hidden annotations allocation-free.
 const EMPTY_ANNOTATIONS: readonly never[] = []
@@ -193,6 +213,18 @@ export interface DocxViewerRootProps {
   documentId?: string
   /** When true, zoom auto-fits page width to container. Overrides zoomScale. */
   fitWidth?: boolean
+  /**
+   * Fit the paper to the container instead of using `zoomScale`: `width` fits
+   * the page edge horizontally, `page` fits the whole page (width or height,
+   * whichever is tighter). `null`/`none` keeps the zoom factor.
+   */
+  fitMode?: DocxFitMode | null
+  /**
+   * Page layout: continuous scrolling, one page at a time, or two-page spreads.
+   * Every mode keeps the page offsets, so page navigation and scroll sync work
+   * the same way and switching modes can stay on the current page.
+   */
+  viewMode?: DocxViewMode
   /** `null` follows the controller flag; `false` always hides. */
   showTrackedChanges?: boolean | null
   /**
@@ -220,6 +252,8 @@ interface VisiblePageEntry {
   pageWidthPx: number
   pageContentWidthPx: number
   pageNumber: number
+  /** Row that renders this page; a spread row owns two pages. */
+  rowIndex: number
   pageNumberFormat?: string
   /** Label Word shows for the page (`iv`, `12`); `w:fmt="none"` → empty. */
   pageLabel: string
@@ -249,7 +283,15 @@ interface PageMeasureEvent {
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
   defineProps<DocxViewerRootProps>(),
-  { editable: false, zoomScale: 100, showTrackedChanges: null, revisionDisplay: null, showComments: null }
+  {
+    editable: false,
+    zoomScale: 100,
+    showTrackedChanges: null,
+    revisionDisplay: null,
+    showComments: null,
+    fitMode: null,
+    viewMode: "continuous",
+  }
 )
 
 const emit = defineEmits<{
@@ -568,6 +610,8 @@ const pageCount = computed(() => pages.value.length)
 const FIT_ZOOM_MIN = 0.25
 const FIT_ZOOM_MAX = 2
 const FIT_ZOOM_SIDE_PAD = 48
+/** Scroll-container padding above and below the paper, plus a small margin. */
+const FIT_ZOOM_VERTICAL_PAD = 64
 
 // Narrow viewports get the drawer overlay instead of a column beside the paper,
 // so the paper can keep the full container width.
@@ -615,7 +659,21 @@ const fitZoom = computed(() => {
   return Math.min(FIT_ZOOM_MAX, Math.max(FIT_ZOOM_MIN, available / pageWidth))
 })
 
+// "Fit page" keeps the whole sheet in view: the tighter of the width and the
+// height fit, so a landscape section still fits a portrait viewport.
+const fitPageZoom = computed(() => {
+  const pageHeight = baseDocumentLayout.value?.pageHeightPx
+  if (!pageHeight || pageHeight <= 0) return fitZoom.value
+  const availableHeight = Math.max(200, viewportHeight.value - FIT_ZOOM_VERTICAL_PAD)
+  return Math.min(
+    FIT_ZOOM_MAX,
+    Math.max(FIT_ZOOM_MIN, Math.min(fitZoom.value, availableHeight / pageHeight))
+  )
+})
+
 const zoomFactor = computed(() => {
+  if (fitMode.value === "page") return fitPageZoom.value
+  if (fitMode.value === "width") return fitZoom.value
   if (props.fitWidth) return fitZoom.value
   return Math.min(2, Math.max(0.5, props.zoomScale / 100))
 })
@@ -836,21 +894,37 @@ function getPageHeight(pageIndex: number): number {
 }
 
 // ── Page offsets ───────────────────────────────────────────────────
-const pageOffsets = computed(() => {
-  const offsets: number[] = []
-  let offset = PAGE_TOP_PADDING
-  for (let i = 0; i < pageCount.value; i++) {
-    offsets.push(offset)
-    offset += getPageHeight(i) * zoomFactor.value + DOC_PAGE_BREAK_GAP
-  }
-  return offsets
-})
+const viewMode = computed<DocxViewMode>(() => normalizeDocxViewMode(props.viewMode))
+const fitMode = computed<DocxFitMode | null>(() => normalizeDocxFitMode(props.fitMode))
 
-const totalHeightPx = computed(() => {
-  if (pageCount.value === 0) return 0
-  const lastOffset = pageOffsets.value[pageOffsets.value.length - 1]
-  return lastOffset + getPageHeight(pageCount.value - 1) * zoomFactor.value + DOC_PAGE_BREAK_GAP
-})
+// One geometry for rendering, hit testing, snapping and page navigation. The
+// continuous mode is one page per row, so the row math reduces to the page
+// stack and every existing offset consumer keeps working unchanged.
+const viewLayout = computed(() =>
+  resolveDocxViewLayout({
+    pageCount: pageCount.value,
+    mode: viewMode.value,
+    pageSize: (pageIndex) => ({
+      widthPx: pagePresentations.value[pageIndex]?.pageLayout.pageWidthPx ?? DEFAULT_DOC_PAGE_WIDTH,
+      heightPx: getPageHeight(pageIndex),
+    }),
+    zoom: zoomFactor.value,
+    gapPx: DOC_PAGE_BREAK_GAP,
+    topPaddingPx: PAGE_TOP_PADDING,
+    spreadGapPx: SPREAD_COLUMN_GAP,
+    gutterWidthPx: gutterVisualWidthPx.value,
+    print: isPrinting.value,
+  })
+)
+
+const pageOffsets = computed(() => viewLayout.value.pageOffsets)
+const totalHeightPx = computed(() => viewLayout.value.totalHeightPx)
+
+/** Row layout of a page, used by the wrapper styles and hit testing. */
+function rowForPage(pageIndex: number): DocxPageRowLayout | undefined {
+  const rowIndex = viewLayout.value.pageRows[pageIndex]
+  return rowIndex === undefined ? undefined : viewLayout.value.rows[rowIndex]
+}
 
 // ── Visible page calculation ───────────────────────────────────────
 interface PageRenderCache {
@@ -1056,6 +1130,7 @@ function buildVisiblePageEntry(
     pageIndex,
     topPx,
     heightPx,
+    rowIndex: viewLayout.value.pageRows[pageIndex] ?? 0,
     pageLayout,
     pageNodeSegments: segments,
     columns,
@@ -1113,6 +1188,7 @@ const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
     return []
   }
 
+  const layout = viewLayout.value
   const viewportStart = isPrinting.value
     ? Number.NEGATIVE_INFINITY
     : Math.max(0, scrollTop.value - DOC_PAGE_BREAK_GAP * PAGE_OVERSCAN)
@@ -1120,31 +1196,49 @@ const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
     ? Number.POSITIVE_INFINITY
     : viewportStart + viewportHeight.value + DOC_PAGE_BREAK_GAP * PAGE_OVERSCAN * 2
 
+  // A spread mounts both of its pages together; single-page mode mounts only
+  // the page the reader currently rests on, so no neighbouring page leaks into
+  // the viewport while the scroll offset snaps to a page boundary.
+  const singleRowIndex = layout.mode === "single" && !isPrinting.value
+    ? docxRowIndexAtOffset(layout.rows, scrollTop.value, viewportHeight.value)
+    : -1
+  const rows = isPrinting.value
+    ? layout.rows
+    : singleRowIndex >= 0
+      ? [layout.rows[singleRowIndex]].filter((row) => row !== undefined)
+      : docxRowsInViewport(layout.rows, { startPx: viewportStart, endPx: viewportEnd })
+
   const entries: VisiblePageEntry[] = []
   const nextEntryCache = new Map<number, VisiblePageEntry>()
-  for (let i = 0; i < pageCount.value; i++) {
-    const pageTop = pageOffsets.value[i]
-    const pageHeight = getPageHeight(i) * zoomFactor.value
-    const pageBottom = pageTop + pageHeight
-
-    if (pageBottom >= viewportStart && pageTop <= viewportEnd) {
-      const previousEntry = pageRenderCache.entries.get(i)
-      const nextEntry = buildVisiblePageEntry(i, pageTop, pageHeight, previousEntry)
+  for (const row of rows) {
+    for (const pageIndex of row.pageIndexes) {
+      if (pageIndex >= pageCount.value) continue
+      const pageTop = layout.pageOffsets[pageIndex]
+      const pageHeight = layout.pageHeights[pageIndex]
+      const previousEntry = pageRenderCache.entries.get(pageIndex)
+      const nextEntry = buildVisiblePageEntry(pageIndex, pageTop, pageHeight, previousEntry)
       const sameContent =
         previousEntry !== undefined &&
         sameVisiblePageContent(previousEntry, nextEntry)
       const entry = sameContent
-        ? previousEntry.topPx === pageTop && previousEntry.heightPx === pageHeight
+        ? previousEntry.topPx === pageTop &&
+          previousEntry.heightPx === pageHeight &&
+          previousEntry.rowIndex === nextEntry.rowIndex
           ? previousEntry
-          : { ...previousEntry, topPx: pageTop, heightPx: pageHeight }
+          : {
+              ...previousEntry,
+              topPx: pageTop,
+              heightPx: pageHeight,
+              rowIndex: nextEntry.rowIndex,
+            }
         : nextEntry
       if (!sameContent) {
         pageRenderCache.revisions.set(
-          i,
-          (previousEntry ? pageRenderCache.revisions.get(i) ?? 1 : 0) + 1
+          pageIndex,
+          (previousEntry ? pageRenderCache.revisions.get(pageIndex) ?? 1 : 0) + 1
         )
       }
-      nextEntryCache.set(i, entry)
+      nextEntryCache.set(pageIndex, entry)
       entries.push(entry)
     }
   }
@@ -1186,12 +1280,9 @@ const spacerStyle = computed<Record<string, string>>(() => {
   }
   return {
     height: `${Math.max(0, totalHeightPx.value)}px`,
-    minWidth: `${Math.max(
-      0,
-      ...pagePresentations.value.map(
-        (entry) => entry.pageLayout.pageWidthPx * zoomFactor.value + gutterVisualWidthPx.value
-      )
-    ) + PAGE_SIDE_PADDING}px`,
+    // A spread row is as wide as both papers plus their gutters, so the widest
+    // row decides the horizontal scroll width.
+    minWidth: `${viewLayout.value.maxRowWidthPx + PAGE_SIDE_PADDING}px`,
     position: "relative",
     width: "100%",
   }
@@ -1214,10 +1305,17 @@ function pageWrapperStyle(entry: VisiblePageEntry): Record<string, string | numb
   // footprint instead of just the paper (which would push the gutter off-right).
   // Offsets are scroll-space values that include the container's top padding;
   // wrappers are positioned inside the spacer, so subtract that padding again.
+  // A spread row shifts each page horizontally around the row centre, so both
+  // pages stay side by side while the row as a whole stays centered.
+  const row = rowForPage(entry.pageIndex)
+  const position = row ? row.pageIndexes.indexOf(entry.pageIndex) : -1
+  const offsetPx = row && position >= 0
+    ? Math.round(row.pageLeftsPx[position] + row.pageWidthsPx[position] / 2 - row.widthPx / 2)
+    : 0
   return {
     position: "absolute",
     top: `${Math.max(0, entry.topPx - PAGE_TOP_PADDING)}px`,
-    left: "50%",
+    left: offsetPx === 0 ? "50%" : `calc(50% + ${offsetPx}px)`,
     transform: "translateX(-50%)",
     height: `${entry.heightPx}px`,
     width: `${entry.pageWidthPx * zoomFactor.value + gutterVisualWidthPx.value}px`,
@@ -1253,8 +1351,33 @@ function onScroll(): void {
     clearTimeout(scrollTimer)
   }
   scrollTimer = setTimeout(() => {
+    // Single-page mode keeps the reader on a page boundary: after the scroll
+    // settles, a partial page is pulled back to the nearest page top.
+    if (snapSinglePage()) return
     updateVisibleRange()
   }, SCROLL_MEASUREMENT_DEBOUNCE_MS)
+}
+
+/**
+ * Snap the scroll offset to the nearest page in `single` mode.
+ *
+ * Returns true when the offset moved, in which case the following scroll event
+ * publishes the new visible range instead of this pass.
+ */
+function snapSinglePage(): boolean {
+  if (isPrinting.value || viewMode.value !== "single") return false
+  const container = scrollContainerRef.value
+  if (!container) return false
+  const top = Math.max(0, container.scrollTop ?? scrollTop.value)
+  const target = docxSnapTopForRow(viewLayout.value.rows, top, viewportHeight.value)
+  if (target === undefined) return false
+  const maxScroll = Math.max(0, totalHeightPx.value - viewportHeight.value)
+  const clamped = Math.min(Math.max(0, target), maxScroll)
+  if (Math.abs(top - clamped) <= SINGLE_PAGE_SNAP_TOLERANCE_PX) return false
+  scrollTop.value = clamped
+  scrollContainerTo(container, clamped, "auto")
+  updateVisibleRange()
+  return true
 }
 
 function updateVisibleRange(): void {
@@ -1664,17 +1787,25 @@ function onCut(event: ClipboardEvent): void {
 }
 
 // ── Context menu ─────────────────────────────────────────────────────
+/** Page under a point, in scroll space. Spread rows resolve the left/right page by x. */
+function pageIndexAtClientPoint(clientX: number, clientY: number): number | undefined {
+  const container = scrollContainerRef.value
+  if (!container) return undefined
+  const rect = container.getBoundingClientRect()
+  const contentWidth = Math.max(
+    container.clientWidth ?? 0,
+    viewLayout.value.maxRowWidthPx + PAGE_SIDE_PADDING,
+  )
+  const x = clientX - rect.left + (container.scrollLeft ?? 0)
+  const y = clientY - rect.top + container.scrollTop
+  return docxPageAtPoint(viewLayout.value.rows, { x, y, contentWidth })
+}
+
 function emitContextMenuAt(clientX: number, clientY: number, target?: EventTarget | null): void {
   const container = scrollContainerRef.value
   if (!container) return
   const rect = container.getBoundingClientRect()
-  const clickY = clientY - rect.top + container.scrollTop
-  let pageIndex = 0
-  for (let i = 0; i < pageCount.value; i++) {
-    const top = pageOffsets.value[i]
-    const bottom = top + getPageHeight(i) * zoomFactor.value + DOC_PAGE_BREAK_GAP
-    if (clickY >= top && clickY < bottom) { pageIndex = i; break }
-  }
+  const pageIndex = pageIndexAtClientPoint(clientX, clientY) ?? 0
   emit("contextMenu", {
     pageIndex,
     clientX,
@@ -1714,13 +1845,7 @@ function onMouseUp(): void {
   if (!container) { emit("selectionChange", { kind: "text", text }); return }
   const range = sel.getRangeAt(0)
   const rect = range.getBoundingClientRect()
-  const clickY = rect.top - container.getBoundingClientRect().top + container.scrollTop
-  let pageIndex = 0
-  for (let i = 0; i < pageCount.value; i++) {
-    const top = pageOffsets.value[i]
-    const bottom = top + getPageHeight(i) * zoomFactor.value + DOC_PAGE_BREAK_GAP
-    if (clickY >= top && clickY < bottom) { pageIndex = i; break }
-  }
+  const pageIndex = pageIndexAtClientPoint(rect.left, rect.top) ?? 0
   emit("selectionChange", { kind: "text", text, pageIndex })
 }
 

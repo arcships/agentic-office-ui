@@ -114,4 +114,27 @@ export type {
   PdfVerifiedDocument,
 } from "./pdf-url-policy"
 
+/** Page layout modes (continuous / single / spread) and their row geometry. */
+export {
+  PDF_PAGE_LAYOUTS,
+  isPdfSpreadLayout,
+  normalizePdfPageLayout,
+  pdfPageAtPoint,
+  pdfPageIndexAtOffset,
+  pdfPageLayoutRows,
+  pdfRowIndexAtOffset,
+  pdfRowsInViewport,
+  pdfSnapTopForRow,
+  pdfSpreadPagePair,
+  pdfSpreadStepPage,
+  resolvePdfPageLayoutMetrics,
+} from "./pdf/pdf-page-layout"
+export type {
+  PdfPageDisplaySize,
+  PdfPageLayout,
+  PdfPageLayoutMetrics,
+  PdfPageLayoutOptions,
+  PdfPageLayoutRow,
+} from "./pdf/pdf-page-layout"
+
 export type { PdfViewerProps } from "./types"
