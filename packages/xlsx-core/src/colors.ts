@@ -1,5 +1,44 @@
 import type { XlsxThemePalette } from "./types/theme-types";
 
+/**
+ * ECMA-376 18.8.27 default indexed colour palette, indices 0-63, plus the two
+ * system colours Excel reserves at 64 (foreground) and 65 (background).
+ *
+ * Workbooks may override any entry with `<colors><indexedColors>` in
+ * `xl/styles.xml`; missing entries keep these values.
+ */
+export const XLSX_INDEXED_COLOR_PALETTE: readonly string[] = Object.freeze([
+  "#000000", "#ffffff", "#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff",
+  "#000000", "#ffffff", "#ff0000", "#00ff00", "#0000ff", "#ffff00", "#ff00ff", "#00ffff",
+  "#800000", "#008000", "#000080", "#808000", "#800080", "#008080", "#c0c0c0", "#808080",
+  "#9999ff", "#993366", "#ffffcc", "#ccffff", "#660066", "#ff8080", "#0066cc", "#ccccff",
+  "#000080", "#ff00ff", "#ffff00", "#00ffff", "#800080", "#800000", "#008080", "#0000ff",
+  "#00ccff", "#ccffff", "#ccffcc", "#ffff99", "#99ccff", "#ff99cc", "#cc99ff", "#ffcc99",
+  "#3366ff", "#33cccc", "#99cc00", "#ffcc00", "#ff9900", "#ff6600", "#666699", "#969696",
+  "#003366", "#339966", "#003300", "#333300", "#993300", "#993366", "#333399", "#333333",
+  "#000000", "#ffffff"
+]);
+
+/** Build the effective indexed palette: standard entries plus workbook overrides. */
+export function buildIndexedColorPalette(
+  overrides?: Record<number, string> | null
+): Record<number, string> {
+  const palette: Record<number, string> = {};
+  XLSX_INDEXED_COLOR_PALETTE.forEach((color, index) => {
+    palette[index] = color;
+  });
+
+  for (const [key, value] of Object.entries(overrides ?? {})) {
+    const index = Number(key);
+    const normalized = typeof value === "string" ? normalizeHexColor(value) : null;
+    if (Number.isInteger(index) && index >= 0 && normalized) {
+      palette[index] = normalized;
+    }
+  }
+
+  return palette;
+}
+
 function normalizeHexColor(value: string) {
   const hex = value.replace(/^#/, "");
   if (hex.length === 8) {
@@ -113,12 +152,46 @@ function applyExcelTint(baseColor: string, tint: number) {
   return rgbToHex(nextRed, nextGreen, nextBlue);
 }
 
+function readColorNumber(value: unknown) {
+  const numeric = typeof value === "number"
+    ? value
+    : typeof value === "string" && value.trim().length > 0
+      ? Number(value)
+      : Number.NaN;
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function applyOptionalTint(color: string, tint: number | null) {
+  return tint === null ? color : applyExcelTint(color, tint);
+}
+
+function readIndexedColorIndex(color: Record<string, unknown>) {
+  // Raw parsed styles use `indexed`; engine-shaped colours carry
+  // `paletteIndex` (usually with `colorType: "indexed"`) and a default-palette
+  // `hex`. The palette index must win over that `hex`, because the engine does
+  // not know about a workbook's custom `<indexedColors>` override.
+  const value = color.paletteIndex ?? color.indexed;
+  const index = readColorNumber(value);
+  return index !== null && Number.isInteger(index) && index >= 0 ? index : null;
+}
+
 export function resolveWorkbookColor(
   color: Record<string, unknown> | undefined,
   themePalette?: XlsxThemePalette | null
 ): string | null {
   if (!color) {
     return null;
+  }
+
+  const tint = readColorNumber(color.tint);
+  const indexed = readIndexedColorIndex(color);
+  if (indexed !== null) {
+    const indexedColor = themePalette?.indexedColors?.[indexed]
+      ?? XLSX_INDEXED_COLOR_PALETTE[indexed]
+      ?? null;
+    if (indexedColor) {
+      return applyOptionalTint(indexedColor, tint);
+    }
   }
 
   const directHex = ["hex", "rgb", "argb"]
@@ -128,25 +201,15 @@ export function resolveWorkbookColor(
     return normalizeHexColor(directHex);
   }
 
-  const themeValue = color.theme;
-  const numericTheme = typeof themeValue === "number"
-    ? themeValue
-    : typeof themeValue === "string" && themeValue.trim().length > 0
-      ? Number(themeValue)
-      : Number.NaN;
-  const themeColor = Number.isFinite(numericTheme) ? themePalette?.colorsByIndex[numericTheme] ?? null : null;
-  if (!themeColor) {
-    return null;
+  const numericTheme = readColorNumber(color.theme);
+  const themeColor = numericTheme === null
+    ? null
+    : themePalette?.colorsByIndex[numericTheme] ?? null;
+  if (themeColor) {
+    return applyOptionalTint(themeColor, tint);
   }
 
-  const tintValue = color.tint;
-  const tint = typeof tintValue === "number"
-    ? tintValue
-    : typeof tintValue === "string" && tintValue.trim().length > 0
-      ? Number(tintValue)
-      : Number.NaN;
-
-  return Number.isFinite(tint) ? applyExcelTint(themeColor, tint) : themeColor;
+  return null;
 }
 
 export function resolveWorkbookFillColor(

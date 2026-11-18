@@ -1,4 +1,4 @@
-import { resolveWorkbookColor } from "../colors";
+import { buildIndexedColorPalette } from "../colors";
 import type {
   XlsxResolvedCellStyle,
   XlsxTableStyleDefinition,
@@ -27,7 +27,10 @@ export type ThemeState = {
 
 // ── Theme palette ──────────────────────────────────────────────────────────
 
-export function buildThemePalette(theme: ThemeState): XlsxThemePalette {
+export function buildThemePalette(
+  theme: ThemeState,
+  indexedColors?: Record<number, string> | null
+): XlsxThemePalette {
   const themeOrder = ["lt1", "dk1", "lt2", "dk2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "hlink", "folHlink"];
   const colorsByIndex: Record<number, string> = {};
 
@@ -40,6 +43,7 @@ export function buildThemePalette(theme: ThemeState): XlsxThemePalette {
 
   return {
     colorsByIndex,
+    indexedColors: buildIndexedColorPalette(indexedColors),
     majorLatinFont: theme.majorLatinFont ?? undefined,
     minorLatinFont: theme.minorLatinFont ?? undefined
   };
@@ -490,11 +494,36 @@ function readFeaturePropertyBagCheckboxComplements(archive: ArchiveEntries) {
 
 // ── Workbook styles parsing ────────────────────────────────────────────────
 
+/**
+ * Read the workbook's `xl/styles.xml` `<colors><indexedColors>` overrides.
+ *
+ * `<indexedColors>` is an ordered list: the first `<rgbColor>` replaces index
+ * 0, the second index 1, and so on. Entries the workbook omits keep the
+ * ECMA-376 default palette.
+ */
+function parseIndexedColors(document: Document): Record<number, string> {
+  const indexedColorsNode = getFirstDescendant(document, "indexedColors");
+  if (!indexedColorsNode) {
+    return {};
+  }
+
+  const indexedColors: Record<number, string> = {};
+  getChildElements(indexedColorsNode, "rgbColor").forEach((node, index) => {
+    const rgb = node.getAttribute("rgb");
+    if (!rgb || !/^#?(?:[0-9a-f]{6}|[0-9a-f]{8})$/i.test(rgb)) {
+      return;
+    }
+    indexedColors[index] = normalizeHexColor(rgb);
+  });
+  return indexedColors;
+}
+
 export function parseWorkbookStyles(archive: ArchiveEntries) {
   const xml = readArchiveText(archive, "xl/styles.xml");
   if (!xml) {
     return {
       defaultFont: null,
+      indexedColors: {},
       namedCellStyleByName: {},
       styleById: {},
       tableStyleByName: {}
@@ -505,6 +534,7 @@ export function parseWorkbookStyles(archive: ArchiveEntries) {
   if (!document) {
     return {
       defaultFont: null,
+      indexedColors: {},
       namedCellStyleByName: {},
       styleById: {},
       tableStyleByName: {}
@@ -520,9 +550,11 @@ export function parseWorkbookStyles(archive: ArchiveEntries) {
   const numFmtsNode = getFirstDescendant(document, "numFmts");
   const dxfsNode = getFirstDescendant(document, "dxfs");
   const tableStylesNode = getFirstDescendant(document, "tableStyles");
+  const indexedColors = parseIndexedColors(document);
   if (!cellXfsNode) {
     return {
       defaultFont: null,
+      indexedColors,
       namedCellStyleByName: {},
       styleById: {},
       tableStyleByName: {}
@@ -596,6 +628,7 @@ export function parseWorkbookStyles(archive: ArchiveEntries) {
 
   return {
     defaultFont,
+    indexedColors,
     namedCellStyleByName,
     styleById,
     tableStyleByName

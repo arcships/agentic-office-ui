@@ -61,6 +61,12 @@ const controller = useXlsxViewerController({
 
 两种模式共用同一套渲染数据：`resolveCanvasCellStyle` 解析出的字体、填充、对齐、边框与换行，条件格式的数据条/色阶/图标集，合并区、超链接、批注、迷你图、格式化后的显示值，以及冻结窗格几何和 `getCellStyle` 覆盖。DOM 模式只物化可见窗口（与 canvas 相同的 ±240px overscan），并按单元格裁剪文本，不再向相邻空单元格溢出；拖动仍移动单元格选区，按住 Alt 拖动则交给浏览器原生选择文字，有文字选区时 `Ctrl/Cmd+C` 复制选中的文字而不是单元格。切换 `renderMode` 不重建滚动容器，滚动位置和控制器选区保持不变。`XlsxGridRenderMode` 从 `@arcships/vue-xlsx` 根入口导出，`XlsxSheetSurface` 同样接受该属性。
 
+## 旧版索引色
+
+旧 `.xls`/`.xlsx` 常用的 OOXML 索引色（`<fgColor indexed="10"/>`）现在会解析成实际颜色：内置 ECMA-376 18.8.27 的 64 色索引调色板（索引 0–63，另含系统前景/背景 64/65），并读取工作簿 `xl/styles.xml` 里的 `<colors><indexedColors>` 覆盖。`XlsxThemePalette.indexedColors` 保存合并后的调色板（未覆盖的索引用标准值），`resolveWorkbookColor({ indexed: 10 }, sheet.themePalette)` 返回 `#ff0000`；越界或非整数索引返回 `null`，不会当作黑色。
+
+解析层对索引色上的 `tint` 与主题色使用同一套 HSL 规则调亮/调暗；字体、填充、边框、条件格式、迷你图、缩略图和打印预览都经过 `resolveWorkbookColor()` / `resolveWorkbookFillStyle()`，因此自定义 `indexedColors` 的单元格在 canvas、DOM、缩略图和打印结果里颜色一致。
+
 ## 选择状态栏
 
 `XlsxViewer` 在网格下方渲染选择状态栏：单元格/区域地址、非空计数、数值计数（仅在两者不同时）、求和、平均值、最小值和最大值，以及 `Selected`/`Filtered` 标记。数值合计使用选区中第一个数值单元格的数字格式，因此货币和百分比选区会按原单位显示；日期、时间等格式回退到 General。
