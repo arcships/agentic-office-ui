@@ -48,6 +48,24 @@
       />
     </div>
 
+    <!-- Table move handle (top-left) and the drag ghost it moves -->
+    <div
+      v-if="showMoveHandle"
+      class="docx-table-move-handle"
+      data-docx-table-move-handle="true"
+      data-docx-thumbnail-exclude="true"
+      :title="m.docx.editor.moveTableHandle"
+      :aria-label="m.docx.editor.moveTableHandle"
+      @mousedown.prevent="onTableMoveStart($event)"
+    />
+    <div
+      v-if="moveGhost"
+      class="docx-table-drag-ghost"
+      data-docx-table-drag-ghost="true"
+      data-docx-thumbnail-exclude="true"
+      :style="moveGhostStyle"
+    />
+
     <!-- Table -->
     <table
       class="docx-table-host-table"
@@ -179,6 +197,7 @@ import {
   mergeTableSpacing,
   resolveTableCellBorderCss,
   resolveTableCellDiagonalOverlayCss,
+  resolveTableFloatingDropPatch,
   resolveTableRenderMetricsPx,
   resolveTableRowHeightCss,
   resolveTableSpacingPaddingPx,
@@ -229,6 +248,8 @@ const DEFAULT_COLUMN_WIDTH = 100
 const MIN_COLUMN_WIDTH = 48
 const MIN_ROW_HEIGHT_PX = 20
 const FALLBACK_ROW_HEIGHT_PX = 24
+/** Pointer travel below this stays a click: the handle then only selects. */
+const TABLE_MOVE_THRESHOLD_PX = 3
 
 defineOptions({ name: "DocxTableHost" })
 
@@ -281,6 +302,8 @@ const props = withDefaults(
     floatingPageOriginPx?: DocxFloatingPageOriginPx
     /** Row resize handles; hosts that manage row heights themselves set false. */
     showRowResizeHandles?: boolean
+    /** Table move handle (drag to float the table); set false to render none. */
+    showTableMoveHandle?: boolean
     /** Internal `#bookmark` link clicked inside a cell paragraph. */
     onInternalLinkClick?: (bookmarkName: string) => void
     /** Transient highlight after the viewer revealed a bookmark in this table. */
@@ -292,6 +315,7 @@ const props = withDefaults(
     editable: false,
     documentTheme: "light" as DocxDocumentTheme,
     showRowResizeHandles: true,
+    showTableMoveHandle: true,
   }
 )
 
@@ -333,6 +357,15 @@ const isRowResizing = ref(false)
 let activeRowMouseMove: ((event: MouseEvent) => void) | undefined
 let activeRowMouseUp: (() => void) | undefined
 let rowResizeTarget: { rowIndex: number; heightPx: number } | undefined
+
+// Table move drag: live pointer offset while the handle is held, committed as a
+// floating position on drop.
+const isMovingTable = ref(false)
+const moveDelta = ref<{ x: number; y: number } | null>(null)
+let moveStartClientX = 0
+let moveStartClientY = 0
+let activeMoveMouseMove: ((event: MouseEvent) => void) | undefined
+let activeMoveMouseUp: (() => void) | undefined
 
 // Cell text drafts. Each editable cell paragraph keeps its uncommitted DOM
 // text here until blur, export, or unmount; committing the whole cell's
@@ -572,6 +605,42 @@ const showRowHandles = computed(
     !isNestedTable.value &&
     (hovered.value || isActiveTable.value)
 )
+
+/**
+ * Tables that can float: a body table, on its first page fragment only. A
+ * nested table lives inside a cell, and a header/footer table has no body node
+ * `setTableFloating` could address.
+ */
+const isFloatableTable = computed(
+  () =>
+    !isNestedTable.value &&
+    !props.withinHeaderFooter &&
+    (props.rowRange?.startRowIndex ?? 0) === 0
+)
+
+const showMoveHandle = computed(
+  () =>
+    props.showTableMoveHandle !== false &&
+    isFloatableTable.value &&
+    props.editable &&
+    !isReadOnly.value &&
+    (hovered.value || isActiveTable.value)
+)
+
+const moveGhost = computed(() => isMovingTable.value && moveDelta.value !== null)
+
+const moveGhostStyle = computed<Record<string, string>>(() => {
+  const delta = moveDelta.value ?? { x: 0, y: 0 }
+  const boundaries = rowBoundaries.value
+  const lastBottomPx = boundaries[boundaries.length - 1]?.bottomPx ?? 0
+  return {
+    width: `${Math.max(1, Math.round(renderedTableWidthPx.value))}px`,
+    height: `${Math.max(1, Math.round(lastBottomPx - tableOffsetTopPx.value))}px`,
+    top: `${Math.round(tableOffsetTopPx.value)}px`,
+    left: "0px",
+    transform: `translate(${Math.round(delta.x)}px, ${Math.round(delta.y)}px)`,
+  }
+})
 
 /**
  * Bottom edge of every rendered row, in table-host coordinates. Measured row
@@ -1211,6 +1280,96 @@ function onAddRow(): void {
   props.controller?.insertTableRow(props.tableIndex, lastRowIndex, "below")
 }
 
+/**
+ * Selects every cell of the table, the way Word's table selector does: the
+ * table gets its active outline and the cell-range commands (merge, clear,
+ * borders) apply to the whole table after a click on the move handle.
+ */
+function selectWholeTable(): void {
+  const controller = props.controller
+  if (!controller || isNestedTable.value) return
+  const lastRowIndex = Math.max(0, props.table.rows.length - 1)
+  const lastCellIndex = Math.max(0, (props.table.rows[lastRowIndex]?.cells.length ?? 1) - 1)
+  controller.selectTableCellRange(
+    props.tableIndex,
+    {
+      tableIndex: props.tableIndex,
+      anchorRowIndex: 0,
+      anchorCellIndex: 0,
+      focusRowIndex: lastRowIndex,
+      focusCellIndex: lastCellIndex,
+    },
+    props.tableRuntimeKey
+  )
+}
+
+function onTableMoveStart(event: MouseEvent): void {
+  if (!showMoveHandle.value) return
+  if (typeof event.button === "number" && event.button !== 0) return
+  event.preventDefault()
+  selectWholeTable()
+  cleanupTableMove(false)
+  isMovingTable.value = true
+  moveStartClientX = event.clientX
+  moveStartClientY = event.clientY
+  moveDelta.value = { x: 0, y: 0 }
+
+  activeMoveMouseMove = (e: MouseEvent) => {
+    if (!isMovingTable.value) return
+    moveDelta.value = {
+      x: e.clientX - moveStartClientX,
+      y: e.clientY - moveStartClientY,
+    }
+  }
+  activeMoveMouseUp = () => cleanupTableMove(true)
+
+  document.addEventListener("mousemove", activeMoveMouseMove)
+  document.addEventListener("mouseup", activeMoveMouseUp)
+}
+
+function cleanupTableMove(commit: boolean): void {
+  if (activeMoveMouseMove) {
+    document.removeEventListener("mousemove", activeMoveMouseMove)
+  }
+  if (activeMoveMouseUp) {
+    document.removeEventListener("mouseup", activeMoveMouseUp)
+  }
+  activeMoveMouseMove = undefined
+  activeMoveMouseUp = undefined
+
+  const delta = moveDelta.value
+  const shouldCommit =
+    commit &&
+    isMovingTable.value &&
+    Boolean(delta) &&
+    Boolean(props.controller) &&
+    !isReadOnly.value &&
+    isFloatableTable.value
+  isMovingTable.value = false
+  moveDelta.value = null
+  if (!shouldCommit || !delta || !props.controller) return
+  // A click (no real travel) only selects the table; it must not turn a table
+  // floating at its own position.
+  if (
+    Math.abs(delta.x) < TABLE_MOVE_THRESHOLD_PX &&
+    Math.abs(delta.y) < TABLE_MOVE_THRESHOLD_PX
+  ) {
+    return
+  }
+
+  props.controller.setTableFloating(
+    props.tableIndex,
+    resolveTableFloatingDropPatch({
+      startXPx: twipsToPixels(props.table.style?.floating?.xTwips) ?? 0,
+      startYPx: twipsToPixels(props.table.style?.floating?.yTwips) ?? 0,
+      deltaXPx: delta.x,
+      deltaYPx: delta.y,
+      pageWidthPx: props.floatingPageOriginPx?.pageWidth,
+      tableWidthPx: renderedTableWidthPx.value,
+    })
+  )
+}
+
 watch(
   () => props.table.style?.columnWidthsTwips,
   () => {
@@ -1223,6 +1382,7 @@ watch([() => props.editable, isReadOnly], ([editable, readOnly]) => {
   if (!editable || readOnly) {
     cleanupColumnResize(false)
     cleanupRowResize(false)
+    cleanupTableMove(false)
   }
 })
 
@@ -1276,6 +1436,7 @@ onUnmounted(() => {
   finishRangeSelection()
   cleanupColumnResize(false)
   cleanupRowResize(false)
+  cleanupTableMove(false)
 })
 </script>
 
@@ -1337,6 +1498,33 @@ onUnmounted(() => {
 }
 .docx-table-row-handle:hover {
   background: #3b82f6;
+}
+
+.docx-table-move-handle {
+  position: absolute;
+  top: -12px;
+  left: -12px;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #93c5fd;
+  border-radius: 2px;
+  background: #eff6ff;
+  cursor: move;
+  pointer-events: auto;
+  z-index: 12;
+}
+.docx-table-move-handle:hover {
+  background: #bfdbfe;
+  border-color: #3b82f6;
+}
+
+.docx-table-drag-ghost {
+  position: absolute;
+  border: 1px dashed #3b82f6;
+  border-radius: 2px;
+  background: rgba(59, 130, 246, 0.08);
+  pointer-events: none;
+  z-index: 11;
 }
 
 .docx-table-host-table {

@@ -520,6 +520,9 @@ export interface DocxEditorStatusMessages {
   resizedTableRow: string;
   tableRowHeightPositive: string;
   tableRowHeightTargetUnavailable: string;
+  floatedTable: string;
+  inlinedTable: string;
+  cannotFloatTableNotFound: string;
   movedBodyNode: string;
   cannotMoveBodyNodeNotFound: string;
   updatedFormField: string;

@@ -26,7 +26,7 @@ const editor = useDocxEditor({
 | 历史 | `undo()`、`redo()` |
 | 文字 | `toggleBold()`、`toggleItalic()`、`toggleUnderline()`、`setFontFamily()`、`setFontSize()`、`setTextColor()` |
 | 段落 | `setHeading()`、`setParagraphStyle()`、`setAlignment()`、`setLineSpacing()`、`toggleList()` |
-| 表格 | `insertTable()`、增删行列、调整列宽、删除表格 |
+| 表格 | `insertTable()`、增删行列、调整列宽、调整行高、删除表格、`setTableFloating()`（拖到落下位置变浮动表格，传 `null` 放回文字流） |
 | 图片 | `insertImageFile()`、`resizeImage()`、`moveImage()`、`setImageWrapMode()` |
 | 输入 | 提交段落或单元格文字、复制和粘贴 |
 

@@ -49,6 +49,7 @@ import type {
 } from "./editor-types";
 import type { DocxPageMarginsUpdate, DocxPageSizeUpdate } from "../../engine/section-properties";
 import type { AddHeaderFooterOptions } from "../page-setup-ops";
+import type { DocxTableFloatingUpdate } from "./table-utils";
 
 /** Undo behaviour shared by the page-setup commands. */
 export interface DocxPageSetupCommandOptions {
@@ -413,6 +414,20 @@ export interface DocxEditorController {
     tableIndex: number,
     rowIndex: number,
     heightPx: number
+  ) => void;
+  /**
+   * Floats a body table at a drop position, or puts it back into the text flow.
+   *
+   * `update` is merged into the table's `TableStyle.floating` and written to
+   * `w:tblpPr` on export: `xTwips`/`yTwips` are the drop position measured from
+   * the anchors, and the `*FromTextTwips` fields keep the surrounding text away
+   * from the table. Passing `null` clears the floating style and restores the
+   * inline layout. One undo entry per call; a second drag only moves the table
+   * and keeps the wrap distances.
+   */
+  setTableFloating: (
+    tableIndex: number,
+    update: DocxTableFloatingUpdate | null
   ) => void;
   /**
    * Moves a body node (paragraph or table) to an insertion index as one undo
