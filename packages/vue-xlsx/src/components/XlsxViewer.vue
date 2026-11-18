@@ -592,6 +592,17 @@ function isCellEditorOpen(event: KeyboardEvent): boolean {
   }
 }
 
+/** True while a text field (formula bar, name box) owns Escape. */
+function isTextInputOpen(event: KeyboardEvent): boolean {
+  const target = event.target as { closest?: (selector: string) => unknown } | null;
+  if (!target || typeof target.closest !== "function") return false;
+  try {
+    return Boolean(target.closest("input, textarea, [contenteditable='true']"));
+  } catch {
+    return false;
+  }
+}
+
 function onKeydown(event: KeyboardEvent) {
   if (event.key === "Escape" && props.controller.isPrintPreviewOpen) {
     event.preventDefault();
@@ -609,6 +620,20 @@ function onKeydown(event: KeyboardEvent) {
   }
 
   if (!props.controller) return;
+
+  // Escape cancels a pending cut wherever the focus sits, mirroring the grid's
+  // own handler. The inline editor and the formula bar own Escape while they
+  // are open, exactly like they own the other grid shortcuts.
+  if (
+    event.key === "Escape"
+    && props.controller.cutState
+    && !isCellEditorOpen(event)
+    && !isTextInputOpen(event)
+  ) {
+    event.preventDefault();
+    props.controller.cancelCut?.();
+    return;
+  }
 
   // Excel's sheet-switching shortcut. It is a navigation key, so read-only
   // viewers keep it, but an open cell editor owns every key including this one.

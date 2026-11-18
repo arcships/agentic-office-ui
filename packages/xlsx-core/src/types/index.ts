@@ -57,6 +57,7 @@ export type {
   XlsxSparkline,
   // Clipboard
   XlsxClipboardData,
+  XlsxClipboardCutState,
   // Tables
   XlsxTableColumn,
   XlsxTableStyleInfo,

@@ -231,6 +231,7 @@ export type {
   XlsxChartWall,
   XlsxChartsheet,
   XlsxClipboardData,
+  XlsxClipboardCutState,
   XlsxConditionalColorScaleRule,
   XlsxConditionalDataBarRule,
   XlsxConditionalFormatIcon,

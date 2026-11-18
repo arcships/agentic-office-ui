@@ -644,6 +644,21 @@ export interface XlsxClipboardData {
   text: string;
 }
 
+/**
+ * A cut waiting for its paste: the source range that still has to be cleared
+ * once the payload lands somewhere else.
+ *
+ * The sheet index is stored alongside the range because a host may switch
+ * sheets between the cut and the paste; the marquee belongs to the source
+ * sheet, and the move clears it there.
+ */
+export interface XlsxClipboardCutState {
+  /** Absolute (zero-based) source range of the pending move. */
+  range: XlsxCellRange;
+  /** Zero-based workbook sheet index of the cut source. */
+  sheetIndex: number;
+}
+
 // ── Tables ───────────────────────────────────────────────────────────────
 
 export interface XlsxTableColumn {
@@ -1137,8 +1152,23 @@ export interface XlsxViewerAuthoring {
   /** Selects the whole used range. */
   selectAll: () => void;
   // ── Clipboard ──────────────────────────────────────────────────────
-  /** Cuts the selection: copies it and clears the source on the next paste. */
+  /**
+   * Cuts the selection: writes the payload and marks the source as a pending
+   * move (`cutState`); the source cells are cleared by the next paste.
+   *
+   * The move is one undo entry: the paste snapshots the workbook before it
+   * writes, then clears the source, so a single undo restores both ranges.
+   *
+   * @returns `true` when a cut is pending.
+   */
   cutSelection: () => boolean;
+  /**
+   * Cancels a pending cut, dropping the marquee and the internal payload
+   * without touching the workbook (Excel's Escape).
+   *
+   * @returns `true` when there was a pending cut to cancel.
+   */
+  cancelCut: () => boolean;
   /**
    * Pastes the last copied or cut payload with Excel-style paste options.
    *
@@ -1351,6 +1381,13 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
   commitCellInput: (cell: XlsxCellAddress, text: string) => boolean;
   continueDeferredLoad: () => void;
   copySelectionToClipboard: () => Promise<boolean>;
+  /**
+   * The pending cut (source range and sheet), or `null` when nothing is cut.
+   *
+   * Hosts draw the moving marquee from it and hide it once a paste lands or
+   * `cancelCut()` is called.
+   */
+  cutState: XlsxClipboardCutState | null;
   /** Pending inline-edit request; the grid starts editing when it changes. */
   editRequest: XlsxCellEditRequest | null;
   /**
@@ -1853,6 +1890,14 @@ export interface XlsxViewerEditing {
   selectColumn: (column: number) => void;
   selectAll: () => void;
   cutSelection: () => boolean;
+  cancelCut: () => boolean;
+  /**
+   * The pending cut (source range and sheet), or `null` when nothing is cut.
+   *
+   * Hosts draw the moving marquee from it and hide it once a paste lands or
+   * `cancelCut()` is called.
+   */
+  cutState: XlsxClipboardCutState | null;
   pasteSpecialFromClipboard: (options?: XlsxPasteSpecialOptions) => Promise<boolean>;
   pasteSpecialStructuredData: (payload: string, options?: XlsxPasteSpecialOptions) => boolean;
   setSelectionNumberFormat: (format: XlsxCellNumberFormatInput) => boolean;

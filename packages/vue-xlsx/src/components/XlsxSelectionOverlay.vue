@@ -5,6 +5,7 @@
     aria-live="polite"
     aria-atomic="true"
     :data-selection-address="selectionAddress ?? undefined"
+    :data-cut-address="cutAddress ?? undefined"
   >
     <span class="xlsx-selection-overlay__announcement">
       {{ selectionAnnouncement }}
@@ -17,6 +18,7 @@ import { computed, type CSSProperties } from "vue";
 import type { XlsxViewerController, XlsxCellAddress } from "@arcships/xlsx-core";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { useXlsxMessages } from "../i18n";
+import { rangeToA1 } from "../composables/selection";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -31,11 +33,22 @@ const m = useXlsxMessages();
 const selectionAddress = computed(
   () => props.controller.selectedRangeAddress ?? props.controller.activeCellAddress
 );
-const selectionAnnouncement = computed(() =>
-  selectionAddress.value
+// A pending cut belongs to the sheet it was made on; switching sheets must not
+// announce (or highlight) it there.
+const cutAddress = computed(() => {
+  const cut = props.controller.cutState;
+  const sheet = props.controller.activeSheet;
+  if (!cut || !sheet || cut.sheetIndex !== sheet.workbookSheetIndex) return null;
+  return rangeToA1(cut.range);
+});
+const selectionAnnouncement = computed(() => {
+  if (cutAddress.value) {
+    return formatOfficeMessage(m.value.xlsx.selection.cutPending, { address: cutAddress.value });
+  }
+  return selectionAddress.value
     ? formatOfficeMessage(m.value.xlsx.selection.current, { address: selectionAddress.value })
-    : m.value.xlsx.selection.none
-);
+    : m.value.xlsx.selection.none;
+});
 </script>
 
 <style scoped>

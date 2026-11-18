@@ -1033,6 +1033,8 @@ export interface OfficeXlsxMessages {
     /** Template with an `{address}` placeholder. */
     current: string
     none: string
+    /** Template with an `{address}` placeholder for a pending cut. */
+    cutPending: string
   }
   validation: {
     list: string
@@ -2212,6 +2214,7 @@ export const officeMessagesEn: OfficeMessages = {
     selection: {
       current: "Current selection {address}",
       none: "No cells selected",
+      cutPending: "Cut {address}, press Escape to cancel",
     },
     validation: {
       list: "The value is not in the allowed list.",
@@ -3348,6 +3351,7 @@ export const officeMessagesZhCN: OfficeMessages = {
     selection: {
       current: "当前选择 {address}",
       none: "当前没有选择单元格",
+      cutPending: "已剪切 {address}，按 Esc 取消",
     },
     validation: {
       list: "输入值不在允许的列表中。",
