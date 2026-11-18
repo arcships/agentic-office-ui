@@ -174,6 +174,11 @@ export type {
   XlsxChartElementSelection,
   XlsxChartTypeGroup,
   XlsxChartWall,
+  // Chart-embedded media / user shapes
+  XlsxChartUserShapeFill,
+  XlsxChartUserShapeStroke,
+  XlsxChartUserShape,
+  XlsxChartDrawing,
   // Chart
   XlsxChart,
   // Chart sheet

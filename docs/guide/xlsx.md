@@ -104,6 +104,16 @@ controller.clearHighlightedRanges()
 
 `highlightRanges()` 会替换上一次宿主传入的区域，默认落在活动工作表、使用琥珀色；它只读，不修改工作簿、不写撤销记录、不影响导出。`clearHighlightedRanges()` 清除当前所有高亮；图表仍保持选中，下一次选择变化后会重新显示其数据源。`XlsxRangeHighlightLayer` 由 `XlsxViewer` 和 `XlsxSheetSurface` 自动挂载在画布之上、图表/图片之下；自建界面可以用 `createRangeHighlightLayout()` 复用同一套冻结窗格几何，或用 `collectChartRangeHighlights()` 和 `CHART_SOURCE_HIGHLIGHT_COLOR_BY_ROLE` 自行绘制。
 
+## 图表内嵌图片与叠加形状
+
+图表部件可以自带图片填充和 `chartUserShapes` 叠加层，查看器会把两者都画出来：
+
+- 图表的 `a:blipFill` 图片填充（整张图表区、绘图区、系列、单个数据点）按图片原样拉伸铺满对应图形，柱形、扇区、面积和数据点标记都适用；图例色块显示同一张图片。
+- `chartUserShapes` 里的文本框、标注和图片按 Excel 的 z 序叠加在绘图区之上：预设几何（`roundRect`、`ellipse`、`triangle`、`chevron`、箭头、星形等，未实现的预设回退为矩形）、`avLst` 调整值、纯色/图片填充、描边宽度与虚线、段落对齐、`anchor` 垂直对齐、`lIns`/`tIns` 边距以及逐段字体（字号、粗体、斜体、下划线、颜色、字体族）都会保留，长文本按文本框宽度换行并裁剪在形状内。
+- 锚点坐标是相对图表区域的，所以缩放、调整图表大小、冻结窗格滚动时叠加层都跟随图表一起缩放；形状不参与命中测试，选择与右键菜单仍由图表本身处理。
+- 嵌入的图片是从包内字节按签名（PNG/JPEG/GIF/WebP/BMP/TIFF）生成 data URL 的，外部链接、SVG、伪装成图片的 HTML 一律不画；单张 72 MB、单图表 100 MB、`chartUserShapes` 8 MB 的上限可防止异常包把内存拉满。宿主也可以读取 `chart.images`（关系 id → data URL）、`chart.drawings`（含 `shapes`）以及 `chart.chartAreaFillImage` / `chart.plotAreaFillImage` / `series.fillImage` / `dataPointStyles[].fillImage` 自行绘制。
+- 导出/重新打开时图表部件、`xl/charts/chartUserShapes*.xml` 及其媒体通过绘图关系图一起保留，重新打开后图片填充和叠加层仍在。
+
 ## 数字、日期与语言区域
 
 查看器的 `locale` 同时决定界面文案和数字/日期的默认区域。数字格式里用 `[$-407]` 这类段显式指定的区域始终优先；没有指定区域的格式跟随查看器区域。需要单独控制数字/日期时，用 `documentLocale` 覆盖 `locale`；使用 `XlsxSheetSurface` 时同样可用这两个属性，或直接在 `useXlsxViewerController({ locale })` 中配置。

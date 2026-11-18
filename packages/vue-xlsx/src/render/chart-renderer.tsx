@@ -47,6 +47,7 @@ export {
   chartSeriesColor,
   chartSeriesStrokeColor,
   chartPointColor,
+  chartPointFillImage,
   isHistogramLikeSeries,
   isHistogramLikeChart,
   normalizeBuiltinPieStyleId,
@@ -183,6 +184,14 @@ import { MemoSurfaceChartComposite } from "./surface-regl";
 import type { ChartLabels, ChartRendererPalette, ChartLayout } from "./chart-types";
 import { buildChartFontFamily, resolveChartAriaLabel, resolveChartMutedTextColor } from "./chart-shared";
 import { normalizeRenderableChartType, isComboChart } from "./chart-data";
+import {
+  CHART_AREA_IMAGE_FILL_KEY,
+  CHART_PLOT_AREA_IMAGE_FILL_KEY,
+  chartImageFillUrl,
+  sanitizeChartImageSource,
+} from "./chart-image-fills";
+import { renderChartImageFillDefs } from "./chart-image-defs";
+import { renderChartUserShapes } from "./chart-user-shapes";
 import { getLegendItems } from "./chart-legend";
 import { buildLayout } from "./chart-legend";
 import { renderTitle } from "./chart-svg-utils";
@@ -308,7 +317,15 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
       const layout = buildLayout(chart, rect, legendItems);
       const chartRaw = chart.raw && typeof chart.raw === "object" ? chart.raw as Record<string, unknown> : null;
       const explicitNoFill = chartRaw?.chartAreaNoFill === true || chartRaw?.plotAreaNoFill === true;
-      const background = chart.chartAreaFillColor ?? (explicitNoFill ? "transparent" : "#ffffff");
+      const chartAreaFillImage = sanitizeChartImageSource(chart.chartAreaFillImage)
+        ? chartImageFillUrl(chart, CHART_AREA_IMAGE_FILL_KEY)
+        : undefined;
+      const plotAreaFillImage = sanitizeChartImageSource(chart.plotAreaFillImage)
+        ? chartImageFillUrl(chart, CHART_PLOT_AREA_IMAGE_FILL_KEY)
+        : undefined;
+      const background = chartAreaFillImage
+        ?? chart.chartAreaFillColor
+        ?? (explicitNoFill ? "transparent" : "#ffffff");
       const borderColor = chart.chartAreaBorderColor ?? "transparent";
       const normalizedBackground = background.trim().toLowerCase();
       const normalizedBorderColor = borderColor.trim().toLowerCase();
@@ -340,7 +357,7 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
       if (renderChartType === "Surface") {
         return (
           <MemoSurfaceChartComposite
-            background={background}
+            background={chartAreaFillImage ? (chart.chartAreaFillColor ?? "#ffffff") : background}
             borderColor={borderColor}
             chart={chart}
         chartLabels={labels.value}
@@ -351,10 +368,12 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
             onPointerDown={handlePointerDown}
             overlay={
               <>
+                {renderChartImageFillDefs(chart)}
                 {renderSurfaceHitOverlay(chart, layout, selectedChartElement)}
                 {renderSurfaceAxes(chart, layout, labels.value)}
                 {renderTitle(chart, layout, palette)}
                 {renderLegend(chart, layout, palette)}
+                {renderChartUserShapes(chart, layout, palette)}
               </>
             }
             palette={palette}
@@ -371,12 +390,23 @@ export const MemoChartSvg = /* @__PURE__ */ defineComponent({
           style={{ display: "block", fontFamily, height: "100%", pointerEvents: "auto", width: "100%" }}
           viewBox={`0 0 ${layout.width} ${layout.height}`}
         >
+          {renderChartImageFillDefs(chart)}
           {hideBackgroundRect
             ? null
             : <rect fill={background} height={layout.height} stroke={borderColor} stroke-width={1} width={layout.width} x={0} y={0} />}
+          {plotAreaFillImage
+            ? <rect
+                fill={plotAreaFillImage}
+                height={layout.plot.height}
+                width={layout.plot.width}
+                x={layout.plot.left}
+                y={layout.plot.top}
+              />
+            : null}
           {renderTitle(chart, layout, palette)}
           {renderLegend(chart, layout, palette)}
           {renderChartPlot(chart, palette, layout, renderChartType, selectedChartElement, labels.value)}
+          {renderChartUserShapes(chart, layout, palette)}
         </svg>
       );
     };

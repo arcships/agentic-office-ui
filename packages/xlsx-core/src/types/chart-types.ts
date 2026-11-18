@@ -1,4 +1,9 @@
-import type { XlsxImageAnchor, XlsxImageRect } from "./image-types";
+import type {
+  XlsxImageAnchor,
+  XlsxImageRect,
+  XlsxShapeParagraph,
+  XlsxShapeTextBox,
+} from "./image-types";
 
 // ── Chart reference / data labels ────────────────────────────────────────
 
@@ -86,6 +91,8 @@ export interface XlsxChartAxis {
 export interface XlsxChartPointStyle {
   color?: string;
   explosion?: number;
+  /** Point picture fill (`c:dPt/c:spPr/a:blipFill`) as a data URL. */
+  fillImage?: string;
   index: number;
   lineColor?: string;
 }
@@ -100,6 +107,8 @@ export interface XlsxChartSeries {
   color?: string;
   dataPoints: unknown[];
   dataPointStyles?: XlsxChartPointStyle[];
+  /** Series picture fill (`c:ser/c:spPr/a:blipFill`) as a data URL. */
+  fillImage?: string;
   formatIdx?: number;
   hidden?: boolean;
   id: string;
@@ -148,6 +157,58 @@ export interface XlsxChartWall {
   thickness?: number;
 }
 
+// ── Chart-embedded media / user shapes ───────────────────────────────────
+
+export interface XlsxChartUserShapeFill {
+  /** Solid fill resolved to a CSS colour. */
+  color?: string;
+  /** `a:blipFill` picture fill resolved to a data URL by `readChartEmbeddedMedia`. */
+  image?: string;
+  /** `a:noFill`, or a stroke-only preset such as `line`. */
+  none?: boolean;
+}
+
+export interface XlsxChartUserShapeStroke {
+  color?: string;
+  /** Preset dash name from `a:ln/a:prstDash@val`. */
+  dash?: string;
+  hidden?: boolean;
+  widthPx?: number;
+}
+
+/**
+ * One shape from a chart's `chartUserShapes` part.
+ *
+ * Excel anchors chart user shapes in the chart's own drawing space, so the rect
+ * is normalised to fractions (0–1) of the chart area: `left`/`top` are the
+ * offset from the chart's top-left corner and `width`/`height` its size. A
+ * renderer multiplies those fractions by its own chart layout, which keeps the
+ * overlay aligned at any zoom level and chart size.
+ */
+export interface XlsxChartUserShape {
+  description?: string;
+  fill?: XlsxChartUserShapeFill;
+  /** `a:prstGeom@prst` (`rect` when the part omits it). */
+  geometry: string;
+  /** `a:avLst/a:gd` adjustment values as raw percentages (`adj="16667"` → 16667). */
+  geometryAdjustments?: Record<string, number>;
+  name?: string;
+  paragraphs: XlsxShapeParagraph[];
+  rect: XlsxImageRect;
+  stroke?: XlsxChartUserShapeStroke;
+  textBox?: XlsxShapeTextBox;
+}
+
+/** One `chartUserShapes` part linked from a chart part. */
+export interface XlsxChartDrawing {
+  /** Images owned by the shapes part, keyed by relationship id → data URL. */
+  images?: Record<string, string>;
+  /** Shapes parsed from the part, in document order. */
+  shapes: XlsxChartUserShape[];
+  /** Raw DrawingML XML, kept so hosts can inspect or re-export the part. */
+  xml: string;
+}
+
 // ── Chart ─────────────────────────────────────────────────────────────────
 
 export interface XlsxChart {
@@ -159,6 +220,8 @@ export interface XlsxChart {
   categoryAxis?: XlsxChartAxis | null;
   chartExLayout?: string;
   chartAreaBorderColor?: string;
+  /** Chart-area `a:blipFill` picture fill resolved to a data URL. */
+  chartAreaFillImage?: string;
   chartAreaFillColor?: string;
   chartColorPalette?: string[];
   chartColorPaletteOffset?: number;
@@ -172,11 +235,23 @@ export interface XlsxChart {
   fontFamily?: string;
   gapWidth?: number;
   holeSize?: number;
+  /**
+   * Chart-embedded images keyed by relationship id → data URL.
+   *
+   * Picture fills (`a:blipFill/a:blip@r:embed`) in the chart part resolve
+   * through this map, which is why it is kept on the model rather than baked
+   * into a single series colour.
+   */
+  images?: Record<string, string>;
   id: string;
   is3d?: boolean;
+  /** `chartUserShapes` parts keyed by relationship id. */
+  drawings?: Record<string, XlsxChartDrawing>;
   legend?: XlsxChartLegend | null;
   name?: string;
   overlap?: number;
+  /** Plot-area `a:blipFill` picture fill resolved to a data URL. */
+  plotAreaFillImage?: string;
   plotVisibleOnly?: boolean;
   raw?: Record<string, unknown>;
   radarStyle?: string;

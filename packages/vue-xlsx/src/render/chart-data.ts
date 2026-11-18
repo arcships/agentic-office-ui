@@ -2,10 +2,21 @@
 import type { XlsxChart, XlsxChartAxis, XlsxChartSeries } from "@arcships/xlsx-core";
 import { safeNumber, normalizeCategoryLabel, clamp, normalizeRendererHexColor, lightenColor, darkenColor, resolveChartSeriesLabel } from "./chart-shared";
 import { formatExcelDateSerial, isLikelyDateFormatCode } from "./chart-date";
+import {
+  chartImageFillUrl,
+  chartPointImageFillKey,
+  chartSeriesImageFillKey,
+  sanitizeChartImageSource,
+} from "./chart-image-fills";
 import type { ChartLabels, ComboRenderableGroup } from "./chart-types";
 
 export function chartSeriesColor(chart: XlsxChart, seriesIndex: number) {
   const series = chart.series[seriesIndex];
+  // A picture fill replaces the solid fill entirely; renderers paint the
+  // `url(#…)` pattern the chart's `<defs>` define.
+  if (sanitizeChartImageSource(series?.fillImage)) {
+    return chartImageFillUrl(chart, chartSeriesImageFillKey(seriesIndex));
+  }
   const paletteColor = chart.chartColorPalette?.[seriesIndex % Math.max(1, chart.chartColorPalette.length)];
   return series?.color ?? series?.lineColor ?? paletteColor ?? chart.textColor ?? "#222222";
 }
@@ -16,10 +27,23 @@ export function chartSeriesStrokeColor(chart: XlsxChart, seriesIndex: number) {
   return series?.lineColor ?? series?.color ?? paletteColor ?? chart.textColor ?? "#222222";
 }
 
+export function chartPointFillImage(chart: XlsxChart, seriesIndex: number, pointIndex: number) {
+  const pointStyle = chart.series[seriesIndex]?.dataPointStyles?.find((entry) => entry.index === pointIndex);
+  return sanitizeChartImageSource(pointStyle?.fillImage)
+    ? chartImageFillUrl(chart, chartPointImageFillKey(seriesIndex, pointIndex))
+    : undefined;
+}
+
 export function chartPointColor(chart: XlsxChart, pointIndex: number, seriesIndex = 0) {
   const pointStyle = chart.series[seriesIndex]?.dataPointStyles?.find((entry) => entry.index === pointIndex);
+  if (pointStyle && sanitizeChartImageSource(pointStyle.fillImage)) {
+    return chartImageFillUrl(chart, chartPointImageFillKey(seriesIndex, pointIndex));
+  }
   if (pointStyle?.color) {
     return pointStyle.color;
+  }
+  if (sanitizeChartImageSource(chart.series[seriesIndex]?.fillImage)) {
+    return chartImageFillUrl(chart, chartSeriesImageFillKey(seriesIndex));
   }
   const rawPoint = chart.series[seriesIndex]?.dataPoints?.[pointIndex];
   if (rawPoint && typeof rawPoint === "object") {
@@ -73,6 +97,11 @@ export function normalizeBuiltinPieStyleId(styleId: number | undefined) {
 }
 
 export function getBuiltinPiePalette(chart: XlsxChart, seriesIndex: number) {
+  // A series picture fill paints every slice with the same image; a built-in
+  // palette would hide it.
+  if (sanitizeChartImageSource(chart.series[seriesIndex]?.fillImage)) {
+    return null;
+  }
   const normalized = normalizeBuiltinPieStyleId(chart.chartStyleId);
   if (normalized !== 32) {
     return null;
@@ -96,6 +125,9 @@ export function getBuiltinPiePalette(chart: XlsxChart, seriesIndex: number) {
 
 export function resolvePiePointColor(chart: XlsxChart, pointIndex: number, seriesIndex = 0) {
   const pointStyle = chart.series[seriesIndex]?.dataPointStyles?.find((entry) => entry.index === pointIndex);
+  if (pointStyle && sanitizeChartImageSource(pointStyle.fillImage)) {
+    return chartImageFillUrl(chart, chartPointImageFillKey(seriesIndex, pointIndex));
+  }
   if (pointStyle?.color) {
     return pointStyle.color;
   }
