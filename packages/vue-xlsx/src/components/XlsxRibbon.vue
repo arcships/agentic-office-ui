@@ -61,9 +61,17 @@
       </div>
       <span class="xlsx-ribbon__separator" />
       <div class="xlsx-ribbon__group">
-        <button class="xlsx-ribbon__action-button" :disabled="!hasSelection" @click="controller.mergeSelection()">{{ m.xlsx.ribbon.merge }}</button>
-        <button class="xlsx-ribbon__action-button" :disabled="!hasSelection" @click="controller.unmergeSelection()">{{ m.xlsx.ribbon.unmerge }}</button>
-        <button class="xlsx-ribbon__icon-button" :title="m.xlsx.ribbon.allBorders" :aria-label="m.xlsx.ribbon.allBorders" @click="applyBorders"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M12 4v16M4 12h16" /></svg></button>
+        <button data-testid="xlsx-ribbon-merge-center" class="xlsx-ribbon__action-button" :disabled="!hasSelection" :title="m.xlsx.ribbon.mergeAndCenter" @click="mergeAndCenter">{{ m.xlsx.ribbon.mergeAndCenter }}</button>
+        <button data-testid="xlsx-ribbon-unmerge" class="xlsx-ribbon__action-button" :disabled="!hasSelection" @click="controller.unmergeSelection()">{{ m.xlsx.ribbon.unmerge }}</button>
+        <select data-testid="xlsx-ribbon-border-preset" class="xlsx-ribbon__borders" :value="''" :aria-label="m.xlsx.ribbon.borders" :title="m.xlsx.ribbon.borders" @change="applyBorderPreset">
+          <option value="">{{ m.xlsx.ribbon.borders }}</option>
+          <option v-for="preset in borderPresets" :key="preset" :value="preset">{{ borderLabels[preset] }}</option>
+        </select>
+        <label class="xlsx-ribbon__color" :title="m.xlsx.ribbon.borderColor">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /></svg><i :style="{ backgroundColor: borderColor }" />
+          <input v-model="borderColor" data-testid="xlsx-ribbon-border-color" type="color" :aria-label="m.xlsx.ribbon.borderColor" @change="applyBorderColor" />
+        </label>
+        <button data-testid="xlsx-ribbon-borders-all" class="xlsx-ribbon__icon-button" :title="m.xlsx.ribbon.allBorders" :aria-label="m.xlsx.ribbon.allBorders" @click="applyBorders('all')"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M12 4v16M4 12h16" /></svg></button>
       </div>
       <span class="xlsx-ribbon__separator" />
       <div class="xlsx-ribbon__group" data-testid="xlsx-ribbon-authoring">
@@ -89,6 +97,7 @@ import { computed, ref, watch } from "vue";
 import {
   resolveWorkbookColor,
   resolveWorkbookFillStyle,
+  type XlsxBorderPreset,
   type XlsxCellAlignmentInput,
   type XlsxCellFontStyleInput,
   type XlsxCellStyleInput,
@@ -96,6 +105,7 @@ import {
   type XlsxViewerController,
 } from "@arcships/xlsx-core";
 import { classifyNumberFormat } from "../composables/cell-input";
+import { DEFAULT_BORDER_COLOR_HEX, XLSX_BORDER_PRESETS } from "../composables/border-presets";
 import { useXlsxMessages } from "../i18n";
 import type { XlsxAuthoringDialogKind } from "./authoring-dialog";
 
@@ -114,6 +124,20 @@ const fontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48];
 const m = useXlsxMessages();
 const textColor = ref("#18181b");
 const fillColor = ref("#fff2cc");
+const borderColor = ref(`#${DEFAULT_BORDER_COLOR_HEX.toLowerCase()}`);
+// The colour picker re-applies the preset it belongs to, so it follows the
+// last border the user asked for rather than the dropdown's placeholder.
+const lastBorderPreset = ref<XlsxBorderPreset>("all");
+const borderPresets = XLSX_BORDER_PRESETS;
+const borderLabels = computed<Record<XlsxBorderPreset, string>>(() => ({
+  all: m.value.xlsx.ribbon.allBorders,
+  bottom: m.value.xlsx.ribbon.bottomBorder,
+  left: m.value.xlsx.ribbon.leftBorder,
+  none: m.value.xlsx.ribbon.noBorders,
+  outside: m.value.xlsx.ribbon.outsideBorders,
+  right: m.value.xlsx.ribbon.rightBorder,
+  top: m.value.xlsx.ribbon.topBorder
+}));
 const hasWorkbook = computed(() => props.controller.tabs.length > 0);
 const hasSelection = computed(() => Boolean(props.controller.selection));
 const hasActiveCell = computed(() => Boolean(props.controller.activeCell));
@@ -244,9 +268,36 @@ function setNumberFormat(event: Event): void {
   applyStyle(numberFormats[key] ?? numberFormats.general);
 }
 
-function applyBorders(): void {
-  const edge = { style: "thin" as const, color: { colorType: "rgb" as const, hex: "A1A1AA" } };
+function applyBorders(preset: XlsxBorderPreset = "all"): void {
+  if (isReadOnly.value) return;
+  lastBorderPreset.value = preset;
+  const color = { colorType: "rgb" as const, hex: borderColor.value.slice(1).toUpperCase() };
+  if (typeof props.controller.setSelectionBorders === "function") {
+    props.controller.setSelectionBorders({ preset, color });
+    return;
+  }
+  // Controllers proxied from an older host keep the plain All-borders path.
+  if (preset !== "all") return;
+  const edge = { style: "thin" as const, color };
   applyStyle({ border: { top: edge, right: edge, bottom: edge, left: edge } });
+}
+
+function applyBorderPreset(event: Event): void {
+  const select = event.target as HTMLSelectElement | null;
+  const preset = (select?.value ?? "") as XlsxBorderPreset | "";
+  // The first option is the dropdown's placeholder, not a command.
+  if (!preset) return;
+  applyBorders(preset);
+  if (select) select.value = "";
+}
+
+function applyBorderColor(): void {
+  applyBorders(lastBorderPreset.value);
+}
+
+function mergeAndCenter(): void {
+  if (isReadOnly.value) return;
+  props.controller.mergeAndCenterSelection?.();
 }
 </script>
 
@@ -272,6 +323,7 @@ function applyBorders(): void {
 .xlsx-ribbon select { background: transparent; border: 1px solid #d4d4d8; border-radius: 6px; font-size: 11px; height: 30px; max-width: 118px; padding: 0 7px; }
 .xlsx-ribbon__size { width: 52px; }
 .xlsx-ribbon__number { width: 86px; }
+.xlsx-ribbon__borders { width: 104px; }
 .xlsx-ribbon__icon-button,
 .xlsx-ribbon__text-button,
 .xlsx-ribbon__action-button,

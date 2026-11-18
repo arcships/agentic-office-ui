@@ -160,6 +160,8 @@ DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注
 - 图表数据：`refreshChartData()` 在主线程工作簿或 Worker 当前工作簿上重新解析图表分类和值，用于源单元格编辑后刷新绘图。
 - 编写入口：`XlsxViewer` 的功能区与右键菜单打开 `XlsxAuthoringDialog`（图表、批注、超链接、表格、条件格式、数据验证）。宿主也可以直接挂载该组件，或只调用控制器上的 `insertChart`、`setCellComment`、`setCellHyperlink`、`addConditionalFormatRule`、`updateConditionalFormatRule`、`deleteConditionalFormatRule`、`createTable`、`removeTable`、`setSelectionDataValidation`、`setFreezePanes`、`toggleFreezePanesAtActiveCell`。每个操作都写入工作簿模型、记录撤销条目，并随导出的 XLSX 一起保存；`XlsxViewerAuthoring` 汇总这些方法的说明。直接读取/清空用 `getCellComment`、`getCellHyperlink`、`getConditionalFormatRules`、`getTableAtCell`、`freezePanes`。
 - 编写限制：这些命令需要可修改的主线程工作簿（Worker 只用于强制只读的大文件），在 `readOnly`、受保护工作表或 Worker 只读模式下返回 `false`/`null`。
+- 单元格格式：功能区提供边框预设下拉（全部/外侧/左/右/上/下/无）与边框颜色，并保留“所有边框”快捷按钮；宿主也可以直接调用 `setSelectionBorders({ preset, style, color })`，`XlsxBorderPreset`、`XlsxBorderPresetInput` 描述这组入参。`all` 给选区内每格画边框，`outside` 只画选区外围（内部格子保持原样），`none` 清除四边；颜色同时写入每一面，`XlsxCellBorderStyleInput` 仍支持宿主用 `setRangeStyle` 逐边设置不同颜色。
+- 合并：`mergeAndCenterSelection()` 是功能区的默认合并动作，合并后同时写入 `horizontal: center` 与 `vertical: center`，两步共用一条撤销记录；单格选区只居中，不写一个格的合并区。`mergeSelection()` 保留给只需合并、不改对齐的宿主，`unmergeSelection()` 取消合并。
 
 网格、工具栏、功能区、公式栏、工作表标签、图表/图片/选区浮层、菜单及单独渲染函数是旧的低层出口，兼容期限见第 6 节。`XlsxAuthoringDialog` 是新增的独立对话框出口，`XlsxViewer` 会自动渲染它。
 

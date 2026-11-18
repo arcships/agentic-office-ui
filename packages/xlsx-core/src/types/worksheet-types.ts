@@ -339,6 +339,31 @@ export interface XlsxCellBorderStyleInput {
   diagonalDirection?: "none" | "down" | "up" | "both";
 }
 
+/**
+ * Border presets the ribbon offers for the current selection.
+ *
+ * `"outside"` draws the perimeter of a multi-cell selection only, so the
+ * inside of the range keeps whatever borders it already had.
+ */
+export type XlsxBorderPreset =
+  | "all"
+  | "outside"
+  | "left"
+  | "right"
+  | "top"
+  | "bottom"
+  | "none";
+
+/** Selection border command: which edges to draw, with what line and colour. */
+export interface XlsxBorderPresetInput {
+  /** Edges the command draws; defaults to `"all"`. */
+  preset?: XlsxBorderPreset;
+  /** Excel border line style; defaults to `"thin"`. */
+  style?: XlsxCellBorderEdgeInput["style"];
+  /** Border line colour; defaults to the ribbon's grey (`A1A1AA`). */
+  color?: XlsxCellStyleColorInput;
+}
+
 /** Alignment styling to persist on a cell or range. */
 export interface XlsxCellAlignmentInput {
   /** Horizontal alignment. */
@@ -1022,7 +1047,33 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
   images: XlsxImage[];
   moveChartBy: (id: string, deltaX: number, deltaY: number) => void;
   shapes: XlsxShape[];
+  /**
+   * Merges the current selection without touching its alignment.
+   *
+   * Hosts that want Excel's default action use `mergeAndCenterSelection`;
+   * this entry stays available for hosts that merge without centring.
+   */
   mergeSelection: () => void;
+  /**
+   * Merges the current selection and centres its text both ways.
+   *
+   * A single-cell selection is only centred, because Excel never writes a
+   * one-cell merge region. The merge and the alignment land in one undo step.
+   */
+  mergeAndCenterSelection: () => void;
+  /**
+   * Draws a border preset on the current selection.
+   *
+   * `all` borders every cell of the selection, `outside` only its perimeter and
+   * `left`/`right`/`top`/`bottom` that edge of every cell. The line style and
+   * colour come from the command, so per-edge colour is available without
+   * dropping to `setRangeStyle`. The mutation is recorded in undo history and is
+   * included in exported XLSX bytes.
+   *
+   * @returns `false` when there is no selection, the sheet is locked, or the
+   *   command changed nothing.
+   */
+  setSelectionBorders: (input?: XlsxBorderPresetInput) => boolean;
   maxZoomScale: number;
   minZoomScale: number;
   moveImageBy: (id: string, deltaX: number, deltaY: number) => void;
@@ -1230,7 +1281,17 @@ export interface XlsxViewerEditing {
   getClipboardData: () => XlsxClipboardData | null;
   getCellDisplayValue: (cell?: XlsxCellAddress | null) => string;
   getCellFormula: (cell?: XlsxCellAddress | null) => string;
+  /** Merges the current selection without touching its alignment. */
   mergeSelection: () => void;
+  /** Merges the current selection and centres its text both ways. */
+  mergeAndCenterSelection: () => void;
+  /**
+   * Draws a border preset on the current selection.
+   *
+   * @returns `false` when there is no selection, the sheet is locked, or the
+   *   command changed nothing.
+   */
+  setSelectionBorders: (input?: XlsxBorderPresetInput) => boolean;
   pasteFromClipboard: () => Promise<boolean>;
   pasteStructuredClipboardData: (payload: string) => boolean;
   pasteText: (text: string) => boolean;

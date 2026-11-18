@@ -136,6 +136,8 @@ export type {
   XlsxCellAlignmentInput,
   XlsxCellBorderEdgeInput,
   XlsxCellBorderStyleInput,
+  XlsxBorderPreset,
+  XlsxBorderPresetInput,
   XlsxCellFillStyleInput,
   XlsxCellFontStyleInput,
   XlsxCellGradientStopInput,

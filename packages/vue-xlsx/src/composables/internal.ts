@@ -31,6 +31,7 @@ import type {
 import { cellAddressToA1 } from "./selection";
 import { DEFAULT_CELL_STYLE_PATCH, coerceEnteredValue } from "./cell-input";
 import type { CellInputOptions } from "./cell-input";
+import { toEngineCellStyle } from "./engine-style";
 import type { XlsxDataValidationCheck } from "./validation";
 
 export const FORMULA_COUNT_THRESHOLD = 1000;
@@ -369,6 +370,12 @@ export function applyCellMutationState(
  * rather than to a hard-coded Calibri style, so a workbook with its own default
  * font (or a default number format) keeps it. The number format is always
  * explicit, because that is the group undo is usually restoring.
+ *
+ * The parsed model mirrors the source OOXML, so its colours are translated to
+ * the engine's colour input before the patch reaches `setCellStyleAt`. The
+ * result always names every style group and every property inside a group: the
+ * engine merges groups and their properties, so a patch that only mentioned the
+ * default font would leave the bold or the border undo is removing in place.
  */
 export function resolveCellFallbackStyle(
   sheet: { styleById?: Record<number, unknown> } | null | undefined
@@ -377,11 +384,17 @@ export function resolveCellFallbackStyle(
   if (!defaultStyle || typeof defaultStyle !== "object") {
     return null;
   }
-  const record = defaultStyle as Record<string, unknown>;
-  if (record.numberFormat) {
-    return defaultStyle;
+  const converted = toEngineCellStyle(defaultStyle);
+  const style: Record<string, unknown> = { ...DEFAULT_CELL_STYLE_PATCH };
+  if (converted && typeof converted === "object") {
+    for (const [group, value] of Object.entries(converted as Record<string, unknown>)) {
+      const base = style[group];
+      style[group] = base && typeof base === "object" && value && typeof value === "object"
+        ? { ...base, ...value }
+        : value;
+    }
   }
-  return { ...record, numberFormat: { formatType: "general" } };
+  return style;
 }
 
 /**
