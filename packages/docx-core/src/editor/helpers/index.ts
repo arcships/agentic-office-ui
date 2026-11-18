@@ -42,6 +42,7 @@
 //   paragraph-tracked.ts   — paragraph tracked-change extraction
 //   pretext-build.ts       — buildParagraphPretextLayoutSource
 //   pretext-measure.ts     — pretext measurement integration
+//   paragraph-line-metrics.ts — per-line ascent/descent metrics for pagination
 //   tracked-changes.ts     — tracked changes and comments collection
 //   tracked-changes-inline.ts — XML visible-unit ↔ model-child cursor mapping
 //   tracked-changes-table.ts — table/row/cell revision parsing and anchoring
@@ -105,6 +106,7 @@ export * from "./selection-restore";
 export * from "./section-manipulation";
 export * from "./pretext-build";
 export * from "./pretext-measure";
+export * from "./paragraph-line-metrics";
 export * from "./tracked-changes";
 export {
   resolveTableTrackedMarkup,

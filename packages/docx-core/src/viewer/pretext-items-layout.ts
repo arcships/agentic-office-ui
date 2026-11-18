@@ -8,8 +8,11 @@ import {
   canUsePretext,
   prepareCached,
   cursorAdvanceCodeUnits,
+  aggregateFragmentLineMetrics,
   layoutCacheKey,
   getCachedValue,
+  lineBoxHeightPx,
+  resolvePretextLineBoxMetrics,
   trimCache,
   rowWidthsAtY,
   layoutByKey,
@@ -19,6 +22,7 @@ import {
   type PretextLineLayout,
   type PretextVariableWidthLayout,
 } from "./pretext-layout";
+import { emptyLineMetrics } from "./line-metrics";
 
 const LAYOUT_CACHE_MAX_ENTRIES = 4096;
 
@@ -259,13 +263,58 @@ function laterIntervalFitsLeadingItemWithoutSplit(
   return false;
 }
 
+/**
+ * Vertical metrics an item contributes to its fragment: explicit ascent/
+ * descent for inline objects and runs in another font size, the baseline shift
+ * of a sub/superscript run, and nothing for plain text (its font is measured
+ * when the line box is aggregated).
+ */
+function itemVerticalMetrics(item: PretextLayoutItem): {
+  ascentPx?: number;
+  descentPx?: number;
+  unsuppressibleDescentPx?: number;
+  hasCustomVerticalMetrics?: boolean;
+  baselineShiftPx?: number;
+} {
+  const shiftMetrics =
+    item.baselineShiftPx !== undefined && item.baselineShiftPx !== 0
+      ? { baselineShiftPx: item.baselineShiftPx }
+      : {};
+  if (
+    item.ascentPx === undefined &&
+    item.descentPx === undefined &&
+    item.unsuppressibleDescentPx === undefined
+  ) {
+    return {
+      ...shiftMetrics,
+      ...(item.hasCustomVerticalMetrics === true
+        ? { hasCustomVerticalMetrics: true }
+        : {}),
+    };
+  }
+
+  return {
+    ascentPx: item.ascentPx ?? 0,
+    descentPx: item.descentPx ?? 0,
+    unsuppressibleDescentPx: item.unsuppressibleDescentPx ?? item.descentPx ?? 0,
+    ...(item.hasCustomVerticalMetrics === true
+      ? { hasCustomVerticalMetrics: true }
+      : {}),
+    ...shiftMetrics,
+  };
+}
+
 export function layoutItemsWithPretextAroundExclusions(
   text: string,
   items: PretextLayoutItem[],
   containerWidthPx: number,
   lineHeightPx: number,
   exclusions?: PretextExclusionRect[],
-  fallbackFont?: string
+  fallbackFont?: string,
+  options?: {
+    /** Snap grown line boxes up to the document grid line pitch. */
+    docGridLinePitchPx?: number;
+  }
 ): PretextVariableWidthLayout | undefined {
   if (!text) {
     return {
@@ -285,6 +334,8 @@ export function layoutItemsWithPretextAroundExclusions(
         top: Math.round(exclusion.top),
         bottom: Math.round(exclusion.bottom),
       })),
+      lineMetrics: [],
+      hasCustomVerticalMetrics: false,
     };
   }
 
@@ -316,20 +367,32 @@ export function layoutItemsWithPretextAroundExclusions(
       (item) =>
         `${item.font}\u0001${item.break ?? "normal"}\u0001${
           item.wordBreak ?? "normal"
-        }\u0001${item.startOffset}\u0001${item.endOffset}\u0001${item.text}`
+        }\u0001${item.startOffset}\u0001${item.endOffset}\u0001${
+          item.ascentPx ?? ""
+        }\u0001${item.descentPx ?? ""}\u0001${
+          item.unsuppressibleDescentPx ?? ""
+        }\u0001${item.hasCustomVerticalMetrics === true ? 1 : 0}\u0001${
+          item.baselineShiftPx ?? ""
+        }\u0001${item.text}`
     )
     .join("\u0002");
   const cacheKey = layoutCacheKey(
     `items\u0000${layoutSignature}`,
     safeContainerWidthPx,
     safeLineHeightPx,
-    normalizedExclusions
+    normalizedExclusions,
+    options?.docGridLinePitchPx
   );
   const cachedLayout = getCachedValue(layoutByKey, cacheKey);
   if (cachedLayout) {
     return cachedLayout;
   }
 
+  // A line may only grow past the paragraph line height when the content on
+  // that line cannot be described by a font-only box (an inline object or a run
+  // in another font size). Lines without such content keep the paragraph line
+  // height, so existing pagination stays unchanged and a single inline image
+  // does not inflate every other line of its paragraph.
   const lines: PretextLineLayout[] = [];
   const consumedOffsetsByItemIndex = items.map(() => 0);
   let cursor: PretextItemCursor = {
@@ -338,19 +401,23 @@ export function layoutItemsWithPretextAroundExclusions(
     graphemeIndex: 0,
   };
   let rowTopPx = 0;
+  let grewAnyLine = false;
+  // Band height used to test exclusions. It tracks the previous line box so a
+  // tall inline image keeps wrapped text clear of its band.
+  let rowHeightPx = safeLineHeightPx;
 
   while (!itemCursorIsDone(preparedItems, cursor)) {
     cursor = normalizeItemCursor(preparedItems, cursor);
     const rowIntervals = rowWidthsAtY(
       safeContainerWidthPx,
-      safeLineHeightPx,
+      rowHeightPx,
       rowTopPx,
       normalizedExclusions
     );
     const fragments: PretextLineFragment[] = [];
 
     if (rowIntervals.length === 0) {
-      rowTopPx += safeLineHeightPx;
+      rowTopPx += rowHeightPx;
       continue;
     }
 
@@ -416,6 +483,7 @@ export function layoutItemsWithPretextAroundExclusions(
           startOffset,
           endOffset,
           font: lineFragment.font,
+          ...itemVerticalMetrics(item),
         });
 
         consumedOffsetsByItemIndex[lineFragment.itemIndex] =
@@ -442,16 +510,35 @@ export function layoutItemsWithPretextAroundExclusions(
       break;
     }
 
+    const lineHasGrowthContent = fragments.some(
+      (fragment) => fragment.hasCustomVerticalMetrics === true
+    );
+    const lineBoxMetrics = resolvePretextLineBoxMetrics(
+      aggregateFragmentLineMetrics(fragments, fallbackFont),
+      {
+        minimumHeightPx: safeLineHeightPx,
+        docGridLinePitchPx: options?.docGridLinePitchPx,
+        allowGrowth: lineHasGrowthContent
+      }
+    );
+    if (lineBoxMetrics.heightPx > safeLineHeightPx) {
+      grewAnyLine = true;
+    }
     lines.push({
       y: rowTopPx,
       fragments,
+      metrics: lineBoxMetrics,
+      baselineYPx: rowTopPx + lineBoxMetrics.ascentPx,
     });
-    rowTopPx += safeLineHeightPx;
+    rowHeightPx = lineBoxMetrics.heightPx;
+    rowTopPx += lineBoxMetrics.heightPx;
   }
 
   const lineCount = lines.length;
-  const contentBottomPx =
-    lines.length > 0 ? (lines[lines.length - 1]?.y ?? 0) + safeLineHeightPx : 0;
+  const lastLine = lines[lines.length - 1];
+  const contentBottomPx = lastLine
+    ? lastLine.y + lineBoxHeightPx(lastLine, safeLineHeightPx)
+    : 0;
   const nextLayout: PretextVariableWidthLayout = {
     lineCount,
     height: Math.max(
@@ -465,6 +552,8 @@ export function layoutItemsWithPretextAroundExclusions(
     containerWidthPx: safeContainerWidthPx,
     lineHeightPx: safeLineHeightPx,
     exclusions: normalizedExclusions,
+    lineMetrics: lines.map((line) => line.metrics ?? emptyLineMetrics()),
+    hasCustomVerticalMetrics: grewAnyLine,
   };
   layoutByKey.set(cacheKey, nextLayout);
   trimCache(layoutByKey, LAYOUT_CACHE_MAX_ENTRIES);

@@ -6,6 +6,9 @@
 // Consumers must use the package root (for example `setWasmSource`) instead of
 // unsupported source-file deep imports.
 
+// Inline line metrics (ascent/descent/baseline, suppressible bottom space)
+export * from "./line-metrics";
+
 // Pretext layout (text layout around exclusions)
 export * from "./pretext-layout";
 

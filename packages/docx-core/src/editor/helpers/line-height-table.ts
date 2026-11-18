@@ -50,6 +50,7 @@ import {
   wrappedPretextParagraphBlockHeightPx,
 } from "./line-height";
 import { paragraphLineCountWithinWidth } from "./line-height-wrap";
+import { paragraphTextFlowHeightPx } from "./paragraph-line-metrics";
 import {
   buildParagraphPretextLayoutSource,
   layoutParagraphPretextSource,
@@ -198,7 +199,13 @@ export function estimateParagraphHeightPx(
     ? 0
     : dualWrappedLayout
     ? wrappedPretextParagraphBlockHeightPx(dualWrappedLayout.layout)
-    : lineHeightPx * lineCount;
+    : paragraphTextFlowHeightPx(paragraph, lineCount, lineHeightPx, {
+        availableWidthPx,
+        numberingDefinitions,
+        docGridLinePitchPx,
+        disableDocGridSnap,
+        expectedLineCount: lineCount
+      });
 
   const contentHeightPx = Math.max(
     collapsibleAbsoluteFloatingAnchorOnlyParagraph ? 0 : lineHeightPx,
@@ -353,7 +360,8 @@ export function estimateTableCellContentHeightPx(
             pretextSource,
             paragraphTextWidthPx,
             lineHeightPx,
-            []
+            [],
+            { docGridLinePitchPx }
           )
         : undefined;
     const suppressTopSpacing =

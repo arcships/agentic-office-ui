@@ -18,6 +18,7 @@ import type {
   TextRunNode
 } from "../../engine/types";
 import { twipsToPixels, TWIPS_PER_PIXEL } from "../../viewer/section-layout";
+import { lineBoxHeightPx } from "../../viewer/pretext-layout";
 import type { PretextVariableWidthLayout } from "../../viewer/pretext-layout";
 import { textMeasurementGeneration } from "../../viewer/text-measurement-generation";
 import {
@@ -481,8 +482,11 @@ export function pretextLayoutContentBottomPx(
     return 0;
   }
 
-  const lineHeightPx = Math.max(1, Math.round(layout.lineHeightPx ?? 1));
-  return (layout.lines[layout.lines.length - 1]?.y ?? 0) + lineHeightPx;
+  const lastLine = layout.lines[layout.lines.length - 1];
+  return (
+    (lastLine?.y ?? 0) +
+    lineBoxHeightPx(lastLine, layout.lineHeightPx ?? 1)
+  );
 }
 
 export function topAndBottomExclusionCanOverflowParagraphBox(
@@ -537,9 +541,16 @@ export function resolvePretextLineRangeContentHeightPx(
   }
 
   const firstLineTopPx = layout.lines[safeStart]?.y ?? safeStart * lineHeightPx;
-  const lastLineTopPx =
-    layout.lines[safeEnd - 1]?.y ?? (safeEnd - 1) * lineHeightPx;
-  return Math.max(1, Math.round(lastLineTopPx - firstLineTopPx + lineHeightPx));
+  const lastLine = layout.lines[safeEnd - 1];
+  const lastLineTopPx = lastLine?.y ?? (safeEnd - 1) * lineHeightPx;
+  return Math.max(
+    1,
+    Math.round(
+      lastLineTopPx -
+        firstLineTopPx +
+        lineBoxHeightPx(lastLine, lineHeightPx)
+    )
+  );
 }
 
 export function resolveMaxPretextLineRangeEndIndexThatFits(
