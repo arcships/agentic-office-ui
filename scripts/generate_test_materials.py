@@ -840,7 +840,77 @@ def make_docx_table_structures(path: Path):
         1,
     )
     entries["word/document.xml"] = document_xml.encode("utf-8")
+
+    # A running head can contain a table (a common letterhead layout), and the
+    # viewer renders it through the same table host as the body. Without this a
+    # header table that is dropped, flattened or rendered outside the header band
+    # is invisible to the suite.
+    header_xml = entries["word/header1.xml"].decode("utf-8")
+    if "<w:tbl>" in header_xml:
+        raise RuntimeError("table-structures header already contains a table")
+    closing = header_xml.find("</w:p>")
+    if closing == -1:
+        raise RuntimeError("table-structures header paragraph is missing")
+    insert_at = closing + len("</w:p>")
+    header_xml = (
+        header_xml[:insert_at] + build_header_table_xml() + header_xml[insert_at:]
+    )
+    entries["word/header1.xml"] = header_xml.encode("utf-8")
     write_docx_parts(path, entries)
+
+
+def build_header_table_xml() -> str:
+    """A two-row table for a page header, in the fixture's table style.
+
+    Word keeps an empty paragraph after a header table so the header can still
+    hold a caret; the fixture does the same so it looks like Word output.
+    """
+
+    def cell(text: str, *, bold: bool = False) -> str:
+        run_properties = "<w:rPr><w:b/></w:rPr>" if bold else ""
+        return (
+            '<w:tc><w:tcPr><w:tcW w:w="2880" w:type="dxa"/></w:tcPr>'
+            f"<w:p><w:r>{run_properties}<w:t>{escape_xml(text)}</w:t></w:r></w:p></w:tc>"
+        )
+
+    borders = (
+        "<w:tblBorders>"
+        '<w:top w:val="single" w:sz="4" w:space="0" w:color="1C3A5E"/>'
+        '<w:left w:val="single" w:sz="4" w:space="0" w:color="1C3A5E"/>'
+        '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="1C3A5E"/>'
+        '<w:right w:val="single" w:sz="4" w:space="0" w:color="1C3A5E"/>'
+        '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="1C3A5E"/>'
+        '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="1C3A5E"/>'
+        "</w:tblBorders>"
+    )
+    grid = (
+        "<w:tblGrid>"
+        '<w:gridCol w:w="2880"/><w:gridCol w:w="2880"/><w:gridCol w:w="2880"/>'
+        "</w:tblGrid>"
+    )
+    header_row = (
+        "<w:tr><w:trPr><w:tblHeader/></w:trPr>"
+        + cell("Register", bold=True)
+        + cell("Period", bold=True)
+        + cell("Owner", bold=True)
+        + "</w:tr>"
+    )
+    value_row = (
+        "<w:tr>"
+        + cell("Table Register")
+        + cell("FY2026")
+        + cell("O. North")
+        + "</w:tr>"
+    )
+    return (
+        '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>'
+        + borders
+        + '<w:tblLook w:val="04A0"/></w:tblPr>'
+        + grid
+        + header_row
+        + value_row
+        + "</w:tbl><w:p/>"
+    )
 
 
 def make_docx_sections_columns(path: Path, image_path: Path):

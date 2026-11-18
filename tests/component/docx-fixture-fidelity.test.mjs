@@ -61,6 +61,11 @@ function htmlText(root) {
     .join("");
 }
 
+/** Visible text of the rendered HTML string held by `htmlText`. */
+function plainHtmlText(root) {
+  return htmlText(root).replace(/<[^>]*>/g, "").trim();
+}
+
 /** Extracts `<span data-docx-note-marker="true">label</span>` labels in order. */
 function noteMarkerLabels(root) {
   const labels = [];
@@ -555,6 +560,56 @@ test("the long table repeats its header row on the continuation page", async () 
   } finally {
     mounted.app.unmount();
   }
+});
+
+test("a table inside the page header renders on every page through the table host", async (t) => {
+  const mounted = await mountViewer(t, "table-structures.docx");
+  const pages = pageWrappers(mounted.root);
+  assert.equal(pages.length, 2, "the fixture renders two pages");
+
+  for (const [pageIndex, page] of pages.entries()) {
+    const header = dataNodes(page, "data-docx-page-header")[0];
+    assert.ok(header, `page ${pageIndex} renders its header`);
+    assert.ok(
+      htmlText(header).includes("Table Structures Fixture"),
+      `page ${pageIndex} keeps the running-head paragraph`,
+    );
+
+    const hosts = dataNodes(header, "data-docx-table-host");
+    assert.equal(
+      hosts.length,
+      1,
+      `page ${pageIndex} renders exactly one header table host`,
+    );
+    const table = walk(hosts[0]).find((node) => node.type === "table");
+    assert.ok(table, `page ${pageIndex} renders a real table element`);
+    const tbody = table.children.find((node) => node.type === "tbody");
+    assert.ok(tbody, `page ${pageIndex} renders the header table body`);
+    const rows = tbody.children.filter((node) => node.type === "tr");
+    assert.deepEqual(
+      rows.map((row) =>
+        row.children
+          .filter((node) => node.type === "td")
+          .map((cell) => plainHtmlText(cell)),
+      ),
+      [
+        ["Register", "Period", "Owner"],
+        ["Table Register", "FY2026", "O. North"],
+      ],
+      `page ${pageIndex} keeps the header table's cells and text`,
+    );
+
+    // The header table is rendered inside the header band, not in the body
+    // flow, so it cannot be mistaken for a body table.
+    const bodyTables = dataNodes(page, "data-docx-table-host").filter(
+      (node) => !walk(header).includes(node),
+    );
+    assert.ok(
+      bodyTables.every((node) => !htmlText(node).includes("Table Register")),
+      `page ${pageIndex} does not duplicate the header table in the body`,
+    );
+  }
+  assert.deepEqual(mounted.warnings, []);
 });
 
 // ── Section headers, footers and columns ───────────────────────────

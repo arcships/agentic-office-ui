@@ -242,9 +242,9 @@
       "type": "docx",
       "category": "normal",
       "source": "synthetic-v1",
-      "expected": "render vertical merges, grid spans, nested tables, multi-paragraph cells and repeating tblHeader rows",
-      "bytes": 37067,
-      "sha256": "92cce3459b52837507e19a6c466a8af6ecc723f2b58232f8966dee4e4f65d97d"
+      "expected": "render vertical merges, grid spans, nested tables, multi-paragraph cells, repeating tblHeader rows and a table inside the page header",
+      "bytes": 37303,
+      "sha256": "1c5453c9e0b16a0fc96a4b88655f14796f061aadca1bcc251281d3b3389a6adf"
     }
   ]
 }

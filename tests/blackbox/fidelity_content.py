@@ -87,6 +87,13 @@ def expect(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
+# The header table of `table-structures.docx`: a running head laid out as a table.
+HEADER_TABLE_ROWS = [
+    ["Register", "Period", "Owner"],
+    ["Table Register", "FY2026", "O. North"],
+]
+
+
 def active_docx_search_highlight(page, message: str) -> dict[str, float]:
     highlight = page.locator(
         ".docx-document-surface__search-highlight--active"
@@ -98,6 +105,83 @@ def active_docx_search_highlight(page, message: str) -> dict[str, float]:
         message,
     )
     return box
+
+
+def collect_docx_pages(page) -> list[dict]:
+    """Per-page header/footer/width/watermark and header-table geometry."""
+    return page.evaluate(
+        """() => {
+          const pages = [...document.querySelectorAll('[data-docx-page-wrapper="true"]')];
+          return pages.map((wrapper) => {
+            const surface = wrapper.querySelector('[data-docx-page-surface]');
+            const header = wrapper.querySelector('[data-docx-page-header]');
+            const footer = wrapper.querySelector('[data-docx-page-footer]');
+            const body = wrapper.querySelector('[data-docx-page-body]');
+            const headerTables = header
+              ? [...header.querySelectorAll('table')].map((table) => ({
+                  rows: [...table.rows].map((row) =>
+                    [...row.cells].map((cell) => (cell.innerText || '').trim())
+                  ),
+                }))
+              : [];
+            const watermarks = header
+              ? [...header.querySelectorAll('img')].filter((img) =>
+                  /z-index:\\s*-\\d+/.test(img.getAttribute('style') || '')
+                ).length
+              : 0;
+            return {
+              index: Number(wrapper.getAttribute('data-docx-page-index')),
+              width: surface
+                ? Math.round(surface.getBoundingClientRect().width)
+                : 0,
+              header: header ? header.innerText.trim() : '',
+              footer: footer ? footer.innerText.trim() : '',
+              watermarks,
+              headerTables,
+              bodyText: body ? body.innerText : '',
+            };
+          });
+        }"""
+    )
+
+
+def scroll_docx_viewer(page, fraction: float) -> None:
+    page.evaluate(
+        """(fraction) => {
+          const viewer = document.querySelector('[data-testid="docx-viewer"]');
+          const candidates = [...(viewer ? viewer.querySelectorAll('*') : [])]
+            .filter((element) => element.scrollHeight > element.clientHeight + 200);
+          candidates.sort((left, right) => right.scrollHeight - left.scrollHeight);
+          const target = candidates[0];
+          if (target) {
+            target.scrollTop =
+              (target.scrollHeight - target.clientHeight) * fraction;
+          }
+        }""",
+        fraction,
+    )
+    page.wait_for_timeout(400)
+
+
+def collect_all_docx_pages(page, expected_pages: int) -> list[dict]:
+    """Merges page snapshots while stepping through the scroll range.
+
+    The viewer only mounts the pages inside its scroll viewport, so a single
+    snapshot cannot see every page of a multi-page document.
+    """
+    observed: dict[int, dict] = {}
+
+    def collect() -> None:
+        for entry in collect_docx_pages(page):
+            observed.setdefault(entry["index"], entry)
+
+    collect()
+    for step in range(13):
+        if len(observed) >= expected_pages:
+            break
+        scroll_docx_viewer(page, step / 12)
+        collect()
+    return [observed[index] for index in sorted(observed)]
 
 
 def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
@@ -215,6 +299,38 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
             table_structure["multiParagraphCell"],
             f"多段落单元格未渲染三段段落: {table_structure}",
         )
+
+        # Issue #53 §2: the running head contains a table. It must render through
+        # the header's own table host on every page of the section, and it must
+        # not be duplicated into the page body.
+        table_pages = collect_all_docx_pages(page, expected_pages=2)
+        expect(
+            len(table_pages) >= 2,
+            f"table-structures.docx 应渲染至少 2 页: {table_pages}",
+        )
+        header_table_rows = [
+            page_info["headerTables"][0]["rows"] if page_info["headerTables"] else None
+            for page_info in table_pages
+        ]
+        expect(
+            header_table_rows == [HEADER_TABLE_ROWS] * len(table_pages),
+            f"页眉表格必须在每一页渲染且保留单元格文本: {header_table_rows}",
+        )
+        expect(
+            all(
+                "Table Structures Fixture" in page_info["header"]
+                for page_info in table_pages
+            ),
+            f"页眉表格不得挤掉运行标题: {[page_info['header'] for page_info in table_pages]}",
+        )
+        expect(
+            all(
+                "Table Register" not in page_info["bodyText"]
+                for page_info in table_pages
+            ),
+            f"页眉表格不能重复渲染到正文: {[page_info['bodyText'][:80] for page_info in table_pages]}",
+        )
+        page.screenshot(path=str(attempt_dir / "docx-header-table.png"), full_page=True)
         page.screenshot(path=str(attempt_dir / "docx-table-structures.png"), full_page=True)
 
         page.locator('[data-testid="docx-sample-select"]').select_option("sections-columns.docx")
@@ -227,58 +343,7 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
         # pages are collected while stepping through the scroll range and merged
         # by page index; that keeps the per-page header assertion honest for a
         # document whose pages cannot all be mounted at once.
-        def collect_sections() -> list[dict]:
-            return page.evaluate(
-                """() => {
-                  const pages = [...document.querySelectorAll('[data-docx-page-wrapper="true"]')];
-                  return pages.map((page) => {
-                    const surface = page.querySelector('[data-docx-page-surface]');
-                    const header = page.querySelector('[data-docx-page-header]');
-                    const footer = page.querySelector('[data-docx-page-footer]');
-                    const watermarks = header
-                      ? [...header.querySelectorAll('img')].filter((img) => /z-index:\\s*-\\d+/.test(img.getAttribute('style') || '')).length
-                      : 0;
-                    return {
-                      index: Number(page.getAttribute('data-docx-page-index')),
-                      width: surface ? Math.round(surface.getBoundingClientRect().width) : 0,
-                      header: header ? header.innerText.trim() : '',
-                      footer: footer ? footer.innerText.trim() : '',
-                      watermarks,
-                    };
-                  });
-                }"""
-            )
-
-        observed_pages: dict[int, dict] = {}
-
-        def collect_pages() -> None:
-            for entry in collect_sections():
-                observed_pages.setdefault(entry["index"], entry)
-
-        def scroll_viewer(fraction: float) -> None:
-            page.evaluate(
-                """(fraction) => {
-                  const viewer = document.querySelector('[data-testid="docx-viewer"]');
-                  const candidates = [...(viewer ? viewer.querySelectorAll('*') : [])]
-                    .filter((element) => element.scrollHeight > element.clientHeight + 200);
-                  candidates.sort((left, right) => right.scrollHeight - left.scrollHeight);
-                  const target = candidates[0];
-                  if (target) {
-                    target.scrollTop =
-                      (target.scrollHeight - target.clientHeight) * fraction;
-                  }
-                }""",
-                fraction,
-            )
-            page.wait_for_timeout(400)
-            collect_pages()
-
-        collect_pages()
-        for step in range(13):
-            scroll_viewer(step / 12)
-            if len(observed_pages) >= 4:
-                break
-        sections = [observed_pages[index] for index in sorted(observed_pages)]
+        sections = collect_all_docx_pages(page, expected_pages=4)
         expect(len(sections) == 4, f"sections-columns.docx 应渲染 4 页: {sections}")
         expect(
             [page_info["header"] for page_info in sections]
@@ -324,6 +389,7 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
             "searchHighlight": search_highlight,
             "tableSearchHighlight": table_highlight,
             "tableStructure": table_structure,
+            "headerTableRows": header_table_rows,
             "sections": sections,
         }
     finally:

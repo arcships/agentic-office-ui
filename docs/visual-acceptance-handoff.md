@@ -224,7 +224,7 @@ For every dropdown-driven fixture route:
 - Merged and nested tables keep their grid column count and cell text, and `w:tblHeader` rows repeat on the continuation page. `G-DOCX-VIEW-8`
 - A section's header and footer render on every page of that section, with that section's part and page orientation. `G-DOCX-VIEW-9`
 - Footnote and endnote markers print the same numbers as the notes section. `G-DOCX-VIEW-10`
-- The fixture set exercises comment threads, several comments on one paragraph, cross-paragraph ranges, comments in a cell and in a header, a resolved thread, `vMerge`/`gridSpan`/nested tables, repeating header rows, mixed orientation and two-column sections, a text box and a watermark. `G-DOCX-VIEW-11`
+- The fixture set exercises comment threads, several comments on one paragraph, cross-paragraph ranges, comments in a cell and in a header, a resolved thread, `vMerge`/`gridSpan`/nested tables, repeating header rows, a table inside a page header, mixed orientation and two-column sections, a text box and a watermark. `G-DOCX-VIEW-11`
 - Source-level DOCX viewer gaps from `docs/upstream-parity-gap-audit.md` are closed or agreed intentional before parity acceptance, including headers/footers, hyperlinks, complex tables, images/fallbacks, sections/columns, notes/comments/revisions visibility, pagination fidelity, dark/night-reader behavior, import depth, and virtualization. `G-DOCX-VIEW-12`
 
 ### DOCX Editor gate
@@ -287,7 +287,7 @@ browser. Nothing in this document is silently treated as verified.
 | `G-DOCX-VIEW-8` | `tests/component/docx-fixture-fidelity.test.mjs::merged and nested tables keep their column count and cell text` |
 | `G-DOCX-VIEW-9` | `tests/component/docx-fixture-fidelity.test.mjs::each section renders its own header and footer on every page of that section` |
 | `G-DOCX-VIEW-10` | `tests/component/docx-fixture-fidelity.test.mjs::footnote and endnote markers match the notes-section numbers` |
-| `G-DOCX-VIEW-11` | `tests/unit/docx-fixture-fidelity.test.mjs::the review fixture carries threads, replies and a resolved thread`; `tests/unit/docx-fixture-fidelity.test.mjs::the table fixture keeps vertical merges, grid spans, nested tables and header rows`; `tests/unit/docx-fixture-fidelity.test.mjs::the section fixture keeps a text box and a behind-text watermark` |
+| `G-DOCX-VIEW-11` | `tests/unit/docx-fixture-fidelity.test.mjs::the review fixture carries threads, replies and a resolved thread`; `tests/unit/docx-fixture-fidelity.test.mjs::the table fixture keeps vertical merges, grid spans, nested tables and header rows`; `tests/unit/docx-fixture-fidelity.test.mjs::the table fixture's page header carries a table of its own`; `tests/unit/docx-fixture-fidelity.test.mjs::the section fixture keeps a text box and a behind-text watermark` |
 | `G-DOCX-VIEW-12` | manual — `docs/upstream-parity-gap-audit.md` |
 | `G-DOCX-EDIT-1` | `tests/unit/docx-model-preservation.test.mjs::editing one paragraph leaves every other node field-identical after a round trip` |
 | `G-DOCX-EDIT-2` | manual — `tests/blackbox/docx_editing.py` |
