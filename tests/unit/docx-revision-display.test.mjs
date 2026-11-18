@@ -113,7 +113,7 @@ test("display text offsets follow the text flow balloons and none render", () =>
   assert.equal(core.displayTextOffsetForSourceOffset(ranges, 5), 5);
   assert.equal(core.displayTextOffsetForSourceOffset(ranges, 9), 5);
   assert.equal(core.displayTextOffsetForSourceOffset(ranges, 14), 10);
-  assert.equal(core.sourceTextOffsetForDisplayOffset(ranges, 5), 5);
+  assert.equal(core.sourceTextOffsetForDisplayOffset(ranges, 5), 9);
   assert.equal(core.sourceTextOffsetForDisplayOffset(ranges, 10), 14);
 
   assert.deepEqual(core.hiddenParagraphTextRanges(paragraph, "inline"), []);

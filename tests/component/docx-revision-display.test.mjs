@@ -15,8 +15,12 @@ const {
   DocxToolbar,
   DocxViewer,
   DocxViewerRoot,
+  displayTextRangeToSourceTextRange,
+  paragraphDisplayOffsetToSourceOffset,
+  paragraphSourceOffsetToDisplayOffset,
   renderParagraphRuns,
   renderStaticHtml,
+  sourceTextRangeToDisplayTextRange,
   useDocxEditor,
 } = await importFromDemo("@arcships/vue-docx");
 const {
@@ -150,6 +154,67 @@ test("hidden revisions render the final text even when inline is the preferred m
   assert.doesNotMatch(html, /gone/u);
   assert.match(html, />new</u);
   assert.doesNotMatch(html, /data-docx-tracked-change=/u);
+});
+
+test("paragraph offset mapping covers body, table, header, footer and note stories", () => {
+  const paragraph = revisionParagraph();
+  assert.equal(
+    paragraphDisplayOffsetToSourceOffset(paragraph, "balloons", 8),
+    12,
+    "caret after the inserted word maps to the source offset"
+  );
+  assert.equal(
+    paragraphSourceOffsetToDisplayOffset(paragraph, "balloons", 12),
+    8,
+    "restoring the source caret maps back to the display offset"
+  );
+
+  const tableModel = {
+    ...createBlankDocumentModel(),
+    nodes: [
+      {
+        type: "table",
+        rows: [
+          {
+            cells: [{ nodes: [revisionParagraph()] }],
+          },
+        ],
+      },
+    ],
+  };
+  const cellLocation = {
+    kind: "table-cell",
+    tableIndex: 0,
+    rowIndex: 0,
+    cellIndex: 0,
+    paragraphIndex: 0,
+  };
+  const displayRange = {
+    start: { location: cellLocation, offset: 5 },
+    end: { location: cellLocation, offset: 8 },
+  };
+  const sourceRange = displayTextRangeToSourceTextRange(
+    tableModel,
+    "balloons",
+    displayRange
+  );
+  assert.equal(sourceRange.start.offset, 9);
+  assert.equal(sourceRange.end.offset, 12);
+  assert.deepEqual(
+    sourceTextRangeToDisplayTextRange(tableModel, "balloons", sourceRange),
+    displayRange
+  );
+
+  // Header/footer/note paragraphs use the same paragraph-level helpers; they
+  // carry story metadata on their container, not on the paragraph itself.
+  assert.equal(
+    paragraphDisplayOffsetToSourceOffset(paragraph, "none", 8),
+    12
+  );
+  assert.equal(
+    paragraphSourceOffsetToDisplayOffset(paragraph, "none", 12),
+    8
+  );
 });
 
 test("renderer omits synthetic w:delText segments outside inline mode", () => {

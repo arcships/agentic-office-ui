@@ -484,6 +484,61 @@ async function mountEditableDocument(t, texts) {
   return { ...mounted, dom, get controller() { return controller; } };
 }
 
+const REVISION_PARAGRAPH_XML =
+  "<w:p>" +
+  '<w:r><w:t xml:space="preserve">Keep </w:t></w:r>' +
+  '<w:del w:id="1" w:author="Ada"><w:r><w:t>gone</w:t></w:r></w:del>' +
+  '<w:ins w:id="2" w:author="Ada"><w:r><w:t>new</w:t></w:r></w:ins>' +
+  '<w:r><w:t xml:space="preserve"> tail</w:t></w:r>' +
+  "</w:p>";
+
+function revisionStarterModel() {
+  const model = createBlankDocumentModel();
+  return {
+    ...model,
+    nodes: [
+      {
+        type: "paragraph",
+        children: [
+          { type: "text", text: "Keep " },
+          { type: "text", text: "gone" },
+          { type: "text", text: "new" },
+          { type: "text", text: " tail" },
+        ],
+        sourceXml: REVISION_PARAGRAPH_XML,
+      },
+    ],
+  };
+}
+
+async function mountRevisionDisplayDocument(t) {
+  const dom = installDomEnvironment(t);
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({
+        starterModel: revisionStarterModel(),
+        initialShowTrackedChanges: true,
+        initialRevisionDisplay: "balloons",
+      });
+      return () => vue.h(DocxEditor, {
+        editor: controller,
+        editable: true,
+        showToolbar: false,
+        showThumbnails: false,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(
+    () => paragraphHosts(mounted.root).length >= 1,
+    "editable revision paragraph",
+  );
+  installRendererDom(mounted, dom.document);
+  dom.setCleanup(() => mounted.app.unmount());
+  return { ...mounted, dom, get controller() { return controller; } };
+}
+
 test("real DOM Range updates activeTextRange and ignores the numbering label", async (t) => {
   const mounted = await mountEditableDocument(t, ["abcdef"]);
   const [paragraph] = paragraphHosts(mounted.root);
@@ -530,6 +585,50 @@ test("caret offsets skip tracked-change deletion text", async (t) => {
     start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
     end: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
   });
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("balloons maps caret display offsets to source and restores the DOM range", async (t) => {
+  const mounted = await mountRevisionDisplayDocument(t);
+  const [paragraph] = paragraphHosts(mounted.root);
+  // The model keeps "Keep gonenew tail" (source length 17); balloons renders
+  // "Keep new tail" (display length 13).
+  const textNode = setHostDomText(paragraph, "Keep new tail", mounted.dom.document);
+  const pageBody = walk(mounted.root)
+    .find((node) => node.props?.["data-docx-page-body"] === "true");
+  assert.ok(pageBody, "page body should render");
+  eventHandler(pageBody, "pointerdown")({ target: paragraph });
+
+  // Caret after "new": display offset 8, source offset 12.
+  mounted.dom.setSelection(textNode, 8);
+  mounted.dom.dispatchDocument("selectionchange");
+  await vue.nextTick();
+  assert.deepEqual(mounted.controller.activeTextRange, {
+    start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 12 },
+    end: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 12 },
+  });
+
+  // An expanded display range (the inserted word) becomes the source range.
+  mounted.dom.setSelection(textNode, 5, textNode, 8);
+  mounted.dom.dispatchDocument("selectionchange");
+  await vue.nextTick();
+  const expectedSourceRange = {
+    start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 9 },
+    end: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 12 },
+  };
+  assert.deepEqual(mounted.controller.activeTextRange, expectedSourceRange);
+
+  // Formatting uses the source range; undo restores it and maps it back to the
+  // display offsets the DOM can represent.
+  mounted.dom.setCollapseSelectionOnFocus(true);
+  mounted.controller.toggleBold();
+  await vue.nextTick();
+  await vue.nextTick();
+  mounted.controller.undo();
+  await vue.nextTick();
+  await vue.nextTick();
+  assert.deepEqual(mounted.controller.activeTextRange, expectedSourceRange);
+  assert.deepEqual(mounted.dom.selectionOffsets(paragraph), { start: 5, end: 8 });
   assert.deepEqual(mounted.warnings, []);
 });
 

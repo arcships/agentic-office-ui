@@ -153,7 +153,10 @@ export function sourceTextOffsetForDisplayOffset(
 
   for (const range of ranges) {
     const visibleLength = range.start - source;
-    if (target <= display + visibleLength) {
+    // A display offset exactly at the hidden boundary belongs to the text
+    // after the hidden run: the DOM has no caret inside deleted content, so
+    // the display position collapses to the nearest visible position after it.
+    if (target < display + visibleLength) {
       return source + (target - display);
     }
     display += visibleLength;

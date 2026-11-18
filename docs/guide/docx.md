@@ -55,6 +55,8 @@ import "@arcships/vue-docx/style.css"
 
 默认值是 `balloons`：原来的“正文内联删除 + 同一删除的卡片”重复显示会被消除。`reviewDisplayModel(model, display)` 生成只读显示模型，`reviewDisplayParagraph()`、`hiddenParagraphChildIndexes()`、`hiddenParagraphTextRanges()`、`displayTextOffsetForSourceOffset()` 和 `sourceTextOffsetForDisplayOffset()` 可供自定义表面复用；`renderParagraphRuns()` 的 `revisionDisplay` 默认 `inline`，保证直接调用渲染器时行为不变。编辑器和查看器工具栏都提供“审阅显示方式”选择器；编辑器也可以通过 `controller.setRevisionDisplay()` 切换。
 
+DOM 选区使用显示文本偏移，控制器区间使用源模型偏移：写入选区前会把 DOM 的显示偏移映射回源偏移，恢复 DOM 选区和右键菜单定位时再把控制器/源区间映射回显示偏移。正文、表格单元格、页眉页脚和脚注/尾注段落都可以复用 `paragraphDisplayOffsetToSourceOffset()` / `paragraphSourceOffsetToDisplayOffset()`；因此删除内容隐藏后，光标仍落在 Word 最终文本对应的源位置，撤销/重做也能恢复到正确的可见位置。
+
 ## SVG 图片
 
 DOCX 中的 `image/svg+xml` 图片按矢量渲染，支持直接引用 SVG 的 `a:blip` 和 Word 常见的 `asvg:svgBlip` + PNG 回退结构（此时取 SVG）。图片保持 `wp:extent` 的锚定尺寸，缩放或 200% 预览时仍按显示分辨率重新栅格化，不会被替换成位图。

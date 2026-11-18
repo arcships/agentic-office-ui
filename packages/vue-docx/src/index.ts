@@ -160,6 +160,11 @@ export {
   useDocxComments,
   useDocxPageLayout,
   useDocxPagination,
+  displayTextRangeToSourceTextRange,
+  effectiveControllerRevisionDisplay,
+  paragraphDisplayOffsetToSourceOffset,
+  paragraphSourceOffsetToDisplayOffset,
+  sourceTextRangeToDisplayTextRange,
 } from "./composables"
 
 export { useDocxModel } from "./composables/useDocxModel"
