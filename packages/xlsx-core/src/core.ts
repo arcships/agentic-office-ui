@@ -39,6 +39,35 @@ export type {
   XlsxShapeTextRun,
 } from "./types/image-types";
 
+export type {
+  XlsxAxisRange,
+  XlsxPageBreak,
+  XlsxPageMargins,
+  XlsxPageOrder,
+  XlsxPageOrientation,
+  XlsxPageSetup,
+  XlsxPaperSize,
+  XlsxPrintLayout,
+  XlsxPrintLayoutOptions,
+  XlsxPrintOptions,
+  XlsxPrintPage,
+  XlsxPrintPageGrid,
+  XlsxPrintPageGridAxis,
+  XlsxPrintPageGridCell,
+  XlsxPrintTitles,
+  XlsxSheetData,
+} from "./types/worksheet-types";
+
+export {
+  PAPER_SIZES,
+  buildPrintPageGrid,
+  buildWorkbookPrintLayouts,
+  buildWorksheetPrintLayout,
+  resolvePageMarginsPx,
+  resolvePaperPixelSize,
+  resolvePaperSize,
+} from "./print/pagination";
+
 export {
   resolveWorkbookColor,
   resolveWorkbookFillColor,

@@ -35,6 +35,28 @@ export {
 } from "./colors";
 
 export {
+  DEFAULT_PAGE_MARGINS,
+  DEFAULT_PAGE_SETUP,
+  DEFAULT_PRINT_OPTIONS,
+  PAPER_SIZES,
+  buildPrintPageGrid,
+  buildWorkbookPrintLayouts,
+  buildWorksheetPrintLayout,
+  defaultPrintTitles,
+  parseWorkbookPrintMetadata,
+  parseWorksheetPrintState,
+  resolvePageMarginsPx,
+  resolvePaperPixelSize,
+  resolvePaperSize,
+  resolveWorksheetPrintState,
+} from "./print";
+export type {
+  WorkbookPrintMetadata,
+  WorksheetPrintSource,
+  WorksheetPrintState,
+} from "./print";
+
+export {
   resolveWorksheetDefaultColumnWidthPixels,
   resolveWorksheetDefaultRowHeightPixels,
   resolveWorksheetHiddenRows,
@@ -225,6 +247,21 @@ export type {
   XlsxImageResizeHandlePosition,
   XlsxImageSelectionRenderProps,
   XlsxImageSourceRect,
+  XlsxPageOrientation,
+  XlsxPageOrder,
+  XlsxPageSetup,
+  XlsxPrintOptions,
+  XlsxPageMargins,
+  XlsxPageBreak,
+  XlsxAxisRange,
+  XlsxPrintTitles,
+  XlsxPaperSize,
+  XlsxPrintPage,
+  XlsxPrintLayout,
+  XlsxPrintLayoutOptions,
+  XlsxPrintPageGridCell,
+  XlsxPrintPageGridAxis,
+  XlsxPrintPageGrid,
   XlsxResolvedCellStyle,
   XlsxScrollerRenderProps,
   XlsxShape,

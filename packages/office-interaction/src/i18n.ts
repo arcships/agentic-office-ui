@@ -499,6 +499,18 @@ export interface OfficeXlsxMessages {
     upload: string
     download: string
     export: string
+    printPreview: string
+    pageBreaks: string
+  }
+  print: {
+    title: string
+    close: string
+    print: string
+    noPages: string
+    /** Template with `{count}`, `{paper}`, `{orientation}` and `{scale}` placeholders. */
+    summary: string
+    orientationPortrait: string
+    orientationLandscape: string
   }
   ribbon: {
     undo: string
@@ -1489,6 +1501,17 @@ export const officeMessagesEn: OfficeMessages = {
       upload: "Upload XLSX",
       download: "Download source",
       export: "Export XLSX",
+      printPreview: "Print preview",
+      pageBreaks: "Page break preview",
+    },
+    print: {
+      title: "Print preview",
+      close: "Close print preview",
+      print: "Print",
+      noPages: "This sheet has no printable pages",
+      summary: "{count} pages · {paper} {orientation} · {scale}%",
+      orientationPortrait: "portrait",
+      orientationLandscape: "landscape",
     },
     ribbon: {
       undo: "Undo",
@@ -2425,6 +2448,17 @@ export const officeMessagesZhCN: OfficeMessages = {
       upload: "上传 XLSX",
       download: "下载源文件",
       export: "导出 XLSX",
+      printPreview: "打印预览",
+      pageBreaks: "分页预览",
+    },
+    print: {
+      title: "打印预览",
+      close: "关闭打印预览",
+      print: "打印",
+      noPages: "此工作表没有可打印的页面",
+      summary: "{count} 页 · {paper} {orientation} · {scale}%",
+      orientationPortrait: "纵向",
+      orientationLandscape: "横向",
     },
     ribbon: {
       undo: "撤销",

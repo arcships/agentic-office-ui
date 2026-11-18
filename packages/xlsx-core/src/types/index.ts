@@ -22,6 +22,22 @@ export type {
   XlsxSheetProtection,
   XlsxSheetProtectionAction,
   XlsxSheetVisibility,
+  // Print / page layout
+  XlsxPageOrientation,
+  XlsxPageOrder,
+  XlsxPageSetup,
+  XlsxPrintOptions,
+  XlsxPageMargins,
+  XlsxPageBreak,
+  XlsxAxisRange,
+  XlsxPrintTitles,
+  XlsxPaperSize,
+  XlsxPrintPage,
+  XlsxPrintLayout,
+  XlsxPrintLayoutOptions,
+  XlsxPrintPageGridCell,
+  XlsxPrintPageGridAxis,
+  XlsxPrintPageGrid,
   // Sheet data
   XlsxSheetData,
   // Cell style inputs

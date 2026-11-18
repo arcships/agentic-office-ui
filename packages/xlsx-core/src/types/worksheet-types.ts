@@ -183,6 +183,173 @@ export interface XlsxFreezePanes {
 
 export type XlsxSheetVisibility = "hidden" | "veryHidden" | "visible";
 
+// ── Print / page layout ──────────────────────────────────────────────────
+
+export type XlsxPageOrientation = "portrait" | "landscape";
+
+export type XlsxPageOrder = "downThenOver" | "overThenDown";
+
+/**
+ * Worksheet print set-up parsed from `pageSetup`, `sheetPr/pageSetUpPr` and
+ * `pageMargins`.
+ *
+ * Lengths are in inches, matching OOXML. `scale` is a percentage in the
+ * 10–400 range Excel accepts. `fitToPage` mirrors
+ * `sheetPr/pageSetUpPr/@fitToPage`; when it is `true`, `fitToWidth` and
+ * `fitToHeight` drive the effective scale instead of `scale`.
+ */
+export interface XlsxPageSetup {
+  paperSize: number;
+  orientation: XlsxPageOrientation;
+  scale: number;
+  fitToWidth: number;
+  fitToHeight: number;
+  fitToPage: boolean;
+  firstPageNumber: number;
+  useFirstPageNumber: boolean;
+  blackAndWhite: boolean;
+  draft: boolean;
+  cellComments: "none" | "asDisplayed" | "atEnd";
+  errors: "displayed" | "blank" | "dash" | "NA";
+  pageOrder: XlsxPageOrder;
+  horizontalDpi?: number;
+  verticalDpi?: number;
+  copies?: number;
+}
+
+/** Worksheet `printOptions` record. */
+export interface XlsxPrintOptions {
+  horizontalCentered: boolean;
+  verticalCentered: boolean;
+  headings: boolean;
+  gridLines: boolean;
+}
+
+/** Worksheet `pageMargins` record; every length is in inches. */
+export interface XlsxPageMargins {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  header: number;
+  footer: number;
+}
+
+/**
+ * A manual page break from `rowBreaks` / `colBreaks`.
+ *
+ * `id` is the zero-based row or column index before which the next page
+ * starts, matching the OOXML `brk/@id` attribute (a break before Excel row 2
+ * is written as `id="1"`).
+ */
+export interface XlsxPageBreak {
+  id: number;
+  min: number;
+  max: number;
+  manual: boolean;
+}
+
+/** Inclusive zero-based range on one worksheet axis. */
+export interface XlsxAxisRange {
+  start: number;
+  end: number;
+}
+
+/**
+ * Repeated rows and columns from `_xlnm.Print_Titles`, applied to every
+ * printed page.
+ */
+export interface XlsxPrintTitles {
+  rows: XlsxAxisRange[];
+  columns: XlsxAxisRange[];
+}
+
+/** A paper size resolved from the OOXML `paperSize` identifier. */
+export interface XlsxPaperSize {
+  id: number;
+  name: string;
+  widthIn: number;
+  heightIn: number;
+}
+
+/** One printed page: a cell range on a sheet plus its paper geometry. */
+export interface XlsxPrintPage {
+  /** Zero-based index in the sheet's flat page list. */
+  index: number;
+  /** One-based page number shown to the user; honours `firstPageNumber`. */
+  pageNumber: number;
+  /** Cell range printed as this page's body, excluding repeated titles. */
+  range: XlsxCellRange;
+  /** Print area this page belongs to. */
+  printArea: XlsxCellRange;
+  paperSize: number;
+  paperSizeName: string;
+  orientation: XlsxPageOrientation;
+  /** Paper width and height in CSS pixels at 96 dpi. */
+  widthPx: number;
+  heightPx: number;
+  /** Printable box after page margins, in CSS pixels. */
+  contentWidthPx: number;
+  contentHeightPx: number;
+  /** Effective print scale as a percentage. */
+  scale: number;
+  /** Zero-based column page index inside the print area. */
+  colPage: number;
+  /** Zero-based row page index inside the print area. */
+  rowPage: number;
+  /** Number of spreadsheet columns/rows in `range`. */
+  colCount: number;
+  rowCount: number;
+}
+
+/** Flat pagination result for one worksheet. */
+export interface XlsxPrintLayout {
+  workbookSheetIndex: number;
+  sheetName: string;
+  pages: XlsxPrintPage[];
+  pageSetup: XlsxPageSetup;
+  printOptions: XlsxPrintOptions;
+  pageMargins: XlsxPageMargins;
+  printAreas: XlsxCellRange[];
+  printTitles: XlsxPrintTitles;
+  paperSize: XlsxPaperSize;
+  /** Effective print scale as a percentage. */
+  scale: number;
+  fitToPage: boolean;
+  /** `true` when a host-provided page cap stopped pagination early. */
+  truncated: boolean;
+}
+
+/** Options accepted by `buildWorksheetPrintLayout`. */
+export interface XlsxPrintLayoutOptions {
+  /** Maximum number of pages to generate. Defaults to 5000. */
+  maxPages?: number;
+}
+
+/** One cell slot rendered by `buildPrintPageGrid`. */
+export interface XlsxPrintPageGridCell {
+  row: number;
+  col: number;
+  rowSpan: number;
+  colSpan: number;
+  /** `true` when a merge anchored earlier on this page covers the slot. */
+  covered: boolean;
+}
+
+/** Row or column slot on a printed page. */
+export interface XlsxPrintPageGridAxis {
+  index: number;
+  /** Unscaled size in CSS pixels at 100%. */
+  sizePx: number;
+}
+
+/** Cell layout for one printed page, including repeated titles and merges. */
+export interface XlsxPrintPageGrid {
+  rows: XlsxPrintPageGridAxis[];
+  columns: XlsxPrintPageGridAxis[];
+  cells: XlsxPrintPageGridCell[];
+}
+
 // ── Sheet data ───────────────────────────────────────────────────────────
 
 export interface XlsxSheetData {
@@ -199,6 +366,20 @@ export interface XlsxSheetData {
   visibility: XlsxSheetVisibility;
   /** Parsed sheet protection; `null` or omitted for unprotected sheets. */
   protection?: XlsxSheetProtection | null;
+  /** Page size, orientation and scaling from `pageSetup`. */
+  pageSetup: XlsxPageSetup;
+  /** Print centering, headings and gridline flags from `printOptions`. */
+  printOptions: XlsxPrintOptions;
+  /** Page margins in inches from `pageMargins`. */
+  pageMargins: XlsxPageMargins;
+  /** Manual row breaks from `rowBreaks`. */
+  rowBreaks: XlsxPageBreak[];
+  /** Manual column breaks from `colBreaks`. */
+  colBreaks: XlsxPageBreak[];
+  /** Areas from `_xlnm.Print_Area`; empty means the whole used range prints. */
+  printAreas: XlsxCellRange[];
+  /** Repeated rows/columns from `_xlnm.Print_Titles`. */
+  printTitles: XlsxPrintTitles;
   columnWidthCharacterWidthPx?: number;
   defaultColWidthPx: number;
   defaultRowHeightPx: number;
@@ -1134,6 +1315,33 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
     /** Resolved number format of the cell, so the viewer can localize it. */
     numberFormat?: XlsxCellNumberFormatInput | null;
   }>;
+  /** Flat print layout of the active sheet, or `null` when none is loaded. */
+  getPrintLayout: () => XlsxPrintLayout | null;
+  /** Pages of the active sheet's current print layout. */
+  printPages: XlsxPrintPage[];
+  /** Current print layout of the active sheet. */
+  printLayout: XlsxPrintLayout | null;
+  /** Whether the grid shows Excel-style dashed page-break preview lines. */
+  isPageBreakPreview: boolean;
+  /** Enables or disables page-break preview on the active sheet. */
+  setPageBreakPreview: (enabled: boolean) => void;
+  /** Whether the print-preview surface is open. */
+  isPrintPreviewOpen: boolean;
+  /**
+   * Opens the print preview for the active sheet.
+   *
+   * @returns `false` when no worksheet is loaded.
+   */
+  openPrintPreview: () => boolean;
+  /** Closes the print preview without printing. */
+  closePrintPreview: () => void;
+  /**
+   * Opens the print preview and asks the host window to print it.
+   *
+   * @returns `false` when no worksheet is loaded or the environment has no
+   *   `window.print`.
+   */
+  print: () => boolean;
   isLoadDeferred: boolean;
   isLoading: boolean;
   isActiveSheetProtected: boolean;

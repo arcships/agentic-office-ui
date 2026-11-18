@@ -4,6 +4,14 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### XLSX page setup and printing (#20)
+
+- Parse `pageSetup`, `printOptions`, `pageMargins`, `rowBreaks`/`colBreaks`, `sheetPr/pageSetUpPr` and the `_xlnm.Print_Area`/`_xlnm.Print_Titles` defined names into `XlsxSheetData`, with an engine fallback for `skipXmlParsing` sources.
+- Add pure pagination to `@arcships/xlsx-core` (`buildWorksheetPrintLayout`, `buildPrintPageGrid`): paper size/orientation, usable margins, fit-to-page scaling, manual breaks, repeated title rows/columns, merged-cell spans and `pageOrder` produce a flat page list of cell ranges with the paper size.
+- Add an Excel-style dashed page-break preview overlay to the grid plus page numbers, and a paginated `XlsxPrintPreview` with paper-sized page blocks, `@media print` output and `window.print()`.
+- Expose `printLayout` / `printPages` / `getPrintLayout()`, `setPageBreakPreview()`, `openPrintPreview()` / `closePrintPreview()` and `print()` on the viewer controller; the toolbar gains page-break and print-preview buttons.
+- Export writes `pageMargins`, `printOptions`, `pageSetUpPr`, manual breaks and print-area/title defined names back into the saved workbook (the engine drops several of them), so export → reload keeps the same pagination; unmodified workbooks still export byte-for-byte unchanged.
+
 ### XLSX chart type editing (#139)
 
 - Add `changeWorkbookChartType()`: classic chart families rebuild the `c:plotArea` while carrying over series names, colours, data labels, point styles and axis formatting, and chartEx families (treemap, sunburst, histogram, pareto, box & whisker, waterfall, funnel, filled map) write a `cx:chartSpace` part with the `chartStyle`/`chartColorStyle` parts, relationships and content-type overrides Excel expects.

@@ -14,6 +14,7 @@ import {
   resolveWorksheetHiddenCols,
   resolveWorksheetHiddenRows,
   resolveWorksheetMergeMetadata,
+  resolveWorksheetPrintState,
   resolveSheetColumnWidthPixels,
   resolveSheetRowHeightPixels,
   revokeWorkbookImageAssets,
@@ -26,6 +27,11 @@ import {
   type XlsxConditionalFormatRule,
   type XlsxDataValidation,
   type XlsxFreezePanes,
+  type XlsxPageBreak,
+  type XlsxPageMargins,
+  type XlsxPageSetup,
+  type XlsxPrintOptions,
+  type XlsxPrintTitles,
   type XlsxResolvedCellStyle,
   type XlsxSheetData,
   type XlsxSheetVisibility,
@@ -199,6 +205,13 @@ export function buildSheetList(
     rowStyleIds?: Record<number, number>;
     showGridLines: boolean;
     sparklines?: XlsxSparkline[];
+    pageSetup?: XlsxPageSetup;
+    printOptions?: XlsxPrintOptions;
+    pageMargins?: XlsxPageMargins;
+    rowBreaks?: XlsxPageBreak[];
+    colBreaks?: XlsxPageBreak[];
+    printAreas?: XlsxCellRange[];
+    printTitles?: XlsxPrintTitles;
   } | null>,
   themePalette?: XlsxThemePalette | null,
   styleById?: Record<number, XlsxResolvedCellStyle> | null,
@@ -212,6 +225,7 @@ export function buildSheetList(
     const worksheet = workbook.getSheet(index);
     try {
       const sheetState = sheetStatesByWorkbookSheetIndex?.[index] ?? null;
+      const printState = resolveWorksheetPrintState(sheetState, worksheet);
       const mergeMetadata = resolveWorksheetMergeMetadata(worksheet);
       const effectiveSheetState = { ...sheetState, ...mergeMetadata };
       const defaultColWidthPx = resolveWorksheetDefaultColumnWidthPixels(
@@ -237,6 +251,7 @@ export function buildSheetList(
           hyperlinks: sheetState?.hyperlinks ?? [],
           comments: sheetState?.comments ?? [],
           dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
+          ...printState,
           defaultColWidthPx,
           defaultRowHeightPx,
           freezePanes: resolveSheetFreezePanes(sheetState, worksheet),
@@ -312,6 +327,7 @@ export function buildSheetList(
         hyperlinks: sheetState?.hyperlinks ?? [],
         comments: sheetState?.comments ?? [],
         dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
+        ...printState,
         defaultColWidthPx,
         defaultRowHeightPx,
         freezePanes: resolveSheetFreezePanes(sheetState, worksheet),

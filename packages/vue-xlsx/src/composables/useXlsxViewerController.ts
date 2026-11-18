@@ -86,6 +86,7 @@ import {
 } from "./workbook-state";
 import { createEditingDomain } from "./editing";
 import { createStructureDomain } from "./structure";
+import { createPrintDomain } from "./print";
 import { createAuthoringDomain } from "./authoring";
 import { createClipboardDomain } from "./clipboard";
 import {
@@ -347,6 +348,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     const tab = activeTab.value;
     return tab?.kind === "sheet" ? sheets.value[tab.sheetIndex ?? -1] ?? null : null;
   });
+  const printDomain = createPrintDomain({ activeSheet, revision });
   const isActiveSheetProtected = computed(() => activeSheet.value?.protection?.enabled === true);
   const isEditingLocked = computed(() => isSheetEditingLocked(
     readOnly.value,
@@ -1680,6 +1682,15 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get isLoadDeferred() { return isLoadDeferred.value; },
     get isLoading() { return isLoading.value; },
     get isActiveSheetProtected() { return isActiveSheetProtected.value; },
+    get isPageBreakPreview() { return printDomain.isPageBreakPreview.value; },
+    get isPrintPreviewOpen() { return printDomain.isPrintPreviewOpen.value; },
+    setPageBreakPreview: printDomain.setPageBreakPreview,
+    openPrintPreview: printDomain.openPrintPreview,
+    closePrintPreview: printDomain.closePrintPreview,
+    print: printDomain.print,
+    getPrintLayout: printDomain.getPrintLayout,
+    get printLayout() { return printDomain.printLayout.value; },
+    get printPages() { return printDomain.printPages.value; },
     get isEditingLocked() { return isEditingLocked.value; },
     get isChartsLoading() { return isChartsLoading.value; },
     get isWorkerBacked() { return isWorkerBacked.value; },

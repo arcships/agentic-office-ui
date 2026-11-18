@@ -2,6 +2,7 @@
   <div
     ref="surfaceRef"
     class="xlsx-sheet-surface"
+    :class="{ 'xlsx-sheet-surface--print-preview': controller.isPrintPreviewOpen }"
     data-testid="xlsx-sheet-surface"
     @keydown="onKeydown"
     @contextmenu="onContextMenu"
@@ -71,6 +72,12 @@
       :is-dark="isDark ?? false"
       @close="authoringKind = null"
     />
+    <XlsxPrintPreview
+      v-if="controller.isPrintPreviewOpen"
+      :controller="controller"
+      :is-dark="isDark ?? false"
+      @close="controller.closePrintPreview()"
+    />
     <div
       v-if="selectionMode === 'region'"
       class="xlsx-sheet-surface__region-layer"
@@ -121,6 +128,7 @@ import XlsxDrawingLayer from "./XlsxDrawingLayer.vue"
 import XlsxSelectionOverlay from "./XlsxSelectionOverlay.vue"
 import XlsxContextMenu from "./XlsxContextMenu.vue"
 import XlsxAuthoringDialog from "./XlsxAuthoringDialog.vue"
+import XlsxPrintPreview from "./XlsxPrintPreview.vue"
 import type { XlsxAuthoringDialogKind } from "./authoring-dialog"
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue"
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch"
@@ -702,5 +710,10 @@ defineExpose({
   box-sizing: border-box;
   pointer-events: none;
   position: absolute;
+}
+
+@media print {
+  .xlsx-sheet-surface--print-preview > :not(.xlsx-print-preview) { display: none !important; }
+  .xlsx-sheet-surface { overflow: visible !important; }
 }
 </style>
