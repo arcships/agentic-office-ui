@@ -20,6 +20,21 @@ export interface PptxObjectIdentity {
   nodeType: string
   geometry?: PptxObjectGeometry
   text?: string
+  /**
+   * Hyperlinks carried by this object, in document order. Hover links are
+   * reported but never executed automatically; hosts use them for tooltips.
+   */
+  hyperlinks?: readonly PptxObjectHyperlink[]
+}
+
+/** One `a:hlinkClick` / `a:hlinkHover` entry, resolved against the slide relationships. */
+export interface PptxObjectHyperlink {
+  trigger: "click" | "hover"
+  kind: "go-to-slide" | "open-url" | "mailto" | "unsupported"
+  targetSlideIndex?: number
+  url?: string
+  /** Raw `tooltip` attribute; PowerPoint falls back to the URL for external links. */
+  tooltip?: string
 }
 
 export type PptxMorphMatchMethod =
@@ -254,6 +269,8 @@ export interface PptxSlideAction {
   kind: "go-to-slide" | "open-url" | "mailto" | "unsupported"
   targetSlideIndex?: number
   url?: string
+  /** Raw `tooltip` attribute from the same `a:hlinkClick` / `a:hlinkHover`. */
+  tooltip?: string
   rawAction?: string
 }
 

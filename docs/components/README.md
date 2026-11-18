@@ -87,5 +87,8 @@
 | `selection-change` | `{ kind: "slide", slideIndex }` |
 | `object-click` | `{ kind: "object", slideIndex, objectKey }` |
 | `context-menu` | `kind: "slide"` 时禁止 `objectKey`；`kind: "object"` 时必须包含 `objectKey`；两者都含 `slideIndex`、`clientX/Y`、`containerX/Y` |
+| `link-activate` | `{ slideIndex, objectKey }`；链接形状获得焦点后按 `Enter`/`Space` |
+
+链接形状会获得 `title`（`tooltip`，缺省时回退到 URL）、`data-pptx-hyperlink*` 标记和（点击链接的）`role="link"` + `tabindex="0"`；`PptxViewer` 默认使用这些标记完成点击/键盘打开，自定义界面可以只监听 `link-activate` 并自行处理。
 
 页面编号从零开始。`objectKey` 是渲染会话生成的稳定对象标识；宿主不应自行解析其字符串结构。

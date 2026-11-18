@@ -158,6 +158,7 @@ const suites = {
       "tests/unit/pptx-baseline-contract.test.mjs",
       "tests/unit/pptx-reference-adapter.test.mjs",
       "tests/unit/pptx-rtl.test.mjs",
+      "tests/unit/pptx-hyperlinks.test.mjs",
       "tests/unit/core-purity.test.mjs",
     ]),
     command("core-boundary", process.execPath, [
@@ -216,6 +217,7 @@ const suites = {
       "tests/component/office-reference-surfaces.test.mjs",
       "tests/component/docx-reference-surfaces.test.mjs",
       "tests/component/pptx-preview.test.mjs",
+      "tests/component/pptx-hyperlinks.test.mjs",
       "tests/component/xlsx-race.test.mjs",
       "tests/component/xlsx-export.test.mjs",
       "tests/component/xlsx-deferred-load.test.mjs",

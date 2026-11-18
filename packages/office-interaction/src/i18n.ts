@@ -1170,6 +1170,15 @@ export interface OfficePptxMessages {
     resumeMedia: string
     resumeMediaAction: string
     fullscreen: string
+    /** Built-in right-click link menu and its two entries. */
+    link: {
+      /** Accessible name of the menu. */
+      menu: string
+      open: string
+      copy: string
+      /** Template with a `{number}` placeholder. */
+      openSlide: string
+    }
     capability: {
       /** Template with `{count}` and `{total}` placeholders. */
       strict: string
@@ -2394,6 +2403,12 @@ export const officeMessagesEn: OfficeMessages = {
       resumeMedia: "Resume media",
       resumeMediaAction: "Resume media playback",
       fullscreen: "Fullscreen",
+      link: {
+        menu: "Link actions",
+        open: "Open link",
+        copy: "Copy link",
+        openSlide: "Go to slide {number}",
+      },
       capability: {
         strict: "Exact {count}/{total}",
         approximate: "Approximate {count}",
@@ -3576,6 +3591,12 @@ export const officeMessagesZhCN: OfficeMessages = {
       resumeMedia: "继续媒体",
       resumeMediaAction: "继续播放媒体",
       fullscreen: "全屏",
+      link: {
+        menu: "链接操作",
+        open: "打开链接",
+        copy: "复制链接",
+        openSlide: "跳到第 {number} 页",
+      },
       capability: {
         strict: "精确 {count}/{total}",
         approximate: "近似 {count}",

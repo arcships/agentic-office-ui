@@ -32,6 +32,7 @@ const document = usePptxDocument(element, {
 function onSelection(selection: PptxStageSelection) {}
 function onObjectClick(object: PptxStageObjectClick) {}
 function onContextMenu(context: PptxStageContextMenu) {}
+function onLinkActivate(target: PptxStageLinkActivate) {}
 </script>
 
 <template>
@@ -41,6 +42,7 @@ function onContextMenu(context: PptxStageContextMenu) {}
     @selection-change="onSelection"
     @object-click="onObjectClick"
     @context-menu="onContextMenu"
+    @link-activate="onLinkActivate"
   />
 </template>
 ```

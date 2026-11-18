@@ -6,7 +6,7 @@
     @click="onClick"
     @pointermove="onReferencePointerMove"
     @mouseup="onTextSelectionMouseUp"
-    @keydown.esc="onReferenceEscape"
+    @keydown="onStageKeydown"
     @contextmenu.prevent="onContextMenu"
   >
     <div ref="elementRef" class="pptx-stage__content" />
@@ -32,6 +32,7 @@ import { clampSurfaceZoom, nextSurfaceZoom } from "@arcships/office-runtime/gest
 import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures"
 import type {
   PptxStageContextMenu,
+  PptxStageLinkActivate,
   PptxStageObjectClick,
   PptxStageSelection,
 } from "./headless-types"
@@ -209,6 +210,8 @@ const emit = defineEmits<{
   contextMenu: [ctx: PptxStageContextMenu]
   selectionChange: [selection: PptxStageSelection]
   objectClick: [object: PptxStageObjectClick]
+  /** A focused linked shape was activated with Enter/Space. */
+  linkActivate: [target: PptxStageLinkActivate]
   "update:zoom": [zoom: number]
   documentRevisionChange: [revision: OfficeDocumentRevision]
   referenceCandidateChange: [change: { candidates: readonly OfficeReferenceCandidatePreview[]; activeCandidateId?: string }]
@@ -491,6 +494,31 @@ function onClick(event: MouseEvent): void {
 
 function onReferenceEscape(): void {
   if (selectionMode.value !== "content") emit("selectionCancel", { mode: selectionMode.value, reason: "escape" })
+}
+
+/**
+ * Keyboard activation for linked shapes.
+ *
+ * `applyPptxObjectMarkers()` marks click links as `role="link" tabindex="0"`;
+ * Enter/Space then behaves like a pointer click on the shape. The event stays
+ * out of the viewer's browse-scroll map so Space does not also scroll.
+ */
+function onStageKeydown(event: KeyboardEvent): void {
+  if (event.key === "Escape") {
+    onReferenceEscape()
+    return
+  }
+  if (event.key !== "Enter" && event.key !== " " && event.key !== "Spacebar") return
+  const target = event.target as Element | null
+  const linked = typeof target?.closest === "function"
+    ? target.closest<HTMLElement>("[data-pptx-object-key][data-pptx-hyperlink='click']")
+    : null
+  if (!linked) return
+  const hit = resolveHitAt(event.target)
+  if (!hit?.objectKey) return
+  event.preventDefault()
+  event.stopPropagation()
+  emit("linkActivate", { slideIndex: hit.slideIndex, objectKey: hit.objectKey })
 }
 
 function slideAtPoint(clientX: number, clientY: number): HTMLElement | undefined {

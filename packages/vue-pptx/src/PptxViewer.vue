@@ -184,6 +184,8 @@
           :scroll-container="stageScrollRef"
           @update:zoom="run(() => setZoom($event * 100))"
           @click="run(() => onStageClick($event))"
+          @context-menu="onStageContextMenu"
+          @link-activate="run(() => onLinkActivate($event))"
         />
       </main>
 
@@ -233,6 +235,44 @@
       </div>
     </div>
 
+    <div
+      v-if="contextMenuVisible"
+      class="pptx-viewer__context-backdrop"
+      data-testid="pptx-context-menu-backdrop"
+      @pointerdown="closeContextMenu"
+      @contextmenu.prevent="closeContextMenu"
+    />
+    <div
+      v-if="contextMenuVisible"
+      ref="contextMenuRef"
+      class="pptx-viewer__context-menu"
+      role="menu"
+      tabindex="-1"
+      data-testid="pptx-context-menu"
+      :aria-label="m.pptx.viewer.link.menu"
+      :style="contextMenuStyle"
+      @contextmenu.prevent
+      @keydown="onContextMenuKeydown"
+    >
+      <button
+        type="button"
+        class="pptx-viewer__context-item"
+        role="menuitem"
+        tabindex="-1"
+        data-testid="pptx-context-menu-open-link"
+        @click="run(openContextMenuLink)"
+      >{{ contextMenuOpenLabel }}</button>
+      <button
+        v-if="contextMenuCopyValue"
+        type="button"
+        class="pptx-viewer__context-item"
+        role="menuitem"
+        tabindex="-1"
+        data-testid="pptx-context-menu-copy-link"
+        @click="run(copyContextMenuLink)"
+      >{{ m.pptx.viewer.link.copy }}</button>
+    </div>
+
     <footer v-if="isPresent && showPlaybackControls" class="pptx-viewer__playback-controls">
       <div class="pptx-viewer__playback-group">
         <button type="button" :disabled="state !== 'ready'" :aria-label="m.pptx.viewer.previousStep" @click="void invoke(previous)">{{ m.pptx.viewer.previousStep }}</button>
@@ -271,10 +311,12 @@ import {
   PptxPlaybackError,
   PptxPreviewError,
   type PptxCapabilityReport,
+  type PptxPlaybackDocument,
   type PptxPlaybackWarning,
   type PptxPreviewDocument,
   type PptxPreviewLimits,
   type PptxPreviewWarning,
+  type PptxSlideAction,
 } from "@arcships/pptx-core"
 import {
   createPptxDocumentSession,
@@ -291,11 +333,23 @@ import {
   type PptxPreviewSource,
 } from "@arcships/pptx-core/browser"
 import type { PptxSearchState, UsePptxDocumentOptions, PptxStageExpose } from "./headless-types"
-import { OfficeLiveStatus, isEditableViewerTarget, isInteractiveViewerTarget, useFileDrop, useViewerKeys, FILE_DROP_OUTLINE } from "@arcships/vue-ui"
+import type { PptxStageContextMenu, PptxStageLinkActivate } from "./headless-types"
+import { OfficeLiveStatus, isEditableViewerTarget, isInteractiveViewerTarget, useFileDrop, useOfficeMenuKeyboard, useViewerKeys, FILE_DROP_OUTLINE } from "@arcships/vue-ui"
 import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import { providePptxMessages } from "./i18n"
+import {
+  createPptxActionRequest,
+  createPptxLinkIndex,
+  openPptxLink,
+  pptxLinkCopyValue,
+  resolvePptxLinkEntry,
+  resolvePptxLinkTarget,
+  sanitizePptxActionRequest,
+  type PptxLinkEntry,
+  type PptxLinkTarget,
+} from "./links"
 import { PPTX_FILE_EXTENSIONS, PPTX_FILE_MIME_TYPES } from "./pptx-file-types"
 import { usePptxDocument } from "./composables/usePptxDocument"
 import { usePptxPlayback } from "./composables/usePptxPlayback"
@@ -330,6 +384,13 @@ const props = withDefaults(defineProps<{
   showSidebar?: boolean
   showToolbar?: boolean
   showWarnings?: boolean
+  /** Built-in link menu (open link / copy link) on right click. */
+  showContextMenu?: boolean
+  /**
+   * `built-in` opens approved links and copies them from the context menu;
+   * `host` only emits `action`/`contextMenu` and leaves the policy to the host.
+   */
+  linkHandling?: "built-in" | "host"
   thumbnailWidth?: number
   /** Browse layout: one slide list (`single`) or a slide-sorter grid (`sorter`). */
   viewMode?: "single" | "sorter" | null
@@ -359,6 +420,8 @@ const props = withDefaults(defineProps<{
   showSidebar: true,
   showToolbar: true,
   showWarnings: true,
+  showContextMenu: true,
+  linkHandling: "built-in" as "built-in" | "host",
   thumbnailWidth: 148,
   viewMode: null,
   defaultViewMode: "single" as "single" | "sorter",
@@ -384,6 +447,8 @@ const emit = defineEmits<{
   documentError: [error: PptxPreviewError]
   /** A supported presentation was dropped; the viewer opened it through `usePptxDocument`. */
   fileDrop: [file: File]
+  /** Right-click on a slide or object; hosts can replace the built-in link menu. */
+  contextMenu: [ctx: PptxStageContextMenu]
   /** The browse layout toggle changed; hosts can drive the `viewMode` prop. */
   "update:viewMode": [mode: "single" | "sorter"]
 }>()
@@ -845,11 +910,203 @@ function onPlaybackEvent(event: PptxPlaybackEvent): void {
   } else if (event.type === "mediarequest") {
     emit("mediaRequest", event.mediaId)
   } else if (event.type === "action") {
-    emit("action", event.action)
+    // Present mode: the controller already navigated internal jumps, so only
+    // external targets need the built-in opener. The host still sees the same
+    // action request, re-checked against the shared URL policy.
+    const action = sanitizePptxActionRequest(event.action)
+    if (props.linkHandling !== "host" && (action.kind === "open-url" || action.kind === "mailto")) {
+      openPptxLink(action.url)
+    }
+    emit("action", action)
   } else if (event.type === "error") {
     emit("playbackError", event.error)
   }
 }
+
+// ── Hyperlinks and the built-in link menu ───────────────────────────
+// The playback parser resolves shape links for every render mode; browse mode
+// has no playback controller, so the viewer routes them itself. Both modes
+// share `resolvePptxLinkTarget()` (the office link policy) and both keep
+// emitting `action` for hosts.
+const CONTEXT_MENU_FALLBACK_WIDTH_PX = 208
+const CONTEXT_MENU_FALLBACK_HEIGHT_PX = 92
+const CONTEXT_MENU_MARGIN_PX = 8
+
+interface ContextMenuState {
+  slideIndex: number
+  objectKey: string
+  x: number
+  y: number
+  action: PptxSlideAction
+  target: PptxLinkTarget
+}
+
+const EMPTY_LINK_INDEX: ReadonlyMap<string, PptxLinkEntry> = new Map()
+const contextMenu = shallowRef<ContextMenuState | null>(null)
+const contextMenuRef = ref<HTMLElement | null>(null)
+const contextMenuStyle = ref<Record<string, string>>({})
+const contextMenuVisible = computed(() => contextMenu.value !== null && props.showContextMenu !== false)
+const contextMenuCopyValue = computed(() => {
+  const target = contextMenu.value?.target
+  return target ? pptxLinkCopyValue(target) : undefined
+})
+const contextMenuOpenLabel = computed(() => {
+  const target = contextMenu.value?.target
+  if (target?.kind === "slide") {
+    return formatOfficeMessage(m.value.pptx.viewer.link.openSlide, { number: target.slideIndex + 1 })
+  }
+  return m.value.pptx.viewer.link.open
+})
+
+function currentPlaybackDocument(): PptxPlaybackDocument | null {
+  return pptxDocument.getSession()?.playbackDocument ?? null
+}
+
+// Reads `document` so a newly opened deck builds a fresh index.
+const linkIndex = computed<ReadonlyMap<string, PptxLinkEntry>>(() => {
+  if (state.value !== "ready" || !document.value) return EMPTY_LINK_INDEX
+  return createPptxLinkIndex(currentPlaybackDocument())
+})
+
+function linkActionFor(slideIndex: number, objectKey: string | undefined, trigger: "click" | "hover" = "click"): PptxSlideAction | undefined {
+  if (!objectKey || !Number.isInteger(slideIndex)) return undefined
+  return resolvePptxLinkEntry(linkIndex.value, slideIndex, objectKey)?.[trigger]
+}
+
+async function applyLinkTarget(target: PptxLinkTarget): Promise<void> {
+  if (props.linkHandling === "host") return
+  if (target.kind === "slide") {
+    await goTo(target.slideIndex)
+  } else if (target.kind === "url") {
+    openPptxLink(target.url)
+  }
+}
+
+/** Activate a parsed link: report it to the host, then run the built-in policy. */
+async function activateLink(action: PptxSlideAction): Promise<void> {
+  const target = resolvePptxLinkTarget(action)
+  emit("action", createPptxActionRequest(action, target))
+  await applyLinkTarget(target)
+}
+
+function objectKeyFromEvent(event: MouseEvent): { slideIndex: number; objectKey?: string } | null {
+  const target = event.target as Element | null
+  if (typeof target?.closest !== "function") return null
+  const slideElement = target.closest<HTMLElement>("[data-slide-index]")
+  const slideIndex = Number(slideElement?.dataset.slideIndex)
+  if (!Number.isInteger(slideIndex) || slideIndex < 0) return null
+  return {
+    slideIndex,
+    objectKey: target.closest<HTMLElement>("[data-pptx-object-key]")?.dataset.pptxObjectKey || undefined,
+  }
+}
+
+/**
+ * Browse-mode link clicks.
+ *
+ * The renderer already turns some text runs into anchors; once the shape has a
+ * parsed action the viewer owns the click so the URL policy applies once and
+ * the link does not also open natively.
+ */
+function onBrowseLinkClick(event: MouseEvent): void {
+  const hit = objectKeyFromEvent(event)
+  if (!hit?.objectKey) return
+  const action = linkActionFor(hit.slideIndex, hit.objectKey)
+  if (!action) return
+  if (props.linkHandling !== "host") event.preventDefault?.()
+  run(() => activateLink(action))
+}
+
+async function onLinkActivate(target: PptxStageLinkActivate): Promise<void> {
+  if (isPresent.value) {
+    // Present mode goes through the controller so it also runs the click-trigger
+    // animation; the controller emits the action the viewer then opens.
+    await invoke(async () => {
+      await requireController().activateObject(target.objectKey)
+    })
+    return
+  }
+  const action = linkActionFor(target.slideIndex, target.objectKey)
+  if (action) await activateLink(action)
+}
+
+function onStageContextMenu(context: PptxStageContextMenu): void {
+  emit("contextMenu", context)
+  if (props.showContextMenu === false || state.value !== "ready" || context.kind !== "object") {
+    closeContextMenu()
+    return
+  }
+  const action = linkActionFor(context.slideIndex, context.objectKey)
+  const target = resolvePptxLinkTarget(action)
+  if (!action || target.kind === "unsupported") {
+    closeContextMenu()
+    return
+  }
+  menuKeyboard.captureInvoker()
+  contextMenu.value = {
+    slideIndex: context.slideIndex,
+    objectKey: context.objectKey,
+    x: context.clientX,
+    y: context.clientY,
+    action,
+    target,
+  }
+  positionContextMenu(context.clientX, context.clientY)
+  void nextTick(() => {
+    positionContextMenu(context.clientX, context.clientY)
+    menuKeyboard.focusFirst()
+  })
+}
+
+function positionContextMenu(x: number, y: number): void {
+  const rect = contextMenuRef.value?.getBoundingClientRect?.()
+  const width = rect && rect.width > 0 ? rect.width : CONTEXT_MENU_FALLBACK_WIDTH_PX
+  const height = rect && rect.height > 0 ? rect.height : CONTEXT_MENU_FALLBACK_HEIGHT_PX
+  const viewportWidth = Number(globalThis.innerWidth) || 0
+  const viewportHeight = Number(globalThis.innerHeight) || 0
+  const left = viewportWidth > 0
+    ? Math.min(x, Math.max(CONTEXT_MENU_MARGIN_PX, viewportWidth - width - CONTEXT_MENU_MARGIN_PX))
+    : x
+  const top = viewportHeight > 0
+    ? Math.min(y, Math.max(CONTEXT_MENU_MARGIN_PX, viewportHeight - height - CONTEXT_MENU_MARGIN_PX))
+    : y
+  contextMenuStyle.value = { left: `${left}px`, top: `${top}px` }
+}
+
+function closeContextMenu(): void {
+  contextMenu.value = null
+}
+
+const menuKeyboard = useOfficeMenuKeyboard({
+  menu: () => contextMenuRef.value,
+  close: closeContextMenu,
+})
+
+function onContextMenuKeydown(event: KeyboardEvent): void {
+  menuKeyboard.onKeydown(event)
+}
+
+async function openContextMenuLink(): Promise<void> {
+  const state = contextMenu.value
+  closeContextMenu()
+  if (!state) return
+  await activateLink(state.action)
+}
+
+async function copyContextMenuLink(): Promise<void> {
+  const value = contextMenuCopyValue.value
+  closeContextMenu()
+  if (!value) return
+  const clipboard = (globalThis.navigator as { clipboard?: { writeText?: (text: string) => Promise<void> } } | undefined)?.clipboard
+  try {
+    await clipboard?.writeText?.(value)
+  } catch {
+    // Copying is a convenience; a blocked clipboard leaves the link untouched.
+  }
+}
+
+// A menu that outlives its target would act on the wrong slide.
+watch([document, activeIndex, state, () => props.mode], closeContextMenu)
 
 function requireSession(): PptxPreviewSession {
   const session = pptxDocument.getSession()
@@ -1032,16 +1289,24 @@ async function exitFullscreen(): Promise<void> {
 }
 
 async function onStageClick(event: MouseEvent): Promise<void> {
-  if (!isPresent.value || state.value !== "ready") return
+  if (state.value !== "ready") return
+  if (!isPresent.value) {
+    onBrowseLinkClick(event)
+    return
+  }
   viewerRef.value?.focus()
   const target = event.target as Element | null
   const objectElement = typeof target?.closest === "function"
     ? target.closest<HTMLElement>("[data-pptx-object-key]")
     : null
+  const objectKey = objectElement?.dataset.pptxObjectKey
+  // A nested text anchor would open natively in addition to the action; when
+  // the shape has a parsed link the viewer owns the single, policy-checked open.
+  if (objectKey && linkActionFor(playbackSnapshot.value?.slideIndex ?? activeIndex.value, objectKey)) {
+    event.preventDefault?.()
+  }
   await invoke(async () => {
-    const handled = objectElement?.dataset.pptxObjectKey
-      ? await requireController().activateObject(objectElement.dataset.pptxObjectKey)
-      : false
+    const handled = objectKey ? await requireController().activateObject(objectKey) : false
     if (!handled) await next()
   })
 }

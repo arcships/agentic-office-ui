@@ -2,6 +2,7 @@ import {
   PptxViewer,
   buildPresentation,
   type PptxFiles,
+  type PresentationData,
   type SearchHighlightHandle,
   type TextSearchResult,
 } from "@aiden0z/pptx-renderer"
@@ -217,7 +218,13 @@ export function createPptxDocumentSession(
     },
     onSlideRendered(index, element) {
       const slide = viewer.presentationData?.slides[index]
-      if (slide) applyPptxObjectMarkers(element, slide.slidePath)
+      if (!slide) return
+      // A superseded open parses a deck without ever installing it; only the
+      // playback document that belongs to the rendered presentation is valid.
+      const objects = viewer.presentationData === renderPresentation
+        ? renderPlaybackDocument?.slides[index]?.objects
+        : currentPlaybackDocument?.slides[index]?.objects
+      applyPptxObjectMarkers(element, slide.slidePath, objects)
     },
   })
   let viewer = createViewer(baseLimits)
@@ -226,6 +233,10 @@ export function createPptxDocumentSession(
   let currentDocument: PptxPreviewDocument | null = null
   let currentArchive: PptxFiles | null = null
   let currentPlaybackDocument: PptxPlaybackDocument | null = null
+  // The parsed deck is available before the first render, so `onSlideRendered`
+  // can mirror hyperlink metadata that the renderer itself does not surface.
+  let renderPlaybackDocument: PptxPlaybackDocument | null = null
+  let renderPresentation: PresentationData | null = null
   let disposed = false
   const renderMode = options.renderMode ?? "slide"
   const listOptions = {
@@ -338,6 +349,8 @@ export function createPptxDocumentSession(
           externalMedia: options.externalMedia ?? "disabled",
         })
         task.assertCurrent()
+        renderPlaybackDocument = playbackDocument
+        renderPresentation = presentation
         const initialSlide = Math.min(
           Math.max(Math.trunc(openOptions.initialSlide ?? 0), 0),
           Math.max(presentation.slides.length - 1, 0),
@@ -407,6 +420,8 @@ export function createPptxDocumentSession(
           currentDocument = null
           currentArchive = null
           currentPlaybackDocument = null
+          renderPlaybackDocument = null
+          renderPresentation = null
           searchCache.clear()
           releaseMediaUrls()
           for (const controller of playbackControllers) controller.dispose()
@@ -502,6 +517,8 @@ export function createPptxDocumentSession(
       currentDocument = null
       currentArchive = null
       currentPlaybackDocument = null
+      renderPlaybackDocument = null
+      renderPresentation = null
       for (const controller of playbackControllers) controller.dispose()
       playbackControllers.clear()
       searchCache.clear()

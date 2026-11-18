@@ -199,7 +199,7 @@ type PptxStageContextMenu = PptxStageContextMenuPosition & (
 <div class="pptx-stage" data-testid="pptx-stage" />
 ```
 
-组件把 `class`、`style`、无障碍属性和普通 DOM 事件透传到根元素，不自行定义加载状态、尺寸或焦点行为。点击页面时发出 `selection-change`；点击带 `data-pptx-object-key` 的对象时再发出 `object-click`；右键页面或对象时发出带目标与坐标的 `context-menu`。使用者可以不用该组件，直接把普通 `<div>` 传给 `usePptxDocument`，但这时需要自行实现上述事件派生。
+组件把 `class`、`style`、无障碍属性和普通 DOM 事件透传到根元素，不自行定义加载状态、尺寸或焦点行为。点击页面时发出 `selection-change`；点击带 `data-pptx-object-key` 的对象时再发出 `object-click`；右键页面或对象时发出带目标与坐标的 `context-menu`；链接形状获得焦点后按 `Enter`/`Space` 发出 `link-activate`。链接标记（`title`、`data-pptx-hyperlink*`、`role="link"`、`tabindex`）由 `applyPptxObjectMarkers()` 在渲染后写入。使用者可以不用该组件，直接把普通 `<div>` 传给 `usePptxDocument`，但这时需要自行实现上述事件派生。
 
 ## 7. 最小用法
 
