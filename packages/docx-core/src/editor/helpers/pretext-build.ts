@@ -659,8 +659,9 @@ export function buildParagraphPretextLayoutItems(
 /**
  * Returns the single measurement font shared by every non-empty run of this
  * pretext source, or `undefined` if there are atomic items (images, tabs)
- * or the runs vary in font. Callers can use this to take a fast
- * `measureLineStats`-based line count path when it returns a value.
+ * or the runs vary in font. The line-count fast path uses
+ * `resolveUniformPretextSourceTypography()` so it also requires matching
+ * kerning and feature settings.
  */
 export function resolveUniformPretextSourceFont(
   paragraph: ParagraphNode,
@@ -700,6 +701,55 @@ export function resolveUniformPretextSourceFont(
 
   paragraphPretextUniformFontBySource.set(source, uniformFont ?? null);
   return uniformFont;
+}
+
+export interface UniformPretextSourceTypography {
+  font: string;
+  fontKerning: "auto" | "normal" | "none";
+  fontFeatureSettings: string;
+}
+
+/**
+ * Font and typography shared by every non-empty text run. The fast
+ * `measureLineStats` path may only be used when kerning and feature settings
+ * are identical too; otherwise it would measure a different face than the
+ * per-run prepared text the render layout uses.
+ */
+export function resolveUniformPretextSourceTypography(
+  paragraph: ParagraphNode,
+  source: ParagraphPretextLayoutSource
+): UniformPretextSourceTypography | undefined {
+  const paragraphBaseFontPx = paragraphBaseFontSizePx(paragraph);
+  let uniform: UniformPretextSourceTypography | undefined;
+
+  for (const run of source.runs) {
+    if (run.endOffset <= run.startOffset) {
+      continue;
+    }
+    if (run.kind !== "text") {
+      return undefined;
+    }
+
+    const font = resolveMeasureFontForText(
+      run.text,
+      run.style,
+      paragraphBaseFontPx
+    );
+    const typography = measureItemTypography(run.style, font);
+    if (!uniform) {
+      uniform = { font, ...typography };
+      continue;
+    }
+    if (
+      uniform.font !== font ||
+      uniform.fontKerning !== typography.fontKerning ||
+      uniform.fontFeatureSettings !== typography.fontFeatureSettings
+    ) {
+      return undefined;
+    }
+  }
+
+  return uniform;
 }
 
 export function buildMeasureSegmentsPretextLayoutItems(

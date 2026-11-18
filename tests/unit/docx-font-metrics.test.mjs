@@ -62,8 +62,8 @@ class FixtureCanvasContext {
       const pairCount = (text.match(/AV/g) ?? []).length;
       width -= pairCount * 1.2;
     }
-    if (this.textRendering !== "optimizeSpeed" && /fi/.test(text)) {
-      width -= 2;
+    if (this.textRendering !== "optimizeSpeed") {
+      width -= (text.match(/fi/g) ?? []).length * 2;
     }
     return {
       width: width * widthScale,
@@ -496,6 +496,71 @@ test("Latin line breaks agree between the estimator and the render layout at a 1
   assert.equal(core.paragraphLineCountWithinWidth(latinParagraph, 83), 3);
   assert.equal(core.paragraphLineCountWithinWidth(latinParagraph, 84), 2);
   assert.equal(renderedLineWidths(latinParagraph, 84).lineCount, 2);
+});
+
+test("line breaks use the same kerning and ligature settings as the painted run", () => {
+  const plainStyle = { ...TEXT_STYLE, kerningMinFontSizePt: undefined };
+  const kernedStyle = {
+    ...TEXT_STYLE,
+    kerningMinFontSizePt: 12,
+    ligatures: "standard",
+  };
+  const plainParagraph = paragraph("AVAV fi fi", plainStyle);
+  const kernedParagraph = paragraph("AVAV fi fi", kernedStyle);
+
+  const plainLayout = renderedLineWidths(plainParagraph, 200);
+  const kernedLayout = renderedLineWidths(kernedParagraph, 200);
+  const plainWidth = plainLayout.widths.reduce((sum, width) => sum + width, 0);
+  const kernedWidth = kernedLayout.widths.reduce((sum, width) => sum + width, 0);
+  const plainMeasured = core.measureTextWidthPx("AVAV fi fi", plainStyle, 16);
+  const kernedMeasured = core.measureTextWidthPx("AVAV fi fi", kernedStyle, 16);
+
+  assert.ok(Math.abs(plainWidth - plainMeasured) <= 1);
+  assert.ok(Math.abs(kernedWidth - kernedMeasured) <= 1);
+  assert.ok(
+    kernedWidth < plainWidth - 4,
+    "kerning and the fi ligatures must narrow the layout line"
+  );
+
+  // 84px: the no-kern/no-ligature run wraps; the kerned run still fits.
+  assert.equal(core.paragraphLineCountWithinWidth(plainParagraph, 84), 2);
+  assert.equal(core.paragraphLineCountWithinWidth(kernedParagraph, 84), 1);
+  assert.equal(renderedLineWidths(plainParagraph, 84).lineCount, 2);
+  assert.equal(renderedLineWidths(kernedParagraph, 84).lineCount, 1);
+
+  for (const widthPx of [plainLayout, kernedLayout]) {
+    for (const lineText of widthPx.texts) {
+      const lineWidth = core.measureTextWidthPx(
+        lineText,
+        widthPx === plainLayout ? plainStyle : kernedStyle,
+        16
+      );
+      assert.ok(lineWidth <= 200 + 1);
+    }
+  }
+});
+
+test("per-run kerning and feature settings survive the measured break engine", () => {
+  const plainStyle = { ...TEXT_STYLE, kerningMinFontSizePt: undefined };
+  const kernedStyle = {
+    ...TEXT_STYLE,
+    kerningMinFontSizePt: 12,
+    ligatures: "standard",
+  };
+  const mixed = {
+    type: "paragraph",
+    children: [
+      { type: "text", text: "AVAV ", style: plainStyle },
+      { type: "text", text: "fi fi", style: kernedStyle },
+    ],
+  };
+  const layout = renderedLineWidths(mixed, 200);
+  const actual = layout.widths.reduce((sum, width) => sum + width, 0);
+  const expected =
+    core.measureTextWidthPx("AVAV ", plainStyle, 16) +
+    core.measureTextWidthPx("fi fi", kernedStyle, 16);
+  assert.ok(Math.abs(actual - expected) <= 1);
+  assert.equal(core.paragraphLineCountWithinWidth(mixed, 200), layout.lineCount);
 });
 
 test("CJK line breaks match between estimator and render layout", () => {

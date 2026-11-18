@@ -81,6 +81,8 @@ const suites = {
       "tests/unit/docx-revision-display.test.mjs",
       "tests/unit/docx-typography.test.mjs",
       "tests/unit/docx-font-metrics.test.mjs",
+      "tests/unit/docx-line-break-metrics.test.mjs",
+      "tests/unit/docx-pagination-performance.test.mjs",
       "tests/unit/docx-paragraph-spacing.test.mjs",
       "tests/unit/docx-line-metrics.test.mjs",
       "tests/unit/docx-pagination-fidelity.test.mjs",
