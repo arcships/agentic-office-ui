@@ -178,6 +178,18 @@ def image_snapshot(page: Page) -> dict[str, object]:
     )
 
 
+def text_layer_text(page: Page) -> str:
+    """Read the text layer as contiguous text.
+
+    `innerText` inserts a line break for every absolutely positioned glyph
+    span even though the spans are in reading order. `textContent` is the DOM's
+    actual extraction path and keeps words and sentences contiguous.
+    """
+    return page.locator('[data-testid="pdf-text-layer"]').evaluate(
+        "element => element.textContent || ''"
+    )
+
+
 def document_snapshot(page: Page) -> dict[str, object]:
     return page.locator('[data-testid="pdf-document"]').evaluate(
         """element => ({
@@ -628,7 +640,14 @@ def pdf_008_file_size_limit(
     page.locator('[data-testid="pdf-max-file-size"]').fill(str(rejected_limit))
     page.locator('[data-testid="pdf-apply-max-file-size"]').click()
     assert active_limit.get_attribute("data-bytes") == str(rejected_limit)
-    page.locator('[data-testid="pdf-load-sample"]').click()
+    # Changing the public limit reloads the active source automatically; the
+    # rejection must happen without opening another engine or retaining a page.
+    # The loader rejects from Content-Length before reading the body, so the
+    # browser reports that deliberate stream cancellation as ERR_ABORTED.
+    evidence.allow_request_abort(
+        f"{BASE_URL}/samples/sample.pdf",
+        reason="PDF_TOO_LARGE rejects the response before reading the body",
+    )
     page.wait_for_function(
         """() => document.querySelector('[data-testid="page-status"]')?.dataset.state === 'error' &&
           document.querySelector('[data-testid="pdf-page-load-error"]')?.dataset.errorCode === 'PDF_TOO_LARGE'""",
@@ -675,7 +694,8 @@ def pdf_008_file_size_limit(
     page.locator('[data-testid="pdf-max-file-size"]').fill(str(default_limit))
     page.locator('[data-testid="pdf-apply-max-file-size"]').click()
     assert active_limit.get_attribute("data-bytes") == str(default_limit)
-    page.locator('[data-testid="pdf-load-sample"]').click()
+    # Restoring the limit also reloads automatically, exercising recovery from
+    # the same public configuration instead of a duplicated manual load.
     wait_for_rendered_page(page, 1, "sample.pdf")
     recovered = {"document": document_snapshot(page), "image": image_snapshot(page)}
     assert recovered["document"]["pageCount"] == 4, recovered
@@ -689,6 +709,7 @@ def pdf_008_file_size_limit(
         "errorCode": "PDF_TOO_LARGE",
         "rejectedRequestId": rejected_request_id,
         "rejectedDiagnosticTypes": rejected_types,
+        "requestAborts": evidence.expected_request_aborts,
         "wasmResponsesBefore": baseline_wasm,
         "wasmResponsesAfterRejectedLoad": rejected_wasm,
         "workersBefore": baseline_workers,
@@ -738,8 +759,13 @@ def pdf_009_encrypted_document(
     assert unlocked["document"]["activePage"] == 1, unlocked
     text_layer = page.locator('[data-testid="pdf-text-layer"]')
     text_layer.wait_for(state="visible", timeout=10_000)
-    unlocked_text = text_layer.inner_text()
-    assert "Encrypted" in unlocked_text, unlocked_text
+    unlocked_text = text_layer_text(page)
+    assert "Encrypted Contract 1" in unlocked_text, unlocked_text
+    assert "Encrypted page 1 row 1" in unlocked_text, unlocked_text
+    assert "\n" not in unlocked_text, {
+        "message": "text layer extraction must stay contiguous",
+        "text": unlocked_text[:200],
+    }
     assert page.locator('[data-testid="pdf-page-load-error"]').count() == 0
     assert_no_native_pdf_embed(page)
     screenshot(page, attempt_dir, "PDF-009-encrypted-unlocked.png")
@@ -763,7 +789,7 @@ def pdf_010_surface_error_state(
     page.locator('[data-testid="pdf-surface-empty"]').wait_for(state="visible", timeout=10_000)
 
     page.locator('[data-testid="pdf-surface-sample-select"]').select_option("encrypted.pdf")
-    error = page.locator('[data-testid="pdf-surface-load-error"]')
+    error = page.locator('[data-testid="pdf-surface-page-load-error"]')
     error.wait_for(state="visible", timeout=45_000)
     error_code = error.get_attribute("data-error-code")
     error_text = error.inner_text()
@@ -788,7 +814,7 @@ def pdf_010_surface_error_state(
         "message": "image-only surface page exposed a text layer",
         "textLayers": text_layers,
     }
-    assert page.locator('[data-testid="pdf-surface-load-error"]').count() == 0
+    assert page.locator('[data-testid="pdf-surface-page-load-error"]').count() == 0
     screenshot(page, attempt_dir, "PDF-010-surface-scanned.png")
     return {
         "errorCode": error_code,

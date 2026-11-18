@@ -18,6 +18,11 @@ class BrowserEvidence:
             key: []
             for key in ("console", "pageErrors", "requestFailures", "responses", "downloads")
         }
+        # A test may deliberately make the application cancel a response stream
+        # (for example a PDF rejected from Content-Length before reading its
+        # body). Those cancellations surface as net::ERR_ABORTED, so they are
+        # allowed by exact URL/failure and count, never by a global pattern.
+        self.expected_request_aborts: list[dict[str, object]] = []
         page.on(
             "console",
             lambda item: self.events["console"].append(
@@ -55,6 +60,35 @@ class BrowserEvidence:
         rendered = json.dumps(item, ensure_ascii=False, sort_keys=True)
         return any(pattern in rendered for pattern in self.allowlist.get(category, []))
 
+    def allow_request_abort(
+        self,
+        url: str,
+        *,
+        failure: str = "net::ERR_ABORTED",
+        limit: int = 1,
+        reason: str = "",
+    ) -> None:
+        self.expected_request_aborts.append(
+            {"url": url, "failure": failure, "limit": limit, "reason": reason}
+        )
+
+    def _unexpected_request_failures(self) -> list[dict[str, object]]:
+        remaining = list(self.events["requestFailures"])
+        for allowance in self.expected_request_aborts:
+            limit = int(allowance["limit"])
+            kept: list[dict[str, object]] = []
+            for item in remaining:
+                if (
+                    limit > 0
+                    and item["url"] == allowance["url"]
+                    and item["failure"] == allowance["failure"]
+                ):
+                    limit -= 1
+                    continue
+                kept.append(item)
+            remaining = kept
+        return remaining
+
     def violations(self) -> dict[str, list[dict[str, object]]]:
         candidates = {
             "console": [
@@ -63,7 +97,7 @@ class BrowserEvidence:
                 if item["type"] in {"warning", "error"}
             ],
             "pageErrors": list(self.events["pageErrors"]),
-            "requestFailures": list(self.events["requestFailures"]),
+            "requestFailures": self._unexpected_request_failures(),
             "responses": [
                 item for item in self.events["responses"] if int(item["status"]) >= 400
             ],
@@ -97,6 +131,8 @@ class BrowserEvidence:
             json.dumps(
                 {
                     "requestFailures": self.events["requestFailures"],
+                    "expectedRequestAborts": self.expected_request_aborts,
+                    "unexpectedRequestFailures": self._unexpected_request_failures(),
                     "responses": self.events["responses"],
                 },
                 ensure_ascii=False,

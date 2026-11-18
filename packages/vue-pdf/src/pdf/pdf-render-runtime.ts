@@ -63,8 +63,15 @@ export interface PdfOpenDocumentOptions {
 export interface PdfRenderPageInfo {
   /** Zero-based page index. */
   index: number
+  /** Canonical page width in 0-degree space (the visible width at zero user rotation). */
   width: number
+  /** Canonical page height in 0-degree space (the visible height at zero user rotation). */
   height: number
+  /**
+   * Intrinsic `/Rotate` value in degrees. Documents are opened with normalized
+   * rotation, so this is metadata for display math and diagnostics; engine
+   * coordinates already account for it and must not apply it again.
+   */
   rotation: PdfRotation
   /**
    * Digest of the page text, populated lazily by this runtime. Page and region
@@ -670,7 +677,15 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
       const id = `${this.runtimeId}-document-${++this.documentSequence}`
       const task = engine.openDocumentBuffer(
         { id, content: bytes },
-        password === undefined ? undefined : { password },
+        {
+          ...(password === undefined ? {} : { password }),
+          // Page sizes from PDFium are already rotated for /Rotate pages, while
+          // this runtime keeps the original rotation in `page.rotation` and
+          // applies it explicitly to rendering and canonical geometry. Opening
+          // in normalized (0-degree) space makes both models agree; without it
+          // a /Rotate 90 page is rotated twice and renders sideways.
+          normalizeRotation: true,
+        },
       )
       try {
         nativeDocument = await runPdfTask(task, {
@@ -775,6 +790,9 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     if (!page) throw new Error(`PDF page ${pageIndex + 1} does not exist.`)
     const task = this.getEngine().renderThumbnail(nativeDocument, page, {
       scaleFactor: parameters.scaleFactor,
+      // Thumbnails must show the page as it is displayed at zero user rotation,
+      // so the intrinsic /Rotate value is applied here explicitly.
+      rotation: asRotation(parameters.rotation),
       dpr: 1,
       imageType: "image/png",
       withAnnotations: true,

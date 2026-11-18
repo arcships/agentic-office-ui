@@ -1074,17 +1074,20 @@ def aggregate_metrics(
     return aggregated
 
 
-def verify_budget(config: dict[str, Any], aggregate: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-    if config.get("status") != "approved":
-        return []
-    violations = []
+def _budget_violations(
+    approved_metrics: dict[str, Any],
+    aggregate: dict[str, dict[str, Any]],
+    config: dict[str, Any],
+    baseline_name: str,
+) -> list[dict[str, Any]]:
+    violations: list[dict[str, Any]] = []
     regression = float(config.get("maxRegressionPercent", 10))
     absolute_ms = float(config.get("maxRegressionAbsoluteMs", 0))
     css_floor_bytes = float(config.get("cssRelativeBudgetFloorBytes", 0))
-    for key, approved in config.get("metrics", {}).items():
+    for key, approved in approved_metrics.items():
         current = aggregate.get(key)
         if not current:
-            violations.append({"metric": key, "reason": "missing"})
+            violations.append({"baseline": baseline_name, "metric": key, "reason": "missing"})
             continue
         baseline = float(approved["median"])
         direction = approved.get("direction", "max")
@@ -1101,6 +1104,7 @@ def verify_budget(config: dict[str, Any], aggregate: dict[str, dict[str, Any]]) 
         if violated:
             violations.append(
                 {
+                    "baseline": baseline_name,
                     "metric": key,
                     "direction": direction,
                     "baselineMedian": baseline,
@@ -1108,6 +1112,23 @@ def verify_budget(config: dict[str, Any], aggregate: dict[str, dict[str, Any]]) 
                     "allowed": allowed,
                 }
             )
+    return violations
+
+
+def verify_budget(config: dict[str, Any], aggregate: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    violations: list[dict[str, Any]] = []
+    if config.get("status") == "approved":
+        violations.extend(
+            _budget_violations(config.get("metrics", {}), aggregate, config, "main")
+        )
+    # PDF first-render and page-turn timings have their own approved capture:
+    # the fixed Chromium used by the PDF suite can differ from the asset
+    # baseline environment, so they are gated from their own recorded medians.
+    pdf_baseline = config.get("pdfBaseline", {})
+    if pdf_baseline.get("status") == "approved":
+        violations.extend(
+            _budget_violations(pdf_baseline.get("metrics", {}), aggregate, config, "pdf")
+        )
     return violations
 
 
@@ -1280,6 +1301,13 @@ def main() -> int:
             "baselineCommit": summary["commit"],
             "capturedBrowser": browser_version,
             "metrics": aggregate,
+            # Keep the latest PDF capture separate so re-approving the PDF
+            # budget does not mix it with the asset baseline environment.
+            "pdfMetrics": {
+                key: value
+                for key, value in aggregate.items()
+                if key.startswith("browser.pdf.")
+            },
         }
         (OUTPUT / "baseline-candidate.json").write_text(
             json.dumps(candidate, ensure_ascii=False, indent=2), encoding="utf-8"

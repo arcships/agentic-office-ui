@@ -115,7 +115,7 @@ def wait_ready(page, route: str) -> None:
         page.locator(
             '[data-testid="pdf-surface-status"][data-state="idle"]'
         ).wait_for(state="visible", timeout=10_000)
-        page.locator('[data-testid="pdf-surface-load-error"]').wait_for(
+        page.locator('[data-testid="pdf-surface-page-load-error"]').wait_for(
             state="detached", timeout=10_000
         )
 

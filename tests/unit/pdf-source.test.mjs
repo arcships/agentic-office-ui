@@ -55,9 +55,10 @@ test("PDF canonical transforms round-trip points and intrinsic search rects at e
 
   for (const intrinsicRotation of rotations) {
     const page = { index: 0, width: 600, height: 800, rotation: intrinsicRotation };
-    const intrinsicRect = transformModule.pdfCanonicalRectToDisplay(page, canonicalRect, 0, 1);
+    // Documents open with normalizeRotation: true, so engine search and
+    // annotation rects arrive in canonical 0-degree page space.
     assert.deepEqual(
-      transformModule.pdfIntrinsicRectToCanonical(page, intrinsicRect),
+      transformModule.pdfIntrinsicRectToCanonical(page, canonicalRect),
       canonicalRect,
       `intrinsic ${intrinsicRotation}`,
     );
