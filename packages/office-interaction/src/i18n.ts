@@ -317,6 +317,9 @@ export interface OfficeDocxMessages {
       updatedTextBox: string
       /** Template with a `{mode}` placeholder. */
       imageWrapSet: string
+      /** The image is not floating, so it has no layer order. */
+      imageLayerOrderRequiresFloating: string
+      imageLayerOrderChanged: string
       movedImage: string
       movedSectionImage: string
       movedDropCap: string
@@ -464,6 +467,11 @@ export interface OfficeDocxMessages {
     deleteTable: string
     mergeCells: string
     splitCell: string
+    layer: string
+    bringToFront: string
+    bringForward: string
+    sendBackward: string
+    sendToBack: string
   }
   colors: {
     black: string
@@ -1492,6 +1500,8 @@ export const officeMessagesEn: OfficeMessages = {
         resizedImage: "Resized image to {width}×{height}",
         updatedTextBox: "Updated text box",
         imageWrapSet: "Set image wrap: {mode}",
+        imageLayerOrderRequiresFloating: "Unsupported: layer order applies to floating images only",
+        imageLayerOrderChanged: "Changed image layer order",
         movedImage: "Moved image",
         movedSectionImage: "Moved section image",
         movedDropCap: "Moved drop cap",
@@ -1631,6 +1641,11 @@ export const officeMessagesEn: OfficeMessages = {
       deleteTable: "Delete Table",
       mergeCells: "Merge cells",
       splitCell: "Split cell",
+      layer: "Layer",
+      bringToFront: "Bring to Front",
+      bringForward: "Bring Forward",
+      sendBackward: "Send Backward",
+      sendToBack: "Send to Back",
     },
     colors: {
       black: "Black",
@@ -2597,6 +2612,8 @@ export const officeMessagesZhCN: OfficeMessages = {
         resizedImage: "已将图片调整为 {width}×{height}",
         updatedTextBox: "已更新文本框",
         imageWrapSet: "已设置图片环绕方式：{mode}",
+        imageLayerOrderRequiresFloating: "不支持：图层顺序仅适用于浮动图片",
+        imageLayerOrderChanged: "已更改图片图层顺序",
         movedImage: "已移动图片",
         movedSectionImage: "已移动节图片",
         movedDropCap: "已移动首字下沉",
@@ -2736,6 +2753,11 @@ export const officeMessagesZhCN: OfficeMessages = {
       deleteTable: "删除表格",
       mergeCells: "合并单元格",
       splitCell: "拆分单元格",
+      layer: "图层",
+      bringToFront: "置于顶层",
+      bringForward: "上移一层",
+      sendBackward: "下移一层",
+      sendToBack: "置于底层",
     },
     colors: {
       black: "黑色",

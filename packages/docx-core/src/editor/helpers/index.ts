@@ -33,6 +33,7 @@
 //   field-helpers.ts       — form-field helpers
 //   synthetic-textbox.ts   — synthetic textbox
 //   paragraph-geometry.ts  — paragraph geometry / wrap calculation
+//   image-layer-order.ts   — Word relativeHeight image layer order commands
 //   drop-cap.ts            — drop-cap layout
 //   letterhead.ts          — letterhead layout
 //   line-height.ts         — estimateParagraphLineHeightPx (part 1)
@@ -91,6 +92,7 @@ export * from "./paragraph-toc";
 export * from "./field-helpers";
 export * from "./synthetic-textbox";
 export * from "./paragraph-geometry";
+export * from "./image-layer-order";
 export * from "./drop-cap";
 export * from "./letterhead";
 export * from "./line-height";

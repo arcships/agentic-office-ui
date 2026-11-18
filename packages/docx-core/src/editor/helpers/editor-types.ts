@@ -473,6 +473,9 @@ export interface DocxEditorStatusMessages {
   updatedTextBox: string;
   /** Template with a `{mode}` placeholder. */
   imageWrapSet: string;
+  /** The image is not floating, so it has no layer order. */
+  imageLayerOrderRequiresFloating: string;
+  imageLayerOrderChanged: string;
   movedImage: string;
   movedSectionImage: string;
   movedDropCap: string;

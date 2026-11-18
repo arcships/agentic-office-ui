@@ -199,11 +199,17 @@ import type {
   FormFieldRunNode,
 } from "@arcships/docx-core"
 import { createDocxRuntime, DocxImportError } from "@arcships/docx-core"
+import {
+  getParagraphAtLocation,
+  imageLocationToParagraphLocation,
+  resolveDocxImageWrapState,
+} from "@arcships/docx-core"
 import { OfficeLiveStatus } from "@arcships/vue-ui"
 import { OfficeFindBar } from "@arcships/vue-ui"
 import { useDocxEditor } from "../composables/useDocxEditor"
 import { useDocxFindReplace } from "../composables/useDocxFindReplace"
 import {
+  docxImageLocationFromNode,
   docxTableContextFromNode,
   docxTextHostFromNode,
   docxTextLocationForNode,
@@ -470,12 +476,30 @@ function onDocumentContextMenu(payload: DocumentContextMenuEvent): void {
     ? payload.target
     : null
   const tableContext = docxTableContextFromNode(target)
+  const imageLocation = docxImageLocationFromNode(target)
   const textHost = docxTextHostFromNode(target)
   const range = controller.activeTextRange
 
-  const context: DocxContextMenuContext = tableContext
+  let context: DocxContextMenuContext = tableContext
     ? { kind: "table", tableContext }
     : { kind: "text" }
+  if (!tableContext && imageLocation) {
+    const { paragraph } = getParagraphAtLocation(
+      controller.model,
+      imageLocationToParagraphLocation(imageLocation),
+    )
+    const image = paragraph?.children[imageLocation.childIndex]
+    if (image?.type === "image") {
+      context = {
+        kind: "image",
+        image: {
+          location: imageLocation,
+          floating: image.floating,
+          wrap: resolveDocxImageWrapState(image.floating),
+        },
+      }
+    }
+  }
   if (range) context.activeTextRange = range
 
   let text: string | undefined

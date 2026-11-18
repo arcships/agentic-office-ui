@@ -46,6 +46,8 @@ await fetch(`/api/documents/${id}`, { method: "PUT", body: bytes })
 
 内置查找栏本身也是普通 Vue 组合（`useDocxFindReplace`）加 `DocxToolbar` 的 `find` 插槽；宿主可以复用 `OfficeFindBar`，也可以只调控制器命令自己绘制界面。
 
+需要自建图片图层菜单时，`bringToFront(location)`、`bringForward(location)`、`sendBackward(location)`、`sendToBack(location)` 分别对应 Word 的四个叠放命令；`resolveDocxImageLayerOrderState(floating)` 和 `resolveDocxImageLayerOrderMenuActions(floating)` 给出与内置菜单相同的可用/禁用状态。每个命令是一条撤销记录，导出时写成 `wp:anchor/@relativeHeight`。
+
 ## 复用内置编辑辅助界面
 
 五个编辑辅助能力也单独导出，自定义表面可以只挂其中几个，全部通过同一个 `DocxEditorController` 工作：

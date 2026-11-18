@@ -63,6 +63,12 @@ if (inspection && !inspection.supported) {
 
 `renderParagraphRuns` 的 `onImageUnsupported` 选项会为每个回退的 SVG 回调一次，诊断带上 `imageKey` 和本地化消息；宿主可用 `imageUnsupportedText` 覆盖消息模板（支持 `{feature}` 占位符）。原始字节保留在模型和基础包中：编辑后导出并重新打开，SVG 媒体部件逐字节不变；缩略图不会降采样 SVG，而是让最终整页栅格化负责缩放。
 
+## 图片图层顺序
+
+浮动图片（`wp:anchor`）的叠放顺序来自 `wp:anchor/@relativeHeight`，模型里对应 `ImageRunNode.floating.zIndex`。编辑器右键图片菜单的“图层”分组提供四个命令：`bringToFront()`、`bringForward()`、`sendBackward()`、`sendToBack()`（均接收 `DocxImageLocation`）。前两个把 `zIndex` 提升到 `WORD_IMAGE_Z_INDEX_MAX`（251658240）或增加一个 `WORD_IMAGE_Z_INDEX_STEP`（65536），后两个降低到 `WORD_IMAGE_Z_INDEX_MIN`（0）或减少一个步长；超出范围时按 Word 的边界截断。内联图片没有叠放顺序，四个命令禁用。
+
+每个命令只写入一条撤销记录，同时清除图片/段落/表格的 `sourceXml`，因此重新导出会写出新的 `relativeHeight`，与屏幕上 `DocxImageLayer` 使用的 CSS `z-index` 保持一致。宿主也可以通过 `resolveDocxImageLayerOrderState()` 和 `resolveDocxImageLayerOrderMenuActions()` 复用同一套禁用规则。
+
 ## 分节页码与奇偶页空白页
 
 页码按“物理页序号 + 分节的 `w:pgNumType`”解析：`w:pgNumType/@w:start` 重新开始计数，`@w:fmt` 决定格式（`decimal`、`decimalZero`、`lowerRoman`、`upperRoman`、`lowerLetter`、`upperLetter`、`none` 等 Word 写入的 `ST_NumberFormat` 值），没有 `@w:start` 的分节接续上一分节的编号。同一份数据同时驱动页脚里的 `PAGE`/`NUMPAGES`/`SECTIONPAGES` 和缩略图的页码标签，所以页脚页码和缩略图不会互相矛盾。
