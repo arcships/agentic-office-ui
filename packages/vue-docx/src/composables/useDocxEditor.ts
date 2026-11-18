@@ -911,6 +911,8 @@ export function useDocxEditor(
     importDocxFile: ie.importDocxFile,
     newDocument: ie.newDocument,
     exportDocx: ie.exportDocx,
+    getDocxBytes: ie.getDocxBytes,
+    getDocxBlob: ie.getDocxBlob,
     undo,
     redo,
     setHeading: fmt.setHeading,

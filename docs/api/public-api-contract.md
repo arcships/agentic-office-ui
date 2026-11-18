@@ -64,6 +64,7 @@ Worker 和 WASM 必须来自安装后的真实包。消费项目不得从 demo �
 - `@arcships/docx-core/runtime`：`createDocxRuntime`、`DocxRuntime`、`DocxRuntimeConfig`、来源与限制类型，以及 DOCX 导入的公开诊断和错误类型。
 - `@arcships/docx-core/wasm-url`：包自带的 `bundledDocxWasmUrl`。
 - 根入口的 `exportDocxBuffer(model, basePackage, options)` 在 UI 环境中使用专用导出 Worker，支持 `onProgress`、`AbortSignal` 取消和 `maxExportMs` 超时；`createBundledDocxExportWorker` 与 `@arcships/docx-core/export-worker` 供自定义 Worker 配置。`DocxExportError` 返回结构化 `ABORTED`、`TIMEOUT`、`WORKER_UNAVAILABLE` 或 `EXPORT_FAILED`。
+- `DocxEditorController.getDocxBytes()` 与 `getDocxBlob()` 返回与 `exportDocx()` 相同的序列化结果，但不创建下载链接，宿主可以直接上传、存储或比较字节。两者复用导出准备流程（提交文字草稿、pending export transformer、`basePackage` 与必填表单校验）和 `exportDocxBuffer` 的 Worker/取消/超时语义：文档被替换或编辑器销毁时，进行中的读取会以 `DocxExportError`（`ABORTED`）拒绝；`exportDocx()` 的待处理请求还会被更新的导出取消。`exportDocx()` 内部调用 `getDocxBytes()`，只在拿到字节后创建 `<a download>`。
 - 根入口：保留现有模型、布局、序列化、解析和编辑命令，供 `0.x` 兼容使用。新代码如只需要纯数据能力，应改用 `./core`；需要 Worker/WASM 时应改用 `./runtime`。
 - 根入口同时提供 `createDocxTextReferenceDraft`、`createDocxPageReferenceDraft`、`createDocxRegionReferenceDraft`、`resolveDocxReference` 和 `describeDocxReference`。它们只把已有 DOCX 模型选区转换/解析为统一引用，不持有宿主的引用集合。
 - 根入口的 `TextStyle` 继续兼容原有布尔字段，同时新增 underline/strike 变体、`caps`/`smallCaps`、字符间距与缩放、分脚本字体、run 边框、文字阴影/描边和 `direction`；`ParagraphStyle` 新增 `direction`。`paragraphTypographyStyle` 与 `isJustifiedAlignment` 供渲染层统一处理扩展对齐和 RTL。

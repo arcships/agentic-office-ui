@@ -4,6 +4,13 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### DOCX programmatic export (#147)
+
+- Add `getDocxBytes()` and `getDocxBlob()` to `DocxEditorController`. They return the serialized DOCX without touching the DOM download path, so hosts can upload, store, diff or post-process the edited document instead of intercepting a browser download. `getDocxBlob()` uses the same container MIME type as the current file name (`.docx`, `.docm`, `.dotx`, `.dotm`).
+- Both methods reuse the full export pipeline: `flushTextDrafts()`, the pending export model transformer, the imported `basePackage`, required-form-field validation, and the Worker-backed `exportDocxBuffer` with its cancellation, timeout and structured `DocxExportError` failures. A document replaced mid-serialization or an unmounted editor rejects the pending promise with `ABORTED` instead of returning stale or partial bytes; an `exportDocx()` request is also cancelled when a newer export starts.
+- `exportDocx()` now calls `getDocxBytes()` internally and only builds the `<a download>` link after serialization succeeds, so programmatic reads and downloads share one serialization path and one set of MIME/file-name rules. Rapid exports still let only the latest request download.
+- Add `tests/component/docx-export-bytes.test.mjs` (registered in `scripts/ci/run-suite.mjs`) covering Worker-backed and headless main-thread serialization, Word-openable OOXML parts and re-import, Blob MIME types, no-download behavior, model-change/unmount cancellation with Worker termination, structured failures, required-field refusal and in-flight imports; document the API in `docs/composables/docx.md`, `docs/custom-components/docx.md` and the public API contract.
+
 ### DOCX and XLSX find & replace (#113)
 
 - Add `replaceMatch(target, text)` and `replaceAll(query, text, options?)` to `DocxEditorController`. `replaceMatch` rewrites exactly one search result (the target is produced by `docxReplaceTargetFromMatch(match)`); `replaceAll` rewrites every body occurrence with the search session's `caseSensitive`/`wholeWord`/`regex` options and returns `{ replaced, skipped }`. Header, footer, footnote and endnote results stay searchable but are skipped: headers and footers are edited through their click-to-edit page bands (#97) and notes are read-only, so find & replace never rewrites those stories behind the user's back.
