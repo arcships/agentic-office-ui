@@ -1,6 +1,6 @@
 # PPTX 正式播放验收记录
 
-日期：2026-07-11
+日期：2026-07-11（第二版补充 2026-11-18）
 
 ## 1. 环境
 
@@ -20,6 +20,8 @@
 - 自动换页、隐藏页、内部跳页和外部链接请求；
 - 音视频占位替换、播放、暂停、继续、裁剪、循环、音量、媒体书签和对象地址释放。
 - 同一对象同一属性同时写入时的稳定裁决，以及三段文字逐次单击显示。
+
+第二版追加 4 份由 `scripts/fixtures/generate-pptx-v2-fixtures.mjs` 从 `text-by-paragraph.pptx` 确定性派生的 `controlled` 素材：`text-by-word.pptx`、`chart-series.pptx`、`table-cells.pptx` 和 `transition-sound.pptx`。当前自动验收在 Node 中解析这 4 份素材，校验 SHA-256、XML 分支、能力码和焦点页模型；它们尚未由桌面版 PowerPoint 另存，因此不计入 13 份 `ready` 素材。升级前必须补做 PowerPoint 另存、截图和浏览器事件基准。
 
 `pnpm test:pptx:blackbox` 在 Chromium、Firefox 和 WebKit 中全部通过。三种浏览器均满足：切换中只有一个旧页层，结束后旧页层归零；暂停期间中央时钟和媒体时间不推进；有限和无限重复能停止；书签只在正向越过时触发；自动换页到达目标页；冲突轨道结果唯一；三段文字依次显示；隐藏页按顺序跳过且显式跳转可进入；组件不直接打开外部链接。
 

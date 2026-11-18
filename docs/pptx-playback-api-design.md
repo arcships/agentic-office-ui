@@ -151,7 +151,28 @@ export interface PptxPlaybackEffect {
   id: string
   kind: PptxEffectKind
   targetObjectKey?: string
+  /** `cNvPr/@id` of the effect target. */
+  targetShapeId?: string
+  /** Parsed target type: shape, picture, table, chart, smartart, group. */
+  targetNodeType?: string
   paragraphRange?: { start: number; end: number }
+  /** `p:txEl/p:charRg`; paragraph marks count as one character. */
+  characterRange?: { start: number; end: number }
+  characterGranularity?: "word" | "character"
+  characterRangeUnavailable?: boolean
+  tableCell?: { row: number; column: number }
+  chartElement?: {
+    type: "chart" | "series" | "category" | "point-in-series" | "point-in-category"
+    index?: number
+    level?: number
+  }
+  graphicElement?: {
+    type: string
+    objectKey?: string
+    sourceId?: string
+    index?: number
+    level?: number
+  }
   presetClass?: string
   presetId?: string
   transition?: "in" | "out"
@@ -208,6 +229,14 @@ export interface PptxSlideTransition {
   advanceOnClick: boolean
   advanceAfterMs?: number
   soundRelationId?: string
+  sound?: {
+    relationId: string
+    sourcePath?: string
+    contentType?: string
+    embedded: boolean
+    loop: boolean
+    volume: number
+  }
 }
 
 export interface PptxMediaBookmark {
@@ -286,6 +315,25 @@ export interface PptxPlaybackDocument {
 ```
 
 `trimStartMs` 是从开头裁掉的时长，`trimEndMs` 是从原媒体末尾裁掉的时长；两者都使用毫秒。播放器拿到媒体总时长后计算实际停止位置。
+
+第二版元素级目标使用稳定的能力码，宿主可以直接按字符串做策略和遥测：
+
+| 能力码 | 含义 | 默认处理 |
+|---|---|---|
+| `text:by-word` | `p:charRg` 覆盖完整词边界 | 严格执行 |
+| `text:by-character` | `p:charRg` 覆盖词内部分或单个字符 | 严格执行 |
+| `text:character-range-unavailable` | 字符范围没有可读文字体 | 静态保留 |
+| `table:cell` | `pRg` 落在单个表格单元格 | 严格执行 |
+| `table-build:<模式>` | 表格构建清单只描述分组 | 静态保留 |
+| `chart:element` | `p:oleChartEl type="chart"` 整图 | 严格执行 |
+| `chart:series` / `chart:category` / `chart:point` | 图表内部元素，固定渲染器无 DOM 身份 | 静态保留 |
+| `smartart:node` | SmartArt 子对象身份可解析 | 严格执行 |
+| `smartart:level` | SmartArt 仅给层级，没有子对象身份 | 静态保留 |
+| `group:sub-shape` | 普通组合的 `p:subSp` 子对象 | 子对象键可解析时严格执行 |
+| `transition:sound` | 幻灯片切换声音 | 嵌入声音严格执行，外部默认静态 |
+| `transition:3d:<kind>` | 三维页面切换 | 静态保留，不退化为二维近似 |
+
+目标状态键在内部统一由 `pptxEffectTargetKey()` 生成：对象本身是对象键，段落是 `#paragraph:start-end`，字符范围是 `#text:start-end`，表格单元格是 `#cell:row:column`，图表是 `#chart:type[:index][@level]`，SmartArt 子对象使用完整组合对象键。
 
 ## 3. 错误和警告
 
@@ -430,6 +478,8 @@ export interface PptxPlaybackController {
 ```
 
 所有异步方法在控制器销毁或被新命令取代时安全结束，不允许旧操作更新新页面。
+
+`PptxPlaybackSnapshot.blockedMediaIds` 同时包含被浏览器阻止的媒体和切换声音（id 形如 `transition-sound:<slideIndex>`）；`resumeBlockedMedia()` 统一重试，UI 不需要区分二者。
 
 `activateObject()` 用于页面元素点击。找到对象触发动画或内部动作时返回 `true`；没有找到专用行为时返回 `false`。Vue 演示界面只在返回 `false` 后把该次点击交给普通 `next()`，避免一次点击同时触发对象序列和下一步。
 

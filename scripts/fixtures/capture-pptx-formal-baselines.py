@@ -247,7 +247,13 @@ def main() -> None:
     args = parser.parse_args()
 
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    entries = {entry["file"]: entry for entry in manifest["entries"]}
+    # `controlled` decks are validated by Node parser tests, not by the
+    # PowerPoint/browser baseline capture; only ready entries have SPECS.
+    entries = {
+        entry["file"]: entry
+        for entry in manifest["entries"]
+        if entry.get("status") == "ready"
+    }
     if set(entries) != set(SPECS):
         raise RuntimeError("正式素材清单与基准映射不一致。")
     selected = [name.strip() for name in args.fixtures.split(",") if name.strip()] or list(SPECS)

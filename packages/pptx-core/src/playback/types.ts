@@ -85,11 +85,63 @@ export type PptxEffectKind =
   | "media-command"
   | "unknown"
 
+/**
+ * Inclusive character range in a text body. Paragraph marks count as one
+ * character, matching ECMA-376 `p:charRg` inside `p:txEl`.
+ */
+export interface PptxCharacterRange {
+  start: number
+  end: number
+}
+
+/** One rendered table cell, addressed with zero-based row and column. */
+export interface PptxTableCellTarget {
+  row: number
+  column: number
+}
+
+export type PptxChartElementType =
+  | "chart"
+  | "series"
+  | "category"
+  | "point-in-series"
+  | "point-in-category"
+
+/** `p:oleChartEl` target inside a chart object. */
+export interface PptxChartElementTarget {
+  type: PptxChartElementType
+  index?: number
+  level?: number
+}
+
+/** `p:graphicEl` / `p:subSp` target inside an object such as SmartArt. */
+export interface PptxGraphicElementTarget {
+  /** Raw target token, for example `dgm` or `subSp`. */
+  type: string
+  /** Resolved child object key when the renderer exposes that identity. */
+  objectKey?: string
+  sourceId?: string
+  index?: number
+  level?: number
+}
+
 export interface PptxPlaybackEffect {
   id: string
   kind: PptxEffectKind
   targetObjectKey?: string
+  /** `cNvPr/@id` of the effect target, kept for element-level target resolution. */
+  targetShapeId?: string
+  /** Parsed object type of the target (`shape`, `table`, `chart`, `smartart`, ...). */
+  targetNodeType?: string
   paragraphRange?: { start: number; end: number }
+  characterRange?: PptxCharacterRange
+  /** Report label inferred from the range; execution uses `characterRange`. */
+  characterGranularity?: "word" | "character"
+  /** `p:charRg` exists but the target has no readable text body. */
+  characterRangeUnavailable?: boolean
+  tableCell?: PptxTableCellTarget
+  chartElement?: PptxChartElementTarget
+  graphicElement?: PptxGraphicElementTarget
   presetClass?: string
   presetId?: string
   transition?: "in" | "out"
@@ -154,6 +206,15 @@ export interface PptxPropertyTrack {
   repeatIndefinite?: boolean
 }
 
+export interface PptxSlideTransitionSound {
+  relationId: string
+  sourcePath?: string
+  contentType?: string
+  embedded: boolean
+  loop: boolean
+  volume: number
+}
+
 export interface PptxSlideTransition {
   kind: string
   direction?: string
@@ -162,6 +223,7 @@ export interface PptxSlideTransition {
   advanceOnClick: boolean
   advanceAfterMs?: number
   soundRelationId?: string
+  sound?: PptxSlideTransitionSound
 }
 
 export interface PptxMediaBookmark {
