@@ -92,6 +92,7 @@ export function parseWorkbookChartStyleAssets(bytes: Uint8Array): import("./grid
   const archive = unzipSync(bytes);
   const {
     chartsheetSheets,
+    sheetStatesByWorkbookSheetIndex,
     themePalette,
     worksheetSheets
   } = parseWorkbookStructureAssetsFromArchive(archive);
@@ -121,6 +122,7 @@ export function parseWorkbookChartStyleAssets(bytes: Uint8Array): import("./grid
     archive,
     chartsheetOrigins,
     sheetOrigins,
+    sheetStatesByWorkbookSheetIndex,
     themePalette
   };
 }

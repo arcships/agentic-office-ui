@@ -204,7 +204,14 @@ export type WorkbookChartStyleAssets = Pick<
   | "chartsheetOrigins"
   | "sheetOrigins"
   | "themePalette"
->;
+> & {
+  /**
+   * Sheet metrics used to normalise `chartUserShapes` anchors to chart-relative
+   * fractions. Optional so hand-built asset objects from older hosts stay valid;
+   * `parseWorkbookChartStyleAssets` and `parseWorkbookImageAssets` provide it.
+   */
+  sheetStatesByWorkbookSheetIndex?: WorkbookImageAssets["sheetStatesByWorkbookSheetIndex"];
+};
 
 // ── Sparklines ─────────────────────────────────────────────────────────────
 

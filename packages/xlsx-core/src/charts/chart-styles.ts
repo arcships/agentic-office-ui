@@ -31,6 +31,8 @@ import {
   parseChartMultiLevelCacheValues,
 } from "./chart-cache";
 
+import { readChartBlipFillImage } from "./chart-embedded-media";
+
 import {
   readChartNumericAttribute,
   readChartBooleanAttribute,
@@ -466,23 +468,26 @@ export function applyBuiltinChartDefaults(chart: XlsxChart, themePalette?: XlsxT
 
   chart.series = chart.series.map((series, index) => {
     const fallbackColor = seriesPalette[index % seriesPalette.length];
+    const pictureFilled = Boolean(series.fillImage);
     return {
       ...series,
-      color: series.color ?? series.lineColor ?? fallbackColor,
+      color: pictureFilled ? undefined : series.color ?? series.lineColor ?? fallbackColor,
       lineColor: series.lineColor ?? series.color ?? fallbackColor,
-      markerColor: series.markerColor ?? series.color ?? series.lineColor ?? fallbackColor,
+      markerColor: pictureFilled ? undefined : series.markerColor ?? series.color ?? series.lineColor ?? fallbackColor,
       markerLineColor: series.markerLineColor ?? series.lineColor ?? series.color ?? fallbackColor
     };
   });
   chart.typeGroups = chart.typeGroups?.map((group, groupIndex) => ({
     ...group,
     series: group.series.map((series, seriesIndex) => {
-      const fallbackColor = seriesPalette[(groupIndex + seriesIndex) % seriesPalette.length];
+      const globalIndex = groupIndex + seriesIndex;
+      const fallbackColor = seriesPalette[globalIndex % seriesPalette.length];
+      const pictureFilled = Boolean(series.fillImage ?? chart.series[globalIndex]?.fillImage);
       return {
         ...series,
-        color: series.color ?? series.lineColor ?? fallbackColor,
+        color: pictureFilled ? undefined : series.color ?? series.lineColor ?? fallbackColor,
         lineColor: series.lineColor ?? series.color ?? fallbackColor,
-        markerColor: series.markerColor ?? series.color ?? series.lineColor ?? fallbackColor,
+        markerColor: pictureFilled ? undefined : series.markerColor ?? series.color ?? series.lineColor ?? fallbackColor,
         markerLineColor: series.markerLineColor ?? series.lineColor ?? series.color ?? fallbackColor
       };
     })
@@ -490,7 +495,11 @@ export function applyBuiltinChartDefaults(chart: XlsxChart, themePalette?: XlsxT
   applyBuiltinSurfaceDefaults(chart);
 }
 
-export function parseChartPointStyles(seriesNode: Element, themePalette?: XlsxThemePalette | null): XlsxChartPointStyle[] {
+export function parseChartPointStyles(
+  seriesNode: Element,
+  themePalette?: XlsxThemePalette | null,
+  images?: Record<string, string>
+): XlsxChartPointStyle[] {
   const pointStyles: XlsxChartPointStyle[] = [];
 
   for (const dataPointNode of getLocalChildren(seriesNode, "dPt")) {
@@ -500,9 +509,11 @@ export function parseChartPointStyles(seriesNode: Element, themePalette?: XlsxTh
     }
     const shapeProperties = getFirstLocalChild(dataPointNode, "spPr");
     const lineStyle = resolveChartLineStyle(shapeProperties, themePalette);
+    const fillImage = readChartBlipFillImage(shapeProperties, images);
     pointStyles.push({
-      color: resolveChartFillColor(shapeProperties, themePalette) ?? undefined,
+      color: fillImage ? undefined : resolveChartFillColor(shapeProperties, themePalette) ?? undefined,
       explosion: readChartNumericAttribute(dataPointNode, "explosion"),
+      fillImage,
       index: indexValue,
       lineColor: lineStyle.color ?? undefined
     });
@@ -542,10 +553,11 @@ export function applyChartSeriesStyleFromXml(chart: XlsxChart, chartTypeNode: El
     const lineStyle = resolveChartLineStyle(shapeProperties, themePalette);
     const markerLineStyle = resolveChartLineStyle(markerShapeProperties, themePalette);
     const fillColor = resolveChartFillColor(shapeProperties, themePalette);
+    const fillImage = readChartBlipFillImage(shapeProperties, chart.images);
     const markerSize = readChartNumericAttribute(markerNode, "size");
     const markerSymbolNode = markerNode ? getFirstLocalChild(markerNode, "symbol") : null;
     const markerSymbol = markerSymbolNode?.getAttribute("val") ?? undefined;
-    const pointStyles = parseChartPointStyles(seriesNode, themePalette);
+    const pointStyles = parseChartPointStyles(seriesNode, themePalette, chart.images);
     const seriesExplosion = readChartNumericAttribute(seriesNode, "explosion");
     const invertNegativeStyle = parseInvertNegativeStyle(seriesNode, themePalette);
     const invertIfNegative = readChartBooleanAttribute(seriesNode, "invertIfNegative");
@@ -594,8 +606,9 @@ export function applyChartSeriesStyleFromXml(chart: XlsxChart, chartTypeNode: El
         ? cachedBubbleSizes.map((value) => (typeof value === "number" && Number.isFinite(value) ? value : null))
         : series.bubbleSizes,
       categories: !hasCategoryReference && cachedCategories ? cachedCategories : series.categories,
-      color: rawFillColor ?? rawLineColor ?? fillColor ?? lineStyle.color ?? series.color,
+      color: fillImage ? undefined : (rawFillColor ?? rawLineColor ?? fillColor ?? lineStyle.color ?? series.color),
       dataPointStyles: pointStyles.length > 0 ? pointStyles : series.dataPointStyles,
+      fillImage,
       lineColor: resolvedLineColor,
       lineWidthPx: lineStyle.hidden ? undefined : lineStyle.widthPx ?? series.lineWidthPx,
       markerColor: rawFillColor

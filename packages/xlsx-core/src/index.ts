@@ -137,8 +137,19 @@ export {
   chartTypeUnavailable,
   matchesChartType,
 } from "./charts";
+export {
+  CHART_EMBEDDED_IMAGE_MAX_BYTES,
+  CHART_EMBEDDED_IMAGE_TOTAL_MAX_BYTES,
+  CHART_USER_SHAPES_MAX_BYTES,
+  parseChartUserShapes,
+  readChartEmbeddedMedia,
+  sniffChartImageMime,
+} from "./charts";
 export type {
   ChartTypeOption,
+  ChartEmbeddedMedia,
+  ChartEmbeddedMediaOptions,
+  ChartUserShapeParseOptions,
   ParsedChartSeriesFormula,
   WorkbookChartOrigin,
   WorkbookChartAssets,
@@ -236,6 +247,7 @@ export type {
   XlsxChart,
   XlsxChartAxis,
   XlsxChartDataLabels,
+  XlsxChartDrawing,
   XlsxChartElementSelection,
   XlsxChartLegend,
   XlsxChartLoadingRenderProps,
@@ -244,6 +256,9 @@ export type {
   XlsxChartReference,
   XlsxChartSeries,
   XlsxChartTypeGroup,
+  XlsxChartUserShape,
+  XlsxChartUserShapeFill,
+  XlsxChartUserShapeStroke,
   XlsxChartWall,
   XlsxChartsheet,
   XlsxClipboardData,

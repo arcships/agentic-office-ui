@@ -12,6 +12,7 @@ export type {
   XlsxChart,
   XlsxChartAxis,
   XlsxChartDataLabels,
+  XlsxChartDrawing,
   XlsxChartElementSelection,
   XlsxChartLegend,
   XlsxChartPointDataLabel,
@@ -20,6 +21,9 @@ export type {
   XlsxChartSeries,
   XlsxChartsheet,
   XlsxChartTypeGroup,
+  XlsxChartUserShape,
+  XlsxChartUserShapeFill,
+  XlsxChartUserShapeStroke,
   XlsxChartWall,
 } from "./types/chart-types";
 
