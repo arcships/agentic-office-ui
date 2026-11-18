@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 import signal
 import socket
@@ -210,6 +211,136 @@ def run_xlsx(browser, attempt_dir: Path) -> dict[str, object]:
         context.close()
 
 
+def run_pdf(browser, attempt_dir: Path) -> dict[str, object]:
+    context = browser.new_context(
+        viewport={"width": 1440, "height": 900}, locale="zh-CN"
+    )
+    page = context.new_page()
+    evidence = BrowserEvidence(page)
+
+    def wait_pdf_ready(file_name: str) -> None:
+        page.wait_for_function(
+            """expected => {
+              const status = document.querySelector('[data-testid="page-status"]');
+              const loaded = document.querySelector('[data-testid="loaded-file"]');
+              const stage = document.querySelector('[data-testid="pdf-page"]');
+              return status?.dataset.state === 'ready' &&
+                loaded?.textContent?.includes(expected) &&
+                stage?.dataset.renderState === 'rendered';
+            }""",
+            arg=file_name,
+            timeout=45_000,
+        )
+
+    def page_text(page_number: int, marker: str) -> str:
+        page.wait_for_function(
+            """expected => {
+              const stage = document.querySelector('[data-testid="pdf-page"]');
+              const layer = document.querySelector('[data-testid="pdf-text-layer"]');
+              return stage?.dataset.pageNumber === String(expected.pageNumber) &&
+                stage?.dataset.renderState === 'rendered' &&
+                (layer?.textContent ?? '').includes(expected.marker);
+            }""",
+            arg={"pageNumber": page_number, "marker": marker},
+            timeout=45_000,
+        )
+        return page.locator('[data-testid="pdf-text-layer"]').text_content() or ""
+
+    def goto_page(page_number: int, marker: str) -> str:
+        input_box = page.locator('[data-testid="pdf-page-input"]')
+        input_box.fill(str(page_number))
+        input_box.press("Enter")
+        return page_text(page_number, marker)
+
+    def search(query: str) -> dict[str, object]:
+        page.locator('[data-testid="pdf-search-input"]').fill(query)
+        page.locator('[data-testid="pdf-search-submit"]').click()
+        page.wait_for_function(
+            """() => /第\\s*\\d+\\s*\\/\\s*\\d+\\s*项/.test(
+              document.querySelector('[data-testid="pdf-search-result"]')?.textContent ?? ''
+            )""",
+            timeout=45_000,
+        )
+        result_text = page.locator('[data-testid="pdf-search-result"]').inner_text()
+        status = re.search(r"第\s*(\d+)\s*/\s*(\d+)\s*项", result_text)
+        expect(status is not None, f"搜索状态缺少命中计数: {result_text}")
+        assert status is not None
+        context_text = page.locator(".pdf-search-context").inner_text()
+        expect(query in context_text, f"搜索上下文未包含 {query}: {context_text}")
+        return {
+            "status": result_text,
+            "activeIndex": int(status.group(1)),
+            "total": int(status.group(2)),
+            "context": context_text,
+        }
+
+    try:
+        page.goto(f"{BASE_URL}/#/pdf-viewer", wait_until="networkidle")
+        wait_pdf_ready("sample.pdf")
+
+        # Per-page extraction: every page of sample.pdf carries its own marker.
+        per_page: dict[str, str] = {}
+        for number in range(1, 5):
+            text = goto_page(number, f"ALPHA-{number}")
+            expect(f"Section {number}" in text, f"第 {number} 页正文缺失 Section {number}: {text[:120]}")
+            expect(f"ALPHA-{number}" in text, f"第 {number} 页正文缺失 ALPHA-{number}: {text[:120]}")
+            per_page[f"page-{number}"] = text
+
+        # Multi-hit search must report every match, not only the active page.
+        multi_hit = search("PdfViewer")
+        expect(
+            int(multi_hit["total"]) >= 16,
+            f"PdfViewer 命中数不足: {multi_hit}",
+        )
+        first_index = int(multi_hit["activeIndex"])
+        page.locator('[data-testid="pdf-search-next"]').click()
+        page.wait_for_function(
+            """previous => {
+              const text = document.querySelector('[data-testid="pdf-search-result"]')?.textContent ?? '';
+              const match = text.match(/第\\s*(\\d+)\\s*\\/\\s*(\\d+)\\s*项/);
+              return match && Number(match[1]) !== previous;
+            }""",
+            arg=first_index,
+            timeout=45_000,
+        )
+        moved = page.locator('[data-testid="pdf-search-result"]').inner_text()
+        moved_status = re.search(r"第\s*(\d+)\s*/\s*(\d+)\s*项", moved)
+        assert moved_status is not None
+        expect(
+            int(moved_status.group(2)) == int(multi_hit["total"]),
+            f"翻到下一个命中后总数变化: {multi_hit} -> {moved}",
+        )
+        screenshot_path = attempt_dir / "pdf-text-fidelity.png"
+        page.screenshot(path=str(screenshot_path), full_page=True)
+
+        # CJK extraction and search: the fixture has a real Chinese text layer.
+        page.locator('[data-testid="pdf-sample-select"]').select_option("cjk-report.pdf")
+        wait_pdf_ready("cjk-report.pdf")
+        cjk_page_1 = page_text(1, "CJK-ALPHA-1")
+        expect("CJK-ALPHA-1" in cjk_page_1, f"中文第 1 页缺少标记: {cjk_page_1[:120]}")
+        expect("合同" in cjk_page_1, f"中文第 1 页缺少合同关键字: {cjk_page_1[:120]}")
+        cjk_page_2 = goto_page(2, "CJK-ALPHA-2")
+        expect("CJK-ALPHA-2" in cjk_page_2, f"中文第 2 页缺少标记: {cjk_page_2[:120]}")
+        cjk_search = search("合同")
+        expect(
+            int(cjk_search["total"]) >= 6,
+            f"中文关键字命中数不足: {cjk_search}",
+        )
+        page.screenshot(path=str(attempt_dir / "pdf-cjk-search.png"), full_page=True)
+        evidence.assert_clean()
+        return {
+            "status": "PASS",
+            "perPageText": {key: len(value) for key, value in per_page.items()},
+            "multiHit": multi_hit,
+            "multiHitAfterNext": moved,
+            "cjkPageLengths": [len(cjk_page_1), len(cjk_page_2)],
+            "cjkSearch": cjk_search,
+        }
+    finally:
+        evidence.save(attempt_dir)
+        context.close()
+
+
 def main() -> int:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     if MANAGE_PREVIEW and port_in_use():
@@ -241,7 +372,11 @@ def main() -> int:
             summary["browser"] = browser.version
             summary["browserSource"] = browser_source
             try:
-                for case_id, runner in (("DOCX-NOTES-SEARCH", run_docx), ("XLSX-RICH-CONTENT", run_xlsx)):
+                for case_id, runner in (
+                    ("DOCX-NOTES-SEARCH", run_docx),
+                    ("XLSX-RICH-CONTENT", run_xlsx),
+                    ("PDF-TEXT-FIDELITY", run_pdf),
+                ):
                     attempts = []
                     for attempt in (1, 2):
                         attempt_dir = OUTPUT / case_id / f"attempt-{attempt}"

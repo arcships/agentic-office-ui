@@ -160,7 +160,7 @@ P0/P1 整改必须同时提供一个只使用公开接口的测试消费页。�
 |---|---|
 | DOCX | `demo.docx`、`legal-contract.docx`、`invoice-table.docx`、`report-with-image.docx`、`chinese-mixed.docx`、`corrupted.docx` |
 | XLSX | `financial-model.xlsx`、`sales-table.xlsx`、`charts-images.xlsx`、`large-grid.xlsx`、`corrupted.xlsx` |
-| PDF | `sample.pdf`、`scanned-invoice.pdf`、`rotated-pages.pdf`、`large-contract.pdf`、`corrupted.pdf` |
+| PDF | `sample.pdf`、`scanned-invoice.pdf`、`rotated-pages.pdf`、`large-contract.pdf`、`cjk-report.pdf`、`encrypted.pdf`、`corrupted.pdf` |
 | 图像与结构数据 | `invoice.png`、`contract-page.png`、`ocr-layout.json`、`field-citations.json` |
 
 每次候选版本执行前保存材料文件名、字节数和 SHA-256。若材料发生变化，必须重新建立视觉和性能基线，不能沿用旧截图。
@@ -425,16 +425,21 @@ find "$PACK_DIR" -maxdepth 1 -name '*.tgz' -print
 
 | 用例 ID | 优先级 | 操作 | 可观察断言 |
 |---|---:|---|---|
-| PDF-001 | P1 | 加载 `sample.pdf` | 使用 PDF 引擎从已验证字节渲染；页数正确 |
+| PDF-001 | P1 | 加载 `sample.pdf` | 使用 PDF 引擎从已验证字节渲染；页数正确；页面位图采样后非白像素和深色墨迹像素超过阈值，空白画布不能通过 |
 | PDF-002 | P1 | 缩略图、前后页和页码导航 | 显示页、页码和选中缩略图同步 |
-| PDF-003 | P1 | 缩放、旋转、搜索真实文本 | 页面真实变化；搜索定位到结果，不只改本地数字 |
-| PDF-004 | P1 | 加载扫描、旋转和大合同材料 | 图像页、混合方向和长文档可操作 |
+| PDF-003 | P1 | 缩放、旋转、搜索真实文本 | 页面真实变化并仍有非白像素；搜索定位到结果，不只改本地数字 |
+| PDF-004 | P1 | 加载扫描、旋转和大合同材料 | 扫描件为无文本层图像页；`rotated-pages.pdf` 第二页 `/Rotate 90` 由 `data-page-rotation` 与横向位图共同证明；240 页长文档可操作 |
 | PDF-005 | P1 | 下载后检查 MIME、文件名和 SHA | 下载的是验证过的 PDF 字节，不是二次原始 URL |
 | PDF-006 | P1 | 损坏材料后恢复 | 不留旧页数、缩略图、搜索和 iframe 内容 |
 | PDF-007 | P2 | 四种视口和纯键盘 | 工具栏、缩略图和页面不遮挡，焦点可见 |
 | PDF-008 | P1 | 检查默认上限，再通过公开 `maxFileSize` 调整为略低于 `sample.pdf` | 默认值为 `50 MiB`；超过当前值返回 `PDF_TOO_LARGE`，不创建引擎、页面或缩略图；恢复配置后可正常打开。该配置可由宿主调整，不叠加第二层隐藏硬上限 |
+| PDF-009 | P1 | 未提供密码时打开 `encrypted.pdf`，再通过公开 `password` 输入 `arcships` | 第一次返回 `ENCRYPTED`，不保留页面或缩略图；提供密码后 2 页正常渲染并暴露文本层 |
+| PDF-010 | P1 | 进入 `/pdf-surface`，加载 `encrypted.pdf`，再加载 `scanned-invoice.pdf` | 页面 UI 展示 `ENCRYPTED` 而不只是 console 记录；加载成功后清除错误；图像页不挂载文本层 |
+| PDF-TEXT-FIDELITY | P1 | 逐页读取 `sample.pdf` 文本层，搜索 `PdfViewer`，再打开 `cjk-report.pdf` 搜索 `合同` | 每页包含本页 `Section N` 与 `ALPHA-N`；多命中数量来自全部页面而不只是当前页；中文文本和中文关键字可提取、可搜索 |
 
 PDF-008 是 PDF 唯一的资源拒绝边界。PDF-001～007 不以页数、单页像素、总内存、并发页或其他复杂度阈值为前置，也不能因为这些未设置的阈值而把真实查看功能标为阻断。
+
+PDF 材料在浏览器用例之前由 `scripts/verify_test_materials.py` 用 pypdf 核对页数、`/Rotate`、加密、文本层和中文提取；`.github/workflows/ci.yml` 的 `PDF suite` 作业执行 `node scripts/ci/run-suite.mjs pdf`，因此本节的用例与材料断言会真实阻断 CI，而不是只登记不执行。
 
 ### 13.3 Components 页面
 

@@ -31,6 +31,8 @@ ROUTES = [
     ("CI-ROUTE-DOCX-EDITOR", "/docx-editor"),
     ("CI-ROUTE-XLSX-VIEWER", "/xlsx-viewer"),
     ("CI-ROUTE-PPTX-VIEWER", "/pptx-viewer"),
+    ("CI-ROUTE-PDF-VIEWER", "/pdf-viewer"),
+    ("CI-ROUTE-PDF-SURFACE", "/pdf-surface"),
     ("CI-ROUTE-RUNTIME-ISOLATION", "/runtime-isolation"),
     ("CI-ROUTE-RUNTIME-LIMITS", "/runtime-limits"),
     ("CI-ROUTE-RUNTIME-WORKER", "/runtime-worker"),
@@ -39,6 +41,7 @@ READY_ROUTES = {
     "/docx-viewer",
     "/docx-editor",
     "/xlsx-viewer",
+    "/pdf-viewer",
     "/runtime-isolation",
     "/runtime-limits",
     "/runtime-worker",
@@ -101,6 +104,19 @@ def wait_ready(page, route: str) -> None:
         page.wait_for_function(
             "() => document.querySelector('.xlsx-grid')?.getBoundingClientRect().height > 0",
             timeout=10_000,
+        )
+    if route == "/pdf-surface":
+        # The surface route starts without a document: the shell and its idle
+        # status must render, and the page-level error slot must stay empty
+        # until a load actually fails.
+        page.locator('[data-testid="pdf-surface-empty"]').wait_for(
+            state="visible", timeout=30_000
+        )
+        page.locator(
+            '[data-testid="pdf-surface-status"][data-state="idle"]'
+        ).wait_for(state="visible", timeout=10_000)
+        page.locator('[data-testid="pdf-surface-load-error"]').wait_for(
+            state="detached", timeout=10_000
         )
 
 

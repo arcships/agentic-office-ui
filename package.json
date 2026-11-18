@@ -26,6 +26,7 @@
     "test:shard": "node scripts/ci/run-acceptance-shard.mjs",
     "test:acceptance": "node scripts/ci/run-acceptance-shard.mjs all",
     "test:blackbox": "node scripts/ci/run-suite.mjs blackbox",
+    "test:pdf": "node scripts/ci/run-suite.mjs pdf",
     "test:stress": "node scripts/ci/run-suite.mjs stress",
     "test:performance": "node scripts/ci/run-suite.mjs performance",
     "test:matrix": "node scripts/ci/run-suite.mjs matrix",

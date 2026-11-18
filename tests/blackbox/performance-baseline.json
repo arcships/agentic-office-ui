@@ -6,6 +6,24 @@
   "maxRegressionPercent": 10,
   "maxRegressionAbsoluteMs": 10,
   "cssRelativeBudgetFloorBytes": 500000,
+  "pdfBaseline": {
+    "status": "capture_required",
+    "description": "PDF timings are recorded by every round but are not approved thresholds yet; run the baseline capture on the fixed Chromium and merge the candidate metrics before gating them.",
+    "fixtures": [
+      "sample.pdf",
+      "large-contract.pdf"
+    ],
+    "metrics": [
+      "browser.pdf.firstRenderMs",
+      "browser.pdf.largeFirstRenderMs",
+      "browser.pdf.largeThumbnailReadyMs",
+      "browser.pdf.pageTurnMedianMs",
+      "browser.pdf.pageTurnP95Ms",
+      "browser.pdf.sampleRenderPixels",
+      "browser.pdf.largeRenderPixels",
+      "browser.pdf.largePageCount"
+    ]
+  },
   "browser": {
     "engine": "chromium",
     "version": "149.0.7827.55",
@@ -41,6 +59,26 @@
     "sample.pdf": {
       "bytes": 4652,
       "sha256": "76e533d35599f1f2c7f92785bba4a111053ca9361913bb809e9c13aa6c262253"
+    },
+    "scanned-invoice.pdf": {
+      "bytes": 39398,
+      "sha256": "f68a038d6c88558d6057b82be14d8b29491112f36cbbe56638b8792d0c5dea26"
+    },
+    "rotated-pages.pdf": {
+      "bytes": 2413,
+      "sha256": "902b9020b732a72ea75540154948e7e1cf94c2866304dc54cac7a4370bf989a6"
+    },
+    "cjk-report.pdf": {
+      "bytes": 3301,
+      "sha256": "ce48dfe7f6a27ba0541ee408c12b3c441f3fd0abb72c43f0d41174091157147e"
+    },
+    "encrypted.pdf": {
+      "bytes": 2710,
+      "sha256": "90bbe4989aee286e7562536b2eec8674f5ee6a0266ef006932bfb449cbac9be1"
+    },
+    "large-contract.pdf": {
+      "bytes": 208838,
+      "sha256": "47d575278e886ba6fd8f745df8a1ce37c258a7b6999dcca562d0164cad761923"
     }
   },
   "metrics": {

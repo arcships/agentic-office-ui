@@ -189,6 +189,76 @@ def document_snapshot(page: Page) -> dict[str, object]:
     )
 
 
+def page_stage_snapshot(page: Page) -> dict[str, object]:
+    """The stage reports the rendered page's intrinsic /Rotate separately from
+    the user rotation exposed on `pdf-document[data-rotation]`."""
+    return page.locator('[data-testid="pdf-page"]').evaluate(
+        """element => ({
+          pageNumber: Number(element.dataset.pageNumber),
+          renderState: element.dataset.renderState,
+          pageRotation: Number(element.dataset.pageRotation ?? 0),
+        })"""
+    )
+
+
+# A blank white canvas satisfies `naturalWidth > 0`; sampling the decoded bitmap
+# is the only way to prove that text or image pixels were actually rasterized.
+MIN_TEXT_NON_WHITE_RATIO = 0.01
+MIN_TEXT_DARK_RATIO = 0.002
+
+
+def pixel_sample(page: Page) -> dict[str, object]:
+    return page.locator('[data-testid="pdf-page-image"]').evaluate(
+        """image => {
+          const sampleWidth = Math.min(480, image.naturalWidth);
+          const sampleHeight = Math.max(
+            1,
+            Math.round((image.naturalHeight * sampleWidth) / image.naturalWidth),
+          );
+          const canvas = document.createElement('canvas');
+          canvas.width = sampleWidth;
+          canvas.height = sampleHeight;
+          const context = canvas.getContext('2d', { willReadFrequently: true });
+          if (!context) throw new Error('2D canvas is unavailable for pixel sampling');
+          context.drawImage(image, 0, 0, sampleWidth, sampleHeight);
+          const pixels = context.getImageData(0, 0, sampleWidth, sampleHeight).data;
+          const total = sampleWidth * sampleHeight;
+          let nonWhite = 0;
+          let dark = 0;
+          let ink = 0;
+          for (let index = 0; index < pixels.length; index += 4) {
+            const luminance =
+              (pixels[index] * 299 + pixels[index + 1] * 587 + pixels[index + 2] * 114) / 1000;
+            if (luminance < 245) nonWhite += 1;
+            if (luminance < 128) dark += 1;
+            ink = (ink * 31 + Math.round(luminance)) % 4294967291;
+          }
+          return {
+            sampleWidth,
+            sampleHeight,
+            nonWhiteRatio: nonWhite / total,
+            darkRatio: dark / total,
+            luminanceDigest: ink,
+          };
+        }"""
+    )
+
+
+def assert_rendered_pixels(page: Page, label: str) -> dict[str, object]:
+    sample = pixel_sample(page)
+    assert sample["nonWhiteRatio"] > MIN_TEXT_NON_WHITE_RATIO, {
+        "label": label,
+        "message": "rendered bitmap is effectively blank",
+        "sample": sample,
+    }
+    assert sample["darkRatio"] > MIN_TEXT_DARK_RATIO, {
+        "label": label,
+        "message": "rendered bitmap has no dark ink pixels",
+        "sample": sample,
+    }
+    return sample
+
+
 def assert_no_native_pdf_embed(page: Page) -> None:
     count = page.locator(
         '[data-testid="pdf-viewer"] iframe, '
@@ -216,10 +286,14 @@ def pdf_001_rendered_pages(
     navigate_pdf(page)
     image = image_snapshot(page)
     document = document_snapshot(page)
+    stage = page_stage_snapshot(page)
     assert document["pageCount"] == 4, document
     assert document["activePage"] == 1, document
+    assert document["rotation"] == 0, document
+    assert stage["pageRotation"] == 0, stage
     assert image["naturalWidth"] > 0 and image["naturalHeight"] > 0, image
     assert str(image["src"]).startswith("blob:"), image
+    pixels = assert_rendered_pixels(page, "sample.pdf page 1")
     page.locator('[data-testid="pdf-thumbnail-image"]').first.wait_for(
         state="visible", timeout=30_000
     )
@@ -237,7 +311,14 @@ def pdf_001_rendered_pages(
     assert all(int(item["status"]) == 200 for item in wasm), wasm
     assert_no_native_pdf_embed(page)
     screenshot(page, attempt_dir, "PDF-001-rendered-page.png")
-    return {"document": document, "image": image, "thumbnail": thumbnail, "wasm": wasm}
+    return {
+        "document": document,
+        "image": image,
+        "pixels": pixels,
+        "stage": stage,
+        "thumbnail": thumbnail,
+        "wasm": wasm,
+    }
 
 
 def pdf_002_navigation(
@@ -295,6 +376,7 @@ def pdf_003_zoom_rotate_search(
     zoomed = image_snapshot(page)
     assert zoomed["naturalWidth"] > initial["naturalWidth"], (initial, zoomed)
     assert zoomed["displayedWidth"] > initial["displayedWidth"], (initial, zoomed)
+    zoomed_pixels = assert_rendered_pixels(page, "sample.pdf page 1 at 200%")
     screenshot(page, attempt_dir, "PDF-003-zoom-200.png")
 
     page.locator('[data-testid="pdf-zoom-select"]').select_option("1")
@@ -315,6 +397,8 @@ def pdf_003_zoom_rotate_search(
     rotated = image_snapshot(page)
     assert before_rotate["naturalHeight"] > before_rotate["naturalWidth"], before_rotate
     assert rotated["naturalWidth"] > rotated["naturalHeight"], rotated
+    assert document_snapshot(page)["rotation"] == 90, document_snapshot(page)
+    rotated_pixels = assert_rendered_pixels(page, "sample.pdf page 1 rotated by the viewer")
     screenshot(page, attempt_dir, "PDF-003-rotated-clockwise.png")
 
     page.locator('[data-testid="pdf-search-input"]').fill("ALPHA-4")
@@ -332,8 +416,10 @@ def pdf_003_zoom_rotate_search(
     return {
         "initial": initial,
         "zoomed": zoomed,
+        "zoomedPixels": zoomed_pixels,
         "beforeRotate": before_rotate,
         "rotated": rotated,
+        "rotatedPixels": rotated_pixels,
         "searchResult": search_result,
         "searchContext": context_text,
     }
@@ -346,39 +432,77 @@ def pdf_004_fixture_matrix(
     results: dict[str, object] = {}
 
     select_sample(page, "scanned-invoice.pdf")
-    scanned = {"document": document_snapshot(page), "image": image_snapshot(page)}
+    scanned = {
+        "document": document_snapshot(page),
+        "image": image_snapshot(page),
+        "page": page_stage_snapshot(page),
+        "textLayers": page.locator('[data-testid="pdf-text-layer"]').count(),
+        "pixels": assert_rendered_pixels(page, "scanned-invoice.pdf page 1"),
+    }
     assert scanned["document"]["pageCount"] == 3, scanned
     assert scanned["image"]["naturalWidth"] > 0, scanned
+    # The fixture is image-only: there is no native text layer, so selecting
+    # text must be unavailable instead of fabricating selectable glyphs.
+    assert scanned["textLayers"] == 0, {
+        "message": "image-only fixture exposed a text layer",
+        "detail": scanned,
+    }
+    assert page.locator('[data-testid="pdf-selection-layer"]').count() == 1, scanned
     screenshot(page, attempt_dir, "PDF-004-scanned-invoice.png")
     results["scanned-invoice.pdf"] = scanned
 
     select_sample(page, "rotated-pages.pdf")
     portrait = image_snapshot(page)
+    portrait_stage = page_stage_snapshot(page)
+    portrait_document = document_snapshot(page)
     page.locator('[data-testid="pdf-next-page"]').click()
     wait_for_rendered_page(page, 2, "rotated-pages.pdf")
     landscape = image_snapshot(page)
+    landscape_stage = page_stage_snapshot(page)
+    landscape_document = document_snapshot(page)
+    assert portrait_document["rotation"] == 0, portrait_document
+    assert portrait_stage["pageRotation"] == 0, portrait_stage
     assert portrait["naturalHeight"] > portrait["naturalWidth"], portrait
+    # Page two carries real /Rotate 90 metadata. The viewer must report and
+    # apply the intrinsic rotation instead of inferring orientation from the
+    # MediaBox or the user rotation control.
+    assert landscape_document["rotation"] == 0, landscape_document
+    assert landscape_stage["pageRotation"] == 90, landscape_stage
     assert landscape["naturalWidth"] > landscape["naturalHeight"], landscape
-    screenshot(page, attempt_dir, "PDF-004-rotated-pages-landscape.png")
+    screenshot(page, attempt_dir, "PDF-004-rotated-pages-rotate-90.png")
     results["rotated-pages.pdf"] = {
-        "document": document_snapshot(page),
+        "document": landscape_document,
         "portrait": portrait,
+        "portraitDocument": portrait_document,
+        "portraitStage": portrait_stage,
         "landscape": landscape,
+        "landscapeStage": landscape_stage,
     }
 
     select_sample(page, "large-contract.pdf")
     large = document_snapshot(page)
-    assert large["pageCount"] == 31, large
-    assert page.locator('[data-testid="pdf-thumbnail"]').count() == 31
+    assert large["pageCount"] == 240, large
+    assert page.locator('[data-testid="pdf-thumbnail"]').count() == 240
+    # Wait for the 240 thumbnail bitmaps before switching pages: they share the
+    # PDFium worker queue, so measuring page 240 while they render would race.
+    page.wait_for_function(
+        """expected => {
+          const images = [...document.querySelectorAll('[data-testid="pdf-thumbnail-image"]')];
+          return images.length === expected &&
+            images.every((image) => image.complete && image.naturalWidth > 0);
+        }""",
+        arg=240,
+        timeout=120_000,
+    )
     page.locator('[data-testid="pdf-last-page"]').click()
-    wait_for_rendered_page(page, 31, "large-contract.pdf")
+    wait_for_rendered_page(page, 240, "large-contract.pdf")
     last_page = image_snapshot(page)
     assert last_page["naturalWidth"] > 0 and last_page["naturalHeight"] > 0, last_page
-    screenshot(page, attempt_dir, "PDF-004-large-contract-page-31.png")
+    screenshot(page, attempt_dir, "PDF-004-large-contract-page-240.png")
     results["large-contract.pdf"] = {
         "document": document_snapshot(page),
         "lastPage": last_page,
-        "thumbnailCount": 31,
+        "thumbnailCount": 240,
     }
     assert_no_native_pdf_embed(page)
     return results
@@ -573,6 +697,107 @@ def pdf_008_file_size_limit(
     }
 
 
+def pdf_009_encrypted_document(
+    page: Page, attempt_dir: Path, _evidence: BrowserEvidence
+) -> dict[str, object]:
+    navigate_pdf(page)
+    password_input = page.locator('[data-testid="pdf-password"]')
+    password_input.fill("")
+    page.locator('[data-testid="pdf-sample-select"]').select_option("encrypted.pdf")
+    page.wait_for_function(
+        """() => document.querySelector('[data-testid="page-status"]')?.dataset.state === 'error'""",
+        timeout=45_000,
+    )
+    error = page.locator('[data-testid="pdf-page-load-error"]')
+    error.wait_for(state="visible", timeout=10_000)
+    error_code = error.get_attribute("data-error-code")
+    error_text = error.inner_text()
+    assert error_code == "ENCRYPTED", (error_code, error_text)
+    assert page.locator('[data-testid="pdf-document"]').count() == 0
+    assert page.locator('[data-testid="pdf-thumbnail"]').count() == 0
+    assert page.locator('[data-testid="pdf-page-image"]').count() == 0
+    assert page.locator('[data-testid="pdf-download"]').is_disabled()
+    diagnostic = page.locator(
+        '[data-testid="pdf-diagnostic"][data-diagnostic-type="load-error"]'
+        '[data-error-code="ENCRYPTED"]'
+    ).last
+    diagnostic.wait_for(state="visible", timeout=10_000)
+    screenshot(page, attempt_dir, "PDF-009-encrypted-locked.png")
+
+    # The documented fixture password unlocks the same bytes through the
+    # public viewer prop; recovery must not require a page reload.
+    password_input.fill("arcships")
+    page.locator('[data-testid="pdf-load-sample"]').click()
+    wait_for_rendered_page(page, 1, "encrypted.pdf")
+    unlocked = {
+        "document": document_snapshot(page),
+        "image": image_snapshot(page),
+        "pixels": assert_rendered_pixels(page, "encrypted.pdf page 1"),
+    }
+    assert unlocked["document"]["pageCount"] == 2, unlocked
+    assert unlocked["document"]["activePage"] == 1, unlocked
+    text_layer = page.locator('[data-testid="pdf-text-layer"]')
+    text_layer.wait_for(state="visible", timeout=10_000)
+    unlocked_text = text_layer.inner_text()
+    assert "Encrypted" in unlocked_text, unlocked_text
+    assert page.locator('[data-testid="pdf-page-load-error"]').count() == 0
+    assert_no_native_pdf_embed(page)
+    screenshot(page, attempt_dir, "PDF-009-encrypted-unlocked.png")
+    return {
+        "errorCode": error_code,
+        "error": error_text,
+        "unlocked": unlocked,
+        "text": unlocked_text,
+    }
+
+
+def pdf_010_surface_error_state(
+    page: Page, attempt_dir: Path, _evidence: BrowserEvidence
+) -> dict[str, object]:
+    """The surface route owns no password input, so a locked PDF must surface
+    the stable error in the page UI instead of only logging to the console."""
+    page.goto(f"{BASE_URL}/#/pdf-surface", wait_until="networkidle")
+    status = page.locator('[data-testid="pdf-surface-status"]')
+    status.wait_for(state="visible", timeout=30_000)
+    assert status.get_attribute("data-state") == "idle", status.get_attribute("data-state")
+    page.locator('[data-testid="pdf-surface-empty"]').wait_for(state="visible", timeout=10_000)
+
+    page.locator('[data-testid="pdf-surface-sample-select"]').select_option("encrypted.pdf")
+    error = page.locator('[data-testid="pdf-surface-load-error"]')
+    error.wait_for(state="visible", timeout=45_000)
+    error_code = error.get_attribute("data-error-code")
+    error_text = error.inner_text()
+    assert error_code == "ENCRYPTED", (error_code, error_text)
+    assert status.get_attribute("data-state") == "error", status.get_attribute("data-state")
+    assert page.locator('.pdf-surface__pages').count() == 0
+    screenshot(page, attempt_dir, "PDF-010-surface-encrypted-error.png")
+
+    # Image-only pages must not gain a selectable text layer in the surface
+    # either, and a successful load clears the page-level error.
+    page.locator('[data-testid="pdf-surface-sample-select"]').select_option(
+        "scanned-invoice.pdf"
+    )
+    page.wait_for_function(
+        """() => document.querySelector('[data-testid="pdf-surface-status"]')?.dataset.state === 'ready'""",
+        timeout=45_000,
+    )
+    page.locator('.pdf-surface__page-img').first.wait_for(state="visible", timeout=45_000)
+    page.wait_for_timeout(750)
+    text_layers = page.locator('.pdf-surface__text-layer').count()
+    assert text_layers == 0, {
+        "message": "image-only surface page exposed a text layer",
+        "textLayers": text_layers,
+    }
+    assert page.locator('[data-testid="pdf-surface-load-error"]').count() == 0
+    screenshot(page, attempt_dir, "PDF-010-surface-scanned.png")
+    return {
+        "errorCode": error_code,
+        "errorText": error_text,
+        "textLayers": text_layers,
+        "status": status.get_attribute("data-state"),
+    }
+
+
 Workflow = Callable[[Page, Path, BrowserEvidence], dict[str, object]]
 
 CASES: list[tuple[str, Workflow]] = [
@@ -583,6 +808,8 @@ CASES: list[tuple[str, Workflow]] = [
     ("PDF-005", pdf_005_verified_download),
     ("PDF-006", pdf_006_corrupted_recovery),
     ("PDF-008", pdf_008_file_size_limit),
+    ("PDF-009", pdf_009_encrypted_document),
+    ("PDF-010", pdf_010_surface_error_state),
 ]
 
 
