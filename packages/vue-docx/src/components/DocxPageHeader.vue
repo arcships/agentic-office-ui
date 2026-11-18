@@ -16,6 +16,9 @@
         :document-theme="theme"
         :controller="controller"
         :numbering-definitions="model.metadata.numberingDefinitions"
+        :auto-spacing-before-px="autoSpacingBeforePx(ni)"
+        :auto-spacing-after-px="autoSpacingAfterPx(ni)"
+        :default-tab-stop-px="defaultTabStopPx"
         :show-tracked-changes="trackedChangesEnabled"
         :show-comment-highlights="commentsEnabled"
         :page-number="pageNumber"
@@ -49,6 +52,7 @@
         :resolve-bookmark-field-value="effectiveBookmarkResolver"
         :resolve-bookmark-page-number="effectiveBookmarkPageResolver"
         :model="model"
+        :default-tab-stop-px="defaultTabStopPx"
         :floating-page-origin-px="floatingPageOriginPx"
         :within-header-footer="true"
         header-footer-region="header"
@@ -65,6 +69,11 @@ import type {
   DocxFloatingPageOriginPx,
   DocxEditorController,
   HeaderSection,
+} from "@arcships/docx-core"
+import {
+  resolveDefaultTabStopPx,
+  resolveDocumentLayoutDefaults,
+  resolveParagraphAutoSpacingInStory,
 } from "@arcships/docx-core"
 import DocxParagraphHost from "./DocxParagraphHost.vue"
 import DocxTableHost from "./DocxTableHost.vue"
@@ -102,6 +111,35 @@ const props = defineProps<{
   /** Distance from the paper's top edge to the top of the header box. */
   headerDistancePx?: number
 }>()
+
+// Header/footer stories share the document layout defaults: HTML automatic
+// paragraph spacing and the default tab grid.
+const layoutDefaults = computed(() => resolveDocumentLayoutDefaults(props.model.metadata))
+const defaultTabStopPx = computed(() =>
+  resolveDefaultTabStopPx(layoutDefaults.value.defaultTabStopTwips)
+)
+
+function autoSpacingBeforePx(nodeIndex: number): number {
+  const node = props.section?.nodes[nodeIndex]
+  if (!node || node.type !== "paragraph") return 0
+  return resolveParagraphAutoSpacingInStory(
+    props.section?.nodes ?? [],
+    nodeIndex,
+    node,
+    layoutDefaults.value
+  ).beforePx
+}
+
+function autoSpacingAfterPx(nodeIndex: number): number {
+  const node = props.section?.nodes[nodeIndex]
+  if (!node || node.type !== "paragraph") return 0
+  return resolveParagraphAutoSpacingInStory(
+    props.section?.nodes ?? [],
+    nodeIndex,
+    node,
+    layoutDefaults.value
+  ).afterPx
+}
 
 const resolvedHeaderDistancePx = computed(() => {
   const explicit = props.headerDistancePx

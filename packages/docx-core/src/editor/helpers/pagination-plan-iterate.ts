@@ -26,6 +26,11 @@ import {
 } from "../../layout/pagination";
 import { MAX_TRAILING_SECTION_TAIL_OVERFLOW_PX, MAX_TRAILING_SECTION_TAIL_PARAGRAPHS, PAGE_OVERFLOW_TOLERANCE_PX } from "./constants";
 import { estimateParagraphLineHeightPx } from "./line-height";
+import { resolveDocumentLayoutDefaults } from "../../engine/layout-defaults";
+import {
+  paragraphsSuppressAutoSpacing,
+  resolveParagraphAutoSpacingPx,
+} from "../../engine/paragraph-auto-spacing";
 import { estimateDocNodeHeightPx } from "./line-height-table";
 import { paragraphHasImage, paragraphText } from "./paragraph-inspect";
 import {
@@ -89,14 +94,25 @@ export function effectiveParagraphAfterSpacingPx(
   nodeIndex: number,
   paragraph: ParagraphNode
 ): number {
-  const afterSpacingPx = paragraphAfterSpacingPx(paragraph);
+  const layoutDefaults = resolveDocumentLayoutDefaults(model.metadata);
+  const afterSpacingPx = paragraphAfterSpacingPx(paragraph, layoutDefaults);
   const nextNode = model.nodes[nodeIndex + 1];
   if (nextNode?.type !== "paragraph") {
     return afterSpacingPx;
   }
 
-  return paragraphsSuppressInterParagraphSpacing(paragraph, nextNode)
-    ? 0
+  if (paragraphsSuppressInterParagraphSpacing(paragraph, nextNode)) {
+    return 0;
+  }
+
+  // Word drops the automatic half of the gap between two items of the same
+  // list; any explicit `w:after` stays.
+  return paragraphsSuppressAutoSpacing(paragraph, nextNode, layoutDefaults)
+    ? Math.max(
+        0,
+        afterSpacingPx -
+          resolveParagraphAutoSpacingPx(paragraph, layoutDefaults).afterPx
+      )
     : afterSpacingPx;
 }
 
@@ -124,8 +140,17 @@ export function effectiveParagraphBeforeSpacingPx(
     return beforeSpacingPx;
   }
 
-  return paragraphsSuppressInterParagraphSpacing(previousNode, paragraph)
-    ? 0
+  if (paragraphsSuppressInterParagraphSpacing(previousNode, paragraph)) {
+    return 0;
+  }
+
+  const layoutDefaults = resolveDocumentLayoutDefaults(model.metadata);
+  return paragraphsSuppressAutoSpacing(previousNode, paragraph, layoutDefaults)
+    ? Math.max(
+        0,
+        beforeSpacingPx -
+          resolveParagraphAutoSpacingPx(paragraph, layoutDefaults).beforePx
+      )
     : beforeSpacingPx;
 }
 
@@ -267,6 +292,7 @@ export function shouldKeepTrailingSectionTailOnCurrentPage(
 
   let tailConsumedHeightPx = 0;
   let substantiveParagraphCount = 0;
+  const layoutDefaults = resolveDocumentLayoutDefaults(model.metadata);
 
   for (
     let nodeIndex = startNodeIndex;
@@ -316,8 +342,8 @@ export function shouldKeepTrailingSectionTailOnCurrentPage(
       return false;
     }
 
-    const directBeforeSpacingPx = paragraphBeforeSpacingPx(node);
-    const directAfterSpacingPx = paragraphAfterSpacingPx(node);
+    const directBeforeSpacingPx = paragraphBeforeSpacingPx(node, layoutDefaults);
+    const directAfterSpacingPx = paragraphAfterSpacingPx(node, layoutDefaults);
     const nodeBeforeSpacingPx = resolveNodeBeforeSpacingPx(
       nodeIndex,
       node,
@@ -366,6 +392,7 @@ function collectDocxEstimatedOverflowBreakStartNodeIndexes(
   if (!Number.isFinite(pageContentHeightPx) || pageContentHeightPx <= 0) {
     return breaks;
   }
+  const layoutDefaults = resolveDocumentLayoutDefaults(model.metadata);
 
   const fallbackMetrics: PaginationSectionMetrics = {
     startNodeIndex: 0,
@@ -469,9 +496,13 @@ function collectDocxEstimatedOverflowBreakStartNodeIndexes(
       continue;
     }
     const directNodeBeforeSpacingPx =
-      node.type === "paragraph" ? paragraphBeforeSpacingPx(node) : 0;
+      node.type === "paragraph"
+        ? paragraphBeforeSpacingPx(node, layoutDefaults)
+        : 0;
     const directNodeAfterSpacingPx =
-      node.type === "paragraph" ? paragraphAfterSpacingPx(node) : 0;
+      node.type === "paragraph"
+        ? paragraphAfterSpacingPx(node, layoutDefaults)
+        : 0;
     const nodeBeforeSpacingPx =
       node.type === "paragraph"
         ? effectiveParagraphBeforeSpacingPx(
@@ -492,7 +523,8 @@ function collectDocxEstimatedOverflowBreakStartNodeIndexes(
         node,
         nodeMetrics.pageContentWidthPx,
         numberingDefinitions,
-        nodeMetrics.docGridLinePitchPx
+        nodeMetrics.docGridLinePitchPx,
+        layoutDefaults
       ) -
         directNodeBeforeSpacingPx -
         directNodeAfterSpacingPx +
@@ -543,11 +575,11 @@ function collectDocxEstimatedOverflowBreakStartNodeIndexes(
           metricsBySection[chainMetricsIndex] ?? fallbackMetrics;
         const nextDirectBeforeSpacingPx =
           nextChainNode.type === "paragraph"
-            ? paragraphBeforeSpacingPx(nextChainNode)
+            ? paragraphBeforeSpacingPx(nextChainNode, layoutDefaults)
             : 0;
         const nextDirectAfterSpacingPx =
           nextChainNode.type === "paragraph"
-            ? paragraphAfterSpacingPx(nextChainNode)
+            ? paragraphAfterSpacingPx(nextChainNode, layoutDefaults)
             : 0;
         const nextBeforeSpacingPx =
           nextChainNode.type === "paragraph"
@@ -573,7 +605,8 @@ function collectDocxEstimatedOverflowBreakStartNodeIndexes(
             nextChainNode,
             chainMetrics.pageContentWidthPx,
             numberingDefinitions,
-            chainMetrics.docGridLinePitchPx
+            chainMetrics.docGridLinePitchPx,
+            layoutDefaults
           ) -
             nextDirectBeforeSpacingPx -
             nextDirectAfterSpacingPx +
@@ -608,7 +641,8 @@ function collectDocxEstimatedOverflowBreakStartNodeIndexes(
             candidateNode,
             candidatePageContentWidthPx,
             numberingDefinitions,
-            nodeMetrics.docGridLinePitchPx
+            nodeMetrics.docGridLinePitchPx,
+            layoutDefaults
           ),
         (candidateNodeIndex, candidateParagraph, consumedHeightPx) =>
           effectiveParagraphBeforeSpacingPx(

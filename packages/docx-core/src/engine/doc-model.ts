@@ -11,6 +11,7 @@ import { parseDocx } from "./ooxml-core";
 
 import { normalizeDocModel } from "./normalize";
 import { parseDocumentBackground } from "./page-background";
+import { attachDocumentDefaults } from "./document-defaults";
 import { parseNoteProperties } from "./note-properties";
 import { enrichDocModelFormFields } from "./form-field-enrichment";
 import { enrichDocModelTypography } from "./model-enrichment";
@@ -86,7 +87,10 @@ export async function buildDocModel(pkg: OoxmlPackage): Promise<DocModel> {
   enrichDocModelFormFields(model);
   enrichDocModelTypography(model, pkg);
   return normalizeDocModel(
-    attachDocumentBackground(attachDocumentNoteProperties(model, pkg), pkg)
+    attachDocumentDefaults(
+      attachDocumentBackground(attachDocumentNoteProperties(model, pkg), pkg),
+      pkg
+    )
   );
 }
 

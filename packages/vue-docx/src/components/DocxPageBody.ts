@@ -30,7 +30,11 @@ import {
   DEFAULT_DOC_PAGE_MARGIN,
   resolveFloatingPageOriginPx,
   resolveWrappedImageFlowClearancePx,
+  resolveDefaultTabStopPx,
+  resolveDocumentLayoutDefaults,
+  resolveParagraphAutoSpacingInStory,
   type DocxPageFlowWrapClearance,
+  type DocumentLayoutDefaults,
 } from "@arcships/docx-core"
 import DocxParagraphHost from "./DocxParagraphHost.vue"
 import DocxTableHost from "./DocxTableHost.vue"
@@ -323,6 +327,24 @@ export default defineComponent({
       )
     }
 
+    // Automatic (HTML) paragraph spacing and document tab grid, resolved once
+    // per page so every host renders the numbers the paginator measured.
+    const layoutDefaults: DocumentLayoutDefaults = resolveDocumentLayoutDefaults(
+      props.model.metadata
+    )
+    const defaultTabStopPx = resolveDefaultTabStopPx(
+      layoutDefaults.defaultTabStopTwips
+    )
+
+    function paragraphAutoSpacing(nodeIndex: number, paragraph: ParagraphNode) {
+      return resolveParagraphAutoSpacingInStory(
+        props.model.nodes,
+        nodeIndex,
+        paragraph,
+        layoutDefaults
+      )
+    }
+
     function ensureParagraphSelection(nodeIndex: number): void {
       const controller = props.controller
       if (!controller) return
@@ -368,6 +390,10 @@ export default defineComponent({
         } else if (node.type === "paragraph") {
           const wrapClearanceTopPx =
             wrapClearances[paragraphSlotRef.value++]?.marginTopPx ?? 0
+          const autoSpacing = paragraphAutoSpacing(
+            segment.nodeIndex,
+            node as ParagraphNode
+          )
           children.push(
             h(DocxParagraphHost, {
               key,
@@ -385,6 +411,9 @@ export default defineComponent({
               showTrackedChanges: props.trackedChangesEnabled,
               showCommentHighlights: props.commentsEnabled,
               numberingDefinitions: props.model.metadata.numberingDefinitions,
+              autoSpacingBeforePx: autoSpacing.beforePx,
+              autoSpacingAfterPx: autoSpacing.afterPx,
+              defaultTabStopPx,
               pageNumber: props.pageNumber,
               totalPages: props.totalPages,
               pageNumberFormat: props.pageNumberFormat,

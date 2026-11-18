@@ -296,11 +296,24 @@ export function buildParagraphPretextLayoutSource(
   options?: {
     allowExplicitLineBreakText?: boolean;
     expandTabsForLayout?: boolean;
+    /** Document `w:defaultTabStop` in CSS pixels; Word's 48px when omitted. */
+    defaultTabStopPx?: number;
   }
 ): ParagraphPretextLayoutSource | undefined {
+  const defaultTabStopPx =
+    Number.isFinite(options?.defaultTabStopPx) &&
+    (options?.defaultTabStopPx as number) > 0
+      ? Math.max(1, Math.round(options?.defaultTabStopPx as number))
+      : DEFAULT_TAB_STOP_PX;
+  // Tabs in the text depend on the document grid, so variants measured for
+  // another default tab stop must not be reused. The two flag bits stay below
+  // 4 and the grid contributes a multiple of 4, so the key stays unique.
   const cacheKey =
-    (options?.allowExplicitLineBreakText ? 1 : 0) |
-    (options?.expandTabsForLayout ? 2 : 0);
+    (options?.allowExplicitLineBreakText ? 1 : 0) +
+    (options?.expandTabsForLayout ? 2 : 0) +
+    (options?.expandTabsForLayout && defaultTabStopPx !== DEFAULT_TAB_STOP_PX
+      ? defaultTabStopPx * 4
+      : 0);
   const cachedVariants = paragraphPretextLayoutSourceCache.get(paragraph);
   const cachedSource = cachedVariants?.get(cacheKey);
   if (cachedSource !== undefined) {
@@ -339,7 +352,7 @@ export function buildParagraphPretextLayoutSource(
     paragraphLooksLikeCheckboxChoiceRow(paragraph);
   const fallbackTabWidthPx = usesCheckboxRowTabFallback
     ? checkboxChoiceRowTabWidthPx(paragraph)
-    : DEFAULT_TAB_STOP_PX;
+    : defaultTabStopPx;
   let approximateLineWidthPx = 0;
   let lastTextStyle: TextRunNode["style"] | undefined =
     firstRunStyle(paragraph);

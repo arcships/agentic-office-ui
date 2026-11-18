@@ -11,6 +11,7 @@ import {
   resolvePaginationSectionMetricsIndexForNodeIndex,
   resolveParagraphConsumedHeightPx
 } from "./pagination";
+import { resolveDocumentLayoutDefaults } from "../engine/layout-defaults";
 
 export function normalizedPositivePixelValue(value: number | undefined, fallback: number): number {
   if (!Number.isFinite(value) || (value as number) <= 0) {
@@ -221,6 +222,7 @@ export function collectDocxEstimatedOverflowBreakStartNodeIndexes(
     pageContentWidthPx,
     paginationMetricsBySection
   );
+  const layoutDefaults = resolveDocumentLayoutDefaults(model.metadata);
 
   let pageConsumedHeightPx = 0;
   let currentMetricsIndex = 0;
@@ -256,7 +258,9 @@ export function collectDocxEstimatedOverflowBreakStartNodeIndexes(
     );
     const collapsedNodeHeightPx = resolveParagraphConsumedHeightPx(
       rawNodeHeightPx,
-      node.type === "paragraph" ? paragraphBeforeSpacingPx(node) : 0,
+      node.type === "paragraph"
+        ? paragraphBeforeSpacingPx(node, layoutDefaults)
+        : 0,
       pageConsumedHeightPx <= 0
     );
 
@@ -270,7 +274,10 @@ export function collectDocxEstimatedOverflowBreakStartNodeIndexes(
       callbacks.paragraphHasVisibleText(node)
     ) {
       let chainCursor = nodeIndex;
-      let chainPreviousParagraphAfterPx = paragraphAfterSpacingPx(node);
+      let chainPreviousParagraphAfterPx = paragraphAfterSpacingPx(
+        node,
+        layoutDefaults
+      );
       while (chainCursor < model.nodes.length - 1) {
         const currentChainNode = model.nodes[chainCursor];
         if (
@@ -321,7 +328,10 @@ export function collectDocxEstimatedOverflowBreakStartNodeIndexes(
         // OOXML keeps both spacing values; no max()-style collapsing between
         // paragraphs that share a page.
         requiredHeightPx += Math.max(1, nextRawHeightPx);
-        chainPreviousParagraphAfterPx = paragraphAfterSpacingPx(nextChainNode);
+        chainPreviousParagraphAfterPx = paragraphAfterSpacingPx(
+          nextChainNode,
+          layoutDefaults
+        );
       }
       keepNextChainEndNodeIndex = chainCursor;
     }

@@ -458,7 +458,8 @@ export function resolveParagraphFirstLineLeftTabStopsPx(
 
 export function resolveNextTabStopPx(
   currentLineWidthPx: number,
-  tabStopsPx: number[]
+  tabStopsPx: number[],
+  defaultTabStopPx: number = DEFAULT_TAB_STOP_PX
 ): number {
   const nextExplicit = tabStopsPx.find(
     (stopPx) => stopPx > currentLineWidthPx + 0.5
@@ -467,7 +468,14 @@ export function resolveNextTabStopPx(
     return nextExplicit;
   }
 
-  const tabStepPx = DEFAULT_TAB_STOP_PX;
+  const tabStepPx = Math.max(
+    1,
+    Math.round(
+      Number.isFinite(defaultTabStopPx) && defaultTabStopPx > 0
+        ? defaultTabStopPx
+        : DEFAULT_TAB_STOP_PX
+    )
+  );
   const nextMultiple =
     Math.floor(Math.max(0, currentLineWidthPx) / tabStepPx + 1) * tabStepPx;
   return Math.max(tabStepPx, nextMultiple);

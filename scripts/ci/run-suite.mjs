@@ -73,6 +73,7 @@ const suites = {
       "tests/unit/docx-page-appearance.test.mjs",
       "tests/unit/docx-tracked-changes.test.mjs",
       "tests/unit/docx-typography.test.mjs",
+      "tests/unit/docx-paragraph-spacing.test.mjs",
       "tests/unit/docx-line-metrics.test.mjs",
       "tests/unit/docx-pagination-fidelity.test.mjs",
       "tests/unit/docx-pagination-completion.test.mjs",

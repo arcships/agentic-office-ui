@@ -77,6 +77,7 @@
             kind="footnote"
             :notes="footnotes"
             :labels="footnoteLabels"
+            :model="model"
             :numbering-definitions="model.metadata.numberingDefinitions"
             :theme="theme"
           />
@@ -86,6 +87,7 @@
             kind="endnote"
             :notes="endnotes"
             :labels="endnoteLabels"
+            :model="model"
             :numbering-definitions="model.metadata.numberingDefinitions"
             :theme="theme"
           />
@@ -222,6 +224,7 @@ import {
   parseSectionPageBorders,
   resolveDocumentBackgroundColor,
   resolveDocumentLayout,
+  resolveDocumentLayoutDefaults,
   resolveDocumentSectionPropertiesXml,
   resolveFooterPaginationReservePx,
   resolveFloatingPageOriginPx,
@@ -404,8 +407,23 @@ const fieldResolvers = computed(() =>
 // margin. The helpers return the overlap beyond the margin, so the body area
 // shrinks instead of the header/footer pushing the paper taller.
 const pageFurnitureReservePx = computed(() => {
+  // Header/footer paragraphs lay out with the document's own spacing defaults
+  // (automatic paragraph spacing and its tab grid).
+  const layoutDefaults = resolveDocumentLayoutDefaults(props.model.metadata)
   const reserveOptions = {
-    estimateDocNodeHeightPx,
+    estimateDocNodeHeightPx: (
+      node: DocModel["nodes"][number],
+      availableWidthPx?: number,
+      numberingDefinitions?: DocModel["metadata"]["numberingDefinitions"],
+      docGridLinePitchPx?: number
+    ) =>
+      estimateDocNodeHeightPx(
+        node,
+        availableWidthPx,
+        numberingDefinitions,
+        docGridLinePitchPx,
+        layoutDefaults
+      ),
     minimumVisibleFlowFooterReservePx: 0,
   }
   return {

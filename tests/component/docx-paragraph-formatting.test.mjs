@@ -188,3 +188,65 @@ test("the paragraph host CSS keeps layout defaults but no typography", () => {
   assert.doesNotMatch(hostRule, /(^|\s)font-family\s*:/);
   assert.doesNotMatch(hostRule, /(^|\s)font-size\s*:/);
 });
+
+// ── Automatic (HTML) spacing and the document tab grid (issue #129) ──
+
+test("paragraph host adds Word's automatic spacing to explicit margins", async () => {
+  // 14 pt at 96 dpi: 280 twips / 15 twips-per-pixel.
+  const autoSpacingPx = 280 / 15;
+  const mounted = await mount(DocxParagraphHost, {
+    paragraph: paragraph({ spacing: { beforeTwips: 240, afterTwips: 120 } }),
+    paragraphIndex: 0,
+    autoSpacingBeforePx: autoSpacingPx,
+    autoSpacingAfterPx: autoSpacingPx,
+  });
+  const host = walk(mounted.root).find(
+    (node) => node.props?.["data-testid"] === "editor-paragraph",
+  );
+  try {
+    assert.ok(host, "paragraph host should render");
+    // 16 px + 18.67 px before, 8 px + 18.67 px after.
+    assert.equal(host.props.style.marginTop, "34.67px");
+    assert.equal(host.props.style.marginBottom, "26.67px");
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+test("rendered tabs advance on the document default tab stop", async () => {
+  const withTab = paragraph({}, [
+    textRun("AA"),
+    textRun("\t"),
+    textRun("ZZ"),
+  ]);
+
+  const tabWidthPxFor = async (defaultTabStopPx) => {
+    const mounted = await mount(DocxParagraphHost, {
+      paragraph: withTab,
+      paragraphIndex: 0,
+      defaultTabStopPx,
+    });
+    try {
+      const host = walk(mounted.root).find(
+        (node) => node.props?.["data-testid"] === "editor-paragraph",
+      );
+      assert.ok(host, "paragraph host should render");
+      // The run renderer emits its vnodes as static HTML.
+      const spacerWidths = [
+        ...String(host.props.innerHTML).matchAll(
+          /display:inline-block;[^"]*?width:(\d+(?:\.\d+)?)px/g,
+        ),
+      ].map((match) => Number(match[1]));
+      assert.equal(spacerWidths.length, 1, "one tab spacer");
+      return spacerWidths[0];
+    } finally {
+      mounted.app.unmount();
+    }
+  };
+
+  const narrow = await tabWidthPxFor(28);
+  const wide = await tabWidthPxFor(48);
+  // 420 twips vs 720 twips: the gap to the same first stop differs by 20 px.
+  assert.equal(wide - narrow, 48 - 28);
+  assert.ok(narrow > 0 && wide > 0);
+});

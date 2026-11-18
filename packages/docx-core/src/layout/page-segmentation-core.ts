@@ -39,6 +39,7 @@ import {
   sumLineHeightsPx,
   type LineVerticalMetrics
 } from "../viewer/line-metrics";
+import { resolveDocumentLayoutDefaults } from "../engine/layout-defaults";
 
 export const DEFAULT_PAGE_OVERFLOW_TOLERANCE_PX = 2;
 export const DEFAULT_MIN_PARAGRAPH_LINE_HEIGHT_PX = 14;
@@ -469,6 +470,7 @@ export function buildDocumentPageNodeSegments(
     }
   }
   const estimatedRowHeightsByTableNodeIndex = new Map<number, number[]>();
+  const layoutDefaults = resolveDocumentLayoutDefaults(model.metadata);
   const allowParagraphLineSplitting = options?.allowParagraphLineSplitting ?? true;
   const suppressSpacingBeforeAfterPageBreak =
     options?.suppressSpacingBeforeAfterPageBreak ?? false;
@@ -625,11 +627,11 @@ export function buildDocumentPageNodeSegments(
         pageConsumedHeightPx,
         suppressSpacingBeforeAfterPageBreak
       );
-      const afterSpacingPx = paragraphAfterSpacingPx(node);
+      const afterSpacingPx = paragraphAfterSpacingPx(node, layoutDefaults);
       const atPageTop = pageConsumedHeightPx <= 0;
       const consumedNodeHeightPx = resolveParagraphConsumedHeightPx(
         rawNodeHeightPx,
-        paragraphBeforeSpacingPx(node),
+        paragraphBeforeSpacingPx(node, layoutDefaults),
         atPageTop
       );
       const paragraphLineHeightPx = Math.max(
@@ -998,7 +1000,7 @@ export function buildDocumentPageNodeSegments(
       currentPageSegments.push({ nodeIndex });
       pageConsumedHeightPx += resolveParagraphConsumedHeightPx(
         rawNodeHeightPx,
-        paragraphBeforeSpacingPx(node),
+        paragraphBeforeSpacingPx(node, layoutDefaults),
         pageConsumedHeightPx <= 0
       );
       continue;

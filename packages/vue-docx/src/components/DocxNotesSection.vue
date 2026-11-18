@@ -24,6 +24,7 @@
               :editable="false"
               :document-theme="theme"
               :numbering-definitions="numberingDefinitions"
+              :default-tab-stop-px="defaultTabStopPx"
             />
             <DocxTableHost
               v-else-if="node.type === 'table'"
@@ -32,6 +33,7 @@
               :editable="false"
               :document-theme="theme"
               :numbering-definitions="numberingDefinitions"
+              :default-tab-stop-px="defaultTabStopPx"
             />
           </template>
         </template>
@@ -42,7 +44,12 @@
 </template>
 
 <script setup lang="ts">
-import type { DocumentNoteDefinition, NumberingDefinitionSet } from "@arcships/docx-core"
+import { computed } from "vue"
+import type { DocModel, DocumentNoteDefinition, NumberingDefinitionSet } from "@arcships/docx-core"
+import {
+  resolveDefaultTabStopPx,
+  resolveDocumentLayoutDefaults,
+} from "@arcships/docx-core"
 import DocxParagraphHost from "./DocxParagraphHost.vue"
 import DocxTableHost from "./DocxTableHost.vue"
 import { useDocxMessages } from "../i18n"
@@ -50,6 +57,7 @@ import { useDocxMessages } from "../i18n"
 const props = withDefaults(defineProps<{
   kind: "footnote" | "endnote"
   notes: DocumentNoteDefinition[]
+  model?: DocModel
   numberingDefinitions?: NumberingDefinitionSet
   /**
    * Note id → display label computed from the document's note numbering
@@ -63,6 +71,15 @@ const props = withDefaults(defineProps<{
   startIndex: 1,
   theme: "light",
 })
+
+// Note bodies render zero-margin paragraphs (see the scoped style below), so
+// only the document tab grid reaches them.
+function noteLayoutDefaults() {
+  return resolveDocumentLayoutDefaults(props.model?.metadata)
+}
+const defaultTabStopPx = computed(() =>
+  resolveDefaultTabStopPx(noteLayoutDefaults().defaultTabStopTwips)
+)
 
 function noteLabel(note: DocumentNoteDefinition, noteIndex: number): string {
   const label = props.labels?.get(note.id)

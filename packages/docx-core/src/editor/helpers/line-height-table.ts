@@ -11,8 +11,15 @@ import type {
 } from "../../engine/types";
 import { twipsToPixels } from "../../viewer/section-layout";
 import {
+  paragraphAfterSpacingPx,
+  paragraphBeforeSpacingPx,
   paragraphHasExplicitPageBreak,
 } from "../../layout/pagination";
+import {
+  resolveDefaultTabStopPx,
+  tabGridLayoutDefaults,
+  type DocumentLayoutDefaults,
+} from "../../engine/layout-defaults";
 import type { TableSpacingTwips } from "./cache-utils";
 import {
   heightEstimateCacheKeyPx,
@@ -111,15 +118,16 @@ export function estimateParagraphHeightPx(
   availableWidthPx?: number,
   numberingDefinitions?: NumberingDefinitionSet,
   docGridLinePitchPx?: number,
-  disableDocGridSnap = false
+  disableDocGridSnap = false,
+  layoutDefaults?: DocumentLayoutDefaults
 ): number {
   const sourceXml = paragraph.sourceXml;
-  const baseWidthKey = heightEstimateCacheKeyPx(
+  const widthKey = heightEstimateCacheKeyPx(
     availableWidthPx,
     docGridLinePitchPx,
-    disableDocGridSnap
+    disableDocGridSnap,
+    layoutDefaults
   );
-  const widthKey: number | string = baseWidthKey;
   if (sourceXml) {
     const cachedByWidth = paragraphEstimatedHeightBySourceXml.get(sourceXml);
     const cached = cachedByWidth?.get(widthKey);
@@ -128,9 +136,8 @@ export function estimateParagraphHeightPx(
     }
   }
 
-  const beforeSpacing =
-    twipsToPixels(paragraph.style?.spacing?.beforeTwips) ?? 0;
-  const afterSpacing = twipsToPixels(paragraph.style?.spacing?.afterTwips) ?? 0;
+  const beforeSpacing = paragraphBeforeSpacingPx(paragraph, layoutDefaults);
+  const afterSpacing = paragraphAfterSpacingPx(paragraph, layoutDefaults);
   const lineHeightPx = estimateParagraphLineHeightPx(
     paragraph,
     docGridLinePitchPx,
@@ -155,7 +162,8 @@ export function estimateParagraphHeightPx(
   const lineCount = paragraphLineCountWithinWidth(
     paragraph,
     availableWidthPx,
-    numberingDefinitions
+    numberingDefinitions,
+    layoutDefaults
   );
   const absoluteFloatingAnchorOnlyParagraph =
     paragraphIsAbsoluteFloatingImageAnchorOnly(paragraph);
@@ -204,7 +212,8 @@ export function estimateParagraphHeightPx(
         numberingDefinitions,
         docGridLinePitchPx,
         disableDocGridSnap,
-        expectedLineCount: lineCount
+        expectedLineCount: lineCount,
+        layoutDefaults
       });
 
   const contentHeightPx = Math.max(
@@ -301,8 +310,11 @@ export function estimateTableCellContentHeightPx(
   availableWidthPx?: number,
   numberingDefinitions?: NumberingDefinitionSet,
   applyWordTableDefaults = false,
-  docGridLinePitchPx?: number
+  docGridLinePitchPx?: number,
+  layoutDefaults?: DocumentLayoutDefaults
 ): number {
+  // Cell paragraphs render with zero margins, so only the tab grid applies.
+  const cellLayoutDefaults = tabGridLayoutDefaults(layoutDefaults);
   let paragraphIndex = 0;
   let expandedWithPretextLayout = false;
   let totalHeightPx = 0;
@@ -313,7 +325,8 @@ export function estimateTableCellContentHeightPx(
         contentNode,
         availableWidthPx,
         numberingDefinitions,
-        docGridLinePitchPx
+        docGridLinePitchPx,
+        cellLayoutDefaults
       );
       continue;
     }
@@ -329,7 +342,8 @@ export function estimateTableCellContentHeightPx(
       availableWidthPx,
       numberingDefinitions,
       docGridLinePitchPx,
-      disableDocGridSnap
+      disableDocGridSnap,
+      cellLayoutDefaults
     );
     const lineHeightPx = Math.max(
       MIN_PARAGRAPH_LINE_HEIGHT_PX,
@@ -341,7 +355,13 @@ export function estimateTableCellContentHeightPx(
     );
     const pretextSource = buildParagraphPretextLayoutSource(
       paragraphForLayout,
-      { allowExplicitLineBreakText: true, expandTabsForLayout: true }
+      {
+        allowExplicitLineBreakText: true,
+        expandTabsForLayout: true,
+        defaultTabStopPx: resolveDefaultTabStopPx(
+          cellLayoutDefaults?.defaultTabStopTwips
+        ),
+      }
     );
     const paragraphTextWidthPx =
       typeof availableWidthPx === "number" && availableWidthPx > 0
@@ -513,11 +533,17 @@ export function estimateTableRowHeightsPx(
   maxAvailableWidthPx?: number,
   numberingDefinitions?: NumberingDefinitionSet,
   docGridLinePitchPx?: number,
-  pageContentHeightPx?: number
+  pageContentHeightPx?: number,
+  layoutDefaults?: DocumentLayoutDefaults
 ): number[] {
+  // Table cells only depend on the tab grid (their paragraph margins are not
+  // rendered), so the compatibility mode stays out of the cache key too.
+  const tableDefaults = tabGridLayoutDefaults(layoutDefaults);
   const baseCacheKey = heightEstimateCacheKeyPx(
     maxAvailableWidthPx,
-    docGridLinePitchPx
+    docGridLinePitchPx,
+    false,
+    tableDefaults
   );
   const cachedByKey = tableEstimatedRowHeightsByNode.get(table);
   let baseRowHeights = cachedByKey?.get(baseCacheKey);
@@ -527,9 +553,10 @@ export function estimateTableRowHeightsPx(
       table,
       maxAvailableWidthPx,
       numberingDefinitions,
-      docGridLinePitchPx
+      docGridLinePitchPx,
+      tableDefaults
     );
-    const cacheByKey = cachedByKey ?? new Map<number, number[]>();
+    const cacheByKey = cachedByKey ?? new Map<number | string, number[]>();
     cacheByKey.set(baseCacheKey, baseRowHeights);
     tableEstimatedRowHeightsByNode.set(table, cacheByKey);
   }
@@ -567,7 +594,8 @@ function computeTableCellDerivedRowHeightsPx(
   table: TableNode,
   maxAvailableWidthPx?: number,
   numberingDefinitions?: NumberingDefinitionSet,
-  docGridLinePitchPx?: number
+  docGridLinePitchPx?: number,
+  layoutDefaults?: DocumentLayoutDefaults
 ): number[] {
   const defaultCellMargin = table.style?.cellMarginTwips;
   const {
@@ -611,7 +639,8 @@ function computeTableCellDerivedRowHeightsPx(
         contentWidthPx,
         numberingDefinitions,
         applyWordTableDefaults,
-        docGridLinePitchPx
+        docGridLinePitchPx,
+        layoutDefaults
       );
       return Math.max(largest, paragraphHeightPx + verticalPaddingPx);
     }, 0);
@@ -669,8 +698,10 @@ function estimateParagraphBoundaryOffsetsPx(
   numberingDefinitions: NumberingDefinitionSet | undefined,
   applyWordTableDefaults: boolean,
   docGridLinePitchPx: number | undefined,
-  paragraphIndex: number
+  paragraphIndex: number,
+  layoutDefaults?: DocumentLayoutDefaults
 ): { heightPx: number; safeBoundariesPx: number[] } {
+  const cellLayoutDefaults = tabGridLayoutDefaults(layoutDefaults);
   const paragraphForLayout = wordLikeTableCellParagraph(
     paragraph,
     applyWordTableDefaults
@@ -681,16 +712,19 @@ function estimateParagraphBoundaryOffsetsPx(
     availableWidthPx,
     numberingDefinitions,
     docGridLinePitchPx,
-    disableDocGridSnap
+    disableDocGridSnap,
+    cellLayoutDefaults
   );
   const suppressTopSpacing =
     paragraphIndex === 0 &&
     suppressFirstTableCellParagraphTopSpacing(paragraph);
   const beforeSpacingPx = suppressTopSpacing
     ? 0
-    : twipsToPixels(paragraphForLayout.style?.spacing?.beforeTwips) ?? 0;
-  const afterSpacingPx =
-    twipsToPixels(paragraphForLayout.style?.spacing?.afterTwips) ?? 0;
+    : paragraphBeforeSpacingPx(paragraphForLayout, cellLayoutDefaults);
+  const afterSpacingPx = paragraphAfterSpacingPx(
+    paragraphForLayout,
+    cellLayoutDefaults
+  );
   const topBorderInsetPx = paragraphBorderInsetPx(
     paragraphForLayout.style?.borders?.top
   );
@@ -708,6 +742,9 @@ function estimateParagraphBoundaryOffsetsPx(
   const pretextSource = buildParagraphPretextLayoutSource(paragraphForLayout, {
     allowExplicitLineBreakText: true,
     expandTabsForLayout: true,
+    defaultTabStopPx: resolveDefaultTabStopPx(
+      cellLayoutDefaults?.defaultTabStopTwips
+    ),
   });
   const paragraphTextWidthPx = paragraphAvailableTextWidthPx(
     paragraphForLayout,
@@ -732,7 +769,8 @@ function estimateParagraphBoundaryOffsetsPx(
             paragraphLineCountWithinWidth(
               paragraphForLayout,
               availableWidthPx,
-              numberingDefinitions
+              numberingDefinitions,
+              cellLayoutDefaults
             )
           ),
         },
@@ -766,13 +804,16 @@ function estimateNestedTableBoundaryOffsetsPx(
   table: TableNode,
   availableWidthPx: number,
   numberingDefinitions: NumberingDefinitionSet | undefined,
-  docGridLinePitchPx: number | undefined
+  docGridLinePitchPx: number | undefined,
+  layoutDefaults?: DocumentLayoutDefaults
 ): { heightPx: number; safeBoundariesPx: number[] } {
   const rowHeightsPx = estimateTableRowHeightsPx(
     table,
     availableWidthPx,
     numberingDefinitions,
-    docGridLinePitchPx
+    docGridLinePitchPx,
+    undefined,
+    tabGridLayoutDefaults(layoutDefaults)
   );
   const boundariesPx: number[] = [];
   let cursorPx = 0;
@@ -793,6 +834,7 @@ export function estimateTableCellSliceBoundaryLayoutPx(params: {
   numberingDefinitions?: NumberingDefinitionSet;
   applyWordTableDefaults: boolean;
   docGridLinePitchPx?: number;
+  layoutDefaults?: DocumentLayoutDefaults;
 }): TableCellSliceBoundaryLayout {
   const {
     cell,
@@ -802,6 +844,7 @@ export function estimateTableCellSliceBoundaryLayoutPx(params: {
     numberingDefinitions,
     applyWordTableDefaults,
     docGridLinePitchPx,
+    layoutDefaults,
   } = params;
   const paddingPx = resolveTableSpacingPaddingPx(
     mergeTableSpacing(tableCellMarginTwips, cell.style?.marginTwips)
@@ -819,13 +862,15 @@ export function estimateTableCellSliceBoundaryLayoutPx(params: {
             numberingDefinitions,
             applyWordTableDefaults,
             docGridLinePitchPx,
-            paragraphIndex++
+            paragraphIndex++,
+            layoutDefaults
           )
         : estimateNestedTableBoundaryOffsetsPx(
             contentNode,
             contentWidthPx,
             numberingDefinitions,
-            docGridLinePitchPx
+            docGridLinePitchPx,
+            layoutDefaults
           );
     localBoundariesPx.push(
       ...layout.safeBoundariesPx.map((boundaryPx) => contentCursorPx + boundaryPx)

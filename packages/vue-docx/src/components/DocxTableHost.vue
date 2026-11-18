@@ -165,6 +165,7 @@ import {
   type TableRowRange,
   paragraphText,
   paragraphTypographyStyle,
+  resolveDefaultTabStopPx,
   resolveTableTrackedMarkup,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
@@ -221,6 +222,8 @@ const props = withDefaults(
     resolveBookmarkFieldValue?: (target: string) => string | undefined
     resolveBookmarkPageNumber?: (target: string) => number | undefined
     model?: DocModel
+    /** Document `w:defaultTabStop`; resolved from `model` when omitted. */
+    defaultTabStopPx?: number
     withinHeaderFooter?: boolean
     headerFooterRegion?: "header" | "footer"
     maxAvailableWidthPx?: number
@@ -241,6 +244,13 @@ const emit = defineEmits<{
 }>()
 
 const m = useDocxMessages()
+
+// Cell paragraphs are measured and rendered on the document's tab grid.
+const documentTabStopPx = computed(() =>
+  Number.isFinite(props.defaultTabStopPx)
+    ? Math.max(1, Math.round(props.defaultTabStopPx as number))
+    : resolveDefaultTabStopPx(props.model?.metadata?.defaultTabStopTwips)
+)
 
 // ── State ──────────────────────────────────────────────────────────
 const tableEl = ref<HTMLElement | undefined>()
@@ -667,6 +677,7 @@ function cellParagraphHtml(
     tableCellLayout: { widthPx: cellContentWidthPx(cell) },
     imageAltText: m.value.docx.image.alt,
     imageMissingText: m.value.docx.image.missing,
+    defaultTabStopPx: documentTabStopPx.value,
   }
   const rendered = renderParagraphRuns(
     para,

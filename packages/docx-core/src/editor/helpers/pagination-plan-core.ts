@@ -48,6 +48,11 @@ import {
   estimateTableHeightPx,
   paragraphCanSplitAcrossPages,
 } from "./line-height-table";
+import {
+  resolveDefaultTabStopPx,
+  resolveDocumentLayoutDefaults,
+  type DocumentLayoutDefaults,
+} from "../../engine/layout-defaults";
 import { paragraphHasImage } from "./paragraph-inspect";
 import {
   buildParagraphPretextLayoutSource,
@@ -451,6 +456,7 @@ function estimateRenderedPageSegmentHeightPx(
     excludeWrappedFloatingImageFootprint?: boolean;
   }
 ): number {
+  const layoutDefaults = resolveDocumentLayoutDefaults(model.metadata);
   if (node.type === "paragraph") {
     const paragraphLineRange = segment.paragraphLineRange;
     if (paragraphLineRange) {
@@ -475,6 +481,9 @@ function estimateRenderedPageSegmentHeightPx(
       const paragraphPretextSource = buildParagraphPretextLayoutSource(node, {
         allowExplicitLineBreakText: true,
         expandTabsForLayout: true,
+        defaultTabStopPx: resolveDefaultTabStopPx(
+          layoutDefaults.defaultTabStopTwips
+        ),
       });
       const paragraphPretextLayout = paragraphPretextSource
         ? layoutParagraphPretextSource(
@@ -513,7 +522,8 @@ function estimateRenderedPageSegmentHeightPx(
         node,
         availableWidthPx,
         numberingDefinitions,
-        docGridLinePitchPx
+        docGridLinePitchPx,
+        layoutDefaults
       )
     );
   }
@@ -523,7 +533,9 @@ function estimateRenderedPageSegmentHeightPx(
       node as TableNode,
       availableWidthPx,
       numberingDefinitions,
-      docGridLinePitchPx
+      docGridLinePitchPx,
+      undefined,
+      layoutDefaults
     );
     const repeatHeaderRowCount = Math.max(
       0,
@@ -563,7 +575,8 @@ function estimateRenderedPageSegmentHeightPx(
       node as TableNode,
       availableWidthPx,
       numberingDefinitions,
-      docGridLinePitchPx
+      docGridLinePitchPx,
+      layoutDefaults
     )
   );
 }
@@ -577,7 +590,8 @@ function resolveParagraphColumnRenderLineRange(
   segment: DocumentPageNodeSegment,
   availableWidthPx: number,
   numberingDefinitions?: NumberingDefinitionSet,
-  docGridLinePitchPx?: number
+  docGridLinePitchPx?: number,
+  layoutDefaults?: DocumentLayoutDefaults
 ): ParagraphLineRange {
   const lineHeightPx = Math.max(
     1,
@@ -599,6 +613,7 @@ function resolveParagraphColumnRenderLineRange(
   const pretextSource = buildParagraphPretextLayoutSource(paragraph, {
     allowExplicitLineBreakText: true,
     expandTabsForLayout: true,
+    defaultTabStopPx: resolveDefaultTabStopPx(layoutDefaults?.defaultTabStopTwips),
   });
   const pretextLayout = pretextSource
     ? layoutParagraphPretextSource(
@@ -667,7 +682,8 @@ function splitParagraphSegmentForColumnRender(params: {
     segment,
     availableWidthPx,
     numberingDefinitions,
-    docGridLinePitchPx
+    docGridLinePitchPx,
+    resolveDocumentLayoutDefaults(model.metadata)
   );
   const startLineIndex = Math.max(0, fullLineRange.startLineIndex);
   const endLineIndex = Math.max(startLineIndex, fullLineRange.endLineIndex);
