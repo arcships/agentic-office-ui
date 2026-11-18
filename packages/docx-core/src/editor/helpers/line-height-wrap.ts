@@ -18,7 +18,7 @@ import type {
 import {
   buildParagraphPretextLayoutSource,
   layoutParagraphPretextSource,
-  resolveUniformPretextSourceFont,
+  resolveUniformPretextSourceTypography,
   pretextWordBreakModeForText,
 } from "./pretext-build";
 import {
@@ -163,18 +163,24 @@ function estimateWrappedLineCountForParagraph(
         return undefined;
       }
 
-      // Uniform-font paragraphs use arithmetic wrapping over cached
-      // segment widths (no per-line string allocations).
-      const uniformFont = resolveUniformPretextSourceFont(
+      // Uniform-typography paragraphs use arithmetic wrapping over cached
+      // segment widths (no per-line string allocations). Kerning and feature
+      // settings must match too: the fast path must measure the same face as
+      // the DOM and the per-run rich layout.
+      const uniformTypography = resolveUniformPretextSourceTypography(
         paragraph,
         pretextSource
       );
-      if (uniformFont !== undefined) {
+      if (uniformTypography !== undefined) {
         const fastLineCount = measurePretextPlainTextLineCount(
           pretextSource.text,
-          uniformFont,
+          uniformTypography.font,
           maxLineWidthPx,
-          { wordBreak: pretextWordBreakModeForText(pretextSource.text) }
+          {
+            wordBreak: pretextWordBreakModeForText(pretextSource.text),
+            fontKerning: uniformTypography.fontKerning,
+            fontFeatureSettings: uniformTypography.fontFeatureSettings,
+          }
         );
         if (fastLineCount !== undefined) {
           return fastLineCount;

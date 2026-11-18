@@ -198,7 +198,7 @@ const missing = await surface.revealBookmark("No_Such_Bookmark")
 
 查看器在首次分页前调用 `awaitDocumentFonts(model, { extraFamilies, embeddedFonts })`：它收集正文、页眉页脚、脚注/尾注、批注和编号标签实际使用的字体族，安装 `word/fontTable.xml` 里的内嵌 `FontFace`，并等待 `document.fonts.ready`。字体加载完成后 `invalidateFontMetrics()` 递增度量版本，`DocxViewerRoot` 会据此重新分页，因此网页字体晚到不会让页数变化。
 
-`measureTextWidthPx()` 与 `resolveMeasureFontForText()` 按 OOXML `w:rFonts` 的 ascii / hAnsi / eastAsia / cs 分槽度量；`resolveDocxFontKerning()` 解析 `w:kern` 阈值，`resolveDocxFontFeatureSettings()` 把 `w14:ligatures` / `w14:cntxtAlts` 映射为 `font-feature-settings`。渲染层用同一组规则把 run 拆成多个 span，并输出 `font-kerning` / `font-feature-settings`，所以估算和 DOM 的换行位置一致。
+`measureTextWidthPx()` 与 `resolveMeasureFontForText()` 按 OOXML `w:rFonts` 的 ascii / hAnsi / eastAsia / cs 分槽度量；`resolveDocxFontKerning()` 解析 `w:kern` 阈值，`resolveDocxFontFeatureSettings()` 把 `w14:ligatures` / `w14:cntxtAlts` 映射为 `font-feature-settings`。渲染层用同一组规则把 run 拆成多个 span，并输出 `font-kerning` / `font-feature-settings`，所以估算和 DOM 的换行位置一致。断行引擎通过 `prepareMeasuredCached()` 把 pretext 的分段/行尾/可断点 advance 替换为同一组 DOCX 度量；单字体快速路径只在字体、kerning 与特性完全一致时启用。
 
 没有 Canvas 时（SSR、Worker）度量优先使用隐藏 DOM span，再退到确定性字宽；`fontMetrics`、`getFontMetricsRevision()`、`registerFontMetricCache()` 与 `subscribeFontMetrics()` 供自定义渲染层复用同一套缓存和失效事件。
 

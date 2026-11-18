@@ -9,7 +9,7 @@ import {
 } from "@chenglou/pretext";
 import { textMeasurementGeneration } from "./text-measurement-generation";
 import { registerFontMetricCache } from "./font-metrics";
-import { measureCanvasGlyphAdvance } from "./font-advances";
+import { measureCanvasGlyphAdvance, fontAdvanceWidthPx } from "./font-advances";
 import type { FontKerningMode } from "./font-kerning";
 import { createDocxTextMeasurementContext } from "./font-features";
 import {
@@ -28,11 +28,19 @@ const fragmentOffsetAdvancesByFragment = new WeakMap<
   { generation: number; advances: number[] }
 >();
 
+// Canvas font strings cannot carry `font-kerning` / `font-feature-settings`, so
+// pretext's own segment widths describe the browser default face, not the run
+// the DOM paints. This cache holds a copy of each prepared text with every
+// advance replaced by the DOCX-metric measurement for its item settings.
+const measuredPreparedByKey = new Map<string, PreparedTextWithSegments>();
+const MEASURED_PREPARED_CACHE_MAX_ENTRIES = 8192;
+
 // Pretext caches measured segment widths itself. A web font that arrives after
 // the first pagination pass changes those widths, so drop its cache (and ours)
 // on the same font-metric revision.
 registerFontMetricCache(() => {
   clearCache();
+  measuredPreparedByKey.clear();
 });
 
 type PretextWordBreak = "normal" | "keep-all";
@@ -540,6 +548,144 @@ export function prepareCached(
   }
 }
 
+export interface PretextMeasurementSettings {
+  fontKerning?: FontKerningMode;
+  fontFeatureSettings?: string;
+}
+
+function measuredSegmentWidth(
+  font: string,
+  text: string,
+  settings?: PretextMeasurementSettings
+): number {
+  return Math.max(0, fontAdvanceWidthPx(font, text, settings));
+}
+
+function measuredBreakableAdvances(
+  font: string,
+  text: string,
+  previous: number[] | null,
+  settings?: PretextMeasurementSettings
+): number[] | null {
+  if (!previous || !text) {
+    return previous;
+  }
+  const offsets = graphemeCodeUnitOffsets(text);
+  const graphemeCount = Math.max(0, offsets.length - 1);
+  if (graphemeCount <= 1) {
+    return null;
+  }
+
+  const advances: number[] = [];
+  let previousPrefixWidth = 0;
+  for (let index = 1; index < offsets.length; index += 1) {
+    const prefixWidth = measuredSegmentWidth(
+      font,
+      text.slice(0, offsets[index]),
+      settings
+    );
+    advances.push(prefixWidth - previousPrefixWidth);
+    previousPrefixWidth = prefixWidth;
+  }
+  return advances;
+}
+
+/**
+ * Replace pretext's segment advances with the DOCX measurement for one run.
+ * Pretext shapes on a canvas whose font string cannot carry `font-kerning` or
+ * `font-feature-settings`; without this shim a no-kern/no-ligature run breaks
+ * on the browser-default advances while the DOM paints the wider run.
+ */
+function withMeasuredAdvances(
+  prepared: PreparedTextWithSegments,
+  font: string,
+  settings?: PretextMeasurementSettings
+): PreparedTextWithSegments {
+  const widths = prepared.widths.slice();
+  const lineEndFitAdvances = prepared.lineEndFitAdvances.slice();
+  const lineEndPaintAdvances = prepared.lineEndPaintAdvances.slice();
+  const breakableFitAdvances = prepared.breakableFitAdvances.slice();
+  const hyphenWidth = measuredSegmentWidth(font, "-", settings);
+
+  for (let index = 0; index < prepared.segments.length; index += 1) {
+    const segment = prepared.segments[index] ?? "";
+    const kind = prepared.kinds[index];
+
+    if (kind === "soft-hyphen") {
+      widths[index] = 0;
+      lineEndFitAdvances[index] = hyphenWidth;
+      lineEndPaintAdvances[index] = hyphenWidth;
+      breakableFitAdvances[index] = null;
+      continue;
+    }
+    if (kind === "hard-break" || kind === "tab") {
+      widths[index] = 0;
+      lineEndFitAdvances[index] = 0;
+      lineEndPaintAdvances[index] = 0;
+      breakableFitAdvances[index] = null;
+      continue;
+    }
+
+    const width = measuredSegmentWidth(font, segment, settings);
+    widths[index] = width;
+    lineEndFitAdvances[index] =
+      kind === "space" || kind === "preserved-space" || kind === "zero-width-break"
+        ? 0
+        : width;
+    lineEndPaintAdvances[index] =
+      kind === "space" || kind === "zero-width-break" ? 0 : width;
+    breakableFitAdvances[index] = measuredBreakableAdvances(
+      font,
+      segment,
+      breakableFitAdvances[index] ?? null,
+      settings
+    );
+  }
+
+  return {
+    ...prepared,
+    widths,
+    lineEndFitAdvances,
+    lineEndPaintAdvances,
+    breakableFitAdvances,
+    discretionaryHyphenWidth: hyphenWidth,
+    tabStopAdvance: measuredSegmentWidth(font, " ", settings) * 8,
+  };
+}
+
+/**
+ * Pretext segmentation plus DOCX-metric advances. The prepared object can be
+ * laid out repeatedly at any width; the cache is keyed by the font-metric
+ * generation, font, word-break mode, kerning mode, feature string and text.
+ */
+export function prepareMeasuredCached(
+  text: string,
+  font: string,
+  wordBreak: PretextWordBreak = "normal",
+  settings?: PretextMeasurementSettings
+): PreparedTextWithSegments | undefined {
+  if (!canUsePretext()) {
+    return undefined;
+  }
+
+  const cacheKey = `${textMeasurementGeneration()}\u0000${font}\u0000${wordBreak}\u0000${
+    settings?.fontKerning ?? ""
+  }\u0000${settings?.fontFeatureSettings ?? ""}\u0000${text}`;
+  const cached = measuredPreparedByKey.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const prepared = prepareCached(text, font, wordBreak);
+  if (!prepared) {
+    return undefined;
+  }
+  const measured = withMeasuredAdvances(prepared, font, settings);
+  measuredPreparedByKey.set(cacheKey, measured);
+  trimCache(measuredPreparedByKey, MEASURED_PREPARED_CACHE_MAX_ENTRIES);
+  return measured;
+}
+
 /**
  * Fast line-count-only path for plain single-font paragraphs with no
  * exclusions. Uses pretext's `measureLineStats` (added in 0.0.5) so we can
@@ -557,6 +703,8 @@ export function measurePretextPlainTextLineCount(
   containerWidthPx: number,
   options?: {
     wordBreak?: PretextWordBreak;
+    fontKerning?: FontKerningMode;
+    fontFeatureSettings?: string;
   }
 ): number | undefined {
   if (!text) {
@@ -565,7 +713,10 @@ export function measurePretextPlainTextLineCount(
 
   const wordBreak = options?.wordBreak ?? "normal";
   const safeWidth = Math.max(1, Math.round(containerWidthPx));
-  const prepared = prepareCached(text, font, wordBreak);
+  const prepared = prepareMeasuredCached(text, font, wordBreak, {
+    fontKerning: options?.fontKerning,
+    fontFeatureSettings: options?.fontFeatureSettings,
+  });
   if (!prepared) {
     return undefined;
   }

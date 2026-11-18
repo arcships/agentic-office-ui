@@ -1,0 +1,406 @@
+{
+  "source": {
+    "kind": "harfbuzz-captured",
+    "description": "Advances/kerning/ligatures captured with HarfBuzz (the OpenType shaper used by LibreOffice and Chromium) from system fonts at 16px. Word-compatible serif (Nimbus Roman), Noto Sans CJK JP and Noto Naskh Arabic.",
+    "sizePx": 16,
+    "capturedAt": "2026-11-18"
+  },
+  "fonts": {
+    "TestLatin": {
+      "family": "Nimbus Roman",
+      "advances": {
+        "A": 11.552,
+        "V": 11.552,
+        "f": 5.328,
+        "i": 4.448,
+        " ": 4.0,
+        "X": 11.552,
+        "Y": 11.552,
+        "Z": 9.776,
+        "a": 7.104,
+        "b": 8.0,
+        "c": 7.104,
+        "0": 8.0,
+        "1": 8.0,
+        "9": 8.0
+      },
+      "kerning": {
+        "AV": -2.048,
+        "VA": -1.92,
+        "fi": 0.224
+      },
+      "ligatures": {
+        "fi": 8.896
+      },
+      "stringWidths": {
+        "A": {
+          "default": 11.552,
+          "kern": 11.552,
+          "liga": 11.552,
+          "kernLiga": 11.552
+        },
+        "V": {
+          "default": 11.552,
+          "kern": 11.552,
+          "liga": 11.552,
+          "kernLiga": 11.552
+        },
+        "f": {
+          "default": 5.328,
+          "kern": 5.328,
+          "liga": 5.328,
+          "kernLiga": 5.328
+        },
+        "i": {
+          "default": 4.448,
+          "kern": 4.448,
+          "liga": 4.448,
+          "kernLiga": 4.448
+        },
+        " ": {
+          "default": 4.0,
+          "kern": 4.0,
+          "liga": 4.0,
+          "kernLiga": 4.0
+        },
+        "X": {
+          "default": 11.552,
+          "kern": 11.552,
+          "liga": 11.552,
+          "kernLiga": 11.552
+        },
+        "Y": {
+          "default": 11.552,
+          "kern": 11.552,
+          "liga": 11.552,
+          "kernLiga": 11.552
+        },
+        "Z": {
+          "default": 9.776,
+          "kern": 9.776,
+          "liga": 9.776,
+          "kernLiga": 9.776
+        },
+        "a": {
+          "default": 7.104,
+          "kern": 7.104,
+          "liga": 7.104,
+          "kernLiga": 7.104
+        },
+        "b": {
+          "default": 8.0,
+          "kern": 8.0,
+          "liga": 8.0,
+          "kernLiga": 8.0
+        },
+        "c": {
+          "default": 7.104,
+          "kern": 7.104,
+          "liga": 7.104,
+          "kernLiga": 7.104
+        },
+        "0": {
+          "default": 8.0,
+          "kern": 8.0,
+          "liga": 8.0,
+          "kernLiga": 8.0
+        },
+        "1": {
+          "default": 8.0,
+          "kern": 8.0,
+          "liga": 8.0,
+          "kernLiga": 8.0
+        },
+        "9": {
+          "default": 8.0,
+          "kern": 8.0,
+          "liga": 8.0,
+          "kernLiga": 8.0
+        },
+        "AV": {
+          "default": 23.104,
+          "kern": 21.056,
+          "liga": 23.104,
+          "kernLiga": 21.056
+        },
+        "VA": {
+          "default": 23.104,
+          "kern": 21.184,
+          "liga": 23.104,
+          "kernLiga": 21.184
+        },
+        "AVAV": {
+          "default": 46.208,
+          "kern": 40.192,
+          "liga": 46.208,
+          "kernLiga": 40.192
+        },
+        "fi": {
+          "default": 9.776,
+          "kern": 10.0,
+          "liga": 8.896,
+          "kernLiga": 8.896
+        },
+        "AVAV fi": {
+          "default": 59.984,
+          "kern": 54.192,
+          "liga": 59.104,
+          "kernLiga": 53.088
+        },
+        "AVAV fi fi": {
+          "default": 73.76,
+          "kern": 68.192,
+          "liga": 72.0,
+          "kernLiga": 65.984
+        }
+      }
+    },
+    "TestCJK": {
+      "family": "Noto Sans CJK JP",
+      "advances": {
+        "中": 16.0,
+        "文": 16.0,
+        "你": 16.0,
+        "好": 16.0
+      },
+      "kerning": {},
+      "ligatures": {},
+      "stringWidths": {
+        "中": {
+          "default": 16.0,
+          "kern": 16.0,
+          "liga": 16.0,
+          "kernLiga": 16.0
+        },
+        "文": {
+          "default": 16.0,
+          "kern": 16.0,
+          "liga": 16.0,
+          "kernLiga": 16.0
+        },
+        "你": {
+          "default": 16.0,
+          "kern": 16.0,
+          "liga": 16.0,
+          "kernLiga": 16.0
+        },
+        "好": {
+          "default": 16.0,
+          "kern": 16.0,
+          "liga": 16.0,
+          "kernLiga": 16.0
+        },
+        "中文": {
+          "default": 32.0,
+          "kern": 32.0,
+          "liga": 32.0,
+          "kernLiga": 32.0
+        },
+        "中文你": {
+          "default": 48.0,
+          "kern": 48.0,
+          "liga": 48.0,
+          "kernLiga": 48.0
+        },
+        "中文你好": {
+          "default": 64.0,
+          "kern": 64.0,
+          "liga": 64.0,
+          "kernLiga": 64.0
+        }
+      }
+    },
+    "TestCS": {
+      "family": "Noto Naskh Arabic",
+      "advances": {
+        "م": 7.824,
+        "ر": 6.176,
+        "ح": 10.176,
+        "ب": 12.352,
+        "ا": 3.808,
+        "ل": 9.52,
+        "ع": 9.664
+      },
+      "kerning": {},
+      "ligatures": {},
+      "stringWidths": {
+        "م": {
+          "default": 7.824,
+          "kern": 7.824,
+          "liga": 7.824,
+          "kernLiga": 7.824
+        },
+        "ر": {
+          "default": 6.176,
+          "kern": 6.176,
+          "liga": 6.176,
+          "kernLiga": 6.176
+        },
+        "ح": {
+          "default": 10.176,
+          "kern": 10.176,
+          "liga": 10.176,
+          "kernLiga": 10.176
+        },
+        "ب": {
+          "default": 12.352,
+          "kern": 12.352,
+          "liga": 12.352,
+          "kernLiga": 12.352
+        },
+        "ا": {
+          "default": 3.808,
+          "kern": 3.808,
+          "liga": 3.808,
+          "kernLiga": 3.808
+        },
+        "ل": {
+          "default": 9.52,
+          "kern": 9.52,
+          "liga": 9.52,
+          "kernLiga": 9.52
+        },
+        "ع": {
+          "default": 9.664,
+          "kern": 9.664,
+          "liga": 9.664,
+          "kernLiga": 9.664
+        },
+        "مرحبا": {
+          "default": 32.656,
+          "kern": 32.656,
+          "liga": 32.656,
+          "kernLiga": 32.656
+        },
+        "بالعالم": {
+          "default": 34.352,
+          "kern": 34.352,
+          "liga": 34.352,
+          "kernLiga": 34.352
+        },
+        "مرحبا بالعالم": {
+          "default": 70.544,
+          "kern": 70.544,
+          "liga": 70.544,
+          "kernLiga": 70.544
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "latin-default",
+      "font": "TestLatin",
+      "text": "AVAV fi fi",
+      "mode": "default",
+      "widthPx": 70,
+      "expectedWidthPx": 73.76,
+      "expectedLines": [
+        {
+          "text": "AVAV fi",
+          "widthPx": 59.984
+        },
+        {
+          "text": "fi",
+          "widthPx": 9.776
+        }
+      ]
+    },
+    {
+      "name": "latin-kern",
+      "font": "TestLatin",
+      "text": "AVAV fi fi",
+      "mode": "kern",
+      "widthPx": 70,
+      "expectedWidthPx": 68.192,
+      "expectedLines": [
+        {
+          "text": "AVAV fi fi",
+          "widthPx": 68.192
+        }
+      ]
+    },
+    {
+      "name": "latin-liga",
+      "font": "TestLatin",
+      "text": "AVAV fi fi",
+      "mode": "liga",
+      "widthPx": 70,
+      "expectedWidthPx": 72.0,
+      "expectedLines": [
+        {
+          "text": "AVAV fi",
+          "widthPx": 59.104
+        },
+        {
+          "text": "fi",
+          "widthPx": 8.896
+        }
+      ]
+    },
+    {
+      "name": "latin-kernliga",
+      "font": "TestLatin",
+      "text": "AVAV fi fi",
+      "mode": "kernLiga",
+      "widthPx": 70,
+      "expectedWidthPx": 65.984,
+      "expectedLines": [
+        {
+          "text": "AVAV fi fi",
+          "widthPx": 65.984
+        }
+      ]
+    },
+    {
+      "name": "latin-default-wide",
+      "font": "TestLatin",
+      "text": "AVAV fi fi",
+      "mode": "default",
+      "widthPx": 80,
+      "expectedWidthPx": 73.76,
+      "expectedLines": [
+        {
+          "text": "AVAV fi fi",
+          "widthPx": 73.76
+        }
+      ]
+    },
+    {
+      "name": "cjk-default",
+      "font": "TestCJK",
+      "text": "中文你好",
+      "mode": "default",
+      "widthPx": 40,
+      "expectedWidthPx": 64.0,
+      "expectedLines": [
+        {
+          "text": "中文",
+          "widthPx": 32.0
+        },
+        {
+          "text": "你好",
+          "widthPx": 32.0
+        }
+      ]
+    },
+    {
+      "name": "rtl-default",
+      "font": "TestCS",
+      "text": "مرحبا بالعالم",
+      "mode": "default",
+      "widthPx": 40,
+      "expectedWidthPx": 70.544,
+      "expectedLines": [
+        {
+          "text": "مرحبا",
+          "widthPx": 32.656
+        },
+        {
+          "text": "بالعالم",
+          "widthPx": 34.352
+        }
+      ]
+    }
+  ]
+}

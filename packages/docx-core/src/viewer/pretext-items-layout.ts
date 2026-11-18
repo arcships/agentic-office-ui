@@ -6,7 +6,7 @@ import {
 } from "@chenglou/pretext";
 import {
   canUsePretext,
-  prepareCached,
+  prepareMeasuredCached,
   cursorAdvanceCodeUnits,
   aggregateFragmentLineMetrics,
   layoutCacheKey,
@@ -344,7 +344,15 @@ export function layoutItemsWithPretextAroundExclusions(
   }
 
   const preparedItems = items.map((item) =>
-    prepareCached(item.text, item.font, item.wordBreak ?? "normal")
+    prepareMeasuredCached(
+      item.text,
+      item.font,
+      item.wordBreak ?? "normal",
+      {
+        fontKerning: item.fontKerning,
+        fontFeatureSettings: item.fontFeatureSettings,
+      }
+    )
   );
   if (
     preparedItems.some(
@@ -373,6 +381,8 @@ export function layoutItemsWithPretextAroundExclusions(
           item.unsuppressibleDescentPx ?? ""
         }\u0001${item.hasCustomVerticalMetrics === true ? 1 : 0}\u0001${
           item.baselineShiftPx ?? ""
+        }\u0001${item.fontKerning ?? ""}\u0001${
+          item.fontFeatureSettings ?? ""
         }\u0001${item.text}`
     )
     .join("\u0002");
