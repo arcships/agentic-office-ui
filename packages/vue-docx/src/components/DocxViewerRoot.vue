@@ -1473,23 +1473,29 @@ onUnmounted(() => {
 })
 
 // ── Expose ─────────────────────────────────────────────────────────
+function scrollContainerTo(container: HTMLElement, top: number, behavior: ScrollBehavior): void {
+  // Test/render environments may expose the host element without the full
+  // HTMLElement scroll API; assigning scrollTop still keeps page navigation
+  // observable instead of throwing on a missing scrollTo.
+  if (typeof container.scrollTo === "function") {
+    container.scrollTo({ top, behavior })
+  } else {
+    container.scrollTop = top
+  }
+}
+
 defineExpose({
   scrollToPage(pageIndex: number): void {
     if (!scrollContainerRef.value || pageIndex < 0 || pageIndex >= pageCount.value)
       return
-    const targetTop = pageOffsets.value[pageIndex] ?? 0
-    scrollContainerRef.value.scrollTo({ top: targetTop, behavior: "smooth" })
+    scrollContainerTo(scrollContainerRef.value, pageOffsets.value[pageIndex] ?? 0, "smooth")
   },
   scrollToNode(nodeIndex: number, options?: ScrollToOptions): void {
     const pageIndex = pageNodeSegments.value.findIndex((segments) =>
       segments.some((segment) => segment.nodeIndex === nodeIndex)
     )
     if (!scrollContainerRef.value || pageIndex < 0) return
-    const targetTop = pageOffsets.value[pageIndex] ?? 0
-    scrollContainerRef.value.scrollTo({
-      top: targetTop,
-      behavior: options?.behavior ?? "smooth",
-    })
+    scrollContainerTo(scrollContainerRef.value, pageOffsets.value[pageIndex] ?? 0, options?.behavior ?? "smooth")
   },
   get scrollContainer() {
     return scrollContainerRef.value

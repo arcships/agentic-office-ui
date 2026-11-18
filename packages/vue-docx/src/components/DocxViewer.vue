@@ -149,7 +149,8 @@ import {
   DOCX_FILE_ACCEPT,
   isSupportedDocxFileName,
 } from "../composables/docx-file-types"
-import { OfficeLiveStatus } from "@arcships/vue-ui"
+import { OfficeLiveStatus, useViewerKeys } from "@arcships/vue-ui"
+import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
 import DocxDocumentSurface from "./DocxDocumentSurface.vue"
 import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
@@ -210,6 +211,8 @@ const emit = defineEmits<{
   (event: "update:showComments", visible: boolean): void
   (event: "searchStateChange", state: DocxSearchState): void
 }>()
+
+const DOCX_ZOOM_OPTIONS = [50, 75, 100, 125, 150, 175, 200]
 
 const isLoading = ref(false)
 const m = provideDocxMessages(() => props.locale, () => props.messages)
@@ -345,9 +348,68 @@ function selectSearchResult(direction: -1 | 1): void {
 }
 
 function onViewerKeydown(event: KeyboardEvent): void {
-  if (!props.showToolbar || !(event.ctrlKey || event.metaKey) || event.key.toLocaleLowerCase() !== "f") return
-  event.preventDefault()
-  toolbarRef.value?.focusSearch()
+  viewerKeys.onKeydown(event)
+}
+
+/**
+ * DOCX keyboard map (shared with PDF and PPTX through `useViewerKeys`):
+ * PageDown/PageUp move one page, Home/End jump to the first/last page,
+ * Ctrl/Cmd +/−/0 zoom, Ctrl/Cmd+F focuses search and Escape closes it.
+ */
+const viewerKeys = useViewerKeys({
+  pageNavigation: true,
+  zoom: true,
+  search: () => props.showToolbar,
+  escape: true,
+  onCommand: onViewerKeyCommand,
+})
+
+function onViewerKeyCommand(command: ViewerKeyCommand): boolean {
+  switch (command) {
+    case "page-next":
+      return goToPage(currentPage.value + 1)
+    case "page-previous":
+      return goToPage(currentPage.value - 1)
+    case "page-first":
+      return goToPage(1)
+    case "page-last":
+      return goToPage(totalPages.value)
+    case "zoom-in":
+      return stepZoom(1)
+    case "zoom-out":
+      return stepZoom(-1)
+    case "zoom-reset":
+      if (zoomPercent.value === 100) return false
+      zoomPercent.value = 100
+      return true
+    case "search":
+      if (!props.showToolbar) return false
+      toolbarRef.value?.focusSearch()
+      return true
+    case "escape":
+      if (!searchQuery.value && searchState.value.status === "idle") return false
+      closeSearch()
+      return true
+    default:
+      return false
+  }
+}
+
+function goToPage(page: number): boolean {
+  if (totalPages.value < 1) return false
+  const target = Math.min(totalPages.value, Math.max(1, page))
+  if (target === currentPage.value) return false
+  selectPage(target)
+  return true
+}
+
+function stepZoom(direction: 1 | -1): boolean {
+  const next = direction > 0
+    ? DOCX_ZOOM_OPTIONS.find((option) => option > zoomPercent.value)
+    : [...DOCX_ZOOM_OPTIONS].reverse().find((option) => option < zoomPercent.value)
+  if (next === undefined) return false
+  zoomPercent.value = next
+  return true
 }
 
 function closeSearch(): void {
@@ -522,8 +584,7 @@ function toggleComments(): void {
 }
 
 function normalizeZoom(value: number): number {
-  const options = [50, 75, 100, 125, 150, 175, 200]
-  return options.reduce((closest, option) =>
+  return DOCX_ZOOM_OPTIONS.reduce((closest, option) =>
     Math.abs(option - value) < Math.abs(closest - value) ? option : closest,
   100)
 }
@@ -572,6 +633,12 @@ function errorNumber(value: Error, key: "actual" | "allowed"): number | undefine
   --docx-toolbar-bg: #18181b;
   background: #09090b;
 }
+/* The viewer root is the keyboard focus target; make that focus visible. */
+.docx-viewer:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+.docx-viewer--dark:focus-visible { outline-color: #60a5fa; }
 .docx-viewer__file-input { display: none; }
 .docx-viewer__body { display: flex; flex: 1; min-height: 0; min-width: 0; }
 .docx-viewer__content { display: flex; flex: 1; min-height: 0; min-width: 0; position: relative; }

@@ -43,6 +43,8 @@ import { hasUnmappedPdfText } from "../pdf/pdf-selection-range"
 import { currentRenderDpr, watchDevicePixelRatio } from "../pdf/pdf-device-pixel-ratio"
 import type { PdfViewerProps } from "../types"
 import { formatOfficeMessage } from "@arcships/office-interaction"
+import { useViewerKeys } from "@arcships/vue-ui"
+import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import { providePdfMessages } from "../i18n"
 
 const props = withDefaults(defineProps<PdfViewerProps>(), {
@@ -749,22 +751,81 @@ function clearSearchAndRestoreFocus(): void {
 }
 
 function onViewerKeydown(event: KeyboardEvent): void {
-  if (event.key === "Escape" && selectionState.value.kind !== "none") {
-    clearSelection()
-    return
-  }
+  // Print is PDF-specific and stays outside the shared page/zoom map.
   if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "p") {
     event.preventDefault()
     void printAllPages()
     return
   }
-  if (
-    !props.showToolbar
-    || !(event.ctrlKey || event.metaKey)
-    || event.key.toLocaleLowerCase() !== "f"
-  ) return
-  event.preventDefault()
-  searchInputRef.value?.focus()
+  viewerKeys.onKeydown(event)
+}
+
+/**
+ * PDF keyboard map (shared with DOCX and PPTX through `useViewerKeys`):
+ * PageDown/PageUp move one page, Home/End jump to the first/last page,
+ * Ctrl/Cmd +/−/0 zoom, Ctrl/Cmd+F focuses search and Escape clears the
+ * search before falling back to the current selection.
+ */
+const viewerKeys = useViewerKeys({
+  pageNavigation: true,
+  zoom: true,
+  search: () => props.showToolbar,
+  escape: true,
+  onCommand: onViewerKeyCommand,
+})
+
+function onViewerKeyCommand(command: ViewerKeyCommand): boolean {
+  switch (command) {
+    case "page-next":
+      return goToPage(activePage.value + 1)
+    case "page-previous":
+      return goToPage(activePage.value - 1)
+    case "page-first":
+      return goToPage(1)
+    case "page-last":
+      return goToPage(numPages.value)
+    case "zoom-in":
+      return stepZoom(1)
+    case "zoom-out":
+      return stepZoom(-1)
+    case "zoom-reset":
+      if (zoom.value === 1) return false
+      applyZoom(1)
+      return true
+    case "search":
+      if (!props.showToolbar) return false
+      searchInputRef.value?.focus()
+      return true
+    case "escape":
+      if (searchDraft.value || searchHits.value.length) {
+        clearSearchAndRestoreFocus()
+        return true
+      }
+      if (selectionState.value.kind !== "none") {
+        clearSelection()
+        return true
+      }
+      return false
+    default:
+      return false
+  }
+}
+
+function goToPage(page: number): boolean {
+  if (!renderDocument.value || numPages.value < 1) return false
+  const target = Math.min(numPages.value, Math.max(1, page))
+  if (target === activePage.value) return false
+  setActivePage(target)
+  return true
+}
+
+function stepZoom(direction: 1 | -1): boolean {
+  const next = direction > 0
+    ? zoomOptions.find((value) => value > zoom.value)
+    : [...zoomOptions].reverse().find((value) => value < zoom.value)
+  if (next === undefined) return false
+  applyZoom(next)
+  return true
 }
 
 async function releaseCurrentDocument(options: { closeDocument?: boolean } = {}): Promise<void> {
@@ -1520,6 +1581,8 @@ defineExpose({
   --pdf-page-shadow: 0 3px 14px rgb(0 0 0 / 60%);
   --pdf-page-filter: var(--pdf-dark-page-filter, invert(1) hue-rotate(180deg));
 }
+/* Keyboard focus lands on the viewer root; keep a visible ring around it. */
+.pdf-viewer:focus-visible { outline: 2px solid var(--pdf-link); outline-offset: -2px; }
 .pdf-toolbar { display: flex; align-items: center; gap: 7px; min-height: 48px; padding: 8px; border-bottom: 1px solid var(--pdf-border); flex-wrap: wrap; }
 .pdf-toolbar button, .pdf-toolbar select, .pdf-toolbar input { height: 32px; border: 1px solid var(--pdf-control-border); border-radius: 6px; background: var(--pdf-control-bg); color: inherit; padding: 0 8px; }
 .pdf-toolbar button { cursor: pointer; }

@@ -4,6 +4,15 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### Viewer keyboard navigation (#116)
+
+- Add `useViewerKeys()` and the pure `resolveViewerKeyCommand()` to `@arcships/vue-ui`, with a documented map for page navigation (`PageUp`/`PageDown`, `Home`/`End`), zoom (`Ctrl/Cmd` + `+`/`=`/`-`/`0`), search (`Ctrl/Cmd + F`) and `Escape`. The composable refuses inputs, textareas, selects and `contenteditable` targets, keeps `Shift`/`Alt` navigation native, and only calls `preventDefault()` when the host actually handled the command.
+- `DocxViewer` and `PdfViewer` now flip pages, jump to the first/last page, zoom, focus their search field and cancel the active search from the keyboard; `Escape` in the PDF viewer clears search before it clears the text selection. The PDF print shortcut (`Ctrl/Cmd + P`) is preserved outside the shared map.
+- `PdfSurface` gains one-page scrolling (`PageUp`/`PageDown`), first/last jumps, keyboard zoom through the controlled `update:zoom` path, and `Escape` for selection/region cancellation. `DocxViewerRoot` now falls back to assigning `scrollTop` when the host element has no `scrollTo`, and `scrollToPage` tolerates a missing `scrollIntoView`.
+- `PptxViewer` no longer hijacks arrows and page keys in browse mode: `PageUp`/`PageDown`, `↑`/`↓`, `Home`/`End` and `Space` scroll the slide list, while slide navigation stays in present mode. Zoom works in both modes, and `Escape` closes browse search or leaves present fullscreen. `Space` on a focused playback button remains a button activation.
+- All four viewer roots and `PdfSurface` show a `:focus-visible` outline for keyboard users.
+- Add `tests/unit/viewer-keys.test.mjs` and `tests/component/viewer-keyboard.test.mjs` (registered in `scripts/ci/run-suite.mjs`), extend `tests/component/pptx-preview.test.mjs`, and document the shared map in `docs/guide/viewer-keyboard.md` plus the DOCX/PDF/PPTX guides.
+
 ### DOCX fixture and acceptance coverage (#53)
 
 - Add three DOCX fixtures that carry the structures the reported defects live in: `review-threads.docx` (comment threads with replies and a resolved thread, two comments on one paragraph, a range crossing three paragraphs, comments anchored in a table cell and in the header, a deleted table row, a row-height `trPrChange`, two footnotes and two endnotes), `table-structures.docx` (`vMerge` restart/continuation cells, `gridSpan`, a nested table, multi-paragraph cells and a `tblHeader` row that repeats across pages), and `sections-columns.docx` (portrait/landscape/two-column sections with their own headers and footers, a text box and a behind-text watermark).

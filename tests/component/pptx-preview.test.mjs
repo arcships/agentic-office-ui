@@ -5,12 +5,18 @@ import test from "node:test";
 import {
   findByTestId,
   importFromDemo,
+  keydownEvent,
   mount,
   textContent,
   vue,
   waitFor,
   walk,
 } from "./vue-test-renderer.mjs";
+
+// Vue's native v-model directive checks these browser constructors during an
+// update. The custom component renderer intentionally has no browser DOM.
+if (globalThis.Document === undefined) globalThis.Document = class Document {};
+if (globalThis.ShadowRoot === undefined) globalThis.ShadowRoot = class ShadowRoot {};
 
 const {
   PptxStage,
@@ -172,6 +178,15 @@ function createPlaybackSession({ document = documentWithSlides(3), open, renderS
 
 function button(root, label) {
   return walk(root).find((node) => node.type === "button" && node.props?.["aria-label"] === label);
+}
+
+function pressKey(node, key, init = {}) {
+  const { event, preventedCount } = keydownEvent(key, init);
+  const handlers = Array.isArray(node.props?.onKeydown)
+    ? node.props.onKeydown
+    : [node.props?.onKeydown];
+  for (const handler of handlers) handler?.(event);
+  return { event, prevented: preventedCount() };
 }
 
 function classNames(node) {
@@ -1109,4 +1124,154 @@ test("PPTX viewer styles keep a CJK-aware font stack", async () => {
     assert.ok(stack.includes(`"${family}"`), `font stack must include ${family}`);
   }
   assert.match(style, /font-family:\s*var\(--pptx-font-family\)/u);
+});
+
+test("PptxViewer browse keys scroll the slide list instead of changing slides", async () => {
+  const { calls, session } = createSession({ document: documentWithSlides(3) });
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([1, 2, 3]),
+    sessionFactory: () => session,
+    showSidebar: false,
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state",
+  );
+
+  const viewer = findByTestId(mounted.root, "pptx-viewer");
+  const stageWrap = nodesWithClass(mounted.root, "pptx-viewer__stage-wrap")[0];
+  assert.ok(stageWrap, "browse mode owns a scroll container");
+  stageWrap.clientHeight = 400;
+  stageWrap.scrollHeight = 1600;
+  stageWrap.scrollTop = 0;
+  const rendersBefore = calls.renderSlide.length;
+
+  const pageDown = pressKey(viewer, "PageDown");
+  await vue.nextTick();
+  assert.equal(stageWrap.scrollTop, 360, "PageDown scrolls one viewport of the list");
+  assert.equal(pageDown.prevented, 1, "the handled scroll key is prevented");
+  assert.equal(calls.renderSlide.length, rendersBefore, "browse PageDown must not navigate slides");
+  assert.equal(viewer.props["data-slide-index"], 0);
+
+  pressKey(viewer, "ArrowDown");
+  await vue.nextTick();
+  assert.equal(stageWrap.scrollTop, 408, "ArrowDown scrolls one line");
+
+  pressKey(viewer, "End");
+  await vue.nextTick();
+  assert.equal(stageWrap.scrollTop, 1200, "End scrolls to the bottom of the list");
+
+  pressKey(viewer, "Home");
+  await vue.nextTick();
+  assert.equal(stageWrap.scrollTop, 0, "Home scrolls to the top of the list");
+
+  pressKey(viewer, "PageDown", { target: { tagName: "INPUT" } });
+  await vue.nextTick();
+  assert.equal(stageWrap.scrollTop, 0, "browse keys do not fire inside an input");
+
+  pressKey(viewer, "=", { ctrlKey: true });
+  await waitFor(() => calls.setZoom.includes(125), "PPTX browse Ctrl+= zoom");
+  pressKey(viewer, "-", { ctrlKey: true });
+  await waitFor(() => calls.setZoom.includes(100), "PPTX browse Ctrl+- zoom");
+  pressKey(viewer, "=", { ctrlKey: true });
+  await waitFor(() => calls.setZoom.filter((value) => value === 125).length === 2, "PPTX browse zoom in again");
+  pressKey(viewer, "0", { ctrlKey: true });
+  await waitFor(
+    () => calls.setZoom.filter((value) => value === 100).length === 2,
+    "PPTX browse Ctrl+0 zoom reset",
+  );
+  assert.equal(calls.renderSlide.length, rendersBefore, "zoom does not switch slides");
+
+  const search = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "search",
+  );
+  assert.ok(search, "search input is available in browse mode");
+  let focused = 0;
+  search.focus = () => { focused += 1; };
+  pressKey(viewer, "f", { ctrlKey: true });
+  assert.equal(focused, 1, "Ctrl+F focuses the PPTX search field");
+
+  search.value = "deck";
+  search.dispatchEvent({ type: "input", target: search });
+  await vue.nextTick();
+  pressKey(viewer, "Escape");
+  await vue.nextTick();
+  assert.equal(
+    walk(mounted.root).find((node) => node.type === "input" && node.props?.type === "search")?.value,
+    "",
+    "Escape cancels the PPTX search",
+  );
+
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("PptxViewer present keys navigate slides and ignore editable/interactive targets", async () => {
+  const playback = createPlaybackSession();
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([7, 8, 9]),
+    mode: "present",
+    autoplay: false,
+    showSidebar: false,
+    documentSessionFactory: () => playback.session,
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX playback ready state",
+  );
+  await waitFor(
+    () => playback.calls.createPlaybackController === 1,
+    "PPTX playback controller",
+  );
+  const viewer = findByTestId(mounted.root, "pptx-viewer");
+
+  pressKey(viewer, "PageDown");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(playback.calls.next, 1, "present PageDown advances one slide");
+
+  pressKey(viewer, "ArrowRight");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(playback.calls.next, 2, "present ArrowRight advances one slide");
+
+  pressKey(viewer, "PageUp");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(playback.calls.previous, 1, "present PageUp goes back one slide");
+
+  pressKey(viewer, "Home");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(playback.calls.goToSlide.at(-1), [0, { includeHidden: false }]);
+
+  pressKey(viewer, "End");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(playback.calls.goToSlide.at(-1), [2, { includeHidden: false }]);
+
+  const nextBeforeEditable = playback.calls.next;
+  pressKey(viewer, "ArrowDown", { target: { tagName: "INPUT" } });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(playback.calls.next, nextBeforeEditable, "present keys stay out of inputs");
+
+  const nextBeforeButton = playback.calls.next;
+  pressKey(viewer, " ", {
+    target: { tagName: "BUTTON", closest: (selector) => (selector.includes("button") ? {} : null) },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(playback.calls.next, nextBeforeButton, "Space on a focused button activates the button");
+
+  const previousDocument = globalThis.document;
+  let exitedFullscreen = 0;
+  globalThis.document = {
+    fullscreenElement: {},
+    exitFullscreen: async () => { exitedFullscreen += 1; },
+  };
+  try {
+    pressKey(viewer, "Escape");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(exitedFullscreen, 1, "present Escape leaves fullscreen");
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+  }
+
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
 });
