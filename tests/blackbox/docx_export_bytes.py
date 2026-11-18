@@ -84,7 +84,12 @@ def run_assertions(page, output: Path) -> dict[str, object]:
         timeout=30_000,
     )
 
-    page.get_by_test_id("editor-test-export-bytes").click()
+    panel = page.get_by_test_id("editor-acceptance-panel")
+    if panel.get_attribute("open") is None:
+        panel.locator("summary").click()
+    button = page.get_by_test_id("editor-test-export-bytes")
+    button.wait_for(state="visible", timeout=30_000)
+    button.click()
     state = page.get_by_test_id("editor-export-bytes-state")
     state.wait_for(state="visible", timeout=30_000)
     page.wait_for_function(
