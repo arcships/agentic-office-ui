@@ -287,6 +287,7 @@ test("pressing the move handle selects every cell of the table", async (t) => {
     anchorCellIndex: 0,
     focusRowIndex: 2,
     focusCellIndex: 1,
+    gridRange: { startColumnIndex: 0, endColumnIndex: 1 },
   });
   env.documentListeners.dispatch("mouseup", { clientX: 10, clientY: 10 });
 });
