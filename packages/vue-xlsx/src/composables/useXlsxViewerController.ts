@@ -86,6 +86,7 @@ import {
 } from "./workbook-state";
 import { createEditingDomain } from "./editing";
 import { createSheetOrderDomain } from "./sheet-order";
+import { createSheetVisibilityDomain } from "./sheet-visibility";
 import { createStructureDomain } from "./structure";
 import { createPrintDomain } from "./print";
 import { createAuthoringDomain } from "./authoring";
@@ -206,7 +207,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const sourceMaxInputBytes = sourceInputLimits.length > 0
     ? Math.min(...sourceInputLimits)
     : undefined;
-  const showHiddenSheets = configuredShowHiddenSheets ?? xlsxRuntime.parseOptions.showHiddenSheets ?? false;
+  const showHiddenSheetsMode = ref(configuredShowHiddenSheets ?? xlsxRuntime.parseOptions.showHiddenSheets ?? false);
   const skipXmlParsing = configuredSkipXmlParsing ?? xlsxRuntime.parseOptions.skipXmlParsing ?? false;
 
   // ═══════════════════════════════════════════════════════════════════
@@ -536,14 +537,14 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     const currentAssets = chartAssetsRef.value;
     if (currentAssets && (currentAssets.chartOriginsById.size > 0 || !targetWorkbook || !imageAssetsRef.value)) return currentAssets;
     if (!targetWorkbook || !imageAssetsRef.value) return chartAssetsRef.value;
-    const assets = loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, buildVisibleSheetIndexMap(targetSheets), showHiddenSheets);
+    const assets = loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, buildVisibleSheetIndexMap(targetSheets), showHiddenSheetsMode.value);
     chartAssetsRef.value = assets;
     return assets;
   }
   function startChartDisplayHydration(buffer: ArrayBuffer, targetWorkbook: Workbook, targetSheets: XlsxSheetData[]) {
     const effectiveSkipXmlParsing = shouldSkipXmlParsingForWorkbook(new Uint8Array(buffer), skipXmlParsing);
     const visibleMap = buildVisibleSheetIndexMap(targetSheets);
-    const quickAssets = loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, visibleMap, showHiddenSheets);
+    const quickAssets = loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, visibleMap, showHiddenSheetsMode.value);
     setChartAssets(quickAssets);
     if (effectiveSkipXmlParsing) return;
     isChartsLoading.value = true;
@@ -577,7 +578,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       chartDisplayFallbackCleanupRef.value = scheduleLowPriorityTask(() => {
         if (requestToken !== chartLoadRequestTokenRef.value) return;
         try {
-          const hydratedAssets = loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, visibleMap, showHiddenSheets);
+          const hydratedAssets = loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, visibleMap, showHiddenSheetsMode.value);
           if (requestToken !== chartLoadRequestTokenRef.value) return;
           setChartAssets(hydratedAssets);
         } catch { if (requestToken !== chartLoadRequestTokenRef.value) return; setChartAssets(quickAssets); }
@@ -585,7 +586,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       });
     };
     if (!workerSupported) { runMainThreadFallback(); return; }
-    void getWorkerClient().parseCharts(buffer, effectiveSkipXmlParsing, showHiddenSheets)
+    void getWorkerClient().parseCharts(buffer, effectiveSkipXmlParsing, showHiddenSheetsMode.value)
       .then((result) => {
         const quickChartCount = quickAssets.chartsByWorkbookSheetIndex.reduce((total, charts) => total + charts.length, 0);
         const workerChartCount = result.chartsByWorkbookSheetIndex.reduce((total, charts) => total + charts.length, 0);
@@ -666,10 +667,10 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     const nextSheets = buildSheetList(
       targetWorkbook, imageAssetsRef.value?.sheetStatesByWorkbookSheetIndex,
       imageAssetsRef.value?.themePalette, imageAssetsRef.value?.styleById,
-      imageAssetsRef.value?.namedCellStyleByName, imageAssetsRef.value?.tableStyleByName, showHiddenSheets
+      imageAssetsRef.value?.namedCellStyleByName, imageAssetsRef.value?.tableStyleByName, showHiddenSheetsMode.value
     );
     sheets.value = nextSheets;
-    setChartAssets(loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, buildVisibleSheetIndexMap(nextSheets), showHiddenSheets));
+    setChartAssets(loadWorkbookChartAssets(targetWorkbook, imageAssetsRef.value, buildVisibleSheetIndexMap(nextSheets), showHiddenSheetsMode.value));
     revision.value = revision.value + 1;
   }
   async function refreshChartData() {
@@ -679,7 +680,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       return true;
     }
     try {
-      const result = await getWorkerClient().refreshCharts(showHiddenSheets);
+      const result = await getWorkerClient().refreshCharts(showHiddenSheetsMode.value);
       chartsByWorkbookSheetIndex.value = result.chartsByWorkbookSheetIndex;
       chartsheets.value = result.chartsheets;
       tabs.value = result.tabs;
@@ -1077,7 +1078,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
         const snapshot = await client.loadWorkbook(
           buffer,
           effectiveSkipXmlParsing,
-          showHiddenSheets,
+          showHiddenSheetsMode.value,
           task.signal,
         );
         if (!isCurrentWorkbookLoad(load)) {
@@ -1158,7 +1159,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
         nextImageAssets.styleById,
         nextImageAssets.namedCellStyleByName,
         nextImageAssets.tableStyleByName,
-        showHiddenSheets,
+        showHiddenSheetsMode.value,
       );
       if (!isCurrentWorkbookLoad(load)) return;
       setImageAssets(nextImageAssets);
@@ -1484,7 +1485,9 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   });
 
   const ctx = {
-    file, src, fileName, maxFileSizeBytes, deferLoadingAboveBytes, skipXmlParsing, showHiddenSheets,
+    file, src, fileName, maxFileSizeBytes, deferLoadingAboveBytes, skipXmlParsing,
+    get showHiddenSheets() { return showHiddenSheetsMode.value; },
+    setShowHiddenSheetsMode: (includeHidden: boolean) => { showHiddenSheetsMode.value = includeHidden; },
     workerSupported, shouldDeferLoading, canUseWorkerForRequestedReadOnly, requestedReadOnly: initialRequestedReadOnly,
     isLoading, error, sourceState, sourceError, workbook, sheets, chartsByWorkbookSheetIndex, chartsheets, tabs,
     isChartsLoading, workerTablesByWorkbookSheetIndex, formControlsByWorkbookSheetIndex,
@@ -1527,6 +1530,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const historyDomain = createHistoryDomain(ctx);
   const editingDomain = createEditingDomain(ctx);
   const sheetOrderDomain = createSheetOrderDomain(ctx);
+  const sheetVisibilityDomain = createSheetVisibilityDomain(ctx);
   const structureDomain = createStructureDomain(ctx);
   const authoringDomain = createAuthoringDomain(ctx);
 
@@ -1763,6 +1767,11 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     renameSheet: editingDomain.renameSheet,
     renameActiveSheet: editingDomain.renameActiveSheet,
     getSheetNameError: editingDomain.getSheetNameError,
+    get hiddenSheets() { return sheetVisibilityDomain.hiddenSheets.value; },
+    getSheetVisibility: sheetVisibilityDomain.getSheetVisibility,
+    setSheetVisibility: sheetVisibilityDomain.setSheetVisibility,
+    get showHiddenSheets() { return showHiddenSheetsMode.value; },
+    setShowHiddenSheets: sheetVisibilityDomain.setShowHiddenSheets,
     get readOnly() { return readOnly.value; },
     get locale() { return documentLocale.value; },
     setDocumentLocale,

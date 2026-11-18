@@ -63,17 +63,32 @@
           class="xlsx-sheettabs__tab"
           data-testid="xlsx-sheet-tab"
           :data-sheet-name="tab.name"
+          :data-visibility="tab.kind === 'sheet' ? tab.visibility ?? 'visible' : undefined"
           role="tab"
           :aria-selected="index === activeTabIndex"
           :class="{
             'xlsx-sheettabs__tab--active': index === activeTabIndex,
+            'xlsx-sheettabs__tab--hidden': tab.kind === 'sheet' && tab.visibility === 'hidden',
           }"
           :style="tabStyle(index)"
+          :title="tabTitle(tab)"
           @click="onTabClick(index)"
           @dblclick="onTabDblClick(tab, index)"
           @keydown="onTabKeydown(index, tab, $event)"
         >
           <span class="xlsx-sheettabs__tab-name">{{ tab.name }}</span>
+        </button>
+        <button
+          v-if="canManageSheets && tab.kind === 'sheet' && tab.visibility === 'hidden'"
+          type="button"
+          class="xlsx-sheettabs__unhide-btn"
+          data-testid="xlsx-unhide-sheet-tab"
+          :data-sheet-name="tab.name"
+          :title="m.xlsx.sheetTabs.unhide"
+          :aria-label="`${m.xlsx.sheetTabs.unhide} ${tab.name}`"
+          @click.stop="unhideTabFromStrip(tab)"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z" /><circle cx="12" cy="12" r="2.5" /></svg>
         </button>
         <div
           v-if="hoveredTabIndex === index && renamingTabIndex !== index && thumbnailComputed[index]"
@@ -140,6 +155,15 @@
       {{ moveError }}
     </div>
     <div
+      v-if="visibilityError"
+      class="xlsx-sheettabs__rename-error"
+      data-testid="xlsx-sheet-visibility-error"
+      role="alert"
+      :style="visibilityErrorStyle"
+    >
+      {{ visibilityError }}
+    </div>
+    <div
       v-if="tabMenu"
       class="xlsx-sheettabs__menu-backdrop"
       data-testid="xlsx-sheet-tab-menu-backdrop"
@@ -151,7 +175,7 @@
       class="xlsx-sheettabs__menu"
       data-testid="xlsx-sheet-tab-menu"
       role="menu"
-      :aria-label="m.xlsx.sheetTabs.rename"
+      :aria-label="m.xlsx.sheetTabs.menuLabel"
       :style="tabMenuStyle"
       @keydown.esc="closeTabMenu"
     >
@@ -164,6 +188,54 @@
       >
         {{ m.xlsx.sheetTabs.rename }}
       </button>
+      <button
+        type="button"
+        class="xlsx-sheettabs__menu-item"
+        data-testid="xlsx-hide-sheet"
+        role="menuitem"
+        :disabled="!canHideMenuTab"
+        @click="hideFromMenu"
+      >
+        {{ m.xlsx.sheetTabs.hide }}
+      </button>
+      <button
+        type="button"
+        class="xlsx-sheettabs__menu-item"
+        data-testid="xlsx-unhide-menu"
+        role="menuitem"
+        aria-haspopup="menu"
+        :aria-expanded="unhideMenuOpen ? 'true' : 'false'"
+        :disabled="controller.hiddenSheets.length === 0"
+        @click="toggleUnhideMenu"
+      >
+        {{ m.xlsx.sheetTabs.unhide }}
+      </button>
+      <div
+        v-if="unhideMenuOpen"
+        class="xlsx-sheettabs__submenu"
+        data-testid="xlsx-unhide-sheet-menu"
+        role="menu"
+        :aria-label="m.xlsx.sheetTabs.unhide"
+      >
+        <button
+          v-for="sheet in controller.hiddenSheets"
+          :key="sheet.workbookSheetIndex"
+          type="button"
+          class="xlsx-sheettabs__menu-item xlsx-sheettabs__menu-item--submenu"
+          data-testid="xlsx-unhide-sheet"
+          :data-sheet-name="sheet.name"
+          role="menuitem"
+          @click="unhideFromMenu(sheet)"
+        >
+          {{ sheet.name }}
+        </button>
+        <span
+          v-if="controller.hiddenSheets.length === 0"
+          class="xlsx-sheettabs__menu-empty"
+        >
+          {{ m.xlsx.sheetTabs.noHiddenSheets }}
+        </span>
+      </div>
     </div>
   </div>
 </template>
@@ -171,6 +243,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onUnmounted, type CSSProperties } from "vue";
 import type {
+  XlsxHiddenSheet,
   XlsxSheetNameIssue,
   XlsxViewerController,
   XlsxWorkbookTab,
@@ -192,6 +265,9 @@ const activeTabIndex = computed(() => props.controller.activeTabIndex);
 const isReadOnly = computed(() => props.controller.isEditingLocked === true || props.controller.readOnly || props.readOnly === true);
 // Renaming a protected sheet is allowed, like Excel; only read-only mode blocks it.
 const canRenameSheets = computed(() => props.controller.readOnly !== true && props.readOnly !== true);
+// Hiding, unhiding and renaming are worksheet management actions; sheet
+// protection does not block them, matching Excel.
+const canManageSheets = canRenameSheets;
 const canMoveSheets = computed(() => canRenameSheets.value && props.controller.tabs.length > 1);
 const m = useXlsxMessages();
 const canRemoveActiveSheet = computed(() => Boolean(props.controller.activeSheet) && props.controller.sheets.length > 1);
@@ -226,6 +302,23 @@ const renameAnchor = ref<{ left: number; top: number } | null>(null);
 // inline editor is read back through this helper.
 const renameInputRef = ref<HTMLInputElement | HTMLInputElement[] | null>(null);
 const tabMenu = ref<{ tabId: string; x: number; y: number } | null>(null);
+const unhideMenuOpen = ref(false);
+const visibilityError = ref<string | null>(null);
+const visibilityErrorAnchor = ref<{ left: number; top: number } | null>(null);
+const menuTab = computed<XlsxWorkbookTab | null>(() => {
+  const menu = tabMenu.value;
+  if (!menu) return null;
+  return props.controller.tabs.find((tab) => tab.id === menu.tabId) ?? null;
+});
+const visibleSheetCount = computed(() => (
+  props.controller.sheets.filter((sheet) => sheet.visibility === "visible").length
+));
+const canHideMenuTab = computed(() => {
+  const tab = menuTab.value;
+  if (!tab) return false;
+  if (tab.visibility && tab.visibility !== "visible") return false;
+  return resolveTabWorkbookSheetIndex(tab) !== null && visibleSheetCount.value > 1;
+});
 
 // Drag-to-reorder state. `dropSlot` is an insertion slot in `tabs` (0 through
 // `tabs.length`), not a tab index, so dropping on the right half of a tab
@@ -326,6 +419,13 @@ function onTabLeave() {
 
 function onTabClick(index: number) {
   props.controller.setActiveTabIndex(index);
+}
+
+/** Hidden tabs are labelled as such; normal tabs keep the default tooltip. */
+function tabTitle(tab: XlsxWorkbookTab) {
+  return tab.kind === "sheet" && tab.visibility === "hidden"
+    ? m.value.xlsx.sheetTabs.hiddenTab
+    : undefined;
 }
 
 function onTabDblClick(tab: XlsxWorkbookTab, index: number) {
@@ -524,6 +624,8 @@ function onTabContextMenu(index: number, event: MouseEvent) {
   }
   event.preventDefault();
   props.controller.setActiveTabIndex(index);
+  unhideMenuOpen.value = false;
+  visibilityError.value = null;
   tabMenu.value = { tabId: tab.id, x: event.clientX, y: event.clientY };
 }
 
@@ -538,11 +640,78 @@ function onTabKeydown(index: number, tab: XlsxWorkbookTab, event: KeyboardEvent)
   event.preventDefault();
   const rect = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect?.();
   props.controller.setActiveTabIndex(index);
+  unhideMenuOpen.value = false;
+  visibilityError.value = null;
   tabMenu.value = { tabId: tab.id, x: rect?.left ?? 0, y: rect?.bottom ?? 0 };
 }
 
 function closeTabMenu() {
   tabMenu.value = null;
+  unhideMenuOpen.value = false;
+}
+
+/** Workbook sheet index for a tab, or null when the tab owns no worksheet. */
+function resolveTabWorkbookSheetIndex(tab: XlsxWorkbookTab): number | null {
+  if (typeof tab.workbookSheetIndex === "number") {
+    return tab.workbookSheetIndex;
+  }
+  if (typeof tab.sheetIndex === "number") {
+    return props.controller.sheets[tab.sheetIndex]?.workbookSheetIndex ?? null;
+  }
+  return null;
+}
+
+function showVisibilityError(message: string, anchor: { left: number; top: number } | null) {
+  visibilityError.value = message;
+  visibilityErrorAnchor.value = anchor;
+}
+
+function menuAnchor(): { left: number; top: number } | null {
+  const menu = tabMenu.value;
+  return menu ? { left: menu.x, top: menu.y } : null;
+}
+
+function hideFromMenu() {
+  const menu = tabMenu.value;
+  const index = menu ? props.controller.tabs.findIndex((tab) => tab.id === menu.tabId) : -1;
+  const tab = index >= 0 ? props.controller.tabs[index] : null;
+  const anchor = menuAnchor();
+  closeTabMenu();
+  if (!tab) return;
+  const workbookSheetIndex = resolveTabWorkbookSheetIndex(tab);
+  if (
+    workbookSheetIndex === null
+    || !props.controller.setSheetVisibility(workbookSheetIndex, "hidden")
+  ) {
+    showVisibilityError(m.value.xlsx.sheetTabs.hideFailed, anchor);
+  }
+}
+
+function toggleUnhideMenu() {
+  unhideMenuOpen.value = !unhideMenuOpen.value;
+}
+
+function unhideFromMenu(sheet: XlsxHiddenSheet) {
+  const anchor = menuAnchor();
+  closeTabMenu();
+  if (!props.controller.setSheetVisibility(sheet.workbookSheetIndex, "visible")) {
+    showVisibilityError(m.value.xlsx.sheetTabs.unhideFailed, anchor);
+  }
+}
+
+function unhideTabFromStrip(tab: XlsxWorkbookTab) {
+  const workbookSheetIndex = resolveTabWorkbookSheetIndex(tab);
+  const index = props.controller.tabs.indexOf(tab);
+  const rect = index >= 0 ? tabWrapperRefs.value.get(index)?.getBoundingClientRect?.() : null;
+  if (
+    workbookSheetIndex === null
+    || !props.controller.setSheetVisibility(workbookSheetIndex, "visible")
+  ) {
+    showVisibilityError(
+      m.value.xlsx.sheetTabs.unhideFailed,
+      rect ? { left: rect.left, top: rect.top } : null,
+    );
+  }
 }
 
 function renameFromMenu() {
@@ -640,6 +809,21 @@ const moveErrorStyle = computed<CSSProperties>(() => ({
   padding: "4px 8px",
   position: "fixed",
   top: `${moveErrorAnchor.value?.top ?? 0}px`,
+  transform: "translateY(calc(-100% - 8px))",
+  whiteSpace: "normal",
+  zIndex: 9998,
+}));
+
+const visibilityErrorStyle = computed<CSSProperties>(() => ({
+  backgroundColor: "#b91c1c",
+  borderRadius: "4px",
+  color: "#ffffff",
+  fontSize: "11px",
+  left: `${visibilityErrorAnchor.value?.left ?? 0}px`,
+  maxWidth: "260px",
+  padding: "4px 8px",
+  position: "fixed",
+  top: `${visibilityErrorAnchor.value?.top ?? 0}px`,
   transform: "translateY(calc(-100% - 8px))",
   whiteSpace: "normal",
   zIndex: 9998,
@@ -745,6 +929,60 @@ onUnmounted(() => {
   text-overflow: ellipsis;
 }
 
+/* Hidden tabs stay in the strip only when the host asks for them; they are
+   visibly different from a normal tab so "hide" is not mistaken for "delete". */
+.xlsx-sheettabs__tab--hidden {
+  font-style: italic;
+  opacity: 0.55;
+}
+
+.xlsx-sheettabs__unhide-btn {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  height: 22px;
+  justify-content: center;
+  opacity: 0.7;
+  padding: 0;
+  width: 22px;
+}
+
+.xlsx-sheettabs__unhide-btn:hover {
+  background: rgba(128, 128, 128, 0.15);
+  opacity: 1;
+}
+
+.xlsx-sheettabs__unhide-btn svg {
+  fill: none;
+  height: 14px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  width: 14px;
+}
+
+.xlsx-sheettabs__submenu {
+  border-top: 1px solid rgba(128, 128, 128, 0.25);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.xlsx-sheettabs__menu-item--submenu {
+  padding-left: 20px;
+}
+
+.xlsx-sheettabs__menu-empty {
+  display: block;
+  font-size: 11px;
+  opacity: 0.6;
+  padding: 4px 10px 4px 20px;
+}
+
 .xlsx-sheettabs__rename-input {
   box-sizing: border-box;
 }
@@ -786,6 +1024,11 @@ onUnmounted(() => {
 
 .xlsx-sheettabs__menu-item:hover {
   background: rgba(128, 128, 128, 0.15);
+}
+
+.xlsx-sheettabs__menu-item:disabled {
+  cursor: default;
+  opacity: 0.4;
 }
 
 .xlsx-sheettabs__thumbnail {

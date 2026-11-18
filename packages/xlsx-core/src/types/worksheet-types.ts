@@ -695,6 +695,19 @@ export interface XlsxWorkbookTab {
   workbookSheetIndex?: number;
 }
 
+/**
+ * A worksheet the user can bring back with "Unhide".
+ *
+ * `veryHidden` worksheets are deliberately absent from this list: Excel does
+ * not show them in its Unhide dialog either, so they can only be restored
+ * through `setSheetVisibility`. `getSheetVisibility` still reports them.
+ */
+export interface XlsxHiddenSheet {
+  name: string;
+  visibility: "hidden";
+  workbookSheetIndex: number;
+}
+
 // ── Formula target ───────────────────────────────────────────────────────
 
 export type XlsxFormulaTarget =
@@ -922,7 +935,12 @@ export interface UseXlsxViewerControllerOptions {
    */
   readOnlyAboveBytes?: number;
   /**
-   * Includes hidden and very hidden workbook sheets in the sheet tabs and controller state.
+   * Includes hidden workbook sheets in the sheet tabs and controller state.
+   *
+   * The mode can be changed after load with
+   * `XlsxViewerController.setShowHiddenSheets`. `veryHidden` sheets are never
+   * listed: Excel keeps them out of the tab strip and Unhide dialog, so they
+   * can only be restored through `setSheetVisibility`.
    *
    * @default false
    */
@@ -1624,6 +1642,69 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
    * @returns The first broken rule, or `null` when the name is acceptable.
    */
   getSheetNameError: (name: string, index?: number) => XlsxSheetNameIssue | null;
+  /**
+   * Hides, unhides or very-hides a worksheet at runtime.
+   *
+   * The sheet is addressed by workbook sheet index — the value every
+   * `XlsxSheetData` and worksheet tab exposes as `workbookSheetIndex` — not by
+   * tab or visible-sheet index. A hidden sheet is absent from `tabs`, so it
+   * has no tab index, while `workbookSheetIndex` identifies both listed and
+   * hidden worksheets.
+   *
+   * Hiding the active worksheet selects the nearest remaining visible tab and
+   * clears the sheet-scoped selection and overlay state; hiding the last
+   * visible worksheet is refused, mirroring `removeActiveSheet`. Unhiding a
+   * worksheet makes it active. `veryHidden` worksheets leave `tabs` and the
+   * `hiddenSheets` unhide list even when hidden tabs are shown, like Excel.
+   *
+   * `@dukelib/sheets-wasm` exposes visibility as read-only, so the viewer
+   * rewrites the `state` attribute of the worksheet in its saved workbook,
+   * reparses the package and commits the result as one undo entry. Visibility
+   * is therefore preserved by `exportXlsx` and by a later reload, and images,
+   * charts, shapes, form controls and sheet state are re-read from the rebuilt
+   * package so their `workbookSheetIndex` keys stay aligned.
+   *
+   * @param workbookSheetIndex Zero-based worksheet index in the workbook.
+   * @param visibility Excel visibility to write.
+   * @returns `true` when visibility changed; `false` for a no-op, an invalid
+   *   index, a read-only viewer, an attempt to hide the last visible sheet, or
+   *   a package that cannot be rewritten.
+   */
+  setSheetVisibility: (
+    workbookSheetIndex: number,
+    visibility: XlsxSheetVisibility
+  ) => boolean;
+  /**
+   * Current visibility of a worksheet, including `veryHidden`.
+   *
+   * Worker-backed read-only viewers only know visibility for sheets present in
+   * their snapshot; `null` means the index is not a worksheet the controller
+   * can see.
+   */
+  getSheetVisibility: (workbookSheetIndex: number) => XlsxSheetVisibility | null;
+  /**
+   * Worksheets the tab context menu offers to unhide, in workbook order.
+   *
+   * `veryHidden` worksheets are omitted, matching Excel's Unhide dialog. The
+   * list comes from the live workbook, so it is populated even when
+   * `showHiddenSheets` is off and hidden tabs are not rendered.
+   */
+  hiddenSheets: XlsxHiddenSheet[];
+  /** Whether hidden worksheet tabs are included in `tabs` and the tab strip. */
+  showHiddenSheets: boolean;
+  /**
+   * Includes or removes hidden worksheet tabs at runtime.
+   *
+   * This is a view option, not a workbook edit: it rebuilds `sheets`, `tabs`
+   * and the visible-index map from the current workbook and records no undo
+   * entry. `veryHidden` worksheets are never listed. Turning it off while a
+   * hidden sheet is active switches to the nearest visible worksheet.
+   *
+   * @returns `true` when the mode changed (or already matched); `false` when
+   *   the viewer has no main-thread workbook to rebuild from, such as a
+   *   Worker-backed read-only viewer.
+   */
+  setShowHiddenSheets: (includeHidden: boolean) => boolean;
 }
 
 // ── Sub-controller interfaces ────────────────────────────────────────────
@@ -1661,6 +1742,19 @@ export interface XlsxViewerEditing {
   renameActiveSheet: (name: string) => boolean;
   /** Explains why a worksheet name is rejected; `null` when it is acceptable. */
   getSheetNameError: (name: string, index?: number) => XlsxSheetNameIssue | null;
+  /** Hides, unhides or very-hides a worksheet; see `XlsxViewerController.setSheetVisibility`. */
+  setSheetVisibility: (
+    workbookSheetIndex: number,
+    visibility: XlsxSheetVisibility
+  ) => boolean;
+  /** Current worksheet visibility; see `XlsxViewerController.getSheetVisibility`. */
+  getSheetVisibility: (workbookSheetIndex: number) => XlsxSheetVisibility | null;
+  /** Worksheets offered by the Unhide menu; see `XlsxViewerController.hiddenSheets`. */
+  hiddenSheets: XlsxHiddenSheet[];
+  /** Includes hidden worksheet tabs; see `XlsxViewerController.showHiddenSheets`. */
+  showHiddenSheets: boolean;
+  /** Includes or removes hidden tabs at runtime; see `XlsxViewerController.setShowHiddenSheets`. */
+  setShowHiddenSheets: (includeHidden: boolean) => boolean;
   canRedo: boolean;
   canUndo: boolean;
   clearSelectedCells: () => void;

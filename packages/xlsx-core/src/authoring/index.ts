@@ -48,6 +48,7 @@ export type {
   XlsxStructureChange,
 } from "./sheet-structure";
 export { applyWorkbookSheetOrder } from "./sheet-order";
+export { applyWorkbookSheetVisibility } from "./sheet-visibility";
 export {
   XLSX_MAX_SHEET_NAME_LENGTH,
   applyWorkbookSheetRename,

@@ -3,6 +3,7 @@ import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interact
 import type { Workbook } from "@dukelib/sheets-wasm";
 import {
   getSheetsWasmModule,
+  isWorksheetTabListed,
   loadWorkbookChartAssets,
   mergeWorkbookImageAssets,
   normalizeTypedDateCells,
@@ -238,7 +239,7 @@ export function buildSheetList(
         sheetState?.defaultRowHeightPx ?? DEFAULT_ROW_HEIGHT
       );
       const visibility = normalizeWorksheetVisibility(worksheet.visibility);
-      if (!showHiddenSheets && visibility !== "visible") continue;
+      if (!isWorksheetTabListed(visibility, showHiddenSheets)) continue;
 
       const usedRange = worksheet.usedRange() as [number, number, number, number] | null;
       if (!usedRange) {
