@@ -289,6 +289,44 @@ test("PdfViewer moves pages, zooms, searches and cancels search with Escape", as
   assert.deepEqual(mounted.warnings, []);
 });
 
+test("PdfViewer Ctrl/Cmd+P follows the editable-target guard but still prints outside fields", async () => {
+  const previousWindow = globalThis.window;
+  let printed = 0;
+  globalThis.window = {
+    print: () => { printed += 1; },
+  };
+  try {
+    const mounted = await mountPdfViewer();
+    const viewer = findByTestId(mounted.root, "pdf-viewer");
+    const search = findByTestId(mounted.root, "pdf-search-input");
+    const pageInput = findByTestId(mounted.root, "pdf-page-input");
+
+    const fromSearch = keydown(viewer, "p", { ctrlKey: true, target: search });
+    const fromPageInput = keydown(viewer, "p", { metaKey: true, target: pageInput });
+    const alreadyHandled = keydown(viewer, "p", {
+      ctrlKey: true,
+      target: viewer,
+      defaultPrevented: true,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.equal(fromSearch.prevented, 0, "Ctrl+P in the search field is not prevented");
+    assert.equal(fromPageInput.prevented, 0, "Cmd+P in the page field is not prevented");
+    assert.equal(alreadyHandled.prevented, 0, "a child-handled Ctrl+P is not re-handled");
+    assert.equal(printed, 0, "printing must not start from an editable field");
+
+    const outside = keydown(viewer, "p", { ctrlKey: true, target: viewer });
+    assert.equal(outside.prevented, 1, "Ctrl+P outside fields is handled");
+    await waitFor(() => printed === 1, "PDF print invocation");
+
+    mounted.app.unmount();
+    assert.deepEqual(mounted.warnings, []);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
 test("PdfSurface pages with PageUp/PageDown and Home/End and zooms with Ctrl keys", async () => {
   const zoomState = vue.ref(1);
   const cancels = [];

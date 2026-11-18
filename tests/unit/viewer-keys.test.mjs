@@ -101,6 +101,7 @@ test("shift/alt navigation and editable targets keep their native meaning", () =
   assert.equal(resolve("End", { pageNavigation: true }, { altKey: true }), null);
   for (const target of [
     { tagName: "INPUT" },
+    { type: "input" },
     { tagName: "TEXTAREA" },
     { tagName: "SELECT" },
     { isContentEditable: true },
