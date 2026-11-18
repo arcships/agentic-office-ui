@@ -30,7 +30,7 @@ pnpm add @arcships/vue-ui
 
 所有 Vue 包都需要 Vue 3。当前支持范围为 `>=3.2.25 <4`。
 
-`@arcships/office-interaction` 和统一 Surface 引用事件属于 `0.6.0` 源码候选；npm 稳定版 `0.5.4` 尚未包含它们。直接消费共享引用类型或纯函数时，应在 `0.6.0` 发布后把该包声明为直接依赖。
+`@arcships/office-interaction` 和统一 Surface 引用事件属于 `0.7.0` 源码候选；npm 稳定版 `0.5.4` 尚未包含它们。直接消费共享引用类型或纯函数时，应在 `0.7.0` 发布后把该包声明为直接依赖。
 
 ## 引入样式
 

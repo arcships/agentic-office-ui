@@ -1,6 +1,6 @@
 # 把用户选择变成 Agent 可定位的引用
 
-> 本页对应 `0.6.0` 源码候选。npm 稳定版 `0.5.4` 尚未包含统一引用 API。
+> 本页对应 `0.7.0` 源码候选。npm 稳定版 `0.5.4` 尚未包含统一引用 API。
 
 Agentic Office UI 只负责把 Office Surface 上的一次选择转换成精确引用，并通过事件交给宿主。组件不保存确认后的引用集合，不提供聊天框、提示词协议或 Agent 调用。
 
@@ -18,7 +18,7 @@ Agentic Office UI 只负责把 Office Surface 上的一次选择转换成精确�
 
 ## 最小接入
 
-直接使用共享类型或纯函数时，宿主应把 `@arcships/office-interaction` 声明为直接依赖。`0.6.0` 发布后可按需安装：
+直接使用共享类型或纯函数时，宿主应把 `@arcships/office-interaction` 声明为直接依赖。`0.7.0` 发布后可按需安装：
 
 ```bash
 pnpm add @arcships/vue-xlsx @arcships/xlsx-core @arcships/office-interaction

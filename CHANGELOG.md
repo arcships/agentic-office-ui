@@ -2,7 +2,7 @@
 
 All notable changes to the `@arcships` package family are documented in this file.
 
-## [Unreleased]
+## [0.7.0] - 2026-11-18
 
 ### DOCX annotation gutter
 

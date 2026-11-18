@@ -25,7 +25,7 @@ Agentic Office UI is an open-source component library for displaying DOCX, XLSX,
 
 It sits between a person and an agent. The library owns preview and selection; your application owns the conversation, the agent, the document tool, and the product workflow.
 
-> **Release status:** `0.5.4` is the current npm stable release. The repository is preparing `0.6.0`, which adds the cross-format reference contract, stage-one format adapters, unified Surface events, and region-selection primitives. Screenshot capture, annotation editing, and automatic diff review are not built in yet.
+> **Release status:** `0.5.4` is the current npm stable release. The repository is preparing `0.7.0`, which adds the cross-format reference contract, stage-one format adapters, unified Surface events, and region-selection primitives. Screenshot capture, annotation editing, and automatic diff review are not built in yet.
 
 ## Why this exists
 
@@ -60,7 +60,7 @@ The reference says **what the user means**. Natural language says **what the use
 
 ## Supported formats
 
-| Format | Viewer capabilities | `0.6.0` stage-one references |
+| Format | Viewer capabilities | `0.7.0` stage-one references |
 |---|---|---|
 | DOCX | View, edit, paginate, search, thumbnails, comments, tracked changes, import/export | Exact text, page, and page region |
 | XLSX | Sheets, formulas, charts, images, range selection, editing, undo/redo | Worksheet, cell, range, row, column, chart, and sheet region |
@@ -99,7 +99,7 @@ Equivalent high-level entries are available as `DocxViewer`, `XlsxViewer`, and `
 
 ## Turn a selection into a reference
 
-The unified reference API below belongs to the `0.6.0` source candidate. Once released, applications that import shared types or utilities directly should declare `@arcships/office-interaction` as a direct dependency.
+The unified reference API below belongs to the `0.7.0` source candidate. Once released, applications that import shared types or utilities directly should declare `@arcships/office-interaction` as a direct dependency.
 
 ```vue
 <script setup lang="ts">
@@ -159,7 +159,7 @@ See the [reference selection guide](docs/guide/reference-selection.md) for `cont
 | [`@arcships/vue-pptx`](packages/vue-pptx/README.md) | PPTX Stage, Viewer, thumbnails, Surface events, and playback composables |
 | [`@arcships/vue-ui`](packages/vue-ui/README.md) | Office selection primitives plus upload, signature, thumbnail, citation, and layout components |
 
-The nine public packages share one release train. The npm stable line is `0.5.4`; the current source candidate is `0.6.0`. PPTX packages became public in `0.3.0`, and `0.4.0` added their minimal composable interface.
+The nine public packages share one release train. The npm stable line is `0.5.4`; the current source candidate is `0.7.0`. PPTX packages became public in `0.3.0`, and `0.4.0` added their minimal composable interface.
 
 ## Scope and boundaries
 
