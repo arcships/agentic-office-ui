@@ -1,9 +1,12 @@
+import type { XlsxCellRange } from "@arcships/xlsx-core";
+
 /**
  * Pure geometry / paint helpers shared by `XlsxGrid.vue`.
  *
  * They live outside the component so the fidelity rules (device-pixel caps,
- * merged-region viewport hits, icon-set buckets, overflow width and resize
- * zoom basis) can be unit-tested without a Canvas implementation.
+ * merged-region viewport hits, icon-set buckets, overflow width, reference
+ * outline clamps and resize zoom basis) can be unit-tested without a Canvas
+ * implementation.
  */
 
 // ── Canvas backing store ───────────────────────────────────────────────────
@@ -112,6 +115,52 @@ export function intersectsViewport(rect: PixelRect, viewport: PixelViewport): bo
     && rect.left + rect.width > viewport.left
     && rect.top < viewport.bottom
     && rect.top + rect.height > viewport.top;
+}
+
+// ── Formula reference outlines ─────────────────────────────────────────────
+
+/**
+ * Maps a sheet-coordinate reference range onto display coordinates for the
+ * grid's outline pass.
+ *
+ * Whole-column (`A:A`) and whole-row (`1:1`) references end at Excel's maximum
+ * index, which is not in the display map. Clamping the missing end to the last
+ * displayed row/column draws the visible portion of the reference instead of
+ * dropping the outline. A single off-screen cell has both endpoints unmapped and
+ * is skipped rather than stretched over the viewport.
+ */
+export function resolvePaintedReferenceRange(
+  range: XlsxCellRange,
+  rowToDisplayIndex: ReadonlyMap<number, number>,
+  colToDisplayIndex: ReadonlyMap<number, number>,
+  displayRowCount: number,
+  displayColCount: number,
+): XlsxCellRange | null {
+  if (displayRowCount <= 0 || displayColCount <= 0) return null;
+  const startRow = rowToDisplayIndex.get(range.start.row);
+  const endRow = rowToDisplayIndex.get(range.end.row);
+  const startCol = colToDisplayIndex.get(range.start.col);
+  const endCol = colToDisplayIndex.get(range.end.col);
+  const wholeColumn = range.start.row === 0 && range.end.row === ROW_KEY_STRIDE - 1;
+  const wholeRow = range.start.col === 0 && range.end.col === CELL_KEY_STRIDE - 1;
+
+  if (startRow === undefined && endRow === undefined) {
+    if (!wholeColumn) return null;
+  }
+  if (startCol === undefined && endCol === undefined) {
+    if (!wholeRow) return null;
+  }
+
+  return {
+    start: {
+      row: startRow ?? 0,
+      col: startCol ?? 0,
+    },
+    end: {
+      row: endRow ?? Math.max(0, displayRowCount - 1),
+      col: endCol ?? Math.max(0, displayColCount - 1),
+    },
+  };
 }
 
 // ── Text overflow ──────────────────────────────────────────────────────────

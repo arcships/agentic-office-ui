@@ -2,6 +2,33 @@
 // Kept as a re-export to preserve the public import path for consumers.
 export { useXlsxViewerController } from "./composables/useXlsxViewerController";
 export { useXlsxSearch } from "./composables/useXlsxSearch";
+export {
+  FORMULA_REFERENCE_COLORS,
+  collectFormulaReferences,
+  formulaReferenceColor,
+  formulaReferenceSegments,
+  parseFormulaReferences,
+  resolveNamedRangeTarget,
+} from "./composables/formula-reference-highlight";
+export type {
+  FormulaReference,
+  FormulaReferenceCollection,
+  FormulaReferenceKind,
+  FormulaReferenceNameTarget,
+  FormulaReferenceOptions,
+  FormulaReferenceSegment,
+} from "./composables/formula-reference-highlight";
+export {
+  FORMULA_REFERENCE_OWNER_FORMULA_BAR,
+  FORMULA_REFERENCE_OWNER_GRID,
+  createNamedRangeResolver,
+  isReferenceOnActiveSheet,
+  useFormulaReferenceEditing,
+} from "./composables/useFormulaReferenceEditing";
+export type {
+  FormulaReferenceEditing,
+  FormulaReferenceEditingSession,
+} from "./composables/useFormulaReferenceEditing";
 export type {
   XlsxSearchMatch,
   XlsxSearchOptions,

@@ -10,6 +10,9 @@
     :data-merged-region-count="activeSheet?.mergedRegions?.length ?? 0"
     :data-worker-backed="String(Boolean(controller.isWorkerBacked))"
     :data-cut-range="cutRangeAddress || undefined"
+    :data-formula-reference-count="formulaReferenceRanges.length || undefined"
+    :data-formula-reference-ranges="formulaReferenceRangeList || undefined"
+    :data-formula-reference-active="activeFormulaReferenceAddress || undefined"
     role="grid"
     :aria-label="gridAriaLabel"
     :aria-rowcount="gridRowCount"
@@ -130,21 +133,34 @@
           <div
             ref="editMirrorRef"
             class="xlsx-grid__edit-mirror"
+            :class="{ 'xlsx-grid__edit-mirror--formula': showEditorReferenceHighlight }"
             data-testid="xlsx-cell-editor-mirror"
+            :data-formula-reference-count="showEditorReferenceHighlight ? formulaReferences.references.length : undefined"
             aria-hidden="true"
             :style="editMirrorStyle"
-          >{{ editingValue }}</div>
+          ><template v-if="showEditorReferenceHighlight"><span
+              v-for="(segment, index) in editorReferenceSegments"
+              :key="index"
+              :data-formula-reference="segment.reference?.rangeAddress"
+              :data-formula-reference-active="segment.active ? 'true' : undefined"
+              :style="segment.color ? { color: segment.color } : undefined"
+            >{{ segment.text }}</span></template><template v-else>{{ editingValue }}</template></div>
           <textarea
             ref="editInputRef"
             v-model="editingValue"
             class="xlsx-grid__edit-input"
             data-testid="xlsx-cell-editor"
             :data-editor-lines="editorLineCount"
+            :data-formula-references="showEditorReferenceHighlight ? 'true' : undefined"
             rows="1"
             wrap="soft"
             spellcheck="false"
             :style="editInputStyle"
             @keydown="onEditKeydown"
+            @input="syncEditorCaret"
+            @keyup="syncEditorCaret"
+            @click="syncEditorCaret"
+            @select="syncEditorCaret"
             @paste="onEditPaste"
             @compositionstart="onEditCompositionStart"
             @compositionend="onEditCompositionEnd"
@@ -279,10 +295,22 @@ import {
   resolveAxisResizeSize,
   resolveCanvasPixelRatio,
   resolveOverflowTextWidth,
+  resolvePaintedReferenceRange,
   sheetCellKey,
 } from "./grid-paint";
 import { isDataValidationListDropdownVisible, localizeDataValidationFeedback } from "../composables/validation";
 import { localizeFormattedNumber, parseDisplayedNumber } from "../composables/cell-input";
+import {
+  collectFormulaReferences,
+  formulaReferenceSegments,
+  type FormulaReferenceCollection,
+} from "../composables/formula-reference-highlight";
+import {
+  createNamedRangeResolver,
+  FORMULA_REFERENCE_OWNER_GRID,
+  isReferenceOnActiveSheet,
+  useFormulaReferenceEditing,
+} from "../composables/useFormulaReferenceEditing";
 import { rangeToA1 } from "../composables/selection";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { useXlsxMessages } from "../i18n";
@@ -352,6 +380,9 @@ const containerHeight = ref(0);
 
 const editingCell = ref<XlsxCellAddress | null>(null);
 const editingValue = ref("");
+// Caret inside the inline draft; the formula-reference parser uses it to decide
+// which occurrence is being edited.
+const editorCaret = ref(0);
 // Exposed so the viewer can keep sheet-level shortcuts (undo, Ctrl+PageUp/Down)
 // out of an open inline editor.
 const isEditingCell = computed(() => editingCell.value !== null);
@@ -420,6 +451,55 @@ const conditionalRuleEnvironments = createScopedCache<ConditionalEnvironment>();
 
 // ── Computed from controller ──────────────────────────────────────────
 const activeSheet = computed(() => props.controller.activeSheet as XlsxSheetData | null);
+
+// ── Formula reference highlighting ────────────────────────────────────
+// Excel colours every reference in an edited formula and outlines the cells it
+// touches. The edit session is shared with `XlsxFormulaBar` through the
+// controller, so a reference outlined here can also be typed in the bar.
+const formulaReferenceEditing = useFormulaReferenceEditing(props.controller);
+const resolveFormulaReferenceName = createNamedRangeResolver(props.controller);
+const EMPTY_FORMULA_REFERENCES: FormulaReferenceCollection = {
+  activeIndex: -1,
+  activeReference: null,
+  references: [],
+};
+const formulaReferences = computed<FormulaReferenceCollection>(() => {
+  const session = formulaReferenceEditing.session;
+  if (!session.active.value) return EMPTY_FORMULA_REFERENCES;
+  return collectFormulaReferences(session.text.value, session.caret.value, {
+    activeSheetName: activeSheet.value?.name ?? null,
+    resolveName: resolveFormulaReferenceName,
+  });
+});
+const activeSheetName = computed(() => activeSheet.value?.name ?? null);
+const formulaReferenceRanges = computed(() =>
+  formulaReferences.value.references.filter(
+    (reference) => isReferenceOnActiveSheet(reference, activeSheetName.value),
+  ),
+);
+const formulaReferenceRangeList = computed(() =>
+  formulaReferenceRanges.value.map((reference) => reference.rangeAddress).join(" "),
+);
+const activeFormulaReference = computed(() => {
+  const active = formulaReferences.value.activeReference;
+  return active && formulaReferenceRanges.value.includes(active) ? active : null;
+});
+const activeFormulaReferenceAddress = computed(
+  () => activeFormulaReference.value?.rangeAddress ?? "",
+);
+const editorReferenceSegments = computed(() =>
+  formulaReferenceSegments(
+    formulaReferenceEditing.session.text.value,
+    formulaReferences.value.references,
+    formulaReferences.value.activeIndex,
+  ),
+);
+const showEditorReferenceHighlight = computed(() =>
+  editingCell.value !== null
+  && !isEditComposing.value
+  && formulaReferenceEditing.session.owner.value === FORMULA_REFERENCE_OWNER_GRID
+  && formulaReferences.value.references.length > 0,
+);
 
 // ── Grid accessibility ────────────────────────────────────────────────
 // The grid paints cells onto canvases, so assistive technology would otherwise
@@ -1225,14 +1305,16 @@ function drawRangeBorder(
     dashOffset?: number;
     /** Inset from the range edge in CSS pixels. */
     inset?: number;
+    /** The range is already in display coordinates (clamped formula references). */
+    displayed?: boolean;
   },
 ): void {
   const normalized = {
     start: { row: Math.min(range.start.row, range.end.row), col: Math.min(range.start.col, range.end.col) },
     end: { row: Math.max(range.start.row, range.end.row), col: Math.max(range.start.col, range.end.col) },
   };
-  const start = getDisplayCell(normalized.start);
-  const end = getDisplayCell(normalized.end);
+  const start = style.displayed ? normalized.start : getDisplayCell(normalized.start);
+  const end = style.displayed ? normalized.end : getDisplayCell(normalized.end);
   if (!start || !end) return;
   const x = getColOffsetSum(start.col);
   const y = getRowOffsetSum(start.row);
@@ -1910,6 +1992,34 @@ function resolveCellWorkbookStyle(
 }
 
 /**
+ * Coloured outlines around the cells an edited formula references. Excel uses
+ * one palette colour per distinct reference and thickens the occurrence the
+ * caret is inside; cross-sheet references are left to the formula bar because
+ * their target is not on this grid.
+ */
+function paintFormulaReferenceBorders(ctx: CanvasRenderingContext2D): void {
+  const references = formulaReferenceRanges.value;
+  if (references.length === 0) return;
+  const active = activeFormulaReference.value;
+  for (const reference of references) {
+    const displayRange = resolvePaintedReferenceRange(
+      reference.range,
+      sheetRowToDisplayIndex.value,
+      sheetColToDisplayIndex.value,
+      displayRows.value.length,
+      displayCols.value.length,
+    );
+    if (!displayRange) continue;
+    drawRangeBorder(ctx, displayRange, {
+      color: reference.color,
+      displayed: true,
+      inset: active === reference ? 1.5 : 2.5,
+      lineWidth: active === reference ? 3 : 1.5,
+    });
+  }
+}
+
+/**
  * Selection, active-cell and pending-cut outlines, drawn once per pane: each
  * pane clips to its own box and translates content by the scroll offset only on
  * its scrolling axes, so an outline inside the frozen strips lands on the
@@ -1929,7 +2039,7 @@ function paintSelectionBorders(
   if (active && (!sel || (sel.start.row === sel.end.row && sel.start.col === sel.end.col))) {
     ranges.push({ start: active, end: active });
   }
-  if (!ranges.length && !cut) return;
+  if (!ranges.length && !cut && formulaReferenceRanges.value.length === 0) return;
 
   const frozen = frozenPaneMetrics();
   const panes = [
@@ -1947,6 +2057,7 @@ function paintSelectionBorders(
     ctx.translate(pane.scrollX ? -scrollLeft.value : 0, pane.scrollY ? -scrollTop.value : 0);
     for (const range of ranges) drawSelectionBorder(ctx, range, color);
     if (cut) drawCutAntsBorder(ctx, cut, color);
+    paintFormulaReferenceBorders(ctx);
     ctx.restore();
   }
 }
@@ -2789,6 +2900,7 @@ function onDblClick(event: MouseEvent) {
   }
   editingCell.value = cell;
   editingValue.value = getCellInputValue(cell);
+  editorCaret.value = editingValue.value.length;
   // Bring the cell fully into its pane first: an editor opened over a cell
   // still half-hidden under a frozen strip would sit on the freeze line.
   scrollToCell(cell);
@@ -2798,6 +2910,7 @@ function onDblClick(event: MouseEvent) {
 
 function commitEdit() {
   if (!editingCell.value) return;
+  formulaReferenceEditing.end(FORMULA_REFERENCE_OWNER_GRID);
   props.controller.commitCellInput(editingCell.value, editingValue.value);
   editingCell.value = null;
   editingValue.value = "";
@@ -2807,6 +2920,7 @@ function commitEdit() {
 }
 
 function cancelEdit() {
+  formulaReferenceEditing.end(FORMULA_REFERENCE_OWNER_GRID);
   editingCell.value = null;
   editingValue.value = "";
   isEditComposing.value = false;
@@ -2843,6 +2957,23 @@ function readEditorSelection(): { start: number; end: number } {
   };
 }
 
+/**
+ * Tracks the caret in the inline draft after clicks, arrows and typing. The
+ * textarea has already applied the event when `input`, `keyup`, `click` and
+ * `select` fire, so this reads the post-event selection.
+ */
+function syncEditorCaret() {
+  if (!editingCell.value) return;
+  const value = editInputRef.value?.value ?? editingValue.value;
+  const { start } = readEditorSelection();
+  editorCaret.value = start;
+  formulaReferenceEditing.update(
+    FORMULA_REFERENCE_OWNER_GRID,
+    value,
+    start,
+  );
+}
+
 /** Inserts text at the textarea caret, keeping the draft in one commit. */
 function insertEditText(text: string) {
   const normalized = text.replace(/\r\n?/g, "\n");
@@ -2858,6 +2989,8 @@ function insertEditText(text: string) {
     if (textarea && typeof textarea.setSelectionRange === "function") {
       textarea.setSelectionRange(caret, caret);
     }
+    editorCaret.value = caret;
+    syncEditorCaret();
     syncEditorSize();
   });
 }
@@ -2969,6 +3102,7 @@ function commitAndTab() {
   props.controller.selectCell(nextCell);
   editingCell.value = nextCell;
   editingValue.value = getCellInputValue(nextCell);
+  editorCaret.value = editingValue.value.length;
   scrollToCell(nextCell);
 }
 
@@ -2977,6 +3111,7 @@ function commitAndMoveCell(rowDelta: number, colDelta: number) {
   const cell = editingCell.value;
   if (!cell) return;
   props.controller.commitCellInput(cell, editingValue.value);
+  formulaReferenceEditing.end(FORMULA_REFERENCE_OWNER_GRID);
   editingCell.value = null;
   editingValue.value = "";
   isEditComposing.value = false;
@@ -3017,6 +3152,7 @@ function moveCell(rowDelta: number, colDelta: number, extend: boolean) {
 function startEdit(cell: XlsxCellAddress) {
   editingCell.value = cell;
   editingValue.value = getCellInputValue(cell);
+  editorCaret.value = editingValue.value.length;
   scrollToCell(cell);
   nextTick(() => editInputRef.value?.focus());
 }
@@ -3102,6 +3238,7 @@ function onGridKeydown(event: KeyboardEvent) {
   if (!editingLocked.value && event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
     editingCell.value = active;
     editingValue.value = event.key;
+    editorCaret.value = event.key.length;
     nextTick(() => editInputRef.value?.focus());
   }
 }
@@ -3150,8 +3287,9 @@ const editInputStyle = computed<CSSProperties>(() => {
     fontSize: `${12 * z}px`, fontFamily: "inherit", lineHeight: `${editorLineHeightPx()}px`,
     outline: "none", resize: "none", overflow: "hidden",
     whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: "break-word",
-    background: props.isDark ? "#18181b" : "#ffffff",
-    color: props.isDark ? "#e4e4e7" : "#18181b",
+    background: showEditorReferenceHighlight.value ? "transparent" : (props.isDark ? "#18181b" : "#ffffff"),
+    color: showEditorReferenceHighlight.value ? "transparent" : (props.isDark ? "#e4e4e7" : "#18181b"),
+    caretColor: props.isDark ? "#e4e4e7" : "#18181b",
     boxSizing: "border-box",
   };
 });
@@ -3175,7 +3313,10 @@ const editMirrorStyle = computed<CSSProperties>(() => {
     padding: `${EDITOR_PADDING_Y_PX}px ${EDITOR_PADDING_X_PX}px`,
     fontSize: `${12 * z}px`, fontFamily: "inherit", lineHeight: `${editorLineHeightPx()}px`,
     whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: "break-word",
-    visibility: "hidden", pointerEvents: "none", boxSizing: "border-box",
+    visibility: showEditorReferenceHighlight.value ? "visible" : "hidden",
+    pointerEvents: "none", boxSizing: "border-box",
+    background: showEditorReferenceHighlight.value ? (props.isDark ? "#18181b" : "#ffffff") : undefined,
+    color: showEditorReferenceHighlight.value ? (props.isDark ? "#e4e4e7" : "#18181b") : undefined,
   };
 });
 
@@ -3215,6 +3356,7 @@ watch(
     props.isDark,
     props.selectionColor,
     props.selectionFillColor,
+    formulaReferences.value,
   ],
   schedulePaint,
   { flush: "post" },
@@ -3242,6 +3384,26 @@ watch(
 watch(
   [editingCell, editingValue, zoomScale, containerWidth, containerHeight],
   syncEditorSize,
+  { flush: "post" },
+);
+
+// Keep the shared formula-editing session in step with the inline editor. The
+// session starts on the first cell with content (including the zero-length seed
+// of a blank cell) and ends as soon as the editor closes via any path: Enter,
+// Escape, Tab, arrow commit, blur or a sheet switch.
+watch(
+  [editingCell, editingValue],
+  ([cell, value]) => {
+    if (!cell) {
+      formulaReferenceEditing.end(FORMULA_REFERENCE_OWNER_GRID);
+      return;
+    }
+    if (formulaReferenceEditing.session.owner.value === FORMULA_REFERENCE_OWNER_GRID) {
+      formulaReferenceEditing.update(FORMULA_REFERENCE_OWNER_GRID, value, editorCaret.value);
+    } else {
+      formulaReferenceEditing.begin(FORMULA_REFERENCE_OWNER_GRID, value, editorCaret.value);
+    }
+  },
   { flush: "post" },
 );
 
@@ -3301,6 +3463,7 @@ onUnmounted(() => {
   unbindDevicePixelRatioWatch();
   stopCutAnts();
   resetWorkerRows(null);
+  formulaReferenceEditing.end(FORMULA_REFERENCE_OWNER_GRID);
   if (paintFrame !== null) window.cancelAnimationFrame(paintFrame);
   paintFrame = null;
 });
