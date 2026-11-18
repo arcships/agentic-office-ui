@@ -239,7 +239,9 @@ async function loadPageTextLayer(pageNumber: number): Promise<void> {
   try {
     const layer = await runtime.getPageTextLayer(document, pageNumber - 1)
     if (request !== textLayerRequest || renderDocument.value !== document || runtimeForDocument !== runtime) return
-    pageTextLayer.value = layer
+    // Image-only pages have no glyphs. An empty text layer would still mount a
+    // selectable overlay, so treat "no glyphs" as "no selectable text".
+    pageTextLayer.value = layer.glyphs.length > 0 ? layer : null
   } catch {
     if (request === textLayerRequest) pageTextLayer.value = null
   }
@@ -1417,6 +1419,7 @@ defineExpose({
           data-testid="pdf-page"
           class="pdf-page-stage"
           :data-page-number="activePage"
+          :data-page-rotation="renderedPage?.rotation ?? 0"
           :data-render-state="pageRenderState"
         >
           <div v-if="pageRenderState === 'rendering'" class="page-loading">{{ formatOfficeMessage(m.pdf.viewer.renderingPage, { page: activePage }) }}</div>

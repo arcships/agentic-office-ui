@@ -20,12 +20,14 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table as XlsxTable, TableStyleInfo
 from PIL import Image, ImageDraw, ImageFont
 from reportlab import rl_config
-from reportlab.lib import colors
+from reportlab.lib import colors, pdfencrypt
 from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Image as PdfImage
 from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
@@ -429,17 +431,23 @@ def make_pdf_sample(path: Path):
 
 
 def make_pdf_scanned(path: Path, image_path: Path):
+    """Image-only pages: the fixture must have no native text layer at all."""
     c = canvas.Canvas(str(path), pagesize=A4)
     w, h = A4
     image = ImageReader(str(image_path))
-    for i in range(3):
+    for _ in range(3):
         c.drawImage(image, 18*mm, 20*mm, width=w-36*mm, height=h-40*mm, preserveAspectRatio=True, anchor="c")
-        c.drawString(20*mm, 10*mm, f"Scanned invoice page {i+1}")
         c.showPage()
     c.save()
 
 
 def make_pdf_rotated(path: Path):
+    """One upright page and one page whose /Rotate entry is 90 degrees.
+
+    ReportLab stores a rotated page at its displayed page size, so the second
+    page keeps an A4 portrait MediaBox with `/Rotate 90`. Viewers must apply
+    the page rotation instead of guessing the orientation from the MediaBox.
+    """
     c = canvas.Canvas(str(path), pagesize=A4)
     w, h = A4
     c.setFont("Helvetica-Bold", 22)
@@ -449,19 +457,72 @@ def make_pdf_rotated(path: Path):
         c.drawString(40, h - 120 - i*22, f"Portrait content row {i+1} for rotation and viewport validation.")
     c.showPage()
     c.setPageSize(landscape(A4))
-    w, h = landscape(A4)
+    c.setPageRotation(90)
     c.setFont("Helvetica-Bold", 22)
-    c.drawString(40, h - 70, "Landscape Page")
-    for i in range(12):
-        c.drawString(40, h - 110 - i*24, f"Landscape wide content row {i+1}: columns should remain visible during zoom and scroll testing.")
+    c.drawString(40, h - 80, "Rotated Page (/Rotate 90)")
+    for i in range(20):
+        c.drawString(40, h - 120 - i*22, f"Rotated content row {i+1} must be drawn through the page rotation.")
     c.showPage()
+    c.save()
+
+
+def make_pdf_encrypted(path: Path):
+    """Password-protected PDF; the documented password is ``arcships``."""
+    encryption = pdfencrypt.StandardEncryption(
+        "arcships",
+        ownerPassword="arcships-owner",
+        canPrint=1,
+        canModify=1,
+        canCopy=1,
+        canAnnotate=1,
+        strength=128,
+    )
+    c = canvas.Canvas(str(path), pagesize=A4, encrypt=encryption)
+    w, h = A4
+    for index, heading in enumerate(("Encrypted Contract", "Payment Schedule"), start=1):
+        c.setFont("Helvetica-Bold", 22)
+        c.drawString(40, h - 80, f"{heading} {index}")
+        c.setFont("Helvetica", 12)
+        for row in range(10):
+            c.drawString(40, h - 120 - row*22, f"Encrypted page {index} row {row+1}: password protected content.")
+        c.showPage()
+    c.save()
+
+
+def make_pdf_cjk_text(path: Path):
+    """Chinese text pages so PDF text extraction and search cover CJK glyphs."""
+    pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+    c = canvas.Canvas(str(path), pagesize=A4)
+    w, h = A4
+    pages = [
+        [
+            "中文合同摘要 / CJK-ALPHA-1",
+            "合同金额：人民币壹佰贰拾万元整",
+            "付款条款：验收合格后三十日内付款",
+            "合同双方：甲方与乙方共同签署",
+            "合同附件：技术规格与交付清单",
+        ],
+        [
+            "合同补充条款 / CJK-ALPHA-2",
+            "合同变更须经双方书面确认",
+            "付款节点：预付款、进度款与尾款",
+            "合同争议由合同签订地法院管辖",
+        ],
+    ]
+    for lines in pages:
+        c.setFont("STSong-Light", 20)
+        c.drawString(40, h - 80, lines[0])
+        c.setFont("STSong-Light", 14)
+        for row, line in enumerate(lines[1:], start=1):
+            c.drawString(40, h - 120 - row*28, line)
+        c.showPage()
     c.save()
 
 
 def make_pdf_large(path: Path):
     c = canvas.Canvas(str(path), pagesize=A4)
     w, h = A4
-    for page in range(1, 32):
+    for page in range(1, 241):
         c.setFont("Helvetica-Bold", 18)
         c.drawString(40, h - 60, f"Large Contract Page {page}")
         c.setFont("Helvetica", 10)
@@ -727,6 +788,8 @@ def main():
     make_pdf_sample(SAMPLES / "sample.pdf")
     make_pdf_scanned(SAMPLES / "scanned-invoice.pdf", invoice_png)
     make_pdf_rotated(SAMPLES / "rotated-pages.pdf")
+    make_pdf_encrypted(SAMPLES / "encrypted.pdf")
+    make_pdf_cjk_text(SAMPLES / "cjk-report.pdf")
     make_pdf_large(SAMPLES / "large-contract.pdf")
     make_corrupted(SAMPLES / "corrupted.pdf", "%PDF corrupted fixture\n")
 

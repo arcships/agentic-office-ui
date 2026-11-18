@@ -30,6 +30,15 @@
       "sha256": "189b875ed681299e768ef21806a80295b592bc6f237972ca2a8d4e0154f8e91e"
     },
     {
+      "file": "cjk-report.pdf",
+      "type": "pdf",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "extract per-page CJK text and search Chinese keywords",
+      "bytes": 3301,
+      "sha256": "ce48dfe7f6a27ba0541ee408c12b3c441f3fd0abb72c43f0d41174091157147e"
+    },
+    {
       "file": "contract-page.png",
       "type": "png",
       "category": "normal",
@@ -76,6 +85,15 @@
       "sha256": "8f918f37b62dee50d65fc6fe120c4f58753579e1f314698c2e6f23400a7d1b35"
     },
     {
+      "file": "encrypted.pdf",
+      "type": "pdf",
+      "category": "boundary",
+      "source": "synthetic-v1",
+      "expected": "reject without a password and open with the documented password arcships",
+      "bytes": 2710,
+      "sha256": "90bbe4989aee286e7562536b2eec8674f5ee6a0266ef006932bfb449cbac9be1"
+    },
+    {
       "file": "field-citations.json",
       "type": "json",
       "category": "normal",
@@ -116,9 +134,9 @@
       "type": "pdf",
       "category": "large",
       "source": "synthetic-v1",
-      "expected": "open a multi-page PDF fixture without network access",
-      "bytes": 27641,
-      "sha256": "ac4f529551660ef2b2ac5564513d700a0a45aa58f1514ad5c66ef341189980e1"
+      "expected": "open a 240-page contract for first-render and page-turn timing",
+      "bytes": 208838,
+      "sha256": "47d575278e886ba6fd8f745df8a1ce37c258a7b6999dcca562d0164cad761923"
     },
     {
       "file": "large-grid.xlsx",
@@ -170,9 +188,9 @@
       "type": "pdf",
       "category": "boundary",
       "source": "synthetic-v1",
-      "expected": "open pages with rotation metadata",
-      "bytes": 2376,
-      "sha256": "7cdd5c1a980e4c40f78bdf88e5c5268adf20c57a507795d4191b74c6a74e65a4"
+      "expected": "open an upright page and a page whose /Rotate 90 metadata viewers must apply",
+      "bytes": 2413,
+      "sha256": "902b9020b732a72ea75540154948e7e1cf94c2866304dc54cac7a4370bf989a6"
     },
     {
       "file": "sales-table.xlsx",
@@ -197,9 +215,9 @@
       "type": "pdf",
       "category": "boundary",
       "source": "synthetic-v1",
-      "expected": "open an image-only scanned invoice",
-      "bytes": 39568,
-      "sha256": "3d905e77053715474caa5ef239e6147635fea35b249079b8d52912badad6d437"
+      "expected": "open image-only scanned pages without a native text layer",
+      "bytes": 39398,
+      "sha256": "f68a038d6c88558d6057b82be14d8b29491112f36cbbe56638b8792d0c5dea26"
     }
   ]
 }

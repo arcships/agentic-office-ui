@@ -32,6 +32,21 @@ const selectionInteractionModule = await import(`data:text/javascript;base64,${B
   }).outputText,
 ).toString("base64")}`);
 
+test("PDF encrypted documents expose a stable ENCRYPTED load code", () => {
+  const encrypted = Object.assign(new Error("Task rejected: password required"), {
+    code: "ENCRYPTED",
+  });
+  assert.deepEqual(pdf.toPdfLoadError(encrypted, "blob"), {
+    code: "ENCRYPTED",
+    message: "The PDF document is encrypted and requires a password.",
+    sourceKind: "blob",
+  });
+  assert.equal(
+    pdf.localizePdfErrorMessage({ code: "ENCRYPTED" }, { encrypted: "Password required." }),
+    "Password required.",
+  );
+});
+
 test("PDF canonical transforms round-trip points and intrinsic search rects at every rotation", () => {
   const rotations = [0, 90, 180, 270];
   const scale = 1.75;

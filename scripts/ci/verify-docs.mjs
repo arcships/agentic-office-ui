@@ -224,6 +224,9 @@ for (const registered of [
   '"formal-scroll-range-regression"',
   '"formal-docx-annotations"',
   '"tests/blackbox/docx_annotations.py"',
+  '"material-verification"',
+  '"tests/blackbox/pdf_workflows.py"',
+  '"tests/blackbox/fidelity_content.py"',
   'childSuite("docs", "test:docs")',
 ]) {
   check(`suite registration ${registered}`, runner.includes(registered));
@@ -239,11 +242,23 @@ check(
 check("CI runs the unit suite", workflow.includes("pnpm test:unit"));
 check("CI runs the component suite", workflow.includes("pnpm test:component"));
 check(
+  "CI runs the PDF suite",
+  workflow.includes("node scripts/ci/run-suite.mjs pdf"),
+);
+check(
+  "CI installs the PDF material dependencies",
+  workflow.includes("pip install -r requirements-ci.txt"),
+);
+check(
   "CI runs the acceptance shards",
   workflow.includes("scripts/ci/run-acceptance-shard.mjs"),
 );
 check("CI installs pnpm through corepack", workflow.includes("corepack enable"));
 check("Playwright dependency pinned", /^playwright==\d+\.\d+\.\d+$/m.test(read("requirements-ci.txt")));
+check(
+  "pypdf dependency pinned",
+  /^pypdf==\d+\.\d+\.\d+$/m.test(read("requirements-ci.txt")),
+);
 
 const allowlist = JSON.parse(read("tests/blackbox/console_allowlist.json"));
 check(
@@ -253,7 +268,7 @@ check(
   ),
 );
 const fixtures = JSON.parse(read("test-data/manifest.json"));
-check("fixture manifest has 21 entries", fixtures.entries?.length === 21, fixtures.entries?.length);
+check("fixture manifest has 23 entries", fixtures.entries?.length === 23, fixtures.entries?.length);
 check("fixture manifest excludes sensitive data", fixtures.containsSensitiveData === false);
 check(
   "consumer template has no source alias",

@@ -510,7 +510,7 @@ Visual review:
 
 Interactions:
 
-- Load each PDF: `sample.pdf`, `scanned-invoice.pdf`, `rotated-pages.pdf`, `large-contract.pdf`, `corrupted.pdf`.
+- Load each PDF: `sample.pdf`, `scanned-invoice.pdf`, `rotated-pages.pdf`, `large-contract.pdf`, `cjk-report.pdf`, `encrypted.pdf`（密码 `arcships`）, `corrupted.pdf`.
 - Upload a valid PDF fixture.
 - Use next/previous page controls.
 - Click thumbnails.

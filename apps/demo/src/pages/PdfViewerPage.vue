@@ -14,6 +14,10 @@
       </label>
       <button data-testid="pdf-load-sample" @click="loadSelectedSample">加载示例</button>
       <label>
+        密码（加密 PDF）
+        <input v-model="pdfPassword" data-testid="pdf-password" type="password" autocomplete="off" placeholder="arcships" />
+      </label>
+      <label>
         本地 PDF
         <input data-testid="pdf-file-input" type="file" accept=".pdf,application/pdf" @change="onFileChange" />
       </label>
@@ -80,7 +84,9 @@
         :source="source"
         :url-policy="urlPolicy"
         :max-file-size="maxFileSize"
+        :password="pdfPassword.trim() || undefined"
         :default-zoom="1"
+        locale="zh-CN"
         :file-name="fileName || 'verification.pdf'"
         style="height: 80vh;"
         @document-load-success="onLoadSuccess"
@@ -120,7 +126,9 @@ const samples = [
   { file: "sample.pdf", label: "文本 PDF" },
   { file: "scanned-invoice.pdf", label: "扫描发票" },
   { file: "rotated-pages.pdf", label: "旋转页面" },
-  { file: "large-contract.pdf", label: "长合同" },
+  { file: "large-contract.pdf", label: "长合同（240 页）" },
+  { file: "cjk-report.pdf", label: "中文文本 PDF" },
+  { file: "encrypted.pdf", label: "加密 PDF（密码 arcships）" },
   { file: "corrupted.pdf", label: "损坏文件（失败用例）" },
 ]
 
@@ -138,6 +146,7 @@ const allowHttpOnLocalhost = ref(true)
 const maxFileSize = ref(DEFAULT_MAX_FILE_SIZE)
 const maxFileSizeDraft = ref(String(DEFAULT_MAX_FILE_SIZE))
 const maxFileSizeInputError = ref("")
+const pdfPassword = ref("")
 const pageState = ref<"idle" | "loading" | "ready" | "error">("idle")
 const pageError = ref<PdfLoadError | null>(null)
 const numPages = ref(0)

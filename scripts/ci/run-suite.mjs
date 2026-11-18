@@ -333,6 +333,48 @@ const suites = {
       allowBlocked: true,
     }),
   ],
+  pdf: [
+    ...buildStep(),
+    // Opens every fixture with a real parser: page counts, /Rotate metadata,
+    // image-only pages, encryption and CJK extraction before any browser runs.
+    command("material-verification", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "scripts/verify_test_materials.py",
+    ], {
+      env: { RUN_PYTHON_MODULES: "pypdf,docx,openpyxl,PIL" },
+    }),
+    command("fixture-manifest", process.execPath, [
+      "scripts/ci/verify-fixtures.mjs",
+    ], {
+      env: {
+        FIXTURE_EVIDENCE_DIR: path.join(suiteDir, "fixture-manifest"),
+      },
+    }),
+    command("formal-preview-routes", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/routes_smoke.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-preview-routes"),
+      },
+    }),
+    command("formal-pdf-workflows", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/pdf_workflows.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-pdf-workflows"),
+      },
+    }),
+    command("formal-fidelity-content", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/fidelity_content.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-fidelity-content"),
+      },
+    }),
+  ],
   stress: [
     ...buildStep(),
     command("formal-stress-workflows", process.execPath, [

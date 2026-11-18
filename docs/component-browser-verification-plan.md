@@ -76,9 +76,11 @@ http://localhost:5173
 | 文件 | 内容要求 | 覆盖 |
 |---|---|---|
 | `sample.pdf` | 3-10 页文本型 PDF | 翻页、缩略图、搜索 |
-| `scanned-invoice.pdf` | 扫描件 | 大图性能、缩放 |
-| `rotated-pages.pdf` | 横向/竖向混排 | 旋转、viewport |
-| `large-contract.pdf` | 30+ 页 | 滚动性能、thumbnail buffer |
+| `scanned-invoice.pdf` | 纯图像扫描件（无原生文本层） | 大图性能、缩放、选择不可用 |
+| `rotated-pages.pdf` | 第 2 页带 `/Rotate 90` | 页内旋转元数据、viewport |
+| `large-contract.pdf` | 240 页 | 首屏渲染、翻页耗时、thumbnail buffer |
+| `cjk-report.pdf` | 中文文本层（每页带标记） | 中文提取、中文搜索 |
+| `encrypted.pdf` | 密码 `arcships` 的标准加密 | `ENCRYPTED` 错误码、密码解锁 |
 | `corrupted.pdf` | 损坏文件 | 错误提示、engine 容错 |
 
 ### XLSX
@@ -225,7 +227,7 @@ http://localhost:5173
 8. 页码输入、下一页、上一页。
 9. 旋转页面。
 10. 下载文件，检查文件名。
-11. 上传 `scanned-invoice.pdf`、`rotated-pages.pdf`、`large-contract.pdf`。
+11. 上传 `scanned-invoice.pdf`、`rotated-pages.pdf`、`large-contract.pdf`、`cjk-report.pdf`、`encrypted.pdf`（密码 `arcships`）。
 12. 上传 `corrupted.pdf`，检查错误行为。
 13. 读取 console errors。
 

@@ -8,6 +8,10 @@
     "bytes": 35981
   },
   {
+    "name": "cjk-report.pdf",
+    "bytes": 3301
+  },
+  {
     "name": "contract-page.png",
     "bytes": 33306
   },
@@ -28,6 +32,10 @@
     "bytes": 37275
   },
   {
+    "name": "encrypted.pdf",
+    "bytes": 2710
+  },
+  {
     "name": "field-citations.json",
     "bytes": 1142
   },
@@ -45,7 +53,7 @@
   },
   {
     "name": "large-contract.pdf",
-    "bytes": 27641
+    "bytes": 208838
   },
   {
     "name": "large-grid.xlsx",
@@ -69,7 +77,7 @@
   },
   {
     "name": "rotated-pages.pdf",
-    "bytes": 2376
+    "bytes": 2413
   },
   {
     "name": "sales-table.xlsx",
@@ -81,6 +89,6 @@
   },
   {
     "name": "scanned-invoice.pdf",
-    "bytes": 39568
+    "bytes": 39398
   }
 ]

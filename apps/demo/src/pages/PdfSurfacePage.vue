@@ -12,6 +12,15 @@
 
     <div class="toolbar-zone">
       <label class="ctrl">
+        示例 PDF
+        <select v-model="selectedSample" data-testid="pdf-surface-sample-select" @change="loadSelectedSample">
+          <option v-for="sample in samples" :key="sample.file" :value="sample.file">
+            {{ sample.label }}
+          </option>
+        </select>
+      </label>
+      <button data-testid="pdf-surface-load-sample" @click="loadSelectedSample">加载示例</button>
+      <label class="ctrl">
         <input ref="fileInputRef" data-testid="pdf-surface-file-input" type="file" accept=".pdf" @change="onFileChange" />
         选择 PDF
       </label>
@@ -60,8 +69,10 @@
         ref="surfaceRef"
         :key="surfaceKey"
         :source="source"
+        :url-policy="urlPolicy"
         :zoom="fitWidth ? undefined : zoom"
         :fit-width="fitWidth"
+        locale="zh-CN"
         class="pdf-surface-embed"
         @document-load-success="onLoadSuccess"
         @document-load-error="onLoadError"
@@ -77,18 +88,31 @@
     </div>
 
     <div class="status-grid">
+      <div><strong>状态：</strong><span data-testid="pdf-surface-status" :data-state="status">{{ status }}</span></div>
       <div><strong>文件：</strong>{{ source ? "已加载" : "未选择" }}</div>
       <div><strong>页数：</strong>{{ numPages || "—" }}</div>
       <div><strong>当前页：</strong>{{ visiblePage + 1 }}</div>
       <div><strong>选中：</strong>{{ selectionInfo }}</div>
       <div><strong>右键：</strong>{{ contextMenuInfo }}</div>
     </div>
+
+    <div
+      v-if="loadError"
+      class="error"
+      data-testid="pdf-surface-load-error"
+      :data-error-code="loadError.code"
+    >
+      {{ loadError.code }}: {{ loadError.message }}
+    </div>
+    <div v-if="searchError" class="error" data-testid="pdf-surface-search-error">
+      {{ searchError }}
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref, shallowRef } from "vue"
-import type { PdfLoadError, PdfSearchState, PdfSelectionState, PdfSource } from "@arcships/vue-pdf"
+import type { PdfLoadError, PdfSearchState, PdfSelectionState, PdfSource, PdfUrlPolicy } from "@arcships/vue-pdf"
 import { PdfSurface } from "@arcships/vue-pdf"
 import { OfficeFindBar } from "@arcships/vue-ui"
 
@@ -96,6 +120,16 @@ const source = ref<PdfSource>()
 const numPages = ref(0)
 const visiblePage = ref(0)
 const ready = ref(false)
+const status = ref<"idle" | "loading" | "ready" | "error">("idle")
+const loadError = ref<PdfLoadError | null>(null)
+const searchError = ref("")
+const urlPolicy: PdfUrlPolicy = {
+  baseUrl: globalThis.location.href,
+  allowRelativeUrl: true,
+  allowedProtocols: ["https:"],
+  allowedOrigins: [globalThis.location.origin],
+  allowHttpOnLocalhost: true,
+}
 const zoom = ref(1)
 const fitWidth = ref(false)
 const loadCounter = ref(0)
@@ -113,9 +147,35 @@ const searchState = shallowRef<PdfSearchState>({
 
 const surfaceKey = computed(() => `pdf-${loadCounter.value}`)
 
+const samples = [
+  { file: "sample.pdf", label: "文本 PDF" },
+  { file: "scanned-invoice.pdf", label: "扫描发票（无文本层）" },
+  { file: "rotated-pages.pdf", label: "旋转页面" },
+  { file: "cjk-report.pdf", label: "中文文本 PDF" },
+  { file: "encrypted.pdf", label: "加密 PDF" },
+  { file: "corrupted.pdf", label: "损坏文件（失败用例）" },
+]
+const selectedSample = ref(samples[0].file)
+
+function loadSelectedSample(): void {
+  resetLoadState()
+  source.value = { kind: "url", url: `/samples/${selectedSample.value}` }
+  loadCounter.value++
+}
+
+function resetLoadState(): void {
+  ready.value = false
+  loadError.value = null
+  searchError.value = ""
+  status.value = "loading"
+  numPages.value = 0
+  visiblePage.value = 0
+}
+
 function onFileChange(event: Event): void {
   const file = (event.target as HTMLInputElement).files?.[0] ?? null
   if (!file) return
+  resetLoadState()
   source.value = { kind: "blob", blob: file }
   loadCounter.value++
 }
@@ -123,11 +183,14 @@ function onFileChange(event: Event): void {
 function onLoadSuccess(count: number): void {
   numPages.value = count
   ready.value = true
+  loadError.value = null
+  status.value = "ready"
 }
 
 function onLoadError(error: PdfLoadError): void {
   ready.value = false
-  console.error("PDF load error:", error.message)
+  loadError.value = error
+  status.value = "error"
 }
 
 function setZoom(value: number): void {
@@ -141,7 +204,7 @@ function onSearchQuery(query: string): void {
     : (surfaceRef.value?.clearSearch(), undefined)
   void task?.catch((cause: unknown) => {
     if (!(cause instanceof Error) || cause.name !== "AbortError") {
-      console.error("PDF search error:", cause)
+      searchError.value = cause instanceof Error ? cause.message : String(cause)
     }
   })
 }
@@ -188,6 +251,7 @@ h2 { margin-bottom: 4px; }
 }
 .pdf-surface-embed { height: 100%; }
 .empty { display: flex; align-items: center; justify-content: center; height: 200px; color: var(--muted-foreground); }
+.error { color: #dc2626; font-size: 13px; margin: 8px 0 0; }
 
 .status-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;

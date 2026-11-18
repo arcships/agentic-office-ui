@@ -13,7 +13,12 @@
   >
     <div v-if="!effectiveSource" class="pdf-surface__empty">{{ m.pdf.surface.noPdf }}</div>
     <div v-else-if="loading" class="pdf-surface__empty">{{ m.pdf.surface.opening }}</div>
-    <div v-else-if="loadError" class="pdf-surface__error" :data-error-code="loadError.code">
+    <div
+      v-else-if="loadError"
+      class="pdf-surface__error"
+      data-testid="pdf-surface-load-error"
+      :data-error-code="loadError.code"
+    >
       {{ loadError.code }}: {{ loadErrorMessage }}
     </div>
     <div v-else-if="renderDocument" class="pdf-surface__pages" :style="pageStackStyle">
@@ -1355,7 +1360,10 @@ function prefetchPageAnnotations(centerPageIndex: number): void {
 // CJK extraction see the real characters instead of an aria-hidden bitmap.
 
 function textLayerFor(pageIndex: number): PdfPageTextLayer | undefined {
-  return textLayers[pageIndex]
+  const layer = textLayers[pageIndex]
+  // Image-only pages return a layer without glyphs; mounting it would expose an
+  // empty selectable overlay over the bitmap.
+  return layer && layer.glyphs.length > 0 ? layer : undefined
 }
 
 function textLayerTransform(pageIndex: number): string {
