@@ -13,9 +13,16 @@ import { cellAddressToA1 } from "./selection";
 import {
   RICH_TEXT_VERTICAL_ALIGN_SCALE,
   isRichTextVerticalAlign,
+  measureRichTextSegments,
   richTextBaselineOffset,
   truncateRichTextRuns,
 } from "../components/rich-text-layout";
+import {
+  resolveCellTextLayout,
+  resolveRotatedTextFitWidth,
+  resolveShrinkToFitFontSize,
+  type CellTextLayout,
+} from "../components/grid-paint";
 
 export interface UseXlsxViewerThumbnailsOptions {
   includeHeaders?: boolean;
@@ -34,9 +41,12 @@ const ROW_HEADER_WIDTH = 40;
 const THUMBNAIL_FONT_SIZE_PX = 8;
 const THUMBNAIL_FONT = `${THUMBNAIL_FONT_SIZE_PX}px sans-serif`;
 
-/** Thumbnail font of one run: weight and superscript scale on the 8px base. */
-function thumbnailRunFont(font: XlsxCellTextRun["font"]): string {
-  const sizePx = Math.max(1, THUMBNAIL_FONT_SIZE_PX * (isRichTextVerticalAlign(font, "superscript") || isRichTextVerticalAlign(font, "subscript") ? RICH_TEXT_VERTICAL_ALIGN_SCALE : 1));
+/** Thumbnail font of one run: weight and superscript scale on the cell's size. */
+function thumbnailRunFont(
+  font: XlsxCellTextRun["font"],
+  fontSizePx = THUMBNAIL_FONT_SIZE_PX,
+): string {
+  const sizePx = Math.max(1, fontSizePx * (isRichTextVerticalAlign(font, "superscript") || isRichTextVerticalAlign(font, "subscript") ? RICH_TEXT_VERTICAL_ALIGN_SCALE : 1));
   const weight = font?.bold ? "bold " : "";
   const style = font?.italic ? "italic " : "";
   return `${style}${weight}${sizePx}px sans-serif`;
@@ -61,6 +71,8 @@ interface ThumbnailGeometry {
 }
 
 interface ThumbnailCells {
+  /** Rotation / shrink-to-fit flags per cell, `null` for plain layout. */
+  layouts: Array<Array<CellTextLayout | null>>;
   /** Rich-text runs per cell, `undefined` when the cell paints plain text. */
   runs: Array<Array<XlsxCellTextRun[] | undefined>>;
   revision: number;
@@ -224,7 +236,10 @@ function createThumbnail(
       const runs = values.map((row, rowOffset) =>
         row.map((value, colOffset) => resolveThumbnailRuns(value, minRow + rowOffset, minCol + colOffset)),
       );
-      return { revision, runs, values };
+      const layouts = values.map((row, rowOffset) =>
+        row.map((_, colOffset) => resolveThumbnailLayout(worksheet, minRow + rowOffset, minCol + colOffset)),
+      );
+      return { layouts, revision, runs, values };
     } finally {
       worksheet?.free();
     }
@@ -239,6 +254,48 @@ function createThumbnail(
    */
   function resolveThumbnailRuns(value: string, row: number, col: number): XlsxCellTextRun[] | undefined {
     return resolveRichTextRuns(sheet.richTextCells?.[cellAddressToA1({ col, row })], value);
+  }
+
+  /**
+   * Rotation / shrink-to-fit of a thumbnail cell.
+   *
+   * A main-thread worksheet resolves the exact cell style; a Worker snapshot
+   * carries only the cells whose explicit style needed text layout, so the
+   * row/column style is the last fallback for everything else.
+   */
+  function resolveThumbnailLayout(
+    worksheet: ReturnType<XlsxViewerController["getActiveWorksheet"]>,
+    row: number,
+    col: number,
+  ): CellTextLayout | null {
+    let alignment: Record<string, unknown> | undefined;
+    if (worksheet) {
+      try {
+        const style = worksheet.getCellStyleAt(row, col) as { alignment?: Record<string, unknown> } | null | undefined;
+        alignment = style?.alignment;
+      } catch {
+        alignment = undefined;
+      }
+    }
+    if (!alignment) {
+      const address = cellAddressToA1({ col, row });
+      const parsed = sheet.cellTextLayouts?.[address];
+      if (parsed) {
+        alignment = {
+          ...(parsed.textRotation !== undefined ? { textRotation: parsed.textRotation } : {}),
+          ...(parsed.shrinkToFit ? { shrinkToFit: true } : {}),
+        };
+      } else {
+        const rowStyleId = sheet.rowStyleIds?.[row];
+        const colStyleId = sheet.colStyleIds?.[col];
+        const fallback = rowStyleId !== undefined
+          ? sheet.styleById?.[rowStyleId]
+          : colStyleId !== undefined ? sheet.styleById?.[colStyleId] : undefined;
+        alignment = fallback?.alignment;
+      }
+    }
+    const layout = alignment ? resolveCellTextLayout(alignment) : { rotation: null, shrinkToFit: false };
+    return layout.rotation !== null || layout.shrinkToFit ? layout : null;
   }
 
   function ensureGeometry(): ThumbnailGeometry {
@@ -342,14 +399,16 @@ function createThumbnail(
       for (let c = 0; c < previewCols; c++) {
         const value = cellValues.values[r]?.[c] ?? "";
         if (value) {
-          const maxW = colWidths[c] - 4;
-          const runs = cellValues.runs[r]?.[c];
-          if (runs) {
-            paintRichTextRuns(context, runs, cx + 2, ry + 2, maxW);
-          } else {
-            const display = value.length > 15 ? value.slice(0, 14) + "…" : value;
-            context.fillText(display, cx + 2, ry + 2, maxW);
-          }
+          paintThumbnailText(
+            context,
+            value,
+            cellValues.runs[r]?.[c],
+            cellValues.layouts[r]?.[c] ?? null,
+            cx,
+            ry,
+            colWidths[c] ?? DEFAULT_COL_WIDTH,
+            rowHeights[r] ?? DEFAULT_ROW_HEIGHT,
+          );
         }
         cx += colWidths[c];
       }
@@ -359,12 +418,101 @@ function createThumbnail(
     return true;
   };
 
+  /** Natural width of the thumbnail cell's runs at one font size. */
+  function measureThumbnailRuns(
+    context: CanvasRenderingContext2D,
+    runs: XlsxCellTextRun[],
+    fontSizePx: number,
+  ): number {
+    const measure = (text: string, font: XlsxCellTextRun["font"]) => {
+      context.font = thumbnailRunFont(font, fontSizePx);
+      return context.measureText(text).width;
+    };
+    return measureRichTextSegments(runs, measure);
+  }
+
+  /**
+   * Paints one thumbnail cell, applying rotation and shrink-to-fit the same
+   * way the grid does.
+   *
+   * Rotated text is clipped to its cell rectangle and anchored by its rotated
+   * bounds, so a 90° header uses the row height as its line length instead of
+   * painting over the next column. Shrink-to-fit binary-searches the 8px
+   * thumbnail base down to 0.4× using the width the thumbnail actually paints.
+   */
+  function paintThumbnailText(
+    context: CanvasRenderingContext2D,
+    value: string,
+    runs: XlsxCellTextRun[] | undefined,
+    layout: CellTextLayout | null,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ): void {
+    const maxWidth = Math.max(0, width - 4);
+    const rotation = layout?.rotation ?? null;
+    let fontSizePx = THUMBNAIL_FONT_SIZE_PX;
+    if (rotation !== null) {
+      context.save();
+      context.beginPath();
+      context.rect(x, y, width, height);
+      context.clip();
+      if (layout?.shrinkToFit) {
+        const fitWidth = Math.max(0, resolveRotatedTextFitWidth(
+          maxWidth,
+          Math.max(0, height - 2),
+          rotation,
+          Math.max(8, fontSizePx * 1.25),
+        ));
+        fontSizePx = resolveShrinkToFitFontSize(
+          THUMBNAIL_FONT_SIZE_PX,
+          fitWidth,
+          (candidate) => runs
+            ? measureThumbnailRuns(context, runs, candidate)
+            : (context.font = `${candidate}px sans-serif`, context.measureText(value).width),
+        );
+      }
+      context.translate(x + width / 2, y + height / 2);
+      context.rotate(rotation * Math.PI / 180);
+      context.textAlign = "left";
+      context.textBaseline = "middle";
+      context.fillStyle = "#333";
+      if (runs) {
+        const naturalWidth = measureThumbnailRuns(context, runs, fontSizePx);
+        paintRichTextRuns(context, runs, -naturalWidth / 2, 0, Number.POSITIVE_INFINITY, fontSizePx);
+      } else {
+        context.font = `${fontSizePx}px sans-serif`;
+        const textWidth = context.measureText(value).width;
+        context.fillText(value, -textWidth / 2, 0);
+      }
+      context.restore();
+      return;
+    }
+
+    if (layout?.shrinkToFit) {
+      fontSizePx = resolveShrinkToFitFontSize(
+        THUMBNAIL_FONT_SIZE_PX,
+        maxWidth,
+        (candidate) => runs
+          ? measureThumbnailRuns(context, runs, candidate)
+          : (context.font = `${candidate}px sans-serif`, context.measureText(value).width),
+      );
+    }
+    if (runs) {
+      paintRichTextRuns(context, runs, x + 2, y + 2, maxWidth, fontSizePx);
+    } else {
+      const display = layout?.shrinkToFit || value.length <= 15 ? value : value.slice(0, 14) + "…";
+      context.font = `${fontSizePx}px sans-serif`;
+      context.fillText(display, x + 2, y + 2, maxWidth);
+    }
+  }
+
   /**
    * Paints one thumbnail cell run by run.
    *
-   * The thumbnail is small, so runs keep their weight, colour and
-   * superscript/subscript shape but use a fixed 8px base and clip to the column
-   * width measured with each run's own font.
+   * Runs keep their weight, colour and superscript/subscript shape at the
+   * requested size and clip to the width measured with each run's own font.
    */
   function paintRichTextRuns(
     context: CanvasRenderingContext2D,
@@ -372,9 +520,10 @@ function createThumbnail(
     x: number,
     y: number,
     maxWidth: number,
+    fontSizePx = THUMBNAIL_FONT_SIZE_PX,
   ): void {
     const measure = (text: string, font: XlsxCellTextRun["font"]) => {
-      context.font = thumbnailRunFont(font);
+      context.font = thumbnailRunFont(font, fontSizePx);
       return context.measureText(text).width;
     };
     const visible = truncateRichTextRuns(runs, measure, maxWidth);
@@ -385,12 +534,12 @@ function createThumbnail(
       const color = segment.font?.color
         ? resolveWorkbookColor(segment.font.color as Record<string, unknown>, sheet.themePalette)
         : null;
-      context.font = thumbnailRunFont(segment.font);
+      context.font = thumbnailRunFont(segment.font, fontSizePx);
       context.fillStyle = color ?? "#333";
       context.fillText(
         segment.text,
         cursor,
-        y + richTextBaselineOffset(segment.font, THUMBNAIL_FONT_SIZE_PX),
+        y + richTextBaselineOffset(segment.font, fontSizePx),
       );
       cursor += segmentWidth;
     }

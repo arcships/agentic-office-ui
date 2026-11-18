@@ -294,11 +294,11 @@ export function createStructureDomain(ctx: XlsxControllerContext) {
     });
   }
 
-  function remapCachedFormulaValues(
-    values: Record<string, string> | undefined,
+  function remapCellRecord<T>(
+    values: Record<string, T> | undefined,
     change: XlsxStructureChange,
   ) {
-    const next: Record<string, string> = {};
+    const next: Record<string, T> = {};
     for (const [address, value] of Object.entries(values ?? {})) {
       const parsed = parseA1CellReference(address);
       if (!parsed) {
@@ -339,13 +339,15 @@ export function createStructureDomain(ctx: XlsxControllerContext) {
     const parsed = sheetPath
       ? parseSheetState(assets.archive, sheetPath, {
           includeCachedFormulaValues: false,
+          styleById: assets.styleById,
           themePalette: assets.themePalette
         })
       : null;
     const base: WorkbookSheetState | null = parsed
       ? {
           ...parsed,
-          cachedFormulaValues: remapCachedFormulaValues(previous?.cachedFormulaValues, change),
+          cachedFormulaValues: remapCellRecord(previous?.cachedFormulaValues, change),
+          cellTextLayouts: remapCellRecord(previous?.cellTextLayouts, change),
           colStyleIds: remapNumberRecord(previous?.colStyleIds, change),
           colWidthOverridesPx: remapNumberRecord(previous?.colWidthOverridesPx, change),
           hiddenCols: remapIndexList(previous?.hiddenCols, change),

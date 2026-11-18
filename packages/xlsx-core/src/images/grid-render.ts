@@ -90,6 +90,12 @@ type WorkbookSheetInfo = {
 export type WorkbookSheetState = {
   cachedFormulaValues: Record<string, string>;
   /**
+   * Cells whose explicit style carries rotation or shrink-to-fit alignment,
+   * keyed by A1 address. Only these cells need the extra map; renderers fall
+   * back to row/column styles for every other cell.
+   */
+  cellTextLayouts?: Record<string, { shrinkToFit?: boolean; textRotation?: number }>;
+  /**
    * Frozen split counts read from the worksheet XML. `undefined` when the
    * archive was not parsed, `null` when the sheet declares no frozen pane.
    */
@@ -138,6 +144,11 @@ export type WorkbookSheetState = {
 type ParseWorkbookStructureOptions = {
   includeCachedFormulaValues?: boolean;
   themePalette?: XlsxThemePalette | null;
+  /**
+   * Resolved cell styles, so the parser only records cells whose alignment
+   * actually needs rotation or shrink-to-fit handling.
+   */
+  styleById?: Record<number, XlsxResolvedCellStyle> | null;
   /**
    * Runs of `xl/sharedStrings.xml`, indexed by shared-string id.
    *
@@ -732,6 +743,24 @@ export function parseWorksheetFreezePanesDocument(document: Document): XlsxFreez
 
 // ── Sheet state parsing ────────────────────────────────────────────────────
 
+/** Text-layout flags of a resolved style, or `null` when it inherits plain layout. */
+function textLayoutOfStyle(
+  style: XlsxResolvedCellStyle | undefined,
+): { shrinkToFit?: boolean; textRotation?: number } | null {
+  const alignment = style?.alignment;
+  if (!alignment) return null;
+  const layout: { shrinkToFit?: boolean; textRotation?: number } = {};
+  const rawRotation = alignment.rotation ?? alignment.textRotation;
+  if (typeof rawRotation === "number" && Number.isFinite(rawRotation)
+    && rawRotation >= 0 && rawRotation <= 180 && rawRotation !== 0) {
+    layout.textRotation = rawRotation;
+  }
+  if (alignment.shrinkToFit === true) {
+    layout.shrinkToFit = true;
+  }
+  return layout.textRotation !== undefined || layout.shrinkToFit ? layout : null;
+}
+
 export function parseSheetState(
   archive: ArchiveEntries,
   path: string,
@@ -772,6 +801,7 @@ export function parseSheetState(
   const colWidthOverridesPx: Record<number, number> = {};
   const rowStyleIds: Record<number, number> = {};
   const colStyleIds: Record<number, number> = {};
+  const cellTextLayouts: Record<string, { shrinkToFit?: boolean; textRotation?: number }> = {};
   let minContentCol = Number.POSITIVE_INFINITY;
   let minContentRow = Number.POSITIVE_INFINITY;
   let maxContentCol = -1;
@@ -865,6 +895,14 @@ export function parseSheetState(
       }
       trackRichTextCell(cellRef, cellNode);
 
+      const cellStyleId = Number(cellNode.getAttribute("s") ?? Number.NaN);
+      if (cellRef && Number.isFinite(cellStyleId)) {
+        const textLayout = textLayoutOfStyle(options?.styleById?.[cellStyleId]);
+        if (textLayout) {
+          cellTextLayouts[cellRef] = textLayout;
+        }
+      }
+
       if (includeCachedFormulaValues) {
         const formulaNode = getFirstChild(cellNode, "f");
         const valueNode = getFirstChild(cellNode, "v");
@@ -902,6 +940,7 @@ export function parseSheetState(
 
   return {
     cachedFormulaValues,
+    cellTextLayouts: Object.keys(cellTextLayouts).length > 0 ? cellTextLayouts : undefined,
     freezePanes,
     richTextCells,
     columnWidthCharacterWidthPx,
@@ -1124,6 +1163,7 @@ export function parseWorkbookStructureAssetsFromArchive(
   const sheetStates = worksheetSheets.map((sheet) => parseSheetState(archive, sheet.path, {
     ...options,
     defaultFont,
+    styleById,
     themePalette,
     sharedStringRuns
   }));

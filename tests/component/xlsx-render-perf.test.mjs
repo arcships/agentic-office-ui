@@ -89,6 +89,10 @@ async function loadThumbnailsModule() {
     .replace(
       /from "\.\.\/components\/rich-text-layout";/u,
       `from "${moduleUrl(transpile(readFileSync(RICH_TEXT_LAYOUT_PATH, "utf8")))}";`,
+    )
+    .replace(
+      /from "\.\.\/components\/grid-paint";/u,
+      `from "${moduleUrl(transpile(readFileSync(GRID_PAINT_PATH, "utf8")))}";`,
     );
   return import(moduleUrl(code));
 }

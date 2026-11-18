@@ -296,8 +296,13 @@ import {
   readDevicePixelRatio,
   resolveAxisResizeSize,
   resolveCanvasPixelRatio,
+  resolveCellTextLayout,
   resolveOverflowTextWidth,
   resolvePaintedReferenceRange,
+  resolveRotatedTextBounds,
+  resolveRotatedTextCenter,
+  resolveRotatedTextFitWidth,
+  resolveShrinkToFitFontSize,
   sheetCellKey,
 } from "./grid-paint";
 import {
@@ -319,7 +324,7 @@ import {
   isReferenceOnActiveSheet,
   useFormulaReferenceEditing,
 } from "../composables/useFormulaReferenceEditing";
-import { rangeToA1 } from "../composables/selection";
+import { cellAddressToA1, rangeToA1 } from "../composables/selection";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { useXlsxMessages } from "../i18n";
 import XlsxHeaderMenu from "./XlsxHeaderMenu.vue";
@@ -1474,6 +1479,10 @@ interface CanvasCellStyle {
   fontSizePx: number;
   fontStyle: string;
   fontWeight: string;
+  /** Canvas angle of rotated text, or `null` for horizontal text. */
+  rotation: number | null;
+  /** Whether Excel may shrink the font down to 0.4× to fit the cell. */
+  shrinkToFit: boolean;
   strike: boolean;
   underline: boolean;
   vertical: "top" | "middle" | "bottom";
@@ -1701,6 +1710,9 @@ function resolveCanvasCellStyleInto(
     ? alignment.vertical === "center" ? "middle" : "top"
     : "bottom";
   target.wrap = Boolean(alignment?.wrapText);
+  const textLayout = resolveCellTextLayout(alignment);
+  target.rotation = textLayout.rotation;
+  target.shrinkToFit = textLayout.shrinkToFit;
   const getCellStyle = props.getCellStyle;
   if (!getCellStyle) return target;
   // Host styles need the full cell context, so this branch keeps allocating.
@@ -1756,6 +1768,8 @@ function createCanvasCellStyleScratch(): CanvasCellStyle {
     fontSizePx: 12,
     fontStyle: "normal",
     fontWeight: "400",
+    rotation: null,
+    shrinkToFit: false,
     strike: false,
     underline: false,
     vertical: "bottom",
@@ -1840,17 +1854,27 @@ function wrapCellText(ctx: CanvasRenderingContext2D, value: string, width: numbe
   return lines;
 }
 
-/** Canvas font string of a cell's base style. */
-function baseCellFont(style: CanvasCellStyle): string {
-  return `${style.fontStyle} ${style.fontWeight} ${Math.round(style.fontSizePx)}px ${JSON.stringify(style.fontFamily)}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+/**
+ * Canvas font string of a cell's base style, optionally at a fitted size.
+ *
+ * Fractional fitted sizes keep one decimal so a 0.4× floor such as 6.4px is
+ * never rounded down to 6px (which would shrink below Excel's minimum).
+ */
+function baseCellFont(style: CanvasCellStyle, fontSizePx = style.fontSizePx): string {
+  const size = Math.max(1, Math.round(fontSizePx * 10) / 10);
+  return `${style.fontStyle} ${style.fontWeight} ${size}px ${JSON.stringify(style.fontFamily)}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
 }
 
 /**
  * Canvas font string of one inline run: the run's own weight/slant/family/size
  * on top of the cell style, with superscript and subscript runs shrunk.
  */
-function richTextRunFont(style: CanvasCellStyle, font: XlsxCellTextRun["font"]): string {
-  const fontSizePx = Math.max(1, style.fontSizePx * richTextFontScale(font));
+function richTextRunFont(
+  style: CanvasCellStyle,
+  font: XlsxCellTextRun["font"],
+  cellFontSizePx = style.fontSizePx,
+): string {
+  const fontSizePx = Math.max(1, cellFontSizePx * richTextFontScale(font));
   const fontWeight = font?.bold ? "700" : style.fontWeight;
   const fontStyle = font?.italic ? "italic" : style.fontStyle;
   const family = font?.name?.trim() ? JSON.stringify(font.name) : JSON.stringify(style.fontFamily);
@@ -1941,6 +1965,150 @@ function drawRichTextRuns(
   });
 }
 
+/** Width the cell's runs occupy when measured with their own fonts. */
+function richTextNaturalWidth(
+  ctx: CanvasRenderingContext2D,
+  runs: readonly XlsxCellTextRun[],
+  style: CanvasCellStyle,
+  cellFontSizePx = style.fontSizePx,
+): number {
+  const measure = (text: string, font: XlsxCellTextRun["font"]) => {
+    ctx.font = richTextRunFont(style, font, cellFontSizePx);
+    return ctx.measureText(text).width;
+  };
+  const lines = wrapRichTextRuns(runs, measure, Number.POSITIVE_INFINITY, 1);
+  return measureRichTextSegments(lines[0] ?? [], measure);
+}
+
+interface RotatedTextRect {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * Draws one line of rotated text.
+ *
+ * The text is measured in its own (unrotated) coordinate space and then
+ * translated to the cell centre that matches the requested horizontal and
+ * vertical alignment. `resolveRotatedTextCenter` uses the rotated bounds, so
+ * at 90° the text's occupied width/height are swapped and the block is
+ * anchored by its height along the cell width. The caller's clip keeps every
+ * glyph inside the cell rectangle.
+ */
+function drawRotatedPlainCellText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  degrees: number,
+  rect: RotatedTextRect,
+  style: CanvasCellStyle,
+  fontSizePx: number,
+  color: string,
+): void {
+  ctx.save();
+  ctx.font = baseCellFont(style, fontSizePx);
+  const textWidth = ctx.measureText(text).width;
+  const lineHeight = Math.max(12, fontSizePx * 1.25);
+  const bounds = resolveRotatedTextBounds(textWidth, lineHeight, degrees);
+  const center = resolveRotatedTextCenter(
+    { height: rect.height, left: rect.x, top: rect.y, width: rect.width },
+    bounds,
+    style.alignment,
+    style.vertical,
+  );
+  ctx.translate(center.x, center.y);
+  ctx.rotate(degrees * Math.PI / 180);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = color;
+  ctx.fillText(text, -textWidth / 2, 0);
+  if (style.underline || style.strike) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    const startX = -textWidth / 2;
+    if (style.underline) {
+      ctx.beginPath();
+      ctx.moveTo(startX, lineHeight * 0.25);
+      ctx.lineTo(startX + textWidth, lineHeight * 0.25);
+      ctx.stroke();
+    }
+    if (style.strike) {
+      const strikeY = -fontSizePx * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(startX, strikeY);
+      ctx.lineTo(startX + textWidth, strikeY);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+/** Rich-text counterpart of `drawRotatedPlainCellText`. */
+function drawRotatedRichTextRuns(
+  ctx: CanvasRenderingContext2D,
+  runs: readonly XlsxCellTextRun[],
+  degrees: number,
+  rect: RotatedTextRect,
+  style: CanvasCellStyle,
+  fontSizePx: number,
+  layout: Omit<RichTextDrawLayout, "maxLines" | "textAreaWidth" | "x" | "y">,
+): void {
+  const measure = (text: string, font: XlsxCellTextRun["font"]) => {
+    ctx.font = richTextRunFont(style, font, fontSizePx);
+    return ctx.measureText(text).width;
+  };
+  const lines = wrapRichTextRuns(runs, measure, Number.POSITIVE_INFINITY, 1);
+  const segments = lines[0] ?? [];
+  const textWidth = measureRichTextSegments(segments, measure);
+  const lineHeight = Math.max(12, fontSizePx * 1.25);
+  const bounds = resolveRotatedTextBounds(textWidth, lineHeight, degrees);
+  const center = resolveRotatedTextCenter(
+    { height: rect.height, left: rect.x, top: rect.y, width: rect.width },
+    bounds,
+    style.alignment,
+    style.vertical,
+  );
+
+  ctx.save();
+  ctx.translate(center.x, center.y);
+  ctx.rotate(degrees * Math.PI / 180);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  let cursor = -textWidth / 2;
+  for (const segment of segments) {
+    if (!segment.text) continue;
+    const segmentWidth = measure(segment.text, segment.font);
+    const baseline = richTextBaselineOffset(segment.font, fontSizePx);
+    const runColor = segment.font?.color
+      ? resolveWorkbookColor(segment.font.color as Record<string, unknown>, layout.themePalette)
+      : null;
+    const color = runColor ?? (layout.hyperlink ? layout.hyperlinkColor : style.color || layout.textColor);
+    ctx.font = richTextRunFont(style, segment.font, fontSizePx);
+    ctx.fillStyle = color;
+    ctx.fillText(segment.text, cursor, baseline);
+    if (segment.font?.underline || style.underline || layout.hyperlink) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cursor, baseline + lineHeight * 0.25);
+      ctx.lineTo(cursor + segmentWidth, baseline + lineHeight * 0.25);
+      ctx.stroke();
+    }
+    if (segment.font?.strikethrough || style.strike) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      const strikeY = baseline - fontSizePx * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(cursor, strikeY);
+      ctx.lineTo(cursor + segmentWidth, strikeY);
+      ctx.stroke();
+    }
+    cursor += segmentWidth;
+  }
+  ctx.restore();
+}
+
 interface CellPaintState {
   style: CanvasCellStyle;
   conditional: ReturnType<typeof conditionalVisual>;
@@ -1996,49 +2164,119 @@ function drawCellText(
     ctx.beginPath();
     ctx.rect(x + 2, y + 1, Math.max(0, textAreaWidth - 4), Math.max(0, height - 2));
     ctx.clip();
-    ctx.fillStyle = hyperlink ? hyperlinkColor : style.color || state.textColor;
-    ctx.font = baseCellFont(style);
-    ctx.textAlign = style.alignment;
+    const textColor = hyperlink ? hyperlinkColor : style.color || state.textColor;
+    ctx.fillStyle = textColor;
     const padding = 5;
-    const textX = style.alignment === "right"
-      ? x + textAreaWidth - padding
-      : style.alignment === "center" ? x + textAreaWidth / 2 : x + padding;
-    const lineHeight = Math.max(12, style.fontSizePx * 1.25);
-    const maxLines = style.wrap ? Math.max(1, Math.floor((height - 4) / lineHeight)) : 1;
     const availableWidth = Math.max(0, textAreaWidth - padding * 2);
-    if (state.runs && state.runs.length > 1) {
-      drawRichTextRuns(ctx, state.runs, style, {
-        height,
-        hyperlink: Boolean(hyperlink),
-        hyperlinkColor,
-        maxLines,
-        textAreaWidth,
-        textColor: state.textColor,
-        themePalette: state.themePalette,
-        x,
-        y,
-      });
+    const availableHeight = Math.max(0, height - 4);
+    const rotation = style.rotation ?? null;
+    const rotated = rotation !== null;
+    const wraps = !rotated && style.wrap;
+    const rich = Boolean(state.runs && state.runs.length > 1);
+    let fontSizePx = style.fontSizePx;
+
+    if (rotated) {
+      // Rotation swaps the occupied width/height, so the line has to fit the
+      // cell's vertical extent (and both axes at an angle) rather than the
+      // column width alone.
+      if (style.shrinkToFit) {
+        const baseLineHeight = Math.max(12, fontSizePx * 1.25);
+        const fitWidth = Math.max(0, resolveRotatedTextFitWidth(
+          availableWidth,
+          availableHeight,
+          rotation!,
+          baseLineHeight,
+        ));
+        if (rich) {
+          const naturalWidth = richTextNaturalWidth(ctx, state.runs!, style);
+          fontSizePx = resolveShrinkToFitFontSize(
+            style.fontSizePx,
+            fitWidth,
+            (candidate) => naturalWidth * (candidate / style.fontSizePx),
+          );
+        } else {
+          fontSizePx = resolveShrinkToFitFontSize(
+            style.fontSizePx,
+            fitWidth,
+            (candidate) => {
+              ctx.font = baseCellFont(style, candidate);
+              return ctx.measureText(value).width;
+            },
+          );
+        }
+      }
+      if (rich) {
+        drawRotatedRichTextRuns(ctx, state.runs!, rotation!, { height, width, x, y }, style, fontSizePx, {
+          height,
+          hyperlink: Boolean(hyperlink),
+          hyperlinkColor,
+          textColor: state.textColor,
+          themePalette: state.themePalette,
+        });
+      } else {
+        drawRotatedPlainCellText(ctx, value, rotation!, { height, width, x, y }, style, fontSizePx, textColor);
+      }
       ctx.restore();
     } else {
-      const lines = wrapCellText(ctx, value, availableWidth, maxLines);
-      const blockHeight = lines.length * lineHeight;
-      const firstBaseline = style.vertical === "top"
-        ? y + 2 + lineHeight * 0.8
-        : style.vertical === "middle"
-          ? y + (height - blockHeight) / 2 + lineHeight * 0.8
-          : y + height - blockHeight + lineHeight * 0.8 - 2;
-      lines.forEach((line, index) => ctx.fillText(line, textX, firstBaseline + index * lineHeight));
-      if (style.underline || style.strike || hyperlink) {
-        const measured = Math.min(ctx.measureText(lines[0] ?? "").width, Math.max(0, textAreaWidth - padding * 2));
-        const startX = style.alignment === "right" ? textX - measured : style.alignment === "center" ? textX - measured / 2 : textX;
-        ctx.strokeStyle = style.color;
-        ctx.lineWidth = 1;
-        for (const offset of [style.underline || hyperlink ? 2 : null, style.strike ? -style.fontSizePx * 0.3 : null]) {
-          if (offset === null) continue;
-          ctx.beginPath();
-          ctx.moveTo(startX, firstBaseline + offset);
-          ctx.lineTo(startX + measured, firstBaseline + offset);
-          ctx.stroke();
+      if (style.shrinkToFit && !wraps) {
+        if (rich) {
+          const naturalWidth = richTextNaturalWidth(ctx, state.runs!, style);
+          fontSizePx = resolveShrinkToFitFontSize(
+            style.fontSizePx,
+            availableWidth,
+            (candidate) => naturalWidth * (candidate / style.fontSizePx),
+          );
+        } else {
+          fontSizePx = resolveShrinkToFitFontSize(
+            style.fontSizePx,
+            availableWidth,
+            (candidate) => {
+              ctx.font = baseCellFont(style, candidate);
+              return ctx.measureText(value).width;
+            },
+          );
+        }
+      }
+      ctx.font = baseCellFont(style, fontSizePx);
+      ctx.textAlign = style.alignment;
+      const textX = style.alignment === "right"
+        ? x + textAreaWidth - padding
+        : style.alignment === "center" ? x + textAreaWidth / 2 : x + padding;
+      const lineHeight = Math.max(12, fontSizePx * 1.25);
+      const maxLines = wraps ? Math.max(1, Math.floor(availableHeight / lineHeight)) : 1;
+      if (rich) {
+        drawRichTextRuns(ctx, state.runs!, { ...style, fontSizePx }, {
+          height,
+          hyperlink: Boolean(hyperlink),
+          hyperlinkColor,
+          maxLines,
+          textAreaWidth,
+          textColor: state.textColor,
+          themePalette: state.themePalette,
+          x,
+          y,
+        });
+      } else {
+        const lines = wrapCellText(ctx, value, availableWidth, maxLines);
+        const blockHeight = lines.length * lineHeight;
+        const firstBaseline = style.vertical === "top"
+          ? y + 2 + lineHeight * 0.8
+          : style.vertical === "middle"
+            ? y + (height - blockHeight) / 2 + lineHeight * 0.8
+            : y + height - blockHeight + lineHeight * 0.8 - 2;
+        lines.forEach((line, index) => ctx.fillText(line, textX, firstBaseline + index * lineHeight));
+        if (style.underline || style.strike || hyperlink) {
+          const measured = Math.min(ctx.measureText(lines[0] ?? "").width, Math.max(0, textAreaWidth - padding * 2));
+          const startX = style.alignment === "right" ? textX - measured : style.alignment === "center" ? textX - measured / 2 : textX;
+          ctx.strokeStyle = style.color;
+          ctx.lineWidth = 1;
+          for (const offset of [style.underline || hyperlink ? 2 : null, style.strike ? -fontSizePx * 0.3 : null]) {
+            if (offset === null) continue;
+            ctx.beginPath();
+            ctx.moveTo(startX, firstBaseline + offset);
+            ctx.lineTo(startX + measured, firstBaseline + offset);
+            ctx.stroke();
+          }
         }
       }
       ctx.restore();
@@ -2123,6 +2361,22 @@ function resolveCellWorkbookStyle(
     workbookStyle = rowStyleId !== undefined
       ? sheet.styleById[rowStyleId]
       : colStyleId !== undefined ? sheet.styleById[colStyleId] : undefined;
+  }
+  // Worker row batches and row/column fallbacks do not always carry the
+  // alignment of an explicitly styled cell. `cellTextLayouts` is parsed from
+  // the worksheet XML, so layering it on keeps rotated headers aligned in both
+  // viewer modes without resolving every style again.
+  const textLayout = sheet.cellTextLayouts?.[cellAddressToA1(cell)];
+  if (textLayout) {
+    const alignment = { ...(workbookStyle?.alignment) };
+    const rotation = alignment.rotation ?? alignment.textRotation;
+    if (textLayout.textRotation !== undefined && rotation === undefined) {
+      alignment.textRotation = textLayout.textRotation;
+    }
+    if (textLayout.shrinkToFit && alignment.shrinkToFit === undefined) {
+      alignment.shrinkToFit = true;
+    }
+    workbookStyle = { ...(workbookStyle ?? {}), alignment };
   }
   return workbookStyle;
 }
@@ -2338,7 +2592,9 @@ function paintBody(worksheet: ActiveWorksheet | null) {
     sparkline: XlsxSparkline | undefined,
   ): number => {
     const cellWidth = widths[displayCol] || 0;
-    if (merge || style.wrap || style.alignment !== "left" || conditional?.kind === "iconSet") return cellWidth;
+    // Rotated text and shrink-to-fit stay inside their cell: spilling them
+    // would paint over the neighbour that hit-testing still attributes to it.
+    if (merge || style.wrap || style.rotation != null || style.shrinkToFit || style.alignment !== "left" || conditional?.kind === "iconSet") return cellWidth;
     if (!value || sparkline || (conditional?.kind === "dataBar" && !conditional.showValue)) return cellWidth;
     overflowNeighbourWidths.length = 0;
     for (let nextCol = displayCol + 1; nextCol < widths.length; nextCol += 1) {

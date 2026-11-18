@@ -68,12 +68,16 @@ const drawTextModule = await loadTsModule([
   "function resolveIconGeometry() { return __iconGeometry; }",
   "export function setIconGeometry(value) { __iconGeometry = value; }",
   `import { wrapRichTextRuns, measureRichTextSegments, richTextBaselineOffset, richTextFontScale } from "${dataUrl(RICH_TEXT_LAYOUT_SOURCE)}";`,
+  `import { resolveRotatedTextBounds, resolveRotatedTextCenter, resolveRotatedTextFitWidth, resolveShrinkToFitFontSize } from "${dataUrl(PAINT_SOURCE)}";`,
   "function resolveWorkbookColor(color) { return color?.rgb ? `#${String(color.rgb).slice(2)}` : null; }",
   gridFunctionText("truncateText"),
   gridFunctionText("wrapCellText"),
   gridFunctionText("baseCellFont"),
   gridFunctionText("richTextRunFont"),
   gridFunctionText("drawRichTextRuns"),
+  gridFunctionText("richTextNaturalWidth"),
+  gridFunctionText("drawRotatedPlainCellText"),
+  gridFunctionText("drawRotatedRichTextRuns"),
   gridFunctionText("drawCellText"),
   "export { drawCellText, wrapCellText };",
 ].join("\n"));
@@ -374,7 +378,10 @@ test("XlsxGrid wires merged clipping, overflow, icon layout, DPR and zoom into p
   assert.match(GRID_SOURCE, /overflowTextTasks/);
   assert.match(GRID_SOURCE, /drawCellText\(ctx, task\.x, task\.y, task\.width, task\.height, task\.state, "#2563eb"\)/);
   assert.match(GRID_SOURCE, /resolveOverflowTextWidth\(/);
-  assert.match(GRID_SOURCE, /style\.wrap \|\| style\.alignment !== "left"/);
+  assert.match(
+    GRID_SOURCE,
+    /style\.wrap \|\| style\.rotation != null \|\| style\.shrinkToFit \|\| style\.alignment !== "left"/,
+  );
   assert.match(GRID_SOURCE, /conditionalHidesValue/);
 
   assert.match(GRID_SOURCE, /resolveIconGeometry\(/);

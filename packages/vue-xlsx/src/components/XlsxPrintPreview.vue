@@ -81,11 +81,15 @@
                   ><span
                     v-if="cell.runs"
                     class="xlsx-print-page__rich-text"
+                    :style="cell.textStyle"
                   ><span
                     v-for="(run, runIndex) in cell.runs"
                     :key="`run-${runIndex}`"
                     :style="run.style"
-                  >{{ run.text }}</span></span><template v-else>{{ cell.text }}</template></td>
+                  >{{ run.text }}</span></span><span
+                    v-else-if="cell.textStyle"
+                    :style="cell.textStyle"
+                  >{{ cell.text }}</span><template v-else>{{ cell.text }}</template></td>
                 </tr>
               </tbody>
             </table>
@@ -114,6 +118,10 @@ import {
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { useXlsxMessages } from "../i18n";
 import { cellAddressToA1 } from "../composables/selection";
+import {
+  resolveShrinkToFitFontSize,
+  resolveSpreadsheetTextRotation,
+} from "./grid-paint";
 import { RICH_TEXT_VERTICAL_ALIGN_SCALE } from "./rich-text-layout";
 
 const props = withDefaults(defineProps<{
@@ -150,6 +158,8 @@ interface PrintCellView {
   rowSpan: number;
   style: CSSProperties;
   text: string;
+  /** Rotation / fitted font-size overrides for the text inside the cell. */
+  textStyle?: CSSProperties;
 }
 
 interface PrintRowView {
@@ -214,6 +224,39 @@ function borderEdge(edge: unknown, themePalette: XlsxThemePalette): string | und
   return `${width}px ${cssStyle} ${color}`;
 }
 
+type PrintMeasureContext = Pick<CanvasRenderingContext2D, "font" | "measureText">;
+let printMeasureContext: PrintMeasureContext | null | undefined;
+
+/** Canvas used to measure shrink-to-fit text, created lazily and shared. */
+function getPrintMeasureContext(): PrintMeasureContext | null {
+  if (printMeasureContext !== undefined) return printMeasureContext;
+  try {
+    printMeasureContext = typeof document !== "undefined"
+      ? document.createElement("canvas").getContext("2d")
+      : typeof OffscreenCanvas !== "undefined"
+        ? new OffscreenCanvas(8, 8).getContext("2d")
+        : null;
+  } catch {
+    printMeasureContext = null;
+  }
+  return printMeasureContext ?? null;
+}
+
+/**
+ * Width of one line in the printed cell font.
+ *
+ * The preview runs inside a DOM `<td>`, so the canvas measure is only an
+ * approximation of the browser's line breaking; when no canvas exists (SSR,
+ * tests without a DOM) a conservative character estimate keeps shrink-to-fit
+ * deterministic instead of leaving the text unshrunk.
+ */
+function measurePrintTextWidth(text: string, font: string, fontSizePx: number): number {
+  const context = getPrintMeasureContext();
+  if (!context) return text.length * fontSizePx * 0.55;
+  context.font = font;
+  return context.measureText(text).width;
+}
+
 /**
  * CSS of one inline run.
  *
@@ -222,7 +265,7 @@ function borderEdge(edge: unknown, themePalette: XlsxThemePalette): string | und
  * superscript/subscript run shrinks by the shared scale and shifts its baseline
  * through `vertical-align`.
  */
-function runView(run: XlsxCellTextRun, scale: number): PrintRunView {
+function runView(run: XlsxCellTextRun, scale: number, shrinkScale = 1): PrintRunView {
   const font = run.font;
   if (!font) return { style: {}, text: run.text };
   const decoration = [
@@ -238,7 +281,7 @@ function runView(run: XlsxCellTextRun, scale: number): PrintRunView {
       // The page scale shrinks the whole page, so a run size in points has to
       // be scaled like the cell font it overrides.
       fontSize: font.sizePt
-        ? `${((font.sizePt * 4 / 3) * scale / 100).toFixed(2)}px`
+        ? `${((font.sizePt * 4 / 3) * scale / 100 * shrinkScale).toFixed(2)}px`
         : shrink ? `${RICH_TEXT_VERTICAL_ALIGN_SCALE}em` : undefined,
       fontStyle: font.italic ? "italic" : undefined,
       fontWeight: font.bold ? "700" : undefined,
@@ -254,6 +297,13 @@ function runView(run: XlsxCellTextRun, scale: number): PrintRunView {
   };
 }
 
+interface PrintCellStyleView {
+  rotationDeg: number | null;
+  shrinkScale: number;
+  style: CSSProperties;
+  textStyle?: CSSProperties;
+}
+
 function cellStyle(
   row: number,
   col: number,
@@ -261,7 +311,9 @@ function cellStyle(
   gridLines: boolean,
   sheet: NonNullable<XlsxViewerController["activeSheet"]>,
   worksheet: ReturnType<XlsxViewerController["getActiveWorksheet"]>,
-): CSSProperties {
+  text: string,
+  cellWidthPx: number,
+): PrintCellStyleView {
   let workbookStyle: XlsxResolvedCellStyle | undefined;
   if (worksheet) {
     try {
@@ -277,35 +329,90 @@ function cellStyle(
       ? sheet.styleById[rowStyleId]
       : colStyleId !== undefined ? sheet.styleById[colStyleId] : undefined;
   }
+  const parsedLayout = sheet.cellTextLayouts?.[cellAddressToA1({ col, row })];
+  if (parsedLayout) {
+    const alignment = { ...(workbookStyle?.alignment) };
+    if (parsedLayout.textRotation !== undefined && alignment.rotation === undefined && alignment.textRotation === undefined) {
+      alignment.textRotation = parsedLayout.textRotation;
+    }
+    if (parsedLayout.shrinkToFit && alignment.shrinkToFit === undefined) {
+      alignment.shrinkToFit = true;
+    }
+    workbookStyle = { ...(workbookStyle ?? {}), alignment };
+  }
   const font = asRecord(workbookStyle?.font);
   const fill = asRecord(workbookStyle?.fill);
   const alignment = asRecord(workbookStyle?.alignment);
   const border = asRecord(workbookStyle?.border);
   const fillStyle = resolveWorkbookFillStyle(fill, sheet.themePalette);
-  const fontSizePx = Math.max(6, (typeof font?.size === "number" ? font.size * 4 / 3 : 12) * scale / 100);
+  const baseFontSizePx = Math.max(6, (typeof font?.size === "number" ? font.size * 4 / 3 : 12) * scale / 100);
+  const fontFamily = typeof font?.name === "string" && font.name.trim() ? font.name : "Segoe UI";
+  const fontStyle = font?.italic ? "italic" : "normal";
+  const fontWeight = font?.bold ? "700" : "400";
   const decoration = [
     font?.underline && font.underline !== "none" ? "underline" : "",
     font?.strikethrough ? "line-through" : "",
   ].filter(Boolean).join(" ");
+  const wrap = alignment?.wrapText === true;
+  const rotationDeg = resolveSpreadsheetTextRotation(alignment?.rotation ?? alignment?.textRotation);
+  let fontSizePx = baseFontSizePx;
+  let shrinkScale = 1;
+  if (alignment?.shrinkToFit === true && !wrap && text.length > 0) {
+    const availableWidth = Math.max(0, cellWidthPx - 6);
+    const font = (sizePx: number) => `${fontStyle} ${fontWeight} ${sizePx}px ${JSON.stringify(fontFamily)}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    fontSizePx = resolveShrinkToFitFontSize(
+      baseFontSizePx,
+      availableWidth,
+      (candidate) => measurePrintTextWidth(text, font(candidate), candidate),
+    );
+    shrinkScale = fontSizePx / baseFontSizePx;
+  }
+  const textStyle: CSSProperties = {};
+  if (rotationDeg !== null) {
+    // The span is centred on the cell and rotated there, so the rotated
+    // bounding box — not the pre-rotation text width — decides how much space
+    // it occupies. `overflow: hidden` on the cell clips it at the border.
+    Object.assign(textStyle, {
+      display: "inline-block",
+      left: "50%",
+      maxWidth: "none",
+      position: "absolute",
+      top: "50%",
+      transform: `translate(-50%, -50%) rotate(${rotationDeg}deg)`,
+      transformOrigin: "center center",
+      whiteSpace: "nowrap",
+      width: "max-content",
+    });
+  }
+  if (shrinkScale < 1) {
+    textStyle.fontSize = `${fontSizePx.toFixed(2)}px`;
+    textStyle.lineHeight = `${Math.max(12 * scale / 100, fontSizePx * 1.25).toFixed(2)}px`;
+  }
   return {
-    backgroundColor: fillStyle.backgroundColor ?? "#ffffff",
-    backgroundImage: fillStyle.backgroundImage ?? undefined,
-    borderBottom: borderEdge(border?.bottom, sheet.themePalette) ?? (gridLines ? "1px solid #d4d4d8" : undefined),
-    borderLeft: borderEdge(border?.left, sheet.themePalette) ?? (gridLines ? "1px solid #d4d4d8" : undefined),
-    borderRight: borderEdge(border?.right, sheet.themePalette) ?? (gridLines ? "1px solid #d4d4d8" : undefined),
-    borderTop: borderEdge(border?.top, sheet.themePalette) ?? (gridLines ? "1px solid #d4d4d8" : undefined),
-    color: resolveWorkbookColor(asRecord(font?.color), sheet.themePalette) ?? "#18181b",
-    fontFamily: typeof font?.name === "string" && font.name.trim() ? font.name : "Segoe UI",
-    fontSize: `${fontSizePx}px`,
-    fontStyle: font?.italic ? "italic" : "normal",
-    fontWeight: font?.bold ? "700" : "400",
-    overflow: "hidden",
-    padding: "0 3px",
-    textAlign: alignment?.horizontal === "center" ? "center" : alignment?.horizontal === "right" ? "right" : "left",
-    textDecoration: decoration || undefined,
-    verticalAlign: alignment?.vertical === "top" ? "top" : alignment?.vertical === "center" ? "middle" : "bottom",
-    whiteSpace: alignment?.wrapText ? "pre-wrap" : "nowrap",
-    wordBreak: "break-word",
+    rotationDeg,
+    shrinkScale,
+    style: {
+      backgroundColor: fillStyle.backgroundColor ?? "#ffffff",
+      backgroundImage: fillStyle.backgroundImage ?? undefined,
+      borderBottom: borderEdge(border?.bottom, sheet.themePalette) ?? (gridLines ? "1px solid #d4d4d8" : undefined),
+      borderLeft: borderEdge(border?.left, sheet.themePalette) ?? (gridLines ? "1px solid #d4d4d8" : undefined),
+      borderRight: borderEdge(border?.right, sheet.themePalette) ?? (gridLines ? "1px solid #d4d4d8" : undefined),
+      borderTop: borderEdge(border?.top, sheet.themePalette) ?? (gridLines ? "1px solid #d4d4d8" : undefined),
+      color: resolveWorkbookColor(asRecord(font?.color), sheet.themePalette) ?? "#18181b",
+      fontFamily,
+      fontSize: `${baseFontSizePx}px`,
+      fontStyle,
+      fontWeight,
+      overflow: "hidden",
+      padding: "0 3px",
+      position: rotationDeg !== null ? "relative" : undefined,
+      textAlign: alignment?.horizontal === "center" ? "center" : alignment?.horizontal === "right" ? "right" : "left",
+      textDecoration: decoration || undefined,
+      verticalAlign: alignment?.vertical === "top" ? "top" : alignment?.vertical === "center" ? "middle" : "bottom",
+      whiteSpace: wrap ? "pre-wrap" : "nowrap",
+      wordBreak: "break-word",
+    },
+    textStyle: Object.keys(textStyle).length > 0 ? textStyle : undefined,
   };
 }
 
@@ -357,19 +464,27 @@ const pageViews = computed<PrintPageView[]>(() => {
   return current.pages.map((page) => {
     const grid = buildPrintPageGrid(sheet, page, current.printTitles);
     const scale = page.scale / 100;
+    const colSizeByIndex = new Map(grid.columns.map((column) => [column.index, column.sizePx * scale]));
     const cellsByRow = new Map<number, PrintCellView[]>();
     for (const cell of grid.cells) {
       if (cell.covered) continue;
       const list = cellsByRow.get(cell.row) ?? [];
+      const text = workerCellValues.get(cellKey(cell.row, cell.col))
+        ?? props.controller.getCellDisplayValue({ col: cell.col, row: cell.row });
+      let cellWidthPx = 0;
+      for (let offset = 0; offset < cell.colSpan; offset += 1) {
+        cellWidthPx += colSizeByIndex.get(cell.col + offset) ?? 0;
+      }
+      const styleView = cellStyle(cell.row, cell.col, page.scale, gridLines, sheet, worksheet, text, cellWidthPx);
       list.push({
         col: cell.col,
         colSpan: cell.colSpan,
         row: cell.row,
         rowSpan: cell.rowSpan,
-        runs: resolveCellRuns(cell.row, cell.col)?.map((run) => runView(run, page.scale)),
-        style: cellStyle(cell.row, cell.col, page.scale, gridLines, sheet, worksheet),
-        text: workerCellValues.get(cellKey(cell.row, cell.col))
-          ?? props.controller.getCellDisplayValue({ col: cell.col, row: cell.row }),
+        runs: resolveCellRuns(cell.row, cell.col)?.map((run) => runView(run, page.scale, styleView.shrinkScale)),
+        style: styleView.style,
+        text,
+        textStyle: styleView.textStyle,
       });
       cellsByRow.set(cell.row, list);
     }
