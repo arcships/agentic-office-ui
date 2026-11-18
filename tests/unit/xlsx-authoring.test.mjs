@@ -185,15 +185,67 @@ test("conditional formats round-trip color scales, data bars and icon sets", () 
   assert.deepEqual(withIcons.map((rule) => rule.priority), [1, 2, 3]);
   assert.deepEqual(withIcons[2].icons.map((icon) => icon.iconId), [0, 1, 2]);
 
+  // ST_HexColorRGB is 8-digit ARGB; a CSS `#rrggbb` value makes LibreOffice and
+  // Excel read the colour as black.
+  const xml = sheetXml(assets.archive);
+  assert.match(xml, /<color rgb="FFF8696B"\/>/);
+  assert.match(xml, /<color rgb="FFFFEB84"\/>/);
+  assert.match(xml, /<color rgb="FF63BE7B"\/>/);
+  assert.match(xml, /<color rgb="FF5B9BD5"\/>/);
+  assert.doesNotMatch(xml, /<color[^>]*rgb="#/);
+
   const updated = core.updateWorkbookConditionalFormatRule(assets, 0, 1, dataBar);
   assert.equal(updated[1].kind, "dataBar");
 
   const deleted = core.deleteWorkbookConditionalFormatRule(assets, 0, 0);
   assert.deepEqual(deleted.map((rule) => rule.kind), ["dataBar", "iconSet"]);
   assert.equal(core.deleteWorkbookConditionalFormatRule(assets, 0, 9), null);
+  assert.match(
+    sheetXml(assets.archive),
+    /<conditionalFormatting sqref="B3:B7"><cfRule type="dataBar" priority="1">/,
+  );
+});
+
+test("conditional-format colours are serialized as ARGB and keep theme/indexed forms", () => {
+  const { assets } = loadAssets();
+  const range = { start: { row: 1, col: 1 }, end: { row: 4, col: 1 } };
+  const colorScale = (color) => core.createConditionalFormatRuleFromDraft(
+    { colors: [color, color], kind: "colorScale" },
+    [range],
+    1,
+  );
+  // Rules built by a host can carry the parsed colour records directly.
+  const dataBarWith = (color) => ({
+    cfvos: [{ type: "min" }, { type: "max" }],
+    color,
+    kind: "dataBar",
+    priority: 1,
+    ranges: [range],
+  });
+
+  core.addWorkbookConditionalFormatRule(assets, 0, colorScale("#112233"));
+  assert.match(sheetXml(assets.archive), /<color rgb="FF112233"\/>/);
+
+  const withArgb = core.addWorkbookConditionalFormatRule(
+    assets,
+    0,
+    dataBarWith({ argb: "80112233" }),
+  );
+  assert.equal(withArgb.at(-1).color.rgb, "#112233", "the in-memory model keeps the CSS form");
+  assert.match(sheetXml(assets.archive), /<color rgb="80112233"\/>/);
+
+  core.addWorkbookConditionalFormatRule(assets, 0, dataBarWith({ theme: 4, tint: -0.25 }));
+  assert.match(sheetXml(assets.archive), /<color theme="4" tint="-0.25"\/>/);
+
+  core.addWorkbookConditionalFormatRule(assets, 0, dataBarWith({ indexed: 5 }));
+  assert.match(sheetXml(assets.archive), /<color indexed="5"\/>/);
+
+  core.addWorkbookConditionalFormatRule(assets, 0, dataBarWith({ colorType: "auto" }));
+  assert.match(sheetXml(assets.archive), /<color auto="1"\/>/);
 
   const xml = sheetXml(assets.archive);
-  assert.match(xml, /<conditionalFormatting sqref="B3:B7"><cfRule type="dataBar" priority="1">/);
+  assert.doesNotMatch(xml, /<color[^>]*rgb="#/, "no CSS hex value reaches the XML");
+  assert.doesNotMatch(xml, /<color[^>]*rgb="[0-9A-Fa-f]{6}"/, "every rgb attribute carries alpha");
 });
 
 test("data validations are replaced per cell and can be removed", () => {
@@ -351,6 +403,7 @@ test("exported workbooks keep authored objects through a save/reload cycle", () 
   const exported = saveWithAuthoring({ assets, workbook }, true);
   const archive = unzipSync(exported);
   const sheet = sheetXml(archive);
+  assert.match(sheet, /<color rgb="FF5B9BD5"\/>/, "exported data-bar colour is ARGB");
   const order = [
     "<conditionalFormatting",
     "<dataValidations",

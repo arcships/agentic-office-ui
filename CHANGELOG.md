@@ -6,6 +6,8 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ### XLSX authoring surface (#102)
 
+- Write conditional-format and data-bar colours as 8-digit ARGB (`FFRRGGBB`) instead of the CSS `#rrggbb` form kept in the model; LibreOffice and Excel read the latter as black. Theme, indexed and automatic colours keep their `theme`/`indexed`/`auto` attributes, and the ARGB/hex input forms are both accepted.
+
 - Add a ribbon group, context-menu entries and an `XlsxAuthoringDialog` for charts, comments, hyperlinks, tables, conditional formatting, data validation and freeze panes; `XlsxViewer` renders the dialog and hosts can mount it directly.
 - Public controller commands mutate the workbook and are undoable: `insertChart`, `getCellComment`/`setCellComment`, `getCellHyperlink`/`setCellHyperlink`, `getConditionalFormatRules`/`addConditionalFormatRule`/`updateConditionalFormatRule`/`deleteConditionalFormatRule`, `createTable`/`removeTable`/`getTableAtCell`, `setSelectionDataValidation`, `freezePanes`/`setFreezePanes`/`toggleFreezePanesAtActiveCell`.
 - Authoring writes OOXML on the source archive (worksheet `pane`, `hyperlinks`, `conditionalFormatting`, `dataValidations`, `legacyDrawing`, `tableParts`, plus comments/VML/table/chart/drawing parts) because the WASM model exposes no setters and its save pass drops most of them.
