@@ -11,6 +11,8 @@ import type {
   XlsxTable,
   XlsxWorkbookTab,
 } from "./types";
+import type { XlsxSelectionStatsQuery, XlsxSelectionSummary } from "./selection-stats";
+import { XLSX_SELECTION_STATS_CELL_LIMIT } from "./selection-stats";
 import { bundledXlsxWasmUrl } from "./wasm-asset";
 import { getConfiguredWorkerWasmSource, type WorkerWasmSource } from "./wasm";
 import {
@@ -77,6 +79,11 @@ type WorkerMessage =
         endCol: number;
         maxRows: number;
       };
+    }
+  | {
+      id: number;
+      type: "getSelectionStats";
+      payload: XlsxSelectionStatsQuery & { workbookSheetIndex: number };
     };
 
 type WorkerSuccessMessage =
@@ -123,6 +130,11 @@ type WorkerSuccessMessage =
       id: number;
       success: true;
       result: XlsxAutoFilterSnapshot | null;
+    }
+  | {
+      id: number;
+      success: true;
+      result: XlsxSelectionSummary | null;
     };
 
 type WorkerErrorMessage = {
@@ -381,6 +393,38 @@ export class XlsxWorkerClient {
       id: 0,
       payload: { endCol, endRow, maxRows, startCol, startRow, workbookSheetIndex },
       type: "getAutoFilterRows"
+    }, [], signal);
+  }
+
+  /**
+   * Summarizes a selection inside the Worker that owns the workbook.
+   *
+   * Worker-backed viewers keep no main-thread worksheet, so the status bar
+   * cannot read cells directly. The Worker returns only the aggregate, never
+   * the cells themselves, which keeps the selection scan on the Worker thread.
+   */
+  getSelectionStats(
+    workbookSheetIndex: number,
+    query: XlsxSelectionStatsQuery,
+    signal?: AbortSignal
+  ) {
+    if (signal?.aborted) {
+      return Promise.reject(createAbortError());
+    }
+    const maxCells = Math.max(1, Math.floor(Number(query.maxCells) || XLSX_SELECTION_STATS_CELL_LIMIT));
+    return this.request<XlsxSelectionSummary | null>({
+      id: 0,
+      payload: {
+        cellCount: Math.max(0, Math.floor(Number(query.cellCount) || 0)),
+        endCol: query.endCol,
+        endRow: query.endRow,
+        hiddenRows: [...(query.hiddenRows ?? [])],
+        maxCells,
+        startCol: query.startCol,
+        startRow: query.startRow,
+        workbookSheetIndex,
+      },
+      type: "getSelectionStats"
     }, [], signal);
   }
 

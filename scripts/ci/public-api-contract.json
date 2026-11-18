@@ -89,8 +89,8 @@
         "getSheetsWasmModule"
       ],
       "rootDeclarationFingerprint": {
-        "count": 357,
-        "sha256": "5b02f8e695fa8c82cf746edef03197dcc31bfb226047a7ab83a142a924b43f60"
+        "count": 362,
+        "sha256": "1f4afd282c89d87f7803995d040c0cf13ebc95512d90260833d8aabb2788dc38"
       }
     },
     {
@@ -181,8 +181,8 @@
         "XlsxContextMenu"
       ],
       "rootDeclarationFingerprint": {
-        "count": 92,
-        "sha256": "5479e291d78e46a3ec0f9da1649ee99d79835fbcb4d4480a228207cb899e979d"
+        "count": 97,
+        "sha256": "a95bc0572adbba7f08b16fc8cea8affb8b5349e02793d7c75ce02be44a143708"
       }
     },
     {

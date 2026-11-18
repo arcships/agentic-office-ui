@@ -4,6 +4,12 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### XLSX selection status bar (#111)
+
+- `XlsxViewer` now renders a selection status bar under the sheet tabs (opt out with `showStatusBar="false"`): cell/range address, non-empty count, numeric count when it differs, sum, average, min/max, and a `Selected`/`Filtered` note. Totals use the first numeric cell's number format, so currency and percentage selections keep their units; date, time and text formats fall back to General.
+- The summary reads only the current selection, bounded by `XLSX_SELECTION_STATS_CELL_LIMIT` (10,000 cells) with a `…` marker when the range is larger. AutoFilter-hidden rows are excluded from the totals and mark the selection as `Filtered`. Main-thread viewers read the active worksheet directly; Worker-backed viewers call `controller.getSelectionStatsAsync()` for an aggregate computed inside the Worker, so selected cells never cross the thread boundary.
+- `xlsx-core` exports `summarizeSelectionValues()`, `XlsxSelectionSummary`, `XlsxSelectionStatsQuery` and the shared limit; `vue-xlsx` exports `XlsxStatusBar`, `useXlsxSelectionStats()`, `formatSelectionStatValue()` and the `showStatusBar` prop. Add `tests/unit/xlsx-selection-stats.test.mjs` (summary arithmetic, truncation and compensated totals), `tests/unit/xlsx-selection-status.test.mjs` (General/number/currency/percent/scientific formatting), Worker coverage in `tests/unit/xlsx-worker.test.mjs`, and `tests/component/xlsx-status-bar.test.mjs` (A1:A10 totals, number formats, sheet switching, filtered rows, the 10,000-cell cap, locale copy and the Worker aggregate); document the behaviour in the XLSX guide, custom-surface guide and public API contract.
+
 ### XLSX built-in chart style palettes (#142)
 
 - Classic charts that carry a `<c:style>` value (1–48, or 101–148 from Excel 2010+) now use Excel's built-in series palette instead of always falling back to theme accent1–6. A new `builtin-chart-styles` module resolves the style to its theme-colour palette, applies DrawingML tint/shade in linear RGB, and reproduces the grayscale, six-grey, monochrome-accent and colourful variants (including the extra brightness groups for charts with more than six series).

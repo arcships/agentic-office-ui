@@ -2,6 +2,16 @@ export { initWasm, setWasmSource, canUseConfiguredWasmSourceInWorker, getConfigu
 export type { XlsxWasmSource, WorkerWasmSource } from "./wasm";
 export { bundledXlsxWasmUrl } from "./wasm-asset";
 
+export {
+  XLSX_SELECTION_STATS_CELL_LIMIT,
+  summarizeSelectionValues,
+} from "./selection-stats";
+export type {
+  XlsxSelectionStatsQuery,
+  XlsxSelectionSummary,
+  XlsxSelectionSummaryOptions,
+} from "./selection-stats";
+
 export { safeCalculate, tryRecalculate } from "./safe-calculate";
 export type { SafeCalculateSkipReason, SafeCalculateResult, SafeCalculateOptions } from "./safe-calculate";
 export { normalizeTypedDateCells, parseIsoDateCell } from "./typed-dates";

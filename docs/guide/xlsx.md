@@ -39,6 +39,7 @@ const controller = useXlsxViewerController({
 | `showFormulaBar` | `boolean` | `true` | 公式栏 |
 | `showImages` | `boolean` | `true` | 图片和绘图对象 |
 | `showSheetTabs` | `boolean` | `true` | 底部工作表标签条 |
+| `showStatusBar` | `boolean` | `true` | 底部选择状态栏 |
 | `activeTabIndex` | `number` | 无 | 受控的活动标签下标；不传时由控制器持有 |
 | `showUpload` | `boolean` | `false` | 上传入口 |
 | `getCellStyle` | `function` | 无 | 按单元格补充样式 |
@@ -46,6 +47,12 @@ const controller = useXlsxViewerController({
 | `documentLocale` | `string` | 跟随 `locale` | 单独覆盖数字/日期区域 |
 
 事件包括 `cellDoubleClick`、`upload`、`update:readOnly`、`tabChange`、`update:activeTabIndex`、`load-deferred`、`deferred-resumed` 和 `deferred-cancel`。打印时 `@page` 尺寸取自活动工作表的 `pageSetup` 纸张与方向；图表工作表使用 16:9 的自适应高度。
+
+## 选择状态栏
+
+`XlsxViewer` 在网格下方渲染选择状态栏：单元格/区域地址、非空计数、数值计数（仅在两者不同时）、求和、平均值、最小值和最大值，以及 `Selected`/`Filtered` 标记。数值合计使用选区中第一个数值单元格的数字格式，因此货币和百分比选区会按原单位显示；日期、时间等格式回退到 General。
+
+自动筛选隐藏的行不计入合计，并在状态栏标记为 `Filtered`。状态栏只读取当前选区，最多 10,000 个单元格；更大的选区会显示 `…` 标记，悬停提示扫描上限。Worker 只读视图通过 `controller.getSelectionStatsAsync()` 在 Worker 内聚合，不把单元格传回主线程。用 `showStatusBar="false"` 可隐藏状态栏；自建界面可以直接挂载导出的 `XlsxStatusBar`，或用 `useXlsxSelectionStats(controller)` 复用同一套汇总逻辑。
 
 ## 单元格编辑
 

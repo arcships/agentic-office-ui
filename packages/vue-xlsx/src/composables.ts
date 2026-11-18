@@ -2,6 +2,11 @@
 // Kept as a re-export to preserve the public import path for consumers.
 export { useXlsxViewerController } from "./composables/useXlsxViewerController";
 export { useXlsxSearch } from "./composables/useXlsxSearch";
+export { useXlsxSelectionStats } from "./composables/selection-stats";
+export type {
+  XlsxSelectionStatsRequest,
+  XlsxSelectionStatsState,
+} from "./composables/selection-stats";
 export {
   CHART_SOURCE_HIGHLIGHT_COLOR_BY_ROLE,
   XLSX_RANGE_HIGHLIGHT_DEFAULT_COLOR,

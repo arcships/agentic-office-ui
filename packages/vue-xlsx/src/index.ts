@@ -81,6 +81,12 @@ export type {
   FormulaReferenceEditingSession,
 } from "./composables/useFormulaReferenceEditing"
 export { useXlsxViewerThumbnails } from "./composables/useXlsxViewerThumbnails"
+export { useXlsxSelectionStats } from "./composables/selection-stats"
+export type {
+  XlsxSelectionStatsRequest,
+  XlsxSelectionStatsState,
+} from "./composables/selection-stats"
+export { formatSelectionStatValue } from "./components/selection-status-format"
 export { useXlsxSearch } from "./composables/useXlsxSearch"
 export type {
   XlsxSearchMatch,
@@ -152,6 +158,11 @@ export { default as XlsxAuthoringDialog } from "./components/XlsxAuthoringDialog
  * state; hosts that embed `XlsxSheetSurface` can mount it directly.
  */
 export { default as XlsxPrintPreview } from "./components/XlsxPrintPreview.vue"
+/**
+ * Selection status bar. `XlsxViewer` renders it under the sheet tabs; hosts
+ * that embed `XlsxSheetSurface` can mount it directly.
+ */
+export { default as XlsxStatusBar } from "./components/XlsxStatusBar.vue"
 
 export const XlsxViewer = XlsxViewerComponent
 

@@ -1828,6 +1828,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       return workbook.value.getSheet(activeSheet.value.workbookSheetIndex);
     },
     get getRowsBatchAsync() { return isWorkerBacked.value ? historyDomain.getRowsBatchAsync : undefined; },
+    get getSelectionStatsAsync() { return isWorkerBacked.value ? historyDomain.getSelectionStatsAsync : undefined; },
     get images() { return chartImageDomain.images.value; },
     get isLoadDeferred() { return isLoadDeferred.value; },
     get isLoading() { return isLoading.value; },

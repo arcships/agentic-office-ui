@@ -699,6 +699,24 @@ export interface OfficeXlsxMessages {
     printPreview: string
     pageBreaks: string
   }
+  statusBar: {
+    /** Accessible label of the selected cell/range address. */
+    range: string
+    /** Shown when nothing is selected. */
+    ready: string
+    count: string
+    numericalCount: string
+    sum: string
+    average: string
+    min: string
+    max: string
+    /** Multi-cell selection without filtered rows. */
+    selected: string
+    /** The selection contains rows hidden by the active AutoFilter. */
+    filtered: string
+    /** Template with a `{count}` placeholder. */
+    truncated: string
+  }
   print: {
     title: string
     close: string
@@ -1904,6 +1922,19 @@ export const officeMessagesEn: OfficeMessages = {
       printPreview: "Print preview",
       pageBreaks: "Page break preview",
     },
+    statusBar: {
+      range: "Selected range",
+      ready: "Ready",
+      count: "Count",
+      numericalCount: "Numerical count",
+      sum: "Sum",
+      average: "Average",
+      min: "Min",
+      max: "Max",
+      selected: "Selected",
+      filtered: "Filtered",
+      truncated: "Showing the first {count} cells",
+    },
     print: {
       title: "Print preview",
       close: "Close print preview",
@@ -3052,6 +3083,19 @@ export const officeMessagesZhCN: OfficeMessages = {
       export: "导出 XLSX",
       printPreview: "打印预览",
       pageBreaks: "分页预览",
+    },
+    statusBar: {
+      range: "选定区域",
+      ready: "就绪",
+      count: "计数",
+      numericalCount: "数值计数",
+      sum: "求和",
+      average: "平均值",
+      min: "最小值",
+      max: "最大值",
+      selected: "已选定",
+      filtered: "已筛选",
+      truncated: "仅显示前 {count} 个单元格",
     },
     print: {
       title: "打印预览",

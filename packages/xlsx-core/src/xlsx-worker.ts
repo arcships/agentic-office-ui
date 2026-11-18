@@ -22,6 +22,8 @@ import {
 import type { WorkbookStructureAssets } from "./images";
 import { resolveWorksheetPrintState } from "./print/page-setup";
 import { safeCalculate } from "./safe-calculate";
+import { summarizeSelectionValues } from "./selection-stats";
+import type { XlsxSelectionStatsQuery, XlsxSelectionSummary } from "./selection-stats";
 import { normalizeTypedDateCells } from "./typed-dates";
 import { trackXlsxWorkbookLifetime } from "./workbook-lifetime";
 import { getSheetsWasmModule, setWasmSource, type WorkerWasmSource } from "./wasm";
@@ -150,6 +152,11 @@ type WorkerRequest =
         endCol: number;
         maxRows: number;
       };
+    }
+  | {
+      id: number;
+      type: "getSelectionStats";
+      payload: XlsxSelectionStatsQuery & { workbookSheetIndex: number };
     };
 
 type WorkerSuccessResponse = {
@@ -180,6 +187,7 @@ type WorkerSuccessResponse = {
       }
     | unknown[]
     | XlsxAutoFilterSnapshot
+    | XlsxSelectionSummary
     | null;
 };
 
@@ -865,6 +873,57 @@ function getCellDisplayValue(worksheet: ReturnType<Workbook["getSheet"]>, row: n
   }
 }
 
+/**
+ * Aggregates one selection from the Worker-owned worksheet.
+ *
+ * Only cells inside the query window are touched, the scan stops at
+ * `maxCells`, and `hiddenRows` mirrors the AutoFilter view state, so the
+ * returned totals match what the grid shows without ever posting the cells
+ * themselves across the thread boundary.
+ */
+function summarizeWorksheetSelection(
+  worksheet: ReturnType<Workbook["getSheet"]>,
+  sheet: XlsxSheetData | null,
+  query: XlsxSelectionStatsQuery
+): XlsxSelectionSummary {
+  const values: Array<number | null> = [];
+  const hidden = new Set<number>(query.hiddenRows ?? []);
+  const maxCells = Math.max(1, Math.floor(Number(query.maxCells) || 1));
+  let scannedCells = 0;
+  let numberFormat: XlsxCellNumberFormatInput | null = null;
+
+  scan: for (let row = query.startRow; row <= query.endRow; row += 1) {
+    for (let col = query.startCol; col <= query.endCol; col += 1) {
+      if (scannedCells >= maxCells) break scan;
+      scannedCells += 1;
+      // Filtered rows still consume the budget, so a filter that hides most
+      // of a huge selection cannot make the scan size depend on the data.
+      if (hidden.has(row)) continue;
+      const cellValue = worksheet.getCalculatedValueAt(row, col);
+      try {
+        if (cellValue.is_empty) continue;
+        let number: number | null = null;
+        if (cellValue.is_number) {
+          const parsed = cellValue.asNumber();
+          if (parsed !== undefined && Number.isFinite(parsed)) number = parsed;
+        }
+        if (number !== null && numberFormat === null) {
+          numberFormat = resolveSnapshotNumberFormat(worksheet, sheet, row, col);
+        }
+        values.push(number);
+      } finally {
+        cellValue.free();
+      }
+    }
+  }
+
+  return summarizeSelectionValues(values, {
+    numberFormat,
+    scannedCells,
+    totalCells: query.cellCount,
+  });
+}
+
 function cellAddressToA1(cell: XlsxCellAddress) {
   let col = cell.col + 1;
   let label = "";
@@ -1228,6 +1287,19 @@ function executeRequest(message: WorkerRequest, isSuperseded: () => boolean): Wo
           rows.push({ row, values });
         }
         return { rows, truncated };
+      } finally {
+        worksheet.free();
+      }
+    }
+    case "getSelectionStats": {
+      if (!workbook) {
+        return null;
+      }
+      const { workbookSheetIndex, ...query } = message.payload;
+      const targetSheet = sheets.find((sheet) => sheet.workbookSheetIndex === workbookSheetIndex) ?? null;
+      const worksheet = workbook.getSheet(workbookSheetIndex);
+      try {
+        return summarizeWorksheetSelection(worksheet, targetSheet, query);
       } finally {
         worksheet.free();
       }
