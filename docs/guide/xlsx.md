@@ -114,6 +114,15 @@ controller.clearHighlightedRanges()
 - 嵌入的图片是从包内字节按签名（PNG/JPEG/GIF/WebP/BMP/TIFF）生成 data URL 的，外部链接、SVG、伪装成图片的 HTML 一律不画；单张 72 MB、单图表 100 MB、`chartUserShapes` 8 MB 的上限可防止异常包把内存拉满。宿主也可以读取 `chart.images`（关系 id → data URL）、`chart.drawings`（含 `shapes`）以及 `chart.chartAreaFillImage` / `chart.plotAreaFillImage` / `series.fillImage` / `dataPointStyles[].fillImage` 自行绘制。
 - 导出/重新打开时图表部件、`xl/charts/chartUserShapes*.xml` 及其媒体通过绘图关系图一起保留，重新打开后图片填充和叠加层仍在。
 
+## 内置图表样式
+
+经典图表 XML 的 `<c:style>`（`chartStyle` 1–48，或 Excel 2010+ 的 101–148）现在会解析为 Excel 自带的系列调色板，而不是一律回退到主题的 accent1–6：
+
+- `style 1/9` 使用主题深色的 6 级灰度，`3–8` 使用 accent1–6 的单色明暗阶梯，`41` 使用 6 级深灰，`2/42/102/142` 等彩色变体按系列循环 accent1–6。系列较多时按每 6 个一组追加亮度/阴影，计算在 DrawingML 的线性 RGB 空间完成。
+- 显式 `chartColorStyle` 部件或系列 `spPr` 填充仍然优先；只有没有自定义颜色样式且图表带经典 `style` 时才使用内置调色板。带 `fillImage` 的系列/数据点仍保留图片填充，不会被内置颜色覆盖。
+- 三维曲面图继续使用专用曲面调色板，同时从同一套内置样式取得墙面/底面填充和主网格线颜色；`chartStyleId` 为 140–148 的深色变体保留深色图表区与浅色文字。
+- `XlsxChartAxis.majorGridlineColor` 会记录网格线颜色（作者 XML 中显式设置时优先），自定义渲染层可以直接使用。
+
 ## 数字、日期与语言区域
 
 查看器的 `locale` 同时决定界面文案和数字/日期的默认区域。数字格式里用 `[$-407]` 这类段显式指定的区域始终优先；没有指定区域的格式跟随查看器区域。需要单独控制数字/日期时，用 `documentLocale` 覆盖 `locale`；使用 `XlsxSheetSurface` 时同样可用这两个属性，或直接在 `useXlsxViewerController({ locale })` 中配置。

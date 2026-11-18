@@ -111,6 +111,7 @@ const suites = {
       "tests/unit/xlsx-worker.test.mjs",
       "tests/unit/xlsx-anchor-geometry.test.mjs",
       "tests/unit/xlsx-chart-data.test.mjs",
+      "tests/unit/xlsx-chart-builtin-styles.test.mjs",
       "tests/unit/xlsx-chart-embedded-media.test.mjs",
       "tests/unit/xlsx-chart-type-edit.test.mjs",
       "tests/unit/xlsx-drawing-fidelity.test.mjs",
