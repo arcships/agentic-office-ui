@@ -4,6 +4,13 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### DOCX image layer order (#145)
+
+- Add `bringToFront(location)`, `bringForward(location)`, `sendBackward(location)` and `sendToBack(location)` to `DocxEditorController`. They rewrite the floating image's `floating.zIndex` — Word's `wp:anchor/@relativeHeight` — with the same clamping as Word (`0` … `251658240`, one `65536` step per "forward"/"backward"), clear the stale `sourceXml` of the image, paragraph and table, and record exactly one undo entry. Non-floating images are refused because inline images have no paint order.
+- The image context menu gets a localized "Layer" group with Bring to Front, Bring Forward, Send Backward and Send to Back. Items are enabled per Word's rules: Bring actions are disabled at the top of the stack, Send actions at the bottom, and all four are disabled for inline images. `resolveDocxImageLayerOrderState()`, `resolveDocxImageLayerOrderPatch()` and `resolveDocxImageLayerOrderMenuActions()` expose the same rules (and consume `DEFAULT_CONTEXT_MENU_IMAGE_LAYER_ACTIONS`) to custom menu renderers.
+- Rendering follows the model order: `DocxImageLayer` now applies the `relativeHeight`-derived CSS `z-index` per floating image, so two overlapping images paint in the order Word stores, and the same ordering reaches the exported `relativeHeight` attribute. Right-clicking an image or the floating-image layer opens the image menu instead of starting a drag.
+- Add `tests/unit/docx-image-layer-order.test.mjs` and `tests/component/docx-image-layer-order.test.mjs` (registered in `scripts/ci/run-suite.mjs`) covering clamping and disabled states, menu-driven reordering of two overlapping images, layer paint order, export/re-import XML, stale-`sourceXml` invalidation, one-step undo, right-click context resolution and the localized menu; document the commands in `docs/guide/docx.md`, `docs/custom-components/docx.md` and the public API contract.
+
 ### DOCX programmatic export (#147)
 
 - Add `getDocxBytes()` and `getDocxBlob()` to `DocxEditorController`. They return the serialized DOCX without touching the DOM download path, so hosts can upload, store, diff or post-process the edited document instead of intercepting a browser download. `getDocxBlob()` uses the same container MIME type as the current file name (`.docx`, `.docm`, `.dotx`, `.dotm`).

@@ -87,6 +87,8 @@ Worker 和 WASM 必须来自安装后的真实包。消费项目不得从 demo �
 
 根入口公开 DOCX 查找替换（issue #113）：`replaceTextRangeInParagraph(paragraph, start, end, replacement)` 在单段内按 UTF-16 偏移替换，只在匹配边界拆分文本 run，保留图片/表单域/链接，替换文字继承被替换位置的 run 样式，平移 `commentRanges` 并使段落 `sourceXml` 失效；`replaceTextInParagraphLocation(model, { location, start, end, replacement })` 接受正文、表格单元格和嵌套表格路径（`kind: "nested-table-cell"` 加 `path`），以写时复制返回新模型；`replaceTextInDocxParagraphs(model, edits)` 按段落从后往前应用一批编辑。`DocxEditorController` 对应命令为 `replaceMatch(target, text)`（一条撤销记录）与 `replaceAll(query, text, options?)`（正文全部命中，一条撤销记录，返回 `{ replaced, skipped }`）；`replaceMatch` 的目标由 `docxReplaceTargetFromMatch(match)` 从 `findDocxSearchMatches()` 的结果转换，页眉、页脚和注释结果不可替换（返回 `undefined`）。
 
+根入口公开 DOCX 图片图层顺序（issue #145）：`DocxEditorController` 新增 `bringToFront(location)`、`bringForward(location)`、`sendBackward(location)` 与 `sendToBack(location)`，每条命令占一个撤销条目并清除图片/段落/表格的 `sourceXml`，导出时重新写入 `wp:anchor/@relativeHeight`。`resolveDocxImageLayerOrderState(floating)` 返回当前截断后的 `zIndex` 与四个 `can*` 可用标志，`resolveDocxImageLayerOrderMenuActions(floating)` 把 `DEFAULT_CONTEXT_MENU_IMAGE_LAYER_ACTIONS` 展开为带禁用状态的四个菜单项，`resolveDocxImageLayerOrderPatch(command, floating)` 给出单个命令的模型补丁；非浮动图片没有图层顺序。`resolveFloatingImageStackingZIndex(floating)` 供自定义渲染层复用与 `DocxImageLayer` 相同的 CSS 叠放规则。
+
 推荐实例写法：
 
 ```ts

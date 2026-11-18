@@ -342,6 +342,26 @@ export interface DocxEditorController {
     mode: DocxImageWrapMode,
     seedFloating?: Partial<NonNullable<ImageRunNode["floating"]>>
   ) => void;
+  /**
+   * Sets the floating image's Word `relativeHeight` to the top of the paint
+   * order (`wp:anchor/@relativeHeight="251658240"`). One undo entry.
+   */
+  bringToFront: (location: DocxImageLocation) => void;
+  /**
+   * Raises the floating image's `relativeHeight` by one Word layer step
+   * (`65536`), clamped at the top. One undo entry.
+   */
+  bringForward: (location: DocxImageLocation) => void;
+  /**
+   * Lowers the floating image's `relativeHeight` by one Word layer step
+   * (`65536`), clamped at the bottom. One undo entry.
+   */
+  sendBackward: (location: DocxImageLocation) => void;
+  /**
+   * Sets the floating image's Word `relativeHeight` to the bottom of the paint
+   * order (`0`). One undo entry.
+   */
+  sendToBack: (location: DocxImageLocation) => void;
   moveFloatingImage: (
     location: DocxImageLocation,
     patch: Partial<NonNullable<ImageRunNode["floating"]>>

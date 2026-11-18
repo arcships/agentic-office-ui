@@ -210,6 +210,24 @@
           <span class="docx-context-menu-item--danger">{{ m.docx.contextMenu.deleteTable }}</span>
         </button>
       </template>
+
+      <template v-if="imageContext">
+        <div class="docx-context-menu-separator" role="separator" />
+        <div class="docx-context-menu-section-title" role="presentation">{{ m.docx.contextMenu.layer }}</div>
+        <button
+          v-for="action of imageLayerActions"
+          :key="action.actionId"
+          :data-testid="action.testId"
+          class="docx-context-menu-item"
+          type="button"
+          role="menuitem"
+          tabindex="-1"
+          :disabled="action.disabled"
+          @click="onAction(action.command)"
+        >
+          {{ action.label }}
+        </button>
+      </template>
     </div>
   </Teleport>
 </template>
@@ -219,9 +237,14 @@ import { ref, computed, nextTick, watch } from "vue"
 import type {
   DocxEditorController,
   DocxContextMenuContext,
+  DocxImageLayerOrderCommand,
   DocxTableContextMenuContext,
 } from "@arcships/docx-core"
-import { compareTextRangeBoundaries, paragraphText } from "@arcships/docx-core"
+import {
+  compareTextRangeBoundaries,
+  paragraphText,
+  resolveDocxImageLayerOrderMenuActions,
+} from "@arcships/docx-core"
 import { resolveOfficeMenuKeyCommand } from "@arcships/vue-ui"
 import { useDocxMessages } from "../i18n"
 
@@ -276,6 +299,34 @@ const visible = computed(() => !!props.context)
 const tableContext = computed<DocxTableContextMenuContext | undefined>(() => (
   props.context?.tableContext
 ))
+
+const imageContext = computed(() => (
+  props.context?.kind === "image" ? props.context.image : undefined
+))
+
+function imageLayerOrderLabel(command: DocxImageLayerOrderCommand): string {
+  const menu = m.value.docx.contextMenu
+  switch (command) {
+    case "bringToFront": return menu.bringToFront
+    case "bringForward": return menu.bringForward
+    case "sendBackward": return menu.sendBackward
+    case "sendToBack": return menu.sendToBack
+    default: return command
+  }
+}
+
+// The four layer commands are the flattened leaves of
+// DEFAULT_CONTEXT_MENU_IMAGE_LAYER_ACTIONS; the helper resolves their item
+// order and Word's disabled rules from the image that opened the menu.
+const imageLayerActions = computed(() =>
+  resolveDocxImageLayerOrderMenuActions(imageContext.value?.floating).map(
+    (action) => ({
+      ...action,
+      label: imageLayerOrderLabel(action.command),
+      testId: `docx-context-menu-${action.actionId}`,
+    })
+  )
+)
 
 const selectedTableSelection = computed(() => {
   const selection = props.controller.selection
@@ -518,6 +569,15 @@ async function onAction(action: string, value?: string): Promise<void> {
     case "deleteTable":
       if (tableContext.value) {
         ctrl.deleteTable(tableContext.value.tableIndex)
+      }
+      break
+    // Image layer order actions
+    case "bringToFront":
+    case "bringForward":
+    case "sendBackward":
+    case "sendToBack":
+      if (imageContext.value) {
+        ctrl[action](imageContext.value.location)
       }
       break
   }

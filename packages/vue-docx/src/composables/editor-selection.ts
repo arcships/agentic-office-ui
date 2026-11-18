@@ -6,6 +6,7 @@
 
 import type {
   DocxEditorController,
+  DocxImageLocation,
   DocxSelectionSessionKind,
   DocxTableContextMenuContext,
   DocxTextRange,
@@ -108,6 +109,63 @@ export function docxTableContextFromNode(
     return undefined
   }
   return { tableIndex, rowIndex, cellIndex }
+}
+
+/**
+ * Resolve the image under a DOM node for context-menu actions.
+ *
+ * Images rendered inside a paragraph host carry `data-docx-image-child-index`;
+ * floating images rendered by the interaction layer carry
+ * `data-image-node-index` + `data-image-child-index` instead of a paragraph
+ * host. Table-cell images resolve through their paragraph host so the same
+ * model location drives the layer commands as every other image edit.
+ */
+export function docxImageLocationFromNode(
+  node: Node | null | undefined
+): DocxImageLocation | undefined {
+  const element = elementForNode(node ?? null)
+  const image = element?.closest?.(
+    "[data-docx-image-child-index],[data-image-child-index]"
+  ) as HTMLElement | null | undefined
+  if (!image) return undefined
+
+  const childIndex = nonNegativeInteger(
+    image.getAttribute?.("data-docx-image-child-index") ??
+      image.getAttribute?.("data-image-child-index")
+  )
+  if (childIndex === undefined) return undefined
+
+  const paragraphHost = image.closest?.(
+    TABLE_CELL_PARAGRAPH_HOST_SELECTOR
+  ) as SelectionHost | null | undefined
+  if (paragraphHost) {
+    const location = locationForHost(paragraphHost)
+    return location ? { ...location, childIndex } as DocxImageLocation : undefined
+  }
+
+  const paragraph = image.closest?.("[data-docx-paragraph-node-index]") as
+    | HTMLElement
+    | null
+    | undefined
+  const paragraphIndex = nonNegativeInteger(
+    paragraph?.getAttribute?.("data-docx-paragraph-node-index")
+  )
+  if (paragraphIndex !== undefined) {
+    return { kind: "paragraph", nodeIndex: paragraphIndex, childIndex }
+  }
+
+  // The image layer container is not inside a paragraph host; its own data
+  // attributes identify the owning body paragraph.
+  const floatingContainer = image.closest?.("[data-image-node-index]") as
+    | HTMLElement
+    | null
+    | undefined
+  const nodeIndex = nonNegativeInteger(
+    floatingContainer?.getAttribute?.("data-image-node-index")
+  )
+  return nodeIndex === undefined
+    ? undefined
+    : { kind: "paragraph", nodeIndex, childIndex }
 }
 
 function nonNegativeInteger(value: string | null | undefined): number | undefined {
