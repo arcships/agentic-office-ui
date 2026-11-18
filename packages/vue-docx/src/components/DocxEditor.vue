@@ -1082,6 +1082,7 @@ defineExpose({
 }
 
 @media print {
+  .docx-toolbar-shell { display: none !important; }
   .docx-editor-viewer {
     background: #fff !important;
     color: #000 !important;
