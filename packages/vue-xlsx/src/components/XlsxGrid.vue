@@ -9,6 +9,7 @@
     :data-first-row-height="effectiveRowHeights[0] ?? DEFAULT_ROW_HEIGHT"
     :data-merged-region-count="activeSheet?.mergedRegions?.length ?? 0"
     :data-worker-backed="String(Boolean(controller.isWorkerBacked))"
+    :data-cut-range="cutRangeAddress || undefined"
     role="grid"
     :aria-label="gridAriaLabel"
     :aria-rowcount="gridRowCount"
@@ -267,6 +268,7 @@ import {
 } from "./grid-paint";
 import { isDataValidationListDropdownVisible, localizeDataValidationFeedback } from "../composables/validation";
 import { localizeFormattedNumber, parseDisplayedNumber } from "../composables/cell-input";
+import { rangeToA1 } from "../composables/selection";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { useXlsxMessages } from "../i18n";
 import XlsxHeaderMenu from "./XlsxHeaderMenu.vue";
@@ -301,6 +303,11 @@ const WORKER_ROW_BATCH_SIZE = 64;
 const MIN_DISPLAY_ROWS = 200;
 const MIN_DISPLAY_COLS = 50;
 const AXIS_RESIZE_DRAG_THRESHOLD = 3;
+// Excel's marching ants: a 4/4 dash whose phase advances a few times a second,
+// slow enough to read and cheap enough to repaint while a cut is pending.
+const CUT_ANTS_DASH = [4, 4];
+const CUT_ANTS_DASH_PERIOD = CUT_ANTS_DASH[0] + CUT_ANTS_DASH[1];
+const CUT_ANTS_STEP_MS = 120;
 
 // ── Refs ───────────────────────────────────────────────────────────────
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -348,6 +355,9 @@ const resizePreview = ref<{
 
 const isSelecting = ref(false);
 const selectionAnchor = ref<XlsxCellAddress | null>(null);
+const cutAntsStep = ref(0);
+let cutAntsFrame: number | null = null;
+let cutAntsLastStepAt = 0;
 const workerRowsRevision = ref(0);
 const devicePixelRatioRevision = ref(0);
 interface GridCellSnapshot {
@@ -453,6 +463,15 @@ const zoomScale = computed(() => props.controller.zoomScale);
 const activeCell = computed(() => props.controller.activeCell);
 const selection = computed(() => props.controller.selection);
 const revision = computed(() => props.controller.revision);
+// The pending cut only gets a marquee on the sheet it was made on; switching
+// sheets keeps the move alive but hides its source outline.
+const cutRange = computed<XlsxCellRange | null>(() => {
+  const cut = props.controller.cutState;
+  const sheet = props.controller.activeSheet;
+  if (!cut || !sheet || cut.sheetIndex !== sheet.workbookSheetIndex) return null;
+  return cut.range;
+});
+const cutRangeAddress = computed(() => (cutRange.value ? rangeToA1(cutRange.value) : ""));
 const editingLocked = computed(() => props.readOnly === true || props.controller.isEditingLocked === true);
 const activeValidation = computed<XlsxDataValidation | null>(() => {
   if (editingLocked.value) return null;
@@ -1166,7 +1185,20 @@ function rangesIntersect(left: XlsxCellRange, right: XlsxCellRange): boolean {
   return leftStartRow <= rightEndRow && leftEndRow >= rightStartRow && leftStartCol <= rightEndCol && leftEndCol >= rightStartCol;
 }
 
-function drawSelectionBorder(ctx: CanvasRenderingContext2D, range: XlsxCellRange, color: string): void {
+function drawRangeBorder(
+  ctx: CanvasRenderingContext2D,
+  range: XlsxCellRange,
+  style: {
+    color: string;
+    lineWidth?: number;
+    /** Dash pattern; omitted for a solid outline. */
+    dash?: readonly number[];
+    /** Phase of the dash pattern in pixels (marching ants). */
+    dashOffset?: number;
+    /** Inset from the range edge in CSS pixels. */
+    inset?: number;
+  },
+): void {
   const normalized = {
     start: { row: Math.min(range.start.row, range.end.row), col: Math.min(range.start.col, range.end.col) },
     end: { row: Math.max(range.start.row, range.end.row), col: Math.max(range.start.col, range.end.col) },
@@ -1178,11 +1210,39 @@ function drawSelectionBorder(ctx: CanvasRenderingContext2D, range: XlsxCellRange
   const y = getRowOffsetSum(start.row);
   const width = getColOffsetSum(end.col + 1) - x;
   const height = getRowOffsetSum(end.row + 1) - y;
+  const inset = style.inset ?? 1;
   ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x + 1, y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
+  ctx.strokeStyle = style.color;
+  ctx.lineWidth = style.lineWidth ?? 2;
+  if (style.dash) {
+    if (typeof ctx.setLineDash === "function") ctx.setLineDash([...style.dash]);
+    ctx.lineDashOffset = style.dashOffset ?? 0;
+  }
+  ctx.strokeRect(x + inset, y + inset, Math.max(0, width - inset * 2), Math.max(0, height - inset * 2));
   ctx.restore();
+}
+
+function drawSelectionBorder(ctx: CanvasRenderingContext2D, range: XlsxCellRange, color: string): void {
+  drawRangeBorder(ctx, range, { color });
+}
+
+/**
+ * Excel's marquee around a cut source: a white halo plus a dashed outline whose
+ * dash offset advances every animation tick.
+ */
+function drawCutAntsBorder(ctx: CanvasRenderingContext2D, range: XlsxCellRange, color: string): void {
+  drawRangeBorder(ctx, range, {
+    color: props.isDark ? "#18181b" : "#ffffff",
+    inset: 0.5,
+    lineWidth: 3,
+  });
+  drawRangeBorder(ctx, range, {
+    color,
+    dash: CUT_ANTS_DASH,
+    dashOffset: -cutAntsStep.value,
+    inset: 0.5,
+    lineWidth: 1.5,
+  });
 }
 
 function normalizeMergeRegion(value: unknown): GridMergeRegion | null {
@@ -1814,10 +1874,10 @@ function resolveCellWorkbookStyle(
 }
 
 /**
- * Selection and active-cell outlines, drawn once per pane: each pane clips to
- * its own box and translates content by the scroll offset only on its
- * scrolling axes, so an outline inside the frozen strips lands on the pinned
- * cells instead of their scrolled positions.
+ * Selection, active-cell and pending-cut outlines, drawn once per pane: each
+ * pane clips to its own box and translates content by the scroll offset only on
+ * its scrolling axes, so an outline inside the frozen strips lands on the
+ * pinned cells instead of their scrolled positions.
  */
 function paintSelectionBorders(
   ctx: CanvasRenderingContext2D,
@@ -1827,12 +1887,13 @@ function paintSelectionBorders(
 ): void {
   const sel = selection.value;
   const active = activeCell.value;
+  const cut = cutRange.value;
   const ranges: XlsxCellRange[] = [];
   if (sel) ranges.push(sel);
   if (active && (!sel || (sel.start.row === sel.end.row && sel.start.col === sel.end.col))) {
     ranges.push({ start: active, end: active });
   }
-  if (!ranges.length) return;
+  if (!ranges.length && !cut) return;
 
   const frozen = frozenPaneMetrics();
   const panes = [
@@ -1849,6 +1910,7 @@ function paintSelectionBorders(
     ctx.clip();
     ctx.translate(pane.scrollX ? -scrollLeft.value : 0, pane.scrollY ? -scrollTop.value : 0);
     for (const range of ranges) drawSelectionBorder(ctx, range, color);
+    if (cut) drawCutAntsBorder(ctx, cut, color);
     ctx.restore();
   }
 }
@@ -2398,6 +2460,38 @@ function onScroll() {
   schedulePaint();
 }
 
+/**
+ * Advances the pending-cut marquee a few times per second.
+ *
+ * A cut stays "armed" until it is pasted or cancelled, so the dashes have to
+ * move while the user looks for the paste target. Each step only advances the
+ * dash phase and reuses `schedulePaint()`, which coalesces the repaint with any
+ * scroll that happens in the same frame.
+ */
+function scheduleCutAnts() {
+  if (cutAntsFrame !== null) return;
+  if (!cutRange.value) return;
+  if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") return;
+  cutAntsFrame = window.requestAnimationFrame((timestamp: number) => {
+    cutAntsFrame = null;
+    if (!cutRange.value) return;
+    if (timestamp - cutAntsLastStepAt >= CUT_ANTS_STEP_MS) {
+      cutAntsLastStepAt = timestamp;
+      cutAntsStep.value = (cutAntsStep.value + 1) % CUT_ANTS_DASH_PERIOD;
+      schedulePaint();
+    }
+    scheduleCutAnts();
+  });
+}
+
+function stopCutAnts() {
+  if (cutAntsFrame === null) return;
+  if (typeof window !== "undefined" && typeof window.cancelAnimationFrame === "function") {
+    window.cancelAnimationFrame(cutAntsFrame);
+  }
+  cutAntsFrame = null;
+}
+
 type AxisHit = {
   actualIndex: number;
   displayIndex: number;
@@ -2815,10 +2909,21 @@ function onGridKeydown(event: KeyboardEvent) {
   // An IME composition owns the keyboard; never treat its keys as grid commands.
   if (isComposingKeyboardEvent(event)) return
 
+  // A pending cut is a grid mode, not a selection: Escape leaves the selection
+  // alone and only drops the marquee (Excel's cancel-cut). The check is on the
+  // controller, not on this sheet's marquee, so a cut made on another sheet is
+  // still cancellable from here.
+  if (event.key === "Escape" && props.controller.cutState) {
+    event.preventDefault();
+    props.controller.cancelCut?.();
+    return;
+  }
+
   const active = activeCell.value;
   if (!active) return;
 
   if ((event.ctrlKey || event.metaKey) && event.key === "c") { event.preventDefault(); void copySelection(); return; }
+  if ((event.ctrlKey || event.metaKey) && event.key === "x") { event.preventDefault(); if (!editingLocked.value) props.controller.cutSelection?.(); return; }
   if ((event.ctrlKey || event.metaKey) && event.key === "v") { event.preventDefault(); props.controller.pasteFromClipboard(); return; }
 
   const handlers: Record<string, () => void> = {
@@ -2913,11 +3018,26 @@ watch(
     selection.value?.start.col,
     selection.value?.end.row,
     selection.value?.end.col,
+    cutRange.value?.start.row,
+    cutRange.value?.start.col,
+    cutRange.value?.end.row,
+    cutRange.value?.end.col,
     props.isDark,
     props.selectionColor,
     props.selectionFillColor,
   ],
   schedulePaint,
+  { flush: "post" },
+);
+
+watch(
+  cutRange,
+  (range) => {
+    cutAntsStep.value = 0;
+    cutAntsLastStepAt = 0;
+    if (range) scheduleCutAnts();
+    else stopCutAnts();
+  },
   { flush: "post" },
 );
 
@@ -2975,11 +3095,13 @@ onMounted(() => {
   });
   resizeObs.observe(container);
   schedulePaint();
+  if (cutRange.value) scheduleCutAnts();
 });
 
 onUnmounted(() => {
   resizeObs?.disconnect();
   unbindDevicePixelRatioWatch();
+  stopCutAnts();
   resetWorkerRows(null);
   if (paintFrame !== null) window.cancelAnimationFrame(paintFrame);
   paintFrame = null;

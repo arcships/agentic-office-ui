@@ -77,7 +77,7 @@
         <button class="xlsx-contextmenu__item" role="menuitem" @click="onRedo">{{ m.xlsx.contextMenu.redo }}</button>
       </template>
       <template v-else>
-      <button class="xlsx-contextmenu__item" data-testid="xlsx-context-cut" role="menuitem" @click="onCut">
+      <button class="xlsx-contextmenu__item" data-testid="xlsx-context-cut" role="menuitem" :disabled="isReadOnly" @click="onCut">
         <span>{{ m.xlsx.contextMenu.cut }}</span><kbd class="xlsx-contextmenu__shortcut">Ctrl+X</kbd>
       </button>
       <button class="xlsx-contextmenu__item" data-testid="xlsx-context-copy" role="menuitem" @click="onCopy">

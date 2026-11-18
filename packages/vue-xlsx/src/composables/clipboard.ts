@@ -1,9 +1,11 @@
+import { shallowRef, watch } from "vue";
 import { XLSX_MIME_TYPE, CSV_MIME_TYPE, INTERNAL_CLIPBOARD_MIME } from "./internal";
 import type { ClipboardPayload, ClipboardMatrixCell, ClipboardMerge } from "./internal";
 import type { Workbook } from "@dukelib/sheets-wasm";
 import type {
   XlsxCellAddress,
   XlsxCellRange,
+  XlsxClipboardCutState,
   XlsxClipboardData,
   XlsxPasteSpecialOptions
 } from "@arcships/xlsx-core";
@@ -125,6 +127,19 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     payload: ClipboardPayload;
     sheetIndex: number;
   } | null = null;
+  // The cut that is still waiting for its paste. It outlives the payload store
+  // so hosts can render a marquee, and it is the state Escape cancels.
+  const cutState = shallowRef<XlsxClipboardCutState | null>(null);
+
+  function resetClipboardState() {
+    storedClipboard = null;
+    cutState.value = null;
+  }
+
+  // A restarted workbook (new file, sheet rebuild) invalidates both the payload
+  // and the source range: pasting it would write into another document and
+  // "clear" cells that were never cut.
+  watch(() => ctx.workbook.value, () => { resetClipboardState(); });
 
   function localizeDisplayValue(value: string, resolveFormat: () => unknown) {
     if (!localizableDisplayValue.test(value)) {
@@ -375,11 +390,18 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     }
     const range = ctx.selection.value
       ?? (ctx.activeCell.value ? { end: ctx.activeCell.value, start: ctx.activeCell.value } : null);
+    const sheetIndex = ctx.activeSheet.value?.workbookSheetIndex ?? -1;
+    const cutRange = cut && range && sheetIndex >= 0 ? normalizeRange(range) : null;
     storedClipboard = {
-      cutRange: cut && range ? normalizeRange(range) : null,
+      cutRange,
       payload,
-      sheetIndex: ctx.activeSheet.value?.workbookSheetIndex ?? -1
+      sheetIndex
     };
+    // A plain copy always ends a pending cut; a cut replaces it and starts a
+    // new marquee on the current sheet.
+    cutState.value = cutRange && sheetIndex >= 0
+      ? { range: cutRange, sheetIndex }
+      : null;
     return data;
   }
 
@@ -490,33 +512,37 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     if (!stored?.cutRange) {
       return;
     }
-    const workbook = ctx.workbook.value;
-    if (!workbook || stored.sheetIndex < 0) {
-      return;
-    }
-    const worksheet = workbook.getSheet(stored.sheetIndex);
     try {
-      for (let row = stored.cutRange.start.row; row <= stored.cutRange.end.row; row += 1) {
-        for (let col = stored.cutRange.start.col; col <= stored.cutRange.end.col; col += 1) {
-          if (targetRange && rangeContainsCell(targetRange, { row, col })) {
-            continue;
-          }
-          if (worksheet.isMergedSecondary(row, col)) {
-            continue;
-          }
-          worksheet.setCell(cellAddressToA1({ row, col }), "");
-          if (worksheet.getCellStyleAt(row, col)) {
-            worksheet.setCellStyleAt(row, col, DEFAULT_CELL_STYLE_PATCH);
+      const workbook = ctx.workbook.value;
+      if (!workbook || stored.sheetIndex < 0) {
+        return;
+      }
+      const worksheet = workbook.getSheet(stored.sheetIndex);
+      try {
+        for (let row = stored.cutRange.start.row; row <= stored.cutRange.end.row; row += 1) {
+          for (let col = stored.cutRange.start.col; col <= stored.cutRange.end.col; col += 1) {
+            if (targetRange && rangeContainsCell(targetRange, { row, col })) {
+              continue;
+            }
+            if (worksheet.isMergedSecondary(row, col)) {
+              continue;
+            }
+            worksheet.setCell(cellAddressToA1({ row, col }), "");
+            if (worksheet.getCellStyleAt(row, col)) {
+              worksheet.setCellStyleAt(row, col, DEFAULT_CELL_STYLE_PATCH);
+            }
           }
         }
+      } finally {
+        worksheet.free();
+      }
+      if (ctx.workbook.value) {
+        ctx.refreshWorkbookState(ctx.workbook.value);
       }
     } finally {
-      worksheet.free();
+      // The move happened: neither the payload nor the marquee may survive it.
+      resetClipboardState();
     }
-    if (ctx.workbook.value) {
-      ctx.refreshWorkbookState(ctx.workbook.value);
-    }
-    storedClipboard = null;
   }
 
   function sameClipboardPayload(left: ClipboardPayload, right: ClipboardPayload) {
@@ -553,6 +579,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
       // source keeps its values, so the move never happens.
       if (applied && storedClipboard) {
         storedClipboard = { ...storedClipboard, cutRange: null };
+        cutState.value = null;
       }
       return applied;
     }
@@ -873,6 +900,21 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     return true;
   }
 
+  /**
+   * Cancels a pending cut without touching the workbook.
+   *
+   * The source cells were never cleared (the clear happens on paste), so only
+   * the marquee and the internal payload have to go; a later paste falls back
+   * to the system clipboard and behaves like an ordinary copy.
+   */
+  function cancelCut() {
+    if (!cutState.value) {
+      return false;
+    }
+    resetClipboardState();
+    return true;
+  }
+
   async function pasteFromClipboard() {
     if (ctx.isEditingLocked.value) {
       return false;
@@ -909,7 +951,10 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
   }
 
   return {
+    cancelCut,
+    copySelectionToClipboard,
     cutSelection,
+    cutState,
     getCellDisplayValue,
     getCellFormula,
     getClipboardData,
@@ -917,7 +962,6 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     pasteSpecialFromClipboard,
     pasteSpecialStructuredData,
     pasteStructuredClipboardData,
-    pasteText,
-    copySelectionToClipboard
+    pasteText
   };
 }

@@ -290,6 +290,8 @@ DOCX 剪贴板公开合同：`copy()` / `paste()` 以及 `writeSelectionToClipbo
 | `UseXlsxViewerControllerOptions.onDiagnostic` | `load-start`、`load-deferred`、`load-resumed`、`load-success`、`load-error`、`load-cancelled`、`download`、`worker-error`、`image-decode-error` | `requestId` 必有；可含 `taskId`、来源、脱敏地址、字节数、图片标识和 `XlsxLoadError`。Worker 或图片失败不得静默伪装成成功 |
 | `XlsxRuntimeConfig.onDiagnostic` | `worker-client-created`、`worker-client-disposed`、`runtime-disposed` | `runtimeId` 必有；可含 Worker/WASM 地址 |
 
+XLSX 剪切合同：`cutSelection()` 把选区写入内部/系统剪贴板并进入剪切状态（`cutState = { range, sheetIndex }`），源单元格保持不动；下一次 `pasteFromClipboard()` 把值、公式和样式搬到目标，并在同一个撤销条目里清空源区域，随后 `cutState` 变为 `null`。`cancelCut()`（`Escape`）只取消剪切状态，不改工作簿；`copySelectionToClipboard()`、仅格式的 `pasteSpecialFromClipboard({ mode: "formats" })` 以及工作簿重建同样结束剪切状态。`Ctrl/Cmd+X`、右键菜单和功能区的“剪切”共用 `cutSelection()`，网格用虚线 marquee 标出 `cutState` 的源区域（仅源工作表），`XlsxSelectionOverlay` 以 `selection.cutPending`（英文/中文）向辅助技术播报。
+
 ### 4.3 `vue-pdf`
 
 | 组件 | 事件 | 参数 |
