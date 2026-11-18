@@ -163,6 +163,12 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
               if (!outer) return null;
               const table = outer.querySelector('table');
               if (!table) return null;
+              // `table.querySelectorAll('colgroup > col')` also matches the
+              // nested table's own column group, so only the outer table's
+              // direct colgroup may be counted.
+              const ownColgroup = [...table.children].find(
+                (child) => child.tagName === 'COLGROUP'
+              );
               const rows = [...table.tBodies[0].rows];
               const body = rows[0] ? [...rows[0].cells] : [];
               const vertical = table.querySelector('td[rowspan="3"]');
@@ -172,7 +178,7 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
                 (cell) => cell.querySelectorAll('[data-docx-table-cell-paragraph-host="true"]').length === 3
               );
               return {
-                columnCount: table.querySelectorAll('colgroup > col').length,
+                columnCount: ownColgroup ? ownColgroup.querySelectorAll('col').length : 0,
                 headerCellCount: body.length,
                 rowCount: rows.length,
                 verticalMergeText: vertical ? vertical.innerText.trim() : null,
@@ -218,8 +224,9 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
             timeout=30_000,
         )
         # The viewer only mounts the pages inside its scroll viewport, so the
-        # pages are collected, the container is scrolled to the end, and the two
-        # observations are merged by page index.
+        # pages are collected while stepping through the scroll range and merged
+        # by page index; that keeps the per-page header assertion honest for a
+        # document whose pages cannot all be mounted at once.
         def collect_sections() -> list[dict]:
             return page.evaluate(
                 """() => {
@@ -243,20 +250,34 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
             )
 
         observed_pages: dict[int, dict] = {}
-        for entry in collect_sections():
-            observed_pages[entry["index"]] = entry
-        page.evaluate(
-            """() => {
-              const viewer = document.querySelector('[data-testid="docx-viewer"]');
-              const candidates = [...(viewer ? viewer.querySelectorAll('*') : [])]
-                .filter((element) => element.scrollHeight > element.clientHeight + 200);
-              candidates.sort((left, right) => right.scrollHeight - left.scrollHeight);
-              if (candidates[0]) candidates[0].scrollTop = candidates[0].scrollHeight;
-            }"""
-        )
-        page.wait_for_timeout(600)
-        for entry in collect_sections():
-            observed_pages.setdefault(entry["index"], entry)
+
+        def collect_pages() -> None:
+            for entry in collect_sections():
+                observed_pages.setdefault(entry["index"], entry)
+
+        def scroll_viewer(fraction: float) -> None:
+            page.evaluate(
+                """(fraction) => {
+                  const viewer = document.querySelector('[data-testid="docx-viewer"]');
+                  const candidates = [...(viewer ? viewer.querySelectorAll('*') : [])]
+                    .filter((element) => element.scrollHeight > element.clientHeight + 200);
+                  candidates.sort((left, right) => right.scrollHeight - left.scrollHeight);
+                  const target = candidates[0];
+                  if (target) {
+                    target.scrollTop =
+                      (target.scrollHeight - target.clientHeight) * fraction;
+                  }
+                }""",
+                fraction,
+            )
+            page.wait_for_timeout(400)
+            collect_pages()
+
+        collect_pages()
+        for step in range(13):
+            scroll_viewer(step / 12)
+            if len(observed_pages) >= 4:
+                break
         sections = [observed_pages[index] for index in sorted(observed_pages)]
         expect(len(sections) == 4, f"sections-columns.docx 应渲染 4 页: {sections}")
         expect(
