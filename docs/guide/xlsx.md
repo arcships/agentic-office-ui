@@ -59,6 +59,16 @@ const controller = useXlsxViewerController({
 
 编辑器用一个隐藏的镜像层按当前宽度测量草稿的换行高度：硬换行或自动换行后编辑器向下增高（裁剪在网格可视区内），不会把后续行藏在单行滚动里。提交后的换行会写进单元格值；要让换行在单元格里显示为多行，请启用“自动换行”并给行足够的高度——未启用时与 Excel 一致，只显示第一行。
 
+## 自动筛选与列头菜单
+
+工作表自己的 `<autoFilter ref="…">` 和每个表部件（`xl/tables/tableN.xml`）的 `<autoFilter>` 会被解析成 `controller.autoFilterRanges`；同一区域的表筛选会被优先保留（带 `tableName`），所以表和工作表不会画出两个菜单。范围里的每个表头单元格都会显示一个常驻的 `▾`，不依赖鼠标悬停；滚动、冻结和缩放时会跟随单元格位置，滚出可视区就隐藏。
+
+- 菜单提供“按此列升序/降序”“按值筛选”和“清除筛选”。值列表读取该列的格式化显示值（数字、日期按当前区域显示），空白单元格单独显示为“(空白)”，`全选` 控制全部值；`应用` 写入筛选项，`清除筛选` 恢复该范围隐藏的所有行。来自文件的筛选条件会在打开工作簿时直接生效，和 Excel 一致。
+- 排序是一次普通的范围编辑：整行一起移动，只写一条撤销记录，`撤销` 恢复原顺序；只读或受保护的工作表不会排序。排序前会检查合并区域，数据区内有合并时拒绝排序（返回 `false`），避免把行移走而合并框留在原地。
+- 筛选是视图状态：不修改单元格、不删除合并区域、不改冻结窗格，也不影响打印分页和导出内容。`controller.hiddenAutoFilterRows` 给出被隐藏的绝对行号，`controller.autoFilterStates` 给出每个范围的列条件；`applyAutoFilterValues(reference, columnIndex, values, { includeBlank })`、`clearAutoFilter(reference?)` 和 `sortAutoFilter(reference, columnIndex, direction)` 是同一套操作的程序入口。
+- 导出时会把当前“应用/清除”的条件写回工作表或表部件的 `autoFilter`，重新打开后筛选状态保持一致；没有筛选操作时导出字节不变。只读 Worker 视图由 Worker 返回范围显示值，菜单和筛选同样可用（排序仍是只读禁止）。
+- 宿主可以替换内置 `▾` 触发器：`XlsxViewer`/`XlsxSheetSurface`/`XlsxGrid` 的 `#table-header-menu` 插槽接收 `XlsxTableHeaderMenuRenderProps`（`cell`、`column`、`table`、`autoFilter`、`direction`、`sortAscending`、`sortDescending`、`getValueOptions`、`applyFilter`、`clearFilter`、`hasFilter`、`triggerIcon` 和必须绑定的 `triggerProps`）。菜单本体仍由查看器提供，排序、筛选、清除和撤销走同一条路径。
+
 ## 公式引用高亮
 
 编辑公式时，内联编辑器和公式栏都会解析光标处的公式文本，并用 Excel 的引用颜色标出目标：

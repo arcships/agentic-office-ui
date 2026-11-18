@@ -148,7 +148,14 @@
           :selection-fill-color="selectionFillColor"
           @cell-double-click="onCellDoubleClick"
           @viewport-change="gridViewport = $event"
-        />
+        >
+          <template
+            v-if="$slots['table-header-menu']"
+            #table-header-menu="headerMenuProps"
+          >
+            <slot name="table-header-menu" v-bind="headerMenuProps" />
+          </template>
+        </XlsxGrid>
         <XlsxRangeHighlightLayer
           :controller="controller"
           :scroll-left="gridViewport.scrollLeft"

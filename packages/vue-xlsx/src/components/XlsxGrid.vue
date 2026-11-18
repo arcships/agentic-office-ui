@@ -8,6 +8,9 @@
     :data-first-column-width="effectiveColWidths[0] ?? DEFAULT_COL_WIDTH"
     :data-first-row-height="effectiveRowHeights[0] ?? DEFAULT_ROW_HEIGHT"
     :data-merged-region-count="activeSheet?.mergedRegions?.length ?? 0"
+    :data-auto-filter-range-count="controller.autoFilterRanges?.length ?? 0"
+    :data-auto-filter-trigger-count="autoFilterTriggers.length"
+    :data-hidden-auto-filter-row-count="controller.hiddenAutoFilterRows?.length ?? 0"
     :data-worker-backed="String(Boolean(controller.isWorkerBacked))"
     :data-cut-range="cutRangeAddress || undefined"
     :data-formula-reference-count="formulaReferenceRanges.length || undefined"
@@ -105,6 +108,42 @@
           :x="headerMenu.x"
           :y="headerMenu.y"
           @close="headerMenu = null"
+        />
+        <template
+          v-for="trigger in autoFilterTriggers"
+          :key="`autofilter-${trigger.range.reference}-${trigger.columnIndex}`"
+        >
+          <slot
+            v-if="$slots['table-header-menu']"
+            name="table-header-menu"
+            v-bind="trigger.slotProps"
+          />
+          <button
+            v-else
+            class="xlsx-grid__autofilter-trigger"
+            :class="{ 'xlsx-grid__autofilter-trigger--active': trigger.hasFilter }"
+            data-testid="xlsx-autofilter-trigger"
+            type="button"
+            tabindex="-1"
+            :style="trigger.style"
+            :data-autofilter-reference="trigger.range.reference"
+            :data-autofilter-column="trigger.columnIndex"
+            :aria-label="trigger.label"
+            aria-haspopup="dialog"
+            @pointerdown.stop.prevent
+            @click.stop.prevent="openAutoFilterMenu(trigger, $event)"
+            @dblclick.stop.prevent
+          >▾</button>
+        </template>
+        <XlsxAutoFilterMenu
+          v-if="autoFilterMenu"
+          :controller="controller"
+          :range="autoFilterMenu.range"
+          :column-index="autoFilterMenu.columnIndex"
+          :column-name="autoFilterMenu.columnName"
+          :x="autoFilterMenu.x"
+          :y="autoFilterMenu.y"
+          @close="autoFilterMenu = null"
         />
         <div
           v-if="pageBreakOverlay"
@@ -251,6 +290,8 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick, type CSSPropert
 import {
   resolveWorkbookColor,
   resolveWorkbookFillStyle,
+  type XlsxAutoFilterRange,
+  type XlsxTableHeaderMenuRenderProps,
   type XlsxViewerController,
   type XlsxCellAddress,
   type XlsxCellRange,
@@ -323,6 +364,7 @@ import { rangeToA1 } from "../composables/selection";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { useXlsxMessages } from "../i18n";
 import XlsxHeaderMenu from "./XlsxHeaderMenu.vue";
+import XlsxAutoFilterMenu from "./XlsxAutoFilterMenu.vue";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -338,6 +380,12 @@ const m = useXlsxMessages();
 const emit = defineEmits<{
   cellDoubleClick: [cell: XlsxCellAddress];
   viewportChange: [viewport: { scrollLeft: number; scrollTop: number; width: number; height: number }];
+}>();
+
+// Hosts can replace the built-in AutoFilter trigger; the menu itself stays
+// internal so sorting, filtering and clearing keep one code path.
+defineSlots<{
+  "table-header-menu"?: (props: XlsxTableHeaderMenuRenderProps) => unknown;
 }>();
 
 const { notice: clipboardNotice, copySelection } = useClipboardCopyNotice(() => props.controller, {
@@ -405,6 +453,13 @@ const hoveredAxis = ref<{
 const headerMenu = ref<{
   index: number;
   kind: "column" | "row";
+  x: number;
+  y: number;
+} | null>(null);
+const autoFilterMenu = ref<{
+  columnIndex: number;
+  columnName: string;
+  range: XlsxAutoFilterRange;
   x: number;
   y: number;
 } | null>(null);
@@ -525,6 +580,8 @@ const gridAriaReadOnly = computed(() => (props.readOnly ? "true" : "false"));
 // Prefer the worksheet's real size; the display counts include row/column
 // filler so the canvas can always paint a full viewport.
 const gridRowCount = computed(() => {
+  const filtered = displayVisibleRows.value;
+  if (filtered) return filtered.length;
   const declared = activeSheet.value?.rowCount ?? 0;
   return declared > 0 ? declared : effectiveRowHeights.value.length;
 });
@@ -732,17 +789,42 @@ const effectiveColWidths = computed(() => {
   });
 });
 
+const autoFilterHiddenRowSet = computed(() => new Set(props.controller.hiddenAutoFilterRows ?? []));
+
+/**
+ * Rows the grid displays after AutoFilter menus hid some of them.
+ *
+ * `null` means the sheet has no explicit row list (worker filler rows), so the
+ * original index-based path stays in charge.
+ */
+const displayVisibleRows = computed<number[] | null>(() => {
+  const rows = activeSheet.value?.visibleRows;
+  if (!rows?.length) return null;
+  const hidden = autoFilterHiddenRowSet.value;
+  return hidden.size === 0 ? rows : rows.filter((row) => !hidden.has(row));
+});
+
+// Actual sheet row → index in the unfiltered `rowHeights` array.
+const baseRowIndexByActual = computed(() => {
+  const rows = activeSheet.value?.visibleRows ?? [];
+  return new Map(rows.map((row, index) => [row, index]));
+});
+
 const effectiveRowHeights = computed(() => {
   const sheet = activeSheet.value;
   if (!sheet) return [];
   const z = gridZoomFactor(zoomScale.value);
-  const count = Math.max(sheet.rowHeights?.length ?? 0, MIN_DISPLAY_ROWS);
+  const rows = displayVisibleRows.value;
+  const count = Math.max(rows?.length ?? sheet.rowHeights?.length ?? 0, MIN_DISPLAY_ROWS);
+  const baseIndexByActual = baseRowIndexByActual.value;
   return Array.from({ length: count }, (_, index) => {
-    const actualIndex = sheet.visibleRows?.[index] ?? index;
+    const actualIndex = rows?.[index] ?? sheet.visibleRows?.[index] ?? index;
+    const baseIndex = rows ? baseIndexByActual.get(actualIndex) : index;
+    const storedHeight = baseIndex === undefined ? undefined : sheet.rowHeights?.[baseIndex];
     const preview = resizePreview.value;
     const size = preview?.kind === "row" && preview.actualIndex === actualIndex
       ? preview.size
-      : sheet.rowHeights?.[index] || sheet.rowHeightOverridesPx?.[actualIndex] || sheet.defaultRowHeightPx || DEFAULT_ROW_HEIGHT;
+      : storedHeight || sheet.rowHeightOverridesPx?.[actualIndex] || sheet.defaultRowHeightPx || DEFAULT_ROW_HEIGHT;
     return size * z;
   });
 });
@@ -817,7 +899,7 @@ function resolveAdjacentSheetCell(
 const colOffsets = computed(() => createOffsetIndex(effectiveColWidths.value));
 const rowOffsets = computed(() => createOffsetIndex(effectiveRowHeights.value));
 const displayCols = computed(() => resolveDisplayIndices(activeSheet.value?.visibleCols, effectiveColWidths.value.length));
-const displayRows = computed(() => resolveDisplayIndices(activeSheet.value?.visibleRows, effectiveRowHeights.value.length));
+const displayRows = computed(() => resolveDisplayIndices(displayVisibleRows.value ?? activeSheet.value?.visibleRows, effectiveRowHeights.value.length));
 const sheetColToDisplayIndex = computed(() => createSheetToDisplayIndex(displayCols.value));
 const sheetRowToDisplayIndex = computed(() => createSheetToDisplayIndex(displayRows.value));
 
@@ -932,8 +1014,8 @@ function resolvePanePoint(clientX: number, clientY: number) {
 /** Body viewport size the canvases and overlays share (headers excluded). */
 function bodyViewportSize(): { width: number; height: number } {
   return {
-    width: Math.max(0, containerWidth.value - ROW_HEADER_WIDTH),
-    height: Math.max(0, containerHeight.value - HEADER_HEIGHT),
+    width: Math.max(0, (Number.isFinite(containerWidth.value) ? containerWidth.value : 0) - ROW_HEADER_WIDTH),
+    height: Math.max(0, (Number.isFinite(containerHeight.value) ? containerHeight.value : 0) - HEADER_HEIGHT),
   };
 }
 
@@ -1098,6 +1180,187 @@ function openHeaderMenu(kind: "column" | "row", event: PointerEvent) {
     x: rect.left,
     y: rect.bottom + 2,
   };
+}
+
+type AutoFilterTrigger = {
+  columnIndex: number;
+  columnName: string;
+  hasFilter: boolean;
+  label: string;
+  range: XlsxAutoFilterRange;
+  slotProps: XlsxTableHeaderMenuRenderProps;
+  style: CSSProperties;
+};
+
+function autoFilterColumnLetter(col: number) {
+  let index = col + 1;
+  let label = "";
+  while (index > 0) {
+    const remainder = (index - 1) % 26;
+    label = String.fromCharCode(65 + remainder) + label;
+    index = Math.floor((index - 1) / 26);
+  }
+  return label;
+}
+
+/**
+ * One persistent ▾ per visible AutoFilter header cell.
+ *
+ * Excel shows the button inside the range's header row rather than in the
+ * column-header strip, so the position comes from the cell rectangle. Cells
+ * scrolled under a frozen strip or outside the body are skipped instead of
+ * being clamped to the edge.
+ */
+const autoFilterTriggers = computed<AutoFilterTrigger[]>(() => {
+  const sheet = activeSheet.value;
+  const ranges = props.controller.autoFilterRanges ?? [];
+  if (!sheet || ranges.length === 0) return [];
+  void revision.value;
+  const frozen = frozenPaneMetrics();
+  const viewport = bodyViewportSize();
+  const triggers: AutoFilterTrigger[] = [];
+  const claimedHeaderCells = new Set<string>();
+  const tableByName = new Map((props.controller.tables ?? []).map((table) => [table.name, table]));
+
+  for (const range of ranges) {
+    const headerRow = range.start.row;
+    const displayRow = sheetRowToDisplayIndex.value.get(headerRow);
+    if (displayRow === undefined) continue;
+    const rowContentY = getRowOffsetSum(displayRow);
+    const rowHeight = effectiveRowHeights.value[displayRow] || DEFAULT_ROW_HEIGHT;
+    const rowFrozen = displayRow < frozen.rows;
+    const rowY = paneViewOffset(rowContentY, scrollTop.value, rowFrozen);
+    const rowVisible = rowFrozen
+      ? rowY >= 0 && (viewport.height === 0 || rowY + rowHeight <= frozen.height)
+      : rowY >= frozen.height && (viewport.height === 0 || rowY + rowHeight <= viewport.height);
+    if (!rowVisible) continue;
+
+    const activeState = (props.controller.autoFilterStates ?? []).find(
+      (state) => state.reference === range.reference
+    );
+    for (let col = range.start.col; col <= range.end.col; col += 1) {
+      const displayCol = sheetColToDisplayIndex.value.get(col);
+      if (displayCol === undefined) continue;
+      const colContentX = getColOffsetSum(displayCol);
+      const colWidth = effectiveColWidths.value[displayCol] || DEFAULT_COL_WIDTH;
+      const colFrozen = displayCol < frozen.cols;
+      const colX = paneViewOffset(colContentX, scrollLeft.value, colFrozen);
+      const colVisible = colFrozen
+        ? colX >= 0 && (viewport.width === 0 || colX + colWidth <= frozen.width)
+        : colX >= frozen.width && (viewport.width === 0 || colX + colWidth <= viewport.width);
+      if (!colVisible) continue;
+
+      const columnIndex = col - range.start.col;
+      const headerCellKey = `${headerRow}:${col}`;
+      if (claimedHeaderCells.has(headerCellKey)) continue;
+      claimedHeaderCells.add(headerCellKey);
+      const headerValue = props.controller.getCellDisplayValue({ row: headerRow, col });
+      const columnName = headerValue.trim().length > 0
+        ? headerValue
+        : autoFilterColumnLetter(col);
+      const direction = props.controller.sortState
+        && (props.controller.sortState.rangeReference === range.reference
+          || props.controller.sortState.tableName === range.tableName)
+        && props.controller.sortState.columnIndex === columnIndex
+        ? props.controller.sortState.direction
+        : null;
+      const activeColumn = activeState?.columns.find((column) => column.columnIndex === columnIndex);
+      const hasFilter = Boolean(activeState && activeState.columns.length > 0);
+      const hasValueFilter = Boolean(activeColumn);
+      const table = range.tableName ? tableByName.get(range.tableName) ?? null : null;
+      const triggerStyle: CSSProperties = {
+        left: `${ROW_HEADER_WIDTH + Math.max(0, colX) + Math.max(0, colWidth) - 16}px`,
+        top: `${HEADER_HEIGHT + Math.max(0, rowY) + 2}px`,
+      };
+      const sortAscending = () => {
+        props.controller.sortAutoFilter(range.reference, columnIndex, "ascending");
+      };
+      const sortDescending = () => {
+        props.controller.sortAutoFilter(range.reference, columnIndex, "descending");
+      };
+      const applyFilter = (values: string[], options?: { includeBlank?: boolean }) => {
+        props.controller.applyAutoFilterValues(range.reference, columnIndex, values, options);
+      };
+      const clearFilter = () => {
+        props.controller.clearAutoFilter(range.reference);
+      };
+      const triggerProps: Record<string, unknown> = {
+        "aria-haspopup": "dialog",
+        "aria-label": formatOfficeMessage(m.value.xlsx.autoFilter.openMenu, { column: columnName }),
+        "data-autofilter-column": columnIndex,
+        "data-autofilter-reference": range.reference,
+        "data-testid": "xlsx-autofilter-trigger",
+        onClick: (event: MouseEvent) => {
+          event.preventDefault();
+          event.stopPropagation();
+          openAutoFilterMenuAt(range, columnIndex, columnName, event.currentTarget as HTMLElement | null);
+        },
+        onPointerDown: (event: PointerEvent) => {
+          event.preventDefault();
+          event.stopPropagation();
+        },
+        style: triggerStyle,
+        type: "button",
+      };
+      triggers.push({
+        columnIndex,
+        columnName,
+        hasFilter,
+        label: triggerProps["aria-label"] as string,
+        range,
+        slotProps: {
+          applyFilter,
+          autoFilter: range,
+          cell: { row: headerRow, col },
+          clearFilter,
+          column: table?.columns[columnIndex] ?? {
+            id: columnIndex + 1,
+            index: columnIndex,
+            name: columnName,
+          },
+          direction,
+          filterValues: activeColumn?.values,
+          getValueOptions: () => props.controller.getAutoFilterColumnValues(range, columnIndex),
+          hasFilter,
+          hasValueFilter,
+          sortAscending,
+          sortDescending,
+          table,
+          triggerIcon: "▾",
+          triggerProps,
+        },
+        style: triggerStyle,
+      });
+    }
+  }
+  return triggers;
+});
+
+function openAutoFilterMenuAt(
+  range: XlsxAutoFilterRange,
+  columnIndex: number,
+  columnName: string,
+  target: HTMLElement | null,
+) {
+  const rect = typeof target?.getBoundingClientRect === "function"
+    ? target.getBoundingClientRect()
+    : { bottom: 0, left: 0 };
+  autoFilterMenu.value = {
+    columnIndex,
+    columnName,
+    range,
+    x: rect.left,
+    y: rect.bottom + 2,
+  };
+}
+
+function openAutoFilterMenu(trigger: AutoFilterTrigger, event: MouseEvent) {
+  openAutoFilterMenuAt(
+    trigger.range,
+    trigger.columnIndex,
+    trigger.columnName,
+    event.currentTarget as HTMLElement | null,
+  );
 }
 
 function captureZoomAnchor(clientX: number, clientY: number): XlsxZoomAnchor | null {
@@ -3672,6 +3935,26 @@ onUnmounted(() => {
   z-index: 20;
 }
 .xlsx-grid__axis-menu-trigger:hover { background: rgba(113, 113, 122, .2); border-radius: 3px; color: #18181b; }
+.xlsx-grid__autofilter-trigger {
+  align-items: center;
+  background: rgba(255, 255, 255, .85);
+  border: 1px solid rgba(113, 113, 122, .35);
+  border-radius: 3px;
+  color: #52525b;
+  cursor: pointer;
+  display: flex;
+  font-size: 9px;
+  height: 14px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  pointer-events: auto;
+  position: absolute;
+  width: 14px;
+  z-index: 21;
+}
+.xlsx-grid__autofilter-trigger:hover { background: #e4e4e7; color: #18181b; }
+.xlsx-grid__autofilter-trigger--active { border-color: #2563eb; color: #1d4ed8; }
 .xlsx-grid__validation-alert { align-items: flex-start; border: 1px solid #f87171; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.18); color: #7f1d1d; display: flex; flex-direction: column; gap: 3px; max-width: 300px; min-width: 170px; padding: 7px 24px 7px 10px; pointer-events: auto; position: absolute; white-space: pre-wrap; z-index: 34; }
 .xlsx-grid__validation-alert strong { font-size: 11px; }
 .xlsx-grid__validation-alert span { font-size: 12px; line-height: 1.45; }

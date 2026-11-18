@@ -1,4 +1,5 @@
 import type {
+  XlsxAutoFilterSnapshot,
   XlsxCellNumberFormatInput,
   XlsxCellTextRun,
   XlsxChart,
@@ -64,6 +65,18 @@ type WorkerMessage =
         startRow: number;
         rowCount: number;
       };
+    }
+  | {
+      id: number;
+      type: "getAutoFilterRows";
+      payload: {
+        workbookSheetIndex: number;
+        startRow: number;
+        endRow: number;
+        startCol: number;
+        endCol: number;
+        maxRows: number;
+      };
     };
 
 type WorkerSuccessMessage =
@@ -105,6 +118,11 @@ type WorkerSuccessMessage =
       id: number;
       success: true;
       result: unknown[] | null;
+    }
+  | {
+      id: number;
+      success: true;
+      result: XlsxAutoFilterSnapshot | null;
     };
 
 type WorkerErrorMessage = {
@@ -344,6 +362,25 @@ export class XlsxWorkerClient {
       id: 0,
       payload: { rowCount, startRow, workbookSheetIndex },
       type: "getRowsBatch"
+    }, [], signal);
+  }
+
+  getAutoFilterRows(
+    workbookSheetIndex: number,
+    startRow: number,
+    endRow: number,
+    startCol: number,
+    endCol: number,
+    maxRows = 200_000,
+    signal?: AbortSignal
+  ) {
+    if (signal?.aborted) {
+      return Promise.reject(createAbortError());
+    }
+    return this.request<XlsxAutoFilterSnapshot | null>({
+      id: 0,
+      payload: { endCol, endRow, maxRows, startCol, startRow, workbookSheetIndex },
+      type: "getAutoFilterRows"
     }, [], signal);
   }
 

@@ -26,6 +26,7 @@ import { normalizeTypedDateCells } from "./typed-dates";
 import { trackXlsxWorkbookLifetime } from "./workbook-lifetime";
 import { getSheetsWasmModule, setWasmSource, type WorkerWasmSource } from "./wasm";
 import type {
+  XlsxAutoFilterSnapshot,
   XlsxChart,
   XlsxChartsheet,
   XlsxCellAddress,
@@ -137,6 +138,18 @@ type WorkerRequest =
         startRow: number;
         rowCount: number;
       };
+    }
+  | {
+      id: number;
+      type: "getAutoFilterRows";
+      payload: {
+        workbookSheetIndex: number;
+        startRow: number;
+        endRow: number;
+        startCol: number;
+        endCol: number;
+        maxRows: number;
+      };
     };
 
 type WorkerSuccessResponse = {
@@ -166,6 +179,7 @@ type WorkerSuccessResponse = {
         runs?: XlsxCellTextRun[];
       }
     | unknown[]
+    | XlsxAutoFilterSnapshot
     | null;
 };
 
@@ -559,6 +573,7 @@ function buildSheetList(
     const usedRange = worksheet.usedRange() as [number, number, number, number] | null;
     if (!usedRange) {
       sheetsByWorkbookSheetIndex.push({
+        autoFilterRanges: sheetState?.autoFilterRanges ?? [],
         cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
         columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
         colCount: 0,
@@ -628,6 +643,7 @@ function buildSheetList(
     }
 
     sheetsByWorkbookSheetIndex.push({
+      autoFilterRanges: sheetState?.autoFilterRanges ?? [],
       cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
       columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
       colCount: visibleCols.length,
@@ -1173,6 +1189,36 @@ function executeRequest(message: WorkerRequest, isSuperseded: () => boolean): Wo
           includeStyles: true,
           useFormattedValues: true
         }) as unknown[] | null;
+      } finally {
+        worksheet.free();
+      }
+    }
+    case "getAutoFilterRows": {
+      if (!workbook) {
+        return null;
+      }
+      const { endCol, endRow, maxRows, startCol, startRow, workbookSheetIndex } = message.payload;
+      const targetSheet = sheets.find((sheet) => sheet.workbookSheetIndex === workbookSheetIndex) ?? null;
+      const worksheet = workbook.getSheet(workbookSheetIndex);
+      try {
+        const columnCount = Math.max(1, endCol - startCol + 1);
+        // A transferable snapshot must stay bounded even when the caller asks
+        // for many rows: 250k cells is already a very large filter menu.
+        const rowLimit = Math.min(maxRows, Math.floor(250_000 / columnCount));
+        const rows: XlsxAutoFilterSnapshot["rows"] = [];
+        let truncated = false;
+        for (let row = startRow; row <= endRow; row += 1) {
+          if (rows.length >= rowLimit) {
+            truncated = true;
+            break;
+          }
+          const values: string[] = [];
+          for (let col = startCol; col <= endCol; col += 1) {
+            values.push(getCellDisplayValue(worksheet, row, col, targetSheet));
+          }
+          rows.push({ row, values });
+        }
+        return { rows, truncated };
       } finally {
         worksheet.free();
       }
