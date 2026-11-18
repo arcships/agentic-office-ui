@@ -350,6 +350,21 @@ export interface XlsxPrintPageGrid {
   cells: XlsxPrintPageGridCell[];
 }
 
+/**
+ * Why Excel would reject a worksheet name.
+ *
+ * `empty` means the trimmed name has no characters, `too-long` means it
+ * exceeds 31 code points, `invalid-characters` covers `\ / : * ? [ ]`,
+ * `apostrophe` covers a leading or trailing apostrophe, and `duplicate` means
+ * another worksheet or chartsheet already uses the name (case-insensitively).
+ */
+export type XlsxSheetNameIssue =
+  | "apostrophe"
+  | "duplicate"
+  | "empty"
+  | "invalid-characters"
+  | "too-long";
+
 // ── Sheet data ───────────────────────────────────────────────────────────
 
 export interface XlsxSheetData {
@@ -1550,6 +1565,41 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
   zoomScale: number;
   getActiveWorksheet: () => Worksheet | null;
   addSheet: (name?: string) => void;
+  /**
+   * Renames a worksheet, the way Excel's tab rename does.
+   *
+   * The name is validated first (trimmed, non-empty, at most 31 characters, no
+   * `[ ] : * ? / \\`, no leading or trailing apostrophe, unique across
+   * worksheets and chartsheets ignoring case) and the workbook is left
+   * untouched when a rule fails. A successful rename keeps worksheet order, so
+   * `activeSheetIndex` and `activeTabIndex` do not move; it is one undo entry
+   * and is written into exported XLSX bytes.
+   *
+   * `@dukelib/sheets-wasm` has no rename setter, so the viewer rewrites the
+   * worksheet name and every reference to it in its saved workbook and parses
+   * the result back into the workbook model.
+   *
+   * @param index Zero-based visible sheet index, as used by `sheets`,
+   *   `activeSheetIndex` and `setActiveSheetIndex`.
+   * @param name New worksheet name. Surrounding whitespace is trimmed.
+   * @returns `true` when the sheet was renamed; `false` when the name is
+   *   rejected, the index does not name a worksheet, or the viewer is
+   *   read-only. Sheet protection does not block a rename, matching Excel.
+   */
+  renameSheet: (index: number, name: string) => boolean;
+  /** Renames the active worksheet; see `renameSheet`. */
+  renameActiveSheet: (name: string) => boolean;
+  /**
+   * Reports why Excel would reject a worksheet name before it is committed.
+   *
+   * Inline rename inputs use this for live validation. The sheet at `index` is
+   * left out of the uniqueness check so a case-only rename stays possible.
+   *
+   * @param name Candidate name, as typed.
+   * @param index Visible sheet index being renamed, when known.
+   * @returns The first broken rule, or `null` when the name is acceptable.
+   */
+  getSheetNameError: (name: string, index?: number) => XlsxSheetNameIssue | null;
 }
 
 // ── Sub-controller interfaces ────────────────────────────────────────────
@@ -1579,6 +1629,12 @@ export interface XlsxViewerZoom {
 
 export interface XlsxViewerEditing {
   addSheet: (name?: string) => void;
+  /** Renames a worksheet; see `XlsxViewerController.renameSheet`. */
+  renameSheet: (index: number, name: string) => boolean;
+  /** Renames the active worksheet; see `XlsxViewerController.renameSheet`. */
+  renameActiveSheet: (name: string) => boolean;
+  /** Explains why a worksheet name is rejected; `null` when it is acceptable. */
+  getSheetNameError: (name: string, index?: number) => XlsxSheetNameIssue | null;
   canRedo: boolean;
   canUndo: boolean;
   clearSelectedCells: () => void;

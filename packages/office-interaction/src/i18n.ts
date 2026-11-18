@@ -573,6 +573,13 @@ export interface OfficeXlsxMessages {
     add: string
     remove: string
     defaultName: string
+    rename: string
+    renameLabel: string
+    renameEmpty: string
+    renameTooLong: string
+    renameDuplicate: string
+    renameApostrophe: string
+    renameFailed: string
   }
   contextMenu: {
     label: string
@@ -1574,6 +1581,13 @@ export const officeMessagesEn: OfficeMessages = {
       add: "Add sheet",
       remove: "Delete sheet",
       defaultName: "Sheet",
+      rename: "Rename",
+      renameLabel: "Sheet name",
+      renameEmpty: "Enter a sheet name.",
+      renameTooLong: "Sheet names cannot be longer than 31 characters.",
+      renameDuplicate: "A sheet with that name already exists.",
+      renameApostrophe: "Sheet names cannot start or end with an apostrophe.",
+      renameFailed: "The sheet could not be renamed.",
     },
     contextMenu: {
       label: "Cell menu",
@@ -2521,6 +2535,13 @@ export const officeMessagesZhCN: OfficeMessages = {
       add: "添加工作表",
       remove: "删除当前工作表",
       defaultName: "工作表",
+      rename: "重命名",
+      renameLabel: "工作表名称",
+      renameEmpty: "请输入工作表名称。",
+      renameTooLong: "工作表名称不能超过 31 个字符。",
+      renameDuplicate: "已存在同名工作表。",
+      renameApostrophe: "工作表名称不能以撇号开头或结尾。",
+      renameFailed: "无法重命名该工作表。",
     },
     contextMenu: {
       label: "单元格菜单",

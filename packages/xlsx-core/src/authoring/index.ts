@@ -47,5 +47,11 @@ export type {
   XlsxStructureAxis,
   XlsxStructureChange,
 } from "./sheet-structure";
+export {
+  XLSX_MAX_SHEET_NAME_LENGTH,
+  applyWorkbookSheetRename,
+  renameSheetInFormula,
+  validateWorksheetName,
+} from "./sheet-rename";
 export type { XlsxConditionalFormatDraft } from "../types";
 export { mergeWorkbookSheetAuthoringAssets } from "./sheet-merge";
