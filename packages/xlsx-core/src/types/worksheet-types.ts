@@ -458,7 +458,6 @@ export type XlsxSheetNameIssue =
 export interface XlsxSheetData {
   cachedFormulaValues: Record<string, string>;
   /**
-<<<<<<< HEAD
    * Rotation and shrink-to-fit alignment of cells whose style overrides the
    * row/column alignment, keyed by A1 address.
    *
@@ -467,13 +466,12 @@ export interface XlsxSheetData {
    * out rotated headers and long values without reading the workbook again.
    */
   cellTextLayouts?: Record<string, { shrinkToFit?: boolean; textRotation?: number }>;
-=======
+  /**
    * AutoFilter ranges of the sheet, composed from the worksheet's own
    * `<autoFilter>` and every table part's filter. Empty when the sheet has no
    * filter or when the viewer skipped XML parsing.
    */
   autoFilterRanges?: XlsxAutoFilterRange[];
->>>>>>> fix/133
   /**
    * Rich-text runs of every cell that stores more than one formatted run,
    * keyed by A1 address. Cells without an entry render their plain `value`.
