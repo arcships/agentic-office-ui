@@ -159,6 +159,8 @@ const suites = {
       "tests/unit/pptx-reference-adapter.test.mjs",
       "tests/unit/pptx-rtl.test.mjs",
       "tests/unit/pptx-hyperlinks.test.mjs",
+      "tests/unit/pptx-speaker-notes.test.mjs",
+      "tests/unit/pptx-transitions.test.mjs",
       "tests/unit/core-purity.test.mjs",
     ]),
     command("core-boundary", process.execPath, [
@@ -270,6 +272,7 @@ const suites = {
       "tests/component/pdf-view-modes.test.mjs",
       "tests/component/pdf-navigation-aids.test.mjs",
       "tests/component/pptx-slide-sorter.test.mjs",
+      "tests/component/pptx-presenter-view.test.mjs",
       "tests/component/docx-notes.test.mjs",
       "tests/component/docx-history-budget.test.mjs",
       "tests/component/docx-edit-clone-sharing.test.mjs",

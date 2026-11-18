@@ -503,11 +503,13 @@ export function createPptxPlaybackController(
         slideIndex = index
         prepareCurrentSlide()
         const targetSlide = host.document.slides[index]
-        const transitionKind = targetSlide.transition?.kind.toLowerCase()
-        const executableTransition = transitionKind && isPptxTransitionExecutable(
-          transitionKind,
-          options.approximation ?? "off",
-        ) ? targetSlide.transition : undefined
+        const transitionKind = targetSlide.transition?.kind
+        // Strict kinds always run; approximate and unknown kinds need the
+        // caller's `approximation: "safe"` opt-in. `mountPptxTransition` turns a
+        // `cut` into no layer at all, which is the hard cut this replaced.
+        const executableTransition = isPptxTransitionExecutable(transitionKind, options.approximation)
+          ? targetSlide.transition
+          : undefined
         const transition = mountPptxTransition(
           host.root,
           capture,

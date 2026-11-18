@@ -5,6 +5,7 @@
     :class="{
       'pptx-viewer--dark': isDark,
       'pptx-viewer--present': isPresent,
+      'pptx-viewer--presenter': presenterVisible,
     }"
     :style="rootStyle"
     :data-state="state"
@@ -233,6 +234,15 @@
           aria-hidden="true"
         />
       </div>
+      <PptxPresenterPanel
+        v-if="presenterVisible"
+        class="pptx-viewer__presenter"
+        :session="pptxDocument.getSession()"
+        :slide="activeSlide"
+        :next-slide="nextSlide"
+        :present="isPresent"
+        :running="isPresent && state === 'ready'"
+      />
     </div>
 
     <div
@@ -360,6 +370,7 @@ import {
 } from "./composables/thumbnail-observer"
 import PptxStage from "./PptxStage.vue"
 import PptxThumbnail from "./PptxThumbnail.vue"
+import PptxPresenterPanel from "./PptxPresenterPanel.vue"
 
 const props = withDefaults(defineProps<{
   source?: PptxPreviewSource | null
@@ -379,6 +390,7 @@ const props = withDefaults(defineProps<{
   openTimeoutMs?: number
   showCapabilityStatus?: boolean
   showHiddenSlides?: boolean
+  showNotes?: boolean
   showPlaybackControls?: boolean
   showSearch?: boolean
   showSidebar?: boolean
@@ -415,6 +427,7 @@ const props = withDefaults(defineProps<{
   openTimeoutMs: 30_000,
   showCapabilityStatus: true,
   showHiddenSlides: false,
+  showNotes: false,
   showPlaybackControls: true,
   showSearch: true,
   showSidebar: true,
@@ -764,6 +777,22 @@ const canGoNext = computed(() =>
   && document.value !== null
   && activeIndex.value < document.value.slides.length - 1,
 )
+
+// ── Speaker notes and presenter view ────────────────────────────────
+// `showNotes` mounts the presenter rail: notes for the current slide in browse
+// mode, plus the next-slide preview and the elapsed clock in present mode.
+const presenterVisible = computed(() =>
+  props.showNotes && state.value === "ready" && !isSorter.value)
+const nextSlide = computed(() => {
+  const slides = document.value?.slides
+  if (!slides) return null
+  const skipHidden = !props.showHiddenSlides
+  for (let index = activeIndex.value + 1; index < slides.length; index += 1) {
+    const candidate = slides[index]
+    if (!skipHidden || !candidate.hidden) return candidate
+  }
+  return null
+})
 
 // Sidebar virtualization: keep the mounted thumbnail count proportional to the
 // visible rows instead of the deck length.

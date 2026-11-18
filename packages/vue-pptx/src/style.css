@@ -288,6 +288,31 @@
   white-space: nowrap;
 }
 
+/* Presenter rail: speaker notes in browse mode, plus next slide and clock in present mode. */
+.pptx-viewer__presenter {
+  background: var(--pptx-panel);
+  border-left: 1px solid var(--pptx-border);
+  color: var(--pptx-text);
+  display: flex;
+  flex: 0 0 300px;
+  flex-direction: column;
+  gap: 12px;
+  max-inline-size: 40cqw;
+  min-width: 0;
+  overflow: auto;
+  padding: 12px;
+}
+.pptx-presenter__meta { display: flex; flex-direction: column; gap: 6px; }
+.pptx-presenter__label { color: var(--pptx-muted); font-size: 11px; letter-spacing: 0.04em; margin: 0; text-transform: uppercase; }
+.pptx-presenter__next { pointer-events: none; }
+.pptx-presenter__timer { color: var(--pptx-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.pptx-presenter__body { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.pptx-presenter__paragraph { font-size: 14px; line-height: 1.5; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.pptx-presenter__empty { color: var(--pptx-muted); font-size: 13px; margin: 0; }
+@container pptx-viewer (max-width: 720px) {
+  .pptx-viewer__presenter { flex-basis: 200px; max-inline-size: 50cqw; padding: 8px; }
+}
+
 .pptx-thumbnail {
   background: transparent;
   border: 1px solid transparent;

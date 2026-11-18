@@ -232,7 +232,10 @@ export interface PptxSlideTransitionSound {
 
 export interface PptxSlideTransition {
   kind: string
+  /** `<p:* dir>`: the edge the new slide enters from, or `in`/`out` for `split`. */
   direction?: string
+  /** `<p:* orient>`: the split line of `split`, `horz` or `vert`. */
+  orientation?: string
   option?: string
   durationMs: number
   advanceOnClick: boolean
