@@ -2,11 +2,16 @@
 //
 // Extracted from useDocxEditor.ts.
 
-import type { DocModel } from "@arcships/docx-core"
+import type {
+  DocModel,
+  DocxExportProgress,
+  DocxFormFieldLocation,
+} from "@arcships/docx-core"
 import {
   cloneDocModel,
   collectFormFieldsFromModel,
   createDocxRuntime,
+  DocxExportError,
   exportDocxBuffer,
   primeCommentAnchors,
 } from "@arcships/docx-core"
@@ -19,25 +24,66 @@ import {
   isSupportedDocxFileName,
 } from "./docx-file-types"
 
+type EditorExportFailureReason = "not-ready" | "required-field"
+
+/**
+ * Controller-level refusal that still carries the reason `exportDocx()` needs
+ * to choose the matching localized status message. Public callers see the
+ * `DocxExportError` shape with `code: "EXPORT_FAILED"`.
+ */
+class EditorExportError extends DocxExportError {
+  readonly reason: EditorExportFailureReason
+  readonly location?: DocxFormFieldLocation
+  readonly label?: string
+
+  constructor(
+    reason: EditorExportFailureReason,
+    message: string,
+    details: { location?: DocxFormFieldLocation; label?: string } = {},
+  ) {
+    super("EXPORT_FAILED", message)
+    this.reason = reason
+    this.location = details.location
+    this.label = details.label
+  }
+}
+
+/** Cancellation/progress hooks used internally by `exportDocx()`. */
+interface GetDocxBytesOptions {
+  signal?: AbortSignal
+  onProgress?: (progress: DocxExportProgress) => void
+  /** Internal: `exportDocx()` already prepared and validated this model. */
+  preparedModel?: DocModel
+}
+
+interface ExportTask {
+  documentLoadNonce: number
+  model: DocModel
+  controller: AbortController
+  cancelExternal?: () => void
+  anchor?: HTMLAnchorElement
+  objectUrl?: string
+  cleanupTimer?: ReturnType<typeof setTimeout>
+  delivered: boolean
+  cleaned: boolean
+}
+
+/** One `exportDocx()` invocation; invalidated when a newer export starts. */
+interface ExportRequest {
+  controller: AbortController
+}
+
 export function createEditorImportExport(ctx: EditorCore) {
   const runtime = createDocxRuntime()
   const loader = runtime.createLoader()
   let activeImport: symbol | undefined
-  let activeExportToken: symbol | undefined
-
-  interface ExportTask {
-    token: symbol
-    documentLoadNonce: number
-    model: DocModel
-    anchor?: HTMLAnchorElement
-    objectUrl?: string
-    cleanupTimer?: ReturnType<typeof setTimeout>
-    cancelExport?: () => void
-    delivered: boolean
-    cleaned: boolean
-  }
-
+  let activeExportRequest: ExportRequest | undefined
   let activeExport: ExportTask | undefined
+  const pendingByteTasks = new Set<ExportTask>()
+  // Applying the pending export transformer replaces the model as part of
+  // preparing the export, not as a user edit. Let the export proceed instead of
+  // invalidating it through the model watcher.
+  let preparingExport = false
 
   // New / Import / close all discard unsaved edits. Use the host's native
   // confirmation when one is available; do not block in non-browser contexts.
@@ -61,12 +107,14 @@ export function createEditorImportExport(ctx: EditorCore) {
   const cleanupExportTask = (task: ExportTask): void => {
     if (task.cleaned) return
     task.cleaned = true
+    pendingByteTasks.delete(task)
+    task.controller.abort()
 
-    const cancelExport = task.cancelExport
-    task.cancelExport = undefined
-    if (cancelExport) {
+    const cancelExternal = task.cancelExternal
+    task.cancelExternal = undefined
+    if (cancelExternal) {
       try {
-        cancelExport()
+        cancelExternal()
       } catch {
         // Cancellation must not prevent the remaining resource cleanup.
       }
@@ -108,20 +156,51 @@ export function createEditorImportExport(ctx: EditorCore) {
   }
 
   const invalidateExport = (reason?: "document-changed"): void => {
-    const task = activeExport
-    activeExportToken = undefined
-    if (task) {
-      const wasPending = !task.delivered
+    const tasks = new Set(pendingByteTasks)
+    if (activeExport) tasks.add(activeExport)
+    const wasPending = activeExportRequest !== undefined ||
+      [...tasks].some((task) => !task.delivered)
+
+    for (const task of tasks) {
       cleanupExportTask(task)
-      if (reason === "document-changed" && wasPending) {
-        ctx.status.value = ctx.statusMessage("exportCancelledChanged")
-      }
+    }
+
+    const request = activeExportRequest
+    activeExportRequest = undefined
+    request?.controller.abort()
+
+    if (reason === "document-changed" && wasPending) {
+      ctx.status.value = ctx.statusMessage("exportCancelledChanged")
     }
   }
 
+  /** Cancel the previous download request without touching `getDocxBytes()` readers. */
+  const invalidateDownload = (): void => {
+    const request = activeExportRequest
+    activeExportRequest = undefined
+    request?.controller.abort()
+
+    const task = activeExport
+    if (task) cleanupExportTask(task)
+  }
+
+  const isCurrentByteTask = (task: ExportTask): boolean => (
+    pendingByteTasks.has(task) &&
+    !task.cleaned &&
+    !task.controller.signal.aborted &&
+    ctx.documentLoadNonce.value === task.documentLoadNonce &&
+    ctx.model.value === task.model
+  )
+
+  const isCurrentExportRequest = (request: ExportRequest): boolean => (
+    activeExportRequest === request &&
+    !request.controller.signal.aborted
+  )
+
   const isCurrentExport = (task: ExportTask): boolean => (
     activeExport === task &&
-    activeExportToken === task.token &&
+    !task.cleaned &&
+    !task.controller.signal.aborted &&
     ctx.documentLoadNonce.value === task.documentLoadNonce &&
     ctx.model.value === task.model
   )
@@ -131,7 +210,10 @@ export function createEditorImportExport(ctx: EditorCore) {
   // Tell the user why the export they requested produced no file.
   watch(
     [ctx.model, ctx.documentLoadNonce],
-    () => invalidateExport("document-changed"),
+    () => {
+      if (preparingExport) return
+      invalidateExport("document-changed")
+    },
     { flush: "sync" },
   )
 
@@ -239,6 +321,140 @@ export function createEditorImportExport(ctx: EditorCore) {
     runtime.dispose()
   })
 
+  // ── shared export preparation / serialization ────────────────────
+  const prepareExportModel = (): DocModel => {
+    // Exporting the starter model while an import is still parsing would save
+    // the wrong document and race the load completion.
+    if (ctx.isImporting.value || activeImport !== undefined) {
+      throw new EditorExportError("not-ready", ctx.statusMessage("exportNotReady"))
+    }
+
+    // contentEditable hosts buffer keystrokes in local drafts; commit them
+    // before reading the model so Ctrl+S never drops the last edit.
+    ctx.flushTextDrafts()
+
+    preparingExport = true
+    try {
+      const sourceModel = ctx.model.value
+      const transformer = ctx.pendingExportModelTransformer.value
+      const exportModel = transformer ? transformer(sourceModel) : sourceModel
+      if (exportModel !== sourceModel) {
+        // The synchronous watcher is suppressed while preparing; the new model
+        // is the one this export serializes.
+        ctx.model.value = exportModel
+        // Vue exposes a reactive proxy through the ref; cancellation compares
+        // model identity, so serialize and track the proxy the editor exposes.
+        return ctx.model.value
+      }
+      return exportModel
+    } catch (error) {
+      throw error instanceof Error ? error : new Error(ctx.statusMessage("unknownExportError"))
+    } finally {
+      preparingExport = false
+    }
+  }
+
+  const validateExportModel = (exportModel: DocModel): void => {
+    const invalidRequiredField = collectFormFieldsFromModel(exportModel).find(
+      ({ field }) => isRequiredFormFieldEmpty(field)
+    )
+    if (!invalidRequiredField) return
+
+    const label =
+      invalidRequiredField.field.widget?.name?.trim() ||
+      invalidRequiredField.field.title?.trim() ||
+      invalidRequiredField.field.tag?.trim()
+    throw new EditorExportError(
+      "required-field",
+      label
+        ? ctx.statusMessage("exportRequiredField", { label })
+        : ctx.statusMessage("exportRequiredFieldEmpty"),
+      { location: invalidRequiredField.location, label },
+    )
+  }
+
+  /** Map a preparation/serialization failure to the editor's status message. */
+  const reportExportFailure = (error: unknown): void => {
+    if (error instanceof EditorExportError && error.reason === "not-ready") {
+      ctx.status.value = error.message
+      return
+    }
+    if (error instanceof EditorExportError && error.reason === "required-field") {
+      if (error.location) ctx.selectedFormFieldLocation.value = error.location
+      ctx.status.value = error.label
+        ? ctx.statusMessage("exportRequiredField", { label: error.label })
+        : ctx.statusMessage("exportRequiredFieldEmpty")
+      return
+    }
+
+    const err = error instanceof Error ? error : new Error(ctx.statusMessage("unknownExportError"))
+    ctx.status.value = ctx.statusMessage("exportFailed", { message: err.message })
+  }
+
+  const createByteTask = (
+    exportModel: DocModel,
+    options: GetDocxBytesOptions,
+  ): ExportTask => {
+    const task: ExportTask = {
+      documentLoadNonce: ctx.documentLoadNonce.value,
+      model: exportModel,
+      controller: new AbortController(),
+      delivered: false,
+      cleaned: false,
+    }
+
+    const externalSignal = options.signal
+    if (externalSignal) {
+      const abort = (): void => task.controller.abort()
+      if (externalSignal.aborted) {
+        task.controller.abort()
+      } else {
+        externalSignal.addEventListener("abort", abort, { once: true })
+        task.cancelExternal = () => externalSignal.removeEventListener("abort", abort)
+      }
+    }
+
+    pendingByteTasks.add(task)
+    return task
+  }
+
+  // ── getDocxBytes / getDocxBlob ───────────────────────────────────
+  // The public controller methods take no options; `exportDocx()` passes an
+  // internal request signal and progress callback so both share one path.
+  const getDocxBytes = async (
+    options: GetDocxBytesOptions = {},
+  ): Promise<ArrayBuffer> => {
+    const exportModel = options.preparedModel ?? prepareExportModel()
+    validateExportModel(exportModel)
+
+    const basePackage = ctx.basePackage.value
+    const task = createByteTask(exportModel, options)
+    try {
+      const output = await exportDocxBuffer(exportModel, basePackage, {
+        signal: task.controller.signal,
+        limits: runtime.limits,
+        onProgress: (progress) => {
+          if (!isCurrentByteTask(task)) return
+          options.onProgress?.(progress)
+        },
+      })
+      if (!isCurrentByteTask(task)) {
+        throw new DocxExportError("ABORTED", "DOCX export was aborted")
+      }
+      return output
+    } finally {
+      cleanupExportTask(task)
+    }
+  }
+
+  const getDocxBlob = async (
+    options: GetDocxBytesOptions = {},
+  ): Promise<Blob> => {
+    const fileName = ctx.fileName.value
+    const bytes = await getDocxBytes(options)
+    return new Blob([bytes], { type: docxExportMimeType(fileName) })
+  }
+
   // ── exportDocx ───────────────────────────────────────────────────
   const exportDocx = (): void => {
     // Exporting the starter model while an import is still parsing would save
@@ -248,73 +464,37 @@ export function createEditorImportExport(ctx: EditorCore) {
       return
     }
 
-    // contentEditable hosts buffer keystrokes in local drafts; commit them
-    // before reading the model so Ctrl+S never drops the last edit.
-    ctx.flushTextDrafts()
-    invalidateExport()
+    invalidateDownload()
 
     let exportModel: DocModel
     try {
-      const sourceModel = ctx.model.value
-      const transformer = ctx.pendingExportModelTransformer.value
-      exportModel = transformer ? transformer(sourceModel) : sourceModel
-      if (exportModel !== sourceModel) {
-        // The synchronous watcher runs before the new export task is created.
-        ctx.model.value = exportModel
-      }
+      exportModel = prepareExportModel()
+      validateExportModel(exportModel)
     } catch (error) {
-      const err = error instanceof Error ? error : new Error(ctx.statusMessage("unknownExportError"))
-      ctx.status.value = ctx.statusMessage("exportFailed", { message: err.message })
+      reportExportFailure(error)
       return
     }
 
-    const invalidRequiredField = collectFormFieldsFromModel(exportModel).find(
-      ({ field }) => isRequiredFormFieldEmpty(field)
-    )
-    if (invalidRequiredField) {
-      ctx.selectedFormFieldLocation.value = invalidRequiredField.location
-      const label =
-        invalidRequiredField.field.widget?.name?.trim() ||
-        invalidRequiredField.field.title?.trim() ||
-        invalidRequiredField.field.tag?.trim()
-      ctx.status.value = label
-        ? ctx.statusMessage("exportRequiredField", { label })
-        : ctx.statusMessage("exportRequiredFieldEmpty")
-      return
+    const request: ExportRequest = {
+      controller: new AbortController(),
     }
-
-    const token = Symbol("docx-export")
-    const exportController = new AbortController()
-    const task: ExportTask = {
-      token,
-      documentLoadNonce: ctx.documentLoadNonce.value,
-      model: exportModel,
-      cancelExport: () => exportController.abort(),
-      delivered: false,
-      cleaned: false,
-    }
-    const fileName = ctx.fileName.value
-    const basePackage = ctx.basePackage.value
-    const exportFileName = docxExportFileName(fileName)
-    const exportMimeType = docxExportMimeType(fileName)
-    activeExportToken = token
-    activeExport = task
+    activeExportRequest = request
+    const exportFileName = docxExportFileName(ctx.fileName.value)
+    const exportMimeType = docxExportMimeType(ctx.fileName.value)
+    let downloadTask: ExportTask | undefined
 
     ctx.status.value = ctx.statusMessage("exporting")
     ;(async () => {
       try {
-        const output = await exportDocxBuffer(exportModel, basePackage, {
-          signal: exportController.signal,
-          limits: runtime.limits,
+        const output = await getDocxBytes({
+          preparedModel: exportModel,
+          signal: request.controller.signal,
           onProgress: (progress) => {
-            if (!isCurrentExport(task)) return
+            if (!isCurrentExportRequest(request)) return
             ctx.status.value = ctx.statusMessage("exportingPhase", { phase: progress.phase })
           },
         })
-        if (!isCurrentExport(task)) {
-          cleanupExportTask(task)
-          return
-        }
+        if (!isCurrentExportRequest(request)) return
 
         // Confirm every required DOM capability before creating an object URL.
         const ownerDocument = globalThis.document
@@ -333,6 +513,16 @@ export function createEditorImportExport(ctx: EditorCore) {
           throw new Error("object URL API unavailable")
         }
 
+        downloadTask = {
+          documentLoadNonce: ctx.documentLoadNonce.value,
+          model: ctx.model.value,
+          controller: new AbortController(),
+          delivered: false,
+          cleaned: false,
+        }
+        activeExport = downloadTask
+        const task = downloadTask
+
         const blob = new Blob([output], {
           type: exportMimeType,
         })
@@ -348,17 +538,19 @@ export function createEditorImportExport(ctx: EditorCore) {
 
         if (!isCurrentExport(task)) {
           cleanupExportTask(task)
+          if (activeExportRequest === request) activeExportRequest = undefined
           return
         }
-        ctx.cleanModel.value = exportModel
+        activeExportRequest = undefined
+        ctx.cleanModel.value = task.model
         ctx.status.value = ctx.statusMessage("exported")
       } catch (error) {
-        const shouldReport = isCurrentExport(task)
-        cleanupExportTask(task)
+        const shouldReport = isCurrentExportRequest(request)
+        if (shouldReport) activeExportRequest = undefined
+        if (downloadTask) cleanupExportTask(downloadTask)
         if (!shouldReport) return
-        activeExportToken = undefined
-        const err = error instanceof Error ? error : new Error(ctx.statusMessage("unknownExportError"))
-        ctx.status.value = ctx.statusMessage("exportFailed", { message: err.message })
+
+        reportExportFailure(error)
       }
     })()
   }
@@ -368,5 +560,7 @@ export function createEditorImportExport(ctx: EditorCore) {
     newDocument,
     importDocxFile,
     exportDocx,
+    getDocxBytes,
+    getDocxBlob,
   }
 }

@@ -27,6 +27,16 @@ const editor = useDocxEditor({ initialFileName: "document.docx" })
 
 只读自定义界面优先使用 `DocxViewer` 的属性和事件。需要从字节得到模型但不显示界面时使用 `useDocxModel()`。
 
+需要保存到服务器或比较两次编辑结果时，不要让宿主拦截浏览器下载：
+
+```ts
+const bytes = await editor.getDocxBytes()          // ArrayBuffer，内容与导出文件相同
+const blob = await editor.getDocxBlob()            // 带当前容器 MIME 类型的 Blob
+await fetch(`/api/documents/${id}`, { method: "PUT", body: bytes })
+```
+
+两者复用 `exportDocx()` 的序列化、`basePackage` 和必填表单校验，文档在序列化期间被替换时会以 `DocxExportError`（`ABORTED`）拒绝；`exportDocx()` 本身也走同一条路径，只是最后多创建一次下载链接，并在更新的导出开始时取消上一次待处理请求。
+
 需要自建查找替换界面时，控制器的两个命令足以完成全部操作：
 
 | 命令 | 说明 |

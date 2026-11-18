@@ -255,6 +255,17 @@ export interface DocxEditorController {
   importDocxFile: (file: File) => Promise<void>;
   newDocument: () => void;
   exportDocx: () => void;
+  /**
+   * Serializes the current document to DOCX bytes without downloading them.
+   *
+   * Uses the same pending-export transformer, base package and required-field
+   * validation as `exportDocx()`. Rejects with a `DocxExportError` (`ABORTED`)
+   * when the document is replaced or the editor is disposed; an `exportDocx()`
+   * request is also aborted when a newer export starts.
+   */
+  getDocxBytes: () => Promise<ArrayBuffer>;
+  /** Serializes the current document to a DOCX `Blob` without downloading. */
+  getDocxBlob: () => Promise<Blob>;
   undo: () => void;
   redo: () => void;
   setHeading: (heading?: HeadingLevel) => void;
