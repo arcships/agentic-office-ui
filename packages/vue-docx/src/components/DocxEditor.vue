@@ -141,8 +141,12 @@ const props = withDefaults(
     isDark?: boolean
     locale?: OfficeLocale
     messages?: OfficeMessagesOverride
+    /** Author name stored on comments created in this editor. */
+    commentAuthor?: string
+    /** Comment initials; derived from `commentAuthor` when omitted. */
+    commentInitials?: string
   }>(),
-  { editable: true, showToolbar: true, showThumbnails: false, minHeight: undefined, isDark: false, locale: "en", messages: undefined }
+  { editable: true, showToolbar: true, showThumbnails: false, minHeight: undefined, isDark: false, locale: "en", messages: undefined, commentAuthor: undefined, commentInitials: undefined }
 )
 
 const emit = defineEmits<{
@@ -158,6 +162,8 @@ const internalController = !props.editor
       starterModel: props.model,
       initialFileName: props.file ? m.value.docx.editor.importedDocument : m.value.docx.editor.newDocument,
       statusMessages: () => m.value.docx.editor.status,
+      commentAuthor: props.commentAuthor ?? m.value.docx.editor.commentAuthor,
+      commentInitials: props.commentInitials,
     })
   : null
 const controller = props.editor ?? internalController!

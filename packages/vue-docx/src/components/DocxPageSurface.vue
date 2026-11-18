@@ -198,9 +198,16 @@
       :active-annotation-id="activeAnnotationId"
       :drawer-mode="annotationDrawerMode"
       :decidable="editable && Boolean(controller)"
+      :comment-actions="editable && Boolean(controller)"
+      :composer="pageCommentComposer"
       @activate="activateAnnotation($event, { scrollToAnchor: true })"
       @card-height="reportGutterCardHeight"
       @decide="onGutterDecide"
+      @reply="onGutterCommentReply"
+      @resolve="onGutterCommentResolve"
+      @delete="onGutterCommentDelete"
+      @composer-submit="onGutterComposerSubmit"
+      @composer-cancel="onGutterComposerCancel"
     />
   </div>
 </template>
@@ -487,6 +494,59 @@ const pageAnnotations = computed(() =>
 )
 
 const pageMeasuredHeightPx = ref(0)
+
+/**
+ * The inline comment editor when its anchor lives on this page.
+ *
+ * A new comment is placed beside the paragraph its selection starts in; a
+ * reply is placed beside the card of the comment it answers. Other pages get
+ * `undefined` and render no editor.
+ */
+const pageCommentComposer = computed<
+  { mode: "new" | "reply"; commentId?: number } | undefined
+>(() => {
+  const composer = props.controller?.commentComposer
+  if (!composer) return undefined
+
+  if (composer.mode === "reply") {
+    const commentId = composer.commentId
+    if (commentId === undefined) return undefined
+    const onThisPage = pageAnnotations.value.some(
+      (entry) => entry.comment?.commentId === commentId
+    )
+    return onThisPage ? { mode: "reply", commentId } : undefined
+  }
+
+  const anchor = composer.anchor
+  if (!anchor) return undefined
+  const nodeIndex =
+    anchor.kind === "paragraph" ? anchor.nodeIndex : anchor.tableIndex
+  return props.pageNodeSegments.some(
+    (segment) => segment.nodeIndex === nodeIndex
+  )
+    ? { mode: "new" }
+    : undefined
+})
+
+function onGutterCommentReply(commentId: number): void {
+  props.controller?.beginCommentReply(commentId)
+}
+
+function onGutterCommentResolve(commentId: number, resolved: boolean): void {
+  props.controller?.resolveComment(commentId, resolved)
+}
+
+function onGutterCommentDelete(commentId: number): void {
+  props.controller?.deleteComment(commentId)
+}
+
+function onGutterComposerSubmit(text: string): void {
+  props.controller?.submitCommentComposer(text)
+}
+
+function onGutterComposerCancel(): void {
+  props.controller?.cancelCommentComposer()
+}
 
 const {
   positioned: positionedAnnotations,

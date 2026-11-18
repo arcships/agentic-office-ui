@@ -26,6 +26,7 @@ import type {
   DocxListType,
   DocxTrackedChange,
   DocxComment,
+  DocxCommentComposer,
   DocxPaginationInfo,
   ParagraphLocation,
   DocxEditorStatusMessages,
@@ -81,6 +82,8 @@ export interface EditorCore {
   documentTheme: Ref<DocxDocumentTheme>
   showTrackedChanges: Ref<boolean>
   showComments: Ref<boolean>
+  /** Open inline comment editor (new comment or reply), if any. */
+  commentComposer: Ref<DocxCommentComposer | undefined>
   paginationInfo: Ref<DocxPaginationInfo>
   historyRestoreRequest: Ref<DocxHistoryRestoreRequest | undefined>
   basePackage: Ref<OoxmlPackage | undefined>

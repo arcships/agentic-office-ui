@@ -6,6 +6,12 @@ import {
   modelNeedsCommentRangeSerialization
 } from "./comment-range-serialization";
 import {
+  applyCommentsToDocxArchive,
+  applyCommentsToPackage,
+  modelNeedsCommentSerialization,
+  stripOrphanCommentMarkers
+} from "./comment-serialization";
+import {
   applyPreservedSectionBreaksToDocumentXml,
   modelNeedsSectionBreakSerialization
 } from "./section-break-serialization";
@@ -28,6 +34,12 @@ import { mapsToWasmPackage, wasmModelToDocumentXml, wasmSerializeDocx } from "./
  */
 function patchDocumentXml(documentXml: string, model: DocModel): string {
   let patched = documentXml;
+  // A deleted comment leaves its anchors behind in `sourceXml`; they must go
+  // before the range pass re-emits the surviving comments.
+  if (model.metadata.comments !== undefined) {
+    const knownIds = new Set(model.metadata.comments.map((comment) => comment.id));
+    patched = stripOrphanCommentMarkers(patched, knownIds);
+  }
   if (modelNeedsSectionBreakSerialization(model)) {
     patched = applyPreservedSectionBreaksToDocumentXml(patched, model);
   }
@@ -45,6 +57,7 @@ function patchDocumentXml(documentXml: string, model: DocModel): string {
 
 function modelNeedsDocumentXmlPatch(model: DocModel): boolean {
   return (
+    model.metadata.comments !== undefined ||
     modelNeedsSectionBreakSerialization(model) ||
     modelNeedsNoteReferenceSerialization(model) ||
     modelNeedsCommentRangeSerialization(model) ||
@@ -82,7 +95,9 @@ function patchSerializedDocxBytes(
   bytes: ArrayBuffer,
   model: DocModel
 ): ArrayBuffer {
-  if (!modelNeedsDocumentXmlPatch(model)) {
+  const needsDocumentPatch = modelNeedsDocumentXmlPatch(model);
+  const needsComments = modelNeedsCommentSerialization(model);
+  if (!needsDocumentPatch && !needsComments) {
     return bytes;
   }
 
@@ -94,11 +109,15 @@ function patchSerializedDocxBytes(
 
   const documentXml = strFromU8(documentBytes);
   const patchedXml = patchDocumentXml(documentXml, model);
-  if (patchedXml === documentXml) {
+  if (!needsComments && patchedXml === documentXml) {
     return bytes;
   }
 
   archive["word/document.xml"] = strToU8(patchedXml);
+  if (needsComments) {
+    applyCommentsToDocxArchive(archive, model);
+  }
+
   const zipped = zipSync(archive);
   return zipped.buffer.slice(
     zipped.byteOffset,
@@ -126,7 +145,10 @@ export async function serializeDocModel(
     basePackage ? mapsToWasmPackage(basePackage) : undefined
   );
   const { parseDocx } = await import("./ooxml-core");
-  return patchPackageDocumentXml(await parseDocx(bytes), model);
+  return applyCommentsToPackage(
+    patchPackageDocumentXml(await parseDocx(bytes), model),
+    model
+  );
 }
 
 export async function serializeDocx(

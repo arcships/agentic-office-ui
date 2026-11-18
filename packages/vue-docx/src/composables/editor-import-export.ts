@@ -159,6 +159,7 @@ export function createEditorImportExport(ctx: EditorCore) {
     ctx.basePackage.value = undefined
     ctx.selection.value = { kind: "paragraph", nodeIndex: 0 }
     ctx.activeTextRange.value = undefined
+    ctx.commentComposer.value = undefined
     ctx.pendingRunStyle.value = undefined
     ctx.pendingRunStyleSnapshot.value = undefined
     ctx.selectedFormFieldLocation.value = undefined
@@ -209,6 +210,9 @@ export function createEditorImportExport(ctx: EditorCore) {
       ctx.historyRestoreRequest.value = undefined
       ctx.selection.value = { kind: "paragraph", nodeIndex: 0 }
       ctx.activeTextRange.value = undefined
+      // A composer opened for the previous document anchors to a paragraph the
+      // new model may not have.
+      ctx.commentComposer.value = undefined
       ctx.pendingRunStyle.value = undefined
       ctx.pendingRunStyleSnapshot.value = undefined
       ctx.selectedFormFieldLocation.value = undefined

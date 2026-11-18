@@ -58,6 +58,7 @@ import type {
   DocxSelectedFormField,
   DocxFormFieldLocation,
   DocxDocumentTheme,
+  DocxCommentComposer,
   DocxSelectionSessionKind,
   DocxTableCellSelectionRange,
   DocxLineSpacingInfo,
@@ -90,6 +91,7 @@ import { createEditorFormField } from "./editor-form-field"
 import { createEditorList } from "./editor-list"
 import { createEditorClipboard } from "./editor-clipboard"
 import { createEditorImportExport } from "./editor-import-export"
+import { createEditorComments } from "./editor-comments"
 import {
   DEFAULT_DOCX_HISTORY_MAX_BYTES,
   estimateHistoryEntryBytes,
@@ -175,6 +177,7 @@ export function useDocxEditor(
   const documentTheme = ref<DocxDocumentTheme>(options.initialDocumentTheme ?? "light")
   const showTrackedChanges = ref(options.initialShowTrackedChanges ?? false)
   const showComments = ref(options.initialShowComments ?? false)
+  const commentComposer = ref<DocxCommentComposer | undefined>(undefined)
 
   // --- pagination ---
   const paginationInfo = ref<DocxPaginationInfo>({ currentPage: 1, totalPages: 1 })
@@ -529,6 +532,7 @@ export function useDocxEditor(
     statusMessage,
     selectedFormFieldLocation, documentLoadNonce, fileName, initialFileName, importError,
     isImporting, documentTheme, showTrackedChanges, showComments,
+    commentComposer,
     paginationInfo, historyRestoreRequest, basePackage,
     selectionSessionKind, selectionSessionKindInternal, embeddedFontLoadNonce,
 
@@ -617,6 +621,13 @@ export function useDocxEditor(
 
   // 11. editor-import-export
   const ie = createEditorImportExport(ctx)
+
+  // 12. editor-comments (authoring: add/reply/resolve/delete)
+  const cmt = createEditorComments(ctx, applyModelChange, {
+    author: options.commentAuthor ?? officeMessagesEn.docx.editor.commentAuthor,
+    initials: options.commentInitials,
+    clock: options.commentClock ?? (() => new Date()),
+  })
 
   // ═══════════════════════════════════════════════════════════════════
   // Thin wrappers (state accessors + trivial dispatch calls)
@@ -816,6 +827,7 @@ export function useDocxEditor(
     get showTrackedChanges() { return showTrackedChanges.value },
     get comments() { return comments.value },
     get showComments() { return showComments.value },
+    get commentComposer() { return commentComposer.value },
     get currentPage() { return paginationInfo.value.currentPage },
     get totalPages() { return paginationInfo.value.totalPages },
     get hasUnorderedList() { return hasUnorderedList.value },
@@ -830,6 +842,14 @@ export function useDocxEditor(
     setDocumentTheme: setDocumentThemeFn,
     setShowTrackedChanges: setShowTrackedChangesFn,
     setShowComments: setShowCommentsFn,
+    beginComment: cmt.beginComment,
+    beginCommentReply: cmt.beginCommentReply,
+    cancelCommentComposer: cmt.cancelCommentComposer,
+    submitCommentComposer: cmt.submitCommentComposer,
+    addComment: cmt.addComment,
+    replyToComment: cmt.replyToComment,
+    resolveComment: cmt.resolveComment,
+    deleteComment: cmt.deleteComment,
     syncPaginationInfo,
     toggleShowTrackedChanges: toggleShowTrackedChangesFn,
     toggleShowComments: toggleShowCommentsFn,

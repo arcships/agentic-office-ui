@@ -430,13 +430,25 @@
 
     <div class="docx-toolbar-separator" />
 
-    <!-- Insert image + Insert table -->
+    <!-- Insert image + Insert table + New comment -->
     <div class="docx-toolbar-group">
       <button class="docx-toolbar-btn" :title="m.docx.editor.insertImage" @click="onInsertImage">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="m5 18 5-5 3 3 2-2 4 4" /></svg>
       </button>
       <button class="docx-toolbar-btn" :title="m.docx.editor.insertTable" @click="controller.insertTable()">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 10h18M3 15h18M9 4v16M15 4v16" /></svg>
+      </button>
+      <button
+        data-testid="editor-add-comment"
+        type="button"
+        class="docx-toolbar-btn"
+        :class="{ active: Boolean(controller.commentComposer) }"
+        :disabled="readOnly || !canAddComment"
+        :title="m.docx.editor.addCommentTitle"
+        :aria-label="m.docx.editor.addComment"
+        @click="onAddComment"
+      >
+        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8Z" /><path d="M8 11h8M8 15h5" /></svg>
       </button>
     </div>
 
@@ -500,6 +512,15 @@ const emit = defineEmits<{
 }>()
 
 const toolbarTheme = computed(() => props.theme ?? props.controller.documentTheme)
+
+// ── Comment authoring ───────────────────────────────────────────────
+// A new comment needs a selection (or a caret) in the document; the composer
+// itself is rendered in the annotation pane beside the anchored page.
+const canAddComment = computed(() => Boolean(props.controller.activeTextRange))
+
+function onAddComment(): void {
+  props.controller.beginComment(props.controller.activeTextRange)
+}
 
 // ── Font sizes ──────────────────────────────────────────────────────
 const fontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48]
