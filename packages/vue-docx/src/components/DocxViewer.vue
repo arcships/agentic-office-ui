@@ -131,6 +131,8 @@
           :show-tracked-changes="effectiveShowTrackedChanges"
           :revision-display="effectiveRevisionDisplay"
           :show-comments="effectiveShowComments"
+          :render-comment-card="renderCommentCard"
+          :render-tracked-change-card="renderTrackedChangeCard"
           :locale="locale"
           :messages="messages"
           @page-count-change="onPageCountChange"
@@ -200,6 +202,14 @@ const props = withDefaults(
     showComments?: boolean | null
     locale?: OfficeLocale
     messages?: OfficeMessagesOverride
+    /** Host renderer that replaces comment cards in the page gutter. */
+    renderCommentCard?: (
+      props: import("@arcships/docx-core").DocxCommentCardRenderProps
+    ) => unknown
+    /** Host renderer that replaces tracked-change cards in the page gutter. */
+    renderTrackedChangeCard?: (
+      props: import("@arcships/docx-core").DocxTrackedChangeCardRenderProps
+    ) => unknown
   }>(),
   {
     emptyState: undefined,

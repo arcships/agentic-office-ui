@@ -147,3 +147,64 @@ const editor = useDocxEditor({ initialFileName: "document.docx" })
 盒子通过 Teleport 进入页面表面，因此自动复用页面缩放，不需要宿主换算 zoom。几何在页面挂载、重分页、字体加载、滚动和窗口缩放后自动刷新；`onGeometry` 可以用来保存引用预览或调试。
 
 `DocxDocumentSurface` 的 `getDocumentBlocks()` 返回带 source id 的块树，`confirmBlockReference(block)` 和 `confirmWordReference(block, word)` 会以统一引用契约发出 `reference-confirm`，可直接用于引用条或引用列表。
+
+## 宿主渲染钩子（批注卡、修订卡与右键菜单）
+
+四个渲染函数属性对应上游的同名 render props，未提供时保持内置外观：
+
+| 属性 | 接收组件 | 返回值 |
+|---|---|---|
+| `renderCommentCard` | `DocxEditor`、`DocxViewer`、`DocxDocumentSurface`、`DocxViewerRoot`、`DocxPageSurface` | 批注卡内容 |
+| `renderTrackedChangeCard` | 同上 | 修订卡内容 |
+| `renderContextMenu` | `DocxEditor`、`DocxContextMenu` | 文本 / 图片 / 表格菜单 |
+| `renderTableContextMenu` | 同上 | 表格菜单（优先于 `renderContextMenu`） |
+
+卡片仍由右侧批注栏定位：宿主渲染函数只替换卡片内容，卡片外层的锚定、激活、抽屉模式和高度测量保持不变。`style` 给出该卡片根元素已经应用的定位样式；需要在卡片内再绘制绝对定位元素时可以直接复用。
+
+```vue
+<script setup lang="ts">
+import { h } from "vue"
+import { DocxEditor } from "@arcships/vue-docx"
+import type { DocxCommentCardRenderProps } from "@arcships/vue-docx"
+
+function renderCommentCard(card: DocxCommentCardRenderProps) {
+  return h("div", { class: "my-comment-card" }, [
+    h("strong", card.comment.author ?? ""),
+    h("p", card.snippet),
+    h("button", { onClick: () => card.setResolved(true) }, "标记完成"),
+    h("button", { onClick: () => card.setResolved(false) }, "重新打开"),
+  ])
+}
+</script>
+
+<template>
+  <DocxEditor :editor="editor" :render-comment-card="renderCommentCard" />
+</template>
+```
+
+批注卡回调：`activate()` 选中批注锚定的文字；`setResolved(resolved)` 调用 `controller.resolveComment()` 的同一命令。修订卡回调：`activate()`、`accept()`、`reject()`，分别对应 `controller.acceptTrackedChange()` / `rejectTrackedChange()`。只读表面把 `canModify` / `canDecide` 设为 `false`，此时 `setResolved()` / `accept()` / `reject()` 不产生修改，宿主可据此隐藏按钮。
+
+菜单渲染函数拿到与内置菜单一致的上下文：
+
+| 字段 | 说明 |
+|---|---|
+| `context` | 文本 / 图片 / 表格上下文；表格专用钩子直接拿到 `DocxTableContextMenuContext` |
+| `actions` | 内置动作（已本地化），带有 `id`、`label`、`shortcut`、`disabled`、`checked`、`children` |
+| `runAction(id)` | 执行内置动作并关闭菜单；颜色动作使用 `highlight-yellow`、`text-color-#ef4444` 形式 |
+| `closeMenu()` | 关闭菜单但不执行动作 |
+| `position` | 与内置菜单相同的视口坐标 |
+| `readOnly` | 只读（或修订锁定时）为 `true`，此时 `actions` 只剩 `copy` |
+
+```ts
+const renderContextMenu = (menu: DocxContextMenuRenderProps) =>
+  h("div", { class: "my-menu", style: { position: "fixed", left: `${menu.position.x}px`, top: `${menu.position.y}px` } }, [
+    ...menu.actions.map((action) =>
+      h("button", { disabled: action.disabled, onClick: () => menu.runAction(action.id) }, action.label)
+    ),
+    h("button", { onClick: menu.closeMenu }, "取消"),
+  ])
+```
+
+`DocxEditor` 在 `editable=false` 或修订被展示（编辑锁定）时仍会打开右键菜单，但内置菜单只保留“复制”一项，保证只读文档里的选中文字可以复制；宿主提供 `renderContextMenu` 时可以按 `readOnly` 自行保留复制项。只读时表格专用钩子不会被调用，回退到通用钩子（没提供时就是内置的“复制”菜单），因此只读文档不会通过宿主表格菜单执行编辑命令。
+
+> 未提供任何渲染函数时，卡片和菜单的 DOM、类名与默认行为与之前完全一致。

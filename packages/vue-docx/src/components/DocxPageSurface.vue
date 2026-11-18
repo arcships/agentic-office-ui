@@ -266,6 +266,9 @@
       :decidable="editable && Boolean(controller)"
       :comment-actions="editable && Boolean(controller)"
       :composer="pageCommentComposer"
+      :page-index="pageIndex"
+      :render-comment-card="renderCommentCard"
+      :render-tracked-change-card="renderTrackedChangeCard"
       @activate="activateAnnotation($event, { scrollToAnchor: true })"
       @card-height="reportGutterCardHeight"
       @decide="onGutterDecide"
@@ -283,9 +286,11 @@ import { ref, computed, onMounted, onUnmounted, watch } from "vue"
 import type {
   DocModel,
   DocxComment,
+  DocxCommentCardRenderProps,
   DocxEditorController,
   DocxRevisionDisplay,
   DocxTrackedChange,
+  DocxTrackedChangeCardRenderProps,
   DocumentNoteDefinition,
   DocumentPageNodeSegment,
   DocumentPageBorders,
@@ -384,6 +389,12 @@ interface DocxPageSurfaceProps {
   onInternalLinkClick?: (bookmarkName: string) => void
   /** Transient highlight after the viewer revealed a bookmark on this page. */
   bookmarkTarget?: DocxBookmarkTargetHighlight
+  /** Host renderer that replaces every comment card on this page. */
+  renderCommentCard?: (props: DocxCommentCardRenderProps) => unknown
+  /** Host renderer that replaces every tracked-change card on this page. */
+  renderTrackedChangeCard?: (
+    props: DocxTrackedChangeCardRenderProps
+  ) => unknown
 }
 
 interface CoverEntry {

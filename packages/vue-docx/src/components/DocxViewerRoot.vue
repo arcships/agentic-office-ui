@@ -77,6 +77,8 @@
             :annotation-drawer-mode="annotationDrawerMode"
             :on-internal-link-click="revealBookmark"
             :bookmark-target="bookmarkTarget"
+            :render-comment-card="renderCommentCard"
+            :render-tracked-change-card="renderTrackedChangeCard"
             @measure="onPageMeasure(entry.pageIndex, $event)"
             @paragraph-measure="onParagraphMeasure"
             @table-row-measure="onTableRowMeasure"
@@ -95,10 +97,12 @@ import { findDocxSearchTargetPage, type DocxSearchPageTarget } from "../composab
 import type {
   DocModel,
   DocxComment,
+  DocxCommentCardRenderProps,
   DocxDocumentTheme,
   DocxEditorController,
   DocxRevisionDisplay,
   DocxTrackedChange,
+  DocxTrackedChangeCardRenderProps,
   DocumentNoteDefinition,
   DocumentPageNodeSegment,
   DocumentPageNotes,
@@ -193,6 +197,12 @@ export interface DocxViewerRootProps {
    */
   revisionDisplay?: DocxRevisionDisplay | null
   showComments?: boolean | null
+  /** Host renderer that replaces every comment card in the gutter. */
+  renderCommentCard?: (props: DocxCommentCardRenderProps) => unknown
+  /** Host renderer that replaces every tracked-change card in the gutter. */
+  renderTrackedChangeCard?: (
+    props: DocxTrackedChangeCardRenderProps
+  ) => unknown
 }
 
 interface VisiblePageEntry {
