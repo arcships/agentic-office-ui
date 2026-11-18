@@ -54,6 +54,11 @@ import {
   updateEstimatedLineWidthPxForText
 } from "./drop-cap";
 import {
+  inlineObjectLineMetricElement,
+  scriptBaselineShiftPx,
+  textLineMetricElement
+} from "../../viewer/line-metrics";
+import {
   measureTextWidthPx,
   paragraphBaseFontSizePx,
   paragraphContainsExplicitLineBreakText,
@@ -525,14 +530,78 @@ export function buildParagraphPretextLayoutItems(
 
   const items: PretextLayoutItem[] = source.runs
     .filter((run) => run.endOffset > run.startOffset)
-    .map((run) => ({
-      text: run.text,
-      font: resolveMeasureFont(run.style, paragraphBaseFontPx),
-      startOffset: run.startOffset,
-      endOffset: run.endOffset,
-      break: run.kind === "image" || run.kind === "tab" ? "never" : "normal",
-      wordBreak,
-    }));
+    .map((run) => {
+      const font = resolveMeasureFont(run.style, paragraphBaseFontPx);
+      const item: PretextLayoutItem = {
+        text: run.text,
+        font,
+        startOffset: run.startOffset,
+        endOffset: run.endOffset,
+        break: run.kind === "image" || run.kind === "tab" ? "never" : "normal",
+        wordBreak,
+      };
+
+      // An inline image is an atomic ascent: it sits on the shared baseline and
+      // has no descent, so a line containing one is at least as tall as the
+      // image.
+      if (run.kind === "image" && run.image) {
+        const imageHeightPx = Math.max(
+          0,
+          Math.round(
+            Number.isFinite(run.image.heightPx)
+              ? (run.image.heightPx as number)
+              : Number.isFinite(run.image.widthPx)
+              ? (run.image.widthPx as number)
+              : 0
+          )
+        );
+        return {
+          ...item,
+          ...inlineObjectLineMetricElement(imageHeightPx),
+          hasCustomVerticalMetrics: true,
+        };
+      }
+
+      if (run.kind !== "text") {
+        return item;
+      }
+
+      // Sub/superscript runs move off the shared baseline: record the shift so
+      // the fragment aligns by baseline, but keep the line box at the
+      // paragraph's line height (Word lets script ink overflow the box instead
+      // of growing the line). A run whose font size differs from the
+      // paragraph's does grow the box.
+      const baselineShiftPx = scriptBaselineShiftPx(
+        run.style?.verticalAlign,
+        paragraphBaseFontPx
+      );
+      // Compare the run's own font size (not the 65% script size) with the
+      // paragraph's dominant size.
+      const runFontSizePt = run.style?.fontSizePt;
+      const unscaledRunFontSizePx =
+        Number.isFinite(runFontSizePt) && (runFontSizePt as number) > 0
+          ? ((runFontSizePt as number) * 96) / 72
+          : paragraphBaseFontPx;
+      const fontSizeDiffers =
+        Math.abs(unscaledRunFontSizePx - paragraphBaseFontPx) > 0.5;
+      if (baselineShiftPx === 0 && !fontSizeDiffers) {
+        return item;
+      }
+
+      const element = textLineMetricElement(font);
+      return {
+        ...item,
+        ...(baselineShiftPx !== 0 ? { baselineShiftPx } : {}),
+        ...(fontSizeDiffers
+          ? {
+              ascentPx: element.ascentPx,
+              descentPx: element.descentPx,
+              unsuppressibleDescentPx: element.unsuppressibleDescentPx,
+              hasCustomVerticalMetrics: true,
+            }
+          : {}),
+      };
+    });
   paragraphPretextLayoutItemsBySource.set(source, items);
   return items;
 }
@@ -610,7 +679,10 @@ export function layoutParagraphPretextSource(
   source: ParagraphPretextLayoutSource,
   containerWidthPx: number,
   lineHeightPx: number,
-  exclusions?: PretextExclusionRect[]
+  exclusions?: PretextExclusionRect[],
+  options?: {
+    docGridLinePitchPx?: number;
+  }
 ): PretextVariableWidthLayout | undefined {
   const fallbackFont = resolveMeasureFont(
     firstRunStyle(paragraph),
@@ -626,7 +698,8 @@ export function layoutParagraphPretextSource(
           containerWidthPx,
           lineHeightPx,
           exclusions,
-          fallbackFont
+          fallbackFont,
+          { docGridLinePitchPx: options?.docGridLinePitchPx }
         )
       : undefined;
   if (richLayout) {

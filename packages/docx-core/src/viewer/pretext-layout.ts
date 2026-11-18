@@ -7,6 +7,16 @@ import {
   type PreparedTextWithSegments,
 } from "@chenglou/pretext";
 import { textMeasurementGeneration } from "./text-measurement-generation";
+import {
+  aggregateLineMetrics,
+  emptyLineMetrics,
+  padLineMetricsToHeight,
+  resolveLineGridHeightPx,
+  textLineMetricElement,
+  withFixedLineBaseline,
+  type LineMetricElement,
+  type LineVerticalMetrics,
+} from "./line-metrics";
 
 const fragmentOffsetAdvancesByFragment = new WeakMap<
   PretextLineFragment,
@@ -22,6 +32,26 @@ export interface PretextLayoutItem {
   endOffset: number;
   break?: "normal" | "never";
   wordBreak?: PretextWordBreak;
+  /**
+   * Ascent above the shared line baseline. Set for atomic inline objects
+   * (images) and for runs in a different font size than the paragraph's.
+   */
+  ascentPx?: number;
+  /** Descent below the shared line baseline. */
+  descentPx?: number;
+  /** Descent that must stay below the baseline (glyph ink, object bottom). */
+  unsuppressibleDescentPx?: number;
+  /**
+   * True when the item can make the line box taller than the paragraph line
+   * height: an inline object, or a run in a different font size. A
+   * sub/superscript run only moves its baseline inside the existing line box.
+   */
+  hasCustomVerticalMetrics?: boolean;
+  /**
+   * Distance the run's own baseline sits above the line baseline (negative for
+   * a subscript). Recorded per fragment so runs align by baseline.
+   */
+  baselineShiftPx?: number;
 }
 
 export interface PretextExclusionRect {
@@ -40,11 +70,31 @@ export interface PretextLineFragment {
   startOffset: number;
   endOffset: number;
   font?: string;
+  /** Ascent of this fragment above the shared line baseline. */
+  ascentPx?: number;
+  /** Descent of this fragment below the shared line baseline. */
+  descentPx?: number;
+  /** Descent of this fragment that cannot be trimmed at a page break. */
+  unsuppressibleDescentPx?: number;
+  /** Bottom space contributed by this fragment that a page break may trim. */
+  suppressibleBottomSpacePx?: number;
+  /** This fragment's metrics did not come from the font alone. */
+  hasCustomVerticalMetrics?: boolean;
+  /**
+   * Distance this fragment's own baseline sits above the line baseline;
+   * negative for a subscript. `lineBaselineYPx - baselineShiftPx` is where the
+   * fragment's glyphs sit.
+   */
+  baselineShiftPx?: number;
 }
 
 export interface PretextLineLayout {
   y: number;
   fragments: PretextLineFragment[];
+  /** Vertical metrics of the line box (ascent/descent/baseline). */
+  metrics?: LineVerticalMetrics;
+  /** Absolute baseline offset of the line's fragments, from the layout top. */
+  baselineYPx?: number;
 }
 
 export interface PretextVariableWidthLayout {
@@ -56,6 +106,13 @@ export interface PretextVariableWidthLayout {
   containerWidthPx?: number;
   lineHeightPx?: number;
   exclusions?: PretextExclusionRect[];
+  /** Per-line line-box metrics, in visual order. */
+  lineMetrics?: LineVerticalMetrics[];
+  /**
+   * True when at least one line grew past `lineHeightPx` because of an inline
+   * object or a run in another font size.
+   */
+  hasCustomVerticalMetrics?: boolean;
 }
 
 export interface PretextSelectionRect {
@@ -284,7 +341,8 @@ export function layoutCacheKey(
   layoutSignature: string,
   containerWidthPx: number,
   lineHeightPx: number,
-  exclusions: PretextExclusionRect[]
+  exclusions: PretextExclusionRect[],
+  docGridLinePitchPx?: number
 ): string {
   const exclusionsKey = exclusions
     .map(
@@ -292,7 +350,127 @@ export function layoutCacheKey(
         `${exclusion.left},${exclusion.right},${exclusion.top},${exclusion.bottom}`
     )
     .join(";");
-  return `${layoutSignature}\u0000${containerWidthPx}\u0000${lineHeightPx}\u0000${exclusionsKey}`;
+  return `${layoutSignature}\u0000${containerWidthPx}\u0000${lineHeightPx}\u0000${docGridLinePitchPx ?? 0}\u0000${exclusionsKey}`;
+}
+
+/**
+ * Vertical metrics contribution of a fragment. Fragments that carry explicit
+ * metrics (inline objects, sub/superscript, mixed font sizes) keep them; plain
+ * text fragments fall back to the metrics of their own font.
+ */
+export function fragmentLineMetricElement(
+  fragment: PretextLineFragment,
+  defaultFont?: string
+): LineMetricElement {
+  const hasExplicitMetrics =
+    fragment.ascentPx !== undefined ||
+    fragment.descentPx !== undefined ||
+    fragment.unsuppressibleDescentPx !== undefined;
+  if (hasExplicitMetrics) {
+    const descentPx = fragment.descentPx ?? 0;
+    return {
+      ascentPx: fragment.ascentPx ?? 0,
+      descentPx,
+      unsuppressibleDescentPx: fragment.unsuppressibleDescentPx ?? descentPx,
+      suppressibleBottomSpacePx: fragment.suppressibleBottomSpacePx,
+    };
+  }
+
+  return textLineMetricElement(fragment.font ?? defaultFont ?? "");
+}
+
+/** Aggregated ascent/descent of every fragment on one line. */
+export function aggregateFragmentLineMetrics(
+  fragments: readonly PretextLineFragment[],
+  defaultFont?: string
+): LineVerticalMetrics {
+  return aggregateLineMetrics(
+    fragments.map((fragment) => fragmentLineMetricElement(fragment, defaultFont))
+  );
+}
+
+export interface PretextLineBoxOptions {
+  /** Paragraph line height: a line box never gets shorter than this. */
+  minimumHeightPx: number;
+  /** Snap the line box up to the document grid line pitch. */
+  docGridLinePitchPx?: number;
+  /**
+   * Let content metrics grow the box past `minimumHeightPx`. Only content whose
+   * metrics a font-only line box cannot express (inline objects, other font
+   * sizes) may grow; everything else keeps the paragraph line height so page
+   * breaks stay where the paragraph model puts them.
+   */
+  allowGrowth?: boolean;
+}
+
+/**
+ * Resolve the line box of one laid-out line: content metrics plus the
+ * paragraph's line height as the floor, snapped to the document grid.
+ */
+export function resolvePretextLineBoxMetrics(
+  metrics: LineVerticalMetrics,
+  options: PretextLineBoxOptions
+): LineVerticalMetrics {
+  const minimumHeightPx = Math.max(
+    1,
+    Math.round(
+      Number.isFinite(options.minimumHeightPx) ? options.minimumHeightPx : 1
+    )
+  );
+  if (!options.allowGrowth) {
+    // The paragraph line height already models Word's single-space line box
+    // (including its wrap compensation); keep it as the box height and let the
+    // baseline sit inside it.
+    return withFixedLineBaseline(metrics, minimumHeightPx);
+  }
+
+  return padLineMetricsToHeight(
+    metrics,
+    resolveLineGridHeightPx(
+      Math.max(minimumHeightPx, Math.ceil(metrics.heightPx)),
+      options.docGridLinePitchPx
+    )
+  );
+}
+
+/** Height of one line box, falling back to the layout line height. */
+export function lineBoxHeightPx(
+  line: PretextLineLayout | undefined,
+  fallbackLineHeightPx = 0
+): number {
+  if (line?.metrics) {
+    return Math.max(0, line.metrics.heightPx);
+  }
+
+  return Math.max(0, Math.round(fallbackLineHeightPx));
+}
+
+/** Absolute baseline offset of one line box, from the layout top. */
+export function lineBaselineYPx(
+  line: PretextLineLayout | undefined,
+  fallbackLineHeightPx = 0
+): number {
+  if (!line) {
+    return 0;
+  }
+
+  const ascentPx = line.metrics
+    ? line.metrics.ascentPx
+    : lineBoxHeightPx(line, fallbackLineHeightPx);
+  return line.y + Math.max(0, ascentPx);
+}
+
+/**
+ * Absolute baseline of one fragment: the line baseline shifted by the
+ * fragment's own sub/superscript offset.
+ */
+export function fragmentBaselineYPx(
+  line: PretextLineLayout | undefined,
+  fragment: PretextLineFragment | undefined,
+  fallbackLineHeightPx = 0
+): number {
+  const shiftPx = fragment?.baselineShiftPx ?? 0;
+  return lineBaselineYPx(line, fallbackLineHeightPx) - shiftPx;
 }
 
 export function cachedFragmentOffsetAdvances(
@@ -543,6 +721,8 @@ export function layoutTextWithPretextAroundExclusions(
         top: Math.round(exclusion.top),
         bottom: Math.round(exclusion.bottom),
       })),
+      lineMetrics: [],
+      hasCustomVerticalMetrics: false,
     };
   }
 
@@ -626,16 +806,27 @@ export function layoutTextWithPretextAroundExclusions(
       break;
     }
 
+    // A single-font paragraph has no custom vertical metrics: the line box keeps
+    // the paragraph line height, but it still records the shared baseline and
+    // the suppressible bottom space so page breaks can trim it.
+    const lineBoxMetrics = resolvePretextLineBoxMetrics(
+      aggregateFragmentLineMetrics(fragments, font),
+      { minimumHeightPx: safeLineHeightPx }
+    );
     lines.push({
       y: rowTopPx,
       fragments,
+      metrics: lineBoxMetrics,
+      baselineYPx: rowTopPx + lineBoxMetrics.ascentPx,
     });
-    rowTopPx += safeLineHeightPx;
+    rowTopPx += lineBoxMetrics.heightPx;
   }
 
   const lineCount = lines.length;
-  const contentBottomPx =
-    lines.length > 0 ? (lines[lines.length - 1]?.y ?? 0) + safeLineHeightPx : 0;
+  const lastLine = lines[lines.length - 1];
+  const contentBottomPx = lastLine
+    ? lastLine.y + lineBoxHeightPx(lastLine, safeLineHeightPx)
+    : 0;
   const nextLayout: PretextVariableWidthLayout = {
     lineCount,
     height: Math.max(
@@ -649,6 +840,8 @@ export function layoutTextWithPretextAroundExclusions(
     containerWidthPx: safeContainerWidthPx,
     lineHeightPx: safeLineHeightPx,
     exclusions: normalizedExclusions,
+    lineMetrics: lines.map((line) => line.metrics ?? emptyLineMetrics()),
+    hasCustomVerticalMetrics: false,
   };
   return nextLayout;
 }

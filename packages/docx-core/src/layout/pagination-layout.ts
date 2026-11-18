@@ -47,6 +47,7 @@ import {
 } from "../editor/helpers/line-height-table-extra";
 import { resolvePageNoteReservePx } from "../editor/helpers/note-numbering";
 import { paragraphLineCountWithinWidth } from "../editor/helpers/line-height-wrap";
+import { resolveParagraphLineMetrics } from "../editor/helpers/paragraph-line-metrics";
 import { paragraphLastRenderedPageBreakLineIndex } from "../editor/helpers/pagination-line-index";
 import { paragraphHasVisibleText } from "../editor/helpers/paragraph-geometry";
 import { paragraphIsStructuralSectionBreakSpacer } from "../editor/helpers/paragraph-tracked";
@@ -353,7 +354,15 @@ function createSegmentationCallbacks(
     paragraphLineCountWithinWidth,
     paragraphWidowControlEnabled,
     paragraphCanSplitAcrossPages,
-    paragraphIsStructuralSectionBreakSpacer
+    paragraphIsStructuralSectionBreakSpacer,
+    resolveParagraphLineMetrics: (params) =>
+      resolveParagraphLineMetrics(params.paragraph, {
+        availableWidthPx: params.availableWidthPx,
+        numberingDefinitions: params.numberingDefinitions,
+        lineHeightPx: params.lineHeightPx,
+        docGridLinePitchPx: params.docGridLinePitchPx,
+        expectedLineCount: params.expectedLineCount
+      })
   };
 }
 

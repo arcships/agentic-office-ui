@@ -1,15 +1,23 @@
 import type {
   PretextLineFragment,
+  PretextLineLayout,
   PretextSelectionRect,
   PretextVariableWidthLayout,
 } from "./pretext-layout";
-import { cachedFragmentOffsetAdvances } from "./pretext-layout";
+import { cachedFragmentOffsetAdvances, lineBoxHeightPx } from "./pretext-layout";
+import { emptyLineMetrics } from "./line-metrics";
+
+function lineBoxHeightForSelection(
+  line: PretextLineLayout | undefined,
+  layout: PretextVariableWidthLayout
+): number {
+  return Math.max(1, lineBoxHeightPx(line, layout.lineHeightPx ?? 1));
+}
 
 function nearestLineIndexForY(
   layout: PretextVariableWidthLayout,
   y: number
 ): number {
-  const lineHeightPx = Math.max(1, Math.round(layout.lineHeightPx ?? 1));
   if (layout.lines.length === 0) {
     return 0;
   }
@@ -17,6 +25,7 @@ function nearestLineIndexForY(
   let nearestIndex = 0;
   let nearestDistance = Number.POSITIVE_INFINITY;
   layout.lines.forEach((line, index) => {
+    const lineHeightPx = lineBoxHeightForSelection(line, layout);
     const centerY = line.y + lineHeightPx / 2;
     const distance = Math.abs(y - centerY);
     if (distance < nearestDistance) {
@@ -137,7 +146,7 @@ export function resolveCaretRectAtOffset(
         left,
         top: line.y,
         width: 1,
-        height: lineHeightPx,
+        height: lineBoxHeightForSelection(line, layout) || lineHeightPx,
       };
     }
   }
@@ -152,7 +161,7 @@ export function resolveCaretRectAtOffset(
     left: lastFragment.x + lastFragment.width,
     top: lastLine.y,
     width: 1,
-    height: lineHeightPx,
+    height: lineBoxHeightForSelection(lastLine, layout) || lineHeightPx,
   };
 }
 
@@ -173,10 +182,10 @@ export function resolveSelectionRects(
     return [];
   }
 
-  const lineHeightPx = Math.max(1, Math.round(layout.lineHeightPx ?? 1));
   const rects: PretextSelectionRect[] = [];
 
   layout.lines.forEach((line) => {
+    const lineHeightPx = lineBoxHeightForSelection(line, layout);
     line.fragments.forEach((fragment) => {
       const overlapStart = Math.max(safeStart, fragment.startOffset);
       const overlapEnd = Math.min(safeEnd, fragment.endOffset);
@@ -221,12 +230,16 @@ export function sliceLayoutToLineRange(
   const normalizedLines = slicedLines.map((line) => ({
     ...line,
     y: line.y - yOffset,
+    baselineYPx: (line.baselineYPx ?? 0) - yOffset,
     fragments: line.fragments.map((fragment) => ({ ...fragment })),
   }));
-  const lineHeightPx = Math.max(1, Math.round(layout.lineHeightPx ?? 1));
   const height =
     normalizedLines.length > 0
-      ? (normalizedLines[normalizedLines.length - 1]?.y ?? 0) + lineHeightPx
+      ? (normalizedLines[normalizedLines.length - 1]?.y ?? 0) +
+        lineBoxHeightForSelection(
+          normalizedLines[normalizedLines.length - 1],
+          layout
+        )
       : 0;
 
   return {
@@ -234,5 +247,8 @@ export function sliceLayoutToLineRange(
     lineCount: normalizedLines.length,
     height,
     lines: normalizedLines,
+    lineMetrics: normalizedLines.map(
+      (line) => line.metrics ?? emptyLineMetrics()
+    ),
   };
 }

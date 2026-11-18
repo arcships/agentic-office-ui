@@ -711,7 +711,9 @@ function buildPlaceholderStyle(
     textTransform: "lowercase",
     fontFamily: "Arial, sans-serif",
     lineHeight: 1,
-    verticalAlign: "middle",
+    // Word sits an inline picture on the text baseline; only floating/absolute
+    // images keep a centred box, where the anchor has no baseline.
+    verticalAlign: isWrapped || isAbsolute ? "middle" : "baseline",
     marginInline: isWrapped || isAbsolute ? undefined : 0,
     ...floatingStyle,
     cursor,
@@ -738,7 +740,9 @@ function buildCropFrameStyle(
     display: isCentered ? "block" : "inline-block",
     marginLeft: isCentered ? "auto" : undefined,
     marginRight: isCentered ? "auto" : undefined,
-    verticalAlign: "middle",
+    // Word sits an inline picture on the text baseline; only floating/absolute
+    // images keep a centred box, where the anchor has no baseline.
+    verticalAlign: isWrapped || isAbsolute ? "middle" : "baseline",
     marginInline: isWrapped || isAbsolute ? undefined : 0,
     ...floatingStyle,
     cursor,
@@ -765,7 +769,9 @@ function buildRotationFrameStyle(
     display: isCentered ? "block" : "inline-block",
     marginLeft: isCentered ? "auto" : undefined,
     marginRight: isCentered ? "auto" : undefined,
-    verticalAlign: "middle",
+    // Same baseline rule as an unrotated inline picture.
+    verticalAlign:
+      isWrapped || isAbsolute || isCentered ? "middle" : "baseline",
     lineHeight: 0,
     marginInline: isWrapped || isAbsolute ? undefined : 0,
     ...floatingStyle,
@@ -797,7 +803,9 @@ function buildDirectImageStyle(
     display: isCentered ? "block" : undefined,
     marginLeft: isCentered ? "auto" : undefined,
     marginRight: isCentered ? "auto" : undefined,
-    verticalAlign: "middle",
+    // Word sits an inline picture on the text baseline; only floating/absolute
+    // images keep a centred box, where the anchor has no baseline.
+    verticalAlign: isWrapped || isAbsolute ? "middle" : "baseline",
     marginInline: isWrapped || isAbsolute ? undefined : 0,
     ...imageVisualStyle,
     ...transformStyle,
