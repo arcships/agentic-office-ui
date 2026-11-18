@@ -194,6 +194,7 @@ const suites = {
     ...buildStep(),
     command("vue-component-behavior", process.execPath, [
       "--test",
+      "--expose-gc",
       "--test-concurrency=1",
       "tests/component/vue-component-behavior.test.mjs",
       "tests/component/vue-components.test.mjs",
