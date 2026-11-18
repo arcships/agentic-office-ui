@@ -16,6 +16,7 @@
     :data-formula-reference-count="formulaReferenceRanges.length || undefined"
     :data-formula-reference-ranges="formulaReferenceRangeList || undefined"
     :data-formula-reference-active="activeFormulaReferenceAddress || undefined"
+    :data-fill-target="fillDragTargetAddress || undefined"
     role="grid"
     :aria-label="gridAriaLabel"
     :aria-rowcount="gridRowCount"
@@ -225,6 +226,17 @@
           <span>{{ validationHint.message }}</span>
         </div>
         <button
+          v-if="fillHandleStyle"
+          class="xlsx-grid__fill-handle"
+          data-testid="xlsx-fill-handle"
+          type="button"
+          tabindex="-1"
+          :style="fillHandleStyle"
+          :aria-label="m.xlsx.grid.fillHandle"
+          @pointerdown.stop.prevent="startFillDrag"
+          @dblclick.stop.prevent
+        />
+        <button
           v-if="validationDropdownTriggerStyle"
           class="xlsx-grid__validation-trigger"
           data-testid="xlsx-validation-dropdown-trigger"
@@ -331,10 +343,15 @@ import {
 } from "./conditional-format-stats";
 import { paneAxisContentOffset, paneViewOffset, resolvePaneContentPoint, resolvePaneOverlayRect, resolvePaneViewPoint, type PaneOverlayRect } from "./grid-pane-geometry";
 import {
+  AUTOFIT_CELL_PADDING_PX,
+  AUTOFIT_SCAN_LIMIT,
   MAX_CANVAS_DIMENSION_PX,
   cellKey,
+  estimateAutofitTextWidth,
   intersectsViewport,
   readDevicePixelRatio,
+  resolveAutofitColumnWidth,
+  resolveAutofitRowHeight,
   resolveAxisResizeSize,
   resolveCanvasPixelRatio,
   resolveCellTextLayout,
@@ -345,7 +362,15 @@ import {
   resolveRotatedTextFitWidth,
   resolveShrinkToFitFontSize,
   sheetCellKey,
+  type AutofitCellText,
 } from "./grid-paint";
+import {
+  FILL_HANDLE_SIZE_PX,
+  fillRangesEqual,
+  normalizeFillRange,
+  resolveFillHandleBox,
+  resolveFillTargetRange,
+} from "./grid-fill-handle";
 import {
   measureRichTextSegments,
   richTextBaselineOffset,
@@ -421,6 +446,9 @@ const EDITOR_MIN_LINE_HEIGHT_PX = 12;
 const CUT_ANTS_DASH = [4, 4];
 const CUT_ANTS_DASH_PERIOD = CUT_ANTS_DASH[0] + CUT_ANTS_DASH[1];
 const CUT_ANTS_STEP_MS = 120;
+// The fill-handle preview: a short dash that reads as "this is a preview",
+// visually distinct from the solid selection and the cutting marquee.
+const FILL_DRAG_PREVIEW_DASH = [4, 3];
 
 // ── Refs ───────────────────────────────────────────────────────────────
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -482,6 +510,13 @@ const resizePreview = ref<{
 
 const isSelecting = ref(false);
 const selectionAnchor = ref<XlsxCellAddress | null>(null);
+// The handle drag keeps the selection as the fill pattern and only previews
+// the range it would cover, so release can hand one range to `fillSelection`.
+const fillDrag = ref<{
+  pointerId: number;
+  source: XlsxCellRange;
+  target: XlsxCellRange;
+} | null>(null);
 const cutAntsStep = ref(0);
 let cutAntsFrame: number | null = null;
 let cutAntsLastStepAt = 0;
@@ -1169,6 +1204,64 @@ const rowMenuTriggerStyle = computed<CSSProperties | null>(() => {
   return {
     left: "3px",
     top: `${HEADER_HEIGHT + anchor.top - 7}px`,
+  };
+});
+
+const fillDragTarget = computed<XlsxCellRange | null>(() => {
+  const drag = fillDrag.value;
+  if (!drag || fillRangesEqual(drag.source, drag.target)) return null;
+  return drag.target;
+});
+const fillDragTargetAddress = computed(() =>
+  fillDragTarget.value ? rangeToA1(fillDragTarget.value) : "",
+);
+
+/**
+ * Viewport box of the selection's fill handle.
+ *
+ * Excel centres a small square on the selection's bottom-right corner and
+ * hides it once that corner scrolls out of its pane, because the handle
+ * belongs to a cell the user can no longer see.
+ */
+const fillHandleStyle = computed<CSSProperties | null>(() => {
+  // The handle belongs to the settled selection: a locked sheet has nothing to
+  // fill, and an open inline editor owns the cell under the corner.
+  if (editingLocked.value || editingCell.value) return null;
+  const drag = fillDrag.value;
+  const selectionValue = selection.value;
+  if (!drag && !selectionValue) return null;
+  const range = drag ? drag.source : normalizeFillRange(selectionValue as XlsxCellRange);
+  const display = getDisplayCell(range.end);
+  if (!display) return null;
+  const viewport = bodyViewportSize();
+  if (!(viewport.width > 0) || !(viewport.height > 0)) return null;
+
+  const frozen = frozenPaneMetrics();
+  const frozenX = display.col < frozen.cols;
+  const frozenY = display.row < frozen.rows;
+  const cornerX = paneViewOffset(getColOffsetSum(display.col + 1), scrollLeft.value, frozenX);
+  const cornerY = paneViewOffset(getRowOffsetSum(display.row + 1), scrollTop.value, frozenY);
+  if (frozenX
+    ? cornerX < 0 || cornerX > frozen.width
+    : cornerX < frozen.width || cornerX > viewport.width) return null;
+  if (frozenY
+    ? cornerY < 0 || cornerY > frozen.height
+    : cornerY < frozen.height || cornerY > viewport.height) return null;
+
+  const box = resolveFillHandleBox(cornerX, cornerY);
+  const anchor = paneOverlayRect(range.end, {
+    contentX: box.left,
+    contentY: box.top,
+    height: FILL_HANDLE_SIZE_PX,
+    width: FILL_HANDLE_SIZE_PX,
+  });
+  if (!anchor) return null;
+  return {
+    background: props.selectionColor || "#2563eb",
+    height: `${FILL_HANDLE_SIZE_PX}px`,
+    left: `${ROW_HEADER_WIDTH + anchor.left}px`,
+    top: `${HEADER_HEIGHT + anchor.top}px`,
+    width: `${FILL_HANDLE_SIZE_PX}px`,
   };
 });
 
@@ -2645,6 +2738,210 @@ function resolveCellWorkbookStyle(
 }
 
 /**
+ * Offscreen context the auto-fit measures text with.
+ *
+ * The paint canvases already hold the current frame, so measuring reuses one
+ * detached canvas whose font is set per cell. Hosts without a DOM (SSR, the
+ * test renderer) fall back to an estimated advance width.
+ */
+let autofitMeasureCanvasResolved = false;
+let autofitMeasureCanvas: CanvasRenderingContext2D | null = null;
+const autofitStyleScratch = createCanvasCellStyleScratch();
+
+function autofitMeasureContext(): CanvasRenderingContext2D | null {
+  if (autofitMeasureCanvasResolved) return autofitMeasureCanvas;
+  autofitMeasureCanvasResolved = true;
+  try {
+    const canvas = typeof document !== "undefined" && typeof document.createElement === "function"
+      ? document.createElement("canvas")
+      : null;
+    autofitMeasureCanvas = canvas?.getContext?.("2d") ?? null;
+  } catch {
+    autofitMeasureCanvas = null;
+  }
+  return autofitMeasureCanvas;
+}
+
+/** Measures text with the exact font string the cell paints with. */
+function measureAutofitText(text: string, font: string): number {
+  const measuring = autofitMeasureContext();
+  if (!measuring) return estimateAutofitTextWidth(text, font);
+  measuring.font = font;
+  return measuring.measureText(text).width;
+}
+
+/**
+ * Everything about one cell's painted text the auto-fit needs.
+ *
+ * The style resolution, font string, rich-run fonts and line height are the
+ * same ones `drawCellText` uses, so a fitted column matches what is on screen
+ * instead of an approximation of the workbook's font.
+ */
+function autofitCellText(
+  cell: XlsxCellAddress,
+  value: string,
+  availableWidth: number,
+  worksheet: ActiveWorksheet | null,
+  tableHeaderCells: ReadonlySet<number>,
+): AutofitCellText {
+  const sheet = activeSheet.value;
+  if (!sheet) return { availableWidth, font: baseCellFont(autofitStyleScratch), lineHeight: 15, rotation: null, value, wrap: false };
+  const style = resolveCanvasCellStyleInto(
+    autofitStyleScratch,
+    cell,
+    value,
+    resolveCellWorkbookStyle(cell, worksheet, sheet),
+    tableHeaderCells,
+  );
+  const runs = getGridCellRuns(cell);
+  const font = baseCellFont(style);
+  const lineHeight = Math.max(12, style.fontSizePx * 1.25);
+  return {
+    availableWidth,
+    font,
+    lineHeight,
+    rotation: style.rotation,
+    runs: runs?.length
+      ? runs.map((run) => ({ font: richTextRunFont(style, run.font), text: run.text }))
+      : undefined,
+    value,
+    wrap: style.wrap,
+  };
+}
+
+/**
+ * Used rows/columns an axis auto-fit scans: the sheet's visible extent up to
+ * its used range, capped so a formatted far-away cell cannot stall the viewer.
+ */
+function autofitScanIndices(indices: number[] | undefined, maxUsed: number): number[] {
+  const used = Math.max(0, Number.isFinite(maxUsed) ? maxUsed : 0);
+  const source = indices?.length ? indices : null;
+  const total = source ? source.length : used + 1;
+  const scan: number[] = [];
+  for (let index = 0; index < total && scan.length < AUTOFIT_SCAN_LIMIT; index += 1) {
+    const actual = source ? source[index] : index;
+    if (actual > used) break;
+    scan.push(actual);
+  }
+  return scan;
+}
+
+interface AutofitInterval {
+  start: number;
+  end: number;
+}
+
+/**
+ * Cells inside a merged region are skipped: the merged value spans several
+ * columns or rows, so fitting one axis to it would resize the wrong thing.
+ * Only the regions crossing `index` are returned, as normalized intervals.
+ */
+function autofitMergedIntervals(index: number, axis: "column" | "row"): AutofitInterval[] {
+  const regions = activeSheet.value?.mergedRegions ?? [];
+  const intervals: AutofitInterval[] = [];
+  for (const region of regions) {
+    const startCol = Math.min(region.start.col, region.end.col);
+    const endCol = Math.max(region.start.col, region.end.col);
+    const startRow = Math.min(region.start.row, region.end.row);
+    const endRow = Math.max(region.start.row, region.end.row);
+    if (axis === "column") {
+      if (index < startCol || index > endCol) continue;
+      intervals.push({ end: endRow, start: startRow });
+    } else {
+      if (index < startRow || index > endRow) continue;
+      intervals.push({ end: endCol, start: startCol });
+    }
+  }
+  return intervals;
+}
+
+function autofitSkipsIndex(index: number, intervals: readonly AutofitInterval[]): boolean {
+  return intervals.some((interval) => index >= interval.start && index <= interval.end);
+}
+
+/** Fitted width of one column in unzoomed CSS pixels, or `null` when it is empty. */
+function resolveColumnAutofitWidth(actualCol: number): number | null {
+  const sheet = activeSheet.value;
+  if (!sheet) return null;
+  const worksheet = props.controller.isWorkerBacked ? null : props.controller.getActiveWorksheet();
+  try {
+    const zoom = gridZoomFactor(zoomScale.value);
+    const displayCol = sheetColToDisplayIndex.value.get(actualCol);
+    const columnWidth = displayCol === undefined
+      ? DEFAULT_COL_WIDTH
+      : effectiveColWidths.value[displayCol] || DEFAULT_COL_WIDTH;
+    const availableWidth = Math.max(1, columnWidth - AUTOFIT_CELL_PADDING_PX * 2);
+    const tableHeaderCells = props.getCellStyle ? collectTableHeaderCells() : EMPTY_CELL_KEYS;
+    const merged = autofitMergedIntervals(actualCol, "column");
+    const cells: AutofitCellText[] = [];
+    for (const row of autofitScanIndices(sheet.visibleRows, sheet.maxUsedRow)) {
+      if (autofitSkipsIndex(row, merged)) continue;
+      const cell = { col: actualCol, row };
+      const value = getGridCellDisplayValue(cell);
+      if (!value) continue;
+      cells.push(autofitCellText(cell, value, availableWidth, worksheet, tableHeaderCells));
+    }
+    if (!cells.length) return null;
+    return resolveAutofitColumnWidth(cells, measureAutofitText, { zoom });
+  } finally {
+    worksheet?.free();
+  }
+}
+
+/** Fitted height of one row in unzoomed CSS pixels, or `null` when it is empty. */
+function resolveRowAutofitHeight(actualRow: number): number | null {
+  const sheet = activeSheet.value;
+  if (!sheet) return null;
+  const worksheet = props.controller.isWorkerBacked ? null : props.controller.getActiveWorksheet();
+  try {
+    const zoom = gridZoomFactor(zoomScale.value);
+    const tableHeaderCells = props.getCellStyle ? collectTableHeaderCells() : EMPTY_CELL_KEYS;
+    const merged = autofitMergedIntervals(actualRow, "row");
+    const cells: AutofitCellText[] = [];
+    for (const col of autofitScanIndices(sheet.visibleCols, sheet.maxUsedCol)) {
+      if (autofitSkipsIndex(col, merged)) continue;
+      const cell = { col, row: actualRow };
+      const value = getGridCellDisplayValue(cell);
+      if (!value) continue;
+      const displayCol = sheetColToDisplayIndex.value.get(col);
+      const columnWidth = displayCol === undefined
+        ? DEFAULT_COL_WIDTH
+        : effectiveColWidths.value[displayCol] || DEFAULT_COL_WIDTH;
+      cells.push(autofitCellText(
+        cell,
+        value,
+        Math.max(1, columnWidth - AUTOFIT_CELL_PADDING_PX * 2),
+        worksheet,
+        tableHeaderCells,
+      ));
+    }
+    if (!cells.length) return null;
+    return resolveAutofitRowHeight(cells, measureAutofitText, { zoom });
+  } finally {
+    worksheet?.free();
+  }
+}
+
+/**
+ * Auto-fits a header boundary to its content.
+ *
+ * The controller owns the resize (one undo entry, read-only and protection
+ * rules), so this only measures and asks; an empty axis is left alone.
+ */
+function autofitAxis(kind: "column" | "row", actualIndex: number): boolean {
+  if (kind === "column") {
+    const width = resolveColumnAutofitWidth(actualIndex);
+    if (width === null) return false;
+    props.controller.resizeColumn(actualIndex, width);
+    return true;
+  }
+  const height = resolveRowAutofitHeight(actualIndex);
+  if (height === null) return false;
+  props.controller.resizeRow(actualIndex, height);
+  return true;
+}
+
+/**
  * Coloured outlines around the cells an edited formula references. Excel uses
  * one palette colour per distinct reference and thickens the occurrence the
  * caret is inside; cross-sheet references are left to the formula bar because
@@ -2692,7 +2989,7 @@ function paintSelectionBorders(
   if (active && (!sel || (sel.start.row === sel.end.row && sel.start.col === sel.end.col))) {
     ranges.push({ start: active, end: active });
   }
-  if (!ranges.length && !cut && formulaReferenceRanges.value.length === 0) return;
+  if (!ranges.length && !cut && !fillDragTarget.value && formulaReferenceRanges.value.length === 0) return;
 
   const frozen = frozenPaneMetrics();
   const panes = [
@@ -2709,6 +3006,17 @@ function paintSelectionBorders(
     ctx.clip();
     ctx.translate(pane.scrollX ? -scrollLeft.value : 0, pane.scrollY ? -scrollTop.value : 0);
     for (const range of ranges) drawSelectionBorder(ctx, range, color);
+    const dragTarget = fillDragTarget.value;
+    if (dragTarget) {
+      // Excel previews the fill area with a dashed gray outline while the
+      // handle is held; the marquee only appears after release.
+      drawRangeBorder(ctx, dragTarget, {
+        color: props.isDark ? "#a1a1aa" : "#71717a",
+        dash: FILL_DRAG_PREVIEW_DASH,
+        inset: 0.5,
+        lineWidth: 1.5,
+      });
+    }
     if (cut) drawCutAntsBorder(ctx, cut, color);
     paintFormulaReferenceBorders(ctx);
     ctx.restore();
@@ -3425,7 +3733,59 @@ function onPointerDown(event: PointerEvent) {
   containerRef.value?.setPointerCapture(event.pointerId);
 }
 
+/**
+ * Begins a fill drag from the handle.
+ *
+ * The selection is left untouched: it is the fill pattern that
+ * `fillSelection` tiles on release, so the controller keeps a stable source
+ * while the pointer previews the target range.
+ */
+function startFillDrag(event: PointerEvent) {
+  const selectionValue = selection.value;
+  if (!selectionValue || editingLocked.value || event.button !== 0) return;
+  const source = normalizeFillRange(selectionValue);
+  fillDrag.value = { pointerId: event.pointerId, source, target: source };
+  containerRef.value?.setPointerCapture?.(event.pointerId);
+  if (containerRef.value) containerRef.value.style.cursor = "crosshair";
+  schedulePaint();
+}
+
+/** Extends the previewed fill target; `true` while the handle owns the pointer. */
+function updateFillDrag(event: PointerEvent): boolean {
+  const drag = fillDrag.value;
+  if (!drag) return false;
+  if (event.pointerId !== undefined && event.pointerId !== drag.pointerId) return false;
+  const cell = hitTestCell(event.clientX, event.clientY);
+  if (cell) {
+    const target = resolveFillTargetRange(drag.source, cell);
+    if (!fillRangesEqual(target, drag.target)) {
+      drag.target = target;
+      fillDrag.value = { ...drag };
+      schedulePaint();
+    }
+  }
+  return true;
+}
+
+/** Ends the fill drag; release applies the fill as one undo entry. */
+function finishFillDrag(event: PointerEvent | undefined, cancelled: boolean): boolean {
+  const drag = fillDrag.value;
+  if (!drag) return false;
+  if (event && event.pointerId !== undefined && event.pointerId !== drag.pointerId) return false;
+  fillDrag.value = null;
+  if (event && containerRef.value?.hasPointerCapture?.(event.pointerId)) {
+    containerRef.value.releasePointerCapture?.(event.pointerId);
+  }
+  if (!cancelled && !fillRangesEqual(drag.source, drag.target)) {
+    props.controller.fillSelection(drag.target);
+  }
+  if (containerRef.value) containerRef.value.style.cursor = "cell";
+  schedulePaint();
+  return true;
+}
+
 function onPointerMove(event: PointerEvent) {
+  if (updateFillDrag(event)) return;
   const resizing = resizePreview.value;
   if (resizing) {
     const position = resizing.kind === "column" ? event.clientX : event.clientY;
@@ -3467,6 +3827,12 @@ function resolveAxisResizeRelease(
 }
 
 function onPointerUp(event?: PointerEvent) {
+  if (finishFillDrag(event, event?.type === "pointercancel")) {
+    isSelecting.value = false;
+    selectionAnchor.value = null;
+    schedulePaint();
+    return;
+  }
   const clickedCell = event ? hitTestCell(event.clientX, event.clientY) : null;
   const pressCell = selectionAnchor.value;
   const resizing = resizePreview.value;
@@ -3550,6 +3916,15 @@ function chooseValidationOption(option: string) {
 }
 
 function onDblClick(event: MouseEvent) {
+  // A double-click on a column/row boundary auto-fits that axis. It is the
+  // only double-click the header strip understands, so it never reaches the
+  // cell editor below the header.
+  const axisHit = hitTestAxis(event.clientX, event.clientY);
+  if (axisHit?.resize && axisHit.kind !== "corner") {
+    event.preventDefault();
+    autofitAxis(axisHit.kind, axisHit.actualIndex);
+    return;
+  }
   const cell = hitTestCell(event.clientX, event.clientY);
   if (!cell || props.readOnly || props.controller?.isEditingLocked === true) return;
   const validation = props.controller?.getCellDataValidation?.(cell) ?? null;
@@ -4020,6 +4395,7 @@ watch(
     props.selectionColor,
     props.selectionFillColor,
     formulaReferences.value,
+    fillDrag.value,
   ],
   schedulePaint,
   { flush: "post" },
@@ -4169,6 +4545,15 @@ onUnmounted(() => {
 .xlsx-grid__validation-hint { background: #eff6ff; border: 1px solid #93c5fd; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.12); color: #1e3a8a; display: flex; flex-direction: column; gap: 3px; max-width: 260px; min-width: 140px; padding: 6px 9px; pointer-events: none; position: absolute; white-space: pre-wrap; z-index: 28; }
 .xlsx-grid__validation-hint strong { font-size: 11px; }
 .xlsx-grid__validation-hint span { font-size: 12px; line-height: 1.4; }
+.xlsx-grid__fill-handle {
+  border: 1px solid #ffffff;
+  box-sizing: border-box;
+  cursor: crosshair;
+  padding: 0;
+  pointer-events: auto;
+  position: absolute;
+  z-index: 24;
+}
 .xlsx-grid__validation-trigger { align-items: center; background: #ffffff; border: 1px solid #94a3b8; border-radius: 3px; color: #334155; cursor: pointer; display: flex; font-size: 10px; height: 18px; justify-content: center; padding: 0; pointer-events: auto; position: absolute; width: 16px; z-index: 29; }
 .xlsx-grid__validation-trigger:hover { background: #e2e8f0; }
 .xlsx-grid__validation-dropdown { background: #ffffff; border: 1px solid #94a3b8; border-radius: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.18); display: flex; flex-direction: column; max-height: 220px; overflow-y: auto; padding: 3px; pointer-events: auto; position: absolute; z-index: 32; }

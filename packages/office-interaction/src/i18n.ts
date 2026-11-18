@@ -1071,6 +1071,8 @@ export interface OfficeXlsxMessages {
   grid: {
     openValidation: string
     closeValidation: string
+    /** Handle at the selection's bottom-right that drag-fills cells. */
+    fillHandle: string
     worksheet: string
     /** Template with a `{name}` placeholder. */
     worksheetNamed: string
@@ -2266,6 +2268,7 @@ export const officeMessagesEn: OfficeMessages = {
       worksheet: "Worksheet",
       worksheetNamed: "Worksheet {name}",
       blank: "Blank",
+      fillHandle: "Fill handle: drag to fill the selection's pattern into more cells",
     },
     surface: {
       region: "Choose worksheet area",
@@ -3415,6 +3418,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       worksheet: "工作表",
       worksheetNamed: "工作表 {name}",
       blank: "空白",
+      fillHandle: "填充柄：拖动以将选区内容填充到更多单元格",
     },
     surface: {
       region: "选择工作表区域",

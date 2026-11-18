@@ -330,3 +330,240 @@ export function resolveShrinkToFitFontSize(
   }
   return Math.min(base, lower);
 }
+
+// ── Axis auto-fit ──────────────────────────────────────────────────────────
+
+/** Text inset the paint path keeps on each side of a cell, in CSS pixels. */
+export const AUTOFIT_CELL_PADDING_PX = 5;
+/** Rounding room for the last glyph's overhang and the cell's gridline. */
+export const AUTOFIT_EXTRA_PX = 2;
+/** Vertical chrome the paint path reserves above and below a cell's text. */
+export const AUTOFIT_ROW_CHROME_PX = 4;
+/** Excel will not auto-fit a column narrower than the drag-resize floor. */
+export const AUTOFIT_MIN_COLUMN_WIDTH_PX = 32;
+/**
+ * Excel's widest column is 255 characters; 1 800 px keeps the fitted width
+ * inside what the engine can round-trip back to a character count.
+ */
+export const AUTOFIT_MAX_COLUMN_WIDTH_PX = 1_800;
+/** Excel's shortest row still shows one line of the default font. */
+export const AUTOFIT_MIN_ROW_HEIGHT_PX = 18;
+/** Excel's tallest row (409 points at 96 DPI). */
+export const AUTOFIT_MAX_ROW_HEIGHT_PX = 546;
+/**
+ * Cells an axis auto-fit measures before it stops.
+ *
+ * The scan is bounded by the sheet's used range, which a formatted-but-empty
+ * far-away cell can stretch to a million rows; measuring stops at this budget
+ * so a double-click can never freeze the viewer.
+ */
+export const AUTOFIT_SCAN_LIMIT = 20_000;
+
+/** Measures one piece of text in one canvas font, in CSS pixels. */
+export type MeasureAutofitText = (text: string, font: string) => number;
+
+/**
+ * Everything the paint path knows about a cell's text, handed to the auto-fit
+ * measurement so it sizes cells with the same font, line height, wrapping and
+ * rotation that `drawCellText` uses.
+ */
+export interface AutofitCellText {
+  /** Text width the cell currently has inside its column, padding excluded. */
+  availableWidth: number;
+  /** Canvas font string `drawCellText` sets for the base style. */
+  font: string;
+  /** Line height `drawCellText` steps by, in CSS pixels. */
+  lineHeight: number;
+  /** Canvas angle of rotated text; `null` for horizontal text. */
+  rotation: number | null;
+  /** Inline rich-text runs, each measured with its own font like the paint path. */
+  runs?: readonly { font: string; text: string }[];
+  /** Formatted display text. */
+  value: string;
+  /** Whether the cell wraps its text inside its column. */
+  wrap: boolean;
+}
+
+/** Text box an axis has to fit, in the same (zoomed) pixels it was measured in. */
+export interface AutofitContentBox {
+  height: number;
+  width: number;
+}
+
+export interface AutofitOptions {
+  /**
+   * Extra room added to the measured box; defaults to
+   * {@link AUTOFIT_EXTRA_PX} for a column and {@link AUTOFIT_ROW_CHROME_PX}
+   * for a row.
+   */
+  extraPx?: number;
+  maximumPx?: number;
+  minimumPx?: number;
+  /** Per-side text inset; defaults to {@link AUTOFIT_CELL_PADDING_PX}. */
+  paddingPx?: number;
+  /** Grid zoom factor the cell fonts were resolved with (1 = 100 %). */
+  zoom?: number;
+}
+
+/**
+ * Advance width of `text` when no canvas is available (SSR, tests).
+ *
+ * CJK and full-width glyphs are square, Latin text averages a little over half
+ * an em; the font string is the same one the canvas would have been given, so
+ * the estimate still tracks the cell's real font size.
+ */
+export function estimateAutofitTextWidth(text: string, font: string): number {
+  const sizeMatch = /([\d.]+)px/.exec(font);
+  const size = sizeMatch ? Number(sizeMatch[1]) : 12;
+  const fontSize = Number.isFinite(size) && size > 0 ? size : 12;
+  let width = 0;
+  for (const character of text) {
+    width += /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/u.test(character)
+      ? fontSize
+      : fontSize * 0.55;
+  }
+  return width;
+}
+
+/** Hard line breaks of a cell value, matching the paint path's `\r\n` handling. */
+function autofitLines(value: string): string[] {
+  return value.replace(/\r\n?/g, "\n").split("\n");
+}
+
+/**
+ * Natural width of a cell's text: the widest hard line, or the sum of the rich
+ * runs' own fonts, exactly as the paint path draws it without wrapping.
+ */
+export function measureAutofitTextWidth(
+  cell: AutofitCellText,
+  measure: MeasureAutofitText,
+): number {
+  if (cell.runs?.length) {
+    let total = 0;
+    for (const run of cell.runs) total += measure(run.text, run.font);
+    return total;
+  }
+  let widest = 0;
+  for (const line of autofitLines(cell.value)) {
+    widest = Math.max(widest, measure(line, cell.font));
+  }
+  return widest;
+}
+
+/**
+ * Painted line count of a cell at its current width.
+ *
+ * Wrapped cells use the same greedy per-character break as `wrapCellText`;
+ * everything else (and rotated text, which Excel never wraps) is one line per
+ * hard line break.
+ */
+export function countAutofitLines(
+  cell: AutofitCellText,
+  measure: MeasureAutofitText,
+): number {
+  const lines = autofitLines(cell.value);
+  if (!cell.wrap || cell.rotation !== null) return Math.max(1, lines.length);
+  const available = Number.isFinite(cell.availableWidth) ? Math.max(1, cell.availableWidth) : 1;
+  let count = 0;
+  for (const line of lines) {
+    if (!line) {
+      count += 1;
+      continue;
+    }
+    let current = "";
+    let breaks = 0;
+    for (const character of line) {
+      const next = current + character;
+      if (current && measure(next, cell.font) > available) {
+        breaks += 1;
+        current = character;
+      } else {
+        current = next;
+      }
+    }
+    count += breaks + 1;
+  }
+  return Math.max(1, count);
+}
+
+/**
+ * Box a cell's text needs, rotation included.
+ *
+ * Rotation swaps the occupied width and height, so a 90° header only needs one
+ * line of column width while its text needs the column's whole height.
+ */
+export function measureAutofitContent(
+  cell: AutofitCellText,
+  measure: MeasureAutofitText,
+): AutofitContentBox {
+  const width = measureAutofitTextWidth(cell, measure);
+  const lineHeight = Number.isFinite(cell.lineHeight) && cell.lineHeight > 0 ? cell.lineHeight : 12;
+  const height = Math.max(lineHeight, countAutofitLines(cell, measure) * lineHeight);
+  return cell.rotation === null ? { height, width } : resolveRotatedTextBounds(width, height, cell.rotation);
+}
+
+function autofitNumber(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function autofitScale(value: number | undefined): number {
+  return Number.isFinite(value) && (value as number) > 0 ? (value as number) : 1;
+}
+
+function clampAutofitSize(size: number, minimumPx: number, maximumPx: number): number {
+  if (!Number.isFinite(size)) return minimumPx;
+  return Math.max(minimumPx, Math.min(maximumPx, size));
+}
+
+/**
+ * Column width that fits every measured cell, in unzoomed CSS pixels.
+ *
+ * The widths come from the same font, line height and rich-run measurement the
+ * paint path uses, so the fitted column shows the value without shrinking or
+ * spilling it into the next column. An empty column yields the minimum width;
+ * callers that want to leave untouched columns alone skip the resize instead.
+ */
+export function resolveAutofitColumnWidth(
+  cells: readonly AutofitCellText[],
+  measure: MeasureAutofitText,
+  options: AutofitOptions = {},
+): number {
+  const padding = Math.max(0, autofitNumber(options.paddingPx, AUTOFIT_CELL_PADDING_PX));
+  const extra = Math.max(0, autofitNumber(options.extraPx, AUTOFIT_EXTRA_PX));
+  const zoom = autofitScale(options.zoom);
+  let width = 0;
+  for (const cell of cells) {
+    width = Math.max(width, measureAutofitContent(cell, measure).width);
+  }
+  const fitted = (width + padding * 2 + extra) / zoom;
+  return clampAutofitSize(
+    fitted,
+    autofitNumber(options.minimumPx, AUTOFIT_MIN_COLUMN_WIDTH_PX),
+    autofitNumber(options.maximumPx, AUTOFIT_MAX_COLUMN_WIDTH_PX),
+  );
+}
+
+/**
+ * Row height that fits every measured cell, in unzoomed CSS pixels.
+ *
+ * Wrapped cells count the lines they paint at their current column width, so a
+ * row grows until its tallest wrapped value is fully visible.
+ */
+export function resolveAutofitRowHeight(
+  cells: readonly AutofitCellText[],
+  measure: MeasureAutofitText,
+  options: AutofitOptions = {},
+): number {
+  const extra = Math.max(0, autofitNumber(options.extraPx, AUTOFIT_ROW_CHROME_PX));
+  const zoom = autofitScale(options.zoom);
+  let height = 0;
+  for (const cell of cells) {
+    height = Math.max(height, measureAutofitContent(cell, measure).height);
+  }
+  const fitted = (height + extra) / zoom;
+  return clampAutofitSize(
+    fitted,
+    autofitNumber(options.minimumPx, AUTOFIT_MIN_ROW_HEIGHT_PX),
+    autofitNumber(options.maximumPx, AUTOFIT_MAX_ROW_HEIGHT_PX),
+  );
+}

@@ -130,6 +130,10 @@ async function loadInlineEditor(controller) {
     let hitTestResult = null;
     function hitTestCell() { return hitTestResult; }
     function setHitTestResult(cell) { hitTestResult = cell; }
+    // A double-click on a column/row boundary auto-fits that axis before the
+    // cell editor is considered; this harness only drives the cell path.
+    function hitTestAxis() { return null; }
+    function autofitAxis() { return false; }
     let adjacentCell = null;
     function getAdjacentCell(cell) { return adjacentCell ?? { row: cell.row, col: cell.col + 1 }; }
     function setAdjacentCell(cell) { adjacentCell = cell; }
