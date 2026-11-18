@@ -580,6 +580,139 @@ export interface OfficeXlsxMessages {
     /** Template with a `{number}` placeholder. */
     defaultColumn: string
   }
+  authoring: {
+    close: string
+    /** Template with a `{range}` placeholder. */
+    rangeLabel: string
+    chart: {
+      title: string
+      insertMode: string
+      editMode: string
+      family: string
+      familyBar: string
+      familyLine: string
+      familyPie: string
+      chartTitle: string
+      chartTitlePlaceholder: string
+      showDataLabels: string
+      headerRow: string
+      headerColumn: string
+      insert: string
+      update: string
+      delete: string
+      /** Template with a `{title}` placeholder. */
+      selectedChart: string
+      noneSelected: string
+    }
+    comment: {
+      title: string
+      text: string
+      textPlaceholder: string
+      author: string
+      authorPlaceholder: string
+      save: string
+      delete: string
+    }
+    hyperlink: {
+      title: string
+      target: string
+      targetPlaceholder: string
+      tooltip: string
+      tooltipPlaceholder: string
+      save: string
+      remove: string
+    }
+    table: {
+      title: string
+      name: string
+      namePlaceholder: string
+      hasHeaders: string
+      create: string
+      remove: string
+      /** Template with a `{name}` and an `{range}` placeholder. */
+      existing: string
+    }
+    conditional: {
+      title: string
+      kind: string
+      kindColorScale: string
+      kindDataBar: string
+      kindIconSet: string
+      thresholds: string
+      typeMin: string
+      typeMax: string
+      typePercentile: string
+      typeNumber: string
+      typePercent: string
+      value: string
+      color: string
+      iconSet: string
+      showValue: string
+      reverse: string
+      add: string
+      update: string
+      delete: string
+      edit: string
+      empty: string
+      /** Template with a `{kind}` and an `{ranges}` placeholder. */
+      ruleSummary: string
+    }
+    validation: {
+      title: string
+      type: string
+      typeList: string
+      typeWhole: string
+      typeDecimal: string
+      typeDate: string
+      typeTextLength: string
+      source: string
+      sourcePlaceholder: string
+      value1: string
+      value2: string
+      allowBlank: string
+      showDropdown: string
+      inputMessage: string
+      errorMessage: string
+      apply: string
+      remove: string
+      /** Template with a `{type}` and an `{ranges}` placeholder. */
+      existing: string
+    }
+    freeze: {
+      freezeHere: string
+      unfreeze: string
+    }
+    context: {
+      insertComment: string
+      editComment: string
+      insertHyperlink: string
+      editHyperlink: string
+      conditional: string
+      createTable: string
+      removeTable: string
+      insertChart: string
+      validation: string
+      freezeHere: string
+      unfreeze: string
+    }
+    status: {
+      chartInserted: string
+      chartUpdated: string
+      chartDeleted: string
+      commentSaved: string
+      commentDeleted: string
+      hyperlinkSaved: string
+      hyperlinkRemoved: string
+      tableCreated: string
+      tableRemoved: string
+      ruleAdded: string
+      ruleUpdated: string
+      ruleRemoved: string
+      validationSet: string
+      validationRemoved: string
+      actionFailed: string
+    }
+  }
   drawing: {
     button: string
     dropdown: string
@@ -1352,6 +1485,134 @@ export const officeMessagesEn: OfficeMessages = {
       defaultName: "Table {number}",
       defaultColumn: "Column {number}",
     },
+    authoring: {
+      close: "Close",
+      rangeLabel: "Range {range}",
+      chart: {
+        title: "Chart",
+        insertMode: "New chart",
+        editMode: "Edit chart",
+        family: "Chart type",
+        familyBar: "Column",
+        familyLine: "Line",
+        familyPie: "Pie",
+        chartTitle: "Chart title",
+        chartTitlePlaceholder: "Quarterly revenue",
+        showDataLabels: "Show values on the chart",
+        headerRow: "First row contains series names",
+        headerColumn: "First column contains categories",
+        insert: "Insert chart",
+        update: "Update chart",
+        delete: "Delete chart",
+        selectedChart: "Editing {title}",
+        noneSelected: "Select a chart first",
+      },
+      comment: {
+        title: "Comment",
+        text: "Comment",
+        textPlaceholder: "Add a note for this cell",
+        author: "Author",
+        authorPlaceholder: "Your name",
+        save: "Save comment",
+        delete: "Delete comment",
+      },
+      hyperlink: {
+        title: "Hyperlink",
+        target: "Address",
+        targetPlaceholder: "https://example.com or #Sheet1!A1",
+        tooltip: "Tooltip",
+        tooltipPlaceholder: "Shown on hover",
+        save: "Save link",
+        remove: "Remove link",
+      },
+      table: {
+        title: "Table",
+        name: "Table name",
+        namePlaceholder: "Table1",
+        hasHeaders: "First row contains headers",
+        create: "Create table",
+        remove: "Remove table",
+        existing: "{name} covers {range}",
+      },
+      conditional: {
+        title: "Conditional formatting",
+        kind: "Rule type",
+        kindColorScale: "Colour scale",
+        kindDataBar: "Data bar",
+        kindIconSet: "Icon set",
+        thresholds: "Thresholds",
+        typeMin: "Minimum",
+        typeMax: "Maximum",
+        typePercentile: "Percentile",
+        typeNumber: "Number",
+        typePercent: "Percent",
+        value: "Value",
+        color: "Colour",
+        iconSet: "Icon set",
+        showValue: "Show value",
+        reverse: "Reverse icons",
+        add: "Add rule",
+        update: "Update rule",
+        delete: "Delete rule",
+        edit: "Edit rule",
+        empty: "No conditional formats on this sheet",
+        ruleSummary: "{kind} · {ranges}",
+      },
+      validation: {
+        title: "Data validation",
+        type: "Allow",
+        typeList: "List",
+        typeWhole: "Whole number",
+        typeDecimal: "Decimal",
+        typeDate: "Date",
+        typeTextLength: "Text length",
+        source: "List source",
+        sourcePlaceholder: "Red,Green,Blue or A1:A5",
+        value1: "Minimum",
+        value2: "Maximum",
+        allowBlank: "Allow blank",
+        showDropdown: "Show dropdown",
+        inputMessage: "Input message",
+        errorMessage: "Error message",
+        apply: "Apply validation",
+        remove: "Remove validation",
+        existing: "{type} on {ranges}",
+      },
+      freeze: {
+        freezeHere: "Freeze panes here",
+        unfreeze: "Unfreeze panes",
+      },
+      context: {
+        insertComment: "Insert comment",
+        editComment: "Edit comment",
+        insertHyperlink: "Insert hyperlink",
+        editHyperlink: "Edit hyperlink",
+        conditional: "Conditional formatting…",
+        createTable: "Create table",
+        removeTable: "Remove table",
+        insertChart: "Insert chart",
+        validation: "Data validation…",
+        freezeHere: "Freeze panes here",
+        unfreeze: "Unfreeze panes",
+      },
+      status: {
+        chartInserted: "Chart inserted",
+        chartUpdated: "Chart updated",
+        chartDeleted: "Chart deleted",
+        commentSaved: "Comment saved",
+        commentDeleted: "Comment deleted",
+        hyperlinkSaved: "Hyperlink saved",
+        hyperlinkRemoved: "Hyperlink removed",
+        tableCreated: "Table created",
+        tableRemoved: "Table removed",
+        ruleAdded: "Conditional format added",
+        ruleUpdated: "Conditional format updated",
+        ruleRemoved: "Conditional format deleted",
+        validationSet: "Data validation applied",
+        validationRemoved: "Data validation removed",
+        actionFailed: "Nothing to change: check the selected range and values",
+      },
+    },
     drawing: {
       button: "Button",
       dropdown: "Dropdown",
@@ -2079,6 +2340,134 @@ export const officeMessagesZhCN: OfficeMessages = {
     table: {
       defaultName: "表格 {number}",
       defaultColumn: "列 {number}",
+    },
+    authoring: {
+      close: "关闭",
+      rangeLabel: "区域 {range}",
+      chart: {
+        title: "图表",
+        insertMode: "新建图表",
+        editMode: "编辑图表",
+        family: "图表类型",
+        familyBar: "柱形图",
+        familyLine: "折线图",
+        familyPie: "饼图",
+        chartTitle: "图表标题",
+        chartTitlePlaceholder: "季度收入",
+        showDataLabels: "在图表上显示数值",
+        headerRow: "首行是系列名称",
+        headerColumn: "首列是分类标签",
+        insert: "插入图表",
+        update: "更新图表",
+        delete: "删除图表",
+        selectedChart: "正在编辑 {title}",
+        noneSelected: "请先选择图表",
+      },
+      comment: {
+        title: "批注",
+        text: "批注内容",
+        textPlaceholder: "为这个单元格添加备注",
+        author: "作者",
+        authorPlaceholder: "你的名字",
+        save: "保存批注",
+        delete: "删除批注",
+      },
+      hyperlink: {
+        title: "超链接",
+        target: "地址",
+        targetPlaceholder: "https://example.com 或 #Sheet1!A1",
+        tooltip: "提示文字",
+        tooltipPlaceholder: "悬停时显示",
+        save: "保存链接",
+        remove: "移除链接",
+      },
+      table: {
+        title: "表格",
+        name: "表格名称",
+        namePlaceholder: "Table1",
+        hasHeaders: "首行是标题行",
+        create: "创建表格",
+        remove: "删除表格",
+        existing: "{name} 覆盖 {range}",
+      },
+      conditional: {
+        title: "条件格式",
+        kind: "规则类型",
+        kindColorScale: "色阶",
+        kindDataBar: "数据条",
+        kindIconSet: "图标集",
+        thresholds: "阈值",
+        typeMin: "最小值",
+        typeMax: "最大值",
+        typePercentile: "百分位",
+        typeNumber: "数值",
+        typePercent: "百分比",
+        value: "值",
+        color: "颜色",
+        iconSet: "图标集",
+        showValue: "显示数值",
+        reverse: "反转图标",
+        add: "添加规则",
+        update: "更新规则",
+        delete: "删除规则",
+        edit: "编辑规则",
+        empty: "此工作表没有条件格式",
+        ruleSummary: "{kind} · {ranges}",
+      },
+      validation: {
+        title: "数据验证",
+        type: "允许",
+        typeList: "序列",
+        typeWhole: "整数",
+        typeDecimal: "小数",
+        typeDate: "日期",
+        typeTextLength: "文本长度",
+        source: "序列来源",
+        sourcePlaceholder: "红,绿,蓝 或 A1:A5",
+        value1: "最小值",
+        value2: "最大值",
+        allowBlank: "允许空值",
+        showDropdown: "显示下拉箭头",
+        inputMessage: "输入提示",
+        errorMessage: "错误信息",
+        apply: "应用验证",
+        remove: "移除验证",
+        existing: "{type}，区域 {ranges}",
+      },
+      freeze: {
+        freezeHere: "在此冻结窗格",
+        unfreeze: "取消冻结窗格",
+      },
+      context: {
+        insertComment: "插入批注",
+        editComment: "编辑批注",
+        insertHyperlink: "插入超链接",
+        editHyperlink: "编辑超链接",
+        conditional: "条件格式…",
+        createTable: "创建表格",
+        removeTable: "删除表格",
+        insertChart: "插入图表",
+        validation: "数据验证…",
+        freezeHere: "在此冻结窗格",
+        unfreeze: "取消冻结窗格",
+      },
+      status: {
+        chartInserted: "已插入图表",
+        chartUpdated: "已更新图表",
+        chartDeleted: "已删除图表",
+        commentSaved: "已保存批注",
+        commentDeleted: "已删除批注",
+        hyperlinkSaved: "已保存超链接",
+        hyperlinkRemoved: "已移除超链接",
+        tableCreated: "已创建表格",
+        tableRemoved: "已删除表格",
+        ruleAdded: "已添加条件格式",
+        ruleUpdated: "已更新条件格式",
+        ruleRemoved: "已删除条件格式",
+        validationSet: "已应用数据验证",
+        validationRemoved: "已移除数据验证",
+        actionFailed: "没有可应用的更改：请检查组区域和输入内容",
+      },
     },
     drawing: {
       button: "按钮",

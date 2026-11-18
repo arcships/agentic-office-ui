@@ -86,6 +86,12 @@ export { default as XlsxDrawingLayer } from "./components/XlsxDrawingLayer.vue"
 export { default as XlsxSelectionOverlay } from "./components/XlsxSelectionOverlay.vue"
 /** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxContextMenu } from "./components/XlsxContextMenu.vue"
+/**
+ * Authoring dialog for charts, comments, hyperlinks, tables, conditional
+ * formats and data validation. `XlsxViewer` renders it from the ribbon and
+ * context menu; hosts that embed `XlsxSheetSurface` can mount it directly.
+ */
+export { default as XlsxAuthoringDialog } from "./components/XlsxAuthoringDialog.vue"
 
 export const XlsxViewer = XlsxViewerComponent
 

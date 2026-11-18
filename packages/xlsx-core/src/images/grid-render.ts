@@ -11,6 +11,7 @@ import type {
   XlsxCellComment,
   XlsxDataValidation,
   XlsxFormControl,
+  XlsxFreezePanes,
   XlsxImage,
   XlsxResolvedCellStyle,
   XlsxShape,
@@ -73,6 +74,11 @@ type WorkbookSheetInfo = {
 
 export type WorkbookSheetState = {
   cachedFormulaValues: Record<string, string>;
+  /**
+   * Frozen split counts read from the worksheet XML. `undefined` when the
+   * archive was not parsed, `null` when the sheet declares no frozen pane.
+   */
+  freezePanes?: XlsxFreezePanes | null;
   columnWidthCharacterWidthPx?: number;
   colWidthOverridesPx: Record<number, number>;
   colStyleIds: Record<number, number>;
@@ -656,6 +662,29 @@ function parseCellComments(archive: ArchiveEntries, path: string): XlsxCellComme
   });
 }
 
+// ── Freeze panes ───────────────────────────────────────────────────────────
+
+/**
+ * Read the frozen split counts declared by a worksheet part. Used by the sheet
+ * model so XML authoring and the workbook engine report the same value.
+ */
+export function parseWorksheetFreezePanesDocument(document: Document): XlsxFreezePanes | null {
+  const pane = getLocalElements(document, "pane")[0];
+  if (!pane) {
+    return null;
+  }
+  const state = pane.getAttribute("state");
+  if (state && state !== "frozen" && state !== "frozenSplit") {
+    return null;
+  }
+  const topLeft = parseA1CellReference(pane.getAttribute("topLeftCell") ?? "");
+  const rawRow = Number(pane.getAttribute("ySplit") ?? Number.NaN);
+  const rawCol = Number(pane.getAttribute("xSplit") ?? Number.NaN);
+  const row = Number.isFinite(rawRow) ? Math.max(0, Math.floor(rawRow)) : topLeft?.row ?? 0;
+  const col = Number.isFinite(rawCol) ? Math.max(0, Math.floor(rawCol)) : topLeft?.col ?? 0;
+  return row > 0 || col > 0 ? { row, col } : null;
+}
+
 // ── Sheet state parsing ────────────────────────────────────────────────────
 
 export function parseSheetState(
@@ -690,6 +719,7 @@ export function parseSheetState(
     .filter((range): range is XlsxCellRange => range !== null);
   const hasHorizontalMerges = mergedRegions.some((range) => range.end.col > range.start.col);
   const hasVerticalMerges = mergedRegions.some((range) => range.end.row > range.start.row);
+  const freezePanes = parseWorksheetFreezePanesDocument(document);
   const sheetFormatNode = getLocalElements(document, "sheetFormatPr")[0] ?? null;
   const sheetViewNode = getLocalElements(document, "sheetView")[0] ?? null;
   const rowHeightOverridesPx: Record<number, number> = {};
@@ -797,6 +827,7 @@ export function parseSheetState(
 
   return {
     cachedFormulaValues,
+    freezePanes,
     columnWidthCharacterWidthPx,
     colWidthOverridesPx,
     colStyleIds,
@@ -875,7 +906,7 @@ function parseWorkbookTableFlag(value: string | null, fallback = false): boolean
   return value === "1" || value.toLowerCase() === "true";
 }
 
-function parseSheetTableMetadata(
+export function parseWorksheetTableMetadata(
   archive: ArchiveEntries,
   sheetPath: string
 ): WorkbookTableMetadata[] {
@@ -1001,7 +1032,7 @@ export function parseWorkbookStructureAssetsFromArchive(
     })),
     styleById,
     tableMetadataByWorkbookSheetIndex: workbookSheets.map((sheet) =>
-      parseSheetTableMetadata(archive, sheet.path)
+      parseWorksheetTableMetadata(archive, sheet.path)
     ),
     tableStyleByName,
     theme,

@@ -53,6 +53,36 @@ import "@arcships/vue-xlsx/webgl"
 
 不使用这些功能时，不需要加载相应的大型实现。旧的网格、工具栏和浮层组件只为兼容保留，新代码从 `XlsxViewer` 和控制器开始。
 
+## 作者入口
+
+功能区新增“图表 / 批注 / 超链接 / 表格 / 条件格式 / 数据验证 / 冻结窗格”一组按钮，右键菜单提供同名入口。对话框由 `XlsxViewer`（以及最小化的 `XlsxSheetSurface` 右键菜单）自动渲染，宿主也可以直接挂载 `XlsxAuthoringDialog`：
+
+```vue
+<script setup lang="ts">
+import { XlsxAuthoringDialog, XlsxViewer } from "@arcships/vue-xlsx"
+</script>
+
+<template>
+  <XlsxViewer :controller="controller" />
+  <!-- 或自行控制 dialog：kind = "chart" | "comment" | "hyperlink" | "table" | "conditional" | "validation" -->
+  <XlsxAuthoringDialog :controller="controller" kind="comment" @close="close" />
+</template>
+```
+
+控制器 API 与对话框一一对应，宿主可以完全不用内置 UI：
+
+| 命令 | 说明 |
+|---|---|
+| `insertChart({ family, range, title })` | 从区域插入柱形/折线/饼图，返回新图表 |
+| `getCellComment(cell?)` / `setCellComment(cell, input \| null)` | 读取、写入或删除单元格批注 |
+| `getCellHyperlink(cell?)` / `setCellHyperlink(cell, input \| null)` | 读取、写入或移除超链接 |
+| `getConditionalFormatRules()` / `addConditionalFormatRule(draft)` / `updateConditionalFormatRule(index, draft)` / `deleteConditionalFormatRule(index)` | 条件格式（色阶、数据条、图标集，含 cfvo 阈值） |
+| `createTable({ range, name, hasHeaders })` / `removeTable(name)` / `getTableAtCell(cell?)` | 从区域创建/删除 ListObject |
+| `setSelectionDataValidation(input \| null)` | 为选区写入或清除数据验证 |
+| `freezePanes` / `setFreezePanes(freeze)` / `toggleFreezePanesAtActiveCell()` | 冻结窗格状态与切换 |
+
+每个命令都会改动工作簿模型、刷新视图、写一条撤销记录，并随导出的 XLSX 保存；导出后再打开仍然保留。命令只在可写的主线程工作簿上生效：`readOnly`、受保护工作表或 Worker 只读大文件模式下返回 `false` / `null`，不做任何修改。详细实现见 [XLSX 作者接口设计](../xlsx-authoring-surface.md)。
+
 ## 延迟解析
 
 控制器配置了 `deferLoadingAboveBytes` 且文件超过阈值时，不会立即解析工作簿。`XlsxViewer` 会直接渲染一个内置提示卡片，显示文件名和大小，并提供“继续解析”和“取消”两个动作；宿主不需要再额外实现加载入口。

@@ -65,6 +65,16 @@
         <button class="xlsx-ribbon__action-button" :disabled="!hasSelection" @click="controller.unmergeSelection()">{{ m.xlsx.ribbon.unmerge }}</button>
         <button class="xlsx-ribbon__icon-button" :title="m.xlsx.ribbon.allBorders" :aria-label="m.xlsx.ribbon.allBorders" @click="applyBorders"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M12 4v16M4 12h16" /></svg></button>
       </div>
+      <span class="xlsx-ribbon__separator" />
+      <div class="xlsx-ribbon__group" data-testid="xlsx-ribbon-authoring">
+        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-chart" :title="m.xlsx.authoring.chart.title" :aria-label="m.xlsx.authoring.chart.title" @click="emit('authoring', 'chart')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V4M4 20h16M8 16v-4M12 16V8M16 16v-6" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-comment" :title="m.xlsx.authoring.comment.title" :aria-label="m.xlsx.authoring.comment.title" :disabled="!hasActiveCell" @click="emit('authoring', 'comment')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v10H9l-5 4z" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-hyperlink" :title="m.xlsx.authoring.hyperlink.title" :aria-label="m.xlsx.authoring.hyperlink.title" :disabled="!hasActiveCell" @click="emit('authoring', 'hyperlink')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 1 0-5l3-3a4 4 0 0 1 5 5l-2 2M14 10a4 4 0 0 1 0 5l-3 3a4 4 0 0 1-5-5l2-2" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-table" :title="m.xlsx.authoring.table.title" :aria-label="m.xlsx.authoring.table.title" :disabled="!hasSelection" @click="emit('authoring', 'table')"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" /><path d="M4 10h16M10 10v9M4 15h16" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-conditional" :title="m.xlsx.authoring.conditional.title" :aria-label="m.xlsx.authoring.conditional.title" :disabled="!hasSelection" @click="emit('authoring', 'conditional')"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" /><rect x="13" y="4" width="7" height="7" /><rect x="4" y="13" width="7" height="7" /><rect x="13" y="13" width="7" height="7" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-validation" :title="m.xlsx.authoring.validation.title" :aria-label="m.xlsx.authoring.validation.title" :disabled="!hasSelection" @click="emit('authoring', 'validation')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" :class="{ active: isFrozen }" data-testid="xlsx-ribbon-freeze" :aria-pressed="isFrozen" :title="isFrozen ? m.xlsx.authoring.freeze.unfreeze : m.xlsx.authoring.freeze.freezeHere" :aria-label="isFrozen ? m.xlsx.authoring.freeze.unfreeze : m.xlsx.authoring.freeze.freezeHere" :disabled="!hasActiveCell" @click="toggleFreeze"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M6 6l12 12M18 6 6 18M4 12h16" /></svg></button>
+      </div>
     </fieldset>
 
     <label class="xlsx-ribbon__readonly" :title="m.xlsx.ribbon.readOnlyTitle">
@@ -87,6 +97,7 @@ import {
 } from "@arcships/xlsx-core";
 import { classifyNumberFormat } from "../composables/cell-input";
 import { useXlsxMessages } from "../i18n";
+import type { XlsxAuthoringDialogKind } from "./authoring-dialog";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -95,6 +106,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
+  authoring: [kind: XlsxAuthoringDialogKind];
   "update:readOnly": [value: boolean];
 }>();
 
@@ -104,6 +116,8 @@ const textColor = ref("#18181b");
 const fillColor = ref("#fff2cc");
 const hasWorkbook = computed(() => props.controller.tabs.length > 0);
 const hasSelection = computed(() => Boolean(props.controller.selection));
+const hasActiveCell = computed(() => Boolean(props.controller.activeCell));
+const isFrozen = computed(() => Boolean(props.controller.freezePanes));
 const isReadOnly = computed(() => props.readOnly === true || props.controller.isEditingLocked === true || (props.readOnly === undefined && props.controller.readOnly));
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -199,6 +213,11 @@ function applyStyle(style: XlsxCellStyleInput): void {
   if (isReadOnly.value || !props.controller.activeCell) return;
   if (props.controller.selection) props.controller.setRangeStyle(props.controller.selection, style);
   else props.controller.setSelectedCellStyle(style);
+}
+
+function toggleFreeze(): void {
+  if (isReadOnly.value) return;
+  props.controller.toggleFreezePanesAtActiveCell?.();
 }
 
 function applyFont(font: XlsxCellFontStyleInput): void { applyStyle({ font }); }

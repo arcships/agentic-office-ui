@@ -134,6 +134,8 @@ export {
   type WorkbookChartStyleAssets,
   parseSheetState,
   parseWorkbookSheets,
+  parseWorksheetTableMetadata,
+  parseWorksheetFreezePanesDocument,
   parseWorkbookStructureAssetsFromArchive,
   normalizeWorkbookTableMetadata,
 } from "./grid-render";

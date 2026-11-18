@@ -63,7 +63,7 @@ The reference says **what the user means**. Natural language says **what the use
 | Format | Viewer capabilities | `0.7.0` stage-one references |
 |---|---|---|
 | DOCX | View, edit, paginate, search, thumbnails, comments, tracked changes, import/export | Exact text, page, and page region |
-| XLSX | Sheets, formulas, charts, images, range selection, editing, undo/redo | Worksheet, cell, range, row, column, chart, and sheet region |
+| XLSX | Sheets, formulas, charts, images, range selection, editing, comments, hyperlinks, tables, conditional formatting, data validation, freeze panes, undo/redo | Worksheet, cell, range, row, column, chart, and sheet region |
 | PPTX | Continuous preview, thumbnails, search, object events, playback, transitions, media, fullscreen | Slide, exact object text, visible object, group hierarchy, and slide region |
 | PDF | PDFium rendering, page navigation, zoom, rotation, thumbnails, search, glyph selection, download | Exact character range, page, and page region |
 

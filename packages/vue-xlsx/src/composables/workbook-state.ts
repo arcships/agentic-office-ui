@@ -25,6 +25,7 @@ import {
   type XlsxCellComment,
   type XlsxConditionalFormatRule,
   type XlsxDataValidation,
+  type XlsxFreezePanes,
   type XlsxResolvedCellStyle,
   type XlsxSheetData,
   type XlsxSheetVisibility,
@@ -178,6 +179,7 @@ export function buildSheetList(
     colStyleIds?: Record<number, number>;
     conditionalFormatRules?: XlsxConditionalFormatRule[];
     dataValidations?: XlsxDataValidation[];
+    freezePanes?: XlsxFreezePanes | null;
     hyperlinks?: XlsxCellHyperlink[];
     comments?: XlsxCellComment[];
     defaultColWidthPx?: number;
@@ -237,7 +239,7 @@ export function buildSheetList(
           dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
           defaultColWidthPx,
           defaultRowHeightPx,
-          freezePanes: parseWorksheetFreezePanes(worksheet),
+          freezePanes: resolveSheetFreezePanes(sheetState, worksheet),
           hasHorizontalMerges: mergeMetadata.hasHorizontalMerges,
           hasVerticalMerges: mergeMetadata.hasVerticalMerges,
           maxHorizontalMergeEndCol: mergeMetadata.maxHorizontalMergeEndCol,
@@ -312,7 +314,7 @@ export function buildSheetList(
         dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
         defaultColWidthPx,
         defaultRowHeightPx,
-        freezePanes: parseWorksheetFreezePanes(worksheet),
+        freezePanes: resolveSheetFreezePanes(sheetState, worksheet),
         hasHorizontalMerges: mergeMetadata.hasHorizontalMerges,
         hasVerticalMerges: mergeMetadata.hasVerticalMerges,
         maxHorizontalMergeEndCol: mergeMetadata.maxHorizontalMergeEndCol,
@@ -350,6 +352,19 @@ export function buildSheetList(
   }
 
   return sheets;
+}
+
+/**
+ * Frozen panes come from the worksheet XML when it was parsed (authored panes,
+ * XML-authoritative freeze) and from the workbook engine otherwise.
+ */
+function resolveSheetFreezePanes(
+  sheetState: { freezePanes?: XlsxFreezePanes | null } | null | undefined,
+  worksheet: ReturnType<Workbook["getSheet"]>
+) {
+  return sheetState?.freezePanes !== undefined
+    ? sheetState.freezePanes
+    : parseWorksheetFreezePanes(worksheet);
 }
 
 export function buildVisibleSheetIndexMap(sheets: XlsxSheetData[]) {

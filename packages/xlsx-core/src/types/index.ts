@@ -45,6 +45,14 @@ export type {
   XlsxTable,
   XlsxTableSortDirection,
   XlsxTableSortState,
+  // Authoring inputs
+  XlsxCellCommentInput,
+  XlsxCellHyperlinkInput,
+  XlsxConditionalFormatDraft,
+  XlsxChartInsertInput,
+  XlsxTableCreateInput,
+  XlsxDataValidationInput,
+  XlsxViewerAuthoring,
   // Workbook tab
   XlsxWorkbookTab,
   // Formula target
@@ -128,6 +136,7 @@ export type {
   XlsxChart,
   // Chart sheet
   XlsxChartsheet,
+  XlsxChartFamily,
   // Render props
   XlsxChartLoadingRenderProps,
 } from "./chart-types";
