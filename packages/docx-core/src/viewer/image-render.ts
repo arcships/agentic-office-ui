@@ -3,6 +3,7 @@ import { encode as encodePng } from "fast-png";
 import UTIFModule from "utif";
 import { createOfficeImageBudget } from "@arcships/office-runtime";
 import { DEFAULT_DOCX_RUNTIME_LIMITS } from "../resource-limits";
+import { inspectSvgPicture, isSvgPicture } from "./svg-picture";
 
 // Buffer is available in Node.js environments via the global scope.
 // tsup with --shims provides a polyfill; for type-checking we declare it here.
@@ -13,7 +14,7 @@ declare const Buffer: {
 
 type ImageRenderSource = Pick<
   ImageRunNode,
-  "src" | "contentType" | "data" | "widthPx" | "heightPx"
+  "src" | "contentType" | "partName" | "data" | "widthPx" | "heightPx"
 >;
 
 interface TiffIfd {
@@ -186,7 +187,11 @@ function imageUsesWmfContent(image: ImageRenderSource): boolean {
 }
 
 export function imageUsesPlaceholderFallback(image: ImageRenderSource): boolean {
-  return imageHasMetafileContent(image);
+  if (imageHasMetafileContent(image)) {
+    return true;
+  }
+  const svg = inspectSvgPicture(image);
+  return Boolean(svg && !svg.supported);
 }
 
 export function unsupportedImageFallbackLabel(
@@ -195,6 +200,9 @@ export function unsupportedImageFallbackLabel(
   heightPx?: number
 ): string {
   const isSmallIcon = (widthPx ?? 0) <= 56 && (heightPx ?? 0) <= 56;
+  if (isSvgPicture(image)) {
+    return isSmallIcon ? "s" : "SVG";
+  }
   if (imageUsesEmfContent(image)) {
     return isSmallIcon ? "e" : "EMF";
   }
@@ -396,6 +404,15 @@ export function resolveRenderableImageSource(image: ImageRenderSource): string |
 
   if (imageHasMetafileContent(image)) {
     return undefined;
+  }
+
+  // SVG pictures stay vector: sanitised markup is handed to the `<img>` as a
+  // `data:image/svg+xml` source, so zooming re-rasterises at display resolution
+  // instead of stretching a bitmap. A picture the pipeline cannot paint
+  // resolves to `undefined`, and the renderer draws the placeholder.
+  const svg = inspectSvgPicture(image);
+  if (svg) {
+    return svg.supported ? svg.src : undefined;
   }
 
   if (!imageHasTiffContent(image)) {

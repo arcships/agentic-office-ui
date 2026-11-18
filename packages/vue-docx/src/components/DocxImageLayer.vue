@@ -93,6 +93,7 @@ import type {
 import {
   resolveRenderableImageSource,
   shouldRenderWrappedFloatingImage,
+  unsupportedImageFallbackLabel,
 } from "@arcships/docx-core"
 import { useDocxMessages } from "../i18n"
 
@@ -206,7 +207,12 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
         selected: selection.kind === "paragraph" && selection.nodeIndex === nodeIndex,
         lockedAnchor: run.floating?.lockedAnchor === true,
         failureKey: imageSourceFailureKey(src),
-        fallbackLabel: undefined,
+        // A picture the pipeline cannot paint gets the same label as the
+        // in-flow placeholder; a node without any source keeps its alt text.
+        fallbackLabel:
+          !src && run.src
+            ? unsupportedImageFallbackLabel(run, run.widthPx, run.heightPx)
+            : undefined,
       })
     })
   })

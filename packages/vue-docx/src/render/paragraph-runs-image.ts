@@ -4,9 +4,12 @@
 // Translates JSX to Vue h() calls.
 
 import { h, type VNode } from "vue"
-import { officeMessagesEn } from "@arcships/office-interaction"
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction"
 import type { ImageRunNode, ParagraphNode } from "@arcships/docx-core"
-import type { DocxSectionImageLocation } from "@arcships/docx-core"
+import type {
+  DocxSectionImageLocation,
+  SvgPictureUnsupportedReason,
+} from "@arcships/docx-core"
 import {
   shouldRenderWrappedFloatingImage,
   shouldRenderAbsoluteFloatingImage,
@@ -21,6 +24,7 @@ import {
   resolveRenderableImageSource,
   imageUsesPlaceholderFallback,
   unsupportedImageFallbackLabel,
+  svgPictureUnsupportedDiagnostic,
   appendCssFilters,
   resolveImageRenderTransformStyle,
   syntheticTextBoxSvg,
@@ -38,9 +42,13 @@ export interface ImageRunRenderExtra {
   imageFilterSuffix?: string
   /** Reports a browser decode failure without exposing document bytes. */
   onImageDecodeError?: (error: DocxImageDecodeError) => void
+  /** Reports an SVG picture that fell back to a placeholder. */
+  onImageUnsupported?: (diagnostic: DocxImageUnsupportedDiagnostic) => void
   /** Localized alt text and missing-source fallback. */
   imageAltText?: string
   imageMissingText?: string
+  /** Localized `{feature}` template for an unsupported SVG picture. */
+  imageUnsupportedText?: string
 
   // Section image interaction callbacks
   sectionImageInteraction?: ImageInteraction | undefined
@@ -50,6 +58,15 @@ export interface DocxImageDecodeError {
   code: "IMAGE_DECODE_FAILED"
   phase: "image-decode"
   imageKey: string
+  message: string
+}
+
+export interface DocxImageUnsupportedDiagnostic {
+  code: "IMAGE_UNSUPPORTED_FEATURE"
+  phase: "image-render"
+  imageKey: string
+  reason: SvgPictureUnsupportedReason
+  partName?: string
   message: string
 }
 
@@ -341,6 +358,18 @@ export function renderImageRun(ctx: ImageRunRenderContext): ImageRunRenderResult
   ) {
     const isSmallIcon = (widthPx ?? 0) <= 56 && (heightPx ?? 0) <= 56
     const fallbackText = unsupportedImageFallbackLabel(child, widthPx, heightPx)
+    const unsupportedDiagnostic = svgPictureUnsupportedDiagnostic(child)
+    if (unsupportedDiagnostic) {
+      extra?.onImageUnsupported?.({
+        ...unsupportedDiagnostic,
+        imageKey: key,
+        message: formatOfficeMessage(
+          extra?.imageUnsupportedText ??
+            officeMessagesEn.docx.diagnostics.unsupportedImageFeature,
+          { feature: unsupportedDiagnostic.reason },
+        ),
+      })
+    }
     return {
       vnode: h(
         "span",

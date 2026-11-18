@@ -550,6 +550,8 @@ export interface OfficeDocxMessages {
   diagnostics: {
     imageDecodeFailed: string
     numberingImageDecodeFailed: string
+    /** Template with a `{feature}` placeholder. */
+    unsupportedImageFeature: string
   }
 }
 
@@ -1643,6 +1645,7 @@ export const officeMessagesEn: OfficeMessages = {
     diagnostics: {
       imageDecodeFailed: "DOCX image could not be decoded.",
       numberingImageDecodeFailed: "DOCX numbering image could not be decoded.",
+      unsupportedImageFeature: "DOCX SVG picture uses unsupported {feature} content; showing a placeholder.",
     },
   },
   xlsx: {
@@ -2679,6 +2682,7 @@ export const officeMessagesZhCN: OfficeMessages = {
     diagnostics: {
       imageDecodeFailed: "DOCX 图片无法解码。",
       numberingImageDecodeFailed: "DOCX 编号图片无法解码。",
+      unsupportedImageFeature: "DOCX SVG 图片包含不支持的 {feature} 内容，已显示占位符。",
     },
   },
   xlsx: {

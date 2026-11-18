@@ -78,6 +78,10 @@ export interface ParagraphRunRenderOptions {
   paragraphOriginTopPx?: number
   imageFilterSuffix?: string
   onImageDecodeError?: ImageRunRenderExtra["onImageDecodeError"]
+  /** Reports an SVG picture that fell back to a placeholder. */
+  onImageUnsupported?: ImageRunRenderExtra["onImageUnsupported"]
+  /** Localized `{feature}` template for an unsupported SVG picture. */
+  imageUnsupportedText?: string
   /** Bounds of the table cell that hosts this paragraph. */
   tableCellLayout?: {
     widthPx?: number
@@ -624,7 +628,9 @@ export function renderParagraphRuns(
         imageFilterSuffix: options?.imageFilterSuffix,
         imageAltText: options?.imageAltText,
         imageMissingText: options?.imageMissingText,
+        imageUnsupportedText: options?.imageUnsupportedText,
         onImageDecodeError: options?.onImageDecodeError,
+        onImageUnsupported: options?.onImageUnsupported,
         sectionImageInteraction: options?.sectionImageInteraction as ImageRunRenderExtra["sectionImageInteraction"],
       },
     })
