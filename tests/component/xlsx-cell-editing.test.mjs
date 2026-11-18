@@ -215,6 +215,28 @@ test("inline editor seeds the formula and commits it back unchanged on blur", as
   }
 });
 
+test("inline editing stores hard line breaks without flattening the cell", async () => {
+  const { controller, app } = await mountController();
+  try {
+    const cell = { row: 0, col: 1 };
+    const original = controller.getCellDisplayValue(cell);
+
+    assert.equal(controller.commitCellInput(cell, "first line\nsecond line"), true);
+    await vue.nextTick();
+    assert.equal(
+      controller.getCellDisplayValue(cell),
+      "first line\nsecond line",
+      "Alt+Enter's line break survives the commit",
+    );
+
+    controller.undo();
+    await vue.nextTick();
+    assert.equal(controller.getCellDisplayValue(cell), original, "one undo restores the previous cell");
+  } finally {
+    app.unmount();
+  }
+});
+
 test("inline editor keeps formulas through F2/Enter, in-place formula edits and Tab", async () => {
   const { controller, app } = await mountController();
   try {

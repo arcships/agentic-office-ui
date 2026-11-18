@@ -123,19 +123,34 @@
             :style="label.style"
           >{{ label.text }}</b>
         </div>
-        <!-- Editing input (hidden unless editing) -->
-        <input
-          v-if="editingCell"
-          ref="editInputRef"
-          v-model="editingValue"
-          class="xlsx-grid__edit-input"
-          data-testid="xlsx-cell-editor"
-          :style="editInputStyle"
-          @keydown="onEditKeydown"
-          @compositionstart="onEditCompositionStart"
-          @compositionend="onEditCompositionEnd"
-          @blur="commitEdit"
-        />
+        <!-- Editing input (hidden unless editing). The textarea makes a draft
+             multi-line; the hidden mirror under it measures how many wrapped
+             lines the draft needs so the editor grows instead of scrolling. -->
+        <template v-if="editingCell">
+          <div
+            ref="editMirrorRef"
+            class="xlsx-grid__edit-mirror"
+            data-testid="xlsx-cell-editor-mirror"
+            aria-hidden="true"
+            :style="editMirrorStyle"
+          >{{ editingValue }}</div>
+          <textarea
+            ref="editInputRef"
+            v-model="editingValue"
+            class="xlsx-grid__edit-input"
+            data-testid="xlsx-cell-editor"
+            :data-editor-lines="editorLineCount"
+            rows="1"
+            wrap="soft"
+            spellcheck="false"
+            :style="editInputStyle"
+            @keydown="onEditKeydown"
+            @paste="onEditPaste"
+            @compositionstart="onEditCompositionStart"
+            @compositionend="onEditCompositionEnd"
+            @blur="commitEdit"
+          />
+        </template>
         <div
           v-if="hoveredComment"
           class="xlsx-grid__comment-popover"
@@ -303,6 +318,15 @@ const WORKER_ROW_BATCH_SIZE = 64;
 const MIN_DISPLAY_ROWS = 200;
 const MIN_DISPLAY_COLS = 50;
 const AXIS_RESIZE_DRAG_THRESHOLD = 3;
+// Inline editor chrome, in CSS pixels. A `<textarea>` sizes its content box
+// between padding and border, so the auto-grown box height is
+// `lines × lineHeight + vertical padding + border`.
+const EDITOR_BORDER_PX = 2;
+const EDITOR_PADDING_X_PX = 4;
+const EDITOR_PADDING_Y_PX = 2;
+const EDITOR_BOX_CHROME_PX = EDITOR_BORDER_PX * 2 + EDITOR_PADDING_Y_PX * 2;
+const EDITOR_LINE_HEIGHT_RATIO = 1.25;
+const EDITOR_MIN_LINE_HEIGHT_PX = 12;
 // Excel's marching ants: a 4/4 dash whose phase advances a few times a second,
 // slow enough to read and cheap enough to repaint while a cut is pending.
 const CUT_ANTS_DASH = [4, 4];
@@ -315,7 +339,11 @@ const bodyCanvasRef = ref<HTMLCanvasElement | null>(null);
 const colHeaderCanvasRef = ref<HTMLCanvasElement | null>(null);
 const rowHeaderCanvasRef = ref<HTMLCanvasElement | null>(null);
 const cornerCanvasRef = ref<HTMLCanvasElement | null>(null);
-const editInputRef = ref<HTMLInputElement | null>(null);
+const editInputRef = ref<HTMLTextAreaElement | null>(null);
+const editMirrorRef = ref<HTMLDivElement | null>(null);
+// Box height the mirror measured for the current draft. Kept separate from the
+// style so growing the editor never feeds back into its own measurement.
+const editorMeasuredHeight = ref(0);
 
 const scrollTop = ref(0);
 const scrollLeft = ref(0);
@@ -1690,20 +1718,28 @@ function drawCellBorders(
 }
 
 function wrapCellText(ctx: CanvasRenderingContext2D, value: string, width: number, maxLines: number): string[] {
-  if (maxLines <= 1) return [truncateText(ctx, value, width)];
+  // Alt+Enter stores a literal line break in the cell. Excel only shows the
+  // first line while wrap text is off, and breaks at every hard newline once
+  // it is on; soft wrapping then applies inside each hard line.
+  const hardLines = value.replace(/\r\n?/g, "\n").split("\n");
+  if (maxLines <= 1) return [truncateText(ctx, hardLines[0] ?? "", width)];
   const lines: string[] = [];
-  let line = "";
-  for (const character of value) {
-    const next = line + character;
-    if (line && ctx.measureText(next).width > width) {
-      lines.push(line);
-      line = character;
-      if (lines.length >= maxLines - 1) break;
-    } else {
-      line = next;
+  for (const hardLine of hardLines) {
+    if (lines.length >= maxLines) break;
+    let line = "";
+    for (const character of hardLine) {
+      const next = line + character;
+      if (line && ctx.measureText(next).width > width) {
+        lines.push(line);
+        line = character;
+        if (lines.length >= maxLines - 1) break;
+      } else {
+        line = next;
+      }
     }
+    if (lines.length >= maxLines) break;
+    if (line || hardLines.length > 1) lines.push(line);
   }
-  if (line && lines.length < maxLines) lines.push(line);
   return lines;
 }
 
@@ -2783,15 +2819,109 @@ function isComposingKeyboardEvent(event: KeyboardEvent) {
   return event.isComposing || event.keyCode === 229;
 }
 
+/** Hard line breaks in the draft; soft wraps are measured by the mirror. */
+function countEditorLines(value: string): number {
+  return value.replace(/\r\n?/g, "\n").split("\n").length;
+}
+
+const editorLineCount = computed(() => countEditorLines(editingValue.value));
+
+function editorLineHeightPx(): number {
+  return Math.max(EDITOR_MIN_LINE_HEIGHT_PX, 12 * gridZoomFactor(zoomScale.value) * EDITOR_LINE_HEIGHT_RATIO);
+}
+
+function readEditorSelection(): { start: number; end: number } {
+  const value = editingValue.value;
+  const textarea = editInputRef.value;
+  const rawStart = textarea?.selectionStart;
+  const rawEnd = textarea?.selectionEnd;
+  const start = typeof rawStart === "number" && Number.isFinite(rawStart) ? rawStart : value.length;
+  const end = typeof rawEnd === "number" && Number.isFinite(rawEnd) ? rawEnd : start;
+  return {
+    start: Math.max(0, Math.min(start, value.length)),
+    end: Math.max(0, Math.min(end, value.length)),
+  };
+}
+
+/** Inserts text at the textarea caret, keeping the draft in one commit. */
+function insertEditText(text: string) {
+  const normalized = text.replace(/\r\n?/g, "\n");
+  const value = editingValue.value;
+  const { start, end } = readEditorSelection();
+  const insertionStart = Math.min(start, end);
+  const insertionEnd = Math.max(start, end);
+  editingValue.value = value.slice(0, insertionStart) + normalized + value.slice(insertionEnd);
+  const caret = insertionStart + normalized.length;
+  void nextTick(() => {
+    const textarea = editInputRef.value;
+    textarea?.focus();
+    if (textarea && typeof textarea.setSelectionRange === "function") {
+      textarea.setSelectionRange(caret, caret);
+    }
+    syncEditorSize();
+  });
+}
+
+/**
+ * Multi-line clipboard text keeps its line breaks. Single-line pastes stay on
+ * the native path so the browser keeps its caret and undo stack.
+ */
+function onEditPaste(event: ClipboardEvent) {
+  if (isEditComposing.value) return;
+  const clipboard = event.clipboardData;
+  if (!clipboard) return;
+  const text = clipboard.getData("text/plain") || clipboard.getData("text") || "";
+  if (!/[\r\n]/.test(text)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  insertEditText(text);
+}
+
+/**
+ * Measures the hidden mirror, which carries the draft with the textarea's
+ * typography and width. Its height is how many wrapped lines the editor has to
+ * show; hard breaks are a deterministic fallback before the mirror has layout.
+ */
+function measureEditorMirrorHeight(): number {
+  const mirror = editMirrorRef.value;
+  if (!mirror) return 0;
+  const offset = Number(mirror.offsetHeight);
+  if (Number.isFinite(offset) && offset > 0) return offset;
+  const scroll = Number(mirror.scrollHeight);
+  if (!Number.isFinite(scroll) || scroll <= 0) return 0;
+  // scrollHeight includes padding but not the border; the editor is border-box.
+  return scroll + EDITOR_BORDER_PX * 2;
+}
+
+function syncEditorSize() {
+  if (!editingCell.value) {
+    editorMeasuredHeight.value = 0;
+    return;
+  }
+  const rect = paneOverlayRect(editingCell.value);
+  const cellHeight = rect?.height || DEFAULT_ROW_HEIGHT;
+  const hardBreakHeight = editorLineCount.value > 1
+    ? Math.ceil(editorLineCount.value * editorLineHeightPx() + EDITOR_BOX_CHROME_PX)
+    : 0;
+  editorMeasuredHeight.value = Math.max(cellHeight, hardBreakHeight, measureEditorMirrorHeight());
+}
+
 function onEditKeydown(event: KeyboardEvent) {
   if (isEditComposing.value || isComposingKeyboardEvent(event)) {
-    // Let the IME consume the key. Enter confirms the composition; remember it
-    // so the cell is committed once the final composition text is in place.
-    if (event.key === "Enter") commitEditOnCompositionEnd = true;
+    // Let the IME consume the key. A plain Enter confirms the composition;
+    // remember it so the cell is committed once the final composition text is
+    // in place. Alt+Enter stays a composition key, not a commit.
+    if (event.key === "Enter" && !event.altKey) commitEditOnCompositionEnd = true;
     return;
   }
 
-  if (event.key === "Enter") {
+  if (event.key === "Enter" && event.altKey) {
+    // Alt+Enter inserts a hard line break without closing the editor, so the
+    // cell can be authored with multiple lines (Excel's shortcut).
+    event.stopPropagation();
+    event.preventDefault();
+    insertEditText("\n");
+  } else if (event.key === "Enter") {
     event.stopPropagation();
     event.preventDefault();
     commitEdit();
@@ -2803,6 +2933,17 @@ function onEditKeydown(event: KeyboardEvent) {
     event.stopPropagation();
     event.preventDefault();
     commitAndTab();
+  } else if (
+    (event.key === "ArrowUp" || event.key === "ArrowDown")
+    && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey
+    && editorLineCount.value === 1
+  ) {
+    // A single-line draft has no text for ↑/↓ to move through, so Excel
+    // commits it and moves the selection out of the cell. A multi-line draft
+    // keeps the arrows for caret movement between its lines.
+    event.stopPropagation();
+    event.preventDefault();
+    commitAndMoveCell(event.key === "ArrowUp" ? -1 : 1, 0);
   }
 }
 
@@ -2829,6 +2970,23 @@ function commitAndTab() {
   editingCell.value = nextCell;
   editingValue.value = getCellInputValue(nextCell);
   scrollToCell(nextCell);
+}
+
+/** Commits the draft and leaves the editor, moving the selection by one cell. */
+function commitAndMoveCell(rowDelta: number, colDelta: number) {
+  const cell = editingCell.value;
+  if (!cell) return;
+  props.controller.commitCellInput(cell, editingValue.value);
+  editingCell.value = null;
+  editingValue.value = "";
+  isEditComposing.value = false;
+  commitEditOnCompositionEnd = false;
+  const nextCell = getAdjacentCell(cell, rowDelta, colDelta);
+  if (nextCell) {
+    props.controller.selectCell(nextCell);
+    scrollToCell(nextCell);
+  }
+  void nextTick(() => containerRef.value?.focus());
 }
 
 function getAdjacentCell(cell: XlsxCellAddress, rowDelta: number, colDelta: number): XlsxCellAddress | null {
@@ -2973,7 +3131,13 @@ const cornerCanvasStyle: CSSProperties = { left: "0px", position: "absolute", to
 const editInputStyle = computed<CSSProperties>(() => {
   if (!editingCell.value) return { display: "none" };
   const z = gridZoomFactor(zoomScale.value);
-  const rect = paneOverlayRect(editingCell.value);
+  const base = paneOverlayRect(editingCell.value);
+  if (!base) return { display: "none" };
+  // Grow over the rows below for wrapped or hard-broken lines. The pane clip
+  // still wins, so a cell at the bottom edge never paints over the headers.
+  const rect = paneOverlayRect(editingCell.value, {
+    height: Math.max(base.height, editorMeasuredHeight.value),
+  });
   if (!rect) return { display: "none" };
   return {
     left: `${ROW_HEADER_WIDTH + rect.left}px`,
@@ -2981,11 +3145,37 @@ const editInputStyle = computed<CSSProperties>(() => {
     width: `${rect.width}px`,
     height: `${rect.height}px`,
     position: "absolute", zIndex: "10",
-    border: "2px solid #2563eb", padding: "2px 4px",
-    fontSize: `${12 * z}px`, fontFamily: "inherit", outline: "none",
+    border: `${EDITOR_BORDER_PX}px solid #2563eb`,
+    padding: `${EDITOR_PADDING_Y_PX}px ${EDITOR_PADDING_X_PX}px`,
+    fontSize: `${12 * z}px`, fontFamily: "inherit", lineHeight: `${editorLineHeightPx()}px`,
+    outline: "none", resize: "none", overflow: "hidden",
+    whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: "break-word",
     background: props.isDark ? "#18181b" : "#ffffff",
     color: props.isDark ? "#e4e4e7" : "#18181b",
     boxSizing: "border-box",
+  };
+});
+
+/**
+ * Hidden measurement twin of the editor. It carries the same text, width,
+ * typography, padding and border, so its natural height is exactly the editor
+ * box height the draft needs.
+ */
+const editMirrorStyle = computed<CSSProperties>(() => {
+  if (!editingCell.value) return { display: "none" };
+  const z = gridZoomFactor(zoomScale.value);
+  const rect = paneOverlayRect(editingCell.value);
+  if (!rect) return { display: "none" };
+  return {
+    left: `${ROW_HEADER_WIDTH + rect.left}px`,
+    top: `${HEADER_HEIGHT + rect.top}px`,
+    width: `${rect.width}px`,
+    position: "absolute", zIndex: "9",
+    border: `${EDITOR_BORDER_PX}px solid transparent`,
+    padding: `${EDITOR_PADDING_Y_PX}px ${EDITOR_PADDING_X_PX}px`,
+    fontSize: `${12 * z}px`, fontFamily: "inherit", lineHeight: `${editorLineHeightPx()}px`,
+    whiteSpace: "pre-wrap", overflowWrap: "break-word", wordBreak: "break-word",
+    visibility: "hidden", pointerEvents: "none", boxSizing: "border-box",
   };
 });
 
@@ -3044,6 +3234,14 @@ watch(
 watch(
   () => [activeSheet.value?.name, activeCell.value?.row, activeCell.value?.col],
   () => { validationDropdownOpen.value = false; },
+  { flush: "post" },
+);
+
+// The mirror is the editor's sizing source: measure it after every draft or
+// zoom change and let the textarea grow instead of scrolling its first line.
+watch(
+  [editingCell, editingValue, zoomScale, containerWidth, containerHeight],
+  syncEditorSize,
   { flush: "post" },
 );
 
@@ -3137,6 +3335,8 @@ onUnmounted(() => {
 .xlsx-grid__corner,
 .xlsx-grid__body { pointer-events: none; }
 .xlsx-grid__edit-input { box-sizing: border-box; pointer-events: auto; }
+.xlsx-grid__edit-mirror { pointer-events: none; position: absolute; visibility: hidden; }
+.xlsx-grid__edit-mirror::after { content: "\200b"; }
 .xlsx-grid__comment-popover { background: #fffbe6; border: 1px solid #eab308; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.18); color: #422006; display: flex; flex-direction: column; gap: 3px; max-width: 260px; min-width: 150px; padding: 8px 10px; pointer-events: none; position: absolute; white-space: pre-wrap; z-index: 30; }
 .xlsx-grid__comment-popover strong { font-size: 11px; }
 .xlsx-grid__comment-popover span { font-size: 12px; line-height: 1.4; }

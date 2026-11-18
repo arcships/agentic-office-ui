@@ -257,6 +257,8 @@ const suites = {
       "tests/component/xlsx-calculation-safety.test.mjs",
       "tests/component/xlsx-grid-scroll.test.mjs",
       "tests/component/xlsx-cell-editing.test.mjs",
+      "tests/component/xlsx-cell-editor-multiline.test.mjs",
+      "tests/component/xlsx-ime-composition.test.mjs",
       "tests/component/xlsx-clipboard-search.test.mjs",
       "tests/component/xlsx-cut.test.mjs",
       "tests/component/xlsx-conditional-format.test.mjs",

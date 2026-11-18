@@ -945,6 +945,7 @@ defineExpose({
   .xlsx-sheet-tabs,
   .xlsx-context-menu,
   .xlsx-grid__edit-input,
+  .xlsx-grid__edit-mirror,
   .xlsx-grid__comment-popover,
   .xlsx-viewer__deferred,
   .xlsx-viewer__calculation-status,
