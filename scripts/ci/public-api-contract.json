@@ -238,8 +238,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 66,
-        "sha256": "502dfefa6652ae3a8b0bac0df45f344fd027845d2d3da472aa474ec2457f0ab8"
+        "count": 67,
+        "sha256": "b39e6c66cf98833b07e0d164156aee75add73c396e05892bee9517a351fb74de"
       }
     },
     {
@@ -255,8 +255,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 63,
-        "sha256": "53d5a3a5bb853a5fa896098d6ad4f0e351b95ee9ec387a331353d618ab447a6e"
+        "count": 65,
+        "sha256": "497bc8e6271226e904da35f7ed76041caac3c7ddc1c3316cb2270c481622ce3e"
       }
     }
   ],

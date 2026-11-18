@@ -24,6 +24,7 @@ import type {
   PptxMediaItem,
   PptxMorphMatch,
   PptxObjectGeometry,
+  PptxObjectHyperlink,
   PptxObjectIdentity,
   PptxPlaybackDocument,
   PptxPlaybackEffect,
@@ -927,6 +928,10 @@ function parseActions(
     const relationId = localAttr(node, "id")
     const relation = relationId ? slide.rels.get(relationId) : undefined
     const rawAction = node.getAttribute("action") ?? undefined
+    // `tooltip` is the visible affordance PowerPoint shows for the link; it is
+    // kept even when the target itself is unsupported so a tooltip-only link
+    // still reads correctly.
+    const tooltip = node.getAttribute("tooltip")?.trim() || undefined
     let kind: PptxSlideAction["kind"] = "unsupported"
     let targetSlideIndex: number | undefined
     let url: string | undefined
@@ -954,10 +959,37 @@ function parseActions(
       kind,
       targetSlideIndex,
       url,
+      tooltip,
       rawAction,
     }))
   }
   return Object.freeze(actions)
+}
+
+function withObjectHyperlinks(
+  objects: readonly PptxObjectIdentity[],
+  actions: readonly PptxSlideAction[],
+): readonly PptxObjectIdentity[] {
+  if (actions.length === 0) return objects
+  const byObject = new Map<string, PptxObjectHyperlink[]>()
+  for (const action of actions) {
+    const hyperlink: PptxObjectHyperlink = Object.freeze({
+      trigger: action.trigger,
+      kind: action.kind,
+      ...(action.targetSlideIndex !== undefined ? { targetSlideIndex: action.targetSlideIndex } : {}),
+      ...(action.url !== undefined ? { url: action.url } : {}),
+      ...(action.tooltip !== undefined ? { tooltip: action.tooltip } : {}),
+    })
+    const existing = byObject.get(action.sourceObjectKey)
+    if (existing) existing.push(hyperlink)
+    else byObject.set(action.sourceObjectKey, [hyperlink])
+  }
+  return Object.freeze(objects.map((object) => {
+    const hyperlinks = byObject.get(object.key)
+    return hyperlinks
+      ? Object.freeze({ ...object, hyperlinks: Object.freeze(hyperlinks) })
+      : object
+  }))
 }
 
 function morphMatchDescription(method: PptxMorphMatch["method"]): string {
@@ -1107,6 +1139,7 @@ function parseSlide(
     }
   }
   const actions = parseActions(document, slide, presentation, objectKeys)
+  const linkedObjects = withObjectHyperlinks(objects, actions)
   features.push(...collectPptxTextDirectionFeatures(document, slide.index))
   for (const action of actions) features.push(Object.freeze({
     id: action.id,
@@ -1121,7 +1154,7 @@ function parseSlide(
     hidden: slide.hidden === true || ["0", "false", "off"].includes(
       (document.documentElement.getAttribute("show") ?? "").toLowerCase(),
     ),
-    objects,
+    objects: linkedObjects,
     morphFromPrevious: Object.freeze([]),
     transition,
     rootNodeId,

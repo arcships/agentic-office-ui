@@ -37,6 +37,8 @@ import "@arcships/vue-pptx/style.css"
 | `showSearch` | `true` | 搜索框 |
 | `showPlaybackControls` | `true` | 播放控制条 |
 | `showWarnings` | `true` | 显示文档 `warnings`（备注不支持、宏已忽略等） |
+| `showContextMenu` | `true` | 内置链接右键菜单；设为 `false` 时只发 `context-menu` |
+| `linkHandling` | `built-in` | `built-in` 由查看器按 URL 策略打开/复制链接；`host` 只发 `action`/`context-menu`，由宿主处理 |
 | `openTimeoutMs` | `30000` | 加载超时毫秒数，超时后进入错误状态；`0` 关闭超时 |
 | `externalMedia` | `disabled` | 是否允许外部媒体；设为 `allowed` 时仍需要 `externalMediaUrlPolicy` 放行 |
 | `externalMediaUrlPolicy` | `undefined` | 外部媒体的 URL 规则：`baseUrl`、`allowedProtocols`、`allowedOrigins` 等 |
@@ -46,6 +48,14 @@ import "@arcships/vue-pptx/style.css"
 `limits` 支持完整的归档预算：`maxInputBytes`、`maxArchiveEntries`、`maxSingleEntryBytes`、`maxUncompressedBytes`、`maxMediaBytes`、`maxCompressionRatio`、`maxArchivePathLength`、`maxXmlBytes`、`maxSingleXmlBytes`、`maxXmlDepth`、`maxXmlAttributeBytes`、`maxTextNodeBytes`、`maxRelationships` 和 `maxConcurrency`。宿主只能收紧默认值，不能放宽硬上限。
 
 模板引用公开 `getController()`、`next()`、`previous()`、`play()`、`pause()`、`resume()`、`reset()`、`goToSlide()`、`enterFullscreen()` 和 `exitFullscreen()`。
+
+### 超链接与右键菜单
+
+`a:hlinkClick` 和 `a:hlinkHover` 在浏览与演示模式下都可用。形状点击先经过共享 URL 策略：只允许 `http:`、`https:`、`mailto:` 和文档内跳页，`javascript:`、`data:`、`vbscript:` 等目标一律拒绝（不会被当作可点击链接，也不会到达 `window.open`）。外部链接在新标签页打开（`noopener,noreferrer`），内部跳转调用同一个 `goTo()`，因此浏览模式会滚到目标页、演示模式沿用播放控制器的跳页规则。两种模式都继续抛出 `action` 事件（`open-url` / `mailto` / `go-to-slide` / `unsupported`），宿主可以照旧接管。`linkHandling="host"` 关闭内置打开/复制行为，只保留事件。
+
+右键带链接的形状会显示一个最小内置菜单（`data-testid="pptx-context-menu"`）：外部链接提供“打开链接”（`pptx-context-menu-open-link`）和“复制链接”（`pptx-context-menu-copy-link`），内部跳转提供“跳到第 N 页”。菜单遵循共享的菜单键盘语义（`↑`/`↓`/`Home`/`End` 移动焦点，`Esc`/`Tab` 关闭），点击背景关闭，文档、页码或模式变化时自动收起。无论是否显示内置菜单，`context-menu` 事件都会先抛出，宿主可用 `showContextMenu="false"` 完全接管。
+
+渲染完成后，标记层会把链接信息写到形状元素上：`title` 为 `tooltip` 属性（没有时回退到 URL），并设置 `data-pptx-hyperlink`（`click`/`hover`）、`data-pptx-hyperlink-kind`、`data-pptx-hyperlink-url`、`data-pptx-hyperlink-slide` 和 `data-pptx-hyperlink-tooltip`。点击链接的形状获得 `role="link"` 和 `tabindex="0"`，`Enter`/`Space` 与鼠标点击走同一条链接路由；缩略图里的链接只保留 tooltip，不会在缩略图按钮里再嵌套可聚焦元素。悬停链接（`a:hlinkHover`）只显示 tooltip，不会自动执行；播放能力报告把悬停动作记为 `static`。同一份链接元数据也会出现在 `PptxObjectIdentity.hyperlinks`（`PptxObjectHyperlink[]`）和 `PptxSlideAction.tooltip` 中，供无障碍、引用适配器和自建界面使用。
 
 ### 幻灯片浏览（Sorter）
 
@@ -85,6 +95,7 @@ import "@arcships/vue-pptx/style.css"
   @selection-change="onSelection"
   @object-click="onObjectClick"
   @context-menu="onContextMenu"
+  @link-activate="onLinkActivate"
 />
 ```
 
@@ -93,6 +104,7 @@ import "@arcships/vue-pptx/style.css"
 | `selection-change` | `{ kind: "slide", slideIndex }` | 点击幻灯片页面或其中对象 |
 | `object-click` | `{ kind: "object", slideIndex, objectKey }` | 点击带稳定对象标识的形状、图片、图表等对象 |
 | `context-menu` | `PptxStageContextMenu` 判别联合 | 右键幻灯片或对象 |
+| `link-activate` | `{ slideIndex, objectKey }` | 用 `Enter`/`Space` 激活已聚焦的链接形状 |
 
 `context-menu` 的精确形式为：
 
@@ -103,7 +115,7 @@ type PptxStageContextMenu = Position & (
 )
 ```
 
-其中 `Position` 包含 `slideIndex`、`clientX/Y` 和 `containerX/Y`；容器坐标相对 `PptxStage` 根元素，而不是宿主的外层滚动容器。`slideIndex` 从零开始。对象点击会先产生页面选中，再产生 `object-click`；右键只发 `context-menu`，其中已经包含页面和对象上下文。宿主决定是否显示菜单，不应解析 `objectKey` 的内部字符串格式。
+其中 `Position` 包含 `slideIndex`、`clientX/Y` 和 `containerX/Y`；容器坐标相对 `PptxStage` 根元素，而不是宿主的外层滚动容器。`slideIndex` 从零开始。对象点击会先产生页面选中，再产生 `object-click`；右键只发 `context-menu`，其中已经包含页面和对象上下文。宿主决定是否显示菜单，不应解析 `objectKey` 的内部字符串格式。`PptxViewer` 会把同一个 `context-menu` 再抛给宿主，并另外提供内置链接菜单（见[超链接与右键菜单](#超链接与右键菜单)）。
 
 ## 兼容性说明
 

@@ -94,7 +94,10 @@ async function onStageClick(event: MouseEvent) {
 
 - `selection-change`：点击幻灯片时返回 `{ kind: "slide", slideIndex }`；
 - `object-click`：点击形状、图片或图表时返回 `{ kind: "object", slideIndex, objectKey }`；
-- `context-menu`：右键幻灯片或对象时返回判别联合；`kind: "slide"` 时没有 `objectKey`，`kind: "object"` 时必须包含 `objectKey`，两者都有页码以及视口/`PptxStage` 根元素坐标。
+- `context-menu`：右键幻灯片或对象时返回判别联合；`kind: "slide"` 时没有 `objectKey`，`kind: "object"` 时必须包含 `objectKey`，两者都有页码以及视口/`PptxStage` 根元素坐标；
+- `link-activate`：链接形状获得焦点后按 `Enter`/`Space`，返回 `{ slideIndex, objectKey }`。
+
+`PptxViewer` 还会先抛出同一个 `context-menu` 事件，并（默认）为带链接的形状显示内置菜单；`PptxViewer` 在浏览和演示模式下都会把 `a:hlinkClick` 交给共享 URL 策略：`http:`/`https:` 和 `mailto:` 在新标签页打开，文档内跳页走 `goTo()`，`javascript:` 等目标被拒绝，`action` 事件照旧抛出。`showContextMenu="false"` 关闭内置菜单，`linkHandling="host"` 关闭内置打开/复制行为。悬停链接（`a:hlinkHover`）只提供 tooltip 并记为 `static` 能力。
 
 传入受控的 `selection-mode="content | object | region"` 后，`PptxStage` 会把对象内文字、幻灯片/可见对象点击和区域拖选转换为统一 `reference-confirm`，并提供候选、取消、revision、解析和错误事件。Stage 只读取渲染标记并发送事件，不持有引用集合、工具栏或 Agent 状态。
 

@@ -74,6 +74,7 @@ export type {
   PptxMediaItem,
   PptxMorphMatch,
   PptxMorphMatchMethod,
+  PptxObjectHyperlink,
   PptxObjectIdentity,
   PptxObjectSource,
   PptxPlaybackDocument,
