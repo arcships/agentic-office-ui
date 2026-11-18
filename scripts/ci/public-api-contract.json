@@ -89,8 +89,8 @@
         "getSheetsWasmModule"
       ],
       "rootDeclarationFingerprint": {
-        "count": 357,
-        "sha256": "5b02f8e695fa8c82cf746edef03197dcc31bfb226047a7ab83a142a924b43f60"
+        "count": 358,
+        "sha256": "702632fcc006343a43f013efd7281feace225a1f2efd50f59d454f714ef5d41e"
       }
     },
     {
@@ -181,8 +181,8 @@
         "XlsxContextMenu"
       ],
       "rootDeclarationFingerprint": {
-        "count": 92,
-        "sha256": "5479e291d78e46a3ec0f9da1649ee99d79835fbcb4d4480a228207cb899e979d"
+        "count": 97,
+        "sha256": "c0bfa1333e098e3b89a0ad0349c75488b755f4344acd80a182dc6a5824bf0bb7"
       }
     },
     {
@@ -216,8 +216,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 47,
-        "sha256": "7c43f41b3872b70c962f2653feadb9a4ddcaed2f90a8f0b12eded9b6851caf44"
+        "count": 55,
+        "sha256": "cb478384057f0fd5201bb0ee2e0f306a81db62ca866b6734c0c274edac14793a"
       }
     },
     {
