@@ -99,3 +99,14 @@ type PptxStageContextMenu = Position & (
 无法精确执行的 PowerPoint 内容会报告为近似、静态或未解析。本库不会用静态显示冒充动画完全兼容。程序可以监听 `capability`、`playback-warning` 和 `playback-error`。
 
 宏格式加载后会通过文档 `warnings` 报告宏已忽略，演讲者备注目前同样以 `NOTES_UNSUPPORTED` 报告。`PptxViewer` 默认在工具栏下方显示这些警告；自定义界面可读取 `usePptxDocument` 返回的 `document.warnings`。
+
+### 从右到左 (RTL) 段落
+
+渲染器会把 `a:pPr/@rtl="1"` 的段落画成 `direction: rtl`。渲染完成后查看器会把同一决定同步到标准 `dir` 属性（并写入 `data-pptx-paragraph-direction`），因此宿主 CSS、文本选择和引用范围都能按段落方向处理。能力报告同时记录：
+
+| 特性 | 处置 | 说明 |
+|---|---|---|
+| `text:rtl-paragraph` | `strict` | 段落方向由渲染器执行，`dir="rtl"` 透传到 DOM |
+| `text:rtl-columns` | `static` | `a:bodyPr/@rtlCol` 的多栏顺序尚未镜像，段落本身仍按 RTL 绘制 |
+
+没有 RTL 段落的页面不会新增能力记录，现有报表计数不变。

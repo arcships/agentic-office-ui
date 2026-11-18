@@ -244,6 +244,13 @@
   .pptx-viewer__playback-controls { overflow-x: auto; }
 }
 
+/* The renderer writes `direction: rtl` for `a:pPr/@rtl`; `applyPptxParagraphDirection`
+   mirrors it onto `dir` so hosts can style and hit-test mirrored paragraphs. */
+.pptx-stage__content [data-pptx-paragraph-index][dir="rtl"] {
+  direction: rtl;
+  unicode-bidi: embed;
+}
+
 @media print {
   .pptx-viewer {
     background: #fff !important;

@@ -224,6 +224,7 @@ export function buildSheetList(
     richTextCells?: Record<string, XlsxCellTextRun[]>;
     rowHeightOverridesPx?: Record<number, number>;
     rowStyleIds?: Record<number, number>;
+    rightToLeft?: boolean;
     showGridLines: boolean;
     sparklines?: XlsxSparkline[];
     pageSetup?: XlsxPageSetup;
@@ -298,6 +299,7 @@ export function buildSheetList(
           colCount: 0,
           rowHeightOverridesPx: sheetState?.rowHeightOverridesPx ?? {},
           rowStyleIds: sheetState?.rowStyleIds ?? {},
+          rightToLeft: sheetState?.rightToLeft ?? false,
           styleById: styleById ?? {},
           sparklines: sheetState?.sparklines ?? [],
           tableStyleByName: tableStyleByName ?? {},
@@ -377,6 +379,7 @@ export function buildSheetList(
         colCount: visibleCols.length,
         rowHeightOverridesPx: sheetState?.rowHeightOverridesPx ?? {},
         rowStyleIds: sheetState?.rowStyleIds ?? {},
+        rightToLeft: sheetState?.rightToLeft ?? false,
         showGridLines: sheetState?.showGridLines ?? true,
         styleById: styleById ?? {},
         sparklines: sheetState?.sparklines ?? [],

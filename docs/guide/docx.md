@@ -206,6 +206,14 @@ const missing = await surface.revealBookmark("No_Such_Bookmark")
 
 没有 Canvas 时（SSR、Worker）度量优先使用隐藏 DOM span，再退到确定性字宽；`fontMetrics`、`getFontMetricsRevision()`、`registerFontMetricCache()` 与 `subscribeFontMetrics()` 供自定义渲染层复用同一套缓存和失效事件。
 
+## 从右到左 (RTL) 段落
+
+段落属性 `w:bidi`（以及 `w:rtl`）解析为 `ParagraphStyle.direction`（`"rtl"` / `"ltr"`），`w:jc` 的 `start` / `end` / `low` 也保留在模型中。渲染时：
+
+- 段落宿主输出标准的 `dir="rtl"` / `dir="ltr"` 属性，表格单元格里的段落使用各自的方向；没有 bidi 标记的段落不写 `dir`，保持默认 LTR。
+- `paragraphTypographyStyle()` 同时输出 `direction` 与 `unicode-bidi: embed`，所以阿拉伯文/希伯来文的标点顺序由浏览器双向算法决定；`start` 对齐在 RTL 中落到右边，`w:jc="right"` 仍是物理右对齐。
+- run 级 `w:rtl` 与 `w:cs` 仍按字符样式输出，可与段落方向独立；公共函数 `parseParagraphDirectionFromXml()`、`parseParagraphDirectionFromParagraphProperties()` 和 `paragraphTypographyStyle()` 可在自建渲染层复用。
+
 ## 编辑辅助操作
 
 `DocxEditor` 默认启用下列编辑辅助操作。不需要时用属性关闭；关闭后不会渲染对应界面，也不改变文档或控制器行为。

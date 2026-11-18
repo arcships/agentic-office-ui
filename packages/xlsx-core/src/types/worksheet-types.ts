@@ -528,6 +528,12 @@ export interface XlsxSheetData {
   visibleCols: number[];
   colWidths: number[];
   rowHeights: number[];
+  /**
+   * `sheetView/@rightToLeft`: the worksheet reads right-to-left, so the grid
+   * mirrors its columns, headers and frozen panes. Cells keep their A1
+   * addresses and the data model is unchanged.
+   */
+  rightToLeft?: boolean;
   showGridLines: boolean;
   sparklines: XlsxSparkline[];
   themePalette: XlsxThemePalette;

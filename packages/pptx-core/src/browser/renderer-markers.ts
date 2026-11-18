@@ -1,4 +1,5 @@
 import { createPptxObjectKey } from "../playback/identity"
+import { applyPptxParagraphDirection } from "../playback/text-direction"
 import type { PptxObjectSource } from "../playback/types"
 
 export interface PptxRenderedObjectIndex {
@@ -54,6 +55,9 @@ export function applyPptxObjectMarkers(
       elements.set(key, element)
     }
   }
+  // The renderer already paints RTL paragraphs with `direction: rtl`; expose
+  // that decision as `dir` so hosts and selection can follow it.
+  applyPptxParagraphDirection(root)
   return {
     elements,
     duplicates: Object.freeze([...duplicates]),

@@ -143,6 +143,12 @@ export type WorkbookSheetState = {
   rowStyleIds: Record<number, number>;
   /** Rich-text runs per A1 address for cells that store several formatted runs. */
   richTextCells: Record<string, XlsxCellTextRun[]>;
+  /**
+   * `<sheetView rightToLeft="1">`: Excel's right-to-left sheet view. The grid
+   * mirrors column order, headers and frozen panes; the data model is
+   * unchanged.
+   */
+  rightToLeft: boolean;
   showGridLines: boolean;
   sparklines: XlsxSparkline[];
   zoomScale: number;
@@ -991,6 +997,7 @@ export function parseSheetState(
     colBreaks: printState.colBreaks,
     rowHeightOverridesPx,
     rowStyleIds,
+    rightToLeft: sheetViewNode ? parseBooleanAttribute(sheetViewNode, "rightToLeft", false) : false,
     showGridLines: (sheetViewNode?.getAttribute("showGridLines") ?? "1") !== "0",
     sparklines,
     zoomScale

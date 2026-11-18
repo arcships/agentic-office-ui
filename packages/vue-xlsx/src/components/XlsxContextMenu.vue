@@ -516,8 +516,12 @@ function resolveGridCell(
   if (localX < 0 || localY < 0) return null;
   // A frozen row/column keeps content coordinates: only the scrolling pane
   // adds the scroll offset, otherwise a right-click on a pinned cell would
-  // select whatever scrolled underneath it.
-  const x = paneAxisContentOffset(localX, target.scrollLeft, frozenExtent(sheet, "column", zoomScale));
+  // select whatever scrolled underneath it. RTL mirrors the column axis, so
+  // the pointer offset is measured from the frozen right-hand strip.
+  const mirroredX = sheet.rightToLeft === true
+    ? Math.max(0, rect.width - ROW_HEADER_WIDTH) - localX
+    : localX;
+  const x = paneAxisContentOffset(mirroredX, target.scrollLeft, frozenExtent(sheet, "column", zoomScale));
   const y = paneAxisContentOffset(localY, target.scrollTop, frozenExtent(sheet, "row", zoomScale));
 
   const zoom = Math.max(0.01, zoomScale / 100);
@@ -555,7 +559,10 @@ function resolveHeaderHit(
   }
   const { colCount, colWidths, rowCount, rowHeights } = resolveAxisSizes(sheet, zoomScale);
   if (localY <= HEADER_HEIGHT) {
-    const x = paneAxisContentOffset(localX - ROW_HEADER_WIDTH, target.scrollLeft, frozenExtent(sheet, "column", zoomScale));
+    const mirroredX = sheet.rightToLeft === true
+      ? Math.max(0, rect.width - ROW_HEADER_WIDTH) - (localX - ROW_HEADER_WIDTH)
+      : localX - ROW_HEADER_WIDTH;
+    const x = paneAxisContentOffset(mirroredX, target.scrollLeft, frozenExtent(sheet, "column", zoomScale));
     const displayCol = findDisplayIndexAtOffset(colWidths, x);
     const col = resolveDisplayIndices(sheet.visibleCols, colCount)[displayCol];
     return col === undefined ? null : { index: col, kind: "column" };

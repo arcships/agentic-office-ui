@@ -14,6 +14,7 @@
     data-testid="editor-paragraph"
     :data-node-index="paragraphIndex"
     :suppresscontenteditablewarning="editable ? 'true' : undefined"
+    :dir="paragraph.style?.direction"
     :style="paragraphStyle"
     :spellcheck="editable ? 'true' : undefined"
     @input="onInput"
