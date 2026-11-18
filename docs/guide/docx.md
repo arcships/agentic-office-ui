@@ -37,9 +37,23 @@ import "@arcships/vue-docx/style.css"
 | `defaultZoom` | `number` | `100` | 初始缩放百分比 |
 | `isDark` | `boolean` | `false` | 深色界面 |
 | `showTrackedChanges` | `boolean \| null` | `null` | 受控显示修订 |
+| `revisionDisplay` | `"inline" \| "balloons" \| "none" \| null` | `null` | 受控选择修订显示方式；`null` 跟随内部状态 |
+| `defaultRevisionDisplay` | `"inline" \| "balloons" \| "none"` | `"balloons"` | 未受控时的初始修订显示方式 |
 | `showComments` | `boolean \| null` | `null` | 受控显示批注 |
 
-主要事件为 `load-start`、`load-success`、`load-error`、`file-selected`、`update:isDark`、`update:showTrackedChanges` 和 `update:showComments`。
+主要事件为 `load-start`、`load-success`、`load-error`、`file-selected`、`update:isDark`、`update:showTrackedChanges`、`update:revisionDisplay` 和 `update:showComments`。
+
+## 修订显示方式
+
+`revisionDisplay` 只改变页面如何绘制修订，不修改模型：导出、接受/拒绝和重新打开仍保留全部修订。
+
+| 模式 | 正文 | 右侧 gutter |
+|---|---|---|
+| `inline` | 插入和删除都留在正文（绿色下划线 / 红色删除线） | 隐藏修订卡片；批注卡片仍显示 |
+| `balloons` | 删除内容离开正文，插入内容仍留在正文 | 显示删除、移动和格式修订卡片 |
+| `none` | 只显示最终文本，没有内联修订 | 隐藏修订卡片；批注卡片仍显示 |
+
+默认值是 `balloons`：原来的“正文内联删除 + 同一删除的卡片”重复显示会被消除。`reviewDisplayModel(model, display)` 生成只读显示模型，`reviewDisplayParagraph()`、`hiddenParagraphChildIndexes()`、`hiddenParagraphTextRanges()`、`displayTextOffsetForSourceOffset()` 和 `sourceTextOffsetForDisplayOffset()` 可供自定义表面复用；`renderParagraphRuns()` 的 `revisionDisplay` 默认 `inline`，保证直接调用渲染器时行为不变。编辑器和查看器工具栏都提供“审阅显示方式”选择器；编辑器也可以通过 `controller.setRevisionDisplay()` 切换。
 
 ## SVG 图片
 

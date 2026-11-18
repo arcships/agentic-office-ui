@@ -53,6 +53,7 @@
 //   tracked-change-table-decisions.ts — accept/reject table rows, cells and properties
 //   tracked-change-markup-loss.ts — report revisions an edit dropped
 //   tracked-changes-gutter.ts — tracked-change gutter card layout
+//   revision-display.ts    — inline/balloons/none display model (deleted runs leave the body)
 //   selection-helpers.ts   — selection/cursor helpers (paragraph location navigation, core helpers)
 //   selection-helpers-range.ts — range normalization/cloning/selection resolution
 //   selection-restore.ts   — DOM selection restore heuristics
@@ -123,6 +124,7 @@ export * from "./tracked-change-decisions";
 export * from "./tracked-change-table-decisions";
 export * from "./tracked-change-markup-loss";
 export * from "./tracked-changes-gutter";
+export * from "./revision-display";
 export * from "./pagination-plan-iterate";
 export * from "./pagination-plan-core";
 export * from "./pagination-line-index";

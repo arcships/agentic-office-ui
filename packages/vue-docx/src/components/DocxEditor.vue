@@ -241,6 +241,11 @@ const props = withDefaults(
     editable?: boolean
     showToolbar?: boolean
     showThumbnails?: boolean
+    /**
+     * Review display mode. Omitted follows the editor controller's own state.
+     * Display only: export keeps every revision.
+     */
+    revisionDisplay?: import("@arcships/docx-core").DocxRevisionDisplay
     runtime?: DocxRuntime
     /** Optional minimum height; the editor itself does not impose one. */
     minHeight?: string | number
@@ -297,6 +302,15 @@ const minHeightStyle = computed(() => {
 watch(
   () => controller.documentTheme,
   (theme) => { emit("update:isDark", theme === "dark") },
+)
+watch(
+  () => props.revisionDisplay,
+  (display) => {
+    if (display && display !== controller.revisionDisplay) {
+      controller.setRevisionDisplay(display)
+    }
+  },
+  { immediate: true },
 )
 const renderedModel = computed(() =>
   !props.editor && !props.editable && props.model

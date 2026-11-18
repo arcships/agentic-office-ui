@@ -15,6 +15,7 @@ import type {
   ParagraphNumberingLabel,
 } from "@arcships/docx-core"
 import type { DocxDocumentTheme } from "@arcships/docx-core"
+import type { DocxRevisionDisplay } from "@arcships/docx-core"
 import type { ParagraphTrackedInlineChange } from "@arcships/docx-core"
 import type { ParagraphCommentTextRange } from "@arcships/docx-core"
 import {
@@ -32,6 +33,7 @@ import {
   updateEstimatedLineWidthPxForText,
   resolveTabSpacerWidthPx,
   resolveParagraphTrackedMarkup,
+  reviewDisplayParagraph,
   resolveParagraphCommentMarkup,
   trackedDeletedStyle,
   runStyleToCss,
@@ -62,6 +64,11 @@ import { renderParagraphMarkChange } from "./paragraph-runs-annotation"
 export interface ParagraphRunRenderOptions {
   showTrackedChanges?: boolean
   showCommentHighlights?: boolean
+  /**
+   * How revisions are drawn. Omitted keeps the historical inline rendering so
+   * direct renderer callers do not change appearance.
+   */
+  revisionDisplay?: DocxRevisionDisplay
   numberingDefinitions?: NumberingDefinitionSet
   tocLinkColorByLevel?: Partial<Record<number, string | undefined>>
   trackedMarkupMode?: "inline" | "gutter"
@@ -153,6 +160,19 @@ export function renderParagraphRuns(
   totalPages?: number,
   options?: ParagraphRunRenderOptions
 ): VNode | VNode[] {
+  const requestedRevisionDisplay: DocxRevisionDisplay =
+    options?.revisionDisplay ??
+    (options?.trackedMarkupMode === "gutter" ? "balloons" : "inline")
+  const showTrackedChanges = options?.showTrackedChanges === true
+  // Hidden revisions render the final text, regardless of the preferred markup
+  // mode; callers that show revisions get the requested display.
+  const revisionDisplay: DocxRevisionDisplay = showTrackedChanges
+    ? requestedRevisionDisplay
+    : "none"
+  // The display model drops deleted model runs in balloons/none mode before
+  // any tab, field or revision layout reads the paragraph's children.
+  paragraph = reviewDisplayParagraph(paragraph, revisionDisplay)
+
   const runs: VNode[] = []
   const runsLeft: VNode[] = []
   const runsRight: VNode[] = []
@@ -214,9 +234,10 @@ export function renderParagraphRuns(
   let tabLeaderColor: string | undefined
 
   // Tracked changes & comments
-  const showTrackedChanges = options?.showTrackedChanges === true
   const showTrackedInlineMarkup =
-    showTrackedChanges && options?.trackedMarkupMode !== "gutter"
+    showTrackedChanges && revisionDisplay !== "none"
+  const showDeletionSegments =
+    showTrackedInlineMarkup && revisionDisplay === "inline"
   const trackedMarkup = showTrackedInlineMarkup
     ? resolveParagraphTrackedMarkup(paragraph)
     : undefined
@@ -287,7 +308,7 @@ export function renderParagraphRuns(
     keySeed: string,
     fallbackStyle?: TextRunNode["style"] | FormFieldRunNode["style"]
   ): void => {
-    if (!trackedMarkup) return
+    if (!trackedMarkup || !showDeletionSegments) return
     const segments = trackedMarkup.deletedSegmentsByVisibleChildIndex.get(
       trackedVisibleChildCursor
     )
@@ -407,6 +428,9 @@ export function renderParagraphRuns(
   }
 
   const appendParagraphMarkChange = (target: VNode[]): void => {
+    // Balloons/none keep the paragraph-mark revision in the review pane only;
+    // drawing the pilcrow would duplicate it in the final text flow.
+    if (revisionDisplay !== "inline") return
     const marker = renderParagraphMarkChange({
       keyPrefix,
       change: trackedMarkup?.paragraphMarkChange,

@@ -251,6 +251,7 @@ export type {
   DocxTextRange,
   DocxTextRangeLocation,
   DocxDocumentTheme,
+  DocxRevisionDisplay,
   DocxFormFieldLocation,
   DocxFormFieldUpdate,
   DocxSelectedFormField,

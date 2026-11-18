@@ -9,6 +9,7 @@
 
 import {
   h,
+  computed,
   defineComponent,
   nextTick,
   onMounted,
@@ -20,6 +21,7 @@ import {
 } from "vue"
 import {
   type DocxEditorController,
+  type DocxRevisionDisplay,
   type DocxFloatingPageOriginPx,
   type DocModel,
   type ParagraphNode,
@@ -113,6 +115,11 @@ export default defineComponent({
       default: "light",
     },
     trackedChangesEnabled: { type: Boolean, default: false },
+    /** Review display mode; controls inline revision markup and gutter cards. */
+    revisionDisplay: {
+      type: String as PropType<DocxRevisionDisplay>,
+      default: "balloons",
+    },
     commentsEnabled: { type: Boolean, default: false },
     pageNumber: { type: Number, required: true },
     totalPages: { type: Number, required: true },
@@ -150,6 +157,12 @@ export default defineComponent({
   setup(props, { emit, slots }) {
     const selectionOwner = {}
     const bodyElement = ref<HTMLElement>()
+
+    // Revisions hidden means the final text, regardless of the preferred
+    // markup mode chosen for the gutter selector.
+    const effectiveRevisionDisplay = computed<DocxRevisionDisplay>(() =>
+      props.trackedChangesEnabled ? props.revisionDisplay : "none"
+    )
 
     function emitContentMeasure(): void {
       const body = bodyElement.value
@@ -428,6 +441,7 @@ export default defineComponent({
               wrapClearanceTopPx,
               lineRange: segment.paragraphLineRange,
               showTrackedChanges: props.trackedChangesEnabled,
+              revisionDisplay: effectiveRevisionDisplay.value,
               showCommentHighlights: props.commentsEnabled,
               numberingDefinitions: props.model.metadata.numberingDefinitions,
               autoSpacingBeforePx: autoSpacing.beforePx,
@@ -472,6 +486,7 @@ export default defineComponent({
               documentTheme: props.theme,
               floatingPageOriginPx: floatingPageOrigin(),
               showTrackedChanges: props.trackedChangesEnabled,
+              revisionDisplay: effectiveRevisionDisplay.value,
               showCommentHighlights: props.commentsEnabled,
               numberingDefinitions: props.model.metadata.numberingDefinitions,
               pageNumber: props.pageNumber,

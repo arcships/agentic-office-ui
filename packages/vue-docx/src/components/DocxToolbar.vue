@@ -50,6 +50,19 @@
           <input type="checkbox" :checked="controller.showTrackedChanges" @change="controller.toggleShowTrackedChanges()" />
           <span>{{ m.docx.editor.edits }}</span>
         </label>
+        <label class="docx-toolbar-zoom" :title="m.docx.toolbar.revisionDisplay">
+          <select
+            data-testid="editor-revision-display"
+            class="docx-toolbar-select docx-toolbar-select-sm"
+            :value="controller.revisionDisplay"
+            :aria-label="m.docx.toolbar.revisionDisplay"
+            @change="onRevisionDisplayChange"
+          >
+            <option value="inline">{{ m.docx.toolbar.revisionDisplayInline }}</option>
+            <option value="balloons">{{ m.docx.toolbar.revisionDisplayBalloons }}</option>
+            <option value="none">{{ m.docx.toolbar.revisionDisplayNone }}</option>
+          </select>
+        </label>
         <label class="docx-toolbar-toggle" :title="m.docx.toolbar.comments">
           <input type="checkbox" :checked="controller.showComments" @change="controller.toggleShowComments()" />
           <span>{{ m.docx.toolbar.comments }}</span>
@@ -700,6 +713,13 @@ function onZoomChange(event: Event): void {
   const value = Number(target.value)
   zoomPercent.value = value
   emit("update:zoom", value)
+}
+
+function onRevisionDisplayChange(event: Event): void {
+  const value = (event.target as HTMLSelectElement).value
+  if (value === "inline" || value === "balloons" || value === "none") {
+    props.controller.setRevisionDisplay(value)
+  }
 }
 
 function onPageChange(event: Event): void {

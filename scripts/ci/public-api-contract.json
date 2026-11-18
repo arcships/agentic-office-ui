@@ -50,8 +50,8 @@
         "setWasmSource"
       ],
       "rootDeclarationFingerprint": {
-        "count": 1485,
-        "sha256": "ec777a315bbfdead025b5ecfc271b62715df3880976b8aea2d125cce15e2d0c4"
+        "count": 1493,
+        "sha256": "309797e276cb7bc3a9dde1ae104097d3772f7eabbe856d72829dfd63a1663e3c"
       }
     },
     {
@@ -132,8 +132,8 @@
         "notifyDocxViewerPageSurfaceListeners"
       ],
       "rootDeclarationFingerprint": {
-        "count": 188,
-        "sha256": "ca47567e9d8f1636f704765f8db74aa45b40e0fe7239b6dde2aa79c8eee6ae83"
+        "count": 189,
+        "sha256": "1320f4805a8a7f4a40a401b55a330a0aff40d85de569fb65868ee1effaac0cf2"
       }
     },
     {
