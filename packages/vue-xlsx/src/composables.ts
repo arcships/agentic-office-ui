@@ -3,6 +3,22 @@
 export { useXlsxViewerController } from "./composables/useXlsxViewerController";
 export { useXlsxSearch } from "./composables/useXlsxSearch";
 export {
+  CHART_SOURCE_HIGHLIGHT_COLOR_BY_ROLE,
+  XLSX_RANGE_HIGHLIGHT_DEFAULT_COLOR,
+  chartRangeCellAt,
+  collectChartRangeHighlights,
+  normalizeHighlightRange,
+  parseChartSourceA1Range,
+  parseChartSourceRange,
+} from "./composables/chart-range-highlight";
+export type {
+  ChartSourceHighlightRole,
+  ChartSourceRange,
+  ChartSourceSheet,
+  CollectChartRangeHighlightsOptions,
+  ParseChartSourceRangeOptions,
+} from "./composables/chart-range-highlight";
+export {
   FORMULA_REFERENCE_COLORS,
   collectFormulaReferences,
   formulaReferenceColor,

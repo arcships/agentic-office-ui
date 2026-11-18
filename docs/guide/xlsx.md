@@ -71,6 +71,29 @@ const controller = useXlsxViewerController({
 
 自建公式栏可以复用导出的规则：`collectFormulaReferences(formula, caret, { activeSheetName, resolveName })` 返回引用、目标区域和调色板颜色，`formulaReferenceSegments()` 把公式切成普通/引用文本段，`FORMULA_REFERENCE_COLORS` 是 Excel 调色板；`useFormulaReferenceEditing(controller)` 让自定义输入框驱动内置网格的边框。
 
+## 图表数据源与范围高亮
+
+选中图表、系列、数据点或图例项时，查看器会解析图表 XML 中的分类轴、数值轴和气泡大小引用，并在网格上框出对应的源单元格：
+
+- 分类（category）、数值（value）和气泡大小（bubbleSize）各用一种固定颜色，图例项与它的数值区域颜色一致；同一分类区域被多个系列共用时只画一次。
+- 选中单个系列时只高亮该系列的分类和数值区域；选中数据点时收窄到该点自己的分类、数值单元格；选中整个图表时高亮所有系列。
+- 支持 `Sheet1!$B$2:$B$5`、带引号的工作表名、`$` 绝对引用、单格、区域、整行/整列以及名称管理器中定义的名称。外部工作簿引用、联合区域和无法解析的名称不会画到错误的位置。
+- 高亮跟随滚动和缩放；冻结窗格按行/列拆成多个片段并裁剪在各自窗格内；隐藏行/列会跳过，整行/整列引用只绘制屏幕可见部分。
+- 取消选择图表后自动清除；切换工作表时只显示当前工作表上的区域。
+
+宿主也可以用控制器主动高亮任意区域：
+
+```ts
+controller.highlightRanges(
+  [{ start: { row: 4, col: 0 }, end: { row: 5, col: 1 } }],
+  { color: "#f59e0b", label: "搜索结果" },
+)
+controller.highlightedRanges // 响应式：图表数据源 + 宿主区域
+controller.clearHighlightedRanges()
+```
+
+`highlightRanges()` 会替换上一次宿主传入的区域，默认落在活动工作表、使用琥珀色；它只读，不修改工作簿、不写撤销记录、不影响导出。`clearHighlightedRanges()` 清除当前所有高亮；图表仍保持选中，下一次选择变化后会重新显示其数据源。`XlsxRangeHighlightLayer` 由 `XlsxViewer` 和 `XlsxSheetSurface` 自动挂载在画布之上、图表/图片之下；自建界面可以用 `createRangeHighlightLayout()` 复用同一套冻结窗格几何，或用 `collectChartRangeHighlights()` 和 `CHART_SOURCE_HIGHLIGHT_COLOR_BY_ROLE` 自行绘制。
+
 ## 数字、日期与语言区域
 
 查看器的 `locale` 同时决定界面文案和数字/日期的默认区域。数字格式里用 `[$-407]` 这类段显式指定的区域始终优先；没有指定区域的格式跟随查看器区域。需要单独控制数字/日期时，用 `documentLocale` 覆盖 `locale`；使用 `XlsxSheetSurface` 时同样可用这两个属性，或直接在 `useXlsxViewerController({ locale })` 中配置。

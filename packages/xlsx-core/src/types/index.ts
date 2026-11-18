@@ -4,6 +4,10 @@ export type {
   XlsxCellRange,
   XlsxCellHyperlink,
   XlsxCellComment,
+  // Range highlights
+  XlsxHighlightRangesOptions,
+  XlsxRangeHighlight,
+  XlsxRangeHighlightRole,
   // Rich text
   XlsxCellTextRun,
   XlsxCellTextRunFont,

@@ -20,8 +20,10 @@ import type {
   XlsxDataValidation,
   XlsxDataValidationFeedback,
   XlsxFormControl,
+  XlsxHighlightRangesOptions,
   XlsxImage,
   XlsxNamedRange,
+  XlsxRangeHighlight,
   XlsxShape,
   XlsxSheetData,
   XlsxTable,
@@ -98,6 +100,11 @@ import {
   shouldSkipXmlParsingForWorkbook
 } from "./chart-controller";
 import { createNavigationDomain } from "./navigation";
+import {
+  XLSX_RANGE_HIGHLIGHT_DEFAULT_COLOR,
+  collectChartRangeHighlights,
+  normalizeHighlightRange
+} from "./chart-range-highlight";
 import {
   XlsxFileSizeLimitExceededError,
   createWorkbookTooLargeError,
@@ -235,6 +242,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const selection = ref<XlsxCellRange | null>(null);
   const selectedChartId = ref<string | null>(null);
   const selectedChartElement = ref<XlsxChartElementSelection | null>(null);
+  const manualHighlightedRanges = ref<XlsxRangeHighlight[]>([]);
+  const chartHighlightsSuppressed = ref(false);
   const selectedImageId = ref<string | null>(null);
   const selectedShapeId = ref<string | null>(null);
   const revision = ref(0);
@@ -449,6 +458,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     shapesByWorkbookSheetIndex.value = [];
   }
   function clearChartAssets() {
+    manualHighlightedRanges.value = [];
     chartLoadRequestTokenRef.value += 1;
     chartDisplayFallbackCleanupRef.value?.();
     chartDisplayFallbackCleanupRef.value = null;
@@ -1539,6 +1549,81 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   // Replace placeholder with actual implementation from chart domain
   _setChartSeriesFormula = chartImageDomain.setChartSeriesFormula;
 
+  /**
+   * Chart source ranges follow the selected chart element. They are kept
+   * separate from host-supplied ranges so a search overlay calling
+   * `highlightRanges()` never overwrites what the chart selection shows, and
+   * deselecting the chart still clears its own ranges.
+   */
+  const chartSourceHighlightRanges = computed<XlsxRangeHighlight[]>(() => {
+    const chart = chartImageDomain.selectedChart.value;
+    if (!chart || chartHighlightsSuppressed.value) return [];
+    return collectChartRangeHighlights(chart, {
+      fallbackSheetIndex: chart.sheetIndex ?? activeSheetIndex.value,
+      resolveNamedRange: (name) => {
+        const override = definedNameOverridesRef.value[name];
+        if (override) return override.refersTo;
+        if (removedDefinedNamesRef.value.some((removed) => removed.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+          return null;
+        }
+        try {
+          const defined = workbook.value?.getNamedRange(name);
+          return typeof defined === "string" && defined.length > 0 ? defined : null;
+        } catch {
+          return null;
+        }
+      },
+      selection: selectedChartElement.value,
+      sheets: sheets.value.map((sheet, index) => ({
+        index,
+        name: sheet.name,
+        workbookSheetIndex: sheet.workbookSheetIndex
+      }))
+    });
+  });
+
+  const highlightedRanges = computed<XlsxRangeHighlight[]>(() => [
+    ...chartSourceHighlightRanges.value,
+    ...manualHighlightedRanges.value
+  ]);
+
+  function highlightRanges(
+    ranges: readonly XlsxCellRange[],
+    options: XlsxHighlightRangesOptions = {}
+  ) {
+    const sheetIndex = options.sheetIndex ?? activeSheetIndex.value;
+    if (!Number.isSafeInteger(sheetIndex) || sheetIndex < 0) {
+      throw new TypeError("XLSX highlight ranges require a non-negative worksheet index");
+    }
+    const color = options.color?.trim() || XLSX_RANGE_HIGHLIGHT_DEFAULT_COLOR;
+    const role = options.role ?? "custom";
+    manualHighlightedRanges.value = ranges.map((range, index) => ({
+      color,
+      ...(options.id ? { id: ranges.length > 1 ? `${options.id}:${index}` : options.id } : {}),
+      ...(options.label ? { label: options.label } : {}),
+      range: normalizeHighlightRange(range),
+      role,
+      sheetIndex
+    }));
+  }
+
+  /**
+   * A new chart/series selection restores the source highlights a previous
+   * `clearHighlightedRanges()` hid without changing the selection itself.
+   */
+  watch(
+    () => [selectedChartId.value, selectedChartElement.value],
+    () => { chartHighlightsSuppressed.value = false; }
+  );
+
+  function clearHighlightedRanges() {
+    manualHighlightedRanges.value = [];
+    // `clearHighlightedRanges()` clears *everything* currently painted; the
+    // chart stays selected, and the next selection change re-enables its
+    // source ranges.
+    chartHighlightsSuppressed.value = true;
+  }
+
   function downloadSource() {
     const sourceBuffer = sourceBufferRef.value;
     if (!sourceBuffer) return;
@@ -1667,6 +1752,9 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get canZoomOut() { return canZoomOut.value; },
     get charts() { return chartImageDomain.charts.value; },
     get chartsheets() { return chartsheets.value; },
+    get highlightedRanges() { return highlightedRanges.value; },
+    highlightRanges,
+    clearHighlightedRanges,
     clearSelectedChart: chartImageDomain.clearSelectedChart,
     clearSelectedChartElement: chartImageDomain.clearSelectedChartElement,
     changeChartType: chartImageDomain.changeChartType,
