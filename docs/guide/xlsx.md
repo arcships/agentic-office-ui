@@ -38,10 +38,46 @@ const controller = useXlsxViewerController({
 | `showRibbon` | `boolean` | `true` | 功能区 |
 | `showFormulaBar` | `boolean` | `true` | 公式栏 |
 | `showImages` | `boolean` | `true` | 图片和绘图对象 |
+| `showSheetTabs` | `boolean` | `true` | 底部工作表标签条 |
+| `activeTabIndex` | `number` | 无 | 受控的活动标签下标；不传时由控制器持有 |
 | `showUpload` | `boolean` | `false` | 上传入口 |
 | `getCellStyle` | `function` | 无 | 按单元格补充样式 |
 
-事件包括 `cellDoubleClick`、`upload`、`update:readOnly`、`load-deferred`、`deferred-resumed` 和 `deferred-cancel`。打印时 `@page` 尺寸取自活动工作表的 `pageSetup` 纸张与方向；图表工作表使用 16:9 的自适应高度。
+事件包括 `cellDoubleClick`、`upload`、`update:readOnly`、`tabChange`、`update:activeTabIndex`、`load-deferred`、`deferred-resumed` 和 `deferred-cancel`。打印时 `@page` 尺寸取自活动工作表的 `pageSetup` 纸张与方向；图表工作表使用 16:9 的自适应高度。
+
+## 工作表标签
+
+`showSheetTabs` 设为 `false` 只移除底部标签条：网格、功能区、公式栏和控制器状态都不变，`Ctrl/Cmd+PageUp/PageDown` 仍然可以切换工作表。此时切换只能通过宿主自己的界面调用 `controller.setActiveTabIndex(index)`。需要完全自定义的导航界面时，直接用 `XlsxSheetSurface` + `useXlsxViewerController`（见[自定义 XLSX 界面](../custom-components/xlsx.md)）。
+
+需要宿主记录或恢复活动工作表时，用 `v-model:active-tab-index` 加 `tabChange`：
+
+```vue
+<script setup lang="ts">
+import { ref } from "vue"
+import { XlsxViewer, type XlsxWorkbookTab } from "@arcships/vue-xlsx"
+
+const activeTab = ref(0)
+
+function onTabChange(tab: XlsxWorkbookTab) {
+  // kind 区分工作表与图表工作表；index 是 tabs 下标
+  console.log(tab.kind, tab.name, tab.index, tab.sheetIndex, tab.chartsheetIndex)
+}
+</script>
+
+<template>
+  <XlsxViewer
+    v-model:active-tab-index="activeTab"
+    :controller="controller"
+    @tab-change="onTabChange"
+  />
+</template>
+```
+
+- `activeTabIndex` 是 `controller.tabs` 的下标。工作表和图表工作表共用同一条标签条，所以它**不是** `controller.sheets` 的下标；越界值会被忽略，与 `setActiveTabIndex()` 一致。
+- 不传（或传 `undefined`）时活动标签由控制器持有，行为与旧版本完全一致。传数字时，值变化会同步到控制器；控制器内部切换后发出 `update:activeTabIndex` 供 `v-model` 更新。受控值可以在工作簿解析完成前传入，首个标签出现时会应用一次。
+- `tabChange(tab)` 在每次真正提交的切换后触发一次，参数是完整的 `XlsxWorkbookTab`（含 `kind`、`id`、`index`、`sheetIndex`/`chartsheetIndex`）。打开工作簿时的首个标签、重命名/排序/隐藏导致的标签重建、普通重渲染都不会触发。
+- 宿主自己写入 `activeTabIndex` 引起的切换不会回发 `tabChange`，避免路由或日志出现回环。
+- 拖拽排序活动标签时它的 `index` 会变化但没有切换工作表：只发 `update:activeTabIndex`，不发 `tabChange`。
 
 ## 打印与分页
 

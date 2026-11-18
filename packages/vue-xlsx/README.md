@@ -55,6 +55,10 @@ import "@arcships/vue-xlsx/webgl"
 | 事件 | 参数 |
 |---|---|
 | `cellDoubleClick` | `XlsxCellAddress` |
+| `tabChange` | `XlsxWorkbookTab`（每次提交的工作表切换一次，含 `kind`） |
+| `update:activeTabIndex` | `number`（配合受控 `activeTabIndex` / `v-model:active-tab-index`） |
+
+`tabChange` 与 `update:activeTabIndex` 让宿主可以记录或恢复活动工作表。`activeTabIndex` 是 `controller.tabs` 的下标，工作表和图表工作表共用一条标签条；不传时活动标签仍由控制器拥有。`showSheetTabs="false"` 只隐藏底部标签条，网格、功能区、公式栏保持可用，此时用 `controller.setActiveTabIndex()` 或宿主的标签栏切换。详细说明见 [XLSX 使用指南](https://github.com/arcships/agentic-office-ui/blob/master/docs/guide/xlsx.md)。
 
 `XlsxSheetSurface` 统一支持 `documentId`、`selectionMode`、`emitReferenceCandidates`，并发出 `referenceConfirm`、`regionDraftChange`、`selectionCancel`、`referenceResolve` 和 `referenceError`。组件 expose 可描述、解析和滚动到引用；确认后的引用集合和 Agent 工作流由宿主负责。
 
