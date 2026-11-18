@@ -787,7 +787,7 @@ pnpm --filter @arcships/vue-xlsx add -D @types/d3-geo @types/d3-hierarchy @types
 | 命名区域定义 | 431-439, 856-872 | `defineNamedRange` |
 | 公式重算 | 318, 850-855 | `recalculate`（Formulas + Data 两个 tab） |
 | 工作表增删/重命名/排序/隐藏 | 324/329, 782-790 | `addSheet`/`removeActiveSheet`/`renameSheet`/`moveSheet`/`setSheetVisibility` |
-| 工作表切换+缩略图 | 1033-1074 | hover Tooltip 显示 canvas 缩略图 |
+| 工作表切换+缩略图 | 1033-1074 | hover Tooltip 显示 canvas 缩略图；`showSheetTabs`/受控 `activeTabIndex`/`tabChange` 把标签条交给宿主 chrome |
 | 缩放控制 | 340, 900-924 | zoomIn/out/reset，预设 50-200% |
 | 加载后自动重置缩放 | 1170-1193 | sourceKey 变化时 setZoomScale(100) |
 | 导出 | 470-473, 831-844 | download（源文件）/exportXlsx/exportCsv |

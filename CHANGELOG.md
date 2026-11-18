@@ -4,6 +4,14 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### XLSX sheet tab surface for host chrome (#7)
+
+- Add `showSheetTabs` (default `true`) to `XlsxViewer`. Setting it to `false` removes only the bottom strip: the grid, ribbon, formula bar and the controller's active tab stay intact, so sheets can still be switched by host UI through `setActiveTabIndex()` (and by `Ctrl/Cmd+PageUp`/`PageDown`).
+- Add a controlled `activeTabIndex` prop with the matching `update:activeTabIndex` event. `undefined` keeps the controller authoritative, so existing hosts are unaffected; a number is mirrored onto the controller, including a restored index that arrives before the workbook is parsed (applied with the first tabs), and out-of-range values are ignored exactly like `setActiveTabIndex()`.
+- Add `tabChange(tab)` with the full `XlsxWorkbookTab` (including `kind`). It fires exactly once per committed switch and never for the workbook's opening tab, a no-op activation, renames, visibility changes, reorders or plain re-renders, and a host-driven `activeTabIndex` write is not echoed. Tab indices are `tabs` indices that interleave worksheets and chartsheets, so `kind`/`sheetIndex`/`chartsheetIndex` stay readable instead of being derived from `sheets`.
+- Reordering the active tab changes its index without switching sheets: `update:activeTabIndex` follows the index while `tabChange` stays quiet.
+- Add `tests/component/xlsx-viewer-tab-surface.test.mjs` (registered in `scripts/ci/run-suite.mjs`) covering strip visibility, the controller-owned default, controller-restored tabs, the controlled index before/after load, the `v-model` round-trip, out-of-range values, chartsheet payloads and rename/reorder rebuilds, and document the surface in `docs/guide/xlsx.md`, `docs/custom-components/xlsx.md` and the package README.
+
 ### XLSX sheet tab strip navigation and semantics (#11)
 
 - Keep the active sheet tab in view. `XlsxSheetTabs` scrolls the newly active tab with `scrollIntoView({ block: "nearest", inline: "nearest" })` and `scroll-behavior: smooth` on the strip, so a switch from the arrows, `setActiveTabIndex()`, a restored document or undo reveals its tab without scrolling the page or the grid viewport.

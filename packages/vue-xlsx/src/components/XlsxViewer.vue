@@ -202,7 +202,7 @@
       @close="authoringKind = null"
     />
     <XlsxSheetTabs
-      v-if="controller.tabs.length > 0"
+      v-if="showSheetTabs && controller.tabs.length > 0"
       :controller="controller"
       :is-dark="isDark ?? false"
       :read-only="effectiveReadOnly"
@@ -215,7 +215,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from "vue";
 import { clampSurfaceZoom, nextSurfaceZoom } from "@arcships/office-runtime/gesture-zoom";
 import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures";
-import type { XlsxViewerController, XlsxCellAddress, XlsxCellStyleContext } from "@arcships/xlsx-core";
+import type { XlsxViewerController, XlsxCellAddress, XlsxCellStyleContext, XlsxWorkbookTab } from "@arcships/xlsx-core";
 import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction";
 import XlsxGrid from "./XlsxGrid.vue";
 import XlsxToolbar from "./XlsxToolbar.vue";
@@ -255,6 +255,19 @@ const props = withDefaults(
     showRibbon?: boolean;
     showFormulaBar?: boolean;
     showImages?: boolean;
+    /**
+     * Renders the sheet tab strip. Hiding it keeps the workbook state and the
+     * rest of the chrome (grid, ribbon, formula bar); sheets can then only be
+     * switched by host UI or `controller.setActiveTabIndex()`.
+     */
+    showSheetTabs?: boolean;
+    /**
+     * Controlled active tab, as an index into `controller.tabs` (worksheets and
+     * chartsheets interleaved). Leave `undefined` to let the controller own the
+     * active tab; a number is mirrored onto the controller and reported back
+     * through `update:activeTabIndex` when the viewer switches.
+     */
+    activeTabIndex?: number;
     showUpload?: boolean;
     /** Enables trackpad, pinch and double-tap zoom for the composite viewer. */
     enableGestureZoom?: boolean;
@@ -279,6 +292,7 @@ const props = withDefaults(
     showRibbon: true,
     showFormulaBar: true,
     showImages: true,
+    showSheetTabs: true,
     showUpload: false,
     enableGestureZoom: true,
     locale: "en",
@@ -290,6 +304,9 @@ const props = withDefaults(
 const emit = defineEmits<{
   cellDoubleClick: [cell: XlsxCellAddress];
   upload: [];
+  /** Committed tab switch: `tab` is the full entry, so `kind` stays readable. */
+  tabChange: [tab: XlsxWorkbookTab];
+  "update:activeTabIndex": [index: number];
   "update:readOnly": [value: boolean];
   searchStateChange: [state: XlsxSearchState];
   "load-deferred": [payload: XlsxDeferredLoadPayload];
@@ -377,6 +394,102 @@ const gridViewport = ref({ height: 0, scrollLeft: 0, scrollTop: 0, width: 0 });
 const authoringKind = ref<XlsxAuthoringDialogKind | null>(null);
 // The tab strip points `aria-controls` at this id; both are unique per viewer.
 const gridId = nextXlsxDomId("xlsx-grid");
+
+// ── Sheet tab surface (controlled index + switch notification) ─────
+// `activeTabIndex` is an index into `controller.tabs`, not into `sheets`:
+// worksheets and chartsheets share one strip. `undefined` keeps the controller
+// authoritative, which is the behavior every existing host already gets.
+const controlledTabIndex = computed<number | undefined>(() => {
+  const index = props.activeTabIndex;
+  return typeof index === "number" && Number.isFinite(index) ? Math.trunc(index) : undefined;
+});
+
+// Set while the host's controlled index is being written to the controller, so
+// that a host-driven restore is not reported back as a user switch.
+let pendingControlledIndex: number | null = null;
+
+function syncControlledTabIndex(): void {
+  const index = controlledTabIndex.value;
+  if (index === undefined) return;
+  if (index === props.controller.activeTabIndex) return;
+  // An out-of-range index is ignored, exactly like `setActiveTabIndex()`.
+  if (index < 0 || index >= props.controller.tabs.length) return;
+  pendingControlledIndex = index;
+  props.controller.setActiveTabIndex(index);
+  // The controller commits synchronously; the marker only has to survive the
+  // flush that emits the events below.
+  void nextTick(() => {
+    if (pendingControlledIndex === index) pendingControlledIndex = null;
+  });
+}
+
+// A controlled value can arrive before the workbook is parsed, so the first
+// tabs of a load are the other moment it can be mirrored onto the controller.
+watch(controlledTabIndex, syncControlledTabIndex, { immediate: true });
+watch(
+  () => props.controller.tabs.length > 0,
+  (hasTabs) => {
+    if (hasTabs) syncControlledTabIndex();
+  },
+);
+
+// `tabChange` reports committed switches only. Tabs are rebuilt into new
+// objects for renames, visibility changes, reorders and removals, so the active
+// tab is compared by what identifies the sheet rather than by tab object or
+// index: a rename keeps the tab id (the workbook slot), while a reorder or a
+// slot shift keeps the name.
+const activeTabKey = computed(() => {
+  const tab = props.controller.activeTab;
+  return tab ? `${tab.index}:${tab.kind}:${tab.id}:${tab.name}` : null;
+});
+
+let reportedTab: { count: number; tab: XlsxWorkbookTab } | null = null;
+
+// A reload clears the strip and starts a new workbook; the next tab it shows is
+// an opening tab again, not a switch. Declared before the tab watcher so a
+// flush that replaces one workbook with another clears the previous tab first.
+watch(
+  () => props.controller.tabs.length,
+  (count) => {
+    if (count === 0) reportedTab = null;
+  },
+);
+
+function isSameSheet(next: XlsxWorkbookTab, count: number): boolean {
+  const previous = reportedTab;
+  if (!previous || previous.tab.kind !== next.kind) return false;
+  if (previous.tab.name === next.name) return true;
+  // A rename keeps the tab id and does not change how many tabs are shown; a
+  // removal can hand that id to a neighbouring sheet, so it also needs the
+  // count to stay put before the id counts as the same sheet.
+  return previous.tab.id === next.id && previous.count === count;
+}
+
+watch(
+  activeTabKey,
+  () => {
+    const tab = props.controller.activeTab;
+    if (!tab) return;
+    const count = props.controller.tabs.length;
+    const openingTab = reportedTab === null;
+    const sameSheet = isSameSheet(tab, count);
+    reportedTab = { count, tab };
+    // The workbook's opening tab is not a switch, and neither is a tab the host
+    // itself selected through `activeTabIndex`.
+    if (openingTab || sameSheet || pendingControlledIndex === props.controller.activeTabIndex) return;
+    emit("tabChange", tab);
+  },
+  { immediate: true },
+);
+
+watch(
+  () => props.controller.activeTabIndex,
+  (index) => {
+    // A value the host already passed in needs no echo.
+    if (index === controlledTabIndex.value) return;
+    emit("update:activeTabIndex", index);
+  },
+);
 
 function openAuthoring(kind: XlsxAuthoringDialogKind) {
   authoringKind.value = kind;

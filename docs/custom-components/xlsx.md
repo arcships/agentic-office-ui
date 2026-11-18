@@ -30,4 +30,17 @@ const controller = useXlsxViewerController({ file: props.bytes })
 
 上例的控制器以创建时的文件为来源。更换 `bytes` 时应重新创建承载该控制器的子组件，不要直接修改控制器内部状态冒充换文件。
 
+需要宿主自己的标签栏时，关闭内置标签条并受控地持有活动标签：
+
+```vue
+<XlsxViewer
+  :controller="controller"
+  :show-sheet-tabs="false"
+  v-model:active-tab-index="activeTab"
+  @tab-change="onTabChange"
+/>
+```
+
+`showSheetTabs=false` 只隐藏底部标签条，网格、功能区、公式栏和控制器状态都还在；活动标签由 `activeTab` 控制（`undefined` 时由控制器持有），`tabChange` 在每次提交的切换后返回完整标签（含 `kind`）。`activeTabIndex` 是 `controller.tabs` 的下标，不是 `controller.sheets` 的下标。
+
 不要用已经弃用的 `XlsxGrid`、`XlsxFormulaBar` 和浮层组件重新拼装查看器。它们依赖大量内部协调状态。需要缩略图时，从同一个控制器调用 `useXlsxViewerThumbnails()`。

@@ -222,6 +222,7 @@ const suites = {
       "tests/component/xlsx-sheet-rename.test.mjs",
       "tests/component/xlsx-sheet-order.test.mjs",
       "tests/component/xlsx-sheet-tabs.test.mjs",
+      "tests/component/xlsx-viewer-tab-surface.test.mjs",
       "tests/component/xlsx-sheet-visibility.test.mjs",
       "tests/component/xlsx-drawing-fidelity.test.mjs",
       "tests/component/xlsx-calculation-safety.test.mjs",
