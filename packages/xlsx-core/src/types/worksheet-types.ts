@@ -1,6 +1,7 @@
 import type { Workbook, Worksheet } from "@dukelib/sheets-wasm";
 import type { XlsxChart, XlsxChartElementSelection, XlsxChartFamily, XlsxChartsheet } from "./chart-types";
 import type { XlsxThemePalette } from "./theme-types";
+import type { XlsxSelectionStatsQuery, XlsxSelectionSummary } from "../selection-stats";
 import type {
   XlsxFormControl,
   XlsxFormControlInput,
@@ -1982,6 +1983,18 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
   setChartRect: (id: string, rect: XlsxImageRect) => void;
   setImageRect: (id: string, rect: XlsxImageRect) => void;
   getRowsBatchAsync?: (workbookSheetIndex: number, startRow: number, rowCount: number, signal?: AbortSignal) => Promise<unknown[] | null>;
+  /**
+   * Summarizes a selection inside the Worker for Worker-backed viewers.
+   *
+   * Main-thread viewers read the worksheet directly. Worker-backed viewers
+   * keep the workbook on the Worker thread, so the status bar asks for the
+   * aggregate instead of transferring the selected cells.
+   */
+  getSelectionStatsAsync?: (
+    workbookSheetIndex: number,
+    query: XlsxSelectionStatsQuery,
+    signal?: AbortSignal,
+  ) => Promise<XlsxSelectionSummary | null>;
   tables: XlsxTable[];
   tabs: XlsxWorkbookTab[];
   undo: () => void;

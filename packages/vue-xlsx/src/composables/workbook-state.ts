@@ -36,6 +36,8 @@ import {
   type XlsxPrintOptions,
   type XlsxPrintTitles,
   type XlsxResolvedCellStyle,
+  type XlsxSelectionStatsQuery,
+  type XlsxSelectionSummary,
   type XlsxSheetData,
   type XlsxSheetVisibility,
   type XlsxSparkline,
@@ -734,6 +736,18 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     return ctx.getWorkerClient().getRowsBatch(workbookSheetIndex, startRow, rowCount, signal);
   }
 
+  function getSelectionStatsAsync(
+    workbookSheetIndex: number,
+    query: XlsxSelectionStatsQuery,
+    signal?: AbortSignal
+  ): Promise<XlsxSelectionSummary | null> {
+    if (!ctx.isWorkerBacked.value) {
+      return Promise.resolve(null);
+    }
+
+    return ctx.getWorkerClient().getSelectionStats(workbookSheetIndex, query, signal);
+  }
+
   function createHistoryEntry(): SnapshotHistoryEntry | null {
     if (!ctx.workbook.value) {
       return null;
@@ -1187,6 +1201,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
     tables,
     getCellSnapshotAsync,
     getRowsBatchAsync,
+    getSelectionStatsAsync,
     sortTable,
     download,
     exportXlsx,

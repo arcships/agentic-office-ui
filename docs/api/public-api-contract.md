@@ -130,6 +130,7 @@ try {
 - 单元格文字旋转与缩小适应（issue #141）：`XlsxSheetData.cellTextLayouts` 以 A1 地址保存显式样式里带 `textRotation`（0–180，91–180 表示顺时针）或 `shrinkToFit` 的单元格，主线程与 Worker 快照都会带回；网格、缩略图和打印预览按 Excel 角度语义旋转、按旋转后的包围盒裁剪，并在 `shrinkToFit` 时二分缩小到基础字号的 0.4 倍。
 - 富文本单元格（issue #138）：`XlsxCellTextRun` / `XlsxCellTextRunFont` 描述单元格内每一段文字的文本与字体覆盖（粗体、斜体、下划线、删除线、颜色、字号、字体族、`vertAlign` 上标/下标），`XlsxSheetData.richTextCells` 以 A1 地址保存多段单元格，`controller.getCellRuns(cell)` 返回当前单元格的段（值变化后自动不再返回）。`parseRichTextRuns`、`parseInlineRichTextCell`、`parseSharedStringRichText`、`richTextRunsToPlainText` 与 `resolveRichTextRuns` 供自定义渲染复用同一套解析与"文本仍匹配"校验；单元格的纯文本 `value` 始终是各段拼接，公式、搜索和剪贴板继续使用它。
 - 预设形状几何与连接线（issue #143）：`buildPresetShapePath(geometry, adjustments, { width, height })` 返回 `{ path, viewBox }`，覆盖 ECMA-376 的 `a:prstGeom` 预设（箭头、V 形、星形、标注、流程图、括号/花括号、月牙、齿轮、云、弧形等）；`adjustments` 接受 `Record<string, number>` 或 `PresetShapeAdjustments`（`a:avLst` 的 1/100000 单位）。`XlsxShape.svgPath`/`svgViewBox` 现在对预设几何也会写入，连接线的 `stroke.dash`、`headEndType`、`tailEndType` 继续保留；`isStrokeOnlyShapeGeometry(geometry)` 标记不填充的开放路径（连接线、弧线、括号/花括号）。`XlsxDrawingLayer` 用同一函数按当前尺寸重建路径，并渲染 `prstDash` 虚线与 `headEnd`/`tailEnd` 端点箭头。
+- 选区汇总（issue #111）：`summarizeSelectionValues(values, { totalCells, scannedCells, numberFormat })` 把主线程和 Worker 读取的非空单元格汇总为 `XlsxSelectionSummary`（`cellCount`、`count`、`numericCount`、`sum`、`average`、`min`、`max`、`numberFormat`、`truncated`），使用补偿求和；`XLSX_SELECTION_STATS_CELL_LIMIT`（10,000）是统一扫描上限。`XlsxSelectionStatsQuery` 描述 Worker 读取窗口（含 `hiddenRows` 与 `cellCount`），`XlsxWorkerClient.getSelectionStats()` / `controller.getSelectionStatsAsync()` 只返回聚合结果，不传输单元格。
 
 `XlsxRuntimeConfig.limits` 使用实例自己的 `XlsxRuntimeLimits`。公开限制除通用输入、压缩包、XML、关系、图片和解析时间外，还覆盖工作表 XML、共享字符串、行列、工作表数量和公式数量。`DEFAULT_XLSX_RUNTIME_LIMITS` 是默认值，`resolveXlsxRuntimeLimits` 返回实例快照；`validateXlsxArchive` 可在创建工作簿前执行同一套检查。
 
@@ -182,12 +183,16 @@ DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注
 - `XlsxViewer`。
 - `useXlsxViewerController`、`useXlsxViewerThumbnails`。
 - `XLSX_FILE_EXTENSIONS`、`XLSX_FILE_MIME_TYPES`、`XLSX_FILE_ACCEPT`、`xlsxFileExtension`、`isSupportedXlsxFileName`（上传入口和拖放共用的类型策略）。
+
+- `XlsxStatusBar`（选择状态栏；`XlsxViewer` 默认挂载，`showStatusBar="false"` 关闭）。
+- `useXlsxViewerController`、`useXlsxViewerThumbnails`、`useXlsxSelectionStats`、`formatSelectionStatValue`。
 - `XlsxFileSizeLimitExceededError`。
 - `XlsxDiagnostic`、`XlsxLoadError`、`XlsxLoadErrorCode`、`XlsxSourceKind`、`XlsxSourceState`、`XlsxUrlPolicy`。
 - 样式：`@arcships/vue-xlsx/style.css`。
 - 可选功能：`@arcships/vue-xlsx/chart`、`@arcships/vue-xlsx/map`、`@arcships/vue-xlsx/webgl`。根入口保留旧渲染名称的异步兼容外观；新代码可显式导入对应子入口。未使用功能时不会请求其实现分包。
 - 工作表缩略图：`useXlsxViewerThumbnails` 只在需要时读取单元格（首次悬停或显式预热），`prefetchThumbnails` 在空闲时预热指定工作表、按 `revision` 去重、单次最多 3 张，`paintThumbnail` 随后只绘制。
 - 历史记录：控制器选项 `historyMaxEntries` 和 `historyMaxBytes` 同时生效，默认最多 100 条、估算 32 MiB。
+- 选择状态栏（issue #111）：`XlsxViewer` 在网格下方渲染 `XlsxStatusBar`，显示单元格/区域地址、非空计数、数值计数、求和、平均值、最小值/最大值，并用第一个数值单元格的数字格式渲染合计；自动筛选隐藏的行不计入合计并显示 `Filtered`。扫描上限为 `XLSX_SELECTION_STATS_CELL_LIMIT`（10,000），更大的选区显示 `…`。自建界面可挂载 `XlsxStatusBar`，或用 `useXlsxSelectionStats(controller)` 读取 `summary`、`filtered`、`pending`，并用 `formatSelectionStatValue(value, numberFormat, locale)` 复用同一套数字格式渲染。Worker 只读视图通过 `controller.getSelectionStatsAsync()` 在 Worker 内聚合，不传输单元格。
 - 图表数据：`refreshChartData()` 在主线程工作簿或 Worker 当前工作簿上重新解析图表分类和值，用于源单元格编辑后刷新绘图。
 - 重新加载本地工作簿：`XlsxViewerController.loadFile(source: XlsxLoadFileSource, fileName?)` 接受 `ArrayBuffer` 或任何带 `arrayBuffer()` 的 `File`/`Blob`。`XlsxViewer` 的拖放导入调用它，与 `file` 选项共用大小上限、URL 规则、延迟解析阈值和 Worker 路径；原来的 URL 来源被替换，加载结束前 `displayFileName`、`sourceState` 和 `sourceError` 与普通加载一致地更新。
 - 编写入口：`XlsxViewer` 的功能区与右键菜单打开 `XlsxAuthoringDialog`（图表、批注、超链接、表格、条件格式、数据验证）。宿主也可以直接挂载该组件，或只调用控制器上的 `insertChart`、`setCellComment`、`setCellHyperlink`、`addConditionalFormatRule`、`updateConditionalFormatRule`、`deleteConditionalFormatRule`、`createTable`、`removeTable`、`setSelectionDataValidation`、`setFreezePanes`、`toggleFreezePanesAtActiveCell`。每个操作都写入工作簿模型、记录撤销条目，并随导出的 XLSX 一起保存；`XlsxViewerAuthoring` 汇总这些方法的说明。直接读取/清空用 `getCellComment`、`getCellHyperlink`、`getConditionalFormatRules`、`getTableAtCell`、`freezePanes`。

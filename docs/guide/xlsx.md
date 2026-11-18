@@ -39,6 +39,7 @@ const controller = useXlsxViewerController({
 | `showFormulaBar` | `boolean` | `true` | 公式栏 |
 | `showImages` | `boolean` | `true` | 图片和绘图对象 |
 | `showSheetTabs` | `boolean` | `true` | 底部工作表标签条 |
+| `showStatusBar` | `boolean` | `true` | 底部选择状态栏 |
 | `activeTabIndex` | `number` | 无 | 受控的活动标签下标；不传时由控制器持有 |
 | `showUpload` | `boolean` | `false` | 上传入口 |
 | `getCellStyle` | `function` | 无 | 按单元格补充样式 |
@@ -52,6 +53,12 @@ const controller = useXlsxViewerController({
 将本地工作簿拖到查看器上会直接加载：先按 `.xlsx`、`.xls`、`.xlsm`、`.xlsb`、`.xltx`、`.xltm` 和 `.csv` 判断类型（`isSupportedXlsxFileName()` 与 `XLSX_FILE_ACCEPT` 可用于自建上传入口），命中的文件交给 `controller.loadFile(file)`。该入口与 `file` 选项共用大小上限、URL 规则、延迟解析阈值和 Worker 路径，因此拖放不会绕过任何加载限制。
 
 `XlsxViewer` 在加载开始时同时抛出 `fileDrop(file)` 事件，宿主可据此更新自己的文件名和状态区。拖入时查看器根元素出现虚线轮廓；拖离、放下或拖拽在窗口其他位置结束后都会清除，不依赖会一直累加的 `dragover` 计数。不支持的扩展名不会加载，查看器上方显示本地化的拒绝提示（`xlsx.viewer.unsupportedDrop`）。
+
+## 选择状态栏
+
+`XlsxViewer` 在网格下方渲染选择状态栏：单元格/区域地址、非空计数、数值计数（仅在两者不同时）、求和、平均值、最小值和最大值，以及 `Selected`/`Filtered` 标记。数值合计使用选区中第一个数值单元格的数字格式，因此货币和百分比选区会按原单位显示；日期、时间等格式回退到 General。
+
+自动筛选隐藏的行不计入合计，并在状态栏标记为 `Filtered`。状态栏只读取当前选区，最多 10,000 个单元格；更大的选区会显示 `…` 标记，悬停提示扫描上限。Worker 只读视图通过 `controller.getSelectionStatsAsync()` 在 Worker 内聚合，不把单元格传回主线程。用 `showStatusBar="false"` 可隐藏状态栏；自建界面可以直接挂载导出的 `XlsxStatusBar`，或用 `useXlsxSelectionStats(controller)` 复用同一套汇总逻辑。
 
 ## 单元格编辑
 

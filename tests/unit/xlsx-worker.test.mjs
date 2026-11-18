@@ -370,3 +370,96 @@ test("XLSX worker: AutoFilter rows expose formatted values and honour the row ca
     ["North", "South", "APAC"],
   );
 });
+
+test("XLSX worker: selection stats summarize numbers, text and the cell budget", async () => {
+  const source = new sheetsWasm.Workbook();
+  const sheet = source.getSheet(0);
+  for (let row = 0; row < 10; row += 1) sheet.setCell(`A${row + 1}`, row + 1);
+  sheet.setCell("B1", "alpha");
+  sheet.free();
+  const bytes = source.saveXlsxBytes();
+  source.free();
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+
+  const payload = { buffer, limits };
+  if (!wasmSourceSent) {
+    payload.wasmSource = wasmBuffer;
+    wasmSourceSent = true;
+  }
+  const loaded = await workerScope.request("load", payload).response;
+  assert.equal(loaded.success, true, `load failed: ${JSON.stringify(loaded)}`);
+
+  const complete = await workerScope.request("getSelectionStats", {
+    cellCount: 10,
+    endCol: 0,
+    endRow: 9,
+    maxCells: 10_000,
+    startCol: 0,
+    startRow: 0,
+    workbookSheetIndex: 0,
+  }).response;
+  assert.equal(complete.success, true, `selection stats failed: ${JSON.stringify(complete)}`);
+  assert.deepEqual({
+    average: complete.result.average,
+    cellCount: complete.result.cellCount,
+    count: complete.result.count,
+    max: complete.result.max,
+    min: complete.result.min,
+    numericCount: complete.result.numericCount,
+    sum: complete.result.sum,
+    truncated: complete.result.truncated,
+  }, {
+    average: 5.5,
+    cellCount: 10,
+    count: 10,
+    max: 10,
+    min: 1,
+    numericCount: 10,
+    sum: 55,
+    truncated: false,
+  });
+
+  const budgeted = await workerScope.request("getSelectionStats", {
+    cellCount: 10,
+    endCol: 0,
+    endRow: 9,
+    maxCells: 3,
+    startCol: 0,
+    startRow: 0,
+    workbookSheetIndex: 0,
+  }).response;
+  assert.equal(budgeted.success, true);
+  assert.equal(budgeted.result.count, 3);
+  assert.equal(budgeted.result.sum, 6);
+  assert.equal(budgeted.result.truncated, true);
+
+  const filtered = await workerScope.request("getSelectionStats", {
+    cellCount: 9,
+    endCol: 0,
+    endRow: 9,
+    hiddenRows: [1],
+    maxCells: 10_000,
+    startCol: 0,
+    startRow: 0,
+    workbookSheetIndex: 0,
+  }).response;
+  assert.equal(filtered.success, true);
+  assert.equal(filtered.result.count, 9);
+  assert.equal(filtered.result.sum, 53, "the hidden row is excluded");
+  assert.equal(filtered.result.min, 1);
+  assert.equal(filtered.result.max, 10);
+
+  const mixed = await workerScope.request("getSelectionStats", {
+    cellCount: 2,
+    endCol: 1,
+    endRow: 0,
+    maxCells: 10_000,
+    startCol: 0,
+    startRow: 0,
+    workbookSheetIndex: 0,
+  }).response;
+  assert.equal(mixed.success, true);
+  assert.equal(mixed.result.count, 2, "text cells count");
+  assert.equal(mixed.result.numericCount, 1);
+  assert.equal(mixed.result.sum, 1);
+});

@@ -237,6 +237,11 @@
       :read-only="effectiveReadOnly"
       :panel-id="controller.activeSheet ? gridId : undefined"
     />
+    <XlsxStatusBar
+      v-if="showStatusBar && controller.activeSheet"
+      :controller="controller"
+      :is-dark="isDark ?? false"
+    />
   </div>
 </template>
 
@@ -251,6 +256,7 @@ import XlsxToolbar from "./XlsxToolbar.vue";
 import XlsxRibbon from "./XlsxRibbon.vue";
 import XlsxFormulaBar from "./XlsxFormulaBar.vue";
 import XlsxSheetTabs from "./XlsxSheetTabs.vue";
+import XlsxStatusBar from "./XlsxStatusBar.vue";
 import XlsxRangeHighlightLayer from "./XlsxRangeHighlightLayer.vue";
 import XlsxChartOverlay from "./XlsxChartOverlay.vue";
 import XlsxImageLayer from "./XlsxImageLayer.vue";
@@ -294,6 +300,12 @@ const props = withDefaults(
      */
     showSheetTabs?: boolean;
     /**
+     * Renders the selection status bar under the sheet tabs. It shows the
+     * selected cell/range, non-empty and numeric counts, sum, average, min and
+     * max, and marks filtered or budget-truncated selections.
+     */
+    showStatusBar?: boolean;
+    /**
      * Controlled active tab, as an index into `controller.tabs` (worksheets and
      * chartsheets interleaved). Leave `undefined` to let the controller own the
      * active tab; a number is mirrored onto the controller and reported back
@@ -333,6 +345,7 @@ const props = withDefaults(
     showFormulaBar: true,
     showImages: true,
     showSheetTabs: true,
+    showStatusBar: true,
     showUpload: false,
     enableGestureZoom: true,
     locale: "en",
@@ -1039,6 +1052,7 @@ defineExpose({
   .xlsx-ribbon,
   .xlsx-formula-bar,
   .xlsx-sheet-tabs,
+  .xlsx-status-bar,
   .xlsx-context-menu,
   .xlsx-grid__edit-input,
   .xlsx-grid__edit-mirror,
