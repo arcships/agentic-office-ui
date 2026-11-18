@@ -4,7 +4,8 @@ import type {
   ImageRunNode,
   ParagraphChildNode,
   ParagraphNode,
-  TableCellContentNode
+  TableCellContentNode,
+  TableNode
 } from "./types";
 import { parseFloatingAnchorProperties } from "./anchor-properties";
 import { parseParagraphCommentRanges } from "./comment-ranges";
@@ -97,7 +98,84 @@ function normalizeDocNode(node: DocNode): DocNode {
     };
   }
 
-  return {
+  return rebuildTable(node);
+}
+
+/**
+ * `w:tblGrid` widths of a table's stored markup, including the zero-width
+ * columns the model builder drops from `columnWidthsTwips`.
+ */
+function sourceGridWidths(sourceXml: string): number[] | undefined {
+  const grid = /<w:tblGrid\b[^>]*>([\s\S]*?)<\/w:tblGrid>/i.exec(sourceXml);
+  if (!grid) return undefined;
+  const widths: number[] = [];
+  for (const match of grid[1].matchAll(/<w:gridCol\b[^>]*>/gi)) {
+    const value = /\bw:w="(\d+)"/i.exec(match[0]);
+    if (!value) return undefined;
+    widths.push(Number(value[1]));
+  }
+  return widths.length > 0 ? widths : undefined;
+}
+
+/**
+ * The model builder keeps cell spans in logical columns but drops zero-width
+ * grid columns from `columnWidthsTwips`, which leaves a collapsed table with a
+ * grid that disagrees with its own spans. Reattach the logical grid and the
+ * collapsed-column marker so `prepareModelForSerialization` can project the
+ * table after an edit; the stored markup still describes the table verbatim.
+ *
+ * Only a grid whose non-zero widths match what the builder kept is trusted, so
+ * an unrelated `w:tblGrid` is never forced onto the model.
+ */
+function normalizeTableGridProvenance(table: TableNode): TableNode {
+  const sourceXml = table.sourceXml;
+  if (!sourceXml) return table;
+  const style = table.style ?? {};
+  let changed = false;
+  let nextStyle = style;
+
+  const widths = sourceGridWidths(sourceXml);
+  if (widths && style.collapsedGridColumns === undefined) {
+    const zeroColumns: number[] = [];
+    const physicalWidths: number[] = [];
+    widths.forEach((width, index) => {
+      if (width === 0) zeroColumns.push(index);
+      else physicalWidths.push(width);
+    });
+    const modelPhysical = (style.columnWidthsTwips ?? []).filter(
+      (width) => width > 0
+    );
+    if (
+      zeroColumns.length > 0 &&
+      physicalWidths.length === modelPhysical.length &&
+      physicalWidths.every((width, index) => width === modelPhysical[index])
+    ) {
+      nextStyle = {
+        ...nextStyle,
+        columnWidthsTwips: widths.slice(),
+        collapsedGridColumns: zeroColumns
+      };
+      changed = true;
+    }
+  }
+
+  if (nextStyle.styleId === undefined) {
+    const styleId = /<w:tblStyle\b[^>]*w:val="([^"]+)"/i.exec(sourceXml)?.[1]?.trim();
+    if (styleId) {
+      nextStyle = {
+        ...nextStyle,
+        styleId,
+        sourceStyleId: nextStyle.sourceStyleId ?? styleId
+      };
+      changed = true;
+    }
+  }
+
+  return changed ? { ...table, style: nextStyle } : table;
+}
+
+function rebuildTable(node: TableNode): TableNode {
+  return normalizeTableGridProvenance({
     ...node,
     rows: node.rows.map((row) => ({
       ...row,
@@ -106,7 +184,7 @@ function normalizeDocNode(node: DocNode): DocNode {
         nodes: cell.nodes.map(normalizeTableCellContent)
       }))
     }))
-  };
+  });
 }
 
 export function normalizeDocModel(model: DocModel): DocModel {

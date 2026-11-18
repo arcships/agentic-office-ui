@@ -87,25 +87,48 @@ function resolvedColumnWidths(
   table: TableNode,
   columnCount: number
 ): number[] {
+  // A collapsed grid keeps its zero-width logical columns: rewriting them to a
+  // default width would silently materialize a grid whose marker still names
+  // them, and export would then reject the table as contradictory.
+  const collapsed = new Set(
+    (table.style?.collapsedGridColumns ?? []).filter(
+      (index) => Number.isInteger(index) && index >= 0 && index < columnCount
+    )
+  );
+  const normalize = (width: number, index: number, fallback: number): number => {
+    if (collapsed.has(index)) return 0;
+    return Number.isFinite(width) && width > 0 ? Math.round(width) : fallback;
+  };
+
   const explicit = table.style?.columnWidthsTwips;
   if (explicit && explicit.length === columnCount) {
-    return explicit.map((width) =>
-      Number.isFinite(width) && width > 0 ? Math.round(width) : DEFAULT_COLUMN_WIDTH_TWIPS
+    return explicit.map((width, index) =>
+      normalize(width, index, DEFAULT_COLUMN_WIDTH_TWIPS)
     );
   }
 
   const derived = computeColumnWidthsFromTableDefinition(table, columnCount);
   if (derived && derived.length === columnCount) {
-    return derived.map((width) =>
-      Number.isFinite(width) && width > 0
-        ? Math.round(width)
-        : Math.max(1, Math.round((table.style?.widthTwips ?? DEFAULT_COLUMN_WIDTH_TWIPS * columnCount) / columnCount))
+    return derived.map((width, index) =>
+      normalize(
+        width,
+        index,
+        Math.max(
+          1,
+          Math.round(
+            (table.style?.widthTwips ?? DEFAULT_COLUMN_WIDTH_TWIPS * columnCount) /
+              columnCount
+          )
+        )
+      )
     );
   }
 
   const total = Math.max(1, table.style?.widthTwips ?? DEFAULT_COLUMN_WIDTH_TWIPS * columnCount);
   const fallback = Math.max(1, Math.round(total / Math.max(1, columnCount)));
-  return Array.from({ length: columnCount }, () => fallback);
+  return Array.from({ length: columnCount }, (_, index) =>
+    collapsed.has(index) ? 0 : fallback
+  );
 }
 
 function applyColumnWidths(table: TableNode, widths: number[]): void {
@@ -114,6 +137,23 @@ function applyColumnWidths(table: TableNode, widths: number[]): void {
     columnWidthsTwips: widths,
     widthTwips: widths.reduce((sum, width) => sum + width, 0),
   };
+}
+
+/**
+ * Keep `collapsedGridColumns` pointing at the same zero-width columns after a
+ * physical grid edit. A stale marker makes export reject the table, because the
+ * marked index would name a column with a positive width.
+ */
+function remapCollapsedGridColumns(
+  table: TableNode,
+  remap: (index: number) => number | undefined
+): void {
+  const marker = table.style?.collapsedGridColumns;
+  if (!marker || marker.length === 0) return;
+  const next = marker
+    .map((index) => remap(index))
+    .filter((index): index is number => index !== undefined);
+  table.style = { ...(table.style ?? {}), collapsedGridColumns: next };
 }
 
 function averageInsertedColumnWidth(widths: number[], boundary: number): number {
@@ -387,6 +427,9 @@ export function insertTableColumn(
   }
 
   applyColumnWidths(table, nextWidths);
+  remapCollapsedGridColumns(table, (index) =>
+    index >= boundary ? index + 1 : index
+  );
   table.sourceXml = undefined;
   return true;
 }
@@ -536,6 +579,9 @@ export function deleteTableColumn(
   const nextWidths = [...widths];
   nextWidths.splice(targetColumn, 1);
   applyColumnWidths(table, nextWidths);
+  remapCollapsedGridColumns(table, (index) =>
+    index === targetColumn ? undefined : index > targetColumn ? index - 1 : index
+  );
   table.sourceXml = undefined;
   return true;
 }

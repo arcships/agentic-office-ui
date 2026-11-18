@@ -73,6 +73,7 @@ const suites = {
       "tests/unit/docx-fixture-fidelity.test.mjs",
       "tests/unit/docx-form-field-required.test.mjs",
       "tests/unit/docx-model-preservation.test.mjs",
+      "tests/unit/docx-export-prepare-model.test.mjs",
       "tests/unit/docx-notes.test.mjs",
       "tests/unit/docx-page-appearance.test.mjs",
       "tests/unit/docx-body-measurement.test.mjs",

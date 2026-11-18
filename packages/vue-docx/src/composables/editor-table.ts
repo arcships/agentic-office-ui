@@ -386,6 +386,10 @@ export function createEditorTable(
         widthTwips: columnWidthsTwips.reduce((sum, width) => sum + width, 0),
         columnWidthsTwips,
       }
+      // A manual column resize materializes the physical grid: the logical
+      // zero-width columns no longer describe what is drawn, so the collapsed
+      // marker must not survive into export.
+      if (node.style) delete node.style.collapsedGridColumns
       node.sourceXml = undefined
       return nextModel
     }, ctx.statusMessage("resizedTableColumns"))
