@@ -118,9 +118,9 @@ Date: 2026-07-06
 
 ### 2.5 `colors.ts`（224行）— 直接复制
 
-**上游实现**：纯颜色解析。`resolveWorkbookColor` 解析 hex/rgb/argb/theme + tint（HSL 调亮度）。`resolveWorkbookFillStyle` 返回 `{backgroundColor, backgroundImage}`，支持 gradient（linear/path）。
+**上游实现**：纯颜色解析。`resolveWorkbookColor` 解析 hex/rgb/argb/theme/indexed + tint（HSL 调亮度）。`resolveWorkbookFillStyle` 返回 `{backgroundColor, backgroundImage}`，支持 gradient（linear/path）。
 
-**注意**：indexed color 未实现（已知 gap）。tint 用 HSL 实现，与 images.ts 的 DrawingML 变换（lumMod/lumOff/shade）是**不同体系**，不能混用。
+**indexed**：`parseWorkbookStyles()` 读取 `xl/styles.xml` 的 `<colors><indexedColors>`，`buildThemePalette()` 与 ECMA-376 18.8.27 默认调色板（0–63 及系统色 64/65）合并到 `XlsxThemePalette.indexedColors`，`resolveWorkbookColor` 再按索引解析并应用 tint；规格外索引返回 `null`。tint 用 HSL 实现，与 images.ts 的 DrawingML 变换（lumMod/lumOff/shade）是**不同体系**，不能混用。
 
 **迁移操作**：直接 `cp`，零修改。
 
@@ -444,7 +444,7 @@ inheritedStyle(col⊕row) → cellStyle → tableStyle → `buildCellStyle`(CSS)
 | 75 | 地图 chart：内置 us-atlas + world-atlas topojson | chart-renderer.tsx |
 | 76 | 3D surface：regl WebGL，自定义旋转+透视+法线光照+墙体 | surface-regl.tsx |
 | 77 | contour(2D) 走 SVG fallback，不用 WebGL | surface-regl.tsx |
-| 78 | colors.ts indexed color 未实现（已知 gap） | colors.ts |
+| 78 | colors.ts 支持 indexed 调色板（ECMA-376 标准 64 色 + 系统色 + `styles.xml` `indexedColors` 覆盖） | colors.ts |
 
 ---
 

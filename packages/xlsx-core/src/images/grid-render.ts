@@ -1328,8 +1328,8 @@ export function parseWorkbookStructureAssetsFromArchive(
   const worksheetSheets = worksheetTabIndexes.map((tabIndex) => workbookSheets[tabIndex]);
   const chartsheetSheets = workbookSheets.filter((sheet) => sheet.kind === "chartsheet");
   const theme = parseWorkbookTheme(archive);
-  const themePalette = buildThemePalette(theme);
-  const { defaultFont, namedCellStyleByName, styleById, tableStyleByName } = parseWorkbookStyles(archive);
+  const { defaultFont, indexedColors, namedCellStyleByName, styleById, tableStyleByName } = parseWorkbookStyles(archive);
+  const themePalette = buildThemePalette(theme, indexedColors);
   const printMetadata = parseWorkbookPrintMetadata(archive, workbookSheets);
   const sharedStringRuns = parseSharedStringRichText(archive);
   const sheetStates = worksheetSheets.map((sheet) => parseSheetState(archive, sheet.path, {
