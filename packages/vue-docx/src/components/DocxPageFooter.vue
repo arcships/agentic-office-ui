@@ -5,6 +5,7 @@
     data-docx-page-footer="true"
     :data-docx-footer-part-name="section.partName"
     class="docx-page-footer docx-page-section--footer"
+    :class="{ 'docx-page-section--editing': editable }"
     :style="footerStyle"
   >
     <template v-for="(node, ni) of section.nodes" :key="`footer-node-${pageIndex}-${ni}`">
@@ -13,9 +14,11 @@
         :paragraph="node"
         :paragraph-index="-(pageIndex * 1000 + ni + 1)"
         :data-docx-footer-node-index="ni"
-        :editable="false"
+        :editable="editable"
         :document-theme="theme"
         :controller="controller"
+        :header-footer-part-name="section.partName"
+        :section-story-node-index="ni"
         :numbering-definitions="model.metadata.numberingDefinitions"
         :auto-spacing-before-px="autoSpacingBeforePx(ni)"
         :auto-spacing-after-px="autoSpacingAfterPx(ni)"
@@ -33,6 +36,7 @@
         :floating-page-origin-px="floatingPageOriginPx"
         :within-header-footer="true"
         header-footer-region="footer"
+        @text-input="(_nodeIndex: number, text: string) => emit('textInput', ni, text)"
       />
       <DocxTableHost
         v-else
@@ -111,6 +115,12 @@ const props = defineProps<{
   commentsEnabled?: boolean
   /** Distance from the paper's bottom edge to the bottom of the footer box. */
   footerDistancePx?: number
+  /** Render footer paragraphs as content-editable (active footer editing). */
+  editable?: boolean
+}>()
+
+const emit = defineEmits<{
+  textInput: [nodeIndex: number, text: string]
 }>()
 
 // Header/footer stories share the document layout defaults: HTML automatic
@@ -183,6 +193,14 @@ const footerStyle = computed(() => ({
 </script>
 
 <style scoped>
+.docx-page-section--editing {
+  outline: 1px dashed rgb(37 99 235 / 55%);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.docx-page-section--editing :deep(.docx-paragraph-host--editable) {
+  min-height: 1.4em;
+}
 .docx-page-footer-node {
   width: 100%;
 }

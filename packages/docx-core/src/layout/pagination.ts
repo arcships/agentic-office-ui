@@ -490,6 +490,38 @@ export function sectionTitlePageEnabled(sectionPropertiesXml?: string): boolean 
   return isOnOffTagEnabled(titlePageTag);
 }
 
+/**
+ * Header/footer variant a page uses, as the OOXML `w:type` a reference must
+ * carry (`default`, `first` for a title page, `even` for even pages). This is
+ * the inverse of `selectSectionVariantForPage` and lets an authoring command
+ * create the variant the current page actually looks for.
+ */
+export function resolveSectionVariantReferenceTypeForPage(params: {
+  sectionPropertiesXml?: string;
+  /** Zero-based page index inside the section. */
+  sectionPageIndex: number;
+  /** Zero-based physical page index used for even/odd selection. */
+  documentPageIndex: number;
+  evenAndOddHeaders?: boolean;
+}): string {
+  const safeSectionPageIndex = Number.isFinite(params.sectionPageIndex)
+    ? Math.max(0, Math.round(params.sectionPageIndex))
+    : 0;
+  const physicalPageIndex = Number.isFinite(params.documentPageIndex)
+    ? Math.max(0, Math.round(params.documentPageIndex))
+    : 0;
+
+  if (safeSectionPageIndex === 0 && sectionTitlePageEnabled(params.sectionPropertiesXml)) {
+    return "first";
+  }
+  // `selectSectionVariantForPage` treats an even physical page index as an odd
+  // page number, so the same parity decides the "even" variant here.
+  if ((params.evenAndOddHeaders ?? true) && physicalPageIndex % 2 !== 0) {
+    return "even";
+  }
+  return "default";
+}
+
 export function selectSectionVariantForPage<T extends HeaderSection | FooterSection>(
   sections: T[],
   sectionPropertiesXml: string | undefined,

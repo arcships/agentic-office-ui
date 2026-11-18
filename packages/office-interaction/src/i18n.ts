@@ -352,6 +352,10 @@ export interface OfficeDocxMessages {
       revisionLossOne: string
       /** Template with a `{count}` placeholder. */
       revisionLossMany: string
+      pageMarginsUpdated: string
+      pageSizeUpdated: string
+      headerAdded: string
+      footerAdded: string
     }
     borderPresets: {
       bottom: string
@@ -368,6 +372,49 @@ export interface OfficeDocxMessages {
       diagonalUp: string
       horizontalLine: string
     }
+  }
+  pageSetup: {
+    title: string
+    open: string
+    /** Template with an `{index}` placeholder. */
+    sectionOption: string
+    sectionLabel: string
+    paperSize: string
+    paperSizeCustom: string
+    presetLetter: string
+    presetLegal: string
+    presetTabloid: string
+    presetA3: string
+    presetA4: string
+    presetA5: string
+    presetB5: string
+    orientation: string
+    orientationPortrait: string
+    orientationLandscape: string
+    width: string
+    height: string
+    margins: string
+    marginTop: string
+    marginRight: string
+    marginBottom: string
+    marginLeft: string
+    units: string
+    apply: string
+    cancel: string
+    close: string
+    invalidValue: string
+  }
+  headerFooter: {
+    header: string
+    footer: string
+    editHeader: string
+    editFooter: string
+    addHeader: string
+    addFooter: string
+    closeEditing: string
+    editingHeader: string
+    editingFooter: string
+    placeholder: string
   }
   contextMenu: {
     label: string
@@ -1403,6 +1450,10 @@ export const officeMessagesEn: OfficeMessages = {
         unsupportedDiagonalParagraphBorders: "Unsupported: diagonal paragraph borders ({preset})",
         revisionLossOne: "Tracked changes in an edited paragraph were resolved with the edit",
         revisionLossMany: "Tracked changes in {count} edited paragraphs were resolved with the edit",
+        pageMarginsUpdated: "Page margins updated",
+        pageSizeUpdated: "Paper size and orientation updated",
+        headerAdded: "Header added",
+        footerAdded: "Footer added",
       },
       borderPresets: {
         bottom: "Bottom Border",
@@ -1419,6 +1470,48 @@ export const officeMessagesEn: OfficeMessages = {
         diagonalUp: "Diagonal Up",
         horizontalLine: "Horizontal Line",
       },
+    },
+    pageSetup: {
+      title: "Page setup",
+      open: "Page setup",
+      sectionOption: "Section {index}",
+      sectionLabel: "Apply to",
+      paperSize: "Paper size",
+      paperSizeCustom: "Custom",
+      presetLetter: "Letter (8.5 × 11 in)",
+      presetLegal: "Legal (8.5 × 14 in)",
+      presetTabloid: "Tabloid (11 × 17 in)",
+      presetA3: "A3 (297 × 420 mm)",
+      presetA4: "A4 (210 × 297 mm)",
+      presetA5: "A5 (148 × 210 mm)",
+      presetB5: "B5 (176 × 250 mm)",
+      orientation: "Orientation",
+      orientationPortrait: "Portrait",
+      orientationLandscape: "Landscape",
+      width: "Paper width",
+      height: "Paper height",
+      margins: "Margins",
+      marginTop: "Top margin",
+      marginRight: "Right margin",
+      marginBottom: "Bottom margin",
+      marginLeft: "Left margin",
+      units: "Values are in inches",
+      apply: "Apply",
+      cancel: "Cancel",
+      close: "Close page setup",
+      invalidValue: "Enter a non-negative number",
+    },
+    headerFooter: {
+      header: "Header",
+      footer: "Footer",
+      editHeader: "Edit header",
+      editFooter: "Edit footer",
+      addHeader: "Add header",
+      addFooter: "Add footer",
+      closeEditing: "Done editing",
+      editingHeader: "Editing header",
+      editingFooter: "Editing footer",
+      placeholder: "Type header text",
     },
     contextMenu: {
       label: "Editor context menu",
@@ -2393,6 +2486,10 @@ export const officeMessagesZhCN: OfficeMessages = {
         unsupportedDiagonalParagraphBorders: "不支持：对角线段落边框（{preset}）",
         revisionLossOne: "已编辑段落中的修订已随编辑一起处理",
         revisionLossMany: "已编辑的 {count} 个段落中的修订已随编辑一起处理",
+        pageMarginsUpdated: "已更新页边距",
+        pageSizeUpdated: "已更新纸张大小与方向",
+        headerAdded: "已添加页眉",
+        footerAdded: "已添加页脚",
       },
       borderPresets: {
         bottom: "下边框",
@@ -2409,6 +2506,48 @@ export const officeMessagesZhCN: OfficeMessages = {
         diagonalUp: "斜上边框",
         horizontalLine: "水平线",
       },
+    },
+    pageSetup: {
+      title: "页面设置",
+      open: "页面设置",
+      sectionOption: "第 {index} 节",
+      sectionLabel: "应用于",
+      paperSize: "纸张大小",
+      paperSizeCustom: "自定义",
+      presetLetter: "Letter（8.5 × 11 英寸）",
+      presetLegal: "Legal（8.5 × 14 英寸）",
+      presetTabloid: "Tabloid（11 × 17 英寸）",
+      presetA3: "A3（297 × 420 毫米）",
+      presetA4: "A4（210 × 297 毫米）",
+      presetA5: "A5（148 × 210 毫米）",
+      presetB5: "B5（176 × 250 毫米）",
+      orientation: "方向",
+      orientationPortrait: "纵向",
+      orientationLandscape: "横向",
+      width: "纸张宽度",
+      height: "纸张高度",
+      margins: "页边距",
+      marginTop: "上边距",
+      marginRight: "右边距",
+      marginBottom: "下边距",
+      marginLeft: "左边距",
+      units: "数值单位为英寸",
+      apply: "应用",
+      cancel: "取消",
+      close: "关闭页面设置",
+      invalidValue: "请输入非负数",
+    },
+    headerFooter: {
+      header: "页眉",
+      footer: "页脚",
+      editHeader: "编辑页眉",
+      editFooter: "编辑页脚",
+      addHeader: "添加页眉",
+      addFooter: "添加页脚",
+      closeEditing: "完成编辑",
+      editingHeader: "正在编辑页眉",
+      editingFooter: "正在编辑页脚",
+      placeholder: "输入页眉文字",
     },
     contextMenu: {
       label: "编辑器上下文菜单",

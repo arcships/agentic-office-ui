@@ -45,6 +45,7 @@ import {
   paragraphText,
   paragraphIsList,
   paragraphTypographyStyle,
+  findDocumentSectionNodes,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
 import { useDocxMessages } from "../i18n"
@@ -87,6 +88,10 @@ const props = withDefaults(
     fieldResolutionNodeIndex?: number
     withinHeaderFooter?: boolean
     headerFooterRegion?: "header" | "footer"
+    /** Part name of the header/footer story this paragraph belongs to. */
+    headerFooterPartName?: string
+    /** Story-local node index (`ni`) of a header/footer paragraph. */
+    sectionStoryNodeIndex?: number
     noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
     skipImageChildIndexes?: readonly number[]
     /** Page-relative origin used to place margin/page/column anchored images. */
@@ -192,6 +197,26 @@ const paragraphStyle = computed<Record<string, any>>(() => {
   return resolved
 })
 
+/**
+ * Header/footer paragraphs render inside a story, not the body: their index is
+ * a per-page rendering key and the text lives in `metadata`. Editing keeps the
+ * draft handling but skips every body-selection/structural path.
+ */
+const isSectionStory = computed(
+  () => props.withinHeaderFooter === true && typeof props.headerFooterPartName === "string"
+)
+
+function sectionStoryParagraphText(): string | undefined {
+  const controller = props.controller
+  const partName = props.headerFooterPartName
+  const region = props.headerFooterRegion
+  const nodeIndex = props.sectionStoryNodeIndex
+  if (!controller || !partName || !region || nodeIndex === undefined) return undefined
+  const nodes = findDocumentSectionNodes(controller.model, region, partName)
+  const node = nodes?.[nodeIndex]
+  return node?.type === "paragraph" ? paragraphText(node) : undefined
+}
+
 const displayHtml = computed(() => {
   const theme = props.documentTheme
   const runOptions: ParagraphRunRenderOptions = {
@@ -272,18 +297,33 @@ function commitDraft(requireUnchangedBase = false): void {
   }
   if (requireUnchangedBase) {
     const controller = props.controller
-    const currentParagraph = controller?.model.nodes[props.paragraphIndex]
-    if (
-      !controller ||
-      draftDocumentNonce !== controller.documentLoadNonce ||
-      !currentParagraph ||
-      currentParagraph.type !== "paragraph" ||
-      paragraphText(currentParagraph) !== (draftBaseText ?? paragraphText(props.paragraph))
-    ) {
-      // The document changed under the draft (import/new document/external
-      // edit). Dropping the stale draft is safer than writing it elsewhere.
-      clearDraft()
-      return
+    if (isSectionStory.value) {
+      // A header/footer draft is validated against its own story: the paragraph
+      // lives in `metadata`, not in the body node list.
+      const currentStoryText = sectionStoryParagraphText()
+      if (
+        !controller ||
+        draftDocumentNonce !== controller.documentLoadNonce ||
+        currentStoryText === undefined ||
+        currentStoryText !== (draftBaseText ?? paragraphText(props.paragraph))
+      ) {
+        clearDraft()
+        return
+      }
+    } else {
+      const currentParagraph = controller?.model.nodes[props.paragraphIndex]
+      if (
+        !controller ||
+        draftDocumentNonce !== controller.documentLoadNonce ||
+        !currentParagraph ||
+        currentParagraph.type !== "paragraph" ||
+        paragraphText(currentParagraph) !== (draftBaseText ?? paragraphText(props.paragraph))
+      ) {
+        // The document changed under the draft (import/new document/external
+        // edit). Dropping the stale draft is safer than writing it elsewhere.
+        clearDraft()
+        return
+      }
     }
   }
   const text = draftText.value
@@ -304,6 +344,9 @@ function selectionRoot(): HTMLElement | undefined {
 }
 
 function syncCurrentSelection(options?: { preservePendingRunStyle?: boolean }): void {
+  // Header/footer stories have no body location to mirror a DOM range onto:
+  // their paragraphs carry negative indices on purpose.
+  if (isSectionStory.value) return
   const root = selectionRoot()
   if (!root || !props.controller) return
   syncDomSelectionToEditor(props.controller, root, undefined, options)
@@ -417,12 +460,12 @@ function onInput(_event: Event): void {
 }
 
 function onPointerDown(): void {
-  if (!props.editable || !props.controller) return
+  if (!props.editable || !props.controller || isSectionStory.value) return
   props.controller.beginSelectionSession("pointer", { settleAfterMs: 250 })
 }
 
 function onMouseUp(): void {
-  if (!props.editable || !props.controller) return
+  if (!props.editable || !props.controller || isSectionStory.value) return
   syncCurrentSelection()
   props.controller.clearSelectionSession("pointer")
 }
@@ -430,6 +473,9 @@ function onMouseUp(): void {
 function onKeydown(event: KeyboardEvent): void {
   if (!props.editable || !props.controller) return
   if (isComposing.value || event.isComposing) return
+  // A header/footer paragraph only holds text: Enter/Backspace/Tab structural
+  // commands address body nodes, which this story does not have.
+  if (isSectionStory.value) return
   props.controller.beginSelectionSession("keyboard", { settleAfterMs: 120 })
 
   if (event.key === "Tab" && !event.ctrlKey && !event.metaKey && !event.altKey) {
@@ -511,6 +557,7 @@ function onBlur(): void {
 
 function onCompositionStart(): void {
   isComposing.value = true
+  if (isSectionStory.value) return
   props.controller?.beginSelectionSession("composition")
 }
 
@@ -518,6 +565,7 @@ function onCompositionEnd(_event: Event): void {
   isComposing.value = false
   syncDraftFromDom()
   syncCurrentSelection({ preservePendingRunStyle: true })
+  if (isSectionStory.value) return
   props.controller?.clearSelectionSession("composition")
 }
 
@@ -538,6 +586,9 @@ function clipboardSourcesFromEvent(event: ClipboardEvent): {
 
 function onPaste(event: ClipboardEvent): void {
   if (!props.editable || !props.controller) return
+  // A header/footer story has no body paste target: let the browser insert the
+  // text into the content-editable and commit the flattened result on blur.
+  if (isSectionStory.value) return
   const sources = clipboardSourcesFromEvent(event)
   if (!sources.internal && !sources.html && !sources.rtf && !sources.text) {
     // Leave file/image clipboards to the browser instead of swallowing them.

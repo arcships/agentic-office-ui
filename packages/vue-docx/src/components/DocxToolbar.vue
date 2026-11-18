@@ -452,6 +452,37 @@
       </button>
     </div>
 
+    <div class="docx-toolbar-separator" />
+
+    <!-- Page setup (margins / paper size / orientation) -->
+    <div class="docx-toolbar-group">
+      <button
+        type="button"
+        class="docx-toolbar-btn"
+        :class="{ active: pageSetupOpen }"
+        data-testid="editor-page-setup"
+        :title="m.docx.pageSetup.open"
+        :aria-label="m.docx.pageSetup.open"
+        :aria-expanded="pageSetupOpen"
+        @click="pageSetupOpen = true"
+      >
+        <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18H6zM3 7h3M18 7h3M3 12h3M18 12h3M3 17h3M18 17h3" /></svg>
+      </button>
+    </div>
+
+    <DocxPageSetupDialog
+      v-if="pageSetupOpen"
+      :section-index="pageSetup.activeSectionIndex.value"
+      :sections="pageSetupSectionOptions"
+      :page-size="pageSetup.pageSize.value"
+      :margins="pageSetup.margins.value"
+      :read-only="readOnly"
+      :is-dark="toolbarTheme === 'dark'"
+      @apply="onPageSetupApply"
+      @update:section-index="pageSetup.selectSection($event)"
+      @close="pageSetupOpen = false"
+    />
+
     <!-- Table structure commands for the selected cell/range -->
     <div
       v-if="selectedTableCell"
@@ -493,6 +524,9 @@ import type { DocxEditorController, DocxBorderPreset, HeadingLevel } from "@arcs
 import { DOCX_FILE_ACCEPT } from "../composables/docx-file-types"
 import { formatOfficeMessage } from "@arcships/office-interaction"
 import { useDocxMessages } from "../i18n"
+import DocxPageSetupDialog from "./DocxPageSetupDialog.vue"
+import { useDocxPageSetup } from "../composables/useDocxPageSetup"
+import type { DocxPageSetupApplyPatch } from "./page-setup-dialog-types"
 
 const props = defineProps<{
   controller: DocxEditorController
@@ -525,6 +559,24 @@ function onAddComment(): void {
 // ── Font sizes ──────────────────────────────────────────────────────
 const fontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48]
 const m = useDocxMessages()
+
+// ── Page setup ─────────────────────────────────────────────────────
+// Margins/paper size/orientation live on the section that holds the caret. The
+// dialog edits that section and offers a picker when the document has more
+// than one.
+const pageSetupOpen = ref(false)
+const pageSetup = useDocxPageSetup(props.controller)
+const pageSetupSectionOptions = computed(() =>
+  pageSetup.sections.value.map((section) => ({
+    index: section.index,
+    sectionNumber: section.sectionNumber,
+  }))
+)
+
+function onPageSetupApply(patch: DocxPageSetupApplyPatch): void {
+  pageSetup.applyPageSetup(patch)
+  pageSetupOpen.value = false
+}
 
 // ── Zoom ────────────────────────────────────────────────────────────
 const zoomLevels = [50, 60, 70, 80, 90, 100, 110, 120, 130, 150, 175, 200]

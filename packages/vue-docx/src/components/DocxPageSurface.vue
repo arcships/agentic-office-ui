@@ -118,6 +118,8 @@
           :tracked-changes-enabled="trackedChangesEnabled"
           :comments-enabled="commentsEnabled"
           :header-distance-px="pageLayout.headerDistancePx"
+          :editable="headerEditing"
+          @text-input="onHeaderTextInput"
         />
       </template>
       <template v-if="hasFooter">
@@ -141,7 +143,57 @@
           :tracked-changes-enabled="trackedChangesEnabled"
           :comments-enabled="commentsEnabled"
           :footer-distance-px="pageLayout.footerDistancePx"
+          :editable="footerEditing"
+          @text-input="onFooterTextInput"
         />
+      </template>
+
+      <!--
+        Header/footer activation. Word shows a header/footer band you click to
+        start editing; the same affordance creates the part when the section has
+        none yet. It is absolutely positioned and ignored by pagination.
+      -->
+      <template v-if="editable && controller">
+        <div
+          v-for="region of pageFurnitureRegions"
+          :key="`section-region-${region}-${pageIndex}`"
+          data-docx-pagination-ignore="true"
+          class="docx-page-section-activate"
+          :class="`docx-page-section-activate--${region}`"
+          :style="regionActivateStyle(region)"
+        >
+          <button
+            type="button"
+            class="docx-page-section-activate__button"
+            :data-docx-section-region="region"
+            :data-testid="`docx-page-${region}-edit`"
+            :data-docx-section-empty="hasRegionPart(region) ? 'false' : 'true'"
+            :aria-label="regionActionLabel(region)"
+            :title="regionActionLabel(region)"
+            :aria-pressed="activeSectionRegion === region"
+            @click.stop="toggleRegion(region)"
+          >
+            {{ region === "header" ? m.docx.headerFooter.header : m.docx.headerFooter.footer }}
+          </button>
+          <span
+            v-if="activeSectionRegion === region"
+            class="docx-page-section-activate__status"
+            :data-testid="`docx-page-${region}-editing`"
+          >
+            {{ region === "header" ? m.docx.headerFooter.editingHeader : m.docx.headerFooter.editingFooter }}
+          </span>
+          <button
+            v-if="activeSectionRegion === region"
+            type="button"
+            class="docx-page-section-activate__done"
+            :data-testid="`docx-page-${region}-done`"
+            :aria-label="m.docx.headerFooter.closeEditing"
+            :title="m.docx.headerFooter.closeEditing"
+            @click.stop="closeRegion()"
+          >
+            {{ m.docx.headerFooter.closeEditing }}
+          </button>
+        </div>
       </template>
 
       <!-- Floating image layer -->
@@ -256,6 +308,7 @@ import DocxTrackedChangeGutter from "./DocxTrackedChangeGutter.vue"
 import DocxGutterAnchorMarkers from "./DocxGutterAnchorMarkers.vue"
 import DocxNotesSection from "./DocxNotesSection.vue"
 import { useDocxGutterLayout } from "../composables/gutter-layout"
+import { useDocxMessages } from "../i18n"
 import { createDocxFieldResolvers } from "../composables/docx-field-resolvers"
 import {
   ensureDocxViewerPageSurfaceRegistry,
@@ -286,6 +339,11 @@ interface DocxPageSurfaceProps {
   pageNumberFormat?: string
   headerSection?: HeaderSection
   footerSection?: FooterSection
+  /** Section this page belongs to; header/footer authoring targets it. */
+  sectionIndex?: number
+  /** `w:type` variant this page looks for (`default`, `first`, `even`). */
+  headerReferenceType?: string
+  footerReferenceType?: string
   trackedChangesEnabled?: boolean
   commentsEnabled?: boolean
   trackedChanges?: readonly DocxTrackedChange[]
@@ -331,6 +389,17 @@ const emit = defineEmits<{
 
 // ── Refs ───────────────────────────────────────────────────────────
 const pageSurfaceRef = ref<HTMLDivElement | undefined>()
+
+// Header/footer authoring: one region at a time on this page. The model is
+// shared by every page of the section, so a commit updates all of them.
+const activeSectionRegion = ref<"header" | "footer" | undefined>(undefined)
+const headerEditing = computed(
+  () => activeSectionRegion.value === "header" && Boolean(props.controller)
+)
+const footerEditing = computed(
+  () => activeSectionRegion.value === "footer" && Boolean(props.controller)
+)
+const pageFurnitureRegions = ["header", "footer"] as const
 
 let publishedSurface:
   | {
@@ -407,6 +476,93 @@ function publishPageSurface(): void {
 // ── Computed ───────────────────────────────────────────────────────
 const hasHeader = computed(() => (props.headerSection?.nodes.length ?? 0) > 0)
 const hasFooter = computed(() => (props.footerSection?.nodes.length ?? 0) > 0)
+
+// ── Header/footer authoring ────────────────────────────────────────
+const m = useDocxMessages()
+
+function sectionEntry(region: "header" | "footer"): HeaderSection | FooterSection | undefined {
+  return region === "header" ? props.headerSection : props.footerSection
+}
+
+function hasRegionPart(region: "header" | "footer"): boolean {
+  return (sectionEntry(region)?.nodes.length ?? 0) > 0
+}
+
+function regionActionLabel(region: "header" | "footer"): string {
+  const group = m.value.docx.headerFooter
+  if (hasRegionPart(region)) {
+    return region === "header" ? group.editHeader : group.editFooter
+  }
+  return region === "header" ? group.addHeader : group.addFooter
+}
+
+function targetSectionIndex(): number {
+  const index = Number(props.sectionIndex)
+  return Number.isFinite(index) ? Math.max(0, Math.round(index)) : 0
+}
+
+/**
+ * The band sits at the top/bottom edge of the paper, above the header distance,
+ * so it never covers the header text it activates.
+ */
+function regionActivateStyle(region: "header" | "footer"): Record<string, string> {
+  const style: Record<string, string> = {
+    left: `${props.pageLayout.marginsPx?.left ?? 72}px`,
+    right: `${props.pageLayout.marginsPx?.right ?? 72}px`,
+  }
+  if (region === "header") style.top = "2px"
+  else style.bottom = "2px"
+  return style
+}
+
+function closeRegion(): void {
+  activeSectionRegion.value = undefined
+}
+
+function toggleRegion(region: "header" | "footer"): void {
+  if (!props.editable || !props.controller) return
+  if (activeSectionRegion.value === region) {
+    closeRegion()
+    return
+  }
+  if (!hasRegionPart(region)) {
+    // No part to edit yet: create the variant this page looks for (default,
+    // title page or even page) and open it for editing.
+    const referenceType =
+      region === "header" ? props.headerReferenceType : props.footerReferenceType
+    props.controller.addHeaderFooter(targetSectionIndex(), region, { referenceType })
+  }
+  activeSectionRegion.value = region
+}
+
+function onHeaderTextInput(nodeIndex: number, text: string): void {
+  const partName = props.headerSection?.partName
+  if (!partName || !props.controller) return
+  props.controller.commitSectionParagraphText(
+    { region: "header", partName, nodeIndex },
+    text
+  )
+}
+
+function onFooterTextInput(nodeIndex: number, text: string): void {
+  const partName = props.footerSection?.partName
+  if (!partName || !props.controller) return
+  props.controller.commitSectionParagraphText(
+    { region: "footer", partName, nodeIndex },
+    text
+  )
+}
+
+/** Clicks inside a header/footer story must keep the region open. */
+function isSectionStoryTarget(target: EventTarget | null): boolean {
+  const element = target as (HTMLElement & { closest?: (selector: string) => unknown }) | null
+  if (!element || typeof element.closest !== "function") return false
+  return Boolean(
+    element.closest(
+      "[data-docx-page-header], [data-docx-page-footer], .docx-page-section-activate"
+    )
+  )
+}
 const resolvedSectionPages = computed(() => props.sectionPages ?? props.totalPages)
 const pageStartNodeIndex = computed(() => props.pageNodeSegments[0]?.nodeIndex)
 const fieldResolvers = computed(() =>
@@ -801,6 +957,11 @@ const surfaceStyle = computed(() => ({
 
 // ── Surface click → select paragraph / focus annotation ────────────
 function onSurfaceClick(event: MouseEvent): void {
+  // Clicking the page body finishes header/footer editing; clicks inside a
+  // story (or its activation band) keep it open.
+  if (activeSectionRegion.value && !isSectionStoryTarget(event.target)) {
+    closeRegion()
+  }
   // Clicks on a commented / revised run link the text to its gutter card.
   const annotationId = annotationIdForTarget(event.target)
   if (annotationId) {
@@ -911,6 +1072,51 @@ watch(
   inset: 0;
   pointer-events: none;
   z-index: 5;
+}
+
+/*
+ * Header/footer activation band. Absolutely positioned at the paper edge so it
+ * never changes page flow or covers the header text it activates.
+ */
+.docx-page-section-activate {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  z-index: 6;
+  pointer-events: none;
+}
+.docx-page-section-activate > * {
+  pointer-events: auto;
+}
+.docx-page-section-activate__button,
+.docx-page-section-activate__done {
+  padding: 1px 8px;
+  border: 1px dashed rgb(100 116 139 / 55%);
+  border-radius: 4px;
+  background: rgb(255 255 255 / 78%);
+  color: rgb(51 65 85);
+  font: 11px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  cursor: pointer;
+  opacity: 0.72;
+}
+.docx-page-section-activate__button:hover,
+.docx-page-section-activate__button:focus-visible,
+.docx-page-section-activate__done:hover,
+.docx-page-section-activate__done:focus-visible {
+  opacity: 1;
+  border-style: solid;
+  outline: none;
+}
+.docx-page-section-activate__status {
+  color: rgb(100 116 139);
+  font: 10px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media print {
+  .docx-page-section-activate {
+    display: none !important;
+  }
 }
 
 @media print {

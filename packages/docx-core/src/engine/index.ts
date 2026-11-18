@@ -108,3 +108,27 @@ export {
 
 // Serialization: model → document.xml / OoxmlPackage / ArrayBuffer
 export { modelToDocumentXml, serializeDocModel, serializeDocx } from "./serializer";
+
+// Section page setup (w:pgSz / w:pgMar) read + rewrite helpers
+export {
+  DEFAULT_DOCX_PAGE_MARGINS,
+  DEFAULT_DOCX_PAGE_SIZE,
+  DEFAULT_SECTION_PROPERTIES_XML,
+  DOCX_PAGE_SIZE_PRESETS,
+  TWIPS_PER_INCH,
+  matchDocxPageSizePreset,
+  normalizePageSizeOrientation,
+  readSectionPageMargins,
+  readSectionPageSize,
+  resolveDocxPageSizePreset,
+  writeSectionPageMargins,
+  writeSectionPageSize,
+} from "./section-properties";
+export type {
+  DocxPageMargins,
+  DocxPageMarginsUpdate,
+  DocxPageOrientation,
+  DocxPageSize,
+  DocxPageSizePreset,
+  DocxPageSizeUpdate,
+} from "./section-properties";

@@ -21,9 +21,7 @@ import {
   setSectionBreakTypeInPropertiesXml
 } from "../engine/section-break";
 import { getParagraph, paragraphFromText } from "./paragraph-ops";
-
-const DEFAULT_SECTION_PROPERTIES_XML =
-  '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>';
+import { DEFAULT_SECTION_PROPERTIES_XML } from "../engine/section-properties";
 
 function cloneSectionHeaderFooter(
   section: DocumentSection

@@ -35,6 +35,9 @@ import {
   collectCommentsFromModel,
   primeCommentAnchors,
   applyTrackedChangeDecision,
+  addHeaderFooter as addSectionHeaderFooter,
+  setPageMargins as applySectionPageMargins,
+  setPageSize as applySectionPageSize,
 } from "@arcships/docx-core"
 
 import type {
@@ -73,6 +76,11 @@ import type {
   DocxImageWrapMode,
   DocxSectionParagraphLocation,
   DocxSectionImageLocation,
+  DocxSectionRegion,
+  DocxPageMarginsUpdate,
+  DocxPageSizeUpdate,
+  DocxPageSetupCommandOptions,
+  AddHeaderFooterOptions,
   UseDocxEditorOptions,
   DocxEditorStatusMessages,
   ParagraphLocation,
@@ -711,6 +719,43 @@ export function useDocxEditor(
   const acceptAllTrackedChanges = (): boolean => decideTrackedChanges("accept")
   const rejectAllTrackedChanges = (): boolean => decideTrackedChanges("reject")
 
+  // ── page setup / header + footer authoring ────────────────────────
+  // Every command is a single undoable step: the edited section lives in
+  // `metadata.sections`, which the history snapshot already covers.
+  const setPageMargins = (
+    sectionIndex: number,
+    margins: DocxPageMarginsUpdate,
+    options?: DocxPageSetupCommandOptions
+  ): boolean =>
+    applyModelChange(
+      (current) => applySectionPageMargins(current, sectionIndex, margins),
+      ctx.statusMessage("pageMarginsUpdated"),
+      { pushHistory: options?.pushHistory }
+    )
+
+  const setPageSize = (
+    sectionIndex: number,
+    pageSize: DocxPageSizeUpdate,
+    options?: DocxPageSetupCommandOptions
+  ): boolean =>
+    applyModelChange(
+      (current) => applySectionPageSize(current, sectionIndex, pageSize),
+      ctx.statusMessage("pageSizeUpdated"),
+      { pushHistory: options?.pushHistory }
+    )
+
+  const addHeaderFooter = (
+    sectionIndex: number,
+    kind: DocxSectionRegion,
+    options?: AddHeaderFooterOptions
+  ): boolean => {
+    const status = ctx.statusMessage(kind === "header" ? "headerAdded" : "footerAdded")
+    return applyModelChange(
+      (current) => addSectionHeaderFooter(current, sectionIndex, kind, options),
+      status
+    )
+  }
+
   // Browser-originated ranges are already reflected in the DOM. Keep the
   // synchronous snapshot current without issuing a DOM restore request that
   // would fight the user's live selection.
@@ -925,6 +970,9 @@ export function useDocxEditor(
     commitTableCellParagraphTextByRuntimeKey: txt.commitTableCellParagraphTextByRuntimeKey,
     commitTableCellParagraphTextRecursive: txt.commitTableCellParagraphTextRecursive,
     commitSectionParagraphText: txt.commitSectionParagraphText,
+    setPageMargins,
+    setPageSize,
+    addHeaderFooter,
     writeSelectionToClipboardData: clp.writeSelectionToClipboardData,
     pasteClipboardData: async (sources) => clp.pasteClipboardData(sources),
     copy: clp.copy,
