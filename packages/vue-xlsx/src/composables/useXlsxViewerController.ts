@@ -1558,6 +1558,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     get chartsheets() { return chartsheets.value; },
     clearSelectedChart: chartImageDomain.clearSelectedChart,
     clearSelectedChartElement: chartImageDomain.clearSelectedChartElement,
+    changeChartType: chartImageDomain.changeChartType,
     clearSelectedCells: editingDomain.clearSelectedCells,
     clearSelectedImage: chartImageDomain.clearSelectedImage,
     clearSelection: editingDomain.clearSelection,

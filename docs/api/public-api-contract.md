@@ -103,6 +103,7 @@ try {
 - `@arcships/xlsx-core/wasm-url`：包自带的 `bundledXlsxWasmUrl`。
 - 根入口：保留现有数据、图片、图表、Worker 和控制器类型供 `0.x` 兼容使用。新代码应按纯数据或运行能力选择 `./core`、`./runtime`。
 - 图表：`refreshChartDataFromWorkbook(workbook, chartsByWorkbookSheetIndex, chartsheets)` 从编辑后的工作簿重新解析图表分类和值，保留图表定义与锚点；Worker 客户端也提供 `refreshCharts()`，不会重新解析源文件字节。
+- 更改图表类型：`changeWorkbookChartType(assets, chartAssets, chartId, type)` 重写图表部件（经典 `c:plotArea` 或 chartEx `cx:chartSpace`），保留系列名称、颜色、数据标签和坐标轴格式；经典与 chartEx 互转时同步 drawing 关系、`mc:AlternateContent` 包裹和内容类型。`chartTypeOptions`、`chartTypeFamilies()`、`resolveChartTypeOption()`、`matchesChartType()`、`chartTypeUnavailable()` 提供菜单目录和可用性判断；`XlsxViewerController.changeChartType(id, type)` 是其控制器入口。
 - 根入口同时提供工作表、单元格、A1 范围、整行、整列、图表和人工 sheet 区域的 `createXlsx*ReferenceDraft`、`resolveXlsxReference` 与 `describeXlsxReference`。适配器优先使用 sheet id 和 drawing id；名称/类型证据只有唯一时才用于迁移。
 
 `XlsxRuntimeConfig.limits` 使用实例自己的 `XlsxRuntimeLimits`。公开限制除通用输入、压缩包、XML、关系、图片和解析时间外，还覆盖工作表 XML、共享字符串、行列、工作表数量和公式数量。`DEFAULT_XLSX_RUNTIME_LIMITS` 是默认值，`resolveXlsxRuntimeLimits` 返回实例快照；`validateXlsxArchive` 可在创建工作簿前执行同一套检查。

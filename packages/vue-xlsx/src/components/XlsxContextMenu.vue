@@ -16,6 +16,66 @@
       :aria-label="m.xlsx.contextMenu.label"
       @keydown="onMenuKeydown"
     >
+      <template v-if="chartTarget">
+        <button
+          class="xlsx-contextmenu__item xlsx-contextmenu__item--submenu"
+          data-testid="xlsx-context-chart-type"
+          role="menuitem"
+          aria-haspopup="menu"
+          :aria-expanded="chartTypeMenuOpen"
+          :disabled="isReadOnly"
+          @click="toggleChartTypeMenu"
+          @mouseenter="openChartTypeMenu"
+        >
+          <span>{{ m.xlsx.contextMenu.changeChartType }}</span>
+          <span class="xlsx-contextmenu__chevron" aria-hidden="true">›</span>
+        </button>
+        <div
+          v-if="chartTypeMenuOpen"
+          class="xlsx-contextmenu__submenu"
+          data-testid="xlsx-chart-type-menu"
+          role="menu"
+          :aria-label="m.xlsx.contextMenu.changeChartType"
+        >
+          <div v-for="family in chartFamilies" :key="family.family" class="xlsx-contextmenu__group">
+            <button
+              class="xlsx-contextmenu__item xlsx-contextmenu__item--submenu"
+              role="menuitem"
+              aria-haspopup="menu"
+              :aria-expanded="openChartFamily === family.family"
+              :data-testid="`xlsx-chart-family-${family.family}`"
+              @click="openChartFamilyMenu(family.family)"
+              @mouseenter="openChartFamilyMenu(family.family)"
+            >
+              <span>{{ family.family }}</span>
+              <span class="xlsx-contextmenu__chevron" aria-hidden="true">›</span>
+            </button>
+            <div
+              v-if="openChartFamily === family.family"
+              class="xlsx-contextmenu__submenu xlsx-contextmenu__submenu--nested"
+              role="menu"
+              :aria-label="family.family"
+            >
+              <button
+                v-for="option in family.options"
+                :key="option.id"
+                class="xlsx-contextmenu__item"
+                role="menuitem"
+                :data-testid="`xlsx-chart-type-${option.id}`"
+                :disabled="isChartTypeUnavailable(option)"
+                @click="onChangeChartType(option.id)"
+              >
+                <span class="xlsx-contextmenu__check" aria-hidden="true">{{ isCurrentChartType(option) ? "✓" : "" }}</span>
+                <span>{{ option.label }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="xlsx-contextmenu__separator" role="separator" />
+        <button class="xlsx-contextmenu__item" role="menuitem" @click="onUndo">{{ m.xlsx.contextMenu.undo }}</button>
+        <button class="xlsx-contextmenu__item" role="menuitem" @click="onRedo">{{ m.xlsx.contextMenu.redo }}</button>
+      </template>
+      <template v-else>
       <button class="xlsx-contextmenu__item" role="menuitem" @click="onCopy">{{ m.xlsx.contextMenu.copy }}</button>
       <button
         v-if="!isReadOnly"
@@ -114,6 +174,7 @@
         role="menuitem"
         @click="onRedo"
       >{{ m.xlsx.contextMenu.redo }}</button>
+      </template>
     </div>
   </Teleport>
   <XlsxClipboardNotice :message="clipboardNotice" />
@@ -122,7 +183,8 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onUnmounted, watch, type CSSProperties } from "vue";
 import { useOfficeMenuKeyboard } from "@arcships/vue-ui";
-import type { XlsxCellAddress, XlsxSheetData, XlsxViewerController } from "@arcships/xlsx-core";
+import type { ChartTypeOption, XlsxCellAddress, XlsxSheetData, XlsxViewerController } from "@arcships/xlsx-core";
+import { chartTypeFamilies, chartTypeUnavailable, matchesChartType } from "@arcships/xlsx-core";
 import XlsxClipboardNotice from "./XlsxClipboardNotice.vue";
 import { useClipboardCopyNotice } from "../composables/useClipboardCopyNotice";
 import { frozenExtent } from "./grid-metrics";
@@ -153,6 +215,15 @@ const menuRef = ref<HTMLElement | null>(null);
 const m = useXlsxMessages();
 const position = ref({ x: 0, y: 0 });
 const sortTarget = ref<{ columnIndex: number; tableName: string } | null>(null);
+/** Chart the menu was opened on, or `null` for the cell menu. */
+const chartTargetId = ref<string | null>(null);
+const chartTypeMenuOpen = ref(false);
+const openChartFamily = ref<string | null>(null);
+const chartFamilies = chartTypeFamilies();
+const chartTarget = computed(() => {
+  props.controller.revision;
+  return chartTargetId.value ? props.controller.getChartById?.(chartTargetId.value) ?? null : null;
+});
 
 const isReadOnly = computed(() => props.controller.isEditingLocked ?? props.controller.readOnly);
 const commentAtCell = computed(() => {
@@ -267,6 +338,8 @@ function openAt(clientX: number, clientY: number, eventTarget?: unknown): boolea
 
   const cell = resolveGridCell(target, sheet, props.controller.zoomScale, clientX, clientY);
   if (!cell) return false;
+  chartTargetId.value = null;
+  closeChartTypeMenu();
   props.controller.selectCell(cell);
   const table = props.controller.tables.find((candidate) => {
     const headerRows = Math.max(1, candidate.headerRowCount);
@@ -285,7 +358,64 @@ function openAt(clientX: number, clientY: number, eventTarget?: unknown): boolea
   return true;
 }
 
-function close() { visible.value = false; sortTarget.value = null; }
+/**
+ * Opens the chart menu for `chartId`: the chart's own actions replace the cell
+ * actions, starting with the family/type submenu of "Change Chart Type".
+ */
+function openForChart(chartId: string, clientX: number, clientY: number): boolean {
+  const chart = props.controller.getChartById?.(chartId) ?? null;
+  if (!chart) return false;
+  chartTargetId.value = chartId;
+  sortTarget.value = null;
+  closeChartTypeMenu();
+  position.value = { x: clientX, y: clientY };
+  menuKeyboard.captureInvoker();
+  visible.value = true;
+  void nextTick(() => menuKeyboard.focusFirst());
+  return true;
+}
+
+function closeChartTypeMenu() {
+  chartTypeMenuOpen.value = false;
+  openChartFamily.value = null;
+}
+
+function toggleChartTypeMenu() {
+  if (chartTypeMenuOpen.value) closeChartTypeMenu();
+  else chartTypeMenuOpen.value = true;
+}
+
+function openChartTypeMenu() {
+  chartTypeMenuOpen.value = true;
+}
+
+function openChartFamilyMenu(family: string) {
+  openChartFamily.value = family;
+}
+
+function isCurrentChartType(option: ChartTypeOption): boolean {
+  const chart = chartTarget.value;
+  return chart ? matchesChartType(chart, option) : false;
+}
+
+function isChartTypeUnavailable(option: ChartTypeOption): boolean {
+  const chart = chartTarget.value;
+  return Boolean(isReadOnly.value || !chart || chartTypeUnavailable(chart, option));
+}
+
+function onChangeChartType(type: string) {
+  const chart = chartTarget.value;
+  if (!chart || isReadOnly.value) return;
+  props.controller.changeChartType?.(chart.id, type);
+  close();
+}
+
+function close() {
+  visible.value = false;
+  sortTarget.value = null;
+  chartTargetId.value = null;
+  closeChartTypeMenu();
+}
 function onCopy() { void copySelection(); close(); }
 function onPaste() { props.controller.pasteFromClipboard(); close(); }
 function onClear() { props.controller.clearSelectedCells(); close(); }
@@ -334,7 +464,7 @@ onUnmounted(() => {
   boundTarget = null;
 });
 
-defineExpose({ openAt, close });
+defineExpose({ openAt, close, openForChart });
 </script>
 
 <style scoped>
@@ -348,7 +478,19 @@ defineExpose({ openAt, close });
   color: #18181b; cursor: pointer; display: flex; font-family: inherit;
   font-size: 12px; height: 28px; padding: 0 8px; width: 100%;
 }
-.xlsx-contextmenu__item:hover { background: #f4f4f5; }
+.xlsx-contextmenu__item:hover:not(:disabled) { background: #f4f4f5; }
+.xlsx-contextmenu__item:disabled { cursor: default; opacity: 0.45; }
+.xlsx-contextmenu__item--submenu { justify-content: space-between; }
+.xlsx-contextmenu__chevron { color: #71717a; }
+.xlsx-contextmenu__check { display: inline-block; min-width: 12px; }
+.xlsx-contextmenu__submenu {
+  background: #ffffff; border: 1px solid #d4d4d8; border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12); left: calc(100% - 4px);
+  max-height: 70vh; min-width: 190px; overflow-y: auto; padding: 4px;
+  position: absolute; top: 0;
+}
+.xlsx-contextmenu__submenu--nested { z-index: 1; }
+.xlsx-contextmenu__group { position: relative; }
 .xlsx-contextmenu__separator { background: #e4e4e7; height: 1px; margin: 4px 0; }
 @media (pointer: coarse) {
   .xlsx-contextmenu__item { height: 44px; }

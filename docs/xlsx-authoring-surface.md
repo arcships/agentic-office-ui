@@ -60,7 +60,18 @@ saveXlsxBytes()                 # 引擎提供权威单元格数据
 - 工作表 rels 的 drawing 关系与 `<drawing r:id>`；
 - 注册到 `sheetOrigins` 的绘图附件，导出时由图片合并逻辑统一重建绘图。
 
-控制器随后调用 `loadWorkbookChartAssets()` 重新解析图表资产，因此插入后立即渲染；图表类型从图表 XML 读取（`resolveChartTypeFromTypeNode`），不再固定为柱形图。`updateChart` / `deleteChart` 继续服务“编辑图表”对话框（标题、删除）。改图表类型由 #139 负责。
+控制器随后调用 `loadWorkbookChartAssets()` 重新解析图表资产，因此插入后立即渲染；图表类型从图表 XML 读取（`resolveChartTypeFromTypeNode`），不再固定为柱形图。`updateChart` / `deleteChart` 继续服务“编辑图表”对话框（标题、删除）。
+
+### 4.1.1 更改图表类型
+
+`changeWorkbookChartType()`（`packages/xlsx-core/src/charts/chart-type-edit.ts`）在同一个图表部件上重写类型：
+
+- 经典类型重建 `<c:plotArea>`，按目标族写入 `barChart`/`lineChart`/`pie3DChart`/`scatterChart`/`stockChart`/`surface3DChart` 等节点、轴（含隐藏的成交量轴）和 `view3D`；系列的名称公式、`spPr`、`dPt`、`dLbls`、标记与平滑设置从原节点克隆，因此颜色、数据标签和点样式不丢；
+- chartEx 类型（treemap、sunburst、histogram、pareto、box & whisker、waterfall、funnel、filled map）生成 `cx:chartSpace`：`cx:chartData` 的 `strDim`/`numDim`、`cx:series@layoutId`、直方图 `cx:binning`、Pareto 的 `paretoLine` 系列；同时补 `chartStyle`/`chartColorStyle` 部件、关系和内容类型，且重复切换不会重复添加；
+- 经典 ↔ chartEx 迁移时同步 drawing 关系类型、`a:graphicData@uri`、`cx:chart`/`c:chart` 引用、`mc:AlternateContent`（含 `mc:Fallback`）和图表内容类型；
+- `loadWorkbookChartAssets()` 现在也会从压缩包解析 chartEx 部件（`parseChartExChartXml()`），所以导出的现代图表重新加载后仍可见；直方图分箱不会二次应用。
+
+控制器入口为 `XlsxViewerController.changeChartType(id, type)`；右键图表时 `XlsxContextMenu` 用 `chartTypeOptions` 的族/类型子菜单打开“更改图表类型”，选择后重写部件并按 `chartPath` 重新选中图表。`chartTypeUnavailable()` 会禁用系列数量不匹配（如股票图）或只读的选项。
 
 ### 4.2 批注
 

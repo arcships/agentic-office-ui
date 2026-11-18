@@ -92,8 +92,15 @@ export {
   updateWorkbookChartAnchor,
   updateWorkbookChartDefinition,
   deleteWorkbookChart,
+  changeWorkbookChartType,
+  chartTypeOptions,
+  chartTypeFamilies,
+  resolveChartTypeOption,
+  chartTypeUnavailable,
+  matchesChartType,
 } from "./charts";
 export type {
+  ChartTypeOption,
   ParsedChartSeriesFormula,
   WorkbookChartOrigin,
   WorkbookChartAssets,

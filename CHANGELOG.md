@@ -4,6 +4,13 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [0.7.0] - 2026-11-18
 
+### XLSX chart type editing (#139)
+
+- Add `changeWorkbookChartType()`: classic chart families rebuild the `c:plotArea` while carrying over series names, colours, data labels, point styles and axis formatting, and chartEx families (treemap, sunburst, histogram, pareto, box & whisker, waterfall, funnel, filled map) write a `cx:chartSpace` part with the `chartStyle`/`chartColorStyle` parts, relationships and content-type overrides Excel expects.
+- Migrate classic ↔ chartEx in place: the drawing relationship type, the `cx:chart`/`c:chart` reference, `a:graphicData@uri`, the `mc:AlternateContent`/`mc:Fallback` wrapper and the chart content type are all kept consistent, and the chart id follows the migrated kind.
+- Read chartEx parts from the package archive because the WASM workbook model does not expose them, so authored and exported modern charts survive re-parse, export and reload; histogram/pareto binning is no longer applied twice, and the declared series stay recoverable when a point-series layout collapses them for rendering.
+- Expose the gallery to hosts and the viewer: `chartTypeOptions` (57 classic and modern entries), `chartTypeFamilies()`, `resolveChartTypeOption()`, `matchesChartType()` and `chartTypeUnavailable()`, plus `XlsxViewerController.changeChartType(id, type)`; the XLSX context menu shows a family/type submenu when a chart is right-clicked, and the change is undoable and included in exported XLSX bytes.
+
 ### XLSX authoring surface (#102)
 
 - Write conditional-format and data-bar colours as 8-digit ARGB (`FFRRGGBB`) instead of the CSS `#rrggbb` form kept in the model; LibreOffice and Excel read the latter as black. Theme, indexed and automatic colours keep their `theme`/`indexed`/`auto` attributes, and the ARGB/hex input forms are both accepted.

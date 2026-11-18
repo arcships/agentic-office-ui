@@ -103,7 +103,7 @@ test("composite XlsxViewer gains gesture zoom, long press and pointercancel reco
 test("context menus close on outside pointer down, not on the trailing click of a long press", () => {
   assert.match(XLSX_MENU, /class="xlsx-contextmenu-backdrop"[\s\S]*?@pointerdown="close"/);
   assert.match(DOCX_MENU, /class="docx-context-menu-backdrop"[\s\S]*?@pointerdown="close"/);
-  assert.match(XLSX_MENU, /defineExpose\(\{ openAt, close \}\)/);
+  assert.match(XLSX_MENU, /defineExpose\(\{ openAt, close, openForChart \}\)/);
 });
 
 test("touch hit targets reach 44px on coarse pointers", () => {
