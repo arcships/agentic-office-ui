@@ -199,6 +199,30 @@ function onChartKeydown(chart: XlsxChart, event: KeyboardEvent) {
   if (props.controller.selectedChartId !== chart.id) {
     return;
   }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c") {
+    event.preventDefault();
+    event.stopPropagation();
+    void props.controller.copySelectionToClipboard?.();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "x") {
+    event.preventDefault();
+    event.stopPropagation();
+    props.controller.cutSelection?.();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v") {
+    event.preventDefault();
+    event.stopPropagation();
+    void props.controller.pasteFromClipboard?.();
+    return;
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "d") {
+    event.preventDefault();
+    event.stopPropagation();
+    props.controller.duplicateDrawing?.();
+    return;
+  }
   const step = event.shiftKey ? 10 : 1;
   const nudge: Record<string, [number, number]> = {
     ArrowLeft: [-1, 0],
@@ -221,6 +245,7 @@ function onChartKeydown(chart: XlsxChart, event: KeyboardEvent) {
   }
   if (event.key === "Escape") {
     event.stopPropagation();
+    if (props.controller.cancelCut?.()) return;
     props.controller.clearSelectedChart();
   }
 }

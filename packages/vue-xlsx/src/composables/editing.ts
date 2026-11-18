@@ -28,6 +28,7 @@ import {
   type HistoryEntry
 } from "./internal";
 import { buildSheetList, buildVisibleSheetIndexMap } from "./workbook-state";
+import { loadWorkbookImageAssets } from "./image-assets";
 import { canonicalizeFormula, resolveCellInput, resolveFormulaNumberFormat } from "./cell-input";
 import { resolveEffectiveCellNumberFormat } from "./formatting";
 import type { XlsxControllerContext } from "./internal";
@@ -624,25 +625,28 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     }
 
     ctx.workbook.value.addSheet(candidate);
-    ctx.sheetOriginsRef.value = [...ctx.sheetOriginsRef.value, null];
-    ctx.imagesByWorkbookSheetIndex.value = [...ctx.imagesByWorkbookSheetIndex.value, []];
-    ctx.shapesByWorkbookSheetIndex.value = [...ctx.shapesByWorkbookSheetIndex.value, []];
+    // Re-materialize the package so the new worksheet part, its relationships
+    // and its empty drawing slot exist in the authoring archive. Without this
+    // a drawing copied onto the new sheet has no sheet part to attach to.
+    const savedBytes = ctx.createSavedWorkbookBytes(ctx.workbook.value);
+    const nextImageAssets = loadWorkbookImageAssets(savedBytes, ctx.workbook.value);
+    ctx.setImageAssets(nextImageAssets);
     const nextSheets = buildSheetList(
       ctx.workbook.value,
-      ctx.imageAssetsRef.value?.sheetStatesByWorkbookSheetIndex,
-      ctx.imageAssetsRef.value?.themePalette,
-      ctx.imageAssetsRef.value?.styleById,
-      ctx.imageAssetsRef.value?.namedCellStyleByName,
-      ctx.imageAssetsRef.value?.tableStyleByName,
+      nextImageAssets.sheetStatesByWorkbookSheetIndex,
+      nextImageAssets.themePalette,
+      nextImageAssets.styleById,
+      nextImageAssets.namedCellStyleByName,
+      nextImageAssets.tableStyleByName,
       ctx.showHiddenSheets
     );
     ctx.sheets.value = nextSheets;
-    const nextChartAssets = ctx.imageAssetsRef.value
-      ? loadWorkbookChartAssets(ctx.workbook.value, ctx.imageAssetsRef.value, buildVisibleSheetIndexMap(nextSheets), ctx.showHiddenSheets)
-      : null;
-    if (ctx.imageAssetsRef.value) {
-      ctx.setChartAssets(nextChartAssets);
-    }
+    ctx.setChartAssets(loadWorkbookChartAssets(
+      ctx.workbook.value,
+      nextImageAssets,
+      buildVisibleSheetIndexMap(nextSheets),
+      ctx.showHiddenSheets
+    ));
     const nextIndex = nextSheets.findIndex((sheet) => sheet.name === candidate);
     ctx.switchToSheet(nextIndex >= 0 ? nextIndex : 0);
     ctx.revision.value = ctx.revision.value + 1;

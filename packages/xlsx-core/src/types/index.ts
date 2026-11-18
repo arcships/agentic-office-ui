@@ -118,6 +118,7 @@ export type {
 } from "./worksheet-types";
 
 export type { XlsxThemePalette } from "./theme-types";
+export type { XlsxDrawingClipboardItem, XlsxDrawingClipboardKind } from "./clipboard-types";
 
 export type {
   // Image anchor / marker

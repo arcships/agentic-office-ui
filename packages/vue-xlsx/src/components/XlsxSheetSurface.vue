@@ -43,6 +43,7 @@
         :scroll-top="gridViewport.scrollTop"
         :viewport-width="gridViewport.width"
         :viewport-height="gridViewport.height"
+        @drawing-context-menu="onDrawingContextMenu"
       />
       <XlsxDrawingLayer
         :controller="controller"
@@ -50,6 +51,7 @@
         :scroll-top="gridViewport.scrollTop"
         :viewport-width="gridViewport.width"
         :viewport-height="gridViewport.height"
+        @drawing-context-menu="onDrawingContextMenu"
       />
       <XlsxSelectionOverlay
         :controller="controller"
@@ -226,6 +228,7 @@ const gridRef = ref<GridInstance | null>(null)
 const contextMenuRef = ref<{
   openAt(clientX: number, clientY: number, target?: unknown): boolean
   openForChart(chartId: string, clientX: number, clientY: number): boolean
+  openForDrawing(kind: "image" | "shape", id: string, clientX: number, clientY: number): boolean
 } | null>(null)
 const gridViewport = ref({ height: 0, scrollLeft: 0, scrollTop: 0, width: 0 })
 const authoringKind = ref<XlsxAuthoringDialogKind | null>(null)
@@ -495,6 +498,15 @@ function onGestureEnd(): void {
 
 function onChartContextMenu(payload: { chartId: string; clientX: number; clientY: number }): void {
   contextMenuRef.value?.openForChart(payload.chartId, payload.clientX, payload.clientY);
+}
+
+function onDrawingContextMenu(payload: {
+  id: string;
+  kind: "image" | "shape";
+  clientX: number;
+  clientY: number;
+}): void {
+  contextMenuRef.value?.openForDrawing(payload.kind, payload.id, payload.clientX, payload.clientY);
 }
 
 function emitContextMenuAt(clientX: number, clientY: number): void {

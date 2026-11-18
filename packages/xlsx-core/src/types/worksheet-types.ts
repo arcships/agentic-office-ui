@@ -1693,8 +1693,13 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
   moveShapeBy: (id: string, deltaX: number, deltaY: number) => void;
   resizeShapeBy: (id: string, handle: XlsxImageResizeHandlePosition, deltaX: number, deltaY: number) => void;
   deleteShape: (id: string) => boolean;
+  deleteSelectedDrawing: () => boolean;
   deleteImage: (id: string) => boolean;
   deleteChart: (id: string) => boolean;
+  copyDrawing: () => XlsxClipboardData | null;
+  cutDrawing: () => XlsxClipboardData | null;
+  pasteDrawing: () => boolean;
+  duplicateDrawing: () => boolean;
   addFormControl: (input: XlsxFormControlInput) => XlsxFormControl | null;
   updateFormControl: (id: string, patch: Partial<XlsxFormControlInput>) => boolean;
   removeFormControl: (id: string) => boolean;
@@ -1943,6 +1948,20 @@ export interface XlsxViewerEditing {
   cutSelection: () => boolean;
   cancelCut: () => boolean;
   /**
+   * Captures the selected chart, image or shape as clipboard data.
+   *
+   * Returns `null` when no drawing is selected. The caller can write the
+   * returned flavours to the system clipboard; the viewer also keeps the
+   * payload so `pasteDrawing()` works where the clipboard is unreadable.
+   */
+  copyDrawing: () => XlsxClipboardData | null;
+  /** Captures the selected drawing for a cut-paste move. */
+  cutDrawing: () => XlsxClipboardData | null;
+  /** Pastes the drawing clipboard onto the active sheet at the active cell. */
+  pasteDrawing: () => boolean;
+  /** Copies the selected drawing in place with a small offset. */
+  duplicateDrawing: () => boolean;
+  /**
    * The pending cut (source range and sheet), or `null` when nothing is cut.
    *
    * Hosts draw the moving marquee from it and hide it once a paste lands or
@@ -2076,6 +2095,11 @@ export interface XlsxViewerImages {
   deleteShape: (id: string) => boolean;
   deleteImage: (id: string) => boolean;
   deleteChart: (id: string) => boolean;
+  deleteSelectedDrawing: () => boolean;
+  copyDrawing: () => XlsxClipboardData | null;
+  cutDrawing: () => XlsxClipboardData | null;
+  pasteDrawing: () => boolean;
+  duplicateDrawing: () => boolean;
   addFormControl: (input: XlsxFormControlInput) => XlsxFormControl | null;
   updateFormControl: (id: string, patch: Partial<XlsxFormControlInput>) => boolean;
   removeFormControl: (id: string) => boolean;

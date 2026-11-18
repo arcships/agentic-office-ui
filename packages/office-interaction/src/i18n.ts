@@ -805,6 +805,8 @@ export interface OfficeXlsxMessages {
     undo: string
     redo: string
     changeChartType: string
+    duplicate: string
+    delete: string
     insertRowAbove: string
     insertRowBelow: string
     deleteRow: string
@@ -1997,6 +1999,8 @@ export const officeMessagesEn: OfficeMessages = {
       undo: "Undo",
       redo: "Redo",
       changeChartType: "Change Chart Type",
+      duplicate: "Duplicate",
+      delete: "Delete",
       insertRowAbove: "Insert row above",
       insertRowBelow: "Insert row below",
       deleteRow: "Delete row",
@@ -3134,6 +3138,8 @@ export const officeMessagesZhCN: OfficeMessages = {
       undo: "撤销",
       redo: "重做",
       changeChartType: "更改图表类型",
+      duplicate: "创建副本",
+      delete: "删除",
       insertRowAbove: "在上方插入行",
       insertRowBelow: "在下方插入行",
       deleteRow: "删除行",

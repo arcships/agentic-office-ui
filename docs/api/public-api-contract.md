@@ -295,6 +295,8 @@ DOCX 剪贴板公开合同：`copy()` / `paste()` 以及 `writeSelectionToClipbo
 
 XLSX 剪切合同：`cutSelection()` 把选区写入内部/系统剪贴板并进入剪切状态（`cutState = { range, sheetIndex }`），源单元格保持不动；下一次 `pasteFromClipboard()` 把值、公式和样式搬到目标，并在同一个撤销条目里清空源区域，随后 `cutState` 变为 `null`。`cancelCut()`（`Escape`）只取消剪切状态，不改工作簿；`copySelectionToClipboard()`、仅格式的 `pasteSpecialFromClipboard({ mode: "formats" })` 以及工作簿重建同样结束剪切状态。`Ctrl/Cmd+X`、右键菜单和功能区的“剪切”共用 `cutSelection()`，网格用虚线 marquee 标出 `cutState` 的源区域（仅源工作表），`XlsxSelectionOverlay` 以 `selection.cutPending`（英文/中文）向辅助技术播报。
 
+XLSX 绘图剪贴板合同：图表、图片和形状共用同一套内部剪贴板载荷。选中绘图后 `Ctrl/Cmd+C`/`X`/`V`/`D` 以及绘图右键菜单的复制、剪切、粘贴、创建副本、删除分别调用 `copySelectionToClipboard()`/`cutSelection()`/`pasteFromClipboard()`/`duplicateDrawing()`/`deleteSelectedDrawing()`。载荷的 `drawings` 数组为每个绘图携带 `kind`、`model`、`anchor`、`relativeAnchor`、`size`、`sourceSheetId` 和 `sourceId`；粘贴在同工作簿的目标工作表上克隆 DrawingML 锚点，生成新的模型 id、关系 id、图表部件（`xl/charts/chartClipboardN.xml`）和必要的绘图部件，因此支持跨工作表粘贴、一个撤销条目内完成的剪切移动以及导出/重新加载。`copyDrawing()`、`cutDrawing()`、`pasteDrawing()` 和 `duplicateDrawing()` 是同一流程的可编程入口。
+
 ### 4.3 `vue-pdf`
 
 | 组件 | 事件 | 参数 |
