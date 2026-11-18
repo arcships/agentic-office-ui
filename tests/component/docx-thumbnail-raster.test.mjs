@@ -684,3 +684,54 @@ test("DOCX floating-image chrome advertises itself for thumbnail exclusion", asy
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });
+
+test("DOCX thumbnail raster keeps SVG picture sources vector", async (t) => {
+  const { FakeImage } = installRasterEnvironment(t);
+  const svgSource = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg">' +
+      "<rect/>".repeat(6_000) +
+      "</svg>",
+  )}`;
+  assert.ok(
+    svgSource.length > 32_768,
+    "the fixture source must be large enough to qualify for raster downscaling",
+  );
+
+  const page = new FakeElement("div", {
+    attributes: { "data-docx-page-surface": "true" },
+    computedStyle: {
+      ...DOCUMENT_COMPUTED_STYLE,
+      display: "block",
+      position: "relative",
+      "box-sizing": "border-box",
+      "background-color": "rgb(255, 255, 255)",
+    },
+    children: [
+      new FakeElement("img", {
+        attributes: { src: svgSource, alt: "svg picture" },
+        computedStyle: { ...DOCUMENT_COMPUTED_STYLE, display: "block" },
+      }),
+    ],
+  });
+
+  const surface = await rasterizeDocxThumbnailSurface({
+    pageElement: page,
+    sourceWidthPx: 816,
+    sourceHeightPx: 1056,
+    widthPx: 140,
+    heightPx: 181,
+    pixelWidthPx: 280,
+    pixelHeightPx: 362,
+  });
+  assert.equal(surface.width, 280);
+
+  // The only image decode is the thumbnail's own outer SVG. The picture is
+  // not re-decoded to a downscaled PNG, so the thumbnail keeps it vector until
+  // the final surface rasterisation.
+  assert.equal(FakeImage.instances.length, 1);
+  const outer = FakeImage.instances[0];
+  assert.match(outer.src, /^data:image\/svg\+xml/u);
+  const serialized = decodeURIComponent(outer.src.slice(outer.src.indexOf(",") + 1));
+  assert.match(serialized, /<img[^>]+src="data:image\/svg\+xml;charset=utf-8,/u);
+  assert.doesNotMatch(serialized, /data:image\/png/u);
+});

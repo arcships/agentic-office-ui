@@ -92,6 +92,7 @@ const suites = {
       "tests/unit/docx-thumbnail-signature.test.mjs",
       "tests/unit/docx-clipboard.test.mjs",
       "tests/unit/docx-comments.test.mjs",
+      "tests/unit/docx-svg-pictures.test.mjs",
       "tests/unit/xlsx-core.test.mjs",
       "tests/unit/xlsx-print.test.mjs",
       "tests/unit/xlsx-worker.test.mjs",
@@ -249,6 +250,7 @@ const suites = {
       "tests/component/viewer-keyboard.test.mjs",
       "tests/component/touch-interactions.test.mjs",
       "tests/component/image-decode-state.test.mjs",
+      "tests/component/docx-svg-pictures.test.mjs",
       "tests/component/viewer-print-theme.test.mjs",
     ]),
     command("docx-xlsx-component-smoke", process.execPath, [

@@ -42,6 +42,9 @@ export * from "./page-pattern-paint";
 // Image rendering (TIFF → PNG, EMF/WMF placeholder)
 export * from "./image-render";
 
+// SVG picture layer (sanitised vector rendering + unsupported-feature fallback)
+export * from "./svg-picture";
+
 // Page count reconciliation (deprecated height-scaling helper; kept for 0.x)
 export * from "./page-count-reconciliation";
 
