@@ -1,4 +1,5 @@
 import {
+  clearCache,
   layoutNextLine,
   measureLineStats,
   prepareWithSegments,
@@ -7,6 +8,10 @@ import {
   type PreparedTextWithSegments,
 } from "@chenglou/pretext";
 import { textMeasurementGeneration } from "./text-measurement-generation";
+import { registerFontMetricCache } from "./font-metrics";
+import { measureCanvasGlyphAdvance } from "./font-advances";
+import type { FontKerningMode } from "./font-kerning";
+import { createDocxTextMeasurementContext } from "./font-features";
 import {
   aggregateLineMetrics,
   emptyLineMetrics,
@@ -23,6 +28,13 @@ const fragmentOffsetAdvancesByFragment = new WeakMap<
   { generation: number; advances: number[] }
 >();
 
+// Pretext caches measured segment widths itself. A web font that arrives after
+// the first pagination pass changes those widths, so drop its cache (and ours)
+// on the same font-metric revision.
+registerFontMetricCache(() => {
+  clearCache();
+});
+
 type PretextWordBreak = "normal" | "keep-all";
 
 export interface PretextLayoutItem {
@@ -32,6 +44,9 @@ export interface PretextLayoutItem {
   endOffset: number;
   break?: "normal" | "never";
   wordBreak?: PretextWordBreak;
+  /** Kerning/OpenType settings used for this item's advance widths. */
+  fontKerning?: FontKerningMode;
+  fontFeatureSettings?: string;
   /**
    * Ascent above the shared line baseline. Set for atomic inline objects
    * (images) and for runs in a different font size than the paragraph's.
@@ -70,6 +85,8 @@ export interface PretextLineFragment {
   startOffset: number;
   endOffset: number;
   font?: string;
+  fontKerning?: FontKerningMode;
+  fontFeatureSettings?: string;
   /** Ascent of this fragment above the shared line baseline. */
   ascentPx?: number;
   /** Descent of this fragment below the shared line baseline. */
@@ -132,12 +149,6 @@ class NonRetainingMap<K, V> extends Map<K, V> {
 // deliberately not retained across calls; a viewer-owned cache can replace it later.
 export const layoutByKey = new NonRetainingMap<string, PretextVariableWidthLayout>();
 
-let measureCanvas: OffscreenCanvas | HTMLCanvasElement | undefined;
-let measureCanvasContext:
-  | OffscreenCanvasRenderingContext2D
-  | CanvasRenderingContext2D
-  | null
-  | undefined;
 let graphemeSegmenter: Intl.Segmenter | undefined;
 
 
@@ -175,27 +186,15 @@ function getMeasureContext():
   if (!canUsePretext()) {
     return undefined;
   }
-
-  if (measureCanvasContext) {
-    return measureCanvasContext ?? undefined;
-  }
-
-  if (typeof OffscreenCanvas !== "undefined") {
-    measureCanvas = new OffscreenCanvas(1, 1);
-    measureCanvasContext = measureCanvas.getContext("2d");
-    return measureCanvasContext ?? undefined;
-  }
-
-  if (typeof document !== "undefined") {
-    measureCanvas = document.createElement("canvas");
-    measureCanvasContext = measureCanvas.getContext("2d");
-    return measureCanvasContext ?? undefined;
-  }
-
-  return undefined;
+  return createDocxTextMeasurementContext();
 }
 
-function measureTextWidthPx(font: string, text: string): number {
+function measureTextWidthPx(
+  font: string,
+  text: string,
+  fontKerning?: FontKerningMode,
+  fontFeatureSettings?: string
+): number {
   if (!text) {
     return 0;
   }
@@ -213,14 +212,30 @@ function measureTextWidthPx(font: string, text: string): number {
     return Math.max(0, Math.round(text.length * safeFontSizePx * 0.5));
   }
 
-  context.font = font;
-  return Math.max(0, Math.round(context.measureText(text).width));
+  try {
+    return Math.max(
+      0,
+      Math.round(
+        measureCanvasGlyphAdvance(
+          context,
+          font,
+          text,
+          fontKerning,
+          fontFeatureSettings
+        )
+      )
+    );
+  } catch {
+    return Math.max(0, Math.round(text.length * 8));
+  }
 }
 
 function measureOffsetWidthPx(
   font: string,
   text: string,
-  offset: number
+  offset: number,
+  fontKerning?: FontKerningMode,
+  fontFeatureSettings?: string
 ): number {
   if (offset <= 0 || !text) {
     return 0;
@@ -228,7 +243,9 @@ function measureOffsetWidthPx(
 
   return measureTextWidthPx(
     font,
-    text.slice(0, Math.max(0, Math.min(offset, text.length)))
+    text.slice(0, Math.max(0, Math.min(offset, text.length))),
+    fontKerning,
+    fontFeatureSettings
   );
 }
 
@@ -492,7 +509,9 @@ export function cachedFragmentOffsetAdvances(
     advances[localOffset] = measureOffsetWidthPx(
       fragment.font ?? defaultFont,
       fragment.text,
-      localOffset
+      localOffset,
+      fragment.fontKerning,
+      fragment.fontFeatureSettings
     );
   }
   fragmentOffsetAdvancesByFragment.set(fragment, {

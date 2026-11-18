@@ -293,11 +293,26 @@ export function mergeTextRunStyles(
 
   const merged: TextRunNode["style"] = {
     fontFamily: override?.fontFamily ?? base?.fontFamily,
+    sourceFontFamily: override?.sourceFontFamily ?? base?.sourceFontFamily,
+    fontFamilyAscii: override?.fontFamilyAscii ?? base?.fontFamilyAscii,
+    fontFamilyHAnsi: override?.fontFamilyHAnsi ?? base?.fontFamilyHAnsi,
     fontFamilyEastAsia:
       override?.fontFamilyEastAsia ?? base?.fontFamilyEastAsia,
     fontFamilyComplexScript:
       override?.fontFamilyComplexScript ?? base?.fontFamilyComplexScript,
+    fontHint: override?.fontHint ?? base?.fontHint,
     fontSizePt: override?.fontSizePt ?? base?.fontSizePt,
+    fontSizeCsPt: override?.fontSizeCsPt ?? base?.fontSizeCsPt,
+    kerningMinFontSizePt:
+      override?.kerningMinFontSizePt ?? base?.kerningMinFontSizePt,
+    ligatures: override?.ligatures ?? base?.ligatures,
+    contextualAlternates:
+      override?.contextualAlternates ?? base?.contextualAlternates,
+    language: override?.language ?? base?.language,
+    languageEastAsia: override?.languageEastAsia ?? base?.languageEastAsia,
+    languageBidi: override?.languageBidi ?? base?.languageBidi,
+    rightToLeft: override?.rightToLeft ?? base?.rightToLeft,
+    complexScript: override?.complexScript ?? base?.complexScript,
     bold: override?.bold ?? base?.bold,
     italic: override?.italic ?? base?.italic,
     underline: override?.underline ?? base?.underline,

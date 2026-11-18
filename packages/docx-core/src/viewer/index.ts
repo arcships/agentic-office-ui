@@ -53,3 +53,12 @@ export * from "./pagination-scroll-anchor";
 
 // Text-measurement cache invalidation (web-font loading, font-set changes)
 export * from "./font-metrics";
+
+// DOCX font subsystem: advances, kerning, OpenType features, script slots and
+// document font loading.
+export * from "./font-advances";
+export * from "./font-kerning";
+export * from "./font-features";
+export * from "./font-table";
+export * from "./script-fonts";
+export * from "./document-fonts";

@@ -16,9 +16,32 @@ import {
   resolveTabSpacerWidthPx,
   noteMarkerLabel,
   isJustifiedAlignment,
+  docxScriptSegmentStyle,
+  segmentTextByDocxScriptFont,
 } from "@arcships/docx-core"
 import type { DocxDocumentTheme } from "@arcships/docx-core"
+import type { DocxScriptFontSegment } from "@arcships/docx-core"
 import type { ParagraphTrackedInlineChange } from "@arcships/docx-core"
+
+/** Replace only the font properties of a span with the script slot's font. */
+function scriptSegmentStyle(
+  baseStyle: Record<string, string | number | undefined>,
+  runStyle: TextRunNode["style"] | undefined,
+  segment: DocxScriptFontSegment,
+  theme: DocxDocumentTheme
+): Record<string, string | number | undefined> {
+  const scriptStyle = runStyleToCss(
+    docxScriptSegmentStyle(runStyle, segment),
+    theme
+  )
+  return {
+    ...baseStyle,
+    ...(scriptStyle.fontFamily ? { fontFamily: scriptStyle.fontFamily } : {}),
+    ...(scriptStyle.fontSize ? { fontSize: scriptStyle.fontSize } : {}),
+    fontKerning: scriptStyle.fontKerning,
+    fontFeatureSettings: scriptStyle.fontFeatureSettings,
+  }
+}
 
 export interface TextRunRenderContext {
   documentTheme: DocxDocumentTheme
@@ -223,6 +246,26 @@ function renderHyperlinkRun(
         ...commentHighlightStyle(ctx.documentTheme, undefined),
       }
 
+  const scriptSegments = segmentTextByDocxScriptFont(textOverride, child.style)
+  const content =
+    scriptSegments.length <= 1
+      ? textOverride
+      : scriptSegments.map((segment) =>
+          h(
+            "span",
+            {
+              key: `${key}-script-${segment.startOffset}`,
+              style: scriptSegmentStyle(
+                linkStyle,
+                child.style,
+                segment,
+                ctx.documentTheme
+              ),
+            },
+            segment.text
+          )
+        )
+
   return {
     vnodes: [
       h(
@@ -246,7 +289,7 @@ function renderHyperlinkRun(
           },
           style: linkStyle,
         },
-        textOverride
+        content
       ),
     ],
     consumedPageFieldValues: ctx.consumedPageFieldValues,
@@ -272,18 +315,41 @@ function renderPlainTextRun(
     textOverride.includes("\n")
 
   if (!shouldControlSoftBreakStretch) {
+    const scriptSegments = segmentTextByDocxScriptFont(
+      textOverride,
+      child.style
+    )
+    const vnodes =
+      scriptSegments.length <= 1
+        ? [
+            h(
+              "span",
+              {
+                key,
+                ...annotationAttributes,
+                style: textStyle,
+              },
+              textOverride
+            ),
+          ]
+        : scriptSegments.map((segment) =>
+            h(
+              "span",
+              {
+                key: `${key}-script-${segment.startOffset}`,
+                ...annotationAttributes,
+                style: scriptSegmentStyle(
+                  textStyle,
+                  child.style,
+                  segment,
+                  ctx.documentTheme
+                ),
+              },
+              segment.text
+            )
+          )
     return {
-      vnodes: [
-        h(
-          "span",
-          {
-            key,
-            ...annotationAttributes,
-            style: textStyle,
-          },
-          textOverride
-        ),
-      ],
+      vnodes,
       consumedPageFieldValues: ctx.consumedPageFieldValues,
       consumedStyleRefFieldValues: ctx.consumedStyleRefFieldValues,
       newLineWidthPx: updateEstimatedLineWidthPxForText(
@@ -305,25 +371,51 @@ function renderPlainTextRun(
     }
 
     if (segment.length > 0) {
-      vnodes.push(
-        h(
-          "span",
-          {
-            key: `${key}-segment-${segmentIndex}`,
-            ...annotationAttributes,
-            style: isLastSegment
-              ? {
-                  ...textStyle,
-                  display: "inline-block",
-                  maxWidth: "100%",
-                  whiteSpace: "pre-wrap",
-                  verticalAlign: "baseline",
-                }
-              : textStyle,
-          },
-          segment
-        )
+      const lineStyle = isLastSegment
+        ? {
+            ...textStyle,
+            display: "inline-block",
+            maxWidth: "100%",
+            whiteSpace: "pre-wrap",
+            verticalAlign: "baseline",
+          }
+        : textStyle
+      const scriptSegments = segmentTextByDocxScriptFont(
+        segment,
+        child.style
       )
+      if (scriptSegments.length <= 1) {
+        vnodes.push(
+          h(
+            "span",
+            {
+              key: `${key}-segment-${segmentIndex}`,
+              ...annotationAttributes,
+              style: lineStyle,
+            },
+            segment
+          )
+        )
+      } else {
+        for (const scriptSegment of scriptSegments) {
+          vnodes.push(
+            h(
+              "span",
+              {
+                key: `${key}-segment-${segmentIndex}-script-${scriptSegment.startOffset}`,
+                ...annotationAttributes,
+                style: scriptSegmentStyle(
+                  lineStyle,
+                  child.style,
+                  scriptSegment,
+                  ctx.documentTheme
+                ),
+              },
+              scriptSegment.text
+            )
+          )
+        }
+      }
     }
 
     newLineWidth = updateEstimatedLineWidthPxForText(

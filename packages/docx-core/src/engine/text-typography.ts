@@ -10,6 +10,7 @@ import type {
   DocxThemeFonts,
   ParagraphAlignment,
   ParagraphDirection,
+  TextLigatures,
   TextOutlineStyle,
   TextRunBorderStyle,
   TextShadowStyle,
@@ -265,8 +266,12 @@ export function parseStrikeFromRunProperties(rPrXml: string): {
 
 export interface ParsedRunFonts {
   fontFamily?: string;
+  sourceFontFamily?: string;
+  fontFamilyAscii?: string;
+  fontFamilyHAnsi?: string;
   fontFamilyEastAsia?: string;
   fontFamilyComplexScript?: string;
+  fontHint?: string;
 }
 
 function themeFontFamily(
@@ -311,20 +316,26 @@ export function parseRunFontsFromXml(
   const complexScriptTheme =
     xmlAttribute(rFontsTag, "w:cstheme") ??
     xmlAttribute(rFontsTag, "w:csTheme");
+  const fontHint = xmlAttribute(rFontsTag, "w:hint")?.trim();
+  const fontFamilyAscii =
+    ascii || themeFontFamily(asciiTheme, themeFonts) || undefined;
+  const fontFamilyHAnsi =
+    hAnsi || themeFontFamily(hAnsiTheme, themeFonts) || undefined;
+  const fontFamilyEastAsia =
+    eastAsia || themeFontFamily(eastAsiaTheme, themeFonts) || undefined;
+  const fontFamilyComplexScript =
+    complexScript || themeFontFamily(complexScriptTheme, themeFonts) || undefined;
+  const fontFamily =
+    fontFamilyAscii ?? fontFamilyHAnsi ?? fontFamilyEastAsia ?? fontFamilyComplexScript;
 
   return {
-    fontFamily:
-      ascii ||
-      hAnsi ||
-      themeFontFamily(hAnsiTheme, themeFonts) ||
-      themeFontFamily(asciiTheme, themeFonts) ||
-      undefined,
-    fontFamilyEastAsia:
-      eastAsia || themeFontFamily(eastAsiaTheme, themeFonts) || undefined,
-    fontFamilyComplexScript:
-      complexScript ||
-      themeFontFamily(complexScriptTheme, themeFonts) ||
-      undefined
+    fontFamily,
+    sourceFontFamily: fontFamily,
+    fontFamilyAscii,
+    fontFamilyHAnsi,
+    fontFamilyEastAsia,
+    fontFamilyComplexScript,
+    fontHint: fontHint || undefined
   };
 }
 
@@ -401,6 +412,44 @@ export interface ParseRunTypographyOptions {
   themeFonts?: DocxThemeFonts;
 }
 
+const TEXT_LIGATURE_VALUES: readonly TextLigatures[] = [
+  "none",
+  "standard",
+  "contextual",
+  "historical",
+  "discretional",
+  "standardContextual",
+  "standardHistorical",
+  "contextualHistorical",
+  "standardDiscretional",
+  "contextualDiscretional",
+  "historicalDiscretional",
+  "standardContextualHistorical",
+  "standardContextualDiscretional",
+  "standardHistoricalDiscretional",
+  "contextualHistoricalDiscretional",
+  "all"
+];
+
+function normalizedLigatures(value: string | undefined): TextLigatures | undefined {
+  const normalized = value?.trim() as TextLigatures | undefined;
+  return normalized && TEXT_LIGATURE_VALUES.includes(normalized)
+    ? normalized
+    : undefined;
+}
+
+function optionalBooleanFlag(tagXml: string | undefined): boolean | undefined {
+  if (!tagXml) {
+    return undefined;
+  }
+
+  const raw = xmlAttribute(tagXml, "w:val")?.trim().toLowerCase();
+  if (!raw) {
+    return true;
+  }
+  return !["0", "false", "off", "no"].includes(raw);
+}
+
 export function parseRunTypographyFromRunXml(
   runXml: string,
   options: ParseRunTypographyOptions = {}
@@ -417,14 +466,23 @@ export function parseRunTypographyFromRunXml(
     options.themeFonts
   );
 
-  const sizeTag = firstTagXml(rPrXml, "w:sz") ?? firstTagXml(rPrXml, "w:szCs");
+  const sizeTag = firstTagXml(rPrXml, "w:sz");
   const sizeHalfPoints = sizeTag
     ? Number(xmlAttribute(sizeTag, "w:val"))
     : Number.NaN;
+  const complexScriptSizeTag = firstTagXml(rPrXml, "w:szCs");
+  const complexScriptSizeHalfPoints = complexScriptSizeTag
+    ? Number(xmlAttribute(complexScriptSizeTag, "w:val"))
+    : Number.NaN;
+  const fontSizeCsPt =
+    Number.isFinite(complexScriptSizeHalfPoints) &&
+    complexScriptSizeHalfPoints > 0
+      ? Number((complexScriptSizeHalfPoints / 2).toFixed(2))
+      : undefined;
   const fontSizePt =
     Number.isFinite(sizeHalfPoints) && sizeHalfPoints > 0
       ? Number((sizeHalfPoints / 2).toFixed(2))
-      : undefined;
+      : fontSizeCsPt;
 
   const bold =
     xmlBooleanFlag(firstTagXml(rPrXml, "w:b")) ||
@@ -458,12 +516,54 @@ export function parseRunTypographyFromRunXml(
       : undefined;
 
   const rtl = xmlBooleanFlag(firstTagXml(rPrXml, "w:rtl"));
+  const complexScript = optionalBooleanFlag(firstTagXml(rPrXml, "w:cs"));
+  const kerningTag = firstTagXml(rPrXml, "w:kern");
+  const kerningHalfPoints = kerningTag
+    ? Number(xmlAttribute(kerningTag, "w:val"))
+    : Number.NaN;
+  const kerningMinFontSizePt =
+    Number.isFinite(kerningHalfPoints) && kerningHalfPoints >= 0
+      ? Number((kerningHalfPoints / 2).toFixed(2))
+      : undefined;
+  const ligaturesTag = firstTagXml(rPrXml, "w14:ligatures");
+  const ligatures = normalizedLigatures(
+    ligaturesTag
+      ? xmlAttribute(ligaturesTag, "w14:val") ??
+          xmlAttribute(ligaturesTag, "w:val")
+      : undefined
+  );
+  const contextualAlternates = optionalBooleanFlag(
+    firstTagXml(rPrXml, "w14:cntxtAlts")
+  );
+  const languageTag = firstTagXml(rPrXml, "w:lang");
+  const language = languageTag
+    ? xmlAttribute(languageTag, "w:val")?.trim()
+    : undefined;
+  const languageEastAsia = languageTag
+    ? xmlAttribute(languageTag, "w:eastAsia")?.trim()
+    : undefined;
+  const languageBidi = languageTag
+    ? xmlAttribute(languageTag, "w:bidi")?.trim()
+    : undefined;
 
   const style: TextStyle = {
     fontFamily: fontFamilies.fontFamily,
+    sourceFontFamily: fontFamilies.sourceFontFamily,
+    fontFamilyAscii: fontFamilies.fontFamilyAscii,
+    fontFamilyHAnsi: fontFamilies.fontFamilyHAnsi,
     fontFamilyEastAsia: fontFamilies.fontFamilyEastAsia,
     fontFamilyComplexScript: fontFamilies.fontFamilyComplexScript,
+    fontHint: fontFamilies.fontHint,
     fontSizePt,
+    fontSizeCsPt,
+    kerningMinFontSizePt,
+    ligatures,
+    contextualAlternates,
+    language: language || undefined,
+    languageEastAsia: languageEastAsia || undefined,
+    languageBidi: languageBidi || undefined,
+    rightToLeft: rtl || undefined,
+    complexScript,
     bold: bold || undefined,
     italic: italic || undefined,
     underline: underline.underline,

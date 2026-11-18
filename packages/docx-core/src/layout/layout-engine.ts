@@ -10,6 +10,7 @@ import type {
   TextStyle
 } from "../engine/types";
 import { shareImageData } from "../engine/clone";
+import { estimateFontLineHeightPx } from "../engine/font-line-height";
 import type { DocumentLayoutMetrics } from "../viewer/section-layout";
 import { parseSectionLayout } from "../viewer/section-layout";
 import {
@@ -154,7 +155,9 @@ function runHeightPx(run: LayoutRun): number {
   }
 
   const fontSizePt = run.style?.fontSizePt ?? 12;
-  return Math.round(fontSizePt * 1.6);
+  // Same platform-neutral vertical metrics the canvas-less line-metrics path
+  // uses; the real pagination engine replaces them with measureText's font box.
+  return estimateFontLineHeightPx((fontSizePt * 96) / 72);
 }
 
 function lineHeightFromRuns(

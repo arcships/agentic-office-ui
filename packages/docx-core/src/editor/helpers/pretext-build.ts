@@ -62,9 +62,18 @@ import {
   measureTextWidthPx,
   paragraphBaseFontSizePx,
   paragraphContainsExplicitLineBreakText,
-  resolveMeasureFont,
+  resolveMeasureFontForText,
   resolveParagraphTabStopsPx
 } from "./line-height";
+import {
+  docxScriptSegmentStyle,
+  segmentTextByDocxScriptFont
+} from "../../viewer/script-fonts";
+import { resolveDocxFontFeatureSettings } from "../../viewer/font-features";
+import {
+  measuredFontSizePt,
+  resolveDocxFontKerning
+} from "../../viewer/font-kerning";
 import {
   firstRunStyle,
   paragraphText
@@ -403,16 +412,22 @@ export function buildParagraphPretextLayoutSource(
       const tabSegments = child.text.split("\t");
       tabSegments.forEach((segmentText, segmentIndex) => {
         if (segmentText.length > 0) {
-          const startOffset = combinedText.length;
-          combinedText += segmentText;
-          runs.push({
-            kind: "text",
-            key: `run-${childIndex}-${segmentIndex}`,
-            text: segmentText,
-            startOffset,
-            endOffset: combinedText.length,
-            style: child.style,
-            link: child.link,
+          const scriptSegments = segmentTextByDocxScriptFont(
+            segmentText,
+            child.style
+          );
+          scriptSegments.forEach((scriptSegment, scriptIndex) => {
+            const startOffset = combinedText.length;
+            combinedText += scriptSegment.text;
+            runs.push({
+              kind: "text",
+              key: `run-${childIndex}-${segmentIndex}-${scriptIndex}`,
+              text: scriptSegment.text,
+              startOffset,
+              endOffset: combinedText.length,
+              style: docxScriptSegmentStyle(child.style, scriptSegment),
+              link: child.link,
+            });
           });
           approximateLineWidthPx = updateEstimatedLineWidthPxForText(
             approximateLineWidthPx,
@@ -453,16 +468,19 @@ export function buildParagraphPretextLayoutSource(
       continue;
     }
 
-    const startOffset = combinedText.length;
-    combinedText += child.text;
-    runs.push({
-      kind: "text",
-      key: `run-${childIndex}`,
-      text: child.text,
-      startOffset,
-      endOffset: combinedText.length,
-      style: child.style,
-      link: child.link,
+    const scriptSegments = segmentTextByDocxScriptFont(child.text, child.style);
+    scriptSegments.forEach((scriptSegment, scriptIndex) => {
+      const startOffset = combinedText.length;
+      combinedText += scriptSegment.text;
+      runs.push({
+        kind: "text",
+        key: `run-${childIndex}-${scriptIndex}`,
+        text: scriptSegment.text,
+        startOffset,
+        endOffset: combinedText.length,
+        style: docxScriptSegmentStyle(child.style, scriptSegment),
+        link: child.link,
+      });
     });
     approximateLineWidthPx = updateEstimatedLineWidthPxForText(
       approximateLineWidthPx,
@@ -529,6 +547,20 @@ export function sanitizeRenderedPretextFragmentText(text: string): string {
 
 // --- Layout items (upstream 6988-7078) ---
 
+function measureItemTypography(
+  style: TextRunNode["style"] | FormFieldRunNode["style"] | undefined,
+  font: string
+): { fontKerning: "auto" | "normal" | "none"; fontFeatureSettings: string } {
+  return {
+    fontKerning:
+      resolveDocxFontKerning(
+        style,
+        measuredFontSizePt(font) ?? style?.fontSizePt
+      ) ?? "auto",
+    fontFeatureSettings: resolveDocxFontFeatureSettings(style),
+  };
+}
+
 export function buildParagraphPretextLayoutItems(
   paragraph: ParagraphNode,
   source: ParagraphPretextLayoutSource
@@ -544,7 +576,11 @@ export function buildParagraphPretextLayoutItems(
   const items: PretextLayoutItem[] = source.runs
     .filter((run) => run.endOffset > run.startOffset)
     .map((run) => {
-      const font = resolveMeasureFont(run.style, paragraphBaseFontPx);
+      const font = resolveMeasureFontForText(
+        run.text,
+        run.style,
+        paragraphBaseFontPx
+      );
       const item: PretextLayoutItem = {
         text: run.text,
         font,
@@ -552,6 +588,7 @@ export function buildParagraphPretextLayoutItems(
         endOffset: run.endOffset,
         break: run.kind === "image" || run.kind === "tab" ? "never" : "normal",
         wordBreak,
+        ...measureItemTypography(run.style, font),
       };
 
       // An inline image is an atomic ascent: it sits on the shared baseline and
@@ -646,7 +683,11 @@ export function resolveUniformPretextSourceFont(
       return undefined;
     }
 
-    const runFont = resolveMeasureFont(run.style, paragraphBaseFontPx);
+    const runFont = resolveMeasureFontForText(
+      run.text,
+      run.style,
+      paragraphBaseFontPx
+    );
     if (uniformFont === undefined) {
       uniformFont = runFont;
       continue;
@@ -670,16 +711,32 @@ export function buildMeasureSegmentsPretextLayoutItems(
   let nextOffset = 0;
 
   return segments
+    .flatMap((segment) => {
+      const scriptSegments = segmentTextByDocxScriptFont(
+        segment.text,
+        segment.style
+      );
+      return scriptSegments.map((scriptSegment) => ({
+        text: scriptSegment.text,
+        style: docxScriptSegmentStyle(segment.style, scriptSegment),
+      }));
+    })
     .map((segment) => {
       const startOffset = nextOffset;
       nextOffset += segment.text.length;
+      const font = resolveMeasureFontForText(
+        segment.text,
+        segment.style,
+        paragraphBaseFontPx
+      );
       return {
         text: segment.text,
-        font: resolveMeasureFont(segment.style, paragraphBaseFontPx),
+        font,
         startOffset,
         endOffset: nextOffset,
         break: "normal" as const,
         wordBreak,
+        ...measureItemTypography(segment.style, font),
       };
     })
     .filter((item) => item.endOffset > item.startOffset);
@@ -697,7 +754,8 @@ export function layoutParagraphPretextSource(
     docGridLinePitchPx?: number;
   }
 ): PretextVariableWidthLayout | undefined {
-  const fallbackFont = resolveMeasureFont(
+  const fallbackFont = resolveMeasureFontForText(
+    source.text,
     firstRunStyle(paragraph),
     paragraphBaseFontSizePx(paragraph)
   );
