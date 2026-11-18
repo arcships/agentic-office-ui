@@ -123,6 +123,25 @@ controller.clearHighlightedRanges()
 - 三维曲面图继续使用专用曲面调色板，同时从同一套内置样式取得墙面/底面填充和主网格线颜色；`chartStyleId` 为 140–148 的深色变体保留深色图表区与浅色文字。
 - `XlsxChartAxis.majorGridlineColor` 会记录网格线颜色（作者 XML 中显式设置时优先），自定义渲染层可以直接使用。
 
+## 形状预设几何与连接线
+
+工作表绘图里的 `a:prstGeom` 不再只区分矩形和椭圆：
+
+- `xlsx-core` 内置了 ECMA-376 的预设几何表（箭头、V 形、星形、标注、流程图、括号/花括号、月牙、齿轮、云、弧形等 150+ 个 `prst`）。`buildPresetShapePath(geometry, adjustments, { width, height })` 返回 `{ path, viewBox }`，路径坐标与形状的像素尺寸一致；`a:avLst` 的 `gd` 调整值按 DrawingML 的 1/100000 单位参与计算。`rect`/`ellipse` 等原生图元仍由 SVG 基本元素绘制。
+- 解析后的 `XlsxShape` 会带上 `svgPath` 与 `svgViewBox`；`XlsxDrawingLayer` 在渲染时按当前矩形重新计算预设路径，所以调整形状大小时箭头、星形和流程图形状会像 Excel 一样重新展开，而不是把路径拉伸成矩形。未识别的 `prst` 才回退到矩形。
+- 连接线（`cxnSp`，`bentConnector3`、`curvedConnector4`、`straightConnector1`、`line` 等）是开放路径，始终不填充；`a:ln` 的 `w`、`a:prstDash`（`dash`、`dot`、`lgDash`、`sysDash` 等）和 `a:headEnd` / `a:tailEnd`（`triangle`、`stealth`、`arrow`、`diamond`、`oval`）会渲染成 SVG 虚线、线宽和端点箭头。
+- 标注（`wedgeRectCallout`、`callout1`/`callout2`/`callout3` 及其 `accent*` 变体）保留矩形主体和引线；引线可以落在形状矩形之外，绘制层不会把它裁掉。
+
+```ts
+import { buildPresetShapePath, isStrokeOnlyShapeGeometry } from "@arcships/xlsx-core"
+
+const arrow = buildPresetShapePath("rightArrow", { adj1: 60000 }, { width: 160, height: 80 })
+// arrow.path / arrow.viewBox 可直接用于 <path d={...} viewBox={...} />
+isStrokeOnlyShapeGeometry("bentConnector3") // true：连接线不填充
+```
+
+预设几何表同样适用于自建渲染器：`XlsxShape.geometry` 是原始 `prst` 名称，`geometryAdjustments`、`svgPath` 和 `svgViewBox` 保留在形状模型里。
+
 ## 数字、日期与语言区域
 
 查看器的 `locale` 同时决定界面文案和数字/日期的默认区域。数字格式里用 `[$-407]` 这类段显式指定的区域始终优先；没有指定区域的格式跟随查看器区域。需要单独控制数字/日期时，用 `documentLocale` 覆盖 `locale`；使用 `XlsxSheetSurface` 时同样可用这两个属性，或直接在 `useXlsxViewerController({ locale })` 中配置。

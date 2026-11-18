@@ -117,6 +117,126 @@ test("shape parsing keeps paragraph runs, alignment, insets and flip state", () 
   assert.equal(shape.textBox?.insetPx?.left, 9.6);
 });
 
+function assetsWithShapeGeometry(prst, { adjustments, connector = false, line } = {}) {
+  const archive = unzipSync(bytesFromFile("charts-images.xlsx"));
+  const drawingPath = "xl/drawings/drawing1.xml";
+  let drawing = strFromU8(archive[drawingPath]);
+  const avLst = adjustments
+    ? `<a:avLst>${Object.entries(adjustments)
+        .map(([name, value]) => `<a:gd name="${name}" fmla="val ${value}"/>`)
+        .join("")}</a:avLst>`
+    : "<a:avLst/>";
+  assert.match(drawing, /prst="roundRect"/, "fixture shape should use preset geometry");
+  drawing = drawing.replace(
+    /<a:prstGeom prst="roundRect"><a:avLst\/><\/a:prstGeom>/,
+    `<a:prstGeom prst="${prst}">${avLst}</a:prstGeom>`,
+  );
+  if (line) {
+    drawing = drawing.replace('<a:ln w="19050">', `<a:ln w="19050">${line}`);
+  }
+  if (connector) {
+    drawing = drawing.replaceAll("<xdr:sp>", "<xdr:cxnSp>").replaceAll("</xdr:sp>", "</xdr:cxnSp>");
+  }
+  archive[drawingPath] = strToU8(drawing);
+  return core.parseWorkbookImageAssets(zipSync(archive));
+}
+
+test("preset shape geometry builds Excel preset paths with guide adjustments", () => {
+  const rect = core.buildPresetShapePath("rect", undefined, { height: 50, width: 100 });
+  assert.deepEqual(rect, {
+    path: "M0,0 L100,0 L100,50 L0,50 Z",
+    viewBox: { height: 50, width: 100 },
+  });
+
+  const rightArrow = core.buildPresetShapePath("rightArrow", undefined, { height: 80, width: 160 });
+  assert.equal(rightArrow.path, "M0,20 L120,20 L120,0 L160,40 L120,80 L120,60 L0,60 Z");
+  assert.deepEqual(rightArrow.viewBox, { height: 80, width: 160 });
+  assert.equal(
+    core.buildPresetShapePath("rightArrow", { adj1: 25000, adj2: 50000 }, { height: 80, width: 160 }).path,
+    "M0,30 L120,30 L120,0 L160,40 L120,80 L120,50 L0,50 Z",
+    "a:avLst guides must feed the preset builders",
+  );
+
+  assert.equal(
+    core.buildPresetShapePath("chevron", undefined, { height: 80, width: 160 }).path,
+    "M0,0 L120,0 L160,40 L120,80 L0,80 L40,40 Z",
+  );
+  assert.equal(
+    core.buildPresetShapePath("chevron", { adj: 25000 }, { height: 80, width: 160 }).path,
+    "M0,0 L140,0 L160,40 L140,80 L0,80 L20,40 Z",
+  );
+
+  const star5 = core.buildPresetShapePath("star5", undefined, { height: 200, width: 200 });
+  assert.equal((star5.path.match(/L/g) ?? []).length, 9, "ten star vertices: one move plus nine lines");
+  assert.match(star5.path, /^M100,0 /);
+  assert.match(star5.path, / Z$/);
+
+  const callout = core.buildPresetShapePath("callout1", undefined, { height: 80, width: 160 });
+  const borderCallout = core.buildPresetShapePath("borderCallout1", undefined, { height: 80, width: 160 });
+  assert.equal(callout.path, borderCallout.path, "callout aliases share the border callout outline");
+  assert.equal((callout.path.match(/M/g) ?? []).length, 2, "callout body plus the leader line");
+  for (const index of [2, 3]) {
+    const aliased = core.buildPresetShapePath(`callout${index}`, undefined, { height: 80, width: 160 });
+    assert.equal(
+      aliased.path,
+      core.buildPresetShapePath(`borderCallout${index}`, undefined, { height: 80, width: 160 }).path,
+    );
+    assert.match(aliased.path, /M0,0 L160,0 L160,80 L0,80 Z M/, `callout${index} keeps the body and leader`);
+  }
+
+  assert.equal(
+    core.buildPresetShapePath("flowChartDecision", undefined, { height: 80, width: 160 }).path,
+    "M80,0 L160,40 L80,80 L0,40 Z",
+  );
+  assert.equal(
+    core.buildPresetShapePath("FLOWCHARTDECISION", undefined, { height: 80, width: 160 }).path,
+    core.buildPresetShapePath("flowChartDecision", undefined, { height: 80, width: 160 }).path,
+    "prst names are matched case-insensitively",
+  );
+
+  assert.equal(core.buildPresetShapePath("not-a-preset", undefined, { height: 80, width: 160 }), undefined);
+  assert.equal(core.buildPresetShapePath("custom", undefined, { height: 80, width: 160 }), undefined);
+  assert.equal(core.buildPresetShapePath(undefined, undefined, { height: 80, width: 160 }), undefined);
+  assert.deepEqual(
+    core.buildPresetShapePath("rightArrow", undefined, { height: 0, width: 0 }).viewBox,
+    { height: 1, width: 1 },
+    "zero-sized connectors keep a drawable view box",
+  );
+
+  assert.equal(core.isStrokeOnlyShapeGeometry("bentConnector3"), true);
+  assert.equal(core.isStrokeOnlyShapeGeometry("Line"), true);
+  assert.equal(core.isStrokeOnlyShapeGeometry("rightArrow"), false);
+});
+
+test("shape parsing emits preset svg paths instead of falling back to rectangles", () => {
+  const assets = assetsWithShapeGeometry("rightArrow", { adjustments: { adj1: 60000, adj2: 40000 } });
+  const shape = assets.shapesByWorkbookSheetIndex
+    .flat()
+    .find((entry) => entry.name === "审批提醒");
+  assert.ok(shape);
+  assert.equal(shape.geometry, "rightArrow");
+  assert.equal(shape.svgPath, "M0,12 L168,12 L168,0 L192,30 L168,60 L168,48 L0,48 Z");
+  assert.deepEqual(shape.svgViewBox, { height: 60, width: 192 });
+  assert.deepEqual(shape.geometryAdjustments, { adj1: 60000, adj2: 40000 });
+});
+
+test("connector shapes keep their dash, arrow ends and stroke-only fill", () => {
+  const assets = assetsWithShapeGeometry("bentConnector3", {
+    connector: true,
+    line: '<a:prstDash val="dash"/><a:headEnd type="triangle"/><a:tailEnd type="stealth"/>',
+  });
+  const shape = assets.shapesByWorkbookSheetIndex
+    .flat()
+    .find((entry) => entry.name === "审批提醒");
+  assert.ok(shape);
+  assert.equal(shape.geometry, "bentConnector3");
+  assert.equal(shape.fill?.none, true, "connectors must not be filled");
+  assert.equal(shape.stroke?.dash, "dash");
+  assert.equal(shape.stroke?.headEndType, "triangle");
+  assert.equal(shape.stroke?.tailEndType, "stealth");
+  assert.match(shape.svgPath, /^M0,0 L/, "connectors use the preset connector path");
+});
+
 function chartsArchiveWithDuplicates() {
   const archive = unzipSync(bytesFromFile("charts-images.xlsx"));
   const drawingPath = "xl/drawings/drawing1.xml";

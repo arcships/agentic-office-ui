@@ -104,8 +104,12 @@ export {
   anchorToAbsoluteRect,
   rectToImageAnchor,
   resizeImageRect,
+  buildPresetShapePath,
+  isStrokeOnlyShapeGeometry,
 } from "./images";
 export type {
+  PresetShapeAdjustments,
+  PresetShapeGeometry,
   WorkbookFormControlOrigin,
   WorkbookImageOrigin,
   WorkbookShapeOrigin,

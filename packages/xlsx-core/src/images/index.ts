@@ -84,6 +84,14 @@ export {
   enrichFormControlsWithHiddenShapes,
 } from "./drawing-parser";
 
+// Preset shape geometry (`a:prstGeom`)
+export {
+  type PresetShapeAdjustments,
+  type PresetShapeGeometry,
+  buildPresetShapePath,
+  isStrokeOnlyShapeGeometry,
+} from "./preset-geometry";
+
 // Clipboard cloning for drawings
 export {
   type WorkbookDrawingCloneOptions,

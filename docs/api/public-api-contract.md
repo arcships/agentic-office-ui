@@ -129,6 +129,7 @@ try {
 - 根入口同时提供工作表、单元格、A1 范围、整行、整列、图表和人工 sheet 区域的 `createXlsx*ReferenceDraft`、`resolveXlsxReference` 与 `describeXlsxReference`。适配器优先使用 sheet id 和 drawing id；名称/类型证据只有唯一时才用于迁移。
 - 单元格文字旋转与缩小适应（issue #141）：`XlsxSheetData.cellTextLayouts` 以 A1 地址保存显式样式里带 `textRotation`（0–180，91–180 表示顺时针）或 `shrinkToFit` 的单元格，主线程与 Worker 快照都会带回；网格、缩略图和打印预览按 Excel 角度语义旋转、按旋转后的包围盒裁剪，并在 `shrinkToFit` 时二分缩小到基础字号的 0.4 倍。
 - 富文本单元格（issue #138）：`XlsxCellTextRun` / `XlsxCellTextRunFont` 描述单元格内每一段文字的文本与字体覆盖（粗体、斜体、下划线、删除线、颜色、字号、字体族、`vertAlign` 上标/下标），`XlsxSheetData.richTextCells` 以 A1 地址保存多段单元格，`controller.getCellRuns(cell)` 返回当前单元格的段（值变化后自动不再返回）。`parseRichTextRuns`、`parseInlineRichTextCell`、`parseSharedStringRichText`、`richTextRunsToPlainText` 与 `resolveRichTextRuns` 供自定义渲染复用同一套解析与"文本仍匹配"校验；单元格的纯文本 `value` 始终是各段拼接，公式、搜索和剪贴板继续使用它。
+- 预设形状几何与连接线（issue #143）：`buildPresetShapePath(geometry, adjustments, { width, height })` 返回 `{ path, viewBox }`，覆盖 ECMA-376 的 `a:prstGeom` 预设（箭头、V 形、星形、标注、流程图、括号/花括号、月牙、齿轮、云、弧形等）；`adjustments` 接受 `Record<string, number>` 或 `PresetShapeAdjustments`（`a:avLst` 的 1/100000 单位）。`XlsxShape.svgPath`/`svgViewBox` 现在对预设几何也会写入，连接线的 `stroke.dash`、`headEndType`、`tailEndType` 继续保留；`isStrokeOnlyShapeGeometry(geometry)` 标记不填充的开放路径（连接线、弧线、括号/花括号）。`XlsxDrawingLayer` 用同一函数按当前尺寸重建路径，并渲染 `prstDash` 虚线与 `headEnd`/`tailEnd` 端点箭头。
 
 `XlsxRuntimeConfig.limits` 使用实例自己的 `XlsxRuntimeLimits`。公开限制除通用输入、压缩包、XML、关系、图片和解析时间外，还覆盖工作表 XML、共享字符串、行列、工作表数量和公式数量。`DEFAULT_XLSX_RUNTIME_LIMITS` 是默认值，`resolveXlsxRuntimeLimits` 返回实例快照；`validateXlsxArchive` 可在创建工作簿前执行同一套检查。
 
