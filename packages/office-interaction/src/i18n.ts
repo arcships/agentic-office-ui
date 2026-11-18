@@ -521,8 +521,17 @@ export interface OfficeXlsxMessages {
     numberFormat: string
     currency: string
     percent: string
+    borders: string
     allBorders: string
+    outsideBorders: string
+    leftBorder: string
+    rightBorder: string
+    topBorder: string
+    bottomBorder: string
+    noBorders: string
+    borderColor: string
     merge: string
+    mergeAndCenter: string
     unmerge: string
     readOnlyTitle: string
     numberFormats: {
@@ -1431,8 +1440,17 @@ export const officeMessagesEn: OfficeMessages = {
       numberFormat: "Number format",
       currency: "Currency",
       percent: "Percent",
+      borders: "Borders",
       allBorders: "All borders",
+      outsideBorders: "Outside borders",
+      leftBorder: "Left border",
+      rightBorder: "Right border",
+      topBorder: "Top border",
+      bottomBorder: "Bottom border",
+      noBorders: "No border",
+      borderColor: "Border color",
       merge: "Merge",
+      mergeAndCenter: "Merge & center",
       unmerge: "Unmerge",
       readOnlyTitle: "Read-only mode",
       numberFormats: {
@@ -2287,8 +2305,17 @@ export const officeMessagesZhCN: OfficeMessages = {
       numberFormat: "数字格式",
       currency: "货币",
       percent: "百分比",
+      borders: "边框",
       allBorders: "所有边框",
+      outsideBorders: "外侧边框",
+      leftBorder: "左侧边框",
+      rightBorder: "右侧边框",
+      topBorder: "上边框",
+      bottomBorder: "下边框",
+      noBorders: "无边框",
+      borderColor: "边框颜色",
       merge: "合并",
+      mergeAndCenter: "合并并居中",
       unmerge: "取消合并",
       readOnlyTitle: "只读模式",
       numberFormats: {

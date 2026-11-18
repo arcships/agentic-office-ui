@@ -22,6 +22,13 @@ All notable changes to the `@arcships` package family are documented in this fil
 - Keep page surfaces on unchanged pages by reusing their segment/column arrays and render entries when only other pages repaginate, and restore the reader's page offset after a measurement pass moves page positions.
 - Add the measurement loop, page reuse, scroll anchor and legal/invoice fixture acceptance tests (nine pages for `legal-contract.docx`, one for `invoice-table.docx`, every page exactly one paper tall).
 
+### XLSX formatting ribbon (#120)
+
+- Add the missing ribbon formatting controls: a border preset dropdown (All / Outside / Left / Right / Top / Bottom / None) with a border colour picker, while the existing All-borders button stays as a shortcut. Border presets are drawn through the existing style command, so each edge is written to `styles.xml` and survives export and reload; `outside` patches only the perimeter cells, so the inside of the selection keeps its own borders and colours.
+- Add `setSelectionBorders({ preset, style, color })` and the `XlsxBorderPreset` / `XlsxBorderPresetInput` types, so hosts can draw a preset (and set the line colour for every edge it touches) without dropping to `setRangeStyle`.
+- Add `mergeAndCenterSelection()`, the default Merge action: it merges the selection and writes `horizontal: center` + `vertical: center` in one undo step. A single-cell selection is only centred, because Excel never writes a one-cell merge region. `mergeSelection()` keeps merging without touching alignment for hosts that want it.
+- Fix undo of a style edit on a cell that had no explicit style: the parsed workbook default is OOXML-shaped (`{ theme }` / `{ rgb }` / `{ indexed }` colours), which `setCellStyleAt` rejects, and it only named the groups the source style carried, so a removal (bold, border, fill) stayed applied. The fallback style now translates colours to the engine input and spells out every group and property.
+
 ### DOCX annotation gutter
 
 - Position tracked-change and comment cards against their text anchors in page space instead of rendering them as an unpositioned list at a fixed `top: 72px`, with stable document-order ties, collision-free stacking, and measured card heights.

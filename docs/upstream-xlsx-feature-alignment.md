@@ -223,34 +223,36 @@ UI 事件 → controller 方法 → worksheet wasm 方法 → maybeRecalculate �
 17. `sortTable`：capture 每格 `{formula, style, value}`（完整 CellMutationState），sort key 用 `getCalculatedValueAt` + `getFormattedValueAt`（计算值，不是原始公式）。排序：empty 沉底 → number → boolean → localeCompare(numeric:true)。无变化时只 setSortState 不写 cell。历史走 range-edit。
 
 #### F. merge/unmerge/resize
-18. merge/unmerge 走 **snapshot 历史**，调 `worksheet.mergeCells`/`unmergeCells`。
+18. merge/unmerge 走 **snapshot 历史**，调 `worksheet.mergeCells`/`unmergeCells`；`mergeAndCenterSelection` 在同一条 snapshot 里再写入 `horizontal: center` + `vertical: center`（单格选区只居中，不写一格合并区），`mergeSelection` 保留纯合并。
 19. resize：worker-backed 或 readOnly → `applyReadOnlyResizeOverride`（纯前端，不碰 workbook）；正常 → `worksheet.setColumnWidth`/`setRowHeight` + snapshot 历史。
 20. `pxToSheetColumnWidth` / `pxToSheetRowHeight` 换算公式。
 
 #### G. style
 21. `setCellStyle`：单格 `worksheet.setCellStyleAt`，走 cell-edit 历史。
 22. `setRangeStyle`：范围 `worksheet.setRangeStyle(a1)`（单次 wasm 批量调用），走 range-edit 历史。
-23. `cloneCellStyle`：`structuredClone` 优先，回退 JSON。
+23. `setSelectionBorders({ preset, style, color })`：`all`/`left`/`right`/`top`/`bottom`/`none` 复用一次范围样式命令；`outside` 只对选区外围格子逐个 `worksheet.setCellStyleAt`，合并成一条 range-edit 历史（引擎按边合并 patch，角落格的两面不会互相覆盖）。
+24. `resolveCellFallbackStyle`：把 `styleById[0]`（OOXML 形状：`{theme}`/`{rgb}`/`{indexed}`）转成引擎颜色入参后补齐 `DEFAULT_CELL_STYLE_PATCH`，撤销才能把无显式样式的格子真正还原。
+25. `cloneCellStyle`：`structuredClone` 优先，回退 JSON。
 
 #### H. formula/recalculate
-24. `maybeRecalculateWorkbook`：仅 `shouldAutoCalculate` 为真才 `tryRecalculate`，trap 时关 `shouldAutoCalculate`（一次性降级）。
-25. `recalculate`（手动）：成功→`refreshWorkbookState`；trap→跳过 refresh（避免崩溃）。
-26. `refreshWorkbookState`：`buildSheetList` + `loadWorkbookChartAssets` + `setRevision+1`。
+26. `maybeRecalculateWorkbook`：仅 `shouldAutoCalculate` 为真才 `tryRecalculate`，trap 时关 `shouldAutoCalculate`（一次性降级）。
+27. `recalculate`（手动）：成功→`refreshWorkbookState`；trap→跳过 refresh（避免崩溃）。
+28. `refreshWorkbookState`：`buildSheetList` + `loadWorkbookChartAssets` + `setRevision+1`。
 
 #### I. sheet 管理
-27. `addSheet`：去重命名（`workbook.sheetIndex` 循环加后缀）→ `workbook.addSheet` → buildSheetList 重建。
-28. `removeActiveSheet`：`workbook.removeSheet(index)` → filter sheetOrigins/images/shapes → buildSheetList。
+29. `addSheet`：去重命名（`workbook.sheetIndex` 循环加后缀）→ `workbook.addSheet` → buildSheetList 重建。
+30. `removeActiveSheet`：`workbook.removeSheet(index)` → filter sheetOrigins/images/shapes → buildSheetList。
 
 #### J. image/chart selection
-29. selectChart/selectImage 互斥（与 selectCell 也互斥）。
-30. `setChartRect`/`setImageRect`：`rectToImageAnchor`（px→EMU）→ `updateWorkbookChartAnchor`/`updateWorkbookImageAnchor` → snapshot 历史。
-31. `moveImageBy`/`resizeImageBy`：算 currentRect → `resizeImageRect(rect, handle, deltaX, deltaY)` → `setImageRect`。
+31. selectChart/selectImage 互斥（与 selectCell 也互斥）。
+32. `setChartRect`/`setImageRect`：`rectToImageAnchor`（px→EMU）→ `updateWorkbookChartAnchor`/`updateWorkbookImageAnchor` → snapshot 历史。
+33. `moveImageBy`/`resizeImageBy`：算 currentRect → `resizeImageRect(rect, handle, deltaX, deltaY)` → `setImageRect`。
 
 #### K. zoom
-32. 纯前端 state，不写 workbook。`clampZoomScale`（10-400）。`zoomScaleOverridesByTabId` 按 tab 存。
+34. 纯前端 state，不写 workbook。`clampZoomScale`（10-400）。`zoomScaleOverridesByTabId` 按 tab 存。
 
 #### L. getCellStyle
-33. controller 内的 `getCellStyleAt`（wasm）是数据层；viewer 的 `getCellStyle` prop 是渲染层。**完全不同**。
+35. controller 内的 `getCellStyleAt`（wasm）是数据层；viewer 的 `getCellStyle` prop 是渲染层。**完全不同**。
 
 **迁移操作（机械改写）**：
 
@@ -777,7 +779,7 @@ pnpm --filter @arcships/vue-xlsx add -D @types/d3-geo @types/d3-hierarchy @types
 | 自定义单元格高亮 | 1131-1142 | `getCellStyle` 回调，奇数行加底色 |
 | 单元格样式编辑 | 377-397, 512-727 | font/alignment/number-format/border/fill |
 | 撤销/重做 | 337/331, 503-508 | `undo`/`redo` |
-| 合并/拆分 | 328/338, 732-737 | `mergeSelection`/`unmergeSelection` |
+| 合并/拆分 | 328/338, 732-737 | `mergeAndCenterSelection`（默认）/`mergeSelection`/`unmergeSelection` |
 | 公式编辑栏 | 996-1028 | Name box + fx + 公式 Input，支持图表 SERIES |
 | 命名区域定义 | 431-439, 856-872 | `defineNamedRange` |
 | 公式重算 | 318, 850-855 | `recalculate`（Formulas + Data 两个 tab） |

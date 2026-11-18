@@ -1,5 +1,6 @@
 import type { Workbook } from "@dukelib/sheets-wasm";
 import type {
+  XlsxBorderPresetInput,
   XlsxCellAddress,
   XlsxCellRange,
   XlsxCellStyleInput
@@ -8,6 +9,7 @@ import { loadWorkbookChartAssets } from "@arcships/xlsx-core";
 import { officeMessagesEn } from "@arcships/office-interaction";
 import { cellAddressToA1, normalizeRange, rangeContainsCell, rangeToA1 } from "./selection";
 import { shiftFormulaReferences } from "./formula-references";
+import { buildSelectionBorderPlan, resolveBorderEdge } from "./border-presets";
 import {
   applyCellMutationState,
   cloneCellStyle,
@@ -302,10 +304,16 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     setCellStyle(ctx.activeCell.value, style);
   }
 
-  function setRangeStyle(range: XlsxCellRange, style: XlsxCellStyleInput) {
+  /**
+   * Applies one style patch to every cell of a range as a single undo step.
+   *
+   * @returns How many cells changed; 0 when the sheet is locked or the range
+   *   holds no readable cell state.
+   */
+  function applyRangeStylePatch(range: XlsxCellRange, style: XlsxCellStyleInput) {
     const worksheet = ctx.getActiveWorksheet();
     if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
-      return;
+      return 0;
     }
 
     const normalized = normalizeRange(range);
@@ -325,7 +333,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     }
 
     if (beforeStates.length === 0) {
-      return;
+      return 0;
     }
 
     worksheet.setRangeStyle(rangeToA1(normalized), style);
@@ -344,6 +352,62 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
     ctx.refreshWorkbookState(ctx.workbook.value);
     ctx.recordRangeEditHistory(mutations, ctx.selection.value, ctx.activeCell.value);
+    return mutations.length;
+  }
+
+  function setRangeStyle(range: XlsxCellRange, style: XlsxCellStyleInput) {
+    applyRangeStylePatch(range, style);
+  }
+
+  /**
+   * Draws a border preset on the selection as one undo step.
+   *
+   * Uniform presets go through the engine's range call; `outside` needs one
+   * patch per perimeter cell so the inside of the range keeps its borders.
+   */
+  function setSelectionBorders(input?: XlsxBorderPresetInput) {
+    const worksheet = ctx.getActiveWorksheet();
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
+      return false;
+    }
+
+    const targetRange = ctx.selection.value
+      ?? (ctx.activeCell.value ? { start: ctx.activeCell.value, end: ctx.activeCell.value } : null);
+    if (!targetRange) {
+      return false;
+    }
+
+    const normalized = normalizeRange(targetRange);
+    const plan = buildSelectionBorderPlan(input?.preset ?? "all", normalized, resolveBorderEdge(input));
+    if (plan.kind === "range") {
+      return applyRangeStylePatch(normalized, plan.style) > 0;
+    }
+
+    const mutations: import("./internal").RangeCellMutation[] = [];
+    for (const patch of plan.patches) {
+      const before = ctx.captureCellMutationState(patch.cell);
+      if (!before) {
+        continue;
+      }
+      worksheet.setCellStyleAt(patch.cell.row, patch.cell.col, patch.style);
+      const after = ctx.captureCellMutationState(patch.cell);
+      if (!after) {
+        continue;
+      }
+      mutations.push({
+        after,
+        before,
+        cell: patch.cell
+      });
+    }
+
+    if (mutations.length === 0) {
+      return false;
+    }
+
+    ctx.refreshWorkbookState(ctx.workbook.value);
+    ctx.recordRangeEditHistory(mutations, ctx.selection.value ?? normalized, ctx.activeCell.value);
+    return true;
   }
 
   function fillSelection(targetRange: XlsxCellRange) {
@@ -435,6 +499,30 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
     ctx.recordHistoryBeforeMutation();
     worksheet.mergeCells(rangeToA1(ctx.selection.value));
+    ctx.refreshWorkbookState(ctx.workbook.value);
+  }
+
+  /**
+   * Merges the selection and centres its text both ways.
+   *
+   * The merge and the alignment share one snapshot entry, so a single undo
+   * restores the sheet. A one-cell selection is only centred, because Excel
+   * never writes a one-cell merge region.
+   */
+  function mergeAndCenterSelection() {
+    const worksheet = ctx.getActiveWorksheet();
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.selection.value || !ctx.workbook.value) {
+      return;
+    }
+
+    const normalized = normalizeRange(ctx.selection.value);
+    ctx.recordHistoryBeforeMutation();
+    if (normalized.start.row !== normalized.end.row || normalized.start.col !== normalized.end.col) {
+      worksheet.mergeCells(rangeToA1(normalized));
+    }
+    worksheet.setRangeStyle(rangeToA1(normalized), {
+      alignment: { horizontal: "center", vertical: "center" }
+    });
     ctx.refreshWorkbookState(ctx.workbook.value);
   }
 
@@ -570,8 +658,10 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     setSelectedFormula,
     setSelectedCellStyle,
     setRangeStyle,
+    setSelectionBorders,
     fillSelection,
     mergeSelection,
+    mergeAndCenterSelection,
     unmergeSelection,
     addSheet,
     removeActiveSheet,

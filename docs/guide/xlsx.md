@@ -83,6 +83,20 @@ import { XlsxAuthoringDialog, XlsxViewer } from "@arcships/vue-xlsx"
 
 每个命令都会改动工作簿模型、刷新视图、写一条撤销记录，并随导出的 XLSX 保存；导出后再打开仍然保留。命令只在可写的主线程工作簿上生效：`readOnly`、受保护工作表或 Worker 只读大文件模式下返回 `false` / `null`，不做任何修改。详细实现见 [XLSX 作者接口设计](../xlsx-authoring-surface.md)。
 
+## 单元格格式
+
+功能区的合并与边框组对应 Excel 的同一组操作：
+
+| 控件 | 命令 | 说明 |
+|---|---|---|
+| 边框预设下拉 | `setSelectionBorders({ preset, style, color })` | `preset` 为 `all` / `outside` / `left` / `right` / `top` / `bottom` / `none`；`outside` 只画选区外围，内部格子保持原样 |
+| 边框颜色 | 同上 | 颜色写入预设涉及的每一面；默认细线灰色 `A1A1AA` |
+| 所有边框 | `setSelectionBorders({ preset: "all" })` | 保留的快捷按钮，同样是上面那条命令 |
+| 合并并居中 | `mergeAndCenterSelection()` | 合并选区并写入 `horizontal: center` + `vertical: center`，一条撤销记录 |
+| 取消合并 | `unmergeSelection()` | 只拆合并区 |
+
+只想合并、不改对齐的宿主用 `mergeSelection()`。边框命令都走现有的样式命令，因此跨越导出/重新打开后保留：预设会写成 `styles.xml` 里对应边的 `<border>`，颜色是 8 位 ARGB。`XlsxCellBorderStyleInput` 仍然允许逐边不同的样式与颜色，需要时直接调 `setRangeStyle(range, { border })`。
+
 ## 延迟解析
 
 控制器配置了 `deferLoadingAboveBytes` 且文件超过阈值时，不会立即解析工作簿。`XlsxViewer` 会直接渲染一个内置提示卡片，显示文件名和大小，并提供“继续解析”和“取消”两个动作；宿主不需要再额外实现加载入口。
