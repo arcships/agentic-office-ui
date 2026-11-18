@@ -620,7 +620,15 @@ function projectPageBlocks(params: {
         const height =
           Number.isFinite(measuredHeightPx) && (measuredHeightPx as number) > 0
             ? {
-                heightPx: Math.round(measuredHeightPx as number),
+                // The DOM-measured height includes the paragraph's margins.
+                // Apply the same page-top space-before suppression the
+                // segmenter uses for this node, otherwise the block frame is
+                // taller than the budget it was placed against.
+                heightPx: resolveParagraphConsumedHeightPx(
+                  Math.round(measuredHeightPx as number),
+                  paragraphBeforeSpacingPx(node, layoutDefaults),
+                  pageConsumedHeightPx <= 0
+                ),
                 afterSpacingPx: paragraphAfterSpacingPx(node, layoutDefaults)
               }
             : paragraphSegmentHeightPx({

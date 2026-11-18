@@ -42,8 +42,11 @@ export * from "./page-pattern-paint";
 // Image rendering (TIFF → PNG, EMF/WMF placeholder)
 export * from "./image-render";
 
-// Page count reconciliation (height-scaling page count alignment)
+// Page count reconciliation (deprecated height-scaling helper; kept for 0.x)
 export * from "./page-count-reconciliation";
+
+// Measure→repaginate scroll anchoring helpers (#99)
+export * from "./pagination-scroll-anchor";
 
 // Text-measurement cache invalidation (web-font loading, font-set changes)
 export * from "./font-metrics";

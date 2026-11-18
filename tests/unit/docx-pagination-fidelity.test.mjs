@@ -271,6 +271,17 @@ test("explicit page breaks inside a paragraph are offset-level breaks", () => {
 });
 
 test("page-count reconciliation rejects over-tall virtual pages", () => {
+  // #99 dropped the former 1.02–1.3 default candidates: a smaller page count
+  // is never reached by growing the virtual page past the paper.
+  const defaultUpward = core.reconcilePageCountCandidateToTargetCountByScalingHeight({
+    initialPages: [1, 2, 3, 4, 5],
+    targetPageCount: 4,
+    buildPagesAtScale: (scale) =>
+      Array.from({ length: Math.max(1, Math.ceil(5 / scale)) }, (_, index) => index),
+  });
+  assert.equal(defaultUpward.pageCount, 5);
+  assert.equal(defaultUpward.scale, 1);
+
   const rejected = [];
   const options = {
     initialPages: [1, 2, 3, 4, 5],

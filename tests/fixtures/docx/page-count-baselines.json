@@ -1,0 +1,14 @@
+{
+  "legal-contract.docx": {
+    "documentPageCount": 9,
+    "embeddedDocumentPageCount": 1,
+    "paperHeightPx": 1056,
+    "source": "Word/LibreOffice baseline used by issue #25; the DOCX's own docProps/app.xml still says 1 page."
+  },
+  "invoice-table.docx": {
+    "documentPageCount": 1,
+    "embeddedDocumentPageCount": 1,
+    "paperHeightPx": 1056,
+    "source": "Single-page invoice fixture; Word/LibreOffice baseline."
+  }
+}
