@@ -91,29 +91,15 @@ export function parseWorkbookStructureAssets(
 export function parseWorkbookChartStyleAssets(bytes: Uint8Array): import("./grid-render").WorkbookChartStyleAssets {
   const archive = unzipSync(bytes);
   const {
+    chartsheetSheets,
     themePalette,
-    workbookSheets
+    worksheetSheets
   } = parseWorkbookStructureAssetsFromArchive(archive);
   const sheetOrigins: Array<WorkbookImageSheetOrigin | null> = [];
+  const chartsheetOrigins: Array<WorkbookImageSheetOrigin | null> = [];
 
-  workbookSheets.forEach((sheet, workbookSheetIndex) => {
-    const sheetRelationships = parseRelationships(archive, relsPathForDocument(sheet.path), sheet.path);
-    const attachments: XlsxImageAttachment[] = [];
-
-    for (const relationship of sheetRelationships.values()) {
-      if (relationship.type !== DRAWING_REL_TYPE) {
-        continue;
-      }
-
-      const drawingPath = relationship.target;
-      const drawingRelsPath = relsPathForDocument(drawingPath);
-      attachments.push({
-        drawingPath,
-        drawingRelsPath: archive[drawingRelsPath] ? drawingRelsPath : null,
-        mediaPaths: []
-      });
-    }
-
+  worksheetSheets.forEach((sheet, workbookSheetIndex) => {
+    const attachments = collectSheetDrawingAttachments(archive, sheet.path);
     sheetOrigins[workbookSheetIndex] = attachments.length > 0
       ? {
           attachments,
@@ -121,9 +107,19 @@ export function parseWorkbookChartStyleAssets(bytes: Uint8Array): import("./grid
         }
       : null;
   });
+  chartsheetSheets.forEach((sheet, chartsheetIndex) => {
+    const attachments = collectSheetDrawingAttachments(archive, sheet.path);
+    chartsheetOrigins[chartsheetIndex] = attachments.length > 0
+      ? {
+          attachments,
+          workbookSheetIndex: -1
+        }
+      : null;
+  });
 
   return {
     archive,
+    chartsheetOrigins,
     sheetOrigins,
     themePalette
   };
@@ -134,6 +130,25 @@ type XlsxImageAttachment = {
   drawingRelsPath: string | null;
   mediaPaths: string[];
 };
+
+/** Drawing attachments of one worksheet or chartsheet part, without parsing objects. */
+function collectSheetDrawingAttachments(archive: ArchiveEntries, sheetPath: string): XlsxImageAttachment[] {
+  const attachments: XlsxImageAttachment[] = [];
+  const sheetRelationships = parseRelationships(archive, relsPathForDocument(sheetPath), sheetPath);
+  for (const relationship of sheetRelationships.values()) {
+    if (relationship.type !== DRAWING_REL_TYPE) {
+      continue;
+    }
+    const drawingPath = relationship.target;
+    const drawingRelsPath = relsPathForDocument(drawingPath);
+    attachments.push({
+      drawingPath,
+      drawingRelsPath: archive[drawingRelsPath] ? drawingRelsPath : null,
+      mediaPaths: []
+    });
+  }
+  return attachments;
+}
 
 export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntimeLimits): WorkbookImageAssets {
   const archive = unzipSync(bytes);
@@ -147,7 +162,8 @@ export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntime
     tableStyleByName,
     theme,
     themePalette,
-    workbookSheets
+    chartsheetSheets,
+    worksheetSheets
   } = parseWorkbookStructureAssetsFromArchive(archive);
   const objectUrls: string[] = [];
   const formControlOriginsById = new Map<string, WorkbookFormControlOrigin>();
@@ -155,12 +171,13 @@ export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntime
   const imagesByWorkbookSheetIndex: XlsxImage[][] = [];
   const shapesByWorkbookSheetIndex: XlsxShape[][] = [];
   const sheetOrigins: Array<WorkbookImageSheetOrigin | null> = [];
+  const chartsheetOrigins: Array<WorkbookImageSheetOrigin | null> = [];
   const imageOriginsById = new Map<string, WorkbookImageOrigin>();
   const shapeOriginsById = new Map<string, WorkbookShapeOrigin>();
-  const sheetPathsByWorkbookSheetIndex = workbookSheets.map((sheet) => sheet.path);
+  const sheetPathsByWorkbookSheetIndex = worksheetSheets.map((sheet) => sheet.path);
 
   try {
-    workbookSheets.forEach((sheet, workbookSheetIndex) => {
+    worksheetSheets.forEach((sheet, workbookSheetIndex) => {
     const sheetRelationships = parseRelationships(archive, relsPathForDocument(sheet.path), sheet.path);
     const attachments: XlsxImageAttachment[] = [];
     const imageList: XlsxImage[] = [];
@@ -222,8 +239,21 @@ export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntime
       : null;
     });
 
+    // Chartsheets can carry a drawing part (their chart lives there) but they
+    // are not worksheet slots, so their origins get their own array.
+    chartsheetSheets.forEach((sheet, chartsheetIndex) => {
+      const attachments = collectSheetDrawingAttachments(archive, sheet.path);
+      chartsheetOrigins[chartsheetIndex] = attachments.length > 0
+        ? {
+            attachments,
+            workbookSheetIndex: -1
+          }
+        : null;
+    });
+
     return {
       archive,
+      chartsheetOrigins,
       formControlOriginsById,
       formControlsByWorkbookSheetIndex,
       imageOriginsById,
@@ -873,13 +903,24 @@ export function mergeWorkbookImageAssets(
   sourceAssets: WorkbookImageAssets | null,
   sheetOrigins: Array<WorkbookImageSheetOrigin | null>
 ) {
-  if (!sourceAssets || sheetOrigins.every((origin) => !origin?.attachments.length)) {
+  if (
+    !sourceAssets
+    || (
+      sheetOrigins.every((origin) => !origin?.attachments.length)
+      && (sourceAssets.chartsheetOrigins ?? []).every((origin) => !origin?.attachments.length)
+    )
+  ) {
     return cloneBytes(savedBytes);
   }
 
   try {
     const archive = unzipSync(savedBytes);
-    const workbookSheets = parseWorkbookSheets(archive);
+    // `sheetOrigins` is worksheet-indexed and `chartsheetOrigins` is
+    // chartsheet-indexed; the workbook part interleaves both kinds in tab
+    // order, so each origin array is paired with its own sheet list.
+    const allWorkbookSheets = parseWorkbookSheets(archive);
+    const workbookSheets = allWorkbookSheets.filter((sheet) => sheet.kind === "worksheet");
+    const chartsheetSheets = allWorkbookSheets.filter((sheet) => sheet.kind === "chartsheet");
     const originalContentTypesDocument = parseXml(readArchiveText(sourceAssets.archive, "[Content_Types].xml") ?? "");
     const targetContentTypesDocument = ensureContentTypesDocument(archive);
     if (!targetContentTypesDocument) {
@@ -888,13 +929,11 @@ export function mergeWorkbookImageAssets(
 
     const copiedPartPaths = new Set<string>();
 
-    sheetOrigins.forEach((origin, workbookSheetIndex) => {
-      if (!origin?.attachments.length) {
-        return;
-      }
-
-      const currentSheet = workbookSheets[workbookSheetIndex];
-      if (!currentSheet) {
+    const mergeOrigin = (
+      currentSheet: (typeof allWorkbookSheets)[number] | undefined,
+      origin: WorkbookImageSheetOrigin | null
+    ) => {
+      if (!currentSheet || !origin?.attachments.length) {
         return;
       }
 
@@ -935,6 +974,13 @@ export function mergeWorkbookImageAssets(
       archive[currentSheet.path] = strToU8(serializeXml(sheetDocument));
       archive[relsPath] = strToU8(serializeXml(relDocument));
       mergeContentTypeForPath(targetContentTypesDocument, originalContentTypesDocument, relsPath);
+    };
+
+    sheetOrigins.forEach((origin, workbookSheetIndex) => {
+      mergeOrigin(workbookSheets[workbookSheetIndex], origin);
+    });
+    (sourceAssets.chartsheetOrigins ?? []).forEach((origin, chartsheetIndex) => {
+      mergeOrigin(chartsheetSheets[chartsheetIndex], origin);
     });
 
     const hasDrawingOverride = getLocalElements(targetContentTypesDocument, "Override").some(

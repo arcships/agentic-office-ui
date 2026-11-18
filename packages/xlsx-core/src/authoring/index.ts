@@ -47,6 +47,7 @@ export type {
   XlsxStructureAxis,
   XlsxStructureChange,
 } from "./sheet-structure";
+export { applyWorkbookSheetOrder } from "./sheet-order";
 export {
   XLSX_MAX_SHEET_NAME_LENGTH,
   applyWorkbookSheetRename,

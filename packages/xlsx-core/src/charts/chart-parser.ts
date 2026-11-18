@@ -1003,15 +1003,13 @@ function buildChartsheetCharts(
   workbook: Workbook,
   rawChartsheet: unknown,
   chartsheetIndex: number,
-  imageAssets: Pick<WorkbookImageAssets, "archive" | "sheetOrigins" | "themePalette"> | null
+  imageAssets: Pick<WorkbookImageAssets, "archive" | "chartsheetOrigins" | "sheetOrigins" | "themePalette"> | null
 ) {
   const chartsheet = rawChartsheet && typeof rawChartsheet === "object"
     ? rawChartsheet as Record<string, unknown>
     : {};
   const workbookOrderIndex = resolveChartsheetWorkbookOrderIndex(workbook, chartsheetIndex);
-  const sheetOrigin = workbookOrderIndex >= 0
-    ? imageAssets?.sheetOrigins[workbookOrderIndex] ?? null
-    : null;
+  const sheetOrigin = imageAssets?.chartsheetOrigins?.[chartsheetIndex] ?? null;
   const origins = imageAssets && sheetOrigin
     ? collectChartOriginsForSheet(imageAssets.archive, sheetOrigin)
       .filter((origin) => origin.chartKind === "classic")
@@ -1085,7 +1083,7 @@ function buildChartsheetCharts(
 
 export function loadWorkbookChartAssets(
   workbook: Workbook,
-  imageAssets: Pick<WorkbookImageAssets, "archive" | "sheetOrigins" | "themePalette"> | null,
+  imageAssets: Pick<WorkbookImageAssets, "archive" | "chartsheetOrigins" | "sheetOrigins" | "themePalette"> | null,
   visibleSheetIndexByWorkbookSheetIndex: Map<number, number>,
   showHiddenSheets = false
 ): WorkbookChartAssets {

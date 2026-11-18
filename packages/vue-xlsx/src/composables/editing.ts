@@ -11,16 +11,13 @@ import {
   applyWorkbookSheetRename,
   loadWorkbookChartAssets,
   resolveWorksheetMergedRegions,
-  revokeWorkbookImageAssets,
-  safeCalculate,
-  trackXlsxWorkbookLifetime,
   validateWorksheetName
 } from "@arcships/xlsx-core";
 import { officeMessagesEn } from "@arcships/office-interaction";
 import { cellAddressToA1, normalizeRange, rangeContainsCell, rangeToA1 } from "./selection";
 import { shiftFormulaReferences } from "./formula-references";
 import { buildSelectionBorderPlan, resolveBorderEdge } from "./border-presets";
-import { loadWorkbookImageAssets } from "./image-assets";
+import { commitWorkbookRebuild, rebuildWorkbookFromBytes } from "./workbook-rebuild";
 import {
   applyCellMutationState,
   cloneCellStyle,
@@ -758,66 +755,14 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       return false;
     }
 
-    const WorkbookConstructor = workbook.constructor as typeof Workbook;
-    let nextWorkbook: Workbook | null = null;
-    let nextImageAssets: ReturnType<typeof loadWorkbookImageAssets> | null = null;
-    let nextSheets: ReturnType<typeof buildSheetList>;
-    let nextChartAssets: ReturnType<typeof loadWorkbookChartAssets>;
-    let calculation: ReturnType<typeof safeCalculate>;
-    try {
-      nextWorkbook = trackXlsxWorkbookLifetime(WorkbookConstructor.fromBytes(renamedBytes));
-      calculation = safeCalculate(nextWorkbook, {
-        reparse: () => trackXlsxWorkbookLifetime(WorkbookConstructor.fromBytes(renamedBytes))
-      });
-      if (calculation.workbook !== nextWorkbook) {
-        try {
-          nextWorkbook.free();
-        } catch {
-          // A trapped WASM workbook may reject cleanup; it is never reused.
-        }
-        nextWorkbook = calculation.workbook;
-      }
-      nextImageAssets = loadWorkbookImageAssets(renamedBytes, nextWorkbook);
-      nextSheets = buildSheetList(
-        nextWorkbook,
-        nextImageAssets.sheetStatesByWorkbookSheetIndex,
-        nextImageAssets.themePalette,
-        nextImageAssets.styleById,
-        nextImageAssets.namedCellStyleByName,
-        nextImageAssets.tableStyleByName,
-        ctx.showHiddenSheets
-      );
-      nextChartAssets = loadWorkbookChartAssets(
-        nextWorkbook,
-        nextImageAssets,
-        buildVisibleSheetIndexMap(nextSheets),
-        ctx.showHiddenSheets
-      );
-    } catch {
-      revokeWorkbookImageAssets(nextImageAssets);
-      if (nextWorkbook) {
-        try {
-          nextWorkbook.free();
-        } catch {
-          // Best-effort cleanup for an instance that was never committed.
-        }
-      }
+    const rebuild = rebuildWorkbookFromBytes(ctx, renamedBytes);
+    if (!rebuild) {
       return false;
-    }
-
-    ctx.noteCalculationResult({ calculated: calculation.calculated, skipReason: calculation.skipReason });
-    if (calculation.calculated) {
-      ctx.resumeAutoCalculate();
     }
 
     // The pre-rename bytes are the history entry, so the undo snapshot and the
     // rename share one save instead of re-serializing the workbook twice.
-    ctx.recordHistoryBeforeMutation(originalBytes);
-    ctx.setImageAssets(nextImageAssets);
-    ctx.replaceWorkbook(nextWorkbook);
-    ctx.sheets.value = nextSheets;
-    ctx.setChartAssets(nextChartAssets);
-    ctx.revision.value = ctx.revision.value + 1;
+    commitWorkbookRebuild(ctx, rebuild, originalBytes);
     return true;
   }
 

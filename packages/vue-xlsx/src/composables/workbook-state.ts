@@ -716,6 +716,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
       kind: "snapshot",
       activeCell: ctx.activeCell.value,
       activeSheetIndex: ctx.activeSheetIndex.value,
+      activeTabIndex: ctx.activeTabIndex.value,
       bytes: ctx.createSavedWorkbookBytes(ctx.workbook.value),
       selection: ctx.selection.value
     };
@@ -783,7 +784,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
       ctx.setChartAssets(nextChartAssets);
       // Restore the sheet and its tab together, then reinstate the selection that
       // belongs to it; the tab watcher must not reset what we restore here.
-      ctx.switchToSheet(nextSheetIndex, { preserveSelection: true });
+      ctx.restoreActiveSheetAndTab(nextSheetIndex, entry.activeTabIndex);
       ctx.activeCell.value = entry.activeCell;
       ctx.selection.value = entry.selection;
       ctx.selectionAnchorRef.value = entry.selection ? normalizeRange(entry.selection).start : entry.activeCell;

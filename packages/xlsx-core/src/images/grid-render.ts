@@ -77,6 +77,7 @@ import {
 // ── Types ───────────────────────────────────────────────────────────────────
 
 type WorkbookSheetInfo = {
+  kind: "chartsheet" | "worksheet";
   name: string;
   path: string;
 };
@@ -148,6 +149,13 @@ export type WorkbookTableMetadata = {
 
 export type WorkbookImageAssets = {
   archive: ArchiveEntries;
+  /**
+   * Drawing attachments for chartsheets, indexed by chartsheet index.
+   * Worksheet drawings live in `sheetOrigins`, indexed by worksheet index;
+   * workbook.xml tab order is never used for these arrays. Optional so assets
+   * built by older hosts stay valid.
+   */
+  chartsheetOrigins?: Array<WorkbookImageSheetOrigin | null>;
   formControlOriginsById: Map<string, WorkbookFormControlOrigin>;
   formControlsByWorkbookSheetIndex: XlsxFormControl[][];
   imageOriginsById: Map<string, WorkbookImageOrigin>;
@@ -178,6 +186,7 @@ export type WorkbookStructureAssets = Pick<
 export type WorkbookChartStyleAssets = Pick<
   WorkbookImageAssets,
   | "archive"
+  | "chartsheetOrigins"
   | "sheetOrigins"
   | "themePalette"
 >;
@@ -914,7 +923,10 @@ export function parseWorkbookSheets(archive: ArchiveEntries) {
       continue;
     }
 
+    const isChartsheet = relationship.type.endsWith("/chartsheet")
+      || relationship.target.startsWith("xl/chartsheets/");
     sheets.push({
+      kind: isChartsheet ? "chartsheet" : "worksheet",
       name: sheetNode.getAttribute("name") ?? `Sheet ${sheets.length + 1}`,
       path: relationship.target
     });
@@ -1043,14 +1055,27 @@ export function parseWorkbookStructureAssetsFromArchive(
   contentTypes: ContentTypesState;
   theme: ThemeState;
   workbookSheets: WorkbookSheetInfo[];
+  /** Workbook slots restricted to worksheets, in worksheet-index order. */
+  worksheetSheets: WorkbookSheetInfo[];
+  /** Workbook slots restricted to chartsheets, in chartsheet-index order. */
+  chartsheetSheets: WorkbookSheetInfo[];
 } {
   const contentTypes = parseContentTypes(archive);
   const workbookSheets = parseWorkbookSheets(archive);
+  // Chartsheets occupy workbook.xml slots but the engine, `XlsxSheetData` and
+  // every `workbookSheetIndex`-keyed asset array count worksheets only. Keep
+  // the tab-slot list for `localSheetId` metadata and index the per-worksheet
+  // state by worksheet order instead.
+  const worksheetTabIndexes = workbookSheets.flatMap((sheet, tabIndex) =>
+    sheet.kind === "worksheet" ? [tabIndex] : []
+  );
+  const worksheetSheets = worksheetTabIndexes.map((tabIndex) => workbookSheets[tabIndex]);
+  const chartsheetSheets = workbookSheets.filter((sheet) => sheet.kind === "chartsheet");
   const theme = parseWorkbookTheme(archive);
   const themePalette = buildThemePalette(theme);
   const { defaultFont, namedCellStyleByName, styleById, tableStyleByName } = parseWorkbookStyles(archive);
   const printMetadata = parseWorkbookPrintMetadata(archive, workbookSheets);
-  const sheetStates = workbookSheets.map((sheet) => parseSheetState(archive, sheet.path, {
+  const sheetStates = worksheetSheets.map((sheet) => parseSheetState(archive, sheet.path, {
     ...options,
     defaultFont,
     themePalette
@@ -1058,16 +1083,18 @@ export function parseWorkbookStructureAssetsFromArchive(
   return {
     contentTypes,
     namedCellStyleByName,
-    sheetStatesByWorkbookSheetIndex: sheetStates.map((state, index) =>
-      state ? { ...state, ...printMetadata[index] } : state
+    sheetStatesByWorkbookSheetIndex: sheetStates.map((state, worksheetIndex) =>
+      state ? { ...state, ...printMetadata[worksheetTabIndexes[worksheetIndex]] } : state
     ),
     styleById,
-    tableMetadataByWorkbookSheetIndex: workbookSheets.map((sheet) =>
+    tableMetadataByWorkbookSheetIndex: worksheetSheets.map((sheet) =>
       parseWorksheetTableMetadata(archive, sheet.path)
     ),
     tableStyleByName,
     theme,
     themePalette,
-    workbookSheets
+    workbookSheets,
+    worksheetSheets,
+    chartsheetSheets
   };
 }

@@ -142,6 +142,7 @@ export {
   addWorkbookConditionalFormatRule,
   addWorkbookTable,
   applyWorkbookDefinedNames,
+  applyWorkbookSheetOrder,
   applyWorkbookSheetRename,
   createConditionalFormatRuleFromDraft,
   deleteWorkbookConditionalFormatRule,

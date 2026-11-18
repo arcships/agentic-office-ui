@@ -243,17 +243,18 @@ UI 事件 → controller 方法 → worksheet wasm 方法 → maybeRecalculate �
 29. `addSheet`：去重命名（`workbook.sheetIndex` 循环加后缀）→ `workbook.addSheet` → buildSheetList 重建。
 30. `removeActiveSheet`：`workbook.removeSheet(index)` → filter sheetOrigins/images/shapes → buildSheetList。
 31. `renameSheet`/`renameActiveSheet`：`validateWorksheetName`（Excel 规则，跨工作表与图表工作表大小写不敏感）→ WASM 无 rename setter，用 `applyWorkbookSheetRename` 重写存档的 `<sheet name>` 与全部引用（公式/定义名称/内部链接/图表系列/透视缓存）→ `Workbook.fromBytes` 重建模型；快照历史，工作表顺序与活动 tab 不变。
+32. `moveSheet(fromIndex, toIndex)`：索引是 `tabs` 的 tab 下标（工作表与图表工作表交错），不是 `sheets`/`chartsheets` 下标；WASM 无 reorder setter，用 `applyWorkbookSheetOrder` 重写存档 `<sheets>` 顺序并重映射 `localSheetId`/`activeTab`/`firstSheet` → `Workbook.fromBytes` 重建模型，`sheetStatesByWorkbookSheetIndex`/images/shapes/`sheetOrigins`/可见索引映射全部从重排后的包按工作表下标重读（图表工作表不再占用这些数组的槽位），因此不会串到相邻表；被移动的 tab 保持活动并滚入视野，拖拽时有插入指示线、`Esc` 取消、同槽放下为无操作；快照历史可撤销/重做，导出与重载保留新顺序。
 
 #### J. image/chart selection
-32. selectChart/selectImage 互斥（与 selectCell 也互斥）。
-33. `setChartRect`/`setImageRect`：`rectToImageAnchor`（px→EMU）→ `updateWorkbookChartAnchor`/`updateWorkbookImageAnchor` → snapshot 历史。
-34. `moveImageBy`/`resizeImageBy`：算 currentRect → `resizeImageRect(rect, handle, deltaX, deltaY)` → `setImageRect`。
+33. selectChart/selectImage 互斥（与 selectCell 也互斥）。
+34. `setChartRect`/`setImageRect`：`rectToImageAnchor`（px→EMU）→ `updateWorkbookChartAnchor`/`updateWorkbookImageAnchor` → snapshot 历史。
+35. `moveImageBy`/`resizeImageBy`：算 currentRect → `resizeImageRect(rect, handle, deltaX, deltaY)` → `setImageRect`。
 
 #### K. zoom
-35. 纯前端 state，不写 workbook。`clampZoomScale`（10-400）。`zoomScaleOverridesByTabId` 按 tab 存。
+36. 纯前端 state，不写 workbook。`clampZoomScale`（10-400）。`zoomScaleOverridesByTabId` 按 tab 存。
 
 #### L. getCellStyle
-36. controller 内的 `getCellStyleAt`（wasm）是数据层；viewer 的 `getCellStyle` prop 是渲染层。**完全不同**。
+37. controller 内的 `getCellStyleAt`（wasm）是数据层；viewer 的 `getCellStyle` prop 是渲染层。**完全不同**。
 
 **迁移操作（机械改写）**：
 
@@ -784,7 +785,7 @@ pnpm --filter @arcships/vue-xlsx add -D @types/d3-geo @types/d3-hierarchy @types
 | 公式编辑栏 | 996-1028 | Name box + fx + 公式 Input，支持图表 SERIES |
 | 命名区域定义 | 431-439, 856-872 | `defineNamedRange` |
 | 公式重算 | 318, 850-855 | `recalculate`（Formulas + Data 两个 tab） |
-| 工作表增删/重命名 | 324/329, 782-790 | `addSheet`/`removeActiveSheet`/`renameSheet` |
+| 工作表增删/重命名/排序 | 324/329, 782-790 | `addSheet`/`removeActiveSheet`/`renameSheet`/`moveSheet` |
 | 工作表切换+缩略图 | 1033-1074 | hover Tooltip 显示 canvas 缩略图 |
 | 缩放控制 | 340, 900-924 | zoomIn/out/reset，预设 50-200% |
 | 加载后自动重置缩放 | 1170-1193 | sourceKey 变化时 setZoomScale(100) |

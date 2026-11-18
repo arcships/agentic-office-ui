@@ -90,6 +90,7 @@ export type WorkbookFormControlOrigin = {
 
 export type WorkbookImageSheetOrigin = {
   attachments: XlsxImageAttachment[];
+  /** Worksheet index, or -1 when this origin belongs to a chartsheet. */
   workbookSheetIndex: number;
 };
 

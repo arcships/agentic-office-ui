@@ -105,6 +105,8 @@ export type SnapshotHistoryEntry = {
   kind: "snapshot";
   activeCell: XlsxCellAddress | null;
   activeSheetIndex: number;
+  /** Active tab, so undoing a chartsheet move restores that chartsheet. */
+  activeTabIndex?: number;
   bytes: Uint8Array;
   selection: XlsxCellRange | null;
 };
@@ -504,6 +506,17 @@ export interface XlsxControllerContext {
    * it; only history restores use it, because they restore selection themselves.
    */
   switchToSheet: (visibleSheetIndex: number, options?: { preserveSelection?: boolean }) => void;
+  /**
+   * Activates one tab, worksheet or chartsheet, keeping the grid and the tab
+   * strip in agreement. `preserveSelection` keeps the current selection across
+   * a switch that does not change the sheet the user is working on.
+   */
+  activateTab: (tabIndex: number, options?: { preserveSelection?: boolean }) => void;
+  /**
+   * Restores a history snapshot's sheet and tab together without letting the
+   * tab watcher reset the selection the snapshot restored.
+   */
+  restoreActiveSheetAndTab: (visibleSheetIndex: number, tabIndex?: number) => void;
   /**
    * Consumes the marker set by a `preserveSelection` switch. True means the
    * pending tab-index change must not reset sheet-scoped state.
