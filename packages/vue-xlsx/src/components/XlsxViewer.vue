@@ -758,6 +758,7 @@ defineExpose({
 }
 
 @media print {
+  .xlsx-toolbar { display: none !important; }
   .xlsx-viewer {
     border-radius: 0 !important;
     height: auto !important;

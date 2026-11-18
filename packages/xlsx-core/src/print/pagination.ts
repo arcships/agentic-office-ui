@@ -11,9 +11,40 @@ import type {
   XlsxPrintPageGrid,
   XlsxPrintPageGridAxis,
   XlsxPrintPageGridCell,
+  XlsxPrintOptions,
   XlsxPrintTitles,
-  XlsxSheetData,
 } from "../types";
+
+/**
+ * Structural sheet subset used by pagination. Keeping it local avoids pulling
+ * the WASM Workbook type into the pure `@arcships/xlsx-core/core` entry.
+ */
+export interface XlsxPrintSheetData {
+  name: string;
+  workbookSheetIndex: number;
+  colBreaks: XlsxPageBreak[];
+  colWidthOverridesPx: Record<number, number>;
+  colWidths?: number[];
+  visibleCols?: number[];
+  defaultColWidthPx: number;
+  defaultRowHeightPx: number;
+  hiddenCols?: number[];
+  hiddenRows?: number[];
+  maxUsedCol: number;
+  maxUsedRow: number;
+  mergedRegions?: XlsxCellRange[];
+  minUsedCol: number;
+  minUsedRow: number;
+  pageMargins: XlsxPageMargins;
+  pageSetup: XlsxPageSetup;
+  printAreas: XlsxCellRange[];
+  printOptions: XlsxPrintOptions;
+  printTitles: XlsxPrintTitles;
+  rowBreaks: XlsxPageBreak[];
+  rowHeightOverridesPx: Record<number, number>;
+  rowHeights?: number[];
+  visibleRows?: number[];
+}
 
 // ── Constants ────────────────────────────────────────────────────────────
 
@@ -176,7 +207,7 @@ export function resolvePageMarginsPx(pageMargins: XlsxPageMargins) {
 
 // ── Range helpers ────────────────────────────────────────────────────────
 
-function resolveColumnWidthPx(sheet: XlsxSheetData, col: number) {
+function resolveColumnWidthPx(sheet: XlsxPrintSheetData, col: number) {
   if (col < 0) return 0;
   const fallback = sheet.defaultColWidthPx;
   const { colWidths, visibleCols } = sheet;
@@ -188,7 +219,7 @@ function resolveColumnWidthPx(sheet: XlsxSheetData, col: number) {
   return sheet.colWidthOverridesPx?.[col] ?? fallback;
 }
 
-function resolveRowHeightPx(sheet: XlsxSheetData, row: number) {
+function resolveRowHeightPx(sheet: XlsxPrintSheetData, row: number) {
   if (row < 0) return 0;
   const fallback = sheet.defaultRowHeightPx;
   const { rowHeights, visibleRows } = sheet;
@@ -279,7 +310,7 @@ function sumSlices(slices: AxisSlice[], indices?: ReadonlySet<number>) {
 
 // ── Pagination ───────────────────────────────────────────────────────────
 
-function printAreasOf(sheet: XlsxSheetData): XlsxCellRange[] {
+function printAreasOf(sheet: XlsxPrintSheetData): XlsxCellRange[] {
   const areas = (sheet.printAreas ?? [])
     .filter((range) => range && Number.isFinite(range.start?.row) && Number.isFinite(range.start?.col))
     .map((range) => clampRange(range, MAX_SHEET_ROWS - 1, MAX_SHEET_COLUMNS - 1));
@@ -412,7 +443,7 @@ function pageBreakIds(breaks: readonly XlsxPageBreak[] | undefined) {
  * list of cell ranges plus the paper size used for each page.
  */
 export function buildWorksheetPrintLayout(
-  sheet: XlsxSheetData,
+  sheet: XlsxPrintSheetData,
   options: XlsxPrintLayoutOptions = {},
 ): XlsxPrintLayout {
   const pageSetup = sheet.pageSetup;
@@ -573,7 +604,7 @@ function buildPageCombination(
 
 /** Paginates every worksheet that has print data. */
 export function buildWorkbookPrintLayouts(
-  sheets: readonly XlsxSheetData[],
+  sheets: readonly XlsxPrintSheetData[],
   options: XlsxPrintLayoutOptions = {},
 ): XlsxPrintLayout[] {
   return sheets.map((sheet) => buildWorksheetPrintLayout(sheet, options));
@@ -591,7 +622,7 @@ export function buildWorkbookPrintLayouts(
  * text belongs to that other page.
  */
 export function buildPrintPageGrid(
-  sheet: XlsxSheetData,
+  sheet: XlsxPrintSheetData,
   page: XlsxPrintPage,
   printTitles: XlsxPrintTitles = sheet.printTitles,
 ): XlsxPrintPageGrid {
