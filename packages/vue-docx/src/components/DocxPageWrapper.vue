@@ -15,6 +15,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from "vue"
+import {
+  resolveClippedBodyRenderedBottomPx,
+  resolveClippedMeasuredHeightPx,
+} from "@arcships/docx-core"
 import type { LayoutPage } from "@arcships/docx-core"
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -25,12 +29,15 @@ const props = withDefaults(
     pageHeightPx?: number
     isActivePage?: boolean
     margin?: number
+    /** Zoom the wrapper (or its ancestors) is rendered at; rects are unscaled. */
+    zoomFactor?: number
   }>(),
   {
     pageWidthPx: 816,
     pageHeightPx: 1056,
     isActivePage: false,
     margin: 72,
+    zoomFactor: 1,
   }
 )
 
@@ -64,8 +71,22 @@ const wrapperStyle = computed(() => ({
 let resizeObserver: ResizeObserver | null = null
 
 function measure(): void {
-  if (!wrapperRef.value) return
-  emit("measure", { heightPx: wrapperRef.value.scrollHeight })
+  const wrapper = wrapperRef.value
+  if (!wrapper) return
+  // `scrollHeight` counts content a clipping ancestor already cut off, so a
+  // wrapper whose cell or fixed-height container clips overflowing paragraphs
+  // reports a taller page than it renders. Prefer the visible bottom, keep
+  // `offsetHeight` as the fallback, and never report less than one paper.
+  const heightPx = resolveClippedMeasuredHeightPx({
+    fallbackHeightPx: wrapper.offsetHeight,
+    minimumHeightPx: props.pageHeightPx,
+    clippedContentBottomPx: resolveClippedBodyRenderedBottomPx(wrapper, {
+      zoomFactor: props.zoomFactor,
+    }),
+  })
+  if (heightPx !== undefined) {
+    emit("measure", { heightPx })
+  }
 }
 
 onMounted(() => {

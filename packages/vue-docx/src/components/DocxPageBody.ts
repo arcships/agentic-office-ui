@@ -33,6 +33,8 @@ import {
   resolveDefaultTabStopPx,
   resolveDocumentLayoutDefaults,
   resolveParagraphAutoSpacingInStory,
+  resolveClippedBodyRenderedBottomPx,
+  resolveClippedMeasuredHeightPx,
   type DocxPageFlowWrapClearance,
   type DocumentLayoutDefaults,
 } from "@arcships/docx-core"
@@ -67,6 +69,8 @@ export default defineComponent({
   },
   props: {
     pageIndex: { type: Number, required: true },
+    /** Zoom applied to the page subtree; measured rects are unscaled by it. */
+    zoomFactor: { type: Number, default: 1 },
     pageNodeSegments: {
       type: Array as PropType<DocumentPageNodeSegment[]>,
       required: true,
@@ -147,8 +151,21 @@ export default defineComponent({
     const bodyElement = ref<HTMLElement>()
 
     function emitContentMeasure(): void {
-      const heightPx = bodyElement.value?.scrollHeight ?? 0
-      if (Number.isFinite(heightPx) && heightPx > 0) {
+      const body = bodyElement.value
+      if (!body) return
+      // `scrollHeight` counts content that a clipping ancestor cut off, so a
+      // page whose body, column or sliced cell clips overflowing paragraphs
+      // would report a taller body and push pagination away from Word. Measure
+      // the visible bottom instead and keep `scrollHeight` as the fallback.
+      const heightPx = resolveClippedMeasuredHeightPx({
+        fallbackHeightPx: body.scrollHeight,
+        // A body never reports less than the height it occupies on screen.
+        minimumHeightPx: body.clientHeight,
+        clippedContentBottomPx: resolveClippedBodyRenderedBottomPx(body, {
+          zoomFactor: props.zoomFactor,
+        }),
+      })
+      if (heightPx !== undefined && Number.isFinite(heightPx) && heightPx > 0) {
         emit("contentMeasure", heightPx)
       }
     }
