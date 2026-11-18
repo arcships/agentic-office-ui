@@ -336,9 +336,11 @@ function readRelationships(
       continue;
     }
     relationships.set(id, {
-      target: target.startsWith("/") || target.startsWith("#")
-        ? target
-        : resolveRelativeTarget(sheetPath, target),
+      target: target.startsWith("/")
+        ? normalizeArchivePath(target)
+        : target.startsWith("#")
+          ? target
+          : resolveRelativeTarget(sheetPath, target),
       targetMode: node.getAttribute("TargetMode"),
       type
     });
@@ -1087,6 +1089,22 @@ export function deleteWorkbookConditionalFormatRule(
   });
 }
 
+/**
+ * Replaces every conditional-format rule on a worksheet in one write.
+ *
+ * Structure edits shift each rule's ranges and must rewrite the whole list so
+ * priorities stay in list order without one XML pass per rule.
+ *
+ * @returns The updated rule list, or `null` when the sheet part is unavailable.
+ */
+export function replaceWorkbookConditionalFormatRules(
+  assets: WorkbookAuthoringAssets,
+  workbookSheetIndex: number,
+  rules: XlsxConditionalFormatRule[]
+): XlsxConditionalFormatRule[] | null {
+  return mutateConditionalFormatRules(assets, workbookSheetIndex, () => rules);
+}
+
 function mutateConditionalFormatRules(
   assets: WorkbookAuthoringAssets,
   workbookSheetIndex: number,
@@ -1218,6 +1236,29 @@ function writeDataValidationNodes(document: XMLDocument, validations: XlsxDataVa
     container.appendChild(node);
   }
   insertSheetChild(document, container);
+}
+
+/**
+ * Replaces every data-validation rule on a worksheet in one write.
+ *
+ * Structure edits shift each rule's ranges; rewriting the whole
+ * `dataValidations` block keeps the OOXML `count` and rule order consistent
+ * without clearing rules cell by cell.
+ *
+ * @returns The updated validation list, or `null` when the sheet part is unavailable.
+ */
+export function replaceWorkbookDataValidations(
+  assets: WorkbookAuthoringAssets,
+  workbookSheetIndex: number,
+  validations: XlsxDataValidation[]
+): XlsxDataValidation[] | null {
+  const sheet = readSheetDocument(assets, workbookSheetIndex);
+  if (!sheet) {
+    return null;
+  }
+  writeDataValidationNodes(sheet.document, validations);
+  writeSheetDocument(assets, sheet.sheetPath, sheet.document);
+  return parseWorksheetState(assets, sheet.sheetPath)?.dataValidations ?? [];
 }
 
 // ── Tables ───────────────────────────────────────────────────────────────────
@@ -1467,6 +1508,74 @@ export function deleteWorkbookTable(
   }
   writeSheetDocument(assets, sheetPath, document);
   writeRelationshipsDocument(assets.archive, relsPath, relationshipsDocument);
+  return readTableMetadata(assets, workbookSheetIndex);
+}
+
+/**
+ * Moves a table to a new range after a structural edit.
+ *
+ * Rewrites the table part's `ref` (and its auto-filter range) without touching
+ * the column names, style or id, so Excel keeps the ListObject identity.
+ *
+ * @returns The updated table list, or `null` when the table was not found.
+ */
+export function updateWorkbookTableRange(
+  assets: WorkbookAuthoringAssets,
+  workbookSheetIndex: number,
+  tableName: string,
+  range: XlsxCellRange
+): XlsxTable[] | null {
+  const sheet = readSheetDocument(assets, workbookSheetIndex);
+  if (!sheet) {
+    return null;
+  }
+  const { sheetPath } = sheet;
+  const relationships = readRelationships(assets.archive, relsPathForDocument(sheetPath), sheetPath);
+  let updated = false;
+  for (const relationship of relationships.values()) {
+    if (relationship.type !== TABLE_REL_TYPE) {
+      continue;
+    }
+    const tableXml = readArchiveText(assets.archive, relationship.target);
+    const tableDocument = tableXml ? parseXml(tableXml) : null;
+    if (!tableDocument) {
+      continue;
+    }
+    const tableNode = getLocalElements(tableDocument, "table")[0];
+    if (!tableNode) {
+      continue;
+    }
+    const name = tableNode.getAttribute("name") ?? tableNode.getAttribute("displayName");
+    if (name !== tableName) {
+      continue;
+    }
+    const normalized = normalizeRange(range);
+    const reference = rangeReference(normalized);
+    tableNode.setAttribute("ref", reference);
+    const hasHeaders = Number(tableNode.getAttribute("headerRowCount") ?? "1") > 0;
+    const autoFilter = getLocalElements(tableDocument, "autoFilter")[0];
+    if (autoFilter) {
+      autoFilter.setAttribute(
+        "ref",
+        hasHeaders && normalized.end.row > normalized.start.row
+          ? rangeReference({
+              end: normalized.end,
+              start: { col: normalized.start.col, row: normalized.start.row + 1 }
+            })
+          : reference
+      );
+    }
+    const sortState = getLocalElements(tableDocument, "sortState")[0];
+    if (sortState) {
+      sortState.setAttribute("ref", reference);
+    }
+    assets.archive[normalizeArchivePath(relationship.target)] = strToU8(serializeXml(tableDocument));
+    updated = true;
+    break;
+  }
+  if (!updated) {
+    return null;
+  }
   return readTableMetadata(assets, workbookSheetIndex);
 }
 

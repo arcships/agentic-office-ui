@@ -12,6 +12,7 @@ import type { Workbook } from "@dukelib/sheets-wasm";
 import type {
   UseXlsxViewerControllerOptions,
   XlsxCellAddress,
+  XlsxCellEditRequest,
   XlsxCellRange,
   XlsxChart,
   XlsxChartElementSelection,
@@ -20,6 +21,7 @@ import type {
   XlsxDataValidationFeedback,
   XlsxFormControl,
   XlsxImage,
+  XlsxNamedRange,
   XlsxShape,
   XlsxSheetData,
   XlsxTable,
@@ -34,11 +36,13 @@ import type {
 import {
   XlsxWorkerClient,
   XlsxWorkerError,
+  applyWorkbookDefinedNames,
   createXlsxRuntime,
   validateXlsxArchive,
   loadWorkbookChartAssets,
   mergeWorkbookImageAssets,
   mergeWorkbookSheetAuthoringAssets,
+  normalizeWorkbookDefinedNames,
   revokeWorkbookImageAssets,
   safeCalculate,
   trackXlsxWorkbookLifetime,
@@ -81,6 +85,7 @@ import {
   createHistoryDomain
 } from "./workbook-state";
 import { createEditingDomain } from "./editing";
+import { createStructureDomain } from "./structure";
 import { createAuthoringDomain } from "./authoring";
 import { createClipboardDomain } from "./clipboard";
 import {
@@ -241,6 +246,9 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const isWorkerBacked = ref(false);
   const sortState = ref<XlsxTableSortState | null>(null);
   const forcedReadOnly = ref(false);
+  const editRequestRef = ref<XlsxCellEditRequest | null>(null);
+  const definedNameOverridesRef = ref<Record<string, XlsxNamedRange>>({});
+  const removedDefinedNamesRef = ref<string[]>([]);
   const dataValidationFeedback = ref<XlsxDataValidationFeedback | null>(null);
   const lastExportWarning = ref<string | null>(null);
   const deferredBufferRef = shallowRef<ArrayBuffer | null>(null);
@@ -405,6 +413,11 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     const previousWorkbook = workbook.value;
     if (previousWorkbook === nextWorkbook) return;
     workbook.value = nextWorkbook;
+    // A loaded or restored workbook already carries its own names; the Name
+    // Manager overlay only applies to edits made after the load.
+    definedNameOverridesRef.value = {};
+    removedDefinedNamesRef.value = [];
+    editRequestRef.value = null;
     disposeWorkbook(previousWorkbook);
   }
   function discardWorkbookLoadResult(
@@ -897,7 +910,30 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
       sanitized.bytes,
       imageAssetsRef.value?.archive ?? null
     );
-    return mergeWorkbookImageAssets(authored, imageAssetsRef.value, sheetOriginsRef.value);
+    const merged = mergeWorkbookImageAssets(authored, imageAssetsRef.value, sheetOriginsRef.value);
+    // The engine cannot delete a defined name, so Name Manager edits (and the
+    // deletions in particular) are written into the saved workbook part.
+    const hasNameEdits = Object.keys(definedNameOverridesRef.value).length > 0
+      || removedDefinedNamesRef.value.length > 0;
+    return hasNameEdits
+      ? applyWorkbookDefinedNames(merged, resolveEffectiveNamedRanges(targetWorkbook))
+      : merged;
+  }
+  function resolveEffectiveNamedRanges(targetWorkbook: Workbook | null): XlsxNamedRange[] {
+    if (!targetWorkbook) return [];
+    const base = normalizeWorkbookDefinedNames(targetWorkbook.namedRanges);
+    const removed = new Set(removedDefinedNamesRef.value.map((name) => name.toLowerCase()));
+    const overrides = definedNameOverridesRef.value;
+    const byName = new Map<string, XlsxNamedRange>();
+    for (const entry of base) {
+      const key = entry.name.toLowerCase();
+      if (removed.has(key)) continue;
+      byName.set(key, overrides[key] ?? entry);
+    }
+    for (const [key, entry] of Object.entries(overrides)) {
+      if (!removed.has(key)) byName.set(key, entry);
+    }
+    return [...byName.values()].sort((left, right) => left.name.localeCompare(right.name));
   }
   function captureCellMutationState(cell: XlsxCellAddress) {
     const worksheet = getInternalActiveWorksheet();
@@ -1409,7 +1445,8 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     zoomScaleOverridesByTabId, activeCell, selection, selectedChartId, selectedChartElement,
     selectedImageId, selectedShapeId, revision, selectionAnchorRef, undoStackRef, redoStackRef, historyBudget,
     isApplyingHistoryRef, historyRevision, shouldAutoCalculate, workerCellSnapshotRevision,
-    isWorkerBacked, sortState, forcedReadOnly, dataValidationFeedback, deferredBufferRef, deferredLoadRequestIdRef, sourceBufferRef, deferredLoadFileSize,
+    isWorkerBacked, sortState, forcedReadOnly, editRequestRef, definedNameOverridesRef, removedDefinedNamesRef,
+    dataValidationFeedback, deferredBufferRef, deferredLoadRequestIdRef, sourceBufferRef, deferredLoadFileSize,
     imageAssetsRef, chartAssetsRef, chartLoadRequestTokenRef, chartDisplayFallbackCleanupRef,
     sheetOriginsRef, workerClientRef, workerCellSnapshotCacheRef, locale: documentLocale,
     activeTab, activeSheet, deferredMetadataCell, deferredMetadataSheet,
@@ -1442,6 +1479,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const chartImageDomain = createChartImageDomain(ctx);
   const historyDomain = createHistoryDomain(ctx);
   const editingDomain = createEditingDomain(ctx);
+  const structureDomain = createStructureDomain(ctx);
   const authoringDomain = createAuthoringDomain(ctx);
 
   // Replace placeholder with actual implementation from chart domain
@@ -1527,18 +1565,35 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     addSheet: editingDomain.addSheet,
     addConditionalFormatRule: authoringDomain.addConditionalFormatRule,
     createTable: authoringDomain.createTable,
+    cutSelection: clipboardDomain.cutSelection,
+    deleteColumns: structureDomain.deleteColumns,
     deleteConditionalFormatRule: authoringDomain.deleteConditionalFormatRule,
+    deleteNamedRange: structureDomain.deleteNamedRange,
+    deleteRows: structureDomain.deleteRows,
+    get editRequest() { return editRequestRef.value; },
+    editCell: editingDomain.editCell,
     get freezePanes() { return authoringDomain.freezePanes.value; },
     getCellComment: authoringDomain.getCellComment,
     getCellHyperlink: authoringDomain.getCellHyperlink,
     getConditionalFormatRules: authoringDomain.getConditionalFormatRules,
+    getNamedRanges: structureDomain.getNamedRanges,
     getTableAtCell: authoringDomain.getTableAtCell,
     insertChart: authoringDomain.insertChart,
+    insertColumns: structureDomain.insertColumns,
+    insertRows: structureDomain.insertRows,
+    mergeAcrossSelection: structureDomain.mergeAcrossSelection,
+    pasteSpecialFromClipboard: clipboardDomain.pasteSpecialFromClipboard,
+    pasteSpecialStructuredData: clipboardDomain.pasteSpecialStructuredData,
     removeTable: authoringDomain.removeTable,
+    selectAll: structureDomain.selectAll,
+    selectColumn: structureDomain.selectColumn,
+    selectRow: structureDomain.selectRow,
     setCellComment: authoringDomain.setCellComment,
     setCellHyperlink: authoringDomain.setCellHyperlink,
     setFreezePanes: authoringDomain.setFreezePanes,
+    setNamedRange: structureDomain.setNamedRange,
     setSelectionDataValidation: authoringDomain.setSelectionDataValidation,
+    setSelectionNumberFormat: editingDomain.setSelectionNumberFormat,
     toggleFreezePanesAtActiveCell: authoringDomain.toggleFreezePanesAtActiveCell,
     updateConditionalFormatRule: authoringDomain.updateConditionalFormatRule,
     get canRedo() { return canRedo.value; },

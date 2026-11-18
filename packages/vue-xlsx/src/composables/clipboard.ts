@@ -4,10 +4,11 @@ import type { Workbook } from "@dukelib/sheets-wasm";
 import type {
   XlsxCellAddress,
   XlsxCellRange,
-  XlsxClipboardData
+  XlsxClipboardData,
+  XlsxPasteSpecialOptions
 } from "@arcships/xlsx-core";
 import { resolveWorkbookColor, resolveWorkbookFillStyle } from "@arcships/xlsx-core";
-import { cellAddressToA1, normalizeRange, rangeToA1 } from "./selection";
+import { cellAddressToA1, normalizeRange, rangeContainsCell, rangeToA1 } from "./selection";
 import { isWithinSheetBounds, SHEET_MAX_COLUMNS, SHEET_MAX_ROWS, shiftFormulaReferences } from "./formula-references";
 import { decodeHtmlEntities, escapeHtml, mapBorder, resolveEffectiveCellNumberFormat, resolveInheritedCellStyle } from "./formatting";
 import { DEFAULT_CELL_STYLE_PATCH, localizeFormattedNumber, resolveCellInput } from "./cell-input";
@@ -117,6 +118,13 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
   // Only re-render values that can be a localized number; dates, text and
   // errors skip the extra style lookup entirely.
   const localizableDisplayValue = /^[\s($€£¥₹₽₪¢₫₴₦₱₸₺฿]*[+-]?\d/;
+  // The last copy/cut made inside the viewer. Paste Special uses it so the
+  // options apply even where the system clipboard cannot be read.
+  let storedClipboard: {
+    cutRange: XlsxCellRange | null;
+    payload: ClipboardPayload;
+    sheetIndex: number;
+  } | null = null;
 
   function localizeDisplayValue(value: string, resolveFormat: () => unknown) {
     if (!localizableDisplayValue.test(value)) {
@@ -350,6 +358,253 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     };
   }
 
+  // Set while a cut-paste is applying its own snapshot, so the inner paste
+  // does not add a second history entry that undo would stop on.
+  let pasteHistorySuppressed = false;
+
+  function storeSelectionForPaste(cut: boolean) {
+    const data = getClipboardData();
+    if (!data) {
+      return null;
+    }
+    let payload: ClipboardPayload;
+    try {
+      payload = JSON.parse(data.structured) as ClipboardPayload;
+    } catch {
+      return null;
+    }
+    const range = ctx.selection.value
+      ?? (ctx.activeCell.value ? { end: ctx.activeCell.value, start: ctx.activeCell.value } : null);
+    storedClipboard = {
+      cutRange: cut && range ? normalizeRange(range) : null,
+      payload,
+      sheetIndex: ctx.activeSheet.value?.workbookSheetIndex ?? -1
+    };
+    return data;
+  }
+
+  function transformPayloadForPaste(
+    payload: ClipboardPayload,
+    options: XlsxPasteSpecialOptions,
+  ): ClipboardPayload {
+    const transpose = options.transpose === true;
+    const mode = options.mode ?? "all";
+    const cells = payload.cells.map((cell) => {
+      const positioned = transpose
+        ? { ...cell, colOffset: cell.rowOffset, rowOffset: cell.colOffset }
+        : { ...cell };
+      if (mode === "all") {
+        return positioned;
+      }
+      if (mode === "values") {
+        // Values-only writes the formula result, never the formula itself or
+        // the source formatting.
+        const rawValue = cell.formula
+          ? (cell.rawValue !== undefined && cell.rawValue !== "" ? cell.rawValue : cell.value)
+          : cell.rawValue;
+        return {
+          ...positioned,
+          formula: null,
+          rawValue,
+          style: undefined
+        };
+      }
+      return positioned;
+    });
+    const merges = mode !== "all"
+      ? []
+      : transpose
+        ? (payload.merges ?? []).map((merge) => ({
+            colOffset: merge.rowOffset,
+            colSpan: merge.rowSpan,
+            rowOffset: merge.colOffset,
+            rowSpan: merge.colSpan
+          }))
+        : payload.merges;
+    return {
+      ...payload,
+      cells,
+      cols: transpose ? Math.max(1, payload.rows) : Math.max(1, payload.cols),
+      merges,
+      rows: transpose ? Math.max(1, payload.cols) : Math.max(1, payload.rows)
+    };
+  }
+
+  function applyFormatsOnly(payload: ClipboardPayload, options: XlsxPasteSpecialOptions) {
+    const worksheet = ctx.getActiveWorksheet();
+    const targetCell = ctx.activeCell.value ?? ctx.selection.value?.start ?? null;
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value || !targetCell) {
+      return false;
+    }
+    const transpose = options.transpose === true;
+    const beforeSnapshot = {
+      activeCell: ctx.activeCell.value,
+      selection: ctx.selection.value
+    };
+    const mutations: import("./internal").RangeCellMutation[] = [];
+    for (const cell of payload.cells) {
+      if (cell.style === undefined) {
+        continue;
+      }
+      const nextCell = transpose
+        ? { col: targetCell.col + cell.rowOffset, row: targetCell.row + cell.colOffset }
+        : { col: targetCell.col + cell.colOffset, row: targetCell.row + cell.rowOffset };
+      if (!isWithinSheetBounds(nextCell) || worksheet.isMergedSecondary(nextCell.row, nextCell.col)) {
+        continue;
+      }
+      const before = ctx.captureCellMutationState(nextCell);
+      if (!before) {
+        continue;
+      }
+      worksheet.setCellStyleAt(
+        nextCell.row,
+        nextCell.col,
+        cell.style && typeof cell.style === "object" ? cell.style : DEFAULT_CELL_STYLE_PATCH
+      );
+      const after = ctx.captureCellMutationState(nextCell);
+      if (!after) {
+        continue;
+      }
+      mutations.push({ after, before, cell: nextCell });
+    }
+    if (mutations.length === 0) {
+      return false;
+    }
+    ctx.refreshWorkbookState(ctx.workbook.value);
+    const nextRange = normalizeRange({
+      start: targetCell,
+      end: {
+        col: Math.min(targetCell.col + Math.max((transpose ? payload.rows : payload.cols) - 1, 0), SHEET_MAX_COLUMNS - 1),
+        row: Math.min(targetCell.row + Math.max((transpose ? payload.cols : payload.rows) - 1, 0), SHEET_MAX_ROWS - 1)
+      }
+    });
+    ctx.activeCell.value = targetCell;
+    ctx.selection.value = nextRange;
+    ctx.selectionAnchorRef.value = targetCell;
+    ctx.recordRangeEditHistory(mutations, nextRange, targetCell, beforeSnapshot);
+    return true;
+  }
+
+  function clearCutSource(targetRange: XlsxCellRange | null) {
+    const stored = storedClipboard;
+    if (!stored?.cutRange) {
+      return;
+    }
+    const workbook = ctx.workbook.value;
+    if (!workbook || stored.sheetIndex < 0) {
+      return;
+    }
+    const worksheet = workbook.getSheet(stored.sheetIndex);
+    try {
+      for (let row = stored.cutRange.start.row; row <= stored.cutRange.end.row; row += 1) {
+        for (let col = stored.cutRange.start.col; col <= stored.cutRange.end.col; col += 1) {
+          if (targetRange && rangeContainsCell(targetRange, { row, col })) {
+            continue;
+          }
+          if (worksheet.isMergedSecondary(row, col)) {
+            continue;
+          }
+          worksheet.setCell(cellAddressToA1({ row, col }), "");
+          if (worksheet.getCellStyleAt(row, col)) {
+            worksheet.setCellStyleAt(row, col, DEFAULT_CELL_STYLE_PATCH);
+          }
+        }
+      }
+    } finally {
+      worksheet.free();
+    }
+    if (ctx.workbook.value) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
+    storedClipboard = null;
+  }
+
+  function sameClipboardPayload(left: ClipboardPayload, right: ClipboardPayload) {
+    if (left.cols !== right.cols || left.rows !== right.rows || left.cells.length !== right.cells.length) {
+      return false;
+    }
+    if (!left.origin || !right.origin) {
+      return left.origin === right.origin;
+    }
+    return left.origin.row === right.origin.row && left.origin.col === right.origin.col;
+  }
+
+  /**
+   * Applies Excel's paste options to a structured clipboard payload.
+   *
+   * @returns `true` when the workbook changed.
+   */
+  function pasteSpecialStructuredData(
+    serializedPayload: string,
+    options: XlsxPasteSpecialOptions = {},
+  ) {
+    let payload: ClipboardPayload;
+    try {
+      payload = JSON.parse(serializedPayload) as ClipboardPayload;
+    } catch {
+      return false;
+    }
+    if (!Array.isArray(payload.cells) || payload.cells.length === 0) {
+      return false;
+    }
+    if ((options.mode ?? "all") === "formats") {
+      const applied = applyFormatsOnly(payload, options);
+      // A formats-only paste consumes the pending cut like a copy would; the
+      // source keeps its values, so the move never happens.
+      if (applied && storedClipboard) {
+        storedClipboard = { ...storedClipboard, cutRange: null };
+      }
+      return applied;
+    }
+    const stored = storedClipboard;
+    const isCut = Boolean(
+      stored?.cutRange && sameClipboardPayload(stored.payload, payload)
+    );
+    if (isCut) {
+      ctx.recordHistoryBeforeMutation();
+      pasteHistorySuppressed = true;
+    }
+    try {
+      const applied = pasteStructuredClipboardData(
+        JSON.stringify(transformPayloadForPaste(payload, options))
+      );
+      if (applied && isCut) {
+        clearCutSource(ctx.selection.value);
+      }
+      return applied;
+    } finally {
+      pasteHistorySuppressed = false;
+    }
+  }
+
+  async function pasteSpecialFromClipboard(options: XlsxPasteSpecialOptions = {}) {
+    if (ctx.isEditingLocked.value) {
+      return false;
+    }
+    if (storedClipboard) {
+      return pasteSpecialStructuredData(JSON.stringify(storedClipboard.payload), options);
+    }
+    if (typeof navigator === "undefined" || !navigator.clipboard) {
+      return false;
+    }
+    if (navigator.clipboard.read) {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        if (item.types.includes(INTERNAL_CLIPBOARD_MIME)) {
+          const blob = await item.getType(INTERNAL_CLIPBOARD_MIME);
+          return pasteSpecialStructuredData(await blob.text(), options);
+        }
+      }
+    }
+    const text = await navigator.clipboard.readText();
+    // Plain text has no formatting or formulas, so only a values/all paste can
+    // consume it; a formats-only paste stays a no-op.
+    if ((options.mode ?? "all") === "formats") {
+      return false;
+    }
+    return pasteText(text);
+  }
+
   function pasteText(text: string) {
     const worksheet = ctx.getActiveWorksheet();
     const targetCell = ctx.activeCell.value ?? ctx.selection.value?.start ?? null;
@@ -473,7 +728,9 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     ctx.setValidationFeedback(null);
     const mutations: import("./internal").RangeCellMutation[] = [];
     if (hasMergeOperations) {
-      ctx.recordHistoryBeforeMutation();
+      if (!pasteHistorySuppressed) {
+        ctx.recordHistoryBeforeMutation();
+      }
     }
     for (const cell of payload.cells) {
       const nextCell = {
@@ -584,14 +841,14 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     ctx.activeCell.value = targetCell;
     ctx.selection.value = nextRange;
     ctx.selectionAnchorRef.value = targetCell;
-    if (!hasMergeOperations) {
+    if (!hasMergeOperations && !pasteHistorySuppressed) {
       ctx.recordRangeEditHistory(mutations, nextRange, targetCell, beforeSnapshot);
     }
     return true;
   }
 
   async function copySelectionToClipboard() {
-    const clipboardData = getClipboardData();
+    const clipboardData = storeSelectionForPaste(false);
     if (!clipboardData) {
       return false;
     }
@@ -602,9 +859,33 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     );
   }
 
-  async function pasteFromClipboard() {
-    if (ctx.isEditingLocked.value || typeof navigator === "undefined" || !navigator.clipboard) {
+  function cutSelection() {
+    const clipboardData = ctx.isEditingLocked.value ? null : storeSelectionForPaste(true);
+    if (!clipboardData) {
       return false;
+    }
+    // The internal store already holds the move payload; writing the system
+    // clipboard is best-effort because not every host exposes one.
+    void writeClipboardPayload(
+      clipboardData,
+      resolveClipboardWriteTargets(INTERNAL_CLIPBOARD_MIME)
+    ).catch(() => false);
+    return true;
+  }
+
+  async function pasteFromClipboard() {
+    if (ctx.isEditingLocked.value) {
+      return false;
+    }
+    // A cut stays pending in the internal store: the next paste is the move,
+    // even when the host clipboard cannot be read back.
+    if (storedClipboard?.cutRange) {
+      return pasteSpecialStructuredData(JSON.stringify(storedClipboard.payload), { mode: "all" });
+    }
+    if (typeof navigator === "undefined" || !navigator.clipboard) {
+      return storedClipboard
+        ? pasteSpecialStructuredData(JSON.stringify(storedClipboard.payload), { mode: "all" })
+        : false;
     }
 
     if (navigator.clipboard.read) {
@@ -628,12 +909,15 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
   }
 
   return {
+    cutSelection,
     getCellDisplayValue,
     getCellFormula,
     getClipboardData,
-    pasteText,
+    pasteFromClipboard,
+    pasteSpecialFromClipboard,
+    pasteSpecialStructuredData,
     pasteStructuredClipboardData,
-    copySelectionToClipboard,
-    pasteFromClipboard
+    pasteText,
+    copySelectionToClipboard
   };
 }

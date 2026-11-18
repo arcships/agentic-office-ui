@@ -2,10 +2,11 @@ import type { Workbook } from "@dukelib/sheets-wasm";
 import type {
   XlsxBorderPresetInput,
   XlsxCellAddress,
+  XlsxCellNumberFormatInput,
   XlsxCellRange,
   XlsxCellStyleInput
 } from "@arcships/xlsx-core";
-import { loadWorkbookChartAssets } from "@arcships/xlsx-core";
+import { loadWorkbookChartAssets, resolveWorksheetMergedRegions } from "@arcships/xlsx-core";
 import { officeMessagesEn } from "@arcships/office-interaction";
 import { cellAddressToA1, normalizeRange, rangeContainsCell, rangeToA1 } from "./selection";
 import { shiftFormulaReferences } from "./formula-references";
@@ -59,6 +60,28 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     ctx.selectedChartId.value = null;
     ctx.selectedChartElement.value = null;
     ctx.selectedImageId.value = null;
+  }
+
+  let editRequestToken = 0;
+
+  /**
+   * Asks the grid to open its inline editor on a cell.
+   *
+   * The request is data, not a callback, so the grid can be mounted later (or
+   * replaced) and still pick the edit up. The token makes a second request for
+   * the same cell observable.
+   */
+  function editCell(cell?: XlsxCellAddress | null) {
+    const target = cell ?? ctx.activeCell.value;
+    if (!target || ctx.isEditingLocked.value) {
+      return false;
+    }
+    if (cell) {
+      selectCell(target);
+    }
+    editRequestToken += 1;
+    ctx.editRequestRef.value = { cell: target, token: editRequestToken };
+    return true;
   }
 
   function clearSelectedCells() {
@@ -360,6 +383,41 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
   }
 
   /**
+   * Copies the engine's merge list into the parsed sheet state, which is what
+   * the overlays and the structure commands read. The engine owns the actual
+   * geometry; the state only mirrors it.
+   */
+  function syncMergedRegions(worksheet: ReturnType<Workbook["getSheet"]>) {
+    const workbookSheetIndex = ctx.activeSheet.value?.workbookSheetIndex ?? -1;
+    const assets = ctx.imageAssetsRef.value;
+    if (workbookSheetIndex < 0 || !assets) {
+      return;
+    }
+    const state = assets.sheetStatesByWorkbookSheetIndex[workbookSheetIndex];
+    if (!state) {
+      return;
+    }
+    assets.sheetStatesByWorkbookSheetIndex[workbookSheetIndex] = {
+      ...state,
+      mergedRegions: resolveWorksheetMergedRegions(worksheet)
+    };
+  }
+
+  /**
+   * Applies one number format to the selection as a single undo step.
+   *
+   * @returns `true` when at least one cell changed.
+   */
+  function setSelectionNumberFormat(format: XlsxCellNumberFormatInput) {
+    const targetRange = ctx.selection.value
+      ?? (ctx.activeCell.value ? { start: ctx.activeCell.value, end: ctx.activeCell.value } : null);
+    if (!targetRange) {
+      return false;
+    }
+    return applyRangeStylePatch(normalizeRange(targetRange), { numberFormat: format }) > 0;
+  }
+
+  /**
    * Draws a border preset on the selection as one undo step.
    *
    * Uniform presets go through the engine's range call; `outside` needs one
@@ -499,6 +557,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
     ctx.recordHistoryBeforeMutation();
     worksheet.mergeCells(rangeToA1(ctx.selection.value));
+    syncMergedRegions(worksheet);
     ctx.refreshWorkbookState(ctx.workbook.value);
   }
 
@@ -523,6 +582,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     worksheet.setRangeStyle(rangeToA1(normalized), {
       alignment: { horizontal: "center", vertical: "center" }
     });
+    syncMergedRegions(worksheet);
     ctx.refreshWorkbookState(ctx.workbook.value);
   }
 
@@ -534,6 +594,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
     ctx.recordHistoryBeforeMutation();
     worksheet.unmergeCells(rangeToA1(ctx.selection.value));
+    syncMergedRegions(worksheet);
     ctx.refreshWorkbookState(ctx.workbook.value);
   }
 
@@ -648,6 +709,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     selectCell,
     selectRange,
     clearSelection,
+    editCell,
     clearSelectedCells,
     setCellValue,
     setCellFormula,
@@ -658,6 +720,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     setSelectedFormula,
     setSelectedCellStyle,
     setRangeStyle,
+    setSelectionNumberFormat,
     setSelectionBorders,
     fillSelection,
     mergeSelection,

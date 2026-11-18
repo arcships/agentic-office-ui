@@ -2,6 +2,7 @@ import type { ComputedRef, Ref, ShallowRef } from "vue";
 import type { Workbook } from "@dukelib/sheets-wasm";
 import type {
   XlsxCellAddress,
+  XlsxCellEditRequest,
   XlsxCellNumberFormatInput,
   XlsxCellRange,
   XlsxChart,
@@ -11,6 +12,7 @@ import type {
   XlsxDataValidationFeedback,
   XlsxFormControl,
   XlsxImage,
+  XlsxNamedRange,
   XlsxShape,
   XlsxSheetData,
   XlsxTable,
@@ -454,6 +456,12 @@ export interface XlsxControllerContext {
   isWorkerBacked: Ref<boolean>;
   sortState: Ref<XlsxTableSortState | null>;
   forcedReadOnly: Ref<boolean>;
+  /** Inline-edit request watched by the grid; `token` retriggers the same cell. */
+  editRequestRef: Ref<XlsxCellEditRequest | null>;
+  /** Name Manager edits layered over the engine's defined names. */
+  definedNameOverridesRef: Ref<Record<string, XlsxNamedRange>>;
+  /** Names the Name Manager deleted; the engine cannot remove a defined name. */
+  removedDefinedNamesRef: Ref<string[]>;
   dataValidationFeedback: Ref<XlsxDataValidationFeedback | null>;
   lastExportWarning: Ref<string | null>;
   deferredBufferRef: ShallowRef<ArrayBuffer | null>;

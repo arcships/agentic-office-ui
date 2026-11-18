@@ -54,6 +54,9 @@ export type {
   XlsxChartInsertInput,
   XlsxTableCreateInput,
   XlsxDataValidationInput,
+  XlsxNamedRange,
+  XlsxPasteSpecialOptions,
+  XlsxCellEditRequest,
   XlsxViewerAuthoring,
   // Workbook tab
   XlsxWorkbookTab,

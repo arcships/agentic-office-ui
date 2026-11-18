@@ -151,6 +151,42 @@ export function resolveWorksheetHiddenCols(worksheet: DukeWorksheet, maxCol: num
 
 // ── Merge metadata ─────────────────────────────────────────────────────────
 
+/** Exact merged regions reported by the engine, normalized to zero-based ranges. */
+export function resolveWorksheetMergedRegions(worksheet: DukeWorksheet): XlsxCellRange[] {
+  const mergedRegions = Array.isArray(worksheet.mergedRegions) ? worksheet.mergedRegions : [];
+  return mergedRegions.flatMap((rawRegion) => {
+    if (typeof rawRegion === "string") {
+      const range = parseA1RangeReference(rawRegion);
+      return range ? [range] : [];
+    }
+    if (!rawRegion || typeof rawRegion !== "object") {
+      return [];
+    }
+    const region = rawRegion as Record<string, unknown>;
+    const startRow = typeof region.startRow === "number" ? region.startRow : Number.NaN;
+    const startCol = typeof region.startCol === "number" ? region.startCol : Number.NaN;
+    const endRow = typeof region.endRow === "number" ? region.endRow : Number.NaN;
+    const endCol = typeof region.endCol === "number" ? region.endCol : Number.NaN;
+    if ([startRow, startCol, endRow, endCol].every((value) => Number.isFinite(value) && value >= 0)) {
+      return [{
+        end: {
+          col: Math.max(startCol, endCol),
+          row: Math.max(startRow, endRow)
+        },
+        start: {
+          col: Math.min(startCol, endCol),
+          row: Math.min(startRow, endRow)
+        }
+      }];
+    }
+    if (typeof region.range === "string") {
+      const range = parseA1RangeReference(region.range);
+      return range ? [range] : [];
+    }
+    return [];
+  });
+}
+
 export function resolveWorksheetMergeMetadata(worksheet: DukeWorksheet) {
   const mergeMetadata = {
     hasHorizontalMerges: false,
@@ -158,38 +194,8 @@ export function resolveWorksheetMergeMetadata(worksheet: DukeWorksheet) {
     maxHorizontalMergeEndCol: -1,
     maxVerticalMergeEndRow: -1
   };
-  const mergedRegions = Array.isArray(worksheet.mergedRegions) ? worksheet.mergedRegions : [];
 
-  for (const rawRegion of mergedRegions) {
-    let range: XlsxCellRange | null = null;
-    if (typeof rawRegion === "string") {
-      range = parseA1RangeReference(rawRegion);
-    } else if (rawRegion && typeof rawRegion === "object") {
-      const region = rawRegion as Record<string, unknown>;
-      const startRow = typeof region.startRow === "number" ? region.startRow : Number.NaN;
-      const startCol = typeof region.startCol === "number" ? region.startCol : Number.NaN;
-      const endRow = typeof region.endRow === "number" ? region.endRow : Number.NaN;
-      const endCol = typeof region.endCol === "number" ? region.endCol : Number.NaN;
-      if ([startRow, startCol, endRow, endCol].every((value) => Number.isFinite(value) && value >= 0)) {
-        range = {
-          end: {
-            col: Math.max(startCol, endCol),
-            row: Math.max(startRow, endRow)
-          },
-          start: {
-            col: Math.min(startCol, endCol),
-            row: Math.min(startRow, endRow)
-          }
-        };
-      } else if (typeof region.range === "string") {
-        range = parseA1RangeReference(region.range);
-      }
-    }
-
-    if (!range) {
-      continue;
-    }
-
+  for (const range of resolveWorksheetMergedRegions(worksheet)) {
     if (range.end.col > range.start.col) {
       mergeMetadata.hasHorizontalMerges = true;
       mergeMetadata.maxHorizontalMergeEndCol = Math.max(mergeMetadata.maxHorizontalMergeEndCol, range.end.col);

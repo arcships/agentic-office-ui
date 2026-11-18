@@ -71,6 +71,37 @@
           class="xlsx-grid__body"
           :style="bodyCanvasStyle"
         />
+        <button
+          v-if="columnMenuTriggerStyle && !editingLocked"
+          class="xlsx-grid__axis-menu-trigger"
+          data-testid="xlsx-column-menu"
+          type="button"
+          tabindex="-1"
+          :style="columnMenuTriggerStyle"
+          :aria-label="m.xlsx.contextMenu.selectColumn"
+          @pointerdown.stop.prevent="openHeaderMenu('column', $event)"
+          @dblclick.stop.prevent
+        >▾</button>
+        <button
+          v-if="rowMenuTriggerStyle && !editingLocked"
+          class="xlsx-grid__axis-menu-trigger"
+          data-testid="xlsx-row-menu"
+          type="button"
+          tabindex="-1"
+          :style="rowMenuTriggerStyle"
+          :aria-label="m.xlsx.contextMenu.selectRow"
+          @pointerdown.stop.prevent="openHeaderMenu('row', $event)"
+          @dblclick.stop.prevent
+        >▾</button>
+        <XlsxHeaderMenu
+          v-if="headerMenu"
+          :controller="controller"
+          :kind="headerMenu.kind"
+          :index="headerMenu.index"
+          :x="headerMenu.x"
+          :y="headerMenu.y"
+          @close="headerMenu = null"
+        />
         <!-- Editing input (hidden unless editing) -->
         <input
           v-if="editingCell"
@@ -217,6 +248,7 @@ import { isDataValidationListDropdownVisible, localizeDataValidationFeedback } f
 import { localizeFormattedNumber, parseDisplayedNumber } from "../composables/cell-input";
 import { formatOfficeMessage } from "@arcships/office-interaction";
 import { useXlsxMessages } from "../i18n";
+import XlsxHeaderMenu from "./XlsxHeaderMenu.vue";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -267,6 +299,17 @@ const editingValue = ref("");
 const isEditComposing = ref(false);
 let commitEditOnCompositionEnd = false;
 const hoveredCell = ref<XlsxCellAddress | null>(null);
+const hoveredAxis = ref<{
+  actualIndex: number;
+  displayIndex: number;
+  kind: "column" | "row";
+} | null>(null);
+const headerMenu = ref<{
+  index: number;
+  kind: "column" | "row";
+  x: number;
+  y: number;
+} | null>(null);
 const validationDropdownOpen = ref(false);
 const resizePreview = ref<{
   actualIndex: number;
@@ -765,6 +808,50 @@ function paneOverlayRect(
     scrollLeft: scrollLeft.value,
     scrollTop: scrollTop.value,
   });
+}
+
+const columnMenuTriggerStyle = computed<CSSProperties | null>(() => {
+  const axis = hoveredAxis.value;
+  if (!axis || axis.kind !== "column") return null;
+  const anchor = paneOverlayRect(
+    { col: axis.actualIndex, row: 0 },
+    { contentX: getColOffsetSum(axis.displayIndex + 1), contentY: 0, height: 0, width: 0 },
+  );
+  if (!anchor) return null;
+  return {
+    left: `${ROW_HEADER_WIDTH + anchor.left - 16}px`,
+    top: "3px",
+  };
+});
+
+const rowMenuTriggerStyle = computed<CSSProperties | null>(() => {
+  const axis = hoveredAxis.value;
+  if (!axis || axis.kind !== "row") return null;
+  const rowHeight = effectiveRowHeights.value[axis.displayIndex] || DEFAULT_ROW_HEIGHT;
+  const anchor = paneOverlayRect(
+    { col: 0, row: axis.actualIndex },
+    { contentX: 0, contentY: getRowOffsetSum(axis.displayIndex) + rowHeight / 2, height: 0, width: 0 },
+  );
+  if (!anchor) return null;
+  return {
+    left: "3px",
+    top: `${HEADER_HEIGHT + anchor.top - 7}px`,
+  };
+});
+
+function openHeaderMenu(kind: "column" | "row", event: PointerEvent) {
+  const axis = hoveredAxis.value;
+  if (!axis || axis.kind !== kind) return;
+  const target = event.currentTarget as HTMLElement | null;
+  const rect = typeof target?.getBoundingClientRect === "function"
+    ? target.getBoundingClientRect()
+    : { bottom: 0, left: 0 };
+  headerMenu.value = {
+    index: axis.actualIndex,
+    kind,
+    x: rect.left,
+    y: rect.bottom + 2,
+  };
 }
 
 function captureZoomAnchor(clientX: number, clientY: number): XlsxZoomAnchor | null {
@@ -2340,6 +2427,13 @@ function onPointerMove(event: PointerEvent) {
   }
   const axisHit = hitTestAxis(event.clientX, event.clientY);
   hoveredCell.value = axisHit ? null : hitTestCell(event.clientX, event.clientY);
+  hoveredAxis.value = axisHit && !axisHit.resize && axisHit.kind !== "corner"
+    ? {
+        actualIndex: axisHit.actualIndex,
+        displayIndex: axisHit.displayIndex,
+        kind: axisHit.kind,
+      }
+    : null;
   if (containerRef.value) {
     containerRef.value.style.cursor = axisHit?.resize
       ? axisHit.kind === "column" ? "col-resize" : "row-resize"
@@ -2386,6 +2480,7 @@ function onPointerUp(event?: PointerEvent) {
 
 function onPointerLeave(): void {
   hoveredCell.value = null;
+  hoveredAxis.value = null;
   if (!resizePreview.value && !isSelecting.value && containerRef.value) {
     containerRef.value.style.cursor = "cell";
   }
@@ -2562,6 +2657,17 @@ function startEdit(cell: XlsxCellAddress) {
   scrollToCell(cell);
   nextTick(() => editInputRef.value?.focus());
 }
+
+// The context menu, ribbon and hosts can request an inline edit without
+// reaching into the grid; the request arrives as data and is consumed here.
+watch(
+  () => props.controller.editRequest,
+  (request) => {
+    if (!request || editingLocked.value) return;
+    props.controller.selectCell(request.cell);
+    startEdit(request.cell);
+  },
+);
 
 function scrollToCell(cell: XlsxCellAddress) {
   const container = containerRef.value;
@@ -2803,6 +2909,23 @@ onUnmounted(() => {
 .xlsx-grid__validation-dropdown { background: #ffffff; border: 1px solid #94a3b8; border-radius: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.18); display: flex; flex-direction: column; max-height: 220px; overflow-y: auto; padding: 3px; pointer-events: auto; position: absolute; z-index: 32; }
 .xlsx-grid__validation-option { background: transparent; border: 0; border-radius: 3px; color: #18181b; cursor: pointer; font: inherit; font-size: 12px; padding: 5px 8px; text-align: left; }
 .xlsx-grid__validation-option:hover { background: #dbeafe; }
+.xlsx-grid__axis-menu-trigger {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #71717a;
+  cursor: pointer;
+  display: flex;
+  font-size: 10px;
+  height: 16px;
+  justify-content: center;
+  padding: 0;
+  pointer-events: auto;
+  position: absolute;
+  width: 14px;
+  z-index: 20;
+}
+.xlsx-grid__axis-menu-trigger:hover { background: rgba(113, 113, 122, .2); border-radius: 3px; color: #18181b; }
 .xlsx-grid__validation-alert { align-items: flex-start; border: 1px solid #f87171; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.18); color: #7f1d1d; display: flex; flex-direction: column; gap: 3px; max-width: 300px; min-width: 170px; padding: 7px 24px 7px 10px; pointer-events: auto; position: absolute; white-space: pre-wrap; z-index: 34; }
 .xlsx-grid__validation-alert strong { font-size: 11px; }
 .xlsx-grid__validation-alert span { font-size: 12px; line-height: 1.45; }

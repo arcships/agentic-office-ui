@@ -11,6 +11,22 @@
       </div>
       <span class="xlsx-ribbon__separator" />
       <div class="xlsx-ribbon__group">
+        <button data-testid="xlsx-ribbon-cut" class="xlsx-ribbon__action-button" :disabled="!hasSelection" :title="m.xlsx.ribbon.cut" @click="cutSelection">{{ m.xlsx.ribbon.cut }}</button>
+        <button data-testid="xlsx-ribbon-copy" class="xlsx-ribbon__action-button" :disabled="!hasSelection" :title="m.xlsx.ribbon.copy" @click="copySelection">{{ m.xlsx.ribbon.copy }}</button>
+        <button data-testid="xlsx-ribbon-paste" class="xlsx-ribbon__action-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.paste" @click="controller.pasteFromClipboard()">{{ m.xlsx.ribbon.paste }}</button>
+        <button data-testid="xlsx-ribbon-paste-special" class="xlsx-ribbon__action-button" :disabled="!hasSelection" :title="m.xlsx.ribbon.pasteSpecial" @click="emit('authoring', 'pasteSpecial')">{{ m.xlsx.ribbon.pasteSpecial }}</button>
+      </div>
+      <span class="xlsx-ribbon__separator" />
+      <div class="xlsx-ribbon__group">
+        <button data-testid="xlsx-ribbon-insert-row-above" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.insertRowAbove" :aria-label="m.xlsx.ribbon.insertRowAbove" @click="insertRow('above')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M12 8v8M8 12h8" /></svg></button>
+        <button data-testid="xlsx-ribbon-insert-row-below" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.insertRowBelow" :aria-label="m.xlsx.ribbon.insertRowBelow" @click="insertRow('below')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M12 6v8M8 10h8" /></svg></button>
+        <button data-testid="xlsx-ribbon-delete-row" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.deleteRow" :aria-label="m.xlsx.ribbon.deleteRow" @click="deleteRow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16M4 20h16M8 12h8" /></svg></button>
+        <button data-testid="xlsx-ribbon-insert-column-left" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.insertColumnLeft" :aria-label="m.xlsx.ribbon.insertColumnLeft" @click="insertColumn('left')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8M12 8v8" /></svg></button>
+        <button data-testid="xlsx-ribbon-insert-column-right" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.insertColumnRight" :aria-label="m.xlsx.ribbon.insertColumnRight" @click="insertColumn('right')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8M12 8v8" /></svg></button>
+        <button data-testid="xlsx-ribbon-delete-column" class="xlsx-ribbon__icon-button" :disabled="!hasActiveCell" :title="m.xlsx.ribbon.deleteColumn" :aria-label="m.xlsx.ribbon.deleteColumn" @click="deleteColumn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16M20 4v16M8 12h8" /></svg></button>
+      </div>
+      <span class="xlsx-ribbon__separator" />
+      <div class="xlsx-ribbon__group">
         <select :value="fontFamilyValue" :aria-label="m.xlsx.ribbon.fontFamily" :title="m.xlsx.ribbon.fontFamily" @change="setFontFamily">
           <option value="Calibri">Calibri</option>
           <option value="Aptos">Aptos</option>
@@ -58,6 +74,7 @@
         </select>
         <button class="xlsx-ribbon__text-button" :title="m.xlsx.ribbon.currency" :aria-label="m.xlsx.ribbon.currency" @click="applyStyle(numberFormats.currency)">$</button>
         <button class="xlsx-ribbon__text-button" :title="m.xlsx.ribbon.percent" :aria-label="m.xlsx.ribbon.percent" @click="applyStyle(numberFormats.percent)">%</button>
+        <button data-testid="xlsx-ribbon-number-format" class="xlsx-ribbon__action-button" :title="m.xlsx.ribbon.numberFormatDialog" @click="emit('authoring', 'numberFormat')">{{ m.xlsx.ribbon.numberFormatDialog }}</button>
       </div>
       <span class="xlsx-ribbon__separator" />
       <div class="xlsx-ribbon__group">
@@ -82,6 +99,7 @@
         <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-conditional" :title="m.xlsx.authoring.conditional.title" :aria-label="m.xlsx.authoring.conditional.title" :disabled="!hasSelection" @click="emit('authoring', 'conditional')"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" /><rect x="13" y="4" width="7" height="7" /><rect x="4" y="13" width="7" height="7" /><rect x="13" y="13" width="7" height="7" /></svg></button>
         <button class="xlsx-ribbon__icon-button" data-testid="xlsx-ribbon-validation" :title="m.xlsx.authoring.validation.title" :aria-label="m.xlsx.authoring.validation.title" :disabled="!hasSelection" @click="emit('authoring', 'validation')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10" /></svg></button>
         <button class="xlsx-ribbon__icon-button" :class="{ active: isFrozen }" data-testid="xlsx-ribbon-freeze" :aria-pressed="isFrozen" :title="isFrozen ? m.xlsx.authoring.freeze.unfreeze : m.xlsx.authoring.freeze.freezeHere" :aria-label="isFrozen ? m.xlsx.authoring.freeze.unfreeze : m.xlsx.authoring.freeze.freezeHere" :disabled="!hasActiveCell" @click="toggleFreeze"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M6 6l12 12M18 6 6 18M4 12h16" /></svg></button>
+        <button class="xlsx-ribbon__action-button" data-testid="xlsx-ribbon-names" :title="m.xlsx.ribbon.nameManager" @click="emit('authoring', 'names')">{{ m.xlsx.ribbon.nameManager }}</button>
       </div>
     </fieldset>
 
@@ -298,6 +316,36 @@ function applyBorderColor(): void {
 function mergeAndCenter(): void {
   if (isReadOnly.value) return;
   props.controller.mergeAndCenterSelection?.();
+}
+
+function copySelection(): void {
+  if (isReadOnly.value) return;
+  void props.controller.copySelectionToClipboard?.();
+}
+
+function cutSelection(): void {
+  if (isReadOnly.value) return;
+  props.controller.cutSelection?.();
+}
+
+function insertRow(position: "above" | "below"): void {
+  if (isReadOnly.value || !props.controller.activeCell) return;
+  props.controller.insertRows?.(props.controller.activeCell.row + (position === "below" ? 1 : 0));
+}
+
+function deleteRow(): void {
+  if (isReadOnly.value || !props.controller.activeCell) return;
+  props.controller.deleteRows?.(props.controller.activeCell.row);
+}
+
+function insertColumn(position: "left" | "right"): void {
+  if (isReadOnly.value || !props.controller.activeCell) return;
+  props.controller.insertColumns?.(props.controller.activeCell.col + (position === "right" ? 1 : 0));
+}
+
+function deleteColumn(): void {
+  if (isReadOnly.value || !props.controller.activeCell) return;
+  props.controller.deleteColumns?.(props.controller.activeCell.col);
 }
 </script>
 

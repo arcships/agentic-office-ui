@@ -503,6 +503,18 @@ export interface OfficeXlsxMessages {
   ribbon: {
     undo: string
     redo: string
+    cut: string
+    copy: string
+    paste: string
+    pasteSpecial: string
+    insertRowAbove: string
+    insertRowBelow: string
+    deleteRow: string
+    insertColumnLeft: string
+    insertColumnRight: string
+    deleteColumn: string
+    numberFormatDialog: string
+    nameManager: string
     fontFamily: string
     fontSize: string
     bold: string
@@ -553,13 +565,34 @@ export interface OfficeXlsxMessages {
   contextMenu: {
     label: string
     copy: string
+    cut: string
     paste: string
+    pasteSpecial: string
+    pasteAll: string
+    pasteValues: string
+    pasteFormats: string
+    pasteTranspose: string
+    editCell: string
     clear: string
+    clearContents: string
     sortAscending: string
     sortDescending: string
     undo: string
     redo: string
     changeChartType: string
+    insertRowAbove: string
+    insertRowBelow: string
+    deleteRow: string
+    insertColumnLeft: string
+    insertColumnRight: string
+    deleteColumn: string
+    mergeAndCenter: string
+    mergeAcross: string
+    mergeCells: string
+    unmerge: string
+    selectRow: string
+    selectColumn: string
+    selectAll: string
   }
   formulaBar: {
     activeCell: string
@@ -691,6 +724,43 @@ export interface OfficeXlsxMessages {
     freeze: {
       freezeHere: string
       unfreeze: string
+    }
+    pasteSpecial: {
+      title: string
+      mode: string
+      modeAll: string
+      modeValues: string
+      modeFormats: string
+      transpose: string
+      paste: string
+      empty: string
+    }
+    numberFormat: {
+      title: string
+      category: string
+      number: string
+      currency: string
+      percent: string
+      date: string
+      text: string
+      custom: string
+      decimals: string
+      thousands: string
+      pattern: string
+      preview: string
+      apply: string
+    }
+    names: {
+      title: string
+      name: string
+      namePlaceholder: string
+      refersTo: string
+      refersToPlaceholder: string
+      add: string
+      update: string
+      delete: string
+      useSelection: string
+      empty: string
     }
     context: {
       insertComment: string
@@ -1423,6 +1493,18 @@ export const officeMessagesEn: OfficeMessages = {
     ribbon: {
       undo: "Undo",
       redo: "Redo",
+      cut: "Cut",
+      copy: "Copy",
+      paste: "Paste",
+      pasteSpecial: "Paste special",
+      insertRowAbove: "Insert row above",
+      insertRowBelow: "Insert row below",
+      deleteRow: "Delete row",
+      insertColumnLeft: "Insert column left",
+      insertColumnRight: "Insert column right",
+      deleteColumn: "Delete column",
+      numberFormatDialog: "Number format…",
+      nameManager: "Name manager",
       fontFamily: "Font family",
       fontSize: "Font size",
       bold: "Bold",
@@ -1473,13 +1555,34 @@ export const officeMessagesEn: OfficeMessages = {
     contextMenu: {
       label: "Cell menu",
       copy: "Copy",
+      cut: "Cut",
       paste: "Paste",
+      pasteSpecial: "Paste special",
+      pasteAll: "Paste all",
+      pasteValues: "Values only",
+      pasteFormats: "Formats only",
+      pasteTranspose: "Transpose",
+      editCell: "Edit cell",
       clear: "Clear contents",
+      clearContents: "Clear contents",
       sortAscending: "Sort ascending",
       sortDescending: "Sort descending",
       undo: "Undo",
       redo: "Redo",
       changeChartType: "Change Chart Type",
+      insertRowAbove: "Insert row above",
+      insertRowBelow: "Insert row below",
+      deleteRow: "Delete row",
+      insertColumnLeft: "Insert column left",
+      insertColumnRight: "Insert column right",
+      deleteColumn: "Delete column",
+      mergeAndCenter: "Merge & center",
+      mergeAcross: "Merge across",
+      mergeCells: "Merge cells",
+      unmerge: "Unmerge cells",
+      selectRow: "Select row",
+      selectColumn: "Select column",
+      selectAll: "Select all",
     },
     formulaBar: {
       activeCell: "Active cell",
@@ -1601,6 +1704,43 @@ export const officeMessagesEn: OfficeMessages = {
       freeze: {
         freezeHere: "Freeze panes here",
         unfreeze: "Unfreeze panes",
+      },
+      pasteSpecial: {
+        title: "Paste special",
+        mode: "Paste",
+        modeAll: "All",
+        modeValues: "Values only",
+        modeFormats: "Formats only",
+        transpose: "Transpose",
+        paste: "Paste",
+        empty: "Copy or cut a range first, then choose the paste options.",
+      },
+      numberFormat: {
+        title: "Format cells",
+        category: "Category",
+        number: "Number",
+        currency: "Currency",
+        percent: "Percentage",
+        date: "Date",
+        text: "Text",
+        custom: "Custom",
+        decimals: "Decimal places",
+        thousands: "Use thousands separator",
+        pattern: "Format code",
+        preview: "Preview",
+        apply: "Apply",
+      },
+      names: {
+        title: "Name manager",
+        name: "Name",
+        namePlaceholder: "QuarterlyRevenue",
+        refersTo: "Refers to",
+        refersToPlaceholder: "Sheet1!$A$1:$C$3",
+        add: "Add",
+        update: "Update",
+        delete: "Delete",
+        useSelection: "Use selection",
+        empty: "No defined names yet.",
       },
       context: {
         insertComment: "Insert comment",
@@ -2289,6 +2429,18 @@ export const officeMessagesZhCN: OfficeMessages = {
     ribbon: {
       undo: "撤销",
       redo: "重做",
+      cut: "剪切",
+      copy: "复制",
+      paste: "粘贴",
+      pasteSpecial: "选择性粘贴",
+      insertRowAbove: "在上方插入行",
+      insertRowBelow: "在下方插入行",
+      deleteRow: "删除行",
+      insertColumnLeft: "在左侧插入列",
+      insertColumnRight: "在右侧插入列",
+      deleteColumn: "删除列",
+      numberFormatDialog: "数字格式…",
+      nameManager: "名称管理器",
       fontFamily: "字体",
       fontSize: "字号",
       bold: "加粗",
@@ -2339,13 +2491,34 @@ export const officeMessagesZhCN: OfficeMessages = {
     contextMenu: {
       label: "单元格菜单",
       copy: "复制",
+      cut: "剪切",
       paste: "粘贴",
+      pasteSpecial: "选择性粘贴",
+      pasteAll: "全部",
+      pasteValues: "仅值",
+      pasteFormats: "仅格式",
+      pasteTranspose: "转置",
+      editCell: "编辑单元格",
       clear: "清除内容",
+      clearContents: "清除内容",
       sortAscending: "按此列升序",
       sortDescending: "按此列降序",
       undo: "撤销",
       redo: "重做",
       changeChartType: "更改图表类型",
+      insertRowAbove: "在上方插入行",
+      insertRowBelow: "在下方插入行",
+      deleteRow: "删除行",
+      insertColumnLeft: "在左侧插入列",
+      insertColumnRight: "在右侧插入列",
+      deleteColumn: "删除列",
+      mergeAndCenter: "合并并居中",
+      mergeAcross: "跨列合并",
+      mergeCells: "合并单元格",
+      unmerge: "取消合并",
+      selectRow: "选择整行",
+      selectColumn: "选择整列",
+      selectAll: "全选",
     },
     formulaBar: {
       activeCell: "活动单元格",
@@ -2467,6 +2640,43 @@ export const officeMessagesZhCN: OfficeMessages = {
       freeze: {
         freezeHere: "在此冻结窗格",
         unfreeze: "取消冻结窗格",
+      },
+      pasteSpecial: {
+        title: "选择性粘贴",
+        mode: "粘贴",
+        modeAll: "全部",
+        modeValues: "仅值",
+        modeFormats: "仅格式",
+        transpose: "转置",
+        paste: "粘贴",
+        empty: "请先复制或剪切一个区域，再选择粘贴方式。",
+      },
+      numberFormat: {
+        title: "设置单元格格式",
+        category: "分类",
+        number: "数值",
+        currency: "货币",
+        percent: "百分比",
+        date: "日期",
+        text: "文本",
+        custom: "自定义",
+        decimals: "小数位数",
+        thousands: "使用千位分隔符",
+        pattern: "格式代码",
+        preview: "预览",
+        apply: "应用",
+      },
+      names: {
+        title: "名称管理器",
+        name: "名称",
+        namePlaceholder: "季度收入",
+        refersTo: "引用位置",
+        refersToPlaceholder: "Sheet1!$A$1:$C$3",
+        add: "添加",
+        update: "更新",
+        delete: "删除",
+        useSelection: "使用当前选区",
+        empty: "尚未定义名称。",
       },
       context: {
         insertComment: "插入批注",
