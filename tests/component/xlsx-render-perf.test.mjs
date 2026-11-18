@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
 
 import ts from "../../packages/xlsx-core/node_modules/typescript/lib/typescript.js";
 
@@ -10,6 +12,14 @@ import ts from "../../packages/xlsx-core/node_modules/typescript/lib/typescript.
 // per sheet before the first hover.
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
+const requireFromXlsxCore = createRequire(
+  new URL("../../packages/xlsx-core/package.json", import.meta.url),
+);
+// The thumbnail composable imports two pure helpers from the package root; the
+// harness resolves them to the real build instead of stubbing them.
+const XLSX_CORE_URL = pathToFileURL(
+  requireFromXlsxCore.resolve("@arcships/xlsx-core"),
+).href;
 const GRID_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/XlsxGrid.vue");
 const GRID_PAINT_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/grid-paint.ts");
 const STATS_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/conditional-format-stats.ts");
@@ -18,6 +28,10 @@ const THUMBNAILS_PATH = path.join(
   "packages/vue-xlsx/src/composables/useXlsxViewerThumbnails.ts",
 );
 const SHEET_TABS_PATH = path.join(ROOT, "packages/vue-xlsx/src/components/XlsxSheetTabs.vue");
+const RICH_TEXT_LAYOUT_PATH = path.join(
+  ROOT,
+  "packages/vue-xlsx/src/components/rich-text-layout.ts",
+);
 
 const THUMBNAIL_MAX_ROWS = 60;
 const THUMBNAIL_MAX_COLS = 26;
@@ -67,6 +81,14 @@ async function loadThumbnailsModule() {
     .replace(
       /import \{ cellAddressToA1 \} from "\.\/selection";/u,
       `const cellAddressToA1 = ({ row, col }) => { let label = ""; let n = col; while (n >= 0) { label = String.fromCharCode((n % 26) + 65) + label; n = Math.floor(n / 26) - 1; } return label + String(row + 1); };`,
+    )
+    .replace(
+      /from "@arcships\/xlsx-core";/u,
+      `from "${XLSX_CORE_URL}";`,
+    )
+    .replace(
+      /from "\.\.\/components\/rich-text-layout";/u,
+      `from "${moduleUrl(transpile(readFileSync(RICH_TEXT_LAYOUT_PATH, "utf8")))}";`,
     );
   return import(moduleUrl(code));
 }

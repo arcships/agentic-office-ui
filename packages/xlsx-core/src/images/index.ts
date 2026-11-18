@@ -141,6 +141,16 @@ export {
   normalizeWorkbookTableMetadata,
 } from "./grid-render";
 
+// Rich text runs
+export {
+  SHARED_STRINGS_PART,
+  parseInlineRichTextCell,
+  parseRichTextRuns,
+  parseSharedStringRichText,
+  resolveRichTextRuns,
+  richTextRunsToPlainText,
+} from "./rich-text";
+
 // Image export / merge
 export {
   revokeWorkbookImageAssets,

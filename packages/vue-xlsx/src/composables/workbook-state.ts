@@ -23,6 +23,7 @@ import {
   trackXlsxWorkbookLifetime,
   type SafeCalculateSkipReason,
   type XlsxCellRange,
+  type XlsxCellTextRun,
   type XlsxCellHyperlink,
   type XlsxCellComment,
   type XlsxConditionalFormatRule,
@@ -177,6 +178,16 @@ export function resolveSheetDisplayUsedRange(
   ];
 }
 
+/**
+ * Runs of a sheet, or `undefined` when no cell is rich.
+ *
+ * Painters ask for the runs of every visible cell, so a plain sheet must not
+ * even allocate an A1 key: `undefined` short-circuits that lookup.
+ */
+function hasRichTextCells(runs: Record<string, XlsxCellTextRun[]> | undefined) {
+  return runs && Object.keys(runs).length > 0 ? runs : undefined;
+}
+
 export function buildSheetList(
   workbook: Workbook,
   sheetStatesByWorkbookSheetIndex?: Array<{
@@ -202,6 +213,7 @@ export function buildSheetList(
     minContentRow?: number;
     hiddenCols?: number[];
     hiddenRows?: number[];
+    richTextCells?: Record<string, XlsxCellTextRun[]>;
     rowHeightOverridesPx?: Record<number, number>;
     rowStyleIds?: Record<number, number>;
     showGridLines: boolean;
@@ -246,6 +258,7 @@ export function buildSheetList(
         sheets.push({
           cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
           columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
+          richTextCells: hasRichTextCells(sheetState?.richTextCells),
           colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
           colStyleIds: sheetState?.colStyleIds ?? {},
           conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
@@ -322,6 +335,7 @@ export function buildSheetList(
       sheets.push({
         cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
         columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
+        richTextCells: hasRichTextCells(sheetState?.richTextCells),
         colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
         colStyleIds: sheetState?.colStyleIds ?? {},
         conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],

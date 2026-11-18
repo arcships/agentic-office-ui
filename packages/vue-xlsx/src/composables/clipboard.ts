@@ -5,11 +5,12 @@ import type { Workbook } from "@dukelib/sheets-wasm";
 import type {
   XlsxCellAddress,
   XlsxCellRange,
+  XlsxCellTextRun,
   XlsxClipboardCutState,
   XlsxClipboardData,
   XlsxPasteSpecialOptions
 } from "@arcships/xlsx-core";
-import { resolveWorkbookColor, resolveWorkbookFillStyle } from "@arcships/xlsx-core";
+import { resolveRichTextRuns, resolveWorkbookColor, resolveWorkbookFillStyle } from "@arcships/xlsx-core";
 import { cellAddressToA1, normalizeRange, rangeContainsCell, rangeToA1 } from "./selection";
 import { isWithinSheetBounds, SHEET_MAX_COLUMNS, SHEET_MAX_ROWS, shiftFormulaReferences } from "./formula-references";
 import { decodeHtmlEntities, escapeHtml, mapBorder, resolveEffectiveCellNumberFormat, resolveInheritedCellStyle } from "./formatting";
@@ -203,6 +204,43 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     } finally {
       calculated.free();
     }
+  }
+
+  /**
+   * Rich-text runs of a cell, or `undefined` when it has none or they no longer
+   * describe the value that is on screen.
+   */
+  function getCellRuns(cell?: XlsxCellAddress | null): XlsxCellTextRun[] | undefined {
+    if (!cell) {
+      return undefined;
+    }
+
+    const sheet = ctx.activeSheet.value;
+    if (!sheet) {
+      return undefined;
+    }
+
+    const runs = sheet.richTextCells?.[cellAddressToA1(cell)];
+    if (!runs || runs.length < 2) {
+      // Painting asks for every visible cell; only rich cells pay for the
+      // display-value comparison that drops stale runs.
+      return undefined;
+    }
+
+    if (ctx.isWorkerBacked.value) {
+      // Large workbooks load read-only in a Worker, so the sheet state parsed
+      // from those bytes still describes the screen. A hydrated snapshot also
+      // carries the displayed text and its own runs, which win when present.
+      const snapshot = ctx.workerCellSnapshotCacheRef.value.get(
+        `${sheet.workbookSheetIndex}:${cell.row}:${cell.col}`,
+      );
+      if (snapshot) {
+        return resolveRichTextRuns(snapshot.runs ?? runs, snapshot.displayValue);
+      }
+      return runs;
+    }
+
+    return resolveRichTextRuns(runs, getCellDisplayValue(cell));
   }
 
   function getCellFormula(cell?: XlsxCellAddress | null) {
@@ -958,6 +996,7 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     cutState,
     getCellDisplayValue,
     getCellFormula,
+    getCellRuns,
     getClipboardData,
     pasteFromClipboard,
     pasteSpecialFromClipboard,

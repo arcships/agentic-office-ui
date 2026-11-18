@@ -16,6 +16,7 @@ import {
   resolveWorksheetDefaultColumnWidthPixels,
   resolveWorksheetDefaultRowHeightPixels,
   resolveWorksheetMergeMetadata,
+  resolveRichTextRuns,
   revokeWorkbookImageAssets
 } from "./images";
 import type { WorkbookStructureAssets } from "./images";
@@ -30,6 +31,7 @@ import type {
   XlsxCellAddress,
   XlsxCellNumberFormatInput,
   XlsxCellRange,
+  XlsxCellTextRun,
   XlsxDataValidation,
   XlsxFreezePanes,
   XlsxFormControl,
@@ -161,6 +163,7 @@ type WorkerSuccessResponse = {
         displayValue: string;
         formula: string;
         numberFormat?: XlsxCellNumberFormatInput | null;
+        runs?: XlsxCellTextRun[];
       }
     | unknown[]
     | null;
@@ -496,6 +499,14 @@ function resolveSheetDisplayUsedRange(
   ];
 }
 
+/**
+ * Runs of a sheet, or `undefined` when no cell is rich, so painters do not
+ * build an A1 key for every visible cell of a plain sheet.
+ */
+function hasRichTextCells(runs: Record<string, XlsxCellTextRun[]> | undefined) {
+  return runs && Object.keys(runs).length > 0 ? runs : undefined;
+}
+
 function buildSheetList(
   nextWorkbook: Workbook,
   structureAssets?: WorkbookStructureAssets | null,
@@ -551,6 +562,7 @@ function buildSheetList(
         cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
         columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
         colCount: 0,
+        richTextCells: hasRichTextCells(sheetState?.richTextCells),
         colStyleIds: sheetState?.colStyleIds ?? {},
         colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
         colWidths: [],
@@ -619,6 +631,7 @@ function buildSheetList(
       cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
       columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
       colCount: visibleCols.length,
+      richTextCells: hasRichTextCells(sheetState?.richTextCells),
       colStyleIds: sheetState?.colStyleIds ?? {},
       colWidthOverridesPx: sheetState?.colWidthOverridesPx ?? {},
       colWidths: visibleCols.map(resolveColumnWidthPx),
@@ -790,6 +803,15 @@ function resolveSnapshotNumberFormat(
   const rowStyleId = sheet.rowStyleIds[row];
   const colStyleId = sheet.colStyleIds[col];
   return normalizeSnapshotNumberFormat(sheet.styleById[rowStyleId ?? colStyleId ?? -1]?.numberFormat);
+}
+
+function resolveSnapshotRichTextRuns(
+  sheet: XlsxSheetData | null,
+  row: number,
+  col: number,
+  displayValue: string
+): XlsxCellTextRun[] | undefined {
+  return resolveRichTextRuns(sheet?.richTextCells?.[cellAddressToA1({ row, col })], displayValue);
 }
 
 function getCellDisplayValue(worksheet: ReturnType<Workbook["getSheet"]>, row: number, col: number, activeSheet?: XlsxSheetData | null) {
@@ -1122,10 +1144,13 @@ function executeRequest(message: WorkerRequest, isSuperseded: () => boolean): Wo
       const targetSheet = sheets.find((sheet) => sheet.workbookSheetIndex === message.payload.workbookSheetIndex) ?? null;
       const worksheet = workbook.getSheet(message.payload.workbookSheetIndex);
       try {
+        const displayValue = getCellDisplayValue(worksheet, message.payload.row, message.payload.col, targetSheet);
+        const runs = resolveSnapshotRichTextRuns(targetSheet, message.payload.row, message.payload.col, displayValue);
         return {
-          displayValue: getCellDisplayValue(worksheet, message.payload.row, message.payload.col, targetSheet),
+          displayValue,
           formula: worksheet.getFormulaAt(message.payload.row, message.payload.col) ?? "",
-          numberFormat: resolveSnapshotNumberFormat(worksheet, targetSheet, message.payload.row, message.payload.col)
+          numberFormat: resolveSnapshotNumberFormat(worksheet, targetSheet, message.payload.row, message.payload.col),
+          ...(runs ? { runs } : {})
         };
       } finally {
         worksheet.free();

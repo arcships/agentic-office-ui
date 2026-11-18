@@ -241,6 +241,7 @@ import {
   type XlsxCellStyleContext,
   type XlsxCellHyperlink,
   type XlsxCellComment,
+  type XlsxCellTextRun,
   type XlsxConditionalFormatRule,
   type XlsxDataValidation,
   type XlsxDataValidationFeedback,
@@ -248,6 +249,7 @@ import {
   type XlsxPrintLayout,
   type XlsxResolvedCellStyle,
   type XlsxSheetData,
+  type XlsxThemePalette,
 } from "@arcships/xlsx-core";
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy";
 import { GRID_HEADER_HEIGHT_PX, GRID_ROW_HEADER_WIDTH_PX, gridZoomFactor } from "./grid-metrics";
@@ -281,6 +283,12 @@ import {
   resolveOverflowTextWidth,
   sheetCellKey,
 } from "./grid-paint";
+import {
+  measureRichTextSegments,
+  richTextBaselineOffset,
+  richTextFontScale,
+  wrapRichTextRuns,
+} from "./rich-text-layout";
 import { isDataValidationListDropdownVisible, localizeDataValidationFeedback } from "../composables/validation";
 import { localizeFormattedNumber, parseDisplayedNumber } from "../composables/cell-input";
 import { rangeToA1 } from "../composables/selection";
@@ -1107,6 +1115,13 @@ function getGridCellDisplayValue(cell: XlsxCellAddress) {
   return props.controller.getCellDisplayValue(cell);
 }
 
+/** Inline runs of a rich-text cell; `undefined` renders the display value as-is. */
+function getGridCellRuns(cell: XlsxCellAddress): XlsxCellTextRun[] | undefined {
+  const readRuns = props.controller.getCellRuns;
+  if (typeof readRuns !== "function") return undefined;
+  return readRuns.call(props.controller, cell);
+}
+
 function getWorkerCellStyle(cell: XlsxCellAddress): XlsxResolvedCellStyle | undefined {
   workerRowsRevision.value;
   const sheetIndex = activeSheet.value?.workbookSheetIndex;
@@ -1743,6 +1758,107 @@ function wrapCellText(ctx: CanvasRenderingContext2D, value: string, width: numbe
   return lines;
 }
 
+/** Canvas font string of a cell's base style. */
+function baseCellFont(style: CanvasCellStyle): string {
+  return `${style.fontStyle} ${style.fontWeight} ${Math.round(style.fontSizePx)}px ${JSON.stringify(style.fontFamily)}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+}
+
+/**
+ * Canvas font string of one inline run: the run's own weight/slant/family/size
+ * on top of the cell style, with superscript and subscript runs shrunk.
+ */
+function richTextRunFont(style: CanvasCellStyle, font: XlsxCellTextRun["font"]): string {
+  const fontSizePx = Math.max(1, style.fontSizePx * richTextFontScale(font));
+  const fontWeight = font?.bold ? "700" : style.fontWeight;
+  const fontStyle = font?.italic ? "italic" : style.fontStyle;
+  const family = font?.name?.trim() ? JSON.stringify(font.name) : JSON.stringify(style.fontFamily);
+  return `${fontStyle} ${fontWeight} ${Math.round(fontSizePx)}px ${family}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+}
+
+interface RichTextDrawLayout {
+  height: number;
+  hyperlink: boolean;
+  hyperlinkColor: string;
+  maxLines: number;
+  textAreaWidth: number;
+  textColor: string;
+  themePalette?: XlsxThemePalette;
+  x: number;
+  y: number;
+}
+
+/**
+ * Draws a rich-text cell run by run.
+ *
+ * Each run is measured with its own font, so the line breaks and the run
+ * offsets follow the widths the canvas actually paints; the concatenated string
+ * would break at the wrong place whenever a run is bold, larger or a
+ * superscript marker. Wrapping, truncation and the ellipsis come from
+ * `wrapRichTextRuns`, the same helpers the thumbnail and DOM paths use.
+ */
+function drawRichTextRuns(
+  ctx: CanvasRenderingContext2D,
+  runs: readonly XlsxCellTextRun[],
+  style: CanvasCellStyle,
+  layout: RichTextDrawLayout,
+): void {
+  const padding = 5;
+  const lineHeight = Math.max(12, style.fontSizePx * 1.25);
+  const maxWidth = Math.max(0, layout.textAreaWidth - padding * 2);
+  const textX = style.alignment === "right"
+    ? layout.x + layout.textAreaWidth - padding
+    : style.alignment === "center" ? layout.x + layout.textAreaWidth / 2 : layout.x + padding;
+  const measure = (text: string, font: XlsxCellTextRun["font"]) => {
+    ctx.font = richTextRunFont(style, font);
+    return ctx.measureText(text).width;
+  };
+  const lines = wrapRichTextRuns(runs, measure, maxWidth, layout.maxLines);
+  const blockHeight = lines.length * lineHeight;
+  const firstBaseline = style.vertical === "top"
+    ? layout.y + 2 + lineHeight * 0.8
+    : style.vertical === "middle"
+      ? layout.y + (layout.height - blockHeight) / 2 + lineHeight * 0.8
+      : layout.y + layout.height - blockHeight + lineHeight * 0.8 - 2;
+
+  ctx.textAlign = "left";
+  lines.forEach((segments, index) => {
+    const lineWidth = Math.min(measureRichTextSegments(segments, measure), maxWidth);
+    const startX = style.alignment === "right"
+      ? textX - lineWidth
+      : style.alignment === "center" ? textX - lineWidth / 2 : textX;
+    const lineBaseline = firstBaseline + index * lineHeight;
+    let cursor = startX;
+    for (const segment of segments) {
+      if (!segment.text) continue;
+      const segmentWidth = measure(segment.text, segment.font);
+      const baseline = lineBaseline + richTextBaselineOffset(segment.font, style.fontSizePx);
+      const runColor = segment.font?.color
+        ? resolveWorkbookColor(segment.font.color as Record<string, unknown>, layout.themePalette)
+        : null;
+      const color = runColor ?? (layout.hyperlink ? layout.hyperlinkColor : style.color || layout.textColor);
+      ctx.font = richTextRunFont(style, segment.font);
+      ctx.fillStyle = color;
+      ctx.fillText(segment.text, cursor, baseline);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      if (segment.font?.underline || style.underline || layout.hyperlink) {
+        ctx.beginPath();
+        ctx.moveTo(cursor, baseline + 2);
+        ctx.lineTo(cursor + segmentWidth, baseline + 2);
+        ctx.stroke();
+      }
+      if (segment.font?.strikethrough || style.strike) {
+        const strikeY = baseline - style.fontSizePx * 0.3;
+        ctx.beginPath();
+        ctx.moveTo(cursor, strikeY);
+        ctx.lineTo(cursor + segmentWidth, strikeY);
+        ctx.stroke();
+      }
+      cursor += segmentWidth;
+    }
+  });
+}
+
 interface CellPaintState {
   style: CanvasCellStyle;
   conditional: ReturnType<typeof conditionalVisual>;
@@ -1750,6 +1866,10 @@ interface CellPaintState {
   hyperlink?: XlsxCellHyperlink;
   sparkline?: XlsxSparkline;
   value: string;
+  /** Inline runs of a rich-text cell; `undefined` renders `value` as one run. */
+  runs?: XlsxCellTextRun[];
+  /** Sheet palette used to resolve run colours; set once per painted frame. */
+  themePalette?: XlsxThemePalette;
   /**
    * Stroke the cell's box with the grid colour. The scrolling pass outlines
    * merged cells only (its gridlines cover the rest); the frozen strips have
@@ -1795,7 +1915,7 @@ function drawCellText(
     ctx.rect(x + 2, y + 1, Math.max(0, textAreaWidth - 4), Math.max(0, height - 2));
     ctx.clip();
     ctx.fillStyle = hyperlink ? hyperlinkColor : style.color || state.textColor;
-    ctx.font = `${style.fontStyle} ${style.fontWeight} ${Math.round(style.fontSizePx)}px ${JSON.stringify(style.fontFamily)}, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
+    ctx.font = baseCellFont(style);
     ctx.textAlign = style.alignment;
     const padding = 5;
     const textX = style.alignment === "right"
@@ -1803,28 +1923,44 @@ function drawCellText(
       : style.alignment === "center" ? x + textAreaWidth / 2 : x + padding;
     const lineHeight = Math.max(12, style.fontSizePx * 1.25);
     const maxLines = style.wrap ? Math.max(1, Math.floor((height - 4) / lineHeight)) : 1;
-    const lines = wrapCellText(ctx, value, Math.max(0, textAreaWidth - padding * 2), maxLines);
-    const blockHeight = lines.length * lineHeight;
-    const firstBaseline = style.vertical === "top"
-      ? y + 2 + lineHeight * 0.8
-      : style.vertical === "middle"
-        ? y + (height - blockHeight) / 2 + lineHeight * 0.8
-        : y + height - blockHeight + lineHeight * 0.8 - 2;
-    lines.forEach((line, index) => ctx.fillText(line, textX, firstBaseline + index * lineHeight));
-    if (style.underline || style.strike || hyperlink) {
-      const measured = Math.min(ctx.measureText(lines[0] ?? "").width, Math.max(0, textAreaWidth - padding * 2));
-      const startX = style.alignment === "right" ? textX - measured : style.alignment === "center" ? textX - measured / 2 : textX;
-      ctx.strokeStyle = style.color;
-      ctx.lineWidth = 1;
-      for (const offset of [style.underline || hyperlink ? 2 : null, style.strike ? -style.fontSizePx * 0.3 : null]) {
-        if (offset === null) continue;
-        ctx.beginPath();
-        ctx.moveTo(startX, firstBaseline + offset);
-        ctx.lineTo(startX + measured, firstBaseline + offset);
-        ctx.stroke();
+    const availableWidth = Math.max(0, textAreaWidth - padding * 2);
+    if (state.runs && state.runs.length > 1) {
+      drawRichTextRuns(ctx, state.runs, style, {
+        height,
+        hyperlink: Boolean(hyperlink),
+        hyperlinkColor,
+        maxLines,
+        textAreaWidth,
+        textColor: state.textColor,
+        themePalette: state.themePalette,
+        x,
+        y,
+      });
+      ctx.restore();
+    } else {
+      const lines = wrapCellText(ctx, value, availableWidth, maxLines);
+      const blockHeight = lines.length * lineHeight;
+      const firstBaseline = style.vertical === "top"
+        ? y + 2 + lineHeight * 0.8
+        : style.vertical === "middle"
+          ? y + (height - blockHeight) / 2 + lineHeight * 0.8
+          : y + height - blockHeight + lineHeight * 0.8 - 2;
+      lines.forEach((line, index) => ctx.fillText(line, textX, firstBaseline + index * lineHeight));
+      if (style.underline || style.strike || hyperlink) {
+        const measured = Math.min(ctx.measureText(lines[0] ?? "").width, Math.max(0, textAreaWidth - padding * 2));
+        const startX = style.alignment === "right" ? textX - measured : style.alignment === "center" ? textX - measured / 2 : textX;
+        ctx.strokeStyle = style.color;
+        ctx.lineWidth = 1;
+        for (const offset of [style.underline || hyperlink ? 2 : null, style.strike ? -style.fontSizePx * 0.3 : null]) {
+          if (offset === null) continue;
+          ctx.beginPath();
+          ctx.moveTo(startX, firstBaseline + offset);
+          ctx.lineTo(startX + measured, firstBaseline + offset);
+          ctx.stroke();
+        }
       }
+      ctx.restore();
     }
-    ctx.restore();
   }
   if (conditionalIcon) {
     ctx.fillStyle = conditionalIcon.color;
@@ -1984,6 +2120,8 @@ function createCellPaintStateScratch(): CellPaintState {
     hyperlink: undefined,
     sparkline: undefined,
     value: "",
+    runs: undefined,
+    themePalette: undefined,
     gridLines: false,
     selected: false,
     selectionFill: "",
@@ -2073,6 +2211,7 @@ function paintBody(worksheet: ActiveWorksheet | null) {
   // of the allocation churn while scrolling; deferred overflow tasks snapshot
   // the two objects they keep a reference to.
   const paintState = createCellPaintStateScratch();
+  paintState.themePalette = sheet.themePalette;
   const styleScratch = createCanvasCellStyleScratch();
   const overflowNeighbourWidths: number[] = [];
 
@@ -2138,6 +2277,7 @@ function paintBody(worksheet: ActiveWorksheet | null) {
     state.hyperlink = hyperlinksByCell.value.get(cellKeyValue);
     state.sparkline = sparkline;
     state.value = value;
+    state.runs = getGridCellRuns(cell);
     state.gridLines = Boolean(merge) && sheet.showGridLines !== false;
     state.selected = isCellInRange(cell, sel) || Boolean(merge && sel && rangesIntersect(merge, sel));
     state.selectionFill = selFill;
@@ -2235,6 +2375,7 @@ function paintFrozenPanes(
 
   const tableHeaderCells = props.getCellStyle ? collectTableHeaderCells() : EMPTY_CELL_KEYS;
   const paintState = createCellPaintStateScratch();
+  paintState.themePalette = sheet.themePalette;
   const styleScratch = createCanvasCellStyleScratch();
 
   const paintCell = (displayRow: number, displayCol: number, frozenY: boolean, frozenX: boolean) => {
@@ -2266,6 +2407,7 @@ function paintFrozenPanes(
     state.hyperlink = hyperlinksByCell.value.get(cellKeyValue);
     state.sparkline = sparklinesByCell.value.get(cellKeyValue);
     state.value = value;
+    state.runs = getGridCellRuns(cell);
     state.gridLines = sheet.showGridLines !== false;
     state.selected = isCellInRange(cell, selection.value)
       || Boolean(merge && selection.value && rangesIntersect(merge, selection.value));

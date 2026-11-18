@@ -71,6 +71,24 @@ const controller = useXlsxViewerController({
 - 显式 `@` 文本格式不参与数字转换：`1.234,5` 仍保存为文本。带引号/转义的格式字面量（例如 `"kg"#,##0.00`）保持原样，日期和时间格式的点、冒号不会被替换成数字分隔符。
 - 控制器通过 `controller.locale` 报告当前区域，`controller.setDocumentLocale(tag)` 可在运行时切换并重绘；非法标签回退为 `en-US`。
 
+## 富文本单元格
+
+单元格内部可以有多段各自带格式的文字（例如加粗前缀、红色后半句、上标脚注）。查看器保留这些段落，而不是把它们压成一段纯文本：
+
+- 网格画布按段绘制，每段使用自己的字体、字号、颜色、下划线/删除线和上标/下标偏移；自动换行和截断按各段实际宽度累加，段里的小号上标不会让文字提前折行或被错误截断。
+- 打印预览（DOM 路径）为每段输出一个 `<span>`，行内样式与画布使用同一套规则，所以 DOM 与缩略图的断行位置一致。
+- 工作表标签的缩略图同样按段绘制（粗体、颜色、上下标在缩略图里仍然可见）。
+- 单元格的纯文本值始终是各段拼接，公式栏、搜索（`findCells`）、复制和导出继续使用它。
+
+读取段落：
+
+```ts
+const runs = controller.getCellRuns({ row: 0, col: 0 })
+// [{ text: "Quarter", font: { bold: true } }, { text: "ly", font: { color: { rgb: "#ff0000" } } }, ...]
+```
+
+`controller.activeSheet.richTextCells` 以 A1 地址保存整张工作表的段落；`getCellRuns` 会在单元格的值被改写（编辑、粘贴、重新计算）后自动不再返回旧段落，因此宿主不需要自己比对。需要自己渲染时，用 `@arcships/xlsx-core` 的 `resolveRichTextRuns(runs, value)`、`richTextRunsToPlainText(runs)` 做同样的“文本仍匹配”校验。导出的 `.xlsx` 会保留段落格式，重新打开后仍按段渲染。
+
 ## 工作表标签
 
 `showSheetTabs` 设为 `false` 只移除底部标签条：网格、功能区、公式栏和控制器状态都不变，`Ctrl/Cmd+PageUp/PageDown` 仍然可以切换工作表。此时切换只能通过宿主自己的界面调用 `controller.setActiveTabIndex(index)`。需要完全自定义的导航界面时，直接用 `XlsxSheetSurface` + `useXlsxViewerController`（见[自定义 XLSX 界面](../custom-components/xlsx.md)）。

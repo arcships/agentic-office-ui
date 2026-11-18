@@ -1,5 +1,6 @@
 import type {
   XlsxCellNumberFormatInput,
+  XlsxCellTextRun,
   XlsxChart,
   XlsxChartsheet,
   XlsxFormControl,
@@ -97,6 +98,7 @@ type WorkerSuccessMessage =
         displayValue: string;
         formula: string;
         numberFormat?: XlsxCellNumberFormatInput | null;
+        runs?: XlsxCellTextRun[];
       };
     }
   | {
@@ -275,6 +277,7 @@ export class XlsxWorkerClient {
       displayValue: string;
       formula: string;
       numberFormat?: XlsxCellNumberFormatInput | null;
+      runs?: XlsxCellTextRun[];
     }>({
       id: 0,
       payload: { col, row, workbookSheetIndex },

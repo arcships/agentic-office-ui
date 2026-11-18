@@ -1,6 +1,7 @@
 import { resolveWorkbookColor } from "../colors";
 import type {
   XlsxCellAddress,
+  XlsxCellTextRun,
   XlsxConditionalDataBarRule,
   XlsxConditionalFormatIcon,
   XlsxConditionalFormatRule,
@@ -49,6 +50,10 @@ import {
   readArchiveText,
   relsPathForDocument,
 } from "./image-parser";
+import {
+  parseInlineRichTextCell,
+  parseSharedStringRichText,
+} from "./rich-text";
 import {
   measureColumnCharacterWidthPx,
   MIN_COL_WIDTH_PX,
@@ -123,6 +128,8 @@ export type WorkbookSheetState = {
   printTitles?: XlsxPrintTitles;
   rowHeightOverridesPx: Record<number, number>;
   rowStyleIds: Record<number, number>;
+  /** Rich-text runs per A1 address for cells that store several formatted runs. */
+  richTextCells: Record<string, XlsxCellTextRun[]>;
   showGridLines: boolean;
   sparklines: XlsxSparkline[];
   zoomScale: number;
@@ -131,6 +138,14 @@ export type WorkbookSheetState = {
 type ParseWorkbookStructureOptions = {
   includeCachedFormulaValues?: boolean;
   themePalette?: XlsxThemePalette | null;
+  /**
+   * Runs of `xl/sharedStrings.xml`, indexed by shared-string id.
+   *
+   * `parseWorkbookStructureAssetsFromArchive` parses the table once and passes
+   * it to every worksheet; callers that re-parse a single sheet (structure
+   * edits) may omit it and let `parseSheetState` read the archive itself.
+   */
+  sharedStringRuns?: ReadonlyArray<XlsxCellTextRun[] | null>;
 };
 
 export type WorkbookTableMetadata = {
@@ -803,6 +818,34 @@ export function parseSheetState(
     const valueNode = getFirstChild(cellNode, "v");
     return Boolean(valueNode && (valueNode.textContent ?? "").length > 0);
   };
+  // Shared strings are parsed once per archive and reused by every worksheet;
+  // a single-sheet re-parse (structure edits) reads the part itself.
+  const sharedStringRuns = options?.sharedStringRuns
+    ?? parseSharedStringRichText(archive);
+  const richTextCells: Record<string, XlsxCellTextRun[]> = {};
+  const trackRichTextCell = (cellRef: string | null, cellNode: Element) => {
+    if (!cellRef) {
+      return;
+    }
+
+    const cellType = cellNode.getAttribute("t");
+    let runs: XlsxCellTextRun[] | null = null;
+    if (cellType === "s") {
+      const sharedStringIndex = Number.parseInt(
+        getFirstChild(cellNode, "v")?.textContent ?? "",
+        10
+      );
+      if (Number.isFinite(sharedStringIndex) && sharedStringIndex >= 0) {
+        runs = sharedStringRuns[sharedStringIndex] ?? null;
+      }
+    } else if (cellType === "inlineStr") {
+      runs = parseInlineRichTextCell(cellNode);
+    }
+
+    if (runs && runs.length > 1) {
+      richTextCells[cellRef] = runs;
+    }
+  };
 
   getLocalElements(document, "row").forEach((rowNode) => {
     const rowIndex = Number(rowNode.getAttribute("r") ?? 0) - 1;
@@ -820,6 +863,7 @@ export function parseSheetState(
       if (isMeaningfulCellNode(cellNode)) {
         trackContentCell(cellRef);
       }
+      trackRichTextCell(cellRef, cellNode);
 
       if (includeCachedFormulaValues) {
         const formulaNode = getFirstChild(cellNode, "f");
@@ -859,6 +903,7 @@ export function parseSheetState(
   return {
     cachedFormulaValues,
     freezePanes,
+    richTextCells,
     columnWidthCharacterWidthPx,
     colWidthOverridesPx,
     colStyleIds,
@@ -1075,10 +1120,12 @@ export function parseWorkbookStructureAssetsFromArchive(
   const themePalette = buildThemePalette(theme);
   const { defaultFont, namedCellStyleByName, styleById, tableStyleByName } = parseWorkbookStyles(archive);
   const printMetadata = parseWorkbookPrintMetadata(archive, workbookSheets);
+  const sharedStringRuns = parseSharedStringRichText(archive);
   const sheetStates = worksheetSheets.map((sheet) => parseSheetState(archive, sheet.path, {
     ...options,
     defaultFont,
-    themePalette
+    themePalette,
+    sharedStringRuns
   }));
   return {
     contentTypes,
