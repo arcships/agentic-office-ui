@@ -51,3 +51,16 @@ export {
   parseDocxClipboardRtf,
   renderDocxClipboardRtf
 } from "./clipboard-rtf";
+
+// Page setup (margins/paper size/orientation) and header/footer authoring.
+export {
+  addHeaderFooter,
+  resolvePageSetup,
+  resolveSectionPropertiesXml,
+  setPageMargins,
+  setPageSize,
+} from "./page-setup-ops";
+export type {
+  AddHeaderFooterOptions,
+  DocxSectionPageSetup,
+} from "./page-setup-ops";

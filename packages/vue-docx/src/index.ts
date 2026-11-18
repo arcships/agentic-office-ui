@@ -70,6 +70,13 @@ export { default as DocxTrackedChangeGutter } from "./components/DocxTrackedChan
 export { default as DocxContextMenu } from "./components/DocxContextMenu.vue"
 /** @deprecated Since 0.2.0. Use `DocxEditor`. Earliest removal: 1.0.0. */
 export { default as DocxToolbar } from "./components/DocxToolbar.vue"
+/** Page-setup dialog: margins, paper size and orientation for a section. */
+export { default as DocxPageSetupDialog } from "./components/DocxPageSetupDialog.vue"
+export type {
+  DocxPageSetupApplyPatch,
+  DocxPageSetupDialogProps,
+  DocxPageSetupSectionOption,
+} from "./components/page-setup-dialog-types"
 /** @deprecated Since 0.2.0. Use `DocxEditor`. Earliest removal: 1.0.0. */
 export { default as DocxThumbnailPanel } from "./components/DocxThumbnailPanel.vue"
 /** @deprecated Since 0.2.0. Use `DocxEditor`. Earliest removal: 1.0.0. */
@@ -148,6 +155,13 @@ export {
 export { findDocxSearchTargetPage } from "./composables/docx-search-page"
 export type { DocxSearchPageTarget } from "./composables/docx-search-page"
 
+export { useDocxPageSetup } from "./composables/useDocxPageSetup"
+export type {
+  DocxPageSetupPatch,
+  DocxPageSetupSection,
+  UseDocxPageSetupResult,
+} from "./composables/useDocxPageSetup"
+
 export { useDocxPageThumbnails } from "./composables/useDocxPageThumbnails"
 /**
  * @deprecated Since 0.2.0. Use `useDocxPageThumbnails`. Kept throughout 0.x;
@@ -209,6 +223,14 @@ export type {
   DocxBorderPreset,
   DocxBorderPresetState,
   DocxSectionColumnLayout,
+  DocxPageMargins,
+  DocxPageMarginsUpdate,
+  DocxPageOrientation,
+  DocxPageSize,
+  DocxPageSizePreset,
+  DocxPageSizeUpdate,
+  DocxSectionPageSetup,
+  DocxPageSetupCommandOptions,
   DocxListType,
   DocxTrackedChange,
   DocxTrackedChangeKind,

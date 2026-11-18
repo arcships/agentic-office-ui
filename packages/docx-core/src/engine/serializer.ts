@@ -23,6 +23,14 @@ import {
   applyFormFieldRequiredToDocumentXml,
   modelNeedsFormFieldRequiredPatch
 } from "./form-field-serialization";
+import {
+  DOCX_CONTENT_TYPES_PART,
+  DOCX_DOCUMENT_RELATIONSHIPS_PART,
+  applySectionPartContentTypes,
+  applySectionPartRelationships,
+  collectSectionPartReferences,
+  modelHasSectionParts
+} from "./section-parts-serialization";
 import { mapsToWasmPackage, wasmModelToDocumentXml, wasmSerializeDocx } from "./wasm";
 
 /**
@@ -32,7 +40,11 @@ import { mapsToWasmPackage, wasmModelToDocumentXml, wasmSerializeDocx } from "./
  * offsets, then required form-field flags. Note references go first so the
  * comment splitter sees the marker run as an opaque run.
  */
-function patchDocumentXml(documentXml: string, model: DocModel): string {
+function patchDocumentXml(
+  documentXml: string,
+  model: DocModel,
+  renamedRelationshipIds?: Map<string, string>
+): string {
   let patched = documentXml;
   // A deleted comment leaves its anchors behind in `sourceXml`; they must go
   // before the range pass re-emits the surviving comments.
@@ -52,7 +64,81 @@ function patchDocumentXml(documentXml: string, model: DocModel): string {
   if (modelNeedsFormFieldRequiredPatch(model)) {
     patched = applyFormFieldRequiredToDocumentXml(patched, model);
   }
+  if (renamedRelationshipIds && renamedRelationshipIds.size > 0) {
+    patched = applyRenamedRelationshipIds(patched, renamedRelationshipIds);
+  }
   return patched;
+}
+
+/**
+ * A header/footer reference moved to a free relationship id because the model's
+ * id already belonged to another relationship. Rewrite the reference so the
+ * document and `word/_rels/document.xml.rels` still agree.
+ */
+function applyRenamedRelationshipIds(
+  documentXml: string,
+  renamedRelationshipIds: Map<string, string>
+): string {
+  let patched = documentXml;
+  for (const [from, to] of renamedRelationshipIds) {
+    const reference = new RegExp(`(r:id\\s*=\\s*")${from}(")`, "g");
+    patched = patched.replace(reference, `$1${to}$2`);
+  }
+  return patched;
+}
+
+interface SectionPartPackagePatch {
+  relationshipsXml?: string;
+  contentTypesXml?: string;
+  renamedRelationshipIds: Map<string, string>;
+}
+
+/**
+ * Relationships and content types a package needs for its header/footer parts.
+ * `undefined` entries mean the package part is unchanged.
+ */
+function planSectionPartPackagePatch(
+  parts: ReadonlyMap<string, { content: string }>,
+  model: DocModel
+): SectionPartPackagePatch {
+  const renamedRelationshipIds = new Map<string, string>();
+  if (!modelHasSectionParts(model)) {
+    return { renamedRelationshipIds };
+  }
+
+  const references = collectSectionPartReferences(model);
+  if (references.length === 0) {
+    return { renamedRelationshipIds };
+  }
+
+  const relationshipsPart = parts.get(DOCX_DOCUMENT_RELATIONSHIPS_PART);
+  const contentTypesPart = parts.get(DOCX_CONTENT_TYPES_PART);
+  const patch: SectionPartPackagePatch = { renamedRelationshipIds };
+
+  if (relationshipsPart) {
+    const relationships = applySectionPartRelationships(
+      relationshipsPart.content,
+      references
+    );
+    if (relationships.xml !== relationshipsPart.content) {
+      patch.relationshipsXml = relationships.xml;
+    }
+    relationships.renamedIds.forEach((value, key) => {
+      renamedRelationshipIds.set(key, value);
+    });
+  }
+
+  if (contentTypesPart) {
+    const contentTypes = applySectionPartContentTypes(
+      contentTypesPart.content,
+      references
+    );
+    if (contentTypes !== contentTypesPart.content) {
+      patch.contentTypesXml = contentTypes;
+    }
+  }
+
+  return patch;
 }
 
 function modelNeedsDocumentXmlPatch(model: DocModel): boolean {
@@ -69,26 +155,79 @@ function patchPackageDocumentXml(
   pkg: OoxmlPackage,
   model: DocModel
 ): OoxmlPackage {
-  if (!modelNeedsDocumentXmlPatch(model)) {
-    return pkg;
-  }
-
   const documentPart = pkg.parts.get("word/document.xml");
+  const sectionParts = planSectionPartPackagePatch(pkg.parts, model);
   if (!documentPart) {
-    return pkg;
+    return applySectionPartPackagePatch(pkg, sectionParts);
   }
 
-  const patchedXml = patchDocumentXml(documentPart.content, model);
-  if (patchedXml === documentPart.content) {
+  const needsDocumentPatch = modelNeedsDocumentXmlPatch(model);
+  const patchedXml = needsDocumentPatch
+    ? patchDocumentXml(
+        documentPart.content,
+        model,
+        sectionParts.renamedRelationshipIds
+      )
+    : applyRenamedRelationshipIds(
+        documentPart.content,
+        sectionParts.renamedRelationshipIds
+      );
+  const parts = new Map(pkg.parts);
+  if (patchedXml !== documentPart.content) {
+    parts.set("word/document.xml", {
+      name: documentPart.name,
+      content: patchedXml
+    });
+  }
+  return applySectionPartPackagePatch(
+    { parts, binaryAssets: pkg.binaryAssets },
+    sectionParts
+  );
+}
+
+function applySectionPartPackagePatch(
+  pkg: OoxmlPackage,
+  patch: SectionPartPackagePatch
+): OoxmlPackage {
+  if (!patch.relationshipsXml && !patch.contentTypesXml) {
     return pkg;
   }
 
   const parts = new Map(pkg.parts);
-  parts.set("word/document.xml", {
-    name: documentPart.name,
-    content: patchedXml
-  });
+  if (patch.relationshipsXml) {
+    const part = parts.get(DOCX_DOCUMENT_RELATIONSHIPS_PART);
+    if (part) {
+      parts.set(DOCX_DOCUMENT_RELATIONSHIPS_PART, {
+        name: part.name,
+        content: patch.relationshipsXml
+      });
+    }
+  }
+  if (patch.contentTypesXml) {
+    const part = parts.get(DOCX_CONTENT_TYPES_PART);
+    if (part) {
+      parts.set(DOCX_CONTENT_TYPES_PART, {
+        name: part.name,
+        content: patch.contentTypesXml
+      });
+    }
+  }
   return { parts, binaryAssets: pkg.binaryAssets };
+}
+
+/**
+ * The package-level text parts the section-part patch may rewrite, read from an
+ * unzipped archive. Images, fonts and other binary parts are never decoded.
+ */
+function collectPackageTextParts(
+  archive: Record<string, Uint8Array>
+): Map<string, { content: string }> {
+  const parts = new Map<string, { content: string }>();
+  for (const name of [DOCX_DOCUMENT_RELATIONSHIPS_PART, DOCX_CONTENT_TYPES_PART]) {
+    const bytes = archive[name];
+    if (bytes) parts.set(name, { content: strFromU8(bytes) });
+  }
+  return parts;
 }
 
 function patchSerializedDocxBytes(
@@ -97,7 +236,8 @@ function patchSerializedDocxBytes(
 ): ArrayBuffer {
   const needsDocumentPatch = modelNeedsDocumentXmlPatch(model);
   const needsComments = modelNeedsCommentSerialization(model);
-  if (!needsDocumentPatch && !needsComments) {
+  const needsSectionParts = modelHasSectionParts(model);
+  if (!needsDocumentPatch && !needsComments && !needsSectionParts) {
     return bytes;
   }
 
@@ -107,15 +247,37 @@ function patchSerializedDocxBytes(
     return bytes;
   }
 
-  const documentXml = strFromU8(documentBytes);
-  const patchedXml = patchDocumentXml(documentXml, model);
-  if (!needsComments && patchedXml === documentXml) {
-    return bytes;
+  let changed = false;
+  if (needsComments) {
+    // Comment parts, their relationships and content types are written first;
+    // the header/footer patch below then appends to the updated wrapper.
+    applyCommentsToDocxArchive(archive, model);
+    changed = true;
   }
 
-  archive["word/document.xml"] = strToU8(patchedXml);
-  if (needsComments) {
-    applyCommentsToDocxArchive(archive, model);
+  const sectionParts = planSectionPartPackagePatch(
+    collectPackageTextParts(archive),
+    model
+  );
+
+  const documentXml = strFromU8(documentBytes);
+  const patchedXml = needsDocumentPatch
+    ? patchDocumentXml(documentXml, model, sectionParts.renamedRelationshipIds)
+    : applyRenamedRelationshipIds(documentXml, sectionParts.renamedRelationshipIds);
+  if (patchedXml !== documentXml) {
+    archive["word/document.xml"] = strToU8(patchedXml);
+    changed = true;
+  }
+  if (sectionParts.relationshipsXml) {
+    archive[DOCX_DOCUMENT_RELATIONSHIPS_PART] = strToU8(sectionParts.relationshipsXml);
+    changed = true;
+  }
+  if (sectionParts.contentTypesXml) {
+    archive[DOCX_CONTENT_TYPES_PART] = strToU8(sectionParts.contentTypesXml);
+    changed = true;
+  }
+  if (!changed) {
+    return bytes;
   }
 
   const zipped = zipSync(archive);

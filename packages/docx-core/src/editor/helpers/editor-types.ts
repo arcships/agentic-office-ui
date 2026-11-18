@@ -476,6 +476,10 @@ export interface DocxEditorStatusMessages {
   revisionLossOne: string;
   /** Template with a `{count}` placeholder. */
   revisionLossMany: string;
+  pageMarginsUpdated: string;
+  pageSizeUpdated: string;
+  headerAdded: string;
+  footerAdded: string;
 }
 
 export interface UseDocxEditorOptions {

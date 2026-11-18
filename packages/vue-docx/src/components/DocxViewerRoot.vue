@@ -46,6 +46,9 @@
             :page-number-format="entry.pageNumberFormat"
             :header-section="entry.headerSection"
             :footer-section="entry.footerSection"
+            :section-index="entry.sectionIndex"
+            :header-reference-type="entry.headerReferenceType"
+            :footer-reference-type="entry.footerReferenceType"
             :tracked-changes-enabled="trackedChangesEnabled"
             :comments-enabled="commentsEnabled"
             :tracked-changes="entry.trackedChanges"
@@ -104,6 +107,7 @@ import {
   resolveDocumentSectionsFromMetadata,
   resolveDocumentLayout,
   resolveSectionIndexForNodeIndex,
+  resolveSectionVariantReferenceTypeForPage,
   groupGutterAnnotationsByPage,
   trackedChangeDuplicatesInlineMarkup,
   selectSectionVariantForPage,
@@ -171,6 +175,10 @@ interface VisiblePageEntry {
   pageNumber: number
   pageNumberFormat?: string
   sectionPages: number
+  sectionIndex: number
+  /** Header/footer `w:type` variant this page looks for. */
+  headerReferenceType: string
+  footerReferenceType: string
   headerSection?: HeaderSection
   footerSection?: FooterSection
   footnotes: DocumentNoteDefinition[]
@@ -548,6 +556,14 @@ const pagePresentations = computed(() => {
       ? parseSectionLayout(sectionPropertiesXml)
       : baseDocumentLayout.value
     const variantOptions = { evenAndOddHeaders, documentPageIndex: pageIndex }
+    // The variant these pages look for, so an authoring command can create
+    // exactly that header/footer instead of always the "default" one.
+    const variantReferenceType = resolveSectionVariantReferenceTypeForPage({
+      sectionPropertiesXml,
+      sectionPageIndex,
+      documentPageIndex: pageIndex,
+      evenAndOddHeaders,
+    })
     const pageNumber = nextPageNumber
     nextPageNumber += 1
 
@@ -555,6 +571,8 @@ const pagePresentations = computed(() => {
       sectionIndex,
       pageLayout,
       pageNumber,
+      headerReferenceType: variantReferenceType,
+      footerReferenceType: variantReferenceType,
       pageNumberFormat: parseSectionPageNumberFormat(sectionPropertiesXml),
       pageBorders: parseSectionPageBorders(sectionPropertiesXml),
       columnLayout: {
@@ -946,6 +964,9 @@ function buildVisiblePageEntry(
     sectionPages:
       sectionPageCounts.value.get(presentation?.sectionIndex ?? 0) ??
       pageCount.value,
+    sectionIndex: presentation?.sectionIndex ?? 0,
+    headerReferenceType: presentation?.headerReferenceType ?? "default",
+    footerReferenceType: presentation?.footerReferenceType ?? "default",
     headerSection: presentation?.headerSection,
     footerSection: presentation?.footerSection,
     footnotes:

@@ -31,6 +31,12 @@ export { useDocxTrackChanges } from "./useDocxTrackChanges"
 export { useDocxComments } from "./useDocxComments"
 export { useDocxPageLayout } from "./useDocxPageLayout"
 export { useDocxPagination } from "./useDocxPagination"
+export { useDocxPageSetup, resolveCaretSectionIndex } from "./useDocxPageSetup"
+export type {
+  DocxPageSetupPatch,
+  DocxPageSetupSection,
+  UseDocxPageSetupResult,
+} from "./useDocxPageSetup"
 
 // Page surface registry (shared by viewer and thumbnail consumers)
 export {

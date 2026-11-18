@@ -6,6 +6,7 @@
 
 import type {
   DocModel,
+  DocNode,
   ImageRunNode,
   ParagraphNode,
   TableNode
@@ -21,6 +22,7 @@ import {
 import type {
   DocxSectionImageLocation,
   DocxSectionParagraphLocation,
+  DocxSectionRegion,
   ParagraphLocation
 } from "./editor-types";
 import {
@@ -119,6 +121,32 @@ export function parseSectionParagraphLocationKey(
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Nodes of a header/footer part.
+ *
+ * The viewer renders the part lists under `metadata.sections`; the top-level
+ * `metadata.headerSections` / `metadata.footerSections` lists are the editing
+ * fallback for documents without section metadata. Both are searched so a
+ * story edit finds the part the page actually shows.
+ */
+export function findDocumentSectionNodes(
+  model: DocModel,
+  region: DocxSectionRegion,
+  partName: string
+): DocNode[] | undefined {
+  const key = region === "header" ? "headerSections" : "footerSections";
+  const matchesPart = (entry: { partName: string }) => entry.partName === partName;
+
+  for (const section of model.metadata.sections ?? []) {
+    const match = (section[key] ?? []).find(matchesPart);
+    if (match) {
+      return match.nodes;
+    }
+  }
+
+  return (model.metadata[key] ?? []).find(matchesPart)?.nodes;
 }
 
 export function paragraphTextFromSectionLocation(

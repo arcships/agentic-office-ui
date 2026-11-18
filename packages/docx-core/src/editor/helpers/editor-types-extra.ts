@@ -33,6 +33,7 @@ import type {
   DocxListType,
   DocxSectionImageLocation,
   DocxSectionParagraphLocation,
+  DocxSectionRegion,
   DocxSelectedFormField,
   DocxSelectionSessionKind,
   DocxTableCellSelectionRange,
@@ -41,6 +42,20 @@ import type {
   DocxTrackedChange,
   ParagraphLocation
 } from "./editor-types";
+import type { DocxPageMarginsUpdate, DocxPageSizeUpdate } from "../../engine/section-properties";
+import type { AddHeaderFooterOptions } from "../page-setup-ops";
+
+/** Undo behaviour shared by the page-setup commands. */
+export interface DocxPageSetupCommandOptions {
+  /**
+   * Set to false to fold the change into the previous undo entry. The page-setup
+   * dialog uses this so "Apply" is one undoable step even when it changes the
+   * paper size and the margins together.
+   *
+   * @defaultValue `true`
+   */
+  pushHistory?: boolean;
+}
 // Re-export the foundational types so consumers can import from one barrel.
 export type {
   DocxDocumentTheme,
@@ -394,6 +409,35 @@ export interface DocxEditorController {
     location: DocxSectionParagraphLocation,
     text: string
   ) => void;
+  /**
+   * Set page margins (twips) on one section. Omitted margins keep their current
+   * value; every other `w:sectPr` child (header/footer references, columns,
+   * page borders) is preserved. One undo entry.
+   */
+  setPageMargins: (
+    sectionIndex: number,
+    margins: DocxPageMarginsUpdate,
+    options?: DocxPageSetupCommandOptions
+  ) => boolean;
+  /**
+   * Set the paper size/orientation of one section. A landscape/portrait
+   * contradiction swaps width and height, matching the way Word stores it.
+   */
+  setPageSize: (
+    sectionIndex: number,
+    pageSize: DocxPageSizeUpdate,
+    options?: DocxPageSetupCommandOptions
+  ) => boolean;
+  /**
+   * Create a header or footer part for one section and reference it from the
+   * section properties. Returns false when the section already has that variant
+   * (the existing part should be edited instead).
+   */
+  addHeaderFooter: (
+    sectionIndex: number,
+    kind: DocxSectionRegion,
+    options?: AddHeaderFooterOptions
+  ) => boolean;
   /**
    * Writes the active selection into a copy/cut event's clipboard sink.
    *
