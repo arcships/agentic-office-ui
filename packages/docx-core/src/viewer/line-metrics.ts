@@ -13,6 +13,12 @@
 // (`aggregateLineMetrics`, `checkLineVerticalFit`, `constrainParagraphLineSplit`).
 
 import { textMeasurementGeneration } from "./text-measurement-generation";
+import { createDocxTextMeasurementContext } from "./font-features";
+import { registerFontMetricCache } from "./font-metrics";
+import {
+  FALLBACK_FONT_ASCENT_EM,
+  FALLBACK_FONT_DESCENT_EM,
+} from "../engine/font-line-height";
 
 /**
  * Vertical metrics of one laid-out line box.
@@ -76,8 +82,6 @@ export interface LineVerticalFit {
 // report deterministically. The pair matches the single-line-spacing heuristic
 // used by `estimateParagraphLineHeightPx`, so a text-only line keeps the same
 // height with and without canvas measurement.
-const FALLBACK_FONT_ASCENT_EM = 0.9;
-const FALLBACK_FONT_DESCENT_EM = 0.25;
 
 /** Word raises a superscript baseline by a third of the parent font size. */
 export const SCRIPT_SUPERSCRIPT_RAISE_EM = 0.33;
@@ -86,17 +90,14 @@ export const SCRIPT_SUBSCRIPT_LOWER_EM = 0.2;
 
 const FONT_METRICS_LIMIT = 512;
 
-let metricsCanvas: OffscreenCanvas | HTMLCanvasElement | undefined;
-let metricsCanvasContext:
-  | OffscreenCanvasRenderingContext2D
-  | CanvasRenderingContext2D
-  | null
-  | undefined;
-
 const fontMetricsByFont = new Map<
   string,
   { generation: number; metrics: FontVerticalMetrics }
 >();
+
+registerFontMetricCache(() => {
+  fontMetricsByFont.clear();
+});
 
 function positivePixelValue(value: number | undefined): number {
   return Number.isFinite(value) && (value as number) > 0 ? (value as number) : 0;
@@ -110,24 +111,7 @@ function getMetricsContext():
   | OffscreenCanvasRenderingContext2D
   | CanvasRenderingContext2D
   | undefined {
-  if (metricsCanvasContext !== undefined) {
-    return metricsCanvasContext ?? undefined;
-  }
-
-  if (typeof OffscreenCanvas !== "undefined") {
-    metricsCanvas = new OffscreenCanvas(1, 1);
-    metricsCanvasContext = metricsCanvas.getContext("2d");
-    return metricsCanvasContext ?? undefined;
-  }
-
-  if (typeof document !== "undefined") {
-    metricsCanvas = document.createElement("canvas");
-    metricsCanvasContext = metricsCanvas.getContext("2d");
-    return metricsCanvasContext ?? undefined;
-  }
-
-  metricsCanvasContext = null;
-  return undefined;
+  return createDocxTextMeasurementContext();
 }
 
 /** Font size in CSS pixels of a canvas font string (`... 16px "Calibri"`). */

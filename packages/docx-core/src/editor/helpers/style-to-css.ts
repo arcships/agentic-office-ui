@@ -15,6 +15,9 @@ import {
   ooxmlBorderWidthPx
 } from "../../engine/border-css";
 import { HIGHLIGHT_TO_CSS, SCRIPT_FONT_SCALE } from "./constants";
+import { resolveDocxFontFeatureSettings } from "../../viewer/font-features";
+import { resolveDocxFontKerning } from "../../viewer/font-kerning";
+import { resolveDocxTextFontFamily } from "../../viewer/script-fonts";
 import type { DocxDocumentTheme } from "./editor-types";
 import type { ParagraphTrackedInlineChange } from "./tracked-changes";
 import { resolveListParagraphIndent } from "./xml-parsing-extra";
@@ -132,7 +135,14 @@ export function cssFontFamily(
 
 export function runStyleToCss(
   style?: TextRunNode["style"],
-  documentTheme: DocxDocumentTheme = "light"
+  documentTheme: DocxDocumentTheme = "light",
+  /**
+   * Text covered by the span. When supplied, the first strong-script slot
+   * supplies the family (so a CJK-only form field does not fall back to the
+   * ASCII family). Mixed-script text is rendered as one span per script by the
+   * DOCX renderer instead.
+   */
+  text?: string
 ): Record<string, string | number | undefined> {
   const hasScriptVerticalAlign =
     style?.verticalAlign === "superscript" ||
@@ -222,10 +232,19 @@ export function runStyleToCss(
       : hasScriptVerticalAlign
       ? `${SCRIPT_FONT_SCALE}em`
       : undefined,
-    fontFamily: cssFontFamily(style?.fontFamily, {
-      eastAsia: style?.fontFamilyEastAsia,
-      complexScript: style?.fontFamilyComplexScript
-    }),
+    fontFamily:
+      (text
+        ? cssFontFamily(resolveDocxTextFontFamily(text, style), {
+            eastAsia: style?.fontFamilyEastAsia,
+            complexScript: style?.fontFamilyComplexScript
+          })
+        : undefined) ??
+      cssFontFamily(style?.fontFamily, {
+        eastAsia: style?.fontFamilyEastAsia,
+        complexScript: style?.fontFamilyComplexScript
+      }),
+    fontKerning: resolveDocxFontKerning(style, style?.fontSizePt),
+    fontFeatureSettings: resolveDocxFontFeatureSettings(style),
     letterSpacing: Number.isFinite(style?.characterSpacingTwips)
       ? `${Number(
           ((style?.characterSpacingTwips as number) / 20).toFixed(3)

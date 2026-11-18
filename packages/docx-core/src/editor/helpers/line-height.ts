@@ -24,10 +24,8 @@ import { textMeasurementGeneration } from "../../viewer/text-measurement-generat
 import {
   paragraphBaseFontSizePxByParagraph,
   paragraphDominantFontFamilyByParagraph,
-  paragraphMeasureCanvasContext,
   setCacheEntry,
-  textWidthByFontAndValue,
-  setParagraphMeasureCanvasContext
+  textWidthByFontAndValue
 } from "./cache-utils";
 import {
   DEFAULT_PARAGRAPH_FONT_SIZE_PT,
@@ -47,6 +45,17 @@ import {
 } from "./constants";
 import { twipsToSignedPixels } from "./ooxml-helpers";
 import { cssFontFamily } from "./style-to-css";
+import { fontAdvanceWidthPx } from "../../viewer/font-advances";
+import { resolveDocxFontFeatureSettings } from "../../viewer/font-features";
+import {
+  measuredFontSizePt,
+  resolveDocxFontKerning
+} from "../../viewer/font-kerning";
+import {
+  resolveDocxScriptFontFamily,
+  segmentTextByDocxScriptFont,
+  type DocxScriptFontSegment
+} from "../../viewer/script-fonts";
 import { formFieldDisplayValue } from "./paragraph-inspect";
 import { isTableOfContentsParagraph } from "./paragraph-toc";
 import {
@@ -328,10 +337,49 @@ export function resolveMeasureFont(
   style: TextRunNode["style"] | FormFieldRunNode["style"] | undefined,
   paragraphBaseFontPx: number
 ): string {
+  // "M" is ASCII, so the ascii slot (or the first structured slot) names the
+  // paragraph mark/strut font. An empty run still needs a measurable font.
+  return resolveMeasureFontForText("M", style, paragraphBaseFontPx);
+}
+
+function resolveMeasureFontSizePxForSegment(
+  segment: DocxScriptFontSegment,
+  style: TextRunNode["style"] | FormFieldRunNode["style"] | undefined,
+  paragraphBaseFontPx: number
+): number {
+  const runFontSizePt =
+    Number.isFinite(segment.fontSizePt) && (segment.fontSizePt as number) > 0
+      ? (segment.fontSizePt as number)
+      : Number.isFinite(style?.fontSizePt) && (style?.fontSizePt as number) > 0
+      ? (style?.fontSizePt as number)
+      : undefined;
+  const runFontSizePx =
+    runFontSizePt !== undefined
+      ? (runFontSizePt * 96) / 72
+      : paragraphBaseFontPx;
+  const verticalAlignScale =
+    style?.verticalAlign === "superscript" ||
+    style?.verticalAlign === "subscript"
+      ? SCRIPT_FONT_SCALE
+      : 1;
+  return Math.max(8, Math.round(runFontSizePx * verticalAlignScale));
+}
+
+/** Canvas font string for one resolved script segment. */
+export function resolveMeasureFontForSegment(
+  segment: DocxScriptFontSegment,
+  style: TextRunNode["style"] | FormFieldRunNode["style"] | undefined,
+  paragraphBaseFontPx: number
+): string {
   const fontStyle = style?.italic ? "italic" : "normal";
   const fontWeight = style?.bold ? "700" : "400";
-  const fontSizePx = resolveMeasureFontSizePx(style, paragraphBaseFontPx);
+  const fontSizePx = resolveMeasureFontSizePxForSegment(
+    segment,
+    style,
+    paragraphBaseFontPx
+  );
   const fontFamily =
+    cssFontFamily(segment.fontFamily) ??
     cssFontFamily(style?.fontFamily, {
       eastAsia: style?.fontFamilyEastAsia,
       complexScript: style?.fontFamilyComplexScript
@@ -339,6 +387,44 @@ export function resolveMeasureFont(
     cssFontFamily(DEFAULT_UNSPECIFIED_DOCX_FONT_FAMILY) ??
     '"Calibri", sans-serif';
   return `${fontStyle} normal ${fontWeight} ${fontSizePx}px ${fontFamily}`;
+}
+
+/**
+ * Canvas font string for the first strong script in `text`. Callers that lay
+ * out mixed-script runs should build one item per script segment instead.
+ */
+export function resolveMeasureFontForText(
+  text: string,
+  style: TextRunNode["style"] | FormFieldRunNode["style"] | undefined,
+  paragraphBaseFontPx: number
+): string {
+  if (!text) {
+    return resolveMeasureFontForSegment(
+      {
+        text: "M",
+        startOffset: 0,
+        endOffset: 1,
+        script: "ascii",
+        fontFamily: resolveDocxScriptFontFamily(style, "ascii")
+      },
+      style,
+      paragraphBaseFontPx
+    );
+  }
+  const [segment] = segmentTextByDocxScriptFont(text, style);
+  return segment
+    ? resolveMeasureFontForSegment(segment, style, paragraphBaseFontPx)
+    : resolveMeasureFontForSegment(
+        {
+          text: "M",
+          startOffset: 0,
+          endOffset: 1,
+          script: "ascii",
+          fontFamily: resolveDocxScriptFontFamily(style, "ascii")
+        },
+        style,
+        paragraphBaseFontPx
+      );
 }
 
 export function measureTextWidthPx(
@@ -350,7 +436,21 @@ export function measureTextWidthPx(
     return 0;
   }
 
-  const font = resolveMeasureFont(style, paragraphBaseFontPx);
+  const segments = segmentTextByDocxScriptFont(text, style);
+  const featureSettings = resolveDocxFontFeatureSettings(style);
+  const fontSignature = segments
+    .map(
+      (segment) =>
+        `${segment.script}:${segment.fontFamily ?? ""}:${
+          segment.fontSizePt ?? ""
+        }`
+    )
+    .join("|");
+  const fontKey = `${fontSignature}|kern=${
+    style?.kerningMinFontSizePt ?? ""
+  }|b=${style?.bold ? 1 : 0}|i=${style?.italic ? 1 : 0}|va=${
+    style?.verticalAlign ?? ""
+  }`;
   const characterSpacingPx = Number.isFinite(style?.characterSpacingTwips)
     ? (style?.characterSpacingTwips as number) / TWIPS_PER_PIXEL
     : 0;
@@ -359,32 +459,28 @@ export function measureTextWidthPx(
     (style?.characterScalePercent as number) > 0
       ? (style?.characterScalePercent as number) / 100
       : 1;
-  const cacheKey = `${textMeasurementGeneration()}\u0000${font}\u0000${characterSpacingPx}\u0000${characterScale}\u0000${text}`;
+  const cacheKey = `${textMeasurementGeneration()}\u0000${fontKey}\u0000${featureSettings}\u0000${characterSpacingPx}\u0000${characterScale}\u0000${text}`;
   const cached = textWidthByFontAndValue.get(cacheKey);
   if (cached !== undefined) {
     return cached;
   }
 
-  const fontSizePx = resolveMeasureFontSizePx(style, paragraphBaseFontPx);
-  let measuredWidthPx = fallbackMeasureTextWidthPx(text, fontSizePx);
-
-  if (typeof document !== "undefined") {
-    try {
-      let context = paragraphMeasureCanvasContext;
-      if (!context) {
-        const canvas = document.createElement("canvas");
-        context = canvas.getContext("2d") ?? undefined;
-        if (context) {
-          setParagraphMeasureCanvasContext(context);
-        }
-      }
-      if (context) {
-        context.font = font;
-        measuredWidthPx = context.measureText(text).width;
-      }
-    } catch {
-      // Keep deterministic fallback width when canvas measurement is unavailable.
-    }
+  let measuredWidthPx = 0;
+  for (const segment of segments) {
+    if (!segment.text) continue;
+    const font = resolveMeasureFontForSegment(
+      segment,
+      style,
+      paragraphBaseFontPx
+    );
+    const fontKerning = resolveDocxFontKerning(
+      style,
+      measuredFontSizePt(font) ?? style?.fontSizePt
+    );
+    measuredWidthPx += fontAdvanceWidthPx(font, segment.text, {
+      fontKerning,
+      fontFeatureSettings: featureSettings
+    });
   }
 
   if (characterSpacingPx !== 0 && text.length > 1) {

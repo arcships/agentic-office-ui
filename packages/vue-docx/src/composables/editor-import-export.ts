@@ -20,6 +20,7 @@ import {
 import { onScopeDispose, toRaw, watch } from "vue"
 import type { EditorCore } from "./editor-shared"
 import { isRequiredFormFieldEmpty } from "./form-field-value"
+import { prepareDocxDocumentFonts } from "./docx-document-fonts"
 import {
   docxExportFileName,
   docxExportMimeType,
@@ -288,6 +289,7 @@ export function createEditorImportExport(ctx: EditorCore) {
       ctx.model.value = parsedModel
       ctx.cleanModel.value = parsedModel
       ctx.basePackage.value = parsedPkg
+      void prepareDocxDocumentFonts(parsedModel, parsedPkg)
       ctx.documentLoadNonce.value += 1
       ctx.fileName.value = file.name
       ctx.history.value = { past: [], future: [] }

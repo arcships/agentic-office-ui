@@ -18,6 +18,7 @@ import type { DocxDocumentTheme } from "@arcships/docx-core"
 import type { DocxRevisionDisplay } from "@arcships/docx-core"
 import type { ParagraphTrackedInlineChange } from "@arcships/docx-core"
 import type { ParagraphCommentTextRange } from "@arcships/docx-core"
+import type { DocxScriptFontSegment } from "@arcships/docx-core"
 import {
   paragraphUsesTabLeaders,
   paragraphAnchoredTabLayout,
@@ -53,6 +54,8 @@ import {
   resolveDropCapFontSizePx,
   resolveDropCapVisualHeightPx,
   estimateParagraphLineHeightPx,
+  docxScriptSegmentStyle,
+  segmentTextByDocxScriptFont,
 } from "@arcships/docx-core"
 import type { ImageRunRenderExtra } from "./paragraph-runs-image"
 import { renderImageRun } from "./paragraph-runs-image"
@@ -448,6 +451,29 @@ export function renderParagraphRuns(
     return segments
   }
 
+  /**
+   * Replaces only the font properties of a span style with the ones the
+   * segment's OOXML slot resolves to. Decoration, comment highlight, tracking
+   * colour and transforms from the run style stay intact.
+   */
+  const scriptSegmentTextStyle = (
+    baseStyle: Record<string, string | number | undefined>,
+    runStyle: TextRunNode["style"] | FormFieldRunNode["style"] | undefined,
+    segment: DocxScriptFontSegment
+  ): Record<string, string | number | undefined> => {
+    const scriptStyle = runStyleToCss(
+      docxScriptSegmentStyle(runStyle, segment),
+      documentTheme
+    )
+    return {
+      ...baseStyle,
+      ...(scriptStyle.fontFamily ? { fontFamily: scriptStyle.fontFamily } : {}),
+      ...(scriptStyle.fontSize ? { fontSize: scriptStyle.fontSize } : {}),
+      fontKerning: scriptStyle.fontKerning,
+      fontFeatureSettings: scriptStyle.fontFeatureSettings,
+    }
+  }
+
   const currentAnnotationAttributes = (
     trackedInlineChange: ParagraphTrackedInlineChange | undefined
   ): Record<string, string> => {
@@ -707,7 +733,7 @@ export function renderParagraphRuns(
 
     const trackedStyle = {
       ...trackedInlineStyle(
-        runStyleToCss(child.style, documentTheme),
+        runStyleToCss(child.style, documentTheme, textValue),
         trackedInlineChange,
         documentTheme
       ),
@@ -846,6 +872,63 @@ export function renderParagraphRuns(
       const linkTextRange = effectiveText === child.text
         ? textRangeAttributes(startOffset, child.text.length)
         : {}
+      const linkStyle = trackedLinkStyle(child.style, trackedInlineChange)
+      const scriptSegments = segmentTextByDocxScriptFont(
+        effectiveText,
+        child.style
+      )
+      let linkChildren: VNode[] | string = effectiveText
+      if (
+        (commentTextRanges && commentTextRanges.length > 0) ||
+        scriptSegments.length > 1
+      ) {
+        const children: VNode[] = []
+        const windows =
+          commentTextRanges && commentTextRanges.length > 0
+            ? commentTextSegments(effectiveText, commentTextRanges)
+            : [{ start: 0, end: effectiveText.length, commentIds: [] as number[] }]
+        for (const window of windows) {
+          const windowText = effectiveText.slice(window.start, window.end)
+          const windowStyle =
+            window.commentIds.length > 0
+              ? { ...linkStyle, ...commentStyleForIds(window.commentIds) }
+              : linkStyle
+          const windowSegments = segmentTextByDocxScriptFont(
+            windowText,
+            child.style
+          )
+          for (const scriptSegment of windowSegments) {
+            children.push(
+              h(
+                "span",
+                {
+                  key: `${key}-comment-${window.start}-script-${scriptSegment.startOffset}`,
+                  ...(window.commentIds.length > 0
+                    ? commentAttributesForIds(window.commentIds)
+                    : {}),
+                  ...(effectiveText === child.text
+                    ? textRangeAttributes(
+                        startOffset === undefined
+                          ? undefined
+                          : startOffset +
+                              window.start +
+                              scriptSegment.startOffset,
+                        scriptSegment.text.length
+                      )
+                    : {}),
+                  style: scriptSegmentTextStyle(
+                    windowStyle,
+                    child.style,
+                    scriptSegment
+                  ),
+                },
+                scriptSegment.text
+              )
+            )
+          }
+        }
+        linkChildren = children
+      }
       target.push(
         h("a", {
           key, ...annotationAttributes,
@@ -863,27 +946,9 @@ export function renderParagraphRuns(
             event.preventDefault(); event.stopPropagation()
             onInternalLinkClick(linkHref.slice(1))
           },
-          style: trackedLinkStyle(child.style, trackedInlineChange),
+          style: linkStyle,
         },
-        commentTextRanges
-          ? commentTextSegments(effectiveText, commentTextRanges).map((segment) =>
-              h(
-                "span",
-                {
-                  key: `${key}-comment-${segment.start}`,
-                  ...commentAttributesForIds(segment.commentIds),
-                  ...(effectiveText === child.text
-                    ? textRangeAttributes(
-                        startOffset === undefined ? undefined : startOffset + segment.start,
-                        segment.end - segment.start
-                      )
-                    : {}),
-                  style: commentStyleForIds(segment.commentIds),
-                },
-                effectiveText.slice(segment.start, segment.end)
-              )
-            )
-          : effectiveText
+        linkChildren
         )
       )
       trackTextAdvance(effectiveText, child.style)
@@ -909,21 +974,61 @@ export function renderParagraphRuns(
     commentTextRanges?: readonly ParagraphCommentTextRange[],
     textOffset?: number
   ): void => {
+    // One span per resolved script segment. A single-script run keeps its old
+    // key and offset attributes; mixed Latin/CJK/RTL text splits so each span
+    // carries the same family the layout measured.
+    const appendSegmentedText = (
+      segmentText: string,
+      keyPrefix: string,
+      segmentTextOffset: number | undefined,
+      baseStyle: Record<string, string | number | undefined>,
+      extraAttributes?: Record<string, string>,
+      extraStyle?: Record<string, string | number | undefined>
+    ): void => {
+      const scriptSegments = segmentTextByDocxScriptFont(
+        segmentText,
+        measureStyle
+      )
+      const base = extraStyle ? { ...baseStyle, ...extraStyle } : baseStyle
+      if (scriptSegments.length <= 1) {
+        target.push(h("span", {
+          key: keyPrefix,
+          ...extraAttributes,
+          ...textRangeAttributes(segmentTextOffset, segmentText.length),
+          style: base,
+        }, segmentText))
+        return
+      }
+      for (const scriptSegment of scriptSegments) {
+        target.push(h("span", {
+          key: `${keyPrefix}-s${scriptSegment.startOffset}`,
+          ...extraAttributes,
+          ...textRangeAttributes(
+            segmentTextOffset === undefined
+              ? undefined
+              : segmentTextOffset + scriptSegment.startOffset,
+            scriptSegment.text.length
+          ),
+          style: scriptSegmentTextStyle(base, measureStyle, scriptSegment),
+        }, scriptSegment.text))
+      }
+    }
+
     // Exact comment windows: emit one span per run of identically-commented
     // characters, so a range covering half a run highlights only that half.
     if (commentTextRanges && commentTextRanges.length > 0) {
       for (const segment of commentTextSegments(text, commentTextRanges)) {
-        target.push(
-          h("span", {
-            key: `${keySeed}-comment-${segment.start}`,
+        const segmentStyle = commentStyleForIds(segment.commentIds)
+        appendSegmentedText(
+          text.slice(segment.start, segment.end),
+          `${keySeed}-comment-${segment.start}`,
+          textOffset === undefined ? undefined : textOffset + segment.start,
+          style,
+          {
             ...spanAttributes,
             ...commentAttributesForIds(segment.commentIds),
-            ...textRangeAttributes(
-              textOffset === undefined ? undefined : textOffset + segment.start,
-              segment.end - segment.start
-            ),
-            style: { ...style, ...commentStyleForIds(segment.commentIds) },
-          }, text.slice(segment.start, segment.end))
+          },
+          segmentStyle
         )
       }
       trackTextAdvance(text, measureStyle)
@@ -933,12 +1038,7 @@ export function renderParagraphRuns(
     const shouldControlSoftBreakStretch =
       isJustifiedAlignment(paragraph.style?.align) && text.includes("\n")
     if (!shouldControlSoftBreakStretch) {
-      target.push(h("span", {
-        key: keySeed,
-        ...spanAttributes,
-        ...textRangeAttributes(textOffset, text.length),
-        style,
-      }, text))
+      appendSegmentedText(text, keySeed, textOffset, style, spanAttributes)
       trackTextAdvance(text, measureStyle)
       return
     }
@@ -952,15 +1052,20 @@ export function renderParagraphRuns(
         segmentOffset = segmentOffset === undefined ? undefined : segmentOffset + 1
       }
       if (segment.length > 0) {
-        target.push(
-          h("span", {
-            key: `${keySeed}-segment-${segmentIndex}`,
-            ...spanAttributes,
-            ...textRangeAttributes(segmentOffset, segment.length),
-            style: isLastSegment
-              ? { ...style, display: "inline-block", maxWidth: "100%", whiteSpace: "pre-wrap", verticalAlign: "baseline" }
-              : style,
-          }, segment)
+        appendSegmentedText(
+          segment,
+          `${keySeed}-segment-${segmentIndex}`,
+          segmentOffset,
+          style,
+          spanAttributes,
+          isLastSegment
+            ? {
+                display: "inline-block",
+                maxWidth: "100%",
+                whiteSpace: "pre-wrap",
+                verticalAlign: "baseline",
+              }
+            : undefined
         )
       }
       segmentOffset = segmentOffset === undefined ? undefined : segmentOffset + segment.length

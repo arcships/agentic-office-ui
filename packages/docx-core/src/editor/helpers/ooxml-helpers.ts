@@ -5,6 +5,7 @@
 import type { TableBorderSet } from "../../engine/types";
 import type { OoxmlPackage } from "../../engine/ooxml-core";
 import { TWIPS_PER_PIXEL } from "../../viewer/section-layout";
+import { fontTableEntries } from "../../viewer/font-table";
 
 /** Extract the value of an XML attribute from a tag string. */
 export function xmlAttribute(tagXml: string, attribute: string): string | undefined {
@@ -160,8 +161,6 @@ export function collectEmbeddedFontFaceDescriptors(
 
   const fontRelationships = parseOoxmlRelationships(pkg, "word/fontTable.xml");
   const descriptors: EmbeddedFontFaceDescriptor[] = [];
-  const fontPattern =
-    /<w:font\b[^>]*w:name="([^"]+)"[^>]*>([\s\S]*?)<\/w:font>/gi;
   const fontVariants = [
     { tagName: "embedRegular", style: "normal" as const, weight: "400" },
     { tagName: "embedBold", style: "normal" as const, weight: "700" },
@@ -169,14 +168,7 @@ export function collectEmbeddedFontFaceDescriptors(
     { tagName: "embedBoldItalic", style: "italic" as const, weight: "700" },
   ];
 
-  let fontMatch: RegExpExecArray | null;
-  while ((fontMatch = fontPattern.exec(fontTableXml))) {
-    const family = fontMatch[1]?.trim();
-    const fontXml = fontMatch[2] ?? "";
-    if (!family) {
-      continue;
-    }
-
+  for (const { family, xml: fontXml } of fontTableEntries(fontTableXml)) {
     fontVariants.forEach((variant) => {
       const tagXml =
         fontXml.match(

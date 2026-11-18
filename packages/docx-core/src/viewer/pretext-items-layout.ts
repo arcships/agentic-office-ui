@@ -483,6 +483,10 @@ export function layoutItemsWithPretextAroundExclusions(
           startOffset,
           endOffset,
           font: lineFragment.font,
+          ...(item.fontKerning ? { fontKerning: item.fontKerning } : {}),
+          ...(item.fontFeatureSettings
+            ? { fontFeatureSettings: item.fontFeatureSettings }
+            : {}),
           ...itemVerticalMetrics(item),
         });
 

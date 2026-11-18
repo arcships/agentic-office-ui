@@ -67,6 +67,25 @@ export interface DocxThemeFonts {
   minor?: DocxThemeFontSet;
 }
 
+/** OOXML `w14:ligatures` / Word's "Use ligatures" list. */
+export type TextLigatures =
+  | "none"
+  | "standard"
+  | "contextual"
+  | "historical"
+  | "discretional"
+  | "standardContextual"
+  | "standardHistorical"
+  | "contextualHistorical"
+  | "standardDiscretional"
+  | "contextualDiscretional"
+  | "historicalDiscretional"
+  | "standardContextualHistorical"
+  | "standardContextualDiscretional"
+  | "standardHistoricalDiscretional"
+  | "contextualHistoricalDiscretional"
+  | "all";
+
 export interface TextStyle {
   bold?: boolean;
   italic?: boolean;
@@ -84,10 +103,39 @@ export interface TextStyle {
   fontSizePt?: number;
   /** Primary (ASCII / high-ANSI) font family. */
   fontFamily?: string;
+  /**
+   * Font family as imported before any user edit. Script-font resolution uses
+   * it to tell a structured `w:rFonts` style from a legacy single-family one.
+   */
+  sourceFontFamily?: string;
+  /** OOXML `w:rFonts/@w:ascii` slot. */
+  fontFamilyAscii?: string;
+  /** OOXML `w:rFonts/@w:hAnsi` slot. */
+  fontFamilyHAnsi?: string;
   /** East-Asian font family (`w:rFonts/@w:eastAsia`). */
   fontFamilyEastAsia?: string;
   /** Complex-script font family (`w:rFonts/@w:cs`). */
   fontFamilyComplexScript?: string;
+  /** Complex-script font size (`w:szCs`), in points. */
+  fontSizeCsPt?: number;
+  /** Minimum size (`w:kern/@w:val`, points) at which kerning is enabled. */
+  kerningMinFontSizePt?: number;
+  /** OOXML `w14:ligatures`; `none` unless the document asks otherwise. */
+  ligatures?: TextLigatures;
+  /** OOXML `w14:cntxtAlts`; enables contextual alternates when true. */
+  contextualAlternates?: boolean;
+  /** OOXML `w:rFonts/@w:hint` (`eastAsia`, `cs`, `default`). */
+  fontHint?: string;
+  /** OOXML `w:lang/@w:val`, used to classify neutral characters. */
+  language?: string;
+  /** OOXML `w:lang/@w:eastAsia`. */
+  languageEastAsia?: string;
+  /** OOXML `w:lang/@w:bidi`. */
+  languageBidi?: string;
+  /** OOXML `w:rtl`; keeps `direction` as the rendering compatibility flag. */
+  rightToLeft?: boolean;
+  /** OOXML `w:cs`; forces complex-script shaping for the run. */
+  complexScript?: boolean;
   characterSpacingTwips?: number;
   /** OOXML `w:w` character scale, 1-600 (100 = normal). */
   characterScalePercent?: number;

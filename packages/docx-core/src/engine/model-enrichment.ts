@@ -71,9 +71,22 @@ function applyMissingRunStyle(
   };
 
   assign("fontFamily");
+  assign("sourceFontFamily");
+  assign("fontFamilyAscii");
+  assign("fontFamilyHAnsi");
   assign("fontFamilyEastAsia");
   assign("fontFamilyComplexScript");
+  assign("fontHint");
   assign("fontSizePt");
+  assign("fontSizeCsPt");
+  assign("kerningMinFontSizePt");
+  assign("ligatures");
+  assign("contextualAlternates");
+  assign("language");
+  assign("languageEastAsia");
+  assign("languageBidi");
+  assign("rightToLeft");
+  assign("complexScript");
   assign("bold");
   assign("italic");
   assign("color");
@@ -128,7 +141,7 @@ function runTextFromXml(runXml: string): string {
 }
 
 const RUN_TYPOGRAPHY_TAG_PATTERN =
-  /<w:(?:rFonts|u|dstrike|strike|caps|smallCaps|spacing|w|bdr|effect|shadow|outline|rtl)\b/i;
+  /<w:(?:rFonts|u|dstrike|strike|caps|smallCaps|spacing|w|bdr|effect|shadow|outline|rtl|kern|lang|szCs|cs)\b|<w14:(?:ligatures|cntxtAlts)\b/i;
 
 function enrichParagraphRuns(
   paragraph: ParagraphNode,

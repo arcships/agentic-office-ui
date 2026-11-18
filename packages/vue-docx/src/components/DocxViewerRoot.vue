@@ -122,6 +122,8 @@ import {
   parseSectionPageBorders,
   createSectionPageNumberTracker,
   primeCommentAnchors,
+  getFontMetricsRevision,
+  subscribeFontMetrics,
   resolveDocumentBackgroundColor,
   reviewDisplayModel,
   resolveDocumentSectionsFromMetadata,
@@ -283,6 +285,11 @@ const paginationPageCountTarget = computed(() =>
 const paginationState = ref<"idle" | "repaginating" | "converged" | "oscillating" | "exhausted">("idle")
 const paginationIterations = ref(0)
 const paginationTargetReached = ref(false)
+// A web font that arrives after the first measure changes advance widths; the
+// revision makes every pagination/measurement computed depend on that event.
+const fontMetricsRevision = ref(getFontMetricsRevision())
+const paginationFontMetricsRevision = computed(() => fontMetricsRevision.value)
+let stopFontMetricsSubscription: (() => void) | undefined
 const measuredParagraphHeightsPxByNodeIndex = ref<Record<number, number>>({})
 const measuredTableRowHeightsPxByNodeIndex = ref<Record<number, number[]>>({})
 const measuredPageContentHeights = ref<
@@ -442,6 +449,9 @@ function pageSegmentationKey(
 }
 
 const paginationPlan = computed(() => {
+  // Track the font-metric revision: a late web font changes measured
+  // advances and must re-run segmentation, not just repaint.
+  void paginationFontMetricsRevision.value
   const snapshot = buildLayoutSnapshot(renderModel.value, {
     ...resolvedLayoutOptions.value,
     measurementFeedback: paginationMeasurementFeedback.value,
@@ -1748,6 +1758,9 @@ let stopPrintDetection: () => void = () => {}
 
 onMounted(() => {
   ensureDocumentFontInvalidation()
+  stopFontMetricsSubscription = subscribeFontMetrics(() => {
+    fontMetricsRevision.value = getFontMetricsRevision()
+  })
   stopPrintDetection = setupPrintDetection()
   if (scrollContainerRef.value) {
     const height = scrollContainerRef.value.clientHeight
@@ -1777,6 +1790,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   stopPrintDetection()
+  stopFontMetricsSubscription?.()
+  stopFontMetricsSubscription = undefined
   printPageStyle?.remove?.()
   printPageStyle = undefined
   containerObserver?.disconnect()
