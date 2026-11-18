@@ -469,6 +469,14 @@ export interface DocxEditorStatusMessages {
   splitTableCell: string;
   movedTable: string;
   movedEmbeddedTable: string;
+  resizedTableRow: string;
+  tableRowHeightPositive: string;
+  tableRowHeightTargetUnavailable: string;
+  movedBodyNode: string;
+  cannotMoveBodyNodeNotFound: string;
+  updatedFormField: string;
+  formFieldTargetUnavailable: string;
+  formFieldOptionsRequired: string;
   /** Template with a `{preset}` placeholder. */
   unsupportedDiagonalTableCellBorders: string;
   /** Template with a `{preset}` placeholder. */

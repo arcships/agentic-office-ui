@@ -6,7 +6,9 @@
 
 import type {
   DocModel,
+  FormFieldOption,
   FormFieldRunNode,
+  FormFieldType,
   HeadingLevel,
   ImageRunNode,
   ParagraphAlignment,
@@ -100,6 +102,29 @@ export interface DocxImageWrapState {
   mode: DocxImageWrapMode;
   moveWithText: boolean;
   fixedPositionOnPage: boolean;
+}
+
+/**
+ * Property patch accepted by `DocxEditorController.updateFormField()`.
+ *
+ * One call is one undo entry, so a form-field dialog that changes the value, the
+ * option list and the widget settings at once stays a single step.
+ */
+export interface DocxFormFieldUpdate {
+  fieldType?: FormFieldType;
+  title?: string;
+  tag?: string;
+  placeholder?: string;
+  required?: boolean;
+  value?: string;
+  checked?: boolean;
+  checkedSymbol?: string;
+  uncheckedSymbol?: string;
+  options?: FormFieldOption[];
+  /** Merged into the existing widget settings unless `replaceWidget` is set. */
+  widget?: Partial<NonNullable<FormFieldRunNode["widget"]>>;
+  /** Replace `widget` instead of merging the patch into it. */
+  replaceWidget?: boolean;
 }
 
 export interface DocxImageWrapMenuOption {
@@ -250,6 +275,16 @@ export interface DocxEditorController {
     location: DocxFormFieldLocation,
     patch: Partial<NonNullable<FormFieldRunNode["widget"]>>
   ) => void;
+  /**
+   * Updates a form field's value and configuration as one undo entry.
+   *
+   * Returns false (and leaves the model untouched) when the location no longer
+   * holds a form field or when the new value violates the field's constraints.
+   */
+  updateFormField: (
+    location: DocxFormFieldLocation,
+    patch: DocxFormFieldUpdate
+  ) => boolean;
   applyBorderPreset: (preset: DocxBorderPreset) => void;
   setAlignment: (align?: ParagraphAlignment) => void;
   toggleList: (listType: DocxListType) => void;
@@ -333,6 +368,21 @@ export interface DocxEditorController {
     cells: Array<{ rowIndex: number; cellIndex: number }>
   ) => void;
   setTableColumnWidths: (tableIndex: number, widthsPx: number[]) => void;
+  /**
+   * Sets a row's height in CSS pixels ('atLeast' rule) as one undo entry.
+   * A non-positive or unmeasurable height is refused with a status message.
+   */
+  setTableRowHeight: (
+    tableIndex: number,
+    rowIndex: number,
+    heightPx: number
+  ) => void;
+  /**
+   * Moves a body node (paragraph or table) to an insertion index as one undo
+   * entry. `targetNodeIndex` addresses the node list *before* the move, so
+   * passing `fromIndex + 1` (or the node count) is a no-op.
+   */
+  moveBodyNode: (fromNodeIndex: number, targetNodeIndex: number) => boolean;
   /**
    * Inserts a row on the requested side of the reference row.
    * `rowIndex` is the index of that reference row, not the insertion index.
@@ -852,6 +902,11 @@ export interface UseDocxFormFieldsResult {
   updateSelectedFormFieldWidget: (
     patch: Partial<NonNullable<FormFieldRunNode["widget"]>>
   ) => void;
+  updateFormField: (
+    location: DocxFormFieldLocation,
+    patch: DocxFormFieldUpdate
+  ) => boolean;
+  updateSelectedFormField: (patch: DocxFormFieldUpdate) => boolean;
 }
 
 export interface UseDocxTrackChangesResult {

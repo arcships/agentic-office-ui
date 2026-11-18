@@ -55,6 +55,18 @@ export function docxTextHostFromNode(
   return closestTextHost(node ?? null) as HTMLElement | undefined
 }
 
+/**
+ * Text location (body paragraph or table cell) of the host that owns a DOM
+ * node. Returns undefined for hosts without a model index (for example the
+ * header/footer stories, which use negative display indexes).
+ */
+export function docxTextLocationForNode(
+  node: Node | null | undefined
+): DocxTextRangeLocation | undefined {
+  const host = closestTextHost(node ?? null)
+  return host ? locationForHost(host) : undefined
+}
+
 /** Read the visible text of a DOCX text host, preserving line breaks. */
 export function readDocxTextHostText(host: HTMLElement): string {
   function readNode(node: Node): string {

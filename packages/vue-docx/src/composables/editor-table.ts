@@ -391,6 +391,44 @@ export function createEditorTable(
     }, ctx.statusMessage("resizedTableColumns"))
   }
 
+  const setTableRowHeight = (
+    tableIndex: number,
+    rowIndex: number,
+    heightPx: number
+  ): void => {
+    if (!Number.isFinite(heightPx) || heightPx <= 0) {
+      unsupported("tableRowHeightPositive")
+      return
+    }
+
+    const table = ctx.modelSnapshot.value.nodes[tableIndex]
+    if (
+      table?.type !== "table" ||
+      !Number.isInteger(rowIndex) ||
+      !table.rows[rowIndex]
+    ) {
+      unsupported("tableRowHeightTargetUnavailable")
+      return
+    }
+
+    const heightTwips = Math.max(1, Math.round(Math.round(heightPx) * TWIPS_PER_PIXEL))
+    applyChange((current) => {
+      const nextModel = cloneModelForTableEdit(current, tableIndex)
+      const node = nextModel.nodes[tableIndex]
+      if (!node || node.type !== "table") return current
+      const row = node.rows[rowIndex]
+      if (!row) return current
+      if (row.style?.heightTwips === heightTwips && row.style?.heightRule === "atLeast") {
+        return current
+      }
+      // A dragged height is a minimum: content that needs more room still grows
+      // the row instead of being clipped like an `exact` height would.
+      row.style = { ...(row.style ?? {}), heightTwips, heightRule: "atLeast" }
+      node.sourceXml = undefined
+      return nextModel
+    }, ctx.statusMessage("resizedTableRow"))
+  }
+
   const mergeTableCells = (
     tableIndex: number, range: DocxTableCellSelectionRange
   ): void => {
@@ -452,6 +490,30 @@ export function createEditorTable(
       }
       return nextModel
     }, ctx.statusMessage("movedTable"))
+  }
+
+  // Paragraph and table reordering share one body-node move: section starts are
+  // re-anchored by `moveBodyNodeInModel`, so a node that crosses a section break
+  // joins the section at its new position instead of redefining the break.
+  const moveBodyNode = (
+    fromNodeIndex: number,
+    targetNodeIndex: number
+  ): boolean => {
+    let moved = false
+    applyChange((current) => {
+      const node = current.nodes[fromNodeIndex]
+      if (!node) {
+        refuse("cannotMoveBodyNodeNotFound")
+        return current
+      }
+      const nextModel = cloneModelForSectionEdit(current)
+      if (!moveBodyNodeInModel(nextModel, fromNodeIndex, targetNodeIndex)) {
+        return current
+      }
+      moved = true
+      return nextModel
+    }, ctx.statusMessage("movedBodyNode"))
+    return moved
   }
 
   const moveEmbeddedTableToBody = (
@@ -524,9 +586,11 @@ export function createEditorTable(
     deleteTable,
     clearTableCellContents,
     setTableColumnWidths,
+    setTableRowHeight,
     mergeTableCells,
     splitTableCell,
     moveTable,
+    moveBodyNode,
     moveEmbeddedTableToBody,
   }
 }

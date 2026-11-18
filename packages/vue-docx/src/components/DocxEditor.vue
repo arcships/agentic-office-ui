@@ -6,6 +6,11 @@
     :style="minHeightStyle"
     data-testid="docx-editor"
     @keydown="onKeydown"
+    @dblclick="onEditorDoubleClick"
+    @pointerover="onEditorPointerOver"
+    @pointerout="onEditorPointerOut"
+    @pointermove="onEditorPointerMove"
+    @pointerleave="onEditorPointerLeave"
   >
     <!-- Toolbar -->
     <DocxToolbar
@@ -15,6 +20,7 @@
       :zoom="zoomPercent"
       :read-only="interactionLocked"
       :show-thumbnails="thumbnailPanelVisible"
+      :show-style-preview="showStylePreview"
       :current-page="currentPage"
       :total-pages="totalPages"
       @update:zoom="zoomPercent = $event"
@@ -82,6 +88,54 @@
       :controller="controller"
     />
 
+    <!-- Node reorder handle and drop indicator -->
+    <button
+      v-if="reorderHandleVisible"
+      type="button"
+      class="docx-node-reorder-handle"
+      data-testid="docx-node-reorder-handle"
+      :data-docx-node-index="reorder.hover.value?.nodeIndex"
+      :aria-label="m.docx.nodeDrag.handle"
+      :title="m.docx.nodeDrag.handleTitle"
+      :style="reorderHandleStyle"
+      @mousedown.prevent.stop="onReorderHandlePointerDown"
+      @keydown.up.prevent.stop="onReorderHandleKey(-1)"
+      @keydown.down.prevent.stop="onReorderHandleKey(1)"
+    >
+      <span aria-hidden="true">⠿</span>
+    </button>
+    <div
+      v-if="reorder.dragging.value && reorder.dropTop.value !== undefined"
+      class="docx-node-drop-indicator"
+      data-testid="docx-node-drop-indicator"
+      :style="reorderDropIndicatorStyle"
+    />
+
+    <!-- Link hover card -->
+    <DocxLinkHoverCard
+      v-if="linkCard.visible.value && linkCard.state.value"
+      :href="linkCard.state.value.href"
+      :x="linkCard.state.value.x"
+      :y="linkCard.state.value.y"
+      :editable="linkCard.state.value.editable"
+      :document-theme="controller.documentTheme"
+      @open="onLinkCardOpen"
+      @edit="onLinkCardEdit"
+      @remove="onLinkCardRemove"
+      @close="hideLinkCard()"
+      @pointerenter="cancelLinkCardHide"
+      @pointerleave="scheduleLinkCardHide"
+    />
+
+    <!-- Form field properties dialog -->
+    <DocxFormFieldDialog
+      v-if="formFieldDialogLocation && formFieldDialogField"
+      :field="formFieldDialogField"
+      :location="formFieldDialogLocation"
+      :controller="controller"
+      @close="closeFormFieldDialog"
+    />
+
     <!-- Status bar -->
     <OfficeLiveStatus test-id="editor-live-status" :message="liveStatusMessage" />
     <div class="docx-editor-statusbar">
@@ -105,7 +159,10 @@ import { formatOfficeMessage } from "@arcships/office-interaction"
 import type {
   DocxEditorController,
   DocxContextMenuContext,
+  DocxFormFieldLocation,
   DocxRuntime,
+  DocxTextRangeLocation,
+  FormFieldRunNode,
 } from "@arcships/docx-core"
 import { createDocxRuntime, DocxImportError } from "@arcships/docx-core"
 import { OfficeLiveStatus } from "@arcships/vue-ui"
@@ -113,15 +170,23 @@ import { useDocxEditor } from "../composables/useDocxEditor"
 import {
   docxTableContextFromNode,
   docxTextHostFromNode,
+  docxTextLocationForNode,
   readDocxTextHostText,
   syncDomSelectionToEditor,
   textOffsetAtDomPoint,
 } from "../composables/editor-selection"
+import {
+  parseDocxFormFieldLocationKey,
+  resolveFormFieldAt,
+} from "../composables/docx-form-fields"
+import { useDocxNodeReorder } from "../composables/useDocxNodeReorder"
 import DocxDocumentSurface from "./DocxDocumentSurface.vue"
 import DocxToolbar from "./DocxToolbar.vue"
 import DocxContextMenu from "./DocxContextMenu.vue"
 import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
 import DocxDragOverlay from "./DocxDragOverlay.vue"
+import DocxLinkHoverCard from "./DocxLinkHoverCard.vue"
+import DocxFormFieldDialog from "./DocxFormFieldDialog.vue"
 import { provideDocxMessages } from "../i18n"
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -145,13 +210,27 @@ const props = withDefaults(
     commentAuthor?: string
     /** Comment initials; derived from `commentAuthor` when omitted. */
     commentInitials?: string
+    /** Link hover card with open/edit/remove actions. Default `true`. */
+    showLinkCard?: boolean
+    /** Double-clicking a form field opens its properties dialog. Default `true`. */
+    showFormFieldDialog?: boolean
+    /** Hovering the paragraph-style picker previews each style. Default `true`. */
+    showStylePreview?: boolean
+    /** Drag handle that reorders body paragraphs/tables. Default `true`. */
+    showNodeReorder?: boolean
   }>(),
-  { editable: true, showToolbar: true, showThumbnails: false, minHeight: undefined, isDark: false, locale: "en", messages: undefined, commentAuthor: undefined, commentInitials: undefined }
+  { editable: true, showToolbar: true, showThumbnails: false, minHeight: undefined, isDark: false, locale: "en", messages: undefined, commentAuthor: undefined, commentInitials: undefined, showLinkCard: true, showFormFieldDialog: true, showStylePreview: true, showNodeReorder: true }
 )
 
 const emit = defineEmits<{
   (event: "load-error", error: Error): void
   (event: "update:isDark", isDark: boolean): void
+  /**
+   * A link card action asked to open `href`. External URLs are opened by the
+   * editor; internal `#bookmark` targets are host navigation, so the host can
+   * scroll to the anchor it resolves.
+   */
+  (event: "link-open", href: string): void
 }>()
 
 const m = provideDocxMessages(() => props.locale, () => props.messages)
@@ -363,6 +442,250 @@ const dragOverlay = {
 }
 provide("docxDragOverlay", dragOverlay)
 
+// ── Link hover card ────────────────────────────────────────────────
+// Hovering a rendered link shows open/edit/remove without changing the
+// selection. Editing and removing select the linked characters first, so the
+// controller's `setLink()` rewrites exactly that link.
+interface LinkCardState {
+  href: string
+  x: number
+  y: number
+  editable: boolean
+  location?: DocxTextRangeLocation
+  start?: number
+  end?: number
+}
+
+const linkCard = {
+  visible: ref(false),
+  state: ref<LinkCardState | undefined>(undefined),
+}
+let linkCardHideTimer: ReturnType<typeof setTimeout> | undefined
+
+function cancelLinkCardHide(): void {
+  if (linkCardHideTimer !== undefined) clearTimeout(linkCardHideTimer)
+  linkCardHideTimer = undefined
+}
+
+function hideLinkCard(): void {
+  cancelLinkCardHide()
+  linkCard.visible.value = false
+  linkCard.state.value = undefined
+}
+
+function scheduleLinkCardHide(): void {
+  cancelLinkCardHide()
+  linkCardHideTimer = setTimeout(() => {
+    linkCard.visible.value = false
+    linkCard.state.value = undefined
+    linkCardHideTimer = undefined
+  }, 140)
+}
+
+function linkElementFromEvent(event: Event): Element | undefined {
+  const target = event.target as (Element & { closest?: (selector: string) => Element | null }) | null
+  if (!target?.closest) return undefined
+  const anchor = target.closest("a[href]")
+  if (!anchor) return undefined
+  // A link inside the hover card itself is card chrome, not a document link.
+  if (anchor.closest?.("[data-docx-link-card]")) return undefined
+  return anchor
+}
+
+function onEditorPointerOver(event: PointerEvent | Event): void {
+  if (props.showLinkCard === false || !props.editable || interactionLocked.value) return
+  const anchor = linkElementFromEvent(event)
+  if (!anchor) return
+  const href = anchor.getAttribute?.("href")
+  if (!href) return
+
+  const start = Number(anchor.getAttribute?.("data-docx-link-start"))
+  const end = Number(anchor.getAttribute?.("data-docx-link-end"))
+  const hasRange = Number.isFinite(start) && Number.isFinite(end) && end > start
+  const location = docxTextLocationForNode(anchor)
+  const rect = (anchor as Element & {
+    getBoundingClientRect?: () => { left: number; bottom: number }
+  }).getBoundingClientRect?.()
+
+  cancelLinkCardHide()
+  linkCard.state.value = {
+    href,
+    x: rect ? Math.round(rect.left) : 0,
+    y: rect ? Math.round(rect.bottom + 6) : 0,
+    editable: hasRange && Boolean(location),
+    location: hasRange ? location : undefined,
+    start: hasRange ? start : undefined,
+    end: hasRange ? end : undefined,
+  }
+  linkCard.visible.value = true
+}
+
+function onEditorPointerOut(event: PointerEvent | Event): void {
+  if (!linkCard.visible.value) return
+  if (!linkElementFromEvent(event)) return
+  scheduleLinkCardHide()
+}
+
+function selectHoveredLink(): boolean {
+  const state = linkCard.state.value
+  if (!state?.editable || !state.location) return false
+  if (state.start === undefined || state.end === undefined) return false
+  controller.setActiveTextRange({
+    start: { location: state.location, offset: state.start },
+    end: { location: state.location, offset: state.end },
+  })
+  return true
+}
+
+function onLinkCardOpen(href: string): void {
+  hideLinkCard()
+  // Internal bookmarks are document navigation, not a URL to open: expose the
+  // action to the host instead of silently doing nothing.
+  if (href.startsWith("#")) {
+    emit("link-open", href)
+    return
+  }
+  const target = globalThis as { window?: { open?: (url: string, name?: string, features?: string) => unknown } }
+  target.window?.open?.(href, "_blank", "noopener,noreferrer")
+  emit("link-open", href)
+}
+
+function onLinkCardEdit(href: string): void {
+  if (!selectHoveredLink()) {
+    hideLinkCard()
+    return
+  }
+  controller.setLink(href)
+  hideLinkCard()
+}
+
+function onLinkCardRemove(): void {
+  if (!selectHoveredLink()) {
+    hideLinkCard()
+    return
+  }
+  controller.setLink(undefined)
+  hideLinkCard()
+}
+
+// ── Form field properties dialog ───────────────────────────────────
+const formFieldDialogLocation = ref<DocxFormFieldLocation | undefined>()
+const formFieldDialogField = computed<FormFieldRunNode | undefined>(() =>
+  resolveFormFieldAt(controller.model, formFieldDialogLocation.value)
+)
+
+function onEditorDoubleClick(event: MouseEvent | Event): void {
+  if (props.showFormFieldDialog === false || !props.editable || interactionLocked.value) return
+  const target = event.target as (Element & { closest?: (selector: string) => Element | null }) | null
+  const fieldElement = target?.closest?.("[data-docx-form-field-location]") as Element | null | undefined
+  const location = parseDocxFormFieldLocationKey(
+    fieldElement?.getAttribute?.("data-docx-form-field-location")
+  )
+  if (!location) return
+  event.preventDefault?.()
+  controller.selectFormField(location)
+  formFieldDialogLocation.value = location
+}
+
+function closeFormFieldDialog(): void {
+  const location = formFieldDialogLocation.value
+  formFieldDialogLocation.value = undefined
+  if (location) controller.endFormFieldEdit(location)
+}
+
+// ── Drag-to-reorder body nodes ─────────────────────────────────────
+const reorder = useDocxNodeReorder(controller, {
+  enabled: () => props.editable && !interactionLocked.value && props.showNodeReorder !== false,
+})
+
+const reorderHandleVisible = computed(
+  () => reorder.enabled.value && !reorder.dragging.value && reorder.hover.value !== undefined
+)
+
+const reorderHandleStyle = computed(() => {
+  const hover = reorder.hover.value
+  if (!hover) return undefined
+  return {
+    position: "fixed" as const,
+    left: `${Math.max(0, Math.round(hover.left - 22))}px`,
+    top: `${Math.round(hover.top + 2)}px`,
+    zIndex: 40,
+  }
+})
+
+const reorderDropIndicatorStyle = computed(() => {
+  const hover = reorder.hover.value
+  return {
+    position: "fixed" as const,
+    left: `${Math.max(0, Math.round((hover?.left ?? 0) - 8))}px`,
+    width: `${Math.max(24, Math.round((hover?.width ?? 280) + 8))}px`,
+    top: `${Math.round(reorder.dropTop.value ?? 0)}px`,
+    zIndex: 45,
+  }
+})
+
+let reorderMouseMove: ((event: MouseEvent) => void) | undefined
+let reorderMouseUp: (() => void) | undefined
+let reorderKeyDown: ((event: KeyboardEvent) => void) | undefined
+
+function detachReorderListeners(): void {
+  const doc = (globalThis as { document?: Document }).document
+  if (reorderMouseMove) doc?.removeEventListener("mousemove", reorderMouseMove)
+  if (reorderMouseUp) doc?.removeEventListener("mouseup", reorderMouseUp)
+  if (reorderKeyDown) doc?.removeEventListener("keydown", reorderKeyDown)
+  reorderMouseMove = undefined
+  reorderMouseUp = undefined
+  reorderKeyDown = undefined
+}
+
+function finishReorderDrag(): void {
+  reorder.finishDrag()
+  detachReorderListeners()
+}
+
+function onReorderHandlePointerDown(event: PointerEvent | MouseEvent): void {
+  const nodeIndex = reorder.hover.value?.nodeIndex
+  if (nodeIndex === undefined || !reorder.enabled.value) return
+  reorder.startDrag(nodeIndex)
+  const doc = (globalThis as { document?: Document }).document
+  if (!doc?.addEventListener) return
+  detachReorderListeners()
+  reorderMouseMove = (moveEvent: MouseEvent) => reorder.updateDrag(moveEvent)
+  reorderMouseUp = () => finishReorderDrag()
+  reorderKeyDown = (keyEvent: KeyboardEvent) => {
+    if (keyEvent.key !== "Escape") return
+    reorder.cancelDrag()
+    detachReorderListeners()
+  }
+  doc.addEventListener("mousemove", reorderMouseMove)
+  doc.addEventListener("mouseup", reorderMouseUp)
+  doc.addEventListener("keydown", reorderKeyDown)
+  event.preventDefault?.()
+}
+
+function onReorderHandleKey(delta: -1 | 1): void {
+  const nodeIndex = reorder.hover.value?.nodeIndex
+  if (nodeIndex === undefined) return
+  if (reorder.moveBy(nodeIndex, delta)) reorder.clearHover()
+}
+
+function onEditorPointerMove(event: PointerEvent | MouseEvent): void {
+  if (reorder.dragging.value) {
+    reorder.updateDrag(event)
+    return
+  }
+  const target = event.target as (Element & { closest?: (selector: string) => Element | null }) | null
+  // The handle sits beside the node, outside the paragraph host: hovering it
+  // must keep the handle (and therefore the node it moves) alive.
+  if (target?.closest?.(".docx-node-reorder-handle")) return
+  reorder.onHover(event)
+}
+
+function onEditorPointerLeave(): void {
+  reorder.clearHover()
+  scheduleLinkCardHide()
+}
+
 // ── Keyboard shortcuts ─────────────────────────────────────────────
 // The listener lives on the editor root, so host-page inputs and other editor
 // instances never see these shortcuts. Commands are also suppressed while the
@@ -436,6 +759,11 @@ watch(
     if (!locked) return
     contextMenu.hide()
     dragOverlay.hide()
+    hideLinkCard()
+    cancelLinkCardHide()
+    formFieldDialogLocation.value = undefined
+    reorder.cancelDrag()
+    detachReorderListeners()
     controller.clearSelectionSession()
   },
 )
@@ -449,6 +777,8 @@ onUnmounted(() => {
     window.removeEventListener("beforeunload", onBeforeUnload)
     beforeUnloadAttached = false
   }
+  cancelLinkCardHide()
+  detachReorderListeners()
   ownedLimitRuntime.dispose()
 })
 </script>
@@ -509,6 +839,34 @@ onUnmounted(() => {
   margin-left: auto;
   color: var(--docx-editor-fg);
   font-weight: 500;
+}
+
+.docx-node-reorder-handle {
+  align-items: center;
+  background: var(--docx-editor-panel);
+  border: 1px solid var(--docx-editor-border);
+  border-radius: 4px;
+  color: var(--docx-editor-muted);
+  cursor: grab;
+  display: inline-flex;
+  font-size: 12px;
+  height: 20px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 16px;
+}
+.docx-node-reorder-handle:hover,
+.docx-node-reorder-handle:focus-visible {
+  border-color: #3b82f6;
+  color: #2563eb;
+  outline: none;
+}
+.docx-node-drop-indicator {
+  background: #3b82f6;
+  border-radius: 2px;
+  height: 2px;
+  pointer-events: none;
 }
 
 @media print {

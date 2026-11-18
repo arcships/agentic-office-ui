@@ -145,7 +145,8 @@ DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注
 - 组件：`DocxViewer`、`DocxEditor`。
 - 状态与命令：`useDocxEditor`、`useDocxModel`。
 - 公共能力组合函数：文档主题、段落样式、图片环绕、行距、边框、表单域、修订、批注、页面布局、分页和 `useDocxPageThumbnails`。
-- 类型：`DocModel`、`DocxEditorController`、编辑选区、图片、表格、分页、修订、批注及上述组合函数的公开类型。
+- 编辑辅助界面（issue #101）：`DocxFormFieldDialog`、`DocxLinkHoverCard`、`DocxStylePreviewPopover` 及其纯函数 `docxStylePreviewCss`、`resolveFormFieldAt`、`parseDocxFormFieldLocationKey`；拖拽排序的 `useDocxNodeReorder` 与 `resolveDocxReorderInsertionIndex`、`resolveDocxReorderTarget`、`docxReorderNodeIndexFromElement`。它们只通过 `DocxEditorController` 读写文档，`DocxEditor` 用 `show-form-field-dialog`、`show-link-card`、`show-style-preview`、`show-node-reorder` 四个属性控制是否渲染。
+- 类型：`DocModel`、`DocxEditorController`、`DocxFormFieldUpdate`、编辑选区、图片、表格、分页、修订、批注及上述组合函数的公开类型。
 - 样式：`@arcships/vue-docx/style.css`。
 - 历史记录：`UseDocxEditorOptions.historyMaxEntries` 和 `historyMaxBytes` 同时生效；Vue 编辑器默认保留最多 100 条、估算 32 MiB，超过后优先淘汰最旧记录。
 

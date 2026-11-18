@@ -11,7 +11,7 @@ import type {
   DocumentPageNodeSegment,
   FormFieldRunNode,
 } from "@arcships/docx-core"
-import { collectFormFieldsFromModel } from "@arcships/docx-core"
+import { collectFormFieldsFromModel, getParagraphAtLocation } from "@arcships/docx-core"
 
 export interface DocxPageFormField {
   field: FormFieldRunNode
@@ -28,6 +28,47 @@ export function docxFormFieldLocationKey(
     return `p:${location.nodeIndex}:${location.childIndex}`
   }
   return `t:${location.tableIndex}:${location.rowIndex}:${location.cellIndex}:${location.paragraphIndex}:${location.childIndex}`
+}
+
+/**
+ * Parses the key written to `data-docx-form-field-location` back into a
+ * location. Returns undefined for values that are not shaped like a key, so a
+ * host-provided attribute cannot address an unrelated node.
+ */
+export function parseDocxFormFieldLocationKey(
+  key: string | null | undefined
+): DocxFormFieldLocation | undefined {
+  if (!key) return undefined
+  const parts = key.split(":")
+  const numbers = parts.slice(1).map((part) => Number(part))
+  if (numbers.some((value) => !Number.isInteger(value) || value < 0)) {
+    return undefined
+  }
+  if (parts[0] === "p" && numbers.length === 2) {
+    return { kind: "paragraph", nodeIndex: numbers[0], childIndex: numbers[1] }
+  }
+  if (parts[0] === "t" && numbers.length === 5) {
+    return {
+      kind: "table-cell",
+      tableIndex: numbers[0],
+      rowIndex: numbers[1],
+      cellIndex: numbers[2],
+      paragraphIndex: numbers[3],
+      childIndex: numbers[4],
+    }
+  }
+  return undefined
+}
+
+/** Resolves the form-field node a location points at, if it still exists. */
+export function resolveFormFieldAt(
+  model: DocModel,
+  location: DocxFormFieldLocation | undefined
+): FormFieldRunNode | undefined {
+  if (!location) return undefined
+  const { paragraph } = getParagraphAtLocation(model, location)
+  const field = paragraph?.children[location.childIndex]
+  return field && field.type === "form-field" ? field : undefined
 }
 
 function topLevelNodeIndex(location: DocxFormFieldLocation): number {
