@@ -26,6 +26,7 @@
         :auto-spacing-after-px="autoSpacingAfterPx(ni)"
         :default-tab-stop-px="defaultTabStopPx"
         :show-tracked-changes="trackedChangesEnabled"
+        :revision-display="revisionDisplay"
         :show-comment-highlights="commentsEnabled"
         :page-number="pageNumber"
         :total-pages="totalPages"
@@ -52,6 +53,7 @@
         :controller="controller"
         :numbering-definitions="model.metadata.numberingDefinitions"
         :show-tracked-changes="trackedChangesEnabled"
+        :revision-display="revisionDisplay"
         :show-comment-highlights="commentsEnabled"
         :page-number="pageNumber"
         :total-pages="totalPages"
@@ -78,6 +80,7 @@ import type {
   DocModel,
   DocxFloatingPageOriginPx,
   DocxEditorController,
+  DocxRevisionDisplay,
   HeaderSection,
 } from "@arcships/docx-core"
 import {
@@ -119,6 +122,7 @@ const props = defineProps<{
   resolveBookmarkFieldValue?: (target: string) => string | undefined
   resolveBookmarkPageNumber?: (target: string) => number | undefined
   trackedChangesEnabled?: boolean
+  revisionDisplay?: DocxRevisionDisplay
   commentsEnabled?: boolean
   /** Distance from the paper's top edge to the top of the header box. */
   headerDistancePx?: number

@@ -150,6 +150,19 @@
         <span>{{ m.docx.toolbar.trackedChanges }}</span>
         <span v-if="trackedChangeCount > 0" class="docx-viewer-toolbar__count">{{ trackedChangeCount }}</span>
       </button>
+      <label class="docx-viewer-toolbar__toggle-button" :title="m.docx.toolbar.revisionDisplay">
+        <select
+          data-testid="docx-revision-display"
+          class="docx-viewer-toolbar__revision-select"
+          :value="revisionDisplay"
+          :aria-label="m.docx.toolbar.revisionDisplay"
+          @change="onRevisionDisplayChange"
+        >
+          <option value="inline">{{ m.docx.toolbar.revisionDisplayInline }}</option>
+          <option value="balloons">{{ m.docx.toolbar.revisionDisplayBalloons }}</option>
+          <option value="none">{{ m.docx.toolbar.revisionDisplayNone }}</option>
+        </select>
+      </label>
       <button
         type="button"
         class="docx-viewer-toolbar__toggle-button"
@@ -228,6 +241,7 @@ const props = withDefaults(
     isDark: boolean
     sidebarOpen: boolean
     showTrackedChanges: boolean
+    revisionDisplay: import("@arcships/docx-core").DocxRevisionDisplay
     showComments: boolean
     trackedChangeCount: number
     commentCount: number
@@ -253,6 +267,7 @@ const emit = defineEmits<{
   toggleTheme: []
   toggleTrackedChanges: []
   toggleComments: []
+  "update:revisionDisplay": [display: import("@arcships/docx-core").DocxRevisionDisplay]
   selectPage: [page: number]
   "update:zoom": [zoom: number]
   "update:searchQuery": [query: string]
@@ -306,6 +321,13 @@ watch(
 
 function onPageFocus(): void {
   pageInputFocused.value = true
+}
+
+function onRevisionDisplayChange(event: Event): void {
+  const value = (event.target as HTMLSelectElement).value
+  if (value === "inline" || value === "balloons" || value === "none") {
+    emit("update:revisionDisplay", value)
+  }
 }
 
 function onPageBlur(): void {
@@ -463,6 +485,16 @@ defineExpose({
 .docx-viewer-toolbar__toggle-button[aria-pressed="true"] { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
 .docx-viewer-toolbar__toggle-button:disabled { cursor: default; opacity: .35; }
 .docx-viewer-toolbar__toggle-button svg { fill: none; height: 15px; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: 15px; }
+.docx-viewer-toolbar__revision-select {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  max-width: 96px;
+  outline: none;
+}
 .docx-viewer-toolbar__count { align-items: center; background: currentColor; border-radius: 999px; color: #fff; display: inline-flex; font-size: 10px; height: 17px; justify-content: center; min-width: 17px; padding: 0 4px; }
 .docx-viewer-toolbar__icon-button:hover:not(:disabled) { background: #f4f4f5; }
 .docx-viewer-toolbar__icon-button:focus-visible,

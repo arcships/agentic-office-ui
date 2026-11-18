@@ -80,6 +80,7 @@ import type {
   DocxPageMarginsUpdate,
   DocxPageSizeUpdate,
   DocxPageSetupCommandOptions,
+  DocxRevisionDisplay,
   AddHeaderFooterOptions,
   UseDocxEditorOptions,
   DocxEditorStatusMessages,
@@ -185,6 +186,12 @@ export function useDocxEditor(
   // --- theme / UI toggles ---
   const documentTheme = ref<DocxDocumentTheme>(options.initialDocumentTheme ?? "light")
   const showTrackedChanges = ref(options.initialShowTrackedChanges ?? false)
+  const revisionDisplay = ref<DocxRevisionDisplay>(
+    options.initialRevisionDisplay ?? "balloons"
+  )
+  const setRevisionDisplay = (display: DocxRevisionDisplay): void => {
+    revisionDisplay.value = display
+  }
   const showComments = ref(options.initialShowComments ?? false)
   const commentComposer = ref<DocxCommentComposer | undefined>(undefined)
 
@@ -874,6 +881,8 @@ export function useDocxEditor(
     get trackedChanges() { return trackedChanges.value },
     get trackedChangeCount() { return trackedChangeCount.value },
     get showTrackedChanges() { return showTrackedChanges.value },
+    get revisionDisplay() { return revisionDisplay.value },
+    setRevisionDisplay,
     get comments() { return comments.value },
     get showComments() { return showComments.value },
     get commentComposer() { return commentComposer.value },

@@ -136,6 +136,7 @@
                 :controller="controller"
                 :document-theme="documentTheme"
                 :show-tracked-changes="showTrackedChanges"
+                :revision-display="effectiveRevisionDisplay"
                 :show-comment-highlights="showCommentHighlights"
                 :numbering-definitions="numberingDefinitions"
                 :page-number="pageNumber"
@@ -191,6 +192,7 @@ import {
   type DocxDocumentTheme,
   type DocxEditorController,
   type DocxEditorSelection,
+  type DocxRevisionDisplay,
   type DocxTableCellSelectionRange,
   type NumberingDefinitionSet,
   type ParagraphNode,
@@ -258,6 +260,8 @@ const props = withDefaults(
     }
     documentTheme?: DocxDocumentTheme
     showTrackedChanges?: boolean
+    /** `inline`, `balloons` or `none`; omitted keeps historical inline markup. */
+    revisionDisplay?: DocxRevisionDisplay
     showCommentHighlights?: boolean
     numberingDefinitions?: NumberingDefinitionSet
     pageNumber?: number
@@ -291,6 +295,7 @@ const props = withDefaults(
   {
     editable: false,
     documentTheme: "light" as DocxDocumentTheme,
+    revisionDisplay: "inline" as DocxRevisionDisplay,
     showRowResizeHandles: true,
   }
 )
@@ -627,7 +632,15 @@ const gridRows = computed(() => {
 })
 
 const tableTrackedMarkup = computed(() =>
-  props.showTrackedChanges ? resolveTableTrackedMarkup(props.table) : undefined
+  props.showTrackedChanges && props.revisionDisplay !== "none"
+    ? resolveTableTrackedMarkup(props.table)
+    : undefined
+)
+
+// Hidden revisions mean the final text, regardless of the preferred markup
+// mode chosen for the gutter selector.
+const effectiveRevisionDisplay = computed<DocxRevisionDisplay>(() =>
+  props.showTrackedChanges ? props.revisionDisplay : "none"
 )
 
 function rowTrackedRevision(rowIndex: number) {
@@ -813,6 +826,7 @@ function cellParagraphHtml(
 ): string {
   const runOptions: ParagraphRunRenderOptions = {
     showTrackedChanges: props.showTrackedChanges,
+    revisionDisplay: effectiveRevisionDisplay.value,
     showCommentHighlights: props.showCommentHighlights,
     numberingDefinitions: props.numberingDefinitions,
     paragraphSourceId: cellParagraphSourceId(cell, pi),

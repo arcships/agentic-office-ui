@@ -36,6 +36,7 @@ import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted, onUnmounted
 import type {
   DocxFloatingPageOriginPx,
   DocxEditorController,
+  DocxRevisionDisplay,
   DocxTextRange,
   NumberingDefinitionSet,
   ParagraphNode,
@@ -48,6 +49,7 @@ import {
   paragraphIsList,
   paragraphTypographyStyle,
   findDocumentSectionNodes,
+  reviewDisplayParagraph,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
 import { useDocxMessages } from "../i18n"
@@ -79,6 +81,8 @@ const props = withDefaults(
     /** Document `w:defaultTabStop` in CSS pixels; 48px (Word) when omitted. */
     defaultTabStopPx?: number
     showTrackedChanges?: boolean
+    /** `inline`, `balloons` or `none`; omitted keeps historical inline markup. */
+    revisionDisplay?: DocxRevisionDisplay
     showCommentHighlights?: boolean
     pageNumber?: number
     totalPages?: number
@@ -122,6 +126,7 @@ const props = withDefaults(
   {
     editable: false,
     documentTheme: "light" as DocxDocumentTheme,
+    revisionDisplay: "inline" as DocxRevisionDisplay,
   }
 )
 
@@ -143,6 +148,18 @@ let draftDocumentNonce: number | undefined
 let unregisterDraftFlusher: (() => void) | undefined
 
 // ── Computed ───────────────────────────────────────────────────────
+/**
+ * Paragraph as drawn for the current review mode. The source paragraph stays
+ * untouched: balloon/none only hide deleted runs from the display text, while
+ * the editing model and export keep every revision.
+ */
+const effectiveRevisionDisplay = computed<DocxRevisionDisplay>(() =>
+  props.showTrackedChanges ? props.revisionDisplay : "none"
+)
+const displayParagraph = computed(() =>
+  reviewDisplayParagraph(props.paragraph, effectiveRevisionDisplay.value)
+)
+
 const isActiveParagraph = computed(() => {
   if (!props.editable || !props.controller) return false
   const sel = props.controller.selection
@@ -223,13 +240,16 @@ function sectionStoryParagraphText(): string | undefined {
   if (!controller || !partName || !region || nodeIndex === undefined) return undefined
   const nodes = findDocumentSectionNodes(controller.model, region, partName)
   const node = nodes?.[nodeIndex]
-  return node?.type === "paragraph" ? paragraphText(node) : undefined
+  return node?.type === "paragraph"
+    ? paragraphText(reviewDisplayParagraph(node, effectiveRevisionDisplay.value))
+    : undefined
 }
 
 const displayHtml = computed(() => {
   const theme = props.documentTheme
   const runOptions: ParagraphRunRenderOptions = {
     showTrackedChanges: props.showTrackedChanges,
+    revisionDisplay: effectiveRevisionDisplay.value,
     showCommentHighlights: props.showCommentHighlights,
     numberingDefinitions: props.numberingDefinitions,
     defaultTabStopPx: props.defaultTabStopPx,
@@ -260,7 +280,7 @@ const displayHtml = computed(() => {
   }
 
   const vnodes = renderParagraphRuns(
-    props.paragraph,
+    displayParagraph.value,
     `p-${props.paragraphIndex}`,
     theme,
     props.numberingLabel ? { label: props.numberingLabel } as any : undefined,
@@ -290,11 +310,11 @@ function syncDraftFromDom(): void {
   if (!props.editable || !paragraphEl.value) return
   const domText = readCurrentDomText()
   if (draftText.value === null) {
-    draftBaseText = paragraphText(props.paragraph)
+    draftBaseText = paragraphText(displayParagraph.value)
     draftDocumentNonce = props.controller?.documentLoadNonce
   }
   draftText.value = domText
-  draftDirty.value = domText !== paragraphText(props.paragraph)
+  draftDirty.value = domText !== paragraphText(displayParagraph.value)
 }
 
 function clearDraft(): void {
@@ -319,7 +339,7 @@ function commitDraft(requireUnchangedBase = false): void {
         !controller ||
         draftDocumentNonce !== controller.documentLoadNonce ||
         currentStoryText === undefined ||
-        currentStoryText !== (draftBaseText ?? paragraphText(props.paragraph))
+        currentStoryText !== (draftBaseText ?? paragraphText(displayParagraph.value))
       ) {
         clearDraft()
         return
@@ -331,7 +351,8 @@ function commitDraft(requireUnchangedBase = false): void {
         draftDocumentNonce !== controller.documentLoadNonce ||
         !currentParagraph ||
         currentParagraph.type !== "paragraph" ||
-        paragraphText(currentParagraph) !== (draftBaseText ?? paragraphText(props.paragraph))
+        paragraphText(reviewDisplayParagraph(currentParagraph, effectiveRevisionDisplay.value)) !==
+          (draftBaseText ?? paragraphText(displayParagraph.value))
       ) {
         // The document changed under the draft (import/new document/external
         // edit). Dropping the stale draft is safer than writing it elsewhere.
@@ -646,7 +667,7 @@ function onPaste(event: ClipboardEvent): void {
 
 // ── Watch for model changes (clears draft when paragraph changes externally) ─
 watch(
-  () => paragraphText(props.paragraph),
+  () => paragraphText(displayParagraph.value),
   () => {
     if (!draftDirty.value) clearDraft()
   }
@@ -706,8 +727,8 @@ defineExpose({
   focus() { paragraphEl.value?.focus() },
   restoreDraft(text: string) {
     draftText.value = text
-    draftDirty.value = text !== paragraphText(props.paragraph)
-    draftBaseText = paragraphText(props.paragraph)
+    draftDirty.value = text !== paragraphText(displayParagraph.value)
+    draftBaseText = paragraphText(displayParagraph.value)
     draftDocumentNonce = props.controller?.documentLoadNonce
   },
 })

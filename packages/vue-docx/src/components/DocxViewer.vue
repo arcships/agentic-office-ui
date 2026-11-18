@@ -37,6 +37,7 @@
       :show-upload="showUpload"
       :show-download="showDownload"
       :show-tracked-changes="effectiveShowTrackedChanges"
+      :revision-display="effectiveRevisionDisplay"
       :show-comments="effectiveShowComments"
       :tracked-change-count="viewerTrackedChanges.length"
       :comment-count="viewerComments.length"
@@ -53,6 +54,7 @@
       @toggle-sidebar="sidebarOpen = !sidebarOpen"
       @toggle-tracked-changes="toggleTrackedChanges"
       @toggle-comments="toggleComments"
+      @update:revision-display="setRevisionDisplay"
       @update:search-query="searchQuery = $event"
       @update:search-case-sensitive="setSearchOption('caseSensitive', $event)"
       @update:search-whole-word="setSearchOption('wholeWord', $event)"
@@ -127,6 +129,7 @@
           :zoom="zoomPercent / 100"
           :editable="false"
           :show-tracked-changes="effectiveShowTrackedChanges"
+          :revision-display="effectiveRevisionDisplay"
           :show-comments="effectiveShowComments"
           :locale="locale"
           :messages="messages"
@@ -144,7 +147,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue"
-import type { DocModel, DocxImportResult, DocxRuntime, DocxRuntimeLoader, LayoutOptions } from "@arcships/docx-core"
+import type { DocModel, DocxImportResult, DocxRevisionDisplay, DocxRuntime, DocxRuntimeLoader, LayoutOptions } from "@arcships/docx-core"
 import {
   collectCommentsFromModel,
   collectTrackedChangesFromModel,
@@ -186,6 +189,13 @@ const props = withDefaults(
     isDark?: boolean
     defaultShowTrackedChanges?: boolean
     defaultShowComments?: boolean
+    /**
+     * Review display when `revisionDisplay` is uncontrolled. Defaults to
+     * `balloons`, which keeps insertions inline and moves deletions to cards.
+     */
+    defaultRevisionDisplay?: DocxRevisionDisplay
+    /** `null` follows the internal state; display only, export keeps revisions. */
+    revisionDisplay?: DocxRevisionDisplay | null
     showTrackedChanges?: boolean | null
     showComments?: boolean | null
     locale?: OfficeLocale
@@ -203,6 +213,8 @@ const props = withDefaults(
     isDark: false,
     defaultShowTrackedChanges: true,
     defaultShowComments: true,
+    defaultRevisionDisplay: "balloons" as DocxRevisionDisplay,
+    revisionDisplay: null,
     showTrackedChanges: null,
     showComments: null,
     locale: "en",
@@ -218,6 +230,7 @@ const emit = defineEmits<{
   (event: "update:isDark", isDark: boolean): void
   (event: "update:showTrackedChanges", visible: boolean): void
   (event: "update:showComments", visible: boolean): void
+  (event: "update:revisionDisplay", display: DocxRevisionDisplay): void
   (event: "searchStateChange", state: DocxSearchState): void
   /** A bookmark reveal needs `pageIndex` mounted/visible in the host. */
   (event: "requestPageReveal", pageIndex: number): void
@@ -251,6 +264,9 @@ const minHeightStyle = computed(() => {
 })
 const internalShowTrackedChanges = ref(props.defaultShowTrackedChanges)
 const internalShowComments = ref(props.defaultShowComments)
+const internalRevisionDisplay = ref<DocxRevisionDisplay>(
+  props.defaultRevisionDisplay
+)
 const searchQuery = ref("")
 const searchOptions = ref<Required<DocxSearchOptions>>({
   caseSensitive: false,
@@ -271,6 +287,9 @@ const displayFileName = computed(() => internalFileName.value || props.fileName)
 const effectiveEmptyState = computed(() => props.emptyState ?? m.value.docx.viewer.emptyDetail)
 const effectiveShowTrackedChanges = computed(() => props.showTrackedChanges ?? internalShowTrackedChanges.value)
 const effectiveShowComments = computed(() => props.showComments ?? internalShowComments.value)
+const effectiveRevisionDisplay = computed(
+  () => props.revisionDisplay ?? internalRevisionDisplay.value
+)
 const viewerTrackedChanges = computed(() => renderableModel.value ? collectTrackedChangesFromModel(renderableModel.value) : [])
 const viewerComments = computed(() => renderableModel.value ? collectCommentsFromModel(renderableModel.value) : [])
 const viewerState = computed(() => {
@@ -324,6 +343,9 @@ watch(() => props.defaultShowTrackedChanges, (value) => {
 })
 watch(() => props.defaultShowComments, (value) => {
   if (props.showComments == null) internalShowComments.value = value
+})
+watch(() => props.defaultRevisionDisplay, (value) => {
+  if (props.revisionDisplay == null) internalRevisionDisplay.value = value
 })
 
 watch(
@@ -612,6 +634,11 @@ function toggleComments(): void {
   const visible = !effectiveShowComments.value
   if (props.showComments == null) internalShowComments.value = visible
   emit("update:showComments", visible)
+}
+
+function setRevisionDisplay(display: DocxRevisionDisplay): void {
+  if (props.revisionDisplay == null) internalRevisionDisplay.value = display
+  emit("update:revisionDisplay", display)
 }
 
 function normalizeZoom(value: number): number {

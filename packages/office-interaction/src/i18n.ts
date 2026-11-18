@@ -184,6 +184,11 @@ export interface OfficeDocxMessages {
     /** Template with a `{count}` placeholder. */
     commentsHide: string
     commentsNone: string
+    /** Label for the inline/balloons/none revision display control. */
+    revisionDisplay: string
+    revisionDisplayInline: string
+    revisionDisplayBalloons: string
+    revisionDisplayNone: string
     lightThemeAction: string
     darkThemeAction: string
     lightDocument: string
@@ -1384,6 +1389,10 @@ export const officeMessagesEn: OfficeMessages = {
       commentsShow: "Show {count} comments",
       commentsHide: "Hide {count} comments",
       commentsNone: "No comments",
+      revisionDisplay: "Display for review",
+      revisionDisplayInline: "All markup",
+      revisionDisplayBalloons: "Balloons",
+      revisionDisplayNone: "No markup",
       lightThemeAction: "Use light document theme",
       darkThemeAction: "Use dark document theme",
       lightDocument: "Light document",
@@ -2497,6 +2506,10 @@ export const officeMessagesZhCN: OfficeMessages = {
       commentsShow: "显示 {count} 条批注",
       commentsHide: "隐藏 {count} 条批注",
       commentsNone: "没有批注",
+      revisionDisplay: "审阅显示方式",
+      revisionDisplayInline: "所有标记",
+      revisionDisplayBalloons: "批注框",
+      revisionDisplayNone: "无标记",
       lightThemeAction: "使用浅色文档主题",
       darkThemeAction: "使用深色文档主题",
       lightDocument: "浅色文档",

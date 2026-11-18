@@ -44,7 +44,7 @@
             :page-node-segments="entry.pageNodeSegments"
             :page-columns="entry.columns"
             :column-layout="entry.columnLayout"
-            :model="model"
+            :model="renderModel"
             :controller="controller"
             :editable="editable"
             :zoom-factor="zoomFactor"
@@ -62,6 +62,7 @@
             :header-reference-type="entry.headerReferenceType"
             :footer-reference-type="entry.footerReferenceType"
             :tracked-changes-enabled="trackedChangesEnabled"
+            :revision-display="renderRevisionDisplay"
             :comments-enabled="commentsEnabled"
             :tracked-changes="entry.trackedChanges"
             :comments="entry.comments"
@@ -96,6 +97,7 @@ import type {
   DocxComment,
   DocxDocumentTheme,
   DocxEditorController,
+  DocxRevisionDisplay,
   DocxTrackedChange,
   DocumentNoteDefinition,
   DocumentPageNodeSegment,
@@ -117,6 +119,7 @@ import {
   createSectionPageNumberTracker,
   primeCommentAnchors,
   resolveDocumentBackgroundColor,
+  reviewDisplayModel,
   resolveDocumentSectionsFromMetadata,
   resolveDocumentLayout,
   resolveSectionVariantReferenceTypeForPage,
@@ -184,6 +187,11 @@ export interface DocxViewerRootProps {
   fitWidth?: boolean
   /** `null` follows the controller flag; `false` always hides. */
   showTrackedChanges?: boolean | null
+  /**
+   * Review display mode. `null` follows the controller and falls back to
+   * `balloons`. Display only: the source model and export keep every revision.
+   */
+  revisionDisplay?: DocxRevisionDisplay | null
   showComments?: boolean | null
 }
 
@@ -227,7 +235,7 @@ interface PageMeasureEvent {
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
   defineProps<DocxViewerRootProps>(),
-  { editable: false, zoomScale: 100, showTrackedChanges: null, showComments: null }
+  { editable: false, zoomScale: 100, showTrackedChanges: null, revisionDisplay: null, showComments: null }
 )
 
 const emit = defineEmits<{
@@ -364,7 +372,23 @@ function setupPrintDetection(): () => void {
 }
 
 // ── Pagination ─────────────────────────────────────────────────────
-const baseDocumentLayout = computed(() => resolveDocumentLayout(props.model))
+// Review display is a view choice: `renderModel` drops deleted runs in
+// balloons/none, while edits, comments and export keep reading `props.model`.
+const trackedChangesVisible = computed(
+  () => props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false
+)
+const effectiveRevisionDisplay = computed<DocxRevisionDisplay>(
+  () => props.revisionDisplay ?? props.controller?.revisionDisplay ?? "balloons"
+)
+// Hiding revisions means the final text, regardless of the preferred markup
+// mode; the selector keeps its value for when revisions are shown again.
+const renderRevisionDisplay = computed<DocxRevisionDisplay>(() =>
+  trackedChangesVisible.value ? effectiveRevisionDisplay.value : "none"
+)
+const renderModel = computed(() =>
+  reviewDisplayModel(props.model, renderRevisionDisplay.value)
+)
+const baseDocumentLayout = computed(() => resolveDocumentLayout(renderModel.value))
 watchEffect(() => {
   const layout = baseDocumentLayout.value
   syncPrintPageSize(layout?.pageWidthPx, layout?.pageHeightPx)
@@ -408,7 +432,7 @@ function pageSegmentationKey(
 }
 
 const paginationPlan = computed(() => {
-  const snapshot = buildLayoutSnapshot(props.model, {
+  const snapshot = buildLayoutSnapshot(renderModel.value, {
     ...resolvedLayoutOptions.value,
     measurementFeedback: paginationMeasurementFeedback.value,
   })
@@ -513,9 +537,17 @@ const FIT_ZOOM_SIDE_PAD = 48
 
 // Narrow viewports get the drawer overlay instead of a column beside the paper,
 // so the paper can keep the full container width.
+// The display model drops deleted runs from the text flow in balloons/none
+// mode. Pagination, rendering and note bodies read it; edits, comments and
+// export keep reading the source model.
+const trackedChangeGutterVisible = computed(
+  () =>
+    trackedChangesVisible.value &&
+    effectiveRevisionDisplay.value === "balloons"
+)
 const annotationsVisible = computed(
   () =>
-    (props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false) ||
+    trackedChangeGutterVisible.value ||
     (props.showComments ?? props.controller?.showComments ?? false)
 )
 
@@ -562,10 +594,12 @@ watch(pageCount, (count) => emit("pageCountChange", count), { immediate: true })
 // tracker owns the page → section attribution too, so the page numbers, the
 // section headers/footers and the thumbnail labels cannot drift apart.
 const sectionPageNumbers = computed(() => {
-  const documentSectionPropertiesXml = props.model.metadata.sectionPropertiesXml
+  const documentSectionPropertiesXml =
+    renderModel.value.metadata.sectionPropertiesXml
   return createSectionPageNumberTracker({
-    sections: resolveDocumentSectionsFromMetadata(props.model.metadata).map(
-      (section) => ({
+    sections: resolveDocumentSectionsFromMetadata(
+      renderModel.value.metadata
+    ).map((section) => ({
         startNodeIndex: section.startNodeIndex,
         // A section without its own `w:sectPr` inherits the document's.
         sectionPropertiesXml:
@@ -580,9 +614,10 @@ const sectionPageNumbers = computed(() => {
 })
 
 const pagePresentations = computed(() => {
-  const sections = resolveDocumentSectionsFromMetadata(props.model.metadata)
+  const sections = resolveDocumentSectionsFromMetadata(renderModel.value.metadata)
   const firstPageBySection = new Map<number, number>()
-  const evenAndOddHeaders = props.model.metadata.compatibility?.evenAndOddHeaders ?? false
+  const evenAndOddHeaders =
+    renderModel.value.metadata.compatibility?.evenAndOddHeaders ?? false
   const tracker = sectionPageNumbers.value
 
   return pageNodeSegments.value.map((segments, pageIndex) => {
@@ -594,7 +629,8 @@ const pagePresentations = computed(() => {
     const section = sections[sectionIndex]
     const sectionPageIndex = pageIndex - (firstPageBySection.get(sectionIndex) ?? pageIndex)
     const sectionPropertiesXml =
-      section?.sectionPropertiesXml ?? props.model.metadata.sectionPropertiesXml
+      section?.sectionPropertiesXml ??
+      renderModel.value.metadata.sectionPropertiesXml
     const pageLayout = sectionPropertiesXml
       ? parseSectionLayout(sectionPropertiesXml)
       : baseDocumentLayout.value
@@ -677,7 +713,7 @@ const theme = computed(() => props.theme ?? props.controller?.documentTheme ?? "
 // Boolean props default to `false`, so `null` is what marks "not passed":
 // without it the controller fallback below could never apply.
 const trackedChangesEnabled = computed(
-  () => props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false
+  () => trackedChangesVisible.value
 )
 const commentsEnabled = computed(
   () => props.showComments ?? props.controller?.showComments ?? false
@@ -736,7 +772,7 @@ const EMPTY_PAGE_NOTES: DocumentPageNotes = {
 }
 
 const pageNotes = computed<DocumentPageNotes[]>(() =>
-  buildDocumentPageNotes(props.model, pageNodeSegments.value)
+  buildDocumentPageNotes(renderModel.value, pageNodeSegments.value)
 )
 
 function notesForPage(pageIndex: number): DocumentPageNotes {
@@ -1527,7 +1563,13 @@ function flushPaginationMeasurementFeedback(): void {
 // virtualized pages until each one has been visited. It also starts a fresh
 // convergence run with the new document's advisory page-count target.
 watch(
-  () => [props.model, props.controller?.documentLoadNonce, props.layoutOptions] as const,
+  () => [
+    props.model,
+    props.controller?.documentLoadNonce,
+    props.layoutOptions,
+    effectiveRevisionDisplay.value,
+    trackedChangesVisible.value,
+  ] as const,
   () => {
     measuredPageHeights.value = {}
     measuredParagraphHeightsPxByNodeIndex.value = {}

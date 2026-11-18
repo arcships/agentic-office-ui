@@ -36,6 +36,7 @@ import type {
   DocxReplaceAllOptions,
   DocxReplaceSummary,
   DocxReplaceTarget,
+  DocxRevisionDisplay,
   DocxSectionImageLocation,
   DocxSectionParagraphLocation,
   DocxSectionRegion,
@@ -190,6 +191,15 @@ export interface DocxEditorController {
    */
   trackedChangeCount: number | null;
   showTrackedChanges: boolean;
+  /**
+   * How revisions are drawn while `showTrackedChanges` is on.
+   *
+   * `inline` keeps them in the text flow, `balloons` moves deleted content onto
+   * gutter cards, and `none` shows the final text only. Display only: the model
+   * keeps every revision for export.
+   */
+  revisionDisplay: DocxRevisionDisplay;
+  setRevisionDisplay: (display: DocxRevisionDisplay) => void;
   comments: DocxComment[];
   showComments: boolean;
   /** Open inline comment editor (new comment or reply), if any. */
@@ -977,6 +987,8 @@ export interface UseDocxTrackChangesResult {
   showTrackedChanges: boolean;
   setShowTrackedChanges: (showTrackedChanges: boolean) => void;
   toggleShowTrackedChanges: () => void;
+  revisionDisplay: DocxRevisionDisplay;
+  setRevisionDisplay: (display: DocxRevisionDisplay) => void;
   changesByLocation: Map<string, DocxTrackedChange[]>;
   getChangesForLocation: (
     location: DocxTextRangeLocation

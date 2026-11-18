@@ -19,6 +19,7 @@
       :document-id="documentRevision.documentId"
       :fit-width="zoom === undefined ? fitWidth : false"
       :show-tracked-changes="showTrackedChanges"
+      :revision-display="revisionDisplay"
       :show-comments="showComments"
       @page-count-change="onPageCountChange"
       @visible-page-range="onVisiblePageRange"
@@ -68,6 +69,7 @@ import type {
   DocModel,
   DocxDocumentTheme,
   DocxEditorController,
+  DocxRevisionDisplay,
   DocxTextRangeLocation,
   LayoutOptions,
 } from "@arcships/docx-core"
@@ -136,6 +138,8 @@ const props = withDefaults(
     fitWidth?: boolean
     /** `null` follows the controller flag; `false` always hides. */
     showTrackedChanges?: boolean | null
+    /** `null` follows the controller; defaults to `balloons`. */
+    revisionDisplay?: DocxRevisionDisplay | null
     showComments?: boolean | null
     documentId?: string
     selectionMode?: OfficeSelectionMode
@@ -150,6 +154,7 @@ const props = withDefaults(
     selectionMode: "content",
     emitReferenceCandidates: false,
     showTrackedChanges: null,
+    revisionDisplay: null,
     showComments: null,
     locale: "en",
     messages: undefined,

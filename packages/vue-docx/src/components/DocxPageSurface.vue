@@ -71,6 +71,7 @@
         :resolve-bookmark-field-value="fieldResolvers.resolveBookmarkFieldValue"
         :resolve-bookmark-page-number="fieldResolvers.resolveBookmarkPageNumber"
         :tracked-changes-enabled="trackedChangesEnabled"
+        :revision-display="renderRevisionDisplay"
         :comments-enabled="commentsEnabled"
         :note-marker-labels="noteMarkerLabels"
         :cover-image-child-indexes-by-node="coverImageChildIndexesByNode"
@@ -125,6 +126,7 @@
           :resolve-bookmark-field-value="fieldResolvers.resolveBookmarkFieldValue"
           :resolve-bookmark-page-number="fieldResolvers.resolveBookmarkPageNumber"
           :tracked-changes-enabled="trackedChangesEnabled"
+          :revision-display="revisionDisplay"
           :comments-enabled="commentsEnabled"
           :header-distance-px="pageLayout.headerDistancePx"
           :editable="headerEditing"
@@ -151,6 +153,7 @@
           :resolve-bookmark-field-value="fieldResolvers.resolveBookmarkFieldValue"
           :resolve-bookmark-page-number="fieldResolvers.resolveBookmarkPageNumber"
           :tracked-changes-enabled="trackedChangesEnabled"
+          :revision-display="revisionDisplay"
           :comments-enabled="commentsEnabled"
           :footer-distance-px="pageLayout.footerDistancePx"
           :editable="footerEditing"
@@ -281,6 +284,7 @@ import type {
   DocModel,
   DocxComment,
   DocxEditorController,
+  DocxRevisionDisplay,
   DocxTrackedChange,
   DocumentNoteDefinition,
   DocumentPageNodeSegment,
@@ -300,6 +304,7 @@ import {
   resolveDocumentBackgroundColor,
   resolveDocumentLayout,
   resolveDocumentLayoutDefaults,
+  trackedChangeDuplicatesInlineMarkup,
   resolveDocumentSectionPropertiesXml,
   resolveClippedBodyRenderedBottomPx,
   resolveClippedMeasuredHeightPx,
@@ -361,6 +366,8 @@ interface DocxPageSurfaceProps {
   headerReferenceType?: string
   footerReferenceType?: string
   trackedChangesEnabled?: boolean
+  /** Review display: inline markup, gutter balloons, or final text only. */
+  revisionDisplay?: DocxRevisionDisplay
   commentsEnabled?: boolean
   trackedChanges?: readonly DocxTrackedChange[]
   comments?: readonly DocxComment[]
@@ -391,6 +398,7 @@ const props = withDefaults(
   {
     editable: true,
     trackedChangesEnabled: false,
+    revisionDisplay: "balloons" as DocxRevisionDisplay,
     commentsEnabled: false,
     footnotes: () => [],
     endnotes: () => [],
@@ -650,7 +658,30 @@ const hasFormFields = computed(
 )
 
 const showGutter = computed(
-  () => props.trackedChangesEnabled || props.commentsEnabled
+  () =>
+    props.commentsEnabled ||
+    (props.trackedChangesEnabled && props.revisionDisplay === "balloons")
+)
+
+// Hidden revisions mean the final text, regardless of the preferred markup
+// mode. The gutter selectors keep their value for when revisions are shown.
+const renderRevisionDisplay = computed<DocxRevisionDisplay>(() =>
+  props.trackedChangesEnabled ? props.revisionDisplay : "none"
+)
+
+// Inline display keeps revisions in the text flow; none hides them. Only
+// balloons reserve gutter cards for tracked changes.
+const trackedChangeCardsEnabled = computed(
+  () => props.trackedChangesEnabled && props.revisionDisplay === "balloons"
+)
+
+// Insertions and move-to content stay inline in balloons mode, so only
+// revisions without inline markup get a card (deletions, formatting, table
+// structure).
+const pageTrackedChanges = computed(() =>
+  (props.trackedChanges ?? props.controller?.trackedChanges ?? []).filter(
+    (change) => !trackedChangeDuplicatesInlineMarkup(change)
+  )
 )
 
 // ── Annotation gutter ──────────────────────────────────────────────
@@ -660,10 +691,10 @@ const showGutter = computed(
 const pageAnnotations = computed(() =>
   buildPageGutterAnnotations({
     comments: props.comments ?? props.controller?.comments ?? [],
-    trackedChanges: props.trackedChanges ?? props.controller?.trackedChanges ?? [],
+    trackedChanges: pageTrackedChanges.value,
     pageSegments: props.pageNodeSegments,
     showComments: props.commentsEnabled,
-    showTrackedChanges: props.trackedChangesEnabled,
+    showTrackedChanges: trackedChangeCardsEnabled.value,
     headerPartName: props.headerSection?.partName,
     footerPartName: props.footerSection?.partName,
   })
@@ -733,7 +764,13 @@ const {
   pageElement: pageSurfaceRef,
   annotations: () => pageAnnotations.value,
   layoutSignal: () =>
-    [props.model, props.pageNodeSegments, props.pageWidthPx, props.theme] as const,
+    [
+      props.model,
+      props.pageNodeSegments,
+      props.pageWidthPx,
+      props.theme,
+      props.revisionDisplay,
+    ] as const,
   pageWidthPx: () => props.pageWidthPx,
   pageHeightPx: () =>
     Math.max(props.pageLayout.pageHeightPx, pageMeasuredHeightPx.value),

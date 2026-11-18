@@ -73,7 +73,7 @@ async function open(file) {
 </template>
 ```
 
-**Props**：`model`（必填）、`zoom`、`enableGestureZoom`、兼容属性 `zoomScale`、`fitWidth`、`showComments`、`showTrackedChanges`、`searchQuery`、`theme`
+**Props**：`model`（必填）、`zoom`、`enableGestureZoom`、兼容属性 `zoomScale`、`fitWidth`、`showComments`、`showTrackedChanges`、`revisionDisplay`、`searchQuery`、`theme`
 
 **事件**：`pageCountChange`、`visiblePageRange`、`contextMenu`（带 `pageIndex` + `containerX/Y`）、`selectionChange`（带选中文字 + 页码）
 

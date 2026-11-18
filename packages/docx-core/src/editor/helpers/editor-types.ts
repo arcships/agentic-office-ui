@@ -16,6 +16,19 @@ import type {
 } from "../../engine/types";
 
 export type DocxDocumentTheme = "light" | "dark";
+/**
+ * How revision markup is drawn on the page.
+ *
+ * - `inline` draws insertions and deletions in the text flow and hides the
+ *   tracked-change gutter.
+ * - `balloons` keeps insertions inline but moves deleted content out of the text
+ *   flow onto gutter cards.
+ * - `none` shows the final text only: no inline markup and no revision cards.
+ *
+ * The editor model is never rewritten by this choice; export still writes every
+ * revision.
+ */
+export type DocxRevisionDisplay = "inline" | "balloons" | "none";
 export type DocxHeadingStyleMap = Partial<
   Record<HeadingLevel, Record<string, string | number | undefined>>
 >;
@@ -579,6 +592,15 @@ export interface UseDocxEditorOptions {
    * @defaultValue `false`
    */
   initialShowTrackedChanges?: boolean;
+  /**
+   * How revisions render while they are visible.
+   *
+   * `inline` keeps insertions and deletions in the text flow, `balloons` moves
+   * deleted content onto gutter cards, and `none` shows the final text only.
+   *
+   * @defaultValue `"balloons"`
+   */
+  initialRevisionDisplay?: DocxRevisionDisplay;
   /**
    * Whether document comments are visible when the editor first mounts.
    *
