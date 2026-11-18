@@ -15,11 +15,31 @@
         v-for="(tab, index) in controller.tabs"
         :key="tab.id ?? index"
         class="xlsx-sheettabs__tab-wrapper"
+        :class="{
+          'xlsx-sheettabs__tab-wrapper--draggable': canMoveSheets,
+          'xlsx-sheettabs__tab-wrapper--dragging': draggingTabIndex === index,
+        }"
+        :data-dragging="draggingTabIndex === index ? 'true' : undefined"
+        :draggable="canMoveSheets && renamingTabIndex !== index"
+        :ref="(el) => setTabWrapperRef(index, el)"
+        @dragstart="onTabDragStart(index, $event)"
+        @dragover="onTabDragOver(index, $event)"
+        @drop="onTabDrop(index, $event)"
+        @dragend="cancelDrag"
         @focusin="onTabFocus(index)"
+        @keydown="onTabDragKeydown"
         @mouseenter="onTabHover(index, $event)"
         @mouseleave="onTabLeave"
         @contextmenu="onTabContextMenu(index, $event)"
       >
+        <div
+          v-if="dropSlot === index || (dropSlot === controller.tabs.length && index === controller.tabs.length - 1)"
+          class="xlsx-sheettabs__drop-indicator"
+          :class="{ 'xlsx-sheettabs__drop-indicator--after': dropSlot === controller.tabs.length }"
+          data-testid="xlsx-sheet-drop-indicator"
+          :data-drop-slot="dropSlot"
+          aria-hidden="true"
+        />
         <input
           v-if="renamingTabIndex === index"
           ref="renameInputRef"
@@ -111,6 +131,15 @@
       {{ renameError }}
     </div>
     <div
+      v-if="moveError"
+      class="xlsx-sheettabs__rename-error"
+      data-testid="xlsx-sheet-move-error"
+      role="alert"
+      :style="moveErrorStyle"
+    >
+      {{ moveError }}
+    </div>
+    <div
       v-if="tabMenu"
       class="xlsx-sheettabs__menu-backdrop"
       data-testid="xlsx-sheet-tab-menu-backdrop"
@@ -163,6 +192,7 @@ const activeTabIndex = computed(() => props.controller.activeTabIndex);
 const isReadOnly = computed(() => props.controller.isEditingLocked === true || props.controller.readOnly || props.readOnly === true);
 // Renaming a protected sheet is allowed, like Excel; only read-only mode blocks it.
 const canRenameSheets = computed(() => props.controller.readOnly !== true && props.readOnly !== true);
+const canMoveSheets = computed(() => canRenameSheets.value && props.controller.tabs.length > 1);
 const m = useXlsxMessages();
 const canRemoveActiveSheet = computed(() => Boolean(props.controller.activeSheet) && props.controller.sheets.length > 1);
 const maxSheetNameLength = XLSX_MAX_SHEET_NAME_LENGTH;
@@ -196,6 +226,16 @@ const renameAnchor = ref<{ left: number; top: number } | null>(null);
 // inline editor is read back through this helper.
 const renameInputRef = ref<HTMLInputElement | HTMLInputElement[] | null>(null);
 const tabMenu = ref<{ tabId: string; x: number; y: number } | null>(null);
+
+// Drag-to-reorder state. `dropSlot` is an insertion slot in `tabs` (0 through
+// `tabs.length`), not a tab index, so dropping on the right half of a tab
+// targets the gap after it.
+const draggingTabIndex = ref<number | null>(null);
+const dropSlot = ref<number | null>(null);
+const moveError = ref<string | null>(null);
+const moveErrorAnchor = ref<{ left: number; top: number } | null>(null);
+const tabWrapperRefs = ref<Map<number, HTMLElement>>(new Map());
+let dragKeydownTarget: Document | null = null;
 
 // Prefetch tuning: one pending idle warm-up at most, for the hovered tab and
 // its immediate neighbours. Sweeping the pointer across the strip cancels the
@@ -290,6 +330,101 @@ function onTabClick(index: number) {
 
 function onTabDblClick(tab: XlsxWorkbookTab, index: number) {
   startRename(tab, index);
+}
+
+function setTabWrapperRef(index: number, el: unknown) {
+  const element = el as HTMLElement | null;
+  if (element) {
+    tabWrapperRefs.value.set(index, element);
+  } else {
+    tabWrapperRefs.value.delete(index);
+  }
+}
+
+function removeDragKeydownListener() {
+  if (!dragKeydownTarget) return;
+  dragKeydownTarget.removeEventListener("keydown", onTabDragKeydown, true);
+  dragKeydownTarget = null;
+}
+
+function addDragKeydownListener() {
+  removeDragKeydownListener();
+  if (typeof document === "undefined" || typeof document.addEventListener !== "function") return;
+  dragKeydownTarget = document;
+  dragKeydownTarget.addEventListener("keydown", onTabDragKeydown, true);
+}
+
+/** Esc cancels a drag in progress, whether the key lands on the strip or not. */
+function onTabDragKeydown(event: KeyboardEvent) {
+  if (event.key !== "Escape" || draggingTabIndex.value === null) return;
+  event.preventDefault?.();
+  event.stopPropagation?.();
+  cancelDrag();
+}
+
+function cancelDrag() {
+  draggingTabIndex.value = null;
+  dropSlot.value = null;
+  removeDragKeydownListener();
+}
+
+function showMoveError(message: string, index: number) {
+  moveError.value = message;
+  const rect = tabWrapperRefs.value.get(index)?.getBoundingClientRect?.();
+  moveErrorAnchor.value = rect ? { left: rect.left, top: rect.top } : null;
+}
+
+function onTabDragStart(index: number, event: DragEvent) {
+  if (!canMoveSheets.value || renamingTabIndex.value === index) {
+    event.preventDefault?.();
+    return;
+  }
+  closeTabMenu();
+  cancelDrag();
+  moveError.value = null;
+  moveErrorAnchor.value = null;
+  draggingTabIndex.value = index;
+  dropSlot.value = null;
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+    try {
+      event.dataTransfer.setData("text/plain", props.controller.tabs[index]?.name ?? "");
+    } catch {
+      // Some platform drag implementations refuse custom payloads; the move
+      // itself does not depend on them.
+    }
+  }
+  addDragKeydownListener();
+}
+
+function onTabDragOver(index: number, event: DragEvent) {
+  if (draggingTabIndex.value === null) return;
+  event.preventDefault?.();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  const rect = (event.currentTarget as HTMLElement | null)?.getBoundingClientRect?.();
+  const isAfter = rect
+    ? event.clientX >= rect.left + rect.width / 2
+    : false;
+  dropSlot.value = isAfter ? index + 1 : index;
+}
+
+function onTabDrop(index: number, event: DragEvent) {
+  if (draggingTabIndex.value === null) return;
+  event.preventDefault?.();
+  const fromIndex = draggingTabIndex.value;
+  const insertionSlot = dropSlot.value ?? index;
+  const toIndex = insertionSlot > fromIndex ? insertionSlot - 1 : insertionSlot;
+  cancelDrag();
+  if (toIndex === fromIndex) return;
+  if (!props.controller.moveSheet(fromIndex, toIndex)) {
+    showMoveError(m.value.xlsx.sheetTabs.moveFailed, toIndex);
+    return;
+  }
+  // The strip re-renders at the new index; keep the moved tab visible once the
+  // keyed wrappers have moved with it.
+  void nextTick(() => {
+    tabWrapperRefs.value.get(toIndex)?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  });
 }
 
 function renameErrorMessage(issue: XlsxSheetNameIssue) {
@@ -495,6 +630,21 @@ const renameErrorStyle = computed<CSSProperties>(() => ({
   zIndex: 9998,
 }));
 
+const moveErrorStyle = computed<CSSProperties>(() => ({
+  backgroundColor: "#b91c1c",
+  borderRadius: "4px",
+  color: "#ffffff",
+  fontSize: "11px",
+  left: `${moveErrorAnchor.value?.left ?? 0}px`,
+  maxWidth: "260px",
+  padding: "4px 8px",
+  position: "fixed",
+  top: `${moveErrorAnchor.value?.top ?? 0}px`,
+  transform: "translateY(calc(-100% - 8px))",
+  whiteSpace: "normal",
+  zIndex: 9998,
+}));
+
 const tabMenuStyle = computed<CSSProperties>(() => ({
   backgroundColor: props.isDark ? "#27272a" : "#ffffff",
   border: `1px solid ${props.isDark ? "#3f3f46" : "#e4e4e7"}`,
@@ -512,18 +662,23 @@ const tabMenuStyle = computed<CSSProperties>(() => ({
 watch(renamingTabIndex, (index) => {
   if (index < 0 && renamingTabId.value !== null) closeRename();
 });
-watch(() => props.controller.tabs, () => closeTabMenu());
+watch(() => props.controller.tabs, () => {
+  closeTabMenu();
+  cancelDrag();
+});
 // Losing edit rights (the host flips readOnly mid-edit) must not leave a live
 // editor that can only fail on commit.
 watch(canRenameSheets, (allowed) => {
   if (!allowed) {
     closeRename();
     closeTabMenu();
+    cancelDrag();
   }
 });
 
 onUnmounted(() => {
   cancelScheduledPrefetch();
+  cancelDrag();
   if (popupTimer) clearTimeout(popupTimer);
 });
 </script>
@@ -543,6 +698,31 @@ onUnmounted(() => {
 .xlsx-sheettabs__tab-wrapper {
   position: relative;
   flex-shrink: 0;
+}
+
+.xlsx-sheettabs__tab-wrapper--draggable {
+  cursor: grab;
+}
+
+.xlsx-sheettabs__tab-wrapper--dragging {
+  opacity: 0.45;
+}
+
+.xlsx-sheettabs__drop-indicator {
+  background: #2563eb;
+  border-radius: 1px;
+  bottom: 2px;
+  left: -2px;
+  pointer-events: none;
+  position: absolute;
+  top: 2px;
+  width: 2px;
+  z-index: 2;
+}
+
+.xlsx-sheettabs__drop-indicator--after {
+  left: auto;
+  right: -2px;
 }
 
 .xlsx-sheettabs__tab {

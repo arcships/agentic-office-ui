@@ -1566,6 +1566,30 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
   getActiveWorksheet: () => Worksheet | null;
   addSheet: (name?: string) => void;
   /**
+   * Moves a sheet tab to another slot in the tab strip.
+   *
+   * `fromIndex` and `toIndex` are tab indices — positions in `tabs`, which
+   * interleave worksheets and chartsheets — not `sheets` or `chartsheets`
+   * indices. The order after the move is `tabs.splice(toIndex, 0,
+   * ...tabs.splice(fromIndex, 1))`: the moved tab becomes active and stays
+   * selected, and dropping a tab on its own slot is a no-op.
+   *
+   * `@dukelib/sheets-wasm` has no reorder setter, so the viewer rewrites the
+   * `<sheets>` order in its saved workbook and parses the result back into the
+   * workbook model. Sheet-scoped names and workbook-view tabs keep pointing at
+   * the same sheet, every per-sheet asset is re-read from the reordered
+   * package (images, charts, shapes, form controls and sheet state follow their
+   * sheet), the move is one undo entry, and exported XLSX bytes keep the new
+   * order.
+   *
+   * @param fromIndex Zero-based tab index being moved.
+   * @param toIndex Zero-based destination tab index in the reordered strip.
+   * @returns `true` when the order changed; `false` for an out-of-range index,
+   *   an unchanged order, a read-only viewer, or a workbook that cannot be
+   *   rewritten. Sheet protection does not block a move, matching Excel.
+   */
+  moveSheet: (fromIndex: number, toIndex: number) => boolean;
+  /**
    * Renames a worksheet, the way Excel's tab rename does.
    *
    * The name is validated first (trimmed, non-empty, at most 31 characters, no
@@ -1629,6 +1653,8 @@ export interface XlsxViewerZoom {
 
 export interface XlsxViewerEditing {
   addSheet: (name?: string) => void;
+  /** Moves a sheet tab; see `XlsxViewerController.moveSheet`. */
+  moveSheet: (fromIndex: number, toIndex: number) => boolean;
   /** Renames a worksheet; see `XlsxViewerController.renameSheet`. */
   renameSheet: (index: number, name: string) => boolean;
   /** Renames the active worksheet; see `XlsxViewerController.renameSheet`. */

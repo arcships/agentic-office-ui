@@ -85,6 +85,7 @@ import {
   createHistoryDomain
 } from "./workbook-state";
 import { createEditingDomain } from "./editing";
+import { createSheetOrderDomain } from "./sheet-order";
 import { createStructureDomain } from "./structure";
 import { createPrintDomain } from "./print";
 import { createAuthoringDomain } from "./authoring";
@@ -482,6 +483,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     );
     setImageAssets({
       archive: {},
+      chartsheetOrigins: [],
       formControlOriginsById: new Map(),
       formControlsByWorkbookSheetIndex: formControls,
       imageOriginsById: new Map(),
@@ -729,6 +731,42 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     }
     activeTabIndex.value = nextTabIndex;
   }
+  function activateTab(tabIndex: number, options?: { preserveSelection?: boolean }) {
+    if (tabIndex < 0 || tabIndex >= tabs.value.length) return;
+    const tab = tabs.value[tabIndex];
+    if (tab?.kind === "sheet" && typeof tab.sheetIndex === "number") {
+      switchToSheet(tab.sheetIndex, options);
+      return;
+    }
+    if (tabIndex === activeTabIndex.value) return;
+    if (options?.preserveSelection) {
+      preservedTabSwitchIndexRef.value = tabIndex;
+      void nextTick(() => {
+        if (preservedTabSwitchIndexRef.value === tabIndex) preservedTabSwitchIndexRef.value = -1;
+      });
+    }
+    activeTabIndex.value = tabIndex;
+  }
+  function restoreActiveSheetAndTab(visibleSheetIndex: number, tabIndex?: number) {
+    if (visibleSheetIndex < 0 || visibleSheetIndex >= sheets.value.length) return;
+    const resolvedTabIndex = tabIndex !== undefined && tabs.value[tabIndex]
+      ? tabIndex
+      : resolveSheetTabIndex(visibleSheetIndex);
+    if (resolvedTabIndex < 0) {
+      switchToSheet(visibleSheetIndex);
+      return;
+    }
+    if (resolvedTabIndex === activeTabIndex.value) {
+      activeSheetIndex.value = visibleSheetIndex;
+      return;
+    }
+    preservedTabSwitchIndexRef.value = resolvedTabIndex;
+    void nextTick(() => {
+      if (preservedTabSwitchIndexRef.value === resolvedTabIndex) preservedTabSwitchIndexRef.value = -1;
+    });
+    activeSheetIndex.value = visibleSheetIndex;
+    activeTabIndex.value = resolvedTabIndex;
+  }
   function getInternalActiveWorksheet() {
     const activeWorkbook = workbook.value;
     const workbookSheetIndex = activeSheet.value?.workbookSheetIndex;
@@ -961,6 +999,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     if (isApplyingHistoryRef.value || !workbook.value) return;
     pushHistoryEntry(undoStackRef.value, {
       kind: "snapshot", activeCell: activeCell.value, activeSheetIndex: activeSheetIndex.value,
+      activeTabIndex: activeTabIndex.value,
       bytes: precomputedBytes ?? createSavedWorkbookBytes(workbook.value), selection: selection.value
     }, historyBudget);
     redoStackRef.value = [];
@@ -1461,7 +1500,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     activeZoomTabKey, defaultZoomScale, zoomScale, canZoomIn, canZoomOut,
     readOnly, isActiveSheetProtected, isEditingLocked, canResizeReadOnly, displayFileName, visibleSheetIndexByWorkbookSheetIndex,
     refreshWorkbookState, maybeRecalculateWorkbook,
-    switchToSheet, consumePreservedTabSwitch,
+    switchToSheet, consumePreservedTabSwitch, activateTab, restoreActiveSheetAndTab,
     recalculateWorkbookSafely, resumeAutoCalculate, calculationStatus, noteCalculationResult,
     getActiveWorksheet: getInternalActiveWorksheet,
     setChartAssets, setImageAssets, clearImageAssets, clearChartAssets,
@@ -1487,6 +1526,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
   const chartImageDomain = createChartImageDomain(ctx);
   const historyDomain = createHistoryDomain(ctx);
   const editingDomain = createEditingDomain(ctx);
+  const sheetOrderDomain = createSheetOrderDomain(ctx);
   const structureDomain = createStructureDomain(ctx);
   const authoringDomain = createAuthoringDomain(ctx);
 
@@ -1711,6 +1751,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     minZoomScale: MIN_ZOOM_SCALE,
     moveChartBy: chartImageDomain.moveChartBy,
     moveImageBy: chartImageDomain.moveImageBy,
+    moveSheet: sheetOrderDomain.moveSheet,
     moveShapeBy: chartImageDomain.moveShapeBy,
     deleteChart: chartImageDomain.deleteChart,
     deleteImage: chartImageDomain.deleteImage,

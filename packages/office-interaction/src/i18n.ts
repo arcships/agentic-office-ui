@@ -580,6 +580,7 @@ export interface OfficeXlsxMessages {
     renameDuplicate: string
     renameApostrophe: string
     renameFailed: string
+    moveFailed: string
   }
   contextMenu: {
     label: string
@@ -1588,6 +1589,7 @@ export const officeMessagesEn: OfficeMessages = {
       renameDuplicate: "A sheet with that name already exists.",
       renameApostrophe: "Sheet names cannot start or end with an apostrophe.",
       renameFailed: "The sheet could not be renamed.",
+      moveFailed: "The sheet could not be moved.",
     },
     contextMenu: {
       label: "Cell menu",
@@ -2542,6 +2544,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       renameDuplicate: "已存在同名工作表。",
       renameApostrophe: "工作表名称不能以撇号开头或结尾。",
       renameFailed: "无法重命名该工作表。",
+      moveFailed: "无法移动该工作表。",
     },
     contextMenu: {
       label: "单元格菜单",
