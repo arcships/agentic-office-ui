@@ -424,7 +424,27 @@ export interface TableStyle {
   layout?: "fixed" | "autofit";
   cellSpacingTwips?: number;
   cellMarginTwips?: TableBoxSpacing;
+  /**
+   * Logical grid widths. When a merge collapsed zero-width columns the array
+   * keeps the zeroes and `collapsedGridColumns` names them; serialization
+   * projects the table onto the physical grid before the width list is written.
+   */
   columnWidthsTwips?: number[];
+  /**
+   * OOXML `w:tblStyle/@w:val` of the table, when it carries an explicit style
+   * reference.
+   */
+  styleId?: string;
+  /**
+   * The explicit style id the table was imported with. A collapsed grid is only
+   * safe while the two agree: a different style can supply its own grid widths.
+   */
+  sourceStyleId?: string;
+  /**
+   * @internal Zero-width logical columns a merge collapsed. The export
+   * preparation projects them away before the physical grid is written.
+   */
+  collapsedGridColumns?: number[];
   borders?: TableBorderSet;
   floating?: {
     xTwips?: number;

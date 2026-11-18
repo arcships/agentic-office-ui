@@ -31,6 +31,14 @@ import {
   collectSectionPartReferences,
   modelHasSectionParts
 } from "./section-parts-serialization";
+import { prepareModelForSerialization } from "./prepare-model";
+import {
+  applyTableRowMergesToDocumentXml,
+  applyTableRowMergesToPackage,
+  applyTableRowMergesToPartContent,
+  isTableMergeStoryPart,
+  modelNeedsTableRowMergeSerialization
+} from "./table-merge-serialization";
 import { mapsToWasmPackage, wasmModelToDocumentXml, wasmSerializeDocx } from "./wasm";
 
 /**
@@ -66,6 +74,12 @@ function patchDocumentXml(
   }
   if (renamedRelationshipIds && renamedRelationshipIds.size > 0) {
     patched = applyRenamedRelationshipIds(patched, renamedRelationshipIds);
+  }
+  // The engine rebuilds an edited table from the model and does not turn
+  // `rowSpan`/`vMergeContinuation` back into `w:vMerge`; put the markers back
+  // once the rest of the part is final.
+  if (modelNeedsTableRowMergeSerialization(model)) {
+    patched = applyTableRowMergesToDocumentXml(patched, model);
   }
   return patched;
 }
@@ -147,7 +161,8 @@ function modelNeedsDocumentXmlPatch(model: DocModel): boolean {
     modelNeedsSectionBreakSerialization(model) ||
     modelNeedsNoteReferenceSerialization(model) ||
     modelNeedsCommentRangeSerialization(model) ||
-    modelNeedsFormFieldRequiredPatch(model)
+    modelNeedsFormFieldRequiredPatch(model) ||
+    modelNeedsTableRowMergeSerialization(model)
   );
 }
 
@@ -237,6 +252,7 @@ function patchSerializedDocxBytes(
   const needsDocumentPatch = modelNeedsDocumentXmlPatch(model);
   const needsComments = modelNeedsCommentSerialization(model);
   const needsSectionParts = modelHasSectionParts(model);
+  const needsMerges = modelNeedsTableRowMergeSerialization(model);
   if (!needsDocumentPatch && !needsComments && !needsSectionParts) {
     return bytes;
   }
@@ -268,6 +284,19 @@ function patchSerializedDocxBytes(
     archive["word/document.xml"] = strToU8(patchedXml);
     changed = true;
   }
+  if (needsMerges) {
+    // Vertical merges in header/footer/note stories are rebuilt by the same
+    // engine path as body tables, so every story part needs the same patch.
+    for (const name of Object.keys(archive)) {
+      if (!isTableMergeStoryPart(name)) continue;
+      const text = strFromU8(archive[name]);
+      const patched = applyTableRowMergesToPartContent(name, text, model);
+      if (patched !== text) {
+        archive[name] = strToU8(patched);
+        changed = true;
+      }
+    }
+  }
   if (sectionParts.relationshipsXml) {
     archive[DOCX_DOCUMENT_RELATIONSHIPS_PART] = strToU8(sectionParts.relationshipsXml);
     changed = true;
@@ -291,25 +320,30 @@ export async function modelToDocumentXml(
   model: DocModel,
   basePackage?: OoxmlPackage
 ): Promise<string> {
+  const prepared = prepareModelForSerialization(model);
   const documentXml = await wasmModelToDocumentXml(
-    model,
+    prepared,
     basePackage ? mapsToWasmPackage(basePackage) : undefined
   );
-  return patchDocumentXml(documentXml, model);
+  return patchDocumentXml(documentXml, prepared);
 }
 
 export async function serializeDocModel(
   model: DocModel,
   basePackage?: OoxmlPackage
 ): Promise<OoxmlPackage> {
+  const prepared = prepareModelForSerialization(model);
   const bytes = await wasmSerializeDocx(
-    model,
+    prepared,
     basePackage ? mapsToWasmPackage(basePackage) : undefined
   );
   const { parseDocx } = await import("./ooxml-core");
   return applyCommentsToPackage(
-    patchPackageDocumentXml(await parseDocx(bytes), model),
-    model
+    applyTableRowMergesToPackage(
+      patchPackageDocumentXml(await parseDocx(bytes), prepared),
+      prepared
+    ),
+    prepared
   );
 }
 
@@ -317,9 +351,10 @@ export async function serializeDocx(
   model: DocModel,
   basePackage?: OoxmlPackage
 ): Promise<ArrayBuffer> {
+  const prepared = prepareModelForSerialization(model);
   const bytes = await wasmSerializeDocx(
-    model,
+    prepared,
     basePackage ? mapsToWasmPackage(basePackage) : undefined
   );
-  return patchSerializedDocxBytes(bytes, model);
+  return patchSerializedDocxBytes(bytes, prepared);
 }

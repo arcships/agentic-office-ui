@@ -108,6 +108,23 @@ export {
 
 // Serialization: model → document.xml / OoxmlPackage / ArrayBuffer
 export { modelToDocumentXml, serializeDocModel, serializeDocx } from "./serializer";
+export {
+  DocxSerializationError,
+  prepareModelForSerialization
+} from "./prepare-model";
+export type { DocxSerializationErrorCode } from "./prepare-model";
+export {
+  hasCollapsedTableGrid,
+  projectCollapsedTableGrid
+} from "./table-grid-projection";
+export type {
+  GridCell,
+  GridProjectionOptions,
+  GridProjectionResult,
+  GridRow,
+  GridTable,
+  LogicalBoundaryRange
+} from "./table-grid-projection";
 
 // Section page setup (w:pgSz / w:pgMar) read + rewrite helpers
 export {

@@ -117,6 +117,14 @@ const fields = tracker.fieldsForPage(2)
 
 编辑器和查看器一样接受 `isDark` 和 `minHeight`。传入 `isDark` 时外壳、工具栏、缩略图和纸张一起切换为深色；不传时跟随 `controller.documentTheme`。`minHeight` 可选，数字按 px；不传时组件不设置最小高度。打印时工具栏、缩略图和状态栏自动隐藏，为每页插入分页，并按文档页面尺寸设置 `@page`。
 
+## 导出前的模型准备
+
+导出（`exportDocx()`、`getDocxBytes()`、`serializeDocx()`、`serializeDocModel()`、`modelToDocumentXml()`）会先调用 `prepareModelForSerialization(model)`：递归正文、页眉、页脚、分节页眉/页脚、脚注和尾注，再把折叠表格网格投影到物理列。
+
+合并过的表格可能带一个逻辑网格：被合并掉的那一列在 `TableStyle.columnWidthsTwips` 中保留宽度 `0`，列号记录在 `TableStyle.collapsedGridColumns`，单元格的 `gridSpan` 仍按逻辑列计数。导入时会从 `w:tblGrid` 恢复这个逻辑网格、折叠列标记和 `styleId` / `sourceStyleId`。编辑清除表格的 `sourceXml` 后，导出会按物理网格重写 `w:tblGrid` 与 `w:gridSpan`（`projectCollapsedTableGrid` / `hasCollapsedTableGrid` 可直接复用同一套投影）；未编辑的表格继续写原始标记。垂直合并同样保留：编辑后的表格会重新写回 `w:vMerge w:val="restart"` 与 `w:vMerge`。插入/删除表格列会同步平移或删除 `collapsedGridColumns`，手动拖动列宽则会把网格实体化并清除该标记。
+
+模型不合法时不会生成文件：样式在导入后被改动（`sourceStyleId` 与 `styleId` 不一致）、折叠网格带可见边框，或标记、列宽与单元格跨度自相矛盾，都会抛出 `DocxSerializationError`（`code` 为 `COLLAPSED_TABLE_GRID_STYLE_CHANGED`、`COLLAPSED_TABLE_GRID_BORDER_SPACING` 或 `INVALID_COLLAPSED_TABLE_GRID`，后者带 `reason`）。`exportDocxBuffer` 会把该错误映射为 `DocxExportError`，`code` 为 `INVALID_MODEL`。
+
 ## 查找与替换
 
 编辑器工具栏右侧的放大镜（或 `Ctrl/Cmd + F`）打开查找栏。查找语义与查看器一致：默认忽略大小写、按字面量匹配，可分别打开区分大小写、全字匹配和正则表达式。输入即搜索，`Enter`/`Shift+Enter` 或 `‹`/`›` 切换结果，`Esc` 关闭。

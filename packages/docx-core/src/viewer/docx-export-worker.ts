@@ -1,6 +1,7 @@
 import type { DocModel } from "../engine/types";
 import type { OoxmlPackage } from "../engine/ooxml-core";
 import { serializeDocx } from "../engine/serializer";
+import { DocxSerializationError } from "../engine/prepare-model";
 import { setWasmSource } from "../engine/wasm";
 import type {
   DocxExportErrorCode,
@@ -17,7 +18,7 @@ function serializeError(error: unknown): {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof Error) {
     return {
-      code: "EXPORT_FAILED",
+      code: error instanceof DocxSerializationError ? "INVALID_MODEL" : "EXPORT_FAILED",
       name: error.name,
       message,
       stack: error.stack,

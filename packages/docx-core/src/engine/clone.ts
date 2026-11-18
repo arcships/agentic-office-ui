@@ -390,6 +390,11 @@ function cloneTable(
           indentTwips: table.style.indentTwips,
           layout: table.style.layout,
           cellSpacingTwips: table.style.cellSpacingTwips,
+          styleId: table.style.styleId,
+          sourceStyleId: table.style.sourceStyleId,
+          collapsedGridColumns: table.style.collapsedGridColumns
+            ? [...table.style.collapsedGridColumns]
+            : undefined,
           floating: cloneTableFloatingStyle(table.style.floating),
           cellMarginTwips: cloneTableBoxSpacing(table.style.cellMarginTwips),
           columnWidthsTwips: table.style.columnWidthsTwips
