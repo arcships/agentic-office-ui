@@ -45,8 +45,9 @@ import "@arcships/vue-xlsx/webgl"
 ## 组件与组合函数
 
 - `XlsxSheetSurface` — 最小嵌入渲染面（支持受控单元格/范围、行列/工作表对象与区域选择；宿主持有 zoom，并保持指针下的单元格和冻结轴）
-- `XlsxViewer` — 电子表格查看器
-- `useXlsxViewerController` — 控制器组合函数
+- `XlsxViewer` — 电子表格查看器（工具栏含分页预览和打印预览）
+- `XlsxPrintPreview` — 按 `pageSetup`、打印区域和手动分页线拆分的分页预览，可直接挂载
+- `useXlsxViewerController` — 控制器组合函数（`printLayout`、`printPages`、`print()`）
 - `useXlsxViewerThumbnails` — 缩略图
 
 ## 事件

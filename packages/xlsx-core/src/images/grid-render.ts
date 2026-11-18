@@ -13,6 +13,11 @@ import type {
   XlsxFormControl,
   XlsxFreezePanes,
   XlsxImage,
+  XlsxPageBreak,
+  XlsxPageMargins,
+  XlsxPageSetup,
+  XlsxPrintOptions,
+  XlsxPrintTitles,
   XlsxResolvedCellStyle,
   XlsxShape,
   XlsxSparkline,
@@ -64,6 +69,10 @@ import {
   parseWorkbookStyles,
   parseWorkbookTheme,
 } from "./theme-palette";
+import {
+  parseWorkbookPrintMetadata,
+  parseWorksheetPrintState,
+} from "../print/page-setup";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -99,6 +108,18 @@ export type WorkbookSheetState = {
   minContentRow: number;
   hiddenCols: number[];
   hiddenRows: number[];
+  /** Print fields parsed from `pageSetup`; `undefined` when XML was skipped. */
+  pageSetup?: XlsxPageSetup;
+  /** Print fields parsed from `printOptions`; `undefined` when XML was skipped. */
+  printOptions?: XlsxPrintOptions;
+  /** Page margins parsed from `pageMargins`; `undefined` when XML was skipped. */
+  pageMargins?: XlsxPageMargins;
+  rowBreaks?: XlsxPageBreak[];
+  colBreaks?: XlsxPageBreak[];
+  /** Areas from `_xlnm.Print_Area`; empty means the whole used range prints. */
+  printAreas?: XlsxCellRange[];
+  /** Repeated rows/columns from `_xlnm.Print_Titles`. */
+  printTitles?: XlsxPrintTitles;
   rowHeightOverridesPx: Record<number, number>;
   rowStyleIds: Record<number, number>;
   showGridLines: boolean;
@@ -711,6 +732,7 @@ export function parseSheetState(
   const cachedFormulaValues: Record<string, string> = {};
   const conditionalFormatRules = parseConditionalFormatRules(document);
   const dataValidations = parseSheetDataValidations(document);
+  const printState = parseWorksheetPrintState(document);
   const hyperlinks = parseCellHyperlinks(archive, path, document);
   const comments = parseCellComments(archive, path);
   const sparklines = parseSheetSparklines(document, options?.themePalette);
@@ -852,6 +874,11 @@ export function parseSheetState(
     minContentRow: Number.isFinite(minContentRow) ? minContentRow : -1,
     hiddenCols: [],
     hiddenRows: [],
+    pageSetup: printState.pageSetup,
+    printOptions: printState.printOptions,
+    pageMargins: printState.pageMargins,
+    rowBreaks: printState.rowBreaks,
+    colBreaks: printState.colBreaks,
     rowHeightOverridesPx,
     rowStyleIds,
     showGridLines: (sheetViewNode?.getAttribute("showGridLines") ?? "1") !== "0",
@@ -1022,14 +1049,18 @@ export function parseWorkbookStructureAssetsFromArchive(
   const theme = parseWorkbookTheme(archive);
   const themePalette = buildThemePalette(theme);
   const { defaultFont, namedCellStyleByName, styleById, tableStyleByName } = parseWorkbookStyles(archive);
+  const printMetadata = parseWorkbookPrintMetadata(archive, workbookSheets);
+  const sheetStates = workbookSheets.map((sheet) => parseSheetState(archive, sheet.path, {
+    ...options,
+    defaultFont,
+    themePalette
+  }));
   return {
     contentTypes,
     namedCellStyleByName,
-    sheetStatesByWorkbookSheetIndex: workbookSheets.map((sheet) => parseSheetState(archive, sheet.path, {
-      ...options,
-      defaultFont,
-      themePalette
-    })),
+    sheetStatesByWorkbookSheetIndex: sheetStates.map((state, index) =>
+      state ? { ...state, ...printMetadata[index] } : state
+    ),
     styleById,
     tableMetadataByWorkbookSheetIndex: workbookSheets.map((sheet) =>
       parseWorksheetTableMetadata(archive, sheet.path)

@@ -9,6 +9,7 @@ import {
   cloneBytes,
   getChildElements,
   getFirstChild,
+  getFirstDescendant,
   getLocalElements,
   getRelationshipId,
   normalizeArchivePath,
@@ -32,6 +33,14 @@ import {
 
 const AUTHORING_FRAGMENT_PATTERN =
   /<(?:[A-Za-z0-9]+:)?(pane|hyperlinks|conditionalFormatting|dataValidations|tableParts|legacyDrawing)[\s>/]/;
+
+const PAGE_LAYOUT_ELEMENTS = [
+  "printOptions",
+  "pageMargins",
+  "pageSetup",
+  "rowBreaks",
+  "colBreaks",
+] as const;
 
 type RelationshipSource = {
   target: string;
@@ -463,10 +472,183 @@ function ensureContentTypesDocument(archive: ArchiveEntries) {
   return document;
 }
 
+function createSheetElement(document: XMLDocument, localName: string) {
+  const root = document.documentElement;
+  return document.createElementNS(root?.namespaceURI ?? "", localName);
+}
+
+const OOXML_DEFAULT_PAGE_MARGINS: Record<string, number> = {
+  bottom: 1,
+  footer: 0.5,
+  header: 0.5,
+  left: 0.75,
+  right: 0.75,
+  top: 1,
+};
+
+const DEFAULT_PAGE_SETUP_ATTRIBUTES: Record<string, string> = {
+  blackAndWhite: "0",
+  cellComments: "none",
+  draft: "0",
+  errors: "displayed",
+  firstPageNumber: "1",
+  fitToHeight: "1",
+  fitToWidth: "1",
+  orientation: "portrait",
+  pageOrder: "downThenOver",
+  paperSize: "1",
+  scale: "100",
+  useFirstPageNumber: "0",
+};
+
+function hasTruthyAttribute(node: Element | null, name: string) {
+  const value = node?.getAttribute(name);
+  return value === "1" || value?.toLowerCase() === "true";
+}
+
+/** Whether the source worksheet carries print settings the engine drops. */
+function hasAuthoredPrintState(document: XMLDocument) {
+  if (hasTruthyAttribute(getFirstDescendant(document, "pageSetUpPr"), "fitToPage")) {
+    return true;
+  }
+  const options = getLocalElements(document, "printOptions")[0] ?? null;
+  if (options && ["gridLines", "headings", "horizontalCentered", "verticalCentered"]
+    .some((name) => hasTruthyAttribute(options, name))) {
+    return true;
+  }
+  const margins = getLocalElements(document, "pageMargins")[0] ?? null;
+  if (margins) {
+    for (const [name, fallback] of Object.entries(OOXML_DEFAULT_PAGE_MARGINS)) {
+      const value = Number(margins.getAttribute(name) ?? fallback);
+      if (Number.isFinite(value) && Math.abs(value - fallback) > 1e-6) return true;
+    }
+  }
+  const setup = getLocalElements(document, "pageSetup")[0] ?? null;
+  if (setup) {
+    for (const [name, fallback] of Object.entries(DEFAULT_PAGE_SETUP_ATTRIBUTES)) {
+      const value = setup.getAttribute(name);
+      if (value != null && value !== fallback) return true;
+    }
+    if (setup.hasAttribute("horizontalDpi") || setup.hasAttribute("verticalDpi") || setup.hasAttribute("copies")) {
+      return true;
+    }
+  }
+  for (const kind of ["rowBreaks", "colBreaks"] as const) {
+    const container = getLocalElements(document, kind)[0] ?? null;
+    if (container && getChildElements(container, "brk").length > 0) return true;
+  }
+  return false;
+}
+
+/**
+ * Copies the worksheet's print set-up into engine-saved bytes.
+ *
+ * The engine keeps `pageSetup` and the manual breaks but drops `pageMargins`,
+ * `printOptions` and `sheetPr/pageSetUpPr`, so an exported file would print
+ * with different margins and without fit-to-page. The source archive owns
+ * those records, exactly like the other authored fragments.
+ */
+function applyPageLayout(sourceDocument: XMLDocument, savedDocument: XMLDocument) {
+  for (const localName of PAGE_LAYOUT_ELEMENTS) {
+    removeSheetElement(savedDocument, localName);
+    const sourceNode = getLocalElements(sourceDocument, localName)[0] ?? null;
+    if (!sourceNode) continue;
+    insertSheetChild(savedDocument, savedDocument.importNode(sourceNode, true) as Element);
+  }
+
+  removeSheetElement(savedDocument, "pageSetUpPr");
+  const sourceFitToPage = getFirstDescendant(sourceDocument, "pageSetUpPr");
+  if (!sourceFitToPage) return;
+  const sheetPr = getLocalElements(savedDocument, "sheetPr")[0] ?? null;
+  if (sheetPr) {
+    sheetPr.appendChild(savedDocument.importNode(sourceFitToPage, true));
+    return;
+  }
+  const created = createSheetElement(savedDocument, "sheetPr");
+  created.appendChild(savedDocument.importNode(sourceFitToPage, true));
+  insertSheetChild(savedDocument, created);
+}
+
+const PRINT_DEFINED_NAME_PATTERN = /^_xlnm\.(?:print_area|print_titles)$/i;
+
+/**
+ * Copies `_xlnm.Print_Area` / `_xlnm.Print_Titles` definitions into the saved
+ * workbook part. The engine round-trips them today, but copying the source nodes
+ * keeps multi-area print ranges and `localSheetId` assignments exact after a
+ * sheet reorder.
+ */
+function applyWorkbookPrintDefinedNames(
+  sourceArchive: ArchiveEntries,
+  savedArchive: ArchiveEntries
+) {
+  const sourceXml = readArchiveText(sourceArchive, "xl/workbook.xml");
+  const savedXml = readArchiveText(savedArchive, "xl/workbook.xml");
+  if (!sourceXml || !savedXml) return false;
+  const sourceDocument = parseXml(sourceXml);
+  const savedDocument = parseXml(savedXml);
+  const sourceRoot = sourceDocument?.documentElement;
+  const savedRoot = savedDocument?.documentElement;
+  if (!sourceDocument || !savedDocument || !sourceRoot || !savedRoot) return false;
+
+  const sourceDefinitions = getLocalElements(sourceDocument, "definedName")
+    .filter((node) => PRINT_DEFINED_NAME_PATTERN.test(node.getAttribute("name") ?? ""));
+  if (sourceDefinitions.length === 0) return false;
+
+  for (const node of getLocalElements(savedDocument, "definedName")) {
+    if (PRINT_DEFINED_NAME_PATTERN.test(node.getAttribute("name") ?? "")) {
+      node.parentNode?.removeChild(node);
+    }
+  }
+
+  let container = getLocalElements(savedDocument, "definedNames")[0] ?? null;
+  if (!container) {
+    container = savedDocument.createElementNS(savedRoot.namespaceURI ?? "", "definedNames");
+    const sheetsNode = getLocalElements(savedDocument, "sheets")[0] ?? null;
+    if (sheetsNode?.nextSibling) savedRoot.insertBefore(container, sheetsNode.nextSibling);
+    else savedRoot.appendChild(container);
+  }
+  for (const definition of sourceDefinitions) {
+    container.appendChild(savedDocument.importNode(definition, true));
+  }
+  savedArchive["xl/workbook.xml"] = strToU8(serializeXml(savedDocument));
+  return true;
+}
+
+/**
+ * Copies authored print set-up from the source archive into saved bytes.
+ *
+ * Workbooks whose page margins and page set-up are still the OOXML defaults
+ * are left untouched, so exporting an unmodified workbook stays byte-for-byte
+ * identical to the engine's output.
+ */
+function applyWorksheetPrintLayouts(
+  sourceArchive: ArchiveEntries,
+  savedArchive: ArchiveEntries
+) {
+  const sourceSheets = parseWorkbookSheets(sourceArchive);
+  const savedSheets = parseWorkbookSheets(savedArchive);
+  let changed = false;
+  for (let index = 0; index < Math.min(sourceSheets.length, savedSheets.length); index += 1) {
+    const sourceSheet = sourceSheets[index];
+    const savedSheet = savedSheets[index];
+    const sourceXml = readArchiveText(sourceArchive, sourceSheet.path);
+    const savedXml = readArchiveText(savedArchive, savedSheet.path);
+    if (!sourceXml || !savedXml) continue;
+    const sourceDocument = parseXml(sourceXml);
+    const savedDocument = parseXml(savedXml);
+    if (!sourceDocument?.documentElement || !savedDocument?.documentElement) continue;
+    if (!hasAuthoredPrintState(sourceDocument)) continue;
+    applyPageLayout(sourceDocument, savedDocument);
+    savedArchive[savedSheet.path] = strToU8(serializeXml(savedDocument));
+    changed = true;
+  }
+  return changed;
+}
+
 /**
  * Writes the authored worksheet objects — freeze pane, hyperlinks, conditional
- * formats, data validations, comments and tables — into freshly saved workbook
- * bytes.
+ * formats, data validations, comments, tables and print set-up — into freshly
+ * saved workbook bytes.
  *
  * `savedBytes` carry the WASM engine's authoritative cell data, which drops all
  * of those OOXML constructs. This merge copies the authored fragments from the
@@ -550,6 +732,10 @@ export function mergeWorkbookSheetAuthoringAssets(
       changed = true;
     }
 
+    const printLayoutsChanged = applyWorksheetPrintLayouts(sourceArchive, savedArchive);
+    if (printLayoutsChanged) changed = true;
+    const workbookChanged = applyWorkbookPrintDefinedNames(sourceArchive, savedArchive);
+    if (workbookChanged) changed = true;
     return changed ? zipSync(savedArchive, { level: 6 }) : cloneBytes(savedBytes);
   } catch {
     return cloneBytes(savedBytes);

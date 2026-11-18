@@ -92,6 +92,11 @@ export { default as XlsxContextMenu } from "./components/XlsxContextMenu.vue"
  * context menu; hosts that embed `XlsxSheetSurface` can mount it directly.
  */
 export { default as XlsxAuthoringDialog } from "./components/XlsxAuthoringDialog.vue"
+/**
+ * Paginated print preview. `XlsxViewer` mounts it from the controller's print
+ * state; hosts that embed `XlsxSheetSurface` can mount it directly.
+ */
+export { default as XlsxPrintPreview } from "./components/XlsxPrintPreview.vue"
 
 export const XlsxViewer = XlsxViewerComponent
 

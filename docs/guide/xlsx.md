@@ -41,7 +41,30 @@ const controller = useXlsxViewerController({
 | `showUpload` | `boolean` | `false` | 上传入口 |
 | `getCellStyle` | `function` | 无 | 按单元格补充样式 |
 
-事件包括 `cellDoubleClick`、`upload`、`update:readOnly`、`load-deferred`、`deferred-resumed` 和 `deferred-cancel`。打印时 `@page` 尺寸取自活动工作表已用区域，图表工作表使用 16:9 的自适应高度。
+事件包括 `cellDoubleClick`、`upload`、`update:readOnly`、`load-deferred`、`deferred-resumed` 和 `deferred-cancel`。打印时 `@page` 尺寸取自活动工作表的 `pageSetup` 纸张与方向；图表工作表使用 16:9 的自适应高度。
+
+## 打印与分页
+
+工作表的 `pageSetup`、`printOptions`、`pageMargins`、`rowBreaks`/`colBreaks` 以及 `_xlnm.Print_Area`/`_xlnm.Print_Titles` 会解析进 `XlsxSheetData`。分页在 `@arcships/xlsx-core` 内完成，Vue 层只消费页面结果，不从 DOM 高度推导分页：
+
+```ts
+import { buildWorksheetPrintLayout } from "@arcships/xlsx-core"
+
+const layout = buildWorksheetPrintLayout(controller.activeSheet)
+// layout.pages: { range, paperSize, widthPx, heightPx, scale, rowPage, colPage, ... }[]
+```
+
+控制器提供同一份结果和打印动作：
+
+| 命令 | 说明 |
+|---|---|
+| `printLayout` / `printPages` | 活动工作表的扁平页面列表；每页带单元格范围和纸张尺寸 |
+| `getPrintLayout()` | 同 `printLayout`，适合在命令式代码里取一次快照 |
+| `setPageBreakPreview(enabled)` | 在网格中显示 Excel 风格的蓝色虚线分页线和页码 |
+| `openPrintPreview()` / `closePrintPreview()` | 打开/关闭分页打印预览；`XlsxPrintPreview` 也可由宿主单独挂载 |
+| `print()` | 打开打印预览并调用 `window.print()`；无工作表或无 `window.print` 时返回 `false` |
+
+`XlsxViewer` 的 `@media print` 只输出预览页面，每页一个区块；纸张方向、页边距、手动分页线、重复标题行/列和合并单元格跨页都由核心分页结果决定。导出 XLSX 时会保留 `pageMargins`、`printOptions`、`pageSetUpPr`、分页线和打印区域定义，重新打开后分页结果一致。
 
 图表、地图和 WebGL 是按需入口：
 

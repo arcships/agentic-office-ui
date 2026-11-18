@@ -19,6 +19,7 @@ import {
   revokeWorkbookImageAssets
 } from "./images";
 import type { WorkbookStructureAssets } from "./images";
+import { resolveWorksheetPrintState } from "./print/page-setup";
 import { safeCalculate } from "./safe-calculate";
 import { normalizeTypedDateCells } from "./typed-dates";
 import { trackXlsxWorkbookLifetime } from "./workbook-lifetime";
@@ -506,6 +507,7 @@ function buildSheetList(
   for (let index = 0; index < nextWorkbook.sheetCount; index += 1) {
     const worksheet = nextWorkbook.getSheet(index);
     const sheetState = structureAssets?.sheetStatesByWorkbookSheetIndex[index] ?? sheetLayoutStates?.[index] ?? null;
+    const printState = resolveWorksheetPrintState(sheetState, worksheet);
     const mergeMetadata = resolveWorksheetMergeMetadata(worksheet);
     const effectiveSheetState = {
       ...sheetState,
@@ -556,6 +558,7 @@ function buildSheetList(
         hyperlinks: sheetState?.hyperlinks ?? [],
         comments: sheetState?.comments ?? [],
         dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
+        ...printState,
         defaultColWidthPx,
         defaultRowHeightPx,
         freezePanes: parseWorksheetFreezePanes(worksheet),
@@ -623,6 +626,7 @@ function buildSheetList(
       hyperlinks: sheetState?.hyperlinks ?? [],
       comments: sheetState?.comments ?? [],
       dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
+      ...printState,
       defaultColWidthPx,
       defaultRowHeightPx,
       freezePanes: parseWorksheetFreezePanes(worksheet),

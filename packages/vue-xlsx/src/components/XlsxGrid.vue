@@ -102,6 +102,26 @@
           :y="headerMenu.y"
           @close="headerMenu = null"
         />
+        <div
+          v-if="pageBreakOverlay"
+          class="xlsx-grid__page-breaks"
+          data-testid="xlsx-page-break-preview"
+          aria-hidden="true"
+        >
+          <i
+            v-for="(line, index) in pageBreakOverlay.lines"
+            :key="`line-${index}`"
+            class="xlsx-grid__page-break-line"
+            :class="`xlsx-grid__page-break-line--${line.kind}`"
+            :style="line.style"
+          />
+          <b
+            v-for="(label, index) in pageBreakOverlay.labels"
+            :key="`label-${index}`"
+            class="xlsx-grid__page-break-label"
+            :style="label.style"
+          >{{ label.text }}</b>
+        </div>
         <!-- Editing input (hidden unless editing) -->
         <input
           v-if="editingCell"
@@ -209,6 +229,7 @@ import {
   type XlsxDataValidation,
   type XlsxDataValidationFeedback,
   type XlsxSparkline,
+  type XlsxPrintLayout,
   type XlsxResolvedCellStyle,
   type XlsxSheetData,
 } from "@arcships/xlsx-core";
@@ -777,6 +798,93 @@ function bodyViewportSize(): { width: number; height: number } {
     height: Math.max(0, containerHeight.value - HEADER_HEIGHT),
   };
 }
+
+interface PageBreakOverlayLine {
+  kind: "column" | "row";
+  style: CSSProperties;
+}
+
+interface PageBreakOverlayLabel {
+  style: CSSProperties;
+  text: string;
+}
+
+const pageBreakOverlay = computed<{
+  labels: PageBreakOverlayLabel[];
+  lines: PageBreakOverlayLine[];
+} | null>(() => {
+  const controller = props.controller as XlsxViewerController & {
+    isPageBreakPreview?: boolean;
+    printLayout?: XlsxPrintLayout | null;
+  };
+  if (!controller.isPageBreakPreview) return null;
+  const layout = controller.printLayout;
+  const sheet = activeSheet.value;
+  if (!layout || !sheet || layout.pages.length === 0) return null;
+  const frozen = frozenPaneMetrics();
+  const viewport = bodyViewportSize();
+  const lines = new Map<string, PageBreakOverlayLine>();
+  const labels: PageBreakOverlayLabel[] = [];
+
+  for (const page of layout.pages) {
+    if (page.colPage > 0) {
+      const displayCol = sheetColToDisplayIndex.value.get(page.range.start.col);
+      if (displayCol !== undefined) {
+        const contentX = getColOffsetSum(displayCol);
+        const x = paneViewOffset(contentX, scrollLeft.value, displayCol < frozen.cols);
+        if (displayCol >= frozen.cols && x < frozen.width) continue;
+        const key = `column:${Math.round(x)}`;
+        if (!lines.has(key)) {
+          lines.set(key, {
+            kind: "column",
+            style: {
+              height: `${viewport.height}px`,
+              left: `${ROW_HEADER_WIDTH + x}px`,
+              top: `${HEADER_HEIGHT}px`,
+            },
+          });
+        }
+      }
+    }
+    if (page.rowPage > 0) {
+      const displayRow = sheetRowToDisplayIndex.value.get(page.range.start.row);
+      if (displayRow !== undefined) {
+        const contentY = getRowOffsetSum(displayRow);
+        const y = paneViewOffset(contentY, scrollTop.value, displayRow < frozen.rows);
+        if (displayRow >= frozen.rows && y < frozen.height) continue;
+        const key = `row:${Math.round(y)}`;
+        if (!lines.has(key)) {
+          lines.set(key, {
+            kind: "row",
+            style: {
+              left: `${ROW_HEADER_WIDTH}px`,
+              top: `${HEADER_HEIGHT + y}px`,
+              width: `${viewport.width}px`,
+            },
+          });
+        }
+      }
+    }
+
+    const displayRow = sheetRowToDisplayIndex.value.get(page.range.start.row);
+    const displayCol = sheetColToDisplayIndex.value.get(page.range.start.col);
+    if (displayRow === undefined || displayCol === undefined) continue;
+    const x = paneViewOffset(getColOffsetSum(displayCol), scrollLeft.value, displayCol < frozen.cols);
+    const y = paneViewOffset(getRowOffsetSum(displayRow), scrollTop.value, displayRow < frozen.rows);
+    if (displayCol >= frozen.cols && x < frozen.width) continue;
+    if (displayRow >= frozen.rows && y < frozen.height) continue;
+    if (x > viewport.width || y > viewport.height || x < -120 || y < -60) continue;
+    labels.push({
+      style: {
+        left: `${ROW_HEADER_WIDTH + Math.max(0, x) + 6}px`,
+        top: `${HEADER_HEIGHT + Math.max(0, y) + 4}px`,
+      },
+      text: String(page.pageNumber),
+    });
+  }
+
+  return { labels, lines: [...lines.values()] };
+});
 
 /**
  * Viewport box for a cell-anchored overlay (editor, comment popover,
@@ -2886,6 +2994,11 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 .xlsx-grid__scroll-space { position: relative; }
+.xlsx-grid__page-breaks { inset: 0; pointer-events: none; position: absolute; z-index: 6; }
+.xlsx-grid__page-break-line { border: 0; display: block; margin: 0; padding: 0; position: absolute; }
+.xlsx-grid__page-break-line--column { border-left: 1px dashed #2563eb; width: 0; }
+.xlsx-grid__page-break-line--row { border-top: 1px dashed #2563eb; height: 0; }
+.xlsx-grid__page-break-label { background: rgba(37, 99, 235, .92); border-radius: 3px; color: #ffffff; font-family: inherit; font-size: 10px; font-style: normal; font-weight: 600; line-height: 1; padding: 2px 4px; position: absolute; }
 .xlsx-grid__viewport {
   left: 0;
   overflow: hidden;

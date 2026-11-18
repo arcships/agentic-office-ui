@@ -2,6 +2,7 @@
   <div
     ref="viewerRef"
     class="xlsx-viewer"
+    :class="{ 'xlsx-viewer--print-preview': controller.isPrintPreviewOpen }"
     data-testid="xlsx-viewer"
     :data-state="controller.isLoading ? 'loading' : controller.error || controller.sourceError ? 'error' : controller.isLoadDeferred ? 'deferred' : controller.activeSheet || controller.activeTab?.kind === 'chartsheet' ? 'ready' : 'empty'"
     :style="viewerStyle"
@@ -185,6 +186,12 @@
           @authoring="openAuthoring"
         />
       </template>
+      <XlsxPrintPreview
+        v-if="controller.isPrintPreviewOpen"
+        :controller="controller"
+        :is-dark="isDark ?? false"
+        @close="controller.closePrintPreview()"
+      />
     </div>
     <XlsxAuthoringDialog
       v-if="authoringKind"
@@ -219,6 +226,7 @@ import XlsxDrawingLayer from "./XlsxDrawingLayer.vue";
 import XlsxSelectionOverlay from "./XlsxSelectionOverlay.vue";
 import XlsxContextMenu from "./XlsxContextMenu.vue";
 import XlsxAuthoringDialog from "./XlsxAuthoringDialog.vue";
+import XlsxPrintPreview from "./XlsxPrintPreview.vue";
 import type { XlsxAuthoringDialogKind } from "./authoring-dialog";
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue";
 import { formatBinaryBytes } from "../composables/formatting";
@@ -404,6 +412,17 @@ let printPageStyle: HTMLStyleElement | undefined;
 function syncPrintPageSize(): void {
   const browserDocument = globalThis.document;
   if (!browserDocument) return;
+  const layout = props.controller.printLayout;
+  const firstPage = props.controller.isPrintPreviewOpen ? layout?.pages[0] : undefined;
+  if (firstPage) {
+    if (!printPageStyle || printPageStyle.isConnected === false) {
+      printPageStyle = browserDocument.createElement("style");
+      if (printPageStyle.dataset) printPageStyle.dataset.officePrintPage = "xlsx";
+      browserDocument.head.append(printPageStyle);
+    }
+    printPageStyle.textContent = `@page { size: ${(firstPage.widthPx / 96).toFixed(2)}in ${(firstPage.heightPx / 96).toFixed(2)}in; margin: 0; }`;
+    return;
+  }
   const sheet = props.controller.activeSheet;
   if (!sheet || sheet.maxUsedCol < sheet.minUsedCol || sheet.maxUsedRow < sheet.minUsedRow) {
     printPageStyle?.remove?.();
@@ -434,12 +453,20 @@ watch(
     props.controller.activeSheet?.maxUsedCol,
     props.controller.activeSheet?.minUsedRow,
     props.controller.activeSheet?.maxUsedRow,
+    props.controller.isPrintPreviewOpen,
+    props.controller.printLayout?.pages[0]?.widthPx,
+    props.controller.printLayout?.pages[0]?.heightPx,
   ] as const,
   syncPrintPageSize,
   { immediate: true },
 );
 
 function onKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape" && props.controller.isPrintPreviewOpen) {
+    event.preventDefault();
+    props.controller.closePrintPreview();
+    return;
+  }
   if (
     props.showDefaultToolbar
     && (event.ctrlKey || event.metaKey)
@@ -732,6 +759,7 @@ defineExpose({
 
 @media print {
   .xlsx-viewer {
+    border-radius: 0 !important;
     height: auto !important;
     min-height: 0 !important;
     overflow: visible !important;
@@ -743,7 +771,11 @@ defineExpose({
   .xlsx-context-menu,
   .xlsx-grid__edit-input,
   .xlsx-grid__comment-popover,
-  .xlsx-viewer__deferred { display: none !important; }
+  .xlsx-viewer__deferred,
+  .xlsx-viewer__calculation-status,
+  .xlsx-live-status { display: none !important; }
   .xlsx-viewer__body { display: block !important; overflow: visible !important; }
+  .xlsx-viewer--print-preview .xlsx-viewer__body > :not(.xlsx-print-preview) { display: none !important; }
+  .xlsx-viewer--print-preview { background: #ffffff !important; }
 }
 </style>

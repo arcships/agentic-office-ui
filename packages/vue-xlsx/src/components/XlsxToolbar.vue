@@ -75,6 +75,28 @@
       <button v-if="showUpload" class="xlsx-toolbar__icon-button" data-testid="xlsx-toolbar-upload" :title="m.xlsx.toolbar.upload" :aria-label="m.xlsx.toolbar.upload" @click="emit('upload')">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7.5 8.5 12 4l4.5 4.5M5 14v6h14v-6" /></svg>
       </button>
+      <button
+        v-if="controller.activeSheet"
+        class="xlsx-toolbar__icon-button"
+        :class="{ active: controller.isPageBreakPreview }"
+        data-testid="xlsx-toolbar-page-breaks"
+        :aria-pressed="controller.isPageBreakPreview"
+        :title="m.xlsx.toolbar.pageBreaks"
+        :aria-label="m.xlsx.toolbar.pageBreaks"
+        @click="controller.setPageBreakPreview(!controller.isPageBreakPreview)"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16" stroke-dasharray="2 2" /></svg>
+      </button>
+      <button
+        v-if="controller.activeSheet"
+        class="xlsx-toolbar__icon-button"
+        data-testid="xlsx-toolbar-print-preview"
+        :title="m.xlsx.toolbar.printPreview"
+        :aria-label="m.xlsx.toolbar.printPreview"
+        @click="controller.openPrintPreview()"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4V9h16v9h-2M8 14h8v7H8z" /></svg>
+      </button>
       <button v-if="controller.canDownload" class="xlsx-toolbar__icon-button" data-testid="xlsx-toolbar-download" :title="m.xlsx.toolbar.download" :aria-label="m.xlsx.toolbar.download" @click="controller.download()">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M7.5 11.5 12 16l4.5-4.5M5 19h14" /></svg>
       </button>
@@ -209,6 +231,8 @@ defineExpose({ openSearch });
   width: 32px;
 }
 .xlsx-toolbar__icon-button:hover:not(:disabled) { background: rgba(113, 113, 122, .12); }
+.xlsx-toolbar__icon-button.active { background: rgba(37, 99, 235, .14); border-color: #2563eb; color: #2563eb; }
+.xlsx-toolbar--dark .xlsx-toolbar__icon-button.active { background: rgba(96, 165, 250, .2); border-color: #60a5fa; color: #93c5fd; }
 .xlsx-toolbar__icon-button:disabled { cursor: default; opacity: .35; }
 .xlsx-toolbar__icon-button:focus-visible,
 .xlsx-toolbar__zoom-select:focus-visible,
