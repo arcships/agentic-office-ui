@@ -159,6 +159,7 @@
           :read-only="effectiveReadOnly"
           :selection-color="selectionColor"
           :selection-fill-color="selectionFillColor"
+          :render-mode="renderMode"
           @cell-double-click="onCellDoubleClick"
           @viewport-change="gridViewport = $event"
         >
@@ -276,6 +277,7 @@ import { formatOfficeMessage } from "@arcships/office-interaction";
 import { provideXlsxMessages } from "../i18n";
 import { localizeXlsxLoadError } from "../errors";
 import { nextXlsxDomId } from "./dom-ids";
+import type { XlsxGridRenderMode } from "./grid-dom";
 
 const props = withDefaults(
   defineProps<{
@@ -289,6 +291,15 @@ const props = withDefaults(
     readOnly?: boolean;
     selectionColor?: string;
     selectionFillColor?: string;
+    /**
+     * Grid body renderer. `canvas` (default) paints the visible range into the
+     * grid canvases; `dom` renders the same window as real `role="gridcell"`
+     * elements with selectable text. Use `dom` as the accessibility mode, for
+     * browser find on cell values, as a canvas fallback, or to inspect the
+     * visible window while debugging. Switching modes keeps the scroll position
+     * and the controller's selection.
+     */
+    renderMode?: XlsxGridRenderMode;
     showDefaultToolbar?: boolean;
     showRibbon?: boolean;
     showFormulaBar?: boolean;
@@ -340,6 +351,7 @@ const props = withDefaults(
     readOnly: false,
     selectionColor: undefined,
     selectionFillColor: undefined,
+    renderMode: "canvas",
     showDefaultToolbar: true,
     showRibbon: true,
     showFormulaBar: true,

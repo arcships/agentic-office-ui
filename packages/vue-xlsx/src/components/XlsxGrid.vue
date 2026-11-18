@@ -24,6 +24,7 @@
     :aria-colcount="gridColCount"
     :aria-readonly="gridAriaReadOnly"
     :aria-activedescendant="activeCellDescendantId"
+    :data-render-mode="gridRenderMode"
     tabindex="0"
     :style="containerStyle"
     @keydown="onGridKeydown"
@@ -36,7 +37,7 @@
     @dblclick="onDblClick"
   >
     <div
-      v-if="activeCellAria"
+      v-if="activeCellAria && showHiddenA11yCell"
       class="xlsx-grid__a11y"
       role="row"
       :aria-rowindex="activeCellAria.rowIndex"
@@ -56,29 +57,38 @@
       :style="scrollSpaceStyle"
     >
       <div class="xlsx-grid__viewport" :style="viewportStyle">
-        <!-- Column header canvas -->
-        <canvas
-          ref="colHeaderCanvasRef"
-          class="xlsx-grid__col-header"
-          :style="colHeaderCanvasStyle"
-        />
-        <!-- Row header canvas -->
-        <canvas
-          ref="rowHeaderCanvasRef"
-          class="xlsx-grid__row-header"
-          :style="rowHeaderCanvasStyle"
-        />
-        <!-- Corner canvas -->
-        <canvas
-          ref="cornerCanvasRef"
-          class="xlsx-grid__corner"
-          :style="cornerCanvasStyle"
-        />
-        <!-- Main body canvas -->
-        <canvas
-          ref="bodyCanvasRef"
-          class="xlsx-grid__body"
-          :style="bodyCanvasStyle"
+        <template v-if="gridRenderMode === 'canvas'">
+          <!-- Column header canvas -->
+          <canvas
+            ref="colHeaderCanvasRef"
+            class="xlsx-grid__col-header"
+            :style="colHeaderCanvasStyle"
+          />
+          <!-- Row header canvas -->
+          <canvas
+            ref="rowHeaderCanvasRef"
+            class="xlsx-grid__row-header"
+            :style="rowHeaderCanvasStyle"
+          />
+          <!-- Corner canvas -->
+          <canvas
+            ref="cornerCanvasRef"
+            class="xlsx-grid__corner"
+            :style="cornerCanvasStyle"
+          />
+          <!-- Main body canvas -->
+          <canvas
+            ref="bodyCanvasRef"
+            class="xlsx-grid__body"
+            :style="bodyCanvasStyle"
+          />
+        </template>
+        <!-- DOM fallback: real, selectable text for the same visible window. -->
+        <XlsxGridDomLayer
+          v-else-if="domGridModel"
+          :model="domGridModel"
+          :scroll-left="scrollLeft"
+          :scroll-top="scrollTop"
         />
         <button
           v-if="columnMenuTriggerStyle && !editingLocked"
@@ -299,7 +309,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick, type CSSProperties } from "vue";
+import { ref, shallowRef, computed, watch, onMounted, onUnmounted, nextTick, type CSSProperties } from "vue";
 import {
   resolveWorkbookColor,
   resolveWorkbookFillStyle,
@@ -396,6 +406,26 @@ import { formatOfficeMessage } from "@arcships/office-interaction";
 import { useXlsxMessages } from "../i18n";
 import XlsxHeaderMenu from "./XlsxHeaderMenu.vue";
 import XlsxAutoFilterMenu from "./XlsxAutoFilterMenu.vue";
+import XlsxGridDomLayer from "./XlsxGridDomLayer.vue";
+import {
+  canvasBorderEdgeCss,
+  canvasCellStyleToCss,
+  canvasCellTextStyle,
+  gridDomSelectionStyle,
+  resolveGridDomAxisWindow,
+  resolveGridDomOutlineStyle,
+  resolveGridRenderMode,
+  richTextRunCss,
+  type CanvasCellStyle,
+  type GridDomCellModel,
+  type GridDomHeaderItemModel,
+  type GridDomHeaderLayerModel,
+  type GridDomLayerModel,
+  type GridDomPaneModel,
+  type GridDomRowModel,
+  type GridDomSparklineModel,
+  type XlsxGridRenderMode,
+} from "./grid-dom";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -404,6 +434,14 @@ const props = defineProps<{
   readOnly?: boolean;
   selectionColor?: string;
   selectionFillColor?: string;
+  /**
+   * Grid body renderer. `canvas` (default) paints the visible range into the
+   * four canvases; `dom` renders the same window as real `role="gridcell"`
+   * elements with selectable text, for accessibility mode, browser find and
+   * debugging, or as a canvas fallback. Both reuse the same cell style
+   * resolution and pane geometry.
+   */
+  renderMode?: XlsxGridRenderMode;
 }>();
 
 const m = useXlsxMessages();
@@ -467,6 +505,11 @@ const scrollTop = ref(0);
 const scrollLeft = ref(0);
 const containerWidth = ref(0);
 const containerHeight = ref(0);
+// DOM renderer model. Rebuilt only when the visible window or its inputs move;
+// scrolling itself is a transform on the layer, exactly like the canvas.
+const domGridModel = shallowRef<GridDomLayerModel | null>(null);
+let domGridSignature = "";
+const gridRenderMode = computed(() => resolveGridRenderMode(props.renderMode));
 
 const editingCell = ref<XlsxCellAddress | null>(null);
 const editingValue = ref("");
@@ -645,6 +688,13 @@ const activeCellAria = computed(() => {
 });
 const activeCellDescendantId = computed(() =>
   activeCellAria.value ? `${gridA11yId}-active-cell` : undefined,
+);
+// In DOM mode the active cell is a real gridcell inside the rendered window and
+// carries the `aria-activedescendant` id itself; the visually hidden mirror is
+// only kept for an active cell that scrolled out of that window, so assistive
+// tech never sees it twice.
+const showHiddenA11yCell = computed(
+  () => gridRenderMode.value === "canvas" || !domGridModel.value?.activeCellId,
 );
 // Per-cell metadata is keyed by `cellKey` (one number) rather than a
 // `${row}:${col}` string, because the paint loop looks these up for every
@@ -1951,25 +2001,6 @@ function resizeCanvas(canvas: HTMLCanvasElement | null, width: number, height: n
   if (ctx) ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
 }
 
-interface CanvasCellStyle {
-  alignment: "left" | "center" | "right";
-  backgroundColor: string;
-  border?: Record<string, Record<string, unknown>>;
-  color: string;
-  fontFamily: string;
-  fontSizePx: number;
-  fontStyle: string;
-  fontWeight: string;
-  /** Canvas angle of rotated text, or `null` for horizontal text. */
-  rotation: number | null;
-  /** Whether Excel may shrink the font down to 0.4× to fit the cell. */
-  shrinkToFit: boolean;
-  strike: boolean;
-  underline: boolean;
-  vertical: "top" | "middle" | "bottom";
-  wrap: boolean;
-}
-
 function asStyleRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
 }
@@ -3162,8 +3193,15 @@ function paintSelectionBorders(
 // WASM handle on every call (unlike the controller's internal cached one), so
 // allocating it per section would churn handles at frame rate.
 function paintGrid() {
+  // Leaving DOM mode drops the element tree; the canvases take over again.
+  if (gridRenderMode.value !== "dom" && domGridModel.value) domGridModel.value = null;
   const worksheet: ActiveWorksheet | null = props.controller.isWorkerBacked ? null : props.controller.getActiveWorksheet();
   try {
+    if (gridRenderMode.value === "dom") {
+      paintDomGrid(worksheet);
+      return;
+    }
+    domGridSignature = "";
     paintBody(worksheet);
     paintColHeaders();
     paintRowHeaders();
@@ -3171,6 +3209,718 @@ function paintGrid() {
   } finally {
     worksheet?.free();
   }
+}
+
+// ── DOM renderer ──────────────────────────────────────────────────────
+// The DOM path mirrors the canvas model instead of driving its own layout: the
+// same visible windows, frozen strips, merge anchors, `resolveCanvasCellStyleInto`
+// styles and conditional formatting feed real elements. The layer is only
+// rebuilt when the window or its inputs change; scrolling is a transform.
+
+interface GridDomPaneLayout {
+  key: "main" | "frozen-rows" | "frozen-cols" | "frozen-corner";
+  /** Viewport position of the pane inside the grid body (headers excluded). */
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  scrollX: boolean;
+  scrollY: boolean;
+  /** Display rows/columns the pane renders. */
+  rows: number[];
+  cols: number[];
+}
+
+interface GridDomBuildContext {
+  worksheet: ActiveWorksheet | null;
+  sheet: XlsxSheetData;
+  tableHeaderCells: ReadonlySet<number>;
+  styleScratch: CanvasCellStyle;
+  gridColor: string;
+  gridLines: boolean;
+  selectionFill: string;
+}
+
+/** CSS borders of a resolved cell style, with workbook colours applied. */
+function domBorderCss(style: CanvasCellStyle, sheet: XlsxSheetData) {
+  const border = style.border;
+  const edge = (name: "top" | "right" | "bottom" | "left") => {
+    const raw = asStyleRecord(border?.[name]);
+    return canvasBorderEdgeCss(raw, resolveWorkbookColor(asStyleRecord(raw?.color), sheet.themePalette));
+  };
+  return { bottom: edge("bottom"), left: edge("left"), right: edge("right"), top: edge("top") };
+}
+
+/**
+ * Sparkline geometry for the inline SVG, in cell-local coordinates.
+ *
+ * The sampling, padding and per-glyph widths match `drawSparkline`, so the DOM
+ * fallback shows the same bars / line / markers the canvas would.
+ */
+function buildDomSparkline(
+  sparkline: XlsxSparkline,
+  width: number,
+  height: number,
+): GridDomSparklineModel | null {
+  const values: number[] = [];
+  for (let row = sparkline.range.start.row; row <= sparkline.range.end.row; row += 1) {
+    for (let col = sparkline.range.start.col; col <= sparkline.range.end.col; col += 1) {
+      const value = parseDisplayedNumber(getGridCellDisplayValue({ row, col }), props.controller.locale);
+      if (value !== null) values.push(value);
+    }
+  }
+  if (!values.length) return null;
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 0);
+  const span = Math.max(1e-9, max - min);
+  const step = Math.max(1, (width - 8) / Math.max(1, values.length - 1));
+  const color = sparkline.color || "#2563eb";
+  const px = (index: number) => 4 + index * step;
+  const py = (value: number) => height - 4 - ((value - min) / span) * Math.max(1, height - 8);
+  const model: GridDomSparklineModel = {
+    color,
+    viewBox: `0 0 ${Math.max(1, width)} ${Math.max(1, height)}`,
+  };
+  if (sparkline.type === "column" || sparkline.type === "winLoss") {
+    const barWidth = Math.max(2, (width - 8) / values.length - 2);
+    model.bars = values.map((value, index) => ({
+      key: `bar-${index}`,
+      height: Math.max(1, Math.abs(py(value) - py(0))),
+      width: barWidth,
+      x: px(index) - barWidth / 2,
+      y: Math.min(py(value), py(0)),
+    }));
+  } else {
+    model.line = values.map((value, index) => `${px(index)},${py(value)}`).join(" ");
+    if (sparkline.markers) {
+      model.markers = values.map((value, index) => ({
+        cx: px(index),
+        cy: py(value),
+        key: `marker-${index}`,
+      }));
+    }
+  }
+  return model;
+}
+
+/** One DOM cell: resolved style, display text (or runs/sparkline) and geometry. */
+function buildDomCellModel(
+  cell: XlsxCellAddress,
+  paneKey: string,
+  box: { left: number; top: number; width: number; height: number },
+  rowTop: number,
+  merge: GridMergeRegion | undefined,
+  context: GridDomBuildContext,
+): GridDomCellModel {
+  const value = getGridCellDisplayValue(cell);
+  const style = resolveCanvasCellStyleInto(
+    context.styleScratch,
+    cell,
+    value,
+    resolveCellWorkbookStyle(cell, context.worksheet, context.sheet),
+    context.tableHeaderCells,
+  );
+  const conditional = conditionalVisual(cell, value);
+  const cellKeyValue = cellKey(cell.row, cell.col);
+  const sparkline = sparklinesByCell.value.get(cellKeyValue);
+  const hyperlink = hyperlinksByCell.value.get(cellKeyValue);
+  const comment = commentsByCell.value.get(cellKeyValue);
+  const selectionValue = selection.value;
+  const selected = isCellInRange(cell, selectionValue)
+    || Boolean(merge && selectionValue && rangesIntersect(merge, selectionValue));
+  const conditionalBackground = conditional?.kind === "colorScale"
+    ? resolveColorScaleFill(conditional.environment, conditional.value)
+    : undefined;
+  const conditionalHidesValue = (conditional?.kind === "dataBar" || conditional?.kind === "iconSet")
+    && conditional.showValue === false;
+  const icon = conditional?.kind === "iconSet"
+    ? resolveIconGeometry(conditional.environment, conditional.value, box.width, box.height)
+    : null;
+  // Excel's shrink-to-fit sizes the font down to 0.4× from the measured text;
+  // reuse the paint path's measurement so both renderers pick the same size.
+  let fontSizePx: number | undefined;
+  if (style.shrinkToFit && !style.wrap && value) {
+    const availableWidth = Math.max(0, box.width - 10);
+    const lineHeight = Math.max(12, style.fontSizePx * 1.25);
+    const fitWidth = style.rotation === null
+      ? availableWidth
+      : resolveRotatedTextFitWidth(availableWidth, Math.max(0, box.height - 4), style.rotation, lineHeight);
+    fontSizePx = resolveShrinkToFitFontSize(
+      style.fontSizePx,
+      fitWidth,
+      (candidate) => measureAutofitText(value, baseCellFont(style, candidate)),
+    );
+  }
+  const cellStyle: CSSProperties = {
+    ...canvasCellStyleToCss(style, {
+      backgroundColor: conditionalBackground,
+      borders: domBorderCss(style, context.sheet),
+      fontSizePx,
+      gridColor: context.gridColor,
+      gridLines: context.gridLines,
+      hyperlink: Boolean(hyperlink),
+      merged: Boolean(merge),
+    }),
+    height: `${box.height}px`,
+    left: `${box.left}px`,
+    position: "absolute",
+    top: `${box.top - rowTop}px`,
+    width: `${box.width}px`,
+  };
+  const model: GridDomCellModel = {
+    active: false,
+    address: `${columnLabel(cell.col)}${cell.row + 1}`,
+    ariaColIndex: cell.col + 1,
+    ariaRowIndex: cell.row + 1,
+    key: `${paneKey}:${cell.row}:${cell.col}`,
+    selected,
+    style: cellStyle,
+  };
+  if (selected) model.selectionStyle = gridDomSelectionStyle(context.selectionFill);
+  if (icon) {
+    model.icon = icon.glyph;
+    model.iconStyle = {
+      color: icon.color,
+      fontSize: `${icon.size}px`,
+      height: `${icon.size}px`,
+      left: `${icon.iconX}px`,
+      top: `${Math.max(0, (box.height - icon.size) / 2)}px`,
+      width: `${icon.size}px`,
+    };
+  }
+  if (comment) model.comment = true;
+  // Sparklines replace the value in Excel; the value stays available to
+  // assistive tech through the cell label.
+  if (sparkline) {
+    const sparklineModel = buildDomSparkline(sparkline, box.width, box.height);
+    if (sparklineModel) {
+      model.sparkline = sparklineModel;
+      if (value) model.ariaLabel = value;
+    }
+  }
+  const textVisible = !conditionalHidesValue && !model.sparkline;
+  if (textVisible) {
+    const runs = getGridCellRuns(cell);
+    if (value && runs && runs.length > 1) {
+      model.runs = runs.map((run, index) => ({
+        key: `run-${index}`,
+        style: richTextRunCss(style, run.font, {
+          color: run.font?.color ? resolveWorkbookColor(asStyleRecord(run.font.color), context.sheet.themePalette) : null,
+          fontSizePx,
+        }),
+        text: run.text,
+      }));
+    } else {
+      model.text = value;
+    }
+    model.textStyle = canvasCellTextStyle(style, {
+      fontSizePx,
+      maxWidthPx: icon ? icon.textWidth : undefined,
+    });
+  } else if (!model.ariaLabel && value) {
+    model.ariaLabel = value;
+  }
+  if (conditional?.kind === "dataBar" && conditional.environment.dataBar) {
+    const barStyle = conditional.environment.dataBar;
+    const barArea = Math.max(0, box.width - 6);
+    const geometry = resolveDataBarGeometry(conditional.environment, conditional.value, barArea);
+    const barHeight = Math.max(2, box.height - 8);
+    if (geometry.barWidth > 0) {
+      const fillColor = geometry.negative ? barStyle.negativeFillColor : barStyle.color;
+      model.dataBarStyle = {
+        background: barStyle.gradient
+          ? `linear-gradient(to right, ${withAlpha(fillColor, "66")}, ${withAlpha(fillColor, "dd")})`
+          : withAlpha(fillColor, "99"),
+        border: barStyle.border
+          ? `1px solid ${geometry.negative ? barStyle.negativeBorderColor : barStyle.borderColor}`
+          : undefined,
+        boxSizing: "border-box",
+        height: `${barHeight}px`,
+        left: `${3 + geometry.barX}px`,
+        position: "absolute",
+        top: "4px",
+        width: `${geometry.barWidth}px`,
+        zIndex: 0,
+      };
+    }
+    if (geometry.showAxis) {
+      model.dataBarAxisStyle = {
+        background: barStyle.axisColor,
+        height: `${barHeight}px`,
+        left: `${3 + geometry.axisX - 0.5}px`,
+        position: "absolute",
+        top: "4px",
+        width: "1px",
+        zIndex: 0,
+      };
+    }
+  }
+  return model;
+}
+
+/** Header strip item: one column label or row number, in the pane it belongs to. */
+function buildDomHeaderItem(
+  key: string,
+  label: string,
+  box: CSSProperties,
+  selected: boolean,
+  colors: { background: string; border: string; selectedBackground: string; selectedText: string; text: string },
+): GridDomHeaderItemModel {
+  return {
+    key,
+    label,
+    style: {
+      ...box,
+      background: selected ? colors.selectedBackground : undefined,
+      borderBottom: `1px solid ${colors.border}`,
+      borderRight: `1px solid ${colors.border}`,
+      boxSizing: "border-box",
+      color: selected ? colors.selectedText : colors.text,
+    },
+  };
+}
+
+function paintDomGrid(worksheet: ActiveWorksheet | null): void {
+  const sheet = activeSheet.value;
+  if (!sheet) {
+    domGridModel.value = null;
+    domGridSignature = "";
+    return;
+  }
+  updatePaintedMergeRegions(props.controller.isWorkerBacked ? sheet.mergedRegions : worksheet?.mergedRegions);
+  const widths = effectiveColWidths.value;
+  const heights = effectiveRowHeights.value;
+  const rowRange = visibleRowRange.value;
+  const colRange = visibleColRange.value;
+  const frozen = frozenPaneMetrics();
+  const bodyWidth = Math.max(0, containerWidth.value - ROW_HEADER_WIDTH);
+  const bodyHeight = Math.max(0, containerHeight.value - HEADER_HEIGHT);
+  const selectionValue = selection.value;
+  const fillTarget = fillDragTarget.value;
+  const cut = cutRange.value;
+  const referenceRanges = formulaReferenceRanges.value;
+  const activeFormula = activeFormulaReference.value;
+  const signature = [
+    sheet.workbookSheetIndex,
+    sheet.name,
+    revision.value,
+    workerRowsRevision.value,
+    zoomScale.value,
+    props.isDark ? "dark" : "light",
+    props.selectionColor ?? "",
+    props.selectionFillColor ?? "",
+    containerWidth.value,
+    containerHeight.value,
+    rowRange.start,
+    rowRange.end,
+    colRange.start,
+    colRange.end,
+    frozen.rows,
+    frozen.cols,
+    activeCell.value?.row ?? -1,
+    activeCell.value?.col ?? -1,
+    selectionValue?.start.row ?? -1,
+    selectionValue?.start.col ?? -1,
+    selectionValue?.end.row ?? -1,
+    selectionValue?.end.col ?? -1,
+    cut?.start.row ?? -1,
+    cut?.start.col ?? -1,
+    cut?.end.row ?? -1,
+    cut?.end.col ?? -1,
+    fillTarget?.start.row ?? -1,
+    fillTarget?.start.col ?? -1,
+    fillTarget?.end.row ?? -1,
+    fillTarget?.end.col ?? -1,
+    activeFormula?.rangeAddress ?? "",
+    referenceRanges.map((reference) => reference.rangeAddress).join(","),
+    sheet.showGridLines !== false ? "grid" : "plain",
+  ].join("|");
+  if (signature === domGridSignature) return;
+  domGridSignature = signature;
+  if (bodyWidth <= 0 || bodyHeight <= 0 || widths.length === 0 || heights.length === 0) {
+    domGridModel.value = null;
+    return;
+  }
+
+  const gridColor = props.isDark ? "#3f3f46" : "#d9d9d9";
+  const selectionFill = props.selectionFillColor || (props.isDark ? "rgba(37, 99, 235, 0.15)" : "rgba(37, 99, 235, 0.08)");
+  const selectionColor = props.selectionColor || "#2563eb";
+  const gridLines = sheet.showGridLines !== false;
+  const context: GridDomBuildContext = {
+    gridColor,
+    gridLines,
+    selectionFill,
+    sheet,
+    styleScratch: createCanvasCellStyleScratch(),
+    tableHeaderCells: props.getCellStyle ? collectTableHeaderCells() : EMPTY_CELL_KEYS,
+    worksheet,
+  };
+  const rowWindow = resolveGridDomAxisWindow(rowRange, frozen.rows, heights.length);
+  const colWindow = resolveGridDomAxisWindow(colRange, frozen.cols, widths.length);
+  const panes: GridDomPaneLayout[] = [
+    {
+      cols: colWindow.scrolling,
+      height: bodyHeight - frozen.height,
+      key: "main",
+      left: frozen.width,
+      rows: rowWindow.scrolling,
+      scrollX: true,
+      scrollY: true,
+      top: frozen.height,
+      width: bodyWidth - frozen.width,
+    },
+    {
+      cols: colWindow.scrolling,
+      height: frozen.height,
+      key: "frozen-rows",
+      left: frozen.width,
+      rows: rowWindow.frozen,
+      scrollX: true,
+      scrollY: false,
+      top: 0,
+      width: bodyWidth - frozen.width,
+    },
+    {
+      cols: colWindow.frozen,
+      height: bodyHeight - frozen.height,
+      key: "frozen-cols",
+      left: 0,
+      rows: rowWindow.scrolling,
+      scrollX: false,
+      scrollY: true,
+      top: frozen.height,
+      width: frozen.width,
+    },
+    {
+      cols: colWindow.frozen,
+      height: frozen.height,
+      key: "frozen-corner",
+      left: 0,
+      rows: rowWindow.frozen,
+      scrollX: false,
+      scrollY: false,
+      top: 0,
+      width: frozen.width,
+    },
+  ].filter((pane) => pane.width > 0 && pane.height > 0 && pane.rows.length > 0 && pane.cols.length > 0) as GridDomPaneLayout[];
+
+  const paneModels: GridDomPaneModel[] = [];
+  let activeCellId: string | undefined;
+  for (const pane of panes) {
+    const contentLeft = pane.scrollX ? frozen.width : 0;
+    const contentTop = pane.scrollY ? frozen.height : 0;
+    const rows: GridDomRowModel[] = [];
+    const renderedCells = new Set<number>();
+    for (const displayRow of pane.rows) {
+      const rowTop = getRowOffsetSum(displayRow) - contentTop;
+      const rowHeight = heights[displayRow] || 0;
+      const cells: GridDomCellModel[] = [];
+      for (const displayCol of pane.cols) {
+        const cell = getSheetCell(displayRow, displayCol);
+        if (!cell) continue;
+        const key = cellKey(cell.row, cell.col);
+        if (paintedMergeAnchors.has(key) || renderedCells.has(key)) continue;
+        renderedCells.add(key);
+        const merge = mergeRegionAtAnchor(cell);
+        const mergeEnd = merge ? getDisplayCell(merge.end) : null;
+        const width = mergeEnd
+          ? getColOffsetSum(mergeEnd.col + 1) - getColOffsetSum(displayCol)
+          : widths[displayCol] || 0;
+        const height = mergeEnd
+          ? getRowOffsetSum(mergeEnd.row + 1) - getRowOffsetSum(displayRow)
+          : rowHeight;
+        const model = buildDomCellModel(
+          cell,
+          pane.key,
+          { height, left: getColOffsetSum(displayCol) - contentLeft, top: getRowOffsetSum(displayRow) - contentTop, width },
+          rowTop,
+          merge,
+          context,
+        );
+        if (activeCell.value && activeCell.value.row === cell.row && activeCell.value.col === cell.col) {
+          model.active = true;
+          model.ariaLabel = activeCellAria.value?.label;
+          // A merge that crosses the freeze line is rendered in two panes; only
+          // the first copy may own the id so the accessibility tree stays valid.
+          if (!activeCellId) {
+            model.id = activeCellDescendantId.value;
+            activeCellId = model.id;
+          }
+        }
+        cells.push(model);
+      }
+      rows.push({
+        ariaRowIndex: (displayRows.value[displayRow] ?? displayRow) + 1,
+        cells,
+        displayRow,
+        key: `${pane.key}:row:${displayRow}`,
+        style: {
+          height: `${rowHeight}px`,
+          position: "absolute",
+          top: `${rowTop}px`,
+          width: "100%",
+        },
+      });
+    }
+
+    // A merged region paints from its anchor rect even when the anchor scrolled
+    // out of the window (the visible part still keeps fill, border and
+    // selection). Attach it to the row that owns it, or the pane's first row.
+    for (const region of paintedMergeRegions) {
+      const anchorKey = cellKey(region.start.row, region.start.col);
+      if (renderedCells.has(anchorKey)) continue;
+      const start = getDisplayCell(region.start);
+      const end = getDisplayCell(region.end);
+      if (!start || !end) continue;
+      const contentWindowLeft = contentLeft + (pane.scrollX ? scrollLeft.value : 0);
+      const contentWindowTop = contentTop + (pane.scrollY ? scrollTop.value : 0);
+      const left = getColOffsetSum(start.col);
+      const top = getRowOffsetSum(start.row);
+      const width = getColOffsetSum(end.col + 1) - left;
+      const height = getRowOffsetSum(end.row + 1) - top;
+      if (
+        left > contentWindowLeft + pane.width
+        || left + width < contentWindowLeft
+        || top > contentWindowTop + pane.height
+        || top + height < contentWindowTop
+      ) continue;
+      const row = rows.find((entry) => entry.displayRow === start.row) ?? rows[0];
+      if (!row) continue;
+      const model = buildDomCellModel(
+        region.start,
+        pane.key,
+        { height, left: left - contentLeft, top: top - contentTop, width },
+        getRowOffsetSum(row.displayRow) - contentTop,
+        region,
+        context,
+      );
+      if (activeCell.value && activeCell.value.row === region.start.row && activeCell.value.col === region.start.col) {
+        model.active = true;
+        model.ariaLabel = activeCellAria.value?.label;
+        if (!activeCellId) {
+          model.id = activeCellDescendantId.value;
+          activeCellId = model.id;
+        }
+      }
+      row.cells.push(model);
+      renderedCells.add(anchorKey);
+    }
+
+    if (!rows.length) continue;
+    const outlines: GridDomPaneModel["outlines"] = [];
+    const addOutline = (
+      key: string,
+      range: XlsxCellRange,
+      options: { color: string; dashed?: boolean; displayed?: boolean; inset?: number; lineWidth?: number },
+    ) => {
+      const normalized = {
+        end: { col: Math.max(range.start.col, range.end.col), row: Math.max(range.start.row, range.end.row) },
+        start: { col: Math.min(range.start.col, range.end.col), row: Math.min(range.start.row, range.end.row) },
+      };
+      const start = options.displayed ? normalized.start : getDisplayCell(normalized.start);
+      const end = options.displayed ? normalized.end : getDisplayCell(normalized.end);
+      if (!start || !end) return;
+      const style = resolveGridDomOutlineStyle(
+        {
+          bottom: getRowOffsetSum(end.row + 1) - contentTop,
+          left: getColOffsetSum(start.col) - contentLeft,
+          right: getColOffsetSum(end.col + 1) - contentLeft,
+          top: getRowOffsetSum(start.row) - contentTop,
+        },
+        {
+          bottom: (pane.scrollY ? scrollTop.value : 0) + pane.height,
+          left: pane.scrollX ? scrollLeft.value : 0,
+          right: (pane.scrollX ? scrollLeft.value : 0) + pane.width,
+          top: pane.scrollY ? scrollTop.value : 0,
+        },
+        {
+          color: options.color,
+          dashed: options.dashed,
+          inset: options.inset,
+          lineWidth: options.lineWidth,
+        },
+      );
+      if (style) outlines.push({ key: `${pane.key}:${key}`, style });
+    };
+    if (selectionValue) addOutline("selection", selectionValue, { color: selectionColor, inset: 1, lineWidth: 2 });
+    if (activeCell.value && (!selectionValue || (selectionValue.start.row === selectionValue.end.row && selectionValue.start.col === selectionValue.end.col))) {
+      addOutline("active", { end: activeCell.value, start: activeCell.value }, { color: selectionColor });
+    }
+    if (cut) addOutline("cut", cut, { color: selectionColor, dashed: true, inset: 0.5, lineWidth: 1.5 });
+    if (fillTarget) addOutline("fill", fillTarget, {
+      color: props.isDark ? "#a1a1aa" : "#71717a",
+      dashed: true,
+      inset: 0.5,
+      lineWidth: 1.5,
+    });
+    for (const reference of referenceRanges) {
+      const displayedRange = resolvePaintedReferenceRange(
+        reference.range,
+        sheetRowToDisplayIndex.value,
+        sheetColToDisplayIndex.value,
+        displayRows.value.length,
+        displayCols.value.length,
+      );
+      if (!displayedRange) continue;
+      addOutline(`reference:${reference.rangeAddress}`, displayedRange, {
+        color: reference.color,
+        displayed: true,
+        inset: activeFormula === reference ? 1.5 : 2.5,
+        lineWidth: activeFormula === reference ? 3 : 1.5,
+      });
+    }
+    paneModels.push({
+      key: pane.key,
+      outlines,
+      rows,
+      scrollX: pane.scrollX,
+      scrollY: pane.scrollY,
+      style: {
+        height: `${pane.height}px`,
+        left: `${pane.left}px`,
+        overflow: "hidden",
+        position: "absolute",
+        top: `${pane.top}px`,
+        width: `${pane.width}px`,
+      },
+    });
+  }
+
+  const colors = {
+    background: props.isDark ? "#27272a" : "#f4f4f5",
+    border: props.isDark ? "#3f3f46" : "#d4d4d8",
+    selectedBackground: props.isDark ? "#1e3a5f" : "#dbeafe",
+    selectedText: props.isDark ? "#bfdbfe" : "#1d4ed8",
+    text: props.isDark ? "#a1a1aa" : "#71717a",
+  };
+  const dividerColor = props.isDark ? "#71717a" : "#a1a1aa";
+  const columnSelected = (sheetCol: number) => activeCell.value?.col === sheetCol || Boolean(selectionValue
+    && sheetCol >= Math.min(selectionValue.start.col, selectionValue.end.col)
+    && sheetCol <= Math.max(selectionValue.start.col, selectionValue.end.col));
+  const rowSelected = (sheetRow: number) => activeCell.value?.row === sheetRow || Boolean(selectionValue
+    && sheetRow >= Math.min(selectionValue.start.row, selectionValue.end.row)
+    && sheetRow <= Math.max(selectionValue.start.row, selectionValue.end.row));
+  const columnHeaders: GridDomHeaderLayerModel = {
+    frozen: colWindow.frozen.map((displayIndex) => buildDomHeaderItem(
+      `column:${displayIndex}`,
+      columnLabel(displayCols.value[displayIndex] ?? displayIndex),
+      {
+        height: `${HEADER_HEIGHT}px`,
+        left: `${getColOffsetSum(displayIndex)}px`,
+        top: "0px",
+        width: `${widths[displayIndex] || 0}px`,
+      },
+      columnSelected(displayCols.value[displayIndex] ?? displayIndex),
+      colors,
+    )),
+    scrolling: colWindow.scrolling.map((displayIndex) => buildDomHeaderItem(
+      `column:${displayIndex}`,
+      columnLabel(displayCols.value[displayIndex] ?? displayIndex),
+      {
+        height: `${HEADER_HEIGHT}px`,
+        left: `${getColOffsetSum(displayIndex) - frozen.width}px`,
+        top: "0px",
+        width: `${widths[displayIndex] || 0}px`,
+      },
+      columnSelected(displayCols.value[displayIndex] ?? displayIndex),
+      colors,
+    )),
+  };
+  if (frozen.width > 0) {
+    columnHeaders.divider = {
+      key: "column-freeze-divider",
+      style: {
+        background: dividerColor,
+        height: `${HEADER_HEIGHT}px`,
+        left: `${frozen.width - 1}px`,
+        top: "0px",
+        width: "2px",
+        zIndex: 2,
+      },
+    };
+  }
+  const rowHeaders: GridDomHeaderLayerModel = {
+    frozen: rowWindow.frozen.map((displayIndex) => buildDomHeaderItem(
+      `row:${displayIndex}`,
+      String((displayRows.value[displayIndex] ?? displayIndex) + 1),
+      {
+        height: `${heights[displayIndex] || 0}px`,
+        left: "0px",
+        top: `${getRowOffsetSum(displayIndex)}px`,
+        width: `${ROW_HEADER_WIDTH}px`,
+      },
+      rowSelected(displayRows.value[displayIndex] ?? displayIndex),
+      colors,
+    )),
+    scrolling: rowWindow.scrolling.map((displayIndex) => buildDomHeaderItem(
+      `row:${displayIndex}`,
+      String((displayRows.value[displayIndex] ?? displayIndex) + 1),
+      {
+        height: `${heights[displayIndex] || 0}px`,
+        left: "0px",
+        top: `${getRowOffsetSum(displayIndex) - frozen.height}px`,
+        width: `${ROW_HEADER_WIDTH}px`,
+      },
+      rowSelected(displayRows.value[displayIndex] ?? displayIndex),
+      colors,
+    )),
+  };
+  if (frozen.height > 0) {
+    rowHeaders.divider = {
+      key: "row-freeze-divider",
+      style: {
+        background: dividerColor,
+        height: "2px",
+        left: "0px",
+        top: `${frozen.height - 1}px`,
+        width: `${ROW_HEADER_WIDTH}px`,
+        zIndex: 2,
+      },
+    };
+  }
+  const dividers = [];
+  if (frozen.width > 0) {
+    dividers.push({
+      key: "freeze-column",
+      style: {
+        background: dividerColor,
+        height: `${bodyHeight}px`,
+        left: `${frozen.width - 1}px`,
+        top: "0px",
+        width: "2px",
+      },
+    });
+  }
+  if (frozen.height > 0) {
+    dividers.push({
+      key: "freeze-row",
+      style: {
+        background: dividerColor,
+        height: "2px",
+        left: "0px",
+        top: `${frozen.height - 1}px`,
+        width: `${bodyWidth}px`,
+      },
+    });
+  }
+  domGridModel.value = {
+    activeCellId,
+    columnHeaders,
+    cornerStyle: {
+      background: colors.background,
+      borderBottom: `1px solid ${colors.border}`,
+      borderRight: `1px solid ${colors.border}`,
+      boxSizing: "border-box",
+      height: `${HEADER_HEIGHT}px`,
+      left: "0px",
+      position: "absolute",
+      top: "0px",
+      width: `${ROW_HEADER_WIDTH}px`,
+    },
+    dividers,
+    panes: paneModels,
+    rowHeaders,
+  };
 }
 
 interface OverflowTextTask {
@@ -3915,6 +4665,10 @@ function onPointerDown(event: PointerEvent) {
   const cell = hitTestCell(event.clientX, event.clientY);
   if (!cell) return;
   containerRef.value?.focus();
+  // DOM mode paints real text, so a drag that starts with Alt is a native text
+  // selection: the browser keeps the default action and the grid does not move
+  // the cell selection or capture the pointer.
+  if (gridRenderMode.value === "dom" && event.altKey) return;
 
   if (event.shiftKey && activeCell.value) {
     props.controller.selectRange({ start: activeCell.value, end: cell });
@@ -4444,6 +5198,27 @@ function scrollToCell(cell: XlsxCellAddress) {
   schedulePaint();
 }
 
+/**
+ * Whether the browser currently has a non-empty text selection inside the grid.
+ *
+ * DOM mode paints real text, so Ctrl/Cmd+C over a native selection must reach
+ * the browser's copy command instead of replacing it with the cell range.
+ */
+function hasDomTextSelection(): boolean {
+  if (gridRenderMode.value !== "dom") return false;
+  if (typeof globalThis.getSelection !== "function") return false;
+  const browserSelection = globalThis.getSelection();
+  if (!browserSelection || browserSelection.isCollapsed || browserSelection.rangeCount === 0) return false;
+  const container = containerRef.value;
+  const anchor = browserSelection.anchorNode;
+  return Boolean(
+    container
+    && anchor
+    && typeof container.contains === "function"
+    && container.contains(anchor),
+  );
+}
+
 function onGridKeydown(event: KeyboardEvent) {
   // When the inline edit input is active, let it consume all keys —
   // do not re-enter edit mode and overwrite the editing value.
@@ -4466,7 +5241,10 @@ function onGridKeydown(event: KeyboardEvent) {
   const active = activeCell.value;
   if (!active) return;
 
-  if ((event.ctrlKey || event.metaKey) && event.key === "c") { event.preventDefault(); void copySelection(); return; }
+  if ((event.ctrlKey || event.metaKey) && event.key === "c") {
+    if (hasDomTextSelection()) return;
+    event.preventDefault(); void copySelection(); return;
+  }
   if ((event.ctrlKey || event.metaKey) && event.key === "x") { event.preventDefault(); if (!editingLocked.value) props.controller.cutSelection?.(); return; }
   if ((event.ctrlKey || event.metaKey) && event.key === "v") { event.preventDefault(); props.controller.pasteFromClipboard(); return; }
 
@@ -4608,6 +5386,7 @@ watch(
     props.isDark,
     props.selectionColor,
     props.selectionFillColor,
+    props.renderMode,
     formulaReferences.value,
     fillDrag.value,
   ],

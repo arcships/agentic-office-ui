@@ -43,6 +43,7 @@ const controller = useXlsxViewerController({
 | `activeTabIndex` | `number` | 无 | 受控的活动标签下标；不传时由控制器持有 |
 | `showUpload` | `boolean` | `false` | 上传入口 |
 | `getCellStyle` | `function` | 无 | 按单元格补充样式 |
+| `renderMode` | `string` | `"canvas"` | 网格渲染模式：`"canvas"`（默认）或 `"dom"`；`dom` 把可视窗口渲染为真实单元格元素 |
 | `locale` | `string` | `"en"` | 界面文案与数字/日期默认区域；内置 `"en"`、`"zh-CN"` |
 | `documentLocale` | `string` | 跟随 `locale` | 单独覆盖数字/日期区域 |
 
@@ -53,6 +54,12 @@ const controller = useXlsxViewerController({
 将本地工作簿拖到查看器上会直接加载：先按 `.xlsx`、`.xls`、`.xlsm`、`.xlsb`、`.xltx`、`.xltm` 和 `.csv` 判断类型（`isSupportedXlsxFileName()` 与 `XLSX_FILE_ACCEPT` 可用于自建上传入口），命中的文件交给 `controller.loadFile(file)`。该入口与 `file` 选项共用大小上限、URL 规则、延迟解析阈值和 Worker 路径，因此拖放不会绕过任何加载限制。
 
 `XlsxViewer` 在加载开始时同时抛出 `fileDrop(file)` 事件，宿主可据此更新自己的文件名和状态区。拖入时查看器根元素出现虚线轮廓；拖离、放下或拖拽在窗口其他位置结束后都会清除，不依赖会一直累加的 `dragover` 计数。不支持的扩展名不会加载，查看器上方显示本地化的拒绝提示（`xlsx.viewer.unsupportedDrop`）。
+
+## 网格渲染模式
+
+网格默认使用 `renderMode="canvas"`：四个 canvas 绘制可见窗口。`renderMode="dom"` 改为真实 DOM：可见窗口（含冻结窗格、行列表头和选区边框）渲染为 `role="grid"` 下的 `role="row"` / `role="gridcell"` 元素，单元格文字是可被浏览器查找、原生文本选择和屏幕阅读器读取的文本节点。该模式不创建任何 canvas，因此也可作为 canvas 不可用时的回退，并可用于检查当前可视窗口。
+
+两种模式共用同一套渲染数据：`resolveCanvasCellStyle` 解析出的字体、填充、对齐、边框与换行，条件格式的数据条/色阶/图标集，合并区、超链接、批注、迷你图、格式化后的显示值，以及冻结窗格几何和 `getCellStyle` 覆盖。DOM 模式只物化可见窗口（与 canvas 相同的 ±240px overscan），并按单元格裁剪文本，不再向相邻空单元格溢出；拖动仍移动单元格选区，按住 Alt 拖动则交给浏览器原生选择文字，有文字选区时 `Ctrl/Cmd+C` 复制选中的文字而不是单元格。切换 `renderMode` 不重建滚动容器，滚动位置和控制器选区保持不变。`XlsxGridRenderMode` 从 `@arcships/vue-xlsx` 根入口导出，`XlsxSheetSurface` 同样接受该属性。
 
 ## 选择状态栏
 
