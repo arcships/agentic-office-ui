@@ -1,17 +1,49 @@
 <template>
   <div
-    ref="scrollRef"
-    class="pdf-surface"
+    class="pdf-surface-shell"
     :class="{ 'pdf-surface--dark': props.isDark }"
     :style="minHeightStyle"
-    data-testid="pdf-surface"
-    :data-page-layout="pageLayoutMode"
-    tabindex="0"
-    @scroll.passive="onScroll"
-    @contextmenu.prevent="onContextMenu"
-    @copy="onCopy"
-    @keydown="onSurfaceKeydown"
+    data-testid="pdf-surface-shell"
   >
+    <aside
+      v-if="navigationVisible"
+      class="pdf-surface__nav"
+      data-testid="pdf-surface-nav"
+    >
+      <PdfOutlinePanel
+        v-if="showOutline && outlineItems.length > 0"
+        :items="outlineItems"
+        :active-page-index="activePageIndex"
+        :label="m.pdf.surface.outline"
+        @activate="onOutlineActivate"
+      />
+      <PdfThumbnailStrip
+        v-if="showThumbnails && renderDocument"
+        :pageCount="renderDocument.pageCount"
+        :labels="resolvedPageLabels"
+        :urls="thumbnailUrls"
+        :activePage="activePageIndex + 1"
+        :label="m.pdf.viewer.thumbnails"
+        :thumbnailAlt="m.pdf.viewer.thumbnailAlt"
+        :pageLabel="m.pdf.viewer.pageLabel"
+        :heading="m.pdf.viewer.thumbnails"
+        testId="pdf-surface-thumbnails"
+        itemTestId="pdf-surface-thumbnail"
+        @select="onThumbnailSelect"
+      />
+    </aside>
+    <div
+      ref="scrollRef"
+      class="pdf-surface"
+      :class="{ 'pdf-surface--dark': props.isDark }"
+      data-testid="pdf-surface"
+      :data-page-layout="pageLayoutMode"
+      tabindex="0"
+      @scroll.passive="onScroll"
+      @contextmenu.prevent="onContextMenu"
+      @copy="onCopy"
+      @keydown="onSurfaceKeydown"
+    >
     <div v-if="!effectiveSource" class="pdf-surface__empty">{{ m.pdf.surface.noPdf }}</div>
     <div v-else-if="loading" class="pdf-surface__empty">{{ m.pdf.surface.opening }}</div>
     <div
@@ -40,7 +72,7 @@
         <img
           v-else-if="pageSlots[pageIndex]?.url"
           :src="pageSlots[pageIndex].url"
-          :alt="formatOfficeMessage(m.pdf.surface.pageAlt, { page: pageIndex + 1 })"
+          :alt="formatOfficeMessage(m.pdf.surface.pageAlt, { page: pageLabelFor(pageIndex) })"
           :style="pageImgStyle(pageIndex)"
           class="pdf-surface__page-img"
           draggable="false"
@@ -150,6 +182,7 @@
           </template>
         </div>
       </div>
+    </div>
     </div>
   </div>
 </template>
@@ -267,6 +300,11 @@ import { formatOfficeMessage } from "@arcships/office-interaction"
 import { useViewerKeys } from "@arcships/vue-ui"
 import type { ViewerKeyCommand } from "@arcships/vue-ui"
 import { providePdfMessages } from "../i18n"
+import { usePdfThumbnails } from "../composables/use-pdf-thumbnails"
+import { resolvePdfLinkUrl } from "../pdf/pdf-annotation"
+import type { PdfOutlineItem } from "../pdf/pdf-outline"
+import PdfOutlinePanel from "./PdfOutlinePanel.vue"
+import PdfThumbnailStrip from "./PdfThumbnailStrip.vue"
 
 // ── Types ────────────────────────────────────────────────────────────
 interface PageSlot {
@@ -314,6 +352,16 @@ const props = withDefaults(
     minHeight?: string | number
     /** Dark viewer chrome and page surround. Defaults to false. */
     isDark?: boolean
+    /**
+     * Render the bookmark/outline tree when the document has one. Defaults to
+     * true; documents without bookmarks show no outline panel.
+     */
+    showOutline?: boolean
+    /**
+     * Render the page thumbnail strip. Defaults to true; the strip shares the
+     * viewer's bounded thumbnail pipeline.
+     */
+    showThumbnails?: boolean
     locale?: import("@arcships/office-interaction").OfficeLocale
     messages?: import("@arcships/office-interaction").OfficeMessagesOverride
     /**
@@ -336,6 +384,8 @@ const props = withDefaults(
     emitReferenceCandidates: false,
     minHeight: undefined,
     isDark: false,
+    showOutline: true,
+    showThumbnails: true,
     locale: "en",
     messages: undefined,
     maxBitmapBytes: DEFAULT_PDF_BITMAP_BUDGET_BYTES,
@@ -349,6 +399,13 @@ const emit = defineEmits<{
   "document-load-error": [error: PdfLoadError]
   "visible-page-change": [pageIndex: number]
   contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number }]
+  /** An outline entry was activated; URL targets are pre-validated. */
+  outlineActivate: [event: {
+    title: string
+    pageIndex?: number
+    url?: string
+    blocked?: boolean
+  }]
   selectionChange: [selection: PdfSelectionState]
   searchStateChange: [state: PdfSearchState]
   diagnostic: [event: PdfDiagnostic]
@@ -428,6 +485,22 @@ const loadErrorMessage = computed(() => loadError.value
   ? localizePdfErrorMessage(loadError.value, m.value.pdf.errors)
   : "")
 const renderDocument = ref<PdfRenderDocument | null>(null)
+const outlineItems = ref<readonly PdfOutlineItem[]>([])
+const pdfPageLabels = ref<readonly string[]>([])
+/** Zero-based page currently under the viewport; drives both navigation aids. */
+const activePageIndex = ref(0)
+const thumbnailPipeline = usePdfThumbnails()
+const thumbnailUrls = thumbnailPipeline.urls
+/** Page labels in document order, with decimal numbers when the runtime has none. */
+const resolvedPageLabels = computed<readonly string[]>(() => {
+  const doc = renderDocument.value
+  if (!doc) return pdfPageLabels.value
+  return Array.from({ length: doc.pageCount }, (_, index) => pageLabelFor(index))
+})
+const navigationVisible = computed(() => !!renderDocument.value && (
+  (props.showOutline && outlineItems.value.length > 0)
+  || props.showThumbnails
+))
 const printMode = ref(false)
 const verifiedBlob = ref<Blob | null>(null)
 const selectionMode = computed(() => props.selectionMode)
@@ -1049,6 +1122,10 @@ async function releaseDocument(): Promise<void> {
   cancelRender()
   surfaceSearch.clearSearch()
   clearSelection()
+  outlineItems.value = []
+  pdfPageLabels.value = []
+  activePageIndex.value = 0
+  thumbnailPipeline.clear()
   geometryCache.clear()
   geometryRequests.clear()
   characterTextCache.clear()
@@ -1163,6 +1240,69 @@ async function renderVisiblePages(): Promise<void> {
   }
 }
 
+// ── Navigation aids (outline, page labels, thumbnails) ───────────────
+async function loadNavigationAids(
+  runtime: PdfRenderRuntime,
+  document: PdfRenderDocument,
+  requestId: number,
+): Promise<void> {
+  const isCurrent = () => (
+    !unmounted
+    && requestId === latestRequestId
+    && renderDocument.value?.id === document.id
+    && runtimeForDocument === runtime
+  )
+  const readLabels = typeof runtime.getPageLabels === "function"
+    ? runtime.getPageLabels.bind(runtime)
+    : undefined
+  const readOutline = typeof runtime.getOutline === "function"
+    ? runtime.getOutline.bind(runtime)
+    : undefined
+  const labels = readLabels
+    ? Promise.resolve().then(() => readLabels(document)).catch(() => undefined)
+    : Promise.resolve(undefined)
+  const outline = readOutline
+    ? Promise.resolve().then(() => readOutline(document)).catch(() => undefined)
+    : Promise.resolve(undefined)
+  const [resolvedLabels, resolvedOutline] = await Promise.all([labels, outline])
+  if (!isCurrent()) return
+  if (resolvedLabels && resolvedLabels.length > 0) pdfPageLabels.value = resolvedLabels
+  if (resolvedOutline) outlineItems.value = resolvedOutline
+}
+
+function loadSurfaceThumbnails(): void {
+  const document = renderDocument.value
+  const runtime = runtimeForDocument
+  if (!props.showThumbnails || !document || !runtime) return
+  void thumbnailPipeline.load(runtime, document)
+}
+
+function pageLabelFor(pageIndex: number): string {
+  const label = pdfPageLabels.value[pageIndex]
+  if (typeof label === "string" && label.trim()) return label.trim()
+  return String(pageIndex + 1)
+}
+
+function onThumbnailSelect(page: number): void {
+  scrollToPage(page - 1)
+}
+
+function onOutlineActivate(item: PdfOutlineItem): void {
+  const event: { title: string; pageIndex?: number; url?: string; blocked?: boolean } = {
+    title: item.title,
+  }
+  if (item.pageIndex !== undefined) {
+    event.pageIndex = item.pageIndex
+    scrollToPage(item.pageIndex)
+  }
+  if (item.url) {
+    const resolution = resolvePdfLinkUrl(item.url)
+    if (resolution.url) event.url = resolution.url
+    event.blocked = resolution.blocked
+  }
+  emit("outlineActivate", event)
+}
+
 // ── Main load flow ───────────────────────────────────────────────────
 async function load(): Promise<void> {
   const source = effectiveSource.value
@@ -1212,6 +1352,7 @@ async function load(): Promise<void> {
     emit("documentRevisionChange", documentRevision.value)
     verifiedBlob.value = verified.blob
     initPageSlots()
+    activePageIndex.value = 0
     emit("document-load-success", openedDocument.pageCount)
     loading.value = false
       measureViewportHeight()
@@ -1219,6 +1360,8 @@ async function load(): Promise<void> {
     prefetchPageGeometry(0)
     prefetchPageAnnotations(0)
     prefetchPageTextLayer(0)
+    void loadNavigationAids(selectedRuntime, openedDocument, requestId)
+    loadSurfaceThumbnails()
   } catch (cause) {
     if (openedDocument && selectedRuntime) {
       await selectedRuntime.closeDocument(openedDocument)
@@ -1267,6 +1410,12 @@ watch(() => props.maxBitmapBytes, (next) => {
   releasePageBitmaps(bitmapCache.clear())
   bitmapCache = createPdfBitmapCache({ maxBytes: next })
   if (renderDocument.value) scheduleVisibleRender(0)
+})
+
+// Enabling the strip after load starts the shared pipeline; disabling it keeps
+// already-rasterized thumbnails so toggling back is instant.
+watch(() => props.showThumbnails, (show) => {
+  if (show) loadSurfaceThumbnails()
 })
 
 // ── Page geometry ────────────────────────────────────────────────────
@@ -2250,6 +2399,7 @@ function flushScrollFrame(): void {
   snapSinglePage()
   if (pageIndex !== visiblePageIndex) {
     visiblePageIndex = pageIndex
+    activePageIndex.value = pageIndex
     keyPageIndex = -1
     emit("visible-page-change", pageIndex)
     prefetchPageGeometry(pageIndex)
@@ -2509,6 +2659,13 @@ function onSurfaceResize(): void {
 
 // ── Expose ───────────────────────────────────────────────────────────
 function scrollToPage(pageIndex: number): void {
+  const count = renderDocument.value?.pageCount ?? 0
+  if (count > 0) {
+    const target = Math.min(count - 1, Math.max(0, Math.floor(pageIndex)))
+    activePageIndex.value = target
+    keyPageIndex = target
+    pageIndex = target
+  }
   const el = scrollRef.value
   if (!el) return
   const slot = el.querySelector(`[data-page-index="${pageIndex}"]`) as HTMLElement | null
@@ -2610,6 +2767,12 @@ function onSurfaceKeyCommand(command: ViewerKeyCommand): boolean {
 
 defineExpose({
   scrollToPage,
+  /** Current bookmark/outline tree (empty when the runtime has no bookmarks). */
+  getOutline: (): readonly PdfOutlineItem[] => outlineItems.value,
+  /** Display label of every page; decimal fallback when the runtime has none. */
+  getPageLabels: (): readonly string[] => resolvedPageLabels.value,
+  /** Zero-based page currently under the viewport. */
+  getActivePage: (): number => activePageIndex.value,
   zoom,
   rotation,
   search: (query: string): Promise<PdfSearchState> => surfaceSearch.search(query),
@@ -2675,6 +2838,7 @@ onBeforeUnmount(async () => {
   element?.removeEventListener("pointerup", onTouchPointerUp)
   element?.removeEventListener("pointercancel", onTouchPointerCancel)
   cancelRender()
+  thumbnailPipeline.dispose()
   pdfLoadCoordinator.dispose()
   pdfTaskSequence.dispose()
   surfaceSearch.dispose()
@@ -2684,6 +2848,13 @@ onBeforeUnmount(async () => {
 </script>
 
 <style scoped>
+.pdf-surface-shell {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+  min-height: 0;
+  min-width: 0;
+}
 .pdf-surface {
   flex: 1;
   overflow-y: auto;
@@ -2694,6 +2865,42 @@ onBeforeUnmount(async () => {
   --pdf-surface-bg: #525659;
   --pdf-surface-page-filter: none;
   background: var(--pdf-surface-bg);
+}
+/* Outline and thumbnail rail. It lives beside the scroll container so bookmarks
+   and thumbnails stay put while the pages scroll under them. */
+.pdf-surface__nav {
+  display: flex;
+  width: 172px;
+  flex: 0 0 172px;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  box-sizing: border-box;
+  border-right: 1px solid #d1d5db;
+  background: #f3f4f6;
+  color: #111827;
+  padding: 8px;
+}
+.pdf-surface--dark .pdf-surface__nav {
+  border-color: #1e293b;
+  background: #0f172a;
+  color: #e5e7eb;
+  --pdf-fg: #e5e7eb;
+  --pdf-link: #93c5fd;
+  --pdf-muted: #94a3b8;
+  --pdf-border: #334155;
+  --pdf-control-bg: #1e293b;
+  --pdf-control-border: #475569;
+  --pdf-panel-bg: #0f172a;
+  --pdf-page-filter: var(--pdf-dark-page-filter, invert(1) hue-rotate(180deg));
+}
+.pdf-surface__nav .pdf-thumbnails {
+  width: 100%;
+  flex: 1 1 auto;
+  overflow: visible;
+  padding: 4px;
+  border-right: 0;
+  background: transparent;
 }
 .pdf-surface--dark {
   --pdf-surface-bg: #020617;
@@ -2800,6 +3007,8 @@ onBeforeUnmount(async () => {
 .pdf-surface__page-error { color: #ef4444; }
 
 @media print {
+  .pdf-surface-shell { display: block !important; }
+  .pdf-surface__nav { display: none !important; }
   .pdf-surface {
     overflow: visible !important;
     background: #fff !important;

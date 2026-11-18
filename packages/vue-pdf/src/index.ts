@@ -22,7 +22,9 @@ export type {
 export { default as PdfViewer } from "./components/PdfViewer.vue"
 /**
  * Minimal embeddable PDF renderer with vertical scroll through all pages.
- * No toolbar, thumbnails panel, or search bar — host owns all controls.
+ * No toolbar or search bar — host owns all controls. A bookmark outline is
+ * shown when the document has one, and page thumbnails use the shared viewer
+ * strip; both can be disabled through `showOutline` / `showThumbnails`.
  * Renders every page as a stacked image in a scrollable container.
  *
  * @example
@@ -52,6 +54,7 @@ export {
 } from "./pdf-url-policy"
 export type { PdfLoadErrorMessages } from "./pdf-url-policy"
 export { bundledPdfiumWasmUrl, createPdfRenderRuntime } from "./pdf/pdf-render-runtime"
+export type { PdfOutlineItem } from "./pdf/pdf-outline"
 export {
   DEFAULT_PDF_MAX_RENDER_PIXELS,
   MAX_PDF_RENDER_DPR,

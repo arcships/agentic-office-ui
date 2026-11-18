@@ -172,7 +172,7 @@ async function mountSurfaceHarness(props) {
     setup() {
       const surface = vue.ref(null);
       vue.watch(surface, (value) => { api = value; }, { flush: "sync" });
-      return () => vue.h(PdfSurface, { ref: surface, ...props });
+      return () => vue.h(PdfSurface, { ref: surface, showThumbnails: false, ...props });
     },
   });
   const mounted = await mount(Harness);

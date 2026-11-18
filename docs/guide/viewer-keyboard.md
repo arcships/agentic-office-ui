@@ -46,6 +46,8 @@ DOCX、PDF 和 PPTX 查看器共用同一套键盘映射。映射由 `@arcships/
 - `Escape`：取消当前选择或区域选择。
 - Surface 没有搜索栏，因此不占用 `Ctrl/Cmd + F`。
 
+大纲面板（`showOutline`，文档有书签时默认显示）使用 WAI-ARIA tree 键盘语义：`↓`/`↑` 在可见条目间移动焦点，`→` 展开当前条目或进入第一个子条目，`←` 收起当前条目或回到父条目，`Home`/`End` 跳到第一个/最后一个可见条目，`Enter`/`Space` 激活条目并跳到目标页。焦点在大纲条目上时，这些键不会传给页面的翻页快捷键。
+
 ### `PptxViewer`
 
 - 浏览模式：`PageDown`/`PageUp` 按视口高度滚动幻灯片列表，`↑`/`↓` 按行滚动，`Home`/`End` 到列表顶部/底部，`Space` 向下翻一屏；这些键不会切换当前幻灯片。`Ctrl/Cmd` 缩放、`Ctrl/Cmd + F` 搜索和 `Escape` 关闭搜索与其它格式一致。

@@ -37,8 +37,10 @@ import "@arcships/vue-pdf/style.css"
 | `showRotateControls` | `boolean` | `true` | 旋转按钮 |
 | `minHeight` | `string \| number` | 无 | 可选最小高度（数字按 px）；不传时组件不设置最小高度 |
 | `isDark` | `boolean` | `false` | 深色外壳与页面背景；页面位图默认反色，可用 `--pdf-dark-page-filter: none` 关闭 |
+| `showOutline` | `boolean` | `true` | `PdfSurface` 在文档带书签时显示大纲面板；无书签时不显示 |
+| `showThumbnails` | `boolean` | `true` | `PdfSurface` 显示共享的页面缩略图栏（`PdfViewer` 同样默认显示） |
 
-`PdfSurface` 也接受 `isDark` 和 `minHeight`。打印时工具栏、缩略图和状态层会自动隐藏，PDF 会在打印前一次性栅格化全部页面（而不是只打印当前页或占位符），并按文档首页尺寸设置 `@page`。
+`PdfSurface` 也接受 `isDark` 和 `minHeight`。打印时工具栏、缩略图和大纲面板会自动隐藏，PDF 会在打印前一次性栅格化全部页面（而不是只打印当前页或占位符），并按文档首页尺寸设置 `@page`。
 
 ### 页面布局
 
@@ -52,7 +54,15 @@ import "@arcships/vue-pdf/style.css"
 
 需要自建 PDF 表面时使用根入口导出的纯函数 `resolvePdfPageLayoutMetrics()`、`pdfPageLayoutRows()`、`pdfRowIndexAtOffset()`、`pdfPageIndexAtOffset()`、`pdfSnapTopForRow()`、`pdfPageAtPoint()`、`pdfRowsInViewport()`、`pdfSpreadPagePair()`、`pdfSpreadStepPage()`、`normalizePdfPageLayout()`、`isPdfSpreadLayout()` 和 `PDF_PAGE_LAYOUTS`，类型为 `PdfPageLayout`、`PdfPageLayoutMetrics`、`PdfPageLayoutRow`、`PdfPageLayoutOptions`、`PdfPageDisplaySize`。
 
-事件包括 `document-load-success`、`document-load-error`、`active-page-change`、`update:pageLayout`、`selectionChange`、`fileDrop` 和 `diagnostic`。当前页支持拖选文字、双击选词、`Ctrl/Cmd+C` 复制和 `Escape` 清除；`clearSelection()` 与 `getSelectionState()` 通过组件实例暴露。位图上方还渲染真实 DOM 文本层（每个 glyph 一个透明 span，随缩放/旋转应用 CSS matrix），可由屏幕阅读器、浏览器查找和 CJK 提取读取；文本层不拦截指针，拖选、链接/表单命中与区域选择行为不变。错误处理使用 `PdfLoadError.code`，不要通过错误文案判断类型。加密文档在无密码可用时返回 `ENCRYPTED`；`load-start` 诊断中的 URL 已去除查询串、片段和凭据。
+事件包括 `document-load-success`、`document-load-error`、`active-page-change`、`update:pageLayout`、`outlineActivate`、`selectionChange`、`fileDrop` 和 `diagnostic`。当前页支持拖选文字、双击选词、`Ctrl/Cmd+C` 复制和 `Escape` 清除；`clearSelection()` 与 `getSelectionState()` 通过组件实例暴露。位图上方还渲染真实 DOM 文本层（每个 glyph 一个透明 span，随缩放/旋转应用 CSS matrix），可由屏幕阅读器、浏览器查找和 CJK 提取读取；文本层不拦截指针，拖选、链接/表单命中与区域选择行为不变。错误处理使用 `PdfLoadError.code`，不要通过错误文案判断类型。加密文档在无密码可用时返回 `ENCRYPTED`；`load-start` 诊断中的 URL 已去除查询串、片段和凭据。
+
+### 大纲、页码标签与缩略图
+
+`PdfRenderRuntime` 新增两个可选导航能力：`getOutline(document)` 返回书签树 `PdfOutlineItem[]`（`title`、`children`，页内目标 `pageIndex` 为 0 基页码，URI 书签给出 `url`），`getPageLabels(document)` 返回每页的显示标签（`1`、`iv`、`A-3`）。`PdfSurface` 在文档打开后读取两者：有书签时默认渲染大纲树（`data-testid="pdf-surface-outline"`），每个条目是 ARIA `treeitem`，激活后滚动到目标页；URI 条目抛出 `outlineActivate`，`url` 经过与链接批注相同的协议和凭据清洗，无法使用时带 `blocked: true`。运行时不实现这两个方法时，界面直接省略对应导航，不伪造数据。`getPageLabels()` 读取 PDF `/PageLabels` 数字树；没有该树、被压缩在对象流里或解析失败时回退为十进制页码。
+
+大纲支持完整的树键盘操作：`↓`/`↑` 在可见条目间移动，`→` 展开或进入第一个子条目，`←` 收起或回到父条目，`Home`/`End` 跳到首/末条目，`Enter`/`Space` 激活。鼠标点击标题同时展开并跳转，点击折叠标记只展开/收起。
+
+缩略图栏由 `PdfViewer` 与 `PdfSurface` 共享同一个 `PdfThumbnailStrip` 和 `usePdfThumbnails()` 渲染管线：最多两个并发缩略图、AbortSignal 取消、换文档时释放全部 object URL。两个组件默认都显示缩略图，`PdfSurface` 随当前可见页高亮（`data-testid="pdf-surface-thumbnails"`、`pdf-surface-thumbnail`），可用 `showThumbnails="false"` 关闭。两个组件的缩略图都使用页标签文字，点击缩略图会跳到对应页。
 
 ### 拖放导入
 

@@ -16,6 +16,8 @@ import {
 import { pdfIntrinsicRectToCanonical } from "./pdf-coordinate-transform"
 import { mapPdfAnnotationObjects } from "./pdf-annotation"
 import { pdfPageTextHash } from "./pdf-page-signature"
+import { mapPdfBookmarks, type PdfOutlineItem } from "./pdf-outline"
+import { readPdfPageLabels } from "./pdf-page-labels"
 
 export type PdfRotation = 0 | 90 | 180 | 270
 
@@ -469,6 +471,22 @@ export interface PdfRenderRuntime {
     options?: { signal?: AbortSignal },
   ): Promise<PdfPageTextLayer>
   /**
+   * Document bookmark tree for outline navigation. Optional so injected
+   * runtimes that only render pages simply render no outline panel.
+   */
+  getOutline?(
+    document: PdfRenderDocument,
+    options?: { signal?: AbortSignal },
+  ): Promise<readonly PdfOutlineItem[]>
+  /**
+   * Display label of every page (`1`, `iv`, `A-3`) in document order. Optional;
+   * consumers fall back to decimal page numbers when it is absent.
+   */
+  getPageLabels?(
+    document: PdfRenderDocument,
+    options?: { signal?: AbortSignal },
+  ): Promise<readonly string[]>
+  /**
    * Write one AcroForm widget value and return the refreshed annotation.
    *
    * Runtime implementers that cannot write forms omit this method; the Surface
@@ -626,6 +644,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
   private readonly contentHashRequests = new Map<string, Promise<string>>()
   private readonly rawPageAnnotations = new Map<string, readonly PdfAnnotationObject[]>()
   private readonly pageTextLayers = new Map<string, PdfPageTextLayer>()
+  private readonly documentPageLabels = new Map<string, readonly string[]>()
   private documentSequence = 0
   private disposed = false
 
@@ -733,6 +752,13 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
       throw new Error("PDF document contains no renderable pages.")
     }
     this.documents.set(nativeDocument.id, nativeDocument)
+    // Parse `/PageLabels` while the verified bytes are still in hand. The tree
+    // is tiny and optional, and keeping only the labels avoids retaining the
+    // whole document buffer in the runtime.
+    this.documentPageLabels.set(
+      nativeDocument.id,
+      readPdfPageLabels(new Uint8Array(bytes), nativeDocument.pageCount),
+    )
     return {
       id: nativeDocument.id,
       pageCount: nativeDocument.pageCount,
@@ -1031,6 +1057,30 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     return layer
   }
 
+  async getOutline(
+    document: PdfRenderDocument,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<readonly PdfOutlineItem[]> {
+    const nativeDocument = this.getNativeDocument(document)
+    const bookmarks = await runPdfTask(this.getEngine().getBookmarks(nativeDocument), {
+      signal: options.signal,
+      timeoutMs: this.operationTimeoutMs,
+      label: officeMessagesEn.pdf.runtime.outline,
+    })
+    return mapPdfBookmarks(bookmarks?.bookmarks, document.pageCount)
+  }
+
+  async getPageLabels(
+    document: PdfRenderDocument,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<readonly string[]> {
+    this.getNativeDocument(document)
+    if (options.signal?.aborted || this.disposed) throw createAbortError()
+    const labels = this.documentPageLabels.get(document.id)
+    if (labels) return labels
+    return Array.from({ length: document.pageCount }, (_, index) => String(index + 1))
+  }
+
   async setFormFieldValue(
     document: PdfRenderDocument,
     pageIndex: number,
@@ -1131,6 +1181,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     for (const key of this.pageTextLayers.keys()) {
       if (key.startsWith(`${document.id}:`)) this.pageTextLayers.delete(key)
     }
+    this.documentPageLabels.delete(document.id)
     const engine = this.engine
     if (!engine) return
     try {
@@ -1150,6 +1201,7 @@ class PdfiumRenderRuntime implements PdfRenderRuntime {
     this.contentHashRequests.clear()
     this.rawPageAnnotations.clear()
     this.pageTextLayers.clear()
+    this.documentPageLabels.clear()
     const engine = this.engine
     this.engine = undefined
     if (!engine) return
