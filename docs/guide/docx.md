@@ -101,6 +101,56 @@ if (inspection && !inspection.supported) {
 
 链接卡片对外部地址调用 `window.open(..., "noopener,noreferrer")`；文档内部书签（`#name`）不会被当作 URL 打开，而是通过 `link-open` 事件交给宿主处理，便于宿主滚动到自己的书签位置。
 
+## 文档块、词与高亮
+
+`@arcships/docx-core` 把已解析的文档模型拆成可寻址的文档块和词：表格、单元格、页眉页脚、脚注尾注、图片也都包含在块树里。每个块带一个稳定的 source id，查看器把同一个 id 渲染为 `data-docx-source-id`，因此几何解析不需要按文字猜位置。
+
+```ts
+import {
+  extractDocumentBlocks,
+  flattenDocumentBlocks,
+  resolveDocxBlockGeometries,
+  resolveDocxWordGeometries,
+} from "@arcships/docx-core"
+
+const document = await extractDocumentBlocks(model, {
+  documentId: "contract.docx",
+  includeWords: true,
+})
+const blocks = flattenDocumentBlocks(document.blocks)
+const words = blocks.flatMap((block) => block.words ?? [])
+
+const root = viewerRoot.value // 包含 [data-docx-page-surface] 的查看器根元素
+const blockGeometry = resolveDocxBlockGeometries(root, blocks)
+const wordGeometry = resolveDocxWordGeometries(root, words)
+```
+
+块类型沿用 Extend parser 的 15 个名称（`DOCUMENT_BLOCK_TYPES`）：段落 `text`、`heading`、`section_heading`、`legend`、列表段落（`details.list`）、`figure`、`table`/`table_head`/`table_cell`、表单域 `key_value`、页码字段 `page_number`，以及 `header`/`footer` 容器。空段落和空单元格按上游约定省略，空段落里的图片会提升为同级 figure，source id 仍保留原段落路径。
+
+词分割对空白分隔的文本保留标点，对中日韩文字按字符切分；每个词用 UTF-16 的 `sourceRefs[].start/end` 指回段落，id 形如 `<blockId>/word/{start}-{end}`。几何解析把 DOM 文本范围换算成页面 CSS 像素：页面表面的 client rect 除以其 CSS 尺寸，因此 100%、200% 缩放以及横版/旋转纸张都使用同一套页面坐标；跨页切分的段落每个挂载页各返回一个 fragment。
+
+`@arcships/vue-docx` 提供两个覆盖层组件，几何盒子通过 Teleport 放进对应页面表面，和页面一起缩放：
+
+```vue
+<DocxBlockHighlights
+  :root="viewerRoot"
+  :blocks="blocks"
+  :block-ids="selectedBlockIds"
+  :page-index="0"
+  color="#2563eb"
+  @geometry="onBlockGeometry"
+/>
+<DocxWordHighlights
+  :root="viewerRoot"
+  :word-ranges="[{ blockId: paragraphId, start: 6, end: 10 }]"
+  color="#f59e0b"
+/>
+```
+
+`blocks`/`block` 传入提取结果；`blockIds` 可以只按 id 选择（没有块列表时 id 直接当 source id）；`pageIndex` 只画某一页；`wordRanges` 不需要先运行词提取。盒子带 `data-docx-block-highlight`、`data-docx-word-highlight`、`data-docx-block-type` 和 `data-docx-highlight-active`，便于宿主样式和测试定位。
+
+`DocxDocumentSurface` 暴露 `getDocumentBlocks()`、`confirmBlockReference()` 和 `confirmWordReference()`：块走结构化定位（`structure`），词走 `text-range` 定位，两者都通过统一引用契约发出 `reference-confirm`，`resolveReference()` 会按当前修订返回 `exact`、`relocated` 或明确失败。
+
 ## 直接使用核心能力
 
 纯数据操作从 `@arcships/docx-core/core` 导入；需要加载文件、Worker 和 WASM 时使用 `@arcships/docx-core/runtime`。

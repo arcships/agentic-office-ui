@@ -35,6 +35,7 @@ import {
   resolveParagraphAutoSpacingInStory,
   resolveClippedBodyRenderedBottomPx,
   resolveClippedMeasuredHeightPx,
+  docxNodeSourceId,
   type DocxPageFlowWrapClearance,
   type DocumentLayoutDefaults,
 } from "@arcships/docx-core"
@@ -416,6 +417,7 @@ export default defineComponent({
               key,
               paragraph: node as ParagraphNode,
               paragraphIndex: segment.nodeIndex,
+              sourceId: docxNodeSourceId(segment.nodeIndex),
               // Showing revisions is a display choice: it must not turn the
               // document read-only, otherwise a document with revisions can
               // never be edited or cleaned up.
@@ -462,6 +464,7 @@ export default defineComponent({
               key,
               table: node as TableNode,
               tableIndex: segment.nodeIndex,
+              sourceId: docxNodeSourceId(segment.nodeIndex),
               editable: props.editable,
               controller: props.controller,
               rowRange: segment.tableRowRange,

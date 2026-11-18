@@ -3,6 +3,7 @@
     ref="scrollContainerRef"
     class="docx-viewer-root"
     :data-docx-page-count="pageCount"
+    :data-docx-document-id="documentId"
     :data-docx-page-count-target="paginationPageCountTarget.targetPageCount ?? 'none'"
     :data-docx-pagination-state="paginationState"
     :data-docx-pagination-iterations="paginationIterations"
@@ -155,6 +156,11 @@ export interface DocxViewerRootProps {
   layoutOptions?: LayoutOptions
   theme?: DocxDocumentTheme
   zoomScale?: number
+  /**
+   * Identity persisted on `data-docx-document-id`; block/word geometry refuses
+   * fragments whose source reference belongs to another document.
+   */
+  documentId?: string
   /** When true, zoom auto-fits page width to container. Overrides zoomScale. */
   fitWidth?: boolean
   /** `null` follows the controller flag; `false` always hides. */

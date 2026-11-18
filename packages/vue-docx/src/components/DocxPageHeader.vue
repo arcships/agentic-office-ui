@@ -4,6 +4,7 @@
     ref="headerEl"
     data-docx-page-header="true"
     :data-docx-header-part-name="section.partName"
+    :data-docx-source-id="containerSourceId"
     class="docx-page-header docx-page-section--header"
     :class="{ 'docx-page-section--editing': editable }"
     :style="headerStyle"
@@ -13,6 +14,7 @@
         v-if="node.type === 'paragraph'"
         :paragraph="node"
         :paragraph-index="-(pageIndex * 1000 + ni + 1)"
+        :source-id="storyNodeSourceId(ni)"
         :data-docx-header-node-index="ni"
         :editable="editable"
         :document-theme="theme"
@@ -42,6 +44,7 @@
         v-else
         :table="node"
         :table-index="-(pageIndex * 1000 + ni + 1)"
+        :source-id="storyNodeSourceId(ni)"
         :data-docx-header-node-index="ni"
         :editable="false"
         :document-theme="theme"
@@ -79,6 +82,8 @@ import {
   resolveDefaultTabStopPx,
   resolveDocumentLayoutDefaults,
   resolveParagraphAutoSpacingInStory,
+  docxStoryContainerSourceId,
+  docxStoryNodeSourceId,
 } from "@arcships/docx-core"
 import DocxParagraphHost from "./DocxParagraphHost.vue"
 import DocxTableHost from "./DocxTableHost.vue"
@@ -122,6 +127,19 @@ const props = defineProps<{
 const emit = defineEmits<{
   textInput: [nodeIndex: number, text: string]
 }>()
+
+// Source ids shared with `extractDocumentBlocks`.
+const containerSourceId = computed(() =>
+  props.section
+    ? docxStoryContainerSourceId("header", props.section.partName)
+    : undefined,
+)
+
+function storyNodeSourceId(nodeIndex: number): string | undefined {
+  return containerSourceId.value
+    ? docxStoryNodeSourceId(containerSourceId.value, nodeIndex)
+    : undefined
+}
 
 // Header/footer stories share the document layout defaults: HTML automatic
 // paragraph spacing and the default tab grid.

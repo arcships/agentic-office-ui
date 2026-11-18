@@ -15,6 +15,7 @@
 | `PptxViewer` | `@arcships/vue-pptx` | 纵向连续浏览 PPTX；演示模式使用单页播放 | [PPTX](../guide/pptx.md) |
 | `PptxStage` | `@arcships/vue-pptx` | 无 chrome 的纵向 Surface 或单页播放舞台；提供选中、对象点击和右键事件 | [PPTX](../guide/pptx.md) |
 | `PptxThumbnail` | `@arcships/vue-pptx` | 使用现有会话渲染单页缩略图 | [PPTX](../guide/pptx.md) |
+| `DocxBlockHighlights` / `DocxWordHighlights` | `@arcships/vue-docx` | 在已渲染页面上叠加文档块/词高亮，支持 `pageIndex`、`blockIds` 和 `wordRanges` | [DOCX](../guide/docx.md) |
 
 ## 最小 Surface
 

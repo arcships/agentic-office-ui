@@ -2,16 +2,26 @@ import type {
   DocxObjectLocator,
   DocxPartLocator,
   DocxPathSegment,
+  DocxReferenceKind,
   ManualRegionLocator,
   OfficeDocumentRevision,
   OfficeObjectDescriptor,
   OfficeObjectFingerprint,
+  OfficeObjectKind,
   OfficeObjectReference,
   OfficeObjectReferenceDraft,
   OfficeObjectReliability,
   ResolveReferenceResult,
 } from "@arcships/office-interaction";
-import type { DocModel, ImageRunNode, ParagraphNode } from "./engine/types";
+import type { DocModel, DocNode, ImageRunNode, ParagraphNode, TableNode } from "./engine/types";
+import type {
+  DocxBlockPart,
+  DocxBlockPathSegment,
+  DocxWordRange,
+  DocumentBlock,
+  DocumentBlockDetails,
+  DocumentWord,
+} from "./blocks/types";
 import type {
   DocxTextRange,
   DocxTextRangeBoundary,
@@ -475,6 +485,202 @@ export function createDocxCommentReferenceDraft(
   };
 }
 
+// ────────────────────────────────────────────────────────────────────
+// Document block / word references
+// ────────────────────────────────────────────────────────────────────
+
+const DOCX_BLOCK_RELIABILITY: OfficeObjectReliability = {
+  semantic: { level: "exact", score: 1, reasonCodes: ["docx.block-identity"] },
+  boundary: { level: "exact", score: 1, reasonCodes: ["docx.block-source-ref"] },
+  hierarchy: { level: "exact", score: 1, reasonCodes: ["docx.model-path"] },
+  relocation: { level: "likely", reasonCodes: ["docx.structural-path"] },
+};
+
+const DOCX_BLOCK_CONTAINER_RELIABILITY: OfficeObjectReliability = {
+  semantic: { level: "likely", score: 1, reasonCodes: ["docx.story-container"] },
+  boundary: { level: "likely", score: 1, reasonCodes: ["docx.story-part"] },
+  hierarchy: { level: "exact", score: 1, reasonCodes: ["docx.part-locator"] },
+  relocation: { level: "uncertain", reasonCodes: ["docx.story-part"] },
+};
+
+function blockPart(block: DocumentBlock): DocxBlockPart {
+  const part = block.details.part;
+  if (!part) return { kind: "body" };
+  return part;
+}
+
+function blockModelPath(block: DocumentBlock): readonly DocxPathSegment[] {
+  const path = block.details.modelPath as readonly DocxBlockPathSegment[] | undefined;
+  return (path ?? []) as readonly DocxPathSegment[];
+}
+
+function blockReferenceKind(block: DocumentBlock): DocxReferenceKind {
+  if (block.type === "table") return "table";
+  if (block.type === "table_head") return "table-row";
+  if (block.type === "table_cell") return "table-cell";
+  if (block.type === "figure") return "image";
+  if (block.type === "header" || block.type === "footer") return "section";
+  if (block.type === "heading" || block.type === "section_heading") return "heading";
+  if (block.type === "legend") return "paragraph";
+  if (block.type === "page_number") return "paragraph";
+  if (block.details.list) return "list-item";
+  return "paragraph";
+}
+
+function textFingerprintAt(
+  text: string,
+  start: number,
+  end: number,
+): OfficeObjectFingerprint {
+  const selected = text.slice(start, end);
+  const prefix = text.slice(Math.max(0, start - TEXT_CONTEXT_LIMIT), start);
+  const suffix = text.slice(end, Math.min(text.length, end + TEXT_CONTEXT_LIMIT));
+  return {
+    ...(selected.length <= TEXT_QUOTE_LIMIT ? { exactText: selected } : {}),
+    ...(prefix ? { prefixText: prefix } : {}),
+    ...(suffix ? { suffixText: suffix } : {}),
+    contentHash: textContentHash(selected),
+  };
+}
+
+function blockStructureLocator(block: DocumentBlock): DocxObjectLocator {
+  const path = blockModelPath(block);
+  return {
+    kind: "structure",
+    part: blockPart(block) as DocxPartLocator,
+    path: path.length > 0 ? path : [{ kind: "node", index: 0 }],
+  };
+}
+
+function blockImageLocator(block: DocumentBlock): DocxObjectLocator | undefined {
+  const childIndex = block.details.childIndex;
+  if (!Number.isSafeInteger(childIndex) || (childIndex as number) < 0) return undefined;
+  return {
+    kind: "image",
+    part: blockPart(block) as DocxPartLocator,
+    paragraphPath: blockModelPath(block),
+    childIndex: childIndex as number,
+  };
+}
+
+/**
+ * Creates a unified reference draft for an extracted document block.
+ *
+ * Paragraph-derived blocks keep their semantic kind (paragraph/heading/
+ * list-item) with a structural model path, tables/cells/rows use structural
+ * paths, figures use the image locator and header/footer containers use their
+ * part locator. The draft can be passed to `confirmOfficeReferenceDraft` so
+ * `referenceConfirm` carries block identity.
+ */
+export function createDocxBlockReferenceDraft(
+  context: DocxReferenceContext,
+  block: DocumentBlock,
+  options: { fallbackRegion?: Extract<ManualRegionLocator, { space: "page" }> } = {},
+): DocxOfficeReferenceDraft {
+  assertDocxContext(context);
+  if (options.fallbackRegion) assertPageRegion(options.fallbackRegion, context.pageCount);
+  if (!block.sourceRefs.length) {
+    throw new TypeError("DOCX block reference requires at least one source reference");
+  }
+
+  let locator: DocxObjectLocator;
+  if (block.type === "figure") {
+    const image = blockImageLocator(block);
+    if (!image) throw new RangeError("DOCX figure block has no image child index");
+    locator = image;
+  } else {
+    // Paragraph-derived blocks keep their semantic kind (paragraph/heading/
+    // list-item); the unified contract only pairs `text-range` locators with
+    // the `text-range` kind, so a structural path is the correct locator here.
+    locator = blockStructureLocator(block);
+  }
+
+  const kind = blockReferenceKind(block);
+  const container = block.type === "header" || block.type === "footer";
+  return {
+    schemaVersion: 1,
+    document: context.revision,
+    kind,
+    source: "native",
+    locator: { type: "format", format: "docx", value: locator },
+    ...(options.fallbackRegion ? { fallbackRegion: options.fallbackRegion } : {}),
+    reliability: copyReliability(
+      container ? DOCX_BLOCK_CONTAINER_RELIABILITY : DOCX_BLOCK_RELIABILITY,
+    ),
+  } as DocxOfficeReferenceDraft;
+}
+
+function wordRangeOffsets(
+  word: DocumentWord | DocxWordRange,
+): { start: number; end: number; content?: string } | undefined {
+  if ("start" in word && typeof word.start === "number") {
+    return {
+      start: word.start,
+      end: word.end,
+      ...(word.content ? { content: word.content } : {}),
+    };
+  }
+  if ("sourceRefs" in word) {
+    const ref = word.sourceRefs[0];
+    if (!ref || ref.start === undefined || ref.end === undefined) return undefined;
+    return { start: ref.start, end: ref.end, content: word.content };
+  }
+  return undefined;
+}
+
+/**
+ * Creates a unified reference draft for a word span inside a document block.
+ * The locator is a text-range with UTF-16 offsets, so `referenceConfirm` can
+ * carry word-level citations and resolution can relocate them by quote.
+ */
+export function createDocxWordReferenceDraft(
+  context: DocxReferenceContext,
+  block: DocumentBlock,
+  word: DocumentWord | DocxWordRange,
+  options: { fallbackRegion?: Extract<ManualRegionLocator, { space: "page" }> } = {},
+): DocxOfficeReferenceDraft {
+  assertDocxContext(context);
+  if (options.fallbackRegion) assertPageRegion(options.fallbackRegion, context.pageCount);
+  if (block.details.kind !== "paragraph") {
+    throw new TypeError("DOCX word reference requires a paragraph-derived block");
+  }
+  const offsets = wordRangeOffsets(word);
+  if (!offsets) {
+    throw new TypeError("DOCX word reference requires UTF-16 start/end offsets");
+  }
+  const { start, end, content: expected } = offsets;
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start) {
+    throw new RangeError("DOCX word reference offsets must describe a non-empty integer range");
+  }
+  if (end > block.content.length) {
+    throw new RangeError("DOCX word reference offsets exceed the block text");
+  }
+  const selected = block.content.slice(start, end);
+  if (expected !== undefined && expected !== selected) {
+    throw new RangeError("DOCX word reference text does not match the block text at those offsets");
+  }
+  const path = blockModelPath(block);
+  return {
+    schemaVersion: 1,
+    document: context.revision,
+    kind: "text-range",
+    source: "native",
+    locator: {
+      type: "format",
+      format: "docx",
+      value: {
+        kind: "text-range",
+        part: blockPart(block) as DocxPartLocator,
+        start: { path, offset: start },
+        end: { path, offset: end },
+      },
+    },
+    fingerprint: textFingerprintAt(block.content, start, end),
+    ...(options.fallbackRegion ? { fallbackRegion: options.fallbackRegion } : {}),
+    reliability: docxTextReliability(selected),
+  } as DocxOfficeReferenceDraft;
+}
+
 function draftFromReference(reference: DocxOfficeReference): DocxOfficeReferenceDraft {
   const { referenceId: _referenceId, ...draft } = reference;
   return draft;
@@ -587,19 +793,6 @@ function imageDescriptor(reference: DocxOfficeReference, image: ImageRunNode): O
   };
 }
 
-function tableDescriptor(reference: DocxOfficeReference, tableIndex: number): OfficeObjectDescriptor {
-  return {
-    objectId: `docx:table:${tableIndex}`,
-    draft: draftFromReference(reference),
-    label: `Table ${tableIndex + 1}`,
-    path: [
-      { kind: "document", label: "Document" },
-      { kind: "table", label: `Table ${tableIndex + 1}` },
-    ],
-    childrenState: "available",
-  };
-}
-
 function commentDescriptor(
   reference: DocxOfficeReference,
   commentId: string,
@@ -683,14 +876,14 @@ function textCandidates(
 
 function docxReferenceKind(
   reference: DocxOfficeReference,
-): "text" | "page" | "region" | "image" | "table" | "comment" | "other" {
+): "text" | "page" | "region" | "image" | "structure" | "comment" | "other" {
   if (reference.locator.type === "manual-region") return "region";
   const value = reference.locator.value;
   if (value.kind === "text-range") return "text";
   if (value.kind === "page") return "page";
   if (value.kind === "image") return "image";
   if (value.kind === "comment") return "comment";
-  if (value.kind === "structure" && value.path[0]?.kind === "table") return "table";
+  if (value.kind === "structure") return "structure";
   return "other";
 }
 
@@ -721,33 +914,6 @@ function resolveDocxImageReference(
   };
 }
 
-function resolveDocxTableReference(
-  context: DocxReferenceContext,
-  reference: DocxOfficeReference,
-): ResolveReferenceResult {
-  if (reference.locator.type !== "format" || reference.locator.value.kind !== "structure") {
-    return { status: "unsupported", reasonCode: "docx.table-locator-unsupported" };
-  }
-  const locator = reference.locator.value;
-  const table = locator.path[0];
-  if (!table || table.kind !== "table") {
-    return { status: "unsupported", reasonCode: "docx.table-locator-unsupported" };
-  }
-  if (context.model.nodes[table.index]?.type !== "table") {
-    return { status: "not-found", reasonCode: "docx.table-not-found" };
-  }
-  if (sameRevision(reference.document, context.revision)) {
-    return { status: "exact", reference, descriptor: tableDescriptor(reference, table.index) };
-  }
-  const relocated = currentReference(context, reference, locator);
-  return {
-    status: "relocated",
-    reference: relocated,
-    descriptor: tableDescriptor(relocated, table.index),
-    reasonCodes: ["docx.revision-changed", "docx.locator-stable"],
-  };
-}
-
 function resolveDocxCommentReference(
   context: DocxReferenceContext,
   reference: DocxOfficeReference,
@@ -774,6 +940,372 @@ function resolveDocxCommentReference(
   };
 }
 
+type ResolvedBlockPath =
+  | { kind: "paragraph"; paragraph: ParagraphNode }
+  | { kind: "table"; table: TableNode }
+  | { kind: "table-row"; table: TableNode; rowIndex: number }
+  | { kind: "table-cell"; table: TableNode; rowIndex: number; cellIndex: number; cell: TableNode["rows"][number]["cells"][number] }
+  | { kind: "container"; nodes: readonly DocNode[] };
+
+function findStoryNodes(
+  model: DocModel,
+  part: DocxPartLocator,
+): readonly DocNode[] | undefined {
+  if (part.kind === "body") return model.nodes;
+  if (part.kind === "header" || part.kind === "footer") {
+    const flat = part.kind === "header"
+      ? model.metadata.headerSections
+      : model.metadata.footerSections;
+    const direct = flat?.find((section) => section.partName === part.partName);
+    if (direct) return direct.nodes;
+    for (const section of model.metadata.sections ?? []) {
+      const nested = (part.kind === "header"
+        ? section.headerSections
+        : section.footerSections)?.find((entry) => entry.partName === part.partName);
+      if (nested) return nested.nodes;
+    }
+    return undefined;
+  }
+  if (part.kind === "footnote" || part.kind === "endnote") {
+    const notes = part.kind === "footnote"
+      ? model.metadata.footnotes
+      : model.metadata.endnotes;
+    return notes?.find((note) => String(note.id) === part.noteId)?.nodes;
+  }
+  return undefined;
+}
+
+function resolveTablePath(
+  table: TableNode,
+  path: readonly DocxPathSegment[],
+  tableIndex: number,
+): ResolvedBlockPath | undefined {
+  if (tableIndex === path.length - 1) return { kind: "table", table };
+  const rowSegment = path[tableIndex + 1];
+  if (!rowSegment || rowSegment.kind !== "row") return undefined;
+  const row = table.rows[rowSegment.index];
+  if (!row) return undefined;
+  if (tableIndex + 1 === path.length - 1) {
+    return { kind: "table-row", table, rowIndex: rowSegment.index };
+  }
+  const cellSegment = path[tableIndex + 2];
+  if (!cellSegment || cellSegment.kind !== "cell") return undefined;
+  const cell = row.cells[cellSegment.index];
+  if (!cell) return undefined;
+  if (tableIndex + 2 === path.length - 1) {
+    return {
+      kind: "table-cell",
+      table,
+      rowIndex: rowSegment.index,
+      cellIndex: cellSegment.index,
+      cell,
+    };
+  }
+  const child = path[tableIndex + 3];
+  if (!child) return undefined;
+  if (child.kind === "paragraph") {
+    if (tableIndex + 3 !== path.length - 1) return undefined;
+    const paragraph = cell.nodes[child.index];
+    return paragraph?.type === "paragraph"
+      ? { kind: "paragraph", paragraph }
+      : undefined;
+  }
+  if (child.kind === "table") {
+    const nested = cell.nodes[child.index];
+    if (nested?.type !== "table") return undefined;
+    return resolveTablePath(nested, path, tableIndex + 3);
+  }
+  return undefined;
+}
+
+function resolvePathInNodes(
+  nodes: readonly DocNode[],
+  path: readonly DocxPathSegment[],
+): ResolvedBlockPath | undefined {
+  const first = path[0];
+  if (!first) return { kind: "container", nodes };
+  if (first.kind === "paragraph" || first.kind === "node") {
+    if (path.length !== 1) return undefined;
+    const node = nodes[first.index];
+    return node?.type === "paragraph"
+      ? { kind: "paragraph", paragraph: node }
+      : undefined;
+  }
+  if (first.kind === "table") {
+    const node = nodes[first.index];
+    if (node?.type !== "table") return undefined;
+    return resolveTablePath(node, path, 0);
+  }
+  return undefined;
+}
+
+function partDescriptorPath(
+  part: DocxPartLocator,
+): { kind: OfficeObjectKind; label: string } | undefined {
+  if (part.kind === "body") return undefined;
+  if (part.kind === "header") {
+    return { kind: "section", label: `Header ${part.partName}` };
+  }
+  if (part.kind === "footer") {
+    return { kind: "section", label: `Footer ${part.partName}` };
+  }
+  if (part.kind === "footnote" || part.kind === "endnote") {
+    return {
+      kind: "note",
+      label: `${part.kind === "footnote" ? "Footnote" : "Endnote"} ${part.noteId}`,
+    };
+  }
+  return undefined;
+}
+
+function blockDescriptor(
+  reference: DocxOfficeReference,
+  part: DocxPartLocator,
+  resolved: ResolvedBlockPath,
+  text: string,
+): OfficeObjectDescriptor {
+  const partPath = partDescriptorPath(part);
+  const basePath: Array<{ kind: OfficeObjectKind; label: string }> = [
+    { kind: "document", label: "Document" },
+    ...(partPath ? [partPath] : []),
+  ];
+  const common = {
+    objectId: `docx:block:${JSON.stringify(reference.locator)}`,
+    draft: draftFromReference(reference),
+    ...(text.trim() ? { content: { text } } : {}),
+    ...(reference.fallbackRegion
+      ? {
+          visual: {
+            fragments: [{
+              container: { space: "page" as const, pageIndex: reference.fallbackRegion.pageIndex },
+              rect: reference.fallbackRegion.rect,
+            }],
+            layoutVersion: reference.document.revision,
+          },
+        }
+      : {}),
+  };
+  if (resolved.kind === "container") {
+    return {
+      ...common,
+      label: partPath?.label ?? "Document part",
+      path: [...basePath, { kind: "section", label: "Part container" }],
+      childrenState: "available",
+    };
+  }
+  if (resolved.kind === "table") {
+    const tableIndex =
+      reference.locator.type === "format" &&
+      reference.locator.value.kind === "structure" &&
+      reference.locator.value.path[0]?.kind === "table"
+        ? reference.locator.value.path[0].index
+        : undefined;
+    return {
+      ...common,
+      label: tableIndex === undefined ? "Table" : `Table ${tableIndex + 1}`,
+      path: [...basePath, { kind: "table", label: "Table" }],
+      childrenState: "available",
+    };
+  }
+  if (resolved.kind === "table-row") {
+    return {
+      ...common,
+      label: `Row ${resolved.rowIndex + 1}`,
+      path: [
+        ...basePath,
+        { kind: "table", label: "Table" },
+        { kind: "table-row", label: `Row ${resolved.rowIndex + 1}` },
+      ],
+      childrenState: "available",
+    };
+  }
+  if (resolved.kind === "table-cell") {
+    return {
+      ...common,
+      label: `Cell ${resolved.rowIndex + 1}, ${resolved.cellIndex + 1}`,
+      path: [
+        ...basePath,
+        { kind: "table", label: "Table" },
+        { kind: "table-row", label: `Row ${resolved.rowIndex + 1}` },
+        { kind: "table-cell", label: `Cell ${resolved.cellIndex + 1}` },
+      ],
+      childrenState: "available",
+    };
+  }
+  const labelText = text.replace(/\s+/gu, " ").trim();
+  const heading = reference.kind === "heading";
+  const listItem = reference.kind === "list-item";
+  return {
+    ...common,
+    label: labelText
+      ? `${heading ? "Heading" : listItem ? "List item" : "Text"}: ${labelText.slice(0, 80)}`
+      : heading
+        ? "Heading"
+        : listItem
+          ? "List item"
+          : "Paragraph",
+    path: [
+      ...basePath,
+      { kind: "paragraph", label: heading ? "Heading" : listItem ? "List item" : "Paragraph" },
+    ],
+    childrenState: "none",
+  };
+}
+
+function resolveDocxStructureReference(
+  context: DocxReferenceContext,
+  reference: DocxOfficeReference,
+): ResolveReferenceResult {
+  if (reference.locator.type !== "format" || reference.locator.value.kind !== "structure") {
+    return { status: "unsupported", reasonCode: "docx.structure-locator-unsupported" };
+  }
+  const locator = reference.locator.value;
+  const nodes = findStoryNodes(context.model, locator.part);
+  if (!nodes) return { status: "not-found", reasonCode: "docx.part-not-found" };
+  const container =
+    reference.kind === "section" &&
+    locator.part.kind !== "body" &&
+    locator.path.length === 1 &&
+    locator.path[0]?.kind === "node" &&
+    locator.path[0]?.index === 0;
+  const resolved: ResolvedBlockPath | undefined = container
+    ? { kind: "container", nodes }
+    : resolvePathInNodes(nodes, locator.path);
+  if (!resolved) {
+    return {
+      status: "not-found",
+      reasonCode: locator.path[0]?.kind === "table" && locator.path.length === 1
+        ? "docx.table-not-found"
+        : "docx.structure-not-found",
+    };
+  }
+  const text = resolved.kind === "paragraph"
+    ? paragraphText(resolved.paragraph)
+    : resolved.kind === "table-cell"
+      ? resolved.cell.nodes
+          .map((node) => (node.type === "paragraph" ? paragraphText(node) : ""))
+          .filter(Boolean)
+          .join("\n")
+      : "";
+  if (sameRevision(reference.document, context.revision)) {
+    return {
+      status: "exact",
+      reference,
+      descriptor: blockDescriptor(reference, locator.part, resolved, text),
+    };
+  }
+  const relocated = currentReference(context, reference, locator);
+  return {
+    status: "relocated",
+    reference: relocated,
+    descriptor: blockDescriptor(relocated, locator.part, resolved, text),
+    reasonCodes: ["docx.revision-changed", "docx.locator-stable"],
+  };
+}
+
+function resolveStoryTextReference(
+  context: DocxReferenceContext,
+  reference: DocxOfficeReference,
+  locator: Extract<DocxObjectLocator, { kind: "text-range" }>,
+): ResolveReferenceResult {
+  const nodes = findStoryNodes(context.model, locator.part);
+  if (!nodes) return { status: "not-found", reasonCode: "docx.part-not-found" };
+  if (pathKey(locator.start.path) !== pathKey(locator.end.path)) {
+    return { status: "unsupported", reasonCode: "docx.cross-paragraph-text-unsupported" };
+  }
+  const resolved = resolvePathInNodes(nodes, locator.start.path);
+  if (!resolved || resolved.kind !== "paragraph") {
+    return { status: "not-found", reasonCode: "docx.text-range-not-found" };
+  }
+  const text = paragraphText(resolved.paragraph);
+  const startOffset = locator.start.offset;
+  const endOffset = locator.end.offset;
+  if (
+    !Number.isInteger(startOffset) ||
+    !Number.isInteger(endOffset) ||
+    startOffset < 0 ||
+    endOffset <= startOffset ||
+    endOffset > text.length
+  ) {
+    return { status: "not-found", reasonCode: "docx.text-range-invalid" };
+  }
+  const isCurrentRevision = sameRevision(reference.document, context.revision);
+  const selected = text.slice(startOffset, endOffset);
+  const locatorAt = (start: number, end: number): DocxObjectLocator => ({
+    ...locator,
+    start: { path: locator.start.path, offset: start },
+    end: { path: locator.end.path, offset: end },
+  });
+  const directMatches =
+    hasMatchingTextFingerprint(selected, reference.fingerprint) ||
+    (isCurrentRevision && !hasVerifiableTextFingerprint(reference.fingerprint));
+  if (directMatches) {
+    if (isCurrentRevision) {
+      return {
+        status: "exact",
+        reference,
+        descriptor: blockDescriptor(reference, locator.part, resolved, selected),
+      };
+    }
+    const relocated = currentReference(
+      context,
+      reference,
+      locatorAt(startOffset, endOffset),
+      undefined,
+      textFingerprintAt(text, startOffset, endOffset),
+    );
+    return {
+      status: "relocated",
+      reference: relocated,
+      descriptor: blockDescriptor(relocated, locator.part, resolved, selected),
+      reasonCodes: ["docx.revision-changed", "docx.locator-stable"],
+    };
+  }
+  if (isCurrentRevision) {
+    return { status: "not-found", reasonCode: "docx.text-range-invalid" };
+  }
+  const quote = reference.fingerprint?.exactText;
+  if (!quote) return { status: "unsupported", reasonCode: "docx.text-quote-unavailable" };
+  const matches: Array<{ start: number; end: number }> = [];
+  for (let from = 0; from <= text.length - quote.length; ) {
+    const start = text.indexOf(quote, from);
+    if (start < 0) break;
+    matches.push({ start, end: start + quote.length });
+    from = start + 1;
+  }
+  if (matches.length === 0) {
+    return { status: "not-found", reasonCode: "docx.text-not-found" };
+  }
+  if (matches.length > 1) {
+    return {
+      status: "ambiguous",
+      candidates: matches.map((match) =>
+        blockDescriptor(
+          currentReference(context, reference, locatorAt(match.start, match.end)),
+          locator.part,
+          resolved,
+          quote,
+        ),
+      ),
+      reasonCodes: ["docx.multiple-text-matches"],
+    };
+  }
+  const match = matches[0]!;
+  const relocated = currentReference(
+    context,
+    reference,
+    locatorAt(match.start, match.end),
+    undefined,
+    textFingerprintAt(text, match.start, match.end),
+  );
+  return {
+    status: "relocated",
+    reference: relocated,
+    descriptor: blockDescriptor(relocated, locator.part, resolved, quote),
+    reasonCodes: ["docx.revision-changed", "docx.text-quote-match"],
+  };
+}
+
 export function resolveDocxReference(
   context: DocxReferenceContext,
   reference: OfficeObjectReference,
@@ -788,7 +1320,7 @@ export function resolveDocxReference(
   if (kind === "other") return { status: "unsupported", reasonCode: "docx.reference-kind-unsupported" };
 
   if (kind === "image") return resolveDocxImageReference(context, docxReference);
-  if (kind === "table") return resolveDocxTableReference(context, docxReference);
+  if (kind === "structure") return resolveDocxStructureReference(context, docxReference);
   if (kind === "comment") return resolveDocxCommentReference(context, docxReference);
 
   if (kind === "page" || kind === "region") {
@@ -810,6 +1342,12 @@ export function resolveDocxReference(
 
   if (docxReference.locator.type !== "format") {
     return { status: "unsupported", reasonCode: "docx.text-locator-unsupported" };
+  }
+  if (
+    docxReference.locator.value.kind === "text-range" &&
+    docxReference.locator.value.part.kind !== "body"
+  ) {
+    return resolveStoryTextReference(context, docxReference, docxReference.locator.value);
   }
   const range = rangeFromLocator(docxReference.locator.value);
   if (!range) return { status: "unsupported", reasonCode: "docx.text-part-unsupported" };

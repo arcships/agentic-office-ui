@@ -9,6 +9,7 @@
     :contenteditable="editable ? 'true' : undefined"
     :data-docx-paragraph-host="true"
     :data-docx-paragraph-node-index="paragraphIndex"
+    :data-docx-source-id="sourceId"
     data-testid="editor-paragraph"
     :data-node-index="paragraphIndex"
     :suppresscontenteditablewarning="editable ? 'true' : undefined"
@@ -62,6 +63,8 @@ const props = withDefaults(
   defineProps<{
     paragraph: ParagraphNode
     paragraphIndex: number
+    /** Source id consumed by block/word geometry (`data-docx-source-id`). */
+    sourceId?: string
     editable?: boolean
     documentTheme?: DocxDocumentTheme
     controller?: DocxEditorController
@@ -246,6 +249,8 @@ const displayHtml = computed(() => {
     // Editable body paragraphs expose the link range so the link hover card can
     // select the linked text before editing or removing the link.
     emitLinkRangeAttributes: props.editable && Boolean(props.controller) && !props.withinHeaderFooter,
+    emitTextRangeAttributes: true,
+    paragraphSourceId: props.sourceId,
   }
 
   const vnodes = renderParagraphRuns(

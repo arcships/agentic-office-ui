@@ -47,7 +47,11 @@
     </div>
 
     <!-- Table -->
-    <table class="docx-table-host-table" :style="tableStyle">
+    <table
+      class="docx-table-host-table"
+      :style="tableStyle"
+      :data-docx-source-id="sourceId"
+    >
       <colgroup>
         <col
           v-for="(width, ci) of resolvedColumnWidths"
@@ -60,6 +64,7 @@
           v-for="row of gridRows"
           :key="`row-${row.rowIndex}`"
           :data-docx-table-row-index="row.rowIndex"
+          :data-docx-source-id="rowSourceId(row.rowIndex)"
           :class="rowClass(row.rowIndex)"
           :data-docx-tracked-change="rowTrackedKind(row.rowIndex)"
           :data-docx-tracked-change-id="rowTrackedId(row.rowIndex)"
@@ -74,6 +79,7 @@
             :rowspan="cell.rowSpan > 1 ? cell.rowSpan : undefined"
             :data-docx-table-cell="true"
             :data-docx-table-index="domTableIndex"
+            :data-docx-source-id="cellSourceId(cell.rowIndex, cell.cellIndex)"
             :data-docx-table-runtime-key="tableRuntimeKey"
             :data-docx-table-row-index="cell.rowIndex"
             :data-docx-table-cell-index="cell.cellIndex"
@@ -103,6 +109,7 @@
                 :contenteditable="editable && controller && !isReadOnly ? 'true' : undefined"
                 :data-docx-table-cell-paragraph-host="true"
                 :data-docx-table-index="domTableIndex"
+                :data-docx-source-id="cellParagraphSourceId(cell, pi)"
                 :data-docx-table-runtime-key="tableRuntimeKey"
                 :data-docx-table-row-index="cell.rowIndex"
                 :data-docx-table-cell-index="cell.cellIndex"
@@ -118,6 +125,7 @@
                 v-else
                 :table="node"
                 :table-index="tableIndex"
+                :source-id="cellNodeSourceId(cell, pi)"
                 :table-runtime-key="nestedTableRuntimeKey(cell.rowIndex, cell.cellIndex, pi)"
                 :nesting-path="nestedTableNestingPath(cell.rowIndex, cell.cellIndex, pi)"
                 :editable="editable && !isReadOnly"
@@ -188,6 +196,10 @@ import {
   paragraphTypographyStyle,
   resolveDefaultTabStopPx,
   resolveTableTrackedMarkup,
+  docxTableCellSourceId,
+  docxTableRowSourceId,
+  docxCellParagraphSourceId,
+  docxNestedTableSourceId,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
 import { renderStaticHtml } from "../render/static-html"
@@ -219,6 +231,8 @@ const props = withDefaults(
   defineProps<{
     table: TableNode
     tableIndex: number
+    /** Source id consumed by block/word geometry (`data-docx-source-id`). */
+    sourceId?: string
     editable?: boolean
     controller?: DocxEditorController
     tableRuntimeKey?: string
@@ -443,6 +457,36 @@ function nestedTableNestingPath(
 ): string {
   const step = `${rowIndex}-${cellIndex}-${contentIndex}`
   return tableNestingPath.value ? `${tableNestingPath.value}/${step}` : step
+}
+
+// Source ids shared with `extractDocumentBlocks`; geometry resolves the rendered
+// table, rows, cells and cell paragraphs through these attributes.
+function rowSourceId(rowIndex: number): string | undefined {
+  return props.sourceId ? docxTableRowSourceId(props.sourceId, rowIndex) : undefined
+}
+
+function cellSourceId(rowIndex: number, cellIndex: number): string | undefined {
+  return props.sourceId
+    ? docxTableCellSourceId(props.sourceId, rowIndex, cellIndex)
+    : undefined
+}
+
+function cellParagraphSourceId(
+  cell: TableGridCell,
+  contentIndex: number,
+): string | undefined {
+  const cellId = cellSourceId(cell.rowIndex, cell.cellIndex)
+  return cellId
+    ? docxCellParagraphSourceId(cellId, cellParagraphIndex(cell.cell.nodes, contentIndex))
+    : undefined
+}
+
+function cellNodeSourceId(
+  cell: TableGridCell,
+  contentIndex: number,
+): string | undefined {
+  const cellId = cellSourceId(cell.rowIndex, cell.cellIndex)
+  return cellId ? docxNestedTableSourceId(cellId, contentIndex) : undefined
 }
 
 // Visible revisions no longer imply a read-only table: the document stays
@@ -759,6 +803,8 @@ function cellParagraphHtml(
     showTrackedChanges: props.showTrackedChanges,
     showCommentHighlights: props.showCommentHighlights,
     numberingDefinitions: props.numberingDefinitions,
+    paragraphSourceId: cellParagraphSourceId(cell, pi),
+    emitTextRangeAttributes: true,
     withinHeaderFooter: props.withinHeaderFooter,
     headerFooterRegion: props.headerFooterRegion,
     pageNumberFormat: props.pageNumberFormat,
