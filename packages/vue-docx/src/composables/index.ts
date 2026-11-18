@@ -43,11 +43,8 @@ export {
 export type {
   DocxViewerPageSurfaceRegistry,
   DocxViewerPageSurfaceSize,
-  DocxPageThumbnailRenderSnapshot,
-  DocxPageThumbnailSnapshotElement,
-  DocxPageThumbnailTextRunSnapshot,
-  DocxPageThumbnailTableCellSnapshot,
-  DocxViewerPageThumbnailSnapshotEntry,
+  DocxViewerPageSurfaceChange,
+  DocxViewerPageSurfaceListener,
 } from "./page-surface-registry"
 
 // Thumbnails

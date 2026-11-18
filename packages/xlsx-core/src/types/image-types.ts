@@ -35,17 +35,34 @@ export type XlsxImageAnchor =
 
 // ── Image ─────────────────────────────────────────────────────────────────
 
+/**
+ * Source crop of a picture, expressed as fractions of the intrinsic image
+ * (0 = no crop, 0.25 = hide a quarter of that edge). Mirrors DrawingML
+ * `a:srcRect`.
+ */
+export interface XlsxImageSourceRect {
+  bottom: number;
+  left: number;
+  right: number;
+  top: number;
+}
+
 export interface XlsxImage {
   anchor: XlsxImageAnchor;
   description?: string;
   editable?: boolean;
+  flipH?: boolean;
+  flipV?: boolean;
   hyperlink?: string;
   id: string;
   mediaPath?: string;
   mimeType: string;
   name?: string;
+  /** Clockwise rotation in degrees, as stored by DrawingML `rot`. */
+  rotationDeg?: number;
   sheetIndex: number;
   src: string;
+  srcRect?: XlsxImageSourceRect;
   workbookSheetIndex: number;
   zIndex: number;
 }
@@ -140,6 +157,7 @@ export type XlsxFormControlKind =
 export interface XlsxFormControl {
   anchor: XlsxImageAnchor;
   checked?: boolean;
+  editable?: boolean;
   fontFamily?: string;
   fontSizePt?: number;
   hidden?: boolean;
@@ -149,10 +167,23 @@ export interface XlsxFormControl {
   linkedCell?: string;
   name?: string;
   sheetIndex: number;
+  /** Worksheet `control@shapeId`, a stable identity in the sheet XML. */
+  shapeId?: number;
   textAlign?: "center" | "left" | "right";
   textColor?: string;
   workbookSheetIndex: number;
   zIndex: number;
+}
+
+/** Patch accepted by programmable form-control CRUD. */
+export interface XlsxFormControlInput {
+  anchor: XlsxImageAnchor;
+  checked?: boolean;
+  kind?: XlsxFormControlKind;
+  label?: string;
+  linkedCell?: string;
+  name?: string;
+  zIndex?: number;
 }
 
 // ── Image rect / resize ──────────────────────────────────────────────────

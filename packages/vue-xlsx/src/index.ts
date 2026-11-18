@@ -15,6 +15,19 @@ export type {
 } from "@arcships/office-interaction"
 
 export { useXlsxViewerController } from "./composables"
+export { resolveChartAriaLabel } from "./render/chart-shared"
+export { localizeXlsxLoadError } from "./errors"
+export type { XlsxLoadErrorMessages } from "./errors"
+export { useClipboardCopyNotice } from "./composables/useClipboardCopyNotice"
+export type {
+  ClipboardCopyNotice,
+  UseClipboardCopyNoticeOptions,
+} from "./composables/useClipboardCopyNotice"
+export {
+  checkCellValueAgainstDataValidation,
+  localizeDataValidationFeedback,
+} from "./composables/validation"
+export type { XlsxValidationMessages } from "./composables/validation"
 export { useXlsxViewerThumbnails } from "./composables/useXlsxViewerThumbnails"
 export { useXlsxSearch } from "./composables/useXlsxSearch"
 export type {
@@ -66,6 +79,9 @@ export { default as XlsxSheetTabs } from "./components/XlsxSheetTabs.vue"
 export { default as XlsxChartOverlay } from "./components/XlsxChartOverlay.vue"
 /** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxImageLayer } from "./components/XlsxImageLayer.vue"
+/** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
+/** @deprecated Internal overlay layer; compose XlsxSheetSurface instead. */
+export { default as XlsxDrawingLayer } from "./components/XlsxDrawingLayer.vue"
 /** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */
 export { default as XlsxSelectionOverlay } from "./components/XlsxSelectionOverlay.vue"
 /** @deprecated Since 0.2.0. Use `XlsxViewer`. Earliest removal: 1.0.0. */

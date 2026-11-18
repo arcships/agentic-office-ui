@@ -9,17 +9,22 @@
   "scripts": {
     "dev": "pnpm --filter=demo dev",
     "dev:pptx-lab": "pnpm --filter=pptx-playback-lab dev",
-    "build": "pnpm typecheck && pnpm -r build",
+    "build": "turbo run build",
+    "build:changed": "turbo run build --filter=...[origin/master]",
     "build:pptx": "pnpm --filter=@arcships/pptx-core build && pnpm --filter=@arcships/vue-pptx build && pnpm --filter=pptx-playback-lab build:lab && pnpm --filter=demo build",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "turbo run typecheck",
+    "typecheck:changed": "turbo run typecheck --filter=...[origin/master]",
     "typecheck:pptx": "pnpm --filter=@arcships/pptx-core typecheck && pnpm --filter=@arcships/vue-pptx typecheck && pnpm --filter=pptx-playback-lab typecheck && pnpm --filter=demo typecheck",
     "test": "node scripts/ci/run-suite.mjs test",
-    "test:pptx": "pnpm build:pptx && node scripts/ci/verify-pptx-development.mjs && node --test --test-concurrency=1 tests/unit/pptx-core.test.mjs tests/component/pptx-preview.test.mjs && node scripts/ci/verify-pptx-consumer.mjs",
+    "test:pptx": "pnpm build:pptx && node scripts/ci/verify-pptx-development.mjs && node --test --test-concurrency=1 tests/unit/pptx-core.test.mjs tests/unit/pptx-media-transitions.test.mjs tests/unit/pptx-morph-geometry.test.mjs tests/unit/pptx-track-player.test.mjs tests/unit/pptx-baseline-contract.test.mjs tests/unit/pptx-browser-session.test.mjs tests/unit/pptx-playback-controller.test.mjs tests/component/pptx-preview.test.mjs && node scripts/ci/verify-pptx-consumer.mjs",
     "test:pptx:headless": "python3 scripts/ci/verify-pptx-headless-browser.py",
+    "test:pptx:baselines": "python3 scripts/fixtures/capture-pptx-formal-baselines.py --check",
     "test:pptx:blackbox": "node scripts/ci/verify-pptx-playback-browser.mjs",
     "capture:pptx-baselines": "python3 scripts/fixtures/capture-pptx-formal-baselines.py",
     "test:unit": "node scripts/ci/run-suite.mjs unit",
     "test:component": "node scripts/ci/run-suite.mjs component",
+    "test:shard": "node scripts/ci/run-acceptance-shard.mjs",
+    "test:acceptance": "node scripts/ci/run-acceptance-shard.mjs all",
     "test:blackbox": "node scripts/ci/run-suite.mjs blackbox",
     "test:stress": "node scripts/ci/run-suite.mjs stress",
     "test:performance": "node scripts/ci/run-suite.mjs performance",
@@ -33,7 +38,8 @@
     "check": "node scripts/ci/run-suite.mjs check"
   },
   "devDependencies": {
-    "@arcships/office-runtime": "workspace:*"
+    "@arcships/office-runtime": "workspace:*",
+    "turbo": "^2.11.11"
   },
   "packageManager": "pnpm@9.0.6",
   "pnpm": {

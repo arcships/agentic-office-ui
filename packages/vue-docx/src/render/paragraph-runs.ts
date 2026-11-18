@@ -5,6 +5,8 @@
 // run rendering via type-specific sub-modules.
 
 import { h, type VNode } from "vue"
+import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
+import { officeMessagesEn } from "@arcships/office-interaction"
 import type {
   ParagraphNode,
   TextRunNode,
@@ -14,6 +16,7 @@ import type {
 } from "@arcships/docx-core"
 import type { DocxDocumentTheme } from "@arcships/docx-core"
 import type { ParagraphTrackedInlineChange } from "@arcships/docx-core"
+import type { ParagraphCommentTextRange } from "@arcships/docx-core"
 import {
   paragraphUsesTabLeaders,
   paragraphAnchoredTabLayout,
@@ -43,6 +46,7 @@ import {
   formFieldDisplayValue,
   attachTextToPreviousCheckbox,
   shouldRenderWrappedFloatingImage,
+  isJustifiedAlignment,
 } from "@arcships/docx-core"
 import type { ImageRunRenderExtra } from "./paragraph-runs-image"
 import { renderImageRun } from "./paragraph-runs-image"
@@ -51,6 +55,7 @@ import {
   type FieldResolutionState,
   resolveFieldText,
 } from "./paragraph-runs-field-resolve"
+import { renderParagraphMarkChange } from "./paragraph-runs-annotation"
 
 // ---- Public types ----
 
@@ -63,17 +68,41 @@ export interface ParagraphRunRenderOptions {
   withinHeaderFooter?: boolean
   headerFooterRegion?: "header" | "footer"
   pageNumberFormat?: string
+  sectionPages?: number
   resolveStyleRefFieldValue?: (target: string) => string | undefined
+  resolveBookmarkFieldValue?: (target: string) => string | undefined
+  resolveBookmarkPageNumber?: (target: string) => number | undefined
   floatingAnchorOriginCorrectionXPx?: number
   sectionImageInteraction?: ImageRunRenderExtra["sectionImageInteraction"]
   paragraphOriginLeftPx?: number
   paragraphOriginTopPx?: number
   imageFilterSuffix?: string
   onImageDecodeError?: ImageRunRenderExtra["onImageDecodeError"]
+  /** Bounds of the table cell that hosts this paragraph. */
+  tableCellLayout?: {
+    widthPx?: number
+    heightPx?: number
+  }
   /** Floating body images are rendered by the editor interaction layer. */
   skipFloatingImages?: boolean
   /** Keep wrapped images in document flow while the interaction layer supplies controls. */
   renderWrappedFloatingImages?: boolean
+  /**
+   * Pre-formatted footnote/endnote marker labels keyed by the raw w:id, as
+   * resolved by `buildDocumentPageNotes`. Without them the marker falls back to
+   * the raw id, which is not the displayed note number.
+   */
+  noteMarkerLabels?: NoteMarkerLabels
+  /** Child indexes rendered by another surface layer (for example a page cover). */
+  skipImageChildIndexes?: readonly number[]
+  /** Localized alt text and missing-source fallback for images. */
+  imageAltText?: string
+  imageMissingText?: string
+}
+
+export interface NoteMarkerLabels {
+  footnote?: Map<number, string>
+  endnote?: Map<number, string>
 }
 
 // ---- Main function ----
@@ -133,8 +162,11 @@ export function renderParagraphRuns(
     styleRefFieldValueSequence: [],
     pageNumber,
     totalPages,
+    sectionPages: options?.sectionPages,
     pageNumberFormat: options?.pageNumberFormat,
     resolveStyleRefFieldValue: options?.resolveStyleRefFieldValue,
+    resolveBookmarkFieldValue: options?.resolveBookmarkFieldValue,
+    resolveBookmarkPageNumber: options?.resolveBookmarkPageNumber,
   }
   fieldCtx.pageFieldSequence = paragraphPageFieldSequence(paragraph)
   fieldCtx.pageFieldValueSequence = paragraphPageFieldValueSequence(paragraph)
@@ -241,6 +273,67 @@ export function renderParagraphRuns(
     return commentHighlightStyle(documentTheme, commentIds[0])
   }
 
+  // Exact character windows for the child being rendered. When the paragraph
+  // carries model comment offsets the renderer splits the run's text at these
+  // boundaries instead of highlighting the whole run.
+  const currentCommentTextRanges = ():
+    | ParagraphCommentTextRange[]
+    | undefined => {
+    const ranges =
+      commentMarkup?.rangesByVisibleChildIndex?.[trackedVisibleChildCursor]
+    return ranges && ranges.length > 0 ? ranges : undefined
+  }
+
+  const commentStyleForIds = (
+    commentIds: readonly number[]
+  ): Record<string, string | number | undefined> | undefined =>
+    commentIds.length > 0
+      ? commentHighlightStyle(documentTheme, commentIds[0])
+      : undefined
+
+  const commentAttributesForIds = (
+    commentIds: readonly number[]
+  ): Record<string, string> => {
+    if (commentIds.length === 0) return {}
+    const attributes: Record<string, string> = {
+      "data-docx-comment-ids": commentIds.join(" "),
+    }
+    if (commentIds.length === 1) {
+      attributes["data-docx-comment-id"] = String(commentIds[0])
+    }
+    return attributes
+  }
+
+  /**
+   * Splits `text` into the segments defined by `ranges`, so each character is
+   * highlighted by exactly the comments that cover it.
+   */
+  const commentTextSegments = (
+    text: string,
+    ranges: readonly ParagraphCommentTextRange[]
+  ): Array<{ start: number; end: number; commentIds: number[] }> => {
+    const boundaries = new Set<number>([0, text.length])
+    for (const range of ranges) {
+      if (range.start > 0 && range.start < text.length) boundaries.add(range.start)
+      if (range.end > 0 && range.end < text.length) boundaries.add(range.end)
+    }
+    const positions = [...boundaries].sort((left, right) => left - right)
+    const segments: Array<{ start: number; end: number; commentIds: number[] }> = []
+    for (let index = 0; index < positions.length - 1; index += 1) {
+      const start = positions[index]
+      const end = positions[index + 1]
+      if (end <= start) continue
+      const commentIds: number[] = []
+      for (const range of ranges) {
+        if (range.start <= start && range.end >= end && !commentIds.includes(range.commentId)) {
+          commentIds.push(range.commentId)
+        }
+      }
+      segments.push({ start, end, commentIds: commentIds.sort((a, b) => a - b) })
+    }
+    return segments
+  }
+
   const currentAnnotationAttributes = (
     trackedInlineChange: ParagraphTrackedInlineChange | undefined
   ): Record<string, string> => {
@@ -258,6 +351,15 @@ export function renderParagraphRuns(
       }
     }
     return attrs
+  }
+
+  const appendParagraphMarkChange = (target: VNode[]): void => {
+    const marker = renderParagraphMarkChange({
+      keyPrefix,
+      change: trackedMarkup?.paragraphMarkChange,
+      documentTheme,
+    })
+    if (marker) target.push(marker)
   }
 
   const consumeTrackedVisibleChild = (
@@ -321,7 +423,8 @@ export function renderParagraphRuns(
   ): void => {
     const textStyle = trackedInlineStyle(
       runStyleToCss(style, documentTheme),
-      trackedInlineChange
+      trackedInlineChange,
+      documentTheme
     )
     const hasUnderline = Boolean(style?.underline)
     target.push(
@@ -354,7 +457,8 @@ export function renderParagraphRuns(
       return {
         ...trackedInlineStyle(
           linkStyleToCss(style, documentTheme),
-          trackedInlineChange
+          trackedInlineChange,
+          documentTheme
         ),
         ...currentCommentHighlightStyle(),
       }
@@ -369,7 +473,8 @@ export function renderParagraphRuns(
             : "inherit",
           textDecoration: "none",
         },
-        trackedInlineChange
+        trackedInlineChange,
+        documentTheme
       ),
       ...currentCommentHighlightStyle(),
     }
@@ -425,16 +530,16 @@ export function renderParagraphRuns(
       "data-docx-form-field": "true",
     }
 
-    if (child.link) {
-      const linkHref = child.link
-      const isInternalLink = linkHref.startsWith("#")
+    const linkedHref = child.link ? sanitizeOfficeLink(child.link) : undefined
+    if (linkedHref) {
+      const isInternalLink = linkedHref.startsWith("#")
       target.push(
         h(
           "a",
           {
             key,
             ...formFieldAttributes,
-            href: linkHref,
+            href: linkedHref,
             target: isInternalLink ? undefined : "_blank",
             rel: isInternalLink ? undefined : "noreferrer noopener",
             onMouseDown(event: MouseEvent) {
@@ -444,7 +549,7 @@ export function renderParagraphRuns(
             onClick(event: MouseEvent) {
               if (!isInternalLink || !onInternalLinkClick) return
               event.preventDefault(); event.stopPropagation()
-              onInternalLinkClick(linkHref.slice(1))
+              onInternalLinkClick(linkedHref.slice(1))
             },
             style: trackedLinkStyle(child.style, trackedInlineChange),
           },
@@ -456,7 +561,11 @@ export function renderParagraphRuns(
     }
 
     const trackedStyle = {
-      ...trackedInlineStyle(runStyleToCss(child.style, documentTheme), trackedInlineChange),
+      ...trackedInlineStyle(
+        runStyleToCss(child.style, documentTheme),
+        trackedInlineChange,
+        documentTheme
+      ),
       ...currentCommentHighlightStyle(),
     }
     if (textValue === "\t" && !useTabLeaderLayout && !useAnchoredTabLayout) {
@@ -478,6 +587,7 @@ export function renderParagraphRuns(
     key: string,
     childIndex: number
   ): void => {
+    if (options?.skipImageChildIndexes?.includes(childIndex)) return
     if (
       options?.skipFloatingImages &&
       child.floating &&
@@ -499,8 +609,11 @@ export function renderParagraphRuns(
       floatingAnchorOriginCorrectionXPx,
       withinHeaderFooter: options?.withinHeaderFooter,
       headerFooterRegion: options?.headerFooterRegion,
+      tableCellLayout: options?.tableCellLayout,
       extra: {
         imageFilterSuffix: options?.imageFilterSuffix,
+        imageAltText: options?.imageAltText,
+        imageMissingText: options?.imageMissingText,
         onImageDecodeError: options?.onImageDecodeError,
         sectionImageInteraction: options?.sectionImageInteraction as ImageRunRenderExtra["sectionImageInteraction"],
       },
@@ -523,11 +636,24 @@ export function renderParagraphRuns(
     annotationAttributes: Record<string, string>,
     trackedInlineChange: ParagraphTrackedInlineChange | undefined
   ): void => {
-    const textStyle = {
-      ...trackedInlineStyle(
-        runStyleToCss(child.style, documentTheme),
-        trackedInlineChange
-      ),
+    const baseTextStyle = trackedInlineStyle(
+      runStyleToCss(child.style, documentTheme),
+      trackedInlineChange,
+      documentTheme
+    )
+    const effectiveText = textOverride ?? child.text
+    // Character-level ranges only line up when the rendered text is the child's
+    // own text (a checkbox leading space becomes an nbsp of the same length).
+    // Tab-leader parts are substrings, so they keep the run-level highlight.
+    const commentTextRanges =
+      effectiveText.length === child.text.length ? currentCommentTextRanges() : undefined
+    const textStyle = commentTextRanges
+      ? baseTextStyle
+      : { ...baseTextStyle, ...currentCommentHighlightStyle() }
+    // Single-unit runs (note markers, tabs) keep the run-level highlight: a
+    // character window inside them would not change what is painted.
+    const singleUnitTextStyle = {
+      ...textStyle,
       ...currentCommentHighlightStyle(),
     }
 
@@ -536,25 +662,25 @@ export function renderParagraphRuns(
     if (noteLabel) {
       target.push(h("span", {
         key, ...annotationAttributes,
-        style: { ...textStyle, verticalAlign: "super", fontSize: "0.75em" },
+        "data-docx-note-marker": "true",
+        style: { ...singleUnitTextStyle, verticalAlign: "super", fontSize: "0.75em" },
       }, noteLabel))
       trackTextAdvance(noteLabel, child.style)
       return
     }
 
     // Tab
-    const effectiveText = textOverride ?? child.text
     if (effectiveText === "\t" && !useTabLeaderLayout && !useAnchoredTabLayout) {
       target.push(h("span", {
         key, ...annotationAttributes,
-        style: tabTextStyle(child.style, textStyle),
+        style: tabTextStyle(child.style, singleUnitTextStyle),
       }, "\u00a0"))
       return
     }
 
     // Hyperlink
-    if (child.link) {
-      const linkHref = child.link
+    const linkHref = child.link ? sanitizeOfficeLink(child.link) : undefined
+    if (linkHref) {
       const isInternalLink = linkHref.startsWith("#")
       target.push(
         h("a", {
@@ -572,7 +698,21 @@ export function renderParagraphRuns(
             onInternalLinkClick(linkHref.slice(1))
           },
           style: trackedLinkStyle(child.style, trackedInlineChange),
-        }, effectiveText)
+        },
+        commentTextRanges
+          ? commentTextSegments(effectiveText, commentTextRanges).map((segment) =>
+              h(
+                "span",
+                {
+                  key: `${key}-comment-${segment.start}`,
+                  ...commentAttributesForIds(segment.commentIds),
+                  style: commentStyleForIds(segment.commentIds),
+                },
+                effectiveText.slice(segment.start, segment.end)
+              )
+            )
+          : effectiveText
+        )
       )
       trackTextAdvance(effectiveText, child.style)
       return
@@ -581,7 +721,7 @@ export function renderParagraphRuns(
     // Plain text with soft-break control
     appendPlainTextWithSoftBreakControl(
       target, key, effectiveText, textStyle,
-      child.style, annotationAttributes
+      child.style, annotationAttributes, commentTextRanges
     )
   }
 
@@ -592,10 +732,28 @@ export function renderParagraphRuns(
     text: string,
     style: Record<string, string | number | undefined>,
     measureStyle?: TextRunNode["style"] | FormFieldRunNode["style"],
-    spanAttributes?: Record<string, string>
+    spanAttributes?: Record<string, string>,
+    commentTextRanges?: readonly ParagraphCommentTextRange[]
   ): void => {
+    // Exact comment windows: emit one span per run of identically-commented
+    // characters, so a range covering half a run highlights only that half.
+    if (commentTextRanges && commentTextRanges.length > 0) {
+      for (const segment of commentTextSegments(text, commentTextRanges)) {
+        target.push(
+          h("span", {
+            key: `${keySeed}-comment-${segment.start}`,
+            ...spanAttributes,
+            ...commentAttributesForIds(segment.commentIds),
+            style: { ...style, ...commentStyleForIds(segment.commentIds) },
+          }, text.slice(segment.start, segment.end))
+        )
+      }
+      trackTextAdvance(text, measureStyle)
+      return
+    }
+
     const shouldControlSoftBreakStretch =
-      paragraph.style?.align === "justify" && text.includes("\n")
+      isJustifiedAlignment(paragraph.style?.align) && text.includes("\n")
     if (!shouldControlSoftBreakStretch) {
       target.push(h("span", { key: keySeed, ...spanAttributes, style }, text))
       trackTextAdvance(text, measureStyle)
@@ -628,6 +786,12 @@ export function renderParagraphRuns(
   const resolveNoteLabel = (child: TextRunNode): string | undefined => {
     if (!child.noteReference) return undefined
     const noteRef = child.noteReference
+    const supplied =
+      noteRef.kind === "footnote"
+        ? options?.noteMarkerLabels?.footnote
+        : options?.noteMarkerLabels?.endnote
+    const label = supplied?.get(noteRef.id)
+    if (label) return label
     const index =
       noteRef.kind === "footnote"
         ? safeNoteMarkerIndexes.footnote.get(noteRef.id)
@@ -679,7 +843,7 @@ export function renderParagraphRuns(
                     code: "IMAGE_DECODE_FAILED",
                     phase: "image-decode",
                     imageKey: numberingKey,
-                    message: "DOCX 编号图片无法解码。",
+                    message: officeMessagesEn.docx.diagnostics.numberingImageDecodeFailed,
                   })
                 },
                 style: {
@@ -757,6 +921,9 @@ export function renderParagraphRuns(
     appendTrackedDeletionSegments(
       zones[Math.max(0, Math.min(zoneCount - 1, activeZone))],
       `${keyPrefix}-tail`
+    )
+    appendParagraphMarkChange(
+      zones[Math.max(0, Math.min(zoneCount - 1, activeZone))]
     )
     return zones
   }
@@ -953,6 +1120,7 @@ export function renderParagraphRuns(
   }
 
   if (useTabLeaderLayout && hasTabSplit) {
+    appendParagraphMarkChange(runsRight)
     return h("div", {
       key: `${keyPrefix}-toc`,
       "data-docx-tab-layout": "leader",
@@ -964,5 +1132,7 @@ export function renderParagraphRuns(
     ])
   }
 
-  return runsLeft.length > 0 ? runsLeft : runs
+  const finalRuns = runsLeft.length > 0 ? runsLeft : runs
+  appendParagraphMarkChange(finalRuns)
+  return finalRuns
 }

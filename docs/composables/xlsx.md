@@ -25,13 +25,13 @@ const controller = useXlsxViewerController({
 
 常用命令：
 
-- 单元格：`setCellValue()`、`setCellFormula()`、`setCellStyle()`、清除、复制、粘贴和填充；
+- 单元格：`setCellValue()`、`setCellFormula()`、`setCellStyle()`、按 `=` 前缀区分公式和值的 `commitCellInput()`、清除、复制、粘贴和填充；
 - 结构：合并、调整行列、增删工作表和切换标签；
 - 历史：`undo()`、`redo()`；
 - 计算和导出：`recalculate()`、`exportXlsx()`、`exportCsv()`、`download()`；
 - 图表和图片：选择、移动、缩放和读取对象。
 
-URL 来源必须同时提供 `src` 和 `urlPolicy`。大文件可以通过 `deferLoadingAboveBytes` 延迟，并在用户确认后调用 `continueDeferredLoad()`。
+URL 来源必须同时提供 `src` 和 `urlPolicy`。大文件可以通过 `deferLoadingAboveBytes` 延迟，并在用户确认后调用 `continueDeferredLoad()`；用户放弃时调用 `cancelDeferredLoad()`，控制器会释放缓存的源字节并回到空状态。
 
 控制器会销毁自己创建的 Runtime、Worker、工作簿和资源。传入 `runtime` 时，Runtime 仍由调用方负责。
 

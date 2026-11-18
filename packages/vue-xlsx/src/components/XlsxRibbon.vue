@@ -2,16 +2,16 @@
   <div class="xlsx-ribbon" :class="{ 'xlsx-ribbon--dark': isDark }" data-testid="xlsx-format-toolbar">
     <fieldset class="xlsx-ribbon__controls" :disabled="isReadOnly || !hasWorkbook">
       <div class="xlsx-ribbon__group">
-        <button data-testid="xlsx-undo" class="xlsx-ribbon__icon-button" :disabled="!controller.canUndo" title="Undo" aria-label="Undo" @click="controller.undo()">
+        <button data-testid="xlsx-undo" class="xlsx-ribbon__icon-button" :disabled="!controller.canUndo" :title="m.xlsx.ribbon.undo" :aria-label="m.xlsx.ribbon.undo" @click="controller.undo()">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5M5 12h8a6 6 0 0 1 6 6" /></svg>
         </button>
-        <button data-testid="xlsx-redo" class="xlsx-ribbon__icon-button" :disabled="!controller.canRedo" title="Redo" aria-label="Redo" @click="controller.redo()">
+        <button data-testid="xlsx-redo" class="xlsx-ribbon__icon-button" :disabled="!controller.canRedo" :title="m.xlsx.ribbon.redo" :aria-label="m.xlsx.ribbon.redo" @click="controller.redo()">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 7 5 5-5 5M19 12h-8a6 6 0 0 0-6 6" /></svg>
         </button>
       </div>
       <span class="xlsx-ribbon__separator" />
       <div class="xlsx-ribbon__group">
-        <select :value="fontFamilyValue" aria-label="Font family" title="Font family" @change="setFontFamily">
+        <select :value="fontFamilyValue" :aria-label="m.xlsx.ribbon.fontFamily" :title="m.xlsx.ribbon.fontFamily" @change="setFontFamily">
           <option value="Calibri">Calibri</option>
           <option value="Aptos">Aptos</option>
           <option value="Arial">Arial</option>
@@ -19,56 +19,57 @@
           <option value="Times New Roman">Times New Roman</option>
           <option value="Courier New">Courier New</option>
         </select>
-        <select :value="fontSizeValue" class="xlsx-ribbon__size" aria-label="Font size" title="Font size" @change="setFontSize">
+        <select :value="fontSizeValue" class="xlsx-ribbon__size" :aria-label="m.xlsx.ribbon.fontSize" :title="m.xlsx.ribbon.fontSize" @change="setFontSize">
           <option v-if="!fontSizes.includes(fontSizeValue)" :value="fontSizeValue">{{ fontSizeValue }}</option>
           <option v-for="size in fontSizes" :key="size" :value="size">{{ size }}</option>
         </select>
-        <button class="xlsx-ribbon__text-button" :class="{ active: fontState.bold }" :aria-pressed="fontState.bold" title="Bold" aria-label="Bold" @click="applyFont({ bold: !fontState.bold })"><strong>B</strong></button>
-        <button class="xlsx-ribbon__text-button" :class="{ active: fontState.italic }" :aria-pressed="fontState.italic" title="Italic" aria-label="Italic" @click="applyFont({ italic: !fontState.italic })"><em>I</em></button>
-        <button class="xlsx-ribbon__text-button" :class="{ active: fontState.underline }" :aria-pressed="fontState.underline" title="Underline" aria-label="Underline" @click="applyFont({ underline: fontState.underline ? 'none' : 'single' })"><u>U</u></button>
-        <button class="xlsx-ribbon__text-button" :class="{ active: fontState.strikethrough }" :aria-pressed="fontState.strikethrough" title="Strikethrough" aria-label="Strikethrough" @click="applyFont({ strikethrough: !fontState.strikethrough })"><s>S</s></button>
-        <label class="xlsx-ribbon__color" title="Text color">
+        <button class="xlsx-ribbon__text-button" :class="{ active: fontState.bold }" :aria-pressed="fontState.bold" :title="m.xlsx.ribbon.bold" :aria-label="m.xlsx.ribbon.bold" @click="applyFont({ bold: !fontState.bold })"><strong>B</strong></button>
+        <button class="xlsx-ribbon__text-button" :class="{ active: fontState.italic }" :aria-pressed="fontState.italic" :title="m.xlsx.ribbon.italic" :aria-label="m.xlsx.ribbon.italic" @click="applyFont({ italic: !fontState.italic })"><em>I</em></button>
+        <button class="xlsx-ribbon__text-button" :class="{ active: fontState.underline }" :aria-pressed="fontState.underline" :title="m.xlsx.ribbon.underline" :aria-label="m.xlsx.ribbon.underline" @click="applyFont({ underline: fontState.underline ? 'none' : 'single' })"><u>U</u></button>
+        <button class="xlsx-ribbon__text-button" :class="{ active: fontState.strikethrough }" :aria-pressed="fontState.strikethrough" :title="m.xlsx.ribbon.strikethrough" :aria-label="m.xlsx.ribbon.strikethrough" @click="applyFont({ strikethrough: !fontState.strikethrough })"><s>S</s></button>
+        <label class="xlsx-ribbon__color" :title="m.xlsx.ribbon.textColor">
           <span>A</span><i :style="{ backgroundColor: textColor }" />
-          <input v-model="textColor" type="color" aria-label="Text color" @change="applyTextColor" />
+          <input v-model="textColor" type="color" :aria-label="m.xlsx.ribbon.textColor" @change="applyTextColor" />
         </label>
-        <label class="xlsx-ribbon__color" title="Fill color">
+        <label class="xlsx-ribbon__color" :title="m.xlsx.ribbon.fillColor">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 4 10 10-5 5-7-7zM14 6l2-2 4 4-2 2" /></svg><i :style="{ backgroundColor: fillColor }" />
-          <input v-model="fillColor" type="color" aria-label="Fill color" @change="applyFillColor" />
+          <input v-model="fillColor" type="color" :aria-label="m.xlsx.ribbon.fillColor" @change="applyFillColor" />
         </label>
       </div>
       <span class="xlsx-ribbon__separator" />
       <div class="xlsx-ribbon__group">
-        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.horizontal === 'left' }" :aria-pressed="alignmentState.horizontal === 'left'" title="Align left" aria-label="Align left" @click="applyAlignment({ horizontal: 'left' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h11M4 14h16M4 18h9" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.horizontal === 'center' }" :aria-pressed="alignmentState.horizontal === 'center'" title="Align center" aria-label="Align center" @click="applyAlignment({ horizontal: 'center' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 10h10M4 14h16M8 18h8" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.horizontal === 'right' }" :aria-pressed="alignmentState.horizontal === 'right'" title="Align right" aria-label="Align right" @click="applyAlignment({ horizontal: 'right' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M9 10h11M4 14h16M11 18h9" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.vertical === 'top' }" :aria-pressed="alignmentState.vertical === 'top'" title="Align top" aria-label="Align top" @click="applyAlignment({ vertical: 'top' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14M7 8h10M9 12h6" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.vertical === 'center' }" :aria-pressed="alignmentState.vertical === 'center'" title="Align middle" aria-label="Align middle" @click="applyAlignment({ vertical: 'center' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M7 9h10M7 15h10M5 19h14" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.vertical === 'bottom' }" :aria-pressed="alignmentState.vertical === 'bottom'" title="Align bottom" aria-label="Align bottom" @click="applyAlignment({ vertical: 'bottom' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12h6M7 16h10M5 20h14" /></svg></button>
-        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.wrapText }" :aria-pressed="alignmentState.wrapText" title="Wrap text" aria-label="Wrap text" @click="applyAlignment({ wrapText: !alignmentState.wrapText })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h12a3 3 0 0 1 0 6h-3M16 13l-3 3 3 3M4 20h7" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.horizontal === 'left' }" :aria-pressed="alignmentState.horizontal === 'left'" :title="m.xlsx.ribbon.alignLeft" :aria-label="m.xlsx.ribbon.alignLeft" @click="applyAlignment({ horizontal: 'left' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h11M4 14h16M4 18h9" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.horizontal === 'center' }" :aria-pressed="alignmentState.horizontal === 'center'" :title="m.xlsx.ribbon.alignCenter" :aria-label="m.xlsx.ribbon.alignCenter" @click="applyAlignment({ horizontal: 'center' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 10h10M4 14h16M8 18h8" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.horizontal === 'right' }" :aria-pressed="alignmentState.horizontal === 'right'" :title="m.xlsx.ribbon.alignRight" :aria-label="m.xlsx.ribbon.alignRight" @click="applyAlignment({ horizontal: 'right' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M9 10h11M4 14h16M11 18h9" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.vertical === 'top' }" :aria-pressed="alignmentState.vertical === 'top'" :title="m.xlsx.ribbon.alignTop" :aria-label="m.xlsx.ribbon.alignTop" @click="applyAlignment({ vertical: 'top' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14M7 8h10M9 12h6" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.vertical === 'center' }" :aria-pressed="alignmentState.vertical === 'center'" :title="m.xlsx.ribbon.alignMiddle" :aria-label="m.xlsx.ribbon.alignMiddle" @click="applyAlignment({ vertical: 'center' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M7 9h10M7 15h10M5 19h14" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.vertical === 'bottom' }" :aria-pressed="alignmentState.vertical === 'bottom'" :title="m.xlsx.ribbon.alignBottom" :aria-label="m.xlsx.ribbon.alignBottom" @click="applyAlignment({ vertical: 'bottom' })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12h6M7 16h10M5 20h14" /></svg></button>
+        <button class="xlsx-ribbon__icon-button" :class="{ active: alignmentState.wrapText }" :aria-pressed="alignmentState.wrapText" :title="m.xlsx.ribbon.wrapText" :aria-label="m.xlsx.ribbon.wrapText" @click="applyAlignment({ wrapText: !alignmentState.wrapText })"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 10h12a3 3 0 0 1 0 6h-3M16 13l-3 3 3 3M4 20h7" /></svg></button>
       </div>
       <span class="xlsx-ribbon__separator" />
       <div class="xlsx-ribbon__group">
-        <select :value="numberFormatValue" class="xlsx-ribbon__number" aria-label="Number format" title="Number format" @change="setNumberFormat">
-          <option value="general">General</option>
-          <option value="number">Number</option>
-          <option value="currency">Currency</option>
-          <option value="percent">Percent</option>
-          <option value="date">Date</option>
+        <select :value="numberFormatValue" class="xlsx-ribbon__number" :aria-label="m.xlsx.ribbon.numberFormat" :title="m.xlsx.ribbon.numberFormat" @change="setNumberFormat">
+          <option value="general">{{ m.xlsx.ribbon.numberFormats.general }}</option>
+          <option value="number">{{ m.xlsx.ribbon.numberFormats.number }}</option>
+          <option value="currency">{{ m.xlsx.ribbon.numberFormats.currency }}</option>
+          <option value="percent">{{ m.xlsx.ribbon.numberFormats.percent }}</option>
+          <option value="date">{{ m.xlsx.ribbon.numberFormats.date }}</option>
+          <option value="text">{{ m.xlsx.ribbon.numberFormats.text }}</option>
         </select>
-        <button class="xlsx-ribbon__text-button" title="Currency" aria-label="Currency" @click="applyStyle(numberFormats.currency)">$</button>
-        <button class="xlsx-ribbon__text-button" title="Percent" aria-label="Percent" @click="applyStyle(numberFormats.percent)">%</button>
+        <button class="xlsx-ribbon__text-button" :title="m.xlsx.ribbon.currency" :aria-label="m.xlsx.ribbon.currency" @click="applyStyle(numberFormats.currency)">$</button>
+        <button class="xlsx-ribbon__text-button" :title="m.xlsx.ribbon.percent" :aria-label="m.xlsx.ribbon.percent" @click="applyStyle(numberFormats.percent)">%</button>
       </div>
       <span class="xlsx-ribbon__separator" />
       <div class="xlsx-ribbon__group">
-        <button class="xlsx-ribbon__action-button" :disabled="!hasSelection" @click="controller.mergeSelection()">Merge</button>
-        <button class="xlsx-ribbon__action-button" :disabled="!hasSelection" @click="controller.unmergeSelection()">Unmerge</button>
-        <button class="xlsx-ribbon__icon-button" title="All borders" aria-label="All borders" @click="applyBorders"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M12 4v16M4 12h16" /></svg></button>
+        <button class="xlsx-ribbon__action-button" :disabled="!hasSelection" @click="controller.mergeSelection()">{{ m.xlsx.ribbon.merge }}</button>
+        <button class="xlsx-ribbon__action-button" :disabled="!hasSelection" @click="controller.unmergeSelection()">{{ m.xlsx.ribbon.unmerge }}</button>
+        <button class="xlsx-ribbon__icon-button" :title="m.xlsx.ribbon.allBorders" :aria-label="m.xlsx.ribbon.allBorders" @click="applyBorders"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" /><path d="M12 4v16M4 12h16" /></svg></button>
       </div>
     </fieldset>
 
-    <label class="xlsx-ribbon__readonly" title="Read-only mode">
+    <label class="xlsx-ribbon__readonly" :title="m.xlsx.ribbon.readOnlyTitle">
       <input data-testid="xlsx-ribbon-read-only" type="checkbox" :checked="isReadOnly" @change="emit('update:readOnly', ($event.target as HTMLInputElement).checked)" />
-      <span>Read only</span>
+      <span>{{ m.common.readOnly }}</span>
     </label>
   </div>
 </template>
@@ -84,6 +85,8 @@ import {
   type XlsxResolvedCellStyle,
   type XlsxViewerController,
 } from "@arcships/xlsx-core";
+import { classifyNumberFormat } from "../composables/cell-input";
+import { useXlsxMessages } from "../i18n";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -96,11 +99,12 @@ const emit = defineEmits<{
 }>();
 
 const fontSizes = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48];
+const m = useXlsxMessages();
 const textColor = ref("#18181b");
 const fillColor = ref("#fff2cc");
 const hasWorkbook = computed(() => props.controller.tabs.length > 0);
 const hasSelection = computed(() => Boolean(props.controller.selection));
-const isReadOnly = computed(() => props.readOnly ?? props.controller.readOnly);
+const isReadOnly = computed(() => props.readOnly === true || props.controller.isEditingLocked === true || (props.readOnly === undefined && props.controller.readOnly));
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? value as Record<string, unknown> : {};
@@ -152,13 +156,23 @@ const fontSizeValue = computed(() => typeof activeFont.value.size === "number" &
   ? activeFont.value.size
   : 11);
 const numberFormatValue = computed(() => {
-  const numberFormat = asRecord(activeCellStyle.value.numberFormat);
-  const format = String(numberFormat.formatString ?? "").toLowerCase();
-  if (format.includes("%")) return "percent";
-  if (/[$€£¥]/.test(format)) return "currency";
-  if (/[dmy]/.test(format)) return "date";
-  if (format && format !== "general") return "number";
-  return "general";
+  // Built-in formats may arrive as an id without a formatString (e.g. numFmtId
+  // 14), and colour sections such as `[Red]` must not read as date tokens.
+  switch (classifyNumberFormat(asRecord(activeCellStyle.value.numberFormat))) {
+    case "percent":
+      return "percent";
+    case "currency":
+      return "currency";
+    case "date":
+    case "time":
+      return "date";
+    case "text":
+      return "text";
+    case "general":
+      return "general";
+    default:
+      return "number";
+  }
 });
 const selectedTextColor = computed(() => resolveWorkbookColor(
   asRecord(activeFont.value.color),
@@ -178,6 +192,7 @@ const numberFormats = {
   currency: { numberFormat: { formatType: "custom" as const, formatString: "$#,##0.00" } },
   percent: { numberFormat: { formatType: "custom" as const, formatString: "0.00%" } },
   date: { numberFormat: { formatType: "custom" as const, formatString: "m/d/yyyy" } },
+  text: { numberFormat: { formatType: "custom" as const, formatString: "@" } },
 };
 
 function applyStyle(style: XlsxCellStyleInput): void {
@@ -271,7 +286,19 @@ function applyBorders(): void {
 .xlsx-ribbon select:focus-visible,
 .xlsx-ribbon__color:focus-within { outline: 2px solid #2563eb; outline-offset: 2px; }
 
-@media (max-width: 560px) {
+@container xlsx-viewer (max-width: 560px) {
   .xlsx-ribbon__readonly span { display: none; }
+}
+
+@media (pointer: coarse) {
+  .xlsx-ribbon button,
+  .xlsx-ribbon select,
+  .xlsx-ribbon input {
+    min-height: 44px;
+  }
+  .xlsx-ribbon__icon-button,
+  .xlsx-ribbon__text-button {
+    min-width: 44px;
+  }
 }
 </style>

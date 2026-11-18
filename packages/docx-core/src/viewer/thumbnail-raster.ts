@@ -7,8 +7,12 @@
  *
  * - editor-only chrome (selection rects, caret, handles) is stripped from the
  *   clone before serialization;
+ * - scoped component CSS is carried into the clone as inline styles because a
+ *   `foreignObject` cannot see the host document's stylesheets;
  * - large embedded data-URI images are swapped for cached, thumbnail-scale
  *   versions so serialize/encode/decode stop round-tripping megabytes;
+ * - image decodes are bounded, so a stalled decoder cannot pin a thumbnail
+ *   request in the rendering state forever;
  * - rasters land on reusable surface canvases held in an LRU cache;
  * - work runs through a serial idle-time queue that coalesces repeat requests
  *   per target canvas instead of fanning out `Promise.all` storms.
@@ -23,6 +27,175 @@ const THUMBNAIL_EXCLUDED_CLONE_SELECTOR = [
   '[data-image-resize-handle="true"]',
   '[data-docx-table-move-handle="true"]',
 ].join(",");
+
+/**
+ * Editor state classes that paint extra chrome on otherwise-document content.
+ * They cannot be removed with an exclusion attribute because they sit on the
+ * paragraph/table cell itself, so the raster pass drops the class and skips
+ * the background it contributes.
+ */
+const THUMBNAIL_EDITOR_CHROME_CLASS_NAMES = new Set([
+  "docx-paragraph-host--active",
+  "docx-table-host--active",
+  "docx-table-cell--active",
+  "docx-floating-image--selected",
+]);
+
+/**
+ * Computed properties copied into the clone. A data-URI SVG has no access to
+ * the host document's stylesheets (scoped component CSS or `@font-face`), so
+ * the values that actually shape the page have to travel as inline styles.
+ * Layout-only state that the browser never paints (outline, box-shadow,
+ * cursor…) is deliberately omitted.
+ */
+const THUMBNAIL_INLINE_STYLE_PROPERTIES = [
+  "display",
+  "position",
+  "top",
+  "right",
+  "bottom",
+  "left",
+  "z-index",
+  "overflow",
+  "box-sizing",
+  "min-width",
+  "min-height",
+  "flex-direction",
+  "flex-wrap",
+  "flex-grow",
+  "flex-shrink",
+  "flex-basis",
+  "align-items",
+  "align-self",
+  "justify-content",
+  "gap",
+  "grid-template-columns",
+  "grid-template-rows",
+  "table-layout",
+  "border-collapse",
+  "border-spacing",
+  "background-color",
+  "border-top-width",
+  "border-top-style",
+  "border-top-color",
+  "border-right-width",
+  "border-right-style",
+  "border-right-color",
+  "border-bottom-width",
+  "border-bottom-style",
+  "border-bottom-color",
+  "border-left-width",
+  "border-left-style",
+  "border-left-color",
+  "padding-top",
+  "padding-right",
+  "padding-bottom",
+  "padding-left",
+  "margin-top",
+  "margin-right",
+  "margin-bottom",
+  "margin-left",
+  "color",
+  "font-family",
+  "font-size",
+  "font-weight",
+  "font-style",
+  "line-height",
+  "letter-spacing",
+  "word-spacing",
+  "text-align",
+  "text-decoration-line",
+  "text-transform",
+  "text-indent",
+  "white-space",
+  "word-break",
+  "overflow-wrap",
+  "vertical-align",
+  "list-style-type",
+  "list-style-position",
+  "opacity",
+] as const;
+
+/** Inherited properties are skipped when the parent already carries the value. */
+const THUMBNAIL_INHERITED_STYLE_PROPERTIES = new Set<string>([
+  "color",
+  "font-family",
+  "font-size",
+  "font-weight",
+  "font-style",
+  "line-height",
+  "letter-spacing",
+  "word-spacing",
+  "text-align",
+  "text-transform",
+  "text-indent",
+  "white-space",
+  "word-break",
+  "overflow-wrap",
+  "list-style-type",
+  "list-style-position",
+]);
+
+/** Default values that do not need to be written into the clone. */
+const THUMBNAIL_INLINE_STYLE_DEFAULTS: Readonly<Record<string, string>> = {
+  display: "inline",
+  position: "static",
+  top: "auto",
+  right: "auto",
+  bottom: "auto",
+  left: "auto",
+  "z-index": "auto",
+  overflow: "visible",
+  "box-sizing": "content-box",
+  "flex-direction": "row",
+  "flex-wrap": "nowrap",
+  "flex-grow": "0",
+  "flex-shrink": "1",
+  "flex-basis": "auto",
+  "align-items": "normal",
+  "align-self": "auto",
+  "justify-content": "normal",
+  gap: "normal",
+  "grid-template-columns": "none",
+  "grid-template-rows": "none",
+  "table-layout": "auto",
+  "border-collapse": "separate",
+  "border-spacing": "0px",
+  "background-color": "rgba(0, 0, 0, 0)",
+  "border-top-width": "0px",
+  "border-top-style": "none",
+  "border-right-width": "0px",
+  "border-right-style": "none",
+  "border-bottom-width": "0px",
+  "border-bottom-style": "none",
+  "border-left-width": "0px",
+  "border-left-style": "none",
+  "padding-top": "0px",
+  "padding-right": "0px",
+  "padding-bottom": "0px",
+  "padding-left": "0px",
+  "margin-top": "0px",
+  "margin-right": "0px",
+  "margin-bottom": "0px",
+  "margin-left": "0px",
+  "letter-spacing": "normal",
+  "word-spacing": "0px",
+  "text-align": "start",
+  "text-decoration-line": "none",
+  "text-transform": "none",
+  "text-indent": "0px",
+  "white-space": "normal",
+  "word-break": "normal",
+  "overflow-wrap": "normal",
+  "vertical-align": "baseline",
+  "list-style-type": "disc",
+  "list-style-position": "outside",
+  opacity: "1",
+};
+
+const THUMBNAIL_IMAGE_DECODE_TIMEOUT_MS = 2_000;
+const THUMBNAIL_SURFACE_DECODE_TIMEOUT_MS = 10_000;
+const THUMBNAIL_TRANSPARENT_COLORS = new Set(["rgba(0, 0, 0, 0)", "transparent"]);
 
 const THUMBNAIL_IMAGE_DOWNSCALE_MIN_DATA_URI_LENGTH = 32_768;
 const THUMBNAIL_IMAGE_DOWNSCALE_MAX_DIMENSION_PX = 512;
@@ -125,6 +298,130 @@ function thumbnailSvgDataUri(svg: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+function thumbnailComputedStyle(
+  element: Element
+): CSSStyleDeclaration | undefined {
+  try {
+    const view = element.ownerDocument?.defaultView;
+    if (view && typeof view.getComputedStyle === "function") {
+      return view.getComputedStyle(element);
+    }
+    if (typeof getComputedStyle === "function") {
+      return getComputedStyle(element);
+    }
+  } catch {
+    // Detached elements can refuse computed styles; the clone keeps whatever
+    // inline styles it already had.
+  }
+  return undefined;
+}
+
+function thumbnailChromeClassNames(element: Element): string[] {
+  const names: string[] = [];
+  const classList = (element as HTMLElement).classList;
+  if (!classList || typeof classList.contains !== "function") return names;
+  for (const className of THUMBNAIL_EDITOR_CHROME_CLASS_NAMES) {
+    if (classList.contains(className)) names.push(className);
+  }
+  return names;
+}
+
+function isDefaultThumbnailStyleValue(
+  property: string,
+  value: string
+): boolean {
+  if (property === "background-color") {
+    return THUMBNAIL_TRANSPARENT_COLORS.has(value);
+  }
+  if (property === "border-spacing") {
+    return value === "0px" || value === "0px 0px";
+  }
+  if (property === "min-width" || property === "min-height") {
+    return value === "auto" || value === "0px";
+  }
+  return THUMBNAIL_INLINE_STYLE_DEFAULTS[property] === value;
+}
+
+function writeThumbnailComputedStyle(
+  liveElement: Element,
+  cloneElement: HTMLElement,
+  computedStyle: CSSStyleDeclaration | undefined,
+  parentStyle: CSSStyleDeclaration | undefined
+): void {
+  const chromeClassNames = thumbnailChromeClassNames(liveElement);
+  if (chromeClassNames.length > 0 && cloneElement.classList) {
+    cloneElement.classList.remove(...chromeClassNames);
+  }
+  if (!computedStyle) return;
+  if (!cloneElement.style || typeof cloneElement.style.setProperty !== "function") {
+    return;
+  }
+
+  for (const property of THUMBNAIL_INLINE_STYLE_PROPERTIES) {
+    // The live computed background includes the active-paragraph / active-cell
+    // tint. Dropping the class is not enough, so skip the background entirely
+    // and let any document-supplied inline background survive.
+    if (property === "background-color" && chromeClassNames.length > 0) {
+      continue;
+    }
+    const value = computedStyle.getPropertyValue(property);
+    if (!value) continue;
+    if (
+      THUMBNAIL_INHERITED_STYLE_PROPERTIES.has(property) &&
+      parentStyle?.getPropertyValue(property) === value
+    ) {
+      continue;
+    }
+    if (isDefaultThumbnailStyleValue(property, value)) continue;
+    cloneElement.style.setProperty(property, value);
+  }
+}
+
+/**
+ * Walks the live page and its clone in parallel, copying computed styles onto
+ * the clone and dropping editor chrome. The live DOM is never mutated.
+ */
+function inlineThumbnailComputedStyles(
+  liveElement: Element,
+  cloneElement: HTMLElement,
+  parentStyle?: CSSStyleDeclaration
+): void {
+  if (
+    typeof liveElement.matches === "function" &&
+    liveElement.matches(THUMBNAIL_EXCLUDED_CLONE_SELECTOR)
+  ) {
+    if (typeof cloneElement.remove === "function") cloneElement.remove();
+    return;
+  }
+
+  const computedStyle = thumbnailComputedStyle(liveElement);
+  writeThumbnailComputedStyle(
+    liveElement,
+    cloneElement,
+    computedStyle,
+    parentStyle
+  );
+
+  // Snapshot the child lists up front: removing an excluded node mutates the
+  // clone's live `childNodes` collection while indexes still refer to the
+  // original structure. Minimal non-DOM test doubles may not model children.
+  if (!liveElement.childNodes || !cloneElement.childNodes) return;
+  const liveChildren = Array.from(liveElement.childNodes);
+  const cloneChildren = Array.from(cloneElement.childNodes);
+  const childCount = Math.min(liveChildren.length, cloneChildren.length);
+  for (let index = 0; index < childCount; index += 1) {
+    const liveChild = liveChildren[index];
+    const cloneChild = cloneChildren[index];
+    if (!liveChild || !cloneChild) continue;
+    if (liveChild.nodeType !== 1 || cloneChild.nodeType !== 1) continue;
+    inlineThumbnailComputedStyles(
+      liveChild as Element,
+      cloneChild as HTMLElement,
+      computedStyle
+    );
+  }
+}
+
 /**
  * True when an `<img>` source is a raster data URI large enough that swapping
  * it for a downscaled copy meaningfully shrinks the serialized page markup.
@@ -139,36 +436,75 @@ export function thumbnailImageSourceQualifiesForDownscale(
   );
 }
 
-async function loadThumbnailImage(src: string): Promise<HTMLImageElement> {
+/**
+ * Decodes an image source, rejecting when the decoder does not settle inside
+ * `timeoutMs`. A stalled decoder must never leave a thumbnail request pending
+ * forever; callers fall back to a placeholder box instead.
+ */
+async function loadThumbnailImage(
+  src: string,
+  timeoutMs: number = THUMBNAIL_IMAGE_DECODE_TIMEOUT_MS
+): Promise<HTMLImageElement> {
   const image = new Image();
   image.decoding = "async";
+
   const loaded = new Promise<HTMLImageElement>((resolve, reject) => {
-    image.onload = () => resolve(image);
-    image.onerror = () => {
-      reject(new Error("Failed to decode DOCX thumbnail image."));
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const cleanup = (): void => {
+      image.onload = null;
+      image.onerror = null;
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
     };
-  });
-  image.src = src;
-  if (typeof image.decode === "function") {
-    try {
-      await image.decode();
-      return image;
-    } catch {
-      // Some engines reject decode() for sources they still paint correctly;
-      // fall back to the load event before giving up.
+    const succeed = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(image);
+    };
+    const fail = (error: Error): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    image.onload = () => succeed();
+    image.onerror = () => {
+      fail(new Error("Failed to decode DOCX thumbnail image."));
+    };
+    if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
+      timer = setTimeout(() => {
+        fail(new Error("Timed out decoding DOCX thumbnail image."));
+      }, timeoutMs);
     }
-  }
+
+    image.src = src;
+
+    if (typeof image.decode === "function") {
+      image.decode().then(succeed, () => {
+        // Some engines reject decode() for sources they still paint correctly;
+        // the load/error events above decide the final outcome.
+      });
+    }
+  });
+
   return loaded;
 }
 
 async function downscaleThumbnailImageDataUri(
-  src: string
+  src: string,
+  decodeTimeoutMs?: number
 ): Promise<string | undefined> {
   if (typeof document === "undefined") {
     return undefined;
   }
 
-  const image = await loadThumbnailImage(src);
+  const image = await loadThumbnailImage(src, decodeTimeoutMs);
   const naturalWidth = image.naturalWidth || image.width;
   const naturalHeight = image.naturalHeight || image.height;
   if (!naturalWidth || !naturalHeight) {
@@ -209,9 +545,12 @@ async function downscaleThumbnailImageDataUri(
  * resulting page surface with its own byte and entry limits.
  */
 export function getDownscaledThumbnailImageDataUri(
-  src: string
+  src: string,
+  options: { decodeTimeoutMs?: number } = {}
 ): Promise<string | undefined> {
-  return downscaleThumbnailImageDataUri(src).catch(() => undefined);
+  return downscaleThumbnailImageDataUri(src, options.decodeTimeoutMs).catch(
+    () => undefined
+  );
 }
 
 /**
@@ -755,11 +1094,10 @@ async function buildDocxThumbnailSvgMarkup(params: {
   const { pageElement, sourceWidthPx, sourceHeightPx, widthPx, heightPx } =
     params;
   const clone = pageElement.cloneNode(true) as HTMLElement;
-  clone
-    .querySelectorAll(THUMBNAIL_EXCLUDED_CLONE_SELECTOR)
-    .forEach((excluded) => {
-      excluded.remove();
-    });
+  // Scoped component CSS never reaches the SVG foreignObject, so carry the
+  // computed values that shape the page into the clone as inline styles while
+  // removing editor-only chrome at the same time.
+  inlineThumbnailComputedStyles(pageElement, clone);
 
   const cloneImages = Array.from(clone.querySelectorAll("img"));
   await Promise.all(
@@ -824,7 +1162,10 @@ export async function rasterizeDocxThumbnailSurface(params: {
   // (bug 156176), but a data:-URI SVG is explicitly exempted (bug 180301), and
   // Chrome/Firefox never taint either way. Keeping the canvas clean lets
   // callers run toDataURL()/toBlob() for client-side thumbnail export.
-  const image = await loadThumbnailImage(thumbnailSvgDataUri(svgMarkup));
+  const image = await loadThumbnailImage(
+    thumbnailSvgDataUri(svgMarkup),
+    THUMBNAIL_SURFACE_DECODE_TIMEOUT_MS
+  );
 
   const surface = document.createElement("canvas");
   surface.width = Math.max(1, Math.round(params.pixelWidthPx));

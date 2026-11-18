@@ -4,7 +4,11 @@ import {
   sanitizeOfficeUrl,
   type OfficeSourceKind,
 } from "./errors";
-import { assertOfficeInputBytes, type OfficeLimits } from "./limits";
+import {
+  assertOfficeInputBytes,
+  resolveOfficeInputByteLimit,
+  type OfficeLimits,
+} from "./limits";
 import {
   resolveOfficeUrl,
   type OfficeFetch,
@@ -21,6 +25,11 @@ export interface OfficeFileLike {
 
 export type OfficeSource =
   | { kind: "file"; file: OfficeFileLike; name?: string }
+  /**
+   * Byte sources are read in place: `loadOfficeSource` returns the caller's
+   * buffer instead of copying it, so hosts must not reuse the buffer for a
+   * differently sized archive while a load is running.
+   */
   | { kind: "bytes"; bytes: ArrayBuffer; name?: string }
   | { kind: "url"; url: string; name?: string };
 
@@ -59,6 +68,32 @@ function failFetch(message: string, url: string, cause?: unknown): never {
   });
 }
 
+function failRead(error: unknown, url: string): never {
+  if (isOfficeAbortError(error)) {
+    throw new OfficeLoadError({
+      code: "ABORTED",
+      message: "加载已取消。",
+      sourceKind: "url",
+      phase: "read",
+      url,
+    });
+  }
+  failFetch("无法读取文档响应。", url, error);
+}
+
+function inputLimitError(url: string, actual: number, allowed: number): OfficeLoadError {
+  return new OfficeLoadError({
+    code: "LIMIT_EXCEEDED",
+    message: `输入大小 ${actual} 字节超过允许值 ${allowed} 字节。`,
+    sourceKind: "url",
+    phase: "input",
+    url,
+    limit: "maxInputBytes",
+    actual,
+    allowed,
+  });
+}
+
 function parseContentLength(response: OfficeFetchResponse): number | undefined {
   const raw = response.headers?.get("content-length");
   if (!raw) return undefined;
@@ -73,6 +108,88 @@ function resolveFetch(policy: OfficeUrlPolicy): OfficeFetch | undefined {
   return async (url, init) => platformFetch(url, init) as unknown as OfficeFetchResponse;
 }
 
+async function cancelResponseBody(response: OfficeFetchResponse): Promise<void> {
+  const body = response.body;
+  if (!body || typeof body.cancel !== "function") return;
+  try {
+    await body.cancel();
+  } catch {
+    // The limit error above is the useful public failure.
+  }
+}
+
+/**
+ * Read a response body without ever allocating more than `allowed` bytes.
+ *
+ * The body is consumed chunk by chunk; as soon as the running total crosses
+ * the cap the reader is cancelled and a LIMIT_EXCEEDED error is thrown, so a
+ * chunked response without Content-Length cannot force a full allocation.
+ * Custom fetchers that only expose `arrayBuffer()` keep working, but their
+ * size can only be checked after the read.
+ */
+async function readResponseBody(
+  response: OfficeFetchResponse,
+  allowed: number | undefined,
+  signal: AbortSignal | undefined,
+  url: string,
+): Promise<ArrayBuffer> {
+  const body = response.body;
+  if (!body || typeof body.getReader !== "function") {
+    try {
+      return await response.arrayBuffer();
+    } catch (error) {
+      failRead(error, url);
+    }
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const cancelReader = async (): Promise<void> => {
+    try {
+      await reader.cancel();
+    } catch {
+      // The size or abort error below remains the useful public failure.
+    }
+  };
+  try {
+    for (;;) {
+      if (signal?.aborted) {
+        await cancelReader();
+        throw new OfficeLoadError({
+          code: "ABORTED",
+          message: "加载已取消。",
+          sourceKind: "url",
+          phase: "read",
+          url,
+        });
+      }
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || value.byteLength === 0) continue;
+      total += value.byteLength;
+      if (allowed !== undefined && total > allowed) {
+        await cancelReader();
+        throw inputLimitError(url, total, allowed);
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof OfficeLoadError) throw error;
+    failRead(error, url);
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes.buffer;
+}
+
 export async function loadOfficeSource(
   source: OfficeSource,
   options: LoadOfficeSourceOptions = {},
@@ -80,11 +197,16 @@ export async function loadOfficeSource(
   if (options.signal?.aborted) {
     throw new OfficeLoadError({ code: "ABORTED", message: "加载已取消。", sourceKind: source.kind });
   }
+  // Validate the configured cap up front: a non-positive or non-finite value
+  // is a configuration error, never an implicit "unlimited".
+  const allowed = resolveOfficeInputByteLimit(options.limits);
 
   if (source.kind === "bytes") {
     assertOfficeInputBytes(source.bytes.byteLength, options.limits);
+    // Byte sources are handed over, not copied: callers own their buffer and a
+    // slice would double peak memory for large documents.
     return {
-      buffer: source.bytes.slice(0),
+      buffer: source.bytes,
       sourceKind: "bytes",
       fileName: source.name,
     };
@@ -125,7 +247,8 @@ export async function loadOfficeSource(
   try {
     response = await fetchImpl(requestedUrl.href, {
       credentials: "omit",
-      redirect: "error",
+      // Follow redirects, then revalidate the final URL below before reading.
+      redirect: "follow",
       signal: options.signal,
     });
   } catch (error) {
@@ -143,25 +266,16 @@ export async function loadOfficeSource(
   if (!response.ok) failFetch(`文档地址返回失败状态 ${response.status}。`, requestedUrl.href);
   if (!response.url) failFetch("文档响应缺少最终地址。", requestedUrl.href);
 
+  // A followed redirect is only trusted after the final address passes the
+  // same protocol/origin policy as the originally requested address.
   const finalUrl = resolveOfficeUrl(response.url, policy);
   const contentLength = parseContentLength(response);
-  if (contentLength !== undefined) assertOfficeInputBytes(contentLength, options.limits);
-
-  let buffer: ArrayBuffer;
-  try {
-    buffer = await response.arrayBuffer();
-  } catch (error) {
-    if (isOfficeAbortError(error)) {
-      throw new OfficeLoadError({
-        code: "ABORTED",
-        message: "加载已取消。",
-        sourceKind: "url",
-        phase: "read",
-        url: finalUrl.href,
-      });
-    }
-    failFetch("无法读取文档响应。", finalUrl.href, error);
+  if (contentLength !== undefined && allowed !== undefined && contentLength > allowed) {
+    await cancelResponseBody(response);
+    throw inputLimitError(finalUrl.href, contentLength, allowed);
   }
+
+  const buffer = await readResponseBody(response, allowed, options.signal, finalUrl.href);
   assertOfficeInputBytes(buffer.byteLength, options.limits);
   return {
     buffer,

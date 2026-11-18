@@ -23,6 +23,16 @@
       <dd data-testid="worker-error-code">{{ errorCode }}</dd>
       <dt>错误阶段</dt>
       <dd data-testid="worker-error-phase">{{ errorPhase }}</dd>
+      <dt>限制</dt>
+      <dd data-testid="worker-error-limit">{{ errorLimit }}</dd>
+      <dt>实际 / 允许</dt>
+      <dd>
+        <span data-testid="worker-error-actual">{{ errorActual }}</span>
+        /
+        <span data-testid="worker-error-allowed">{{ errorAllowed }}</span>
+      </dd>
+      <dt>配置的 maxParseMs</dt>
+      <dd data-testid="worker-configured-parse-limit">{{ configuredParseLimit }}</dd>
       <dt>已终止 Worker</dt>
       <dd data-testid="worker-terminated-count">{{ terminatedCount }}</dd>
       <dt>恢复后工作表</dt>
@@ -49,6 +59,10 @@ const state = ref<CaseState>("idle")
 const busy = ref(false)
 const errorCode = ref("")
 const errorPhase = ref("")
+const errorLimit = ref("")
+const errorActual = ref("")
+const errorAllowed = ref("")
+const configuredParseLimit = ref(0)
 const terminatedCount = ref(0)
 const recoveredSheets = ref(0)
 const heartbeat = ref(0)
@@ -81,18 +95,32 @@ async function sampleBuffer(): Promise<ArrayBuffer> {
 }
 
 function normalizeFailure(error: unknown): void {
-  const value = error as { code?: unknown; phase?: unknown; message?: unknown }
+  const value = error as {
+    code?: unknown
+    phase?: unknown
+    limit?: unknown
+    actual?: unknown
+    allowed?: unknown
+    message?: unknown
+  }
   errorCode.value = typeof value?.code === "string" ? value.code : "WORKER_FAILED"
   errorPhase.value = typeof value?.phase === "string" ? value.phase : "parse"
+  errorLimit.value = typeof value?.limit === "string" ? value.limit : ""
+  errorActual.value = typeof value?.actual === "number" ? String(value.actual) : ""
+  errorAllowed.value = typeof value?.allowed === "number" ? String(value.allowed) : ""
   recordDiagnostic({
     type: "worker-error",
     code: errorCode.value,
     phase: errorPhase.value,
+    limit: errorLimit.value || undefined,
+    actual: typeof value?.actual === "number" ? value.actual : undefined,
+    allowed: typeof value?.allowed === "number" ? value.allowed : undefined,
     message: typeof value?.message === "string" ? value.message : String(error),
   })
 }
 
 function createTrackedRuntime(maxParseMs: number): XlsxRuntime {
+  configuredParseLimit.value = maxParseMs
   const runtime = createXlsxRuntime({
     createWorker: trackedHangingWorker,
     limits: { maxParseMs },
@@ -117,6 +145,10 @@ function resetCase(): void {
   state.value = "running"
   errorCode.value = ""
   errorPhase.value = ""
+  errorLimit.value = ""
+  errorActual.value = ""
+  errorAllowed.value = ""
+  configuredParseLimit.value = 0
   recoveredSheets.value = 0
   diagnostics.value = []
 }

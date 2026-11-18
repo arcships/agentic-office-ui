@@ -3,7 +3,7 @@
     :class="['office-region-selector', props.className, { 'is-disabled': props.disabled, 'is-drawing': drawing }]"
     :tabindex="props.disabled ? -1 : 0"
     role="group"
-    :aria-label="props.ariaLabel"
+    :aria-label="props.ariaLabel ?? m.vueUi.regionSelector.defaultAriaLabel"
     data-testid="office-region-selector"
     @pointerdown="onPointerDown"
     @pointermove="onPointerMove"
@@ -19,29 +19,37 @@
       :aria-label="regionDescription"
       @pointerdown.stop
     >
-      <span class="office-region-selector__label">选定区域</span>
+      <span class="office-region-selector__label">{{ m.vueUi.regionSelector.label }}</span>
       <span v-for="handle in handles" :key="handle" :class="['office-region-selector__handle', `is-${handle}`]" />
     </div>
     <span class="office-region-selector__instructions">
-      拖动以框选区域。方向键移动区域，按住 Shift 配合方向键调整大小，Enter 确认，Escape 取消。
+      {{ m.vueUi.regionSelector.instructions }}
     </span>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import { normalizedRectFromPoints } from "@arcships/office-interaction"
+import { formatOfficeMessage, normalizedRectFromPoints, resolveOfficeMessages } from "@arcships/office-interaction"
 import type { NormalizedPoint, NormalizedRect } from "@arcships/office-interaction"
 import type { OfficeRegionSelectorProps } from "../types"
+import { useOfficeUiMessages } from "../i18n"
 
 const props = withDefaults(defineProps<OfficeRegionSelectorProps>(), {
   modelValue: null,
   disabled: false,
   minSize: 0.005,
   keyboardStep: 0.01,
-  ariaLabel: "选择文档区域",
+  ariaLabel: undefined,
   className: "",
+  locale: undefined,
+  messages: undefined,
 })
+
+const inheritedMessages = useOfficeUiMessages()
+const m = computed(() => (props.locale || props.messages)
+  ? resolveOfficeMessages(props.locale, props.messages)
+  : inheritedMessages.value)
 
 const emit = defineEmits<{
   "update:modelValue": [rect: NormalizedRect | null]
@@ -59,8 +67,13 @@ const activePointerId = ref<number | null>(null)
 const currentRect = computed(() => draft.value ?? props.modelValue ?? null)
 const drawing = computed(() => activePointerId.value !== null)
 const regionDescription = computed(() => currentRect.value
-  ? `区域，左侧 ${Math.round(currentRect.value.x * 100)}%，顶部 ${Math.round(currentRect.value.y * 100)}%，宽 ${Math.round(currentRect.value.width * 100)}%，高 ${Math.round(currentRect.value.height * 100)}%`
-  : "尚未选择区域",
+  ? formatOfficeMessage(m.value.vueUi.regionSelector.description, {
+    left: Math.round(currentRect.value.x * 100),
+    top: Math.round(currentRect.value.y * 100),
+    width: Math.round(currentRect.value.width * 100),
+    height: Math.round(currentRect.value.height * 100),
+  })
+  : m.value.vueUi.regionSelector.noSelection,
 )
 
 function clamp(value: number, min = 0, max = 1): number {

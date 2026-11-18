@@ -30,8 +30,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onUnmounted } from "vue"
+import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted, onUnmounted } from "vue"
 import type {
+  DocxFloatingPageOriginPx,
   DocxEditorController,
   DocxTextRange,
   NumberingDefinitionSet,
@@ -42,19 +43,17 @@ import {
   compareTextRangeBoundaries,
   paragraphText,
   paragraphIsList,
+  paragraphTypographyStyle,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
+import { useDocxMessages } from "../i18n"
+import { paragraphStyleToCss } from "../render/paragraph-style"
 import { renderStaticHtml } from "../render/static-html"
 import {
   restoreDomSelectionFromTextRange,
   syncDomSelectionToEditor,
+  readDocxTextHostText,
 } from "../composables/editor-selection"
-
-// ── Constants ──────────────────────────────────────────────────────
-const HEADING_FONT_SIZES: Record<number, string> = {
-  1: "2rem", 2: "1.6rem", 3: "1.35rem",
-  4: "1.2rem", 5: "1.05rem", 6: "0.95rem",
-}
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
@@ -71,8 +70,33 @@ const props = withDefaults(
     pageNumber?: number
     totalPages?: number
     pageNumberFormat?: string
+    sectionPages?: number
+    resolveStyleRefFieldValue?: (
+      target: string,
+      beforeNodeIndex?: number,
+    ) => string | undefined
+    resolveBookmarkFieldValue?: (target: string) => string | undefined
+    resolveBookmarkPageNumber?: (target: string) => number | undefined
+    fieldResolutionNodeIndex?: number
     withinHeaderFooter?: boolean
     headerFooterRegion?: "header" | "footer"
+    noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
+    skipImageChildIndexes?: readonly number[]
+    /** Page-relative origin used to place margin/page/column anchored images. */
+    floatingPageOriginPx?: DocxFloatingPageOriginPx
+    /** Space to insert above the paragraph so it clears an overflowing float. */
+    wrapClearanceTopPx?: number
+    /**
+     * Render only this wrap-line slice of the paragraph (pagination/columns).
+     * The host clips overflow and offsets the content so the slice starts at
+     * its own top edge. Ignored while editing.
+     */
+    lineRange?: {
+      startLineIndex: number
+      endLineIndex: number
+      totalLineCount: number
+      lineHeightPx: number
+    }
   }>(),
   {
     editable: false,
@@ -85,6 +109,7 @@ const emit = defineEmits<{
   focus: [nodeIndex: number]
   blur: [nodeIndex: number]
   click: [nodeIndex: number, event: MouseEvent]
+  measure: [nodeIndex: number, heightPx: number]
 }>()
 
 // ── State ──────────────────────────────────────────────────────────
@@ -92,6 +117,9 @@ const paragraphEl = ref<HTMLElement | undefined>()
 const draftText = ref<string | null>(null)
 const draftDirty = ref(false)
 const isComposing = ref(false)
+let draftBaseText: string | undefined
+let draftDocumentNonce: number | undefined
+let unregisterDraftFlusher: (() => void) | undefined
 
 // ── Computed ───────────────────────────────────────────────────────
 const isActiveParagraph = computed(() => {
@@ -103,17 +131,56 @@ const isActiveParagraph = computed(() => {
   return false
 })
 
+const m = useDocxMessages()
 const paragraphStyle = computed<Record<string, any>>(() => {
-  const style = props.paragraph.style
-  return {
-    margin: "0",
-    minHeight: "1em",
-    textAlign: (style?.align as any) ?? undefined,
-    fontWeight: style?.headingLevel ? 700 : undefined,
-    fontSize: style?.headingLevel
-      ? HEADING_FONT_SIZES[style.headingLevel]
-      : undefined,
+  const resolved: Record<string, any> = {
+    "--docx-editor-placeholder": m.value.docx.editor.placeholder,
+    ...paragraphStyleToCss(props.paragraph, {
+      numberingDefinitions: props.numberingDefinitions,
+    }),
+    // Keep the shared paragraph typography (alignment/direction) too.
+    ...paragraphTypographyStyle(props.paragraph.style),
   }
+  // A floating image that outlives this paragraph is cleared by pushing the next
+  // paragraph below it; the paragraph's own spacing-before still applies.
+  const wrapClearanceTopPx = Math.max(0, Math.round(props.wrapClearanceTopPx ?? 0))
+  if (wrapClearanceTopPx > 0) {
+    const modelMarginTopPx = Number.parseFloat(String(resolved.marginTop ?? ""))
+    const baseMarginTopPx = Number.isFinite(modelMarginTopPx) ? modelMarginTopPx : 0
+    resolved.marginTop = `${baseMarginTopPx + wrapClearanceTopPx}px`
+  }
+
+  const lineRange = props.lineRange
+  if (lineRange && !props.editable) {
+    const lineHeightPx = Math.max(1, Math.round(lineRange.lineHeightPx))
+    const startLineIndex = Math.max(0, Math.round(lineRange.startLineIndex))
+    const endLineIndex = Math.max(
+      startLineIndex + 1,
+      Math.round(lineRange.endLineIndex)
+    )
+    const sliceLineCount = endLineIndex - startLineIndex
+    const marginTopPx = Number.parseFloat(String(resolved.marginTop ?? ""))
+    const marginBottomPx = Number.parseFloat(String(resolved.marginBottom ?? ""))
+    const keepsTopSpacing = startLineIndex === 0
+    const keepsBottomSpacing = endLineIndex >= lineRange.totalLineCount
+    const topSpacingPx = keepsTopSpacing && Number.isFinite(marginTopPx)
+      ? marginTopPx
+      : 0
+    const bottomSpacingPx = keepsBottomSpacing && Number.isFinite(marginBottomPx)
+      ? marginBottomPx
+      : 0
+    // Pull the paragraph up so the first line of the slice lands at the top of
+    // the slot, then clip everything after the slice.
+    resolved.marginTop = `${topSpacingPx - startLineIndex * lineHeightPx}px`
+    resolved.marginBottom = `${bottomSpacingPx}px`
+    resolved.height = `${Math.max(
+      lineHeightPx,
+      sliceLineCount * lineHeightPx + topSpacingPx + bottomSpacingPx
+    )}px`
+    resolved.overflow = "hidden"
+  }
+
+  return resolved
 })
 
 const displayHtml = computed(() => {
@@ -125,8 +192,22 @@ const displayHtml = computed(() => {
     withinHeaderFooter: props.withinHeaderFooter,
     headerFooterRegion: props.headerFooterRegion,
     pageNumberFormat: props.pageNumberFormat,
+    sectionPages: props.sectionPages,
+    resolveStyleRefFieldValue: props.resolveStyleRefFieldValue
+      ? (target: string) =>
+          props.resolveStyleRefFieldValue?.(
+            target,
+            props.fieldResolutionNodeIndex,
+          )
+      : undefined,
+    resolveBookmarkFieldValue: props.resolveBookmarkFieldValue,
+    resolveBookmarkPageNumber: props.resolveBookmarkPageNumber,
     skipFloatingImages: props.editable,
     renderWrappedFloatingImages: props.editable,
+    noteMarkerLabels: props.noteMarkerLabels,
+    skipImageChildIndexes: props.skipImageChildIndexes,
+    imageAltText: m.value.docx.image.alt,
+    imageMissingText: m.value.docx.image.missing,
   }
 
   const vnodes = renderParagraphRuns(
@@ -135,7 +216,7 @@ const displayHtml = computed(() => {
     theme,
     props.numberingLabel ? { label: props.numberingLabel } as any : undefined,
     undefined,
-    undefined,
+    props.floatingPageOriginPx,
     undefined,
     props.pageNumber,
     props.totalPages,
@@ -146,26 +227,23 @@ const displayHtml = computed(() => {
   return result.map((v) => renderStaticHtml(v)).join("")
 })
 
-// ── Draft management ───────────────────────────────────────────────
 function readCurrentDomText(): string {
   const root = paragraphEl.value
   if (!root) return ""
-
-  function readNode(node: Node): string {
-    const element = node as Element
-    if (element.matches?.("[data-docx-numbering-label='true']")) return ""
-    if (element.matches?.("[data-docx-image-child-index]")) return ""
-    if (element.tagName?.toLowerCase() === "br") return "\n"
-    if (node.nodeType === 3) return node.textContent ?? ""
-    return Array.from(node.childNodes).map(readNode).join("")
-  }
-
-  return readNode(root)
+  // Test renderers (and some host shims) expose only textContent.
+  if (!root.childNodes) return root.textContent ?? ""
+  // The shared reader skips numbering labels, note markers and tracked-change
+  // deletion/move-from runs, which are rendered but are not paragraph text.
+  return readDocxTextHostText(root)
 }
 
 function syncDraftFromDom(): void {
   if (!props.editable || !paragraphEl.value) return
   const domText = readCurrentDomText()
+  if (draftText.value === null) {
+    draftBaseText = paragraphText(props.paragraph)
+    draftDocumentNonce = props.controller?.documentLoadNonce
+  }
   draftText.value = domText
   draftDirty.value = domText !== paragraphText(props.paragraph)
 }
@@ -173,16 +251,40 @@ function syncDraftFromDom(): void {
 function clearDraft(): void {
   draftText.value = null
   draftDirty.value = false
+  draftBaseText = undefined
+  draftDocumentNonce = undefined
 }
 
-function commitDraft(): void {
+function commitDraft(requireUnchangedBase = false): void {
   if (draftText.value === null || !draftDirty.value) {
     clearDraft()
     return
   }
+  if (requireUnchangedBase) {
+    const controller = props.controller
+    const currentParagraph = controller?.model.nodes[props.paragraphIndex]
+    if (
+      !controller ||
+      draftDocumentNonce !== controller.documentLoadNonce ||
+      !currentParagraph ||
+      currentParagraph.type !== "paragraph" ||
+      paragraphText(currentParagraph) !== (draftBaseText ?? paragraphText(props.paragraph))
+    ) {
+      // The document changed under the draft (import/new document/external
+      // edit). Dropping the stale draft is safer than writing it elsewhere.
+      clearDraft()
+      return
+    }
+  }
   const text = draftText.value
   clearDraft()
   emit("textInput", props.paragraphIndex, text)
+}
+
+function flushDraft(): void {
+  if (!props.controller) return
+  if (props.editable) syncDraftFromDom()
+  commitDraft(true)
 }
 
 // ── Event handlers ─────────────────────────────────────────────────
@@ -191,10 +293,10 @@ function selectionRoot(): HTMLElement | undefined {
   return (element?.closest?.(".docx-editor-viewer") as HTMLElement | undefined) ?? element
 }
 
-function syncCurrentSelection(): void {
+function syncCurrentSelection(options?: { preservePendingRunStyle?: boolean }): void {
   const root = selectionRoot()
   if (!root || !props.controller) return
-  syncDomSelectionToEditor(props.controller, root)
+  syncDomSelectionToEditor(props.controller, root, undefined, options)
 }
 
 function currentSelectionOffsets(textLength: number): { start: number; end: number } {
@@ -299,7 +401,9 @@ function deleteAdjacentParagraph(direction: "backward" | "forward"): boolean {
 function onInput(_event: Event): void {
   if (!props.editable || isComposing.value) return
   syncDraftFromDom()
-  syncCurrentSelection()
+  // Typing expands the range before the draft is committed; keep the caret's
+  // pending run style until blur/export applies it to the inserted text.
+  syncCurrentSelection({ preservePendingRunStyle: true })
 }
 
 function onPointerDown(): void {
@@ -317,6 +421,19 @@ function onKeydown(event: KeyboardEvent): void {
   if (!props.editable || !props.controller) return
   if (isComposing.value || event.isComposing) return
   props.controller.beginSelectionSession("keyboard", { settleAfterMs: 120 })
+
+  if (event.key === "Tab" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    const currentText = readCurrentDomText()
+    if (!paragraphIsList(props.paragraph, currentText)) return
+    event.preventDefault()
+    syncDraftFromDom()
+    commitDraft()
+    const changed = props.controller.adjustSelectedListDepth(
+      event.shiftKey ? -1 : 1
+    )
+    if (changed) restoreControllerSelection()
+    return
+  }
 
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault()
@@ -376,7 +493,9 @@ function onFocus(): void {
 function onBlur(): void {
   if (!props.editable) return
   syncDraftFromDom()
-  commitDraft()
+  commitDraft(true)
+  // Blur closes the typing burst: the next edit is a new undo step.
+  props.controller?.endTextCommitBurst?.()
   emit("blur", props.paragraphIndex)
 }
 
@@ -388,20 +507,63 @@ function onCompositionStart(): void {
 function onCompositionEnd(_event: Event): void {
   isComposing.value = false
   syncDraftFromDom()
-  syncCurrentSelection()
+  syncCurrentSelection({ preservePendingRunStyle: true })
   props.controller?.clearSelectionSession("composition")
 }
 
-function onPaste(event: ClipboardEvent): void {
-  if (!props.editable) return
-  event.preventDefault()
-  const text = event.clipboardData?.getData("text/plain") ?? ""
-  if (text) {
-    // Insert plain text at cursor
-    document.execCommand("insertText", false, text)
-    syncDraftFromDom()
-    syncCurrentSelection()
+function clipboardHtmlToText(html: string): string {
+  if (!html) return ""
+  if (typeof DOMParser !== "undefined") {
+    const parsed = new DOMParser().parseFromString(html, "text/html")
+    parsed.querySelectorAll("script,style").forEach((node) => node.remove())
+    parsed.querySelectorAll("br").forEach((node) => node.replaceWith("\n"))
+    parsed.querySelectorAll("p,div,li,tr,h1,h2,h3,h4,h5,h6,blockquote").forEach((node) => {
+      node.append("\n")
+    })
+    return parsed.body?.textContent ?? ""
   }
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|tr|h[1-6]|blockquote)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+}
+
+function onPaste(event: ClipboardEvent): void {
+  if (!props.editable || !props.controller) return
+  const clipboard = event.clipboardData
+  const html = clipboard?.getData("text/html") ?? ""
+  const plain = clipboard?.getData("text/plain") ?? ""
+  const text = html ? clipboardHtmlToText(html) || plain : plain
+  if (!text) {
+    // Leave file/image clipboards to the browser instead of swallowing them.
+    return
+  }
+
+  event.preventDefault()
+  const currentText = readCurrentDomText()
+  const offsets = currentSelectionOffsets(currentText.length)
+  const controller = props.controller
+
+  // Use the model range for cross-paragraph selections; the local paragraph
+  // offsets can only describe a selection contained in this host.
+  const activeRange = controller.activeTextRange
+  if (activeRange && compareTextRangeBoundaries(activeRange.start, activeRange.end) < 0) {
+    syncDraftFromDom()
+    commitDraft(true)
+    const nextRange = controller.replaceExpandedSelection(text, activeRange)
+    if (nextRange) restoreControllerSelection()
+    return
+  }
+
+  const caretOffset = offsets.end + text.length
+  const nextText = `${currentText.slice(0, offsets.end)}${text}${currentText.slice(offsets.end)}`
+  if (nextText === currentText) return
+  clearDraft()
+  controller.commitParagraphText(props.paragraphIndex, nextText)
+  void nextTick(() => {
+    controller.setActiveTextRange(localTextRange(caretOffset, caretOffset))
+    restoreControllerSelection()
+  })
 }
 
 // ── Watch for model changes (clears draft when paragraph changes externally) ─
@@ -412,8 +574,52 @@ watch(
   }
 )
 
+let paragraphResizeObserver: ResizeObserver | undefined
+
+function emitMeasuredHeight(): void {
+  // A clipped line-range fragment reports only its slice height; feeding that
+  // back as the paragraph height would shrink the paragraph on every pass.
+  if (props.lineRange) return
+  const element = paragraphEl.value
+  if (!element) return
+  const marginTopPx = Number.parseFloat(String(paragraphStyle.value.marginTop ?? ""))
+  const marginBottomPx = Number.parseFloat(
+    String(paragraphStyle.value.marginBottom ?? "")
+  )
+  const heightPx =
+    element.offsetHeight +
+    (Number.isFinite(marginTopPx) ? marginTopPx : 0) +
+    (Number.isFinite(marginBottomPx) ? marginBottomPx : 0)
+  if (Number.isFinite(heightPx) && heightPx > 0) {
+    emit("measure", props.paragraphIndex, heightPx)
+  }
+}
+
+watch(
+  () => displayHtml.value,
+  () => { void nextTick(emitMeasuredHeight) },
+  { flush: "post" }
+)
+
+onMounted(() => {
+  unregisterDraftFlusher = props.controller?.registerTextDraftFlusher(flushDraft)
+  void nextTick(emitMeasuredHeight)
+  if (typeof ResizeObserver !== "undefined" && paragraphEl.value) {
+    paragraphResizeObserver = new ResizeObserver(() => emitMeasuredHeight())
+    paragraphResizeObserver.observe(paragraphEl.value)
+  }
+})
+
+onBeforeUnmount(() => {
+  flushDraft()
+  paragraphResizeObserver?.disconnect()
+  paragraphResizeObserver = undefined
+})
+
 onUnmounted(() => {
   if (isComposing.value) props.controller?.clearSelectionSession("composition")
+  unregisterDraftFlusher?.()
+  unregisterDraftFlusher = undefined
 })
 
 // ── Expose ─────────────────────────────────────────────────────────
@@ -423,6 +629,8 @@ defineExpose({
   restoreDraft(text: string) {
     draftText.value = text
     draftDirty.value = text !== paragraphText(props.paragraph)
+    draftBaseText = paragraphText(props.paragraph)
+    draftDocumentNonce = props.controller?.documentLoadNonce
   },
 })
 </script>
@@ -434,15 +642,12 @@ defineExpose({
   outline: none;
   white-space: pre-wrap;
   word-wrap: break-word;
-  line-height: 1.35;
-  font-family: "Calibri", sans-serif;
-  font-size: 11pt;
 }
 .docx-paragraph-host--editable {
   cursor: text;
 }
 .docx-paragraph-host--editable:empty::before {
-  content: "Type here...";
+  content: var(--docx-editor-placeholder);
   color: #9ca3af;
 }
 .docx-paragraph-host--active {

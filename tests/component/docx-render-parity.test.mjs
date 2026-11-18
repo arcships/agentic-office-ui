@@ -9,7 +9,14 @@ import {
   walk,
 } from "./vue-test-renderer.mjs";
 
-const { DocxEditor, DocxViewer } = await importFromDemo("@arcships/vue-docx");
+const {
+  DocxEditor,
+  DocxPageFooter,
+  DocxPageHeader,
+  DocxPageSurface,
+  DocxParagraphHost,
+  DocxViewer,
+} = await importFromDemo("@arcships/vue-docx");
 const { wasmBuildDocModelFromBytes } = await importFromDemo("@arcships/docx-core");
 
 function classes(node) {
@@ -112,6 +119,14 @@ function pageShape(index, nodes, header, footer, root) {
 }
 
 function viewerPages(root) {
+  // The live page shell always wraps paper surfaces. Prefer the surface tree:
+  // header/footer furniture is a sibling of the clipped body, so the legacy
+  // direct-child scan below would miss it.
+  const hasSurfaces = walk(root).some((node) =>
+    node.props?.["data-docx-page-surface"] === true ||
+    node.props?.["data-docx-page-surface"] === "true");
+  if (hasSurfaces) return surfacePages(root);
+
   const legacyPages = walk(root)
     .filter((node) => node.props?.["data-testid"] === "docx-page")
     .map((page, index) => {
@@ -304,4 +319,388 @@ test("DocxViewer and read-only DocxEditor render one public DocModel with identi
   assert.deepEqual(editor, viewer, "Viewer and read-only Editor must normalize to the same rendered structure");
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
+});
+
+const PAGE_FIELD_XML = [
+  "<w:p>",
+  '<w:r><w:fldChar w:fldCharType="begin"/></w:r>',
+  '<w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>',
+  '<w:r><w:fldChar w:fldCharType="separate"/></w:r>',
+  "<w:r><w:t>1</w:t></w:r>",
+  '<w:r><w:fldChar w:fldCharType="end"/></w:r>',
+  "</w:p>",
+].join("");
+
+function furnitureParagraph(text) {
+  return { type: "paragraph", children: [{ type: "text", text }] };
+}
+
+function simpleFieldParagraph(instruction, cachedText) {
+  return {
+    type: "paragraph",
+    children: [{ type: "text", text: cachedText }],
+    sourceXml: `<w:p><w:fldSimple w:instr="${instruction}"><w:r><w:t>${cachedText}</w:t></w:r></w:fldSimple></w:p>`,
+  };
+}
+
+function furnitureModel() {
+  return {
+    nodes: [],
+    metadata: {
+      sourceParts: 0,
+      warnings: [],
+      headerSections: [],
+      footerSections: [],
+      paragraphStyles: [],
+    },
+  };
+}
+
+test("DOCX PAGE fields render OOXML roman and letter numbering formats", async () => {
+  const expectations = [
+    ["lowerRoman", "i"],
+    ["upperRoman", "I"],
+    ["lowerLetter", "a"],
+    ["upperLetter", "A"],
+  ];
+
+  for (const [pageNumberFormat, expected] of expectations) {
+    const mounted = await mount(DocxParagraphHost, {
+      paragraph: {
+        type: "paragraph",
+        children: [{ type: "text", text: "1" }],
+        sourceXml: PAGE_FIELD_XML,
+      },
+      paragraphIndex: 0,
+      documentTheme: "light",
+      pageNumber: 1,
+      totalPages: 2,
+      pageNumberFormat,
+    });
+    try {
+      assert.equal(nodeText(mounted.root), expected, pageNumberFormat);
+    } finally {
+      mounted.app.unmount();
+    }
+  }
+});
+
+test("DOCX dynamic fields re-evaluate at render time", async () => {
+  const now = new Date();
+  const expectedYear = String(now.getFullYear());
+  const expectedHour = String(now.getHours()).padStart(2, "0");
+  const cases = [
+    {
+      label: "SECTIONPAGES",
+      instruction: "SECTIONPAGES",
+      cached: "99",
+      expected: "2",
+      props: { sectionPages: 2, totalPages: 5 },
+    },
+    {
+      label: "DATE",
+      instruction: 'DATE \\@ &quot;yyyy&quot;',
+      cached: "1999",
+      expected: expectedYear,
+      props: {},
+    },
+    {
+      label: "TIME",
+      instruction: 'TIME \\@ &quot;HH&quot;',
+      cached: "03",
+      expected: expectedHour,
+      props: {},
+    },
+    {
+      label: "REF",
+      instruction: "REF chapterOne",
+      cached: "stale reference",
+      expected: "Chapter One",
+      props: {
+        resolveBookmarkFieldValue: (target) =>
+          target === "chapterOne" ? "Chapter One" : undefined,
+      },
+    },
+    {
+      label: "PAGEREF",
+      instruction: "PAGEREF chapterOne",
+      cached: "99",
+      expected: "3",
+      props: {
+        resolveBookmarkPageNumber: (target) =>
+          target === "chapterOne" ? 3 : undefined,
+      },
+    },
+    {
+      label: "IF",
+      instruction: 'IF 1 = 1 &quot;Yes&quot; &quot;No&quot;',
+      cached: "No",
+      expected: "Yes",
+      props: {},
+    },
+    {
+      label: "unsupported",
+      instruction: "AUTHOR",
+      cached: "Old Author",
+      expected: "[AUTHOR]",
+      props: {},
+    },
+  ];
+
+  for (const entry of cases) {
+    const mounted = await mount(DocxParagraphHost, {
+      paragraph: simpleFieldParagraph(entry.instruction, entry.cached),
+      paragraphIndex: 0,
+      documentTheme: "light",
+      pageNumber: 1,
+      totalPages: 5,
+      ...entry.props,
+    });
+    try {
+      assert.equal(nodeText(mounted.root), entry.expected, entry.label);
+    } finally {
+      mounted.app.unmount();
+    }
+  }
+});
+
+test("DOCX STYLEREF resolves heading text from the model", async () => {
+  const heading = {
+    type: "paragraph",
+    style: { styleId: "Heading1", styleName: "Heading 1" },
+    children: [{ type: "text", text: "Chapter One" }],
+  };
+  const headerParagraph = simpleFieldParagraph(
+    'STYLEREF &quot;Heading 1&quot;',
+    "Old heading",
+  );
+  const model = {
+    nodes: [heading],
+    metadata: {
+      sourceParts: 0,
+      warnings: [],
+      headerSections: [],
+      footerSections: [],
+      paragraphStyles: [],
+    },
+  };
+  const mounted = await mount(DocxPageSurface, {
+    pageIndex: 0,
+    pageLayout: {
+      pageWidthPx: 816,
+      pageHeightPx: 1056,
+      marginsPx: { top: 96, bottom: 96, left: 96, right: 96 },
+      headerDistancePx: 48,
+      footerDistancePx: 48,
+    },
+    pageNodeSegments: [{ nodeIndex: 0 }],
+    model,
+    editable: false,
+    pageWidthPx: 816,
+    pageContentWidthPx: 624,
+    pageNumber: 1,
+    totalPages: 1,
+    headerSection: {
+      partName: "header1.xml",
+      referenceType: "default",
+      nodes: [headerParagraph],
+    },
+  });
+
+  try {
+    const header = walk(mounted.root).find(
+      (node) =>
+        node.props?.["data-docx-page-header"] === true ||
+        node.props?.["data-docx-page-header"] === "true",
+    );
+    assert.ok(header, "header must render");
+    assert.equal(nodeText(header), "Chapter One");
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+test("DOCX REF/PAGEREF resolve bookmarks from the model", async () => {
+  const bookmark = {
+    type: "paragraph",
+    children: [{ type: "text", text: "Chapter One" }],
+    sourceXml:
+      '<w:p><w:bookmarkStart w:id="1" w:name="chapterOne"/><w:r><w:t>Chapter One</w:t></w:r><w:bookmarkEnd w:id="1"/></w:p>',
+  };
+  const model = {
+    nodes: [bookmark],
+    metadata: {
+      sourceParts: 0,
+      warnings: [],
+      headerSections: [],
+      footerSections: [],
+      paragraphStyles: [],
+    },
+  };
+  const mounted = await mount(DocxPageSurface, {
+    pageIndex: 0,
+    pageLayout: {
+      pageWidthPx: 816,
+      pageHeightPx: 1056,
+      marginsPx: { top: 96, bottom: 96, left: 96, right: 96 },
+      headerDistancePx: 48,
+      footerDistancePx: 48,
+    },
+    pageNodeSegments: [{ nodeIndex: 0 }],
+    model,
+    editable: false,
+    pageWidthPx: 816,
+    pageContentWidthPx: 624,
+    pageNumber: 1,
+    totalPages: 2,
+    headerSection: {
+      partName: "header1.xml",
+      referenceType: "default",
+      nodes: [
+        simpleFieldParagraph("REF chapterOne", "old reference"),
+        simpleFieldParagraph("PAGEREF chapterOne", "99"),
+      ],
+    },
+  });
+
+  try {
+    const header = walk(mounted.root).find(
+      (node) =>
+        node.props?.["data-docx-page-header"] === true ||
+        node.props?.["data-docx-page-header"] === "true",
+    );
+    assert.ok(header, "header must render");
+    const paragraphs = walk(header).filter(
+      (node) =>
+        node.props?.["data-docx-paragraph-host"] === true ||
+        node.props?.["data-docx-paragraph-host"] === "true",
+    );
+    assert.deepEqual(paragraphs.map((node) => nodeText(node)), [
+      "Chapter One",
+      "1",
+    ]);
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+test("DOCX header/footer boxes sit at w:header/w:footer distance from the paper edge", async () => {
+  const pageLayout = {
+    pageWidthPx: 816,
+    pageHeightPx: 1056,
+    marginsPx: { top: 96, bottom: 96, left: 96, right: 96 },
+    headerDistancePx: 48,
+    footerDistancePx: 36,
+  };
+  const model = furnitureModel();
+  const section = {
+    partName: "header1.xml",
+    referenceType: "default",
+    nodes: [furnitureParagraph("Header")],
+  };
+  const footerSection = {
+    partName: "footer1.xml",
+    referenceType: "default",
+    nodes: [furnitureParagraph("Footer")],
+  };
+
+  const headerMounted = await mount(DocxPageHeader, {
+    pageIndex: 0,
+    section,
+    model,
+    pageLayout,
+    pageContentWidthPx: 624,
+    theme: "light",
+    pageNumber: 1,
+    totalPages: 1,
+  });
+  const footerMounted = await mount(DocxPageFooter, {
+    pageIndex: 0,
+    section: footerSection,
+    model,
+    pageLayout,
+    pageContentWidthPx: 624,
+    theme: "light",
+    pageNumber: 1,
+    totalPages: 1,
+  });
+
+  try {
+    const header = walk(headerMounted.root).find(
+      (node) =>
+        node.props?.["data-docx-page-header"] === true ||
+        node.props?.["data-docx-page-header"] === "true",
+    );
+    const footer = walk(footerMounted.root).find(
+      (node) =>
+        node.props?.["data-docx-page-footer"] === true ||
+        node.props?.["data-docx-page-footer"] === "true",
+    );
+    assert.ok(header, "header component must render its public box");
+    assert.ok(footer, "footer component must render its public box");
+    assert.equal(header.props.style.position, "absolute");
+    assert.equal(header.props.style.top, "48px");
+    assert.equal(header.props.style.left, "96px");
+    assert.equal(header.props.style.right, "96px");
+    assert.equal(header.props.style.borderBottom, undefined);
+    assert.equal(header.props.style.color, undefined);
+    assert.equal(footer.props.style.position, "absolute");
+    assert.equal(footer.props.style.bottom, "36px");
+    assert.equal(footer.props.style.borderTop, undefined);
+    assert.equal(footer.props.style.color, undefined);
+  } finally {
+    headerMounted.app.unmount();
+    footerMounted.app.unmount();
+  }
+});
+
+test("DOCX tall header reserve shrinks the body area instead of growing the page", async () => {
+  const pageLayout = {
+    pageWidthPx: 816,
+    pageHeightPx: 1056,
+    marginsPx: { top: 96, bottom: 96, left: 96, right: 96 },
+    headerDistancePx: 48,
+    footerDistancePx: 48,
+  };
+  const headerSection = {
+    partName: "header1.xml",
+    referenceType: "default",
+    nodes: Array.from({ length: 4 }, (_, index) =>
+      furnitureParagraph(`Header line ${index}`),
+    ),
+  };
+  const mounted = await mount(DocxPageSurface, {
+    pageIndex: 0,
+    pageLayout,
+    pageNodeSegments: [],
+    model: furnitureModel(),
+    editable: false,
+    pageWidthPx: 816,
+    pageContentWidthPx: 624,
+    pageNumber: 1,
+    totalPages: 1,
+    headerSection,
+  });
+
+  try {
+    const surface = walk(mounted.root).find(
+      (node) =>
+        node.props?.["data-docx-page-surface"] === true ||
+        node.props?.["data-docx-page-surface"] === "true",
+    );
+    const body = walk(mounted.root).find(
+      (node) =>
+        node.props?.["data-docx-page-body"] === true ||
+        node.props?.["data-docx-page-body"] === "true",
+    );
+    assert.ok(surface, "page surface must render");
+    assert.ok(body, "page body must render");
+    assert.equal(surface.props.style.height, "1056px");
+    assert.ok(
+      Number.parseInt(body.props.style.paddingTop, 10) > 0,
+      "the body must reserve the header overflow instead of growing the paper",
+    );
+  } finally {
+    mounted.app.unmount();
+  }
 });

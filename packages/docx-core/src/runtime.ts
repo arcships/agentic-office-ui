@@ -72,7 +72,7 @@ export interface DocxRuntimeConfig {
   workerUrl?: string;
   /** Override Worker creation without relying on module-level configuration. */
   createWorker?: () => Worker;
-  /** Disabled by default; fallback also requires a positive byte limit. */
+  /** Headless-only opt-in; UI environments always require a Worker. */
   allowMainThreadFallback?: boolean;
   mainThreadFallbackMaxBytes?: number;
   /** Per-instance source policy; URL loading is disabled when omitted. */
@@ -252,18 +252,15 @@ export function createDocxRuntime(config: DocxRuntimeConfig = {}): DocxRuntime {
     return coordinator;
   };
 
-  const runOne = async (
+  // Top-level imports share one latest-wins slot, so a new import replaces the
+  // previous one instead of running both Workers and copying both buffers.
+  // Loaders keep their own coordinators because each loader owns cancel().
+  const importCoordinator = createTrackedCoordinator();
+
+  const runOne = (
     source: ArrayBuffer | DocxSource,
     options: Omit<DocxImportOptions, "requestId"> = {},
-  ): Promise<DocxImportResult> => {
-    const coordinator = createTrackedCoordinator();
-    try {
-      return await runWithCoordinator(coordinator, source, options);
-    } finally {
-      coordinator.dispose();
-      coordinators.delete(coordinator);
-    }
-  };
+  ): Promise<DocxImportResult> => runWithCoordinator(importCoordinator, source, options);
 
   return {
     id,

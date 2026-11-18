@@ -6,10 +6,11 @@ import {
   type LayoutLine,
   type PreparedTextWithSegments,
 } from "@chenglou/pretext";
+import { textMeasurementGeneration } from "./text-measurement-generation";
 
 const fragmentOffsetAdvancesByFragment = new WeakMap<
   PretextLineFragment,
-  number[]
+  { generation: number; advances: number[] }
 >();
 
 type PretextWordBreak = "normal" | "keep-all";
@@ -144,7 +145,15 @@ function measureTextWidthPx(font: string, text: string): number {
 
   const context = getMeasureContext();
   if (!context) {
-    return 0;
+    // No canvas (SSR, worker without OffscreenCanvas): keep selection offsets
+    // usable with a deterministic font-size-based estimate instead of zero.
+    const fontSizePx = Number.parseFloat(
+      /(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? ""
+    );
+    const safeFontSizePx = Number.isFinite(fontSizePx) && fontSizePx > 0
+      ? fontSizePx
+      : 12;
+    return Math.max(0, Math.round(text.length * safeFontSizePx * 0.5));
   }
 
   context.font = font;
@@ -290,9 +299,10 @@ export function cachedFragmentOffsetAdvances(
   defaultFont: string,
   fragment: PretextLineFragment
 ): number[] {
+  const measurementGeneration = textMeasurementGeneration();
   const cached = fragmentOffsetAdvancesByFragment.get(fragment);
-  if (cached) {
-    return cached;
+  if (cached && cached.generation === measurementGeneration) {
+    return cached.advances;
   }
 
   const advances = new Array<number>(fragment.text.length + 1);
@@ -307,7 +317,10 @@ export function cachedFragmentOffsetAdvances(
       localOffset
     );
   }
-  fragmentOffsetAdvancesByFragment.set(fragment, advances);
+  fragmentOffsetAdvancesByFragment.set(fragment, {
+    generation: measurementGeneration,
+    advances,
+  });
   return advances;
 }
 

@@ -3,12 +3,19 @@
 // Upstream editor.tsx: lines 16061-16261, 16263-16413, 17032-17156.
 
 import type {
+  DocxThemeFonts,
   ImageRunNode,
   ParagraphAlignment,
+  ParagraphDirection,
   TextRunNode
 } from "../../engine/types";
+import {
+  parseParagraphAlignmentFromParagraphProperties,
+  parseParagraphDirectionFromParagraphProperties,
+  parseRunTypographyFromRunXml
+} from "../../engine/text-typography";
 import { xmlAttribute } from "./ooxml-helpers";
-import type { DocxTrackedChangeKind } from "./editor-types";
+import type { DocxInlineTrackedChangeKind } from "./editor-types";
 
 export function decodeXmlText(text: string): string {
   if (!text) {
@@ -96,11 +103,31 @@ export function extractBalancedTagRanges(
   return ranges;
 }
 
+/**
+ * Returns only balanced ranges that are not nested inside another range of the
+ * same tag. Tables, rows and paragraphs can contain nested structures of the
+ * same name; callers that index top-level containers (rendered rows, cells or
+ * paragraph properties) need the outer ranges only.
+ */
+export function extractTopLevelTagRanges(
+  xml: string,
+  tagName: string
+): XmlBalancedTagRange[] {
+  const ranges = extractBalancedTagRanges(xml, tagName);
+  return ranges.filter(
+    (range) =>
+      !ranges.some(
+        (other) =>
+          other !== range &&
+          other.start <= range.start &&
+          other.end >= range.end &&
+          (other.start < range.start || other.end > range.end)
+      )
+  );
+}
+
 export interface RevisionTagRange extends XmlBalancedTagRange {
-  kind: Exclude<
-    DocxTrackedChangeKind,
-    "format-change" | "paragraph-format-change"
-  >;
+  kind: DocxInlineTrackedChangeKind;
   revisionId?: string;
   author?: string;
   date?: string;
@@ -108,9 +135,7 @@ export interface RevisionTagRange extends XmlBalancedTagRange {
 
 export function trackedChangeKindFromTagName(
   tagName: string
-):
-  | Exclude<DocxTrackedChangeKind, "format-change" | "paragraph-format-change">
-  | undefined {
+): DocxInlineTrackedChangeKind | undefined {
   const normalized = tagName.trim().toLowerCase();
   switch (normalized) {
     case "w:ins":
@@ -246,71 +271,10 @@ export function xmlColorValue(tagXml: string | undefined): string | undefined {
 }
 
 export function parseRunStyleFromRunXml(
-  runXml: string
+  runXml: string,
+  options: { themeFonts?: DocxThemeFonts } = {}
 ): TextRunNode["style"] | undefined {
-  const rPrRange = extractBalancedTagRanges(runXml, "w:rPr")[0];
-  const rPrXml = rPrRange ? runXml.slice(rPrRange.start, rPrRange.end) : "";
-  if (!rPrXml) {
-    return undefined;
-  }
-
-  const rFontsTag = rPrXml.match(/<w:rFonts\b[^>]*\/?>/i)?.[0];
-  const rFontsAscii = rFontsTag
-    ? xmlAttribute(rFontsTag, "w:ascii")
-    : undefined;
-  const rFontsHAnsi = rFontsTag
-    ? xmlAttribute(rFontsTag, "w:hAnsi")
-    : undefined;
-  const rFontsEastAsia = rFontsTag
-    ? xmlAttribute(rFontsTag, "w:eastAsia")
-    : undefined;
-  const rFontsCs = rFontsTag ? xmlAttribute(rFontsTag, "w:cs") : undefined;
-  const fontFamily = rFontsAscii ?? rFontsHAnsi ?? rFontsEastAsia ?? rFontsCs;
-
-  const sizeTag =
-    rPrXml.match(/<w:sz\b[^>]*\/?>/i)?.[0] ??
-    rPrXml.match(/<w:szCs\b[^>]*\/?>/i)?.[0];
-  const sizeHalfPoints = sizeTag
-    ? Number(xmlAttribute(sizeTag, "w:val"))
-    : Number.NaN;
-  const fontSizePt =
-    Number.isFinite(sizeHalfPoints) && sizeHalfPoints > 0
-      ? Number((sizeHalfPoints / 2).toFixed(2))
-      : undefined;
-
-  const bold = xmlBooleanFlag(rPrXml.match(/<w:b(?:Cs)?\b[^>]*\/?>/i)?.[0]);
-  const italic = xmlBooleanFlag(rPrXml.match(/<w:i(?:Cs)?\b[^>]*\/?>/i)?.[0]);
-  const underlineTag = rPrXml.match(/<w:u\b[^>]*\/?>/i)?.[0];
-  const underline = xmlBooleanFlag(underlineTag);
-  const strike = xmlBooleanFlag(rPrXml.match(/<w:strike\b[^>]*\/?>/i)?.[0]);
-  const color = xmlColorValue(rPrXml.match(/<w:color\b[^>]*\/?>/i)?.[0]);
-  const highlightTag = rPrXml.match(/<w:highlight\b[^>]*\/?>/i)?.[0];
-  const highlight = highlightTag
-    ? xmlAttribute(highlightTag, "w:val")
-    : undefined;
-  const verticalAlignTag = rPrXml.match(/<w:vertAlign\b[^>]*\/?>/i)?.[0];
-  const verticalAlign = verticalAlignTag
-    ? xmlAttribute(verticalAlignTag, "w:val")
-    : undefined;
-
-  const style: NonNullable<TextRunNode["style"]> = {
-    fontFamily: fontFamily?.trim() || undefined,
-    fontSizePt,
-    bold: bold || undefined,
-    italic: italic || undefined,
-    underline: underline || undefined,
-    strike: strike || undefined,
-    color,
-    highlight: highlight?.trim() || undefined,
-    verticalAlign:
-      verticalAlign === "superscript" || verticalAlign === "subscript"
-        ? verticalAlign
-        : undefined,
-  };
-
-  return Object.values(style).some((value) => value !== undefined)
-    ? style
-    : undefined;
+  return parseRunTypographyFromRunXml(runXml, options);
 }
 
 export function balancedTagXmlBlocks(xml: string, tagName: string): string[] {
@@ -329,14 +293,30 @@ export function mergeTextRunStyles(
 
   const merged: TextRunNode["style"] = {
     fontFamily: override?.fontFamily ?? base?.fontFamily,
+    fontFamilyEastAsia:
+      override?.fontFamilyEastAsia ?? base?.fontFamilyEastAsia,
+    fontFamilyComplexScript:
+      override?.fontFamilyComplexScript ?? base?.fontFamilyComplexScript,
     fontSizePt: override?.fontSizePt ?? base?.fontSizePt,
     bold: override?.bold ?? base?.bold,
     italic: override?.italic ?? base?.italic,
     underline: override?.underline ?? base?.underline,
+    underlineStyle: override?.underlineStyle ?? base?.underlineStyle,
     strike: override?.strike ?? base?.strike,
+    strikeStyle: override?.strikeStyle ?? base?.strikeStyle,
+    caps: override?.caps ?? base?.caps,
+    smallCaps: override?.smallCaps ?? base?.smallCaps,
     color: override?.color ?? base?.color,
     highlight: override?.highlight ?? base?.highlight,
+    characterSpacingTwips:
+      override?.characterSpacingTwips ?? base?.characterSpacingTwips,
+    characterScalePercent:
+      override?.characterScalePercent ?? base?.characterScalePercent,
+    direction: override?.direction ?? base?.direction,
     verticalAlign: override?.verticalAlign ?? base?.verticalAlign,
+    runBorder: override?.runBorder ?? base?.runBorder,
+    textShadow: override?.textShadow ?? base?.textShadow,
+    textOutline: override?.textOutline ?? base?.textOutline,
   };
 
   return Object.values(merged).some((value) => value !== undefined)
@@ -347,19 +327,13 @@ export function mergeTextRunStyles(
 export function parseParagraphAlignmentFromXml(
   paragraphPropertiesXml: string
 ): ParagraphAlignment | undefined {
-  const jcTag = paragraphPropertiesXml.match(/<w:jc\b[^>]*\/?>/i)?.[0];
-  const raw = jcTag
-    ? xmlAttribute(jcTag, "w:val")?.trim().toLowerCase()
-    : undefined;
-  if (
-    raw === "center" ||
-    raw === "right" ||
-    raw === "justify" ||
-    raw === "left"
-  ) {
-    return raw;
-  }
-  return undefined;
+  return parseParagraphAlignmentFromParagraphProperties(paragraphPropertiesXml);
+}
+
+export function parseParagraphDirectionFromXml(
+  paragraphPropertiesXml: string
+): ParagraphDirection | undefined {
+  return parseParagraphDirectionFromParagraphProperties(paragraphPropertiesXml);
 }
 
 export function parseDrawingImageTransformFromSourceXml(sourceXml?: string):
@@ -410,6 +384,64 @@ export function joinCssTransforms(
   return resolved.length > 0 ? resolved.join(" ") : undefined;
 }
 
+/**
+ * Normalized quarter-turn rotation of a drawing (90 or 270), or `undefined`
+ * when the image is not rotated by a quarter turn.
+ */
+export function resolveImageRotationQuarterTurnDegrees(
+  rotationDegrees?: number
+): 90 | 270 | undefined {
+  if (!Number.isFinite(rotationDegrees)) {
+    return undefined;
+  }
+
+  const degrees = rotationDegrees as number;
+  if (Math.abs((Math.abs(degrees) % 180) - 90) >= 0.5) {
+    return undefined;
+  }
+
+  const normalized = (((Math.round(degrees / 90) % 4) + 4) % 4) * 90;
+  return normalized === 90 || normalized === 270 ? normalized : undefined;
+}
+
+/**
+ * Resolve the layout frame an image occupies after its drawing rotation.
+ *
+ * A 90°/270° rotation turns the visual footprint a quarter turn, so the frame
+ * swaps width and height; rendering the image inside the unrotated frame makes
+ * it overflow and paint over neighbouring content. Quarter-turned frames are
+ * reported with `rotationSwapped` so callers can rotate the image into the
+ * frame (`resolveImageRenderTransformStyle` with `fillFrame: true`).
+ */
+export function resolveImageFrameSizePx(
+  image: ImageRunNode,
+  widthPx?: number,
+  heightPx?: number
+): { widthPx?: number; heightPx?: number; rotationSwapped: boolean } {
+  const quarterTurn = resolveImageRotationQuarterTurnDegrees(
+    parseDrawingImageTransformFromSourceXml(image.sourceXml)?.rotationDegrees
+  );
+  const safeWidthPx = Number.isFinite(widthPx)
+    ? Math.max(1, Math.round(widthPx as number))
+    : undefined;
+  const safeHeightPx = Number.isFinite(heightPx)
+    ? Math.max(1, Math.round(heightPx as number))
+    : undefined;
+  if (
+    quarterTurn === undefined ||
+    safeWidthPx === undefined ||
+    safeHeightPx === undefined
+  ) {
+    return { widthPx, heightPx, rotationSwapped: false };
+  }
+
+  return {
+    widthPx: safeHeightPx,
+    heightPx: safeWidthPx,
+    rotationSwapped: true,
+  };
+}
+
 export function resolveImageRenderTransformStyle(
   image: ImageRunNode,
   options?: {
@@ -428,11 +460,9 @@ export function resolveImageRenderTransformStyle(
     ? Math.max(1, Math.round(options?.frameHeightPx as number))
     : undefined;
   const fillFrame = options?.fillFrame === true;
-  const normalizedQuarterTurn =
-    Number.isFinite(rotationDegrees) &&
-    Math.abs((Math.abs(rotationDegrees as number) % 180) - 90) < 0.5
-      ? (((Math.round((rotationDegrees as number) / 90) % 4) + 4) % 4) * 90
-      : undefined;
+  const normalizedQuarterTurn = resolveImageRotationQuarterTurnDegrees(
+    rotationDegrees
+  );
   const flipScaleTransform =
     transform?.flipH || transform?.flipV
       ? `scale(${transform?.flipH ? -1 : 1}, ${transform?.flipV ? -1 : 1})`
@@ -449,11 +479,7 @@ export function resolveImageRenderTransformStyle(
     const rotationTransform =
       normalizedQuarterTurn === 90
         ? `translate(${safeFrameWidthPx}px, 0px) rotate(90deg)`
-        : normalizedQuarterTurn === 180
-        ? `translate(${safeFrameWidthPx}px, ${safeFrameHeightPx}px) rotate(180deg)`
-        : normalizedQuarterTurn === 270
-        ? `translate(0px, ${safeFrameHeightPx}px) rotate(-90deg)`
-        : undefined;
+        : `translate(0px, ${safeFrameHeightPx}px) rotate(-90deg)`;
 
     return {
       width: `${safeFrameHeightPx}px`,

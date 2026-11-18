@@ -21,6 +21,26 @@ function modelWithText(text) {
   };
 }
 
+function modelWithPages(pageCount, { imageCount = 0, imageBytes = 0 } = {}) {
+  const nodes = [];
+  for (let index = 0; index < pageCount; index += 1) {
+    const children = [{ type: "text", text: `Paragraph ${index} body text` }];
+    if (imageCount > 0 && index % Math.ceil(pageCount / imageCount) === 0) {
+      children.push({
+        type: "image",
+        src: `data:image/png;base64,image-${index}`,
+        partName: `word/media/image${index}.png`,
+        contentType: "image/png",
+        widthPx: 640,
+        heightPx: 480,
+        data: new Uint8Array(imageBytes),
+      });
+    }
+    nodes.push({ type: "paragraph", children });
+  }
+  return { ...createBlankDocumentModel(), nodes };
+}
+
 function paragraphText(controller) {
   const paragraph = controller.model.nodes[0];
   return paragraph?.type === "paragraph"
@@ -35,6 +55,9 @@ async function commitSeries(controller, prefix, count, textLength) {
       `${prefix}-${index}:`.padEnd(textLength, String.fromCharCode(65 + index)),
     );
     await vue.nextTick();
+    // Byte-budget assertions count one history entry per edit, so each commit
+    // is closed explicitly instead of coalescing into one typing burst.
+    controller.endTextCommitBurst();
   }
 }
 
@@ -116,6 +139,61 @@ test("useDocxEditor keeps one oversized undo item and clears redo on a new edit"
     await vue.nextTick();
     assert.equal(editor.canRedo, false);
     assert.equal(editor.canUndo, true);
+  } finally {
+    mounted.app.unmount();
+  }
+});
+
+test("typing in a 200-page document does not clone the whole document per keystroke", async () => {
+  const pageCount = 200;
+  const starterModel = modelWithPages(pageCount, {
+    imageCount: 2,
+    imageBytes: 2 * 1024 * 1024,
+  });
+  let editor;
+  const Harness = vue.defineComponent({
+    setup() {
+      editor = useDocxEditor({ starterModel });
+      return () => vue.h("div", `${editor.canUndo}`);
+    },
+  });
+  const mounted = await mount(Harness);
+
+  try {
+    const untouchedNode = editor.model.nodes[1];
+    const untouchedImageData = editor.model.nodes[100].children[1].data;
+    const startedAt = performance.now();
+
+    for (let index = 0; index < 100; index += 1) {
+      editor.commitParagraphText(0, `typed ${index}`);
+      await vue.nextTick();
+      assert.equal(
+        editor.model.nodes[1],
+        untouchedNode,
+        `keystroke ${index} rebuilt an untouched paragraph`,
+      );
+      assert.equal(
+        editor.model.nodes[100].children[1].data,
+        untouchedImageData,
+        `keystroke ${index} copied image bytes`,
+      );
+    }
+
+    const elapsedMs = performance.now() - startedAt;
+    assert.equal(paragraphText(editor), "typed 99");
+    assert.equal(editor.model.nodes.length, pageCount);
+    assert.equal(editor.canUndo, true);
+    assert.ok(
+      elapsedMs < 10_000,
+      `100 keystrokes on a ${pageCount}-page document took ${elapsedMs.toFixed(0)} ms`,
+    );
+
+    editor.undo();
+    await vue.nextTick();
+    // The 100 keystrokes are one burst, so one undo restores the pre-burst text.
+    assert.equal(paragraphText(editor), "Paragraph 0 body text");
+    assert.equal(editor.canUndo, false);
+    assert.equal(editor.model.nodes[1], untouchedNode);
   } finally {
     mounted.app.unmount();
   }

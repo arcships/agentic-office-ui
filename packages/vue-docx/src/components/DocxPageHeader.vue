@@ -11,6 +11,7 @@
         v-if="node.type === 'paragraph'"
         :paragraph="node"
         :paragraph-index="-(pageIndex * 1000 + ni + 1)"
+        :data-docx-header-node-index="ni"
         :editable="false"
         :document-theme="theme"
         :controller="controller"
@@ -20,6 +21,12 @@
         :page-number="pageNumber"
         :total-pages="totalPages"
         :page-number-format="pageNumberFormat"
+        :section-pages="resolvedSectionPages"
+        :resolve-style-ref-field-value="effectiveStyleRefResolver"
+        :resolve-bookmark-field-value="effectiveBookmarkResolver"
+        :resolve-bookmark-page-number="effectiveBookmarkPageResolver"
+        :field-resolution-node-index="pageStartNodeIndex"
+        :floating-page-origin-px="floatingPageOriginPx"
         :within-header-footer="true"
         header-footer-region="header"
       />
@@ -27,6 +34,7 @@
         v-else
         :table="node"
         :table-index="-(pageIndex * 1000 + ni + 1)"
+        :data-docx-header-node-index="ni"
         :editable="false"
         :document-theme="theme"
         :controller="controller"
@@ -36,8 +44,15 @@
         :page-number="pageNumber"
         :total-pages="totalPages"
         :page-number-format="pageNumberFormat"
+        :section-pages="resolvedSectionPages"
+        :resolve-style-ref-field-value="effectiveStyleRefResolver"
+        :resolve-bookmark-field-value="effectiveBookmarkResolver"
+        :resolve-bookmark-page-number="effectiveBookmarkPageResolver"
+        :model="model"
+        :floating-page-origin-px="floatingPageOriginPx"
         :within-header-footer="true"
         header-footer-region="header"
+        :max-available-width-px="pageContentWidthPx"
       />
     </template>
   </div>
@@ -47,44 +62,88 @@
 import { computed } from "vue"
 import type {
   DocModel,
+  DocxFloatingPageOriginPx,
   DocxEditorController,
   HeaderSection,
 } from "@arcships/docx-core"
 import DocxParagraphHost from "./DocxParagraphHost.vue"
 import DocxTableHost from "./DocxTableHost.vue"
+import { createDocxFieldResolvers } from "../composables/docx-field-resolvers"
 
 // ── Props ──────────────────────────────────────────────────────────
 const props = defineProps<{
   pageIndex: number
   section?: HeaderSection
   model: DocModel
-  pageLayout: { pageWidthPx: number; pageHeightPx: number; marginsPx?: { top: number; bottom: number; left: number; right: number } }
+  pageLayout: {
+    pageWidthPx: number
+    pageHeightPx: number
+    marginsPx?: { top: number; bottom: number; left: number; right: number }
+    headerDistancePx?: number
+    footerDistancePx?: number
+  }
   pageContentWidthPx: number
+  floatingPageOriginPx?: DocxFloatingPageOriginPx
   theme: "light" | "dark"
   controller?: DocxEditorController
   pageNumber: number
   totalPages: number
   pageNumberFormat?: string
+  sectionPages?: number
+  pageStartNodeIndex?: number
+  resolveStyleRefFieldValue?: (
+    target: string,
+    beforeNodeIndex?: number,
+  ) => string | undefined
+  resolveBookmarkFieldValue?: (target: string) => string | undefined
+  resolveBookmarkPageNumber?: (target: string) => number | undefined
   trackedChangesEnabled?: boolean
   commentsEnabled?: boolean
+  /** Distance from the paper's top edge to the top of the header box. */
+  headerDistancePx?: number
 }>()
 
+const resolvedHeaderDistancePx = computed(() => {
+  const explicit = props.headerDistancePx
+  if (Number.isFinite(explicit) && (explicit as number) >= 0) return Math.round(explicit as number)
+  const fromLayout = props.pageLayout.headerDistancePx
+  if (Number.isFinite(fromLayout) && (fromLayout as number) >= 0) return Math.round(fromLayout as number)
+  return Math.round(props.pageLayout.marginsPx?.top ?? 72)
+})
+
+const resolvedSectionPages = computed(() => props.sectionPages ?? props.totalPages)
+const modelFieldResolvers = computed(() => createDocxFieldResolvers(props.model))
+const effectiveStyleRefResolver = computed(
+  () =>
+    props.resolveStyleRefFieldValue ??
+    ((target: string, beforeNodeIndex?: number) =>
+      modelFieldResolvers.value.resolveStyleRefFieldValue(target, beforeNodeIndex)),
+)
+const effectiveBookmarkResolver = computed(
+  () =>
+    props.resolveBookmarkFieldValue ??
+    ((target: string) => modelFieldResolvers.value.resolveBookmarkFieldValue(target)),
+)
+const effectiveBookmarkPageResolver = computed(
+  () =>
+    props.resolveBookmarkPageNumber ??
+    ((target: string) => modelFieldResolvers.value.resolveBookmarkPageNumber(target)),
+)
+
 const headerStyle = computed(() => ({
+  position: "absolute" as const,
+  top: `${resolvedHeaderDistancePx.value}px`,
+  left: `${props.pageLayout.marginsPx?.left ?? 72}px`,
+  right: `${props.pageLayout.marginsPx?.right ?? 72}px`,
   display: "grid",
   gap: "0px",
-  width: "100%",
+  width: "auto",
   boxSizing: "border-box" as const,
-  paddingBottom: "8px",
-  borderBottom: `1px solid ${props.theme === "dark" ? "#374151" : "#e5e7eb"}`,
-  color: props.theme === "dark" ? "#9ca3af" : "#6b7280",
 }))
 
 </script>
 
 <style scoped>
-.docx-page-header {
-  font-size: 10pt;
-}
 .docx-page-header-node {
   width: 100%;
 }

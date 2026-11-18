@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
+import { useOfficeUiMessages } from "../i18n"
 
 export interface BoundingBoxField {
   /** Unique stable id for the field */
@@ -27,6 +28,7 @@ export interface BoundingBoxCitationsProps {
 const props = withDefaults(defineProps<BoundingBoxCitationsProps>(), {
   className: "",
 })
+const m = useOfficeUiMessages()
 
 const emit = defineEmits<{
   "field-click": [field: BoundingBoxField]
@@ -77,7 +79,7 @@ function selectField(field: BoundingBoxField) {
         Page {{ page }} &mdash; {{ pageFields.length }} field{{ pageFields.length > 1 ? "s" : "" }}
       </h4>
       <div class="citation-page-preview">
-        <img :src="props.file" alt="Citation source preview" class="citation-image" />
+        <img :src="props.file" :alt="m.vueUi.boundingBox.imageAlt" class="citation-image" />
         <button
           v-for="field in pageFields"
           :key="field.id"
@@ -119,7 +121,7 @@ function selectField(field: BoundingBoxField) {
       </ul>
     </div>
     <p v-if="props.fields.length === 0" class="empty-state">
-      No fields to display
+      {{ m.vueUi.boundingBox.noFields }}
     </p>
   </div>
 </template>

@@ -151,7 +151,7 @@ const xlsxRoot = walk(xlsx.root).find((node) => {
   return typeof value === "string" && value.split(/\s+/).includes("xlsx-viewer");
 });
 assert.ok(xlsxRoot, "XlsxViewer renders its public root element");
-assert.match(textContent(xlsx.root), /打开一个 XLSX 文件开始查看/);
+assert.match(textContent(xlsx.root), /Open an XLSX file to get started/);
 assert.deepEqual(xlsx.warnings, [], "XlsxViewer renders without Vue warnings");
 xlsx.app.unmount();
 

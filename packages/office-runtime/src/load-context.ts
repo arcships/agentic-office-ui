@@ -1,6 +1,6 @@
 import type { OfficeSourceKind } from "./errors";
 import type { OfficeSource } from "./source";
-import { snapshotOfficeLimits, type OfficeLimits } from "./limits";
+import { resolveOfficeLimits, snapshotOfficeLimits, type OfficeLimits } from "./limits";
 import { snapshotOfficeUrlPolicy, type OfficeUrlPolicy } from "./url-policy";
 
 export interface OfficeResourceConfig {
@@ -14,6 +14,10 @@ export interface CreateOfficeLoadContextOptions {
   source: OfficeSource;
   resources?: OfficeResourceConfig;
   limits?: OfficeLimits;
+  /** When present, `limits` is resolved against these format defaults. */
+  limitDefaults?: OfficeLimits;
+  /** Hard caps applied after the defaults when `limitDefaults` is present. */
+  limitHardCaps?: OfficeLimits;
   urlPolicy?: OfficeUrlPolicy;
   signal: AbortSignal;
 }
@@ -39,7 +43,9 @@ export function createOfficeLoadContext(
     source,
     sourceKind: source.kind,
     resources: Object.freeze({ ...(options.resources ?? {}) }),
-    limits: snapshotOfficeLimits(options.limits),
+    limits: options.limitDefaults
+      ? resolveOfficeLimits(options.limitDefaults, options.limits, options.limitHardCaps ?? {})
+      : snapshotOfficeLimits(options.limits),
     urlPolicy: snapshotOfficeUrlPolicy(options.urlPolicy),
     signal: options.signal,
   });

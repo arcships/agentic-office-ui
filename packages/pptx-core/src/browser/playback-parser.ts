@@ -1,11 +1,18 @@
 import type { PptxFiles, PresentationData, SlideData } from "@aiden0z/pptx-renderer"
 
 import { createPptxCapabilityReport } from "../playback/capability"
-import { createPptxObjectKey, matchPptxMorphObjects } from "../playback/identity"
+import {
+  createPptxObjectGeometry,
+  createPptxObjectKey,
+  matchPptxMorphObjects,
+  normalizePptxObjectText,
+} from "../playback/identity"
 import type {
   PptxFeatureDisposition,
   PptxFeatureRecord,
   PptxMediaItem,
+  PptxMorphMatch,
+  PptxObjectGeometry,
   PptxObjectIdentity,
   PptxPlaybackDocument,
   PptxPlaybackEffect,
@@ -18,6 +25,8 @@ import type {
   PptxTriggerEvent,
 } from "../playback/types"
 import type { PptxApproximationPolicy } from "../browser-types"
+import { withAutoplayMedia } from "../playback/media-command"
+import { repeatCountNote, repeatCountValue } from "../playback/timing-values"
 
 export interface PptxPlaybackParserOptions {
   approximation?: PptxApproximationPolicy
@@ -101,10 +110,33 @@ function collectObjects(
       explicitMorphName: name?.startsWith("!!") ? name : undefined,
       creationId: localAttr(creation, "id") ?? localAttr(creation, "val"),
       nodeType: objectType(node),
+      // 组合子对象的坐标属于子坐标系，不参与跨页几何匹配。
+      geometry: groupPath.length > 0 ? undefined : objectGeometry(node),
+      text: objectText(node),
     })
     result.push(identity)
     if (node.localName === "grpSp") collectObjects(node, slidePath, [...groupPath, shapeId], result)
   }
+}
+
+function objectGeometry(node: Element): PptxObjectGeometry | undefined {
+  const properties = directChild(node, node.localName === "grpSp" ? "grpSpPr" : "spPr")
+  const transform = directChild(node, "xfrm") ?? (properties ? directChild(properties, "xfrm") : undefined)
+  if (!transform) return undefined
+  const offset = directChild(transform, "off")
+  const extent = directChild(transform, "ext")
+  return createPptxObjectGeometry({
+    x: offset?.getAttribute("x"),
+    y: offset?.getAttribute("y"),
+    cx: extent?.getAttribute("cx"),
+    cy: extent?.getAttribute("cy"),
+  })
+}
+
+function objectText(node: Element): string | undefined {
+  // 组合对象的文字等于子对象文字之和，不作为独立的文字身份。
+  if (node.localName === "grpSp") return undefined
+  return normalizePptxObjectText(elements(node, "t").map((item) => item.textContent ?? "").join(" "))
 }
 
 function parseObjects(document: Document, slidePath: string): readonly PptxObjectIdentity[] {
@@ -354,10 +386,7 @@ function parseTimeNode(
     rawDuration = Math.max(0, ...behaviorDurations)
   }
   const rawRepeat = localAttr(node, "repeatCount")
-  const repeatRawNumber = Number(rawRepeat)
-  const repeatNumber = Number.isFinite(repeatRawNumber) && repeatRawNumber >= 1000
-    ? repeatRawNumber / 1000
-    : repeatRawNumber
+  const repeatNumber = repeatCountValue(rawRepeat)
   const timeNode: PptxTimeNode = Object.freeze({
     id,
     parentId,
@@ -374,7 +403,7 @@ function parseTimeNode(
     nodeType: node.getAttribute("nodeType") ?? undefined,
     delayMs: conditions.find((condition) => condition.source === "start")?.delayMs ?? 0,
     durationMs: rawDuration,
-    repeatCount: rawRepeat === "indefinite" ? "indefinite" : Number.isFinite(repeatNumber) && repeatNumber > 0 ? repeatNumber : undefined,
+    repeatCount: repeatNumber,
     autoReverse: localAttr(node, "autoRev") === "1",
     fill: ["hold", "remove", "freeze"].includes(localAttr(node, "fill") ?? "")
       ? localAttr(node, "fill") as "hold" | "remove" | "freeze"
@@ -419,17 +448,26 @@ function parseTimeNode(
           : disposition === "static" ? "第一版尚未批准该效果参数。" : undefined,
       sourceNodeId: id,
     }))
-    if (timeNode.repeatCount !== undefined) features.push(Object.freeze({
-      id: `repeat:${slideIndex}:${id}`,
-      slideIndex,
-      objectKey: effect.targetObjectKey,
-      feature: timeNode.repeatCount === "indefinite" ? "repeat:indefinite" : "repeat:finite",
-      disposition: disposition === "strict" && typeof timeNode.durationMs === "number" && timeNode.durationMs > 0
+    if (timeNode.repeatCount !== undefined) {
+      const repeatDisposition: PptxFeatureDisposition = disposition === "strict"
+        && typeof timeNode.durationMs === "number"
+        && timeNode.durationMs > 0
         ? "strict"
-        : "static",
-      reason: disposition === "strict" ? undefined : "基础效果本身未进入严格执行范围。",
-      sourceNodeId: id,
-    }))
+        : "static"
+      const encoding = timeNode.repeatCount === "indefinite"
+        ? undefined
+        : repeatCountNote(rawRepeat, timeNode.repeatCount)
+      features.push(Object.freeze({
+        id: `repeat:${slideIndex}:${id}`,
+        slideIndex,
+        objectKey: effect.targetObjectKey,
+        feature: timeNode.repeatCount === "indefinite" ? "repeat:indefinite" : "repeat:finite",
+        disposition: repeatDisposition,
+        reason: encoding
+          ?? (repeatDisposition === "strict" ? undefined : "基础效果本身未进入严格执行范围。"),
+        sourceNodeId: id,
+      }))
+    }
     if (timeNode.autoReverse) features.push(Object.freeze({
       id: `auto-reverse:${slideIndex}:${id}`,
       slideIndex,
@@ -513,6 +551,7 @@ function parseMedia(
             : sourcePath?.toLowerCase().endsWith(".wav") ? "audio/wav" : undefined,
       kind: node.localName === "videoFile" ? "video" : "audio",
       embedded: !external && sourcePath?.startsWith("ppt/") === true,
+      autoplay: false,
       trimStartMs: Number.isFinite(trimStart) && trim?.hasAttribute("st") ? trimStart : undefined,
       trimEndMs: Number.isFinite(trimEnd) && trim?.hasAttribute("end") ? trimEnd : undefined,
       loop: false,
@@ -546,8 +585,14 @@ function parseMedia(
     })
     const bookmarks = new Map(entry.bookmarks.map((bookmark) => [bookmark.name, bookmark]))
     for (const bookmark of discoveredBookmarks) bookmarks.set(bookmark.name, bookmark)
+    // `numSld` 表示媒体跨页继续播放，`nodeType` 为 withEffect/afterEffect 时它随页面自动开始。
+    const autoStartNodeType = localAttr(timing, "nodeType")
+    const autoStart = mediaNode.hasAttribute("numSld")
+      || autoStartNodeType === "withEffect"
+      || autoStartNodeType === "afterEffect"
     result.set(entry.relationId, Object.freeze({
       ...entry,
+      autoplay: entry.autoplay || autoStart,
       trimStartMs: attributeNumber(["trimSt", "st"]) ?? entry.trimStartMs,
       trimEndMs: attributeNumber(["trimEnd", "end"]) ?? entry.trimEndMs,
       loop: localAttr(timing, "repeatCount") === "indefinite" || mediaNode.getAttribute("loop") === "1",
@@ -621,6 +666,15 @@ function transitionDisposition(kind: string, approximation: PptxApproximationPol
   return approximation === "safe" ? "approximate" : "static"
 }
 
+function morphMatchDescription(method: PptxMorphMatch["method"]): string {
+  switch (method) {
+    case "explicit-name": return "显式名称"
+    case "creation-id": return "创建编号"
+    case "name-and-geometry": return "普通名称与几何"
+    default: return "文字与几何"
+  }
+}
+
 function parseSlide(
   files: PptxFiles,
   presentation: PresentationData,
@@ -670,7 +724,7 @@ function parseSlide(
     feature: `transition:${transition.kind}`,
     disposition: transitionDisposition(transition.kind, options.approximation ?? "off"),
   }))
-  const media = parseMedia(document, objectKeys, slide)
+  const media = withAutoplayMedia(parseMedia(document, objectKeys, slide), nodes, rootNodeId)
   for (const item of media) features.push(Object.freeze({
     id: `media:${slide.index}:${item.id}`,
     slideIndex: slide.index,
@@ -733,10 +787,15 @@ export function parsePptxPlaybackDocument(
       slideIndex: index,
       objectKey: match.to,
       feature: `morph:${match.method}`,
-      disposition: options.approximation === "safe" ? "approximate" : "static",
-      reason: options.approximation === "safe"
-        ? `使用${match.method === "explicit-name" ? "显式名称" : "创建编号"}进行强身份匹配。`
-        : "近似播放未开启，保留静态页面。",
+      // 弱匹配只用于调试报告，不进入任何播放模式。
+      disposition: options.approximation === "safe" && match.confidence !== "weak"
+        ? "approximate"
+        : "static",
+      reason: match.confidence === "weak"
+        ? "文字弱匹配只用于调试报告，不执行补间。"
+        : options.approximation === "safe"
+          ? `使用${morphMatchDescription(match.method)}进行${match.confidence === "strong" ? "强" : "中等"}身份匹配，分数 ${match.score}。`
+          : "近似播放未开启，保留静态页面。",
     }))
     return Object.freeze({
       ...slide,

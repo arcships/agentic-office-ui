@@ -93,7 +93,11 @@ export function createSurfaceSearchSession<M>(
     activationController = undefined
   }
 
-  async function activate(index: number, expectedRequest = requestVersion): Promise<void> {
+  async function activate(
+    index: number,
+    expectedRequest = requestVersion,
+    rethrowFailure = true,
+  ): Promise<void> {
     assertUsable()
     if (!Number.isInteger(index) || index < 0 || index >= state.matches.length) {
       throw new RangeError(`Search result index ${index} is out of range.`)
@@ -114,7 +118,9 @@ export function createSurfaceSearchSession<M>(
         || expectedRequest !== requestVersion
         || currentActivation !== activationVersion
       ) {
-        throw createAbortError()
+        // Superseded by a newer query or activation. This is normal
+        // interactive behaviour, not a host-visible failure.
+        return
       }
       commit({
         status: "ready",
@@ -129,7 +135,7 @@ export function createSurfaceSearchSession<M>(
         || expectedRequest !== requestVersion
         || currentActivation !== activationVersion
       ) {
-        throw createAbortError()
+        return
       }
       requestedActiveIndex = state.activeIndex
       commit({
@@ -139,7 +145,7 @@ export function createSurfaceSearchSession<M>(
         activeIndex: state.activeIndex,
         error: { code: "ACTIVATION_FAILED", message: errorMessage(error) },
       })
-      throw error
+      if (rethrowFailure) throw error
     } finally {
       if (activationController === controller) activationController = undefined
     }
@@ -189,7 +195,17 @@ export function createSurfaceSearchSession<M>(
         throw createAbortError()
       }
       commit({ status: "ready", query, matches: [...matches], activeIndex: -1 })
-      if (matches.length) await activate(0, currentRequest)
+      if (matches.length) {
+        // The implicit first-match activation is a convenience for hosts that
+        // type into a search box. A superseded or failed activation is already
+        // reflected in `state`, so resolve with the latest state instead of
+        // leaking an AbortError or activation failure to the host.
+        try {
+          await activate(0, currentRequest, false)
+        } catch {
+          // `state` already carries ACTIVATION_FAILED.
+        }
+      }
       return state
     },
 

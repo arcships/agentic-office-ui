@@ -215,9 +215,9 @@ UI 事件 → controller 方法 → worksheet wasm 方法 → maybeRecalculate �
 
 #### D. clipboard/paste/fill
 13. `getClipboardData`：三种格式（text TSV + html table + structured JSON），跳过 mergedSecondary。
-14. `pasteText`：`rawValue.startsWith("=")` → `setFormula`；否则 `coerceUserEnteredValue` → `setCell`。
-15. `pasteStructuredClipboardData`：有 merge 时走 snapshot 历史；value 直接用 payload.value（不再 coerce）。
-16. `fillSelection`：**平铺/重复填充**（`offset % sourceSize`），公式原样复制（不做 R1C1 偏移），样式也复制。逐格 capture+apply。
+14. `pasteText`：`rawValue.startsWith("=")` → `setFormula`；否则 `coerceUserEnteredValue` → `setCell`。跳过 mergedSecondary 与超出 16384×1048576 的目标；外部文本没有来源坐标，公式原样写入。
+15. `pasteStructuredClipboardData`：有 merge 时走 snapshot 历史；value 直接用 payload.value（不再 coerce）。payload 记录复制来源 `origin`，公式按 目标−来源 偏移改写相对引用（`$` 绝对部分不变，越界转 `#REF!`）；旧 payload 无 `origin` 时原样粘贴。
+16. `fillSelection`：**平铺/重复填充**（`offset % sourceSize`），公式按 目标−来源 偏移改写相对引用（`$` 绝对部分不变，越界转 `#REF!`），样式也复制。逐格 capture+apply。
 
 #### E. sort
 17. `sortTable`：capture 每格 `{formula, style, value}`（完整 CellMutationState），sort key 用 `getCalculatedValueAt` + `getFormattedValueAt`（计算值，不是原始公式）。排序：empty 沉底 → number → boolean → localeCompare(numeric:true)。无变化时只 setSortState 不写 cell。历史走 range-edit。
@@ -381,7 +381,7 @@ inheritedStyle(col⊕row) → cellStyle → tableStyle → `buildCellStyle`(CSS)
 | 27 | `coerceUserEnteredValue`：`'`前缀→文本；true/false→boolean；纯数字→Number | controller.tsx |
 | 28 | paste 区分 formula/value（`startsWith("=")` → setFormula） | controller.tsx |
 | 29 | pasteStructured value 不再 coerce（copy 时存的就是 display value） | controller.tsx |
-| 30 | fillSelection 平铺/重复填充，公式不做 R1C1 偏移，样式也复制 | controller.tsx |
+| 30 | fillSelection 平铺/重复填充，公式按 目标−来源 偏移改写相对引用（`$` 不变），样式也复制 | controller.tsx |
 | 31 | sortTable capture 完整 CellMutationState，sort key 用计算值 | controller.tsx |
 | 32 | sort 无变化时只 setSortState 不写 cell | controller.tsx |
 | 33 | merge/unmerge/resize 走 snapshot 历史 | controller.tsx |
@@ -1077,7 +1077,8 @@ print('OK', ws['C1'].value)
 | 导出 CSV | exportCsv → 文本检查 | TSV 格式正确 |
 | 冻结窗格 | 加载含冻结的 fixture | 滚动时冻结区固定 |
 | 条件格式 | 加载含 dataBar/colorScale 的 fixture | 渲染提示可见 |
-| 数据验证 | 加载含 validation 的 fixture | 下拉/提示可见 |
+| 数据验证 | 加载含 validation 的 fixture | 下拉/提示可见，非法输入按 errorStyle 拒绝或告警 |
+| 工作表保护 | 加载含 sheetProtection 的 fixture | 受保护工作表默认只读，宿主可显式放行 |
 | 图表 | 加载含 charts 的 fixture | 图表渲染 + 选中/拖拽 |
 | 图片 | 加载含 images 的 fixture | 图片显示 + 定位正确 |
 | worker 模式 | 开启 worker 开关 + 加载大文件 | 不阻塞 UI + worker 状态正确 |

@@ -92,6 +92,10 @@ export type {
   PptxTriggerEvent,
 } from "./playback/types"
 
+/**
+ * Hard PPTX preview budgets. Requested limits can only tighten these values;
+ * they are also the defaults every session starts from.
+ */
 export const DEFAULT_PPTX_PREVIEW_LIMITS = Object.freeze({
   maxInputBytes: 50 * 1024 * 1024,
   maxArchiveEntries: 4_000,
@@ -99,4 +103,12 @@ export const DEFAULT_PPTX_PREVIEW_LIMITS = Object.freeze({
   maxUncompressedBytes: 256 * 1024 * 1024,
   maxMediaBytes: 192 * 1024 * 1024,
   maxConcurrency: 8,
+  maxCompressionRatio: 100,
+  maxArchivePathLength: 1_024,
+  maxXmlBytes: 256 * 1024 * 1024,
+  maxSingleXmlBytes: 32 * 1024 * 1024,
+  maxXmlDepth: 256,
+  maxXmlAttributeBytes: 1 * 1024 * 1024,
+  maxTextNodeBytes: 16 * 1024 * 1024,
+  maxRelationships: 100_000,
 })

@@ -36,10 +36,12 @@ export type {
   ParagraphIndent,
   ParagraphNode,
   ParagraphNumbering,
+  ParagraphSectionBreak,
   ParagraphSpacing,
   ParagraphStyle,
   ParagraphStyleDefinition,
   ParagraphTabStop,
+  SectionBreakType,
   TableBorderSet,
   TableBorderStyle,
   TableBoxSpacing,
@@ -55,7 +57,14 @@ export type {
   TextStyle,
 } from "./engine/types";
 
-export { cloneDocModel } from "./engine/clone";
+export {
+  cloneDocModel,
+  cloneDocModelNodes,
+  cloneDocModelSectionLists,
+  cloneDocModelShallow,
+  cloneDocNode,
+  cloneNumberingDefinitions,
+} from "./engine/clone";
 export { normalizeDocModel } from "./engine/normalize";
 
 export type {
@@ -83,6 +92,10 @@ export {
   removeParagraph,
   updateParagraphText,
 } from "./editor/paragraph-ops";
+export {
+  deleteSectionBreak,
+  insertSectionBreak,
+} from "./editor/section-break-ops";
 export {
   applyRunStyle,
   replaceText,

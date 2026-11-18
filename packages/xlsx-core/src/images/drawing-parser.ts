@@ -11,6 +11,7 @@ import {
   IMAGE_REL_TYPE,
   type RelationshipRecord,
   type WorkbookImageOrigin,
+  type WorkbookShapeOrigin,
   anchorFromNodeOrFallback,
   anchorToRect,
   applyGroupTransform,
@@ -27,6 +28,7 @@ import {
   isElementNode,
   normalizeArchivePath,
   parseAnchor,
+  parseImageSourceRect,
   parseRelationships,
   parseTransformRect,
   parseXml,
@@ -640,13 +642,17 @@ function parsePictureNode(
     image: {
       anchor: transform.anchor,
       description: nonVisualProps?.getAttribute("descr") ?? undefined,
+      flipH: transform.flipH,
+      flipV: transform.flipV,
       hyperlink: getHyperlinkTarget(nonVisualProps ?? pictureNode, drawingRelationships),
       id: imageId,
       mediaPath: mediaRelationship.target,
       mimeType: resolveContentType(contentTypes, mediaRelationship.target),
       name: nonVisualProps?.getAttribute("name") ?? undefined,
+      rotationDeg: transform.rotationDeg,
       sheetIndex: workbookSheetIndex,
       src: createImageSource(mediaBytes, resolveContentType(contentTypes, mediaRelationship.target), objectUrls),
+      srcRect: parseImageSourceRect(pictureNode),
       workbookSheetIndex,
       zIndex
     } satisfies XlsxImage,
@@ -729,6 +735,8 @@ export function parseAnchorContents(
   theme: ThemeState,
   ids: { image: number; shape: number; z: number },
   imageOriginsById: Map<string, WorkbookImageOrigin>,
+  shapeOriginsById: Map<string, WorkbookShapeOrigin>,
+  drawingPath: string,
   anchorIndex: number,
   sheetState: WorkbookSheetState | null,
   parentGroup: GroupTransform | null = null
@@ -758,37 +766,34 @@ export function parseAnchorContents(
         mediaPaths.add(parsed.mediaPath);
         imageOriginsById.set(imageId, {
           anchorIndex,
+          drawingPath,
+          objectId: getFirstDescendant(child, "cNvPr")?.getAttribute("id") ?? undefined,
+          objectKind: "pic",
           workbookSheetIndex
         });
       }
       return;
     }
 
-    if (child.localName === "sp") {
+    if (child.localName === "sp" || child.localName === "cxnSp") {
+      const shapeId = `shape-${workbookSheetIndex}-${ids.shape++}`;
       shapes.push(parseShapeNode(
         child,
         fallbackAnchor,
         drawingRelationships,
         theme,
         workbookSheetIndex,
-        `shape-${workbookSheetIndex}-${ids.shape++}`,
+        shapeId,
         ids.z++,
         parentGroup
       ));
-      return;
-    }
-
-    if (child.localName === "cxnSp") {
-      shapes.push(parseShapeNode(
-        child,
-        fallbackAnchor,
-        drawingRelationships,
-        theme,
-        workbookSheetIndex,
-        `shape-${workbookSheetIndex}-${ids.shape++}`,
-        ids.z++,
-        parentGroup
-      ));
+      shapeOriginsById.set(shapeId, {
+        anchorIndex,
+        drawingPath,
+        objectId: getFirstDescendant(child, "cNvPr")?.getAttribute("id") ?? undefined,
+        objectKind: child.localName,
+        workbookSheetIndex
+      });
       return;
     }
 
@@ -819,6 +824,8 @@ export function parseAnchorContents(
       theme,
       ids,
       imageOriginsById,
+      shapeOriginsById,
+      drawingPath,
       anchorIndex,
       sheetState,
       nextGroup
@@ -846,7 +853,8 @@ export function parseDrawingObjects(
   zIndexBase: number,
   theme: ThemeState,
   sheetState: WorkbookSheetState | null,
-  imageOriginsById: Map<string, WorkbookImageOrigin>
+  imageOriginsById: Map<string, WorkbookImageOrigin>,
+  shapeOriginsById: Map<string, WorkbookShapeOrigin>
 ) {
   const drawingXml = readArchiveText(archive, drawingPath);
   if (!drawingXml) {
@@ -894,6 +902,8 @@ export function parseDrawingObjects(
       theme,
       ids,
       imageOriginsById,
+      shapeOriginsById,
+      drawingPath,
       anchorIndex,
       sheetState
     );

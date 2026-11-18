@@ -24,24 +24,37 @@
             :page-index="entry.pageIndex"
             :page-layout="entry.pageLayout"
             :page-node-segments="entry.pageNodeSegments"
+            :page-columns="entry.columns"
+            :column-layout="entry.columnLayout"
             :model="model"
             :controller="controller"
             :editable="editable"
+            :zoom-factor="zoomFactor"
             :page-width-px="entry.pageWidthPx"
             :page-content-width-px="entry.pageContentWidthPx"
             :page-number="entry.pageNumber"
             :total-pages="pageCount"
+            :section-pages="entry.sectionPages"
             :page-number-format="entry.pageNumberFormat"
             :header-section="entry.headerSection"
             :footer-section="entry.footerSection"
             :tracked-changes-enabled="trackedChangesEnabled"
             :comments-enabled="commentsEnabled"
-            :tracked-changes="trackedChanges"
-            :comments="comments"
-            :footnotes="pageFootnotes(entry.pageIndex)"
-            :endnotes="pageEndnotes(entry.pageIndex)"
+            :tracked-changes="pageTrackedChanges(entry.pageIndex)"
+            :comments="pageComments(entry.pageIndex)"
+            :footnotes="entry.footnotes"
+            :endnotes="entry.endnotes"
+            :footnote-labels="entry.noteLabels.footnote"
+            :endnote-labels="entry.noteLabels.endnote"
+            :note-marker-labels="entry.noteLabels"
+            :page-background-color="documentBackgroundColor"
+            :page-borders="entry.pageBorders ?? null"
             :theme="theme"
+            :annotation-drawer-mode="annotationDrawerMode"
             @measure="onPageMeasure(entry.pageIndex, $event)"
+            @paragraph-measure="onParagraphMeasure"
+            @table-row-measure="onTableRowMeasure"
+            @content-measure="onPageContentMeasure(entry.pageIndex, $event)"
           />
         </div>
       </div>
@@ -50,7 +63,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue"
+import { ref, computed, onMounted, onUnmounted, watch, watchEffect } from "vue"
+import { createTouchGestureTracker } from "@arcships/office-runtime/touch-gestures"
 import type {
   DocModel,
   DocxComment,
@@ -59,37 +73,59 @@ import type {
   DocxTrackedChange,
   DocumentNoteDefinition,
   DocumentPageNodeSegment,
+  DocumentPageNotes,
+  DocumentPageBorders,
   FooterSection,
   HeaderSection,
   LayoutOptions,
 } from "@arcships/docx-core"
 import {
   buildLayoutSnapshot,
+  buildDocumentPageNotes,
+  ensureDocumentFontInvalidation,
   collectCommentsFromModel,
   collectTrackedChangesFromModel,
   parseSectionLayout,
+  parseSectionPageBorders,
   parseSectionPageNumberFormat,
   parseSectionPageNumberStartOverride,
+  primeCommentAnchors,
+  resolveDocumentBackgroundColor,
   resolveDocumentSectionsFromMetadata,
   resolveDocumentLayout,
   resolveSectionIndexForNodeIndex,
-  nodeReferencedNoteIds,
+  groupGutterAnnotationsByPage,
+  trackedChangeDuplicatesInlineMarkup,
   selectSectionVariantForPage,
+  documentPageNodeSegmentsIdentityKey,
+  type PaginationMeasurementFeedback,
   DEFAULT_DOC_PAGE_WIDTH,
   DEFAULT_DOC_PAGE_HEIGHT,
 } from "@arcships/docx-core"
 import DocxPageSurface from "./DocxPageSurface.vue"
+import {
+  DOCX_UNSUPPORTED_FILE_MESSAGE,
+  isSupportedDocxFileName,
+} from "../composables/docx-file-types"
+import {
+  ensureDocxViewerPageSurfaceRegistry,
+  notifyDocxViewerPageSurfaceListeners,
+} from "../composables/page-surface-registry"
+import {
+  annotationGutterReservedWidthPx,
+  annotationGutterUsesDrawer,
+} from "./gutter-metrics"
 
 // ── Constants ──────────────────────────────────────────────────────
 const DOC_PAGE_BREAK_GAP = 28
 const PAGE_OVERSCAN = 2
 const SCROLL_MEASUREMENT_DEBOUNCE_MS = 80
-// Gutter (tracked changes / comments) sits beside the paper, inside the scaled
-// content. It must enter the horizontal footprint so the paper stays centered
-// and horizontal scroll can reach it.
-const GUTTER_GAP_PX = 16
-const GUTTER_WIDTH_PX = 240
 const PAGE_SIDE_PADDING = 48
+// Shared empty list keeps hidden annotations allocation-free.
+const EMPTY_ANNOTATIONS: readonly never[] = []
+// The scroll container uses `padding: 24px 0`; page offsets are expressed in
+// scroll coordinates so scrollToPage / hit tests line up with the rendered page.
+const PAGE_TOP_PADDING = 24
 
 // ── Types ──────────────────────────────────────────────────────────
 export interface DocxViewerRootProps {
@@ -101,8 +137,9 @@ export interface DocxViewerRootProps {
   zoomScale?: number
   /** When true, zoom auto-fits page width to container. Overrides zoomScale. */
   fitWidth?: boolean
-  showTrackedChanges?: boolean
-  showComments?: boolean
+  /** `null` follows the controller flag; `false` always hides. */
+  showTrackedChanges?: boolean | null
+  showComments?: boolean | null
 }
 
 interface VisiblePageEntry {
@@ -111,12 +148,19 @@ interface VisiblePageEntry {
   heightPx: number
   pageLayout: ReturnType<typeof resolveDocumentLayout>
   pageNodeSegments: DocumentPageNodeSegment[]
+  columns: DocumentPageNodeSegment[][]
+  columnLayout: { count: number; gapPx: number; widthsPx: number[] }
   pageWidthPx: number
   pageContentWidthPx: number
   pageNumber: number
   pageNumberFormat?: string
+  sectionPages: number
   headerSection?: HeaderSection
   footerSection?: FooterSection
+  footnotes: DocumentNoteDefinition[]
+  endnotes: DocumentNoteDefinition[]
+  noteLabels: { footnote: Map<number, string>; endnote: Map<number, string> }
+  pageBorders?: DocumentPageBorders
 }
 
 interface PageMeasureEvent {
@@ -126,13 +170,13 @@ interface PageMeasureEvent {
 // ── Props ──────────────────────────────────────────────────────────
 const props = withDefaults(
   defineProps<DocxViewerRootProps>(),
-  { editable: false, zoomScale: 100 }
+  { editable: false, zoomScale: 100, showTrackedChanges: null, showComments: null }
 )
 
 const emit = defineEmits<{
   pageCountChange: [count: number]
   visiblePageRange: [range: { startPageIndex: number; endPageIndex: number }]
-  contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number }]
+  contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number; target?: EventTarget | null }]
   selectionChange: [sel: { kind: string; text?: string; pageIndex?: number }]
 }>()
 
@@ -142,15 +186,109 @@ const scrollTop = ref(0)
 const viewportHeight = ref(800)
 const containerWidth = ref(800)
 
-// Track measured page heights (key: pageIndex, value: px)
-const measuredPageHeights = ref<Record<number, number>>({})
+// Track measured page heights (key: pageIndex). Each entry is tagged with the
+// page layout it was measured for so layout changes invalidate stale values.
+const measuredPageHeights = ref<Record<number, { heightPx: number; layoutKey: string }>>({})
+
+// Measure→repaginate feedback (#99). Paragraph heights come from rendered
+// paragraph hosts; page content heights come from the page body. Feedback is
+// applied for at most PAGINATION_MEASUREMENT_MAX_ITERATIONS passes and cleared
+// whenever the document/layout changes.
+const PAGINATION_MEASUREMENT_MAX_ITERATIONS = 3
+const PAGINATION_MEASUREMENT_TOLERANCE_PX = 1
+const paginationMeasurementFeedback = ref<PaginationMeasurementFeedback | undefined>()
+const paginationMeasurementIteration = ref(0)
+const measuredParagraphHeightsPxByNodeIndex = ref<Record<number, number>>({})
+const measuredTableRowHeightsPxByNodeIndex = ref<Record<number, number[]>>({})
+const measuredPageContentHeights = ref<
+  Record<number, { heightPx: number; identityKey: string }>
+>({})
+const seenPaginationMeasurementSignatures = new Set<string>()
+let measurementFlushScheduled = false
+let measurementFlushHandle: ReturnType<typeof setTimeout> | undefined
 
 // Drag-over state for file drops
-const dragOverDepth = ref(0)
-const isDragOver = computed(() => dragOverDepth.value > 0)
+const isDragOver = ref(false)
+
+// ── Print mode ─────────────────────────────────────────────────────
+// Printing must include every page, not only the virtualized window that is
+// currently mounted. `matchMedia("print")` covers browser print preview and
+// automated media emulation; beforeprint/afterprint cover browsers that do not
+// update the media query list.
+const printMediaActive = ref(false)
+const beforePrintActive = ref(false)
+const isPrinting = computed(() => printMediaActive.value || beforePrintActive.value)
+let printMediaQuery: MediaQueryList | undefined
+let printPageStyle: HTMLStyleElement | undefined
+
+function syncPrintPageSize(widthPx?: number, heightPx?: number): void {
+  if (typeof document === "undefined" || typeof document.createElement !== "function") return
+  if (!Number.isFinite(widthPx) || !Number.isFinite(heightPx) || (widthPx ?? 0) <= 0 || (heightPx ?? 0) <= 0) {
+    printPageStyle?.remove?.()
+    printPageStyle = undefined
+    return
+  }
+  if (!printPageStyle) {
+    printPageStyle = document.createElement("style")
+    if (printPageStyle.dataset) printPageStyle.dataset.officePrintPage = "docx"
+    document.head?.append(printPageStyle)
+  }
+  printPageStyle.textContent = `@page { size: ${Math.round(widthPx!)}px ${Math.round(heightPx!)}px; margin: 0; }`
+}
+
+function onPrintMediaChange(event: MediaQueryListEvent): void {
+  printMediaActive.value = event.matches
+}
+
+function onBeforePrint(): void {
+  beforePrintActive.value = true
+}
+
+function onAfterPrint(): void {
+  beforePrintActive.value = false
+  printMediaActive.value = printMediaQuery?.matches ?? false
+}
+
+function setupPrintDetection(): () => void {
+  if (typeof window === "undefined") return () => {}
+  printMediaQuery = typeof window.matchMedia === "function" ? window.matchMedia("print") : undefined
+  if (printMediaQuery) {
+    printMediaActive.value = printMediaQuery.matches
+    if (typeof printMediaQuery.addEventListener === "function") {
+      printMediaQuery.addEventListener("change", onPrintMediaChange)
+    } else {
+      printMediaQuery.addListener?.(onPrintMediaChange)
+    }
+  }
+  if (typeof window.addEventListener === "function") {
+    window.addEventListener("beforeprint", onBeforePrint)
+    window.addEventListener("afterprint", onAfterPrint)
+  }
+  return () => {
+    if (printMediaQuery) {
+      if (typeof printMediaQuery.removeEventListener === "function") {
+        printMediaQuery.removeEventListener("change", onPrintMediaChange)
+      } else {
+        printMediaQuery.removeListener?.(onPrintMediaChange)
+      }
+    }
+    printMediaQuery = undefined
+    if (typeof window.removeEventListener === "function") {
+      window.removeEventListener("beforeprint", onBeforePrint)
+      window.removeEventListener("afterprint", onAfterPrint)
+    }
+  }
+}
 
 // ── Pagination ─────────────────────────────────────────────────────
 const baseDocumentLayout = computed(() => resolveDocumentLayout(props.model))
+watchEffect(() => {
+  const layout = baseDocumentLayout.value
+  syncPrintPageSize(layout?.pageWidthPx, layout?.pageHeightPx)
+})
+const documentBackgroundColor = computed(() =>
+  resolveDocumentBackgroundColor(props.model.metadata.documentBackgroundColor)
+)
 
 const resolvedLayoutOptions = computed<LayoutOptions>(() => ({
   pageWidth: baseDocumentLayout.value.pageWidthPx,
@@ -160,31 +298,106 @@ const resolvedLayoutOptions = computed<LayoutOptions>(() => ({
 }))
 
 const paginationPlan = computed(() => {
-  const snapshot = buildLayoutSnapshot(props.model, resolvedLayoutOptions.value)
+  const snapshot = buildLayoutSnapshot(props.model, {
+    ...resolvedLayoutOptions.value,
+    measurementFeedback: paginationMeasurementFeedback.value,
+  })
+
+  const segmentFromBlock = (block: (typeof snapshot.pages)[number]["blocks"][number]): DocumentPageNodeSegment | undefined => {
+    const nodeIndex = block.source?.nodeIndex
+    if (!Number.isFinite(nodeIndex) || (nodeIndex as number) < 0) return undefined
+
+    const segment: DocumentPageNodeSegment = {
+      nodeIndex: Math.round(nodeIndex as number),
+    }
+    if (block.kind === "table" && block.tableRowRange) {
+      segment.tableRowRange = {
+        startRowIndex: block.tableRowRange.startRowIndex,
+        endRowIndex: block.tableRowRange.endRowIndex,
+      }
+    }
+    if (block.kind === "paragraph" && block.paragraphLineRange) {
+      segment.paragraphLineRange = {
+        startLineIndex: block.paragraphLineRange.startLineIndex,
+        endLineIndex: block.paragraphLineRange.endLineIndex,
+        totalLineCount: block.paragraphLineRange.totalLineCount,
+        lineHeightPx: block.paragraphLineRange.lineHeightPx,
+      }
+    }
+    return segment
+  }
+
   const pageNodeSegments: DocumentPageNodeSegment[][] = snapshot.pages.map((page) =>
-    page.blocks.flatMap((block) => {
-      const nodeIndex = block.source?.nodeIndex
-      return Number.isFinite(nodeIndex) && (nodeIndex as number) >= 0
-        ? [{ nodeIndex: Math.round(nodeIndex as number) }]
-        : []
+    page.blocks.flatMap((block): DocumentPageNodeSegment[] => {
+      const segment = segmentFromBlock(block)
+      return segment ? [segment] : []
     })
   )
 
-  return { pages: snapshot.pages, pageNodeSegments }
+  const pageColumns: DocumentPageNodeSegment[][][] = snapshot.pages.map((page) => {
+    const columnCount = Math.max(1, page.columnCount ?? 1)
+    const columns = Array.from(
+      { length: columnCount },
+      () => [] as DocumentPageNodeSegment[]
+    )
+    page.blocks.forEach((block) => {
+      const segment = segmentFromBlock(block)
+      if (!segment) return
+      const columnIndex = Math.max(
+        0,
+        Math.min(columnCount - 1, block.source?.columnIndex ?? 0)
+      )
+      columns[columnIndex].push(segment)
+    })
+    return columns
+  })
+
+  return { pages: snapshot.pages, pageNodeSegments, pageColumns, snapshot }
 })
 
 const pages = computed(() => paginationPlan.value.pages)
 const pageNodeSegments = computed(() => paginationPlan.value.pageNodeSegments)
+const pageColumns = computed(() => paginationPlan.value.pageColumns)
 const pageCount = computed(() => pages.value.length)
 const FIT_ZOOM_MIN = 0.25
 const FIT_ZOOM_MAX = 2
 const FIT_ZOOM_SIDE_PAD = 48
 
+// Narrow viewports get the drawer overlay instead of a column beside the paper,
+// so the paper can keep the full container width.
+const annotationsVisible = computed(
+  () =>
+    (props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false) ||
+    (props.showComments ?? props.controller?.showComments ?? false)
+)
+
+const annotationDrawerMode = computed(
+  () =>
+    annotationsVisible.value &&
+    annotationGutterUsesDrawer(containerWidth.value)
+)
+
+// Horizontal space the annotation gutter reserves beside the paper, in screen
+// px. The pane counter-scales itself (see gutter-metrics), so this footprint is
+// constant at every zoom level. 0 when annotations are hidden or when the pane
+// is an overlay drawer (it then takes no space from the paper).
+const gutterScreenWidthPx = computed(() =>
+  annotationsVisible.value && !annotationDrawerMode.value
+    ? annotationGutterReservedWidthPx()
+    : 0
+)
+
 const fitZoom = computed(() => {
   if (!baseDocumentLayout.value) return 1
   const pageWidth = baseDocumentLayout.value.pageWidthPx
   if (!pageWidth || pageWidth <= 0) return 1
-  const available = Math.max(200, containerWidth.value - FIT_ZOOM_SIDE_PAD)
+  // The annotation gutter is part of the horizontal footprint; reserve its
+  // screen-space width so fit-width does not introduce a horizontal scrollbar
+  // when it is visible.
+  const available = Math.max(
+    200,
+    containerWidth.value - FIT_ZOOM_SIDE_PAD - gutterScreenWidthPx.value
+  )
   return Math.min(FIT_ZOOM_MAX, Math.max(FIT_ZOOM_MIN, available / pageWidth))
 })
 
@@ -233,9 +446,18 @@ const pagePresentations = computed(() => {
     nextPageNumber += 1
 
     return {
+      sectionIndex,
       pageLayout,
       pageNumber,
       pageNumberFormat: parseSectionPageNumberFormat(sectionPropertiesXml),
+      pageBorders: parseSectionPageBorders(sectionPropertiesXml),
+      columnLayout: {
+        count: pages.value[pageIndex]?.columnCount ?? 1,
+        gapPx: pages.value[pageIndex]?.columnGapPx ?? 0,
+        widthsPx: pages.value[pageIndex]?.columnWidthsPx ?? [],
+      },
+      segments: pageNodeSegments.value[pageIndex] ?? [],
+      columns: pageColumns.value[pageIndex] ?? [],
       headerSection: section
         ? selectSectionVariantForPage(
             section.headerSections,
@@ -256,51 +478,129 @@ const pagePresentations = computed(() => {
   })
 })
 
-// ── Theme / feature flags ──────────────────────────────────────────
-const theme = computed(() => props.theme ?? props.controller?.documentTheme ?? "light")
-const trackedChangesEnabled = computed(() => props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false)
-const commentsEnabled = computed(() => props.showComments ?? props.controller?.showComments ?? false)
-// Visual horizontal space the annotation gutter occupies at the current zoom.
-// 0 when annotations are hidden, so no space is reserved.
-const gutterVisualWidthPx = computed(() =>
-  (trackedChangesEnabled.value || commentsEnabled.value)
-    ? (GUTTER_GAP_PX + GUTTER_WIDTH_PX) * zoomFactor.value
-    : 0
-)
-const trackedChanges = computed<readonly DocxTrackedChange[]>(() =>
-  props.controller?.trackedChanges ?? (trackedChangesEnabled.value ? collectTrackedChangesFromModel(props.model) : [])
-)
-const comments = computed<readonly DocxComment[]>(() =>
-  props.controller?.comments ?? (commentsEnabled.value ? collectCommentsFromModel(props.model) : [])
-)
-
-function notesForPage(pageIndex: number, kind: "footnote" | "endnote"): DocumentNoteDefinition[] {
-  const definitions = kind === "footnote"
-    ? props.model.metadata.footnotes ?? []
-    : props.model.metadata.endnotes ?? []
-  if (!definitions.length) return []
-  if (kind === "endnote") return pageIndex === pageCount.value - 1 ? definitions : []
-  const byId = new Map(definitions.map((note) => [note.id, note]))
-  const ids: number[] = []
-  const seen = new Set<number>()
-  for (const segment of pageNodeSegments.value[pageIndex] ?? []) {
-    const node = props.model.nodes[segment.nodeIndex]
-    if (!node) continue
-    for (const id of nodeReferencedNoteIds(node, kind, segment.tableRowRange, segment.paragraphLineRange)) {
-      if (!seen.has(id)) { seen.add(id); ids.push(id) }
-    }
+const sectionPageCounts = computed(() => {
+  const counts = new Map<number, number>()
+  for (const presentation of pagePresentations.value) {
+    counts.set(
+      presentation.sectionIndex,
+      (counts.get(presentation.sectionIndex) ?? 0) + 1,
+    )
   }
-  return ids.map((id) => byId.get(id)).filter((note): note is DocumentNoteDefinition => Boolean(note))
+  return counts
+})
+// The thumbnail rail reads the viewer's pagination result instead of running
+// its own buildLayoutSnapshot on every model change.
+if (props.controller) {
+  watchEffect(() => {
+    const controller = props.controller
+    if (!controller) return
+    const plan = paginationPlan.value
+    const presentations = pagePresentations.value
+    const registry = ensureDocxViewerPageSurfaceRegistry(controller)
+    const sizes = new Map<number, { widthPx: number; heightPx: number }>()
+    plan.pages.forEach((page, pageIndex) => {
+      const layout = presentations[pageIndex]?.pageLayout ?? baseDocumentLayout.value
+      sizes.set(pageIndex, {
+        widthPx: layout.pageWidthPx ?? page.pageSizePx.width,
+        heightPx: layout.pageHeightPx ?? page.pageSizePx.height,
+      })
+    })
+    registry.layoutPageCount = plan.pages.length
+    registry.layoutPageSizes = sizes
+    registry.layoutSnapshot = plan.snapshot
+    notifyDocxViewerPageSurfaceListeners(controller)
+  }, { flush: "post" })
 }
 
-function pageFootnotes(pageIndex: number): DocumentNoteDefinition[] { return notesForPage(pageIndex, "footnote") }
-function pageEndnotes(pageIndex: number): DocumentNoteDefinition[] { return notesForPage(pageIndex, "endnote") }
+// ── Theme / feature flags ──────────────────────────────────────────
+const theme = computed(() => props.theme ?? props.controller?.documentTheme ?? "light")
+// Boolean props default to `false`, so `null` is what marks "not passed":
+// without it the controller fallback below could never apply.
+const trackedChangesEnabled = computed(
+  () => props.showTrackedChanges ?? props.controller?.showTrackedChanges ?? false
+)
+const commentsEnabled = computed(
+  () => props.showComments ?? props.controller?.showComments ?? false
+)
+// Visual horizontal space the annotation gutter occupies at the current zoom.
+// Visual horizontal space the annotation gutter occupies in screen px.
+// 0 when annotations are hidden, so no space is reserved. The pane counter-
+// scales, so this footprint does not follow the zoom factor.
+const gutterVisualWidthPx = computed(() => isPrinting.value ? 0 : gutterScreenWidthPx.value)
+const trackedChanges = computed<readonly DocxTrackedChange[]>(() => {
+  // `showTrackedChanges` gates the collection even when a controller is
+  // present: hidden revisions must not cost a model scan.
+  if (!trackedChangesEnabled.value) return EMPTY_ANNOTATIONS
+  const changes = props.controller?.trackedChanges ?? collectTrackedChangesFromModel(props.model)
+  // Insertions and move-to content are already highlighted inline, so a gutter
+  // card would show the same revision twice.
+  return changes.filter((change) => !trackedChangeDuplicatesInlineMarkup(change))
+})
+const comments = computed<readonly DocxComment[]>(() => {
+  if (!commentsEnabled.value) return EMPTY_ANNOTATIONS
+  return props.controller?.comments ?? collectCommentsFromModel(props.model)
+})
+
+// Each annotation is owned by exactly one page: a change inside row 3 of a
+// table spanning pages — or inside a paragraph split across pages — must not be
+// repeated on every page that renders the node.
+const trackedChangesByPage = computed<readonly (readonly DocxTrackedChange[])[]>(() =>
+  groupGutterAnnotationsByPage(trackedChanges.value, pageNodeSegments.value)
+)
+const commentsByPage = computed<readonly (readonly DocxComment[])[]>(() =>
+  groupGutterAnnotationsByPage(comments.value, pageNodeSegments.value)
+)
+
+function pageTrackedChanges(pageIndex: number): readonly DocxTrackedChange[] {
+  return trackedChangesByPage.value[pageIndex] ?? EMPTY_ANNOTATIONS
+}
+
+function pageComments(pageIndex: number): readonly DocxComment[] {
+  return commentsByPage.value[pageIndex] ?? EMPTY_ANNOTATIONS
+}
+
+// Capture comment anchors before any edit clears paragraph sourceXml, even
+// while the comments gutter is hidden.
+watch(() => props.model, (model) => primeCommentAnchors(model), { immediate: true })
+
+// Notes are resolved from the run model, once per document: this is the single
+// source of truth shared by in-text markers and the note bodies at the page
+// bottom (see buildDocumentPageNotes).
+const EMPTY_PAGE_NOTES: DocumentPageNotes = {
+  footnotes: [],
+  endnotes: [],
+  footnoteNumbers: new Map(),
+  endnoteNumbers: new Map(),
+  footnoteLabels: new Map(),
+  endnoteLabels: new Map(),
+}
+
+const pageNotes = computed<DocumentPageNotes[]>(() =>
+  buildDocumentPageNotes(props.model, pageNodeSegments.value)
+)
+
+function notesForPage(pageIndex: number): DocumentPageNotes {
+  return pageNotes.value[pageIndex] ?? EMPTY_PAGE_NOTES
+}
+
+function pageFootnoteNotes(pageIndex: number): DocumentNoteDefinition[] {
+  return notesForPage(pageIndex).footnotes.map((entry) => entry.note)
+}
+
+function pageEndnoteNotes(pageIndex: number): DocumentNoteDefinition[] {
+  return notesForPage(pageIndex).endnotes.map((entry) => entry.note)
+}
 
 // ── Page heights ───────────────────────────────────────────────────
+function pageLayoutKey(pageIndex: number): string {
+  const layout = pagePresentations.value[pageIndex]?.pageLayout
+  return layout ? `${layout.pageWidthPx}x${layout.pageHeightPx}` : "default"
+}
+
 function getPageHeight(pageIndex: number): number {
   const measured = measuredPageHeights.value[pageIndex]
-  if (Number.isFinite(measured) && (measured as number) > 0) {
-    return measured as number
+  if (measured && measured.layoutKey === pageLayoutKey(pageIndex) && Number.isFinite(measured.heightPx) && measured.heightPx > 0) {
+    return measured.heightPx
   }
   return pagePresentations.value[pageIndex]?.pageLayout.pageHeightPx ?? DEFAULT_DOC_PAGE_HEIGHT
 }
@@ -308,7 +608,7 @@ function getPageHeight(pageIndex: number): number {
 // ── Page offsets ───────────────────────────────────────────────────
 const pageOffsets = computed(() => {
   const offsets: number[] = []
-  let offset = 0
+  let offset = PAGE_TOP_PADDING
   for (let i = 0; i < pageCount.value; i++) {
     offsets.push(offset)
     offset += getPageHeight(i) * zoomFactor.value + DOC_PAGE_BREAK_GAP
@@ -326,8 +626,12 @@ const totalHeightPx = computed(() => {
 const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
   if (pageCount.value === 0) return []
 
-  const viewportStart = Math.max(0, scrollTop.value - DOC_PAGE_BREAK_GAP * PAGE_OVERSCAN)
-  const viewportEnd = viewportStart + viewportHeight.value + DOC_PAGE_BREAK_GAP * PAGE_OVERSCAN * 2
+  const viewportStart = isPrinting.value
+    ? Number.NEGATIVE_INFINITY
+    : Math.max(0, scrollTop.value - DOC_PAGE_BREAK_GAP * PAGE_OVERSCAN)
+  const viewportEnd = isPrinting.value
+    ? Number.POSITIVE_INFINITY
+    : viewportStart + viewportHeight.value + DOC_PAGE_BREAK_GAP * PAGE_OVERSCAN * 2
 
   const entries: VisiblePageEntry[] = []
   for (let i = 0; i < pageCount.value; i++) {
@@ -342,6 +646,12 @@ const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
         heightPx: pageHeight,
         pageLayout: pagePresentations.value[i]?.pageLayout ?? baseDocumentLayout.value,
         pageNodeSegments: pageNodeSegments.value[i] ?? [],
+        columns: pageColumns.value[i] ?? [],
+        columnLayout: pagePresentations.value[i]?.columnLayout ?? {
+          count: 1,
+          gapPx: 0,
+          widthsPx: [],
+        },
         pageWidthPx:
           pagePresentations.value[i]?.pageLayout.pageWidthPx ?? DEFAULT_DOC_PAGE_WIDTH,
         pageContentWidthPx: Math.max(
@@ -352,8 +662,19 @@ const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
         ),
         pageNumber: pagePresentations.value[i]?.pageNumber ?? i + 1,
         pageNumberFormat: pagePresentations.value[i]?.pageNumberFormat,
+        sectionPages:
+          sectionPageCounts.value.get(
+            pagePresentations.value[i]?.sectionIndex ?? 0,
+          ) ?? pageCount.value,
         headerSection: pagePresentations.value[i]?.headerSection,
         footerSection: pagePresentations.value[i]?.footerSection,
+        footnotes: pageFootnoteNotes(i),
+        endnotes: pageEndnoteNotes(i),
+        noteLabels: {
+          footnote: notesForPage(i).footnoteLabels,
+          endnote: notesForPage(i).endnoteLabels,
+        },
+        pageBorders: pagePresentations.value[i]?.pageBorders,
       })
     }
   }
@@ -362,35 +683,69 @@ const visiblePageEntries = computed<VisiblePageEntry[]>(() => {
 })
 
 // ── Styles ─────────────────────────────────────────────────────────
-const rootStyle = computed(() => ({
-  flex: "1",
-  width: "100%",
-  minWidth: "0",
-  overflowY: "auto" as const,
-  overflowX: "auto" as const,
-  background: `var(--docx-surface-bg, ${theme.value === "dark" ? "#111827" : "#f4f4f5"})`,
-  padding: "24px 0",
-  outline: isDragOver.value ? "3px dashed #2563eb" : "none",
-}))
+const rootStyle = computed<Record<string, string>>(() => {
+  if (isPrinting.value) {
+    const printStyle: Record<string, string> = {
+      flex: "1",
+      width: "100%",
+      minWidth: "0",
+      overflow: "visible",
+      background: "#fff",
+      padding: "0",
+      outline: "none",
+    }
+    return printStyle
+  }
+  const screenStyle: Record<string, string> = {
+    flex: "1",
+    width: "100%",
+    minWidth: "0",
+    overflowY: "auto",
+    overflowX: "auto",
+    background: `var(--docx-surface-bg, ${theme.value === "dark" ? "#111827" : "#f4f4f5"})`,
+    padding: "24px 0",
+    outline: isDragOver.value ? "3px dashed #2563eb" : "none",
+  }
+  return screenStyle
+})
 
-const spacerStyle = computed(() => ({
-  height: `${Math.max(0, totalHeightPx.value)}px`,
-  minWidth: `${Math.max(
-    0,
-    ...pagePresentations.value.map(
-      (entry) => entry.pageLayout.pageWidthPx * zoomFactor.value + gutterVisualWidthPx.value
-    )
-  ) + PAGE_SIDE_PADDING}px`,
-  position: "relative" as const,
-  width: "100%",
-}))
+const spacerStyle = computed<Record<string, string>>(() => {
+  if (isPrinting.value) {
+    return { height: "auto", minWidth: "0", position: "static", width: "100%" }
+  }
+  return {
+    height: `${Math.max(0, totalHeightPx.value)}px`,
+    minWidth: `${Math.max(
+      0,
+      ...pagePresentations.value.map(
+        (entry) => entry.pageLayout.pageWidthPx * zoomFactor.value + gutterVisualWidthPx.value
+      )
+    ) + PAGE_SIDE_PADDING}px`,
+    position: "relative",
+    width: "100%",
+  }
+})
 
 function pageWrapperStyle(entry: VisiblePageEntry): Record<string, string | number> {
+  if (isPrinting.value) {
+    return {
+      position: "relative",
+      top: "0",
+      left: "0",
+      transform: "none",
+      height: `${entry.pageLayout.pageHeightPx}px`,
+      width: `${entry.pageWidthPx}px`,
+      margin: "0 auto",
+      breakAfter: entry.pageIndex < pageCount.value - 1 ? "page" : "auto",
+    }
+  }
   // Wrapper width covers paper + gutter so translateX(-50%) centers the whole
   // footprint instead of just the paper (which would push the gutter off-right).
+  // Offsets are scroll-space values that include the container's top padding;
+  // wrappers are positioned inside the spacer, so subtract that padding again.
   return {
     position: "absolute",
-    top: `${entry.topPx}px`,
+    top: `${Math.max(0, entry.topPx - PAGE_TOP_PADDING)}px`,
     left: "50%",
     transform: "translateX(-50%)",
     height: `${entry.heightPx}px`,
@@ -399,6 +754,14 @@ function pageWrapperStyle(entry: VisiblePageEntry): Record<string, string | numb
 }
 
 function pageContentStyle(entry: VisiblePageEntry): Record<string, string> {
+  if (isPrinting.value) {
+    return {
+      height: `${entry.pageLayout.pageHeightPx}px`,
+      transform: "none",
+      transformOrigin: "left top",
+      width: `${entry.pageWidthPx}px`,
+    }
+  }
   return {
     height: `${entry.pageLayout.pageHeightPx}px`,
     transform: `scale(${zoomFactor.value})`,
@@ -440,39 +803,181 @@ function onPageMeasure(pageIndex: number, event: PageMeasureEvent): void {
   if (Number.isFinite(event.heightPx) && event.heightPx > 0) {
     measuredPageHeights.value = {
       ...measuredPageHeights.value,
-      [pageIndex]: event.heightPx,
+      [pageIndex]: { heightPx: event.heightPx, layoutKey: pageLayoutKey(pageIndex) },
     }
   }
 }
+
+function pageIdentityKey(pageIndex: number): string {
+  return documentPageNodeSegmentsIdentityKey(pageNodeSegments.value[pageIndex] ?? [])
+}
+
+function schedulePaginationMeasurementFlush(): void {
+  if (measurementFlushScheduled) return
+  measurementFlushScheduled = true
+  measurementFlushHandle = setTimeout(() => {
+    measurementFlushScheduled = false
+    measurementFlushHandle = undefined
+    flushPaginationMeasurementFeedback()
+  }, 0)
+}
+
+function onParagraphMeasure(nodeIndex: number, heightPx: number): void {
+  if (!Number.isFinite(heightPx) || heightPx <= 0) return
+  measuredParagraphHeightsPxByNodeIndex.value = {
+    ...measuredParagraphHeightsPxByNodeIndex.value,
+    [nodeIndex]: Math.round(heightPx),
+  }
+  schedulePaginationMeasurementFlush()
+}
+
+function onTableRowMeasure(nodeIndex: number, rowHeightsPx: number[]): void {
+  if (!Number.isFinite(nodeIndex) || rowHeightsPx.length === 0) return
+  measuredTableRowHeightsPxByNodeIndex.value = {
+    ...measuredTableRowHeightsPxByNodeIndex.value,
+    [nodeIndex]: rowHeightsPx.map((heightPx) => Math.max(1, Math.round(heightPx))),
+  }
+  schedulePaginationMeasurementFlush()
+}
+
+function onPageContentMeasure(pageIndex: number, heightPx: number): void {
+  if (!Number.isFinite(heightPx) || heightPx <= 0) return
+  measuredPageContentHeights.value = {
+    ...measuredPageContentHeights.value,
+    [pageIndex]: {
+      heightPx: Math.round(heightPx),
+      identityKey: pageIdentityKey(pageIndex),
+    },
+  }
+  schedulePaginationMeasurementFlush()
+}
+
+function flushPaginationMeasurementFeedback(): void {
+  if (paginationMeasurementIteration.value >= PAGINATION_MEASUREMENT_MAX_ITERATIONS) return
+  const keys = pageNodeSegments.value.map((_, pageIndex) => pageIdentityKey(pageIndex))
+  if (keys.length === 0) return
+
+  const paragraphHeightsPxByNodeIndex = { ...measuredParagraphHeightsPxByNodeIndex.value }
+  const tableRowHeightsPxByNodeIndex = { ...measuredTableRowHeightsPxByNodeIndex.value }
+  if (
+    Object.keys(paragraphHeightsPxByNodeIndex).length === 0 &&
+    Object.keys(tableRowHeightsPxByNodeIndex).length === 0
+  ) {
+    return
+  }
+
+  const previous = paginationMeasurementFeedback.value
+  const previousParagraphs = previous?.paragraphHeightsPxByNodeIndex ?? {}
+  const previousTableRows = previous?.tableRowHeightsPxByNodeIndex ?? {}
+  const paragraphChanged =
+    Object.keys(paragraphHeightsPxByNodeIndex).some(
+      (key) =>
+        Math.abs(
+          (paragraphHeightsPxByNodeIndex[Number(key)] ?? 0) -
+            (previousParagraphs[Number(key)] ?? Number.NEGATIVE_INFINITY)
+        ) > PAGINATION_MEASUREMENT_TOLERANCE_PX
+    ) ||
+    Object.keys(tableRowHeightsPxByNodeIndex).some((key) => {
+      const nextRows = tableRowHeightsPxByNodeIndex[Number(key)] ?? []
+      const previousRows = previousTableRows[Number(key)] ?? []
+      return (
+        nextRows.length !== previousRows.length ||
+        nextRows.some(
+          (heightPx, rowIndex) =>
+            Math.abs(heightPx - (previousRows[rowIndex] ?? -1)) >
+            PAGINATION_MEASUREMENT_TOLERANCE_PX
+        )
+      )
+    })
+  const identityKeysChanged =
+    previous?.pageIdentityKeys?.join("\u0000") !== keys.join("\u0000")
+  if (!paragraphChanged && !identityKeysChanged) return
+
+  // Page content heights are diagnostic only: using them directly as page
+  // budgets would let sparse pages shrink their own budget and spiral. They do
+  // make the oscillation signature sensitive to rendered overflow.
+  const renderedPageSignature = keys
+    .map((key, pageIndex) => {
+      const measured = measuredPageContentHeights.value[pageIndex]
+      return measured && measured.identityKey === key ? measured.heightPx : -1
+    })
+    .join(",")
+  const signature = `${keys.join("\u0000")}|${renderedPageSignature}|${Object.entries(
+    paragraphHeightsPxByNodeIndex
+  )
+    .map(([nodeIndex, heightPx]) => `${nodeIndex}:${Math.round(heightPx)}`)
+    .join(",")}`
+  if (seenPaginationMeasurementSignatures.has(signature)) return
+  seenPaginationMeasurementSignatures.add(signature)
+
+  paginationMeasurementFeedback.value = {
+    paragraphHeightsPxByNodeIndex,
+    tableRowHeightsPxByNodeIndex,
+    pageIdentityKeys: keys,
+  }
+  paginationMeasurementIteration.value += 1
+  measuredPageContentHeights.value = {}
+}
+
+// A new document (or a new pagination layout) invalidates every cached height:
+// only mounted pages re-measure, so stale values would corrupt offsets for all
+// virtualized pages until each one has been visited.
+watch(
+  () => [props.model, props.controller?.documentLoadNonce, props.layoutOptions] as const,
+  () => {
+    measuredPageHeights.value = {}
+    measuredParagraphHeightsPxByNodeIndex.value = {}
+    measuredTableRowHeightsPxByNodeIndex.value = {}
+    measuredPageContentHeights.value = {}
+    paginationMeasurementFeedback.value = undefined
+    paginationMeasurementIteration.value = 0
+    seenPaginationMeasurementSignatures.clear()
+  }
+)
 
 // ── Drag-and-drop file import ──────────────────────────────────────
 function onDragOver(event: DragEvent): void {
   if (!event.dataTransfer) return
   if (props.editable && props.controller && hasDocxFile(event.dataTransfer)) {
-    dragOverDepth.value++
+    // `dragover` fires continuously while inside the element; a counter would
+    // only ever grow because `dragleave` fires once when the pointer leaves.
+    isDragOver.value = true
     event.dataTransfer.dropEffect = "copy"
   }
 }
 
-function onDragLeave(): void {
-  dragOverDepth.value = Math.max(0, dragOverDepth.value - 1)
+function onDragLeave(event?: DragEvent): void {
+  const container = scrollContainerRef.value
+  const related = event?.relatedTarget as Node | null | undefined
+  if (related && container && typeof container.contains === "function" && container.contains(related)) {
+    return
+  }
+  isDragOver.value = false
 }
 
 async function onDrop(event: DragEvent): Promise<void> {
-  dragOverDepth.value = 0
+  isDragOver.value = false
   if (!props.editable || !props.controller) return
-  const file = event.dataTransfer?.files?.[0]
-  if (file && file.name.endsWith(".docx")) {
-    await props.controller.importDocxFile(file)
+
+  const files = event.dataTransfer?.files
+  if (!files || files.length === 0) return
+
+  for (let i = 0; i < files.length; i++) {
+    if (isSupportedDocxFileName(files[i].name)) {
+      await props.controller.importDocxFile(files[i])
+      return
+    }
   }
+
+  props.controller.setStatus(DOCX_UNSUPPORTED_FILE_MESSAGE)
 }
 
 // ── Context menu ─────────────────────────────────────────────────────
-function onContextMenu(event: MouseEvent): void {
+function emitContextMenuAt(clientX: number, clientY: number, target?: EventTarget | null): void {
   const container = scrollContainerRef.value
   if (!container) return
   const rect = container.getBoundingClientRect()
-  const clickY = event.clientY - rect.top + container.scrollTop
+  const clickY = clientY - rect.top + container.scrollTop
   let pageIndex = 0
   for (let i = 0; i < pageCount.value; i++) {
     const top = pageOffsets.value[i]
@@ -481,11 +986,29 @@ function onContextMenu(event: MouseEvent): void {
   }
   emit("contextMenu", {
     pageIndex,
-    clientX: event.clientX,
-    clientY: event.clientY,
-    containerX: event.clientX - rect.left,
-    containerY: event.clientY - rect.top,
+    clientX,
+    clientY,
+    containerX: clientX - rect.left,
+    containerY: clientY - rect.top,
+    target,
   })
+}
+
+const touchGestures = createTouchGestureTracker({
+  onLongPress: (pointer) => emitContextMenuAt(pointer.clientX, pointer.clientY, pointer.target as EventTarget | null),
+})
+
+function onTouchPointerDown(event: PointerEvent): void { touchGestures.pointerDown(event) }
+function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMove(event) }
+function onTouchPointerUp(event: PointerEvent): void { touchGestures.pointerUp(event) }
+function onTouchPointerCancel(event: PointerEvent): void { touchGestures.pointerCancel(event) }
+
+function onContextMenu(event: MouseEvent): void {
+  if (touchGestures.shouldSuppressContextMenu(event.clientX, event.clientY)) {
+    event.preventDefault()
+    return
+  }
+  emitContextMenuAt(event.clientX, event.clientY, event.target)
 }
 
 // ── Selection tracking ───────────────────────────────────────────────
@@ -513,38 +1036,60 @@ function onMouseUp(): void {
 function hasDocxFile(dataTransfer: DataTransfer): boolean {
   if (dataTransfer.types.includes("Files")) {
     for (let i = 0; i < dataTransfer.files.length; i++) {
-      if (dataTransfer.files[i].name.endsWith(".docx")) return true
+      if (isSupportedDocxFileName(dataTransfer.files[i].name)) return true
     }
   }
   return false
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────────
+let containerObserver: ResizeObserver | undefined
+let stopPrintDetection: () => void = () => {}
+
 onMounted(() => {
+  ensureDocumentFontInvalidation()
+  stopPrintDetection = setupPrintDetection()
   if (scrollContainerRef.value) {
     const height = scrollContainerRef.value.clientHeight
     if (Number.isFinite(height) && height > 0) viewportHeight.value = height
-    containerWidth.value = scrollContainerRef.value.clientWidth
+    const width = scrollContainerRef.value.clientWidth
+    if (Number.isFinite(width) && width > 0) containerWidth.value = width
+    scrollContainerRef.value.addEventListener("pointerdown", onTouchPointerDown, { passive: true })
+    scrollContainerRef.value.addEventListener("pointermove", onTouchPointerMove, { passive: true })
+    scrollContainerRef.value.addEventListener("pointerup", onTouchPointerUp)
+    scrollContainerRef.value.addEventListener("pointercancel", onTouchPointerCancel)
   }
   const ResizeObserverConstructor = globalThis.ResizeObserver
   if (typeof ResizeObserverConstructor !== "function") {
     updateVisibleRange()
     return
   }
-  const observer = new ResizeObserverConstructor((entries) => {
+  containerObserver = new ResizeObserverConstructor((entries) => {
     for (const entry of entries) {
       viewportHeight.value = entry.contentRect.height
       containerWidth.value = entry.contentRect.width
     }
   })
   if (scrollContainerRef.value) {
-    observer.observe(scrollContainerRef.value)
+    containerObserver.observe(scrollContainerRef.value)
   }
+})
 
-  onUnmounted(() => {
-    observer.disconnect()
-    if (scrollTimer !== null) clearTimeout(scrollTimer)
-  })
+onUnmounted(() => {
+  stopPrintDetection()
+  printPageStyle?.remove?.()
+  printPageStyle = undefined
+  containerObserver?.disconnect()
+  containerObserver = undefined
+  if (scrollTimer !== null) clearTimeout(scrollTimer)
+  if (measurementFlushHandle !== undefined) clearTimeout(measurementFlushHandle)
+  measurementFlushHandle = undefined
+  touchGestures.reset()
+  const container = scrollContainerRef.value
+  container?.removeEventListener("pointerdown", onTouchPointerDown)
+  container?.removeEventListener("pointermove", onTouchPointerMove)
+  container?.removeEventListener("pointerup", onTouchPointerUp)
+  container?.removeEventListener("pointercancel", onTouchPointerCancel)
 })
 
 // ── Expose ─────────────────────────────────────────────────────────
@@ -578,5 +1123,15 @@ defineExpose({
   overflow-y: auto;
   overflow-x: hidden;
   background: #f3f4f6;
+  touch-action: pan-x pan-y;
+}
+
+@media print {
+  .docx-viewer-root {
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
 }
 </style>

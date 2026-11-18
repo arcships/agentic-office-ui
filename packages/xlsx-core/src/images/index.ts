@@ -18,8 +18,10 @@ export {
   type DrawingRectEmu,
   type GroupTransform,
   type XlsxImageAttachment,
+  type WorkbookFormControlOrigin,
   type WorkbookImageOrigin,
   type WorkbookImageSheetOrigin,
+  type WorkbookShapeOrigin,
   // Archive path utilities
   normalizeArchivePath,
   joinArchivePath,
@@ -58,6 +60,7 @@ export {
   parseAnchor,
   anchorToRect,
   parseTransformRect,
+  parseImageSourceRect,
   applyGroupTransform,
   emuToPixels,
   pixelsToEmu,
@@ -109,6 +112,7 @@ export {
   resolveWorksheetMergeMetadata,
   resolveSheetColumnWidthPx,
   resolveSheetRowHeightPx,
+  createAnchoredRectCache,
   sumSheetColumnWidthsEmu,
   sumSheetRowHeightsEmu,
   anchorToAbsoluteRect,
@@ -141,6 +145,15 @@ export {
   parseWorkbookChartStyleAssets,
   parseWorkbookImageAssets,
   updateWorkbookImageAnchor,
+  updateWorkbookShapeAnchor,
+  deleteWorkbookImage,
+  deleteWorkbookShape,
   mergeWorkbookImageAssets,
 } from "./image-export";
+export {
+  addWorkbookFormControl,
+  updateWorkbookFormControl,
+  deleteWorkbookFormControl,
+  createAnchorElement,
+} from "./form-control-export";
 export { validateXlsxImageAssets } from "./image-budget";

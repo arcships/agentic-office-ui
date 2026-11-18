@@ -5,6 +5,9 @@ import {
   type OfficeLoadError,
   type OfficeUrlPolicy,
 } from "@arcships/office-runtime"
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction"
+
+export type PdfLoadErrorMessages = typeof officeMessagesEn.pdf.errors
 
 export type PdfSource =
   | { kind: "url"; url: string }
@@ -17,6 +20,12 @@ export interface PdfUrlPolicy {
   allowedProtocols?: readonly string[]
   allowedOrigins?: readonly string[]
   allowHttpOnLocalhost?: boolean
+  /**
+   * Redirects are followed by the shared loader and the final response URL is
+   * revalidated against this policy before bytes are accepted. Diagnostics and
+   * errors only expose the final URL after query, fragment and credentials are
+   * stripped.
+   */
   fetch?: typeof fetch
 }
 
@@ -33,6 +42,7 @@ export type PdfLoadErrorCode =
   | "FETCH_FAILED"
   | "INVALID_PDF"
   | "PDF_TOO_LARGE"
+  | "ENCRYPTED"
   | "ABORTED"
 
 export interface PdfLoadError {
@@ -129,19 +139,42 @@ function mapOfficeCode(error: OfficeLoadError): PdfLoadErrorCode {
 }
 
 function pdfMessage(code: PdfLoadErrorCode, actual?: number, allowed?: number): string {
+  const messages = officeMessagesEn.pdf.errors
   switch (code) {
-    case "SOURCE_NOT_ALLOWED": return "PDF 地址不在允许范围内。"
-    case "FETCH_FAILED": return "无法获取 PDF 文件。"
-    case "PDF_TOO_LARGE": return `PDF 文件大小 ${actual ?? "未知"} 字节超过允许值 ${allowed ?? "未知"} 字节。`
-    case "ABORTED": return "PDF 加载已取消。"
-    default: return "来源不是可验证的 PDF 文件。"
+    case "SOURCE_NOT_ALLOWED": return messages.sourceNotAllowed
+    case "FETCH_FAILED": return messages.fetchFailed
+    case "PDF_TOO_LARGE": return formatOfficeMessage(messages.tooLarge, {
+      actual: actual ?? messages.unknown,
+      allowed: allowed ?? messages.unknown,
+    })
+    case "ABORTED": return messages.aborted
+    case "ENCRYPTED": return messages.encrypted
+    default: return messages.invalidPdf
+  }
+}
+
+/** Resolve a PDF load error into localized copy for the active catalog. */
+export function localizePdfErrorMessage(
+  error: Pick<PdfLoadError, "code" | "actual" | "allowed">,
+  messages: PdfLoadErrorMessages,
+): string {
+  switch (error.code) {
+    case "SOURCE_NOT_ALLOWED": return messages.sourceNotAllowed
+    case "FETCH_FAILED": return messages.fetchFailed
+    case "PDF_TOO_LARGE": return formatOfficeMessage(messages.tooLarge, {
+      actual: error.actual ?? messages.unknown,
+      allowed: error.allowed ?? messages.unknown,
+    })
+    case "ABORTED": return messages.aborted
+    case "ENCRYPTED": return messages.encrypted
+    default: return messages.invalidPdf
   }
 }
 
 function fromOfficeError(error: unknown, sourceKind: PdfSource["kind"], url?: string): PdfSourceError {
   const officeError = toOfficeLoadError(error, {
     fallbackCode: "INVALID_SOURCE",
-    message: "无法打开 PDF 文件。",
+    message: officeMessagesEn.pdf.errors.openFailed,
     format: "pdf",
     sourceKind: sourceKind === "blob" ? "file" : "url",
     url,
@@ -182,15 +215,34 @@ function verifyPdfBytes(bytes: Uint8Array, sourceKind: PdfSource["kind"], url?: 
     bytes[3] === 0x46 &&
     bytes[4] === 0x2d
   if (!isPdf) {
-    throw new PdfSourceError({ code: "INVALID_PDF", message: "来源不是可验证的 PDF 文件。", sourceKind, url })
+    throw new PdfSourceError({ code: "INVALID_PDF", message: officeMessagesEn.pdf.errors.invalidPdf, sourceKind, url })
   }
 }
 
-function verifyPdfMime(contentType: string | undefined, sourceKind: PdfSource["kind"], url?: string): void {
+/**
+ * CDNs and object stores commonly serve PDF bytes as application/octet-stream
+ * or with no Content-Type at all. Only reject an explicitly wrong media type;
+ * the %PDF- magic check below remains the authority for the actual bytes.
+ */
+const ACCEPTED_PDF_CONTENT_TYPES = new Set([
+  "application/pdf",
+  "application/x-pdf",
+  "application/octet-stream",
+  "binary/octet-stream",
+])
+
+function isAcceptedPdfContentType(contentType: string | undefined): boolean {
   const mime = contentType?.split(";", 1)[0]?.trim().toLowerCase()
-  if (mime !== "application/pdf") {
-    throw new PdfSourceError({ code: "INVALID_PDF", message: "来源响应不是 application/pdf。", sourceKind, url })
-  }
+  return !mime || ACCEPTED_PDF_CONTENT_TYPES.has(mime)
+}
+
+function verifyPdfMime(contentType: string | undefined, sourceKind: PdfSource["kind"], url?: string): void {
+  if (isAcceptedPdfContentType(contentType)) return
+  throw new PdfSourceError({ code: "INVALID_PDF", message: officeMessagesEn.pdf.errors.invalidPdf, sourceKind, url })
+}
+
+function isEncryptedPdfError(error: unknown): boolean {
+  return !!error && typeof error === "object" && (error as { code?: unknown }).code === "ENCRYPTED"
 }
 
 function fileNameFromUrl(rawUrl: string): string {
@@ -214,12 +266,21 @@ function fileNameFromBlob(source: Extract<PdfSource, { kind: "blob" }>): string 
 
 export function toPdfLoadError(error: unknown, sourceKind: PdfSource["kind"], url?: string): PdfLoadError {
   if (error instanceof PdfSourceError) return error.toJSON()
+  if (isEncryptedPdfError(error)) {
+    return new PdfSourceError({
+      code: "ENCRYPTED",
+      message: pdfMessage("ENCRYPTED"),
+      sourceKind,
+      ...(url ? { url } : {}),
+    }, { cause: error }).toJSON()
+  }
   return fromOfficeError(error, sourceKind, url).toJSON()
 }
 
 /**
  * Compatibility adapter over office-runtime. PDF keeps its public Blob shape,
- * while URL validation, controlled fetch, cancellation and redaction are shared.
+ * while URL validation, redirect revalidation, controlled fetch, cancellation
+ * and query/fragment/credential redaction are shared with every office loader.
  */
 export async function loadVerifiedPdfSource(
   source: PdfSource,
@@ -251,8 +312,8 @@ export async function loadVerifiedPdfSource(
     const sourceKind = source.kind
     if (sourceKind === "blob") {
       const mime = source.blob.type.trim().toLowerCase()
-      if (mime && mime !== "application/pdf") {
-        throw new PdfSourceError({ code: "INVALID_PDF", message: "文件不是 application/pdf。", sourceKind })
+      if (mime && !isAcceptedPdfContentType(mime)) {
+        throw new PdfSourceError({ code: "INVALID_PDF", message: officeMessagesEn.pdf.errors.invalidPdf, sourceKind })
       }
     } else {
       verifyPdfMime(resolved.contentType, sourceKind, resolved.resolvedUrl)

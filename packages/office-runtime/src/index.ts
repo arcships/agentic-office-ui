@@ -32,7 +32,29 @@ export {
   normalizeWheelDelta,
 } from "./gesture-zoom";
 export {
+  SURFACE_DOUBLE_TAP_ZOOM,
+  TOUCH_CONTEXT_MENU_SUPPRESSION_MS,
+  TOUCH_CONTEXT_MENU_SUPPRESSION_PX,
+  TOUCH_DOUBLE_TAP_DISTANCE_PX,
+  TOUCH_DOUBLE_TAP_MS,
+  TOUCH_LONG_PRESS_MS,
+  TOUCH_LONG_PRESS_MOVE_TOLERANCE_PX,
+  TOUCH_MIN_TARGET_PX,
+  createTouchGestureTracker,
+  nextDoubleTapZoom,
+  pinchSurfaceZoom,
+  pointerDistance,
+} from "./touch-gestures";
+export type {
+  TouchGesturePoint,
+  TouchGesturePointer,
+  TouchGesturePointerEvent,
+  TouchGestureTracker,
+  TouchGestureTrackerOptions,
+} from "./touch-gestures";
+export {
   assertOfficeInputBytes,
+  resolveOfficeInputByteLimit,
   resolveOfficeLimits,
   snapshotOfficeLimits,
 } from "./limits";
@@ -50,18 +72,32 @@ export type {
 export {
   inspectOfficeArchive,
   validateOfficeArchive,
+  validateOfficeArchiveParts,
   validateOfficeXmlEntry,
+  validateOfficeXmlText,
+  utf8ByteLength,
 } from "./archive-budget";
 export type {
   OfficeArchiveEntry,
+  OfficeArchivePart,
+  OfficeArchivePartsOptions,
+  OfficeArchivePartsValidation,
   OfficeArchiveSummary,
   OfficeArchiveValidationOptions,
   OfficeArchiveValidationResult,
   OfficeXmlEntrySummary,
 } from "./archive-budget";
 export { resolveOfficeUrl, snapshotOfficeUrlPolicy } from "./url-policy";
+export {
+  OFFICE_LINK_PROTOCOLS,
+  isSafeOfficeLink,
+  sanitizeOfficeLink,
+} from "./link-policy";
+export type { OfficeLinkProtocol } from "./link-policy";
 export type {
   OfficeFetch,
+  OfficeFetchBody,
+  OfficeFetchBodyReader,
   OfficeFetchHeaders,
   OfficeFetchInit,
   OfficeFetchResponse,

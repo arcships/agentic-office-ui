@@ -768,10 +768,14 @@ export interface OfficeReferenceCandidateChange {
   activeCandidateId?: string
 }
 
-export interface OfficeRegionDraftChange {
-  phase: "start" | "change"
-  region: ManualRegionLocator
-}
+export type OfficeRegionDraftStart =
+  | { space: "page"; pageIndex: number; x: number; y: number }
+  | { space: "slide"; slideIndex: number; x: number; y: number }
+  | { space: "sheet"; sheetId: string; start: SheetRegionPoint }
+
+export type OfficeRegionDraftChange =
+  | { phase: "start"; point: OfficeRegionDraftStart }
+  | { phase: "change"; region: ManualRegionLocator }
 
 export interface OfficeSelectionCancelEvent {
   mode: OfficeSelectionMode

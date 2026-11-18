@@ -34,13 +34,7 @@ export type { PaginationSectionMetrics } from "../../layout/pagination";
 
 // A page node segment extended with the optional table-row-slice field present
 // in the upstream DocumentPageNodeSegment (used by the identity-key serializer).
-export interface MeasuredDocumentPageNodeSegment extends DocumentPageNodeSegment {
-  tableRowSlice?: {
-    rowIndex: number;
-    startOffsetPx: number;
-    sliceHeightPx: number;
-  };
-}
+export type MeasuredDocumentPageNodeSegment = DocumentPageNodeSegment;
 
 // Extended pagination-section metrics carrying the column multiplier used by
 // the render-time page-content-height resolver. The layout-layer
@@ -58,8 +52,17 @@ export function stabilizeMeasuredPageContentHeights(
   options?: {
     currentPageIdentityKeys?: string[];
     nextPageIdentityKeys?: string[];
+    /** Measurement generation that produced `current` (font-set fingerprint). */
+    currentGeneration?: number;
+    /** Measurement generation that produced `next`. */
+    nextGeneration?: number;
   }
 ): number[] {
+  const measurementGenerationChanged =
+    options?.currentGeneration !== undefined &&
+    options?.nextGeneration !== undefined &&
+    options.currentGeneration !== options.nextGeneration;
+
   return next.map((heightPx, pageIndex) => {
     const roundedNextHeightPx = Math.round(heightPx);
     const currentHeightPx = current[pageIndex];
@@ -70,7 +73,7 @@ export function stabilizeMeasuredPageContentHeights(
       currentPageIdentityKey === undefined ||
       nextPageIdentityKey === undefined ||
       currentPageIdentityKey === nextPageIdentityKey;
-    return Number.isFinite(currentHeightPx)
+    return Number.isFinite(currentHeightPx) && !measurementGenerationChanged
       ? canPreserveConservativeHeight
         ? Math.min(Math.round(currentHeightPx as number), roundedNextHeightPx)
         : roundedNextHeightPx
@@ -84,12 +87,16 @@ export function documentPageNodeSegmentIdentityKey(
   segment: MeasuredDocumentPageNodeSegment
 ): string {
   const tableRowRangeKey = segment.tableRowRange
-    ? `${segment.tableRowRange.startRowIndex}-${segment.tableRowRange.endRowIndex}`
+    ? `${segment.tableRowRange.startRowIndex}-${segment.tableRowRange.endRowIndex}-${
+        segment.tableRowRange.repeatHeaderRowCount ?? 0
+      }`
     : "none";
   const tableRowSliceKey = segment.tableRowSlice
     ? `${segment.tableRowSlice.rowIndex}-${Math.round(
         segment.tableRowSlice.startOffsetPx
-      )}-${Math.round(segment.tableRowSlice.sliceHeightPx)}`
+      )}-${Math.round(segment.tableRowSlice.sliceHeightPx)}-${Math.round(
+        segment.tableRowSlice.totalRowHeightPx
+      )}`
     : "none";
   const paragraphLineRangeKey = segment.paragraphLineRange
     ? `${segment.paragraphLineRange.startLineIndex}-${segment.paragraphLineRange.endLineIndex}-${segment.paragraphLineRange.totalLineCount}`
@@ -139,6 +146,24 @@ export function buildPaginationSectionMetrics(
         1,
         sectionColumns?.count ?? 1
       );
+      const bodyWidthPx = resolveSectionPaginationContentWidthPx(
+        layout,
+        section.sectionPropertiesXml
+      );
+      const columnWidthPx =
+        pageContentHeightMultiplier === 1
+          ? bodyWidthPx
+          : sectionColumns?.widthsPx?.length === pageContentHeightMultiplier
+          ? sectionColumns.widthsPx[0]
+          : Math.max(
+              24,
+              Math.round(
+                (bodyWidthPx -
+                  (sectionColumns?.gapPx ?? 0) *
+                    (pageContentHeightMultiplier - 1)) /
+                  pageContentHeightMultiplier
+              )
+            );
       const hasHeaderContent = sectionHasVisibleHeaderContent(section);
       const hasFooterContent = sectionHasVisibleFooterContent(section);
       const headerPaginationReservePx = hasHeaderContent
@@ -157,10 +182,7 @@ export function buildPaginationSectionMetrics(
         : 0;
       return {
         startNodeIndex: Math.max(0, Math.round(section.startNodeIndex)),
-        pageContentWidthPx: resolveSectionPaginationContentWidthPx(
-          layout,
-          section.sectionPropertiesXml
-        ),
+        pageContentWidthPx: columnWidthPx,
         pageContentHeightPx: Math.max(
           120,
           (layout.pageHeightPx -

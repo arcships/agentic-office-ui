@@ -77,18 +77,24 @@ export function parseChartMultiLevelCacheValues(
   }
 
   const pointCount = readChartNumericAttribute(cacheNode, "ptCount");
-  const primaryLevelNode = mode === "category"
-    ? levelNodes[levelNodes.length - 1] ?? levelNodes[0]
-    : levelNodes[0];
-  const pointNodes = getLocalChildren(primaryLevelNode, "pt")
-    .map((pointNode) => {
-      const rawIndex = Number(pointNode.getAttribute("idx") ?? Number.NaN);
-      return {
-        index: Number.isFinite(rawIndex) ? rawIndex : 0,
-        value: getFirstLocalChild(pointNode, "v")?.textContent ?? ""
-      };
-    })
-    .sort((left, right) => left.index - right.index);
+  const readLevelPoints = (levelNode: Element) => (
+    getLocalChildren(levelNode, "pt")
+      .map((pointNode) => {
+        const rawIndex = Number(pointNode.getAttribute("idx") ?? Number.NaN);
+        return {
+          index: Number.isFinite(rawIndex) ? rawIndex : 0,
+          value: getFirstLocalChild(pointNode, "v")?.textContent ?? ""
+        };
+      })
+      .sort((left, right) => left.index - right.index)
+  );
+  const levelPointNodes = levelNodes.map(readLevelPoints).filter((points) => points.length > 0);
+  if (levelPointNodes.length === 0) {
+    return null;
+  }
+  const pointNodes = mode === "value"
+    ? levelPointNodes[0] ?? []
+    : levelPointNodes.flatMap((points) => points);
 
   if (pointNodes.length === 0) {
     return null;
@@ -96,17 +102,24 @@ export function parseChartMultiLevelCacheValues(
 
   const maxIndex = pointNodes.reduce((max, point) => Math.max(max, point.index), 0);
   const targetLength = Math.max(
-    pointNodes.length,
+    ...levelPointNodes.map((points) => points.length),
     Number.isFinite(pointCount ?? Number.NaN) ? Number(pointCount) : 0,
     maxIndex + 1
   );
   const values = Array.from({ length: targetLength }, () => null as number | string | null);
-  for (const point of pointNodes) {
-    if (mode === "value") {
+  if (mode === "value") {
+    for (const point of pointNodes) {
       values[point.index] = cellValueToNumber(point.value);
-      continue;
     }
-    values[point.index] = point.value.length > 0 ? point.value : null;
+    return values;
+  }
+
+  const levelMaps = levelPointNodes.map((points) => new Map(points.map((point) => [point.index, point.value])));
+  for (let index = 0; index < targetLength; index += 1) {
+    const labels = levelMaps
+      .map((level) => level.get(index) ?? "")
+      .filter((value) => value.length > 0);
+    values[index] = labels.length > 0 ? labels.join(" / ") : null;
   }
   return values;
 }

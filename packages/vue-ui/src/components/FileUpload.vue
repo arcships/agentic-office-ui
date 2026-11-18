@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import type { FileUploadProps, FileUploadRejection } from "../types"
+import { useOfficeUiMessages } from "../i18n"
 
 const props = withDefaults(defineProps<FileUploadProps>(), {
   accept: "",
@@ -9,6 +10,7 @@ const props = withDefaults(defineProps<FileUploadProps>(), {
   disabled: false,
   className: "",
 })
+const m = useOfficeUiMessages()
 
 const emit = defineEmits<{
   "files-accepted": [files: File[]]
@@ -151,7 +153,7 @@ function openPicker() {
       </slot>
       <div class="file-upload-copy">
         <p class="file-upload-label">
-          <slot name="label">Drag & drop files here, or click to select</slot>
+          <slot name="label">{{ m.vueUi.fileUpload.prompt }}</slot>
         </p>
         <p v-if="props.accept" class="file-upload-meta">
           Accepted: {{ props.accept }}

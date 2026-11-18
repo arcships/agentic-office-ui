@@ -44,6 +44,8 @@ import "@arcships/vue-pptx/style.css"
 import "@arcships/vue-ui/style.css"
 ```
 
+所有查看器都带打印样式：打印时工具栏、缩略图、状态栏等外壳自动隐藏，限制高度的 flex 容器会改为随纸张内容展开；DOCX 打印会自动关闭页面虚拟化并逐页分页。`@arcships/vue-ui/style.css` 还提供一份跨查看器的打印基线。
+
 ## 最小示例
 
 ```vue

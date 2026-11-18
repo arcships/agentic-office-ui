@@ -8,59 +8,69 @@
     />
     <div
       v-if="visible"
+      ref="menuRef"
       class="xlsx-contextmenu"
       data-testid="xlsx-context-menu"
       :style="menuStyle"
       role="menu"
+      :aria-label="m.xlsx.contextMenu.label"
+      @keydown="onMenuKeydown"
     >
-      <button class="xlsx-contextmenu__item" role="menuitem" @click="onCopy">复制</button>
+      <button class="xlsx-contextmenu__item" role="menuitem" @click="onCopy">{{ m.xlsx.contextMenu.copy }}</button>
       <button
         v-if="!isReadOnly"
         class="xlsx-contextmenu__item"
         role="menuitem"
         @click="onPaste"
-      >粘贴</button>
+      >{{ m.xlsx.contextMenu.paste }}</button>
       <button
         v-if="!isReadOnly"
         class="xlsx-contextmenu__item"
         role="menuitem"
         @click="onClear"
-      >清除内容</button>
+      >{{ m.xlsx.contextMenu.clear }}</button>
       <template v-if="sortTarget && !isReadOnly">
-        <div class="xlsx-contextmenu__separator" />
+        <div class="xlsx-contextmenu__separator" role="separator" />
         <button
           class="xlsx-contextmenu__item"
           data-testid="xlsx-sort-ascending"
           role="menuitem"
           @click="onSort('ascending')"
-        >按此列升序</button>
+        >{{ m.xlsx.contextMenu.sortAscending }}</button>
         <button
           class="xlsx-contextmenu__item"
           data-testid="xlsx-sort-descending"
           role="menuitem"
           @click="onSort('descending')"
-        >按此列降序</button>
+        >{{ m.xlsx.contextMenu.sortDescending }}</button>
       </template>
-      <div class="xlsx-contextmenu__separator" />
+      <div class="xlsx-contextmenu__separator" role="separator" />
       <button
         v-if="!isReadOnly"
         class="xlsx-contextmenu__item"
         role="menuitem"
         @click="onUndo"
-      >撤销</button>
+      >{{ m.xlsx.contextMenu.undo }}</button>
       <button
         v-if="!isReadOnly"
         class="xlsx-contextmenu__item"
         role="menuitem"
         @click="onRedo"
-      >重做</button>
+      >{{ m.xlsx.contextMenu.redo }}</button>
     </div>
   </Teleport>
+  <XlsxClipboardNotice :message="clipboardNotice" />
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted, watch, type CSSProperties } from "vue";
+import { ref, computed, nextTick, onUnmounted, watch, type CSSProperties } from "vue";
+import { useOfficeMenuKeyboard } from "@arcships/vue-ui";
 import type { XlsxCellAddress, XlsxSheetData, XlsxViewerController } from "@arcships/xlsx-core";
+import XlsxClipboardNotice from "./XlsxClipboardNotice.vue";
+import { useClipboardCopyNotice } from "../composables/useClipboardCopyNotice";
+import { frozenExtent } from "./grid-metrics";
+import { paneAxisContentOffset } from "./grid-pane-geometry";
+import { useXlsxMessages } from "../i18n";
 
 const DEFAULT_ROW_HEIGHT = 24;
 const DEFAULT_COL_WIDTH = 80;
@@ -72,13 +82,33 @@ const MIN_DISPLAY_COLS = 50;
 const props = defineProps<{
   controller: XlsxViewerController;
   targetElement?: HTMLElement | null;
+  /** Native contextmenu is ignored right after a synthetic long press. */
+  suppressContextMenu?: ((clientX: number, clientY: number) => boolean) | null;
 }>();
 
 const visible = ref(false);
+const menuRef = ref<HTMLElement | null>(null);
+const m = useXlsxMessages();
 const position = ref({ x: 0, y: 0 });
 const sortTarget = ref<{ columnIndex: number; tableName: string } | null>(null);
 
-const isReadOnly = computed(() => props.controller.readOnly);
+const isReadOnly = computed(() => props.controller.isEditingLocked ?? props.controller.readOnly);
+const { notice: clipboardNotice, copySelection } = useClipboardCopyNotice(() => props.controller, {
+  failureMessage: () => m.value.xlsx.clipboard.copyFailed,
+});
+
+// Escape/Tab and arrow navigation come from the shared Office menu keyboard, so
+// the cell menu closes exactly like the DOCX context menu and returns focus to
+// the surface that opened it.
+const menuKeyboard = useOfficeMenuKeyboard({
+  menu: () => menuRef.value,
+  close: () => close(),
+  restoreTarget: () => props.targetElement ?? null,
+});
+
+function onMenuKeydown(event: KeyboardEvent): void {
+  menuKeyboard.onKeydown(event);
+}
 
 const menuStyle = computed<CSSProperties>(() => ({
   left: `${position.value.x}px`,
@@ -115,9 +145,14 @@ function resolveGridCell(
   clientY: number,
 ): XlsxCellAddress | null {
   const rect = target.getBoundingClientRect();
-  const x = clientX - rect.left + target.scrollLeft - ROW_HEADER_WIDTH;
-  const y = clientY - rect.top + target.scrollTop - HEADER_HEIGHT;
-  if (x < 0 || y < 0) return null;
+  const localX = clientX - rect.left - ROW_HEADER_WIDTH;
+  const localY = clientY - rect.top - HEADER_HEIGHT;
+  if (localX < 0 || localY < 0) return null;
+  // A frozen row/column keeps content coordinates: only the scrolling pane
+  // adds the scroll offset, otherwise a right-click on a pinned cell would
+  // select whatever scrolled underneath it.
+  const x = paneAxisContentOffset(localX, target.scrollLeft, frozenExtent(sheet, "column", zoomScale));
+  const y = paneAxisContentOffset(localY, target.scrollTop, frozenExtent(sheet, "row", zoomScale));
 
   const zoom = Math.max(0.01, zoomScale / 100);
   const colCount = Math.max(sheet.colWidths.length, MIN_DISPLAY_COLS);
@@ -138,19 +173,25 @@ function resolveGridCell(
 }
 
 function onContextMenu(event: MouseEvent) {
+  if (props.suppressContextMenu?.(event.clientX, event.clientY)) {
+    event.preventDefault();
+    return;
+  }
+  if (openAt(event.clientX, event.clientY, event.target)) event.preventDefault();
+}
+
+function openAt(clientX: number, clientY: number, eventTarget?: unknown): boolean {
   const target = props.targetElement;
   const sheet = props.controller.activeSheet;
-  if (!target || !sheet) return;
-  const eventTarget = event.target;
+  if (!target || !sheet) return false;
   if (
     typeof HTMLElement !== "undefined" &&
     eventTarget instanceof HTMLElement &&
     eventTarget.closest("input, textarea, [contenteditable='true']")
-  ) return;
+  ) return false;
 
-  const cell = resolveGridCell(target, sheet, props.controller.zoomScale, event.clientX, event.clientY);
-  if (!cell) return;
-  event.preventDefault();
+  const cell = resolveGridCell(target, sheet, props.controller.zoomScale, clientX, clientY);
+  if (!cell) return false;
   props.controller.selectCell(cell);
   const table = props.controller.tables.find((candidate) => {
     const headerRows = Math.max(1, candidate.headerRowCount);
@@ -162,12 +203,15 @@ function onContextMenu(event: MouseEvent) {
   sortTarget.value = table
     ? { columnIndex: cell.col - table.start.col, tableName: table.name }
     : null;
-  position.value = { x: event.clientX, y: event.clientY };
+  position.value = { x: clientX, y: clientY };
+  menuKeyboard.captureInvoker();
   visible.value = true;
+  void nextTick(() => menuKeyboard.focusFirst());
+  return true;
 }
 
 function close() { visible.value = false; sortTarget.value = null; }
-function onCopy() { props.controller.copySelectionToClipboard(); close(); }
+function onCopy() { void copySelection(); close(); }
 function onPaste() { props.controller.pasteFromClipboard(); close(); }
 function onClear() { props.controller.clearSelectedCells(); close(); }
 function onUndo() { props.controller.undo(); close(); }
@@ -196,6 +240,8 @@ onUnmounted(() => {
   boundTarget?.removeEventListener("contextmenu", boundHandler);
   boundTarget = null;
 });
+
+defineExpose({ openAt, close });
 </script>
 
 <style scoped>
@@ -211,4 +257,7 @@ onUnmounted(() => {
 }
 .xlsx-contextmenu__item:hover { background: #f4f4f5; }
 .xlsx-contextmenu__separator { background: #e4e4e7; height: 1px; margin: 4px 0; }
+@media (pointer: coarse) {
+  .xlsx-contextmenu__item { height: 44px; }
+}
 </style>

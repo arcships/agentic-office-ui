@@ -6,14 +6,21 @@ import type {
 } from "../engine/types";
 import {
   collectDocxHardPageBreakStartNodeIndexes,
+  collectParagraphExplicitPageBreakOffsets,
   collectTableExplicitPageBreakInfo,
   paragraphAfterSpacingPx,
   paragraphBeforeSpacingPx,
+  paragraphLastRenderedPageBreakPosition,
+  paragraphLastRenderedPageBreakTextOffset,
   paragraphStartsWithLastRenderedPageBreak,
   paragraphHasPageBreakBefore,
+  resolveDocumentSectionsFromMetadata,
   resolvePaginationSectionMetricsIndexForNodeIndex,
   resolveParagraphBeforeSpacingPx,
-  type PaginationSectionMetrics
+  resolveParagraphConsumedHeightPx,
+  sectionBreakRequiredPageParity,
+  type PaginationSectionMetrics,
+  type SectionStartPageParity
 } from "./pagination";
 import {
   collectDocxEstimatedOverflowBreakStartNodeIndexes,
@@ -41,6 +48,15 @@ const LAST_RENDERED_PAGE_BREAK_HINT_MAX_REMAINING_SPACE_PX = 120;
 export interface TableRowRange {
   startRowIndex: number;
   endRowIndex: number;
+  /** Leading `w:tblHeader` rows repeated at the top of this continuation page. */
+  repeatHeaderRowCount?: number;
+}
+
+export interface TableRowSlice {
+  rowIndex: number;
+  startOffsetPx: number;
+  sliceHeightPx: number;
+  totalRowHeightPx: number;
 }
 
 export interface ParagraphLineRange {
@@ -53,6 +69,7 @@ export interface ParagraphLineRange {
 export interface DocumentPageNodeSegment {
   nodeIndex: number;
   tableRowRange?: TableRowRange;
+  tableRowSlice?: TableRowSlice;
   paragraphLineRange?: ParagraphLineRange;
 }
 
@@ -89,6 +106,18 @@ export interface DocumentPageSegmentationOptions extends OverflowBreakCollection
   measuredPageContentHeightsPxByPageIndex?: number[];
   minParagraphLineHeightPx?: number;
   preferLastRenderedParagraphStartBreaks?: boolean;
+  /**
+   * Resolves the wrap line on which Word's cached
+   * `w:lastRenderedPageBreak` sits. Used to break inside a paragraph instead
+   * of moving the whole paragraph to the next page. When omitted, the break
+   * line is estimated proportionally from the marker's text offset.
+   */
+  paragraphLastRenderedPageBreakLineIndex?: (
+    paragraph: ParagraphNode,
+    lineCount: number,
+    availableWidthPx?: number,
+    numberingDefinitions?: NumberingDefinitionSet
+  ) => number | undefined;
 }
 
 function paragraphSegmentHasPartialLineRange(paragraphLineRange?: ParagraphLineRange): boolean {
@@ -156,6 +185,135 @@ function shouldHonorParagraphStartLastRenderedPageBreak(params: {
     )
   );
   return remainingHeightPx <= maxAllowedRemainingHeightPx;
+}
+
+function paragraphTextContentLength(paragraph: ParagraphNode): number {
+  return paragraph.children.reduce((length, child) => {
+    if (child.type === "text") {
+      return length + child.text.length;
+    }
+    if (child.type === "form-field") {
+      return length + (child.value ?? "").length;
+    }
+    return length;
+  }, 0);
+}
+
+function estimateBreakLineIndexForTextOffset(
+  textOffset: number,
+  textLength: number,
+  lineCount: number
+): number | undefined {
+  if (textLength <= 0 || lineCount <= 0) {
+    return undefined;
+  }
+
+  const clampedOffset = Math.max(0, Math.min(textOffset, textLength));
+  return Math.max(
+    0,
+    Math.min(
+      lineCount,
+      Math.round((clampedOffset / textLength) * lineCount)
+    )
+  );
+}
+
+/**
+ * Wrap lines at which the paragraph must start a new page. Explicit
+ * `<w:br w:type="page"/>` breaks inside the paragraph are authoritative;
+ * Word's cached `w:lastRenderedPageBreak` marker is only honoured when the
+ * caller opted into render hints. A mid-paragraph marker is a line-level
+ * break, never a node-level page start.
+ */
+function resolveParagraphForcedPageBreakLineIndexes(params: {
+  paragraph: ParagraphNode;
+  lineCount: number;
+  availableWidthPx?: number;
+  numberingDefinitions?: NumberingDefinitionSet;
+  preferLastRenderedPageBreakHints: boolean;
+  resolveLastRenderedPageBreakLineIndex?: DocumentPageSegmentationOptions["paragraphLastRenderedPageBreakLineIndex"];
+}): number[] {
+  const {
+    paragraph,
+    lineCount,
+    availableWidthPx,
+    numberingDefinitions,
+    preferLastRenderedPageBreakHints,
+    resolveLastRenderedPageBreakLineIndex
+  } = params;
+  const textLength = paragraphTextContentLength(paragraph);
+  if (textLength <= 0) {
+    return [];
+  }
+
+  // A paragraph estimated as a single line can still carry an inline break;
+  // model it as two flow lines so the break produces a real page boundary
+  // instead of being dropped.
+  const lineCountForBreak = Math.max(lineCount, 2);
+  const breakLineIndexes = new Set<number>();
+  const addBreakLineIndex = (lineIndex: number | undefined): void => {
+    if (lineIndex === undefined) {
+      return;
+    }
+    const clamped = Math.max(1, Math.min(lineCountForBreak, lineIndex));
+    if (clamped < lineCountForBreak) {
+      breakLineIndexes.add(clamped);
+    }
+  };
+
+  collectParagraphExplicitPageBreakOffsets(paragraph).forEach((textOffset) => {
+    if (textOffset <= 0 || textOffset >= textLength) {
+      return;
+    }
+    addBreakLineIndex(
+      estimateBreakLineIndexForTextOffset(
+        textOffset,
+        textLength,
+        lineCountForBreak
+      )
+    );
+  });
+
+  if (
+    preferLastRenderedPageBreakHints &&
+    paragraphLastRenderedPageBreakPosition(paragraph) === "internal"
+  ) {
+    const hintedLineIndex =
+      resolveLastRenderedPageBreakLineIndex?.(
+        paragraph,
+        lineCountForBreak,
+        availableWidthPx,
+        numberingDefinitions
+      ) ??
+      (() => {
+        const textOffset = paragraphLastRenderedPageBreakTextOffset(paragraph);
+        return textOffset === undefined
+          ? undefined
+          : estimateBreakLineIndexForTextOffset(
+              textOffset,
+              textLength,
+              lineCountForBreak
+            );
+      })();
+    addBreakLineIndex(hintedLineIndex);
+  }
+
+  return [...breakLineIndexes].sort((left, right) => left - right);
+}
+
+function tableHeaderRowCount(table: TableNode): number {
+  let headerRowCount = 0;
+  for (const row of table.rows) {
+    if (row.style?.isHeader !== true) {
+      break;
+    }
+    headerRowCount += 1;
+  }
+  return headerRowCount;
+}
+
+function tableRowCanSplitAcrossPages(row: TableNode["rows"][number]): boolean {
+  return row.style?.cantSplit !== true && row.style?.heightRule !== "exact";
 }
 
 function keepNextParagraphReservePx(
@@ -281,6 +439,17 @@ export function buildDocumentPageNodeSegments(
   const pages: DocumentPageNodeSegment[][] = [];
   let currentPageSegments: DocumentPageNodeSegment[] = [];
   const hardBreakStartNodeIndexes = collectDocxHardPageBreakStartNodeIndexes(model);
+  const sectionStartPageParityByNodeIndex = new Map<
+    number,
+    SectionStartPageParity
+  >();
+  for (const section of resolveDocumentSectionsFromMetadata(model.metadata)) {
+    const startNodeIndex = Math.max(0, Math.round(section.startNodeIndex));
+    const parity = sectionBreakRequiredPageParity(section.sectionPropertiesXml);
+    if (startNodeIndex > 0 && parity) {
+      sectionStartPageParityByNodeIndex.set(startNodeIndex, parity);
+    }
+  }
   const estimatedRowHeightsByTableNodeIndex = new Map<number, number[]>();
   const allowParagraphLineSplitting = options?.allowParagraphLineSplitting ?? true;
   const suppressSpacingBeforeAfterPageBreak =
@@ -306,7 +475,21 @@ export function buildDocumentPageNodeSegments(
       pages.push(currentPageSegments);
     }
     currentPageSegments = [];
-    currentPageIndex += 1;
+    currentPageIndex = pages.length;
+  };
+  const startNextPageForSection = (parity?: SectionStartPageParity): void => {
+    startNextPage();
+    if (parity) {
+      // Word numbers pages from 1. `evenPage` sections must start on an even
+      // page number and `oddPage` sections on an odd one; otherwise insert a
+      // blank page so headers/footers bind to the right parity.
+      const nextPageNumber = pages.length + 1;
+      const startsOnEvenPage = nextPageNumber % 2 === 0;
+      if (startsOnEvenPage !== (parity === "even")) {
+        pages.push([]);
+      }
+    }
+    currentPageIndex = pages.length;
   };
 
   if (!Number.isFinite(pageContentHeightPx) || pageContentHeightPx <= 0) {
@@ -314,7 +497,6 @@ export function buildDocumentPageNodeSegments(
   }
 
   let pageConsumedHeightPx = 0;
-  let previousParagraphAfterPx = 0;
   let currentMetricsIndex = 0;
   let committedKeepNextChainEndNodeIndex = -1;
   let currentPageContentHeightPx = resolvePageContentHeightPx(
@@ -331,9 +513,20 @@ export function buildDocumentPageNodeSegments(
     const nodeMetrics = metricsBySection[currentMetricsIndex] ?? fallbackMetrics;
 
     if (hardBreakStartNodeIndexes.has(nodeIndex) && currentPageSegments.length > 0) {
-      startNextPage();
+      startNextPageForSection(sectionStartPageParityByNodeIndex.get(nodeIndex));
       pageConsumedHeightPx = 0;
-      previousParagraphAfterPx = 0;
+      currentPageContentHeightPx = resolvePageContentHeightPx(
+        currentPageIndex,
+        nodeMetrics.pageContentHeightPx
+      );
+    } else if (
+      hardBreakStartNodeIndexes.has(nodeIndex) &&
+      sectionStartPageParityByNodeIndex.has(nodeIndex)
+    ) {
+      // The previous node ended exactly at the page boundary; the section
+      // still needs its parity page.
+      startNextPageForSection(sectionStartPageParityByNodeIndex.get(nodeIndex));
+      pageConsumedHeightPx = 0;
       currentPageContentHeightPx = resolvePageContentHeightPx(
         currentPageIndex,
         nodeMetrics.pageContentHeightPx
@@ -343,14 +536,12 @@ export function buildDocumentPageNodeSegments(
     const node = model.nodes[nodeIndex];
     if (node.type === "paragraph") {
       if (callbacks.paragraphIsStructuralSectionBreakSpacer(node)) {
-        previousParagraphAfterPx = 0;
         continue;
       }
 
       if (paragraphHasPageBreakBefore(node) && currentPageSegments.length > 0) {
         startNextPage();
         pageConsumedHeightPx = 0;
-        previousParagraphAfterPx = 0;
         currentPageContentHeightPx = resolvePageContentHeightPx(
           currentPageIndex,
           nodeMetrics.pageContentHeightPx
@@ -368,7 +559,6 @@ export function buildDocumentPageNodeSegments(
       ) {
         startNextPage();
         pageConsumedHeightPx = 0;
-        previousParagraphAfterPx = 0;
         currentPageContentHeightPx = resolvePageContentHeightPx(
           currentPageIndex,
           nodeMetrics.pageContentHeightPx
@@ -404,7 +594,6 @@ export function buildDocumentPageNodeSegments(
       ) {
         startNextPage();
         pageConsumedHeightPx = 0;
-        previousParagraphAfterPx = 0;
         currentPageContentHeightPx = resolvePageContentHeightPx(
           currentPageIndex,
           nodeMetrics.pageContentHeightPx
@@ -419,9 +608,12 @@ export function buildDocumentPageNodeSegments(
         suppressSpacingBeforeAfterPageBreak
       );
       const afterSpacingPx = paragraphAfterSpacingPx(node);
-      const collapsedMarginPx =
-        pageConsumedHeightPx > 0 ? Math.min(previousParagraphAfterPx, beforeSpacingPx) : 0;
-      const collapsedNodeHeightPx = Math.max(1, rawNodeHeightPx - collapsedMarginPx);
+      const atPageTop = pageConsumedHeightPx <= 0;
+      const consumedNodeHeightPx = resolveParagraphConsumedHeightPx(
+        rawNodeHeightPx,
+        paragraphBeforeSpacingPx(node),
+        atPageTop
+      );
       const paragraphLineHeightPx = Math.max(
         1,
         normalizedPositivePixelValue(
@@ -429,7 +621,7 @@ export function buildDocumentPageNodeSegments(
           1
         )
       );
-      const paragraphLineCount = Math.max(
+      let paragraphLineCount = Math.max(
         1,
         normalizedPositivePixelValue(
           callbacks.paragraphLineCountWithinWidth(
@@ -448,18 +640,48 @@ export function buildDocumentPageNodeSegments(
           allowKeepNextOverflow: keepNextOverflowSplit
         }) &&
         (!widowControlEnabled || paragraphLineCount > 3);
+      const forcedPageBreakLineIndexes = resolveParagraphForcedPageBreakLineIndexes({
+        paragraph: node,
+        lineCount: paragraphLineCount,
+        availableWidthPx: nodeMetrics.pageContentWidthPx,
+        numberingDefinitions,
+        preferLastRenderedPageBreakHints: preferLastRenderedParagraphStartBreaks,
+        resolveLastRenderedPageBreakLineIndex:
+          options?.paragraphLastRenderedPageBreakLineIndex
+      });
+      const mustSplitForForcedBreak = forcedPageBreakLineIndexes.length > 0;
+      if (mustSplitForForcedBreak) {
+        // A single-line estimate still needs two flow lines so an inline break
+        // can split the paragraph instead of being ignored.
+        paragraphLineCount = Math.max(
+          paragraphLineCount,
+          Math.max(...forcedPageBreakLineIndexes) + 1
+        );
+      }
 
-      if (canSplitParagraphAcrossPages && allowParagraphLineSplitting) {
+      if (
+        mustSplitForForcedBreak ||
+        (canSplitParagraphAcrossPages && allowParagraphLineSplitting)
+      ) {
         let lineCursor = 0;
         let isFirstSegment = true;
         while (lineCursor < paragraphLineCount) {
           const linesRemaining = paragraphLineCount - lineCursor;
+          const nextForcedBreakLineIndex = forcedPageBreakLineIndexes.find(
+            (lineIndex) => lineIndex > lineCursor
+          );
+          const linesAvailableBeforeForcedBreak =
+            nextForcedBreakLineIndex === undefined
+              ? linesRemaining
+              : Math.max(0, nextForcedBreakLineIndex - lineCursor);
           const topSpacingPx = isFirstSegment
             ? pageConsumedHeightPx > 0
-              ? Math.max(0, beforeSpacingPx - collapsedMarginPx)
-              : beforeSpacingPx
+              ? beforeSpacingPx
+              : 0
             : 0;
-          const mustKeepBottomSpacing = linesRemaining <= minLinesPerSegment;
+          const mustKeepBottomSpacing =
+            linesRemaining <= minLinesPerSegment &&
+            nextForcedBreakLineIndex === undefined;
           const bottomSpacingPx = mustKeepBottomSpacing ? afterSpacingPx : 0;
           const remainingHeightPx = Math.max(0, currentPageContentHeightPx - pageConsumedHeightPx);
           const allRemainingSegmentReservePx = resolveParagraphSegmentNonFlowReservePx({
@@ -471,7 +693,10 @@ export function buildDocumentPageNodeSegments(
           const allRemainingHeightPx =
             topSpacingPx + linesRemaining * paragraphLineHeightPx + bottomSpacingPx;
 
-          if (allRemainingHeightPx + allRemainingSegmentReservePx <= remainingHeightPx) {
+          if (
+            nextForcedBreakLineIndex === undefined &&
+            allRemainingHeightPx + allRemainingSegmentReservePx <= remainingHeightPx
+          ) {
             currentPageSegments.push({
               nodeIndex,
               paragraphLineRange: {
@@ -482,12 +707,17 @@ export function buildDocumentPageNodeSegments(
               }
             });
             pageConsumedHeightPx += allRemainingHeightPx;
-            previousParagraphAfterPx = afterSpacingPx;
             lineCursor = paragraphLineCount;
             break;
           }
 
-          const maxLinesThisPage = Math.max(0, linesRemaining - minLinesPerSegment);
+          const maxLinesThisPage = Math.max(
+            0,
+            Math.min(
+              linesRemaining - minLinesPerSegment,
+              linesAvailableBeforeForcedBreak
+            )
+          );
           const continuingSegmentReservePx = resolveParagraphSegmentNonFlowReservePx({
             startLineIndex: lineCursor,
             endLineIndex: Math.min(paragraphLineCount, lineCursor + maxLinesThisPage),
@@ -502,31 +732,55 @@ export function buildDocumentPageNodeSegments(
           linesThatFit = Math.min(linesThatFit, maxLinesThisPage);
 
           if (linesThatFit < minLinesPerSegment) {
-            if (currentPageSegments.length > 0) {
+            const forcedBreakBeforeWidowMinimum =
+              nextForcedBreakLineIndex !== undefined &&
+              linesAvailableBeforeForcedBreak > 0 &&
+              linesAvailableBeforeForcedBreak < minLinesPerSegment;
+            if (forcedBreakBeforeWidowMinimum) {
+              // An explicit page break outranks widow/orphan control.
+              linesThatFit = Math.max(1, linesThatFit);
+            } else if (currentPageSegments.length > 0) {
               startNextPage();
               pageConsumedHeightPx = 0;
-              previousParagraphAfterPx = 0;
               currentPageContentHeightPx = resolvePageContentHeightPx(
                 currentPageIndex,
                 nodeMetrics.pageContentHeightPx
               );
               continue;
+            } else {
+              const fallbackLines = Math.max(
+                1,
+                Math.floor(Math.max(1, availableForLinesPx) / paragraphLineHeightPx)
+              );
+              linesThatFit = Math.max(
+                1,
+                Math.min(
+                  maxLinesThisPage > 0
+                    ? maxLinesThisPage
+                    : linesAvailableBeforeForcedBreak > 0
+                    ? linesAvailableBeforeForcedBreak
+                    : linesRemaining,
+                  fallbackLines
+                )
+              );
             }
-
-            const fallbackLines = Math.max(
-              1,
-              Math.floor(Math.max(1, availableForLinesPx) / paragraphLineHeightPx)
-            );
-            linesThatFit = Math.max(
-              1,
-              Math.min(
-                maxLinesThisPage > 0 ? maxLinesThisPage : linesRemaining,
-                fallbackLines
-              )
-            );
           }
 
-          let segmentEndLineIndex = Math.min(paragraphLineCount, lineCursor + linesThatFit);
+          let segmentEndLineIndex = Math.min(
+            paragraphLineCount,
+            lineCursor + linesThatFit,
+            nextForcedBreakLineIndex ?? paragraphLineCount
+          );
+          if (nextForcedBreakLineIndex !== undefined) {
+            linesThatFit = Math.min(
+              linesThatFit,
+              Math.max(1, linesAvailableBeforeForcedBreak)
+            );
+            segmentEndLineIndex = Math.min(
+              segmentEndLineIndex,
+              nextForcedBreakLineIndex
+            );
+          }
           while (linesThatFit > minLinesPerSegment) {
             const segmentReservePx = resolveParagraphSegmentNonFlowReservePx({
               startLineIndex: lineCursor,
@@ -543,7 +797,11 @@ export function buildDocumentPageNodeSegments(
               break;
             }
             linesThatFit -= 1;
-            segmentEndLineIndex = Math.min(paragraphLineCount, lineCursor + linesThatFit);
+            segmentEndLineIndex = Math.min(
+              paragraphLineCount,
+              lineCursor + linesThatFit,
+              nextForcedBreakLineIndex ?? paragraphLineCount
+            );
           }
           currentPageSegments.push({
             nodeIndex,
@@ -557,14 +815,12 @@ export function buildDocumentPageNodeSegments(
 
           pageConsumedHeightPx +=
             topSpacingPx + (segmentEndLineIndex - lineCursor) * paragraphLineHeightPx;
-          previousParagraphAfterPx = 0;
           lineCursor = segmentEndLineIndex;
           isFirstSegment = false;
 
           if (lineCursor < paragraphLineCount) {
             startNextPage();
             pageConsumedHeightPx = 0;
-            previousParagraphAfterPx = 0;
             currentPageContentHeightPx = resolvePageContentHeightPx(
               currentPageIndex,
               nodeMetrics.pageContentHeightPx
@@ -574,7 +830,7 @@ export function buildDocumentPageNodeSegments(
         continue;
       }
 
-      let requiredHeightPx = collapsedNodeHeightPx;
+      let requiredHeightPx = consumedNodeHeightPx;
       let keepNextChainEndNodeIndex = -1;
       if (
         node.style?.keepNext === true &&
@@ -582,7 +838,6 @@ export function buildDocumentPageNodeSegments(
         callbacks.paragraphHasVisibleText(node)
       ) {
         let chainCursor = nodeIndex;
-        let chainPreviousParagraphAfterPx = afterSpacingPx;
         while (chainCursor < model.nodes.length - 1) {
           const currentChainNode = model.nodes[chainCursor];
           if (
@@ -630,18 +885,15 @@ export function buildDocumentPageNodeSegments(
               1
             )
           );
-          const collapsedChainMarginPx = Math.min(
-            chainPreviousParagraphAfterPx,
-            paragraphBeforeSpacingPx(nextChainNode)
-          );
-          requiredHeightPx += Math.max(1, nextRawHeightPx - collapsedChainMarginPx);
+          // OOXML keeps both spacing values; no max()-style collapsing between
+          // paragraphs that share a page.
+          requiredHeightPx += Math.max(1, nextRawHeightPx);
           requiredHeightPx += keepNextParagraphReservePx(
             currentChainNode,
             nextChainNode,
             callbacks,
             chainMetrics.docGridLinePitchPx
           );
-          chainPreviousParagraphAfterPx = paragraphAfterSpacingPx(nextChainNode);
         }
         keepNextChainEndNodeIndex = chainCursor;
       }
@@ -653,7 +905,6 @@ export function buildDocumentPageNodeSegments(
       ) {
         startNextPage();
         pageConsumedHeightPx = 0;
-        previousParagraphAfterPx = 0;
         currentPageContentHeightPx = resolvePageContentHeightPx(
           currentPageIndex,
           nodeMetrics.pageContentHeightPx
@@ -664,10 +915,11 @@ export function buildDocumentPageNodeSegments(
         committedKeepNextChainEndNodeIndex = keepNextChainEndNodeIndex;
       }
       currentPageSegments.push({ nodeIndex });
-      const effectiveNodeHeightPx =
-        pageConsumedHeightPx > 0 ? collapsedNodeHeightPx : rawNodeHeightPx;
-      pageConsumedHeightPx += effectiveNodeHeightPx;
-      previousParagraphAfterPx = afterSpacingPx;
+      pageConsumedHeightPx += resolveParagraphConsumedHeightPx(
+        rawNodeHeightPx,
+        paragraphBeforeSpacingPx(node),
+        pageConsumedHeightPx <= 0
+      );
       continue;
     }
 
@@ -691,7 +943,6 @@ export function buildDocumentPageNodeSegments(
 
     if (estimatedRowHeightsPx.length === 0) {
       currentPageSegments.push({ nodeIndex });
-      previousParagraphAfterPx = 0;
       continue;
     }
 
@@ -700,22 +951,57 @@ export function buildDocumentPageNodeSegments(
     if (tableBreakStartRows.includes(0) && currentPageSegments.length > 0) {
       startNextPage();
       pageConsumedHeightPx = 0;
-      previousParagraphAfterPx = 0;
       currentPageContentHeightPx = resolvePageContentHeightPx(
         currentPageIndex,
         nodeMetrics.pageContentHeightPx
       );
     }
 
+    const headerRowCount = tableHeaderRowCount(node);
+    const headerRowsHeightPx =
+      headerRowCount > 0
+        ? sumEstimatedTableRowHeightsPx(
+            estimatedRowHeightsPx,
+            0,
+            headerRowCount,
+            minParagraphLineHeightPx
+          )
+        : 0;
+    const rowSliceStartOffsetPxByRowIndex = new Map<number, number>();
+
     let rowStartIndex = 0;
     let tableBreakStartRowCursor = 0;
     while (rowStartIndex < estimatedRowHeightsPx.length) {
-      const remainingHeightPx = Math.max(0, currentPageContentHeightPx - pageConsumedHeightPx);
+      const startsInsideHeaderRows = rowStartIndex < headerRowCount;
+      const repeatsHeaderRows =
+        headerRowCount > 0 &&
+        headerRowCount < estimatedRowHeightsPx.length &&
+        rowStartIndex > 0 &&
+        !startsInsideHeaderRows;
+      const headerReservePx = repeatsHeaderRows
+        ? Math.min(
+            headerRowsHeightPx,
+            Math.max(0, currentPageContentHeightPx - minParagraphLineHeightPx)
+          )
+        : 0;
+      const availableHeightPx = Math.max(
+        0,
+        currentPageContentHeightPx - pageConsumedHeightPx - headerReservePx
+      );
+      const currentRow = node.rows[rowStartIndex];
+      const currentRowHeightPx = Math.max(
+        minParagraphLineHeightPx,
+        estimatedRowHeightsPx[rowStartIndex] ?? minParagraphLineHeightPx
+      );
+      const currentRowNeedsSlicing =
+        currentRow !== undefined &&
+        tableRowCanSplitAcrossPages(currentRow) &&
+        currentRowHeightPx > availableHeightPx + pageOverflowTolerancePx;
       const fittedRowEndIndex = fitTableRowsWithinHeightPx(
         estimatedRowHeightsPx,
         rowStartIndex,
-        remainingHeightPx,
-        pageConsumedHeightPx <= 0,
+        availableHeightPx,
+        pageConsumedHeightPx <= 0 && !currentRowNeedsSlicing,
         minParagraphLineHeightPx,
         pageOverflowTolerancePx
       );
@@ -741,11 +1027,19 @@ export function buildDocumentPageNodeSegments(
         rowEndIndex = fittedRowEndIndex - 1;
       }
 
+      const segmentRowRange = (
+        segmentStartRowIndex: number,
+        segmentEndRowIndex: number
+      ): TableRowRange => ({
+        startRowIndex: segmentStartRowIndex,
+        endRowIndex: segmentEndRowIndex,
+        repeatHeaderRowCount: repeatsHeaderRows ? headerRowCount : undefined
+      });
+
       if (rowEndIndex <= rowStartIndex) {
         if (currentPageSegments.length > 0) {
           startNextPage();
           pageConsumedHeightPx = 0;
-          previousParagraphAfterPx = 0;
           currentPageContentHeightPx = resolvePageContentHeightPx(
             currentPageIndex,
             nodeMetrics.pageContentHeightPx
@@ -753,28 +1047,88 @@ export function buildDocumentPageNodeSegments(
           continue;
         }
 
-        const forcedEndIndex = Math.min(estimatedRowHeightsPx.length, rowStartIndex + 1);
-        const forcedHeightPx = sumEstimatedTableRowHeightsPx(
-          estimatedRowHeightsPx,
-          rowStartIndex,
-          forcedEndIndex,
-          minParagraphLineHeightPx
+        const row = node.rows[rowStartIndex];
+        const rowHeightPx = Math.max(
+          minParagraphLineHeightPx,
+          estimatedRowHeightsPx[rowStartIndex] ?? minParagraphLineHeightPx
         );
-        currentPageSegments.push({
-          nodeIndex,
-          tableRowRange: {
-            startRowIndex: rowStartIndex,
-            endRowIndex: forcedEndIndex
+        const rowStartOffsetPx = Math.min(
+          rowSliceStartOffsetPxByRowIndex.get(rowStartIndex) ?? 0,
+          Math.max(0, rowHeightPx - 1)
+        );
+        const availableSliceHeightPx = Math.max(
+          minParagraphLineHeightPx,
+          currentPageContentHeightPx - pageConsumedHeightPx - headerReservePx
+        );
+        const sliceHeightPx = Math.min(
+          availableSliceHeightPx,
+          rowHeightPx - rowStartOffsetPx
+        );
+
+        if (
+          row &&
+          tableRowCanSplitAcrossPages(row) &&
+          sliceHeightPx < rowHeightPx - rowStartOffsetPx
+        ) {
+          currentPageSegments.push({
+            nodeIndex,
+            tableRowRange: segmentRowRange(rowStartIndex, rowStartIndex + 1),
+            tableRowSlice: {
+              rowIndex: rowStartIndex,
+              startOffsetPx: rowStartOffsetPx,
+              sliceHeightPx,
+              totalRowHeightPx: rowHeightPx
+            }
+          });
+          pageConsumedHeightPx += headerReservePx + sliceHeightPx;
+          const nextRowOffsetPx = rowStartOffsetPx + sliceHeightPx;
+          if (nextRowOffsetPx >= rowHeightPx) {
+            rowSliceStartOffsetPxByRowIndex.delete(rowStartIndex);
+            rowStartIndex += 1;
+          } else {
+            rowSliceStartOffsetPxByRowIndex.set(
+              rowStartIndex,
+              nextRowOffsetPx
+            );
           }
-        });
-        pageConsumedHeightPx += forcedHeightPx;
-        previousParagraphAfterPx = 0;
-        rowStartIndex = forcedEndIndex;
+        } else {
+          const forcedEndIndex = Math.min(
+            estimatedRowHeightsPx.length,
+            rowStartIndex + 1
+          );
+          const forcedHeightPx = sumEstimatedTableRowHeightsPx(
+            estimatedRowHeightsPx,
+            rowStartIndex,
+            forcedEndIndex,
+            minParagraphLineHeightPx
+          );
+          const remainingRowHeightPx = Math.max(
+            1,
+            rowHeightPx - rowStartOffsetPx
+          );
+          currentPageSegments.push({
+            nodeIndex,
+            tableRowRange: segmentRowRange(rowStartIndex, forcedEndIndex),
+            tableRowSlice:
+              rowStartOffsetPx > 0
+                ? {
+                    rowIndex: rowStartIndex,
+                    startOffsetPx: rowStartOffsetPx,
+                    sliceHeightPx: remainingRowHeightPx,
+                    totalRowHeightPx: rowHeightPx
+                  }
+                : undefined
+          });
+          pageConsumedHeightPx +=
+            headerReservePx +
+            (rowStartOffsetPx > 0 ? remainingRowHeightPx : forcedHeightPx);
+          rowSliceStartOffsetPxByRowIndex.delete(rowStartIndex);
+          rowStartIndex = forcedEndIndex;
+        }
 
         if (rowStartIndex < estimatedRowHeightsPx.length) {
           startNextPage();
           pageConsumedHeightPx = 0;
-          previousParagraphAfterPx = 0;
           currentPageContentHeightPx = resolvePageContentHeightPx(
             currentPageIndex,
             nodeMetrics.pageContentHeightPx
@@ -795,19 +1149,14 @@ export function buildDocumentPageNodeSegments(
         nodeIndex,
         tableRowRange: coversWholeTable
           ? undefined
-          : {
-              startRowIndex: rowStartIndex,
-              endRowIndex: rowEndIndex
-            }
+          : segmentRowRange(rowStartIndex, rowEndIndex)
       });
-      pageConsumedHeightPx += segmentHeightPx;
-      previousParagraphAfterPx = 0;
+      pageConsumedHeightPx += headerReservePx + segmentHeightPx;
       rowStartIndex = rowEndIndex;
 
       if (rowStartIndex < estimatedRowHeightsPx.length) {
         startNextPage();
         pageConsumedHeightPx = 0;
-        previousParagraphAfterPx = 0;
         currentPageContentHeightPx = resolvePageContentHeightPx(
           currentPageIndex,
           nodeMetrics.pageContentHeightPx

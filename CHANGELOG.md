@@ -4,6 +4,53 @@ All notable changes to the `@arcships` package family are documented in this fil
 
 ## [Unreleased]
 
+### DOCX annotation gutter
+
+- Position tracked-change and comment cards against their text anchors in page space instead of rendering them as an unpositioned list at a fixed `top: 72px`, with stable document-order ties, collision-free stacking, and measured card heights.
+- Counter-scale the annotation pane so cards keep a fixed screen size at every zoom level, and reserve a constant screen-space footprint beside the paper.
+- Number every comment and draw a numbered marker plus leader line at its anchor, linking the highlighted range to its card; clicking a card, marker, or highlighted range activates the pair.
+- Stop switching the pane to `position: static` below 1100px, which inflated the measured page height and broke multi-page scroll positions.
+- Store `w:commentRangeStart` / `w:commentRangeEnd` on the paragraph model as UTF-16 character offsets, so a comment highlights exactly the commented characters instead of a whole run, and so highlights and gutter cards survive the edits that clear `sourceXml`.
+- Remap those offsets on every text edit (typing, delete, find/replace, paragraph split and join) with an `anchorText` fallback when an edit cannot be mapped, and re-emit the range markers plus `w:commentReference` when serializing an edited paragraph.
+- Turn the pane into a toggleable overlay drawer below 1024px instead of a column that leaves the paper, so the paper keeps the full viewport width on laptop screens.
+
+### DOCX character typography
+
+- Preserve OOXML underline/strike variants (`double`, `dotted`, `dash`, `wave`, `dstrike`) and expose them as CSS text-decoration style/thickness instead of flattening every run to a single solid line.
+- Map run, paragraph and table borders through one OOXML-to-CSS line-style table so `wave`, `triple`, `thick` and compound gap styles stay visible instead of producing invalid CSS declarations.
+- Model and render `w:caps`, `w:smallCaps`, `w:spacing`, `w:w`, `w:bdr`, text shadow/outline, run RTL and paragraph `w:bidi`/extended `w:jc` values.
+- Keep ASCII, high-ANSI, eastAsia and complex-script fonts separately, build a per-glyph font stack and resolve major/minor theme fonts from `theme1.xml` during import.
+- Read `w:lvlJc`/`w:suff` from `numbering.xml`, align list markers accordingly, and add decimalZero, Chinese, ideographic, enclosed and text numbering formats.
+
+### XLSX drawing objects
+
+- Honour picture `zIndex` inside per-pane stacking contexts and render rotation, flip and `srcRect` crop.
+- Add drag, eight-way resize and arrow-key nudge for images and charts; pointer gestures preview locally and commit one history entry.
+- Add the same move/resize/nudge interaction to shapes, plus Delete for images, charts and shapes backed by stable non-visual object identities.
+- Expose programmable form-control CRUD (`addFormControl`/`updateFormControl`/`removeFormControl`) backed by worksheet controls, ctrlProps and content-type rewrites.
+- Cull anchored objects by visible pane bounds and cache content-space rects by sheet and zoom.
+- Render shape text from paragraphs and runs with alignment, insets, vertical alignment and flips.
+- Make checkbox and radio controls interactive and write `TRUE`/`FALSE` to their `linkedCell`.
+- Use one visible-column axis model for grid rendering and anchor write-back, including hidden rows and columns.
+- Memoise chart SVG trees so scrolling does not rebuild chart DOM.
+
+### XLSX worker robustness
+
+- Treat cell-snapshot and row-batch cancellation as per-request aborts instead of terminating the shared Worker, and recover cleanly from Worker failures.
+- Report non-cloneable Worker results as `WORKER_FAILED` immediately instead of waiting for the 30 s parse timeout.
+- Fall back to main-thread parsing when a Worker load fails for a non-limit reason, and apply `maxParseMs` to the main-thread path as well.
+- Keep charts refreshed after an edit from being overwritten by a late Worker chart-hydration result.
+- Render Worker-mode sheet thumbnails from the transferred sheet snapshot instead of an unavailable main-thread workbook.
+- Inflate only `xl/media/*` for image budget validation, avoid redundant source-buffer copies, and bound the Worker cell-snapshot cache as an LRU.
+
+### PPTX archive limits, single-pass parsing and media policy
+
+- Pass the full PPTX archive budget subset through `toOfficeLimits` (`maxCompressionRatio`, `maxArchivePathLength`, `maxXmlBytes`, `maxSingleXmlBytes`, `maxXmlDepth`, `maxXmlAttributeBytes`, `maxTextNodeBytes`, `maxRelationships`) and expose it in `DEFAULT_PPTX_PREVIEW_LIMITS`, so the shared runtime limits are no longer silently disabled for PPTX.
+- Decompress each deck once: `loadPptxArchive` reads only the central directory, lets the renderer parse the container, and validates the decoded parts with `validateOfficeArchiveParts` instead of inflating the archive a second time.
+- Use one `slideId` for PPTX object fingerprints, locators and resolution, so hosts that supply `slideIds` keep resolving their own references as `exact`.
+- Route external media through the shared URL policy via `externalMediaUrlPolicy`; `externalMedia: "allowed"` alone no longer loads arbitrary `http(s)` targets.
+- Read byte sources in place instead of copying them twice and hand decoded media bytes to `Blob` without an extra copy.
+
 ### Cross-format Office references
 
 - Prepare the nine public packages as the `0.6.0` candidate while keeping `0.5.4` as the published stable line.
@@ -11,6 +58,38 @@ All notable changes to the `@arcships` package family are documented in this fil
 - Add stage-one reference adapters for DOCX, XLSX, PPTX, and PDF, including precise text, page or sheet regions, spreadsheet rows and columns, and stable PPTX objects.
 - Add one controlled reference-selection contract to all four minimal Surfaces without making them own the host's reference collection or Agent workflow.
 - Add optional object-outline and region-selection primitives, demo coverage, external package-consumer checks, and release-gate coverage.
+
+### XLSX chart data
+
+- Render value, series-name, category, and percent data labels on 2D and 3D bar, column, line, and area charts, including label position and number format.
+- Read combo-chart data labels independently from each column, line, or area type group, falling back to chart-level labels only when a group does not define its own.
+- Normalize 100 % stacked charts with `Σ|v|`, so mixed positive and negative categories render at their real percentages.
+- Honour logarithmic value axes, smooth line series, marker symbols, shared combo-chart value axes, and date category axes with elapsed-time spacing.
+- Exclude hidden rows and columns from chart series unless the chart explicitly opts out with `plotVisOnly=0`.
+- Keep every level of multi-level category caches instead of only the deepest label.
+- Refresh chart series from an edited workbook through `refreshChartDataFromWorkbook` and the Worker `refreshCharts` request, so worker-backed charts do not stay on the source file's cached XML values after an in-worker edit.
+
+### PDF selection and annotation hit layer
+
+- Allow PDF text selection to cross page boundaries: drag focus is resolved from the client position, each touched page becomes its own text slice, and copy joins the pages in document order.
+- Extend `PdfSelectionState` with per-page `segments` while keeping `range`, `text`, and `rects` compatible for single-page selections.
+- Add optional `PdfRenderRuntime.getPageAnnotations()` and `PdfRenderAnnotation`, exposing link, widget, and annotation rectangles in canonical page space with sanitized link targets and form-field identity.
+- Add an invisible hit layer to `PdfSurface` that emits `linkActivate` and `annotationActivate`; external links never navigate automatically, and a host `urlPolicy` blocks unapproved targets.
+- Stop the region interaction layer from bubbling Escape to the Surface handler so hosts receive one `selectionCancel` per key press.
+- Write AcroForm values end to end: `PdfRenderRuntime.setFormFieldValue()` maps text, checkbox and choice widgets through `resolvePdfFormFieldValue()`, and `PdfSurface` renders native controls that commit through the runtime, refresh the page bitmap and emit `formFieldChange`/`formFieldError`.
+- Edit annotation appearance through `PdfRenderRuntime.updateAnnotationAppearance()` (`contents`, `color`, `strokeColor`, `opacity`, `strokeWidth`) and `PdfSurface.updateAnnotationAppearance()`, which regenerates the appearance stream, refreshes the bitmap and emits `annotationChange`/`annotationError`.
+- Add single-page text selection to `PdfViewer`: drag selection, double-click word selection, clipboard copy, `Escape` clear, and a `selectionChange` event fed by the same canonical transform and glyph geometry as `PdfSurface`.
+- Restore a real PDF text layer: `PdfRenderRuntime.getPageTextLayer()` batches PDFium geometry and per-character slices into `PdfPageTextLayer`, and `PdfSurface`/`PdfViewer` render one transparent, non-`aria-hidden` span per glyph positioned from its glyph box. A single CSS matrix per page applies zoom and 0/90/180/270 rotation, so no browser re-shaping or glyph drift is involved; unmapped-Unicode glyphs are marked `aria-hidden` and unselectable. The layer keeps `pointer-events: none`, so cross-page selection, annotation hits and region selection are unchanged, and screen readers, browser find and CJK extraction now see the document text.
+
+### DOCX tracked-change decisions (#41)
+
+- Add `acceptTrackedChange` / `rejectTrackedChange`, row variants and `acceptAllTrackedChanges` / `rejectAllTrackedChanges` to the DOCX editor controller, backed by the pure `applyTrackedChangeDecision` model rewrite in `@arcships/docx-core`. Every decision is one undoable history step.
+- Accepting or rejecting a revision now rewrites the paragraph `sourceXml` envelope instead of dropping it, so remaining revisions stay visible and exportable, rejected deletions come back as ordinary runs, and accepting an insertion no longer needs a second edit pass.
+- Wire per-card Accept/Reject buttons into the revision gutter and Accept all / Reject all into the editor toolbar.
+- Keep the document editable while revisions are shown: the `Edits` toggle is a display choice again, for body paragraphs and table cells alike. Committed text now skips inline deleted/moved-from runs (`readEditableText`), so an edit cannot resurrect rejected content by accident, and edits that still clear revision markup report it on the status line instead of silently dropping the cards.
+- Own each gutter card on exactly one page using `trackedChangeBelongsToPageSegments` and the new `groupGutterAnnotationsByPage`, so a change in row 3 of a table spanning pages (or in a paragraph split across pages) is no longer repeated.
+- Stop duplicating insertions in the gutter (`trackedChangeUsesGutterBalloon`), and stop collecting revisions while they are hidden: `trackedChanges` stays empty and `trackedChangeCount` reports `null` until the markup is shown.
+- Model limitation to be explicit about: run format revisions revert their previous run style and paragraph format revisions revert an explicit alignment, but table/row/cell property revisions only have their markup cleared — the model stores no previous table formatting. Those ids come back in `clearedOnlyChangeIds` and the status line says so.
 
 ### Boundaries
 

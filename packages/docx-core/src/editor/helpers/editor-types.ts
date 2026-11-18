@@ -32,6 +32,14 @@ export type DocxEditorSelection =
       tableIndex: number;
       rowIndex: number;
       cellIndex: number;
+      /** Runtime key for a cell in a nested table; absent for body tables. */
+      tableRuntimeKey?: string;
+      /**
+       * Multi-cell rectangular selection inside this table. `rowIndex` and
+       * `cellIndex` point at the focus (active) cell; `cellRange` carries the
+       * anchor so merge/split and table commands can work on whole ranges.
+       */
+      cellRange?: DocxTableCellSelectionRange;
     };
 
 export interface DocxTableCellLocation {
@@ -174,6 +182,15 @@ export interface DocxEditorTransactionPatch {
   status?: string;
   clearSelectedFormField?: boolean;
   pushHistory?: boolean;
+  /**
+   * Coalesces consecutive text commits into one undo entry.
+   *
+   * A patch that carries the same key as the previous patch, with no
+   * intervening transaction, folds into the undo entry opened by the first
+   * commit of the burst. Selection changes, formatting/structural commands,
+   * undo/redo, a different key or `endTextCommitBurst()` close the burst.
+   */
+  textCommitKey?: string;
 }
 
 export type ParagraphLocation = DocxTextRangeLocation;
@@ -216,7 +233,19 @@ export type DocxTrackedChangeKind =
   | "move-from"
   | "move-to"
   | "format-change"
-  | "paragraph-format-change";
+  | "paragraph-format-change"
+  | "table-format-change"
+  | "row-format-change"
+  | "cell-format-change";
+
+export type DocxInlineTrackedChangeKind = Exclude<
+  DocxTrackedChangeKind,
+  | "format-change"
+  | "paragraph-format-change"
+  | "table-format-change"
+  | "row-format-change"
+  | "cell-format-change"
+>;
 
 export interface DocxTrackedChange {
   id: string;
@@ -247,6 +276,10 @@ export interface DocxComment {
   anchorText?: string;
   nodeIndex: number;
   location: DocxTextRangeLocation;
+  /** Region that owns the anchored paragraph (defaults to the body). */
+  region?: "body" | "header" | "footer";
+  /** OOXML part name for header/footer comments. */
+  partName?: string;
 }
 
 export type DocxLineSpacingRule = "auto" | "exact" | "atLeast";
@@ -284,6 +317,118 @@ export type DocxBorderPreset =
 
 export type DocxBorderPresetState = Record<DocxBorderPreset, boolean>;
 
+/** Status messages emitted by editor commands, keyed for host localization. */
+export interface DocxEditorStatusMessages {
+  ready: string;
+  copied: string;
+  pasted: string;
+  listParagraphNotFound: string;
+  listAppliedBullet: string;
+  listAppliedNumbered: string;
+  /** Template with a `{level}` placeholder. */
+  maximumListLevel: string;
+  discardChanges: string;
+  /** Template with a `{name}` placeholder. */
+  loadingFile: string;
+  /** Template with a `{message}` placeholder. */
+  importFailed: string;
+  unsupportedFile: string;
+  exportCancelledChanged: string;
+  exportNotReady: string;
+  /** Template with a `{message}` placeholder. */
+  exportFailed: string;
+  /** Template with a `{label}` placeholder. */
+  exportRequiredField: string;
+  exportRequiredFieldEmpty: string;
+  exporting: string;
+  /** Template with a `{phase}` placeholder. */
+  exportingPhase: string;
+  exported: string;
+  unknownImportError: string;
+  unknownExportError: string;
+  /** Template with a `{count}` placeholder. */
+  acceptedChanges: string;
+  acceptedChange: string;
+  /** Template with a `{count}` placeholder. */
+  rejectedChanges: string;
+  rejectedChange: string;
+  /** Template with a `{count}` placeholder. */
+  formattingCleared: string;
+  formattingClearedOne: string;
+  /** Template with a `{feature}` placeholder. */
+  unsupportedFeature: string;
+  imageTargetUnavailable: string;
+  imageSizePositive: string;
+  resizeTargetUnavailable: string;
+  lockedImageAnchorResize: string;
+  imageOverlapDisabled: string;
+  syntheticTextBoxUnavailable: string;
+  imageMoveTargetUnavailable: string;
+  lockedImageAnchorMove: string;
+  sectionImageTargetUnavailable: string;
+  dropCapTargetUnavailable: string;
+  dropCapFontSizeTargetUnavailable: string;
+  dropCapTextTargetUnavailable: string;
+  imageMoveSourceUnavailable: string;
+  selectImageFile: string;
+  imageInsertionCancelled: string;
+  /** Template with a `{name}` placeholder. */
+  insertedImage: string;
+  /** Template with `{width}` and `{height}` placeholders. */
+  resizedImage: string;
+  updatedTextBox: string;
+  /** Template with a `{mode}` placeholder. */
+  imageWrapSet: string;
+  movedImage: string;
+  movedSectionImage: string;
+  movedDropCap: string;
+  /** Template with a `{size}` placeholder. */
+  dropCapFontSize: string;
+  updatedDropCapText: string;
+  tableColumnWidthPositive: string;
+  tableColumnWidthTargetUnavailable: string;
+  cannotInsertRowTableNotFound: string;
+  cannotInsertTableRow: string;
+  cannotInsertColumnTableNotFound: string;
+  cannotInsertTableColumn: string;
+  cannotDeleteRowTableNotFound: string;
+  cannotDeleteOnlyTableRow: string;
+  cannotDeleteColumnTableNotFound: string;
+  cannotDeleteOnlyTableColumn: string;
+  cannotDeleteTableColumn: string;
+  cannotDeleteTableNotFound: string;
+  cannotClearCellsTableNotFound: string;
+  cannotMergeCellsTableNotFound: string;
+  cannotMergeSingleCell: string;
+  cannotSplitCellTableNotFound: string;
+  cannotSplitCellNotMerged: string;
+  cannotMoveTableNotFound: string;
+  cannotMoveEmbeddedHostTableNotFound: string;
+  cannotMoveEmbeddedHostCellNotFound: string;
+  cannotMoveEmbeddedTableNotFound: string;
+  insertedTable: string;
+  /** Template with a `{direction}` placeholder. */
+  insertedTableRow: string;
+  /** Template with a `{direction}` placeholder. */
+  insertedTableColumn: string;
+  deletedTableRow: string;
+  deletedTableColumn: string;
+  deletedTable: string;
+  clearedTableCells: string;
+  resizedTableColumns: string;
+  mergedTableCells: string;
+  splitTableCell: string;
+  movedTable: string;
+  movedEmbeddedTable: string;
+  /** Template with a `{preset}` placeholder. */
+  unsupportedDiagonalTableCellBorders: string;
+  /** Template with a `{preset}` placeholder. */
+  unsupportedDiagonalParagraphBorders: string;
+  revisionLossOne: string;
+  /** Template with a `{count}` placeholder. */
+  revisionLossMany: string;
+}
+
 export interface UseDocxEditorOptions {
   /**
    * Model used for `editor.newDocument()` and for the initial empty editor.
@@ -303,6 +448,13 @@ export interface UseDocxEditorOptions {
    * @defaultValue `"Ready"`
    */
   initialStatus?: string;
+  /**
+   * Localized status messages for commands. Can be a getter so a host can
+   * switch locale while the editor stays mounted.
+   */
+  statusMessages?:
+    | Partial<DocxEditorStatusMessages>
+    | (() => Partial<DocxEditorStatusMessages>);
   /**
    * Initial document surface theme.
    *

@@ -1,9 +1,65 @@
 // Paragraph border style-to-CSS conversion helpers.
 // Upstream editor.tsx: lines 15036-15079.
 
-import type { ParagraphBorderStyle, TableBorderStyle } from "../../engine/types";
+import type {
+  ParagraphAlignment,
+  ParagraphBorderStyle,
+  ParagraphStyle,
+  TableBorderStyle
+} from "../../engine/types";
 import { pointsToPixels } from "./ooxml-helpers";
 import { normalizeBorderType, tableBorderToCss } from "./table-utils";
+
+const JUSTIFIED_ALIGNMENTS = new Set<ParagraphAlignment>([
+  "justify",
+  "both",
+  "distribute",
+  "thaiDistribute"
+]);
+
+/** Map an OOXML `w:jc` value to a CSS `text-align` keyword. */
+function paragraphAlignmentToCss(
+  align: ParagraphAlignment | undefined
+): string | undefined {
+  if (!align) {
+    return undefined;
+  }
+  if (JUSTIFIED_ALIGNMENTS.has(align)) {
+    return "justify";
+  }
+  if (align === "low") {
+    return "left";
+  }
+  return align;
+}
+
+export function isJustifiedAlignment(
+  align: ParagraphAlignment | undefined
+): boolean {
+  return align !== undefined && JUSTIFIED_ALIGNMENTS.has(align);
+}
+
+/** CSS for paragraph direction/RTL plus extended alignment values. */
+function paragraphDirectionStyle(
+  style: ParagraphStyle | undefined
+): Record<string, string | undefined> {
+  if (!style?.direction) {
+    return {};
+  }
+  return {
+    direction: style.direction,
+    unicodeBidi: "embed"
+  };
+}
+
+export function paragraphTypographyStyle(
+  style: ParagraphStyle | undefined
+): Record<string, string | undefined> {
+  return {
+    textAlign: paragraphAlignmentToCss(style?.align),
+    ...paragraphDirectionStyle(style)
+  };
+}
 
 export function paragraphBorderToCss(
   border: ParagraphBorderStyle | undefined

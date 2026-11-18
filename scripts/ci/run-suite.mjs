@@ -35,6 +35,11 @@ const evidenceRoot = path.resolve(
 );
 const suiteDir = path.join(evidenceRoot, suiteName || "unknown-suite");
 const prebuilt = process.env.CI_PREBUILT === "1";
+// A blocked step (exit code 2) is never a pass. `allowBlocked` only marks a step
+// as legitimately blockable in this environment; the suite still reports
+// INCOMPLETE and exits non-zero. CI_ALLOW_BLOCKED=1 downgrades that to a warning
+// for local runs that intentionally lack the upstream checkout.
+const allowBlocked = process.env.CI_ALLOW_BLOCKED === "1";
 
 function command(id, executable, args, options = {}) {
   return { id, executable, args, ...options };
@@ -57,17 +62,48 @@ const suites = {
       "--test",
       "--test-concurrency=1",
       "tests/unit/office-runtime.test.mjs",
+      "tests/unit/runtime-demo-limits.test.mjs",
       "tests/unit/office-interaction.test.mjs",
+      "tests/unit/i18n.test.mjs",
       "tests/unit/image-budget.test.mjs",
       "tests/unit/docx-core.test.mjs",
+      "tests/unit/docx-form-field-required.test.mjs",
+      "tests/unit/docx-model-preservation.test.mjs",
+      "tests/unit/docx-notes.test.mjs",
+      "tests/unit/docx-page-appearance.test.mjs",
+      "tests/unit/docx-tracked-changes.test.mjs",
+      "tests/unit/docx-typography.test.mjs",
+      "tests/unit/docx-pagination-fidelity.test.mjs",
+      "tests/unit/docx-pagination-completion.test.mjs",
+      "tests/unit/docx-section-break.test.mjs",
+      "tests/unit/docx-floating-image.test.mjs",
       "tests/unit/docx-reference-adapter.test.mjs",
       "tests/unit/docx-history-cache.test.mjs",
+      "tests/unit/docx-edit-structural-sharing.test.mjs",
+      "tests/unit/docx-pagination-runtime.test.mjs",
+      "tests/unit/docx-thumbnail-signature.test.mjs",
       "tests/unit/xlsx-core.test.mjs",
+      "tests/unit/xlsx-worker.test.mjs",
+      "tests/unit/xlsx-anchor-geometry.test.mjs",
+      "tests/unit/xlsx-chart-data.test.mjs",
+      "tests/unit/xlsx-drawing-fidelity.test.mjs",
+      "tests/unit/xlsx-typed-dates.test.mjs",
       "tests/unit/xlsx-reference-adapter.test.mjs",
       "packages/vue-xlsx/test/lazy-loading.mjs",
+      "packages/vue-xlsx/test/chart-date-format.mjs",
       "tests/unit/pdf-source.test.mjs",
+      "tests/unit/pdf-render-runtime.test.mjs",
+      "tests/unit/pdf-page-viewport.test.mjs",
+      "tests/unit/pdf-bitmap-cache.test.mjs",
+      "tests/unit/pdf-page-raster.test.mjs",
       "tests/unit/pdf-reference-adapter.test.mjs",
       "tests/unit/pptx-core.test.mjs",
+      "tests/unit/pptx-media-transitions.test.mjs",
+      "tests/unit/pptx-browser-session.test.mjs",
+      "tests/unit/pptx-playback-controller.test.mjs",
+      "tests/unit/pptx-morph-geometry.test.mjs",
+      "tests/unit/pptx-track-player.test.mjs",
+      "tests/unit/pptx-baseline-contract.test.mjs",
       "tests/unit/pptx-reference-adapter.test.mjs",
       "tests/unit/core-purity.test.mjs",
     ]),
@@ -97,6 +133,12 @@ const suites = {
     command("xlsx-structure", process.execPath, [
       "packages/vue-xlsx/test/structure.mjs",
     ]),
+    command("xlsx-export-openpyxl", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/xlsx_export_openpyxl.py",
+    ], {
+      env: { RUN_PYTHON_MODULES: "openpyxl", NODE: process.execPath },
+    }),
     command("fixture-manifest", process.execPath, [
       "scripts/ci/verify-fixtures.mjs",
     ], {
@@ -112,20 +154,68 @@ const suites = {
       "--test-concurrency=1",
       "tests/component/vue-component-behavior.test.mjs",
       "tests/component/vue-components.test.mjs",
+      "tests/component/pdf-page-lifecycle.test.mjs",
+      "tests/component/i18n-source.test.mjs",
+      "tests/component/i18n-runtime.test.mjs",
       "tests/component/office-selection-ui.test.mjs",
       "tests/component/office-reference-surfaces.test.mjs",
+      "tests/component/docx-reference-surfaces.test.mjs",
       "tests/component/pptx-preview.test.mjs",
       "tests/component/xlsx-race.test.mjs",
+      "tests/component/xlsx-export.test.mjs",
+      "tests/component/xlsx-deferred-load.test.mjs",
       "tests/component/docx-render-parity.test.mjs",
+      "tests/component/docx-paragraph-formatting.test.mjs",
+      "tests/component/docx-page-overflow.test.mjs",
+      "tests/component/docx-page-appearance.test.mjs",
+      "tests/component/docx-floating-image-layout.test.mjs",
       "tests/component/docx-edit-interactions.test.mjs",
+      "tests/component/docx-link-safety.test.mjs",
+      "tests/component/docx-toolbar-state.test.mjs",
+      "tests/component/docx-table-editing.test.mjs",
+      "tests/component/docx-command-wiring.test.mjs",
+      "tests/component/docx-edit-model-preservation.test.mjs",
       "tests/component/docx-selection-input.test.mjs",
       "tests/component/docx-thumbnail-panel.test.mjs",
+      "tests/component/docx-column-pagination.test.mjs",
+      "tests/component/docx-multipage-shell.test.mjs",
+      "tests/component/docx-page-thumbnails-cache.test.mjs",
+      "tests/component/docx-thumbnail-raster.test.mjs",
       "tests/component/docx-product-interactions.test.mjs",
+      "tests/component/docx-annotation-gutter.test.mjs",
+      "tests/component/docx-comment-ranges.test.mjs",
+      "tests/component/docx-table-presentation.test.mjs",
+      "tests/component/docx-file-handling.test.mjs",
+      "tests/component/docx-tracked-changes.test.mjs",
+      "tests/component/docx-context-menu-form-fields.test.mjs",
       "tests/component/docx-page-budget.test.mjs",
+      "tests/component/pdf-surface-lazy-render.test.mjs",
+      "tests/component/docx-notes.test.mjs",
       "tests/component/docx-history-budget.test.mjs",
+      "tests/component/docx-edit-clone-sharing.test.mjs",
+      "tests/component/docx-text-commit-burst.test.mjs",
       "tests/component/xlsx-history-budget.test.mjs",
+      "tests/component/xlsx-number-formats.test.mjs",
+      "tests/component/xlsx-number-locale.test.mjs",
+      "tests/component/xlsx-number-format-undo.test.mjs",
+      "tests/component/xlsx-worker-cell-format.test.mjs",
+      "tests/component/xlsx-sheet-sync.test.mjs",
+      "tests/component/xlsx-drawing-fidelity.test.mjs",
+      "tests/component/xlsx-calculation-safety.test.mjs",
       "tests/component/xlsx-grid-scroll.test.mjs",
+      "tests/component/xlsx-cell-editing.test.mjs",
+      "tests/component/xlsx-clipboard-search.test.mjs",
+      "tests/component/xlsx-conditional-format.test.mjs",
+      "tests/component/xlsx-grid-freeze-panes.test.mjs",
+      "tests/component/xlsx-grid-fidelity.test.mjs",
+      "tests/component/xlsx-render-perf.test.mjs",
+      "tests/component/xlsx-data-validation.test.mjs",
+      "tests/component/xlsx-chart-rendering.test.mjs",
+      "tests/component/xlsx-chart-axis.test.mjs",
+      "tests/component/office-a11y.test.mjs",
+      "tests/component/touch-interactions.test.mjs",
       "tests/component/image-decode-state.test.mjs",
+      "tests/component/viewer-print-theme.test.mjs",
     ]),
     command("docx-xlsx-component-smoke", process.execPath, [
       "scripts/ci/component-smoke.mjs",
@@ -147,6 +237,14 @@ const suites = {
     ], {
       env: {
         BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-preview-routes"),
+      },
+    }),
+    command("formal-touch-mobile", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/touch_mobile.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-touch-mobile"),
       },
     }),
     command("formal-preview-workflows", process.execPath, [
@@ -181,6 +279,15 @@ const suites = {
         BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-docx-editing"),
       },
     }),
+    // The only automated coverage for the DOCX comment/revision gutter.
+    command("formal-docx-annotations", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/docx_annotations.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-docx-annotations"),
+      },
+    }),
     command("formal-ux-parity", process.execPath, [
       "scripts/ci/run-python.mjs",
       "tests/blackbox/ux_parity.py",
@@ -188,6 +295,8 @@ const suites = {
       env: {
         BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-ux-parity"),
       },
+      // Blockable because the upstream reference worktree is an opt-in checkout,
+      // but a BLOCKED result makes the suite INCOMPLETE (issue #57), not PASS.
       allowBlocked: true,
     }),
     command("formal-fidelity-content", process.execPath, [
@@ -461,7 +570,12 @@ const baseEnv = {
   CI_EVIDENCE_ROOT: evidenceRoot,
 };
 const failureProbe = process.env.CI_FAILURE_PROBE || "";
+// The probe exit code lets scripts/ci/verify-failure-propagation.mjs exercise the
+// BLOCKED path (exit code 2) without a browser or an upstream checkout.
+const failureProbeExit = Number.parseInt(process.env.CI_FAILURE_PROBE_EXIT || "97", 10);
+const probeBlocked = process.env.CI_PROBE_BLOCKED === "1";
 const results = [];
+const blockedSteps = [];
 let failed = false;
 
 for (const step of steps) {
@@ -479,7 +593,7 @@ for (const step of steps) {
   let signal = null;
   let output = "";
   if (probeMatches) {
-    status = 97;
+    status = failureProbeExit;
     output = `Intentional CI failure probe at ${suiteName}:${step.id}\n`;
     console.error(output.trim());
   } else {
@@ -500,13 +614,14 @@ for (const step of steps) {
   }
 
   const finishedAt = new Date().toISOString();
-  const blockedOk = step.allowBlocked && status === 2;
-  const stepStatus = blockedOk ? "BLOCKED" : status === 0 ? "PASS" : "FAIL";
+  const blockable = step.allowBlocked || (probeMatches && probeBlocked);
+  const blocked = blockable && status === 2;
+  const stepStatus = blocked ? "BLOCKED" : status === 0 ? "PASS" : "FAIL";
 
   // When a Playwright blackbox test fails with no stdout, try reading its
   // summary.json from the evidence directory so the failure reason shows up
   // in CI logs.
-  if (!blockedOk && status !== 0 && !output.trim()) {
+  if (!blocked && status !== 0 && !output.trim()) {
     const summaryPath = path.join(suiteDir, step.id, "summary.json");
     try {
       const summary = JSON.parse(readFileSync(summaryPath, "utf8"));
@@ -527,20 +642,36 @@ for (const step of steps) {
     finishedAt,
     failureProbe: probeMatches,
   });
-  if (!blockedOk && status !== 0) failed = true;
+  if (blocked) blockedSteps.push(step.id);
+  else if (status !== 0) failed = true;
 }
 
+const result = failed
+  ? "FAIL"
+  : blockedSteps.length > 0 && !allowBlocked
+    ? "INCOMPLETE"
+    : "PASS";
 const summary = {
   suite: suiteName,
-  result: failed ? "FAIL" : "PASS",
+  result,
   runId,
   commit,
   evidenceRoot,
+  allowBlocked,
+  blockedSteps,
   results,
 };
 writeFileSync(
   path.join(suiteDir, "summary.json"),
   `${JSON.stringify(summary, null, 2)}\n`,
 );
-console.log(`\n[${suiteName}] ${summary.result}: ${suiteDir}`);
-process.exit(failed ? 1 : 0);
+
+if (blockedSteps.length > 0) {
+  const detail = allowBlocked
+    ? "counted as a warning because CI_ALLOW_BLOCKED=1"
+    : "not counted as a pass; set CI_ALLOW_BLOCKED=1 only for local runs without the upstream checkout";
+  console.warn(`\n[${suiteName}] BLOCKED steps (${detail}): ${blockedSteps.join(", ")}`);
+}
+console.log(`\n[${suiteName}] ${result}: ${suiteDir}`);
+if (failed) process.exit(1);
+process.exit(result === "INCOMPLETE" ? 2 : 0);

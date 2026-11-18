@@ -10,6 +10,7 @@ import type {
 } from "../../engine/types";
 import type {
   DocxEditorSelection,
+  DocxTableCellSelectionRange,
   DocxTextRange,
   DocxTextRangeBoundary,
   DocxTextRangeLocation,
@@ -184,12 +185,47 @@ export function cloneEditorSelection(
     };
   }
 
-  return {
+  const cloned: Extract<DocxEditorSelection, { kind: "table-cell" }> = {
     kind: "table-cell",
     tableIndex: selection.tableIndex,
     rowIndex: selection.rowIndex,
     cellIndex: selection.cellIndex,
   };
+  if (selection.tableRuntimeKey !== undefined) {
+    cloned.tableRuntimeKey = selection.tableRuntimeKey;
+  }
+  if (selection.cellRange) {
+    cloned.cellRange = cloneTableCellSelectionRange(selection.cellRange);
+  }
+  return cloned;
+}
+
+export function cloneTableCellSelectionRange(
+  range: DocxTableCellSelectionRange
+): DocxTableCellSelectionRange {
+  return {
+    tableIndex: range.tableIndex,
+    anchorRowIndex: range.anchorRowIndex,
+    anchorCellIndex: range.anchorCellIndex,
+    focusRowIndex: range.focusRowIndex,
+    focusCellIndex: range.focusCellIndex,
+  };
+}
+
+function sameTableCellSelectionRange(
+  a: DocxTableCellSelectionRange | undefined,
+  b: DocxTableCellSelectionRange | undefined
+): boolean {
+  if (!a || !b) {
+    return a === b;
+  }
+  return (
+    a.tableIndex === b.tableIndex &&
+    a.anchorRowIndex === b.anchorRowIndex &&
+    a.anchorCellIndex === b.anchorCellIndex &&
+    a.focusRowIndex === b.focusRowIndex &&
+    a.focusCellIndex === b.focusCellIndex
+  );
 }
 
 export function sameEditorSelection(
@@ -214,7 +250,9 @@ export function sameEditorSelection(
   return (
     a.tableIndex === tableSelection.tableIndex &&
     a.rowIndex === tableSelection.rowIndex &&
-    a.cellIndex === tableSelection.cellIndex
+    a.cellIndex === tableSelection.cellIndex &&
+    a.tableRuntimeKey === tableSelection.tableRuntimeKey &&
+    sameTableCellSelectionRange(a.cellRange, tableSelection.cellRange)
   );
 }
 
@@ -477,11 +515,31 @@ export function normalizeTextRangeForModel(
 
 export function normalizeSelectionForModel(
   model: DocModel,
-  selection: DocxEditorSelection
+  selection: DocxEditorSelection,
+  preferredLocation?: DocxTextRangeLocation
 ): DocxEditorSelection {
+  // Nested table cells live inside a cell of the host table. The host table
+  // cannot normalize inner row/cell coordinates, so preserve the runtime-key
+  // selection verbatim.
+  if (selection.kind === "table-cell" && selection.tableRuntimeKey) {
+    const preserved: Extract<DocxEditorSelection, { kind: "table-cell" }> = {
+      kind: "table-cell",
+      tableIndex: selection.tableIndex,
+      rowIndex: selection.rowIndex,
+      cellIndex: selection.cellIndex,
+      tableRuntimeKey: selection.tableRuntimeKey,
+    };
+    if (selection.cellRange) {
+      preserved.cellRange = cloneTableCellSelectionRange(selection.cellRange);
+    }
+    return preserved;
+  }
+
   const normalizedParagraphLocation = normalizeParagraphLocationForModel(
     model,
-    selectionFallbackParagraphLocation(selection)
+    preferredLocation
+      ? paragraphLocationFromTextRangeLocation(preferredLocation)
+      : selectionFallbackParagraphLocation(selection)
   );
   if (!normalizedParagraphLocation) {
     return {
@@ -490,7 +548,39 @@ export function normalizeSelectionForModel(
     };
   }
 
-  return selectionFromTextRangeLocation(normalizedParagraphLocation);
+  const normalizedSelection = selectionFromTextRangeLocation(
+    normalizedParagraphLocation
+  );
+  if (
+    selection.kind === "table-cell" &&
+    selection.cellRange &&
+    normalizedSelection.kind === "table-cell" &&
+    normalizedSelection.tableIndex === selection.tableIndex &&
+    cellIsInsideSelectionRange(normalizedSelection, selection.cellRange)
+  ) {
+    return {
+      ...normalizedSelection,
+      cellRange: cloneTableCellSelectionRange(selection.cellRange),
+    };
+  }
+
+  return normalizedSelection;
+}
+
+function cellIsInsideSelectionRange(
+  cell: { rowIndex: number; cellIndex: number },
+  range: DocxTableCellSelectionRange
+): boolean {
+  const minRow = Math.min(range.anchorRowIndex, range.focusRowIndex);
+  const maxRow = Math.max(range.anchorRowIndex, range.focusRowIndex);
+  const minCell = Math.min(range.anchorCellIndex, range.focusCellIndex);
+  const maxCell = Math.max(range.anchorCellIndex, range.focusCellIndex);
+  return (
+    cell.rowIndex >= minRow &&
+    cell.rowIndex <= maxRow &&
+    cell.cellIndex >= minCell &&
+    cell.cellIndex <= maxCell
+  );
 }
 
 export function normalizeEditorCursorStateForModel(
@@ -506,7 +596,8 @@ export function normalizeEditorCursorStateForModel(
     return {
       selection: normalizeSelectionForModel(
         model,
-        selectionFromTextRangeLocation(normalizedRange.start.location)
+        selection,
+        normalizedRange.start.location
       ),
       activeTextRange: normalizedRange,
     };

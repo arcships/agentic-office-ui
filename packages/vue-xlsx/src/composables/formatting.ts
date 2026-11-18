@@ -5,6 +5,7 @@ import {
   strToU8
 } from "fflate";
 import type {
+  XlsxCellNumberFormatInput,
   XlsxCellRange,
   XlsxResolvedCellStyle,
   XlsxSheetData
@@ -241,20 +242,89 @@ export function cloneBytes(bytes: Uint8Array): Uint8Array {
   return nextBytes;
 }
 
-export function sanitizeSavedWorkbookBytes(bytes: Uint8Array): Uint8Array {
+export type WorkbookSanitizationResult = {
+  bytes: Uint8Array;
+  changed: boolean;
+  changedParts: string[];
+  error: Error | null;
+};
+
+const DOUBLE_ESCAPED_XML_ENTITY = /&amp;(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/g;
+
+function repairDoubleEscapedXmlEntities(xml: string) {
+  let repaired = xml;
+  for (let pass = 0; pass < 4; pass += 1) {
+    const next = repaired.replace(DOUBLE_ESCAPED_XML_ENTITY, "&$1;");
+    if (next === repaired) {
+      break;
+    }
+    repaired = next;
+  }
+  return repaired;
+}
+
+function toSanitizationError(error: unknown) {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+/**
+ * Repairs double-escaped XML entities across every XML part in a saved
+ * workbook. Returns the archive it wrote, the parts it changed, and any failure
+ * so callers can surface a broken export instead of silently using the raw
+ * save.
+ */
+export function sanitizeSavedWorkbookBytes(bytes: Uint8Array): WorkbookSanitizationResult {
+  let archive: Record<string, Uint8Array>;
   try {
-    const archive = unzipSync(bytes);
-    const stylesEntry = archive["xl/styles.xml"];
-    if (stylesEntry) {
-      const stylesXml = strFromU8(stylesEntry)
-        .replace(/&amp;quot;/g, "&quot;")
-        .replace(/&amp;apos;/g, "&apos;");
-      archive["xl/styles.xml"] = strToU8(stylesXml);
+    archive = unzipSync(bytes);
+  } catch (error) {
+    return {
+      bytes: cloneBytes(bytes),
+      changed: false,
+      changedParts: [],
+      error: toSanitizationError(error)
+    };
+  }
+
+  const changedParts: string[] = [];
+  try {
+    for (const [partPath, entry] of Object.entries(archive)) {
+      if (!partPath.endsWith(".xml") && !partPath.endsWith(".rels")) {
+        continue;
+      }
+
+      const xml = strFromU8(entry);
+      const repairedXml = repairDoubleEscapedXmlEntities(xml);
+      if (repairedXml === xml) {
+        continue;
+      }
+
+      archive[partPath] = strToU8(repairedXml);
+      changedParts.push(partPath);
     }
 
-    return zipSync(archive, { level: 6 });
-  } catch {
-    return cloneBytes(bytes);
+    if (changedParts.length === 0) {
+      return {
+        bytes: cloneBytes(bytes),
+        changed: false,
+        changedParts,
+        error: null
+      };
+    }
+
+    return {
+      bytes: zipSync(archive, { level: 6 }),
+      changed: true,
+      changedParts,
+      error: null
+    };
+  } catch (error) {
+    return {
+      bytes: cloneBytes(bytes),
+      changed: false,
+      changedParts: [],
+      error: toSanitizationError(error)
+    };
   }
 }
 
@@ -302,4 +372,33 @@ export function resolveInheritedCellStyle(sheet: XlsxSheetData | null | undefine
   }
 
   return null;
+}
+
+function readNumberFormat(style: unknown): XlsxCellNumberFormatInput | null {
+  if (!style || typeof style !== "object") {
+    return null;
+  }
+
+  const numberFormat = (style as Record<string, unknown>).numberFormat;
+  return numberFormat && typeof numberFormat === "object"
+    ? numberFormat as XlsxCellNumberFormatInput
+    : null;
+}
+
+/**
+ * Number format that applies to a cell. An explicit cell style wins; cells
+ * without one inherit the row/column style, exactly like Excel's fallback for
+ * cells that carry no `s` attribute.
+ */
+export function resolveEffectiveCellNumberFormat(
+  style: unknown,
+  sheet: XlsxSheetData | null | undefined,
+  row: number,
+  col: number
+): XlsxCellNumberFormatInput | null {
+  if (style && typeof style === "object") {
+    return readNumberFormat(style);
+  }
+
+  return readNumberFormat(resolveInheritedCellStyle(sheet, row, col));
 }

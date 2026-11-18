@@ -40,9 +40,19 @@ export {
   DEFAULT_PDF_MAX_FILE_SIZE,
   PdfSourceError,
   loadVerifiedPdfSource,
+  localizePdfErrorMessage,
   toPdfLoadError,
 } from "./pdf-url-policy"
+export type { PdfLoadErrorMessages } from "./pdf-url-policy"
 export { bundledPdfiumWasmUrl, createPdfRenderRuntime } from "./pdf/pdf-render-runtime"
+export {
+  DEFAULT_PDF_MAX_RENDER_PIXELS,
+  MAX_PDF_RENDER_DPR,
+  MAX_PDF_RENDER_SCALE,
+  PdfRenderError,
+  resolvePdfFormFieldValue,
+  resolvePdfPageRenderParameters,
+} from "./pdf/pdf-render-runtime"
 export {
   createPdfPageReferenceDraft,
   createPdfRegionReferenceDraft,
@@ -55,11 +65,25 @@ export type {
   PdfOfficeReference,
   PdfOfficeReferenceDraft,
   PdfReferenceContext,
+  PdfReferenceDescriptorLabels,
   PdfTextReferenceSelection,
 } from "./pdf/pdf-reference-adapter"
 export type {
+  PdfAnnotationAppearancePatch,
+  PdfFormFieldDescriptor,
+  PdfFormFieldOption,
+  PdfFormFieldType,
+  PdfFormFieldValue,
+  PdfOpenDocumentOptions,
   PdfPageRenderOptions,
+  PdfPageRenderParameters,
+  PdfPageTextLayer,
+  PdfPageTextLayerGlyph,
+  PdfPasswordHandler,
+  PdfPasswordRequest,
+  PdfRenderAnnotation,
   PdfRenderDocument,
+  PdfRenderErrorCode,
   PdfRenderPageInfo,
   PdfRenderRect,
   PdfRenderRuntime,
@@ -68,6 +92,7 @@ export type {
   PdfSearchHit,
   PdfSearchState,
   PdfSearchStatus,
+  PdfSelectionSegment,
   PdfSelectionState,
   PdfThumbnailRenderOptions,
 } from "./pdf/pdf-render-runtime"

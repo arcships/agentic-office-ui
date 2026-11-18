@@ -54,8 +54,10 @@ import {
   type ParagraphPretextLayoutSource
 } from "./pretext-build";
 import {
+  resolveWrappedFloatingTextBands,
   shouldRenderWrappedFloatingImage
 } from "./paragraph-geometry";
+import { resolveFloatingEffectExtentPx } from "../../engine/anchor-properties";
 import {
   syntheticTextBoxActsAsTopAndBottomMasthead
 } from "./synthetic-textbox";
@@ -463,6 +465,7 @@ export function resolveDualWrappedFloatingImageGeometry(
     : 0;
   const wrapType = floating?.wrapType;
   const horizontalAlign = floating?.horizontalAlign?.trim().toLowerCase();
+  const effectExtent = resolveFloatingEffectExtentPx(floating);
   const distLPx = Math.max(0, Math.round(floating?.distLPx ?? 0));
   const distRPx = Math.max(0, Math.round(floating?.distRPx ?? 0));
   const distTPx = Math.max(0, Math.round(floating?.distTPx ?? 0));
@@ -517,14 +520,47 @@ export function resolveDualWrappedFloatingImageGeometry(
       ? Math.round(rawImageTopPx)
       : Math.max(0, Math.round(rawImageTopPx));
 
-  let exclusionLeftPx = Math.max(0, imageLeftPx - distLPx);
+  let exclusionLeftPx = Math.max(
+    0,
+    imageLeftPx - distLPx - Math.round(effectExtent.leftPx)
+  );
   let exclusionRightPx = Math.min(
     safeContainerWidthPx,
-    imageLeftPx + imageWidthPx + distRPx
+    imageLeftPx +
+      imageWidthPx +
+      distRPx +
+      Math.round(effectExtent.rightPx)
   );
   if (wrapType === "topAndBottom") {
     exclusionLeftPx = 0;
     exclusionRightPx = safeContainerWidthPx;
+  } else if (
+    floating?.wrapText === "left" ||
+    floating?.wrapText === "right"
+  ) {
+    // `wrapText = left|right` disables one side in Word. Ask the helper the
+    // renderer uses and snap the exclusion to that edge, so the measured free
+    // band is exactly the one the CSS float leaves for text; measuring both
+    // sides instead under-counts lines and shifts every later page break.
+    const textBands = resolveWrappedFloatingTextBands(image, {
+      containerWidthPx: safeContainerWidthPx,
+      imageWidthPx
+    });
+    const effectLeftPx = Math.round(effectExtent.leftPx);
+    const effectRightPx = Math.round(effectExtent.rightPx);
+    if (textBands.textOnLeft) {
+      exclusionLeftPx = Math.max(
+        0,
+        safeContainerWidthPx - imageWidthPx - distLPx - effectLeftPx
+      );
+      exclusionRightPx = safeContainerWidthPx;
+    } else {
+      exclusionLeftPx = 0;
+      exclusionRightPx = Math.min(
+        safeContainerWidthPx,
+        imageWidthPx + distRPx + effectRightPx
+      );
+    }
   } else if (horizontalAlign === "left" || horizontalAlign === "inside") {
     exclusionLeftPx = 0;
   } else if (horizontalAlign === "right" || horizontalAlign === "outside") {
@@ -560,8 +596,12 @@ export function resolveDualWrappedFloatingImageGeometry(
     exclusion: {
       left: exclusionLeftPx,
       right: exclusionRightPx,
-      top: imageTopPx,
-      bottom: imageTopPx + imageHeightPx + distBPx,
+      top: imageTopPx - Math.round(effectExtent.topPx),
+      bottom:
+        imageTopPx +
+        imageHeightPx +
+        distBPx +
+        Math.round(effectExtent.bottomPx),
     },
   };
 }

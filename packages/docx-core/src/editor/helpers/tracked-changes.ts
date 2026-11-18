@@ -13,13 +13,28 @@
 
 import type {
   DocModel,
+  DocNode,
+  DocumentCommentAnchor,
+  DocumentCommentDefinition,
+  FooterSection,
   FormFieldRunNode,
+  HeaderSection,
   ParagraphNode,
   TableNode,
   TextRunNode
 } from "../../engine/types";
+import {
+  getCachedDocumentCommentAnchor,
+  setCachedDocumentCommentAnchor,
+} from "../../engine/comment-anchors";
+import {
+  parseParagraphCommentRanges,
+  resolveParagraphCommentRanges,
+  type ParagraphCommentRange,
+} from "../../engine/comment-ranges";
 import type {
   DocxComment,
+  DocxInlineTrackedChangeKind,
   DocxTextRangeLocation,
   DocxTrackedChange,
   DocxTrackedChangeKind,
@@ -27,22 +42,31 @@ import type {
 } from "./editor-types";
 import {
   extractBalancedTagRanges,
+  extractTopLevelTagRanges,
   decodeXmlText,
   normalizeTrackedChangeSnippet,
   parseRunStyleFromRunXml,
   parseTrackedRunTokens,
   stripTextBoxContentFromRunXml,
   trackedChangeKindFromTagName,
-  type RevisionTagRange,
-  type XmlBalancedTagRange
+  type RevisionTagRange
 } from "./xml-parsing";
 import { xmlAttribute } from "./ooxml-helpers";
 import { setCacheEntry } from "./cache-utils";
+import { paragraphLocationKey } from "./text-mutation";
 import {
-  firstTableCellAnchorLocation,
-  paragraphLocationKey
-} from "./text-mutation";
-import { tableCellParagraphs, tableCellParagraphsRecursively } from "./paragraph-inspect";
+  paragraphText,
+  tableCellParagraphEntries
+} from "./paragraph-inspect";
+import {
+  collectParagraphVisibleUnits,
+  mapVisibleUnitsToParagraphChildren,
+  paragraphVisibleCursorBefore
+} from "./tracked-changes-inline";
+import {
+  resolveTableTrackedMarkup,
+  tableRevisionAnchorLocation
+} from "./tracked-changes-table";
 
 // ---------------------------------------------------------------------------
 // Paragraph tracked/comment markup types (upstream 382-409)
@@ -70,11 +94,32 @@ export interface ParagraphTrackedMarkup {
     number,
     ParagraphTrackedDeletionSegment[]
   >;
+  /** Inserted/deleted paragraph mark (no visible child of its own). */
+  paragraphMarkChange?: ParagraphTrackedInlineChange;
   changes: ParagraphTrackedInlineChange[];
 }
 
+/** A comment range expressed in a single rendered child's text. */
+export interface ParagraphCommentTextRange {
+  commentId: number;
+  /** Inclusive offset inside the child's own text. */
+  start: number;
+  /** Exclusive offset inside the child's own text. */
+  end: number;
+}
+
 export interface ParagraphCommentMarkup {
+  /**
+   * Comment ids touching each rendered child. A run that only partly intersects
+   * a range still appears here so the gutter can match it from the DOM.
+   */
   commentIdsByVisibleChildIndex: Array<number[] | undefined>;
+  /**
+   * Exact character windows per rendered child. Present when the paragraph
+   * carries model-level comment offsets; the renderer splits the child's text
+   * at these boundaries instead of highlighting the whole run.
+   */
+  rangesByVisibleChildIndex?: Array<ParagraphCommentTextRange[] | undefined>;
 }
 
 // Shared caches keyed by paragraph sourceXml. `null` marks a confirmed miss so
@@ -170,46 +215,18 @@ function summarizeParagraphFormattingChange(changeXml: string): string {
   );
 }
 
-function summarizeTableFormattingChange(
-  scope: "table" | "row" | "cell",
-  changeXml: string
-): string {
-  const features: string[] = [];
-  if (/<w:tblW\b|<w:tcW\b|<w:gridSpan\b/i.test(changeXml)) {
-    features.push("width");
+/**
+ * Deleted run text that has no model child (`w:delText`) — the renderer needs
+ * a synthetic struck-through segment for these.
+ */
+function deletedRunText(runXml: string): string | undefined {
+  const texts: string[] = [];
+  for (const match of runXml.matchAll(
+    /<w:delText\b[^>]*>([\s\S]*?)<\/w:delText>/gi
+  )) {
+    texts.push(decodeXmlText(match[1] ?? ""));
   }
-  if (/<w:tblLayout\b/i.test(changeXml)) {
-    features.push("layout");
-  }
-  if (/<w:tblInd\b|<w:ind\b/i.test(changeXml)) {
-    features.push("indent");
-  }
-  if (/<w:tblCellMar\b|<w:tcMar\b/i.test(changeXml)) {
-    features.push("margins");
-  }
-  if (/<w:(?:tblBorders|tcBorders|trBorders|pBdr)\b/i.test(changeXml)) {
-    features.push("borders");
-  }
-  if (/<w:trHeight\b/i.test(changeXml)) {
-    features.push("row height");
-  }
-  if (/<w:vAlign\b/i.test(changeXml)) {
-    features.push("vertical align");
-  }
-  if (/<w:jc\b/i.test(changeXml)) {
-    features.push("alignment");
-  }
-  if (/<w:shd\b/i.test(changeXml)) {
-    features.push("shading");
-  }
-
-  const prefix =
-    scope === "table"
-      ? "Table formatting"
-      : scope === "row"
-      ? "Row formatting"
-      : "Cell formatting";
-  return summarizeChangeFeatures(prefix, features, prefix);
+  return normalizeTrackedChangeSnippet(texts.join(""));
 }
 
 // ---------------------------------------------------------------------------
@@ -252,6 +269,11 @@ export function resolveParagraphTrackedMarkup(
     });
   }
 
+  // Map XML units to the model children the renderer actually walks. This is
+  // the single source of truth for the visible-child cursor used below.
+  const visibleUnits = collectParagraphVisibleUnits(sourceXml);
+  mapVisibleUnitsToParagraphChildren(visibleUnits, paragraph.children);
+
   const inlineChangeByVisibleChildIndex: Array<
     ParagraphTrackedInlineChange | undefined
   > = [];
@@ -262,7 +284,6 @@ export function resolveParagraphTrackedMarkup(
   const changes: ParagraphTrackedInlineChange[] = [];
   const changeByKey = new Map<string, ParagraphTrackedInlineChange>();
   let anonymousChangeCounter = 0;
-  let visibleChildIndex = 0;
 
   const getOrCreateChange = (
     kind: DocxTrackedChangeKind,
@@ -318,6 +339,61 @@ export function resolveParagraphTrackedMarkup(
     return next;
   };
 
+  const innermostRevisionAt = (
+    offset: number
+  ): RevisionTagRange | undefined =>
+    revisionRanges
+      .filter((range) => offset >= range.start && offset < range.end)
+      .sort(
+        (left, right) => left.end - left.start - (right.end - right.start)
+      )[0];
+
+  // Resolve revision snippets once, then annotate the mapped model children.
+  const snippetByRevision = new Map<RevisionTagRange, string | undefined>();
+  revisionRanges.forEach((revisionRange) => {
+    const revisionXml = sourceXml.slice(revisionRange.start, revisionRange.end);
+    const includeDeletedText =
+      revisionRange.kind === "deletion" || revisionRange.kind === "move-from";
+    const revisionTokens = parseTrackedRunTokens(
+      stripTextBoxContentFromRunXml(revisionXml),
+      includeDeletedText
+    );
+    const revisionText = normalizeTrackedChangeSnippet(
+      revisionTokens.map((token) => token.text).join("")
+    );
+    const hasImage = /<w:(?:drawing|pict)\b/i.test(revisionXml);
+    snippetByRevision.set(
+      revisionRange,
+      revisionText ?? (hasImage ? "[image]" : undefined)
+    );
+  });
+
+  revisionRanges.forEach((revisionRange) => {
+    const revisionSnippet = snippetByRevision.get(revisionRange);
+    if (!revisionSnippet) {
+      return;
+    }
+    const change = getOrCreateChange(
+      revisionRange.kind,
+      revisionRange.revisionId,
+      revisionRange.author,
+      revisionRange.date,
+      revisionSnippet
+    );
+    for (const unit of visibleUnits) {
+      if (unit.visibleChildIndex === undefined) {
+        continue;
+      }
+      if (unit.start < revisionRange.start || unit.start >= revisionRange.end) {
+        continue;
+      }
+      if (innermostRevisionAt(unit.start) !== revisionRange) {
+        continue;
+      }
+      inlineChangeByVisibleChildIndex[unit.visibleChildIndex] = change;
+    }
+  });
+
   const runPattern = /<w:r\b[\s\S]*?<\/w:r>/gi;
   for (const runMatch of sourceXml.matchAll(runPattern)) {
     const runXml = runMatch[0] ?? "";
@@ -326,15 +402,7 @@ export function resolveParagraphTrackedMarkup(
     }
 
     const runStart = runMatch.index ?? 0;
-    const runEnd = runStart + runXml.length;
-    const enclosingRevision = revisionRanges
-      .filter(
-        (revisionRange) =>
-          runStart >= revisionRange.start && runEnd <= revisionRange.end
-      )
-      .sort(
-        (left, right) => left.end - left.start - (right.end - right.start)
-      )[0];
+    const enclosingRevision = innermostRevisionAt(runStart);
 
     const revisionKind = enclosingRevision?.kind;
     const revisionId = enclosingRevision?.revisionId;
@@ -344,22 +412,15 @@ export function resolveParagraphTrackedMarkup(
       revisionKind === "deletion" || revisionKind === "move-from";
     const contentRunXml = stripTextBoxContentFromRunXml(runXml);
     const trackedRunStyle = parseRunStyleFromRunXml(contentRunXml);
-    const visibleTokens = parseTrackedRunTokens(contentRunXml, false);
-    const deletedTokens = parseTrackedRunTokens(contentRunXml, true);
-    const hasImage = /<w:(?:drawing|pict)\b/i.test(runXml);
-    const visibleChildCount =
-      visibleTokens.filter((token) => token.text.length > 0 || token.isNote)
-        .length + (hasImage ? 1 : 0);
-    const visibleText = normalizeTrackedChangeSnippet(
-      visibleTokens.map((token) => token.text).join("")
-    );
-    const deletedText = normalizeTrackedChangeSnippet(
-      deletedTokens.map((token) => token.text).join("")
-    );
 
     if (isDeletionLike) {
-      const deletionSnippet = deletedText ?? (hasImage ? "[image]" : undefined);
-      if (!deletionSnippet) {
+      // Deleted text with no model child (w:delText) is rendered as a synthetic
+      // struck-through segment at the mapped cursor. Deleted content that does
+      // have a model child (w:t) is styled inline via the revision pass above.
+      const deletedText = deletedRunText(
+        stripTextBoxContentFromRunXml(runXml)
+      );
+      if (!deletedText) {
         continue;
       }
       const change = getOrCreateChange(
@@ -367,18 +428,16 @@ export function resolveParagraphTrackedMarkup(
         revisionId,
         revisionAuthor,
         revisionDate,
-        deletionSnippet
+        deletedText
       );
-      if (deletedText) {
-        const segments =
-          deletedSegmentsByVisibleChildIndex.get(visibleChildIndex) ?? [];
-        segments.push({
-          text: deletedText,
-          change,
-          style: trackedRunStyle,
-        });
-        deletedSegmentsByVisibleChildIndex.set(visibleChildIndex, segments);
-      }
+      const cursor = paragraphVisibleCursorBefore(visibleUnits, runStart);
+      const segments = deletedSegmentsByVisibleChildIndex.get(cursor) ?? [];
+      segments.push({
+        text: deletedText,
+        change,
+        style: trackedRunStyle,
+      });
+      deletedSegmentsByVisibleChildIndex.set(cursor, segments);
       continue;
     }
 
@@ -403,28 +462,6 @@ export function resolveParagraphTrackedMarkup(
         formatSnippet
       );
     });
-
-    if (revisionKind === "insertion" || revisionKind === "move-to") {
-      const insertionSnippet =
-        visibleText ?? (hasImage ? "[image]" : undefined);
-      if (!insertionSnippet) {
-        visibleChildIndex += visibleChildCount;
-        continue;
-      }
-      const inlineChange = getOrCreateChange(
-        revisionKind,
-        revisionId,
-        revisionAuthor,
-        revisionDate,
-        insertionSnippet
-      );
-      for (let index = 0; index < visibleChildCount; index += 1) {
-        inlineChangeByVisibleChildIndex[visibleChildIndex + index] =
-          inlineChange;
-      }
-    }
-
-    visibleChildIndex += visibleChildCount;
   }
 
   const pPrChangeRanges = extractBalancedTagRanges(sourceXml, "w:pPrChange");
@@ -443,32 +480,53 @@ export function resolveParagraphTrackedMarkup(
     );
   });
 
-  // Some DOCX revisions wrap non-run content. Ensure every revision range is
-  // represented even if the run-based pass above does not emit it.
-  revisionRanges.forEach((revisionRange) => {
-    const revisionXml = sourceXml.slice(revisionRange.start, revisionRange.end);
-    const includeDeletedText =
-      revisionRange.kind === "deletion" || revisionRange.kind === "move-from";
-    const revisionTokens = parseTrackedRunTokens(
-      stripTextBoxContentFromRunXml(revisionXml),
-      includeDeletedText
+  // A paragraph mark revision lives in pPr/rPr and has no w:t/w:delText of its
+  // own, so it never reaches the run pass above.
+  let paragraphMarkChange: ParagraphTrackedInlineChange | undefined;
+  for (const pPrRange of extractTopLevelTagRanges(sourceXml, "w:pPr")) {
+    const pPrXml = sourceXml.slice(pPrRange.start, pPrRange.end);
+    const pPrChangeInnerRanges = extractBalancedTagRanges(
+      pPrXml,
+      "w:pPrChange"
     );
-    const revisionText = normalizeTrackedChangeSnippet(
-      revisionTokens.map((token) => token.text).join("")
-    );
-    const hasImage = /<w:(?:drawing|pict)\b/i.test(revisionXml);
-    const revisionSnippet = revisionText ?? (hasImage ? "[image]" : undefined);
-    if (!revisionSnippet) {
-      return;
+    for (const rPrRange of extractTopLevelTagRanges(pPrXml, "w:rPr")) {
+      if (
+        pPrChangeInnerRanges.some(
+          (changeRange) =>
+            rPrRange.start >= changeRange.start &&
+            rPrRange.end <= changeRange.end
+        )
+      ) {
+        continue;
+      }
+      const rPrXml = pPrXml.slice(rPrRange.start, rPrRange.end);
+      const markMatch = rPrXml.match(/<w:(ins|del)\b[^>]*\/?>/i);
+      if (!markMatch) {
+        continue;
+      }
+      const markTag = markMatch[0] ?? "";
+      const kind: DocxInlineTrackedChangeKind =
+        (markMatch[1] ?? "").toLowerCase() === "ins"
+          ? "insertion"
+          : "deletion";
+      paragraphMarkChange = getOrCreateChange(
+        kind,
+        xmlAttribute(markTag, "w:id"),
+        decodeXmlText(xmlAttribute(markTag, "w:author") ?? ""),
+        xmlAttribute(markTag, "w:date"),
+        "Paragraph mark"
+      );
     }
-    getOrCreateChange(
-      revisionRange.kind,
-      revisionRange.revisionId,
-      revisionRange.author,
-      revisionRange.date,
-      revisionSnippet
+  }
+  if (!paragraphMarkChange && paragraph.paragraphMarkDeleted === true) {
+    paragraphMarkChange = getOrCreateChange(
+      "deletion",
+      undefined,
+      undefined,
+      undefined,
+      "Paragraph mark"
     );
-  });
+  }
 
   const hasInlineChanges = inlineChangeByVisibleChildIndex.some(Boolean);
   const hasDeletedSegments = deletedSegmentsByVisibleChildIndex.size > 0;
@@ -480,6 +538,7 @@ export function resolveParagraphTrackedMarkup(
   const resolved: ParagraphTrackedMarkup = {
     inlineChangeByVisibleChildIndex,
     deletedSegmentsByVisibleChildIndex,
+    paragraphMarkChange,
     changes,
   };
   setCacheEntry(paragraphTrackedMarkupBySourceXml, sourceXml, resolved);
@@ -491,14 +550,123 @@ export function resolveParagraphTrackedMarkup(
 // ---------------------------------------------------------------------------
 
 /**
- * Maps comment ranges (`commentRangeStart`/`commentRangeEnd`) to the
- * paragraph's visible child indexes using the same run accounting as
- * `resolveParagraphTrackedMarkup`, so the run renderer can highlight
- * commented content at the matching child cursor.
+ * The paragraph's live comment ranges as character offsets.
+ *
+ * Reads the model field that parsing put on the paragraph (kept up to date by
+ * the editing commands) and falls back to re-parsing `sourceXml` for models
+ * built before the field existed. Ranges are reconciled with the current text,
+ * so a comment keeps its place even when an edit could not be remapped.
+ */
+export function resolveParagraphCommentRangesForParagraph(
+  paragraph: ParagraphNode
+): ParagraphCommentRange[] {
+  const text = paragraphText(paragraph);
+  if (paragraph.commentRanges && paragraph.commentRanges.length > 0) {
+    return resolveParagraphCommentRanges(text, paragraph.commentRanges);
+  }
+
+  const sourceXml = paragraph.sourceXml ?? "";
+  if (!sourceXml || !/commentRange|commentReference/i.test(sourceXml)) {
+    return [];
+  }
+
+  return resolveParagraphCommentRanges(
+    text,
+    parseParagraphCommentRanges(sourceXml, text.length)
+  );
+}
+
+function mapCommentRangesToVisibleChildren(
+  paragraph: ParagraphNode,
+  ranges: readonly ParagraphCommentRange[]
+): ParagraphCommentMarkup | undefined {
+  const commentIdsByVisibleChildIndex: Array<number[] | undefined> = [];
+  const rangesByVisibleChildIndex: Array<ParagraphCommentTextRange[] | undefined> = [];
+  let textCursor = 0;
+  let visibleChildIndex = 0;
+  let matched = false;
+
+  for (const child of paragraph.children) {
+    // The run renderer skips form fields without advancing its cursor.
+    if (child.type === "form-field") {
+      continue;
+    }
+    if (child.type !== "text") {
+      visibleChildIndex += 1;
+      continue;
+    }
+
+    const childStart = textCursor;
+    const childEnd = textCursor + child.text.length;
+    textCursor = childEnd;
+
+    const childRanges: ParagraphCommentTextRange[] = [];
+    const childCommentIds: number[] = [];
+    for (const range of ranges) {
+      const overlapStart = Math.max(range.start, childStart);
+      const overlapEnd = Math.min(range.end, childEnd);
+      if (overlapEnd > overlapStart) {
+        childRanges.push({
+          commentId: range.commentId,
+          start: overlapStart - childStart,
+          end: overlapEnd - childStart,
+        });
+        if (!childCommentIds.includes(range.commentId)) {
+          childCommentIds.push(range.commentId);
+        }
+        matched = true;
+        continue;
+      }
+
+      // Point anchor (a comment with only `w:commentReference`) or a range that
+      // owns no characters of this run: tag the run without a highlight so the
+      // marker and card can still find it.
+      if (
+        range.start === range.end &&
+        range.start >= childStart &&
+        range.start <= childEnd &&
+        !childCommentIds.includes(range.commentId)
+      ) {
+        childCommentIds.push(range.commentId);
+      }
+    }
+
+    if (childRanges.length > 0) {
+      rangesByVisibleChildIndex[visibleChildIndex] = childRanges;
+    }
+    if (childCommentIds.length > 0) {
+      commentIdsByVisibleChildIndex[visibleChildIndex] =
+        childCommentIds.sort((left, right) => left - right);
+    }
+    visibleChildIndex += 1;
+  }
+
+  if (!matched && commentIdsByVisibleChildIndex.length === 0) {
+    return undefined;
+  }
+
+  return { commentIdsByVisibleChildIndex, rangesByVisibleChildIndex };
+}
+
+/**
+ * Resolves comment highlighting for one paragraph.
+ *
+ * Model offsets are authoritative: they are captured when the document is
+ * parsed and remapped by every text edit, so the highlight is exact to the
+ * character and survives edits that clear `sourceXml`. Only when the model has
+ * no offsets does this re-parse the paragraph markup (compatibility path).
  */
 export function resolveParagraphCommentMarkup(
   paragraph: ParagraphNode
 ): ParagraphCommentMarkup | undefined {
+  const text = paragraphText(paragraph);
+  if (paragraph.commentRanges && paragraph.commentRanges.length > 0) {
+    return mapCommentRangesToVisibleChildren(
+      paragraph,
+      resolveParagraphCommentRanges(text, paragraph.commentRanges)
+    );
+  }
+
   const sourceXml = paragraph.sourceXml ?? "";
   if (!sourceXml || !/commentRange|commentReference/i.test(sourceXml)) {
     return undefined;
@@ -509,82 +677,14 @@ export function resolveParagraphCommentMarkup(
     return cached ?? undefined;
   }
 
-  const rangeStartById = new Map<number, number>();
-  const rangeEndById = new Map<number, number>();
-  for (const match of sourceXml.matchAll(
-    /<w:commentRangeStart\b[^>]*w:id="(-?\d+)"[^>]*\/?>/gi
-  )) {
-    const commentId = Number.parseInt(match[1] ?? "", 10);
-    if (Number.isFinite(commentId) && match.index !== undefined) {
-      rangeStartById.set(commentId, match.index + match[0].length);
-    }
-  }
-  for (const match of sourceXml.matchAll(
-    /<w:commentRangeEnd\b[^>]*w:id="(-?\d+)"[^>]*\/?>/gi
-  )) {
-    const commentId = Number.parseInt(match[1] ?? "", 10);
-    if (Number.isFinite(commentId) && match.index !== undefined) {
-      rangeEndById.set(commentId, match.index);
-    }
-  }
-  // Ranges may open in an earlier paragraph (start missing) or close in a
-  // later one (end missing); treat the missing side as the paragraph edge.
-  const ranges: Array<{ commentId: number; start: number; end: number }> = [];
-  const rangeIds = new Set<number>([
-    ...rangeStartById.keys(),
-    ...rangeEndById.keys(),
-  ]);
-  rangeIds.forEach((commentId) => {
-    const start = rangeStartById.get(commentId) ?? 0;
-    const end = rangeEndById.get(commentId) ?? sourceXml.length;
-    if (end > start) {
-      ranges.push({ commentId, start, end });
-    }
-  });
-  if (ranges.length === 0) {
-    setCacheEntry(paragraphCommentMarkupBySourceXml, sourceXml, null);
-    return undefined;
-  }
-
-  const commentIdsByVisibleChildIndex: Array<number[] | undefined> = [];
-  let visibleChildIndex = 0;
-  const runPattern = /<w:r\b[\s\S]*?<\/w:r>/gi;
-  for (const runMatch of sourceXml.matchAll(runPattern)) {
-    const runXml = runMatch[0] ?? "";
-    if (!runXml) {
-      continue;
-    }
-
-    const runStart = runMatch.index ?? 0;
-    const contentRunXml = stripTextBoxContentFromRunXml(runXml);
-    const visibleTokens = parseTrackedRunTokens(contentRunXml, false);
-    const hasImage = /<w:(?:drawing|pict)\b/i.test(runXml);
-    const visibleChildCount =
-      visibleTokens.filter((token) => token.text.length > 0 || token.isNote)
-        .length + (hasImage ? 1 : 0);
-    if (visibleChildCount === 0) {
-      continue;
-    }
-
-    const activeCommentIds = ranges
-      .filter((range) => runStart >= range.start && runStart < range.end)
-      .map((range) => range.commentId);
-    if (activeCommentIds.length > 0) {
-      for (let index = 0; index < visibleChildCount; index += 1) {
-        commentIdsByVisibleChildIndex[visibleChildIndex + index] =
-          activeCommentIds;
-      }
-    }
-    visibleChildIndex += visibleChildCount;
-  }
-
-  if (commentIdsByVisibleChildIndex.length === 0) {
-    setCacheEntry(paragraphCommentMarkupBySourceXml, sourceXml, null);
-    return undefined;
-  }
-
-  const resolved: ParagraphCommentMarkup = { commentIdsByVisibleChildIndex };
-  setCacheEntry(paragraphCommentMarkupBySourceXml, sourceXml, resolved);
+  const resolved = mapCommentRangesToVisibleChildren(
+    paragraph,
+    resolveParagraphCommentRanges(
+      text,
+      parseParagraphCommentRanges(sourceXml, text.length)
+    )
+  );
+  setCacheEntry(paragraphCommentMarkupBySourceXml, sourceXml, resolved ?? null);
   return resolved;
 }
 
@@ -603,13 +703,8 @@ function collectTablePropertyTrackedChanges(
   text?: string;
   location: DocxTextRangeLocation;
 }> {
-  const sourceXml = table.sourceXml ?? "";
-  if (!sourceXml) {
-    return [];
-  }
-
-  const anchorLocation = firstTableCellAnchorLocation(table, tableIndex);
-  if (!anchorLocation) {
+  const markup = resolveTableTrackedMarkup(table);
+  if (!markup) {
     return [];
   }
 
@@ -621,68 +716,27 @@ function collectTablePropertyTrackedChanges(
     text?: string;
     location: DocxTextRangeLocation;
   }> = [];
-  const entryByKey = new Map<string, (typeof entries)[number]>();
 
-  const append = (
-    scope: "table" | "row" | "cell",
-    changeTag: XmlBalancedTagRange
-  ): void => {
-    const kind: DocxTrackedChangeKind = "paragraph-format-change";
-    const author =
-      decodeXmlText(xmlAttribute(changeTag.openTag, "w:author") ?? "") ||
-      undefined;
-    const date = xmlAttribute(changeTag.openTag, "w:date")?.trim() || undefined;
-    const revisionId =
-      xmlAttribute(changeTag.openTag, "w:id")?.trim() || undefined;
-    const changeXml = sourceXml.slice(changeTag.start, changeTag.end);
-    const text = summarizeTableFormattingChange(scope, changeXml);
-    const key = revisionId
-      ? `${scope}:${kind}:id:${revisionId}`
-      : `${scope}:${kind}:${author ?? ""}:${date ?? ""}:${text}`;
-    const existing = entryByKey.get(key);
-    if (existing) {
-      if (!existing.text && text) {
-        existing.text = text;
-      }
-      if (!existing.author && author) {
-        existing.author = author;
-      }
-      if (!existing.date && date) {
-        existing.date = date;
-      }
+  markup.revisions.forEach((revision) => {
+    const location = tableRevisionAnchorLocation(table, tableIndex, revision);
+    if (!location) {
       return;
     }
-
-    const stableId = revisionId
-      ? `${scope}-${kind}-${revisionId}`
-      : `${scope}-${kind}-${entryByKey.size}`;
-    const next = {
-      stableId,
-      kind,
-      author,
-      date,
-      text,
+    entries.push({
+      stableId: revision.stableId,
+      kind: revision.kind,
+      author: revision.author,
+      date: revision.date,
+      text: revision.text,
       location: {
-        kind: "table-cell" as const,
+        kind: "table-cell",
         tableIndex,
-        rowIndex: anchorLocation.rowIndex,
-        cellIndex: anchorLocation.cellIndex,
-        paragraphIndex: anchorLocation.paragraphIndex,
+        rowIndex: location.rowIndex,
+        cellIndex: location.cellIndex,
+        paragraphIndex: location.paragraphIndex,
       },
-    };
-    entries.push(next);
-    entryByKey.set(key, next);
-  };
-
-  extractBalancedTagRanges(sourceXml, "w:tblPrChange").forEach((range) =>
-    append("table", range)
-  );
-  extractBalancedTagRanges(sourceXml, "w:trPrChange").forEach((range) =>
-    append("row", range)
-  );
-  extractBalancedTagRanges(sourceXml, "w:tcPrChange").forEach((range) =>
-    append("cell", range)
-  );
+    });
+  });
 
   return entries;
 }
@@ -746,32 +800,17 @@ export function collectTrackedChangesFromModel(
 
     node.rows.forEach((row, rowIndex) => {
       row.cells.forEach((cell, cellIndex) => {
-        const directParagraphs = tableCellParagraphs(cell.nodes);
-        directParagraphs.forEach((paragraph, paragraphIndex) => {
-          appendParagraphChanges(paragraph, nodeIndex, {
-            kind: "table-cell",
-            tableIndex: nodeIndex,
-            rowIndex,
-            cellIndex,
-            paragraphIndex,
-          });
-        });
-
-        // Nested tables inside a cell are rendered without per-paragraph location
-        // attributes, so anchor these changes to the owning cell via a negative
-        // paragraph index to avoid colliding with direct paragraph indexes.
-        const nestedParagraphs = tableCellParagraphsRecursively(
-          cell.nodes
-        ).filter((paragraph) => !directParagraphs.includes(paragraph));
-        nestedParagraphs.forEach((paragraph, nestedParagraphIndex) => {
-          appendParagraphChanges(paragraph, nodeIndex, {
-            kind: "table-cell",
-            tableIndex: nodeIndex,
-            rowIndex,
-            cellIndex,
-            paragraphIndex: -(nestedParagraphIndex + 1),
-          });
-        });
+        tableCellParagraphEntries(cell.nodes).forEach(
+          ({ paragraph, paragraphIndex }) => {
+            appendParagraphChanges(paragraph, nodeIndex, {
+              kind: "table-cell",
+              tableIndex: nodeIndex,
+              rowIndex,
+              cellIndex,
+              paragraphIndex,
+            });
+          }
+        );
       });
     });
 
@@ -842,108 +881,636 @@ function resolveCommentAnchorText(
 }
 
 // ---------------------------------------------------------------------------
+// Comment anchor discovery
+// ---------------------------------------------------------------------------
+
+interface ResolvedCommentAnchor {
+  anchor: DocumentCommentAnchor;
+  location: DocxTextRangeLocation;
+}
+
+interface CommentRegionPart {
+  region: "body" | "header" | "footer";
+  partName?: string;
+  nodes: DocNode[];
+}
+
+function sameCommentPartName(left?: string, right?: string): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return false;
+  }
+  return (left.split("/").pop() ?? left) === (right.split("/").pop() ?? right);
+}
+
+function commentAnchorLocation(
+  anchor: DocumentCommentAnchor
+): DocxTextRangeLocation {
+  if (anchor.rowIndex !== undefined && anchor.cellIndex !== undefined) {
+    return {
+      kind: "table-cell",
+      tableIndex: anchor.nodeIndex,
+      rowIndex: anchor.rowIndex,
+      cellIndex: anchor.cellIndex,
+      paragraphIndex: anchor.paragraphIndex ?? 0,
+    };
+  }
+  return { kind: "paragraph", nodeIndex: anchor.nodeIndex };
+}
+
+function decodeCommentTextPrefix(xmlPrefix: string): string {
+  let text = "";
+  for (const match of xmlPrefix.matchAll(
+    /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/gi
+  )) {
+    text += decodeXmlText(match[1] ?? "");
+  }
+  return text;
+}
+
+function locateParagraphTextOffset(
+  paragraph: ParagraphNode,
+  textOffset: number
+): { runIndex: number; offset: number } {
+  const paragraphLength = paragraphText(paragraph).length;
+  let remaining = Math.max(0, Math.min(textOffset, paragraphLength));
+  let runIndex = 0;
+  let lastOffset = 0;
+
+  for (const child of paragraph.children) {
+    if (child.type !== "text") {
+      continue;
+    }
+    if (remaining <= child.text.length) {
+      return { runIndex, offset: remaining };
+    }
+    remaining -= child.text.length;
+    runIndex += 1;
+    lastOffset = child.text.length;
+  }
+
+  return { runIndex: Math.max(0, runIndex - 1), offset: lastOffset };
+}
+
+function commentAnchorForParagraph(
+  paragraph: ParagraphNode,
+  base: Omit<
+    DocumentCommentAnchor,
+    "textOffset" | "runIndex" | "offset" | "anchorText"
+  >,
+  commentId: number,
+  anchorXmlIndex: number,
+  includeAnchorText: boolean
+): DocumentCommentAnchor {
+  const sourceXml = paragraph.sourceXml ?? "";
+  const textOffset = Math.min(
+    decodeCommentTextPrefix(sourceXml.slice(0, anchorXmlIndex)).length,
+    paragraphText(paragraph).length
+  );
+  const position = locateParagraphTextOffset(paragraph, textOffset);
+
+  return {
+    ...base,
+    textOffset,
+    runIndex: position.runIndex,
+    offset: position.offset,
+    anchorText: includeAnchorText
+      ? resolveCommentAnchorText(sourceXml, commentId)
+      : undefined,
+  };
+}
+
+function scanCommentAnchorsInParagraph(
+  paragraph: ParagraphNode,
+  base: Omit<
+    DocumentCommentAnchor,
+    "textOffset" | "runIndex" | "offset" | "anchorText"
+  >,
+  anchors: Map<number, ResolvedCommentAnchor>
+): void {
+  const sourceXml = paragraph.sourceXml ?? "";
+  if (!sourceXml || !/commentRangeStart|commentReference/i.test(sourceXml)) {
+    return;
+  }
+
+  const rangeStartById = new Map<number, number>();
+  for (const match of sourceXml.matchAll(
+    /<w:commentRangeStart\b[^>]*w:id="(-?\d+)"[^>]*\/?>/gi
+  )) {
+    const commentId = Number.parseInt(match[1] ?? "", 10);
+    if (Number.isFinite(commentId) && match.index !== undefined) {
+      rangeStartById.set(commentId, match.index + match[0].length);
+    }
+  }
+
+  const referenceById = new Map<number, number>();
+  for (const match of sourceXml.matchAll(
+    /<w:commentReference\b[^>]*w:id="(-?\d+)"[^>]*\/?>/gi
+  )) {
+    const commentId = Number.parseInt(match[1] ?? "", 10);
+    if (Number.isFinite(commentId) && match.index !== undefined) {
+      referenceById.set(commentId, match.index);
+    }
+  }
+
+  for (const commentId of new Set<number>([
+    ...rangeStartById.keys(),
+    ...referenceById.keys(),
+  ])) {
+    if (anchors.has(commentId)) {
+      continue;
+    }
+    const rangeStart = rangeStartById.get(commentId);
+    const anchorXmlIndex = rangeStart ?? referenceById.get(commentId);
+    if (anchorXmlIndex === undefined) {
+      continue;
+    }
+    const anchor = commentAnchorForParagraph(
+      paragraph,
+      base,
+      commentId,
+      anchorXmlIndex,
+      rangeStart !== undefined
+    );
+    anchors.set(commentId, {
+      anchor,
+      location: commentAnchorLocation(anchor),
+    });
+  }
+}
+
+function scanCommentAnchorsInNodes(
+  nodes: DocNode[],
+  region: "body" | "header" | "footer",
+  partName: string | undefined,
+  anchors: Map<number, ResolvedCommentAnchor>
+): void {
+  nodes.forEach((node, nodeIndex) => {
+    if (node.type === "paragraph") {
+      scanCommentAnchorsInParagraph(
+        node,
+        { region, partName, nodeIndex },
+        anchors
+      );
+      return;
+    }
+
+    node.rows.forEach((row, rowIndex) => {
+      row.cells.forEach((cell, cellIndex) => {
+        for (const { paragraph, paragraphIndex } of tableCellParagraphEntries(
+          cell.nodes
+        )) {
+          scanCommentAnchorsInParagraph(
+            paragraph,
+            {
+              region,
+              partName,
+              nodeIndex,
+              rowIndex,
+              cellIndex,
+              paragraphIndex,
+            },
+            anchors
+          );
+        }
+      });
+    });
+  });
+}
+
+function collectCommentRegionParts(model: DocModel): CommentRegionPart[] {
+  const parts = new Map<string, CommentRegionPart>();
+  const addSection = (
+    region: "header" | "footer",
+    section: HeaderSection | FooterSection
+  ): void => {
+    const partName = section.partName;
+    const key = `${region}:${partName ?? ""}`;
+    const existing = parts.get(key);
+    if (!existing || (existing.nodes.length === 0 && (section.nodes ?? []).length > 0)) {
+      parts.set(key, { region, partName, nodes: section.nodes ?? [] });
+    }
+  };
+
+  for (const section of model.metadata.headerSections ?? []) {
+    addSection("header", section);
+  }
+  for (const section of model.metadata.footerSections ?? []) {
+    addSection("footer", section);
+  }
+  for (const section of model.metadata.sections ?? []) {
+    for (const header of section.headerSections ?? []) {
+      addSection("header", header);
+    }
+    for (const footer of section.footerSections ?? []) {
+      addSection("footer", footer);
+    }
+  }
+
+  return Array.from(parts.values());
+}
+
+/**
+ * Anchors that come from the paragraph's model-level comment offsets.
+ *
+ * These are the authoritative anchors: parsing stores the offsets on the
+ * paragraph and every text edit remaps them, so a comment keeps its anchor (and
+ * its gutter card) after `sourceXml` is cleared.
+ */
+function collectModelCommentAnchors(
+  model: DocModel
+): Map<number, ResolvedCommentAnchor> {
+  const anchors = new Map<number, ResolvedCommentAnchor>();
+  scanModelCommentAnchorsInNodes(model.nodes, "body", undefined, anchors);
+  for (const part of collectCommentRegionParts(model)) {
+    scanModelCommentAnchorsInNodes(
+      part.nodes,
+      part.region,
+      part.partName,
+      anchors
+    );
+  }
+  return anchors;
+}
+
+function scanModelCommentAnchorsInParagraph(
+  paragraph: ParagraphNode,
+  base: Omit<
+    DocumentCommentAnchor,
+    "textOffset" | "runIndex" | "offset" | "anchorText"
+  >,
+  anchors: Map<number, ResolvedCommentAnchor>
+): void {
+  if (!paragraph.commentRanges || paragraph.commentRanges.length === 0) {
+    return;
+  }
+
+  const text = paragraphText(paragraph);
+  for (const range of resolveParagraphCommentRanges(
+    text,
+    paragraph.commentRanges
+  )) {
+    if (anchors.has(range.commentId)) {
+      continue;
+    }
+
+    const position = locateParagraphTextOffset(paragraph, range.start);
+    const anchor: DocumentCommentAnchor = {
+      ...base,
+      textOffset: range.start,
+      runIndex: position.runIndex,
+      offset: position.offset,
+      anchorText: text.slice(range.start, range.end) || undefined,
+    };
+    anchors.set(range.commentId, {
+      anchor,
+      location: commentAnchorLocation(anchor),
+    });
+  }
+}
+
+function scanModelCommentAnchorsInNodes(
+  nodes: DocNode[],
+  region: "body" | "header" | "footer",
+  partName: string | undefined,
+  anchors: Map<number, ResolvedCommentAnchor>
+): void {
+  nodes.forEach((node, nodeIndex) => {
+    if (node.type === "paragraph") {
+      scanModelCommentAnchorsInParagraph(
+        node,
+        { region, partName, nodeIndex },
+        anchors
+      );
+      return;
+    }
+
+    node.rows.forEach((row, rowIndex) => {
+      row.cells.forEach((cell, cellIndex) => {
+        for (const { paragraph, paragraphIndex } of tableCellParagraphEntries(
+          cell.nodes
+        )) {
+          scanModelCommentAnchorsInParagraph(
+            paragraph,
+            {
+              region,
+              partName,
+              nodeIndex,
+              rowIndex,
+              cellIndex,
+              paragraphIndex,
+            },
+            anchors
+          );
+        }
+      });
+    });
+  });
+}
+
+function collectDiscoveredCommentAnchors(
+  model: DocModel
+): Map<number, ResolvedCommentAnchor> {
+  const anchors = new Map<number, ResolvedCommentAnchor>();
+  scanCommentAnchorsInNodes(model.nodes, "body", undefined, anchors);
+  for (const part of collectCommentRegionParts(model)) {
+    scanCommentAnchorsInNodes(
+      part.nodes,
+      part.region,
+      part.partName,
+      anchors
+    );
+  }
+  return anchors;
+}
+
+function commentRegionNodes(
+  model: DocModel,
+  anchor: DocumentCommentAnchor
+): DocNode[] {
+  if (anchor.region === "body") {
+    return model.nodes;
+  }
+
+  const parts = collectCommentRegionParts(model).filter(
+    (part) => part.region === anchor.region
+  );
+  const matchingParts = parts.filter((part) =>
+    sameCommentPartName(part.partName, anchor.partName)
+  );
+  const matching =
+    matchingParts.find((part) => part.nodes.length > 0) ?? matchingParts[0];
+  return (matching ?? parts[0])?.nodes ?? [];
+}
+
+function paragraphAtCommentAnchor(
+  model: DocModel,
+  anchor: DocumentCommentAnchor
+): ParagraphNode | undefined {
+  const node = commentRegionNodes(model, anchor)[anchor.nodeIndex];
+  if (!node) {
+    return undefined;
+  }
+  if (anchor.rowIndex === undefined) {
+    return node.type === "paragraph" ? node : undefined;
+  }
+  if (node.type !== "table") {
+    return undefined;
+  }
+  const cell = node.rows[anchor.rowIndex]?.cells[anchor.cellIndex ?? -1];
+  if (!cell) {
+    return undefined;
+  }
+  return tableCellParagraphEntries(cell.nodes).find(
+    (entry) => entry.paragraphIndex === anchor.paragraphIndex
+  )?.paragraph;
+}
+
+function firstParagraphCommentAnchor(
+  nodes: DocNode[],
+  region: "body" | "header" | "footer",
+  partName?: string
+): DocumentCommentAnchor | undefined {
+  for (let nodeIndex = 0; nodeIndex < nodes.length; nodeIndex += 1) {
+    const node = nodes[nodeIndex];
+    if (!node) {
+      continue;
+    }
+    if (node.type === "paragraph") {
+      return { region, partName, nodeIndex };
+    }
+    for (let rowIndex = 0; rowIndex < node.rows.length; rowIndex += 1) {
+      const row = node.rows[rowIndex];
+      for (let cellIndex = 0; cellIndex < row.cells.length; cellIndex += 1) {
+        const entry = tableCellParagraphEntries(
+          row.cells[cellIndex]?.nodes ?? []
+        )[0];
+        if (entry) {
+          return {
+            region,
+            partName,
+            nodeIndex,
+            rowIndex,
+            cellIndex,
+            paragraphIndex: entry.paragraphIndex,
+          };
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+function fallbackCommentAnchor(model: DocModel): DocumentCommentAnchor {
+  return (
+    firstParagraphCommentAnchor(model.nodes, "body") ??
+    collectCommentRegionParts(model)
+      .map((part) =>
+        firstParagraphCommentAnchor(part.nodes, part.region, part.partName)
+      )
+      .find((anchor): anchor is DocumentCommentAnchor => Boolean(anchor)) ??
+    { region: "body", nodeIndex: 0 }
+  );
+}
+
+function resolveDefinedCommentAnchors(
+  model: DocModel,
+  definitions: DocumentCommentDefinition[]
+): Map<number, ResolvedCommentAnchor> {
+  const modelAnchors = collectModelCommentAnchors(model);
+  const discovered = collectDiscoveredCommentAnchors(model);
+  const definitionById = new Map(
+    definitions.map((definition) => [definition.id, definition])
+  );
+  const resolved = new Map<number, ResolvedCommentAnchor>();
+  const resolving = new Set<number>();
+  const fallback = fallbackCommentAnchor(model);
+
+  const resolve = (definition: DocumentCommentDefinition): ResolvedCommentAnchor => {
+    const existing = resolved.get(definition.id);
+    if (existing) {
+      return existing;
+    }
+    if (resolving.has(definition.id)) {
+      return { anchor: fallback, location: commentAnchorLocation(fallback) };
+    }
+    resolving.add(definition.id);
+
+    const cached = getCachedDocumentCommentAnchor(definition);
+    const cachedIsLocated = cached
+      ? Boolean(paragraphAtCommentAnchor(model, cached))
+      : false;
+    const discoveredAnchor = discovered.get(definition.id)?.anchor;
+    // Model offsets win: they are the only source that survives edits. The
+    // cached/discovered sourceXml anchors are the compatibility fallbacks.
+    const ownAnchor =
+      modelAnchors.get(definition.id)?.anchor ??
+      (cachedIsLocated ? cached : undefined) ??
+      discoveredAnchor;
+
+    let anchor = ownAnchor;
+    if (!anchor && definition.parentId !== undefined) {
+      const parent = definitionById.get(definition.parentId);
+      if (parent) {
+        anchor = resolve(parent).anchor;
+      }
+    }
+    if (!anchor) {
+      anchor = fallback;
+    }
+
+    if (ownAnchor) {
+      setCachedDocumentCommentAnchor(definition, ownAnchor);
+    }
+
+    const result: ResolvedCommentAnchor = {
+      anchor: {
+        ...anchor,
+        anchorText:
+          ownAnchor?.anchorText ??
+          discoveredAnchor?.anchorText ??
+          anchor.anchorText,
+      },
+      location: commentAnchorLocation(anchor),
+    };
+    resolved.set(definition.id, result);
+    resolving.delete(definition.id);
+    return result;
+  };
+
+  for (const definition of definitions) {
+    resolve(definition);
+  }
+  return resolved;
+}
+
+/**
+ * Whether a comment belongs to a resolved thread. `resolved` is normally only
+ * set on the thread root, so replies must walk their `parentId` chain.
+ */
+export function commentThreadIsResolved(
+  comment: DocxComment,
+  commentsById: Map<number, DocxComment>
+): boolean {
+  let current: DocxComment | undefined = comment;
+  const seen = new Set<number>();
+  while (current) {
+    if (current.resolved) {
+      return true;
+    }
+    if (current.parentId === undefined || seen.has(current.parentId)) {
+      return false;
+    }
+    seen.add(current.parentId);
+    current = commentsById.get(current.parentId);
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
 // collectCommentsFromModel (upstream 22908-23003)
 // ---------------------------------------------------------------------------
 
+const COMMENT_REGION_ORDER = { body: 0, header: 1, footer: 2 } as const;
+
+function compareCommentAnchors(
+  left?: DocumentCommentAnchor,
+  right?: DocumentCommentAnchor
+): number {
+  if (!left || !right) {
+    return left ? -1 : right ? 1 : 0;
+  }
+  return (
+    COMMENT_REGION_ORDER[left.region] - COMMENT_REGION_ORDER[right.region] ||
+    left.nodeIndex - right.nodeIndex ||
+    (left.rowIndex ?? 0) - (right.rowIndex ?? 0) ||
+    (left.cellIndex ?? 0) - (right.cellIndex ?? 0) ||
+    (left.paragraphIndex ?? 0) - (right.paragraphIndex ?? 0)
+  );
+}
+
 /**
- * Collects every comment reference found in the document body, pairing each
- * `w:commentReference` with its definition from `model.metadata.comments` and
- * resolving an anchor-text excerpt from the surrounding comment range.
- * Read-only — never mutates the model.
+ * Collects every comment definition in `model.metadata.comments`. Locations
+ * come from `w:commentRangeStart` / `w:commentReference` markup, with replies
+ * inheriting their parent's anchor. Anchors are cached outside the model so
+ * they survive edits that clear `sourceXml`; header and footer parts are
+ * scanned alongside the body. Read-only — never mutates the document model.
  */
 export function collectCommentsFromModel(model: DocModel): DocxComment[] {
   const definitions = model.metadata.comments ?? [];
   if (definitions.length === 0) {
     return [];
   }
+
   const definitionById = new Map(
     definitions.map((definition) => [definition.id, definition])
   );
-
+  const anchors = resolveDefinedCommentAnchors(model, definitions);
   const comments: DocxComment[] = [];
-  const appendParagraphComments = (
-    paragraph: ParagraphNode,
-    nodeIndex: number,
-    location: ParagraphLocation
-  ): void => {
-    const sourceXml = paragraph.sourceXml ?? "";
-    if (!sourceXml || !/commentReference/i.test(sourceXml)) {
+  const emitted = new Set<number>();
+
+  const emit = (definition: DocumentCommentDefinition): void => {
+    if (emitted.has(definition.id)) {
       return;
     }
-
-    for (const match of sourceXml.matchAll(
-      /<w:commentReference\b[^>]*w:id="(-?\d+)"/gi
-    )) {
-      const commentId = Number.parseInt(match[1] ?? "", 10);
-      const definition = Number.isFinite(commentId)
-        ? definitionById.get(commentId)
-        : undefined;
-      if (!definition) {
-        continue;
+    emitted.add(definition.id);
+    if (definition.parentId !== undefined) {
+      const parent = definitionById.get(definition.parentId);
+      if (parent) {
+        emit(parent);
       }
-
-      comments.push({
-        id: `${paragraphLocationKey(location)}:comment:${commentId}`,
-        commentId,
-        author: definition.author,
-        initials: definition.initials,
-        date: definition.date,
-        text: definition.text,
-        parentId: definition.parentId,
-        resolved: definition.resolved,
-        anchorText: resolveCommentAnchorText(sourceXml, commentId),
-        nodeIndex,
-        location:
-          location.kind === "paragraph"
-            ? { kind: "paragraph", nodeIndex: location.nodeIndex }
-            : {
-                kind: "table-cell",
-                tableIndex: location.tableIndex,
-                rowIndex: location.rowIndex,
-                cellIndex: location.cellIndex,
-                paragraphIndex: location.paragraphIndex,
-              },
-      });
     }
+
+    const resolved = anchors.get(definition.id);
+    if (!resolved) {
+      return;
+    }
+    const { anchor, location } = resolved;
+    const locationKey = paragraphLocationKey(location);
+    comments.push({
+      id:
+        anchor.region === "body"
+          ? `${locationKey}:comment:${definition.id}`
+          : `${anchor.region}:${anchor.partName ?? ""}:${locationKey}:comment:${
+              definition.id
+            }`,
+      commentId: definition.id,
+      author: definition.author,
+      initials: definition.initials,
+      date: definition.date,
+      text: definition.text,
+      parentId: definition.parentId,
+      resolved: definition.resolved,
+      anchorText: anchor.anchorText,
+      nodeIndex: anchor.nodeIndex,
+      location,
+      region: anchor.region,
+      partName: anchor.partName,
+    });
   };
 
-  model.nodes.forEach((node, nodeIndex) => {
-    if (node.type === "paragraph") {
-      appendParagraphComments(node, nodeIndex, {
-        kind: "paragraph",
-        nodeIndex,
-      });
-      return;
-    }
-
-    node.rows.forEach((row, rowIndex) => {
-      row.cells.forEach((cell, cellIndex) => {
-        const directParagraphs = tableCellParagraphs(cell.nodes);
-        directParagraphs.forEach((paragraph, paragraphIndex) => {
-          appendParagraphComments(paragraph, nodeIndex, {
-            kind: "table-cell",
-            tableIndex: nodeIndex,
-            rowIndex,
-            cellIndex,
-            paragraphIndex,
-          });
-        });
-
-        const nestedParagraphs = tableCellParagraphsRecursively(
-          cell.nodes
-        ).filter((paragraph) => !directParagraphs.includes(paragraph));
-        nestedParagraphs.forEach((paragraph, nestedParagraphIndex) => {
-          appendParagraphComments(paragraph, nodeIndex, {
-            kind: "table-cell",
-            tableIndex: nodeIndex,
-            rowIndex,
-            cellIndex,
-            paragraphIndex: -(nestedParagraphIndex + 1),
-          });
-        });
-      });
-    });
-  });
-
+  const orderedDefinitions = [...definitions].sort((left, right) =>
+    compareCommentAnchors(
+      anchors.get(left.id)?.anchor,
+      anchors.get(right.id)?.anchor
+    )
+  );
+  for (const definition of orderedDefinitions) {
+    emit(definition);
+  }
   return comments;
+}
+
+/**
+ * Pre-computes and caches comment anchors, typically right after a DOCX is
+ * parsed. This keeps anchored comments visible even if they are hidden while
+ * the user edits the document and `sourceXml` is cleared.
+ */
+export function primeCommentAnchors(model: DocModel): void {
+  if (!model.metadata.comments?.length) {
+    return;
+  }
+  collectCommentsFromModel(model);
 }

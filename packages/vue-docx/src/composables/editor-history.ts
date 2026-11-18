@@ -10,9 +10,22 @@ import type { EditorCore } from "./editor-shared"
 import { trimHistoryEntriesToBudget } from "./history-budget"
 
 export function createEditorHistory(ctx: EditorCore) {
+  function clearPendingRunStyle(): void {
+    if (ctx.pendingRunStyleSnapshot.value === undefined && ctx.pendingRunStyle.value === undefined) return
+    ctx.pendingRunStyleSnapshot.value = undefined
+    ctx.pendingRunStyle.value = undefined
+  }
+
   function undo(): void {
+    // A keystroke after undo must open a new undo entry instead of folding into
+    // the burst that produced the undone text.
+    ctx.endTextCommitBurst()
     const h = ctx.history.value
     if (h.past.length === 0) return
+    ctx.activeFormFieldEditKey.value = undefined
+    // Undo restores a different selection/model; a caret style chosen before
+    // the undo must not leak into the restored document state.
+    clearPendingRunStyle()
 
     const previous = h.past[h.past.length - 1]
     const past = trimHistoryEntriesToBudget(h.past.slice(0, -1), {
@@ -58,8 +71,11 @@ export function createEditorHistory(ctx: EditorCore) {
   }
 
   function redo(): void {
+    ctx.endTextCommitBurst()
     const h = ctx.history.value
     if (h.future.length === 0) return
+    ctx.activeFormFieldEditKey.value = undefined
+    clearPendingRunStyle()
 
     const next = h.future[0]
     const past = trimHistoryEntriesToBudget(

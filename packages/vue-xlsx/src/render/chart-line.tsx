@@ -1,9 +1,10 @@
 import { scaleBand, scaleLinear, scalePoint } from "d3-scale";
-import { area as d3Area, curveCatmullRom, curveLinear, curveLinearClosed, line as d3Line, symbol as d3Symbol, symbolCircle, symbolCross, symbolDiamond, symbolSquare, symbolStar, symbolTriangle } from "d3-shape";
+import { area as d3Area, curveCatmullRom, curveLinear, curveLinearClosed, curveMonotoneX, line as d3Line, symbol as d3Symbol, symbolCircle, symbolCross, symbolDiamond, symbolSquare, symbolStar, symbolTriangle } from "d3-shape";
 import type { CurveFactory } from "d3-shape";
 import type { XlsxChart, XlsxChartAxis, XlsxChartElementSelection, XlsxChartSeries, XlsxChartTypeGroup, XlsxImageRect } from "@arcships/xlsx-core";
-import { chartSeriesColor, chartSeriesStrokeColor, chartPointColor, safeNumber, clamp, darkenColor, lightenColor, coerceLooseNumber, resolveRenderableSeriesValue, resolveChartTextColor, resolveChartAxisTextColor, resolveChartMutedTextColor, buildChartFontFamily, formatTickValue, formatPercentTickValue, chartElementDataProps, barChartElementDataProps, resolveChartElementTarget, resolveChartSelectionFromTarget, isSelectedChartSeries, isSelectedChartPoint, isSelectedChartPointOrSeries, renderSelectionRectHandles, renderSelectionPointHandles, normalizeRendererHexColor, toSvgNumber, normalizeChartMarkerSymbol, markerSymbolPath, normalizeLegendPosition, parseRgbColor, mixRgbColor, escapeCssFontFamilyToken, DEFAULT_CHART_FONT_STACK, DEFAULT_CHART_TEXT_COLOR, DEFAULT_CHART_MUTED_TEXT_COLOR, truncateSvgText, getCategoryLabels, normalizeCategoryLabel, estimateReferencePointCount, isHistogramLikeSeries, isHistogramLikeChart, resolve3dFrameOffsets, resolveAxisDomainWithChartOverrides, resolveCategoryBandPadding, chartSeriesBarColors, buildNumericTickValues, buildNiceStep, resolveNumericAxisDomain, renderCartesianAxes, renderExtrudedRect, buildChartStages, resolveChartStageSubtotal, computeBoxWhiskerStats, resolveBoxWhiskerVisibility, resolveBoxWhiskerQuartileMethod, computePercentile, renderLineOrAreaChart3d, projectCartesian3dPoint, scaleProjectedVector, buildLinearSvgPath, buildRibbonSvgPath, renderRadialFrustum, sampleProjectedEllipseArc, isComboChart, getComboLegendSeries, findAxisForGroup, buildComboGroups, resolveStockRoleIndices, resolveStockPalette, normalizeBuiltinPieStyleId, getBuiltinPiePalette, resolvePiePointColor, selectPrimaryPieSeriesIndex, buildPieEntries, buildHierarchyData, resolveHierarchyNodeColor, resolveTreemapNodeColor, excelTreemapTile, normalizePieArc, resolvePieFrontSegments, pieEllipsePoint, buildPieOuterWallPath, isPieFrontFacingAngle, buildPieRadialWallPath, TWO_PI, normalizeRegionMapKey, resolveRegionMapFeature, resolveRegionMapBaseColor, resolveRegionMapDataColor, resolveRegionMapValueColors, resolveRegionMapColorStrings, resolveRegionMapLayoutProperties, resolveRegionMapFeatureSet, getRegionMapBaseFeatures, resolveRegionMapValueColorFromStops, resolveRegionMapValueColor, resolveRegionMapNoDataColor, resolveSurfaceBaseColor, normalizeBuiltinSurfaceStyleId, hasExplicitSurfaceBaseColor, buildMonochromeSurfacePalette, getBuiltinSurfacePalette, shouldPreferBuiltinSurfacePalette, getSurfaceBandCount, getSurfaceColorStops, resolveSurfaceBandPaletteColor, getSurfaceDomain, resolveSurfaceColor, resolveSurfaceBandColor, resolveSurfaceBandIndex, buildSurfaceSmoothPath, splitSurfacePointRuns, connectSurfaceContourSegments, getSurfaceWireframePalette, resolveSurfaceWireframeColor, resolveSurfacePlotRect, buildSurfaceLegendItems, isContourSurfaceChart, getLegendItems, buildLayout, normalizeRenderableChartType, renderSurfaceAxes, renderTitle, renderLegend, buildRegionMapLegendItems, buildStockLegendItems, excelSerialToDate, isLikelyDateFormatCode, formatExcelDateSerial, formatCategoryLabel } from "./chart-renderer";
+import { chartSeriesColor, chartSeriesStrokeColor, chartPointColor, safeNumber, clamp, darkenColor, lightenColor, coerceLooseNumber, resolveRenderableSeriesValue, resolveChartTextColor, resolveChartAxisTextColor, resolveChartMutedTextColor, buildChartFontFamily, formatTickValue, formatPercentTickValue, createChartAxisTickFormatter, chartElementDataProps, barChartElementDataProps, resolveChartElementTarget, resolveChartSelectionFromTarget, isSelectedChartSeries, isSelectedChartPoint, isSelectedChartPointOrSeries, renderSelectionRectHandles, renderSelectionPointHandles, normalizeRendererHexColor, toSvgNumber, normalizeChartMarkerSymbol, markerSymbolPath, normalizeLegendPosition, parseRgbColor, mixRgbColor, escapeCssFontFamilyToken, DEFAULT_CHART_FONT_STACK, DEFAULT_CHART_TEXT_COLOR, DEFAULT_CHART_MUTED_TEXT_COLOR, truncateSvgText, getCategoryLabels, getCategoryNumericValues, computePercentStackedTotals, resolveAxisLogBase, resolveLogAxisDomain, createValueScale, resolveDateAxisDomain, createDateScale, buildDateAxisTicks, normalizeCategoryLabel, estimateReferencePointCount, isHistogramLikeSeries, isHistogramLikeChart, resolve3dFrameOffsets, resolveAxisDomainWithChartOverrides, resolveCategoryBandPadding, chartSeriesBarColors, buildNumericTickValues, buildNiceStep, resolveNumericAxisDomain, renderCartesianAxes, renderExtrudedRect, buildChartStages, resolveChartStageSubtotal, computeBoxWhiskerStats, resolveBoxWhiskerVisibility, resolveBoxWhiskerQuartileMethod, computePercentile, renderLineOrAreaChart3d, projectCartesian3dPoint, scaleProjectedVector, buildLinearSvgPath, buildRibbonSvgPath, renderRadialFrustum, sampleProjectedEllipseArc, isComboChart, getComboLegendSeries, findAxisForGroup, buildComboGroups, resolveStockRoleIndices, resolveStockPalette, normalizeBuiltinPieStyleId, getBuiltinPiePalette, resolvePiePointColor, selectPrimaryPieSeriesIndex, buildPieEntries, buildHierarchyData, resolveHierarchyNodeColor, resolveTreemapNodeColor, excelTreemapTile, normalizePieArc, resolvePieFrontSegments, pieEllipsePoint, buildPieOuterWallPath, isPieFrontFacingAngle, buildPieRadialWallPath, TWO_PI, normalizeRegionMapKey, resolveRegionMapFeature, resolveRegionMapBaseColor, resolveRegionMapDataColor, resolveRegionMapValueColors, resolveRegionMapColorStrings, resolveRegionMapLayoutProperties, resolveRegionMapFeatureSet, getRegionMapBaseFeatures, resolveRegionMapValueColorFromStops, resolveRegionMapValueColor, resolveRegionMapNoDataColor, resolveSurfaceBaseColor, normalizeBuiltinSurfaceStyleId, hasExplicitSurfaceBaseColor, buildMonochromeSurfacePalette, getBuiltinSurfacePalette, shouldPreferBuiltinSurfacePalette, getSurfaceBandCount, getSurfaceColorStops, resolveSurfaceBandPaletteColor, getSurfaceDomain, resolveSurfaceColor, resolveSurfaceBandColor, resolveSurfaceBandIndex, buildSurfaceSmoothPath, splitSurfacePointRuns, connectSurfaceContourSegments, getSurfaceWireframePalette, resolveSurfaceWireframeColor, resolveSurfacePlotRect, buildSurfaceLegendItems, isContourSurfaceChart, getLegendItems, buildLayout, normalizeRenderableChartType, renderSurfaceAxes, renderTitle, renderLegend, buildRegionMapLegendItems, buildStockLegendItems, excelSerialToDate, isLikelyDateFormatCode, formatExcelDateSerial, formatCategoryLabel } from "./chart-renderer";
 import type { ChartRendererPalette, ChartSvgProps, ChartLayout, LegendItem, BarRect, PlotRect, ChartStage, ChartHierarchyDatum, ComboRenderableGroup, BoxWhiskerStats, SurfaceDomain, RegionMapFeature, SurfacePathPoint, SurfaceContourSegment, ChartElementDataOptions } from "./chart-renderer";
+import { buildDataLabelText, hasVisibleDataLabels, resolveDataLabelsForPoint, resolveDataLabelPosition } from "./chart-labels";
 
 
 export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, chartType: string, selectedChartElement?: XlsxChartElementSelection | null) {
@@ -27,6 +28,7 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
 
   type SeriesPoint = {
     defined: boolean;
+    value: number | null;
     y: number | null;
     y0: number | null;
     y1: number | null;
@@ -37,18 +39,13 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
         const positive = Array.from({ length: categories.length }, () => 0);
         const negative = Array.from({ length: categories.length }, () => 0);
         const categoryTotals = isPercentStackedSeries
-          ? categories.map((_, categoryIndex) => {
-              const total = resolvedValuesBySeries.reduce((sum, seriesValues) => (
-                sum + (seriesValues[categoryIndex] ?? 0)
-              ), 0);
-              return Math.abs(total) < 1e-9 ? 1 : total;
-            })
+          ? computePercentStackedTotals(resolvedValuesBySeries, categories.length)
           : null;
         return chart.series.map((_, seriesIndex) => (
           categories.map((_, categoryIndex) => {
             const rawValue = resolvedValuesBySeries[seriesIndex]?.[categoryIndex] ?? null;
             if (rawValue == null) {
-              return { defined: false, y: null, y0: null, y1: null };
+              return { defined: false, value: null, y: null, y0: null, y1: null };
             }
             const value = isPercentStackedSeries
               ? (rawValue / (categoryTotals?.[categoryIndex] ?? 1)) * 100
@@ -57,12 +54,12 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
               const start = positive[categoryIndex];
               const end = start + value;
               positive[categoryIndex] = end;
-              return { defined: true, y: end, y0: start, y1: end };
+              return { defined: true, value, y: end, y0: start, y1: end };
             }
             const start = negative[categoryIndex];
             const end = start + value;
             negative[categoryIndex] = end;
-            return { defined: true, y: end, y0: start, y1: end };
+            return { defined: true, value, y: end, y0: start, y1: end };
           })
         ));
       })()
@@ -71,6 +68,7 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
           const value = resolvedValuesBySeries[seriesIndex]?.[categoryIndex] ?? null;
           return {
             defined: value != null,
+            value,
             y: value,
             y0: null,
             y1: value
@@ -96,6 +94,8 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
   } else if ((chartType === "Line" || isStackedLine) && chart.valueAxis?.crosses === "autoZero") {
     minValue = Math.min(0, minValue);
   }
+  const logBase = resolveAxisLogBase(chart.valueAxis);
+  let ticks: number[] = [];
   if (isPercentStackedSeries) {
     const explicitMin = typeof chart.valueAxis?.min === "number" && Number.isFinite(chart.valueAxis.min)
       ? Number(chart.valueAxis.min)
@@ -105,6 +105,17 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
       : Math.max(100, maxValue);
     minValue = explicitMin;
     maxValue = explicitMax <= explicitMin ? explicitMin + 1 : explicitMax;
+    ticks = buildNumericTickValues(minValue, maxValue, chart.valueAxis?.majorUnit ?? 20);
+  } else if (logBase) {
+    const positiveValues = stackedExtents.filter((value) => value > 0);
+    const logDomain = resolveLogAxisDomain(
+      chart.valueAxis,
+      positiveValues.length > 0 ? Math.min(...positiveValues) : minValue,
+      maxValue
+    );
+    minValue = logDomain.min;
+    maxValue = logDomain.max;
+    ticks = logDomain.ticks;
   } else {
     const valueDomain = resolveAxisDomainWithChartOverrides(
       chart.valueAxis,
@@ -114,38 +125,62 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
     );
     minValue = valueDomain.min;
     maxValue = valueDomain.max;
+    ticks = valueDomain.ticks;
   }
 
-  const xScale = scalePoint<string>()
-    .domain(categories)
-    .range([plot.left, plot.left + plot.width]);
-  const yScale = scaleLinear()
-    .domain([minValue, maxValue])
-    .range([plot.top + plot.height, plot.top]);
+  const yScale = createValueScale(
+    chart.valueAxis,
+    minValue,
+    maxValue,
+    [plot.top + plot.height, plot.top]
+  );
 
-  const ticks = isPercentStackedSeries
-    ? buildNumericTickValues(minValue, maxValue, chart.valueAxis?.majorUnit ?? 20)
-    : resolveAxisDomainWithChartOverrides(
-        chart.valueAxis,
-        minValue,
-        maxValue,
-        isAreaChart || chart.valueAxis?.crosses === "autoZero"
-      ).ticks;
-  const categoryPositions = categories.map((category) => xScale(category) ?? plot.left);
+  const categoryNumericValues = getCategoryNumericValues(chart);
+  const date1904 = chart.raw && typeof chart.raw === "object" && (chart.raw as Record<string, unknown>).date1904 === true;
+  const isDateAxis = chart.categoryAxis?.axisType === "date"
+    || (
+      isLikelyDateFormatCode(chart.categoryAxis?.numberFormat?.formatCode)
+      && categoryNumericValues.length > 0
+      && categoryNumericValues.every((value) => value != null)
+    );
+  const canUseDateScale = isDateAxis
+    && categoryNumericValues.length === categories.length
+    && categoryNumericValues.every((value) => value != null);
+  const dateDomain = canUseDateScale
+    ? resolveDateAxisDomain(chart.categoryAxis, categoryNumericValues)
+    : null;
+  const dateScale = dateDomain
+    ? createDateScale(dateDomain.min, dateDomain.max, [plot.left, plot.left + plot.width], date1904)
+    : null;
+  const dateTicks = dateDomain
+    ? buildDateAxisTicks(chart.categoryAxis, dateDomain.min, dateDomain.max, date1904)
+    : [];
+  const pointScale = canUseDateScale
+    ? null
+    : scalePoint<string>()
+        .domain(categories)
+        .range([plot.left, plot.left + plot.width]);
+  const categoryPositions = canUseDateScale
+    ? categoryNumericValues.map((value) => dateScale?.(value as number) ?? plot.left)
+    : categories.map((category) => pointScale?.(category) ?? plot.left);
+  const axisCategoryLabels = canUseDateScale ? dateTicks.map((tick) => tick.label) : categories;
+  const axisCategoryPositions = canUseDateScale
+    ? dateTicks.map((tick) => dateScale?.(tick.serial) ?? plot.left)
+    : categoryPositions;
 
-  const curve: CurveFactory = curveLinear;
-  const areaBaseline = yScale(Math.max(minValue, 0));
   const plotPointsBySeries = chart.series.map((_, seriesIndex) => (
-    categories.map((category, categoryIndex) => {
+    categories.map((_, categoryIndex) => {
       const point = stackedPointsBySeries[seriesIndex]?.[categoryIndex] ?? {
         defined: false,
+        value: null,
         y: null,
         y0: null,
         y1: null
       };
       return {
         defined: point.defined,
-        x: xScale(category) ?? plot.left,
+        value: point.value,
+        x: categoryPositions[categoryIndex] ?? plot.left,
         y: point.y,
         y0: point.y0,
         y1: point.y1
@@ -201,10 +236,11 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
         palette,
         plot,
         false,
-        categories,
-        categoryPositions,
+        axisCategoryLabels,
+        axisCategoryPositions,
         ticks,
-        (value) => yScale(value)
+        (value) => yScale(value),
+        { categoryAxis: chart.categoryAxis, valueAxis: chart.valueAxis }
       )}
       {!isAreaChart && !isStackedSeries && highLowLinesRecord
         ? categories.map((_, categoryIndex) => {
@@ -256,6 +292,8 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
         : null}
       {chart.series.map((series, seriesIndex) => {
         const points = plotPointsBySeries[seriesIndex] ?? [];
+        const seriesCurve: CurveFactory = series.smooth === true ? curveMonotoneX : curveLinear;
+        const areaBaseline = yScale(logBase ? minValue : Math.max(minValue, 0));
         const lineStrokePoints = displayBlanksAs === "span"
           ? points.filter((point) => point.y != null)
           : points;
@@ -263,7 +301,7 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
           .defined((point) => point.y != null)
           .x((point) => point.x)
           .y((point) => yScale(point.y ?? 0))
-          .curve(curve)(lineStrokePoints) ?? "";
+          .curve(seriesCurve)(lineStrokePoints) ?? "";
 
         const areaPath = isAreaChart
           ? d3Area<{ x: number; y: number | null; y0: number | null; y1: number | null }>()
@@ -279,12 +317,17 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
                 : areaBaseline
             ))
             .y1((point) => yScale((isStackedSeries ? point.y1 : point.y) ?? 0))
-            .curve(curve)(points) ?? ""
+            .curve(seriesCurve)(points) ?? ""
           : "";
 
         const seriesFillColor = typeof series.shapeProperties?.xmlFillColor === "string"
           ? series.shapeProperties.xmlFillColor
           : chartSeriesColor(chart, seriesIndex);
+        const markerSymbol = series.markerSymbol == null
+          ? "circle"
+          : normalizeChartMarkerSymbol(series.markerSymbol);
+        const markerRadius = Math.max(2.5, (series.markerSize ?? 6) * 0.5);
+        const seriesMarkerPath = markerSymbolPath(markerSymbol, markerRadius);
         return (
           <g key={`line-series-${seriesIndex}`}>
             {!isAreaChart && !isStackedSeries && dropLinesRecord
@@ -320,20 +363,57 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
               stroke-linejoin="round"
               stroke-width={Math.max(1.5, series.lineWidthPx ?? 2)}
             />
-            {points.map((point, pointIndex) => (
+            {seriesMarkerPath.length > 0 ? points.map((point, pointIndex) => (
               point.y == null ? null : (
-                <circle
+                <path
                   {...chartElementDataProps(seriesIndex, pointIndex)}
-                  key={`line-marker-${seriesIndex}-${pointIndex}`}
-                  cx={point.x}
-                  cy={yScale(point.y)}
+                  d={seriesMarkerPath}
                   fill={series.markerColor ?? chartSeriesColor(chart, seriesIndex)}
-                  r={Math.max(2, (series.markerSize ?? 6) * 0.25)}
+                  key={`line-marker-${seriesIndex}-${pointIndex}`}
                   stroke={series.markerLineColor ?? chart.chartAreaFillColor ?? chartSeriesStrokeColor(chart, seriesIndex)}
                   stroke-width={1}
+                  transform={`translate(${point.x}, ${yScale(point.y)})`}
                 />
               )
-            ))}
+            )) : null}
+            {points.map((point, pointIndex) => {
+              const labels = resolveDataLabelsForPoint(chart, pointIndex, series);
+              if (!labels || !hasVisibleDataLabels(labels) || point.y == null) {
+                return null;
+              }
+              const text = buildDataLabelText(chart, series, labels, {
+                categoryLabel: categories[pointIndex],
+                percentValue: isPercentStackedSeries,
+                value: point.value
+              });
+              if (!text) {
+                return null;
+              }
+              const position = resolveDataLabelPosition(labels, "t");
+              const labelY = position === "b"
+                ? yScale(point.y) + 12
+                : position === "ctr"
+                  ? yScale(point.y) + 3
+                  : yScale(point.y) - 6;
+              const labelX = position === "l"
+                ? point.x - 6
+                : position === "r"
+                  ? point.x + 6
+                  : point.x;
+              return (
+                <text
+                  fill={resolveChartTextColor(chart)}
+                  font-size={10}
+                  key={`line-data-label-${seriesIndex}-${pointIndex}`}
+                  pointer-events="none"
+                  text-anchor={position === "l" ? "end" : position === "r" ? "start" : "middle"}
+                  x={labelX}
+                  y={labelY}
+                >
+                  {text}
+                </text>
+              );
+            })}
             {points.map((point, pointIndex) => (
               point.y != null && (
                 isSelectedChartPoint(selectedChartElement, chart.id, seriesIndex, pointIndex)
@@ -363,16 +443,21 @@ export function renderLineOrAreaChart(chart: XlsxChart, palette: ChartRendererPa
 export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, selectedChartElement?: XlsxChartElementSelection | null) {
   const groups = buildComboGroups(chart);
   const columnGroup = groups.find((group) => group.chartType.startsWith("Column"));
-  const lineGroup = groups.find((group) => group.chartType.startsWith("Line"));
+  const lineGroup = groups.find((group) => (
+    group.chartType.startsWith("Line") || group.chartType.startsWith("Area")
+  ));
   if (!columnGroup || !lineGroup) {
     return null;
   }
+  const isAreaGroup = lineGroup.chartType.startsWith("Area");
+  const columnDataLabels = columnGroup.dataLabels ?? chart.dataLabels;
+  const lineDataLabels = lineGroup.dataLabels ?? chart.dataLabels;
 
   const primaryChart: XlsxChart = {
     ...chart,
     categoryAxis: columnGroup.categoryAxis ?? chart.categoryAxis,
     chartType: columnGroup.chartType,
-    dataLabels: undefined,
+    dataLabels: columnDataLabels,
     is3d: columnGroup.is3d ?? false,
     series: columnGroup.series,
     valueAxis: columnGroup.valueAxis ?? chart.valueAxis
@@ -417,27 +502,77 @@ export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette
   if (primaryValues.length === 0 || secondaryValues.length === 0) {
     return null;
   }
+  const columnCategoryTotals = categories.map((_, categoryIndex) => (
+    columnGroup.series.reduce((sum, series) => (
+      sum + Math.abs(safeNumber(series.values[categoryIndex]) ?? 0)
+    ), 0)
+  ));
+  const lineCategoryTotals = categories.map((_, categoryIndex) => (
+    lineGroup.series.reduce((sum, series) => (
+      sum + Math.abs(safeNumber(series.values[categoryIndex]) ?? 0)
+    ), 0)
+  ));
+  const lineLabelChart: XlsxChart = {
+    ...primaryChart,
+    chartType: lineGroup.chartType,
+    dataLabels: lineDataLabels,
+    series: lineGroup.series,
+    valueAxis: lineGroup.valueAxis ?? chart.valueAxis
+  };
 
-  const primaryDomain = resolveNumericAxisDomain(
-    typeof columnGroup.valueAxis?.min === "number" ? columnGroup.valueAxis.min : Math.min(...primaryValues),
-    typeof columnGroup.valueAxis?.max === "number" ? columnGroup.valueAxis.max : Math.max(...primaryValues),
-    columnGroup.valueAxis?.majorUnit,
+  const columnValueAxis = columnGroup.valueAxis ?? chart.valueAxis ?? null;
+  const lineValueAxis = lineGroup.valueAxis ?? chart.valueAxis ?? null;
+  const sharedValueAxis = columnValueAxis != null && lineValueAxis != null
+    ? (columnValueAxis.id != null && lineValueAxis.id != null
+        ? columnValueAxis.id === lineValueAxis.id
+        : columnValueAxis === lineValueAxis)
+    : columnValueAxis === lineValueAxis;
+  const resolveComboDomain = (
+    axis: typeof columnValueAxis,
+    values: number[],
+    includeZero: boolean
+  ) => {
+    if (resolveAxisLogBase(axis)) {
+      const positiveValues = values.filter((value) => value > 0);
+      return resolveLogAxisDomain(
+        axis,
+        positiveValues.length > 0 ? Math.min(...positiveValues) : 1,
+        positiveValues.length > 0 ? Math.max(...positiveValues) : 10
+      );
+    }
+    return resolveNumericAxisDomain(
+      typeof axis?.min === "number" ? axis.min : Math.min(...values),
+      typeof axis?.max === "number" ? axis.max : Math.max(...values),
+      axis?.majorUnit,
+      includeZero
+    );
+  };
+  const primaryDomain = resolveComboDomain(
+    columnValueAxis,
+    sharedValueAxis ? [...primaryValues, ...secondaryValues] : primaryValues,
     true
   );
-  const secondaryDomain = resolveNumericAxisDomain(
-    typeof lineGroup.valueAxis?.min === "number" ? lineGroup.valueAxis.min : Math.min(...secondaryValues),
-    typeof lineGroup.valueAxis?.max === "number" ? lineGroup.valueAxis.max : Math.max(...secondaryValues),
-    lineGroup.valueAxis?.majorUnit,
-    false
+  const secondaryDomain = sharedValueAxis
+    ? primaryDomain
+    : resolveComboDomain(lineValueAxis, secondaryValues, false);
+  const primaryScale = createValueScale(
+    columnValueAxis,
+    primaryDomain.min,
+    primaryDomain.max,
+    [plot.top + plot.height, plot.top]
   );
-  const primaryScale = scaleLinear()
-    .domain([primaryDomain.min, primaryDomain.max])
-    .range([plot.top + plot.height, plot.top]);
-  const secondaryScale = scaleLinear()
-    .domain([secondaryDomain.min, secondaryDomain.max])
-    .range([plot.top + plot.height, plot.top]);
+  const secondaryScale = sharedValueAxis
+    ? primaryScale
+    : createValueScale(
+        lineValueAxis,
+        secondaryDomain.min,
+        secondaryDomain.max,
+        [plot.top + plot.height, plot.top]
+      );
+  const showSecondaryAxis = !sharedValueAxis;
   const axisColor = chart.axisLineColor ?? chart.chartAreaBorderColor ?? palette.border;
   const labelColor = resolveChartAxisTextColor(chart);
+  const formatSecondaryTick = createChartAxisTickFormatter(lineGroup.valueAxis, chart);
 
   return (
     <g>
@@ -449,9 +584,10 @@ export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette
         categories,
         categoryPositions,
         primaryDomain.ticks,
-        (value) => primaryScale(value)
+        (value) => primaryScale(value),
+        { categoryAxis: primaryChart.categoryAxis, valueAxis: primaryChart.valueAxis }
       )}
-      {secondaryDomain.ticks.map((tick) => {
+      {showSecondaryAxis ? secondaryDomain.ticks.map((tick) => {
         const y = secondaryScale(tick);
         return (
           <text
@@ -462,27 +598,48 @@ export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette
             x={plot.left + plot.width + 6}
             y={y + 3}
           >
-            {formatTickValue(tick)}
+            {formatSecondaryTick(tick)}
           </text>
         );
-      })}
-      <line
-        stroke={axisColor}
-        stroke-width={1.2}
-        x1={plot.left + plot.width}
-        x2={plot.left + plot.width}
-        y1={plot.top}
-        y2={plot.top + plot.height}
-      />
+      }) : null}
+      {showSecondaryAxis ? (
+        <line
+          stroke={axisColor}
+          stroke-width={1.2}
+          x1={plot.left + plot.width}
+          x2={plot.left + plot.width}
+          y1={plot.top}
+          y2={plot.top + plot.height}
+        />
+      ) : null}
       {columnGroup.series.flatMap((series, seriesIndex) => categories.map((category, categoryIndex) => {
         const globalSeriesIndex = resolveGlobalSeriesIndex(series);
         const value = safeNumber(series.values[categoryIndex]) ?? 0;
         const categoryStart = categoryScale(category) ?? plot.left;
         const barWidth = Math.max(1, histogramColumns ? categoryScale.bandwidth() : seriesScale.bandwidth());
         const x = categoryStart + (histogramColumns ? 0 : (seriesScale(String(seriesIndex)) ?? 0));
-        const y = primaryScale(Math.max(0, value));
-        const zeroY = primaryScale(0);
-        const height = Math.max(1, Math.abs(zeroY - primaryScale(value)));
+        const logBaseline = resolveAxisLogBase(columnValueAxis) ? primaryDomain.min : 0;
+        const scaledValue = Math.max(logBaseline, value);
+        const scaledBaseline = Math.max(logBaseline, 0);
+        const y = primaryScale(scaledValue);
+        const zeroY = primaryScale(scaledBaseline);
+        const height = Math.max(1, Math.abs(zeroY - primaryScale(scaledValue)));
+        const labels = resolveDataLabelsForPoint(primaryChart, categoryIndex, series);
+        const labelText = labels && hasVisibleDataLabels(labels)
+          ? buildDataLabelText(primaryChart, series, labels, {
+              categoryLabel: categories[categoryIndex],
+              totalValue: columnCategoryTotals[categoryIndex],
+              value
+            })
+          : "";
+        const labelPosition = resolveDataLabelPosition(labels, "outEnd");
+        const labelY = labelPosition === "inEnd"
+          ? (value >= 0 ? Math.min(y, zeroY) + 11 : Math.min(y, zeroY) + height - 4)
+          : labelPosition === "ctr"
+            ? Math.min(y, zeroY) + height / 2 + 3
+            : labelPosition === "inBase"
+              ? (value >= 0 ? Math.min(y, zeroY) + height - 4 : Math.min(y, zeroY) + 11)
+              : (value >= 0 ? Math.min(y, zeroY) - 4 : Math.min(y, zeroY) + height + 12);
         const selected = isSelectedChartPoint(selectedChartElement, chart.id, globalSeriesIndex, categoryIndex)
           || (
             isSelectedChartSeries(selectedChartElement, chart.id, globalSeriesIndex)
@@ -509,6 +666,18 @@ export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette
                   height
                 )
               : null}
+            {labelText ? (
+              <text
+                fill={resolveChartTextColor(primaryChart)}
+                font-size={10}
+                pointer-events="none"
+                text-anchor="middle"
+                x={x + barWidth / 2}
+                y={labelY}
+              >
+                {labelText}
+              </text>
+            ) : null}
           </>
         );
       }))}
@@ -521,13 +690,38 @@ export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette
         const lineStrokePoints = chart.displayBlanksAs === "span"
           ? points.filter((point) => point.y != null)
           : points;
+        const seriesCurve: CurveFactory = series.smooth === true ? curveMonotoneX : curveLinear;
         const path = d3Line<{ x: number; y: number | null }>()
           .defined((point) => point.y != null)
           .x((point) => point.x)
           .y((point) => secondaryScale(point.y ?? 0))
-          .curve(curveLinear)(lineStrokePoints) ?? "";
+          .curve(seriesCurve)(lineStrokePoints) ?? "";
+        const areaBaseline = secondaryScale(
+          resolveAxisLogBase(lineValueAxis) ? secondaryDomain.min : Math.max(secondaryDomain.min, 0)
+        );
+        const areaPath = isAreaGroup
+          ? d3Area<{ x: number; y: number | null }>()
+              .defined((point) => point.y != null)
+              .x((point) => point.x)
+              .y0(areaBaseline)
+              .y1((point) => secondaryScale(point.y ?? 0))
+              .curve(seriesCurve)(lineStrokePoints) ?? ""
+          : "";
+        const markerSymbol = series.markerSymbol == null
+          ? "circle"
+          : normalizeChartMarkerSymbol(series.markerSymbol);
+        const markerPath = markerSymbolPath(markerSymbol, Math.max(3, (series.markerSize ?? 7) * 0.5));
         return (
           <g key={`combo-line-${seriesIndex}`}>
+            {areaPath ? (
+              <path
+                {...chartElementDataProps(globalSeriesIndex)}
+                d={areaPath}
+                fill={series.color ?? series.lineColor ?? chartSeriesColor(chart, globalSeriesIndex)}
+                fill-opacity={0.32}
+                stroke="none"
+              />
+            ) : null}
             <path
               {...chartElementDataProps(globalSeriesIndex)}
               d={path}
@@ -537,11 +731,11 @@ export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette
               stroke-linejoin="round"
               stroke-width={Math.max(1.5, series.lineWidthPx ?? 2)}
             />
-            {points.map((point, pointIndex) => (
+            {markerPath.length > 0 ? points.map((point, pointIndex) => (
               point.y == null ? null : (
                 <path
                   {...chartElementDataProps(globalSeriesIndex, pointIndex)}
-                  d={markerSymbolPath(normalizeChartMarkerSymbol(series.markerSymbol), Math.max(4, series.markerSize ?? 7)) || markerSymbolPath("circle", 7)}
+                  d={markerPath}
                   fill={series.markerColor ?? series.color ?? series.lineColor ?? chartSeriesColor(chart, columnGroup.series.length + seriesIndex)}
                   key={`combo-line-marker-${seriesIndex}-${pointIndex}`}
                   stroke={series.markerLineColor ?? chart.chartAreaFillColor ?? "#ffffff"}
@@ -549,7 +743,45 @@ export function renderComboChart(chart: XlsxChart, palette: ChartRendererPalette
                   transform={`translate(${point.x}, ${secondaryScale(point.y)})`}
                 />
               )
-            ))}
+            )) : null}
+            {points.map((point, pointIndex) => {
+              const labels = resolveDataLabelsForPoint(lineLabelChart, pointIndex, series);
+              if (!labels || !hasVisibleDataLabels(labels) || point.y == null) {
+                return null;
+              }
+              const text = buildDataLabelText(lineLabelChart, series, labels, {
+                categoryLabel: categories[pointIndex],
+                totalValue: lineCategoryTotals[pointIndex],
+                value: point.y
+              });
+              if (!text) {
+                return null;
+              }
+              const position = resolveDataLabelPosition(labels, "t");
+              const labelY = position === "b"
+                ? secondaryScale(point.y) + 12
+                : position === "ctr"
+                  ? secondaryScale(point.y) + 3
+                  : secondaryScale(point.y) - 6;
+              const labelX = position === "l"
+                ? point.x - 6
+                : position === "r"
+                  ? point.x + 6
+                  : point.x;
+              return (
+                <text
+                  fill={resolveChartTextColor(primaryChart)}
+                  font-size={10}
+                  key={`combo-line-data-label-${seriesIndex}-${pointIndex}`}
+                  pointer-events="none"
+                  text-anchor={position === "l" ? "end" : position === "r" ? "start" : "middle"}
+                  x={labelX}
+                  y={labelY}
+                >
+                  {text}
+                </text>
+              );
+            })}
             {points.map((point, pointIndex) => (
               point.y != null && isSelectedChartPointOrSeries(selectedChartElement, chart.id, globalSeriesIndex, pointIndex)
                 ? renderSelectionRectHandles(
@@ -608,6 +840,7 @@ export function renderRadarChart(chart: XlsxChart, palette: ChartRendererPalette
   const ticks = buildNumericTickValues(minValue, safeMax, preferredMajorUnit);
   const axisColor = chart.axisLineColor ?? chart.chartAreaBorderColor ?? palette.border;
   const labelColor = resolveChartAxisTextColor(chart);
+  const formatRingTick = createChartAxisTickFormatter(chart.valueAxis, chart);
   const filled = chart.radarStyle === "filled";
   const showSpokes = chart.categoryAxis?.majorGridlines === true;
 
@@ -639,7 +872,7 @@ export function renderRadarChart(chart: XlsxChart, palette: ChartRendererPalette
               stroke-width={1}
             />
             <text fill={labelColor} font-size={9} x={centerX + 4} y={centerY - radius * ratio + 3}>
-              {formatTickValue(tick)}
+              {formatRingTick(tick)}
             </text>
           </g>
         );
@@ -812,6 +1045,7 @@ export function renderStockChart(chart: XlsxChart, palette: ChartRendererPalette
     .paddingOuter(0.18);
   const ticks = resolvedDomain.ticks;
   const labelColor = resolveChartAxisTextColor(chart);
+  const formatStockTick = createChartAxisTickFormatter(chart.valueAxis, chart);
   const openTickColor = stockPalette.openAccent;
   const closeTickColor = openIndex != null ? stockPalette.lineColor : stockPalette.closeAccent;
   const labelStep = Math.max(1, Math.ceil(categories.length / Math.max(4, Math.floor(plot.width / 68))));
@@ -830,7 +1064,7 @@ export function renderStockChart(chart: XlsxChart, palette: ChartRendererPalette
             y2={yScale(tick)}
           />
           <text fill={labelColor} font-size={10} text-anchor="end" x={plot.left - 6} y={yScale(tick) + 3}>
-            {formatTickValue(tick)}
+            {formatStockTick(tick)}
           </text>
         </g>
       ))}

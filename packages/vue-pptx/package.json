@@ -3,7 +3,14 @@
   "version": "0.6.0",
   "license": "Apache-2.0",
   "description": "Vue 3 PPTX viewer with browse and presentation playback modes",
-  "keywords": ["vue", "vue3", "pptx", "powerpoint", "presentation", "viewer"],
+  "keywords": [
+    "vue",
+    "vue3",
+    "pptx",
+    "powerpoint",
+    "presentation",
+    "viewer"
+  ],
   "homepage": "https://github.com/arcships/agentic-office-ui#readme",
   "repository": {
     "type": "git",
@@ -34,7 +41,9 @@
     },
     "./style.css": "./dist/style.css"
   },
-  "sideEffects": ["./dist/style.css"],
+  "sideEffects": [
+    "./dist/style.css"
+  ],
   "scripts": {
     "build": "vite build && vue-tsc --declaration --emitDeclarationOnly --outDir dist",
     "prepack": "pnpm run build",
@@ -42,7 +51,8 @@
   },
   "dependencies": {
     "@arcships/office-interaction": "^0.6.0",
-    "@arcships/pptx-core": "^0.6.0"
+    "@arcships/pptx-core": "^0.6.0",
+    "@arcships/vue-ui": "^0.6.0"
   },
   "peerDependencies": {
     "vue": ">=3.2.25 <4"

@@ -1,24 +1,36 @@
 import { computed, watch } from "vue";
 import type { Workbook } from "@dukelib/sheets-wasm";
 import {
+  addWorkbookFormControl,
+  anchorToAbsoluteRect,
   applyChartSeriesFormula,
   buildChartSeriesFormula,
+  deleteWorkbookChart,
+  deleteWorkbookFormControl,
+  deleteWorkbookImage,
+  deleteWorkbookShape,
+  emuToPixels,
   rectToImageAnchor,
   resizeImageRect,
-  resolveContentSheetAxisPixels,
   resolveRenderedSheetAxisPixels,
   resolveSheetColumnWidthPixels,
+  resolveSheetColumnWidthPx,
   resolveSheetRowHeightPixels,
+  resolveSheetRowHeightPx,
   updateWorkbookChartAnchor,
   updateWorkbookChartDefinition,
+  updateWorkbookFormControl,
   updateWorkbookImageAnchor,
+  updateWorkbookShapeAnchor,
   type XlsxChart,
   type XlsxChartElementSelection,
   type XlsxChartLegend,
   type XlsxFormControl,
+  type XlsxFormControlInput,
   type XlsxImage,
   type XlsxImageRect,
-  type XlsxImageResizeHandlePosition
+  type XlsxImageResizeHandlePosition,
+  type XlsxShape
 } from "@arcships/xlsx-core";
 import {
   DEFAULT_COL_WIDTH,
@@ -158,6 +170,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
 
   function selectChart(id: string | null) {
     ctx.selectedImageId.value = null;
+    ctx.selectedShapeId.value = null;
     ctx.selectedChartId.value = id;
     ctx.selectedChartElement.value = id ? { chartId: id, kind: "chart" } : null;
   }
@@ -173,6 +186,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
 
   function selectChartElement(selection: XlsxChartElementSelection | null) {
     ctx.selectedImageId.value = null;
+    ctx.selectedShapeId.value = null;
     ctx.selectedChartId.value = selection?.chartId ?? null;
     ctx.selectedChartElement.value = selection;
   }
@@ -199,6 +213,20 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
 
   const formControls = computed(() => { return getSheetFormControls(ctx.activeSheetIndex.value); })
 
+  function getFormControlById(id: string) {
+    for (const sheetControls of ctx.formControlsByWorkbookSheetIndex.value) {
+      const match = sheetControls?.find((control) => control.id === id);
+      if (match) {
+        return mapPublicFormControl(match);
+      }
+    }
+    return null;
+  }
+
+  function getFormControlItems(sheetIndex = ctx.activeSheetIndex.value) {
+    return getSheetFormControls(sheetIndex);
+  }
+
   function getSheetShapes(sheetIndex = ctx.activeSheetIndex.value) {
     const targetSheet = ctx.sheets.value[sheetIndex];
     if (!targetSheet) {
@@ -216,6 +244,19 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
 
   const shapes = computed(() => { return getSheetShapes(ctx.activeSheetIndex.value); })
 
+  function getShapeById(id: string) {
+    for (const sheetShapes of ctx.shapesByWorkbookSheetIndex.value) {
+      const match = sheetShapes?.find((shape) => shape.id === id);
+      if (match) {
+        const visibleSheetIndex = ctx.visibleSheetIndexByWorkbookSheetIndex.value.get(match.workbookSheetIndex);
+        return { ...match, sheetIndex: visibleSheetIndex ?? match.workbookSheetIndex };
+      }
+    }
+    return null;
+  }
+
+  const selectedShape = computed(() => (ctx.selectedShapeId.value ? getShapeById(ctx.selectedShapeId.value) : null));
+
   function getImageById(id: string) {
     for (const sheetImages of ctx.imagesByWorkbookSheetIndex.value) {
       const match = sheetImages?.find((image) => image.id === id);
@@ -232,6 +273,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
   function selectImage(id: string | null) {
     ctx.selectedChartId.value = null;
     ctx.selectedChartElement.value = null;
+    ctx.selectedShapeId.value = null;
     ctx.selectedImageId.value = id;
   }
 
@@ -239,8 +281,34 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     ctx.selectedImageId.value = null;
   }
 
+  function selectShape(id: string | null) {
+    ctx.selectedChartId.value = null;
+    ctx.selectedChartElement.value = null;
+    ctx.selectedImageId.value = null;
+    ctx.selectedShapeId.value = id;
+  }
+
+  function clearSelectedShape() {
+    ctx.selectedShapeId.value = null;
+  }
+
+  function zoomFactor() {
+    const scale = ctx.zoomScale.value / 100;
+    return Number.isFinite(scale) ? Math.max(0.1, scale) : 1;
+  }
+
   function getColumnWidthPx(worksheet: ReturnType<Workbook["getSheet"]>, col: number) {
+    const sheet = ctx.activeSheet.value;
+    if (sheet) {
+      // The grid renders with display-order widths, so write-back must use the
+      // same model (`visibleCols` + `colWidths`) instead of the worksheet API.
+      return resolveSheetColumnWidthPx(sheet, col);
+    }
+
     const sheetState = ctx.imageAssetsRef.value?.sheetStatesByWorkbookSheetIndex[ctx.activeSheet.value?.workbookSheetIndex ?? -1] ?? null;
+    if (typeof worksheet.isColumnHidden === "function" && worksheet.isColumnHidden(col)) {
+      return 0;
+    }
     const width = worksheet.getColumnWidth(col);
     const showGridLines = ctx.activeSheet.value?.showGridLines ?? true;
     if (width !== undefined && width !== null) {
@@ -249,7 +317,6 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
         showGridLines
       );
     }
-
     return resolveRenderedSheetAxisPixels(
       sheetState?.colWidthOverridesPx?.[col] ?? sheetState?.defaultColWidthPx ?? DEFAULT_COL_WIDTH,
       showGridLines
@@ -257,66 +324,57 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
   }
 
   function getRowHeightPx(worksheet: ReturnType<Workbook["getSheet"]>, row: number) {
+    const sheet = ctx.activeSheet.value;
+    if (sheet) {
+      return resolveSheetRowHeightPx(sheet, row);
+    }
+
     const sheetState = ctx.imageAssetsRef.value?.sheetStatesByWorkbookSheetIndex[ctx.activeSheet.value?.workbookSheetIndex ?? -1] ?? null;
+    if (typeof worksheet.isRowHidden === "function" && worksheet.isRowHidden(row)) {
+      return 0;
+    }
     const height = worksheet.getRowHeight(row);
     const showGridLines = ctx.activeSheet.value?.showGridLines ?? true;
     if (height !== undefined && height !== null) {
       return resolveRenderedSheetAxisPixels(resolveSheetRowHeightPixels(height), showGridLines);
     }
-
     return resolveRenderedSheetAxisPixels(
       sheetState?.rowHeightOverridesPx?.[row] ?? sheetState?.defaultRowHeightPx ?? DEFAULT_ROW_HEIGHT,
       showGridLines
     );
   }
 
-  function resolveAnchoredObjectRect(anchor: XlsxImage["anchor"], worksheet: ReturnType<Workbook["getSheet"]>) {
-    const resolveAxisSum = (
-      index: number,
-      getSize: (target: number) => number
-    ) => {
-      let total = 0;
-      for (let cursor = 0; cursor < index; cursor += 1) {
-        total += getSize(cursor);
-      }
-      return total;
-    };
-
-    if (anchor.kind === "absolute") {
-      return {
-        height: anchor.sizeEmu.cy / 9525,
-        left: GRID_ROW_HEADER_WIDTH + anchor.positionEmu.x / 9525,
-        top: GRID_HEADER_HEIGHT + anchor.positionEmu.y / 9525,
-        width: anchor.sizeEmu.cx / 9525
-      };
-    }
-
-    const left = GRID_ROW_HEADER_WIDTH + resolveAxisSum(anchor.from.col, (col) => getColumnWidthPx(worksheet, col)) + anchor.from.colOffsetEmu / 9525;
-    const top = GRID_HEADER_HEIGHT + resolveAxisSum(anchor.from.row, (row) => getRowHeightPx(worksheet, row)) + anchor.from.rowOffsetEmu / 9525;
-
-    if (anchor.kind === "one-cell") {
-      return {
-        height: anchor.sizeEmu.cy / 9525,
-        left,
-        top,
-        width: anchor.sizeEmu.cx / 9525
-      };
-    }
-
-    const right = GRID_ROW_HEADER_WIDTH + resolveAxisSum(anchor.to.col, (col) => getColumnWidthPx(worksheet, col)) + anchor.to.colOffsetEmu / 9525;
-    const bottom = GRID_HEADER_HEIGHT + resolveAxisSum(anchor.to.row, (row) => getRowHeightPx(worksheet, row)) + anchor.to.rowOffsetEmu / 9525;
-
+  function resolveAnchoredObjectRect(anchor: XlsxImage["anchor"]) {
+    const rect = anchorToAbsoluteRect(anchor, ctx.activeSheet.value);
+    const zoom = zoomFactor();
     return {
-      height: Math.max(1, bottom - top),
-      left,
-      top,
-      width: Math.max(1, right - left)
+      height: Math.max(1, emuToPixels(rect.cy) * zoom),
+      left: GRID_ROW_HEADER_WIDTH + emuToPixels(rect.x) * zoom,
+      top: GRID_HEADER_HEIGHT + emuToPixels(rect.y) * zoom,
+      width: Math.max(1, emuToPixels(rect.cx) * zoom)
+    };
+  }
+
+  /**
+   * Convert an overlay rect (viewer CSS pixels, including zoom) into the
+   * unscaled sheet-pixel space that image anchors are written in.
+   */
+  function toSheetRect(rect: XlsxImageRect): XlsxImageRect {
+    const zoom = zoomFactor();
+    if (zoom === 1) {
+      return rect;
+    }
+    return {
+      height: rect.height / zoom,
+      left: GRID_ROW_HEADER_WIDTH + (rect.left - GRID_ROW_HEADER_WIDTH) / zoom,
+      top: GRID_HEADER_HEIGHT + (rect.top - GRID_HEADER_HEIGHT) / zoom,
+      width: rect.width / zoom
     };
   }
 
   function setChartRect(id: string, rect: XlsxImageRect) {
     const hydratedChartAssets = ctx.ensureChartAssetsHydrated(ctx.workbook.value, ctx.sheets.value);
-    if (ctx.readOnly.value || !ctx.workbook.value || !ctx.activeSheet.value || !ctx.imageAssetsRef.value || !hydratedChartAssets) {
+    if (ctx.isEditingLocked.value || !ctx.workbook.value || !ctx.activeSheet.value || !ctx.imageAssetsRef.value || !hydratedChartAssets) {
       return;
     }
 
@@ -325,8 +383,13 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     if (!worksheet || !currentChart || currentChart.editable === false || currentChart.workbookSheetIndex !== ctx.activeSheet.value.workbookSheetIndex) {
       return;
     }
+    // Validate before snapshotting so a rejected move does not leave an empty
+    // undo entry (and dragging never serialises the workbook per frame).
+    if (!hydratedChartAssets.chartOriginsById.has(id)) {
+      return;
+    }
 
-    const nextAnchor = rectToImageAnchor(rect, currentChart.anchor, {
+    const nextAnchor = rectToImageAnchor(toSheetRect(rect), currentChart.anchor, {
       contentOffsetLeft: GRID_ROW_HEADER_WIDTH,
       contentOffsetTop: GRID_HEADER_HEIGHT,
       getColumnWidthPx: (col) => getColumnWidthPx(worksheet, col),
@@ -334,7 +397,9 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     });
 
     ctx.recordHistoryBeforeMutation();
-    updateWorkbookChartAnchor(ctx.imageAssetsRef.value, hydratedChartAssets, id, nextAnchor);
+    if (!updateWorkbookChartAnchor(ctx.imageAssetsRef.value, hydratedChartAssets, id, nextAnchor)) {
+      return;
+    }
 
     hydratedChartAssets.chartsByWorkbookSheetIndex = hydratedChartAssets.chartsByWorkbookSheetIndex.map((sheetCharts) => (
       sheetCharts.map((chart) => chart.id === id ? { ...chart, anchor: nextAnchor } : chart)
@@ -347,7 +412,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
   }
 
   function setImageRect(id: string, rect: XlsxImageRect) {
-    if (ctx.readOnly.value || !ctx.workbook.value || !ctx.activeSheet.value || !ctx.imageAssetsRef.value) {
+    if (ctx.isEditingLocked.value || !ctx.workbook.value || !ctx.activeSheet.value || !ctx.imageAssetsRef.value) {
       return;
     }
 
@@ -356,8 +421,13 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     if (!worksheet || !currentImage || currentImage.editable === false || currentImage.workbookSheetIndex !== ctx.activeSheet.value.workbookSheetIndex) {
       return;
     }
+    // Validate before snapshotting so a rejected move does not leave an empty
+    // undo entry (and dragging never serialises the workbook per frame).
+    if (!ctx.imageAssetsRef.value.imageOriginsById.has(id)) {
+      return;
+    }
 
-    const nextAnchor = rectToImageAnchor(rect, currentImage.anchor, {
+    const nextAnchor = rectToImageAnchor(toSheetRect(rect), currentImage.anchor, {
       contentOffsetLeft: GRID_ROW_HEADER_WIDTH,
       contentOffsetTop: GRID_HEADER_HEIGHT,
       getColumnWidthPx: (col) => getColumnWidthPx(worksheet, col),
@@ -379,12 +449,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const worksheet = ctx.getActiveWorksheet();
-    if (!worksheet) {
-      return;
-    }
-
-    const currentRect = resolveAnchoredObjectRect(currentChart.anchor, worksheet);
+    const currentRect = resolveAnchoredObjectRect(currentChart.anchor);
     setChartRect(id, {
       ...currentRect,
       left: currentRect.left + deltaX,
@@ -398,59 +463,11 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const currentRect = (() => {
-      const worksheet = ctx.getActiveWorksheet();
-      if (!worksheet) {
-        return null;
-      }
-
-      const resolveAxisSum = (
-        index: number,
-        getSize: (target: number) => number
-      ) => {
-        let total = 0;
-        for (let cursor = 0; cursor < index; cursor += 1) {
-          total += getSize(cursor);
-        }
-        return total;
-      };
-
-      if (currentImage.anchor.kind === "absolute") {
-        return {
-          height: currentImage.anchor.sizeEmu.cy / 9525,
-          left: GRID_ROW_HEADER_WIDTH + currentImage.anchor.positionEmu.x / 9525,
-          top: GRID_HEADER_HEIGHT + currentImage.anchor.positionEmu.y / 9525,
-          width: currentImage.anchor.sizeEmu.cx / 9525
-        };
-      }
-
-      const left = GRID_ROW_HEADER_WIDTH + resolveAxisSum(currentImage.anchor.from.col, (col) => getColumnWidthPx(worksheet, col)) + currentImage.anchor.from.colOffsetEmu / 9525;
-      const top = GRID_HEADER_HEIGHT + resolveAxisSum(currentImage.anchor.from.row, (row) => getRowHeightPx(worksheet, row)) + currentImage.anchor.from.rowOffsetEmu / 9525;
-
-      if (currentImage.anchor.kind === "one-cell") {
-        return {
-          height: currentImage.anchor.sizeEmu.cy / 9525,
-          left,
-          top,
-          width: currentImage.anchor.sizeEmu.cx / 9525
-        };
-      }
-
-      const right = GRID_ROW_HEADER_WIDTH + resolveAxisSum(currentImage.anchor.to.col, (col) => getColumnWidthPx(worksheet, col)) + currentImage.anchor.to.colOffsetEmu / 9525;
-      const bottom = GRID_HEADER_HEIGHT + resolveAxisSum(currentImage.anchor.to.row, (row) => getRowHeightPx(worksheet, row)) + currentImage.anchor.to.rowOffsetEmu / 9525;
-
-      return {
-        height: Math.max(1, bottom - top),
-        left,
-        top,
-        width: Math.max(1, right - left)
-      };
-    })();
-
-    if (!currentRect) {
+    if (!ctx.getActiveWorksheet()) {
       return;
     }
 
+    const currentRect = resolveAnchoredObjectRect(currentImage.anchor);
     setImageRect(id, {
       ...currentRect,
       left: currentRect.left + deltaX,
@@ -464,12 +481,11 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const worksheet = ctx.getActiveWorksheet();
-    if (!worksheet) {
+    if (!ctx.getActiveWorksheet()) {
       return;
     }
 
-    const currentRect = resolveAnchoredObjectRect(currentChart.anchor, worksheet);
+    const currentRect = resolveAnchoredObjectRect(currentChart.anchor);
     setChartRect(id, resizeImageRect(currentRect, handle, deltaX, deltaY, 48));
   }
 
@@ -479,49 +495,167 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
       return;
     }
 
+    if (!ctx.getActiveWorksheet()) {
+      return;
+    }
+
+    const currentRect = resolveAnchoredObjectRect(currentImage.anchor);
+    setImageRect(id, resizeImageRect(currentRect, handle, deltaX, deltaY));
+  }
+
+  function setShapeRect(id: string, rect: XlsxImageRect) {
+    const assets = ctx.imageAssetsRef.value;
+    if (ctx.isEditingLocked.value || !ctx.workbook.value || !ctx.activeSheet.value || !assets) {
+      return;
+    }
+    const currentShape = getShapeById(id);
+    if (!currentShape || currentShape.workbookSheetIndex !== ctx.activeSheet.value.workbookSheetIndex) {
+      return;
+    }
+    if (!assets.shapeOriginsById.has(id)) {
+      return;
+    }
     const worksheet = ctx.getActiveWorksheet();
     if (!worksheet) {
       return;
     }
+    const nextAnchor = rectToImageAnchor(toSheetRect(rect), currentShape.anchor, {
+      contentOffsetLeft: GRID_ROW_HEADER_WIDTH,
+      contentOffsetTop: GRID_HEADER_HEIGHT,
+      getColumnWidthPx: (col) => getColumnWidthPx(worksheet, col),
+      getRowHeightPx: (row) => getRowHeightPx(worksheet, row)
+    });
+    ctx.recordHistoryBeforeMutation();
+    if (!updateWorkbookShapeAnchor(assets, id, nextAnchor)) {
+      return;
+    }
+    ctx.shapesByWorkbookSheetIndex.value = [...assets.shapesByWorkbookSheetIndex];
+    ctx.revision.value = ctx.revision.value + 1;
+  }
 
-    const resolveAxisSum = (
-      index: number,
-      getSize: (target: number) => number
-    ) => {
-      let total = 0;
-      for (let cursor = 0; cursor < index; cursor += 1) {
-        total += getSize(cursor);
-      }
-      return total;
-    };
+  function moveShapeBy(id: string, deltaX: number, deltaY: number) {
+    const currentShape = getShapeById(id);
+    if (!currentShape || !ctx.getActiveWorksheet()) {
+      return;
+    }
+    const currentRect = resolveAnchoredObjectRect(currentShape.anchor);
+    setShapeRect(id, {
+      ...currentRect,
+      left: currentRect.left + deltaX,
+      top: currentRect.top + deltaY
+    });
+  }
 
-    const left = currentImage.anchor.kind === "absolute"
-      ? GRID_ROW_HEADER_WIDTH + currentImage.anchor.positionEmu.x / 9525
-      : GRID_ROW_HEADER_WIDTH + resolveAxisSum(currentImage.anchor.from.col, (col) => getColumnWidthPx(worksheet, col)) + currentImage.anchor.from.colOffsetEmu / 9525;
-    const top = currentImage.anchor.kind === "absolute"
-      ? GRID_HEADER_HEIGHT + currentImage.anchor.positionEmu.y / 9525
-      : GRID_HEADER_HEIGHT + resolveAxisSum(currentImage.anchor.from.row, (row) => getRowHeightPx(worksheet, row)) + currentImage.anchor.from.rowOffsetEmu / 9525;
-    const width = currentImage.anchor.kind === "two-cell"
-      ? Math.max(
-          1,
-          GRID_ROW_HEADER_WIDTH + resolveAxisSum(currentImage.anchor.to.col, (col) => getColumnWidthPx(worksheet, col)) + currentImage.anchor.to.colOffsetEmu / 9525 - left
-        )
-      : currentImage.anchor.sizeEmu.cx / 9525;
-    const height = currentImage.anchor.kind === "two-cell"
-      ? Math.max(
-          1,
-          GRID_HEADER_HEIGHT + resolveAxisSum(currentImage.anchor.to.row, (row) => getRowHeightPx(worksheet, row)) + currentImage.anchor.to.rowOffsetEmu / 9525 - top
-        )
-      : currentImage.anchor.sizeEmu.cy / 9525;
+  function resizeShapeBy(id: string, handle: XlsxImageResizeHandlePosition, deltaX: number, deltaY: number) {
+    const currentShape = getShapeById(id);
+    if (!currentShape || !ctx.getActiveWorksheet()) {
+      return;
+    }
+    const currentRect = resolveAnchoredObjectRect(currentShape.anchor);
+    setShapeRect(id, resizeImageRect(currentRect, handle, deltaX, deltaY));
+  }
 
-    const nextRect = resizeImageRect({ height, left, top, width }, handle, deltaX, deltaY);
-    setImageRect(id, nextRect);
+  function deleteShape(id: string) {
+    const assets = ctx.imageAssetsRef.value;
+    if (ctx.isEditingLocked.value || !assets || !assets.shapeOriginsById.has(id)) {
+      return false;
+    }
+    ctx.recordHistoryBeforeMutation();
+    if (!deleteWorkbookShape(assets, id)) {
+      return false;
+    }
+    ctx.shapesByWorkbookSheetIndex.value = [...assets.shapesByWorkbookSheetIndex];
+    if (ctx.selectedShapeId.value === id) ctx.selectedShapeId.value = null;
+    ctx.revision.value = ctx.revision.value + 1;
+    return true;
+  }
+
+  function deleteImage(id: string) {
+    const assets = ctx.imageAssetsRef.value;
+    if (ctx.isEditingLocked.value || !assets || !assets.imageOriginsById.has(id)) {
+      return false;
+    }
+    ctx.recordHistoryBeforeMutation();
+    if (!deleteWorkbookImage(assets, id)) {
+      return false;
+    }
+    ctx.imagesByWorkbookSheetIndex.value = [...assets.imagesByWorkbookSheetIndex];
+    if (ctx.selectedImageId.value === id) ctx.selectedImageId.value = null;
+    ctx.revision.value = ctx.revision.value + 1;
+    return true;
+  }
+
+  function deleteChart(id: string) {
+    const hydratedChartAssets = ctx.ensureChartAssetsHydrated(ctx.workbook.value, ctx.sheets.value);
+    if (ctx.isEditingLocked.value || !ctx.imageAssetsRef.value || !hydratedChartAssets || !hydratedChartAssets.chartOriginsById.has(id)) {
+      return false;
+    }
+    ctx.recordHistoryBeforeMutation();
+    if (!deleteWorkbookChart(ctx.imageAssetsRef.value, hydratedChartAssets, id)) {
+      return false;
+    }
+    ctx.chartsByWorkbookSheetIndex.value = hydratedChartAssets.chartsByWorkbookSheetIndex;
+    if (ctx.selectedChartId.value === id) {
+      ctx.selectedChartId.value = null;
+      ctx.selectedChartElement.value = null;
+    }
+    ctx.revision.value = ctx.revision.value + 1;
+    return true;
+  }
+
+  function addFormControl(input: XlsxFormControlInput) {
+    const assets = ctx.imageAssetsRef.value;
+    const sheet = ctx.activeSheet.value;
+    if (
+      ctx.isEditingLocked.value
+      || !assets
+      || !sheet
+      || !assets.sheetPathsByWorkbookSheetIndex[sheet.workbookSheetIndex]
+    ) {
+      return null;
+    }
+    ctx.recordHistoryBeforeMutation();
+    const control = addWorkbookFormControl(assets, sheet.workbookSheetIndex, input);
+    if (!control) {
+      return null;
+    }
+    ctx.formControlsByWorkbookSheetIndex.value = [...assets.formControlsByWorkbookSheetIndex];
+    ctx.revision.value = ctx.revision.value + 1;
+    return control;
+  }
+
+  function updateFormControl(id: string, patch: Partial<XlsxFormControlInput>) {
+    const assets = ctx.imageAssetsRef.value;
+    if (ctx.isEditingLocked.value || !assets || !assets.formControlOriginsById.has(id)) {
+      return false;
+    }
+    ctx.recordHistoryBeforeMutation();
+    if (!updateWorkbookFormControl(assets, id, patch)) {
+      return false;
+    }
+    ctx.formControlsByWorkbookSheetIndex.value = [...assets.formControlsByWorkbookSheetIndex];
+    ctx.revision.value = ctx.revision.value + 1;
+    return true;
+  }
+
+  function removeFormControl(id: string) {
+    const assets = ctx.imageAssetsRef.value;
+    if (ctx.isEditingLocked.value || !assets || !assets.formControlOriginsById.has(id)) {
+      return false;
+    }
+    ctx.recordHistoryBeforeMutation();
+    if (!deleteWorkbookFormControl(assets, id)) {
+      return false;
+    }
+    ctx.formControlsByWorkbookSheetIndex.value = [...assets.formControlsByWorkbookSheetIndex];
+    ctx.revision.value = ctx.revision.value + 1;
+    return true;
   }
 
   function updateChart(id: string, patch: Partial<XlsxChart>) {
     const currentChart = getChartById(id);
     const hydratedChartAssets = ctx.ensureChartAssetsHydrated(ctx.workbook.value, ctx.sheets.value);
-    if (ctx.readOnly.value || !currentChart || currentChart.editable === false) {
+    if (ctx.isEditingLocked.value || !currentChart || currentChart.editable === false) {
       return;
     }
 
@@ -540,7 +674,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
   }
 
   function setChartSeriesFormula(chartId: string, seriesIndex: number, formula: string) {
-    if (ctx.readOnly.value) {
+    if (ctx.isEditingLocked.value) {
       return false;
     }
 
@@ -580,6 +714,7 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     charts,
     selectedChart,
     selectedImage,
+    selectedShape,
     images,
     formControls,
     shapes,
@@ -592,16 +727,30 @@ export function createChartImageDomain(ctx: XlsxControllerContext) {
     selectChartElement,
     getSheetImages,
     getSheetFormControls,
+    getFormControlById,
+    getFormControlItems,
     getSheetShapes,
     getImageById,
+    getShapeById,
     selectImage,
+    selectShape,
     clearSelectedImage,
+    clearSelectedShape,
     setChartRect,
     setImageRect,
+    setShapeRect,
     moveChartBy,
     moveImageBy,
+    moveShapeBy,
     resizeChartBy,
     resizeImageBy,
+    resizeShapeBy,
+    deleteChart,
+    deleteImage,
+    deleteShape,
+    addFormControl,
+    updateFormControl,
+    removeFormControl,
     updateChart,
     setChartSeriesFormula,
     getChartSeriesFormula

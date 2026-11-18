@@ -35,7 +35,7 @@ pnpm add @arcships/vue-docx@0.5.3 @arcships/vue-xlsx@0.5.3 @arcships/vue-pptx@0.
 const zoom = ref(1) // 100%，范围 0.5–2
 ```
 
-传入 `zoom` 后，Surface 处理 `Ctrl+wheel`、trackpad pinch 和 WebKit gesture，并保持指针下的页面、幻灯片或单元格。普通 wheel 继续滚动。`enableGestureZoom` 默认为 `true`；未传 `zoom` 时不接管手势。受控 `zoom` 与 `fitWidth` 同时存在时以 `zoom` 为准。
+传入 `zoom` 后，Surface 处理 `Ctrl+wheel`、trackpad pinch、两指 pointer pinch 和 WebKit gesture，并保持指针下的页面、幻灯片或单元格。普通 wheel 继续滚动。`enableGestureZoom` 默认为 `true`；未传 `zoom` 时不接管手势。受控 `zoom` 与 `fitWidth` 同时存在时以 `zoom` 为准。触屏长按会打开上下文菜单，双击在 100% 与 200% 之间切换；完整的触摸契约见 [touch-interaction-spec.md](../touch-interaction-spec.md)。
 
 ## DOCX
 

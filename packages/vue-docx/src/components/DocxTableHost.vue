@@ -6,13 +6,16 @@
       'docx-table-host--editable': editable && !isReadOnly,
       'docx-table-host--active': isActiveTable,
     }"
+    :style="wrapperStyle"
     :data-docx-table-host="true"
-    :data-docx-table-index="tableIndex"
+    :data-docx-table-index="domTableIndex"
+    :data-docx-table-runtime-key="tableRuntimeKey"
   >
     <!-- Column resize handles -->
     <div
       v-if="showColumnHandles"
       class="docx-table-column-handles"
+      data-docx-thumbnail-exclude="true"
     >
       <div
         v-for="(boundary, ci) of columnBoundaries"
@@ -34,54 +37,69 @@
       </colgroup>
       <tbody>
         <tr
-          v-for="(row, ri) of visibleRows"
-          :key="`row-${sourceRowIndex(ri)}`"
-          :style="rowStyle(row, sourceRowIndex(ri))"
+          v-for="row of gridRows"
+          :key="`row-${row.rowIndex}`"
+          :data-docx-table-row-index="row.rowIndex"
+          :class="rowClass(row.rowIndex)"
+          :data-docx-tracked-change="rowTrackedKind(row.rowIndex)"
+          :data-docx-tracked-change-id="rowTrackedId(row.rowIndex)"
+          :style="rowStyle(row.row, row.rowIndex)"
         >
           <template
-            v-for="(cell, ci) of row.cells"
-            :key="`cell-${sourceRowIndex(ri)}-${ci}`"
+            v-for="cell of row.cells"
+            :key="`cell-${cell.rowIndex}-${cell.cellIndex}`"
           >
           <td
-            v-if="!cell.style?.vMergeContinuation"
-            :colspan="cell.style?.gridSpan && cell.style.gridSpan > 1 ? cell.style.gridSpan : undefined"
-            :rowspan="cell.style?.rowSpan && cell.style.rowSpan > 1 ? cell.style.rowSpan : undefined"
+            :colspan="cell.colSpan > 1 ? cell.colSpan : undefined"
+            :rowspan="cell.rowSpan > 1 ? cell.rowSpan : undefined"
             :data-docx-table-cell="true"
-            :data-docx-table-index="tableIndex"
-            :data-docx-table-row-index="sourceRowIndex(ri)"
-            :data-docx-table-cell-index="ci"
+            :data-docx-table-index="domTableIndex"
+            :data-docx-table-runtime-key="tableRuntimeKey"
+            :data-docx-table-row-index="cell.rowIndex"
+            :data-docx-table-cell-index="cell.cellIndex"
             class="docx-table-cell"
             :class="{
-              'docx-table-cell--active': isCellActive(sourceRowIndex(ri), ci),
+              'docx-table-cell--active': isCellActive(cell.rowIndex, cell.cellIndex),
+              'docx-table-cell--merge-fallback': cell.continuationFallback,
+              'docx-table-cell--contain-floating': cellContainsLayoutInCellFloatingImage(cell),
+              'docx-table-cell--insertion': cellTrackedKind(cell.rowIndex, cell.cellIndex) === 'insertion',
+              'docx-table-cell--deletion': cellTrackedKind(cell.rowIndex, cell.cellIndex) === 'deletion',
             }"
-            :style="cellStyle(cell)"
-            @click="onCellClick(sourceRowIndex(ri), ci, $event)"
+            :data-docx-tracked-change="cellTrackedKind(cell.rowIndex, cell.cellIndex)"
+            :data-docx-tracked-change-id="cellTrackedId(cell.rowIndex, cell.cellIndex)"
+            :style="{ ...cellStyle(cell), ...tableCellSliceStyle(cell.rowIndex) }"
+            @mousedown="onCellMouseDown(cell.rowIndex, cell.cellIndex, $event)"
+            @mouseenter="onCellMouseEnter(cell.rowIndex, cell.cellIndex, $event)"
+            @click.stop="onCellClick(cell.rowIndex, cell.cellIndex, $event)"
           >
+            <template v-if="!cell.continuationFallback">
             <template
-              v-for="(node, pi) of cell.nodes"
-              :key="`cell-node-${sourceRowIndex(ri)}-${ci}-${pi}`"
+              v-for="(node, pi) of cell.cell.nodes"
+              :key="`cell-node-${cell.rowIndex}-${cell.cellIndex}-${pi}`"
             >
               <div
                 v-if="node.type === 'paragraph'"
                 class="docx-table-cell-paragraph"
                 :contenteditable="editable && controller && !isReadOnly ? 'true' : undefined"
                 :data-docx-table-cell-paragraph-host="true"
-                :data-docx-table-index="tableIndex"
-                :data-docx-table-row-index="sourceRowIndex(ri)"
-                :data-docx-table-cell-index="ci"
-                :data-docx-paragraph-index="pi"
+                :data-docx-table-index="domTableIndex"
+                :data-docx-table-runtime-key="tableRuntimeKey"
+                :data-docx-table-row-index="cell.rowIndex"
+                :data-docx-table-cell-index="cell.cellIndex"
+                :data-docx-paragraph-index="cellParagraphIndex(cell.cell.nodes, pi)"
                 :suppresscontenteditablewarning="editable && controller ? 'true' : undefined"
-                :style="cellParagraphStyle(node)"
-                @input="onCellInput(tableIndex, sourceRowIndex(ri), ci, pi, $event)"
-                @focus="onCellFocus(tableIndex, sourceRowIndex(ri), ci, pi)"
-                @blur="onCellBlur(tableIndex, sourceRowIndex(ri), ci, pi)"
-                v-html="cellParagraphHtml(node, sourceRowIndex(ri), ci, pi)"
+                :style="{ ...cellParagraphStyle(node), ...cellParagraphSliceStyle(cell.rowIndex) }"
+                @input="onCellInput(tableIndex, cell.rowIndex, cell.cellIndex, cellParagraphIndex(cell.cell.nodes, pi), $event)"
+                @focus="onCellFocus(tableIndex, cell.rowIndex, cell.cellIndex, cellParagraphIndex(cell.cell.nodes, pi))"
+                @blur="onCellBlur(tableIndex, cell.rowIndex, cell.cellIndex, cellParagraphIndex(cell.cell.nodes, pi), $event)"
+                v-html="cellParagraphHtml(node, cell, pi)"
               />
               <DocxTableHost
                 v-else
                 :table="node"
                 :table-index="tableIndex"
-                :editable="false"
+                :table-runtime-key="nestedTableRuntimeKey(cell.rowIndex, cell.cellIndex, pi)"
+                :editable="editable && !isReadOnly"
                 :controller="controller"
                 :document-theme="documentTheme"
                 :show-tracked-changes="showTrackedChanges"
@@ -90,9 +108,18 @@
                 :page-number="pageNumber"
                 :total-pages="totalPages"
                 :page-number-format="pageNumberFormat"
+                :section-pages="sectionPages"
+                :resolve-style-ref-field-value="resolveStyleRefFieldValue"
+                :resolve-bookmark-field-value="resolveBookmarkFieldValue"
+                :resolve-bookmark-page-number="resolveBookmarkPageNumber"
+                :model="model"
                 :within-header-footer="withinHeaderFooter"
                 :header-footer-region="headerFooterRegion"
+                :max-available-width-px="cellContentWidthPx(cell)"
+                :note-marker-labels="noteMarkerLabels"
+                :floating-page-origin-px="floatingPageOriginPx"
               />
+            </template>
             </template>
           </td>
           </template>
@@ -102,8 +129,9 @@
 
     <!-- Row add button (below table, only when editable) -->
     <div
-      v-if="editable && !isReadOnly"
+      v-if="editable && !isReadOnly && !isNestedTable"
       class="docx-table-add-row"
+      data-docx-thumbnail-exclude="true"
       @click="onAddRow"
     >
       + Add row
@@ -112,17 +140,38 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onUnmounted } from "vue"
+import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted, onUnmounted } from "vue"
 import {
+  mergeTableSpacing,
+  resolveTableCellBorderCss,
+  resolveTableCellDiagonalOverlayCss,
+  resolveTableRenderMetricsPx,
+  resolveTableRowHeightCss,
+  resolveTableSpacingPaddingPx,
+  tableSpacingPaddingStyle,
+  tableElementBorderStyle,
+  tableWrapperStyle,
+  twipsToPixels,
+  type DocxFloatingPageOriginPx,
+  type DocModel,
   type DocxDocumentTheme,
   type DocxEditorController,
+  type DocxEditorSelection,
+  type DocxTableCellSelectionRange,
   type NumberingDefinitionSet,
   type ParagraphNode,
   type TableNode,
+  type TableRowNode,
   type TableRowRange,
+  paragraphText,
+  paragraphTypographyStyle,
+  resolveTableTrackedMarkup,
 } from "@arcships/docx-core"
 import { renderParagraphRuns, type ParagraphRunRenderOptions } from "../render/paragraph-runs"
 import { renderStaticHtml } from "../render/static-html"
+import { readDocxTextHostText } from "../composables/editor-selection"
+import { useDocxMessages } from "../i18n"
+import { resolveTableGrid, type TableGridCell } from "./table-grid"
 
 // ── Constants ──────────────────────────────────────────────────────
 const HIGHLIGHT_TO_CSS: Record<string, string> = {
@@ -148,7 +197,15 @@ const props = withDefaults(
     tableIndex: number
     editable?: boolean
     controller?: DocxEditorController
+    tableRuntimeKey?: string
     rowRange?: TableRowRange
+    /** Partial row slice produced by the pagination engine. */
+    rowSlice?: {
+      rowIndex: number
+      startOffsetPx: number
+      sliceHeightPx: number
+      totalRowHeightPx: number
+    }
     documentTheme?: DocxDocumentTheme
     showTrackedChanges?: boolean
     showCommentHighlights?: boolean
@@ -156,8 +213,20 @@ const props = withDefaults(
     pageNumber?: number
     totalPages?: number
     pageNumberFormat?: string
+    sectionPages?: number
+    resolveStyleRefFieldValue?: (
+      target: string,
+      beforeNodeIndex?: number,
+    ) => string | undefined
+    resolveBookmarkFieldValue?: (target: string) => string | undefined
+    resolveBookmarkPageNumber?: (target: string) => number | undefined
+    model?: DocModel
     withinHeaderFooter?: boolean
     headerFooterRegion?: "header" | "footer"
+    maxAvailableWidthPx?: number
+    noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
+    /** Page-relative origin used to place margin/page/column anchored images. */
+    floatingPageOriginPx?: DocxFloatingPageOriginPx
   }>(),
   {
     editable: false,
@@ -168,10 +237,14 @@ const props = withDefaults(
 const emit = defineEmits<{
   cellInput: [tableIndex: number, rowIndex: number, cellIndex: number, paragraphIndex: number, text: string]
   cellFocus: [tableIndex: number, rowIndex: number, cellIndex: number, paragraphIndex: number]
+  measure: [tableIndex: number, rowHeightsPx: number[]]
 }>()
+
+const m = useDocxMessages()
 
 // ── State ──────────────────────────────────────────────────────────
 const tableEl = ref<HTMLElement | undefined>()
+let rowResizeObserver: ResizeObserver | undefined
 const hovered = ref(false)
 const isResizing = ref(false)
 const resizeBoundaryIndex = ref(-1)
@@ -183,34 +256,174 @@ const localColumnWidths = ref<number[] | null>(null)
 let activeColumnMouseMove: ((event: MouseEvent) => void) | undefined
 let activeColumnMouseUp: (() => void) | undefined
 
+// Cell text drafts. Each editable cell paragraph keeps its uncommitted DOM
+// text here until blur, export, or unmount; committing the whole cell's
+// textContent would duplicate every paragraph into the first one.
+interface CellDraftEntry {
+  text: string
+  baseText: string
+  documentLoadNonce: number
+}
+const cellDrafts = new Map<string, CellDraftEntry>()
+let unregisterDraftFlusher: (() => void) | undefined
+
+function cellDraftKey(rowIndex: number, cellIndex: number, paragraphIndex: number): string {
+  return `${rowIndex}:${cellIndex}:${paragraphIndex}`
+}
+
+function parseCellDraftKey(
+  key: string
+): { rowIndex: number; cellIndex: number; paragraphIndex: number } | undefined {
+  const [row, cell, paragraph] = key.split(":").map((value) => Number(value))
+  if (!Number.isInteger(row) || !Number.isInteger(cell) || !Number.isInteger(paragraph)) {
+    return undefined
+  }
+  return { rowIndex: row, cellIndex: cell, paragraphIndex: paragraph }
+}
+
+function cellParagraphIndex(
+  nodes: TableGridCell["cell"]["nodes"],
+  contentIndex: number
+): number {
+  // `paragraphIndex` addresses paragraphs, not all cell content nodes. Nested
+  // tables occupy content slots but must not shift the index of a following
+  // paragraph, otherwise the host commits into the wrong paragraph.
+  let paragraphIndex = 0
+  for (let index = 0; index < contentIndex; index += 1) {
+    if (nodes[index]?.type === "paragraph") paragraphIndex += 1
+  }
+  return paragraphIndex
+}
+
+function cellParagraphAt(
+  rowIndex: number, cellIndex: number, paragraphIndex: number
+): ParagraphNode | undefined {
+  // Nested tables carry their own node; the host table index points at the
+  // parent table and cannot be used to resolve inner row/cell coordinates.
+  const modelTable = props.controller?.model.nodes[props.tableIndex]
+  const table = props.tableRuntimeKey
+    ? props.table
+    : modelTable?.type === "table"
+      ? modelTable
+      : props.table
+  const cell = table.rows[rowIndex]?.cells[cellIndex]
+  if (!cell) return undefined
+  return cell.nodes.filter((node): node is ParagraphNode => node.type === "paragraph")[paragraphIndex]
+}
+
+function readCellParagraphDomText(root: HTMLElement): string {
+  // Shared reader: skips list markers, image children and — while revisions are
+  // on screen — inline deleted/moved-from runs, which must not be committed.
+  return readDocxTextHostText(root)
+}
+
+function commitCellParagraph(
+  rowIndex: number, cellIndex: number, paragraphIndex: number, text: string
+): void {
+  const controller = props.controller
+  if (!controller) return
+  const paragraph = cellParagraphAt(rowIndex, cellIndex, paragraphIndex)
+  if (!paragraph || paragraphText(paragraph) === text) return
+  if (props.tableRuntimeKey) {
+    const nestedController = controller as DocxEditorController &
+      RuntimeKeyTableCellController
+    nestedController.commitTableCellParagraphTextByRuntimeKey?.(
+      props.tableRuntimeKey, rowIndex, cellIndex, paragraphIndex, text
+    )
+    return
+  }
+  controller.commitTableCellParagraphTextRecursive(
+    props.tableIndex, rowIndex, cellIndex, paragraphIndex, text
+  )
+}
+
+function flushCellDrafts(): void {
+  const controller = props.controller
+  if (!controller) return
+  for (const [key, draft] of [...cellDrafts.entries()]) {
+    const parsed = parseCellDraftKey(key)
+    cellDrafts.delete(key)
+    if (!parsed) continue
+    const paragraph = cellParagraphAt(parsed.rowIndex, parsed.cellIndex, parsed.paragraphIndex)
+    if (
+      !paragraph ||
+      draft.documentLoadNonce !== controller.documentLoadNonce ||
+      paragraphText(paragraph) !== draft.baseText ||
+      paragraphText(paragraph) === draft.text
+    ) continue
+    commitCellParagraph(
+      parsed.rowIndex, parsed.cellIndex, parsed.paragraphIndex, draft.text
+    )
+  }
+}
 // ── Computed ───────────────────────────────────────────────────────
-const isReadOnly = computed(
-  () => !props.editable || !props.controller || props.controller.showTrackedChanges
-)
+type RuntimeKeyTableCellController = {
+  selectTableCellByRuntimeKey?: (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number
+  ) => void
+  commitTableCellTextByRuntimeKey?: (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number,
+    text: string
+  ) => void
+  commitTableCellParagraphTextByRuntimeKey?: (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number,
+    paragraphIndex: number,
+    text: string
+  ) => void
+}
+
+const isNestedTable = computed(() => Boolean(props.tableRuntimeKey))
+
+const domTableIndex = computed(() => props.tableRuntimeKey ?? props.tableIndex)
+
+// Visible revisions no longer imply a read-only table: the document stays
+// editable and revisions are resolved through accept/reject.
+const isReadOnly = computed(() => !props.editable || !props.controller)
+
+function selectionRuntimeKey(
+  selection: Extract<DocxEditorSelection, { kind: "table-cell" }>
+): string | undefined {
+  return (selection as { tableRuntimeKey?: string }).tableRuntimeKey
+}
 
 const isActiveTable = computed(() => {
   if (!props.editable || !props.controller) return false
   const sel = props.controller.selection
   if (sel.kind === "table-cell") {
-    return sel.tableIndex === props.tableIndex
+    return sel.tableIndex === props.tableIndex &&
+      selectionRuntimeKey(sel) === props.tableRuntimeKey
   }
   return false
 })
 
-const columnCount = computed(() => {
-  if (props.table.rows.length === 0) return 1
-  return props.table.rows[0].cells.length
+const tableMetrics = computed(() =>
+  resolveTableRenderMetricsPx(props.table, props.maxAvailableWidthPx)
+)
+
+const columnCount = computed(() => tableMetrics.value.columnCount)
+
+const wrapperStyle = computed(() =>
+  tableWrapperStyle(props.table, twipsToPixels(props.table.style?.indentTwips) ?? 0)
+)
+
+const renderedTableWidthPx = computed(() => {
+  if (localColumnWidths.value && localColumnWidths.value.length === columnCount.value) {
+    return localColumnWidths.value.reduce((sum, width) => sum + width, 0)
+  }
+  return tableMetrics.value.tableWidthPx
 })
 
 const resolvedColumnWidths = computed(() => {
   if (localColumnWidths.value && localColumnWidths.value.length === columnCount.value) {
     return localColumnWidths.value
   }
-  const storedWidths = props.table.style?.columnWidthsTwips
-  if (storedWidths?.length === columnCount.value) {
-    return storedWidths.map((width) => Math.max(MIN_COLUMN_WIDTH, Math.round(width / 15)))
-  }
-  return Array.from({ length: columnCount.value }, () => DEFAULT_COLUMN_WIDTH)
+  return tableMetrics.value.columnWidthsPx.map((width) => Math.max(1, Math.round(width)))
 })
 
 const columnBoundaries = computed(() => {
@@ -225,61 +438,215 @@ const columnBoundaries = computed(() => {
 })
 
 const showColumnHandles = computed(
-  () => props.editable && !isReadOnly && (hovered.value || isActiveTable.value)
+  () =>
+    props.editable &&
+    !isReadOnly.value &&
+    !isNestedTable.value &&
+    (hovered.value || isActiveTable.value)
 )
 
-const visibleRowStart = computed(() =>
-  Math.max(0, props.rowRange?.startRowIndex ?? 0)
-)
-
-const visibleRows = computed(() => {
-  const start = visibleRowStart.value
-  const end = Math.max(start, props.rowRange?.endRowIndex ?? props.table.rows.length)
-  return props.table.rows.slice(start, end)
+const gridRows = computed(() => {
+  const range = props.rowRange
+  const bodyRows = resolveTableGrid(props.table, {
+    startRowIndex: range?.startRowIndex,
+    endRowIndex: range?.endRowIndex,
+  })
+  const repeatHeaderRowCount = Math.max(
+    0,
+    Math.round(range?.repeatHeaderRowCount ?? 0)
+  )
+  const rangeStartsInBody = (range?.startRowIndex ?? 0) > 0
+  if (
+    repeatHeaderRowCount === 0 ||
+    !rangeStartsInBody ||
+    repeatHeaderRowCount >= (range?.startRowIndex ?? 0)
+  ) {
+    return bodyRows
+  }
+  const headerRows = resolveTableGrid(props.table, {
+    startRowIndex: 0,
+    endRowIndex: repeatHeaderRowCount,
+  })
+  return [...headerRows, ...bodyRows]
 })
 
-function sourceRowIndex(visibleRowIndex: number): number {
-  return visibleRowStart.value + visibleRowIndex
+const tableTrackedMarkup = computed(() =>
+  props.showTrackedChanges ? resolveTableTrackedMarkup(props.table) : undefined
+)
+
+function rowTrackedRevision(rowIndex: number) {
+  return tableTrackedMarkup.value?.rowChangeByIndex.get(rowIndex)
+}
+
+function cellTrackedRevision(rowIndex: number, cellIndex: number) {
+  return tableTrackedMarkup.value?.cellChangeByIndex.get(
+    `${rowIndex}:${cellIndex}`
+  )
+}
+
+function rowTrackedKind(rowIndex: number): string | undefined {
+  return rowTrackedRevision(rowIndex)?.kind
+}
+
+function rowTrackedId(rowIndex: number): string | undefined {
+  return rowTrackedRevision(rowIndex)?.stableId
+}
+
+function cellTrackedKind(rowIndex: number, cellIndex: number): string | undefined {
+  return cellTrackedRevision(rowIndex, cellIndex)?.kind
+}
+
+function cellTrackedId(rowIndex: number, cellIndex: number): string | undefined {
+  return cellTrackedRevision(rowIndex, cellIndex)?.stableId
+}
+
+function rowClass(rowIndex: number): string | undefined {
+  const kind = rowTrackedKind(rowIndex)
+  return kind === "insertion" || kind === "deletion"
+    ? `docx-table-row--${kind}`
+    : undefined
 }
 
 const tableStyle = computed(() => ({
-  width: "100%",
-  borderCollapse: "collapse" as const,
+  width: `${Math.max(1, Math.round(renderedTableWidthPx.value))}px`,
+  maxWidth: "100%",
   tableLayout: "fixed" as const,
+  ...tableElementBorderStyle(props.table),
 }))
 
 // ── Cell helpers ───────────────────────────────────────────────────
-function rowStyle(_row: any, _ri: number): Record<string, any> {
-  return {}
+function rowSlicedFrame(rowIndex: number) {
+  return props.rowSlice?.rowIndex === rowIndex ? props.rowSlice : undefined
 }
 
-function cellStyle(cell: any): Record<string, any> {
+function tableCellSliceStyle(rowIndex: number): Record<string, string | number | undefined> {
+  const slice = rowSlicedFrame(rowIndex)
+  if (!slice) return {}
   return {
-    border: "1px solid #d1d5db",
-    padding: "8px",
-    verticalAlign: cell.style?.verticalAlign ?? "top",
+    height: `${Math.max(1, Math.round(slice.sliceHeightPx))}px`,
+    maxHeight: `${Math.max(1, Math.round(slice.sliceHeightPx))}px`,
+    overflow: "hidden",
+    paddingTop: "0px",
+    paddingBottom: "0px",
+  }
+}
+
+function cellParagraphSliceStyle(rowIndex: number): Record<string, string | number | undefined> {
+  const slice = rowSlicedFrame(rowIndex)
+  if (!slice) return {}
+  return { marginTop: `${-Math.max(0, Math.round(slice.startOffsetPx))}px` }
+}
+
+function rowStyle(
+  row: TableRowNode,
+  rowIndex: number
+): Record<string, string | number | undefined> {
+  const style: Record<string, string | number | undefined> = {}
+  const explicitHeightPx = twipsToPixels(row.style?.heightTwips)
+  const heightCss = resolveTableRowHeightCss(row, explicitHeightPx)
+  if (heightCss) Object.assign(style, heightCss)
+  if (row.style?.backgroundColor) style.backgroundColor = row.style.backgroundColor
+  if (row.style?.cantSplit) style.breakInside = "avoid"
+  const trackedKind = rowTrackedKind(rowIndex)
+  if (trackedKind === "deletion") {
+    style.backgroundColor = "rgba(185, 28, 28, 0.07)"
+    style.opacity = 0.72
+  } else if (trackedKind === "insertion") {
+    style.backgroundColor = "rgba(220, 38, 38, 0.08)"
+  }
+  return style
+}
+
+// Border resolution needs the grid columns a cell covers, so a merged cell is
+// treated as one outer edge. The materialized grid already knows them.
+function cellStyle(cell: TableGridCell): Record<string, string | number | undefined> {
+  const startColumnIndex = cell.columnIndex
+  const endColumnIndex = Math.min(
+    Math.max(0, columnCount.value - 1),
+    cell.columnIndex + cell.colSpan - 1
+  )
+  const borders = resolveTableCellBorderCss(
+    props.table.style?.borders,
+    cell.cell.style?.borders,
+    cell.rowIndex,
+    props.table.rows.length,
+    startColumnIndex,
+    endColumnIndex,
+    columnCount.value
+  )
+  const trackedKind = cellTrackedKind(cell.rowIndex, cell.cellIndex)
+  return {
+    ...borders,
+    ...tableSpacingPaddingStyle(
+      mergeTableSpacing(
+        props.table.style?.cellMarginTwips,
+        cell.cell.style?.marginTwips
+      )
+    ),
+    ...resolveTableCellDiagonalOverlayCss(
+      props.table.style?.borders,
+      cell.cell.style?.borders
+    ),
+    verticalAlign: cell.cell.style?.verticalAlign ?? "top",
     minWidth: "0",
-    backgroundColor: cell.style?.backgroundColor as string | undefined,
+    backgroundColor:
+      trackedKind === "deletion"
+        ? "rgba(185, 28, 28, 0.08)"
+        : trackedKind === "insertion"
+        ? "rgba(220, 38, 38, 0.08)"
+        : (cell.cell.style?.backgroundColor as string | undefined),
+    color: trackedKind === "deletion" ? "#b91c1c" : undefined,
+    textDecoration: trackedKind === "deletion" ? "line-through" : undefined,
+    opacity: trackedKind === "deletion" ? 0.8 : undefined,
     wordWrap: "break-word",
     overflowWrap: "break-word",
     wordBreak: "break-word",
   }
 }
 
+// Width a nested table may occupy: the parent cell box minus its padding.
+function cellContentWidthPx(cell: TableGridCell): number | undefined {
+  const endColumnIndex = Math.min(
+    Math.max(0, columnCount.value - 1),
+    cell.columnIndex + cell.colSpan - 1
+  )
+  const padding = resolveTableSpacingPaddingPx(
+    mergeTableSpacing(
+      props.table.style?.cellMarginTwips,
+      cell.cell.style?.marginTwips
+    )
+  )
+  const spannedWidthPx = resolvedColumnWidths.value
+    .slice(cell.columnIndex, endColumnIndex + 1)
+    .reduce((sum, width) => sum + width, 0)
+  return Math.max(1, Math.round(spannedWidthPx - padding.left - padding.right))
+}
+
 function cellParagraphStyle(para: ParagraphNode): Record<string, any> {
   return {
     margin: "0",
-    textAlign: para.style?.align,
+    ...paragraphTypographyStyle(para.style),
     fontWeight: para.style?.headingLevel ? "700" : undefined,
     minHeight: "1em",
     outline: "none",
   }
 }
 
+function cellContainsLayoutInCellFloatingImage(cell: TableGridCell): boolean {
+  return cell.cell.nodes.some((node) =>
+    node.type === "paragraph" &&
+    node.children.some(
+      (child) =>
+        child.type === "image" &&
+        Boolean(child.floating) &&
+        child.floating?.layoutInCell !== false
+    )
+  )
+}
+
 function cellParagraphHtml(
   para: ParagraphNode,
-  ri: number,
-  ci: number,
+  cell: TableGridCell,
   pi: number
 ): string {
   const runOptions: ParagraphRunRenderOptions = {
@@ -289,14 +656,25 @@ function cellParagraphHtml(
     withinHeaderFooter: props.withinHeaderFooter,
     headerFooterRegion: props.headerFooterRegion,
     pageNumberFormat: props.pageNumberFormat,
+    sectionPages: props.sectionPages,
+    resolveStyleRefFieldValue: props.resolveStyleRefFieldValue
+      ? (target: string) =>
+          props.resolveStyleRefFieldValue?.(target, undefined)
+      : undefined,
+    resolveBookmarkFieldValue: props.resolveBookmarkFieldValue,
+    resolveBookmarkPageNumber: props.resolveBookmarkPageNumber,
+    noteMarkerLabels: props.noteMarkerLabels,
+    tableCellLayout: { widthPx: cellContentWidthPx(cell) },
+    imageAltText: m.value.docx.image.alt,
+    imageMissingText: m.value.docx.image.missing,
   }
   const rendered = renderParagraphRuns(
     para,
-    `table-${props.tableIndex}-r${ri}-c${ci}-p${pi}`,
+    `table-${domTableIndex.value}-r${cell.rowIndex}-c${cell.cellIndex}-p${pi}`,
     props.documentTheme,
     undefined,
     undefined,
-    undefined,
+    props.floatingPageOriginPx,
     undefined,
     props.pageNumber,
     props.totalPages,
@@ -310,17 +688,161 @@ function isCellActive(rowIndex: number, cellIndex: number): boolean {
   if (!props.editable || !props.controller) return false
   const sel = props.controller.selection
   if (sel.kind === "table-cell") {
-    return sel.tableIndex === props.tableIndex &&
-      sel.rowIndex === rowIndex &&
-      sel.cellIndex === cellIndex
+    if (
+      sel.tableIndex !== props.tableIndex ||
+      selectionRuntimeKey(sel) !== props.tableRuntimeKey
+    ) {
+      return false
+    }
+    if (sel.cellRange) {
+      return cellInsideRange(rowIndex, cellIndex, sel.cellRange)
+    }
+    return sel.rowIndex === rowIndex && sel.cellIndex === cellIndex
   }
   return false
+}
+
+function cellInsideRange(
+  rowIndex: number,
+  cellIndex: number,
+  range: DocxTableCellSelectionRange
+): boolean {
+  const minRow = Math.min(range.anchorRowIndex, range.focusRowIndex)
+  const maxRow = Math.max(range.anchorRowIndex, range.focusRowIndex)
+  const minCell = Math.min(range.anchorCellIndex, range.focusCellIndex)
+  const maxCell = Math.max(range.anchorCellIndex, range.focusCellIndex)
+  return (
+    rowIndex >= minRow &&
+    rowIndex <= maxRow &&
+    cellIndex >= minCell &&
+    cellIndex <= maxCell
+  )
+}
+
+function nestedTableRuntimeKey(
+  rowIndex: number,
+  cellIndex: number,
+  contentIndex: number
+): string {
+  if (props.tableRuntimeKey) {
+    return `${props.tableRuntimeKey}-nested-table-${rowIndex}-${cellIndex}-${contentIndex}`
+  }
+  return `body-cell-nested-table-${props.tableIndex}-${rowIndex}-${cellIndex}-${contentIndex}`
+}
+
+function selectCell(rowIndex: number, cellIndex: number): void {
+  if (!props.controller) return
+  if (props.tableRuntimeKey) {
+    const nestedController = props.controller as DocxEditorController &
+      RuntimeKeyTableCellController
+    if (nestedController.selectTableCellByRuntimeKey) {
+      nestedController.selectTableCellByRuntimeKey(
+        props.tableRuntimeKey,
+        rowIndex,
+        cellIndex
+      )
+      return
+    }
+  }
+  props.controller.selectTableCell(props.tableIndex, rowIndex, cellIndex)
 }
 
 // ── Event handlers ─────────────────────────────────────────────────
 function onCellClick(rowIndex: number, cellIndex: number, _event: MouseEvent): void {
   if (!props.editable || !props.controller || isReadOnly.value) return
-  props.controller.selectTableCell(props.tableIndex, rowIndex, cellIndex)
+  const sel = props.controller.selection
+  if (
+    sel.kind === "table-cell" &&
+    sel.tableIndex === props.tableIndex &&
+    selectionRuntimeKey(sel) === props.tableRuntimeKey &&
+    sel.cellRange &&
+    selectionRangeHasMultipleCells(sel.cellRange) &&
+    cellInsideRange(rowIndex, cellIndex, sel.cellRange)
+  ) {
+    return
+  }
+  selectCell(rowIndex, cellIndex)
+}
+
+function selectionRangeHasMultipleCells(range: DocxTableCellSelectionRange): boolean {
+  return (
+    range.anchorRowIndex !== range.focusRowIndex ||
+    range.anchorCellIndex !== range.focusCellIndex
+  )
+}
+
+const rangeAnchor = ref<{ rowIndex: number; cellIndex: number } | null>(null)
+const isRangeSelecting = ref(false)
+let activeRangeMouseUp: (() => void) | undefined
+
+function selectCellRange(
+  anchor: { rowIndex: number; cellIndex: number },
+  focus: { rowIndex: number; cellIndex: number }
+): void {
+  if (!props.controller) return
+  props.controller.selectTableCellRange(props.tableIndex, {
+    tableIndex: props.tableIndex,
+    anchorRowIndex: anchor.rowIndex,
+    anchorCellIndex: anchor.cellIndex,
+    focusRowIndex: focus.rowIndex,
+    focusCellIndex: focus.cellIndex,
+  }, props.tableRuntimeKey)
+}
+
+function finishRangeSelection(): void {
+  isRangeSelecting.value = false
+  rangeAnchor.value = null
+  if (activeRangeMouseUp) {
+    document.removeEventListener("mouseup", activeRangeMouseUp)
+    activeRangeMouseUp = undefined
+  }
+}
+
+function onCellMouseDown(
+  rowIndex: number,
+  cellIndex: number,
+  event: MouseEvent
+): void {
+  if (!props.editable || !props.controller || isReadOnly.value) return
+  if (props.tableRuntimeKey) return
+  if (event.button !== 0) return
+  const target = event.target as HTMLElement | undefined
+  const insideEditable = target?.closest?.("[contenteditable='true']")
+  if (insideEditable && !event.shiftKey) return
+
+  const selection = props.controller.selection
+  const currentRange =
+    selection.kind === "table-cell" &&
+    selection.tableIndex === props.tableIndex &&
+    selectionRuntimeKey(selection) === props.tableRuntimeKey
+      ? selection.cellRange
+      : undefined
+  const anchor = event.shiftKey && currentRange
+    ? { rowIndex: currentRange.anchorRowIndex, cellIndex: currentRange.anchorCellIndex }
+    : { rowIndex, cellIndex }
+
+  event.preventDefault()
+  rangeAnchor.value = anchor
+  isRangeSelecting.value = true
+  selectCellRange(anchor, { rowIndex, cellIndex })
+
+  if (!activeRangeMouseUp) {
+    activeRangeMouseUp = () => finishRangeSelection()
+    document.addEventListener("mouseup", activeRangeMouseUp)
+  }
+}
+
+function onCellMouseEnter(
+  rowIndex: number,
+  cellIndex: number,
+  event: MouseEvent
+): void {
+  if (!isRangeSelecting.value || !rangeAnchor.value) return
+  if (event.buttons === 0) {
+    finishRangeSelection()
+    return
+  }
+  selectCellRange(rangeAnchor.value, { rowIndex, cellIndex })
 }
 
 function onCellInput(
@@ -332,7 +854,17 @@ function onCellInput(
 ): void {
   if (!props.editable || !props.controller || isReadOnly.value) return
   const target = event.target as HTMLElement
-  const text = target.textContent ?? ""
+  const text = readCellParagraphDomText(target)
+  const key = cellDraftKey(rowIndex, cellIndex, paragraphIndex)
+  const existing = cellDrafts.get(key)
+  const paragraph = cellParagraphAt(rowIndex, cellIndex, paragraphIndex)
+  if (paragraph) {
+    cellDrafts.set(key, {
+      text,
+      baseText: existing?.baseText ?? paragraphText(paragraph),
+      documentLoadNonce: existing?.documentLoadNonce ?? props.controller.documentLoadNonce,
+    })
+  }
   emit("cellInput", tableIndex, rowIndex, cellIndex, paragraphIndex, text)
 }
 
@@ -343,25 +875,38 @@ function onCellFocus(
   paragraphIndex: number
 ): void {
   if (!props.editable || !props.controller || isReadOnly.value) return
-  props.controller.selectTableCell(tableIndex, rowIndex, cellIndex)
+  selectCell(rowIndex, cellIndex)
   emit("cellFocus", tableIndex, rowIndex, cellIndex, paragraphIndex)
 }
 
 function onCellBlur(
-  tableIndex: number,
+  _tableIndex: number,
   rowIndex: number,
   cellIndex: number,
-  _paragraphIndex: number
+  paragraphIndex: number,
+  event?: Event
 ): void {
   if (!props.editable || !props.controller || isReadOnly.value) return
-  // Commit cell text
-  const cellEl = tableEl.value?.querySelector(
-    `[data-docx-table-cell="true"][data-docx-table-row-index="${rowIndex}"][data-docx-table-cell-index="${cellIndex}"]`
+  const key = cellDraftKey(rowIndex, cellIndex, paragraphIndex)
+  const draft = cellDrafts.get(key)
+  cellDrafts.delete(key)
+  if (draft && draft.documentLoadNonce !== props.controller.documentLoadNonce) return
+
+  const target = event?.target as HTMLElement | undefined
+  const runtimeKeySelector = props.tableRuntimeKey
+    ? `[data-docx-table-runtime-key="${props.tableRuntimeKey}"]`
+    : ""
+  const element = target ?? tableEl.value?.querySelector<HTMLElement>(
+    `[data-docx-table-cell-paragraph-host="true"]${runtimeKeySelector}` +
+    `[data-docx-table-row-index="${rowIndex}"]` +
+    `[data-docx-table-cell-index="${cellIndex}"]` +
+    `[data-docx-paragraph-index="${paragraphIndex}"]`
   )
-  if (cellEl) {
-    const text = cellEl.textContent ?? ""
-    props.controller.commitTableCellText(tableIndex, rowIndex, cellIndex, text)
-  }
+  const text = element ? readCellParagraphDomText(element) : draft?.text
+  if (text === undefined) return
+  commitCellParagraph(rowIndex, cellIndex, paragraphIndex, text)
+  // Blur closes the typing burst: the next edit in this cell is a new undo step.
+  props.controller.endTextCommitBurst?.()
 }
 
 function onColumnResizeStart(boundaryIndex: number, event: MouseEvent): void {
@@ -417,7 +962,8 @@ function cleanupColumnResize(commit: boolean): void {
 }
 
 function onAddRow(): void {
-  props.controller?.insertTableRow(props.tableIndex, props.table.rows.length, "below")
+  const lastRowIndex = Math.max(0, props.table.rows.length - 1)
+  props.controller?.insertTableRow(props.tableIndex, lastRowIndex, "below")
 }
 
 watch(
@@ -432,7 +978,52 @@ watch([() => props.editable, isReadOnly], ([editable, readOnly]) => {
   if (!editable || readOnly) cleanupColumnResize(false)
 })
 
-onUnmounted(() => cleanupColumnResize(false))
+function emitMeasuredRowHeights(): void {
+  const root = tableEl.value
+  if (!root || typeof root.querySelectorAll !== "function") return
+  const rowHeightsPx: number[] = []
+  root
+    .querySelectorAll<HTMLElement>("tbody tr[data-docx-table-row-index]")
+    .forEach((rowElement) => {
+      const rowIndex = Number(rowElement.getAttribute("data-docx-table-row-index"))
+      const heightPx = rowElement.offsetHeight
+      if (Number.isSafeInteger(rowIndex) && heightPx > 0) {
+        rowHeightsPx[rowIndex] = Math.round(heightPx)
+      }
+    })
+  if (rowHeightsPx.some((heightPx) => Number.isFinite(heightPx) && heightPx > 0)) {
+    emit("measure", props.tableIndex, rowHeightsPx)
+  }
+}
+
+watch(
+  () => [props.table.rows, props.maxAvailableWidthPx] as const,
+  () => { void nextTick(emitMeasuredRowHeights) },
+  { flush: "post" },
+)
+
+onMounted(() => {
+  unregisterDraftFlusher = props.controller?.registerTextDraftFlusher(flushCellDrafts)
+  void nextTick(emitMeasuredRowHeights)
+  if (typeof ResizeObserver !== "undefined" && tableEl.value) {
+    const observer = new ResizeObserver(() => emitMeasuredRowHeights())
+    observer.observe(tableEl.value)
+    rowResizeObserver = observer
+  }
+})
+
+onBeforeUnmount(() => {
+  flushCellDrafts()
+  rowResizeObserver?.disconnect()
+  rowResizeObserver = undefined
+})
+
+onUnmounted(() => {
+  unregisterDraftFlusher?.()
+  unregisterDraftFlusher = undefined
+  finishRangeSelection()
+  cleanupColumnResize(false)
+})
 </script>
 
 <style scoped>
@@ -473,13 +1064,10 @@ onUnmounted(() => cleanupColumnResize(false))
 }
 
 .docx-table-host-table {
-  width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
 }
 .docx-table-cell {
-  border: 1px solid #d1d5db;
-  padding: 8px;
   vertical-align: top;
   min-width: 0;
   word-wrap: break-word;
@@ -488,6 +1076,28 @@ onUnmounted(() => cleanupColumnResize(false))
 }
 .docx-table-cell--active {
   background: rgba(59, 130, 246, 0.04);
+}
+.docx-table-row--insertion .docx-table-cell {
+  box-shadow: inset 0 2px 0 rgba(220, 38, 38, 0.55);
+}
+.docx-table-row--deletion .docx-table-cell {
+  text-decoration: line-through;
+}
+.docx-table-row--deletion .docx-table-cell-paragraph {
+  opacity: 0.72;
+}
+.docx-table-cell--deletion {
+  text-decoration: line-through;
+}
+.docx-table-cell--insertion {
+  box-shadow: inset 0 2px 0 rgba(220, 38, 38, 0.55);
+}
+.docx-table-cell--merge-fallback {
+  background: transparent;
+}
+.docx-table-cell--contain-floating {
+  position: relative;
+  overflow: hidden;
 }
 .docx-table-cell-paragraph {
   margin: 0;

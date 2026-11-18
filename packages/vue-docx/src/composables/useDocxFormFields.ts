@@ -15,8 +15,9 @@ export interface UseDocxFormFieldsResult {
   formFields: DocxSelectedFormField[]
   selectedFormField?: DocxSelectedFormField
   selectFormField: (location?: DocxFormFieldLocation) => void
-  setFormFieldValue: (location: DocxFormFieldLocation, value: string) => void
+  setFormFieldValue: (location: DocxFormFieldLocation, value: string) => boolean
   toggleFormCheckbox: (location: DocxFormFieldLocation) => void
+  endFormFieldEdit: (location?: DocxFormFieldLocation) => void
   updateFormFieldWidget: (
     location: DocxFormFieldLocation,
     patch: Partial<NonNullable<FormFieldRunNode["widget"]>>
@@ -34,6 +35,7 @@ export function useDocxFormFields(
     | "selectFormField"
     | "setFormFieldValue"
     | "toggleFormCheckbox"
+    | "endFormFieldEdit"
     | "updateFormFieldWidget"
   >
 ): UseDocxFormFieldsResult {
@@ -50,6 +52,7 @@ export function useDocxFormFields(
     selectFormField: editor.selectFormField,
     setFormFieldValue: editor.setFormFieldValue,
     toggleFormCheckbox: editor.toggleFormCheckbox,
+    endFormFieldEdit: editor.endFormFieldEdit,
     updateFormFieldWidget: editor.updateFormFieldWidget,
     updateSelectedFormFieldWidget,
   }

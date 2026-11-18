@@ -9,6 +9,11 @@ import type {
   ParagraphNode,
   TextRunNode
 } from "../../engine/types";
+import {
+  normalizeBorderType,
+  ooxmlBorderTypeToCss,
+  ooxmlBorderWidthPx
+} from "../../engine/border-css";
 import { HIGHLIGHT_TO_CSS, SCRIPT_FONT_SCALE } from "./constants";
 import type { DocxDocumentTheme } from "./editor-types";
 import type { ParagraphTrackedInlineChange } from "./tracked-changes";
@@ -68,35 +73,61 @@ export function themedRunColor(
   return color;
 }
 
-export function cssFontFamily(fontFamily?: string): string | undefined {
-  if (!fontFamily) {
+function fontFamilyTokens(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((part) => part.trim().replace(/^['"]+|['"]+$/g, ""))
+    .filter(
+      (part) =>
+        part.length > 0 &&
+        !/^(sans-serif|serif|monospace)$/i.test(part)
+    );
+}
+
+export function cssFontFamily(
+  fontFamily?: string,
+  options?: { eastAsia?: string; complexScript?: string }
+): string | undefined {
+  const families: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of [
+    fontFamily,
+    options?.eastAsia,
+    options?.complexScript
+  ]) {
+    for (const token of fontFamilyTokens(candidate)) {
+      const key = token.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      families.push(token);
+    }
+  }
+
+  if (families.length === 0) {
     return undefined;
   }
 
-  const trimmed = fontFamily.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-
-  if (trimmed.includes(",")) {
-    return trimmed;
-  }
-
-  const normalized = trimmed.replace(/^['"]+|['"]+$/g, "");
-  if (!normalized) {
-    return undefined;
-  }
-
-  const escaped = normalized.replace(/"/g, '\\"');
-  const familyToken = /\s/.test(escaped) ? `"${escaped}"` : escaped;
-  const lower = normalized.toLowerCase();
+  const lower = families.join(" ").toLowerCase();
   const genericFamily = /(mono|consolas|courier|menlo|code)/.test(lower)
     ? "monospace"
-    : /(times|cambria|georgia|garamond|baskerville|serif)/.test(lower)
+    : /(times|cambria|georgia|garamond|baskerville|serif|simsun|song|mincho|ming)/.test(
+        lower
+      )
     ? "serif"
     : "sans-serif";
 
-  return `${familyToken}, ${genericFamily}`;
+  const tokens = families.map((family) => {
+    const escaped = family.replace(/"/g, '\\"');
+    return /\s/.test(escaped) ? `"${escaped}"` : escaped;
+  });
+
+  return [...tokens, genericFamily].join(", ");
 }
 
 export function runStyleToCss(
@@ -118,27 +149,51 @@ export function runStyleToCss(
   ].filter(Boolean);
   const textDecoration =
     textDecorationTokens.length > 0 ? textDecorationTokens.join(" ") : "none";
-  const borderType = style?.runBorder?.type?.trim().toLowerCase();
+  const decorationVariant = style?.underline
+    ? style.underlineStyle
+    : style?.strike
+    ? style.strikeStyle
+    : undefined;
+  const decorationStyle =
+    decorationVariant === "double"
+      ? "double"
+      : decorationVariant === "dotted" || decorationVariant === "dottedHeavy"
+      ? "dotted"
+      : decorationVariant === "dash" ||
+        decorationVariant === "dashedHeavy" ||
+        decorationVariant === "dashLong" ||
+        decorationVariant === "dashLongHeavy" ||
+        decorationVariant === "dotDash" ||
+        decorationVariant === "dashDotHeavy" ||
+        decorationVariant === "dotDotDash" ||
+        decorationVariant === "dashDotDotHeavy"
+      ? "dashed"
+      : decorationVariant === "wave" ||
+        decorationVariant === "wavyHeavy" ||
+        decorationVariant === "wavyDouble"
+      ? "wavy"
+      : undefined;
+  const decorationThickness =
+    decorationVariant === "thick" ||
+    decorationVariant === "dottedHeavy" ||
+    decorationVariant === "dashedHeavy" ||
+    decorationVariant === "dashLongHeavy" ||
+    decorationVariant === "dashDotHeavy" ||
+    decorationVariant === "dashDotDotHeavy" ||
+    decorationVariant === "wavyHeavy"
+      ? "3px"
+      : decorationVariant === "wavyDouble"
+      ? "2px"
+      : undefined;
+  const borderType = normalizeBorderType(style?.runBorder?.type);
+  const borderMapping = ooxmlBorderTypeToCss(borderType);
   const borderStyle =
-    borderType === "single"
-      ? "solid"
-      : borderType === "nil" || borderType === "none"
-      ? undefined
-      : borderType;
+    borderMapping && borderMapping.style !== "none"
+      ? borderMapping.style
+      : undefined;
   const borderWidthPx =
-    Number.isFinite(style?.runBorder?.sizeEighthPt) &&
-    (style?.runBorder?.sizeEighthPt as number) > 0
-      ? Math.max(
-          1,
-          Number(
-            (
-              ((style?.runBorder?.sizeEighthPt as number) / 8) *
-              (96 / 72)
-            ).toFixed(2)
-          )
-        )
-      : borderStyle
-      ? 1
+    borderStyle && style?.runBorder
+      ? Math.max(1, ooxmlBorderWidthPx(style.runBorder))
       : undefined;
   const borderPaddingPt =
     Number.isFinite(style?.runBorder?.spacePt) &&
@@ -150,6 +205,11 @@ export function runStyleToCss(
     fontWeight: style?.bold ? 700 : undefined,
     fontStyle: style?.italic ? "italic" : undefined,
     textDecoration,
+    textDecorationStyle: decorationStyle,
+    textDecorationThickness: decorationThickness,
+    textTransform: style?.caps ? "uppercase" : undefined,
+    fontVariantCaps:
+      !style?.caps && style?.smallCaps ? "small-caps" : undefined,
     color: themedRunColor(style?.color, documentTheme),
     backgroundColor:
       style?.backgroundColor ?? resolveHighlightColor(style?.highlight),
@@ -162,14 +222,53 @@ export function runStyleToCss(
       : hasScriptVerticalAlign
       ? `${SCRIPT_FONT_SCALE}em`
       : undefined,
-    fontFamily: cssFontFamily(style?.fontFamily),
+    fontFamily: cssFontFamily(style?.fontFamily, {
+      eastAsia: style?.fontFamilyEastAsia,
+      complexScript: style?.fontFamilyComplexScript
+    }),
     letterSpacing: Number.isFinite(style?.characterSpacingTwips)
       ? `${Number(
           ((style?.characterSpacingTwips as number) / 20).toFixed(3)
         )}pt`
       : undefined,
+    direction:
+      style?.direction === "rtl"
+        ? "rtl"
+        : style?.direction === "ltr"
+        ? "ltr"
+        : undefined,
+    unicodeBidi: style?.direction ? "embed" : undefined,
+    textShadow: style?.textShadow
+      ? `${style.textShadow.offsetXPt ?? 1}pt ${
+          style.textShadow.offsetYPt ?? 1
+        }pt ${style.textShadow.blurPt ?? 1}pt ${
+          style.textShadow.color ?? "rgba(0, 0, 0, 0.35)"
+        }`
+      : undefined,
+    WebkitTextStroke: style?.textOutline
+      ? `${style.textOutline.widthPt ?? 0.5}pt ${
+          style.textOutline.color ?? "currentColor"
+        }`
+      : undefined,
     verticalAlign,
-    display: borderStyle ? "inline-block" : undefined,
+    display:
+      borderStyle ||
+      (Number.isFinite(style?.characterScalePercent) &&
+        (style?.characterScalePercent as number) !== 100)
+        ? "inline-block"
+        : undefined,
+    transform:
+      Number.isFinite(style?.characterScalePercent) &&
+      (style?.characterScalePercent as number) !== 100
+        ? `scaleX(${Number(
+            ((style?.characterScalePercent as number) / 100).toFixed(3)
+          )})`
+        : undefined,
+    transformOrigin:
+      Number.isFinite(style?.characterScalePercent) &&
+      (style?.characterScalePercent as number) !== 100
+        ? "left center"
+        : undefined,
     borderStyle,
     borderWidth: borderWidthPx ? `${borderWidthPx}px` : undefined,
     borderColor: borderStyle
@@ -210,33 +309,44 @@ export function mergeTextDecorations(
   decoration: string
 ): string {
   const tokens = new Set<string>();
-  if (typeof baseDecoration === "string") {
-    baseDecoration
+  // `none` is exclusive in CSS: "none underline" is invalid and the whole
+  // declaration is dropped. Only emit it when no real decoration remains.
+  const addTokens = (value: unknown): void => {
+    if (typeof value !== "string") return;
+    value
       .split(/\s+/)
       .map((token) => token.trim())
-      .filter(Boolean)
+      .filter((token) => token && token !== "none")
       .forEach((token) => tokens.add(token));
-  }
+  };
 
-  decoration
-    .split(/\s+/)
-    .map((token) => token.trim())
-    .filter(Boolean)
-    .forEach((token) => tokens.add(token));
+  addTokens(baseDecoration);
+  addTokens(decoration);
 
   return tokens.size > 0 ? Array.from(tokens).join(" ") : "none";
 }
 
 export function trackedInlineStyle(
   baseStyle: Record<string, string | number | undefined>,
-  change: ParagraphTrackedInlineChange | undefined
+  change: ParagraphTrackedInlineChange | undefined,
+  documentTheme: DocxDocumentTheme = "light"
 ): Record<string, string | number | undefined> {
   if (!change) {
     return baseStyle;
   }
 
   if (change.kind === "insertion" || change.kind === "move-to") {
-    const accentColor = change.kind === "move-to" ? "#70ad47" : "#dc2626";
+    // Insertions use a distinct green accent (the gutter already uses green
+    // for inserted content) plus an underline, so they remain readable
+    // without relying on colour alone. Deletions stay red and struck through.
+    const accentColor =
+      change.kind === "move-to"
+        ? documentTheme === "dark"
+          ? "#86efac"
+          : "#70ad47"
+        : documentTheme === "dark"
+        ? "#4ade80"
+        : "#15803d";
     return {
       ...baseStyle,
       color: accentColor,
@@ -244,6 +354,20 @@ export function trackedInlineStyle(
         baseStyle.textDecoration,
         "underline"
       ),
+      textDecorationColor: accentColor,
+    };
+  }
+
+  if (change.kind === "deletion" || change.kind === "move-from") {
+    const accentColor = change.kind === "move-from" ? "#70ad47" : "#b91c1c";
+    return {
+      ...baseStyle,
+      color: accentColor,
+      textDecoration: mergeTextDecorations(
+        baseStyle.textDecoration,
+        "line-through"
+      ),
+      opacity: 0.95,
     };
   }
 
@@ -255,13 +379,15 @@ export function trackedDeletedStyle(
   baseRunStyle?: TextRunNode["style"] | FormFieldRunNode["style"]
 ): Record<string, string | number | undefined> {
   const baseStyle = runStyleToCss(baseRunStyle, documentTheme);
+  const accentColor = documentTheme === "dark" ? "#fca5a5" : "#b91c1c";
   return {
     ...baseStyle,
-    color: documentTheme === "dark" ? "#fca5a5" : "#b91c1c",
+    color: accentColor,
     textDecoration: mergeTextDecorations(
       baseStyle.textDecoration,
       "line-through"
     ),
+    textDecorationColor: accentColor,
     whiteSpace: baseStyle.whiteSpace ?? "pre-wrap",
     lineHeight: "inherit",
     opacity: 0.95,
@@ -360,18 +486,32 @@ export function numberingMarkerStyle(
     ? 0
     : 2;
 
+  const labelAlignment = numberingLabel.alignment;
+  const justifyContent =
+    labelAlignment === "left" ||
+    labelAlignment === "start" ||
+    labelAlignment === "low"
+      ? "flex-start"
+      : labelAlignment === "center"
+      ? "center"
+      : "flex-end";
+
   return {
     ...(baseStyle ?? {}),
     display: "inline-flex",
     alignItems: "baseline",
-    justifyContent: "flex-end",
+    justifyContent,
     verticalAlign: "baseline",
     width: markerBoxWidthPx ? `${markerBoxWidthPx}px` : undefined,
     minWidth: markerBoxWidthPx ? `${markerBoxWidthPx}px` : "1.1em",
     marginRight: markerGapPx,
     whiteSpace: "pre",
     fontFamily: cssFontFamily(
-      numberingLabel.fontFamily ?? numberingLabel.style?.fontFamily
+      numberingLabel.fontFamily ?? numberingLabel.style?.fontFamily,
+      {
+        eastAsia: numberingLabel.style?.fontFamilyEastAsia,
+        complexScript: numberingLabel.style?.fontFamilyComplexScript
+      }
     ),
     color: themedRunColor(
       numberingLabel.color ?? numberingLabel.style?.color,

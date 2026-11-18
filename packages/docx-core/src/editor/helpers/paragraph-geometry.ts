@@ -12,6 +12,7 @@ import type {
   TableNode,
   TextRunNode
 } from "../../engine/types";
+import { paragraphHasSectionBreak } from "../../engine/section-break";
 import type { DocumentLayoutMetrics } from "../../viewer/section-layout";
 import {
   headingLevelFromStyleLabel,
@@ -535,7 +536,7 @@ export function paragraphHasActiveNumbering(paragraph: ParagraphNode): boolean {
 export function paragraphContainsSectionBreakProperties(
   paragraph: ParagraphNode
 ): boolean {
-  return /<w:sectPr\b/i.test(paragraph.sourceXml ?? "");
+  return paragraphHasSectionBreak(paragraph);
 }
 
 export function paragraphAbsoluteFloatingAnchorsDependOnParagraphFlow(
@@ -604,10 +605,28 @@ export function isLikelyFullPageCoverFloatingImage(
   pageWidthPx: number,
   pageHeightPx: number
 ): boolean {
-  return likelyFullPageCoverImageRelativeToContentBox(
-    image,
-    pageWidthPx,
-    pageHeightPx
+  if (!shouldRenderAbsoluteFloatingImage(image) || !image.floating) {
+    return false;
+  }
+
+  const floating = image.floating;
+  if (
+    floating.behindDocument !== true ||
+    (floating.wrapType ?? "none") !== "none"
+  ) {
+    return false;
+  }
+
+  const widthPx = Math.max(0, Math.round(image.widthPx ?? 0));
+  const heightPx = Math.max(0, Math.round(image.heightPx ?? 0));
+  const safePageWidthPx = Math.max(1, Math.round(pageWidthPx));
+  const safePageHeightPx = Math.max(1, Math.round(pageHeightPx));
+
+  // Cover art can be anchored to the page, margin, column or paragraph; the
+  // rendered page surface anchors it to the paper either way.
+  return (
+    widthPx >= safePageWidthPx * 0.8 &&
+    heightPx >= safePageHeightPx * 0.7
   );
 }
 

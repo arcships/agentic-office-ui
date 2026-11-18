@@ -6,7 +6,10 @@ import type { DocxTextRange } from "@arcships/docx-core"
 import { paragraphText } from "@arcships/docx-core"
 import type { EditorCore } from "./editor-shared"
 
-export function createEditorClipboard(ctx: EditorCore) {
+export function createEditorClipboard(
+  ctx: EditorCore,
+  insertTextAtSelection: (text: string, range?: DocxTextRange) => DocxTextRange | undefined,
+) {
   // ── resolveSelectedTextForRange ──────────────────────────────────
   function resolveSelectedTextForRange(range?: DocxTextRange): string {
     if (!range) return ""
@@ -100,7 +103,7 @@ export function createEditorClipboard(ctx: EditorCore) {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
       try {
         await navigator.clipboard.writeText(text)
-        ctx.status.value = "Copied to clipboard"
+        ctx.status.value = ctx.statusMessage("copied")
       } catch {
         // Clipboard write failed — silently ignore
       }
@@ -108,33 +111,24 @@ export function createEditorClipboard(ctx: EditorCore) {
   }
 
   // ── paste ────────────────────────────────────────────────────────
+  // Inserts clipboard text at the active caret/selection. Reports success
+  // only when the model actually changed.
   const paste = async (): Promise<void> => {
     if (typeof navigator === "undefined" || !navigator.clipboard?.readText) return
 
+    let text = ""
     try {
-      const text = await navigator.clipboard.readText()
-      if (!text) return
-
-      // Insert pasted text at current selection — replace if expanded, insert at cursor if collapsed
-      const activeRange = ctx.activeTextRange.value
-      if (activeRange) {
-        // Will be handled by component via replaceExpandedSelection
-        ctx.status.value = "Pasted from clipboard"
-        return
-      }
-
-      // No active range — append a paragraph
-      applyPastedText(text)
+      text = await navigator.clipboard.readText()
     } catch {
       // Clipboard read failed — silently ignore
+      return
     }
-  }
+    if (!text) return
 
-  // Helper: append pasted text as new paragraph
-  function applyPastedText(text: string): void {
-    // Component-level: dispatch text to be inserted via replaceExpandedSelection
-    // Store pasted text for component to consume
-    ;(ctx as any)._pendingPasteText = text
+    const replaced = insertTextAtSelection(text)
+    if (!replaced) return
+
+    ctx.status.value = ctx.statusMessage("pasted")
   }
 
   return { copy, paste, resolveSelectedTextForRange }

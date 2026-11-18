@@ -13,6 +13,18 @@ import { PptxViewer } from "@arcships/vue-pptx"
 import "@arcships/vue-pptx/style.css"
 ```
 
+## 本地化
+
+`PptxViewer` 接受 `locale`（默认 `"en"`，内置 `"zh-CN"`）与 `messages` 覆盖。用户可见文案和 aria-label 来自 `@arcships/office-interaction` 的共享消息目录：
+
+```vue
+<PptxViewer
+  :source="source"
+  locale="zh-CN"
+  :messages="{ pptx: { viewer: { search: '查找' } } }"
+/>
+```
+
 ## 组件边界
 
 Vue 包负责：
@@ -30,7 +42,9 @@ Vue 包不负责：
 - 合并动画属性；
 - 保存独立于控制器的第二份播放状态。
 
-`PptxViewer` 默认以纵向连续页面浏览。传入 `mode="present"` 后切换为单页播放，并可使用下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏；模板引用也暴露同一组公开方法。
+`PptxViewer` 默认以纵向连续页面浏览。传入 `mode="present"` 后切换为单页播放，并可使用下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏；模板引用也暴露同一组公开方法。切换浏览/演示模式会保留当前页，全屏时自动占满屏幕，演示模式按幻灯片比例等比缩放并留黑边。
+
+界面状态通过 `data-state` 暴露：`empty`、`waiting`、`loading`、`ready`、`cancelled` 和 `error`。单页渲染失败不再锁死查看器：上一页保持可见，顶部提示失败页并提供“重试/跳过”；加载超时或取消会进入可重试状态。文档 `warnings`（如不支持的演讲者备注）显示在提示条中，可用 `warnings` 插槽替换，或用 `showWarnings=false` 隐藏。
 
 ## 最小组合方式
 

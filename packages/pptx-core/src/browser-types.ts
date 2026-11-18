@@ -54,13 +54,35 @@ export interface PptxPreviewSessionOptions {
 
 export type PptxApproximationPolicy = "off" | "safe"
 
+/**
+ * URL policy applied to external media. It mirrors the shared office URL policy
+ * without the `fetch` hook, because external media is played by the browser.
+ */
+export interface PptxExternalMediaUrlPolicy {
+  enabled?: boolean
+  baseUrl?: string
+  allowRelativeUrl?: boolean
+  allowedProtocols?: readonly string[]
+  allowedOrigins?: readonly string[]
+  allowHttpOnLocalhost?: boolean
+}
+
 export interface PptxDocumentSessionOptions extends PptxPreviewSessionOptions {
   approximation?: PptxApproximationPolicy
+  /** External media stays reported but unloaded unless this is `allowed`. */
   externalMedia?: "disabled" | "allowed"
+  /**
+   * URL policy that authorizes external media. `externalMedia: "allowed"` without
+   * a policy keeps every external target blocked, so a deck can never trigger
+   * arbitrary http(s) requests on its own.
+   */
+  externalMediaUrlPolicy?: PptxExternalMediaUrlPolicy
 }
 
 export interface PptxPreviewSession {
   readonly document: PptxPreviewDocument | null
+  /** Effective limits of the latest open request, including per-open tightening. */
+  readonly limits: Readonly<PptxPreviewLimits>
   readonly currentSlideIndex: number
   readonly zoomPercent: number
   open(source: PptxPreviewSource, options?: PptxPreviewOpenOptions): Promise<PptxPreviewDocument>
@@ -70,6 +92,12 @@ export interface PptxPreviewSession {
   highlightSearchResult(result: PptxSearchResult): Promise<PptxDisposableHandle | null>
   clearSearchHighlights(): void
   setZoom(percent: number): Promise<void>
+  /**
+   * Re-render the current view so text is measured again.
+   * Hosts call this after external layout inputs change, such as web fonts
+   * finishing loading after the first paint.
+   */
+  refresh?(): Promise<void>
   cancel(): void
   dispose(): void
 }

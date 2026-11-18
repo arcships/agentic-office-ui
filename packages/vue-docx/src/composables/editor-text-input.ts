@@ -2,20 +2,26 @@
 //
 // Extracted from useDocxEditor.ts.
 
-import type { DocModel, ParagraphNode, TextRunNode } from "@arcships/docx-core"
+import type { DocModel, ParagraphNode, TableNode, TextRunNode } from "@arcships/docx-core"
 import type { DocxTextRange, ParagraphLocation } from "@arcships/docx-core"
 import {
-  cloneDocModel,
+  cloneDocModelNodes,
+  cloneDocModelShallow,
+  parseEmbeddedTableRuntimeKey,
   updateParagraphText,
   normalizeTextRange,
   compareTextRangeBoundaries,
   sameParagraphLocation,
   paragraphText,
+  distributeTextAcrossParagraphChildren,
   paragraphIsEffectivelyEmpty,
   rangeCoversEntireDocument,
   firstParagraphLocationInDocument,
   normalizeRangeBoundaryParagraphOffset,
   updateParagraphTextAtLocation,
+  updateTableCellText,
+  updateTableCellParagraphText,
+  updateSectionParagraphTextAtLocation,
   paragraphRangeForMutate,
   fullyCoveredTableNodeIndexesForRange,
   adjustLocationAfterRemovedNodeIndexes,
@@ -24,6 +30,10 @@ import {
   firstTextStyleAtOffset,
   firstRunStyle,
   paragraphHasOnlyTextRuns,
+  remapParagraphCommentRanges,
+  splitParagraphCommentRanges,
+  shiftParagraphCommentRanges,
+  mergeParagraphCommentRanges,
   cloneTextRunWithMetadata,
   splitTextRunsAtOffset,
   cloneTextRangeLocation,
@@ -42,60 +52,236 @@ import {
   ORDERED_LIST_PREFIX_CAPTURE_PATTERN,
 } from "@arcships/docx-core"
 import type { DocxListType } from "@arcships/docx-core"
-import type { EditorCore } from "./editor-shared"
+import type { ApplyModelChangeOptions, EditorCore } from "./editor-shared"
+import { cloneHostTableForRuntimeKey, topLevelNodeIndex } from "./editor-clone-helpers"
+
+function commonPrefixLength(left: string, right: string): number {
+  const limit = Math.min(left.length, right.length)
+  let index = 0
+  while (index < limit && left[index] === right[index]) index += 1
+  return index
+}
 
 export function createEditorTextInput(
   ctx: EditorCore,
-  applyChange: (updater: (current: DocModel) => DocModel, successStatus?: string) => void,
+  applyChange: (
+    updater: (current: DocModel) => DocModel,
+    successStatus?: string,
+    options?: ApplyModelChangeOptions,
+  ) => void,
 ) {
+  // Resolve the style of text inserted by a commit: inherit the run style at
+  // the insertion point and overlay a pending caret style (Ctrl+B before
+  // typing), instead of dropping run formatting or discarding the pending run.
+  const insertedStyleForTextChange = (
+    paragraph: ParagraphNode, previousText: string, nextText: string
+  ): TextRunNode["style"] | undefined => {
+    const pending = cloneTextStyle(ctx.pendingRunStyleSnapshot.value)
+    if (!pending || Object.keys(pending).length === 0) return undefined
+    const baseStyle =
+      firstTextStyleAtOffset(paragraph, commonPrefixLength(previousText, nextText), true) ??
+      firstRunStyle(paragraph)
+    return cloneTextStyle({ ...(baseStyle ?? {}), ...pending })
+  }
+
+  function resolveRuntimeKeyTable(
+    model: DocModel,
+    tableRuntimeKey: string,
+    invalidateSources = false
+  ): TableNode | undefined {
+    const location = parseEmbeddedTableRuntimeKey(tableRuntimeKey)
+    if (!location) return undefined
+
+    const hostTable = model.nodes[location.hostTableIndex]
+    if (!hostTable || hostTable.type !== "table") return undefined
+    if (invalidateSources) hostTable.sourceXml = undefined
+    const hostCell = hostTable.rows[location.hostRowIndex]?.cells[location.hostCellIndex]
+    const rootContent = hostCell?.nodes[location.rootContentIndex]
+    if (!rootContent || rootContent.type !== "table") return undefined
+
+    let table = rootContent
+    if (invalidateSources) table.sourceXml = undefined
+    for (const segment of location.descendants) {
+      const cell = table.rows[segment.rowIndex]?.cells[segment.cellIndex]
+      const content = cell?.nodes[segment.contentIndex]
+      if (!content || content.type !== "table") return undefined
+      table = content
+      if (invalidateSources) table.sourceXml = undefined
+    }
+    return table
+  }
+
+  function writeFirstTableCellText(
+    table: TableNode,
+    rowIndex: number,
+    cellIndex: number,
+    text: string
+  ): boolean {
+    const cell = table.rows[rowIndex]?.cells[cellIndex]
+    if (!cell) return false
+    const para = cell.nodes[0]
+    if (!para || para.type !== "paragraph") {
+      const newPara: ParagraphNode = {
+        type: "paragraph",
+        children: [{ type: "text", text, style: {} }],
+      }
+      if (cell.nodes.length > 0) {
+        cell.nodes[0] = newPara
+      } else {
+        cell.nodes.push(newPara)
+      }
+      table.sourceXml = undefined
+      return true
+    }
+    // Diff instead of replacing the run list: a cell paragraph can carry a
+    // footnote/endnote reference (or an image/form field) that must survive the
+    // text edit, exactly like body paragraphs and index-based cell commits.
+    // Comment offsets are character offsets, so they follow the same diff.
+    const previousText = paragraphText(para)
+    para.commentRanges = remapParagraphCommentRanges(
+      previousText,
+      text,
+      para.commentRanges
+    )
+    para.children = distributeTextAcrossParagraphChildren(para, text)
+    para.sourceXml = undefined
+    table.sourceXml = undefined
+    return true
+  }
+
+  function updateRuntimeKeyParagraph(
+    model: DocModel,
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number,
+    paragraphIndex: number,
+    text: string
+  ): boolean {
+    const table = resolveRuntimeKeyTable(model, tableRuntimeKey, true)
+    if (!table) return false
+    const cell = table.rows[rowIndex]?.cells[cellIndex]
+    const paragraph = cell?.nodes
+      .filter((child): child is ParagraphNode => child.type === "paragraph")[paragraphIndex]
+    if (!paragraph) return false
+    const previousText = paragraphText(paragraph)
+    if (previousText === text) return false
+    const insertedStyle = insertedStyleForTextChange(paragraph, previousText, text)
+    paragraph.children = distributeTextAcrossParagraphChildren(paragraph, text, {
+      insertedStyle,
+    })
+    paragraph.commentRanges = remapParagraphCommentRanges(
+      previousText,
+      text,
+      paragraph.commentRanges
+    )
+    paragraph.sourceXml = undefined
+    table.sourceXml = undefined
+    return true
+  }
+
   // ── commitParagraphText ──────────────────────────────────────────
   const commitParagraphText = (nodeIndex: number, text: string): void => {
-    applyChange((current) => updateParagraphText(current, nodeIndex, text))
+    applyChange(
+      (current) => {
+        const paragraph = current.nodes[nodeIndex]
+        if (!paragraph || paragraph.type !== "paragraph") return current
+        const previousText = paragraphText(paragraph)
+        if (previousText === text) return current
+        const insertedStyle = insertedStyleForTextChange(paragraph, previousText, text)
+        return updateParagraphText(current, nodeIndex, text, { insertedStyle })
+      },
+      undefined,
+      { textCommitKey: `paragraph:${nodeIndex}` },
+    )
   }
 
   // ── commitTableCellText ──────────────────────────────────────────
   const commitTableCellText = (
     tableIndex: number, rowIndex: number, cellIndex: number, text: string
   ): void => {
+    applyChange(
+      (current) => {
+        const node = current.nodes[tableIndex]
+        if (!node || node.type !== "table") return current
+        const cell = node.rows[rowIndex]?.cells[cellIndex]
+        if (!cell) return current
+        const currentText = cell.nodes
+          .filter((child): child is ParagraphNode => child.type === "paragraph")
+          .map((paragraph) => paragraphText(paragraph))
+          .join("\n")
+        if (currentText === text) return current
+        // Diff per paragraph so run styles, images and form fields survive, and
+        // the paragraph/table sourceXml caches are invalidated for export.
+        return updateTableCellText(current, tableIndex, rowIndex, cellIndex, text)
+      },
+      undefined,
+      { textCommitKey: `table-cell:${tableIndex}:${rowIndex}:${cellIndex}:0` },
+    )
+  }
+
+  // ── commitTableCellTextByRuntimeKey ──────────────────────────────
+  const commitTableCellTextByRuntimeKey = (
+    tableRuntimeKey: string, rowIndex: number, cellIndex: number, text: string
+  ): void => {
+    applyChange(
+      (current) => {
+        const nextModel = cloneHostTableForRuntimeKey(current, tableRuntimeKey)
+        if (!nextModel) return current
+        const node = resolveRuntimeKeyTable(nextModel, tableRuntimeKey, true)
+        if (!node) return current
+        return writeFirstTableCellText(node, rowIndex, cellIndex, text)
+          ? nextModel
+          : current
+      },
+      undefined,
+      { textCommitKey: `runtime-table:${tableRuntimeKey}:${rowIndex}:${cellIndex}:0` },
+    )
+  }
+
+  // ── commitTableCellParagraphTextByRuntimeKey ─────────────────────
+  const commitTableCellParagraphTextByRuntimeKey = (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number,
+    paragraphIndex: number,
+    text: string
+  ): void => {
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
-      const node = nextModel.nodes[tableIndex]
-      if (!node || node.type !== "table") return current
-      const cell = node.rows[rowIndex]?.cells[cellIndex]
-      if (!cell) return current
-      const para = cell.nodes[0]
-      if (!para || para.type !== "paragraph") {
-        const newPara: ParagraphNode = {
-          type: "paragraph",
-          children: [{ type: "text", text, style: {} }],
-        }
-        if (cell.nodes.length > 0) {
-          cell.nodes[0] = newPara
-        } else {
-          cell.nodes.push(newPara)
-        }
-        return nextModel
-      }
-      para.children = [{ type: "text", text, style: {} }]
-      return nextModel
-    })
+      const nextModel = cloneHostTableForRuntimeKey(current, tableRuntimeKey)
+      if (!nextModel) return current
+      return updateRuntimeKeyParagraph(
+        nextModel, tableRuntimeKey, rowIndex, cellIndex, paragraphIndex, text
+      )
+        ? nextModel
+        : current
+    },
+    undefined,
+    { textCommitKey: `runtime-table:${tableRuntimeKey}:${rowIndex}:${cellIndex}:${paragraphIndex}` },
+  )
   }
 
   // ── commitTableCellParagraphTextRecursive ────────────────────────
   const commitTableCellParagraphTextRecursive = (
     tableIndex: number, rowIndex: number, cellIndex: number, paragraphIndex: number, text: string
   ): void => {
-    applyChange((current) => {
-      const nextModel = cloneDocModel(current)
-      const node = nextModel.nodes[tableIndex]
-      if (!node || node.type !== "table") return current
-      const cell = node.rows[rowIndex]?.cells[cellIndex]
-      if (!cell) return current
-      const para = cell.nodes[paragraphIndex]
-      if (!para || para.type !== "paragraph") return current
-      para.children = [{ type: "text", text, style: {} }]
-      return nextModel
-    })
+    applyChange(
+      (current) => {
+        const node = current.nodes[tableIndex]
+        if (!node || node.type !== "table") return current
+        const cell = node.rows[rowIndex]?.cells[cellIndex]
+        const paragraph = cell?.nodes
+          .filter((child): child is ParagraphNode => child.type === "paragraph")[paragraphIndex]
+        if (!cell || !paragraph) return current
+        const previousText = paragraphText(paragraph)
+        if (previousText === text) return current
+        const insertedStyle = insertedStyleForTextChange(paragraph, previousText, text)
+        return updateTableCellParagraphText(
+          current, tableIndex, rowIndex, cellIndex, paragraphIndex, text, { insertedStyle }
+        )
+      },
+      undefined,
+      { textCommitKey: `table-cell:${tableIndex}:${rowIndex}:${cellIndex}:${paragraphIndex}` },
+    )
   }
 
   // ── commitSectionParagraphText ───────────────────────────────────
@@ -103,26 +289,21 @@ export function createEditorTextInput(
     location: { region: "header" | "footer"; partName: string; nodeIndex: number },
     text: string
   ): void => {
-    applyChange((current) => {
-      const nextModel = cloneDocModel(current)
-      const sections =
-        location.region === "header"
-          ? nextModel.metadata.headerSections
-          : nextModel.metadata.footerSections
-      const section = sections.find((s) => s.partName === location.partName)
-      if (!section) return current
-      const node = section.nodes[location.nodeIndex]
-      if (!node || node.type !== "paragraph") return current
-      node.children = [{ type: "text", text, style: {} }]
-      return nextModel
-    })
+    applyChange(
+      (current) => updateSectionParagraphTextAtLocation(current, location, text),
+      undefined,
+      {
+        textCommitKey:
+          `section:${location.region}:${location.partName}:${location.nodeIndex}`,
+      },
+    )
   }
 
   // ── appendParagraph ──────────────────────────────────────────────
   const appendParagraph = (text?: string): number => {
     let nodeIndex = -1
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
+      const nextModel = cloneDocModelShallow(current)
       const para: ParagraphNode = { type: "paragraph", children: [] }
       if (text) {
         para.children.push({ type: "text", text, style: {} })
@@ -166,7 +347,10 @@ export function createEditorTextInput(
 
     applyChange(
       (current) => {
-        let next = cloneDocModel(current)
+        let next = cloneDocModelNodes(current, [
+          topLevelNodeIndex(normalizedRange.start.location),
+          topLevelNodeIndex(normalizedRange.end.location),
+        ])
 
         const clearNumberingIfParagraphEmpty = (location: ParagraphLocation): void => {
           const { paragraph, tableNode } = getParagraphAtLocation(next, location)
@@ -281,6 +465,28 @@ export function createEditorTextInput(
         } else {
           const mergedText = `${startText.slice(0, safeStart)}${replacementText}${endText.slice(safeEnd)}`
           next = updateParagraphTextAtLocation(next, normalizedRange.start.location, mergedText, { insertedStyle })
+        }
+
+        // Comment ranges span character offsets, so a join must take the
+        // surviving left prefix and the shifted right suffix. Fragments that
+        // become adjacent once the deleted text is gone are coalesced again.
+        const mergedCommentRanges = mergeParagraphCommentRanges(
+          [
+            ...splitParagraphCommentRanges(startParagraph.commentRanges, safeStart).before,
+            ...shiftParagraphCommentRanges(
+              splitParagraphCommentRanges(endParagraph.commentRanges, safeEnd).after,
+              safeStart + replacementText.length
+            ),
+          ],
+          `${startText.slice(0, safeStart)}${replacementText}${endText.slice(safeEnd)}`
+        )
+        const mergedParagraphAfterReplace = getParagraphAtLocation(
+          next,
+          normalizedRange.start.location
+        ).paragraph
+        if (mergedParagraphAfterReplace) {
+          mergedParagraphAfterReplace.commentRanges =
+            mergedCommentRanges.length > 0 ? mergedCommentRanges : undefined
         }
 
         if (shouldAdoptEndParagraphStyleOnDelete) {
@@ -434,6 +640,65 @@ export function createEditorTextInput(
     return replaceExpandedSelection("", range)
   }
 
+  // ── insertTextAtSelection ────────────────────────────────────────
+  // Inserts text at a collapsed caret, or replaces an expanded selection.
+  // Unlike replaceExpandedSelection it also handles the collapsed case, which
+  // is what clipboard paste needs.
+  const insertTextAtSelection = (
+    text: string,
+    range?: DocxTextRange
+  ): DocxTextRange | undefined => {
+    const sourceRange = range ?? ctx.activeTextRangeSnapshot.value
+    if (!sourceRange) return undefined
+
+    const replacementText = text.replace(/\r\n?/g, "\n")
+    if (!replacementText) return undefined
+
+    if (compareTextRangeBoundaries(sourceRange.start, sourceRange.end) < 0) {
+      return replaceExpandedSelection(replacementText, sourceRange)
+    }
+
+    const location = sourceRange.start.location
+    const { paragraph } = getParagraphAtLocation(ctx.model.value, location)
+    if (!paragraph) return undefined
+
+    const currentText = paragraphText(paragraph)
+    const offset = normalizeRangeBoundaryParagraphOffset(paragraph, sourceRange.start.offset)
+    const nextText = `${currentText.slice(0, offset)}${replacementText}${currentText.slice(offset)}`
+    if (nextText === currentText) return undefined
+
+    const insertedStyle = cloneTextStyle(
+      ctx.pendingRunStyleSnapshot.value ??
+        firstTextStyleAtOffset(paragraph, offset, true) ??
+        firstRunStyle(paragraph)
+    )
+
+    applyChange(
+      (current) => updateParagraphTextAtLocation(current, location, nextText, { insertedStyle }),
+      "Inserted text"
+    )
+
+    const caretOffset = offset + replacementText.length
+    const collapsedRange: DocxTextRange = {
+      start: { location: cloneTextRangeLocation(location), offset: caretOffset },
+      end: { location: cloneTextRangeLocation(location), offset: caretOffset },
+    }
+
+    ctx.suppressSelectionReset.value = true
+    ctx.selection.value = location.kind === "paragraph"
+      ? { kind: "paragraph", nodeIndex: location.nodeIndex }
+      : {
+          kind: "table-cell",
+          tableIndex: location.tableIndex,
+          rowIndex: location.rowIndex,
+          cellIndex: location.cellIndex,
+        }
+    ctx.activeTextRange.value = collapsedRange
+    ctx.pendingRunStyle.value = undefined
+
+    return collapsedRange
+  }
+
   // ── splitParagraphAtSelection ─────────────────────────────────────
   const splitParagraphAtSelection = (
     draftText: string,
@@ -454,7 +719,7 @@ export function createEditorTextInput(
     let splitResult: { paragraphIndex: number; caretOffset: number } | undefined
 
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const next = cloneDocModelNodes(current, [targetLocation.nodeIndex])
       const paragraphNode = next.nodes[targetLocation.nodeIndex]
       if (!paragraphNode || paragraphNode.type !== "paragraph") return current
 
@@ -480,14 +745,33 @@ export function createEditorTextInput(
         { beforeInsertedStyle, afterInsertedStyle: inheritedRunStyle }
       )
 
+      // Split comment ranges with the text: each side keeps the part of a range
+      // that survives on it, so highlights stay exact across the break.
+      const draftCommentRanges = remapParagraphCommentRanges(
+        paragraphText(paragraphNode),
+        normalizedDraftText,
+        paragraphNode.commentRanges
+      )
+      const beforeCommentRanges = splitParagraphCommentRanges(
+        draftCommentRanges,
+        safeStart
+      ).before
+      const afterCommentRanges = splitParagraphCommentRanges(
+        draftCommentRanges,
+        safeEnd
+      ).after
+
       paragraphNode.style = cloneParagraphStyle(splitParagraphStyle)
       paragraphNode.children = splitChildren.beforeChildren
+      paragraphNode.commentRanges =
+        beforeCommentRanges.length > 0 ? beforeCommentRanges : undefined
       paragraphNode.sourceXml = undefined
 
       next.nodes.splice(insertionIndex, 0, {
         type: "paragraph",
         style: cloneParagraphStyle(splitParagraphStyle),
         children: splitChildren.afterChildren,
+        commentRanges: afterCommentRanges.length > 0 ? afterCommentRanges : undefined,
       })
 
       splitResult = { paragraphIndex: insertionIndex, caretOffset: 0 }
@@ -524,7 +808,7 @@ export function createEditorTextInput(
     const normalizedEndOffset = Math.max(normalizedStartOffset, Math.round(endOffset ?? normalizedStartOffset))
 
     applyChange((current) => {
-      let next = cloneDocModel(current)
+      let next = cloneDocModelShallow(current)
       let paragraphNode = next.nodes[targetLocation.nodeIndex]
       if (!paragraphNode || paragraphNode.type !== "paragraph") return current
 
@@ -566,17 +850,34 @@ export function createEditorTextInput(
             })()
           : textWithListType(beforeText, paragraphListType)
 
+      const draftCommentRanges = remapParagraphCommentRanges(
+        paragraphText(paragraphNode),
+        normalizedDraftText,
+        paragraphNode.commentRanges
+      )
+      const beforeCommentRanges = splitParagraphCommentRanges(
+        draftCommentRanges,
+        safeStart
+      ).before
+      const afterCommentRanges = splitParagraphCommentRanges(
+        draftCommentRanges,
+        safeEnd
+      ).after
+
       next = updateParagraphText(next, targetLocation.nodeIndex, textForCurrentParagraph, {
         insertedStyle: cloneTextStyle(ctx.pendingRunStyleSnapshot.value),
       })
       paragraphNode = next.nodes[targetLocation.nodeIndex]
       if (!paragraphNode || paragraphNode.type !== "paragraph") return current
+      paragraphNode.commentRanges =
+        beforeCommentRanges.length > 0 ? beforeCommentRanges : undefined
       paragraphNode.sourceXml = undefined
 
       next.nodes.splice(insertionIndex, 0, {
         type: "paragraph",
         style: cloneParagraphStyle(paragraphNode.style),
         children: [{ type: "text", text: textForInsertedParagraph, style: insertRunStyle }],
+        commentRanges: afterCommentRanges.length > 0 ? afterCommentRanges : undefined,
       })
       insertedParagraphResult = { paragraphIndex: insertionIndex, caretOffset: insertedCaretOffset }
       return next
@@ -596,6 +897,8 @@ export function createEditorTextInput(
   return {
     commitParagraphText,
     commitTableCellText,
+    commitTableCellTextByRuntimeKey,
+    commitTableCellParagraphTextByRuntimeKey,
     commitTableCellParagraphTextRecursive,
     commitSectionParagraphText,
     appendParagraph,
@@ -603,5 +906,6 @@ export function createEditorTextInput(
     insertListItemAfterSelection,
     replaceExpandedSelection,
     deleteExpandedSelection,
+    insertTextAtSelection,
   }
 }

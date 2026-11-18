@@ -49,6 +49,7 @@
     },
     "./assets/docx_wasm_bg.wasm": "./dist/assets/docx_wasm_bg.wasm",
     "./worker": "./dist/docx-import-worker.js",
+    "./export-worker": "./dist/docx-export-worker.js",
     "./package.json": "./package.json"
   },
   "scripts": {

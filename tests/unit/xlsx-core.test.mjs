@@ -4,11 +4,11 @@ import { createRequire } from "node:module";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
-const requireFromVueXlsx = createRequire(
-  new URL("../../packages/vue-xlsx/package.json", import.meta.url),
-);
 const requireFromXlsxCore = createRequire(
   new URL("../../packages/xlsx-core/package.json", import.meta.url),
+);
+const { strFromU8, strToU8, unzipSync, zipSync } = await import(
+  pathToFileURL(requireFromXlsxCore.resolve("fflate")).href
 );
 const {
   DOMParser: XmlDomParser,
@@ -18,11 +18,13 @@ const {
 globalThis.DOMParser ??= XmlDomParser;
 globalThis.Node ??= XmlNode;
 globalThis.XMLSerializer ??= XmlSerializer;
+// Self-reference through this package's own exports: the tests always load the
+// build that belongs to this checkout, never a linked copy from elsewhere.
 const core = await import(
-  pathToFileURL(requireFromVueXlsx.resolve("@arcships/xlsx-core")).href
+  pathToFileURL(requireFromXlsxCore.resolve("@arcships/xlsx-core")).href
 );
 const runtimeEntry = await import(
-  pathToFileURL(requireFromVueXlsx.resolve("@arcships/xlsx-core/runtime")).href
+  pathToFileURL(requireFromXlsxCore.resolve("@arcships/xlsx-core/runtime")).href
 );
 const samples = new URL("../../apps/demo/public/samples/", import.meta.url);
 
@@ -30,7 +32,45 @@ function bytesFromFile(name) {
   return new Uint8Array(readFileSync(new URL(name, samples)));
 }
 
-const wasmPath = requireFromVueXlsx.resolve(
+const XML_PREFIX = String.raw`(?:[\w.-]+:)?`;
+const SERIES_XML_PATTERN = new RegExp(
+  `<${XML_PREFIX}ser>([\\s\\S]*?)</${XML_PREFIX}ser>`,
+);
+const SERIES_TITLE_XML_PATTERN = new RegExp(
+  `<${XML_PREFIX}tx>[\\s\\S]*?</${XML_PREFIX}tx>`,
+);
+
+function bytesWithoutFirstChartSeriesTitle(name, chartPath = "xl/charts/chart1.xml") {
+  const archive = unzipSync(bytesFromFile(name));
+  const chartXml = strFromU8(archive[chartPath]);
+  let removed = false;
+  const withoutTitle = chartXml.replace(SERIES_XML_PATTERN, (seriesXml) => {
+    const next = seriesXml.replace(SERIES_TITLE_XML_PATTERN, "");
+    removed = next !== seriesXml;
+    return next;
+  });
+  assert.equal(removed, true, "fixture chart series must contain a tx title");
+  archive[chartPath] = strToU8(withoutTitle);
+  return zipSync(archive);
+}
+
+function resolvePackagePart(relsPath, target) {
+  if (target.startsWith("/")) {
+    return target.slice(1);
+  }
+
+  const ownerPath = relsPath === "_rels/.rels"
+    ? ""
+    : relsPath.replace(/\/_rels\/([^/]+)\.rels$/, "/$1");
+  const baseDir = ownerPath.split("/").slice(0, -1).join("/");
+  const resolved = new URL(
+    target,
+    `https://xlsx.invalid/${baseDir ? `${baseDir}/` : ""}`,
+  );
+  return resolved.pathname.replace(/^\/+/, "");
+}
+
+const wasmPath = requireFromXlsxCore.resolve(
   "@arcships/xlsx-core/assets/duke_sheets_wasm_bg.wasm",
 );
 const wasmBytes = readFileSync(wasmPath);
@@ -205,6 +245,29 @@ test("XLSX resolves a chartsheet drawing into a renderable chart", () => {
   }
 });
 
+test("XLSX loads chart workbooks whose series have no tx title", () => {
+  const bytes = bytesWithoutFirstChartSeriesTitle("charts-images.xlsx");
+  const workbook = wasm.Workbook.fromBytes(bytes);
+  try {
+    const imageAssets = core.parseWorkbookChartStyleAssets(bytes);
+    const assets = core.loadWorkbookChartAssets(
+      workbook,
+      imageAssets,
+      new Map([[0, 0]]),
+    );
+    const charts = assets.chartsByWorkbookSheetIndex[0] ?? [];
+    assert.equal(charts.length, 1);
+    const chart = charts[0];
+    assert.equal(chart.chartType, "ColumnClustered");
+    assert.equal(chart.series.length, 1);
+    assert.equal(chart.series[0].name, undefined);
+    assert.deepEqual(chart.series[0].categories, ["Q1", "Q2", "Q3", "Q4"]);
+    assert.deepEqual(chart.series[0].values, [120000, 145000, 168000, 210000]);
+  } finally {
+    workbook.free();
+  }
+});
+
 test("XLSX rejects empty and corrupted input", () => {
   assert.throws(
     () => wasm.Workbook.fromBytes(new Uint8Array()),
@@ -247,6 +310,243 @@ test("XLSX roundtrip preserves values, formula, calculation and cell style", () 
 
   reloaded.free();
   workbook.free();
+});
+
+test("XLSX styles expose number formats for custom and built-in ids", () => {
+  const workbook = new wasm.Workbook();
+  const sheet = workbook.getSheet(0);
+  sheet.setCell("A1", 1234.5);
+  sheet.setCell("B1", 1234.5);
+  sheet.setCell("C1", 45306);
+  sheet.setCellStyle("A1", {
+    numberFormat: { formatType: "custom", formatString: "[$-407]#,##0.00" },
+  });
+  sheet.setCellStyle("B1", { numberFormat: { formatType: "builtin", id: 14 } });
+  sheet.free();
+
+  const bytes = workbook.saveXlsxBytes();
+  workbook.free();
+
+  const structure = core.parseWorkbookStructureAssets(bytes);
+  const formats = Object.values(structure.styleById).map((style) => style.numberFormat);
+  assert.ok(
+    formats.some((format) => format?.formatType === "custom" && format.formatString === "[$-407]#,##0.00"),
+    "a custom numFmtId keeps its format code",
+  );
+  assert.ok(
+    formats.some((format) => format?.formatType === "builtin" && format.id === 14),
+    "a built-in numFmtId is recorded so the renderer can resolve it",
+  );
+  assert.ok(
+    formats.some((format) => format === undefined),
+    "General styles stay lean",
+  );
+});
+
+test("XLSX export keeps chart parts, chart relationships and chart edits", () => {
+  const bytes = bytesFromFile("charts-images.xlsx");
+  const workbook = wasm.Workbook.fromBytes(bytes);
+  const imageAssets = core.parseWorkbookImageAssets(bytes);
+  const chartAssets = core.loadWorkbookChartAssets(
+    workbook,
+    imageAssets,
+    new Map([[0, 0]]),
+  );
+  const chart = chartAssets.chartsByWorkbookSheetIndex[0]?.[0];
+  assert.ok(chart, "fixture must expose an editable worksheet chart");
+  assert.equal(chart.chartPath, "xl/charts/chart1.xml");
+  assert.equal(
+    core.updateWorkbookChartDefinition(imageAssets, chartAssets, chart.id, {
+      title: "Exported chart title",
+    }),
+    true,
+  );
+
+  const sheet = workbook.getSheetByName("Dashboard");
+  sheet.setCell("A1", "Edited cell");
+  const merged = core.mergeWorkbookImageAssets(
+    workbook.saveXlsxBytes(),
+    imageAssets,
+    imageAssets.sheetOrigins,
+  );
+  workbook.free();
+
+  const archive = unzipSync(merged);
+  assert.ok(archive["xl/charts/chart1.xml"], "worksheet chart part must be exported");
+  assert.ok(archive["xl/charts/chart2.xml"], "chartsheet chart part must be exported");
+  const drawingPath = Object.keys(archive).find(
+    (path) => /^xl\/drawings\/drawing[^/]+\.xml$/.test(path) && /drawingReactXlsx/.test(path),
+  );
+  assert.ok(drawingPath, "worksheet drawing part must be exported");
+  const drawingRelsPath = `xl/drawings/_rels/${drawingPath.split("/").pop()}.rels`;
+  assert.ok(archive[drawingRelsPath]);
+  assert.ok(archive["xl/media/image1.png"]);
+  assert.match(
+    strFromU8(archive["xl/charts/chart1.xml"]),
+    /Exported chart title/,
+  );
+  const sheetXml = strFromU8(archive["xl/worksheets/sheet1.xml"]);
+  assert.equal(
+    (sheetXml.match(/<drawing\b/g) ?? []).length,
+    1,
+    "a worksheet may contain only one drawing element",
+  );
+  const sheetRels = strFromU8(archive["xl/worksheets/_rels/sheet1.xml.rels"]);
+  assert.equal(
+    (sheetRels.match(/Type="[^"]*\/drawing"/g) ?? []).length,
+    1,
+    "the worksheet must reference its merged drawing exactly once",
+  );
+
+  const contentTypes = strFromU8(archive["[Content_Types].xml"]);
+  assert.ok(contentTypes.includes(`PartName="/${drawingPath}"`));
+  for (const chartPath of ["/xl/charts/chart1.xml", "/xl/charts/chart2.xml"]) {
+    assert.ok(
+      contentTypes.includes(`PartName="${chartPath}"`),
+      `${chartPath} must have a content type override`,
+    );
+  }
+  assert.match(
+    contentTypes,
+    /ContentType="application\/vnd\.openxmlformats-officedocument\.drawingml\.chart\+xml"/,
+  );
+
+  for (const [relsPath, data] of Object.entries(archive)) {
+    if (!relsPath.endsWith(".rels")) continue;
+    const relsXml = strFromU8(data);
+    for (const match of relsXml.matchAll(/<Relationship\b([^>]*)\/?>/g)) {
+      const attributes = match[1];
+      if (/TargetMode="External"/.test(attributes)) continue;
+      const target = /Target="([^"]*)"/.exec(attributes)?.[1];
+      if (!target || target.startsWith("#")) continue;
+      const resolved = resolvePackagePart(relsPath, target);
+      assert.ok(
+        archive[resolved],
+        `${relsPath} target ${target} must resolve to ${resolved}`,
+      );
+    }
+  }
+
+  const drawingRels = strFromU8(archive[drawingRelsPath]);
+  const chartTarget = /Type="[^"]*\/chart"[^>]*Target="([^"]*)"/.exec(drawingRels)?.[1];
+  assert.equal(
+    resolvePackagePart(drawingRelsPath, chartTarget ?? ""),
+    "xl/charts/chart1.xml",
+  );
+
+  const reloaded = wasm.Workbook.fromBytes(merged);
+  try {
+    assert.equal(
+      reloaded.getSheetByName("Dashboard").getCell("A1").toString(),
+      "Edited cell",
+    );
+    const reloadedAssets = core.parseWorkbookImageAssets(merged);
+    const reloadedCharts = core.loadWorkbookChartAssets(
+      reloaded,
+      reloadedAssets,
+      new Map([[0, 0]]),
+    );
+    assert.equal(
+      reloadedCharts.chartsByWorkbookSheetIndex[0]?.[0]?.title,
+      "Exported chart title",
+    );
+    assert.equal(reloadedCharts.chartsheets[0]?.chartPath, "xl/charts/chart2.xml");
+  } finally {
+    reloaded.free();
+  }
+});
+
+test("XLSX export merges multiple source drawings into one worksheet drawing", () => {
+  const bytes = bytesFromFile("charts-images.xlsx");
+  const workbook = wasm.Workbook.fromBytes(bytes);
+  const imageAssets = core.parseWorkbookImageAssets(bytes);
+  const origin = imageAssets.sheetOrigins[0];
+  assert.ok(origin?.attachments.length);
+
+  const secondDrawingPath = "xl/drawings/drawingSecond.xml";
+  imageAssets.archive[secondDrawingPath] = strToU8(
+    '<wsDr xmlns="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing">'
+    + "<twoCellAnchor><from><col>0</col><colOff>0</colOff><row>0</row><rowOff>0</rowOff></from>"
+    + "<to><col>1</col><colOff>0</colOff><row>1</row><rowOff>0</rowOff></to>"
+    + "<sp><nvSpPr><cNvPr id=\"77\" name=\"Second object\"/><cNvSpPr/></nvSpPr><spPr/>"
+    + "<txBody><a:p xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"><a:r><a:t>Second</a:t></a:r></a:p></txBody>"
+    + "</sp><clientData/></twoCellAnchor></wsDr>",
+  );
+  origin.attachments.push({
+    drawingPath: secondDrawingPath,
+    drawingRelsPath: null,
+    mediaPaths: [],
+  });
+
+  const merged = core.mergeWorkbookImageAssets(
+    workbook.saveXlsxBytes(),
+    imageAssets,
+    imageAssets.sheetOrigins,
+  );
+  workbook.free();
+
+  const archive = unzipSync(merged);
+  const sheetXml = strFromU8(archive["xl/worksheets/sheet1.xml"]);
+  assert.equal(
+    (sheetXml.match(/<drawing\b/g) ?? []).length,
+    1,
+    "multiple source drawings must still leave one drawing element",
+  );
+
+  const sheetRels = strFromU8(archive["xl/worksheets/_rels/sheet1.xml.rels"]);
+  assert.equal(
+    (sheetRels.match(/Type="[^"]*\/drawing"/g) ?? []).length,
+    1,
+    "multiple source drawings must still leave one drawing relationship",
+  );
+
+  const drawingPaths = Object.keys(archive).filter(
+    (path) => /^xl\/drawings\/drawing[^/]+\.xml$/.test(path) && /drawingReactXlsx/.test(path),
+  );
+  assert.equal(
+    drawingPaths.length,
+    2,
+    "one merged drawing is expected for the worksheet and one for the chartsheet",
+  );
+  const mergedDrawing = strFromU8(archive["xl/drawings/drawingReactXlsx1.xml"]);
+  assert.match(mergedDrawing, /Chart 1/);
+  assert.match(mergedDrawing, /Second object/);
+  assert.ok(archive["xl/charts/chart1.xml"]);
+});
+
+test("XLSX export inserts the merged drawing before later worksheet elements", () => {
+  const bytes = bytesFromFile("charts-images.xlsx");
+  const workbook = wasm.Workbook.fromBytes(bytes);
+  const imageAssets = core.parseWorkbookImageAssets(bytes);
+  const saved = workbook.saveXlsxBytes();
+  workbook.free();
+
+  const savedArchive = unzipSync(saved);
+  const sheetPath = "xl/worksheets/sheet1.xml";
+  const savedSheetXml = strFromU8(savedArchive[sheetPath]);
+  savedArchive[sheetPath] = strToU8(
+    savedSheetXml.replace(
+      "</worksheet>",
+      '<legacyDrawing r:id="rIdLegacy"/><controls/><tableParts count="0"/><extLst/></worksheet>',
+    ),
+  );
+
+  const merged = core.mergeWorkbookImageAssets(
+    zipSync(savedArchive),
+    imageAssets,
+    imageAssets.sheetOrigins,
+  );
+  const sheetXml = strFromU8(unzipSync(merged)[sheetPath]);
+  const drawingIndex = sheetXml.indexOf("<drawing");
+  assert.ok(drawingIndex >= 0);
+  for (const laterElement of ["<legacyDrawing", "<controls", "<tableParts", "<extLst"]) {
+    const laterIndex = sheetXml.indexOf(laterElement);
+    assert.ok(laterIndex >= 0, `${laterElement} must remain in the sheet`);
+    assert.ok(
+      drawingIndex < laterIndex,
+      "<drawing> must precede legacyDrawing, controls, tableParts and extLst",
+    );
+  }
 });
 
 test("XLSX Worker client matches out-of-order responses to their requests", async () => {
@@ -308,12 +608,12 @@ test("XLSX Worker client does not post any pre-cancelled request", async () => {
   client.dispose();
 });
 
-test("XLSX Worker cancellation terminates the client and rejects every pending request", async () => {
+test("XLSX Worker cancellation of a parse terminates the client and rejects every pending request", async () => {
   const worker = new ControlledXlsxWorker({ respond: false });
   const client = new core.XlsxWorkerClient({ createWorker: () => worker });
   const cancelledSignal = new ControlledAbortSignal();
   const activeSignal = new ControlledAbortSignal();
-  const cancelled = client.getCellSnapshot(0, 0, 0, cancelledSignal);
+  const cancelled = client.loadWorkbook(new ArrayBuffer(4), false, false, cancelledSignal);
   const active = client.getCellSnapshot(0, 0, 1, activeSignal);
   const cancelledMessage = worker.messages[0];
   const activeMessage = worker.messages[1];
@@ -353,6 +653,112 @@ test("XLSX Worker cancellation terminates the client and rejects every pending r
     client.getRowsBatch(0, 0, 1),
     (error) => error?.name === "AbortError",
   );
+  client.dispose();
+});
+
+test("XLSX Worker aborting one interactive read keeps the worker and other requests alive", async () => {
+  const worker = new ControlledXlsxWorker({ respond: false });
+  const client = new core.XlsxWorkerClient({ createWorker: () => worker });
+  const abortedSignal = new ControlledAbortSignal();
+  const aborted = client.getRowsBatch(0, 0, 10, abortedSignal);
+  const active = client.getCellSnapshot(0, 0, 1);
+  const abortedMessage = worker.messages[0];
+  const activeMessage = worker.messages[1];
+
+  abortedSignal.abort();
+  await assert.rejects(aborted, (error) => error?.name === "AbortError");
+  assert.equal(worker.terminated, false, "aborting a read terminated the worker");
+  assert.equal(worker.terminateCount, 0);
+  assert.deepEqual(
+    worker.messages.at(-1),
+    { payload: { targetId: abortedMessage.id }, type: "cancel" },
+    "the worker was not told to drop the queued read",
+  );
+
+  worker.emit("message", {
+    data: {
+      id: activeMessage.id,
+      success: true,
+      result: { displayValue: "active", formula: "active" },
+    },
+  });
+  assert.equal((await active).displayValue, "active");
+
+  worker.emit("message", {
+    data: { id: abortedMessage.id, success: true, result: null },
+  });
+  const next = client.getRowsBatch(0, 0, 1);
+  const nextMessage = worker.messages.at(-1);
+  worker.emit("message", {
+    data: { id: nextMessage.id, success: true, result: ["row"] },
+  });
+  assert.deepEqual(await next, ["row"]);
+  client.dispose();
+});
+
+test("XLSX Worker parse timeout does not apply to interactive reads", async () => {
+  const worker = new ControlledXlsxWorker({ respond: false });
+  const client = new core.XlsxWorkerClient({
+    createWorker: () => worker,
+    limits: { maxParseMs: 5 },
+  });
+  let settled = false;
+  const read = client.getRowsBatch(0, 0, 10);
+  read.then(
+    () => { settled = true; },
+    () => { settled = true; },
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(settled, false, "the interactive read was timed out");
+  assert.equal(worker.terminated, false, "the parse budget terminated the worker for a read");
+
+  worker.emit("message", {
+    data: { id: worker.messages[0].id, success: true, result: ["row"] },
+  });
+  assert.deepEqual(await read, ["row"]);
+  client.dispose();
+});
+
+test("XLSX Worker client keeps the worker alive when a load is superseded", async () => {
+  const worker = new ControlledXlsxWorker({ respond: false });
+  const client = new core.XlsxWorkerClient({ createWorker: () => worker });
+  const superseded = client.loadWorkbook(new ArrayBuffer(4));
+  const current = client.loadWorkbook(new ArrayBuffer(4));
+  const supersededMessage = worker.messages[0];
+  const currentMessage = worker.messages[1];
+
+  worker.emit("message", {
+    data: {
+      id: supersededMessage.id,
+      success: false,
+      error: { code: "SUPERSEDED", message: "load superseded" },
+    },
+  });
+  await assert.rejects(
+    superseded,
+    (error) => error?.code === "SUPERSEDED" && error?.name === "XlsxWorkerError",
+  );
+  assert.equal(worker.terminated, false, "a superseded load terminated the worker");
+
+  worker.emit("message", {
+    data: {
+      id: currentMessage.id,
+      success: true,
+      result: {
+        chartsByWorkbookSheetIndex: [],
+        chartsheets: [],
+        formControlsByWorkbookSheetIndex: [],
+        imagesByWorkbookSheetIndex: [],
+        objectUrls: [],
+        shapesByWorkbookSheetIndex: [],
+        sheets: [],
+        tablesByWorkbookSheetIndex: [],
+        tabs: [],
+      },
+    },
+  });
+  assert.deepEqual((await current).sheets, []);
   client.dispose();
 });
 
@@ -523,7 +929,7 @@ test("XLSX URL loading uses shared policy, controlled fetch and safe diagnostics
   const result = await core.loadVerifiedXlsxSource("sales-table.xlsx?token=secret", policy);
   assert.equal(result.fileName, "sales-table.xlsx");
   assert.equal(result.resolvedUrl, "https://app.example/viewer/sales-table.xlsx");
-  assert.equal(calls[0].init.redirect, "error");
+  assert.equal(calls[0].init.redirect, "follow");
   assert.equal(calls[0].init.credentials, "omit");
   assert.equal(JSON.stringify(result).includes("secret"), false);
 
@@ -824,4 +1230,128 @@ test("XLSX Worker timeout terminates the client for clean recovery", async () =>
   );
   assert.equal(worker.terminated, true);
   client.dispose();
+});
+
+test("XLSX Worker reports an uncloneable result as WORKER_FAILED instead of timing out", async () => {
+  const originalSelf = globalThis.self;
+  const messages = [];
+  const listeners = new Map();
+  let throwOnce = true;
+  globalThis.self = {
+    addEventListener(type, listener) {
+      listeners.set(type, listener);
+    },
+    postMessage(message) {
+      if (throwOnce) {
+        throwOnce = false;
+        throw new Error("DataCloneError: could not be cloned");
+      }
+      messages.push(message);
+    },
+  };
+  try {
+    const workerUrl = new URL(
+      "../../packages/xlsx-core/dist/xlsx-worker.js",
+      import.meta.url,
+    );
+    workerUrl.searchParams.set("worker-response-test", String(Date.now()));
+    await import(workerUrl.href);
+    const onMessage = listeners.get("message");
+    assert.equal(typeof onMessage, "function");
+    onMessage({
+      data: {
+        id: 7,
+        payload: { col: 0, row: 0, workbookSheetIndex: 0 },
+        type: "getCellSnapshot",
+      },
+    });
+    for (let attempt = 0; attempt < 50 && messages.length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].id, 7);
+    assert.equal(messages[0].success, false);
+    assert.equal(messages[0].error.code, "WORKER_FAILED");
+    assert.equal(messages[0].error.phase, "response");
+    assert.match(messages[0].error.message, /无法返回结果/);
+  } finally {
+    if (originalSelf === undefined) delete globalThis.self;
+    else globalThis.self = originalSelf;
+  }
+});
+
+function fakeCalculationWorkbook({ formulas = [], sheetNames = ["Sheet1"], calculate }) {
+  return {
+    calculate,
+    getSheet(index) {
+      return {
+        formulaCells: (formulas[index] ?? []).map((formula) => ({ formula })),
+        free() {},
+      };
+    },
+    sheetCount: sheetNames.length,
+    sheetNames,
+  };
+}
+
+test("XLSX safeCalculate skips unresolved sheet references before calculating", () => {
+  let calculateCalls = 0;
+  const workbook = fakeCalculationWorkbook({
+    formulas: [["Missing!A1"]],
+    calculate() {
+      calculateCalls += 1;
+      throw new Error("should not calculate");
+    },
+  });
+
+  const result = core.safeCalculate(workbook);
+
+  assert.equal(result.calculated, false);
+  assert.equal(result.skipReason, "unresolved-sheet-refs");
+  assert.equal(result.workbook, workbook);
+  assert.equal(calculateCalls, 0);
+});
+
+test("XLSX safeCalculate reparses after a calculation trap", () => {
+  const trapped = fakeCalculationWorkbook({
+    formulas: [["SUM(A1:A2)"]],
+    calculate() {
+      throw new Error("wasm unreachable");
+    },
+  });
+  const reparsed = fakeCalculationWorkbook({
+    calculate() {},
+  });
+  let reparseCalls = 0;
+
+  const result = core.safeCalculate(trapped, {
+    reparse() {
+      reparseCalls += 1;
+      return reparsed;
+    },
+  });
+
+  assert.equal(result.calculated, false);
+  assert.equal(result.skipReason, "calculate-trapped");
+  assert.equal(result.workbook, reparsed);
+  assert.equal(reparseCalls, 1);
+});
+
+test("XLSX safeCalculate reports success without reparsing", () => {
+  const workbook = fakeCalculationWorkbook({
+    calculate() {},
+  });
+  let reparseCalls = 0;
+
+  const result = core.safeCalculate(workbook, {
+    reparse() {
+      reparseCalls += 1;
+      return workbook;
+    },
+  });
+
+  assert.equal(result.calculated, true);
+  assert.equal(result.skipReason, null);
+  assert.equal(result.workbook, workbook);
+  assert.equal(reparseCalls, 0);
 });

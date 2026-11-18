@@ -3,62 +3,25 @@
 //
 // Migrated from upstream @extend-ai/react-docx, editor.tsx lines 29582-29668
 
-import type { DocxEditorController, DocxPaginationInfo } from "@arcships/docx-core"
+import type { DocxEditorController, LayoutSnapshot } from "@arcships/docx-core"
 
-// ---------------------------------------------------------------------------
-// Snapshots used by the fast (direct-draw) thumbnail renderer
-
-export interface DocxPageThumbnailTextRunSnapshot {
-  text: string
-  bold?: boolean
-  italic?: boolean
-  color?: string
-  backgroundColor?: string
-  fontSizePx: number
-  fontFamily?: string
-}
-
-export interface DocxPageThumbnailSnapshotElement {
-  kind: "paragraph" | "image" | "image-placeholder" | "table"
-  xPx: number
-  yPx: number
-  widthPx: number
-  heightPx: number
-  align?: string
-  backgroundColor?: string
-  lineHeightPx?: number
-  startLineIndex?: number
-  runs?: DocxPageThumbnailTextRunSnapshot[]
-  src?: string
-  cells?: DocxPageThumbnailTableCellSnapshot[]
-}
-
-export interface DocxPageThumbnailTableCellSnapshot {
-  xPx: number
-  yPx: number
-  widthPx: number
-  heightPx: number
-  backgroundColor?: string
-  runs?: DocxPageThumbnailTextRunSnapshot[]
-}
-
-export interface DocxPageThumbnailRenderSnapshot {
-  key: string
-  sourceWidthPx: number
-  sourceHeightPx: number
-  pageBackgroundColor: string
-  elements: DocxPageThumbnailSnapshotElement[]
-}
-
-export interface DocxViewerPageThumbnailSnapshotEntry {
-  key: string
-  getSnapshot: () => DocxPageThumbnailRenderSnapshot
+/** A page surface was published or unpublished by the viewer. */
+export interface DocxViewerPageSurfaceChange {
+  /** Zero-based page index that changed. */
+  pageIndex: number
+  kind: "publish" | "unpublish"
+  /** Content signature attached to a publish notification. */
+  contentKey?: string
 }
 
 export interface DocxViewerPageSurfaceSize {
   widthPx: number
   heightPx: number
 }
+
+export type DocxViewerPageSurfaceListener = (
+  change?: DocxViewerPageSurfaceChange
+) => void
 
 // ---------------------------------------------------------------------------
 // Registry
@@ -70,14 +33,27 @@ export interface DocxViewerPageSurfaceRegistry {
   /** Content signatures per page, synced when pagination or content changes. */
   pageContentKeys: Map<number, string>
 
-  /** Layout-derived page sizes, available for offscreen pages. */
+  /** Page sizes reported by mounted page surfaces. */
   pageSizes: Map<number, DocxViewerPageSurfaceSize>
 
-  /** Fast-paint draw snapshots for offscreen pages. */
-  pageThumbnailSnapshots: Map<number, DocxViewerPageThumbnailSnapshotEntry>
+  /**
+   * Page count from the viewer's pagination pass. Thumbnail consumers use it
+   * instead of re-paginating the document themselves.
+   */
+  layoutPageCount: number
 
-  /** Change listeners, notified when surface state changes. */
-  listeners: Set<() => void>
+  /**
+   * Layout-derived page sizes for every page, including unmounted ones. Kept
+   * separate from `pageSizes` so unmounting an offscreen surface cannot delete
+   * the size the viewer resolved from section layout.
+   */
+  layoutPageSizes: Map<number, DocxViewerPageSurfaceSize>
+
+  /** Viewer-owned layout snapshot shared with thumbnail consumers. */
+  layoutSnapshot?: LayoutSnapshot
+
+  /** Change listeners, notified when a page surface changes. */
+  listeners: Set<DocxViewerPageSurfaceListener>
 }
 
 // ---------------------------------------------------------------------------
@@ -94,7 +70,8 @@ export function createDocxViewerPageSurfaceRegistry(): DocxViewerPageSurfaceRegi
     pageElements: new Map(),
     pageContentKeys: new Map(),
     pageSizes: new Map(),
-    pageThumbnailSnapshots: new Map(),
+    layoutPageCount: 0,
+    layoutPageSizes: new Map(),
     listeners: new Set(),
   }
 }
@@ -113,7 +90,7 @@ export function ensureDocxViewerPageSurfaceRegistry(
 
 export function subscribeDocxViewerPageSurfaces(
   editor: Pick<DocxEditorController, "syncPaginationInfo">,
-  listener: () => void
+  listener: DocxViewerPageSurfaceListener
 ): () => void {
   const registry = ensureDocxViewerPageSurfaceRegistry(editor)
   registry.listeners.add(listener)
@@ -122,12 +99,19 @@ export function subscribeDocxViewerPageSurfaces(
   }
 }
 
+/**
+ * Notifies listeners about one changed page. Passing no change keeps the
+ * legacy "something changed" semantics for callers that cannot identify the
+ * page; consumers should prefer the per-page form.
+ */
 export function notifyDocxViewerPageSurfaceListeners(
-  editor: Pick<DocxEditorController, "syncPaginationInfo">
+  editor: Pick<DocxEditorController, "syncPaginationInfo">,
+  change?: DocxViewerPageSurfaceChange
 ): void {
   const registry = ensureDocxViewerPageSurfaceRegistry(editor)
-  for (const listener of registry.listeners) {
-    listener()
+  // Copy so listeners may unsubscribe while being called.
+  for (const listener of [...registry.listeners]) {
+    listener(change)
   }
 }
 

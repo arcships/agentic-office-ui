@@ -378,7 +378,8 @@ function parseResolvedXfStyle(
   fonts: Array<XlsxResolvedCellStyle["font"]>,
   fills: Array<XlsxResolvedCellStyle["fill"]>,
   borders: Array<XlsxResolvedCellStyle["border"]>,
-  checkboxComplementIndices?: Set<number>
+  checkboxComplementIndices?: Set<number>,
+  customNumberFormats?: Map<number, string>
 ) {
   const style: XlsxResolvedCellStyle = {};
   const fontId = Number(xfNode.getAttribute("fontId") ?? Number.NaN);
@@ -398,6 +399,10 @@ function parseResolvedXfStyle(
   if (alignment) {
     style.alignment = alignment;
   }
+  const numberFormat = resolveXfNumberFormat(xfNode, customNumberFormats);
+  if (numberFormat) {
+    style.numberFormat = numberFormat;
+  }
   const xfComplementNode = getFirstDescendant(xfNode, "xfComplement");
   const xfComplementIndex = Number(xfComplementNode?.getAttribute("i") ?? Number.NaN);
   if (Number.isFinite(xfComplementIndex) && checkboxComplementIndices?.has(xfComplementIndex)) {
@@ -405,6 +410,25 @@ function parseResolvedXfStyle(
   }
 
   return style;
+}
+
+/**
+ * Number format declared by an `xf`. Custom codes come from `<numFmts>`; any
+ * other non-zero id is a built-in whose code the render layer resolves, so the
+ * style stays small and the built-in table lives in one place.
+ */
+function resolveXfNumberFormat(xfNode: Element, customNumberFormats?: Map<number, string>) {
+  const numFmtId = Number(xfNode.getAttribute("numFmtId") ?? Number.NaN);
+  if (!Number.isFinite(numFmtId) || numFmtId === 0) {
+    return undefined;
+  }
+
+  const formatString = customNumberFormats?.get(numFmtId);
+  if (formatString) {
+    return { formatString, formatType: "custom" as const, id: numFmtId };
+  }
+
+  return { formatType: "builtin" as const, id: numFmtId };
 }
 
 // ── Feature property bag ───────────────────────────────────────────────────
@@ -493,6 +517,7 @@ export function parseWorkbookStyles(archive: ArchiveEntries) {
   const cellStyleXfsNode = getFirstDescendant(document, "cellStyleXfs");
   const cellStylesNode = getFirstDescendant(document, "cellStyles");
   const cellXfsNode = getFirstDescendant(document, "cellXfs");
+  const numFmtsNode = getFirstDescendant(document, "numFmts");
   const dxfsNode = getFirstDescendant(document, "dxfs");
   const tableStylesNode = getFirstDescendant(document, "tableStyles");
   if (!cellXfsNode) {
@@ -509,15 +534,23 @@ export function parseWorkbookStyles(archive: ArchiveEntries) {
   const fills = getChildElements(fillsNode ?? document.documentElement, "fill").map((node) => parseSpreadsheetFill(node));
   const borders = getChildElements(bordersNode ?? document.documentElement, "border").map((node) => parseSpreadsheetBorder(node));
   const differentialStyles = getChildElements(dxfsNode ?? document.documentElement, "dxf").map((node) => parseDifferentialStyle(node));
+  const customNumberFormats = new Map<number, string>();
+  getChildElements(numFmtsNode ?? document.documentElement, "numFmt").forEach((node) => {
+    const id = Number(node.getAttribute("numFmtId") ?? Number.NaN);
+    const formatCode = node.getAttribute("formatCode") ?? "";
+    if (Number.isFinite(id) && formatCode) {
+      customNumberFormats.set(id, formatCode);
+    }
+  });
   const cellStyleXfs = getChildElements(cellStyleXfsNode ?? document.documentElement, "xf").map(
-    (node) => parseResolvedXfStyle(node, fonts, fills, borders, checkboxComplementIndices)
+    (node) => parseResolvedXfStyle(node, fonts, fills, borders, checkboxComplementIndices, customNumberFormats)
   );
   const namedCellStyleByName: Record<string, XlsxResolvedCellStyle> = {};
   const styleById: Record<number, XlsxResolvedCellStyle> = {};
   const tableStyleByName: Record<string, XlsxTableStyleDefinition> = {};
 
   getChildElements(cellXfsNode, "xf").forEach((xfNode, index) => {
-    styleById[index] = parseResolvedXfStyle(xfNode, fonts, fills, borders, checkboxComplementIndices);
+    styleById[index] = parseResolvedXfStyle(xfNode, fonts, fills, borders, checkboxComplementIndices, customNumberFormats);
   });
 
   getChildElements(cellStylesNode ?? document.documentElement, "cellStyle").forEach((cellStyleNode) => {

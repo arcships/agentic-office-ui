@@ -4,6 +4,7 @@
     class="docx-document-surface"
     :data-selection-mode="selectionMode"
     @pointermove="onReferencePointerMove"
+    @pointerleave="onReferencePointerLeave"
     @click="onReferenceClick"
     @keydown.esc="onReferenceEscape"
   >
@@ -40,13 +41,13 @@
     <div
       v-if="selectionMode === 'region'"
       class="docx-document-surface__region-layer"
-      aria-label="选择文档区域"
+      :aria-label="m.docx.documentSurface.region"
       tabindex="0"
       @pointerdown="onRegionPointerDown"
       @pointermove="onRegionPointerMove"
       @pointerup="onRegionPointerUp"
       @pointercancel="onRegionPointerCancel"
-      @keydown.esc="onRegionKeyboardCancel"
+      @keydown.esc.stop="onRegionKeyboardCancel"
     >
       <div v-if="regionFrame" class="docx-document-surface__region-frame" :style="regionFrame" />
     </div>
@@ -56,6 +57,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue"
 import { clampSurfaceZoom, nextSurfaceZoom } from "@arcships/office-runtime/gesture-zoom"
+import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures"
 import {
   createSurfaceSearchSession,
 } from "@arcships/office-runtime"
@@ -67,10 +69,13 @@ import type {
   LayoutOptions,
 } from "@arcships/docx-core"
 import {
+  createDocxCommentReferenceDraft,
+  createDocxImageReferenceDraft,
   createDocxPageReferenceDraft,
   createDocxRegionReferenceDraft,
+  createDocxTableReferenceDraft,
   createDocxTextReferenceDraft,
-  describeDocxReference,
+  docNodeContentSignature,
   resolveDocxReference,
   type DocxOfficeReference,
   type DocxReferenceContext,
@@ -78,11 +83,18 @@ import {
 import {
   confirmOfficeReferenceDraft,
   createOfficeReferenceId,
+  MAX_OFFICE_VISIBLE_CANDIDATES,
+  officeReferenceErrorForResult,
+  rankOfficeHitCandidates,
+  toOfficeReferenceCandidatePreview,
   type NormalizedRect,
   type OfficeDocumentRevision,
+  type OfficeHitCandidate,
   type OfficeObjectReference,
   type OfficeReferenceCandidatePreview,
   type OfficeReferenceError,
+  type OfficeReferencePreviewOptions,
+  type OfficeRegionDraftChange,
   type OfficeSelectionMode,
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
@@ -92,6 +104,8 @@ import {
   type DocxSearchState,
 } from "../composables/useDocxSearch"
 import DocxViewerRoot from "./DocxViewerRoot.vue"
+import { provideDocxMessages } from "../i18n"
+import { formatOfficeMessage, localizeOfficeObjectDescriptor, localizeOfficeResolveResult } from "@arcships/office-interaction"
 import { docxTextRangeFromDomSelection } from "../composables/editor-selection"
 
 const props = withDefaults(
@@ -107,11 +121,14 @@ const props = withDefaults(
     zoomScale?: number
     enableGestureZoom?: boolean
     fitWidth?: boolean
-    showTrackedChanges?: boolean
-    showComments?: boolean
+    /** `null` follows the controller flag; `false` always hides. */
+    showTrackedChanges?: boolean | null
+    showComments?: boolean | null
     documentId?: string
     selectionMode?: OfficeSelectionMode
     emitReferenceCandidates?: boolean
+    locale?: import("@arcships/office-interaction").OfficeLocale
+    messages?: import("@arcships/office-interaction").OfficeMessagesOverride
   }>(),
   {
     editable: false,
@@ -119,13 +136,17 @@ const props = withDefaults(
     enableGestureZoom: true,
     selectionMode: "content",
     emitReferenceCandidates: false,
+    showTrackedChanges: null,
+    showComments: null,
+    locale: "en",
+    messages: undefined,
   }
 )
 
 const emit = defineEmits<{
   pageCountChange: [count: number]
   visiblePageRange: [range: { startPageIndex: number; endPageIndex: number }]
-  contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number }]
+  contextMenu: [ctx: { pageIndex: number; clientX: number; clientY: number; containerX: number; containerY: number; target?: EventTarget | null }]
   selectionChange: [sel: { kind: string; text?: string; nodeIndex?: number }]
   objectClick: [obj: { kind: "image" | "table"; nodeIndex?: number }]
   searchStateChange: [state: DocxSearchState]
@@ -133,13 +154,19 @@ const emit = defineEmits<{
   documentRevisionChange: [revision: OfficeDocumentRevision]
   referenceCandidateChange: [change: { candidates: readonly OfficeReferenceCandidatePreview[]; activeCandidateId?: string }]
   referenceConfirm: [event: ReturnType<typeof confirmOfficeReferenceDraft>]
-  regionDraftChange: [event: { phase: "start" | "change"; region: { space: "page"; pageIndex: number; rect: NormalizedRect } }]
+  regionDraftChange: [event: OfficeRegionDraftChange]
   selectionCancel: [event: { mode: OfficeSelectionMode; reason: "escape" | "pointer-cancel" | "programmatic" }]
   referenceResolve: [event: { referenceId: string; result: ResolveReferenceResult }]
   referenceError: [error: OfficeReferenceError]
 }>()
 
 const surfaceRef = ref<HTMLElement>()
+const m = provideDocxMessages(() => props.locale, () => props.messages)
+const descriptor = (
+  key: keyof typeof m.value.common.descriptors,
+  values: Record<string, string | number> = {},
+) => formatOfficeMessage(m.value.common.descriptors[key], values)
+const confirmFailed = () => formatOfficeMessage(m.value.common.reference.confirmFailed, { format: "DOCX" })
 const viewerRootRef = ref<InstanceType<typeof DocxViewerRoot>>()
 const effectiveZoomScale = computed(() =>
   props.zoom === undefined ? props.zoomScale : clampSurfaceZoom(props.zoom) * 100
@@ -148,11 +175,23 @@ const selectionMode = computed(() => props.selectionMode)
 const pageCount = ref(0)
 const revisionCounter = ref(0)
 const generatedDocumentId = `docx-surface-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`
-const documentRevision = computed<OfficeDocumentRevision & { format: "docx" }>(() => ({
-  format: "docx",
-  documentId: props.documentId?.trim() || generatedDocumentId,
-  revision: `${generatedDocumentId}:${revisionCounter.value}`,
-}))
+const documentRevision = computed<OfficeDocumentRevision & { format: "docx" }>(() => {
+  const hostDocumentId = props.documentId?.trim()
+  if (hostDocumentId) {
+    // A host-supplied identity must survive remounts. The fingerprint keeps
+    // page/region references honest while never embedding this instance's id.
+    return {
+      format: "docx",
+      documentId: hostDocumentId,
+      revision: `${hostDocumentId}:${docNodeContentSignature(props.model)}:${pageCount.value}`,
+    }
+  }
+  return {
+    format: "docx",
+    documentId: generatedDocumentId,
+    revision: `${generatedDocumentId}:${revisionCounter.value}`,
+  }
+})
 
 function referenceContext(): DocxReferenceContext {
   return { revision: documentRevision.value, model: props.model, pageCount: pageCount.value || undefined }
@@ -160,6 +199,18 @@ function referenceContext(): DocxReferenceContext {
 
 function emitReferenceError(operation: OfficeReferenceError["operation"], code: OfficeReferenceError["code"], message: string, referenceId?: string): void {
   emit("referenceError", { code, operation, format: "docx", recoverable: true, ...(referenceId ? { referenceId } : {}), message })
+}
+
+function emitResolveFailure(
+  reference: OfficeObjectReference,
+  result: ResolveReferenceResult,
+  operation: "resolve" | "describe" | "scroll",
+): void {
+  const failure = officeReferenceErrorForResult("docx", result, {
+    operation,
+    referenceId: reference.referenceId,
+  })
+  if (failure) emit("referenceError", failure)
 }
 
 function confirmDraft(
@@ -176,12 +227,14 @@ function confirmDraft(
       ...(snapshot ? { snapshot } : {}),
     }))
   } catch (reason) {
-    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to confirm DOCX reference.")
+    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : confirmFailed())
   }
 }
 
 function onPageCountChange(count: number): void {
+  const changed = count !== pageCount.value
   pageCount.value = count
+  if (changed && props.documentId?.trim()) emit("documentRevisionChange", documentRevision.value)
   emit("pageCountChange", count)
 }
 
@@ -201,55 +254,232 @@ function onRawSelectionChange(selection: { kind: string; text?: string; pageInde
     confirmDraft(draft, "pointer", {
       label: selection.text.length > 80 ? `${selection.text.slice(0, 77)}…` : selection.text,
       path: [
-        { kind: "document", label: "Document" },
-        ...(selection.pageIndex === undefined ? [] : [{ kind: "page" as const, label: `Page ${selection.pageIndex + 1}` }]),
-        { kind: "text-range", label: "Selected text" },
+        { kind: "document", label: descriptor("document") },
+        ...(selection.pageIndex === undefined ? [] : [{ kind: "page" as const, label: descriptor("page", { number: selection.pageIndex + 1 }) }]),
+        { kind: "text-range", label: m.value.common.selectedText },
       ],
       content: { text: selection.text },
     })
   } catch (reason) {
-    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to create DOCX text reference.")
+    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : formatOfficeMessage(m.value.common.reference.createFailed, { format: "DOCX" }))
   }
 }
 
+function dataAttribute(element: Element | null | undefined, name: string): string | undefined {
+  if (!element) return undefined
+  const dataset = (element as HTMLElement).dataset
+  if (dataset) {
+    const key = name
+      .replace(/^data-/u, "")
+      .replace(/-([a-z])/gu, (_match, letter: string) => letter.toUpperCase())
+    const value = dataset[key]
+    if (value !== undefined) return String(value)
+  }
+  return typeof element.getAttribute === "function" ? element.getAttribute(name) ?? undefined : undefined
+}
+
+function elementsAtPoint(clientX: number, clientY: number): readonly Element[] {
+  const document = surfaceRef.value?.ownerDocument
+  const all = document?.elementsFromPoint?.(clientX, clientY)
+  if (all?.length) return all
+  const single = document?.elementFromPoint?.(clientX, clientY)
+  return single ? [single] : []
+}
+
 function pageAtPoint(clientX: number, clientY: number): HTMLElement | undefined {
-  const elements = surfaceRef.value?.ownerDocument?.elementsFromPoint?.(clientX, clientY) ?? []
-  for (const element of elements) {
+  for (const element of elementsAtPoint(clientX, clientY)) {
     const page = element.closest<HTMLElement>("[data-docx-page-index]")
     if (page) return page
   }
   return undefined
 }
 
-function pageCandidate(pageIndex: number): OfficeReferenceCandidatePreview {
-  const draft = createDocxPageReferenceDraft(referenceContext(), pageIndex)
+function paragraphLocationForElement(element: Element): DocxTextRangeLocation | undefined {
+  const cell = element.closest<HTMLElement>("[data-docx-table-cell-paragraph-host='true']")
+  if (cell) {
+    const tableIndex = Number(dataAttribute(cell, "data-docx-table-index"))
+    const rowIndex = Number(dataAttribute(cell, "data-docx-table-row-index"))
+    const cellIndex = Number(dataAttribute(cell, "data-docx-table-cell-index"))
+    const paragraphIndex = Number(dataAttribute(cell, "data-docx-paragraph-index"))
+    if ([tableIndex, rowIndex, cellIndex, paragraphIndex].every((value) => Number.isSafeInteger(value) && value >= 0)) {
+      return { kind: "table-cell", tableIndex, rowIndex, cellIndex, paragraphIndex }
+    }
+  }
+  const paragraph = element.closest<HTMLElement>("[data-docx-paragraph-node-index]")
+  if (paragraph) {
+    const nodeIndex = Number(dataAttribute(paragraph, "data-docx-paragraph-node-index"))
+    if (Number.isSafeInteger(nodeIndex) && nodeIndex >= 0) return { kind: "paragraph", nodeIndex }
+  }
+  const floatingImage = element.closest<HTMLElement>("[data-image-node-index]")
+  if (floatingImage) {
+    const nodeIndex = Number(dataAttribute(floatingImage, "data-image-node-index"))
+    if (Number.isSafeInteger(nodeIndex) && nodeIndex >= 0) return { kind: "paragraph", nodeIndex }
+  }
+  return undefined
+}
+
+function pageHitCandidate(pageIndex: number): OfficeHitCandidate {
   return {
     candidateId: `docx:page:${pageIndex}`,
-    draft,
+    draft: createDocxPageReferenceDraft(referenceContext(), pageIndex),
     preview: {
-      label: `Page ${pageIndex + 1}`,
-      path: [{ kind: "document", label: "Document" }, { kind: "page", label: `Page ${pageIndex + 1}` }],
+      label: descriptor("page", { number: pageIndex + 1 }),
+      path: [{ kind: "document", label: descriptor("document") }, { kind: "page", label: descriptor("page", { number: pageIndex + 1 }) }],
     },
     hit: "inside",
     depth: 1,
   }
 }
 
+function tableHitCandidate(element: Element): OfficeHitCandidate | undefined {
+  const table = element.closest<HTMLElement>("[data-docx-table-host='true']")
+    ?? element.closest<HTMLElement>("[data-docx-table-cell='true']")
+  if (!table) return undefined
+  const tableIndex = Number(dataAttribute(table, "data-docx-table-index"))
+  if (!Number.isSafeInteger(tableIndex) || tableIndex < 0) return undefined
+  return {
+    candidateId: `docx:table:${tableIndex}`,
+    draft: createDocxTableReferenceDraft(referenceContext(), tableIndex),
+    preview: {
+      label: descriptor("table", { number: tableIndex + 1 }),
+      path: [{ kind: "document", label: descriptor("document") }, { kind: "table", label: descriptor("table", { number: tableIndex + 1 }) }],
+    },
+    hit: "direct",
+    depth: 2,
+  }
+}
+
+function imageHitCandidate(element: Element): OfficeHitCandidate | undefined {
+  const image = element.closest<HTMLElement>("[data-docx-image-child-index]")
+    ?? element.closest<HTMLElement>("[data-image-child-index]")
+  if (!image) return undefined
+  const childIndex = Number(dataAttribute(image, "data-docx-image-child-index") ?? dataAttribute(image, "data-image-child-index"))
+  const paragraph = paragraphLocationForElement(image)
+  if (!paragraph || !Number.isSafeInteger(childIndex) || childIndex < 0) return undefined
+  const key = paragraph.kind === "paragraph"
+    ? `p${paragraph.nodeIndex}`
+    : `t${paragraph.tableIndex}.${paragraph.rowIndex}.${paragraph.cellIndex}.${paragraph.paragraphIndex}`
+  return {
+    candidateId: `docx:image:${key}:${childIndex}`,
+    draft: createDocxImageReferenceDraft(referenceContext(), { paragraph, childIndex }),
+    preview: {
+      label: descriptor("image"),
+      path: [
+        { kind: "document", label: descriptor("document") },
+        { kind: "image", label: descriptor("image") },
+      ],
+    },
+    hit: "direct",
+    depth: 3,
+  }
+}
+
+function commentHitCandidates(element: Element): readonly OfficeHitCandidate[] {
+  const marked = element.closest<HTMLElement>("[data-docx-comment-ids], [data-docx-comment-id]")
+  if (!marked) return []
+  const ids = new Set(
+    (dataAttribute(marked, "data-docx-comment-ids") ?? dataAttribute(marked, "data-docx-comment-id") ?? "")
+      .split(/\s+/u)
+      .filter(Boolean),
+  )
+  if (ids.size === 0) return []
+  const anchor = paragraphLocationForElement(marked)
+  const comments = props.model.metadata.comments ?? []
+  const candidates: OfficeHitCandidate[] = []
+  for (const commentId of ids) {
+    const comment = comments.find((entry) => String(entry.id) === commentId)
+    const label = comment?.text
+      ? `Comment: ${comment.text.replace(/\s+/gu, " ").trim().slice(0, 80)}`
+      : `Comment ${commentId}`
+    candidates.push({
+      candidateId: `docx:comment:${commentId}`,
+      draft: createDocxCommentReferenceDraft(referenceContext(), { commentId, ...(anchor ? { anchor } : {}) }),
+      preview: {
+        label,
+        path: [{ kind: "document", label: descriptor("document") }, { kind: "comment", label }],
+      },
+      hit: "direct",
+      depth: 3,
+    })
+  }
+  return candidates
+}
+
 function hitTest(point: { clientX: number; clientY: number }): readonly OfficeReferenceCandidatePreview[] {
   try {
-    const page = pageAtPoint(point.clientX, point.clientY)
-    const pageIndex = Number(page?.dataset.docxPageIndex)
-    return Number.isSafeInteger(pageIndex) && pageIndex >= 0 ? [pageCandidate(pageIndex)] : []
+    const elements = elementsAtPoint(point.clientX, point.clientY)
+    const pageElement = elements
+      .map((element) => element.closest<HTMLElement>("[data-docx-page-index]"))
+      .find((element) => element !== null)
+    const pageIndex = Number(dataAttribute(pageElement, "data-docx-page-index"))
+    const candidates: OfficeHitCandidate[] = []
+    const seen = new Set<string>()
+    const push = (candidate: OfficeHitCandidate | undefined): void => {
+      if (!candidate || seen.has(candidate.candidateId) || candidates.length >= MAX_OFFICE_VISIBLE_CANDIDATES) return
+      seen.add(candidate.candidateId)
+      candidates.push(candidate)
+    }
+
+    for (const element of elements) {
+      try {
+        push(tableHitCandidate(element))
+        push(imageHitCandidate(element))
+        for (const comment of commentHitCandidates(element)) push(comment)
+      } catch {
+        // Stale DOM nodes (for example a virtualized page being replaced) must
+        // not discard candidates that still resolve against the model.
+      }
+    }
+    if (Number.isSafeInteger(pageIndex) && pageIndex >= 0) {
+      try {
+        push(pageHitCandidate(pageIndex))
+      } catch {
+        // Page candidates are unavailable until pagination produces a page.
+      }
+    }
+    return rankOfficeHitCandidates(candidates).map(toOfficeReferenceCandidatePreview)
   } catch (reason) {
-    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : "DOCX hit test failed.")
+    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : formatOfficeMessage(m.value.common.reference.hitTestFailed, { format: "DOCX" }))
     return []
   }
 }
 
+let candidateFrame = 0
+let pendingCandidatePoint: { clientX: number; clientY: number } | undefined
+
+function flushCandidatePointer(): void {
+  const point = pendingCandidatePoint
+  pendingCandidatePoint = undefined
+  if (!point) return
+  const candidates = hitTest(point)
+  emit("referenceCandidateChange", { candidates, ...(candidates[0] ? { activeCandidateId: candidates[0].candidateId } : {}) })
+}
+
+function cancelCandidateFrame(): void {
+  pendingCandidatePoint = undefined
+  if (!candidateFrame) return
+  if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(candidateFrame)
+  candidateFrame = 0
+}
+
 function onReferencePointerMove(event: PointerEvent): void {
   if (selectionMode.value !== "object" || !props.emitReferenceCandidates) return
-  const candidates = hitTest(event)
-  emit("referenceCandidateChange", { candidates, ...(candidates[0] ? { activeCandidateId: candidates[0].candidateId } : {}) })
+  pendingCandidatePoint = { clientX: event.clientX, clientY: event.clientY }
+  if (typeof requestAnimationFrame !== "function") {
+    flushCandidatePointer()
+    return
+  }
+  if (candidateFrame) return
+  candidateFrame = requestAnimationFrame(() => {
+    candidateFrame = 0
+    flushCandidatePointer()
+  })
+}
+
+function onReferencePointerLeave(): void {
+  cancelCandidateFrame()
+  if (selectionMode.value !== "object" || !props.emitReferenceCandidates) return
+  emit("referenceCandidateChange", { candidates: [] })
 }
 
 function onReferenceClick(event: MouseEvent): void {
@@ -263,49 +493,107 @@ function onReferenceEscape(): void {
   emit("selectionCancel", { mode: selectionMode.value, reason: "escape" })
 }
 
-type RegionGesture = { pageIndex: number; bounds: DOMRect; startX: number; startY: number; pointerId: number }
+type RegionGesture = {
+  pageIndex: number
+  page: HTMLElement
+  startX: number
+  startY: number
+  lastClientX: number
+  lastClientY: number
+  pointerId: number
+}
 const regionGesture = ref<RegionGesture | null>(null)
 const regionRect = ref<NormalizedRect | null>(null)
+const regionBounds = shallowRef<DOMRect | null>(null)
 const regionFrame = computed(() => {
   const rect = regionRect.value
-  const gesture = regionGesture.value
-  const root = surfaceRef.value?.getBoundingClientRect()
-  return rect && gesture && root ? {
-    left: `${gesture.bounds.left - root.left + rect.x * gesture.bounds.width}px`,
-    top: `${gesture.bounds.top - root.top + rect.y * gesture.bounds.height}px`,
-    width: `${rect.width * gesture.bounds.width}px`,
-    height: `${rect.height * gesture.bounds.height}px`,
+  const bounds = regionBounds.value
+  const root = rect && bounds ? surfaceRef.value?.getBoundingClientRect() : undefined
+  return rect && bounds && root ? {
+    left: `${bounds.left - root.left + rect.x * bounds.width}px`,
+    top: `${bounds.top - root.top + rect.y * bounds.height}px`,
+    width: `${rect.width * bounds.width}px`,
+    height: `${rect.height * bounds.height}px`
   } : undefined
 })
 
 function clampUnit(value: number): number { return Math.max(0, Math.min(1, value)) }
 
-function normalizedRegionRect(gesture: RegionGesture, clientX: number, clientY: number): NormalizedRect {
-  const x1 = clampUnit((Math.min(gesture.startX, clientX) - gesture.bounds.left) / gesture.bounds.width)
-  const y1 = clampUnit((Math.min(gesture.startY, clientY) - gesture.bounds.top) / gesture.bounds.height)
-  const x2 = clampUnit((Math.max(gesture.startX, clientX) - gesture.bounds.left) / gesture.bounds.width)
-  const y2 = clampUnit((Math.max(gesture.startY, clientY) - gesture.bounds.top) / gesture.bounds.height)
+function normalizedRegionRect(
+  gesture: RegionGesture,
+  bounds: DOMRect,
+  clientX: number,
+  clientY: number,
+): NormalizedRect {
+  const x1 = clampUnit((Math.min(gesture.startX, clientX) - bounds.left) / bounds.width)
+  const y1 = clampUnit((Math.min(gesture.startY, clientY) - bounds.top) / bounds.height)
+  const x2 = clampUnit((Math.max(gesture.startX, clientX) - bounds.left) / bounds.width)
+  const y2 = clampUnit((Math.max(gesture.startY, clientY) - bounds.top) / bounds.height)
   return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 }
+}
+
+function liveRegionBounds(gesture: RegionGesture): DOMRect | undefined {
+  const bounds = gesture.page.getBoundingClientRect()
+  return bounds && bounds.width > 0 && bounds.height > 0 ? bounds : undefined
+}
+
+/**
+ * Re-read the page rect on every gesture sample (and on scroll/zoom while a
+ * gesture is active) so edge auto-scroll and Ctrl-wheel zoom cannot leave the
+ * denominators or the preview frame stale.
+ */
+function updateRegionGeometry(clientX: number, clientY: number, emitChange: boolean): void {
+  const gesture = regionGesture.value
+  if (!gesture) return
+  const bounds = liveRegionBounds(gesture)
+  if (!bounds) return
+  const rect = normalizedRegionRect(gesture, bounds, clientX, clientY)
+  regionBounds.value = bounds
+  regionRect.value = rect
+  if (emitChange && rect.width > 0 && rect.height > 0) {
+    emit("regionDraftChange", {
+      phase: "change",
+      region: { space: "page", pageIndex: gesture.pageIndex, rect },
+    })
+  }
+}
+
+function refreshRegionGeometry(): void {
+  const gesture = regionGesture.value
+  if (!gesture) return
+  updateRegionGeometry(gesture.lastClientX, gesture.lastClientY, true)
 }
 
 function onRegionPointerDown(event: PointerEvent): void {
   if (event.button !== 0) return
   const page = pageAtPoint(event.clientX, event.clientY)
-  const pageIndex = Number(page?.dataset.docxPageIndex)
+  const pageIndex = Number(dataAttribute(page, "data-docx-page-index"))
   const bounds = page?.getBoundingClientRect()
-  if (!bounds || bounds.width <= 0 || bounds.height <= 0 || !Number.isSafeInteger(pageIndex)) return
-  regionGesture.value = { pageIndex, bounds, startX: event.clientX, startY: event.clientY, pointerId: event.pointerId }
-  regionRect.value = { x: clampUnit((event.clientX - bounds.left) / bounds.width), y: clampUnit((event.clientY - bounds.top) / bounds.height), width: 0, height: 0 }
+  if (!page || !bounds || bounds.width <= 0 || bounds.height <= 0 || !Number.isSafeInteger(pageIndex)) return
+  const x = clampUnit((event.clientX - bounds.left) / bounds.width)
+  const y = clampUnit((event.clientY - bounds.top) / bounds.height)
+  regionGesture.value = {
+    pageIndex,
+    page,
+    startX: event.clientX,
+    startY: event.clientY,
+    lastClientX: event.clientX,
+    lastClientY: event.clientY,
+    pointerId: event.pointerId,
+  }
+  regionBounds.value = bounds
+  regionRect.value = { x, y, width: 0, height: 0 }
   ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
-  emit("regionDraftChange", { phase: "start", region: { space: "page", pageIndex, rect: regionRect.value } })
+  emit("regionDraftChange", { phase: "start", point: { space: "page", pageIndex, x, y } })
   event.preventDefault()
 }
 
 function onRegionPointerMove(event: PointerEvent): void {
   const gesture = regionGesture.value
   if (!gesture || gesture.pointerId !== event.pointerId) return
-  regionRect.value = normalizedRegionRect(gesture, event.clientX, event.clientY)
-  emit("regionDraftChange", { phase: "change", region: { space: "page", pageIndex: gesture.pageIndex, rect: regionRect.value } })
+  gesture.lastClientX = event.clientX
+  gesture.lastClientY = event.clientY
+  updateRegionGeometry(event.clientX, event.clientY, true)
 }
 
 function finishRegion(event: PointerEvent, cancelled: boolean): void {
@@ -313,9 +601,13 @@ function finishRegion(event: PointerEvent, cancelled: boolean): void {
   if (!gesture || gesture.pointerId !== event.pointerId) return
   const target = event.currentTarget as HTMLElement
   if (target.hasPointerCapture?.(event.pointerId)) target.releasePointerCapture?.(event.pointerId)
+  gesture.lastClientX = event.clientX
+  gesture.lastClientY = event.clientY
+  updateRegionGeometry(event.clientX, event.clientY, false)
   const rect = regionRect.value
   regionGesture.value = null
   regionRect.value = null
+  regionBounds.value = null
   if (cancelled || !rect || rect.width < 0.005 || rect.height < 0.005) {
     emit("selectionCancel", { mode: "region", reason: cancelled ? "pointer-cancel" : "programmatic" })
     return
@@ -328,6 +620,7 @@ function onRegionPointerCancel(event: PointerEvent): void { finishRegion(event, 
 function onRegionKeyboardCancel(): void {
   regionGesture.value = null
   regionRect.value = null
+  regionBounds.value = null
   emit("selectionCancel", { mode: "region", reason: "escape" })
 }
 
@@ -352,8 +645,34 @@ interface DomTextSegment {
   endPoint: DomPoint
 }
 
+interface HighlightRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+  width: number
+  height: number
+}
+
+interface CachedMatchGeometry {
+  hostRect: HighlightRect
+  rects: HighlightRect[]
+}
+
+interface SearchGeometryCache {
+  matches: readonly DocxSearchMatch[]
+  container: HTMLElement
+  scrollTop: number
+  scrollLeft: number
+  rootRect: HighlightRect
+  viewportRect: HighlightRect
+  entries: CachedMatchGeometry[][]
+}
+
 const searchHighlights = shallowRef<SearchHighlight[]>([])
 let highlightFrame = 0
+let pendingReuseGeometry = false
+let searchGeometryCache: SearchGeometryCache | undefined
 let cleanupSearchSubscription: (() => void) | undefined
 let cleanupSearchScrollListener: (() => void) | undefined
 
@@ -368,6 +687,48 @@ function throwIfAborted(signal: AbortSignal): void {
 function nextFrame(): Promise<void> {
   if (typeof requestAnimationFrame !== "function") return Promise.resolve()
   return new Promise((resolve) => requestAnimationFrame(() => resolve()))
+}
+
+const SEARCH_ACTIVATION_RETRY_LIMIT = 30
+const visiblePageWaiters = new Set<() => void>()
+
+function waitForActivationRetry(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (): void => {
+      if (settled) return
+      settled = true
+      visiblePageWaiters.delete(finish)
+      signal.removeEventListener?.("abort", finish)
+      resolve()
+    }
+    if (signal.aborted) {
+      finish()
+      return
+    }
+    visiblePageWaiters.add(finish)
+    signal.addEventListener?.("abort", finish, { once: true })
+    void nextFrame().then(finish)
+  })
+}
+
+function preferredSearchCandidate(
+  candidates: readonly { host: HTMLElement; range: Range }[],
+  container: HTMLElement | undefined,
+): { host: HTMLElement; range: Range } | undefined {
+  if (!container) return candidates[0]
+  const viewport = container.getBoundingClientRect()
+  const visible = candidates.find(({ range }) => {
+    const rect = range.getClientRects()[0]
+    return rect && rect.top >= viewport.top && rect.bottom <= viewport.bottom
+  })
+  if (visible) return visible
+  const center = viewport.top + viewport.height / 2
+  return [...candidates].sort((left, right) => {
+    const leftRect = left.range.getClientRects()[0]
+    const rightRect = right.range.getClientRects()[0]
+    return Math.abs((leftRect?.top ?? Infinity) - center) - Math.abs((rightRect?.top ?? Infinity) - center)
+  })[0]
 }
 
 function selectorForLocation(location: DocxTextRangeLocation): string {
@@ -385,7 +746,7 @@ function selectorForLocation(location: DocxTextRangeLocation): string {
 
 function isExcludedTextElement(element: Element): boolean {
   return element.matches(
-    "[data-docx-numbering-label='true'], [data-docx-image-child-index], [data-docx-form-field='true'], [data-docx-tracked-change='deletion']",
+    "[data-docx-numbering-label='true'], [data-docx-note-marker='true'], [data-docx-image-child-index], [data-docx-form-field='true'], [data-docx-tracked-change='deletion']",
   )
 }
 
@@ -474,9 +835,9 @@ function rangesForMatch(match: DocxSearchMatch): Array<{ host: HTMLElement; rang
 }
 
 function intersectionRect(
-  rect: DOMRect,
-  hostRect: DOMRect,
-  viewportRect: DOMRect,
+  rect: HighlightRect,
+  hostRect: HighlightRect,
+  viewportRect: HighlightRect,
 ): { left: number; top: number; right: number; bottom: number } | undefined {
   const left = Math.max(rect.left, hostRect.left, viewportRect.left)
   const top = Math.max(rect.top, hostRect.top, viewportRect.top)
@@ -486,24 +847,82 @@ function intersectionRect(
   return { left, top, right, bottom }
 }
 
-function renderSearchHighlights(): void {
+function highlightRect(rect: DOMRect): HighlightRect {
+  const width = Number.isFinite(rect.width) ? rect.width : rect.right - rect.left
+  const height = Number.isFinite(rect.height) ? rect.height : rect.bottom - rect.top
+  return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width, height }
+}
+
+function cachedSearchGeometry(
+  root: HTMLElement,
+  container: HTMLElement,
+  matches: readonly DocxSearchMatch[],
+): SearchGeometryCache {
+  return {
+    matches,
+    container,
+    scrollTop: container.scrollTop,
+    scrollLeft: container.scrollLeft,
+    rootRect: highlightRect(root.getBoundingClientRect()),
+    viewportRect: highlightRect(container.getBoundingClientRect()),
+    entries: matches.map((match) =>
+      rangesForMatch(match).map(({ host, range }) => ({
+        hostRect: highlightRect(host.getBoundingClientRect()),
+        rects: Array.from(range.getClientRects()).map(highlightRect),
+      }))
+    ),
+  }
+}
+
+/**
+ * Highlight geometry is expensive to collect (selector walk + text segment
+ * collection + getClientRects per range). Cache it and translate the cached
+ * rectangles by the scroll delta while scrolling; only rebuild when the
+ * document, zoom, search state or mounted page window changes.
+ */
+function renderSearchHighlights(reuseGeometry = false): void {
   const root = surfaceRef.value
   const container = viewerRootRef.value?.scrollContainer
   const state = surfaceSearch.getSearchState()
   if (!root || !container || !state.matches.length) {
+    searchGeometryCache = undefined
     searchHighlights.value = []
     return
   }
 
-  const rootRect = root.getBoundingClientRect()
-  const viewportRect = container.getBoundingClientRect()
+  let cache = reuseGeometry
+    && searchGeometryCache?.matches === state.matches
+    && searchGeometryCache.container === container
+    ? searchGeometryCache
+    : undefined
+  if (!cache) {
+    cache = cachedSearchGeometry(root, container, state.matches)
+    searchGeometryCache = cache
+  }
+
+  const deltaX = container.scrollLeft - cache.scrollLeft
+  const deltaY = container.scrollTop - cache.scrollTop
+  const { rootRect, viewportRect } = cache
   const seen = new Set<string>()
   const next: SearchHighlight[] = []
-  state.matches.forEach((match, matchIndex) => {
-    for (const { host, range } of rangesForMatch(match)) {
-      const hostRect = host.getBoundingClientRect()
-      for (const rect of Array.from(range.getClientRects())) {
-        const clipped = intersectionRect(rect, hostRect, viewportRect)
+  cache.entries.forEach((hosts, matchIndex) => {
+    for (const { hostRect, rects } of hosts) {
+      const translatedHost: HighlightRect = {
+        ...hostRect,
+        left: hostRect.left - deltaX,
+        right: hostRect.right - deltaX,
+        top: hostRect.top - deltaY,
+        bottom: hostRect.bottom - deltaY,
+      }
+      for (const cachedRect of rects) {
+        const rect: HighlightRect = {
+          ...cachedRect,
+          left: cachedRect.left - deltaX,
+          right: cachedRect.right - deltaX,
+          top: cachedRect.top - deltaY,
+          bottom: cachedRect.bottom - deltaY,
+        }
+        const clipped = intersectionRect(rect, translatedHost, viewportRect)
         if (!clipped) continue
         const left = clipped.left - rootRect.left
         const top = clipped.top - rootRect.top
@@ -526,77 +945,59 @@ function renderSearchHighlights(): void {
   searchHighlights.value = next
 }
 
-function scheduleSearchHighlights(): void {
-  if (highlightFrame && typeof cancelAnimationFrame === "function") {
-    cancelAnimationFrame(highlightFrame)
-  }
+function scheduleSearchHighlights(reuseGeometry = false): void {
   if (typeof requestAnimationFrame !== "function") {
-    renderSearchHighlights()
+    renderSearchHighlights(reuseGeometry)
     return
+  }
+  if (highlightFrame) {
+    cancelAnimationFrame(highlightFrame)
+    // A forced rebuild scheduled in the same frame must win over a cheap
+    // scroll-only refresh.
+    pendingReuseGeometry = pendingReuseGeometry && reuseGeometry
+  } else {
+    pendingReuseGeometry = reuseGeometry
   }
   highlightFrame = requestAnimationFrame(() => {
     highlightFrame = 0
-    renderSearchHighlights()
+    const reuse = pendingReuseGeometry
+    pendingReuseGeometry = false
+    renderSearchHighlights(reuse)
   })
 }
 
 async function activateSearchMatchInView(match: DocxSearchMatch, signal: AbortSignal): Promise<void> {
-  const container = viewerRootRef.value?.scrollContainer
-  let candidates = rangesForMatch(match)
-  let candidate = container
-    ? candidates.find(({ range }) => {
-        const rect = range.getClientRects()[0]
+  for (let attempt = 0; attempt <= SEARCH_ACTIVATION_RETRY_LIMIT; attempt += 1) {
+    throwIfAborted(signal)
+    const container = viewerRootRef.value?.scrollContainer
+    const candidate = preferredSearchCandidate(rangesForMatch(match), container)
+    if (candidate) {
+      const rect = candidate.range.getClientRects()[0]
+      if (container && rect) {
         const viewport = container.getBoundingClientRect()
-        return rect && rect.top >= viewport.top && rect.bottom <= viewport.bottom
-      })
-    : undefined
-  if (candidate) {
-    scheduleSearchHighlights()
-    return
-  }
-
-  if (!candidates.length) {
+        if (rect.top < viewport.top || rect.bottom > viewport.bottom) {
+          container.scrollBy({
+            top: rect.top - viewport.top - (viewport.height - rect.height) / 2,
+            behavior: "auto",
+          })
+          await nextFrame()
+          throwIfAborted(signal)
+        }
+      }
+      scheduleSearchHighlights()
+      return
+    }
+    if (attempt === SEARCH_ACTIVATION_RETRY_LIMIT) break
+    // The match lives on a virtualized page that is not mounted yet. Ask the
+    // viewer to scroll it into range and retry on the next frame or as soon as
+    // the visible page range changes.
     viewerRootRef.value?.scrollToNode(match.nodeIndex, { behavior: "auto" })
     await nextTick()
-    await nextFrame()
-    throwIfAborted(signal)
-    candidates = rangesForMatch(match)
+    await waitForActivationRetry(signal)
   }
-
-  if (container && candidates.length) {
-    const viewport = container.getBoundingClientRect()
-    const center = viewport.top + viewport.height / 2
-    candidate = [...candidates].sort((left, right) => {
-      const leftRect = left.range.getClientRects()[0]
-      const rightRect = right.range.getClientRects()[0]
-      return Math.abs((leftRect?.top ?? Infinity) - center) - Math.abs((rightRect?.top ?? Infinity) - center)
-    })[0]
-  } else {
-    candidate = candidates[0]
-  }
-  if (!candidate) {
-    await nextFrame()
-    throwIfAborted(signal)
-    candidate = rangesForMatch(match)[0]
-  }
-
-  if (!candidate) {
-    throw new Error("DOCX search match could not be projected into the mounted document.")
-  }
-
-  const rect = candidate.range.getClientRects()[0]
-  if (container && rect) {
-    const viewport = container.getBoundingClientRect()
-    if (rect.top < viewport.top || rect.bottom > viewport.bottom) {
-      container.scrollBy({
-        top: rect.top - viewport.top - (viewport.height - rect.height) / 2,
-        behavior: "auto",
-      })
-      await nextFrame()
-      throwIfAborted(signal)
-    }
-  }
-  scheduleSearchHighlights()
+  throw new Error(
+    `DOCX search match could not be projected into the mounted document after ${SEARCH_ACTIVATION_RETRY_LIMIT + 1} attempts.`,
+  )
 }
 
 const surfaceSearch = createSurfaceSearchSession<DocxSearchMatch>({
@@ -607,6 +1008,7 @@ const surfaceSearch = createSurfaceSearchSession<DocxSearchMatch>({
     return activateSearchMatchInView(match, signal)
   },
   clear() {
+    searchGeometryCache = undefined
     searchHighlights.value = []
   },
 })
@@ -620,13 +1022,18 @@ cleanupSearchSubscription = surfaceSearch.subscribe((next) => {
 function onVisiblePageRange(range: { startPageIndex: number; endPageIndex: number }): void {
   emit("visiblePageRange", range)
   scheduleSearchHighlights()
+  refreshRegionGeometry()
+  for (const waiter of [...visiblePageWaiters]) waiter()
 }
 
 function attachSearchScrollListener(): void {
   cleanupSearchScrollListener?.()
   const container = viewerRootRef.value?.scrollContainer
   if (!container) return
-  const onScroll = () => scheduleSearchHighlights()
+  const onScroll = () => {
+    scheduleSearchHighlights(true)
+    refreshRegionGeometry()
+  }
   container.addEventListener("scroll", onScroll, { passive: true })
   cleanupSearchScrollListener = () => container.removeEventListener("scroll", onScroll)
 }
@@ -726,6 +1133,23 @@ function onGestureChange(event: WebKitGestureEvent): void {
   )
 }
 
+const touchGestures = createTouchGestureTracker({
+  isEnabled: () => selectionMode.value === "content" && !props.editable,
+  isDoubleTapEnabled: () => controlledZoom() !== undefined,
+  getZoom: controlledZoom,
+  onZoom: (zoom, center) => requestGestureZoom(zoom, center.clientX, center.clientY),
+  onDoubleTap: (pointer) => {
+    const current = controlledZoom()
+    if (current === undefined) return
+    requestGestureZoom(nextDoubleTapZoom(current), pointer.clientX, pointer.clientY)
+  },
+})
+
+function onTouchPointerDown(event: PointerEvent): void { touchGestures.pointerDown(event) }
+function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMove(event) }
+function onTouchPointerUp(event: PointerEvent): void { touchGestures.pointerUp(event) }
+function onTouchPointerCancel(event: PointerEvent): void { touchGestures.pointerCancel(event) }
+
 function attachGestureListeners(): void {
   cleanupGestureListeners?.()
   const element = viewerRootRef.value?.scrollContainer
@@ -735,11 +1159,19 @@ function attachGestureListeners(): void {
   element.addEventListener("gesturestart", onGestureStart, { passive: false })
   element.addEventListener("gesturechange", onGestureChange as EventListener, { passive: false })
   element.addEventListener("gestureend", onGestureEnd)
+  element.addEventListener("pointerdown", onTouchPointerDown, { passive: true })
+  element.addEventListener("pointermove", onTouchPointerMove, { passive: true })
+  element.addEventListener("pointerup", onTouchPointerUp)
+  element.addEventListener("pointercancel", onTouchPointerCancel)
   cleanupGestureListeners = () => {
     element.removeEventListener("wheel", onWheel)
     element.removeEventListener("gesturestart", onGestureStart)
     element.removeEventListener("gesturechange", onGestureChange as EventListener)
     element.removeEventListener("gestureend", onGestureEnd)
+    element.removeEventListener("pointerdown", onTouchPointerDown)
+    element.removeEventListener("pointermove", onTouchPointerMove)
+    element.removeEventListener("pointerup", onTouchPointerUp)
+    element.removeEventListener("pointercancel", onTouchPointerCancel)
   }
 }
 
@@ -766,7 +1198,12 @@ watch(() => props.documentId, () => emit("documentRevisionChange", documentRevis
 
 watch(
   () => [effectiveZoomScale.value, props.fitWidth, props.showTrackedChanges, props.showComments],
-  () => { void nextTick(scheduleSearchHighlights) },
+  () => {
+    void nextTick(() => {
+      scheduleSearchHighlights()
+      refreshRegionGeometry()
+    })
+  },
 )
 
 onMounted(() => {
@@ -778,6 +1215,9 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   gestureToken += 1
+  cancelCandidateFrame()
+  visiblePageWaiters.clear()
+  touchGestures.reset()
   cleanupGestureListeners?.()
   cleanupSearchScrollListener?.()
   cleanupSearchSubscription?.()
@@ -809,29 +1249,61 @@ defineExpose({
   getDocumentRevision: (): OfficeDocumentRevision => documentRevision.value,
   hitTest,
   async describeReference(reference: OfficeObjectReference, signal?: AbortSignal) {
-    if (signal?.aborted) throw new DOMException("DOCX reference description aborted.", "AbortError")
-    const descriptor = describeDocxReference(referenceContext(), reference)
-    if (!descriptor) throw new Error("DOCX reference is not resolvable in the current revision.")
-    return descriptor
+    if (signal?.aborted) {
+      emitReferenceError("describe", "ABORTED", formatOfficeMessage(m.value.common.reference.describeAborted, { format: "DOCX" }), reference.referenceId)
+      throw new DOMException("DOCX reference description aborted.", "AbortError")
+    }
+    const result = resolveDocxReference(referenceContext(), reference)
+    if (result.status !== "exact" && result.status !== "relocated") {
+      emitResolveFailure(reference, result, "describe")
+      const reason = result.status === "ambiguous" ? result.reasonCodes.join(", ") : result.reasonCode
+      throw new Error(`DOCX reference is not resolvable in the current revision (${reason}).`)
+    }
+    return localizeOfficeObjectDescriptor(result.descriptor, m.value.common)
   },
   async resolveReference(reference: OfficeObjectReference): Promise<ResolveReferenceResult> {
     const result = resolveDocxReference(referenceContext(), reference)
-    emit("referenceResolve", { referenceId: reference.referenceId, result })
-    return result
+    emitResolveFailure(reference, result, "resolve")
+    const localized = localizeOfficeResolveResult(result, m.value.common)
+    emit("referenceResolve", { referenceId: reference.referenceId, result: localized })
+    return localized
   },
   async scrollToReference(reference: OfficeObjectReference): Promise<void> {
     const result = resolveDocxReference(referenceContext(), reference)
-    if (result.status !== "exact" && result.status !== "relocated") return
+    if (result.status !== "exact" && result.status !== "relocated") {
+      emitResolveFailure(reference, result, "scroll")
+      return
+    }
     const locator = (result.reference as DocxOfficeReference).locator
     if (locator.type === "manual-region") viewerRootRef.value?.scrollToPage(locator.value.pageIndex)
     else if (locator.value.kind === "page") viewerRootRef.value?.scrollToPage(locator.value.pageIndex)
     else if (locator.value.kind === "text-range") {
       const first = locator.value.start.path.find((segment) => segment.kind === "paragraph" || segment.kind === "node")
       if (first) viewerRootRef.value?.scrollToNode(first.index, { behavior: "smooth" })
+    } else if (locator.value.kind === "image") {
+      const first = locator.value.paragraphPath.find((segment) => segment.kind === "paragraph" || segment.kind === "node")
+      if (first) viewerRootRef.value?.scrollToNode(first.index, { behavior: "smooth" })
+    } else if (locator.value.kind === "structure") {
+      const first = locator.value.path.find((segment) => segment.kind === "table" || segment.kind === "node")
+      if (first) viewerRootRef.value?.scrollToNode(first.index, { behavior: "smooth" })
+    } else if (locator.value.kind === "comment" && locator.value.anchorPath) {
+      const first = locator.value.anchorPath.find((segment) => segment.kind === "paragraph" || segment.kind === "node")
+      if (first) viewerRootRef.value?.scrollToNode(first.index, { behavior: "smooth" })
     }
   },
-  async captureReferencePreview(reference: OfficeObjectReference): Promise<Blob> {
-    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", "DOCX preview capture is not provided by the Surface; use the host's capture pipeline.", reference.referenceId)
+  async captureReferencePreview(reference: OfficeObjectReference, options?: OfficeReferencePreviewOptions): Promise<Blob> {
+    const maxDimension = 16_384
+    const requested = [options?.maxWidth, options?.maxHeight]
+    if (requested.some((value) => value !== undefined && (!Number.isFinite(value) || value <= 0 || value > maxDimension))) {
+      emitReferenceError(
+        "capture",
+        "CAPTURE_LIMIT_EXCEEDED",
+        `DOCX preview capture limits must be between 1 and ${maxDimension} pixels.`,
+        reference.referenceId,
+      )
+      throw new RangeError("DOCX reference preview capture limit exceeded")
+    }
+    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", formatOfficeMessage(m.value.common.reference.captureUnsupported, { format: "DOCX" }), reference.referenceId)
     throw new Error("DOCX reference preview capture is unsupported")
   },
 })

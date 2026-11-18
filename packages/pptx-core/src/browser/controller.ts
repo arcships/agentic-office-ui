@@ -18,7 +18,7 @@ import {
 import type { PptxMediaItem, PptxPlaybackDocument } from "../playback/types"
 import { createPptxClock } from "./clock"
 import { createPptxMediaPlayer, type PptxMediaPlayer } from "./media-player"
-import { applyPptxObjectState, capturePptxStaticState } from "./track-player"
+import { applyPptxObjectState, capturePptxStaticState, createPptxTrackTargets, type PptxTrackTargets } from "./track-player"
 import {
   capturePptxTransition,
   mountPptxTransition,
@@ -51,6 +51,21 @@ function mergeState(base: PptxObjectStateMap, update: PptxObjectStateMap): PptxO
   ))
 }
 
+const RETAINED_EVENT_LIMIT = 50
+
+interface RetainedPlaybackEvent {
+  sequence: number
+  event: PptxPlaybackEvent
+}
+
+function toRenderFailure(reason: unknown, slideIndex: number): PptxPlaybackError {
+  if (reason instanceof PptxPlaybackError) return reason
+  return new PptxPlaybackError("RENDER_FAILED", "无法渲染目标页面。", {
+    cause: reason,
+    slideIndex,
+  })
+}
+
 export function createPptxPlaybackController(
   host: PptxPlaybackControllerHost,
   options: PptxPlaybackControllerOptions = {},
@@ -62,8 +77,9 @@ export function createPptxPlaybackController(
       { slideIndex: options.initialSlide },
     )
   }
-  const listeners = new Set<(event: PptxPlaybackEvent) => void>()
-  const retainedEvents: PptxPlaybackEvent[] = []
+  const listeners = new Map<(event: PptxPlaybackEvent) => void, number>()
+  const retainedEvents: RetainedPlaybackEvent[] = []
+  let retainedSequence = 0
   const clock = createPptxClock()
   let status: PptxPlaybackStatus = "ready"
   let slideIndex = Math.min(
@@ -74,6 +90,7 @@ export function createPptxPlaybackController(
   let generation = 1
   let disposed = false
   let compiled: PptxCompiledSlide | null = null
+  let targets: PptxTrackTargets | undefined
   let stableState: PptxObjectStateMap = Object.freeze({})
   let activeGroup: PptxCompiledTriggerGroup | null = null
   let activeResolve: (() => void) | null = null
@@ -105,17 +122,30 @@ export function createPptxPlaybackController(
     generation,
   })
   const emit = (event: PptxPlaybackEvent) => {
-    if (listeners.size === 0 && (event.type === "warning" || event.type === "error")) {
-      retainedEvents.push(event)
+    let sequence: number | undefined
+    if (event.type === "warning" || event.type === "error") {
+      retainedSequence += 1
+      sequence = retainedSequence
+      retainedEvents.push({ sequence, event })
+      if (retainedEvents.length > RETAINED_EVENT_LIMIT) {
+        retainedEvents.splice(0, retainedEvents.length - RETAINED_EVENT_LIMIT)
+      }
     }
-    for (const listener of [...listeners]) listener(event)
+    for (const listener of [...listeners.keys()]) {
+      if (!listeners.has(listener)) continue
+      listener(event)
+      if (sequence !== undefined && listeners.has(listener)) listeners.set(listener, sequence)
+    }
   }
   const emitState = () => emit({ type: "statechange", snapshot: snapshot() })
   const assertUsable = () => {
     if (disposed) throw new PptxPlaybackError("PLAYBACK_DISPOSED", "PPTX 播放控制器已经销毁。")
   }
   const queueCommand = (run: () => Promise<void>): Promise<void> => new Promise((resolve, reject) => {
-    pendingCommand?.resolve()
+    pendingCommand?.reject(new PptxPlaybackError(
+      "COMMAND_CANCELLED",
+      "PPTX 播放命令已被新的命令取代。",
+    ))
     pendingCommand = { run, resolve, reject }
   })
   const flushPendingCommand = () => {
@@ -123,16 +153,16 @@ export function createPptxPlaybackController(
     pendingCommand = null
     if (!pending) return
     if (disposed) {
-      pending.resolve()
+      pending.reject(new PptxPlaybackError("PLAYBACK_DISPOSED", "PPTX 播放控制器已经销毁。"))
       return
     }
     queueMicrotask(() => {
-      if (disposed) pending.resolve()
+      if (disposed) pending.reject(new PptxPlaybackError("PLAYBACK_DISPOSED", "PPTX 播放控制器已经销毁。"))
       else void pending.run().then(pending.resolve, pending.reject)
     })
   }
   const applyStableState = () => {
-    applyPptxObjectState(host.root, stableState)
+    applyPptxObjectState(host.root, stableState, targets)
     mediaPlayer?.apply(stableState)
   }
 
@@ -145,18 +175,16 @@ export function createPptxPlaybackController(
   const prepareCurrentSlide = () => {
     const slide = host.document.slides[slideIndex]
     if (!slide) throw new PptxPlaybackError("PLAYBACK_NOT_READY", "当前页面没有播放模型。", { slideIndex })
-    compiled = compilePptxSlideTracks(slide, capturePptxStaticState(host.root))
-    const targetCounts = new Map<string, number>()
-    for (const element of host.root.querySelectorAll<HTMLElement>("[data-pptx-object-key]")) {
-      const key = element.dataset.pptxObjectKey
-      if (key) targetCounts.set(key, (targetCounts.get(key) ?? 0) + 1)
-    }
+    // The rendered slide is the only moment targets can change: resolve them once and
+    // let every animation frame reuse the index.
+    targets = createPptxTrackTargets(host.root)
+    compiled = compilePptxSlideTracks(slide, capturePptxStaticState(host.root, targets))
     const checkedTargets = new Set<string>()
     for (const effect of compiled.groups.flatMap((group) => group.effects)) {
       const objectKey = effect.effect.targetObjectKey
       if (!objectKey || checkedTargets.has(objectKey)) continue
       checkedTargets.add(objectKey)
-      const count = targetCounts.get(objectKey) ?? 0
+      const count = targets.elements.get(objectKey)?.length ?? 0
       if (count === 1) continue
       emit({
         type: "warning",
@@ -288,7 +316,7 @@ export function createPptxPlaybackController(
     const group = activeGroup
     if (group) {
       const currentState = mergeState(stableState, evaluatePptxTriggerGroup(group, positionMs))
-      applyPptxObjectState(host.root, currentState)
+      applyPptxObjectState(host.root, currentState, targets)
       mediaPlayer?.apply(currentState)
       updateEffectEvents(positionMs)
       if (group.durationMs !== "indefinite" && positionMs >= group.durationMs) finishActiveGroup()
@@ -310,14 +338,19 @@ export function createPptxPlaybackController(
         emitState()
         return
       }
-      void goTo(next, "automatic").catch((reason) => emit({
-        type: "error",
-        error: reason instanceof PptxPlaybackError
-          ? reason
-          : new PptxPlaybackError("TRACK_COMPILE_FAILED", "自动换页失败。", { cause: reason, slideIndex }),
-      }))
+      void goTo(next, "automatic").catch(reportNavigationFailure)
     }
   })
+
+  const reportNavigationFailure = (reason: unknown) => {
+    if (reason instanceof PptxPlaybackError && reason.code === "COMMAND_CANCELLED") return
+    emit({
+      type: "error",
+      error: reason instanceof PptxPlaybackError
+        ? reason
+        : new PptxPlaybackError("TRACK_COMPILE_FAILED", "自动换页失败。", { cause: reason, slideIndex }),
+    })
+  }
 
   const runGroup = (group: PptxCompiledTriggerGroup): Promise<void> => {
     assertUsable()
@@ -373,7 +406,7 @@ export function createPptxPlaybackController(
     if (delay === 0) {
       const next = findNextVisibleSlide(1)
       activeAdvance = null
-      if (next !== undefined) void goTo(next, "automatic")
+      if (next !== undefined) void goTo(next, "automatic").catch(reportNavigationFailure)
     } else clock.play()
   }
 
@@ -428,27 +461,37 @@ export function createPptxPlaybackController(
       if (activeTransition) finishActiveTransition()
       const from = slideIndex
       const capture = capturePptxTransition(host.root)
+      const previousStatus = status
       status = "transitioning"
       generation += 1
       emitState()
-      await host.renderSlide(index)
-      assertUsable()
-      if (commandId !== operationId) return
-      slideIndex = index
-      prepareCurrentSlide()
-      const targetSlide = host.document.slides[index]
-      const transitionKind = targetSlide.transition?.kind.toLowerCase()
-      const executableTransition = transitionKind && (
-        ["cut", "fade", "push", "wipe"].includes(transitionKind)
-        || options.approximation === "safe"
-      ) ? targetSlide.transition : undefined
-      const transition = mountPptxTransition(
-        host.root,
-        capture,
-        executableTransition,
-        from === index - 1 ? targetSlide.morphFromPrevious : [],
-      )
-      await runTransition(transition)
+      try {
+        await host.renderSlide(index)
+        assertUsable()
+        if (commandId !== operationId) return
+        slideIndex = index
+        prepareCurrentSlide()
+        const targetSlide = host.document.slides[index]
+        const transitionKind = targetSlide.transition?.kind.toLowerCase()
+        const executableTransition = transitionKind && (
+          ["cut", "fade", "push", "wipe"].includes(transitionKind)
+          || options.approximation === "safe"
+        ) ? targetSlide.transition : undefined
+        const transition = mountPptxTransition(
+          host.root,
+          capture,
+          executableTransition,
+          from === index - 1 ? targetSlide.morphFromPrevious : [],
+        )
+        await runTransition(transition)
+      } catch (reason) {
+        if (disposed || commandId !== operationId) throw reason
+        status = previousStatus
+        emitState()
+        const failure = toRenderFailure(reason, index)
+        emit({ type: "error", error: failure })
+        throw failure
+      }
       if (commandId !== operationId) return
       status = "ready"
       emit({ type: "slidechange", from, to: index, reason })
@@ -609,17 +652,23 @@ export function createPptxPlaybackController(
     },
     subscribe(listener) {
       assertUsable()
-      listeners.add(listener)
+      const cursor = retainedEvents[0] ? retainedEvents[0].sequence - 1 : retainedSequence
+      listeners.set(listener, cursor)
       listener({ type: "statechange", snapshot: snapshot() })
       listener({ type: "capability", report: host.document.capability })
-      for (const event of retainedEvents) listener(event)
+      for (const retained of retainedEvents) {
+        if (!listeners.has(listener)) break
+        if (retained.sequence <= (listeners.get(listener) ?? cursor)) continue
+        listener(retained.event)
+        if (listeners.has(listener)) listeners.set(listener, retained.sequence)
+      }
       return () => listeners.delete(listener)
     },
     dispose() {
       if (disposed) return
       disposed = true
       operationId += 1
-      pendingCommand?.resolve()
+      pendingCommand?.reject(new PptxPlaybackError("PLAYBACK_DISPOSED", "PPTX 播放控制器已经销毁。"))
       pendingCommand = null
       cancelAdvance()
       if (activeTransition) finishActiveTransition()

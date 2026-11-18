@@ -145,7 +145,7 @@
         "objectKey": "ppt/slides/slide7.xml|slide|shape:2",
         "feature": "repeat:finite",
         "disposition": "strict",
-        "reason": null,
+        "reason": "repeatCount 以千分位记录重复次数（ECMA-376 §19.5.33）：原始值 2000 表示 2 次。",
         "sourceNodeId": "2"
       },
       {
@@ -311,6 +311,7 @@
         "contentType": "video/webm",
         "kind": "video",
         "embedded": true,
+        "autoplay": true,
         "trimStartMs": 100,
         "trimEndMs": 1100,
         "loop": true,
@@ -330,6 +331,7 @@
         "contentType": "audio/wav",
         "kind": "audio",
         "embedded": true,
+        "autoplay": true,
         "trimStartMs": null,
         "trimEndMs": null,
         "loop": false,
@@ -515,7 +517,12 @@
       "trimEndMs": 1100,
       "loop": true,
       "volume": 0.7,
+      "autoplay": true,
       "nativeLoop": false
+    },
+    "mediaTracks": {
+      "media-playback": "play",
+      "media-volume": 0.7
     }
   }
 }

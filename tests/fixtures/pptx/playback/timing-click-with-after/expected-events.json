@@ -145,7 +145,7 @@
         "objectKey": "ppt/slides/slide7.xml|slide|shape:2",
         "feature": "repeat:finite",
         "disposition": "strict",
-        "reason": null,
+        "reason": "repeatCount 以千分位记录重复次数（ECMA-376 §19.5.33）：原始值 2000 表示 2 次。",
         "sourceNodeId": "2"
       },
       {
@@ -309,22 +309,6 @@
   },
   "schedule": [
     {
-      "key": "click:1",
-      "durationMs": 700,
-      "effects": [
-        {
-          "nodeId": "4",
-          "kind": "fade-in",
-          "targetObjectKey": "ppt/slides/slide1.xml|slide|shape:2",
-          "paragraphRange": null,
-          "triggerKey": "click:1",
-          "triggerEvent": "with-previous",
-          "startMs": 0,
-          "endMs": 700
-        }
-      ]
-    },
-    {
       "key": "shape:ppt/slides/slide1.xml|slide|shape:4",
       "durationMs": 500,
       "effects": [
@@ -337,6 +321,22 @@
           "triggerEvent": "with-previous",
           "startMs": 0,
           "endMs": 500
+        }
+      ]
+    },
+    {
+      "key": "click:1",
+      "durationMs": 700,
+      "effects": [
+        {
+          "nodeId": "4",
+          "kind": "fade-in",
+          "targetObjectKey": "ppt/slides/slide1.xml|slide|shape:2",
+          "paragraphRange": null,
+          "triggerKey": "click:1",
+          "triggerEvent": "with-previous",
+          "startMs": 0,
+          "endMs": 700
         }
       ]
     }

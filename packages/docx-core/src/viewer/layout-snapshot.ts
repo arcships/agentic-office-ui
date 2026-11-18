@@ -19,6 +19,7 @@ export interface LayoutParagraphLineRange {
 export interface LayoutTableRowRange {
   startRowIndex: number;
   endRowIndex: number;
+  repeatHeaderRowCount?: number;
 }
 
 export interface LayoutTableRowSlice {
@@ -182,6 +183,8 @@ export function buildLayoutSnapshot(
             ? {
                 startRowIndex: segment.tableRowRange.startRowIndex,
                 endRowIndex: segment.tableRowRange.endRowIndex,
+                repeatHeaderRowCount:
+                  segment.tableRowRange.repeatHeaderRowCount,
               }
             : undefined,
           tableRowSlice: segment.tableRowSlice

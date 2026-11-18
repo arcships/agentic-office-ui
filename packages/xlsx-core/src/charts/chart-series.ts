@@ -6,6 +6,7 @@ import {
 import type {
   XlsxChart,
   XlsxChartAxis,
+  XlsxChartsheet,
   XlsxChartSeries,
   XlsxChartReference,
   XlsxChartTypeGroup,
@@ -225,12 +226,12 @@ export function applyChartSeriesFormula(
     ...currentSeries,
     bubbleSizeRef,
     bubbleSizes: workbook && bubbleSizeRef?.formula
-      ? resolveReferenceValues(workbook, chart.workbookSheetIndex, bubbleSizeRef, "value").map((value) => (
+      ? resolveReferenceValues(workbook, chart.workbookSheetIndex, bubbleSizeRef, "value", chart.plotVisibleOnly !== false).map((value) => (
           typeof value === "number" && Number.isFinite(value) ? value : null
         ))
       : currentSeries.bubbleSizes,
     categories: workbook
-      ? resolveReferenceValues(workbook, chart.workbookSheetIndex, categoriesRef, "category")
+      ? resolveReferenceValues(workbook, chart.workbookSheetIndex, categoriesRef, "category", chart.plotVisibleOnly !== false)
       : currentSeries.categories,
     categoriesRef,
     name: parsed.nameLiteral ?? (
@@ -240,7 +241,7 @@ export function applyChartSeriesFormula(
     ),
     raw,
     values: workbook
-      ? resolveReferenceValues(workbook, chart.workbookSheetIndex, valuesRef, "value").map((value) => (
+      ? resolveReferenceValues(workbook, chart.workbookSheetIndex, valuesRef, "value", chart.plotVisibleOnly !== false).map((value) => (
           typeof value === "number" && Number.isFinite(value) ? value : null
         ))
       : currentSeries.values,
@@ -538,7 +539,8 @@ export function resolveReferenceValues(
   workbook: Workbook,
   fallbackSheetIndex: number,
   reference: XlsxChartReference | null | undefined,
-  mode: "category" | "value"
+  mode: "category" | "value",
+  skipHidden = false
 ): Array<number | string | null> {
   if (!reference?.formula) {
     return reference?.values ?? [];
@@ -552,7 +554,13 @@ export function resolveReferenceValues(
   try {
     const values: Array<number | string | null> = [];
     for (let row = resolved.range.start.row; row <= resolved.range.end.row; row += 1) {
+      if (skipHidden && typeof resolved.sheet.isRowHidden === "function" && resolved.sheet.isRowHidden(row)) {
+        continue;
+      }
       for (let col = resolved.range.start.col; col <= resolved.range.end.col; col += 1) {
+        if (skipHidden && typeof resolved.sheet.isColumnHidden === "function" && resolved.sheet.isColumnHidden(col)) {
+          continue;
+        }
         const calculated = typeof resolved.sheet.getCalculatedValueAt === "function"
           ? resolved.sheet.getCalculatedValueAt(row, col)
           : null;
@@ -604,7 +612,8 @@ export function normalizeChartSeries(
   workbookSheetIndex: number,
   chartId: string,
   raw: unknown,
-  index: number
+  index: number,
+  skipHidden = false
 ): XlsxChartSeries {
   const series = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
   const categoriesRef = normalizeChartReference(series.categories);
@@ -622,10 +631,10 @@ export function normalizeChartSeries(
 
   return {
     bubbleSizeRef,
-    bubbleSizes: resolveReferenceValues(workbook, workbookSheetIndex, bubbleSizeRef, "value").map((value) => (
+    bubbleSizes: resolveReferenceValues(workbook, workbookSheetIndex, bubbleSizeRef, "value", skipHidden).map((value) => (
       typeof value === "number" && Number.isFinite(value) ? value : null
     )),
-    categories: resolveReferenceValues(workbook, workbookSheetIndex, categoriesRef, "category"),
+    categories: resolveReferenceValues(workbook, workbookSheetIndex, categoriesRef, "category", skipHidden),
     categoriesRef,
     color: rawFillColor ?? undefined,
     dataPoints: Array.isArray(series.dataPoints) ? series.dataPoints : [],
@@ -651,10 +660,72 @@ export function normalizeChartSeries(
     raw: series,
     shapeProperties,
     smooth: typeof series.smooth === "boolean" ? series.smooth : undefined,
-    values: resolveReferenceValues(workbook, workbookSheetIndex, valuesRef, "value").map((value) => (
+    values: resolveReferenceValues(workbook, workbookSheetIndex, valuesRef, "value", skipHidden).map((value) => (
       typeof value === "number" && Number.isFinite(value) ? value : null
     )),
     valuesRef
+  };
+}
+
+
+export function refreshChartDataFromWorkbook(
+  workbook: Workbook,
+  chartsByWorkbookSheetIndex: XlsxChart[][],
+  chartsheets: XlsxChartsheet[]
+) {
+  const refreshSeries = (
+    chart: XlsxChart,
+    series: XlsxChartSeries,
+    fallbackSheetIndex: number
+  ): XlsxChartSeries => {
+    const skipHidden = chart.plotVisibleOnly !== false;
+    const categoriesRef = series.categoriesRef ?? null;
+    const valuesRef = series.valuesRef ?? null;
+    const bubbleSizeRef = series.bubbleSizeRef ?? null;
+    const rawName = series.raw && typeof series.raw === "object"
+      ? (series.raw as Record<string, unknown>).name
+      : null;
+    const name = typeof rawName === "string" && rawName.length > 0
+      ? resolveSeriesName(workbook, fallbackSheetIndex, rawName) ?? series.name
+      : series.name;
+    return {
+      ...series,
+      bubbleSizes: bubbleSizeRef?.formula
+        ? resolveReferenceValues(workbook, fallbackSheetIndex, bubbleSizeRef, "value", skipHidden).map((value) => (
+            typeof value === "number" && Number.isFinite(value) ? value : null
+          ))
+        : series.bubbleSizes,
+      categories: categoriesRef?.formula
+        ? resolveReferenceValues(workbook, fallbackSheetIndex, categoriesRef, "category", skipHidden)
+        : series.categories,
+      name,
+      values: valuesRef?.formula
+        ? resolveReferenceValues(workbook, fallbackSheetIndex, valuesRef, "value", skipHidden).map((value) => (
+            typeof value === "number" && Number.isFinite(value) ? value : null
+          ))
+        : series.values
+    };
+  };
+
+  const refreshChart = (chart: XlsxChart): XlsxChart => {
+    const fallbackSheetIndex = chart.workbookSheetIndex >= 0 ? chart.workbookSheetIndex : 0;
+    return {
+      ...chart,
+      series: chart.series.map((series) => refreshSeries(chart, series, fallbackSheetIndex)),
+      typeGroups: chart.typeGroups?.map((group) => ({
+        ...group,
+        series: group.series.map((series) => refreshSeries(chart, series, fallbackSheetIndex))
+      }))
+    };
+  };
+
+  return {
+    chartsByWorkbookSheetIndex: chartsByWorkbookSheetIndex.map((charts) => charts.map(refreshChart)),
+    chartsheets: chartsheets.map((chartsheet) => (
+      chartsheet.charts?.length
+        ? { ...chartsheet, charts: chartsheet.charts.map(refreshChart) }
+        : chartsheet
+    ))
   };
 }
 

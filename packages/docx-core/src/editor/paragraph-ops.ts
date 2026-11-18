@@ -7,16 +7,35 @@ import type {
   DocModel,
   FormFieldRunNode,
   HeadingLevel,
-  ImageRunNode,
   ParagraphAlignment,
   ParagraphNode,
-  TableCellContentNode,
-  TableNode,
   ParagraphStyle,
   TextRunNode,
   TextStyle
 } from "../engine/types";
-import { cloneDocModel } from "../engine/clone";
+import {
+  cloneDocModelShallow,
+  cloneDocNode,
+  cloneFormFieldRun,
+  cloneImageRun,
+  cloneParagraph,
+  cloneParagraphChild,
+  cloneTextRun
+} from "../engine/clone";
+import {
+  cloneNodeForInsertion,
+  createSourceXmlIdentifierRegistry
+} from "./helpers/xml-identifiers";
+import {
+  invalidateParagraphSourceXml,
+  paragraphSectionBreak,
+  removeSectionPropertiesXmlFromSourceXml,
+  shiftDocumentSectionStartNodeIndexes
+} from "../engine/section-break";
+import { remapParagraphCommentRanges } from "../engine/comment-ranges";
+import { paragraphTextContent } from "../engine/paragraph-text";
+
+export { cloneParagraph };
 
 export interface InsertParagraphOptions {
   paragraphStyle?: ParagraphStyle;
@@ -71,101 +90,11 @@ function textRuns(paragraph: ParagraphNode): TextRunNode[] {
   return paragraph.children.filter((child): child is TextRunNode => child.type === "text");
 }
 
-function cloneTextRun(run: TextRunNode): TextRunNode {
-  return {
-    type: "text",
-    text: run.text,
-    style: run.style ? { ...run.style } : undefined,
-    link: run.link,
-    noteReference: run.noteReference ? { ...run.noteReference } : undefined
-  };
-}
-
 function noteReferencesEqual(left?: TextRunNode["noteReference"], right?: TextRunNode["noteReference"]): boolean {
   if (!left || !right) {
     return left === right;
   }
   return left.kind === right.kind && left.id === right.id;
-}
-
-function cloneFormFieldRun(run: FormFieldRunNode): FormFieldRunNode {
-  return {
-    type: "form-field",
-    fieldType: run.fieldType,
-    sourceKind: run.sourceKind,
-    id: run.id,
-    tag: run.tag,
-    title: run.title,
-    placeholder: run.placeholder,
-    checked: run.checked,
-    value: run.value,
-    options: run.options?.map((option) => ({
-      displayText: option.displayText,
-      value: option.value
-    })),
-    widget: run.widget
-      ? {
-          name: run.widget.name,
-          enabled: run.widget.enabled,
-          calcOnExit: run.widget.calcOnExit,
-          text: run.widget.text
-            ? {
-                inputType: run.widget.text.inputType,
-                defaultText: run.widget.text.defaultText,
-                maxLength: run.widget.text.maxLength,
-                textFormat: run.widget.text.textFormat
-              }
-            : undefined,
-          checkbox: run.widget.checkbox
-            ? {
-                defaultChecked: run.widget.checkbox.defaultChecked,
-                sizeMode: run.widget.checkbox.sizeMode,
-                sizePt: run.widget.checkbox.sizePt
-              }
-            : undefined,
-          dropdown: run.widget.dropdown
-            ? {
-                defaultValue: run.widget.dropdown.defaultValue
-              }
-            : undefined
-        }
-      : undefined,
-    checkedSymbol: run.checkedSymbol,
-    uncheckedSymbol: run.uncheckedSymbol,
-    style: run.style ? { ...run.style } : undefined,
-    link: run.link,
-    sourceXml: run.sourceXml
-  };
-}
-
-function cloneImageRun(run: ImageRunNode): ImageRunNode {
-  return {
-    type: "image",
-    src: run.src,
-    alt: run.alt,
-    widthPx: run.widthPx,
-    heightPx: run.heightPx,
-    partName: run.partName,
-    contentType: run.contentType,
-    data: run.data ? new Uint8Array(run.data) : undefined,
-    floating: run.floating ? { ...run.floating } : undefined,
-    syntheticTextBox: run.syntheticTextBox,
-    textBoxText: run.textBoxText
-  };
-}
-
-function cloneParagraphChildRun(
-  run: ParagraphNode["children"][number]
-): ParagraphNode["children"][number] {
-  if (run.type === "text") {
-    return cloneTextRun(run);
-  }
-
-  if (run.type === "form-field") {
-    return cloneFormFieldRun(run);
-  }
-
-  return cloneImageRun(run);
 }
 
 function cloneTextStyle(style?: TextStyle): TextStyle | undefined {
@@ -231,7 +160,10 @@ function splitRunsAtOffset(
     const runEnd = runStart + runLength;
     cursor = runEnd;
 
-    if (runEnd <= safeOffset) {
+    // A zero-length run (a footnote/endnote marker is a zero-length text run)
+    // sits *at* the boundary, not before it: keep it on the right so deleting
+    // text next to a marker no longer deletes the marker itself.
+    if (runEnd < safeOffset || (runEnd === safeOffset && runLength > 0)) {
       left.push(cloneTextRun(run));
       continue;
     }
@@ -357,6 +289,90 @@ function distributeTextAcrossRuns(
   ];
 }
 
+type ParagraphAnchor = Exclude<ParagraphNode["children"][number], TextRunNode>;
+
+/**
+ * Split `text` into one segment per text group, keeping the paragraph's
+ * non-text anchors in place.
+ *
+ * A form field whose display text is still present in `text` is matched by
+ * text. Empty form fields and images are zero-width anchors, and text that no
+ * longer contains the field value is treated the same way: their offset is
+ * remapped through the common prefix/suffix of the edit. That keeps an image or
+ * form field from being dropped just because the user typed somewhere else in
+ * the paragraph.
+ */
+function resolveAnchorSegments(
+  textGroups: TextRunNode[][],
+  anchors: ParagraphAnchor[],
+  text: string
+): { segments: string[]; anchorOffsets: number[] } | undefined {
+  const originalSegmentTexts = textGroups.map((group) => group.map((run) => run.text).join(""));
+  const originalText = originalSegmentTexts.join("");
+  const originalAnchorOffsets: number[] = [];
+  let originalOffsetCursor = 0;
+  for (let index = 0; index < anchors.length; index += 1) {
+    originalOffsetCursor += originalSegmentTexts[index]?.length ?? 0;
+    originalAnchorOffsets.push(originalOffsetCursor);
+  }
+
+  const anchorTexts = anchors.map((anchor) =>
+    anchor.type === "form-field" ? formFieldDisplayValue(anchor) : undefined
+  );
+  let canMatchAnchorText = anchorTexts.every((anchorText) => Boolean(anchorText));
+  if (canMatchAnchorText) {
+    let cursor = 0;
+    for (const anchorText of anchorTexts as string[]) {
+      const anchorIndex = text.indexOf(anchorText, cursor);
+      if (anchorIndex < 0) {
+        canMatchAnchorText = false;
+        break;
+      }
+      cursor = anchorIndex + anchorText.length;
+    }
+  }
+
+  if (canMatchAnchorText) {
+    const segments: string[] = [];
+    const anchorOffsets: number[] = [];
+    let cursor = 0;
+    for (let index = 0; index < anchors.length; index += 1) {
+      const anchorText = anchorTexts[index] as string;
+      const anchorIndex = text.indexOf(anchorText, cursor);
+      if (anchorIndex < 0) return undefined;
+      segments.push(text.slice(cursor, anchorIndex));
+      anchorOffsets.push(anchorIndex);
+      cursor = anchorIndex + anchorText.length;
+    }
+    segments.push(text.slice(cursor));
+    while (segments.length < textGroups.length) segments.push("");
+    return { segments, anchorOffsets };
+  }
+
+  const prefixLength = commonPrefixLength(originalText, text);
+  const suffixLength = commonSuffixLength(originalText, text, prefixLength);
+  const replacedOriginalStart = prefixLength;
+  const replacedOriginalEnd = Math.max(replacedOriginalStart, originalText.length - suffixLength);
+  const replacedNextEnd = Math.max(replacedOriginalStart, text.length - suffixLength);
+  const delta = replacedNextEnd - replacedOriginalEnd;
+  const remappedAnchorOffsets = originalAnchorOffsets.map((anchorOffset) => {
+    if (anchorOffset < replacedOriginalStart) return anchorOffset;
+    if (anchorOffset >= replacedOriginalEnd) return anchorOffset + delta;
+    return replacedOriginalStart;
+  });
+
+  const segments: string[] = [];
+  let cursor = 0;
+  remappedAnchorOffsets.forEach((anchorOffset) => {
+    const safeAnchorOffset = Math.max(cursor, Math.min(anchorOffset, text.length));
+    segments.push(text.slice(cursor, safeAnchorOffset));
+    cursor = safeAnchorOffset;
+  });
+  segments.push(text.slice(cursor));
+  while (segments.length < textGroups.length) segments.push("");
+  return { segments, anchorOffsets: remappedAnchorOffsets };
+}
+
 export function distributeTextAcrossParagraphChildren(
   paragraph: ParagraphNode,
   text: string,
@@ -387,65 +403,12 @@ export function distributeTextAcrossParagraphChildren(
   }
   textGroups.push(currentGroup);
 
-  const allAnchorsAreImages = anchors.length > 0 && anchors.every((anchor) => anchor.type === "image");
-  if (allAnchorsAreImages) {
-    const originalSegmentTexts = textGroups.map((group) => group.map((run) => run.text).join(""));
-    const originalText = originalSegmentTexts.join("");
-    const originalAnchorOffsets: number[] = [];
-    let originalOffsetCursor = 0;
-    for (let index = 0; index < anchors.length; index += 1) {
-      originalOffsetCursor += originalSegmentTexts[index]?.length ?? 0;
-      originalAnchorOffsets.push(originalOffsetCursor);
-    }
-
-    const prefixLength = (() => {
-      const limit = Math.min(originalText.length, text.length);
-      let index = 0;
-      while (index < limit && originalText[index] === text[index]) {
-        index += 1;
-      }
-      return index;
-    })();
-    const suffixLength = (() => {
-      const remainingOriginal = originalText.length - prefixLength;
-      const remainingNext = text.length - prefixLength;
-      const limit = Math.min(remainingOriginal, remainingNext);
-      let index = 0;
-      while (
-        index < limit &&
-        originalText[originalText.length - 1 - index] === text[text.length - 1 - index]
-      ) {
-        index += 1;
-      }
-      return index;
-    })();
-    const replacedOriginalStart = prefixLength;
-    const replacedOriginalEnd = Math.max(replacedOriginalStart, originalText.length - suffixLength);
-    const replacedNextEnd = Math.max(replacedOriginalStart, text.length - suffixLength);
-    const delta = replacedNextEnd - replacedOriginalEnd;
-    const remappedAnchorOffsets = originalAnchorOffsets.map((anchorOffset) => {
-      if (anchorOffset < replacedOriginalStart) {
-        return anchorOffset;
-      }
-      if (anchorOffset >= replacedOriginalEnd) {
-        return anchorOffset + delta;
-      }
-      return replacedOriginalStart;
-    });
-
-    const segments: string[] = [];
-    let cursor = 0;
-    remappedAnchorOffsets.forEach((anchorOffset) => {
-      const safeAnchorOffset = Math.max(cursor, Math.min(anchorOffset, text.length));
-      segments.push(text.slice(cursor, safeAnchorOffset));
-      cursor = safeAnchorOffset;
-    });
-    segments.push(text.slice(cursor));
-
+  const resolved = resolveAnchorSegments(textGroups, anchors, text);
+  if (resolved) {
     const nextChildren: ParagraphNode["children"] = [];
     for (let index = 0; index < textGroups.length; index += 1) {
       const templateRuns = textGroups[index];
-      const segmentText = segments[index] ?? "";
+      const segmentText = resolved.segments[index] ?? "";
 
       if (templateRuns.length > 0) {
         nextChildren.push(...distributeTextAcrossRuns(segmentText, templateRuns, options));
@@ -458,62 +421,13 @@ export function distributeTextAcrossParagraphChildren(
       }
 
       if (index < anchors.length) {
-        nextChildren.push(cloneParagraphChildRun(anchors[index]));
+        nextChildren.push(cloneParagraphChild(anchors[index]));
       }
     }
 
     if (nextChildren.length > 0) {
       return nextChildren;
     }
-  }
-
-  const segments: string[] = [];
-  let cursor = 0;
-  for (let index = 0; index < anchors.length; index += 1) {
-    const anchor = anchors[index];
-    const anchorText = anchor.type === "form-field" ? formFieldDisplayValue(anchor) : "";
-    if (!anchorText) {
-      return distributeTextAcrossRuns(text, textRuns(paragraph), options);
-    }
-
-    const anchorIndex = text.indexOf(anchorText, cursor);
-    if (anchorIndex < 0) {
-      segments.push(text.slice(cursor));
-      cursor = text.length;
-      break;
-    }
-
-    segments.push(text.slice(cursor, anchorIndex));
-    cursor = anchorIndex + anchorText.length;
-  }
-
-  segments.push(text.slice(cursor));
-  while (segments.length < textGroups.length) {
-    segments.push("");
-  }
-
-  const nextChildren: ParagraphNode["children"] = [];
-  for (let index = 0; index < textGroups.length; index += 1) {
-    const templateRuns = textGroups[index];
-    const segmentText = segments[index] ?? "";
-
-    if (templateRuns.length > 0) {
-      nextChildren.push(...distributeTextAcrossRuns(segmentText, templateRuns, options));
-    } else if (segmentText.length > 0) {
-      nextChildren.push({
-        type: "text",
-        text: segmentText,
-        style: cloneTextStyle(options?.insertedStyle)
-      });
-    }
-
-    if (index < anchors.length) {
-      nextChildren.push(cloneParagraphChildRun(anchors[index]));
-    }
-  }
-
-  if (nextChildren.length > 0) {
-    return nextChildren;
   }
 
   return [
@@ -578,83 +492,8 @@ export function splitParagraphChildrenAtTextOffsets(
   }
   textGroups.push(currentGroup);
 
-  let segments: string[] | undefined;
-  let anchorOffsets: number[] | undefined;
-
-  const allAnchorsAreImages = anchors.length > 0 && anchors.every((anchor) => anchor.type === "image");
-  if (allAnchorsAreImages) {
-    const originalSegmentTexts = textGroups.map((group) => group.map((run) => run.text).join(""));
-    const originalText = originalSegmentTexts.join("");
-    const originalAnchorOffsets: number[] = [];
-    let originalOffsetCursor = 0;
-    for (let index = 0; index < anchors.length; index += 1) {
-      originalOffsetCursor += originalSegmentTexts[index]?.length ?? 0;
-      originalAnchorOffsets.push(originalOffsetCursor);
-    }
-
-    const prefixLength = commonPrefixLength(originalText, normalizedText);
-    const suffixLength = commonSuffixLength(originalText, normalizedText, prefixLength);
-    const replacedOriginalStart = prefixLength;
-    const replacedOriginalEnd = Math.max(replacedOriginalStart, originalText.length - suffixLength);
-    const replacedNextEnd = Math.max(replacedOriginalStart, normalizedText.length - suffixLength);
-    const delta = replacedNextEnd - replacedOriginalEnd;
-    const remappedAnchorOffsets = originalAnchorOffsets.map((anchorOffset) => {
-      if (anchorOffset < replacedOriginalStart) {
-        return anchorOffset;
-      }
-      if (anchorOffset >= replacedOriginalEnd) {
-        return anchorOffset + delta;
-      }
-      return replacedOriginalStart;
-    });
-
-    const nextSegments: string[] = [];
-    let cursor = 0;
-    remappedAnchorOffsets.forEach((anchorOffset) => {
-      const safeAnchorOffset = Math.max(cursor, Math.min(anchorOffset, normalizedText.length));
-      nextSegments.push(normalizedText.slice(cursor, safeAnchorOffset));
-      cursor = safeAnchorOffset;
-    });
-    nextSegments.push(normalizedText.slice(cursor));
-    segments = nextSegments;
-    anchorOffsets = remappedAnchorOffsets;
-  } else {
-    const nextSegments: string[] = [];
-    const nextAnchorOffsets: number[] = [];
-    let cursor = 0;
-
-    for (let index = 0; index < anchors.length; index += 1) {
-      const anchor = anchors[index];
-      const anchorText = anchor.type === "form-field" ? formFieldDisplayValue(anchor) : "";
-      if (!anchorText) {
-        segments = undefined;
-        anchorOffsets = undefined;
-        break;
-      }
-
-      const anchorIndex = normalizedText.indexOf(anchorText, cursor);
-      if (anchorIndex < 0) {
-        nextSegments.push(normalizedText.slice(cursor));
-        cursor = normalizedText.length;
-        break;
-      }
-
-      nextSegments.push(normalizedText.slice(cursor, anchorIndex));
-      cursor = anchorIndex + anchorText.length;
-      nextAnchorOffsets.push(anchorIndex);
-    }
-
-    if (nextSegments.length > 0 || anchors.length === 0) {
-      nextSegments.push(normalizedText.slice(cursor));
-      while (nextSegments.length < textGroups.length) {
-        nextSegments.push("");
-      }
-      segments = nextSegments;
-      anchorOffsets = nextAnchorOffsets;
-    }
-  }
-
-  if (!segments || !anchorOffsets) {
+  const resolved = resolveAnchorSegments(textGroups, anchors, normalizedText);
+  if (!resolved) {
     return {
       beforeChildren: distributeTextAcrossRuns(
         normalizedText.slice(0, safeStart),
@@ -668,6 +507,8 @@ export function splitParagraphChildrenAtTextOffsets(
       )
     };
   }
+
+  const { segments, anchorOffsets } = resolved;
 
   const beforeChildren: ParagraphNode["children"] = [];
   const afterChildren: ParagraphNode["children"] = [];
@@ -722,7 +563,7 @@ export function splitParagraphChildrenAtTextOffsets(
     }
 
     if (index < anchors.length) {
-      const anchor = cloneParagraphChildRun(anchors[index]);
+      const anchor = cloneParagraphChild(anchors[index]);
       const anchorOffset = anchorOffsets[index] ?? segmentEnd;
       if (anchorOffset <= safeStart) {
         beforeChildren.push(anchor);
@@ -756,51 +597,135 @@ export function splitParagraphChildrenAtTextOffsets(
   };
 }
 
-export function cloneParagraph(paragraph: ParagraphNode): ParagraphNode {
-  return {
-    type: "paragraph",
-    style: paragraph.style ? { ...paragraph.style } : undefined,
-    sourceXml: paragraph.sourceXml,
-    children: paragraph.children.map(cloneParagraphChildRun)
-  };
-}
-
 export function insertParagraph(
   model: DocModel,
   text: string,
   index = model.nodes.length,
   options?: InsertParagraphOptions
 ): DocModel {
-  const next = cloneDocModel(model);
+  const next = cloneDocModelShallow(model);
   const safeIndex = Math.max(0, Math.min(index, next.nodes.length));
+  shiftDocumentSectionStartNodeIndexes(next, safeIndex, 1);
   next.nodes.splice(safeIndex, 0, paragraphFromText(text, options));
   return next;
 }
 
+function findPreviousParagraphIndex(
+  nodes: DocModel["nodes"],
+  beforeIndex: number,
+  requireWithoutSectionBreak = false
+): number | undefined {
+  for (let index = beforeIndex - 1; index >= 0; index -= 1) {
+    const node = nodes[index];
+    if (node?.type !== "paragraph") {
+      continue;
+    }
+    if (requireWithoutSectionBreak && node.sectionBreak) {
+      continue;
+    }
+    return index;
+  }
+  return undefined;
+}
+
+function findNextParagraphIndex(
+  nodes: DocModel["nodes"],
+  fromIndex: number,
+  requireWithoutSectionBreak = false
+): number | undefined {
+  for (let index = fromIndex; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    if (node?.type !== "paragraph") {
+      continue;
+    }
+    if (requireWithoutSectionBreak && node.sectionBreak) {
+      continue;
+    }
+    return index;
+  }
+  return undefined;
+}
+
+function shiftSectionStartsAfterParagraphRemoval(
+  model: DocModel,
+  removedIndex: number,
+  preservedSectionStart?: number
+): void {
+  model.metadata.sections?.forEach((section) => {
+    if (section.startNodeIndex <= removedIndex) {
+      return;
+    }
+
+    if (preservedSectionStart !== undefined && section.startNodeIndex === preservedSectionStart) {
+      return;
+    }
+
+    section.startNodeIndex = Math.max(0, section.startNodeIndex - 1);
+  });
+}
+
 export function removeParagraph(model: DocModel, index: number): DocModel {
-  const next = cloneDocModel(model);
+  const next = cloneDocModelShallow(model);
   const node = getParagraph(next, index);
   if (!node) {
     return next;
   }
 
+  // Deleting the paragraph that carries a section break must not delete the
+  // section. Move the break to the nearest surviving paragraph.
+  const sectionBreak = paragraphSectionBreak(node);
   next.nodes.splice(index, 1);
+
+  let transferForward = false;
+  if (sectionBreak) {
+    const previousParagraphIndex = findPreviousParagraphIndex(next.nodes, index, true);
+    if (previousParagraphIndex !== undefined) {
+      const previousParagraph = next.nodes[previousParagraphIndex];
+      if (previousParagraph?.type === "paragraph") {
+        previousParagraph.sectionBreak = { ...sectionBreak };
+      }
+    } else {
+      const nextParagraphIndex = findNextParagraphIndex(next.nodes, index, true);
+      if (nextParagraphIndex !== undefined) {
+        const nextParagraph = next.nodes[nextParagraphIndex];
+        if (nextParagraph?.type === "paragraph") {
+          nextParagraph.sectionBreak = { ...sectionBreak };
+          transferForward = true;
+        }
+      }
+    }
+  }
 
   if (!next.nodes.some((candidate) => candidate.type === "paragraph")) {
     next.nodes.push(paragraphFromText(""));
   }
 
+  shiftSectionStartsAfterParagraphRemoval(
+    next,
+    index,
+    transferForward ? index + 1 : undefined
+  );
+
   return next;
 }
 
 export function duplicateParagraph(model: DocModel, index: number): DocModel {
-  const next = cloneDocModel(model);
+  const next = cloneDocModelShallow(model);
   const node = getParagraph(next, index);
   if (!node) {
     return next;
   }
 
-  next.nodes.splice(index + 1, 0, cloneParagraph(node));
+  // The copy must not reuse the original's XML identifiers (bookmarks,
+  // w14:paraId, wp:docPr ids) or the exported file binds them twice.
+  const registry = createSourceXmlIdentifierRegistry(next);
+  const copy = cloneNodeForInsertion(node, registry);
+  // A duplicate is content, not a new section boundary; keeping the marker
+  // would leave metadata.sections unable to describe the copied break.
+  copy.sectionBreak = undefined;
+  copy.sourceXml = removeSectionPropertiesXmlFromSourceXml(copy.sourceXml);
+  shiftDocumentSectionStartNodeIndexes(next, index + 1, 1);
+  next.nodes.splice(index + 1, 0, copy);
   return next;
 }
 
@@ -810,14 +735,24 @@ export function updateParagraphText(
   text: string,
   options?: UpdateTextOptions
 ): DocModel {
-  const next = cloneDocModel(model);
-  const paragraph = getParagraph(next, index);
-  if (!paragraph) {
+  const next = cloneDocModelShallow(model);
+  const source = getParagraph(model, index);
+  if (!source) {
     return next;
   }
 
+  const paragraph = cloneDocNode(source);
+  next.nodes[index] = paragraph;
+  const previousText = paragraphTextContent(paragraph);
   paragraph.children = distributeTextAcrossParagraphChildren(paragraph, text, options);
-  paragraph.sourceXml = undefined;
+  // Comment ranges are character offsets, so they follow the edit instead of
+  // being re-derived from `sourceXml`, which this clears.
+  paragraph.commentRanges = remapParagraphCommentRanges(
+    previousText,
+    text,
+    paragraph.commentRanges
+  );
+  invalidateParagraphSourceXml(paragraph);
 
   return next;
 }

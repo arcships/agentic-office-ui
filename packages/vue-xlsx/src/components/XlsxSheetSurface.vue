@@ -31,17 +31,23 @@
         :is-dark="isDark ?? false"
         :scroll-left="gridViewport.scrollLeft"
         :scroll-top="gridViewport.scrollTop"
+        :viewport-width="gridViewport.width"
+        :viewport-height="gridViewport.height"
       />
       <XlsxImageLayer
         :controller="controller"
         :show-images="showImages ?? true"
         :scroll-left="gridViewport.scrollLeft"
         :scroll-top="gridViewport.scrollTop"
+        :viewport-width="gridViewport.width"
+        :viewport-height="gridViewport.height"
       />
       <XlsxDrawingLayer
         :controller="controller"
         :scroll-left="gridViewport.scrollLeft"
         :scroll-top="gridViewport.scrollTop"
+        :viewport-width="gridViewport.width"
+        :viewport-height="gridViewport.height"
       />
       <XlsxSelectionOverlay
         :controller="controller"
@@ -50,14 +56,16 @@
         :selection-fill-color="selectionFillColor"
       />
       <XlsxContextMenu
+        ref="contextMenuRef"
         :controller="controller"
         :target-element="gridElement"
+        :suppress-context-menu="touchGestures.shouldSuppressContextMenu"
       />
     </template>
     <div
       v-if="selectionMode === 'region'"
       class="xlsx-sheet-surface__region-layer"
-      aria-label="选择工作表区域"
+      :aria-label="m.xlsx.surface.region"
       tabindex="0"
       @pointerdown="onRegionPointerDown"
       @pointermove="onRegionPointerMove"
@@ -73,6 +81,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from "vue"
 import { clampSurfaceZoom, nextSurfaceZoom } from "@arcships/office-runtime/gesture-zoom"
+import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures"
 import type { XlsxViewerController, XlsxCellAddress, XlsxCellStyleContext, XlsxOfficeReference, XlsxReferenceContext, XlsxReferenceSheet } from "@arcships/xlsx-core"
 import {
   createXlsxCellReferenceDraft,
@@ -91,6 +100,7 @@ import {
   type OfficeObjectReference,
   type OfficeReferenceCandidatePreview,
   type OfficeReferenceError,
+  type OfficeRegionDraftChange,
   type OfficeSelectionMode,
   type SheetRegionPoint,
   type ResolveReferenceResult,
@@ -103,6 +113,8 @@ import XlsxSelectionOverlay from "./XlsxSelectionOverlay.vue"
 import XlsxContextMenu from "./XlsxContextMenu.vue"
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue"
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch"
+import { provideXlsxMessages } from "../i18n"
+import { formatOfficeMessage, localizeOfficeObjectDescriptor, localizeOfficeResolveResult } from "@arcships/office-interaction"
 
 const props = withDefaults(
   defineProps<{
@@ -119,6 +131,8 @@ const props = withDefaults(
     documentId?: string
     selectionMode?: OfficeSelectionMode
     emitReferenceCandidates?: boolean
+    locale?: import("@arcships/office-interaction").OfficeLocale
+    messages?: import("@arcships/office-interaction").OfficeMessagesOverride
   }>(),
   {
     getCellStyle: null,
@@ -130,6 +144,8 @@ const props = withDefaults(
     enableGestureZoom: true,
     selectionMode: "content",
     emitReferenceCandidates: false,
+    locale: "en",
+    messages: undefined,
   },
 )
 
@@ -149,7 +165,7 @@ const emit = defineEmits<{
   documentRevisionChange: [revision: OfficeDocumentRevision]
   referenceCandidateChange: [change: { candidates: readonly OfficeReferenceCandidatePreview[]; activeCandidateId?: string }]
   referenceConfirm: [event: ReturnType<typeof confirmOfficeReferenceDraft>]
-  regionDraftChange: [event: { phase: "start" | "change"; region: { space: "sheet"; sheetId: string; start: SheetRegionPoint; end: SheetRegionPoint } }]
+  regionDraftChange: [event: OfficeRegionDraftChange]
   selectionCancel: [event: { mode: OfficeSelectionMode; reason: "escape" | "pointer-cancel" | "programmatic" }]
   referenceResolve: [event: { referenceId: string; result: ResolveReferenceResult }]
   referenceError: [error: OfficeReferenceError]
@@ -160,9 +176,16 @@ type GridZoomAnchor = ReturnType<GridInstance["captureZoomAnchor"]>
 type WebKitGestureEvent = Event & { clientX?: number; clientY?: number; scale?: number }
 
 const surfaceRef = ref<HTMLElement | null>(null)
+const m = provideXlsxMessages(() => props.locale, () => props.messages)
+const descriptor = (
+  key: keyof typeof m.value.common.descriptors,
+  values: Record<string, string | number> = {},
+) => formatOfficeMessage(m.value.common.descriptors[key], values)
+const confirmFailed = () => formatOfficeMessage(m.value.common.reference.confirmFailed, { format: "XLSX" })
 const gridRef = ref<GridInstance | null>(null)
-const gridViewport = ref({ scrollLeft: 0, scrollTop: 0 })
-const effectiveReadOnly = computed(() => props.controller.readOnly || props.readOnly)
+const contextMenuRef = ref<{ openAt(clientX: number, clientY: number, target?: unknown): boolean } | null>(null)
+const gridViewport = ref({ height: 0, scrollLeft: 0, scrollTop: 0, width: 0 })
+const effectiveReadOnly = computed(() => props.readOnly || props.controller.isEditingLocked === true || props.controller.readOnly)
 const selectionMode = computed(() => props.selectionMode)
 const gridElement = computed<HTMLElement | null>(() => gridRef.value?.scrollContainer ?? null)
 const generatedDocumentId = `xlsx-surface-${typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`
@@ -219,12 +242,12 @@ function confirmDraft(
       referenceId: createOfficeReferenceId(), trigger, additiveRequested, ...(snapshot ? { snapshot } : {}),
     }))
   } catch (reason) {
-    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to confirm XLSX reference.")
+    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : confirmFailed())
   }
 }
 
 function worksheetPath(sheet: XlsxReferenceSheet) {
-  return [{ kind: "workbook" as const, label: "Workbook" }, { kind: "worksheet" as const, label: sheet.name }]
+  return [{ kind: "workbook" as const, label: descriptor("workbook") }, { kind: "worksheet" as const, label: sheet.name }]
 }
 
 function columnLabel(columnIndex: number): string {
@@ -243,12 +266,12 @@ function candidateForPoint(point: { clientX: number; clientY: number }): OfficeR
   const axis = gridRef.value?.hitTestAxis(point.clientX, point.clientY)
   if (axis?.kind === "row") {
     const draft = createXlsxRowReferenceDraft(referenceContext(), sheet, axis.actualIndex)
-    return [{ candidateId: `xlsx:row:${axis.actualIndex}`, draft, preview: { label: `Row ${axis.actualIndex + 1}`, path: [...worksheetPath(sheet), { kind: "row", label: `Row ${axis.actualIndex + 1}` }] }, hit: "direct", depth: 2 }]
+    return [{ candidateId: `xlsx:row:${axis.actualIndex}`, draft, preview: { label: descriptor("row", { number: axis.actualIndex + 1 }), path: [...worksheetPath(sheet), { kind: "row", label: descriptor("row", { number: axis.actualIndex + 1 }) }] }, hit: "direct", depth: 2 }]
   }
   if (axis?.kind === "column") {
     const label = columnLabel(axis.actualIndex)
     const draft = createXlsxColumnReferenceDraft(referenceContext(), sheet, axis.actualIndex)
-    return [{ candidateId: `xlsx:column:${axis.actualIndex}`, draft, preview: { label: `Column ${label}`, path: [...worksheetPath(sheet), { kind: "column", label: `Column ${label}` }] }, hit: "direct", depth: 2 }]
+    return [{ candidateId: `xlsx:column:${axis.actualIndex}`, draft, preview: { label: descriptor("column", { column: label }), path: [...worksheetPath(sheet), { kind: "column", label: descriptor("column", { column: label }) }] }, hit: "direct", depth: 2 }]
   }
   if (axis?.kind === "corner") {
     const draft = createXlsxWorksheetReferenceDraft(referenceContext(), sheet)
@@ -263,7 +286,7 @@ function candidateForPoint(point: { clientX: number; clientY: number }): OfficeR
 
 function hitTest(point: { clientX: number; clientY: number }): readonly OfficeReferenceCandidatePreview[] {
   try { return candidateForPoint(point) } catch (reason) {
-    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : "XLSX hit test failed.")
+    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : formatOfficeMessage(m.value.common.reference.hitTestFailed, { format: "XLSX" }))
     return []
   }
 }
@@ -312,7 +335,10 @@ function onRegionPointerDown(event: PointerEvent): void {
   regionDraft.value = orderedSheetRegion(sheet, start, { ...start, xOffset: Math.min(1, start.xOffset + 0.0001), yOffset: Math.min(1, start.yOffset + 0.0001) })
   regionVisual.value = { startX: event.clientX, startY: event.clientY, endX: event.clientX, endY: event.clientY }
   ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
-  emit("regionDraftChange", { phase: "start", region: regionDraft.value })
+  emit("regionDraftChange", {
+    phase: "start",
+    point: { space: "sheet", sheetId: regionDraft.value.sheetId, start },
+  })
   event.preventDefault()
 }
 
@@ -419,21 +445,51 @@ function onGestureEnd(): void {
   webkitGestureActive = false
 }
 
-function onContextMenu(event: MouseEvent): void {
+function emitContextMenuAt(clientX: number, clientY: number): void {
   const sel = props.controller.selection
   const active = props.controller.activeCell
-  const container = event.currentTarget as HTMLElement
+  const container = surfaceRef.value
+  if (!container) return
   const rect = container.getBoundingClientRect()
   emit("contextMenu", {
-    clientX: event.clientX,
-    clientY: event.clientY,
-    containerX: event.clientX - rect.left,
-    containerY: event.clientY - rect.top,
+    clientX,
+    clientY,
+    containerX: clientX - rect.left,
+    containerY: clientY - rect.top,
     sheetName: props.controller.activeSheet?.name,
     selection: sel ? { start: { row: sel.start.row, col: sel.start.col }, end: { row: sel.end.row, col: sel.end.col } } : undefined,
     activeCell: active ? { row: active.row, col: active.col } : undefined,
   })
 }
+
+function onContextMenu(event: MouseEvent): void {
+  if (touchGestures.shouldSuppressContextMenu(event.clientX, event.clientY)) {
+    event.preventDefault()
+    return
+  }
+  emitContextMenuAt(event.clientX, event.clientY)
+}
+
+const touchGestures = createTouchGestureTracker({
+  isEnabled: () => selectionMode.value === "content",
+  isDoubleTapEnabled: () => effectiveReadOnly.value && controlledZoom() !== undefined,
+  getZoom: controlledZoom,
+  onZoom: (zoom, center) => requestGestureZoom(zoom, center.clientX, center.clientY),
+  onDoubleTap: (pointer) => {
+    const current = controlledZoom()
+    if (current === undefined) return
+    requestGestureZoom(nextDoubleTapZoom(current), pointer.clientX, pointer.clientY)
+  },
+  onLongPress: (pointer) => {
+    if (!contextMenuRef.value?.openAt(pointer.clientX, pointer.clientY, pointer.target)) return
+    emitContextMenuAt(pointer.clientX, pointer.clientY)
+  },
+})
+
+function onTouchPointerDown(event: PointerEvent): void { touchGestures.pointerDown(event) }
+function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMove(event) }
+function onTouchPointerUp(event: PointerEvent): void { touchGestures.pointerUp(event) }
+function onTouchPointerCancel(event: PointerEvent): void { touchGestures.pointerCancel(event) }
 
 function onKeydown(event: KeyboardEvent) {
   if (event.key === "Escape" && selectionMode.value !== "content") {
@@ -520,16 +576,25 @@ onMounted(() => {
   element.addEventListener("gesturestart", onGestureStart, { passive: false })
   element.addEventListener("gesturechange", onGestureChange as EventListener, { passive: false })
   element.addEventListener("gestureend", onGestureEnd)
+  element.addEventListener("pointerdown", onTouchPointerDown, { passive: true })
+  element.addEventListener("pointermove", onTouchPointerMove, { passive: true })
+  element.addEventListener("pointerup", onTouchPointerUp)
+  element.addEventListener("pointercancel", onTouchPointerCancel)
 })
 
 onBeforeUnmount(() => {
   surfaceMounted.value = false
   gestureToken += 1
+  touchGestures.reset()
   const element = surfaceRef.value
   element?.removeEventListener("wheel", onWheel)
   element?.removeEventListener("gesturestart", onGestureStart)
   element?.removeEventListener("gesturechange", onGestureChange as EventListener)
   element?.removeEventListener("gestureend", onGestureEnd)
+  element?.removeEventListener("pointerdown", onTouchPointerDown)
+  element?.removeEventListener("pointermove", onTouchPointerMove)
+  element?.removeEventListener("pointerup", onTouchPointerUp)
+  element?.removeEventListener("pointercancel", onTouchPointerCancel)
 })
 
 defineExpose({
@@ -552,12 +617,13 @@ defineExpose({
     if (signal?.aborted) throw new DOMException("XLSX reference description aborted.", "AbortError")
     const descriptor = describeXlsxReference(referenceContext(), reference)
     if (!descriptor) throw new Error("XLSX reference is not resolvable in the current revision.")
-    return descriptor
+    return localizeOfficeObjectDescriptor(descriptor, m.value.common)
   },
   async resolveReference(reference: OfficeObjectReference): Promise<ResolveReferenceResult> {
     const result = resolveXlsxReference(referenceContext(), reference)
-    emit("referenceResolve", { referenceId: reference.referenceId, result })
-    return result
+    const localized = localizeOfficeResolveResult(result, m.value.common)
+    emit("referenceResolve", { referenceId: reference.referenceId, result: localized })
+    return localized
   },
   async scrollToReference(reference: OfficeObjectReference): Promise<void> {
     const result = resolveXlsxReference(referenceContext(), reference)
@@ -579,7 +645,7 @@ defineExpose({
     }
   },
   async captureReferencePreview(reference: OfficeObjectReference): Promise<Blob> {
-    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", "XLSX preview capture is not provided by the Surface; use the host's capture pipeline.", reference.referenceId)
+    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", formatOfficeMessage(m.value.common.reference.captureUnsupported, { format: "XLSX" }), reference.referenceId)
     throw new Error("XLSX reference preview capture is unsupported")
   },
 })
@@ -595,6 +661,7 @@ defineExpose({
   min-width: 0;
   outline: none;
   position: relative;
+  touch-action: pan-x pan-y;
   background: var(--xlsx-surface-bg, #ffffff);
 }
 

@@ -34,7 +34,16 @@
 
     <section class="panel" aria-live="polite">
       <div data-testid="runtime-limits-status" :data-state="state">{{ state }}</div>
-      <div data-testid="runtime-limits-loaded-file">{{ fileName || "未选择" }}</div>
+      <div data-testid="runtime-limits-loaded-file" :data-file-size="selectedFileSize ?? ''">
+        {{ fileName || "未选择" }}
+      </div>
+      <div
+        data-testid="runtime-limits-limit-source"
+        :data-source="limitSource"
+        :data-read-bytes="readBytes"
+      >
+        {{ limitSourceLabel }}
+      </div>
       <div
         v-if="visibleError"
         data-testid="runtime-limits-error"
@@ -43,6 +52,8 @@
         :data-error-limit="visibleError.limit"
         :data-error-actual="visibleError.actual"
         :data-error-allowed="visibleError.allowed"
+        :data-error-source="limitSource"
+        :data-read-bytes="readBytes"
       >
         <div><span data-testid="runtime-limits-error-code">{{ visibleError.code }}</span>: {{ visibleError.message }}</div>
         <div>phase=<span data-testid="runtime-limits-error-phase">{{ visibleError.phase ?? "" }}</span></div>
@@ -113,17 +124,16 @@ import {
   XlsxViewer,
   type XlsxDiagnostic,
 } from "@arcships/vue-xlsx"
+import {
+  inputSizeLimitError,
+  normalizeRuntimeError,
+  type StructuredRuntimeError,
+} from "../runtime-limits"
 
 type Format = "docx" | "xlsx"
 type LoadState = "idle" | "loading" | "ready" | "error"
-type StructuredError = {
-  code: string
-  message: string
-  phase?: string
-  limit?: string
-  actual?: number
-  allowed?: number
-}
+type LimitSource = "none" | "file-size" | "runtime"
+type StructuredError = StructuredRuntimeError
 
 const COMMON_LIMIT_KEYS = [
   "maxInputBytes", "maxArchiveEntries", "maxUncompressedBytes",
@@ -176,6 +186,9 @@ const state = ref<LoadState>("idle")
 const configError = ref("")
 const fileBuffer = shallowRef<ArrayBuffer | null>(null)
 const fileName = ref("")
+const selectedFileSize = ref<number | null>(null)
+const readBytes = ref(0)
+const limitSource = ref<LimitSource>("none")
 const inputKey = ref(0)
 const generation = ref(0)
 const runtimeError = shallowRef<StructuredError | null>(null)
@@ -205,6 +218,11 @@ const limitsText = computed({
   },
 })
 const activeLimits = computed(() => format.value === "docx" ? docxRuntime.value.limits : xlsxRuntime.value.limits)
+const limitSourceLabel = computed(() => {
+  if (limitSource.value === "file-size") return "file.size 预检：未读取文件内容，未启动解析"
+  if (limitSource.value === "runtime") return "Runtime 输入检查：文件已读取并交给 Runtime"
+  return "选择文件后先按 file.size 检查 maxInputBytes"
+})
 const visibleError = computed<StructuredError | null>(() => {
   if (runtimeError.value) return runtimeError.value
   if (format.value === "xlsx") return xlsxController.value?.sourceError ?? null
@@ -239,6 +257,8 @@ function clearResult(): void {
   runtimeError.value = null
   xlsxController.value = null
   diagnostics.value = []
+  limitSource.value = fileBuffer.value ? "runtime" : "none"
+  readBytes.value = fileBuffer.value?.byteLength ?? 0
   state.value = fileBuffer.value ? "loading" : "idle"
 }
 
@@ -254,6 +274,22 @@ function applyLimits(): void {
       xlsxRuntime.value = makeXlsxRuntime()
     }
     configError.value = ""
+    // Applying a tighter input cap must reject an already-selected file before
+    // the viewer re-reads or re-renders it.
+    const preReadError = inputSizeLimitError(
+      selectedFileSize.value ?? undefined,
+      activeLimits.value.maxInputBytes,
+    )
+    if (preReadError) {
+      xlsxController.value = null
+      diagnostics.value = []
+      fileBuffer.value = null
+      runtimeError.value = preReadError
+      limitSource.value = "file-size"
+      readBytes.value = 0
+      state.value = "error"
+      return
+    }
     clearResult()
     if (fileBuffer.value) generation.value += 1
   } catch (error) {
@@ -265,6 +301,7 @@ function changeFormat(): void {
   fileReadSequence += 1
   fileBuffer.value = null
   fileName.value = ""
+  selectedFileSize.value = null
   inputKey.value += 1
   clearResult()
   configError.value = ""
@@ -284,40 +321,42 @@ async function onFileChange(event: Event): Promise<void> {
   runtimeError.value = null
   xlsxController.value = null
   diagnostics.value = []
+  fileName.value = file.name
+  selectedFileSize.value = file.size
+  // Reject an oversized upload from file.size alone: the bytes are never read,
+  // so a 500 MB file cannot first become resident and only then hit a limit.
+  const preReadError = inputSizeLimitError(file.size, activeLimits.value.maxInputBytes)
+  if (preReadError) {
+    fileBuffer.value = null
+    runtimeError.value = preReadError
+    limitSource.value = "file-size"
+    readBytes.value = 0
+    state.value = "error"
+    return
+  }
+  limitSource.value = "runtime"
   const buffer = await file.arrayBuffer()
   if (requestId !== fileReadSequence) return
-  fileName.value = file.name
+  readBytes.value = buffer.byteLength
   fileBuffer.value = buffer
   generation.value += 1
 }
 
-function normalizeError(error: unknown): StructuredError {
-  const value = error instanceof Error ? error : new Error(String(error))
-  const details = value as Error & {
-    code?: unknown; phase?: unknown; limit?: unknown; actual?: unknown; allowed?: unknown
-  }
-  return {
-    code: typeof details.code === "string" ? details.code : "PARSE_FAILED",
-    message: value.message,
-    ...(typeof details.phase === "string" ? { phase: details.phase } : {}),
-    ...(typeof details.limit === "string" ? { limit: details.limit } : {}),
-    ...(typeof details.actual === "number" ? { actual: details.actual } : {}),
-    ...(typeof details.allowed === "number" ? { allowed: details.allowed } : {}),
-  }
-}
-
 function onLoadError(error: unknown): void {
-  runtimeError.value = normalizeError(error)
+  limitSource.value = "runtime"
+  runtimeError.value = normalizeRuntimeError(error)
   state.value = "error"
 }
 
 function onDocxSuccess(_result: DocxImportResult): void {
   runtimeError.value = null
+  limitSource.value = "runtime"
   state.value = "ready"
 }
 
 function onXlsxControllerReady(controller: XlsxViewerController): void {
   xlsxController.value = controller
+  limitSource.value = "runtime"
   state.value = controller.sourceState
 }
 

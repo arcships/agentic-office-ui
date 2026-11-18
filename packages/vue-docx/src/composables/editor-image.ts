@@ -7,10 +7,11 @@ import type {
   DocxImageLocation,
   DocxImageWrapMode,
   DocxImageDropTarget,
+  DocxEditorStatusMessages,
   DocxSectionImageLocation,
 } from "@arcships/docx-core"
 import {
-  cloneDocModel,
+  cloneDocModelNodes,
   cloneEditorSelection,
   cloneTextRange,
   paragraphText,
@@ -51,10 +52,101 @@ function locateImage(
   return { image, paragraph, table }
 }
 
+/** Top-level node index that owns an image location. */
+function imageNodeIndex(location: DocxImageLocation): number {
+  return location.kind === "paragraph" ? location.nodeIndex : location.tableIndex
+}
+
 function invalidateImageSource(location: LocatedImage): void {
   location.image.sourceXml = undefined
   location.paragraph.sourceXml = undefined
   if (location.table) location.table.sourceXml = undefined
+}
+
+interface FloatingImageRect {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+function floatingImageRect(
+  floating: NonNullable<ImageRunNode["floating"]>,
+  widthPx: number,
+  heightPx: number,
+): FloatingImageRect | undefined {
+  if (!Number.isFinite(floating.xPx) || !Number.isFinite(floating.yPx)) {
+    return undefined
+  }
+  const effect = floating.effectExtent
+  const leftEffect = Math.max(0, effect?.leftPx ?? 0)
+  const topEffect = Math.max(0, effect?.topPx ?? 0)
+  const rightEffect = Math.max(0, effect?.rightPx ?? 0)
+  const bottomEffect = Math.max(0, effect?.bottomPx ?? 0)
+  return {
+    left: (floating.xPx as number) - leftEffect,
+    top: (floating.yPx as number) - topEffect,
+    right: (floating.xPx as number) + widthPx + rightEffect,
+    bottom: (floating.yPx as number) + heightPx + bottomEffect,
+  }
+}
+
+function floatingImageRectsOverlap(
+  first: FloatingImageRect,
+  second: FloatingImageRect,
+): boolean {
+  return (
+    first.left < second.right &&
+    first.right > second.left &&
+    first.top < second.bottom &&
+    first.bottom > second.top
+  )
+}
+
+function findOverlappingFloatingImage(
+  model: DocModel,
+  target: ImageRunNode,
+  candidate: NonNullable<ImageRunNode["floating"]>,
+  widthPx: number,
+  heightPx: number,
+): ImageRunNode | undefined {
+  if (candidate.allowOverlap !== false) {
+    return undefined
+  }
+  const candidateRect = floatingImageRect(candidate, widthPx, heightPx)
+  if (!candidateRect) {
+    return undefined
+  }
+
+  const visit = (nodes: DocModel["nodes"]): ImageRunNode | undefined => {
+    for (const node of nodes) {
+      if (node.type === "paragraph") {
+        for (const child of node.children) {
+          if (child.type !== "image" || child === target || !child.floating) {
+            continue
+          }
+          const rect = floatingImageRect(
+            child.floating,
+            child.widthPx ?? 120,
+            child.heightPx ?? 80,
+          )
+          if (rect && floatingImageRectsOverlap(candidateRect, rect)) {
+            return child
+          }
+        }
+        continue
+      }
+      for (const row of node.rows) {
+        for (const cell of row.cells) {
+          const overlap = visit(cell.nodes)
+          if (overlap) return overlap
+        }
+      }
+    }
+    return undefined
+  }
+
+  return visit(model.nodes)
 }
 
 function insertImageAtTextRange(
@@ -111,8 +203,8 @@ export function createEditorImage(
   ctx: EditorCore,
   applyChange: (updater: (current: DocModel) => DocModel, successStatus?: string) => void,
 ) {
-  const unsupported = (feature: string): void => {
-    ctx.status.value = `Unsupported: ${feature}`
+  const unsupported = (key: keyof DocxEditorStatusMessages): void => {
+    ctx.status.value = ctx.statusMessage(key)
   }
 
   const applyImageChange = (
@@ -121,11 +213,11 @@ export function createEditorImage(
     status: string,
   ): void => {
     if (!locateImage(ctx.modelSnapshot.value, location)) {
-      unsupported(`${status} target is unavailable`)
+      unsupported("imageTargetUnavailable")
       return
     }
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const next = cloneDocModelNodes(current, [imageNodeIndex(location)])
       const located = locateImage(next, location)
       if (!located) return current
       update(located)
@@ -136,7 +228,7 @@ export function createEditorImage(
 
   const insertImageFile = async (file: File): Promise<void> => {
     if (!file.type.startsWith("image/")) {
-      ctx.status.value = "Select an image file"
+      ctx.status.value = ctx.statusMessage("selectImageFile")
       return
     }
 
@@ -145,12 +237,22 @@ export function createEditorImage(
     // cannot silently move the image into another paragraph or table cell.
     const insertionSelection = cloneEditorSelection(ctx.selectionSnapshot.value)
     const insertionRange = cloneTextRange(ctx.activeTextRangeSnapshot.value)
+    const documentLoadNonce = ctx.documentLoadNonce.value
 
     const bytes = new Uint8Array(await file.arrayBuffer())
+    if (documentLoadNonce !== ctx.documentLoadNonce.value) {
+      // A different document was loaded while the file bytes were in flight;
+      // the captured node indexes no longer identify the user's target.
+      ctx.status.value = ctx.statusMessage("imageInsertionCancelled")
+      return
+    }
     const src = `data:${file.type};base64,${toBase64(bytes)}`
 
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const insertionNodeIndex = insertionSelection.kind === "paragraph"
+        ? insertionSelection.nodeIndex
+        : insertionSelection.tableIndex
+      const next = cloneDocModelNodes(current, [insertionNodeIndex])
       const selection = insertionSelection
 
       if (selection.kind === "paragraph") {
@@ -204,22 +306,44 @@ export function createEditorImage(
       paragraph.sourceXml = undefined
       table.sourceXml = undefined
       return next
-    }, `Inserted image: ${file.name}`)
+    }, ctx.statusMessage("insertedImage", { name: file.name }))
   }
 
   const resizeImage = (
     location: DocxImageLocation, widthPx: number, heightPx: number
   ): void => {
     if (!Number.isFinite(widthPx) || !Number.isFinite(heightPx) || widthPx <= 0 || heightPx <= 0) {
-      unsupported("image size must be positive")
+      unsupported("imageSizePositive")
       return
     }
     const width = Math.max(1, Math.round(widthPx))
     const height = Math.max(1, Math.round(heightPx))
+    const located = locateImage(ctx.modelSnapshot.value, location)
+    if (!located) {
+      unsupported("resizeTargetUnavailable")
+      return
+    }
+    if (located.image.floating?.lockedAnchor) {
+      unsupported("lockedImageAnchorResize")
+      return
+    }
+    if (
+      located.image.floating &&
+      findOverlappingFloatingImage(
+        ctx.modelSnapshot.value,
+        located.image,
+        located.image.floating,
+        width,
+        height,
+      )
+    ) {
+      unsupported("imageOverlapDisabled")
+      return
+    }
     applyImageChange(location, ({ image }) => {
       image.widthPx = width
       image.heightPx = height
-    }, `Resized image to ${width}×${height}`)
+    }, ctx.statusMessage("resizedImage", { width, height }))
   }
 
   const setSyntheticTextBoxText = (
@@ -227,12 +351,12 @@ export function createEditorImage(
   ): void => {
     const located = locateImage(ctx.modelSnapshot.value, location)
     if (!located?.image.syntheticTextBox) {
-      unsupported("synthetic text box editing is unavailable for this image")
+      unsupported("syntheticTextBoxUnavailable")
       return
     }
     applyImageChange(location, ({ image }) => {
       image.textBoxText = text
-    }, "Updated text box")
+    }, ctx.statusMessage("updatedTextBox"))
   }
 
   const setImageWrapMode = (
@@ -265,25 +389,49 @@ export function createEditorImage(
         floating.behindDocument = false
       }
       image.floating = floating
-    }, `Set image wrap: ${mode}`)
+    }, ctx.statusMessage("imageWrapSet", { mode }))
   }
 
   const moveFloatingImage = (
     location: DocxImageLocation,
     patch: Partial<NonNullable<ImageRunNode["floating"]>>
   ): void => {
+    const located = locateImage(ctx.modelSnapshot.value, location)
+    if (!located) {
+      unsupported("imageMoveTargetUnavailable")
+      return
+    }
+    if (located.image.floating?.lockedAnchor) {
+      unsupported("lockedImageAnchorMove")
+      return
+    }
+
+    const floating: NonNullable<ImageRunNode["floating"]> = {
+      xPx: 0,
+      yPx: 0,
+      wrapType: "square",
+      ...(located.image.floating ?? {}),
+      ...patch,
+    }
+    if (patch.xPx !== undefined) delete floating.horizontalAlign
+    if (patch.yPx !== undefined) delete floating.verticalAlign
+
+    if (
+      findOverlappingFloatingImage(
+        ctx.modelSnapshot.value,
+        located.image,
+        floating,
+        located.image.widthPx ?? 120,
+        located.image.heightPx ?? 80,
+      )
+    ) {
+      unsupported("imageOverlapDisabled")
+      return
+    }
+
     applyImageChange(location, ({ image }) => {
-      const floating: NonNullable<ImageRunNode["floating"]> = {
-        xPx: 0,
-        yPx: 0,
-        wrapType: "square",
-        ...(image.floating ?? {}),
-        ...patch,
-      }
-      if (patch.xPx !== undefined) delete floating.horizontalAlign
-      if (patch.yPx !== undefined) delete floating.verticalAlign
       image.floating = floating
-    }, "Moved image")
+    }, ctx.statusMessage("movedImage"))
   }
 
   const moveSectionFloatingImage = (
@@ -296,10 +444,10 @@ export function createEditorImage(
       patch,
     )
     if (next === ctx.modelSnapshot.value) {
-      unsupported("section image target is unavailable")
+      unsupported("sectionImageTargetUnavailable")
       return
     }
-    applyChange(() => next, "Moved section image")
+    applyChange(() => next, ctx.statusMessage("movedSectionImage"))
   }
 
   const moveParagraphDropCap = (
@@ -308,17 +456,17 @@ export function createEditorImage(
   ): void => {
     const paragraph = ctx.modelSnapshot.value.nodes[nodeIndex]
     if (paragraph?.type !== "paragraph" || !paragraph.style?.dropCap) {
-      unsupported("drop cap target is unavailable")
+      unsupported("dropCapTargetUnavailable")
       return
     }
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const next = cloneDocModelNodes(current, [nodeIndex])
       const target = next.nodes[nodeIndex]
       if (target?.type !== "paragraph" || !target.style?.dropCap) return current
       target.style.dropCap = { ...target.style.dropCap, ...patch }
       target.sourceXml = undefined
       return next
-    }, "Moved drop cap")
+    }, ctx.statusMessage("movedDropCap"))
   }
 
   const setParagraphDropCapFontSizePt = (
@@ -329,11 +477,11 @@ export function createEditorImage(
       ? paragraph.children.find((child) => child.type === "text" && child.text.length > 0)
       : undefined
     if (!textRun || !Number.isFinite(fontSizePt) || fontSizePt <= 0) {
-      unsupported("drop cap font size target is unavailable")
+      unsupported("dropCapFontSizeTargetUnavailable")
       return
     }
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const next = cloneDocModelNodes(current, [nodeIndex])
       const target = next.nodes[nodeIndex]
       if (target?.type !== "paragraph") return current
       const firstText = target.children.find((child) => child.type === "text" && child.text.length > 0)
@@ -341,7 +489,7 @@ export function createEditorImage(
       firstText.style = { ...(firstText.style ?? {}), fontSizePt }
       target.sourceXml = undefined
       return next
-    }, `Set drop cap font size to ${fontSizePt}pt`)
+    }, ctx.statusMessage("dropCapFontSize", { size: fontSizePt }))
   }
 
   const setParagraphDropCapText = (
@@ -352,11 +500,11 @@ export function createEditorImage(
       ? paragraph.children.find((child) => child.type === "text" && child.text.length > 0)
       : undefined
     if (!textRun || text.length === 0) {
-      unsupported("drop cap text target is unavailable")
+      unsupported("dropCapTextTargetUnavailable")
       return
     }
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const next = cloneDocModelNodes(current, [nodeIndex])
       const target = next.nodes[nodeIndex]
       if (target?.type !== "paragraph") return current
       const firstText = target.children.find((child) => child.type === "text" && child.text.length > 0)
@@ -365,18 +513,21 @@ export function createEditorImage(
       firstText.text = text + characters.slice(1).join("")
       target.sourceXml = undefined
       return next
-    }, "Updated drop cap text")
+    }, ctx.statusMessage("updatedDropCapText"))
   }
 
   const moveImage = (
     source: DocxImageLocation, target: DocxImageDropTarget
   ): void => {
     if (!locateImage(ctx.modelSnapshot.value, source)) {
-      unsupported("image move source is unavailable")
+      unsupported("imageMoveSourceUnavailable")
       return
     }
     applyChange((current) => {
-      const next = cloneDocModel(current)
+      const next = cloneDocModelNodes(current, [
+        imageNodeIndex(source),
+        target.kind === "paragraph" ? target.nodeIndex : target.tableIndex,
+      ])
       const from = locateImage(next, source)
       if (!from) return current
 
@@ -395,7 +546,7 @@ export function createEditorImage(
         }
       }
       if (!targetParagraph) {
-        unsupported("image move target is unavailable")
+        unsupported("imageMoveTargetUnavailable")
         return current
       }
 
@@ -415,7 +566,7 @@ export function createEditorImage(
       if (from.table) from.table.sourceXml = undefined
       if (targetTable) targetTable.sourceXml = undefined
       return next
-    }, "Moved image")
+    }, ctx.statusMessage("movedImage"))
   }
 
   return {

@@ -6,7 +6,7 @@ import {
 } from "@xmldom/xmldom";
 import { strFromU8, unzipSync } from "fflate";
 import { OfficeLoadError } from "@arcships/office-runtime";
-import { loadWorkbookChartAssets } from "./charts";
+import { loadWorkbookChartAssets, refreshChartDataFromWorkbook } from "./charts";
 import {
   parseWorkbookChartStyleAssets,
   parseWorkbookImageAssets,
@@ -20,12 +20,14 @@ import {
 } from "./images";
 import type { WorkbookStructureAssets } from "./images";
 import { safeCalculate } from "./safe-calculate";
+import { normalizeTypedDateCells } from "./typed-dates";
 import { trackXlsxWorkbookLifetime } from "./workbook-lifetime";
 import { getSheetsWasmModule, setWasmSource, type WorkerWasmSource } from "./wasm";
 import type {
   XlsxChart,
   XlsxChartsheet,
   XlsxCellAddress,
+  XlsxCellNumberFormatInput,
   XlsxCellRange,
   XlsxDataValidation,
   XlsxFreezePanes,
@@ -34,6 +36,8 @@ import type {
   XlsxResolvedCellStyle,
   XlsxShape,
   XlsxSheetData,
+  XlsxSheetProtection,
+  XlsxSheetProtectionAction,
   XlsxSheetVisibility,
   XlsxTable,
   XlsxTableStyleDefinition,
@@ -108,6 +112,13 @@ type WorkerRequest =
     }
   | {
       id: number;
+      type: "refreshCharts";
+      payload: {
+        showHiddenSheets?: boolean;
+      };
+    }
+  | {
+      id: number;
       type: "getCellSnapshot";
       payload: {
         workbookSheetIndex: number;
@@ -148,6 +159,7 @@ type WorkerSuccessResponse = {
     | {
         displayValue: string;
         formula: string;
+        numberFormat?: XlsxCellNumberFormatInput | null;
       }
     | unknown[]
     | null;
@@ -167,6 +179,17 @@ type WorkerErrorResponse = {
 };
 
 type WorkerResponse = WorkerSuccessResponse | WorkerErrorResponse;
+
+/**
+ * A load that lost to a newer load. It never commits module state and only
+ * releases the workbook it created itself.
+ */
+class SupersededLoadError extends Error {
+  constructor() {
+    super("XLSX Worker 加载请求已被更新的加载请求取代。");
+    this.name = "SupersededLoadError";
+  }
+}
 
 let workbook: Workbook | null = null;
 let chartsByWorkbookSheetIndex: XlsxChart[][] = [];
@@ -370,15 +393,59 @@ function parseWorksheetDataValidations(worksheet: ReturnType<Workbook["getSheet"
       allowBlank: typeof validation.allowBlank === "boolean" ? validation.allowBlank : undefined,
       errorMessage: typeof validation.errorMessage === "string" ? validation.errorMessage : undefined,
       errorStyle: typeof validation.errorStyle === "string" ? validation.errorStyle : undefined,
+      errorTitle: typeof validation.errorTitle === "string" ? validation.errorTitle : undefined,
       inputMessage: typeof validation.inputMessage === "string" ? validation.inputMessage : undefined,
+      inputTitle: typeof validation.inputTitle === "string" ? validation.inputTitle : undefined,
       listSource: typeof validation.listSource === "string" ? validation.listSource : undefined,
+      operator: typeof validation.operator === "string" ? validation.operator : undefined,
       ranges,
       showDropdown: typeof validation.showDropdown === "boolean" ? validation.showDropdown : undefined,
       showErrorAlert: typeof validation.showErrorAlert === "boolean" ? validation.showErrorAlert : undefined,
       showInputMessage: typeof validation.showInputMessage === "boolean" ? validation.showInputMessage : undefined,
-      validationType
+      validationType,
+      value1: typeof validation.value1 === "string" ? validation.value1 : undefined,
+      value2: typeof validation.value2 === "string" ? validation.value2 : undefined
     } satisfies XlsxDataValidation];
   });
+}
+
+const SHEET_PROTECTION_ACTIONS: XlsxSheetProtectionAction[] = [
+  "autoFilter",
+  "deleteColumns",
+  "deleteRows",
+  "formatCells",
+  "formatColumns",
+  "formatRows",
+  "insertColumns",
+  "insertHyperlinks",
+  "insertRows",
+  "objects",
+  "pivotTables",
+  "scenarios",
+  "selectLockedCells",
+  "selectUnlockedCells",
+  "sort"
+];
+
+function parseWorksheetSheetProtection(
+  worksheet: ReturnType<Workbook["getSheet"]>
+): XlsxSheetProtection | null {
+  const rawProtection = worksheet.protection as Record<string, unknown> | null | undefined;
+  if (!rawProtection || typeof rawProtection !== "object" || rawProtection.protected !== true) {
+    return null;
+  }
+
+  const flags: Partial<Record<XlsxSheetProtectionAction, boolean>> = {};
+  for (const action of SHEET_PROTECTION_ACTIONS) {
+    if (typeof rawProtection[action] === "boolean") {
+      flags[action] = rawProtection[action];
+    }
+  }
+
+  return {
+    enabled: true,
+    flags
+  };
 }
 
 function resolveWorksheetZoomScale(
@@ -488,7 +555,7 @@ function buildSheetList(
         conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
         hyperlinks: sheetState?.hyperlinks ?? [],
         comments: sheetState?.comments ?? [],
-        dataValidations: parseWorksheetDataValidations(worksheet),
+        dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
         defaultColWidthPx,
         defaultRowHeightPx,
         freezePanes: parseWorksheetFreezePanes(worksheet),
@@ -505,6 +572,7 @@ function buildSheetList(
         maxUsedRow: -1,
         name: worksheet.name,
         visibility,
+        protection: parseWorksheetSheetProtection(worksheet),
         namedCellStyleByName: structureAssets?.namedCellStyleByName ?? {},
         rowCount: 0,
         rowHeightOverridesPx: sheetState?.rowHeightOverridesPx ?? {},
@@ -554,7 +622,7 @@ function buildSheetList(
       conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
       hyperlinks: sheetState?.hyperlinks ?? [],
       comments: sheetState?.comments ?? [],
-      dataValidations: parseWorksheetDataValidations(worksheet),
+      dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
       defaultColWidthPx,
       defaultRowHeightPx,
       freezePanes: parseWorksheetFreezePanes(worksheet),
@@ -571,6 +639,7 @@ function buildSheetList(
       maxUsedRow: maxRow,
       name: worksheet.name,
       visibility,
+      protection: parseWorksheetSheetProtection(worksheet),
       namedCellStyleByName: structureAssets?.namedCellStyleByName ?? {},
       rowCount: visibleRows.length,
       rowHeightOverridesPx: sheetState?.rowHeightOverridesPx ?? {},
@@ -677,6 +746,48 @@ function decodeHtmlEntities(value: string): string {
     .replace(/&amp;/g, "&");
 }
 
+/**
+ * Number format that applies to a cell: its own style first, else the
+ * row/column style the sheet declares. Snapshots carry it so the viewer can
+ * localize the display string without reading styles on the main thread.
+ */
+/** Keep only the public number-format fields PostMessage can carry. */
+function normalizeSnapshotNumberFormat(format: unknown): XlsxCellNumberFormatInput | null {
+  if (!format || typeof format !== "object") {
+    return null;
+  }
+  const record = format as Record<string, unknown>;
+  const normalized: XlsxCellNumberFormatInput = {};
+  if (record.formatType === "custom" || record.formatType === "builtin" || record.formatType === "general") {
+    normalized.formatType = record.formatType;
+  }
+  if (typeof record.id === "number" && Number.isFinite(record.id)) {
+    normalized.id = record.id;
+  }
+  if (typeof record.formatString === "string" && record.formatString) {
+    normalized.formatString = record.formatString;
+  }
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+function resolveSnapshotNumberFormat(
+  worksheet: ReturnType<Workbook["getSheet"]>,
+  sheet: XlsxSheetData | null,
+  row: number,
+  col: number
+): XlsxCellNumberFormatInput | null {
+  const style = worksheet.getCellStyleAt(row, col) as { numberFormat?: XlsxCellNumberFormatInput } | null | undefined;
+  if (style && typeof style === "object") {
+    return normalizeSnapshotNumberFormat(style.numberFormat);
+  }
+  if (!sheet) {
+    return null;
+  }
+  const rowStyleId = sheet.rowStyleIds[row];
+  const colStyleId = sheet.colStyleIds[col];
+  return normalizeSnapshotNumberFormat(sheet.styleById[rowStyleId ?? colStyleId ?? -1]?.numberFormat);
+}
+
 function getCellDisplayValue(worksheet: ReturnType<Workbook["getSheet"]>, row: number, col: number, activeSheet?: XlsxSheetData | null) {
   const formula = worksheet.getFormulaAt(row, col);
   const cachedFormulaValue = formula ? activeSheet?.cachedFormulaValues?.[cellAddressToA1({ row, col })] : undefined;
@@ -719,11 +830,19 @@ async function loadWorkbook(
   skipXmlParsing = false,
   showHiddenSheets = false,
   limits?: XlsxRuntimeLimits,
+  isSuperseded: () => boolean = () => false,
 ) {
   validateXlsxArchive(buffer, limits);
   const wasmModule = await getSheetsWasmModule();
-  const bytes = new Uint8Array(buffer);
-  const effectiveSkipXmlParsing = shouldSkipXmlParsingForWorkbook(bytes, skipXmlParsing);
+  if (isSuperseded()) {
+    // Nothing has been created yet, so there is nothing to release.
+    throw new SupersededLoadError();
+  }
+  const rawBytes = new Uint8Array(buffer);
+  const effectiveSkipXmlParsing = shouldSkipXmlParsingForWorkbook(rawBytes, skipXmlParsing);
+  const bytes = effectiveSkipXmlParsing
+    ? rawBytes
+    : normalizeTypedDateCells(rawBytes);
   let activeWorkbook = trackXlsxWorkbookLifetime(wasmModule.Workbook.fromBytes(bytes));
   let totalFormulas = 0;
   for (let index = 0; index < activeWorkbook.sheetCount; index += 1) {
@@ -746,20 +865,20 @@ async function loadWorkbook(
   }
 
   const nextWorkbook = activeWorkbook;
-  const imageAssets = effectiveSkipXmlParsing || !canParseXmlInWorker()
-    ? null
-    : parseWorkbookImageAssets(bytes, limits);
-  const structureAssets = imageAssets ?? (
-    effectiveSkipXmlParsing || !canParseXmlInWorker()
-      ? null
-      : parseWorkbookStructureAssets(bytes, { includeCachedFormulaValues: true })
-  );
-  const sheetLayoutStates = structureAssets ? undefined : parseWorkerSheetLayoutAssets(bytes, nextWorkbook.sheetCount);
-  const previousWorkbook = workbook;
-  workbook = nextWorkbook;
+  let imageAssets: ReturnType<typeof parseWorkbookImageAssets> | null = null;
+  let committed = false;
   try {
-    sheets = buildSheetList(nextWorkbook, structureAssets, sheetLayoutStates, showHiddenSheets);
-    tablesByWorkbookSheetIndex = Array.from(
+    imageAssets = effectiveSkipXmlParsing || !canParseXmlInWorker()
+      ? null
+      : parseWorkbookImageAssets(bytes, limits);
+    const structureAssets = imageAssets ?? (
+      effectiveSkipXmlParsing || !canParseXmlInWorker()
+        ? null
+        : parseWorkbookStructureAssets(bytes, { includeCachedFormulaValues: true })
+    );
+    const sheetLayoutStates = structureAssets ? undefined : parseWorkerSheetLayoutAssets(bytes, nextWorkbook.sheetCount);
+    const nextSheets = buildSheetList(nextWorkbook, structureAssets, sheetLayoutStates, showHiddenSheets);
+    const nextTablesByWorkbookSheetIndex = Array.from(
       { length: nextWorkbook.sheetCount },
       (_, workbookSheetIndex) => {
         const parsedTables = structureAssets?.tableMetadataByWorkbookSheetIndex[workbookSheetIndex];
@@ -768,7 +887,7 @@ async function loadWorkbook(
           : mapWorksheetTables(nextWorkbook.getSheet(workbookSheetIndex));
       }
     );
-    const visibleSheetIndexByWorkbookSheetIndex = new Map(sheets.map((sheet, index) => [sheet.workbookSheetIndex, index]));
+    const visibleSheetIndexByWorkbookSheetIndex = new Map(nextSheets.map((sheet, index) => [sheet.workbookSheetIndex, index]));
     const chartStyleAssets = effectiveSkipXmlParsing || !canParseXmlInWorker()
       ? null
       : parseWorkbookChartStyleAssets(bytes);
@@ -778,9 +897,21 @@ async function loadWorkbook(
       visibleSheetIndexByWorkbookSheetIndex,
       showHiddenSheets
     );
+
+    if (isSuperseded()) {
+      // A newer load won. The catch below releases only the workbook and object
+      // URLs created by this request; current module state stays untouched.
+      throw new SupersededLoadError();
+    }
+
+    const previousWorkbook = workbook;
+    workbook = nextWorkbook;
+    sheets = nextSheets;
+    tablesByWorkbookSheetIndex = nextTablesByWorkbookSheetIndex;
     chartsByWorkbookSheetIndex = chartAssets.chartsByWorkbookSheetIndex;
     chartsheets = chartAssets.chartsheets;
     tabs = chartAssets.tabs;
+    committed = true;
     if (previousWorkbook && previousWorkbook !== nextWorkbook) {
       try { previousWorkbook.free(); } catch { /* previous workbook is never reused */ }
     }
@@ -796,9 +927,10 @@ async function loadWorkbook(
       tabs
     };
   } catch (error) {
-    workbook = previousWorkbook;
-    revokeWorkbookImageAssets(imageAssets);
-    try { nextWorkbook.free(); } catch { /* failed load is discarded */ }
+    if (!committed) {
+      revokeWorkbookImageAssets(imageAssets);
+      try { nextWorkbook.free(); } catch { /* failed load is discarded */ }
+    }
     throw error;
   }
 }
@@ -811,8 +943,11 @@ async function parseCharts(
 ) {
   validateXlsxArchive(buffer, limits);
   const wasmModule = await getSheetsWasmModule();
-  const bytes = new Uint8Array(buffer);
-  const effectiveSkipXmlParsing = shouldSkipXmlParsingForWorkbook(bytes, skipXmlParsing);
+  const rawBytes = new Uint8Array(buffer);
+  const effectiveSkipXmlParsing = shouldSkipXmlParsingForWorkbook(rawBytes, skipXmlParsing);
+  const bytes = effectiveSkipXmlParsing
+    ? rawBytes
+    : normalizeTypedDateCells(rawBytes);
   let activeWorkbook = trackXlsxWorkbookLifetime(wasmModule.Workbook.fromBytes(bytes));
   let totalFormulas = 0;
   for (let index = 0; index < activeWorkbook.sheetCount; index += 1) {
@@ -859,23 +994,98 @@ function respond(message: WorkerResponse) {
   self.postMessage(message);
 }
 
-async function handleMessage(message: WorkerRequest) {
+/**
+ * A result that cannot be structured-cloned (for example a WASM handle that
+ * leaked into a snapshot) makes `postMessage` throw. Without this guard the
+ * client receives no response at all and only reports a 30 s TIMEOUT.
+ */
+function respondSafely(message: WorkerResponse) {
+  try {
+    respond(message);
+  } catch (error) {
+    try {
+      respond({
+        error: {
+          code: "WORKER_FAILED",
+          message: error instanceof Error
+            ? `XLSX Worker 无法返回结果：${error.message}`
+            : "XLSX Worker 无法返回结果。",
+          phase: "response",
+        },
+        id: message.id,
+        success: false,
+      } satisfies WorkerErrorResponse);
+    } catch {
+      // The Worker transport itself is gone; the client reports WORKER_FAILED.
+    }
+  }
+}
+
+/**
+ * Worker message shapes handled outside the serial queue.
+ *
+ * `cancel` marks a queued interactive read as abandoned; it never produces a
+ * response because the client already rejected that request.
+ */
+type WorkerCancelRequest = {
+  payload: {
+    targetId: number;
+  };
+  type: "cancel";
+};
+
+type WorkerJobResult = WorkerSuccessResponse["result"];
+
+type WorkerJob = {
+  id: number;
+  type: WorkerRequest["type"];
+  run: (isSuperseded: () => boolean) => WorkerJobResult | Promise<WorkerJobResult>;
+};
+
+function createErrorResponse(id: number, error: unknown): WorkerErrorResponse {
+  const officeError = error instanceof OfficeLoadError ? error : undefined;
+  return {
+    error: {
+      code: error instanceof SupersededLoadError
+        ? "SUPERSEDED"
+        : officeError?.code === "LIMIT_EXCEEDED"
+          ? "LIMIT_EXCEEDED"
+          : officeError?.code === "TIMEOUT"
+            ? "TIMEOUT"
+            : officeError?.code === "INVALID_SOURCE"
+              ? "INVALID_SOURCE"
+              : "WORKER_FAILED",
+      message: error instanceof Error ? error.message : "Worker request failed.",
+      ...(officeError?.phase ? { phase: officeError.phase } : {}),
+      ...(officeError?.limit ? { limit: officeError.limit } : {}),
+      ...(officeError?.actual !== undefined ? { actual: officeError.actual } : {}),
+      ...(officeError?.allowed !== undefined ? { allowed: officeError.allowed } : {}),
+    },
+    id,
+    success: false
+  };
+}
+
+function postErrorResponse(id: number, error: unknown) {
+  try {
+    respond(createErrorResponse(id, error));
+  } catch {
+    // One failed response must not stall the serial queue.
+  }
+}
+
+function executeRequest(message: WorkerRequest, isSuperseded: () => boolean): WorkerJobResult | Promise<WorkerJobResult> {
   switch (message.type) {
     case "load": {
-      if (message.payload.wasmSource !== undefined) {
-        setWasmSource(message.payload.wasmSource);
-      }
       return loadWorkbook(
         message.payload.buffer,
         message.payload.skipXmlParsing,
         message.payload.showHiddenSheets,
         message.payload.limits,
+        isSuperseded,
       );
     }
     case "parseCharts": {
-      if (message.payload.wasmSource !== undefined) {
-        setWasmSource(message.payload.wasmSource);
-      }
       return parseCharts(
         message.payload.buffer,
         message.payload.skipXmlParsing,
@@ -883,11 +1093,25 @@ async function handleMessage(message: WorkerRequest) {
         message.payload.limits,
       );
     }
+    case "refreshCharts": {
+      if (!workbook) {
+        throw new Error("XLSX Worker 尚未加载工作簿，无法刷新图表数据。");
+      }
+      const refreshed = refreshChartDataFromWorkbook(workbook, chartsByWorkbookSheetIndex, chartsheets);
+      chartsByWorkbookSheetIndex = refreshed.chartsByWorkbookSheetIndex;
+      chartsheets = refreshed.chartsheets;
+      return {
+        chartsByWorkbookSheetIndex,
+        chartsheets,
+        tabs
+      };
+    }
     case "getCellSnapshot": {
       if (!workbook) {
         return {
           displayValue: "",
-          formula: ""
+          formula: "",
+          numberFormat: null
         };
       }
 
@@ -896,7 +1120,8 @@ async function handleMessage(message: WorkerRequest) {
       try {
         return {
           displayValue: getCellDisplayValue(worksheet, message.payload.row, message.payload.col, targetSheet),
-          formula: worksheet.getFormulaAt(message.payload.row, message.payload.col) ?? ""
+          formula: worksheet.getFormulaAt(message.payload.row, message.payload.col) ?? "",
+          numberFormat: resolveSnapshotNumberFormat(worksheet, targetSheet, message.payload.row, message.payload.col)
         };
       } finally {
         worksheet.free();
@@ -928,35 +1153,88 @@ async function handleMessage(message: WorkerRequest) {
   }
 }
 
-self.addEventListener("message", (event: MessageEvent<WorkerRequest>) => {
+// Every request runs through one serial queue. Only one job touches the
+// workbook/sheets/charts module state at a time, and interactive reads wait
+// behind the load they were requested after.
+const pendingJobs: WorkerJob[] = [];
+let latestLoadRequestId = 0;
+let isProcessingJobs = false;
+
+function dropQueuedLoads() {
+  for (let index = pendingJobs.length - 1; index >= 0; index -= 1) {
+    const job = pendingJobs[index];
+    if (job?.type !== "load") continue;
+    pendingJobs.splice(index, 1);
+    postErrorResponse(job.id, new SupersededLoadError());
+  }
+}
+
+function enqueueJob(message: WorkerRequest) {
+  if (message.type === "load") {
+    latestLoadRequestId = message.id;
+    // The newest load wins: loads that never started are settled as superseded
+    // instead of parsing a workbook that is already obsolete.
+    dropQueuedLoads();
+  }
+  pendingJobs.push({
+    id: message.id,
+    run: (isSuperseded) => executeRequest(message, isSuperseded),
+    type: message.type,
+  });
+  void drainJobQueue();
+}
+
+function cancelQueuedJob(targetId: number) {
+  const index = pendingJobs.findIndex((job) => job.id === targetId);
+  if (index >= 0) {
+    pendingJobs.splice(index, 1);
+  }
+}
+
+async function drainJobQueue() {
+  if (isProcessingJobs) return;
+  isProcessingJobs = true;
+  try {
+    while (pendingJobs.length > 0) {
+      const job = pendingJobs.shift();
+      if (!job) break;
+      const isSuperseded = () => job.type === "load" && job.id !== latestLoadRequestId;
+      try {
+        const result = await job.run(isSuperseded);
+        respondSafely({
+          id: job.id,
+          result,
+          success: true
+        });
+      } catch (error) {
+        postErrorResponse(job.id, error);
+      }
+    }
+  } finally {
+    isProcessingJobs = false;
+  }
+}
+
+function applyRequestWasmSource(message: WorkerRequest) {
+  if (message.type !== "load" && message.type !== "parseCharts") return;
+  if (message.payload.wasmSource === undefined) return;
+  setWasmSource(message.payload.wasmSource);
+}
+
+self.addEventListener("message", (event: MessageEvent<WorkerRequest | WorkerCancelRequest>) => {
   const message = event.data;
-  void handleMessage(message)
-    .then((result) => {
-      respond({
-        id: message.id,
-        result,
-        success: true
-      });
-    })
-    .catch((error: unknown) => {
-      const officeError = error instanceof OfficeLoadError ? error : undefined;
-      respond({
-        error: {
-          code: officeError?.code === "LIMIT_EXCEEDED"
-            ? "LIMIT_EXCEEDED"
-            : officeError?.code === "TIMEOUT"
-              ? "TIMEOUT"
-              : officeError?.code === "INVALID_SOURCE"
-                ? "INVALID_SOURCE"
-                : "WORKER_FAILED",
-          message: error instanceof Error ? error.message : "Worker request failed.",
-          ...(officeError?.phase ? { phase: officeError.phase } : {}),
-          ...(officeError?.limit ? { limit: officeError.limit } : {}),
-          ...(officeError?.actual !== undefined ? { actual: officeError.actual } : {}),
-          ...(officeError?.allowed !== undefined ? { allowed: officeError.allowed } : {}),
-        },
-        id: message.id,
-        success: false
-      } satisfies WorkerErrorResponse);
-    });
+  if (!message || typeof message.type !== "string") {
+    return;
+  }
+  if (message.type === "cancel") {
+    cancelQueuedJob(message.payload.targetId);
+    return;
+  }
+  try {
+    applyRequestWasmSource(message);
+  } catch (error) {
+    postErrorResponse(message.id, error);
+    return;
+  }
+  enqueueJob(message);
 });

@@ -13,8 +13,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 105,
-        "sha256": "c8e7779a130bbbbf509df8d95572f7d18883a8cd885080bf252a049d93a106b8"
+        "count": 139,
+        "sha256": "b90abbb93684169484c532752b3ac0daf0a30b2d19f1473e43584a9b91c3e6c2"
       }
     },
     {
@@ -43,14 +43,15 @@
         },
         "./assets/docx_wasm_bg.wasm": "./dist/assets/docx_wasm_bg.wasm",
         "./worker": "./dist/docx-import-worker.js",
+        "./export-worker": "./dist/docx-export-worker.js",
         "./package.json": "./package.json"
       },
       "deprecatedSymbols": [
         "setWasmSource"
       ],
       "rootDeclarationFingerprint": {
-        "count": 1063,
-        "sha256": "dc2986a0570ea62b402a32beb5e945e323533b38b340e10dbfaa0ed44244fb5b"
+        "count": 1236,
+        "sha256": "7091659eda593a9e05ecc4bb38d6767e9452d76b6f51dce09efe50b51724ad6c"
       }
     },
     {
@@ -88,8 +89,8 @@
         "getSheetsWasmModule"
       ],
       "rootDeclarationFingerprint": {
-        "count": 178,
-        "sha256": "35835a78a9202f175a5dc306d3bb9c709c274f8687595c77792518e047dc78c9"
+        "count": 201,
+        "sha256": "02c4931639c91b6c129cde17f24679311a568d41c8f9a9d11024a0fd4b8fc77d"
       }
     },
     {
@@ -131,8 +132,8 @@
         "notifyDocxViewerPageSurfaceListeners"
       ],
       "rootDeclarationFingerprint": {
-        "count": 116,
-        "sha256": "b1d16eb37dbd2daefd48b1fb5e1731db7a3844f252d79ef9c33bb27cb54c173d"
+        "count": 132,
+        "sha256": "eb2ae72d7a71a339ddf85c90f09428b9c60f02545177be474ebdf475e890403e"
       }
     },
     {
@@ -175,12 +176,13 @@
         "XlsxSheetTabs",
         "XlsxChartOverlay",
         "XlsxImageLayer",
+        "XlsxDrawingLayer",
         "XlsxSelectionOverlay",
         "XlsxContextMenu"
       ],
       "rootDeclarationFingerprint": {
-        "count": 42,
-        "sha256": "8bfbd2d48e74550b78dca7b47202cb89295f9ad523934bf883ede1447ce628d1"
+        "count": 52,
+        "sha256": "72dff604f7d2146a6ba7def3c8e90e9851be1e6b105eb4d58870957bcbce3852"
       }
     },
     {
@@ -197,8 +199,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 51,
-        "sha256": "67536a977596204589b543344053887317251b2eedc74d0801e9c57159f59e6a"
+        "count": 74,
+        "sha256": "e918ca5458284afd7a8a2439c162f55ca73121ee692e833bb6d8fc6d34aaced3"
       }
     },
     {
@@ -214,8 +216,8 @@
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 28,
-        "sha256": "7dcd9837d49e5e39a991ac560d876523af2b2d38bc9e4d8e7e01d6c3e70abc8e"
+        "count": 35,
+        "sha256": "9f129112743c04bbed50c208550b25eb26fc4180bb71a8b5f95db8dbe2973bf6"
       }
     },
     {

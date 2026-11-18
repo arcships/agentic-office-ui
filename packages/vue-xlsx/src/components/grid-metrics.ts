@@ -1,12 +1,15 @@
 import type { CSSProperties } from "vue";
 import type { XlsxImageAnchor, XlsxImageRect, XlsxSheetData } from "@arcships/xlsx-core";
-import { anchorToAbsoluteRect, emuToPixels } from "@arcships/xlsx-core";
+import { createAnchoredRectCache } from "@arcships/xlsx-core";
 import { GRID_HEADER_HEIGHT, GRID_ROW_HEADER_WIDTH } from "../composables/internal";
 
 /** Height of the grid's column-header strip, in CSS pixels. */
 export const GRID_HEADER_HEIGHT_PX = GRID_HEADER_HEIGHT;
 /** Width of the grid's row-header gutter, in CSS pixels. */
 export const GRID_ROW_HEADER_WIDTH_PX = GRID_ROW_HEADER_WIDTH;
+/** Grid defaults, matching the fallbacks XlsxGrid paints with. */
+const GRID_DEFAULT_COL_WIDTH_PX = 80;
+const GRID_DEFAULT_ROW_HEIGHT_PX = 24;
 
 /**
  * Absolute box covering the grid body only (headers excluded), used by the
@@ -37,12 +40,21 @@ export function frozenExtent(
   const limit = axis === "column" ? sheet.freezePanes.col : sheet.freezePanes.row;
   const indices = axis === "column" ? sheet.visibleCols : sheet.visibleRows;
   const sizes = axis === "column" ? sheet.colWidths : sheet.rowHeights;
+  const overrides = axis === "column" ? sheet.colWidthOverridesPx : sheet.rowHeightOverridesPx;
   const fallback = axis === "column" ? sheet.defaultColWidthPx : sheet.defaultRowHeightPx;
+  const hardFallback = axis === "column" ? GRID_DEFAULT_COL_WIDTH_PX : GRID_DEFAULT_ROW_HEIGHT_PX;
   const zoom = gridZoomFactor(zoomScale);
   return indices.reduce((total, actualIndex, displayIndex) =>
-    actualIndex < limit ? total + (sizes[displayIndex] || fallback) * zoom : total,
+    // Resolve sizes the way XlsxGrid does (resized columns live in the
+    // override maps), otherwise overlay panes drift from the grid at the
+    // freeze line.
+    actualIndex < limit
+      ? total + (sizes[displayIndex] || overrides?.[actualIndex] || fallback || hardFallback) * zoom
+      : total,
   0);
 }
+
+const anchorRectCache = createAnchoredRectCache();
 
 /** Content-space rect (grid-body coordinates, zoom applied) of an anchored object. */
 export function resolveAnchorRect(
@@ -50,14 +62,9 @@ export function resolveAnchorRect(
   sheet: XlsxSheetData | null,
   zoomScale: number,
 ): XlsxImageRect {
-  const rect = anchorToAbsoluteRect(anchor, sheet);
-  const zoom = gridZoomFactor(zoomScale);
-  return {
-    left: emuToPixels(rect.x) * zoom,
-    top: emuToPixels(rect.y) * zoom,
-    width: Math.max(1, emuToPixels(rect.cx) * zoom),
-    height: Math.max(1, emuToPixels(rect.cy) * zoom),
-  };
+  // Anchors are stable objects across scroll frames, so reuse their content
+  // rect instead of walking the axis model on every scroll tick.
+  return anchorRectCache.resolve(anchor, sheet, zoomScale);
 }
 
 export type GridPaneKey = "main" | "frozen-rows" | "frozen-cols" | "frozen-corner";
@@ -75,6 +82,19 @@ export interface GridPanePlacement {
 export interface GridPaneLayout {
   panes: GridPane[];
   place: (rect: XlsxImageRect) => GridPanePlacement;
+  frozenWidth: number;
+  frozenHeight: number;
+  /**
+   * Whether an object in `pane` intersects the visible viewport (plus an
+   * overscan margin). Used to cull anchored objects that scrolled away.
+   */
+  isVisible: (
+    rect: XlsxImageRect,
+    pane: GridPaneKey,
+    viewportWidth: number,
+    viewportHeight: number,
+    overscan?: number,
+  ) => boolean;
 }
 
 /**
@@ -128,5 +148,43 @@ export function createGridPaneLayout(
     };
   };
 
-  return { panes, place };
+  const isVisible = (
+    rect: XlsxImageRect,
+    pane: GridPaneKey,
+    viewportWidth: number,
+    viewportHeight: number,
+    overscan = 64,
+  ) => {
+    if (!(viewportWidth > 0) || !(viewportHeight > 0)) return true;
+    let left = 0;
+    let top = 0;
+    let right = viewportWidth;
+    let bottom = viewportHeight;
+
+    if (pane === "main" || pane === "frozen-rows") {
+      left = scrollLeft;
+      right = scrollLeft + Math.max(0, viewportWidth - frozenWidth);
+    }
+    if (pane === "main" || pane === "frozen-cols") {
+      top = scrollTop;
+      bottom = scrollTop + Math.max(0, viewportHeight - frozenHeight);
+    }
+    if (pane === "frozen-rows" || pane === "frozen-corner") {
+      top = 0;
+      bottom = frozenHeight;
+    }
+    if (pane === "frozen-cols" || pane === "frozen-corner") {
+      left = 0;
+      right = frozenWidth;
+    }
+
+    return (
+      rect.left + rect.width >= left - overscan
+      && rect.left <= right + overscan
+      && rect.top + rect.height >= top - overscan
+      && rect.top <= bottom + overscan
+    );
+  };
+
+  return { panes, place, frozenWidth, frozenHeight, isVisible };
 }

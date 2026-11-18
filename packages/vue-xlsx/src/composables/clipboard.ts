@@ -8,29 +8,35 @@ import type {
 } from "@arcships/xlsx-core";
 import { resolveWorkbookColor, resolveWorkbookFillStyle } from "@arcships/xlsx-core";
 import { cellAddressToA1, normalizeRange, rangeToA1 } from "./selection";
-import { decodeHtmlEntities, escapeHtml, mapBorder, resolveInheritedCellStyle } from "./formatting";
-import { coerceUserEnteredValue } from "./internal";
+import { isWithinSheetBounds, SHEET_MAX_COLUMNS, SHEET_MAX_ROWS, shiftFormulaReferences } from "./formula-references";
+import { decodeHtmlEntities, escapeHtml, mapBorder, resolveEffectiveCellNumberFormat, resolveInheritedCellStyle } from "./formatting";
+import { DEFAULT_CELL_STYLE_PATCH, localizeFormattedNumber, resolveCellInput } from "./cell-input";
 import type { XlsxControllerContext } from "./internal";
 import { XlsxSourceError } from "@arcships/xlsx-core";
+import { officeMessagesEn } from "@arcships/office-interaction";
+import {
+  parseClipboardText,
+  serializeClipboardText,
+  writeClipboardPayload
+} from "./clipboard-text";
+import type { ClipboardWriteTargets } from "./clipboard-text";
 
-export { INTERNAL_CLIPBOARD_MIME, escapeHtml };
+export { INTERNAL_CLIPBOARD_MIME, escapeHtml, parseClipboardText };
 export type { ClipboardPayload, ClipboardMatrixCell, ClipboardMerge };
 
-export function parseClipboardText(text: string): string[][] {
-  const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const rows = normalized.split("\n");
-
-  if (rows.length > 1 && rows[rows.length - 1] === "") {
-    rows.pop();
-  }
-
-  return rows.map((row) => row.split("\t"));
+/** Resolves the clipboard handles of the current browser; absent ones disable that flavour. */
+function resolveClipboardWriteTargets(mimeType: string): ClipboardWriteTargets {
+  return {
+    mimeType,
+    clipboard: typeof navigator === "undefined" ? undefined : navigator.clipboard,
+    ClipboardItem: typeof ClipboardItem === "function" ? ClipboardItem : undefined
+  };
 }
 
 function downloadBlob(blob: Blob, fileName: string) {
   const ownerDocument = globalThis.document;
   if (!ownerDocument?.body || typeof ownerDocument.createElement !== "function") {
-    throw new Error("下载失败：当前环境没有可用的 document。");
+    throw new Error(officeMessagesEn.xlsx.clipboard.noDocument);
   }
   const anchor = ownerDocument.createElement("a");
   let objectUrl: string | undefined;
@@ -79,21 +85,21 @@ export function downloadUrl(src: string, fileName: string) {
   } catch {
     throw new XlsxSourceError({
       code: "SOURCE_NOT_ALLOWED",
-      message: "下载地址无效。",
+      message: officeMessagesEn.xlsx.clipboard.invalidUrl,
       sourceKind: "url",
     });
   }
   if (url.protocol !== "blob:") {
     throw new XlsxSourceError({
       code: "SOURCE_NOT_ALLOWED",
-      message: "下载只能使用已验证的 Blob 地址。",
+      message: officeMessagesEn.xlsx.clipboard.unverifiedBlob,
       sourceKind: "url",
       url: url.href,
     });
   }
   const ownerDocument = globalThis.document;
   if (!ownerDocument?.body || typeof ownerDocument.createElement !== "function") {
-    throw new Error("下载失败：当前环境没有可用的 document。");
+    throw new Error(officeMessagesEn.xlsx.clipboard.noDocument);
   }
   const anchor = ownerDocument.createElement("a");
   try {
@@ -108,11 +114,24 @@ export function downloadUrl(src: string, fileName: string) {
 }
 
 export function createClipboardDomain(ctx: XlsxControllerContext) {
+  // Only re-render values that can be a localized number; dates, text and
+  // errors skip the extra style lookup entirely.
+  const localizableDisplayValue = /^[\s($€£¥₹₽₪¢₫₴₦₱₸₺฿]*[+-]?\d/;
+
+  function localizeDisplayValue(value: string, resolveFormat: () => unknown) {
+    if (!localizableDisplayValue.test(value)) {
+      return value;
+    }
+    return localizeFormattedNumber(value, resolveFormat(), ctx.locale.value);
+  }
+
   function getCellDisplayValue(cell?: XlsxCellAddress | null) {
     if (cell && ctx.activeSheet.value) {
       const workerSnapshot = ctx.workerCellSnapshotCacheRef.value.get(`${ctx.activeSheet.value.workbookSheetIndex}:${cell.row}:${cell.col}`);
       if (workerSnapshot) {
-        return workerSnapshot.displayValue;
+        // Worker snapshots carry the resolved number format so the formula bar
+        // and a11y labels can localize exactly like the main thread does.
+        return localizeDisplayValue(workerSnapshot.displayValue, () => workerSnapshot.numberFormat);
       }
     }
 
@@ -125,7 +144,15 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     const cachedFormulaValue = formula ? ctx.activeSheet.value?.cachedFormulaValues?.[cellAddressToA1(cell)] : undefined;
     const formatted = worksheet.getFormattedValueAt(cell.row, cell.col);
     if (formatted && !(formula && cachedFormulaValue !== undefined && formatted.startsWith("#"))) {
-      return decodeHtmlEntities(formatted);
+      return localizeDisplayValue(
+        decodeHtmlEntities(formatted),
+        () => resolveEffectiveCellNumberFormat(
+          worksheet.getCellStyleAt(cell.row, cell.col),
+          ctx.activeSheet.value,
+          cell.row,
+          cell.col
+        )
+      );
     }
 
     const calculated = worksheet.getCalculatedValueAt(cell.row, cell.col);
@@ -140,7 +167,15 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
         return "";
       }
 
-      return calculated.toString();
+      return localizeDisplayValue(
+        calculated.toString(),
+        () => resolveEffectiveCellNumberFormat(
+          worksheet.getCellStyleAt(cell.row, cell.col),
+          ctx.activeSheet.value,
+          cell.row,
+          cell.col
+        )
+      );
     } finally {
       calculated.free();
     }
@@ -170,12 +205,13 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     }
 
     const normalized = normalizeRange(targetRange);
-    const rows: string[] = [];
+    const rows: string[][] = [];
     const htmlRows: string[] = [];
     const payload: ClipboardPayload = {
       cells: [],
       cols: normalized.end.col - normalized.start.col + 1,
       merges: [],
+      origin: { col: normalized.start.col, row: normalized.start.row },
       rows: normalized.end.row - normalized.start.row + 1
     };
 
@@ -191,13 +227,28 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
 
         const formula = worksheet.getFormulaAt(row, col) ?? null;
         const value = getCellDisplayValue({ row, col });
+        const rawCellValue = worksheet.getCellAt(row, col);
+        let rawValue: unknown = "";
+        try {
+          rawValue = rawCellValue.toJs();
+        } finally {
+          rawCellValue.free();
+        }
         const merge = worksheet.getMergeSpan(row, col) as
           | { colSpan?: number; rowSpan?: number }
           | null
           | undefined;
-        const rawStyle = (
-          worksheet.getCellStyleAt(row, col) as Record<string, unknown> | null | undefined
-        ) ?? resolveInheritedCellStyle(ctx.activeSheet.value, row, col);
+        const explicitStyle = worksheet.getCellStyleAt(row, col);
+        const inheritedStyle = explicitStyle
+          ? null
+          : resolveInheritedCellStyle(ctx.activeSheet.value, row, col);
+        // Carry the style so an internal paste keeps the number format. Cells
+        // without an explicit style inherit row/column formatting, so only the
+        // inherited number format is materialised instead of freezing the
+        // whole inherited style onto the pasted cell.
+        const carriedStyle = explicitStyle
+          ?? (inheritedStyle?.numberFormat ? { numberFormat: inheritedStyle.numberFormat } : null);
+        const rawStyle = (explicitStyle as Record<string, unknown> | null | undefined) ?? inheritedStyle;
         const cellStyles: string[] = [
           "padding:2px 4px",
           "white-space:pre-wrap",
@@ -267,7 +318,9 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
         payload.cells.push({
           colOffset: col - normalized.start.col,
           formula,
+          rawValue: rawValue === undefined ? "" : rawValue,
           rowOffset: row - normalized.start.row,
+          style: carriedStyle,
           value
         });
 
@@ -286,21 +339,21 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
         );
       }
 
-      rows.push(textCells.join("\t"));
+      rows.push(textCells);
       htmlRows.push(`<tr>${htmlCells.join("")}</tr>`);
     }
 
     return {
       html: `<table style="border-collapse:collapse">${htmlRows.join("")}</table>`,
       structured: JSON.stringify(payload),
-      text: rows.join("\n")
+      text: serializeClipboardText(rows)
     };
   }
 
   function pasteText(text: string) {
     const worksheet = ctx.getActiveWorksheet();
     const targetCell = ctx.activeCell.value ?? ctx.selection.value?.start ?? null;
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value || !targetCell || !text) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value || !targetCell || !text) {
       return false;
     }
 
@@ -309,6 +362,11 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
       return false;
     }
 
+    const beforeSnapshot = {
+      activeCell: ctx.activeCell.value,
+      selection: ctx.selection.value
+    };
+    ctx.setValidationFeedback(null);
     const mutations: import("./internal").RangeCellMutation[] = [];
     for (let rowIndex = 0; rowIndex < grid.length; rowIndex += 1) {
       const row = grid[rowIndex] ?? [];
@@ -318,57 +376,76 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
           col: targetCell.col + colIndex,
           row: targetCell.row + rowIndex
         };
+        // Overflow past the sheet and merged secondary cells are not
+        // writable: skip them instead of corrupting the worksheet.
+        if (!isWithinSheetBounds(nextCell) || worksheet.isMergedSecondary(nextCell.row, nextCell.col)) {
+          continue;
+        }
         const before = ctx.captureCellMutationState(nextCell);
         if (!before) {
           continue;
         }
-        if (rawValue.startsWith("=") && rawValue.length > 1) {
-          worksheet.setFormula(cellAddressToA1(nextCell), rawValue);
-          const after = ctx.captureCellMutationState(nextCell);
-          if (!after) {
+        const input = resolveCellInput(rawValue, {
+          date1904: worksheet.date1904 === true,
+          locale: ctx.locale.value,
+          numberFormat: resolveEffectiveCellNumberFormat(
+            worksheet.getCellStyleAt(nextCell.row, nextCell.col),
+            ctx.activeSheet.value,
+            nextCell.row,
+            nextCell.col
+          )
+        });
+        if (input.kind !== "formula") {
+          const validationCheck = ctx.checkCellValue(nextCell, rawValue);
+          if (validationCheck.feedback) {
+            ctx.setValidationFeedback(validationCheck.feedback);
+          }
+          if (!validationCheck.accepted) {
             continue;
           }
-          mutations.push({
-            after,
-            before,
-            cell: nextCell
-          });
-        } else {
-          const nextValue = coerceUserEnteredValue(rawValue);
-          worksheet.setCell(cellAddressToA1(nextCell), nextValue);
-          const after = ctx.captureCellMutationState(nextCell);
-          if (!after) {
-            continue;
-          }
-          mutations.push({
-            after,
-            before,
-            cell: nextCell
-          });
         }
+        const address = cellAddressToA1(nextCell);
+        if (input.kind === "formula") {
+          worksheet.setFormula(address, input.formula);
+        } else {
+          worksheet.setCell(address, input.value);
+        }
+        if (input.numberFormat) {
+          worksheet.setCellStyleAt(nextCell.row, nextCell.col, { numberFormat: input.numberFormat });
+        }
+        const after = ctx.captureCellMutationState(nextCell);
+        if (!after) {
+          continue;
+        }
+        mutations.push({
+          after,
+          before,
+          cell: nextCell
+        });
       }
     }
 
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
     const nextRange = normalizeRange({
       start: targetCell,
       end: {
-        col: targetCell.col + Math.max(0, Math.max(...grid.map((row) => row.length), 1) - 1),
-        row: targetCell.row + grid.length - 1
+        col: Math.min(targetCell.col + Math.max(0, Math.max(...grid.map((row) => row.length), 1) - 1), SHEET_MAX_COLUMNS - 1),
+        row: Math.min(targetCell.row + grid.length - 1, SHEET_MAX_ROWS - 1)
       }
     });
     ctx.activeCell.value = targetCell;
     ctx.selection.value = nextRange;
     ctx.selectionAnchorRef.value = targetCell;
-    ctx.recordRangeEditHistory(mutations, nextRange, targetCell);
+    ctx.recordRangeEditHistory(mutations, nextRange, targetCell, beforeSnapshot);
     return true;
   }
 
   function pasteStructuredClipboardData(serializedPayload: string) {
     const worksheet = ctx.getActiveWorksheet();
     const targetCell = ctx.activeCell.value ?? ctx.selection.value?.start ?? null;
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value || !targetCell || !serializedPayload) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value || !targetCell || !serializedPayload) {
       return false;
     }
 
@@ -384,6 +461,16 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
     }
 
     const hasMergeOperations = Array.isArray(payload.merges) && payload.merges.some((merge) => (merge.rowSpan ?? 1) > 1 || (merge.colSpan ?? 1) > 1);
+    // Formulas copied from another range shift by the distance between the
+    // copied range's origin and the paste target, like Excel. Payloads from
+    // other hosts may omit the origin; those paste verbatim.
+    const rowDelta = payload.origin ? targetCell.row - payload.origin.row : 0;
+    const colDelta = payload.origin ? targetCell.col - payload.origin.col : 0;
+    const beforeSnapshot = {
+      activeCell: ctx.activeCell.value,
+      selection: ctx.selection.value
+    };
+    ctx.setValidationFeedback(null);
     const mutations: import("./internal").RangeCellMutation[] = [];
     if (hasMergeOperations) {
       ctx.recordHistoryBeforeMutation();
@@ -393,34 +480,71 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
         col: targetCell.col + cell.colOffset,
         row: targetCell.row + cell.rowOffset
       };
+      // Overflow past the sheet and merged secondary cells are not writable:
+      // skip them instead of corrupting the merge.
+      if (!isWithinSheetBounds(nextCell) || worksheet.isMergedSecondary(nextCell.row, nextCell.col)) {
+        continue;
+      }
+      if (!cell.formula) {
+        const validationValue = cell.rawValue !== undefined
+          ? String(cell.rawValue ?? "")
+          : typeof cell.value === "string" ? cell.value : "";
+        const validationCheck = ctx.checkCellValue(nextCell, validationValue);
+        if (validationCheck.feedback) {
+          ctx.setValidationFeedback(validationCheck.feedback);
+        }
+        if (!validationCheck.accepted) {
+          continue;
+        }
+      }
       const before = hasMergeOperations ? null : ctx.captureCellMutationState(nextCell);
+      const address = cellAddressToA1(nextCell);
 
       if (cell.formula) {
-        worksheet.setFormula(cellAddressToA1(nextCell), cell.formula);
-        if (before) {
-          const after = ctx.captureCellMutationState(nextCell);
-          if (!after) {
-            continue;
-          }
-          mutations.push({
-            after,
-            before,
-            cell: nextCell
-          });
-        }
+        worksheet.setFormula(address, shiftFormulaReferences(cell.formula, rowDelta, colDelta));
+      } else if (cell.rawValue !== undefined) {
+        worksheet.setCell(address, cell.rawValue);
       } else {
-        worksheet.setCell(cellAddressToA1(nextCell), cell.value);
-        if (before) {
-          const after = ctx.captureCellMutationState(nextCell);
-          if (!after) {
-            continue;
-          }
-          mutations.push({
-            after,
-            before,
-            cell: nextCell
-          });
+        // Payloads written before the raw value was carried only hold the
+        // display string; coerce it like typed input instead of pasting text.
+        const input = resolveCellInput(typeof cell.value === "string" ? cell.value : "", {
+          date1904: worksheet.date1904 === true,
+          locale: ctx.locale.value,
+          numberFormat: resolveEffectiveCellNumberFormat(
+            worksheet.getCellStyleAt(nextCell.row, nextCell.col),
+            ctx.activeSheet.value,
+            nextCell.row,
+            nextCell.col
+          )
+        });
+        if (input.kind === "formula") {
+          worksheet.setFormula(address, shiftFormulaReferences(input.formula, rowDelta, colDelta));
+        } else {
+          worksheet.setCell(address, input.value);
         }
+        if (input.numberFormat) {
+          worksheet.setCellStyleAt(nextCell.row, nextCell.col, { numberFormat: input.numberFormat });
+        }
+      }
+
+      if (cell.style !== undefined) {
+        worksheet.setCellStyleAt(
+          nextCell.row,
+          nextCell.col,
+          cell.style && typeof cell.style === "object" ? cell.style : DEFAULT_CELL_STYLE_PATCH
+        );
+      }
+
+      if (before) {
+        const after = ctx.captureCellMutationState(nextCell);
+        if (!after) {
+          continue;
+        }
+        mutations.push({
+          after,
+          before,
+          cell: nextCell
+        });
       }
     }
 
@@ -440,50 +564,46 @@ export function createClipboardDomain(ctx: XlsxControllerContext) {
             row: targetCell.row + merge.rowOffset + merge.rowSpan - 1
           }
         });
+        if (!isWithinSheetBounds(mergeRange.start) || !isWithinSheetBounds(mergeRange.end)) {
+          continue;
+        }
         worksheet.mergeCells(rangeToA1(mergeRange));
       }
     }
 
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
     const nextRange = normalizeRange({
       start: targetCell,
       end: {
-        col: targetCell.col + Math.max((payload.cols ?? 1) - 1, 0),
-        row: targetCell.row + Math.max((payload.rows ?? 1) - 1, 0)
+        col: Math.min(targetCell.col + Math.max((payload.cols ?? 1) - 1, 0), SHEET_MAX_COLUMNS - 1),
+        row: Math.min(targetCell.row + Math.max((payload.rows ?? 1) - 1, 0), SHEET_MAX_ROWS - 1)
       }
     });
     ctx.activeCell.value = targetCell;
     ctx.selection.value = nextRange;
     ctx.selectionAnchorRef.value = targetCell;
     if (!hasMergeOperations) {
-      ctx.recordRangeEditHistory(mutations, nextRange, targetCell);
+      ctx.recordRangeEditHistory(mutations, nextRange, targetCell, beforeSnapshot);
     }
     return true;
   }
 
   async function copySelectionToClipboard() {
     const clipboardData = getClipboardData();
-    if (!clipboardData || typeof navigator === "undefined" || !navigator.clipboard) {
+    if (!clipboardData) {
       return false;
     }
 
-    if (typeof ClipboardItem === "function" && navigator.clipboard.write) {
-      const item = new ClipboardItem({
-        [INTERNAL_CLIPBOARD_MIME]: new Blob([clipboardData.structured], { type: INTERNAL_CLIPBOARD_MIME }),
-        "text/html": new Blob([clipboardData.html], { type: "text/html" }),
-        "text/plain": new Blob([clipboardData.text], { type: "text/plain" })
-      });
-      await navigator.clipboard.write([item]);
-      return true;
-    }
-
-    await navigator.clipboard.writeText(clipboardData.text);
-    return true;
+    return writeClipboardPayload(
+      clipboardData,
+      resolveClipboardWriteTargets(INTERNAL_CLIPBOARD_MIME)
+    );
   }
 
   async function pasteFromClipboard() {
-    if (ctx.readOnly.value || typeof navigator === "undefined" || !navigator.clipboard) {
+    if (ctx.isEditingLocked.value || typeof navigator === "undefined" || !navigator.clipboard) {
       return false;
     }
 

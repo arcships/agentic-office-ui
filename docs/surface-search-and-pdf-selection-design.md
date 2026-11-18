@@ -1,6 +1,6 @@
 # Surface 搜索与 PDF 文字选择设计
 
-> 状态：首版实现已提交（`cf0a408`）；PDF 拖选与双击选词优化已实现并通过单元、组件及 Chromium 交互验证，待 Firefox/WebKit 矩阵复验
+> 状态：首版实现已提交（`cf0a408`）；PDF 拖选与双击选词优化已实现并通过单元、组件及 Chromium 交互验证，待 Firefox/WebKit 矩阵复验；Issue #84 追加跨页选择、批注命中层和区域 Escape 去重，并恢复可定位 DOM 文本层（2026-11-17）
 > 适用范围：`packages/vue-docx`、`packages/vue-xlsx`、`packages/vue-pptx`、`packages/vue-pdf`、`packages/vue-ui`
 > 取代：`pdf-text-layer-issue.md` 中的透明 `<span>` 文字层方案
 > 目标：让四种 Surface 都能搜索并定位结果，让 PDF 在原生文字可用时可靠选择和复制文字
@@ -44,6 +44,8 @@
 
 - OCR、扫描件文字识别以及 OCR Provider。
 - PDF 跨页选择、双击选句、三击选行、边缘自动滚动、触屏拖拽手柄和永久高亮。
+
+> 2026-11-17（Issue #84）把“PDF 跨页选择”从非目标移入范围：多页选区按页拆分 `PageTextSlice`，一起读取文字并在复制时用 `\n` 连接。跨页选择不生成 PDF 引用（引用仍然是单页文本范围）；双击选句、三击选行、边缘自动滚动、触屏拖拽手柄和永久高亮仍不在范围内。
 - 查找替换、正则、大小写开关和整词搜索。
 - XLSX 搜索范围切换，以及公式、批注等搜索字段选择。
 - 隐藏 Sheet、隐藏行列、隐藏幻灯片和播放模式的特殊搜索规则；首版沿用现有文档模型的可搜索内容，不在本设计新增产品语义。
@@ -181,7 +183,9 @@ export interface PdfSearchMatch {
 
 ### 5.3 匹配语义
 
-- 首版默认模糊搜索，定义为大小写不敏感的连续子串包含匹配，不提供搜索模式开关。
+- 首版默认模糊搜索，定义为大小写不敏感的连续子串包含匹配，Find Bar 不提供搜索模式开关。
+- `useXlsxSearch` 接受可选的 `caseSensitive: true`，用于宿主需要精确大小写匹配的场景；默认保持大小写不敏感。
+- 搜索结果缓存的是匹配时刻的单元格文本，工作簿 `revision` 变化（编辑、撤销、排序、重新加载）后必须清空会话，不能继续复用陈旧的 `text/start/end`。
 - “模糊”不包含错别字纠正、编辑距离、拼音、同义词或语义召回；这些能力没有需求依据，也不能保证四种格式结果一致。
 - `start/end` 和 DOCX/PPTX offset 使用 UTF-16 code unit，start inclusive/end exclusive，与 DOM Range 和 `String#indexOf` 一致。
 - DOCX 搜索可表达位置的正文和表格段落；PPTX、PDF 搜索当前文档；XLSX 沿用现有 workbook 搜索的文字来源。本设计不新增范围或字段切换。
@@ -538,3 +542,55 @@ PDF 搜索结果必须透传上游已有的 `charIndex/charCount`，不能根据
 - `unified-surface-api-design.md` 定义 Surface 边界、通用事件和 expose 命名；搜索与 PDF 选择以本文为准。
 - `pdf-text-layer-issue.md` 仅作为历史问题记录，不再作为实现计划。
 - `docx-viewer-controlled-surface-and-pagination-fix.md` 中未实现的搜索 props/update/expose 方案已经撤回；该文档只负责非搜索的分页与受控状态设计。
+
+## 16. Issue #84：跨页选择与批注命中层
+
+Issue #84 指出 PDF 页面只有位图：选择限于单页、链接/表单/批注被烘焙进图片、区域层 Escape 重复触发。本轮补齐以下能力，仍不重新引入透明 `<span>` 文字层。
+
+### 16.1 跨页选择
+
+- 手势同时保存 anchor 与 focus 的 `{ pageIndex, charIndex }`；指针捕获仍在起始页，focus 页由 `elementFromPoint()` 定位，因此拖动可以跨页。
+- 中间页按完整字符范围参与选择；每页由一个 `selectionPageRanges()` 生成 `PageTextSlice`，共用同一个 canonical 坐标管线。
+- 提交前等待起始页与 focus 页的 geometry，避免 geometry 未返回时退化成单页选区；无法解析 focus 页字符时保留上一个 focus 点，与单页行为一致。
+- 复制文本按文档顺序用 `\n` 连接各页；`PdfSelectionState.text` 是完整文本，`range`/`rects` 描述第一页，新增可选的 `segments` 给出每页范围。
+- 多页选区不确认文本引用草稿：office-interaction 的 PDF 定位器仍是单页字符范围。
+
+### 16.2 链接、表单与批注命中层
+
+- `PdfRenderRuntime.getPageAnnotations?()` 透传 PDFium 批注读取；`PdfRenderAnnotation` 把矩形适配到 canonical 空间，并给出链接目标、表单字段或批注文字。链接只接受绝对 `http`/`https`/`mailto`，并去掉内嵌凭据。
+- `PdfSurface` 在可见页附近预取批注，渲染不可见命中矩形（`data-annotation-kind`），点击时命中测试并发出 `linkActivate` 或 `annotationActivate`；命中层使用 `pointer-events: none`，不阻断拖选。
+- 内部链接在未被策略拦截时滚入目标页；外部链接默认不导航，由宿主打开。宿主提供 `urlPolicy` 时还会按该策略再次校验，失败以 `blocked: true` 上报。
+
+### 16.3 AcroForm 写入
+
+- `PdfRenderRuntime.setFormFieldValue?()` 从 Runtime 的批注缓存中定位 widget，经 `resolvePdfFormFieldValue()` 转换成 PDFium `FormFieldValue`，再调用引擎写入并重新读取该页批注；文本字段接受字符串，复选框接受布尔值，单选与选择字段接受选项标签或索引，非法值在触碰引擎前报 `INVALID_FIELD_VALUE`。
+- `PdfSurface` 在 `content` 模式下为文本、复选框、单选框、下拉框和列表框渲染原生控件（`data-form-field-id`），控件层在交互层之上、其余区域 `pointer-events: none`，因此输入不会启动拖选；只读 widget 渲染为禁用控件，不支持写入的 Runtime 不渲染控件。
+- 提交后 Surface 替换缓存中的批注、标记该页位图过期并重新栅格化，再发出 `formFieldChange`；失败发出 `formFieldError` 并保留可编辑状态。组件实例暴露 `setFormFieldValue(pageIndex, annotationId, value)` 供宿主驱动。
+
+### 16.4 批注外观编辑
+
+- `PdfRenderRuntime.updateAnnotationAppearance?()` 改写缓存中的原始批注（`contents`、`color`/`strokeColor`、`opacity`、`strokeWidth`），调用 `updatePageAnnotation(..., { regenerateAppearance: true })` 重新生成外观流，再刷新缓存。
+- `PdfSurface.updateAnnotationAppearance(pageIndex, annotationId, patch)` 更新缓存、重新栅格化该页并发出 `annotationChange`；如果批注没有对应字段或取值非法，在修改前抛出 `ANNOTATION_NOT_WRITABLE`/`INVALID_RENDER_OPTIONS` 并发 `annotationError`。
+
+### 16.5 PdfViewer 单页选择
+
+- `PdfViewer` 在当前页位图上叠加选择层，复用与 Surface 相同的 canonical 坐标变换、glyph 命中、连续矩形和 `Intl.Segmenter` 选词；支持拖选、双击选词、`Ctrl/Cmd+C` 复制和 `Escape` 清除。
+- 选区随 `selectionChange` 发出 `PdfSelectionState`；`clearSelection()` 与 `getSelectionState()` 通过实例暴露。切页、缩放、旋转、重新加载和卸载会清除选区与 geometry 缓存。
+
+### 16.6 无障碍文本层
+
+- `PdfRenderRuntime.getPageTextLayer?()` 用一次 `getPageGeometry()` 加一次批量的单字符 `getTextSlices()` 返回 `PdfPageTextLayer`：每页 canonical 宽高和按 PDFium 阅读顺序排列的 `PdfPageTextLayerGlyph`（字符索引、文字、glyph box、`unmapped`）。结果按页缓存，关闭文档或写入表单值时失效。
+- `PdfSurface` 与 `PdfViewer` 为每个 glyph 渲染一个透明 `<span>`，位置宽高和字体大小直接取自 glyph box；文本层本身保持在 canonical 坐标系，由 `pdfCanonicalToDisplayTransform()` 给出的单个 CSS matrix 完成缩放与 0/90/180/270 旋转。span 不参与重排，因此不会累积字宽漂移。
+- 文本层不是 `aria-hidden`，屏幕阅读器、浏览器查找和 CJK 提取均能读取；`unmapped` glyph 标记 `aria-hidden="true"` 且不可选，写入剪贴板仍是 PDFium 字符索引提取的文字。
+- 文本层 `pointer-events: none`：指针拖选、跨页选择、链接/表单命中与区域选择仍由 interaction layer 处理，不因文本层改变行为。
+- 组件暴露 `getPageTextLayer` 数据入口；PDFium 映射失败时仍保留 `PdfSelectionState.unavailable` 的显式降级。
+
+### 16.7 区域 Escape
+
+区域层处理 Escape 时 `stopPropagation()` 并 `preventDefault()`，Surface 处理器同时忽略 `defaultPrevented` 的事件；一次按键只发出一次 `selectionCancel`。
+
+### 16.8 验收
+
+- 组件测试覆盖跨页拖选、跨页复制、区域 Escape 去重、链接/控件命中与事件转发、AcroForm 写入与页面刷新、批注外观更新，以及 `PdfViewer` 拖选、复制、Escape 和双击选词。
+- 文本层测试覆盖 span 文本与阅读顺序、无映射 glyph 的 `aria-hidden`、缩放/旋转只改 CSS matrix 而不移动 span，以及文本层存在时选择与复制仍然工作。
+- 单元测试覆盖 `resolvePdfFormFieldValue()` 的类型转换、`getPageTextLayer()` 的分批提取/缓存/失效，以及 Runtime 在缓存引擎对象上写入表单和批注外观的错误分支。

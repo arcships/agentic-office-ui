@@ -27,6 +27,7 @@
 //   numbering.ts           — list numbering
 //   table-utils.ts         — table utilities (part 1)
 //   table-utils-extra.ts   — table utilities (part 2)
+//   table-metrics.ts       — shared table/column width metrics for render + pagination
 //   paragraph-toc.ts       — paragraph table-of-contents leaf (cycle-breaker)
 //   field-helpers.ts       — form-field helpers
 //   synthetic-textbox.ts   — synthetic textbox
@@ -42,6 +43,12 @@
 //   pretext-build.ts       — buildParagraphPretextLayoutSource
 //   pretext-measure.ts     — pretext measurement integration
 //   tracked-changes.ts     — tracked changes and comments collection
+//   tracked-changes-inline.ts — XML visible-unit ↔ model-child cursor mapping
+//   tracked-changes-table.ts — table/row/cell revision parsing and anchoring
+//   tracked-change-xml.ts   — revision range matching and XML splicing
+//   tracked-change-decisions.ts — accept/reject paragraph revisions (model rewrite)
+//   tracked-change-table-decisions.ts — accept/reject table rows, cells and properties
+//   tracked-change-markup-loss.ts — report revisions an edit dropped
 //   tracked-changes-gutter.ts — tracked-change gutter card layout
 //   selection-helpers.ts   — selection/cursor helpers (paragraph location navigation, core helpers)
 //   selection-helpers-range.ts — range normalization/cloning/selection resolution
@@ -74,6 +81,9 @@ export * from "./text-mutation";
 export * from "./numbering";
 export * from "./table-utils";
 export * from "./table-utils-extra";
+export * from "./table-metrics";
+export * from "./table-structure";
+export * from "./list-numbering";
 export * from "./paragraph-toc";
 export * from "./field-helpers";
 export * from "./synthetic-textbox";
@@ -83,9 +93,12 @@ export * from "./letterhead";
 export * from "./line-height";
 export * from "./line-height-wrap";
 export * from "./line-height-table";
+export * from "./page-flow-wrap-clearance";
 export * from "./table-height";
 export * from "./header-footer";
 export * from "./paragraph-tracked";
+export * from "./note-references";
+export * from "./note-numbering";
 export * from "./selection-helpers";
 export * from "./selection-helpers-range";
 export * from "./selection-restore";
@@ -93,7 +106,18 @@ export * from "./section-manipulation";
 export * from "./pretext-build";
 export * from "./pretext-measure";
 export * from "./tracked-changes";
+export {
+  resolveTableTrackedMarkup,
+  type TableTrackedMarkup,
+  type TableTrackedRevision,
+  type TableTrackedRevisionScope
+} from "./tracked-changes-table";
+export * from "./tracked-change-xml";
+export * from "./tracked-change-decisions";
+export * from "./tracked-change-table-decisions";
+export * from "./tracked-change-markup-loss";
 export * from "./tracked-changes-gutter";
 export * from "./pagination-plan-iterate";
 export * from "./pagination-plan-core";
+export * from "./pagination-line-index";
 export * from "./pagination-plan-stabilize";

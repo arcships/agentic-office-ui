@@ -28,11 +28,37 @@ import type {
   DocxComment,
   DocxPaginationInfo,
   ParagraphLocation,
+  DocxEditorStatusMessages,
 } from "@arcships/docx-core"
+
+export interface ApplyModelChangeOptions {
+  selection?: DocxEditorSelection
+  activeTextRange?: DocxTextRange | undefined
+  /**
+   * Form-field edits keep the field selected so its focus ring survives the
+   * model update; regular edits clear the selection as before.
+   */
+  clearSelectedFormField?: boolean
+  /** Set to false to fold a change into the previous undo entry. */
+  pushHistory?: boolean
+  /**
+   * Coalesces consecutive text commits into one undo entry.
+   *
+   * Commits that carry the same key with no intervening transaction share the
+   * undo entry opened by the first commit of the burst; any other transaction
+   * (selection change, formatting command, structural edit, undo/redo, a
+   * different key) or `endTextCommitBurst()` closes the burst, so the next text
+   * commit starts a new entry.
+   */
+  textCommitKey?: string
+}
 
 export interface EditorCore {
   // ── core reactive refs ──────────────────────────────────────────
   model: Ref<DocModel>
+  /** Model snapshot as of the last load/new/export, used for dirty tracking. */
+  cleanModel: Ref<DocModel>
+  isDirty: ComputedRef<boolean>
   selection: Ref<DocxEditorSelection>
   activeTextRange: Ref<DocxTextRange | undefined>
   pendingRunStyle: Ref<TextRunNode["style"] | undefined>
@@ -40,9 +66,16 @@ export interface EditorCore {
   historyBudget: { maxEntries: number; maxBytes: number }
   estimateHistorySnapshotBytes: (snapshot: DocxHistorySnapshot) => number
   status: Ref<string>
+  /** Resolve a localized editor status message with placeholder values. */
+  statusMessage: (
+    key: keyof DocxEditorStatusMessages,
+    values?: Record<string, string | number>,
+  ) => string
   selectedFormFieldLocation: Ref<DocxFormFieldLocation | undefined>
   documentLoadNonce: Ref<number>
   fileName: Ref<string>
+  /** File name restored by newDocument(). */
+  initialFileName: string
   importError: Ref<Error | undefined>
   isImporting: Ref<boolean>
   documentTheme: Ref<DocxDocumentTheme>
@@ -70,6 +103,10 @@ export interface EditorCore {
   loadedEmbeddedFontFaces: { value: FontFace[] }
   activeImportAbortController: { value: AbortController | undefined }
   pendingExportModelTransformer: { value: ((model: DocModel) => DocModel) | undefined }
+  flushTextDrafts: () => void
+  /** Ends the current text-commit burst so the next keystroke opens a new undo entry. */
+  endTextCommitBurst: () => void
+  activeFormFieldEditKey: { value: string | undefined }
   starterTemplate: DocModel
 
   // ── computed refs (pre-computed in useDocxEditor, read by sub-modules) ─

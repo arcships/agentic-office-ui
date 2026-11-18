@@ -17,8 +17,8 @@ import type {
   TableNode,
 } from "../../engine/types";
 import {
-  paragraphHasLastRenderedPageBreak,
   paragraphHasPageBreakBefore,
+  paragraphStartsWithLastRenderedPageBreak,
 } from "../../layout/pagination";
 import type {
   DocumentPageNodeSegment,
@@ -519,26 +519,41 @@ function estimateRenderedPageSegmentHeightPx(
   }
 
   if (segment.tableRowRange) {
-    if (segment.tableRowSlice) {
-      return Math.max(
-        MIN_PARAGRAPH_LINE_HEIGHT_PX,
-        Math.round(segment.tableRowSlice.sliceHeightPx)
-      );
-    }
     const rowHeightsPx = estimateTableRowHeightsPx(
       node as TableNode,
       availableWidthPx,
       numberingDefinitions,
       docGridLinePitchPx
     );
+    const repeatHeaderRowCount = Math.max(
+      0,
+      Math.round(segment.tableRowRange.repeatHeaderRowCount ?? 0)
+    );
+    const repeatedHeaderHeightPx =
+      repeatHeaderRowCount > 0
+        ? sumEstimatedTableRowHeightsPx(
+            rowHeightsPx,
+            0,
+            repeatHeaderRowCount,
+            MIN_PARAGRAPH_LINE_HEIGHT_PX
+          )
+        : 0;
+    if (segment.tableRowSlice) {
+      return Math.max(
+        MIN_PARAGRAPH_LINE_HEIGHT_PX,
+        repeatedHeaderHeightPx +
+          Math.round(segment.tableRowSlice.sliceHeightPx)
+      );
+    }
     return Math.max(
       MIN_PARAGRAPH_LINE_HEIGHT_PX,
-      sumEstimatedTableRowHeightsPx(
-        rowHeightsPx,
-        segment.tableRowRange?.startRowIndex ?? 0,
-        segment.tableRowRange?.endRowIndex ?? 0,
-        MIN_PARAGRAPH_LINE_HEIGHT_PX
-      )
+      repeatedHeaderHeightPx +
+        sumEstimatedTableRowHeightsPx(
+          rowHeightsPx,
+          segment.tableRowRange.startRowIndex ?? 0,
+          segment.tableRowRange.endRowIndex ?? 0,
+          MIN_PARAGRAPH_LINE_HEIGHT_PX
+        )
     );
   }
 
@@ -732,7 +747,8 @@ export function buildRenderColumnSegmentsForPageSection(
   docGridLinePitchPxByNodeIndex?: Map<number, number | undefined>,
   measuredParagraphOuterHeightsPxByNodeIndex?: Map<number, number>,
   balanceColumns = false,
-  forceColumnBreakNodeIndexes?: Set<number>
+  forceColumnBreakNodeIndexes?: Set<number>,
+  keepTogetherNodeRangeByStartNodeIndex?: Map<number, number>
 ): DocumentPageNodeSegment[][] {
   const columnCount = Math.max(1, columnWidthsPx.length);
   const columns = Array.from(
@@ -776,7 +792,7 @@ export function buildRenderColumnSegmentsForPageSection(
       ? Math.min(
           maxColumnHeightPx,
           Math.max(
-            MIN_PARAGRAPH_LINE_HEIGHT_PX * 4,
+            1,
             Math.ceil(
               flowSegments.reduce((totalHeightPx, segment) => {
                 const columnWidthPx = Math.max(
@@ -825,6 +841,42 @@ export function buildRenderColumnSegmentsForPageSection(
       consumedHeightPx > 0
     ) {
       moveToNextColumn();
+    }
+    const keepTogetherEndNodeIndex =
+      keepTogetherNodeRangeByStartNodeIndex?.get(flowSegment.nodeIndex);
+    if (
+      isNodeStartSegment &&
+      keepTogetherEndNodeIndex !== undefined &&
+      keepTogetherEndNodeIndex > flowSegment.nodeIndex &&
+      consumedHeightPx > 0
+    ) {
+      const columnWidthPx = Math.max(
+        120,
+        Math.round(columnWidthsPx[columnIndex] ?? columnWidthsPx[0] ?? 120)
+      );
+      const remainingHeightPx = Math.max(
+        0,
+        safeColumnHeightPx - consumedHeightPx
+      );
+      const groupEndIndex = (() => {
+        const foundIndex = flowSegments.findIndex(
+          (candidate) => candidate.nodeIndex > keepTogetherEndNodeIndex
+        );
+        return foundIndex === -1 ? flowSegments.length : foundIndex;
+      })();
+      const keepTogetherHeightPx = flowSegments
+        .slice(flowSegments.indexOf(rawSegment), groupEndIndex)
+        .reduce(
+          (heightPx, candidate) =>
+            heightPx +
+            resolveSegmentHeightPx(candidate as Seg, columnWidthPx),
+          0
+        );
+      if (
+        keepTogetherHeightPx > remainingHeightPx + PAGE_OVERFLOW_TOLERANCE_PX
+      ) {
+        moveToNextColumn();
+      }
     }
     let pendingSegment: Seg | undefined = flowSegment;
     let splitGuard = 0;
@@ -929,7 +981,7 @@ export function buildDocumentPageNodeSegmentsFromLastRenderedPageBreakHints(
     }
 
     if (
-      paragraphHasLastRenderedPageBreak(node) ||
+      paragraphStartsWithLastRenderedPageBreak(node) ||
       paragraphHasPageBreakBefore(node)
     ) {
       pageStartNodeIndexes.push(nodeIndex);

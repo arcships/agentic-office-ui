@@ -1,9 +1,11 @@
 import { computed } from "vue";
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction";
 import type { Workbook } from "@dukelib/sheets-wasm";
 import {
   getSheetsWasmModule,
   loadWorkbookChartAssets,
   mergeWorkbookImageAssets,
+  normalizeTypedDateCells,
   normalizeWorkbookTableMetadata,
   pxToSheetColumnWidth,
   resolveContentSheetAxisPixels,
@@ -17,11 +19,12 @@ import {
   revokeWorkbookImageAssets,
   safeCalculate,
   trackXlsxWorkbookLifetime,
-  tryRecalculate,
+  type SafeCalculateSkipReason,
   type XlsxCellRange,
   type XlsxCellHyperlink,
   type XlsxCellComment,
   type XlsxConditionalFormatRule,
+  type XlsxDataValidation,
   type XlsxResolvedCellStyle,
   type XlsxSheetData,
   type XlsxSheetVisibility,
@@ -57,7 +60,7 @@ import {
   type CellEditHistoryEntry,
   type RangeEditHistoryEntry
 } from "./internal";
-import { parseWorksheetDataValidations, parseWorksheetFreezePanes, parseA1RangeReference, rangeToA1, cellAddressToA1, normalizeRange } from "./selection";
+import { parseWorksheetDataValidations, parseWorksheetFreezePanes, parseWorksheetSheetProtection, parseA1RangeReference, rangeToA1, cellAddressToA1, normalizeRange } from "./selection";
 import {
   XlsxFileSizeLimitExceededError,
   cloneBytes,
@@ -66,10 +69,9 @@ import {
   fileStem,
   pxToSheetRowHeight,
   preflightWorkbookBuffer,
-  resolveDisplayFileName,
-  sanitizeSavedWorkbookBytes
+  resolveDisplayFileName
 } from "./formatting";
-import { applyCellMutationState } from "./internal";
+import { applyCellMutationState, resolveCellFallbackStyle } from "./internal";
 import { loadWorkbookImageAssets } from "./image-assets";
 import { downloadArrayBuffer, downloadBytes, downloadText } from "./clipboard";
 import type { XlsxControllerContext } from "./internal";
@@ -175,6 +177,7 @@ export function buildSheetList(
     colWidthOverridesPx?: Record<number, number>;
     colStyleIds?: Record<number, number>;
     conditionalFormatRules?: XlsxConditionalFormatRule[];
+    dataValidations?: XlsxDataValidation[];
     hyperlinks?: XlsxCellHyperlink[];
     comments?: XlsxCellComment[];
     defaultColWidthPx?: number;
@@ -231,7 +234,7 @@ export function buildSheetList(
           conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
           hyperlinks: sheetState?.hyperlinks ?? [],
           comments: sheetState?.comments ?? [],
-          dataValidations: parseWorksheetDataValidations(worksheet),
+          dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
           defaultColWidthPx,
           defaultRowHeightPx,
           freezePanes: parseWorksheetFreezePanes(worksheet),
@@ -248,6 +251,7 @@ export function buildSheetList(
           maxUsedRow: -1,
           name: worksheet.name,
           visibility,
+          protection: parseWorksheetSheetProtection(worksheet),
           namedCellStyleByName: namedCellStyleByName ?? {},
           rowCount: 0,
           colCount: 0,
@@ -305,7 +309,7 @@ export function buildSheetList(
         conditionalFormatRules: sheetState?.conditionalFormatRules ?? [],
         hyperlinks: sheetState?.hyperlinks ?? [],
         comments: sheetState?.comments ?? [],
-        dataValidations: parseWorksheetDataValidations(worksheet),
+        dataValidations: sheetState?.dataValidations ?? parseWorksheetDataValidations(worksheet),
         defaultColWidthPx,
         defaultRowHeightPx,
         freezePanes: parseWorksheetFreezePanes(worksheet),
@@ -322,6 +326,7 @@ export function buildSheetList(
         maxUsedRow: maxRow,
         name: worksheet.name,
         visibility,
+        protection: parseWorksheetSheetProtection(worksheet),
         namedCellStyleByName: namedCellStyleByName ?? {},
         rowCount: visibleRows.length,
         colCount: visibleCols.length,
@@ -357,13 +362,15 @@ export function mapWorksheetTables(worksheet: ReturnType<Workbook["getSheet"]> |
   const rawTables = (worksheet?.tables ?? []) as Array<Record<string, unknown>>;
   return rawTables.flatMap((table, index) => {
     const rawColumns = Array.isArray(table.columns) ? table.columns : [];
-    const rawName = typeof table.name === "string" ? table.name : `Table${index + 1}`;
+    const rawName = typeof table.name === "string"
+      ? table.name
+      : formatOfficeMessage(officeMessagesEn.xlsx.table.defaultName, { number: index + 1 });
     const rawDisplayName =
       typeof table.displayName === "string"
         ? table.displayName
         : typeof table.name === "string"
           ? table.name
-          : `Table ${index + 1}`;
+          : formatOfficeMessage(officeMessagesEn.xlsx.table.defaultName, { number: index + 1 });
     const rawReference = typeof table.reference === "string" ? table.reference : "";
     const reference = rawReference;
     const parsedRange = parseA1RangeReference(reference);
@@ -375,7 +382,9 @@ export function mapWorksheetTables(worksheet: ReturnType<Workbook["getSheet"]> |
       columns: rawColumns.map((column, columnIndex) => ({
         id: typeof (column as { id?: unknown }).id === "number" ? ((column as { id?: number }).id ?? columnIndex + 1) : columnIndex + 1,
         index: columnIndex,
-        name: typeof (column as { name?: unknown }).name === "string" ? ((column as { name?: string }).name ?? `Column ${columnIndex + 1}`) : `Column ${columnIndex + 1}`
+        name: typeof (column as { name?: unknown }).name === "string"
+          ? ((column as { name?: string }).name ?? formatOfficeMessage(officeMessagesEn.xlsx.table.defaultColumn, { number: columnIndex + 1 }))
+          : formatOfficeMessage(officeMessagesEn.xlsx.table.defaultColumn, { number: columnIndex + 1 })
       })),
       displayName: rawDisplayName,
       end: parsedRange.end,
@@ -469,7 +478,7 @@ export async function resolveWorkbookSource(
     return loadVerifiedXlsxSource(src, urlPolicy, signal, limits);
   }
 
-  throw new Error("Either `file` or `src` must be provided.");
+  throw new Error(officeMessagesEn.xlsx.diagnostics.fileOrSrcRequired);
 }
 
 /** Preserved public helper for callers that only need the loaded bytes. */
@@ -498,7 +507,7 @@ export async function convertCsvBufferToXlsx(buffer: ArrayBuffer): Promise<Array
   try {
     csv = csvTextDecoder(buffer).decode(buffer);
   } catch (cause) {
-    throw new Error("CSV 必须使用 UTF-8，或带 BOM 的 UTF-16 编码。", { cause });
+    throw new Error(officeMessagesEn.xlsx.diagnostics.csvEncoding, { cause });
   }
 
   const wasmModule = await getSheetsWasmModule();
@@ -510,7 +519,7 @@ export async function convertCsvBufferToXlsx(buffer: ArrayBuffer): Promise<Array
     new Uint8Array(output).set(bytes);
     return output;
   } catch (cause) {
-    throw new Error("无法解析 CSV 文件。", { cause });
+    throw new Error(officeMessagesEn.xlsx.diagnostics.csvParseFailed, { cause });
   } finally {
     csvWorkbook?.free();
   }
@@ -535,17 +544,19 @@ export async function convertXlsbBufferToXlsx(buffer: ArrayBuffer): Promise<Arra
     new Uint8Array(output).set(bytes);
     return output;
   } catch (cause) {
-    throw new Error("无法解析 XLSB 文件。", { cause });
+    throw new Error(officeMessagesEn.xlsx.diagnostics.xlsbParseFailed, { cause });
   }
 }
 
 export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{
   shouldAutoCalculate: boolean;
+  calculationSkipReason: SafeCalculateSkipReason | null;
   workbook: Workbook;
 }> {
   const wasmModule = await getSheetsWasmModule();
+  const bytes = normalizeTypedDateCells(new Uint8Array(buffer));
   const initialWorkbook = trackXlsxWorkbookLifetime(
-    wasmModule.Workbook.fromBytes(new Uint8Array(buffer))
+    wasmModule.Workbook.fromBytes(bytes)
   );
   let totalFormulas = 0;
 
@@ -560,12 +571,12 @@ export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{
 
   const shouldAutoCalculate = totalFormulas <= FORMULA_COUNT_THRESHOLD;
   if (!shouldAutoCalculate) {
-    return { shouldAutoCalculate, workbook: initialWorkbook };
+    return { shouldAutoCalculate, calculationSkipReason: null, workbook: initialWorkbook };
   }
 
   const result = safeCalculate(initialWorkbook, {
     reparse: () => trackXlsxWorkbookLifetime(
-      wasmModule.Workbook.fromBytes(new Uint8Array(buffer))
+      wasmModule.Workbook.fromBytes(bytes)
     )
   });
   if (result.workbook !== initialWorkbook) {
@@ -578,13 +589,60 @@ export async function parseWorkbookBuffer(buffer: ArrayBuffer): Promise<{
 
   return {
     shouldAutoCalculate: result.calculated,
+    calculationSkipReason: result.skipReason,
     workbook: result.workbook
   };
 }
 
-export { tryRecalculate };
-
 export type { XlsxSheetVisibility };
+
+const MACRO_ENABLED_SPREADSHEET = /\.(xlsm|xltm)$/i;
+
+function macroLossWarning(fileName: string) {
+  return MACRO_ENABLED_SPREADSHEET.test(fileName.trim())
+    ? officeMessagesEn.xlsx.diagnostics.macroLoss
+    : null;
+}
+
+function escapeCsvField(value: string) {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+/** Serializes one worksheet the same way the WASM CSV writer does, for any sheet index. */
+export function saveWorksheetCsvString(worksheet: ReturnType<Workbook["getSheet"]>) {
+  const usedRange = worksheet.usedRange() as [number, number, number, number] | null;
+  if (!Array.isArray(usedRange) || usedRange.length !== 4) {
+    return "";
+  }
+
+  const [startRow, startCol, endRow, endCol] = usedRange;
+  const rows: string[] = [];
+  for (let row = startRow; row <= endRow; row += 1) {
+    const fields: string[] = [];
+    for (let col = startCol; col <= endCol; col += 1) {
+      const cell = worksheet.getCalculatedValueAt(row, col);
+      try {
+        if (cell.is_empty) {
+          fields.push("");
+        } else if (cell.is_error) {
+          fields.push(escapeCsvField(cell.asError() ?? "#ERROR!"));
+        } else if (cell.is_boolean) {
+          fields.push(cell.asBoolean() ? "TRUE" : "FALSE");
+        } else if (cell.is_number) {
+          const value = cell.asNumber();
+          fields.push(value === undefined ? "" : String(value));
+        } else {
+          fields.push(escapeCsvField(cell.asText() ?? ""));
+        }
+      } finally {
+        cell.free();
+      }
+    }
+    rows.push(fields.join(","));
+  }
+
+  return rows.length > 0 ? `${rows.join("\r\n")}\r\n` : "";
+}
 
 export function createHistoryDomain(ctx: XlsxControllerContext) {
   let historyRestoreToken = 0;
@@ -646,6 +704,26 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
       nextWorkbook = trackXlsxWorkbookLifetime(
         wasmModule.Workbook.fromBytes(cloneBytes(entry.bytes))
       );
+      const calculation = safeCalculate(nextWorkbook, {
+        reparse: () => trackXlsxWorkbookLifetime(
+          wasmModule.Workbook.fromBytes(cloneBytes(entry.bytes))
+        )
+      });
+      if (calculation.workbook !== nextWorkbook) {
+        try {
+          nextWorkbook.free();
+        } catch {
+          // A trapped WASM workbook may reject cleanup; it is never reused.
+        }
+        nextWorkbook = calculation.workbook;
+      }
+      ctx.noteCalculationResult({
+        calculated: calculation.calculated,
+        skipReason: calculation.skipReason
+      });
+      if (calculation.calculated) {
+        ctx.resumeAutoCalculate();
+      }
       nextImageAssets = loadWorkbookImageAssets(entry.bytes, nextWorkbook);
       const nextSheets = buildSheetList(
         nextWorkbook,
@@ -672,9 +750,9 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
       committed = true;
       ctx.sheets.value = nextSheets;
       ctx.setChartAssets(nextChartAssets);
-      ctx.activeSheetIndex.value = nextSheetIndex;
-      const nextTabIndex = nextChartAssets.tabs.findIndex((tab) => tab.kind === "sheet" && tab.sheetIndex === nextSheetIndex);
-      if (nextTabIndex >= 0) ctx.activeTabIndex.value = nextTabIndex;
+      // Restore the sheet and its tab together, then reinstate the selection that
+      // belongs to it; the tab watcher must not reset what we restore here.
+      ctx.switchToSheet(nextSheetIndex, { preserveSelection: true });
       ctx.activeCell.value = entry.activeCell;
       ctx.selection.value = entry.selection;
       ctx.selectionAnchorRef.value = entry.selection ? normalizeRange(entry.selection).start : entry.activeCell;
@@ -734,13 +812,19 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
 
     ctx.isApplyingHistoryRef.value = true;
     try {
-      applyCellMutationState(worksheet, entry.cell, targetState);
-      ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-      ctx.refreshWorkbookState(ctx.workbook.value);
+      applyCellMutationState(
+        worksheet,
+        entry.cell,
+        targetState,
+        resolveCellFallbackStyle(visibleSheetIndex >= 0 ? ctx.sheets.value[visibleSheetIndex] : null)
+      );
+      if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+        ctx.refreshWorkbookState(ctx.workbook.value);
+      }
 
       const nextActiveCell = direction === "undo" ? entry.activeCellBefore : entry.activeCellAfter;
       const nextSelection = direction === "undo" ? entry.selectionBefore : entry.selectionAfter;
-      if (visibleSheetIndex >= 0) ctx.activeSheetIndex.value = visibleSheetIndex;
+      if (visibleSheetIndex >= 0) ctx.switchToSheet(visibleSheetIndex, { preserveSelection: true });
       ctx.activeCell.value = nextActiveCell;
       ctx.selection.value = nextSelection;
       ctx.selectionAnchorRef.value = nextSelection ? normalizeRange(nextSelection).start : nextActiveCell;
@@ -760,15 +844,22 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
 
     ctx.isApplyingHistoryRef.value = true;
     try {
+      const sheet = visibleSheetIndex >= 0 ? ctx.sheets.value[visibleSheetIndex] : null;
       for (const mutation of entry.mutations) {
-        applyCellMutationState(worksheet, mutation.cell, direction === "undo" ? mutation.before : mutation.after);
+        applyCellMutationState(
+          worksheet,
+          mutation.cell,
+          direction === "undo" ? mutation.before : mutation.after,
+          resolveCellFallbackStyle(sheet)
+        );
       }
-      ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-      ctx.refreshWorkbookState(ctx.workbook.value);
+      if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+        ctx.refreshWorkbookState(ctx.workbook.value);
+      }
 
       const nextActiveCell = direction === "undo" ? entry.activeCellBefore : entry.activeCellAfter;
       const nextSelection = direction === "undo" ? entry.selectionBefore : entry.selectionAfter;
-      if (visibleSheetIndex >= 0) ctx.activeSheetIndex.value = visibleSheetIndex;
+      if (visibleSheetIndex >= 0) ctx.switchToSheet(visibleSheetIndex, { preserveSelection: true });
       ctx.activeCell.value = nextActiveCell;
       ctx.selection.value = nextSelection;
       ctx.selectionAnchorRef.value = nextSelection ? normalizeRange(nextSelection).start : nextActiveCell;
@@ -779,9 +870,13 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function sortTable(tableName: string, columnIndex: number, direction: XlsxTableSortDirection) {
+    if (ctx.readOnly.value) {
+      return;
+    }
+
     const worksheet = ctx.getActiveWorksheet();
     const targetTable = tables.value.find((table) => table.name === tableName || table.displayName === tableName);
-    if (!worksheet || !ctx.workbook.value || !ctx.activeSheet.value || !targetTable) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value || !ctx.activeSheet.value || !targetTable) {
       return;
     }
 
@@ -877,7 +972,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
         }
 
         const cell = { row: targetRow, col: startCol + colOffset };
-        applyCellMutationState(worksheet, cell, after);
+        applyCellMutationState(worksheet, cell, after, resolveCellFallbackStyle(ctx.activeSheet.value));
         mutations.push({
           after,
           before,
@@ -886,8 +981,9 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
       }
     }
 
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
     ctx.sortState.value = { columnIndex, direction, tableName: targetTable.name };
     ctx.recordRangeEditHistory(mutations, ctx.selection.value, ctx.activeCell.value);
   }
@@ -899,36 +995,45 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function exportXlsx() {
-    if (!ctx.workbook.value) {
+    const targetWorkbook = ctx.workbook.value;
+    if (!targetWorkbook || ctx.isLoading.value || ctx.sourceState.value !== "ready") {
       return;
     }
 
-    downloadBytes(ctx.createSavedWorkbookBytes(ctx.workbook.value), `${fileStem(ctx.displayFileName.value)}.xlsx`, XLSX_MIME_TYPE);
+    ctx.setExportWarning(macroLossWarning(ctx.displayFileName.value));
+    downloadBytes(ctx.createSavedWorkbookBytes(targetWorkbook, true), `${fileStem(ctx.displayFileName.value)}.xlsx`, XLSX_MIME_TYPE);
   }
 
   function exportCsv() {
-    if (!ctx.workbook.value) {
+    const targetWorkbook = ctx.workbook.value;
+    const activeSheet = ctx.activeSheet.value;
+    if (!targetWorkbook || !activeSheet || ctx.isLoading.value || ctx.sourceState.value !== "ready") {
       return;
     }
 
-    const activeSheetName = ctx.activeSheet.value?.name ?? "sheet";
-    downloadText(ctx.workbook.value.saveCsvString(), `${fileStem(ctx.displayFileName.value)}-${activeSheetName}.csv`, CSV_MIME_TYPE);
+    const worksheet = targetWorkbook.getSheet(activeSheet.workbookSheetIndex);
+    let csv = "";
+    try {
+      csv = saveWorksheetCsvString(worksheet);
+    } finally {
+      worksheet.free();
+    }
+    downloadText(csv, `${fileStem(ctx.displayFileName.value)}-${activeSheet.name}.csv`, CSV_MIME_TYPE);
   }
 
   function recalculate() {
-    if (!ctx.workbook.value) {
+    const targetWorkbook = ctx.workbook.value;
+    if (!targetWorkbook) {
       return;
     }
 
-    const result = tryRecalculate(ctx.workbook.value);
-    if (result.calculated) {
+    const outcome = ctx.recalculateWorkbookSafely(targetWorkbook);
+    if (outcome.calculated) {
+      ctx.resumeAutoCalculate();
+    }
+    if (outcome.safeToRefresh && ctx.workbook.value) {
       ctx.refreshWorkbookState(ctx.workbook.value);
-      return;
     }
-
-    // Trap poisons the Workbook pointer; skip refreshWorkbookState so we
-    // don't crash reading cells from it.
-    ctx.shouldAutoCalculate.value = false;
   }
 
   function applyReadOnlyResizeOverride(axis: "column" | "row", actualIndex: number, sizePx: number) {
@@ -981,7 +1086,8 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function resizeColumn(col: number, widthPx: number) {
-    if ((ctx.readOnly.value && !ctx.canResizeReadOnly.value) || !ctx.activeSheet.value) {
+    const resizeAllowedInReadOnly = ctx.canResizeReadOnly.value && !ctx.isActiveSheetProtected.value;
+    if ((ctx.isEditingLocked.value && !resizeAllowedInReadOnly) || !ctx.activeSheet.value) {
       return;
     }
 
@@ -1005,7 +1111,8 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function resizeRow(row: number, heightPx: number) {
-    if ((ctx.readOnly.value && !ctx.canResizeReadOnly.value) || !ctx.activeSheet.value) {
+    const resizeAllowedInReadOnly = ctx.canResizeReadOnly.value && !ctx.isActiveSheetProtected.value;
+    if ((ctx.isEditingLocked.value && !resizeAllowedInReadOnly) || !ctx.activeSheet.value) {
       return;
     }
 
@@ -1029,7 +1136,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function undo() {
-    if (ctx.readOnly.value || ctx.isApplyingHistoryRef.value || !ctx.workbook.value || ctx.undoStackRef.value.length === 0) {
+    if (ctx.isEditingLocked.value || ctx.isApplyingHistoryRef.value || !ctx.workbook.value || ctx.undoStackRef.value.length === 0) {
       return;
     }
 
@@ -1057,7 +1164,7 @@ export function createHistoryDomain(ctx: XlsxControllerContext) {
   }
 
   function redo() {
-    if (ctx.readOnly.value || ctx.isApplyingHistoryRef.value || !ctx.workbook.value || ctx.redoStackRef.value.length === 0) {
+    if (ctx.isEditingLocked.value || ctx.isApplyingHistoryRef.value || !ctx.workbook.value || ctx.redoStackRef.value.length === 0) {
       return;
     }
 

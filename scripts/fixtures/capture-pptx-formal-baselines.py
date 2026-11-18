@@ -4,10 +4,15 @@
 
 from __future__ import annotations
 
+import argparse
+import difflib
 import hashlib
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
+import sys
 import time
 from urllib.request import urlopen
 
@@ -108,13 +113,34 @@ def wait_for_server() -> None:
     raise RuntimeError("PPTX 基准捕获服务启动超时。")
 
 
+def stop_server(server: subprocess.Popen) -> None:
+    """结束整个开发服务器进程组，避免 vite 子进程残留到下一次捕获。"""
+    if server.poll() is not None:
+        return
+    try:
+        group = os.getpgid(server.pid)
+    except ProcessLookupError:
+        return
+    try:
+        os.killpg(group, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        server.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(group, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
 def stable_snapshot(file_name: str, spec: dict, raw: dict) -> dict:
     assertions = {
         key: raw.get(key)
         for key in [
             "clickBoundary", "effectStarts", "effectEnds", "stepChanges", "previousBoundary",
             "transitionLayersDuring", "transitionLayersAfter", "autoAdvanceSlideIndex",
-            "autoAdvanceStatus", "mediaReleasedOnSlide", "mediaPolicy", "mediaUrlRevoked",
+            "autoAdvanceStatus", "mediaReleasedOnSlide", "mediaPolicy", "mediaTracks", "mediaUrlRevoked",
             "remainingChildrenAfterDispose", "repeatFinalScale", "indefiniteFinalStatus",
             "hiddenDirectRejected", "hiddenDirectSlideIndex", "hiddenSkippedSlideIndex",
             "externalActionHandled", "internalActionHandled", "internalActionSlideIndex",
@@ -167,56 +193,95 @@ def write_readme(directory: Path, file_name: str, spec: dict, digest: str) -> No
             f"- SHA-256：`{digest}`；",
             "- `expected-events.json`：Chromium 中解析、对象、触发组、事件和能力报告基准；",
             "",
-            "复测命令由 `scripts/fixtures/capture-pptx-formal-baselines.py` 统一执行。",
+            "复测命令由 `scripts/fixtures/capture-pptx-formal-baselines.py` 统一执行；",
+            "`--check` 只重新捕获并比对，不写入基准。",
             "",
         ]),
         encoding="utf-8",
     )
 
 
+def capture_fixture(file_name: str, spec: dict) -> dict:
+    """在 Chromium 中重新捕获一份稳定快照。"""
+    fixture = FIXTURES / file_name
+    if not fixture.is_file():
+        raise RuntimeError(f"缺少正式素材：{file_name}")
+    directory = FIXTURES / fixture.stem
+    directory.mkdir(exist_ok=True)
+    raw_output = directory / ".observed-events.json"
+    sample_url = f"{APP_URL}/@fs{fixture}"
+    command = [
+        sys.executable, "tests/blackbox/pptx_playback_model.py",
+        "--app-url", APP_URL,
+        "--sample-url", sample_url,
+        "--initial-slide", str(spec["slide"]),
+        "--browser", "chromium",
+        "--quiet",
+        "--output", str(raw_output),
+        *spec["args"],
+    ]
+    try:
+        subprocess.run(command, cwd=ROOT, check=True)
+        raw = json.loads(raw_output.read_text(encoding="utf-8"))
+    finally:
+        raw_output.unlink(missing_ok=True)
+    return stable_snapshot(file_name, spec, raw)
+
+
+def baseline_diff(file_name: str, spec: dict, snapshot: dict) -> list[str]:
+    """比对现有基准与新快照，返回差异行；空列表表示一致。"""
+    target = FIXTURES / Path(file_name).stem / "expected-events.json"
+    expected = target.read_text(encoding="utf-8").splitlines()
+    observed = (json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n").splitlines()
+    return [
+        line
+        for line in difflib.unified_diff(expected, observed, fromfile="expected-events.json", tofile="observed-events.json", lineterm="")
+        if not line.startswith(("---", "+++"))
+    ]
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description="重新捕获并校验正式 PPTX 浏览器事件基准。")
+    parser.add_argument("--check", action="store_true", help="只重新捕获并比对现有基准，不写入任何文件。")
+    parser.add_argument("--fixtures", default="", help="逗号分隔的素材文件名，默认全部。")
+    args = parser.parse_args()
+
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     entries = {entry["file"]: entry for entry in manifest["entries"]}
     if set(entries) != set(SPECS):
         raise RuntimeError("正式素材清单与基准映射不一致。")
+    selected = [name.strip() for name in args.fixtures.split(",") if name.strip()] or list(SPECS)
+    unknown = [name for name in selected if name not in SPECS]
+    if unknown:
+        raise RuntimeError(f"未找到正式素材：{', '.join(unknown)}")
 
     server = subprocess.Popen(
         ["pnpm", "--filter=pptx-playback-lab", "dev", "--host", "127.0.0.1", "--port", str(PORT)],
         cwd=ROOT,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        start_new_session=True,
     )
+    failures: list[tuple[str, list[str]]] = []
     try:
         wait_for_server()
-        for file_name, spec in SPECS.items():
+        for file_name in selected:
+            spec = SPECS[file_name]
+            snapshot = capture_fixture(file_name, spec)
+            if args.check:
+                diff = baseline_diff(file_name, spec, snapshot)
+                if diff:
+                    failures.append((file_name, diff))
+                continue
             fixture = FIXTURES / file_name
-            if not fixture.is_file():
-                raise RuntimeError(f"缺少正式素材：{file_name}")
             directory = FIXTURES / fixture.stem
-            directory.mkdir(exist_ok=True)
-            raw_output = directory / ".observed-events.json"
-            sample_url = f"{APP_URL}/@fs{fixture}"
-            command = [
-                "python3", "tests/blackbox/pptx_playback_model.py",
-                "--app-url", APP_URL,
-                "--sample-url", sample_url,
-                "--initial-slide", str(spec["slide"]),
-                "--browser", "chromium",
-                "--quiet",
-                "--output", str(raw_output),
-                *spec["args"],
-            ]
-            subprocess.run(command, cwd=ROOT, check=True)
-            raw = json.loads(raw_output.read_text(encoding="utf-8"))
-            raw_output.unlink()
             directory.joinpath("expected-events.json").write_text(
-                json.dumps(stable_snapshot(file_name, spec, raw), ensure_ascii=False, indent=2) + "\n",
+                json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
             )
             digest = sha256(fixture)
             write_readme(directory, file_name, spec, digest)
-            entry = entries[file_name]
-            entry.update({
+            entries[file_name].update({
                 "status": "ready",
                 "source": f"scripts/fixtures/generate-pptx-playback-fixtures.py -> Microsoft PowerPoint {POWERPOINT_VERSION} 另存为",
                 "license": "项目自有测试素材",
@@ -226,14 +291,20 @@ def main() -> None:
                 "focusSlideIndex": spec["slide"],
             })
     finally:
-        server.terminate()
-        try:
-            server.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            server.kill()
+        stop_server(server)
+
+    if args.check:
+        if failures:
+            for file_name, diff in failures:
+                print(f"FAIL: {file_name} 的浏览器基准已变化（前 80 行）：")
+                print("\n".join(diff[:80]))
+            print(f"FAIL: {len(failures)} 份基准与浏览器重新捕获的结果不一致。")
+            sys.exit(1)
+        print(f"PASS: {len(selected)} 份正式 PPTX 事件基准与 Chromium 重新捕获一致。")
+        return
 
     MANIFEST.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"PASS: 已生成 {len(SPECS)} 份正式 PPTX 事件基准。")
+    print(f"PASS: 已生成 {len(selected)} 份正式 PPTX 事件基准。")
 
 
 if __name__ == "__main__":

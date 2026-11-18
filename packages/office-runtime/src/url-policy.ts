@@ -4,17 +4,35 @@ export interface OfficeFetchHeaders {
   get(name: string): string | null;
 }
 
+export interface OfficeFetchBodyReader {
+  read(): Promise<{ done: boolean; value?: Uint8Array }>;
+  cancel(reason?: unknown): Promise<void> | void;
+  releaseLock(): void;
+}
+
+export interface OfficeFetchBody {
+  getReader(): OfficeFetchBodyReader;
+  cancel?(reason?: unknown): Promise<void> | void;
+}
+
 export interface OfficeFetchResponse {
   readonly ok: boolean;
   readonly status: number;
   readonly url: string;
   readonly headers: OfficeFetchHeaders;
+  /** Optional streamed body; when present the loader reads it under the byte cap. */
+  readonly body?: OfficeFetchBody | null;
   arrayBuffer(): Promise<ArrayBuffer>;
 }
 
 export interface OfficeFetchInit {
   readonly credentials: "omit";
-  readonly redirect: "error";
+  /**
+   * Redirects are followed by the fetcher. The loader revalidates the final
+   * `response.url` against the caller's URL policy before accepting any bytes,
+   * so a redirect can never smuggle in a disallowed origin.
+   */
+  readonly redirect: "follow";
   readonly signal?: AbortSignal;
 }
 

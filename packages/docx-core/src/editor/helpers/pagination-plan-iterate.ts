@@ -17,6 +17,7 @@ import {
   paragraphStartsWithLastRenderedPageBreak,
   resolveDocumentSectionsFromMetadata,
   resolveParagraphBeforeSpacingPx,
+  resolveParagraphConsumedHeightPx,
   resolvePaginationSectionMetricsIndexForNodeIndex,
   sectionBreakAfterParagraphStartsNewPage,
   sectionBreakPropertiesStartNewPage,
@@ -265,7 +266,6 @@ export function shouldKeepTrailingSectionTailOnCurrentPage(
   const remainingHeightPx = pageContentHeightPx - pageConsumedHeightPx;
 
   let tailConsumedHeightPx = 0;
-  let tailPreviousParagraphAfterPx = previousParagraphAfterPx;
   let substantiveParagraphCount = 0;
 
   for (
@@ -278,7 +278,6 @@ export function shouldKeepTrailingSectionTailOnCurrentPage(
       node.type === "paragraph" &&
       paragraphIsStructuralSectionBreakSpacer(node)
     ) {
-      tailPreviousParagraphAfterPx = 0;
       continue;
     }
     if (
@@ -333,16 +332,8 @@ export function shouldKeepTrailingSectionTailOnCurrentPage(
         nodeBeforeSpacingPx +
         nodeAfterSpacingPx
     );
-    const collapsedMarginPx =
-      pageConsumedHeightPx + tailConsumedHeightPx > 0
-        ? Math.min(tailPreviousParagraphAfterPx, nodeBeforeSpacingPx)
-        : 0;
-    const effectiveNodeHeightPx = Math.max(
-      1,
-      rawNodeHeightPx - collapsedMarginPx
-    );
+    const effectiveNodeHeightPx = Math.max(1, rawNodeHeightPx);
     tailConsumedHeightPx += effectiveNodeHeightPx;
-    tailPreviousParagraphAfterPx = nodeAfterSpacingPx;
   }
 
   if (substantiveParagraphCount === 0) {
@@ -508,13 +499,10 @@ function collectDocxEstimatedOverflowBreakStartNodeIndexes(
         nodeBeforeSpacingPx +
         nodeAfterSpacingPx
     );
-    const collapsedMarginPx =
-      node.type === "paragraph" && pageConsumedHeightPx > 0
-        ? Math.min(previousParagraphAfterPx, nodeBeforeSpacingPx)
-        : 0;
-    const collapsedNodeHeightPx = Math.max(
-      1,
-      rawNodeHeightPx - collapsedMarginPx
+    const collapsedNodeHeightPx = resolveParagraphConsumedHeightPx(
+      rawNodeHeightPx,
+      nodeBeforeSpacingPx,
+      pageConsumedHeightPx <= 0
     );
 
     let requiredHeightPx = collapsedNodeHeightPx;
@@ -527,7 +515,6 @@ function collectDocxEstimatedOverflowBreakStartNodeIndexes(
       paragraphHasVisibleText(node)
     ) {
       let chainCursor = nodeIndex;
-      let chainPreviousParagraphAfterPx = nodeAfterSpacingPx;
       while (chainCursor < model.nodes.length - 1) {
         const currentChainNode = model.nodes[chainCursor];
         if (
@@ -593,20 +580,13 @@ function collectDocxEstimatedOverflowBreakStartNodeIndexes(
             nextBeforeSpacingPx +
             nextAfterSpacingPx
         );
-        const collapsedChainMarginPx =
-          nextChainNode.type === "paragraph"
-            ? Math.min(chainPreviousParagraphAfterPx, nextBeforeSpacingPx)
-            : 0;
-        requiredHeightPx += Math.max(
-          1,
-          nextRawHeightPx - collapsedChainMarginPx
-        );
+        // OOXML keeps both spacing values on the same page.
+        requiredHeightPx += Math.max(1, nextRawHeightPx);
         requiredHeightPx += keepNextPaginationReservePx(
           currentChainNode,
           nextChainNode,
           chainMetrics.docGridLinePitchPx
         );
-        chainPreviousParagraphAfterPx = nextAfterSpacingPx;
       }
       keepNextChainEndNodeIndex = chainCursor;
     }
@@ -659,8 +639,7 @@ function collectDocxEstimatedOverflowBreakStartNodeIndexes(
     if (pageConsumedHeightPx === 0 && keepNextChainEndNodeIndex > nodeIndex) {
       committedKeepNextChainEndNodeIndex = keepNextChainEndNodeIndex;
     }
-    const effectiveNodeHeightPx =
-      pageConsumedHeightPx > 0 ? collapsedNodeHeightPx : rawNodeHeightPx;
+    const effectiveNodeHeightPx = collapsedNodeHeightPx;
     pageConsumedHeightPx += effectiveNodeHeightPx;
     previousParagraphAfterPx =
       node.type === "paragraph" ? nodeAfterSpacingPx : 0;

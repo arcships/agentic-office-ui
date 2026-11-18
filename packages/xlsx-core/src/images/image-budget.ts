@@ -21,7 +21,8 @@ const XLSX_IMAGE_EXTENSIONS = new Set([
   "wmf",
 ]);
 
-function isXlsxImagePath(path: string): boolean {
+/** True when an archive entry contains a workbook image that the image budget must inspect. */
+export function isXlsxImagePath(path: string): boolean {
   const normalized = path.replace(/\\/g, "/").replace(/^\/+/, "").toLowerCase();
   const extension = normalized.split(".").pop() ?? "";
   return normalized.startsWith("xl/media/") && XLSX_IMAGE_EXTENSIONS.has(extension);

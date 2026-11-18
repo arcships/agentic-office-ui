@@ -7,7 +7,8 @@ import type {
   TableCellContentNode,
   TableNode,
 } from "../engine/types";
-import { cloneDocModel } from "../engine/clone";
+import { cloneDocModelShallow, cloneDocNode } from "../engine/clone";
+import { invalidateParagraphSourceXml } from "../engine/section-break";
 import type { UpdateTextOptions } from "./paragraph-ops";
 import {
   distributeTextAcrossParagraphChildren,
@@ -15,6 +16,7 @@ import {
   paragraphFromText,
 } from "./paragraph-ops";
 import { cloneTextStyle } from "./helpers/text-mutation";
+import { remapParagraphCommentRanges } from "../engine/comment-ranges";
 
 export function updateTableCellText(
   model: DocModel,
@@ -24,11 +26,14 @@ export function updateTableCellText(
   text: string,
   options?: UpdateTextOptions
 ): DocModel {
-  const next = cloneDocModel(model);
-  const tableNode = next.nodes[tableIndex];
-  if (!tableNode || tableNode.type !== "table") {
+  const next = cloneDocModelShallow(model);
+  const sourceTable = model.nodes[tableIndex];
+  if (!sourceTable || sourceTable.type !== "table") {
     return next;
   }
+
+  const tableNode = cloneDocNode(sourceTable);
+  next.nodes[tableIndex] = tableNode;
 
   const row = tableNode.rows[rowIndex];
   const cell = row?.cells[cellIndex];
@@ -37,6 +42,12 @@ export function updateTableCellText(
   }
 
   const paragraphs = cell.nodes.filter((node): node is ParagraphNode => node.type === "paragraph");
+  const currentParagraphTexts = paragraphs.map((paragraph) =>
+    paragraph.children
+      .filter((child) => child.type === "text")
+      .map((child) => (child.type === "text" ? child.text : ""))
+      .join("")
+  );
   const incomingParagraphTexts = text
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
@@ -56,8 +67,14 @@ export function updateTableCellText(
 
   paragraphs.forEach((paragraph, paragraphIndex) => {
     const paragraphText = incomingParagraphTexts[paragraphIndex] ?? "";
+    const previousText = currentParagraphTexts[paragraphIndex] ?? "";
     paragraph.children = distributeTextAcrossParagraphChildren(paragraph, paragraphText, options);
-    paragraph.sourceXml = undefined;
+    paragraph.commentRanges = remapParagraphCommentRanges(
+      previousText,
+      paragraphText,
+      paragraph.commentRanges
+    );
+    invalidateParagraphSourceXml(paragraph);
   });
 
   if (incomingParagraphTexts.length > paragraphs.length) {
@@ -81,11 +98,14 @@ export function updateTableCellParagraphText(
   text: string,
   options?: UpdateTextOptions
 ): DocModel {
-  const next = cloneDocModel(model);
-  const tableNode = next.nodes[tableIndex];
-  if (!tableNode || tableNode.type !== "table") {
+  const next = cloneDocModelShallow(model);
+  const sourceTable = model.nodes[tableIndex];
+  if (!sourceTable || sourceTable.type !== "table") {
     return next;
   }
+
+  const tableNode = cloneDocNode(sourceTable);
+  next.nodes[tableIndex] = tableNode;
 
   const row = tableNode.rows[rowIndex];
   const cell = row?.cells[cellIndex];
@@ -95,8 +115,17 @@ export function updateTableCellParagraphText(
     return next;
   }
 
+  const previousText = paragraph.children
+    .filter((child) => child.type === "text")
+    .map((child) => (child.type === "text" ? child.text : ""))
+    .join("");
   paragraph.children = distributeTextAcrossParagraphChildren(paragraph, text, options);
-  paragraph.sourceXml = undefined;
+  paragraph.commentRanges = remapParagraphCommentRanges(
+    previousText,
+    text,
+    paragraph.commentRanges
+  );
+  invalidateParagraphSourceXml(paragraph);
   tableNode.sourceXml = undefined;
 
   return next;
@@ -111,11 +140,14 @@ export function updateTableCellParagraphTextRecursive(
   text: string,
   options?: UpdateTextOptions
 ): DocModel {
-  const next = cloneDocModel(model);
-  const tableNode = next.nodes[tableIndex];
-  if (!tableNode || tableNode.type !== "table") {
+  const next = cloneDocModelShallow(model);
+  const sourceTable = model.nodes[tableIndex];
+  if (!sourceTable || sourceTable.type !== "table") {
     return next;
   }
+
+  const tableNode = cloneDocNode(sourceTable);
+  next.nodes[tableIndex] = tableNode;
 
   const row = tableNode.rows[rowIndex];
   const cell = row?.cells[cellIndex];
@@ -138,7 +170,7 @@ export function updateTableCellParagraphTextRecursive(
         }
 
         node.children = distributeTextAcrossParagraphChildren(node, text, options);
-        node.sourceXml = undefined;
+        invalidateParagraphSourceXml(node);
         ancestorTables.forEach((ancestorTable) => {
           ancestorTable.sourceXml = undefined;
         });

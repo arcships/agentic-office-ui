@@ -6,13 +6,36 @@ import type {
   TableCellContentNode,
   TableNode
 } from "../engine/types";
+import {
+  resolveDocumentSectionsFromMetadata,
+  resolveSectionIndexForNodeIndex,
+  sectionBreakPropertiesStartNewPage,
+  type ResolvedModelSection
+} from "./sections";
+import { paragraphSectionPropertiesXml } from "../engine/section-break";
+
+export {
+  resolveDocumentSectionsFromMetadata,
+  resolveSectionIndexForNodeIndex,
+  sectionBreakPropertiesStartNewPage,
+  sectionBreakRequiredPageParity
+} from "./sections";
+export type {
+  ResolvedModelSection,
+  SectionStartPageParity
+} from "./sections";
 
 const TWIPS_PER_PIXEL = 15;
 const PAGE_BREAK_XML_PATTERN = /<w:br\b[^>]*w:type="page"[^>]*\/?>/i;
 const LAST_RENDERED_PAGE_BREAK_XML_PATTERN = /<w:lastRenderedPageBreak\b[^>]*\/?>/i;
 const PAGE_BREAK_BEFORE_XML_PATTERN = /<w:pageBreakBefore\b[^>]*\/?>/i;
-const SECTION_PROPERTIES_XML_PATTERN = /<w:sectPr\b[\s\S]*?<\/w:sectPr>/i;
-const SECTION_TYPE_XML_PATTERN = /<w:type\b[^>]*w:val="([^"]+)"/i;
+// Tokenizes the paragraph's inline story in document order: text runs, tabs,
+// line breaks and page breaks. Used to map an inline page break to a text
+// offset inside the paragraph instead of treating the whole paragraph as a
+// node-level page start.
+const PARAGRAPH_INLINE_TOKEN_PATTERN =
+  /<w:t\b[^>]*>([\s\S]*?)<\/w:t>|<w:br\b[^>]*\/?>|<w:cr\b[^>]*\/?>|<w:tab\b[^>]*\/?>|<w:noBreakHyphen\b[^>]*\/?>/gi;
+const XML_ENTITY_PATTERN = /&(?:#(\d+)|#x([0-9a-f]+)|(amp|lt|gt|quot|apos));/gi;
 const paragraphBreakFlagsByParagraph = new WeakMap<
   ParagraphNode,
   {
@@ -39,52 +62,6 @@ type ParagraphBreakFlags = {
   pageBreakBefore: boolean;
   sectionBreakStartsNewPage: boolean;
 };
-
-export interface ResolvedModelSection {
-  startNodeIndex: number;
-  sectionPropertiesXml?: string;
-  headerSections: HeaderSection[];
-  footerSections: FooterSection[];
-}
-
-function normalizeSectionReferenceType(referenceType?: string): string {
-  const normalized = referenceType?.trim().toLowerCase();
-  return normalized && normalized.length > 0 ? normalized : "default";
-}
-
-function inheritSectionReferences<T extends HeaderSection | FooterSection>(
-  sections: ResolvedModelSection[],
-  sectionKey: "headerSections" | "footerSections"
-): ResolvedModelSection[] {
-  const inheritedByType = new Map<string, T>();
-
-  return sections.map((section) => {
-    const explicitSections = section[sectionKey] as T[];
-    if (explicitSections.length > 0) {
-      explicitSections.forEach((entry) => {
-        inheritedByType.set(normalizeSectionReferenceType(entry.referenceType), entry);
-      });
-    }
-
-    return {
-      ...section,
-      [sectionKey]: [...inheritedByType.values()]
-    };
-  });
-}
-
-function resolveInheritedSectionHeaderFooterReferences(
-  sections: ResolvedModelSection[]
-): ResolvedModelSection[] {
-  if (sections.length === 0) {
-    return sections;
-  }
-
-  return inheritSectionReferences(
-    inheritSectionReferences(sections, "headerSections"),
-    "footerSections"
-  );
-}
 
 export interface PaginationSectionMetrics {
   startNodeIndex: number;
@@ -210,23 +187,6 @@ function tableRowUsesTrailingSignatureCellBreakPattern(
   return substantiveIndexes.length === 1 && substantiveIndexes[0] >= row.cells.length - 1;
 }
 
-export function sectionBreakPropertiesStartNewPage(sectionPropertiesXml: string): boolean {
-  const sectionType =
-    sectionPropertiesXml.match(SECTION_TYPE_XML_PATTERN)?.[1]?.trim().toLowerCase() ?? "nextpage";
-
-  if (sectionType === "continuous") {
-    return false;
-  }
-
-  if (sectionType === "nextcolumn") {
-    const columnsTag = sectionPropertiesXml.match(/<w:cols\b[^>]*\/?>/i)?.[0];
-    const columnsCount = Number.parseInt(columnsTag?.match(/\bw:num="(\d+)"/i)?.[1] ?? "", 10);
-    return !Number.isFinite(columnsCount) || columnsCount <= 1;
-  }
-
-  return true;
-}
-
 function resolveParagraphBreakFlags(paragraph: ParagraphNode): ParagraphBreakFlags {
   const sourceXml = paragraph.sourceXml ?? "";
   const cached = paragraphBreakFlagsByParagraph.get(paragraph);
@@ -239,7 +199,7 @@ function resolveParagraphBreakFlags(paragraph: ParagraphNode): ParagraphBreakFla
     lastRenderedPageBreak: LAST_RENDERED_PAGE_BREAK_XML_PATTERN.test(sourceXml),
     pageBreakBefore: isOnOffTagEnabled(sourceXml.match(PAGE_BREAK_BEFORE_XML_PATTERN)?.[0]),
     sectionBreakStartsNewPage: (() => {
-      const sectionProperties = sourceXml.match(SECTION_PROPERTIES_XML_PATTERN)?.[0];
+      const sectionProperties = paragraphSectionPropertiesXml(paragraph);
       if (!sectionProperties) {
         return false;
       }
@@ -272,11 +232,12 @@ export function paragraphHasPageBreakBefore(paragraph: ParagraphNode): boolean {
 }
 
 export function sectionBreakAfterParagraphStartsNewPage(paragraph: ParagraphNode): boolean {
-  if (!paragraph.sourceXml) {
+  const sectionProperties = paragraphSectionPropertiesXml(paragraph);
+  if (!sectionProperties) {
     return false;
   }
 
-  return resolveParagraphBreakFlags(paragraph).sectionBreakStartsNewPage;
+  return sectionBreakPropertiesStartNewPage(sectionProperties);
 }
 
 export function paragraphHasLastRenderedPageBreak(paragraph: ParagraphNode): boolean {
@@ -285,6 +246,58 @@ export function paragraphHasLastRenderedPageBreak(paragraph: ParagraphNode): boo
   }
 
   return resolveParagraphBreakFlags(paragraph).lastRenderedPageBreak;
+}
+
+export type LastRenderedPageBreakPosition = "none" | "leading" | "internal";
+
+/**
+ * Where Word's cached `w:lastRenderedPageBreak` marker sits inside the
+ * paragraph. Word writes the marker at the previous render's break position,
+ * which is usually mid-paragraph; only a marker with nothing but run/paragraph
+ * boilerplate before it denotes a paragraph that starts a page.
+ */
+export function paragraphLastRenderedPageBreakPosition(
+  paragraph: ParagraphNode
+): LastRenderedPageBreakPosition {
+  if (!paragraphHasLastRenderedPageBreak(paragraph)) {
+    return "none";
+  }
+
+  return paragraphStartsWithLastRenderedPageBreak(paragraph) ? "leading" : "internal";
+}
+
+/**
+ * Text offset (code units) of Word's cached `w:lastRenderedPageBreak` marker
+ * inside the paragraph's visible text. Mirrors `paragraphHasExplicitPageBreak`
+ * offset accounting: text runs contribute their decoded length, tabs, line
+ * breaks and hyphens contribute one position each.
+ */
+export function paragraphLastRenderedPageBreakTextOffset(
+  paragraph: ParagraphNode
+): number | undefined {
+  const xml = paragraph.sourceXml ?? "";
+  const breakMatch = LAST_RENDERED_PAGE_BREAK_XML_PATTERN.exec(xml);
+  if (!breakMatch || breakMatch.index === undefined) {
+    return undefined;
+  }
+
+  const leadingXml = xml.slice(0, breakMatch.index);
+  let textOffset = 0;
+  for (const match of leadingXml.matchAll(PARAGRAPH_INLINE_TOKEN_PATTERN)) {
+    const token = match[0];
+    if (match[1] !== undefined) {
+      textOffset += decodeXmlText(match[1]).length;
+      continue;
+    }
+    if (/^<w:br\b/i.test(token) && !/\bw:type="page"/i.test(token)) {
+      textOffset += 1;
+      continue;
+    }
+    if (/^<w:(?:tab|cr|noBreakHyphen)\b/i.test(token)) {
+      textOffset += 1;
+    }
+  }
+  return textOffset;
 }
 
 export function paragraphStartsWithLastRenderedPageBreak(paragraph: ParagraphNode): boolean {
@@ -309,6 +322,126 @@ export function paragraphStartsWithLastRenderedPageBreak(paragraph: ParagraphNod
     .replace(/\s+/g, "");
 
   return leadingXml.length === 0;
+}
+
+function decodeXmlText(xmlText: string): string {
+  return xmlText.replace(
+    XML_ENTITY_PATTERN,
+    (match, decimal: string | undefined, hex: string | undefined, named: string | undefined) => {
+      if (decimal !== undefined) {
+        const codePoint = Number.parseInt(decimal, 10);
+        return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+      }
+      if (hex !== undefined) {
+        const codePoint = Number.parseInt(hex, 16);
+        return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+      }
+      switch (named) {
+        case "amp":
+          return "&";
+        case "lt":
+          return "<";
+        case "gt":
+          return ">";
+        case "quot":
+          return '"';
+        case "apos":
+          return "'";
+        default:
+          return match;
+      }
+    }
+  );
+}
+
+/**
+ * Text offsets (code units) of `<w:br w:type="page"/>` runs inside the
+ * paragraph. Offsets are measured in the same text the model exposes through
+ * `paragraph.children`, so they can be mapped back to a wrap line.
+ */
+export function collectParagraphExplicitPageBreakOffsets(
+  paragraph: ParagraphNode
+): number[] {
+  const xml = paragraph.sourceXml ?? "";
+  if (!xml) {
+    return [];
+  }
+
+  const offsets: number[] = [];
+  let textOffset = 0;
+  for (const match of xml.matchAll(PARAGRAPH_INLINE_TOKEN_PATTERN)) {
+    const token = match[0];
+    if (match[1] !== undefined) {
+      textOffset += decodeXmlText(match[1]).length;
+      continue;
+    }
+
+    if (/^<w:br\b/i.test(token)) {
+      if (/\bw:type="page"/i.test(token)) {
+        offsets.push(textOffset);
+      } else {
+        // A plain <w:br/> is a line break and occupies one text position.
+        textOffset += 1;
+      }
+      continue;
+    }
+
+    // <w:cr/>, <w:tab/> and <w:noBreakHyphen/> each render as one character.
+    textOffset += 1;
+  }
+
+  return offsets;
+}
+
+function paragraphModelTextLength(paragraph: ParagraphNode): number {
+  return paragraph.children.reduce((length, child) => {
+    if (child.type === "text") {
+      return length + child.text.length;
+    }
+    if (child.type === "form-field") {
+      return length + (child.value ?? "").length;
+    }
+    return length;
+  }, 0);
+}
+
+/**
+ * True when the paragraph's explicit page break sits at (or after) the end of
+ * its visible content, i.e. the break belongs between this paragraph and the
+ * next node rather than inside this paragraph.
+ */
+export function paragraphHasTrailingExplicitPageBreak(paragraph: ParagraphNode): boolean {
+  if (!paragraphHasExplicitPageBreak(paragraph)) {
+    return false;
+  }
+
+  const offsets = collectParagraphExplicitPageBreakOffsets(paragraph);
+  if (offsets.length === 0) {
+    // The break lives in markup the offset scanner does not model (e.g. inside
+    // a field result); keep the historical node-level behaviour.
+    return true;
+  }
+
+  const textLength = paragraphModelTextLength(paragraph);
+  return Math.max(...offsets) >= textLength;
+}
+
+/**
+ * OOXML does not collapse `w:spacing w:after` into the next paragraph's
+ * `w:before`; both apply. Only a paragraph that begins a page or column drops
+ * its `w:before`. This converts a raw paragraph height (which already contains
+ * both spacing values, see `estimateParagraphHeightPx`) into the height the
+ * flow algorithm should consume.
+ */
+export function resolveParagraphConsumedHeightPx(
+  rawNodeHeightPx: number,
+  beforeSpacingPx: number,
+  atPageTop: boolean
+): number {
+  const safeRawHeightPx = Math.max(1, rawNodeHeightPx);
+  return atPageTop
+    ? Math.max(1, safeRawHeightPx - Math.max(0, beforeSpacingPx))
+    : safeRawHeightPx;
 }
 
 export function paragraphBeforeSpacingPx(paragraph: ParagraphNode): number {
@@ -345,43 +478,6 @@ export function resolveParagraphBeforeSpacingPx(
   }
 
   return beforeSpacingPx;
-}
-
-export function resolveDocumentSectionsFromMetadata(
-  metadata: DocModel["metadata"]
-): ResolvedModelSection[] {
-  const normalizedSections = (metadata.sections ?? [])
-    .map((section): ResolvedModelSection => ({
-      startNodeIndex:
-        Number.isFinite(section.startNodeIndex) && (section.startNodeIndex as number) >= 0
-          ? Math.round(section.startNodeIndex as number)
-          : 0,
-      sectionPropertiesXml: section.sectionPropertiesXml,
-      headerSections: section.headerSections ?? [],
-      footerSections: section.footerSections ?? []
-    }))
-    .sort((left, right) => left.startNodeIndex - right.startNodeIndex);
-
-  if (normalizedSections.length > 0) {
-    if (normalizedSections[0].startNodeIndex > 0) {
-      normalizedSections.unshift({
-        startNodeIndex: 0,
-        sectionPropertiesXml: normalizedSections[0].sectionPropertiesXml,
-        headerSections: normalizedSections[0].headerSections,
-        footerSections: normalizedSections[0].footerSections
-      });
-    }
-    return resolveInheritedSectionHeaderFooterReferences(normalizedSections);
-  }
-
-  return [
-    {
-      startNodeIndex: 0,
-      sectionPropertiesXml: metadata.sectionPropertiesXml,
-      headerSections: metadata.headerSections ?? [],
-      footerSections: metadata.footerSections ?? []
-    }
-  ];
 }
 
 export function sectionTitlePageEnabled(sectionPropertiesXml?: string): boolean {
@@ -436,32 +532,6 @@ export function selectSectionVariantForPage<T extends HeaderSection | FooterSect
   }
 
   return first ?? even ?? sections[0];
-}
-
-export function resolveSectionIndexForNodeIndex(
-  sections: Pick<ResolvedModelSection, "startNodeIndex">[],
-  nodeIndex: number,
-  previousSectionIndex: number
-): number {
-  if (sections.length === 0) {
-    return 0;
-  }
-
-  const safePrevious = Math.max(0, Math.min(previousSectionIndex, sections.length - 1));
-  let sectionIndex = safePrevious;
-
-  if (nodeIndex < sections[sectionIndex].startNodeIndex) {
-    sectionIndex = 0;
-  }
-
-  while (
-    sectionIndex + 1 < sections.length &&
-    sections[sectionIndex + 1].startNodeIndex <= nodeIndex
-  ) {
-    sectionIndex += 1;
-  }
-
-  return sectionIndex;
 }
 
 export function resolveSectionPropertiesXmlForNodeIndex(
@@ -591,7 +661,7 @@ export function collectTopLevelExplicitPageBreakStartNodeIndexes(
         breaks.add(nodeIndex);
       }
 
-      if (hasNextNode && paragraphHasExplicitPageBreak(node)) {
+      if (hasNextNode && paragraphHasTrailingExplicitPageBreak(node)) {
         breaks.add(nodeIndex + 1);
       }
       continue;
@@ -650,7 +720,10 @@ export function collectDocxLastRenderedPageBreakStartNodeIndexes(model: DocModel
   const breaks: number[] = [];
 
   model.nodes.forEach((node, nodeIndex) => {
-    if (node.type === "paragraph" && paragraphHasLastRenderedPageBreak(node)) {
+    if (
+      node.type === "paragraph" &&
+      paragraphLastRenderedPageBreakPosition(node) === "leading"
+    ) {
       breaks.push(nodeIndex);
     }
   });

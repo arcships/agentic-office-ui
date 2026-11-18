@@ -32,6 +32,15 @@ export interface PptxObjectIdentity {
   explicitMorphName?: string
   creationId?: string
   nodeType: string
+  geometry?: PptxObjectGeometry
+  text?: string
+}
+
+export interface PptxObjectGeometry {
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 export type PptxMorphMatchMethod =
@@ -51,6 +60,8 @@ export interface PptxMorphMatch {
 ```
 
 同页动画只接受 `PptxObjectIdentity.key` 的精确匹配。`PptxMorphMatch` 只用于相邻页 Morph。
+
+`geometry` 与 `text` 只服务于 Morph 跨页匹配：`geometry` 取顶层对象的 `a:xfrm/a:off`、`a:ext`（EMU），组合子对象因坐标属于子坐标系而不保留；`text` 折叠空白，超过 240 字符时不参与弱匹配。强匹配（`!!` 显式名称、相同创建编号）始终优先；中等匹配要求相同普通名称、对象类型和接近几何，弱匹配要求相同文字、对象类型和接近几何。候选键必须在前后页各自唯一，弱匹配只用于能力报告。
 
 ### 2.3 时间节点
 
@@ -114,6 +125,8 @@ export interface PptxTimeNode {
   rawSummary?: string
 }
 ```
+
+`repeatCount` 是真实重复次数（`indefinite` 表示无限）：源文件里它是 ECMA-376 §19.5.33 的千分位记法（`1000` 为一次），解析时已经换算。
 
 节点使用编号引用，避免公开模型中递归对象过深，也便于 Worker 传输和序列化。
 
@@ -210,6 +223,7 @@ export interface PptxMediaItem {
   contentType?: string
   kind: "audio" | "video"
   embedded: boolean
+  autoplay: boolean
   trimStartMs?: number
   trimEndMs?: number
   loop: boolean
@@ -281,6 +295,8 @@ export interface PptxPlaybackDocument {
 export type PptxPlaybackErrorCode =
   | "PLAYBACK_NOT_READY"
   | "PLAYBACK_DISPOSED"
+  | "COMMAND_CANCELLED"
+  | "RENDER_FAILED"
   | "TARGET_NOT_FOUND"
   | "TARGET_AMBIGUOUS"
   | "TIME_CONDITION_UNSUPPORTED"
@@ -337,6 +353,7 @@ export interface PptxPreviewSessionOptions {
 export interface PptxDocumentSessionOptions extends PptxPreviewSessionOptions {
   approximation?: PptxApproximationPolicy
   externalMedia?: "disabled" | "allowed"
+  externalMediaUrlPolicy?: PptxExternalMediaUrlPolicy
 }
 
 export interface PptxDocumentSession extends PptxPreviewSession {
@@ -514,7 +531,9 @@ type PptxStageContextMenu = PptxStageContextMenuPosition & (
 - `mode` 默认 `browse`；
 - `browse` 默认纵向连续页面，`present` 保持单页播放；
 - `approximation` 默认 `off`；
-- `externalMedia` 默认 `disabled`；
+- `externalMedia` 默认 `disabled`；`allowed` 仍必须同时提供 `externalMediaUrlPolicy`，媒体 URL 经共享 URL 规则校验后才加载；
+- 归档预算与共享 office 限制对齐：`toOfficeLimits` 传递完整的 PPTX 预算子集（压缩比、XML 嵌套层数与总量、路径长度、关系数），未传入的字段不会再被静默关闭；
+- 一次解压：`inspectOfficeArchive` 只读中央目录，渲染器完成唯一一次解压，共享校验器直接检查已解码的部件；
 - 新事件只增加，不改变旧事件参数；
 - `PptxPreviewSession` 不增加必须实现的方法；新增的列表/单页行为通过可选会话参数表达，测试替身无需实现播放接口。
 

@@ -6,17 +6,23 @@
         <path d="m9 11 6 6M15 11l-6 6" />
       </svg>
       <span class="xlsx-toolbar__filename" :title="displayFileName">{{ displayFileName }}</span>
+      <span
+        v-if="controller.lastExportWarning"
+        class="xlsx-toolbar__export-warning"
+        data-testid="xlsx-export-warning"
+        role="status"
+      >{{ controller.lastExportWarning }}</span>
     </div>
 
     <div class="xlsx-toolbar__actions">
-      <div class="xlsx-toolbar__zoom" aria-label="Workbook zoom">
-        <button class="xlsx-toolbar__icon-button" :disabled="!controller.canZoomOut" title="Zoom out" aria-label="Zoom out" @click="controller.zoomOut()">
+      <div class="xlsx-toolbar__zoom" :aria-label="m.xlsx.toolbar.zoomGroup">
+        <button class="xlsx-toolbar__icon-button" :disabled="!controller.canZoomOut" :title="m.common.zoom.out" :aria-label="m.common.zoom.out" @click="controller.zoomOut()">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8 12h8" /></svg>
         </button>
-        <select class="xlsx-toolbar__zoom-select" aria-label="Zoom level" :value="zoomPercent" @change="onZoomChange">
+        <select class="xlsx-toolbar__zoom-select" :aria-label="m.common.zoom.level" :value="zoomPercent" @change="onZoomChange">
           <option v-for="z in zoomPresets" :key="z" :value="z">{{ z }}%</option>
         </select>
-        <button class="xlsx-toolbar__icon-button" :disabled="!controller.canZoomIn" title="Zoom in" aria-label="Zoom in" @click="controller.zoomIn()">
+        <button class="xlsx-toolbar__icon-button" :disabled="!controller.canZoomIn" :title="m.common.zoom.in" :aria-label="m.common.zoom.in" @click="controller.zoomIn()">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8 12h8M12 8v8" /></svg>
         </button>
       </div>
@@ -28,8 +34,8 @@
           class="xlsx-toolbar__icon-button"
           data-testid="xlsx-search-toggle"
           :aria-expanded="searchOpen"
-          aria-label="Search workbook"
-          title="Search workbook"
+          :aria-label="m.xlsx.toolbar.search"
+          :title="m.xlsx.toolbar.search"
           @click="toggleSearch"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m15.5 15.5 5 5" /></svg>
@@ -42,7 +48,7 @@
             :active-index="searchState.activeIndex"
             :result-count="results.length"
             input-test-id="xlsx-search-input"
-            placeholder="Find values"
+            :placeholder="m.xlsx.toolbar.searchPlaceholder"
             @update:query="onSearchQuery"
             @previous="selectRelativeResult(-1)"
             @next="selectRelativeResult(1)"
@@ -66,13 +72,13 @@
         </div>
       </div>
 
-      <button v-if="showUpload" class="xlsx-toolbar__icon-button" data-testid="xlsx-toolbar-upload" title="Upload XLSX" aria-label="Upload XLSX" @click="emit('upload')">
+      <button v-if="showUpload" class="xlsx-toolbar__icon-button" data-testid="xlsx-toolbar-upload" :title="m.xlsx.toolbar.upload" :aria-label="m.xlsx.toolbar.upload" @click="emit('upload')">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7.5 8.5 12 4l4.5 4.5M5 14v6h14v-6" /></svg>
       </button>
-      <button v-if="controller.canDownload" class="xlsx-toolbar__icon-button" data-testid="xlsx-toolbar-download" title="Download source" aria-label="Download source" @click="controller.download()">
+      <button v-if="controller.canDownload" class="xlsx-toolbar__icon-button" data-testid="xlsx-toolbar-download" :title="m.xlsx.toolbar.download" :aria-label="m.xlsx.toolbar.download" @click="controller.download()">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M7.5 11.5 12 16l4.5-4.5M5 19h14" /></svg>
       </button>
-      <button v-if="controller.canExport" class="xlsx-toolbar__icon-button" data-testid="xlsx-toolbar-export" title="Export XLSX" aria-label="Export XLSX" @click="controller.exportXlsx()">
+      <button v-if="controller.canExport" class="xlsx-toolbar__icon-button" data-testid="xlsx-toolbar-export" :title="m.xlsx.toolbar.export" :aria-label="m.xlsx.toolbar.export" @click="controller.exportXlsx()">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l2 2v16H5zM8 3v6h8V3M8 21v-7h8v7" /></svg>
       </button>
     </div>
@@ -84,6 +90,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import type { XlsxViewerController } from "@arcships/xlsx-core";
 import { OfficeFindBar } from "@arcships/vue-ui";
 import { useXlsxSearch, type XlsxSurfaceSearch } from "../composables/useXlsxSearch";
+import { useXlsxMessages } from "../i18n";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -98,6 +105,7 @@ const emit = defineEmits<{
 }>();
 
 const zoomPresets = [50, 75, 100, 125, 150, 200];
+const m = useXlsxMessages();
 const searchOpen = ref(false);
 const findBarRef = ref<InstanceType<typeof OfficeFindBar> | null>(null);
 const searchQuery = ref("");
@@ -185,6 +193,8 @@ defineExpose({ openSearch });
 }
 .xlsx-toolbar__file-icon { color: #15803d; flex: 0 0 auto; }
 .xlsx-toolbar__filename { font-size: 13px; font-weight: 600; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xlsx-toolbar__export-warning { color: #b45309; font-size: 11px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xlsx-toolbar--dark .xlsx-toolbar__export-warning { color: #fbbf24; }
 .xlsx-toolbar__icon-button {
   align-items: center;
   background: transparent;
@@ -242,9 +252,23 @@ defineExpose({ openSearch });
 .xlsx-toolbar__search-result span { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .xlsx-toolbar__search-result mark { background: #fde047; color: inherit; padding: 0; }
 
-@media (max-width: 620px) {
+@container xlsx-viewer (max-width: 620px) {
   .xlsx-toolbar { align-items: stretch; flex-direction: column; gap: 5px; }
   .xlsx-toolbar__filename { flex: 1; max-width: none; }
   .xlsx-toolbar__actions { justify-content: flex-end; overflow-x: auto; }
+}
+
+@media (pointer: coarse) {
+  .xlsx-toolbar__icon-button,
+  .xlsx-toolbar__zoom-select,
+  .xlsx-toolbar__search-panel input,
+  .xlsx-toolbar__search-summary button,
+  .xlsx-toolbar__search-result {
+    min-height: 44px;
+  }
+  .xlsx-toolbar__icon-button {
+    min-width: 44px;
+  }
+  .xlsx-toolbar__search-result { padding-block: 10px; }
 }
 </style>

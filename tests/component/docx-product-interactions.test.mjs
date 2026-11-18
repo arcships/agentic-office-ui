@@ -1,21 +1,25 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
   findByTestId,
   importFromDemo,
   mount,
+  textContent,
   vue,
   walk,
 } from "./vue-test-renderer.mjs";
 
 const {
+  DocxFormFieldLayer,
   DocxTableHost,
   DocxToolbar,
   findDocxSearchMatches,
   useDocxEditor,
 } = await importFromDemo("@arcships/vue-docx");
-const { createBlankDocumentModel } = await importFromDemo("@arcships/docx-core");
+const { createBlankDocumentModel, wasmBuildDocModelFromBytes } =
+  await importFromDemo("@arcships/docx-core");
 
 function modelWithNodes(nodes) {
   return {
@@ -26,6 +30,11 @@ function modelWithNodes(nodes) {
 
 function hasClass(node, className) {
   return String(node?.props?.class || "").split(/\s+/).includes(className);
+}
+
+function paragraphText(node) {
+  if (!node || node.type !== "paragraph") return "";
+  return node.children.map((child) => child.type === "text" ? child.text : "").join("");
 }
 
 async function mountController(model) {
@@ -159,6 +168,425 @@ test("DocxTableHost renders vertical merges once and commits editable cell text"
   mounted.app.unmount();
 });
 
+test("table cell blur commits each paragraph without duplicating text or dropping run styles", async () => {
+  const table = {
+    type: "table",
+    sourceXml: "<w:tbl/>",
+    rows: [{
+      cells: [{
+        nodes: [
+          {
+            type: "paragraph",
+            sourceXml: "<w:p first/>",
+            children: [{ type: "text", text: "first", style: { bold: true } }],
+          },
+          {
+            type: "paragraph",
+            sourceXml: "<w:p second/>",
+            children: [{ type: "text", text: "second", style: { italic: true } }],
+          },
+        ],
+      }],
+    }],
+  };
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([table]) });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[0],
+        tableIndex: 0,
+        editable: true,
+        controller,
+      });
+    },
+  });
+
+  const mounted = await mount(Harness);
+  const cellParagraphs = walk(mounted.root).filter((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true
+  );
+  assert.equal(cellParagraphs.length, 2);
+
+  cellParagraphs[0].props.onInput({ target: { textContent: "first edited" } });
+  cellParagraphs[1].props.onInput({ target: { textContent: "second edited" } });
+  cellParagraphs[0].props.onBlur({ target: { textContent: "first edited" } });
+  await vue.nextTick();
+  cellParagraphs[1].props.onBlur({ target: { textContent: "second edited" } });
+  await vue.nextTick();
+
+  const committed = controller.model.nodes[0];
+  assert.equal(committed.type, "table");
+  const paragraphs = committed.rows[0].cells[0].nodes;
+  assert.deepEqual(paragraphs.map(paragraphText), ["first edited", "second edited"]);
+  assert.equal(paragraphs[0].children[0].style.bold, true);
+  assert.equal(paragraphs[1].children[0].style.italic, true);
+  assert.equal(paragraphs[0].sourceXml, undefined);
+  assert.equal(paragraphs[1].sourceXml, undefined);
+  assert.equal(committed.sourceXml, undefined, "table XML must be rebuilt after a cell edit");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("flushing cell drafts commits every dirty paragraph in one model chain", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [{
+        nodes: [
+          { type: "paragraph", children: [{ type: "text", text: "first" }] },
+          { type: "paragraph", children: [{ type: "text", text: "second" }] },
+        ],
+      }],
+    }],
+  };
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([table]) });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[0],
+        tableIndex: 0,
+        editable: true,
+        controller,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  const cellParagraphs = walk(mounted.root).filter((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true
+  );
+
+  cellParagraphs[0].props.onInput({ target: { textContent: "first edited" } });
+  cellParagraphs[1].props.onInput({ target: { textContent: "second edited" } });
+  controller.flushTextDrafts();
+  await vue.nextTick();
+
+  const paragraphs = controller.model.nodes[0].rows[0].cells[0].nodes;
+  assert.deepEqual(paragraphs.map(paragraphText), ["first edited", "second edited"]);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("unmounting a table host commits live cell drafts", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [{
+        nodes: [
+          { type: "paragraph", children: [{ type: "text", text: "first" }] },
+          { type: "paragraph", children: [{ type: "text", text: "second" }] },
+        ],
+      }],
+    }],
+  };
+  const show = vue.ref(true);
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([table]) });
+      return () => show.value
+        ? vue.h(DocxTableHost, {
+            table: controller.model.nodes[0],
+            tableIndex: 0,
+            editable: true,
+            controller,
+          })
+        : null;
+    },
+  });
+  const mounted = await mount(Harness);
+  const cellParagraphs = walk(mounted.root).filter((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true
+  );
+  cellParagraphs[0].props.onInput({ target: { textContent: "first edited" } });
+  cellParagraphs[1].props.onInput({ target: { textContent: "second edited" } });
+
+  show.value = false;
+  await vue.nextTick();
+
+  const paragraphs = controller.model.nodes[0].rows[0].cells[0].nodes;
+  assert.deepEqual(paragraphs.map(paragraphText), ["first edited", "second edited"]);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("a cell draft is dropped when the document is replaced before unmount", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [{
+        nodes: [{ type: "paragraph", children: [{ type: "text", text: "original" }] }],
+      }],
+    }],
+  };
+  const show = vue.ref(true);
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([table]) });
+      return () => show.value
+        ? vue.h(DocxTableHost, {
+            table: controller.model.nodes[0],
+            tableIndex: 0,
+            editable: true,
+            controller,
+          })
+        : null;
+    },
+  });
+  const mounted = await mount(Harness);
+  const [cellParagraph] = walk(mounted.root).filter((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true
+  );
+  cellParagraph.props.onInput({ target: { textContent: "stale edit" } });
+  controller.newDocument();
+  await vue.nextTick();
+
+  show.value = false;
+  await vue.nextTick();
+
+  assert.equal(
+    controller.model.nodes.some((node) =>
+      node.type === "paragraph" && paragraphText(node) === "stale edit"
+    ),
+    false,
+    "a draft captured from the old document must not land in the new one",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("cell blur keeps image children while diffing the paragraph text", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [{
+        nodes: [{
+          type: "paragraph",
+          sourceXml: "<w:p image/>",
+          children: [
+            { type: "text", text: "before" },
+            {
+              type: "image",
+              src: "data:image/svg+xml;base64,PHN2Zy8+",
+              alt: "inline",
+              widthPx: 20,
+              heightPx: 20,
+            },
+            { type: "text", text: "after" },
+          ],
+        }],
+      }],
+    }],
+  };
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([table]) });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[0],
+        tableIndex: 0,
+        editable: true,
+        controller,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  const [cellParagraph] = walk(mounted.root).filter((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true
+  );
+  cellParagraph.props.onInput({ target: { textContent: "beforeXafter" } });
+  cellParagraph.props.onBlur({ target: { textContent: "beforeXafter" } });
+  await vue.nextTick();
+
+  const paragraph = controller.model.nodes[0].rows[0].cells[0].nodes[0];
+  assert.equal(paragraphText(paragraph), "beforeXafter");
+  assert.equal(
+    paragraph.children.some((child) => child.type === "image"),
+    true,
+    "the inline image anchor must survive the text diff",
+  );
+  assert.equal(paragraph.sourceXml, undefined);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("cell blur keeps an empty form-field run while diffing the paragraph text", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [{
+        nodes: [{
+          type: "paragraph",
+          sourceXml: "<w:p field/>",
+          children: [
+            { type: "text", text: "hello " },
+            { type: "form-field", fieldType: "text", widget: { text: {} } },
+            { type: "text", text: "world" },
+          ],
+        }],
+      }],
+    }],
+  };
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([table]) });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[0],
+        tableIndex: 0,
+        editable: true,
+        controller,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  const [cellParagraph] = walk(mounted.root).filter((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true
+  );
+  cellParagraph.props.onInput({ target: { textContent: "hello Xworld" } });
+  cellParagraph.props.onBlur({ target: { textContent: "hello Xworld" } });
+  await vue.nextTick();
+
+  const paragraph = controller.model.nodes[0].rows[0].cells[0].nodes[0];
+  assert.equal(paragraphText(paragraph), "hello Xworld");
+  assert.deepEqual(
+    paragraph.children.map((child) => child.type),
+    ["text", "form-field", "text"],
+    "an empty form field is an atomic anchor and must survive unrelated text edits",
+  );
+  assert.equal(paragraph.sourceXml, undefined);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("a paragraph after a nested table keeps its own cell paragraph index", async () => {
+  const table = {
+    type: "table",
+    rows: [{
+      cells: [{
+        nodes: [
+          { type: "paragraph", children: [{ type: "text", text: "before nested" }] },
+          {
+            type: "table",
+            rows: [{
+              cells: [{
+                nodes: [{ type: "paragraph", children: [{ type: "text", text: "inside nested" }] }],
+              }],
+            }],
+          },
+          { type: "paragraph", children: [{ type: "text", text: "after nested" }] },
+        ],
+      }],
+    }],
+  };
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([table]) });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[0],
+        tableIndex: 0,
+        editable: true,
+        controller,
+      });
+    },
+  });
+
+  const mounted = await mount(Harness);
+  const outerParagraph = walk(mounted.root).find((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true &&
+    node.props?.["data-docx-table-row-index"] === 0 &&
+    node.props?.["data-docx-table-cell-index"] === 0 &&
+    node.props?.["data-docx-paragraph-index"] === 1
+  );
+  assert.ok(outerParagraph, "the paragraph after the nested table must be addressable as paragraph 1");
+
+  outerParagraph.props.onInput({ target: { textContent: "after nested edited" } });
+  outerParagraph.props.onBlur({ target: { textContent: "after nested edited" } });
+  await vue.nextTick();
+
+  const cellNodes = controller.model.nodes[0].rows[0].cells[0].nodes;
+  assert.equal(paragraphNodeText(cellNodes[0]), "before nested");
+  assert.equal(paragraphNodeText(cellNodes[2]), "after nested edited");
+  const nested = cellNodes[1];
+  assert.equal(nested.type, "table");
+  assert.equal(paragraphNodeText(nested.rows[0].cells[0].nodes[0]), "inside nested");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("whole-cell commit diffs multiline text, keeps run styles, and clears source XML", async () => {
+  const table = {
+    type: "table",
+    sourceXml: "<w:tbl/>",
+    rows: [{
+      cells: [{
+        nodes: [
+          {
+            type: "paragraph",
+            sourceXml: "<w:p first/>",
+            children: [{ type: "text", text: "one", style: { bold: true } }],
+          },
+          {
+            type: "paragraph",
+            sourceXml: "<w:p second/>",
+            children: [{ type: "text", text: "two", style: { underline: true } }],
+          },
+        ],
+      }],
+    }],
+  };
+  const mounted = await mountController(modelWithNodes([table]));
+  mounted.controller.commitTableCellText(0, 0, 0, "one edited\ntwo edited");
+  await vue.nextTick();
+
+  const committed = mounted.controller.model.nodes[0];
+  const paragraphs = committed.rows[0].cells[0].nodes;
+  assert.deepEqual(paragraphs.map(paragraphText), ["one edited", "two edited"]);
+  assert.equal(paragraphs[0].children[0].style.bold, true);
+  assert.equal(paragraphs[1].children[0].style.underline, true);
+  assert.equal(paragraphs[0].sourceXml, undefined);
+  assert.equal(paragraphs[1].sourceXml, undefined);
+  assert.equal(committed.sourceXml, undefined);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("section paragraph commit preserves run style and clears source XML", async () => {
+  const base = createBlankDocumentModel();
+  const model = {
+    ...base,
+    nodes: [{ type: "paragraph", children: [{ type: "text", text: "body" }] }],
+    metadata: {
+      ...base.metadata,
+      headerSections: [{
+        partName: "word/header1.xml",
+        referenceType: "default",
+        nodes: [{
+          type: "paragraph",
+          sourceXml: "<w:p header/>",
+          children: [{ type: "text", text: "Header", style: { bold: true } }],
+        }],
+      }],
+    },
+  };
+  const mounted = await mountController(model);
+  mounted.controller.commitSectionParagraphText(
+    { region: "header", partName: "word/header1.xml", nodeIndex: 0 },
+    "Header edited",
+  );
+  await vue.nextTick();
+
+  const paragraph = mounted.controller.model.metadata.headerSections[0].nodes[0];
+  assert.equal(paragraphText(paragraph), "Header edited");
+  assert.equal(paragraph.children[0].style.bold, true, "run formatting must survive the commit");
+  assert.equal(paragraph.sourceXml, undefined, "the serializer must rebuild the header paragraph");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
 test("DOCX surface search indexes an exact table-cell range without a block highlighter", async () => {
   const table = {
     type: "table",
@@ -270,6 +698,617 @@ test("insertImageFile creates a visible floating square image with default dimen
     zIndex: 1,
   });
   assert.equal(mounted.controller.status, "Inserted image: diagram.png");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("insertImageFile drops the insertion when the document changes while reading the file", async () => {
+  const mounted = await mountController(modelWithNodes([
+    { type: "paragraph", children: [{ type: "text", text: "Image anchor" }] },
+  ]));
+  mounted.controller.selectParagraph(0);
+  await vue.nextTick();
+  mounted.controller.setActiveTextRange({
+    start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 6 },
+    end: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 6 },
+  });
+  await vue.nextTick();
+
+  const file = new File([new Uint8Array([137, 80, 78, 71])], "late.png", { type: "image/png" });
+  let releaseFileRead;
+  Object.defineProperty(file, "arrayBuffer", {
+    configurable: true,
+    value: () => new Promise((resolve) => {
+      releaseFileRead = () => resolve(new Uint8Array([137, 80, 78, 71]).buffer);
+    }),
+  });
+
+  const insertion = mounted.controller.insertImageFile(file);
+  await Promise.resolve();
+  mounted.controller.newDocument();
+  releaseFileRead();
+  await insertion;
+  await vue.nextTick();
+
+  assert.equal(
+    mounted.controller.model.nodes.some((node) =>
+      node.type === "paragraph" && node.children.some((child) => child.type === "image")
+    ),
+    false,
+    "a document loaded during the file read must not receive the image",
+  );
+  assert.equal(mounted.controller.status, "Image insertion cancelled: document changed");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+function tableRowCells(root) {
+  return walk(root)
+    .filter((node) => node.type === "tr")
+    .map((row) => row.children.filter((child) => child.type === "td"));
+}
+
+function paragraphNodeText(node) {
+  return (node?.children ?? [])
+    .map((child) => (child.type === "text" ? child.text : ""))
+    .join("");
+}
+
+async function loadMergedTableFixture() {
+  const bytes = readFileSync(
+    new URL("../../test-data/corpus/docx-merged-table.docx", import.meta.url),
+  );
+  const input = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const { model } = await wasmBuildDocModelFromBytes(input);
+  return model;
+}
+
+test("DOCX table grid carries vMerge rowSpan and drops continuation cells", async () => {
+  const fixture = await loadMergedTableFixture();
+  const table = fixture.nodes[1];
+  assert.equal(table.type, "table");
+
+  const mounted = await mount(DocxTableHost, { table, tableIndex: 1 });
+  const rows = tableRowCells(mounted.root);
+
+  assert.equal(rows.length, 3);
+  assert.deepEqual(rows.map((cells) => cells.length), [3, 2, 3]);
+  assert.equal(rows[0][0].props.rowspan, 2);
+  assert.deepEqual(
+    rows[1].map((cell) => cell.props["data-docx-table-cell-index"]),
+    [1, 2],
+    "the continuation cell must be covered by the restart rowSpan",
+  );
+  assert.equal(
+    walk(mounted.root).filter((node) => node.type === "col").length,
+    3,
+  );
+  const renderedHtml = walk(mounted.root)
+    .map((node) => String(node.props?.innerHTML ?? ""))
+    .join("");
+  assert.match(renderedHtml, /Merged A1/);
+  assert.equal(renderedHtml.includes("Hidden continuation"), false);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("DOCX table grid counts columns from gridSpan instead of the first row", async () => {
+  const fixture = await loadMergedTableFixture();
+  const table = fixture.nodes[3];
+  assert.equal(table.type, "table");
+  table.style = {
+    ...(table.style ?? {}),
+    columnWidthsTwips: [1500, 3000, 1500],
+  };
+
+  const mounted = await mount(DocxTableHost, { table, tableIndex: 3 });
+  const rows = tableRowCells(mounted.root);
+  const columns = walk(mounted.root).filter((node) => node.type === "col");
+
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].length, 2, "the wide first cell stays a single td");
+  assert.equal(rows[0][0].props.colspan, 2);
+  assert.equal(rows[1].length, 3);
+  assert.equal(
+    columns.length,
+    3,
+    "the grid must use the widest row, not the first row's cell count",
+  );
+  assert.deepEqual(
+    columns.map((column) => column.props.style.width),
+    ["100px", "200px", "100px"],
+    "stored column widths must line up with the full grid",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("DOCX table grid degrades vMerge continuations across a page slice", async () => {
+  const fixture = await loadMergedTableFixture();
+  const table = fixture.nodes[1];
+
+  const mounted = await mount(DocxTableHost, {
+    table,
+    tableIndex: 1,
+    rowRange: { startRowIndex: 1, endRowIndex: 2 },
+  });
+  const rows = tableRowCells(mounted.root);
+
+  assert.equal(rows.length, 1);
+  assert.equal(
+    rows[0].length,
+    3,
+    "a continuation row without its restart must keep all three columns",
+  );
+  assert.equal(rows[0][0].props.rowspan, undefined);
+  assert.equal(
+    String(rows[0][0].props.class).includes("docx-table-cell--merge-fallback"),
+    true,
+  );
+  assert.deepEqual(
+    rows[0].slice(1).map((cell) => cell.props["data-docx-table-cell-index"]),
+    [1, 2],
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("DOCX nested tables use a unique runtime key and commit into the inner cell", async () => {
+  const fixture = await loadMergedTableFixture();
+  const model = modelWithNodes(fixture.nodes);
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: model });
+      return () => vue.h(DocxTableHost, {
+        table: controller.model.nodes[5],
+        tableIndex: 5,
+        editable: true,
+        controller,
+      });
+    },
+  });
+
+  const mounted = await mount(Harness);
+  const tableHosts = walk(mounted.root).filter((node) =>
+    hasClass(node, "docx-table-host")
+  );
+  const outerHost = tableHosts.find((node) =>
+    node.props?.["data-docx-table-index"] === 5
+  );
+  const nestedHost = tableHosts.find((node) =>
+    String(node.props?.["data-docx-table-index"] ?? "").startsWith(
+      "body-cell-nested-table-5-0-0-1"
+    )
+  );
+
+  assert.ok(outerHost);
+  assert.ok(nestedHost, "the nested table must expose its runtime key");
+  assert.notEqual(
+    nestedHost.props["data-docx-table-index"],
+    outerHost.props["data-docx-table-index"],
+  );
+
+  const innerParagraph = walk(nestedHost).find((node) =>
+    node.props?.["data-docx-table-cell-paragraph-host"] === true &&
+    node.props?.["data-docx-table-row-index"] === 0 &&
+    node.props?.["data-docx-table-cell-index"] === 0
+  );
+  assert.ok(innerParagraph);
+  assert.equal(innerParagraph.props.contenteditable, "true");
+
+  innerParagraph.props.onFocus();
+  await vue.nextTick();
+  assert.equal(
+    controller.selection.tableRuntimeKey,
+    nestedHost.props["data-docx-table-index"],
+  );
+
+  nestedHost.querySelector = () => ({ textContent: "Inner A1 updated" });
+  innerParagraph.props.onBlur();
+  await vue.nextTick();
+
+  const outerTable = controller.model.nodes[5];
+  assert.equal(
+    paragraphNodeText(outerTable.rows[0].cells[0].nodes[0]),
+    "Outer A1",
+    "editing the nested cell must not overwrite the outer cell",
+  );
+  const innerTable = outerTable.rows[0].cells[0].nodes[1];
+  assert.equal(innerTable.type, "table");
+  assert.equal(
+    paragraphNodeText(innerTable.rows[0].cells[0].nodes[0]),
+    "Inner A1 updated",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+async function mountFormFieldLayer(nodes) {
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes(nodes) });
+      return () => vue.h(DocxFormFieldLayer, {
+        pageIndex: 0,
+        controller,
+        pageNodeSegments: [{ nodeIndex: 0 }],
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  return { ...mounted, get controller() { return controller; } };
+}
+
+function formFieldLocation(childIndex) {
+  return { kind: "paragraph", nodeIndex: 0, childIndex };
+}
+
+function countUndoSteps(controller) {
+  let steps = 0;
+  while (controller.canUndo && steps < 100) {
+    controller.undo();
+    steps += 1;
+  }
+  return steps;
+}
+
+test("date form fields render a date control and round-trip ISO values", async () => {
+  const mounted = await mountFormFieldLayer([
+    {
+      type: "paragraph",
+      children: [
+        {
+          type: "form-field",
+          fieldType: "date",
+          value: "2026-11-16",
+          widget: { text: { textFormat: "MMMM d, yyyy" } },
+        },
+      ],
+    },
+  ]);
+
+  const dateInput = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "date",
+  );
+  assert.ok(dateInput, "date fields must render a date control");
+  assert.equal(dateInput.props.value, "2026-11-16");
+
+  const display = walk(mounted.root).find((node) =>
+    String(node.props?.class || "").includes("docx-form-date-display")
+  );
+  assert.ok(display, "date fields must display their value");
+  assert.match(textContent(display), /November 16, 2026/);
+
+  dateInput.props.onInput({ target: { value: "2027-01-02" } });
+  await vue.nextTick();
+  assert.equal(mounted.controller.model.nodes[0].children[0].value, "2027-01-02");
+  assert.match(
+    textContent(
+      walk(mounted.root).find((node) =>
+        String(node.props?.class || "").includes("docx-form-date-display")
+      ),
+    ),
+    /January 2, 2027/,
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("form-field layer reports validation errors instead of writing bad values", async () => {
+  const mounted = await mountFormFieldLayer([
+    {
+      type: "paragraph",
+      children: [
+        { type: "form-field", fieldType: "text", widget: { text: { maxLength: 3 } } },
+      ],
+    },
+  ]);
+  const input = walk(mounted.root).find((node) => node.type === "input");
+  assert.ok(input);
+
+  input.props.onInput({ target: { value: "abcd" } });
+  await vue.nextTick();
+  assert.equal(mounted.controller.model.nodes[0].children[0].value, undefined);
+  const error = walk(mounted.root).find((node) =>
+    String(node.props?.class || "").includes("docx-form-error")
+  );
+  assert.ok(error, "the field must show its own error state");
+  assert.match(textContent(error), /at most 3 characters/);
+  assert.equal(input.props["aria-invalid"], "true");
+
+  input.props.onInput({ target: { value: "abc" } });
+  await vue.nextTick();
+  assert.equal(mounted.controller.model.nodes[0].children[0].value, "abc");
+  assert.equal(
+    walk(mounted.root).some((node) =>
+      String(node.props?.class || "").includes("docx-form-error")
+    ),
+    false,
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("form-field writes reject invalid values and normalize accepted ones", async () => {
+  const mounted = await mountController(modelWithNodes([
+    {
+      type: "paragraph",
+      children: [
+        { type: "form-field", fieldType: "text", widget: { text: { maxLength: 5 } } },
+        { type: "form-field", fieldType: "date" },
+        {
+          type: "form-field",
+          fieldType: "dropdown",
+          options: [
+            { displayText: "Alpha", value: "A" },
+            { displayText: "Beta", value: "B" },
+          ],
+        },
+      ],
+    },
+  ]));
+  const controller = mounted.controller;
+
+  assert.equal(controller.setFormFieldValue(formFieldLocation(0), "abcdef"), false);
+  assert.equal(controller.model.nodes[0].children[0].value, undefined);
+  assert.equal(controller.setFormFieldValue(formFieldLocation(0), "abcde"), true);
+  assert.equal(controller.model.nodes[0].children[0].value, "abcde");
+
+  assert.equal(controller.setFormFieldValue(formFieldLocation(1), "2026-02-30"), false);
+  assert.equal(controller.model.nodes[0].children[1].value, undefined);
+  assert.equal(controller.setFormFieldValue(formFieldLocation(1), "2026-11-16"), true);
+  assert.equal(controller.model.nodes[0].children[1].value, "2026-11-16");
+
+  assert.equal(controller.setFormFieldValue(formFieldLocation(2), "Gamma"), false);
+  assert.equal(controller.model.nodes[0].children[2].value, undefined);
+  assert.equal(controller.setFormFieldValue(formFieldLocation(2), "Alpha"), true);
+  assert.equal(controller.model.nodes[0].children[2].value, "A");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("typing in a form field keeps the selection and creates one undo step", async () => {
+  const mounted = await mountController(modelWithNodes([
+    {
+      type: "paragraph",
+      children: [{ type: "form-field", fieldType: "text" }],
+    },
+  ]));
+  const controller = mounted.controller;
+  const location = formFieldLocation(0);
+  controller.selectFormField(location);
+
+  const typed = ["2", "20", "202", "2026", "2026-", "2026-1", "2026-11", "2026-11-", "2026-11-1", "2026-11-16"];
+  for (const value of typed) {
+    assert.equal(controller.setFormFieldValue(location, value), true);
+    assert.deepEqual(controller.selectedFormField?.location, location);
+  }
+  controller.endFormFieldEdit(location);
+
+  assert.equal(countUndoSteps(controller), 1, "one editing session must create one undo entry");
+  assert.equal(controller.model.nodes[0].children[0].value, undefined);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("blurring a text field produces one undo step for the whole edit", async () => {
+  const mounted = await mountFormFieldLayer([
+    {
+      type: "paragraph",
+      children: [{ type: "form-field", fieldType: "text" }],
+    },
+  ]);
+  const input = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "text",
+  );
+  input.props.onFocus();
+
+  for (const value of ["2", "20", "202", "2026", "2026-", "2026-11", "2026-11-16"]) {
+    input.props.onInput({ target: { value } });
+    assert.deepEqual(
+      mounted.controller.selectedFormField?.location,
+      formFieldLocation(0),
+      "the field must stay selected while typing",
+    );
+  }
+  input.props.onBlur({ target: { value: "2026-11-16" } });
+  await vue.nextTick();
+
+  assert.equal(
+    countUndoSteps(mounted.controller),
+    1,
+    "blurring must close a single coalesced history entry",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("read-only toolbar keeps zoom outside the disabled fieldset", async () => {
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: modelWithNodes([
+        { type: "paragraph", children: [{ type: "text", text: "Read-only" }] },
+      ]) });
+      return () => vue.h(DocxToolbar, {
+        controller,
+        readOnly: true,
+        currentPage: 1,
+        totalPages: 1,
+      });
+    },
+  });
+  const toolbar = await mount(Harness);
+  const fieldset = walk(toolbar.root).find((node) => node.type === "fieldset");
+  const zoom = findByTestId(toolbar.root, "editor-zoom");
+  assert.ok(fieldset);
+  assert.equal(fieldset.props.disabled, true);
+  assert.ok(zoom, "zoom select should render");
+  let ancestor = zoom.parent;
+  while (ancestor) {
+    assert.notEqual(ancestor.type, "fieldset", "zoom must not be inside the read-only fieldset");
+    ancestor = ancestor.parent;
+  }
+  assert.equal(zoom.props.disabled, undefined);
+  assert.deepEqual(toolbar.warnings, []);
+  toolbar.app.unmount();
+});
+
+test("toolbar indent buttons change list depth and disable outside lists", async () => {
+  const listModel = modelWithNodes([
+    {
+      type: "paragraph",
+      style: { numbering: { numId: 1, ilvl: 0 } },
+      children: [{ type: "text", text: "Item" }],
+    },
+    {
+      type: "paragraph",
+      children: [{ type: "text", text: "Plain" }],
+    },
+  ]);
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: listModel });
+      return () => vue.h(DocxToolbar, { controller, currentPage: 1, totalPages: 1 });
+    },
+  });
+  const mounted = await mount(Harness);
+
+  let indent = findByTestId(mounted.root, "editor-indent");
+  let outdent = findByTestId(mounted.root, "editor-outdent");
+  assert.ok(indent);
+  assert.ok(outdent);
+  assert.notEqual(indent.props.disabled, true);
+  assert.equal(outdent.props.disabled, true);
+
+  indent.props.onClick();
+  await vue.nextTick();
+  assert.equal(controller.model.nodes[0].style.numbering.ilvl, 1);
+
+  outdent = findByTestId(mounted.root, "editor-outdent");
+  assert.notEqual(outdent.props.disabled, true);
+  outdent.props.onClick();
+  await vue.nextTick();
+  assert.equal(controller.model.nodes[0].style.numbering.ilvl, 0);
+
+  controller.selectParagraph(1);
+  await vue.nextTick();
+  indent = findByTestId(mounted.root, "editor-indent");
+  assert.equal(indent.props.disabled, true);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("required text fields show an error on blur and block export", async () => {
+  const mounted = await mountFormFieldLayer([
+    {
+      type: "paragraph",
+      children: [
+        {
+          type: "form-field",
+          fieldType: "text",
+          required: true,
+          widget: { name: "Employee" },
+        },
+      ],
+    },
+  ]);
+  const wrapper = walk(mounted.root).find(
+    (node) => node.props?.["data-docx-form-field"] === true,
+  );
+  assert.equal(wrapper.props["data-docx-form-field-required"], "true");
+
+  let input = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "text",
+  );
+  assert.equal(input.props["aria-required"], "true");
+
+  input.props.onBlur({ target: { value: "" } });
+  await vue.nextTick();
+  let error = walk(mounted.root).find((node) =>
+    String(node.props?.class || "").includes("docx-form-error")
+  );
+  assert.ok(error, "required fields must show an error on blur");
+  assert.match(textContent(error), /This field is required/);
+  input = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "text",
+  );
+  assert.equal(input.props["aria-invalid"], "true");
+
+  mounted.controller.exportDocx();
+  assert.equal(
+    mounted.controller.status,
+    'Cannot export: required form field "Employee" is empty',
+  );
+  assert.deepEqual(mounted.controller.selectedFormField?.location, {
+    kind: "paragraph",
+    nodeIndex: 0,
+    childIndex: 0,
+  });
+
+  input.props.onInput({ target: { value: "Ada" } });
+  await vue.nextTick();
+  input = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "text",
+  );
+  input.props.onBlur({ target: { value: "Ada" } });
+  await vue.nextTick();
+  assert.equal(
+    walk(mounted.root).some((node) =>
+      String(node.props?.class || "").includes("docx-form-error")
+    ),
+    false,
+  );
+  assert.equal(
+    mounted.controller.model.nodes[0].children[0].required,
+    true,
+    "editing a form field must keep its required flag",
+  );
+
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("required checkboxes must be checked before they validate", async () => {
+  const mounted = await mountFormFieldLayer([
+    {
+      type: "paragraph",
+      children: [
+        { type: "form-field", fieldType: "checkbox", required: true, title: "Accept" },
+      ],
+    },
+  ]);
+  let checkbox = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "checkbox",
+  );
+  assert.equal(checkbox.props["aria-required"], "true");
+
+  checkbox.props.onBlur({ target: { checked: false } });
+  await vue.nextTick();
+  assert.match(
+    textContent(
+      walk(mounted.root).find((node) =>
+        String(node.props?.class || "").includes("docx-form-error")
+      ),
+    ),
+    /This field is required/,
+  );
+
+  checkbox.props.onChange();
+  await vue.nextTick();
+  checkbox = walk(mounted.root).find(
+    (node) => node.type === "input" && node.props?.type === "checkbox",
+  );
+  checkbox.props.onBlur({ target: { checked: true } });
+  await vue.nextTick();
+  assert.equal(
+    walk(mounted.root).some((node) =>
+      String(node.props?.class || "").includes("docx-form-error")
+    ),
+    false,
+  );
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
 });

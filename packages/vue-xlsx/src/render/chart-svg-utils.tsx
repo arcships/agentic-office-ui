@@ -2,8 +2,10 @@
 import { symbol as d3Symbol, symbolCircle, symbolCross, symbolDiamond, symbolSquare, symbolStar, symbolTriangle } from "d3-shape";
 import type { XlsxChart } from "@arcships/xlsx-core";
 import { clamp, lightenColor, normalizeRendererHexColor, DEFAULT_CHART_TEXT_COLOR, buildChartFontFamily, truncateSvgText, resolveChartMutedTextColor } from "./chart-shared";
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction";
 import { chartSeriesColor } from "./chart-data";
-import type { ChartRendererPalette, ChartLayout, LegendItem } from "./chart-types";
+import { resolveChartSeriesLabel } from "./chart-shared";
+import type { ChartLabels, ChartRendererPalette, ChartLayout, LegendItem } from "./chart-types";
 
 export const TWO_PI = Math.PI * 2;
 
@@ -67,7 +69,7 @@ export function resolveStockPalette(chart: XlsxChart, axisColor: string) {
   };
 }
 
-export function buildStockLegendItems(chart: XlsxChart, palette: ChartRendererPalette): LegendItem[] {
+export function buildStockLegendItems(chart: XlsxChart, palette: ChartRendererPalette, labels?: ChartLabels): LegendItem[] {
   const axisColor = chart.axisLineColor ?? chart.chartAreaBorderColor ?? palette.border;
   const roles = resolveStockRoleIndices(chart);
   const stockPalette = resolveStockPalette(chart, axisColor);
@@ -84,7 +86,7 @@ export function buildStockLegendItems(chart: XlsxChart, palette: ChartRendererPa
     }
     return {
       color,
-      label: series.name ?? `Series ${index + 1}`
+      label: resolveChartSeriesLabel(series, index, labels)
     };
   });
 }
@@ -243,7 +245,7 @@ export function renderTitle(chart: XlsxChart, layout: ChartLayout, palette: Char
 
 // ---- renderUnsupported ----
 
-export function renderUnsupported(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, chartType: string) {
+export function renderUnsupported(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, chartType: string, unsupportedTemplate = officeMessagesEn.xlsx.chart.unsupportedType) {
   return (
     <g>
       <rect
@@ -262,7 +264,7 @@ export function renderUnsupported(chart: XlsxChart, palette: ChartRendererPalett
         x={layout.plot.left + layout.plot.width / 2}
         y={layout.plot.top + layout.plot.height / 2}
       >
-        {`Unsupported chart type: ${chartType}`}
+        {formatOfficeMessage(unsupportedTemplate, { type: chartType })}
       </text>
     </g>
   );

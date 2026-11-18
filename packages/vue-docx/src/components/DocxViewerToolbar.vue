@@ -6,8 +6,8 @@
         class="docx-viewer-toolbar__icon-button"
         data-testid="docx-sidebar-toggle"
         :aria-pressed="sidebarOpen"
-        aria-label="Toggle page thumbnails"
-        title="Page thumbnails"
+        :aria-label="m.docx.toolbar.sidebarToggle"
+        :title="m.docx.toolbar.pageThumbnails"
         :disabled="disabled"
         @click="emit('toggleSidebar')"
       >
@@ -19,20 +19,22 @@
 
       <span class="docx-viewer-toolbar__file" :title="fileName">{{ fileName }}</span>
 
-      <div class="docx-viewer-toolbar__page" aria-label="Page navigation">
-        <span>Page</span>
+      <div class="docx-viewer-toolbar__page" :aria-label="m.common.page.navigation">
+        <span>{{ m.common.page.label }}</span>
         <input
+          ref="pageInputRef"
           v-model="pageDraft"
           data-testid="docx-page-current"
-          aria-label="Current page"
+          :aria-label="m.common.page.current"
           inputmode="numeric"
           pattern="[0-9]*"
           :disabled="disabled || totalPages < 1"
-          @blur="commitPage"
+          @focus="onPageFocus"
+          @blur="onPageBlur"
           @keydown.enter.prevent="commitPage"
           @keydown.esc.prevent="resetPageDraft"
         />
-        <span>of {{ totalPages || "–" }}</span>
+        <span>{{ m.common.page.of }} {{ totalPages || "–" }}</span>
       </div>
     </div>
 
@@ -43,8 +45,8 @@
           data-testid="docx-search-input"
           type="search"
           :value="searchQuery"
-          placeholder="搜索文档"
-          aria-label="搜索文档"
+          :placeholder="m.docx.toolbar.searchPlaceholder"
+          :aria-label="m.docx.toolbar.searchPlaceholder"
           :disabled="disabled"
           @input="onSearchInput"
           @compositionstart="searchComposing = true"
@@ -52,15 +54,20 @@
           @keydown.enter.prevent="onSearchEnter"
           @keydown.esc.prevent="emit('searchClose')"
         />
-        <span data-testid="docx-search-status">{{ searchResultCount ? `${searchResultIndex + 1}/${searchResultCount}` : searchQuery ? '0/0' : '' }}</span>
-        <button type="button" aria-label="上一个搜索结果" data-testid="docx-search-previous" :disabled="disabled || !searchResultCount" @click="emit('searchPrevious')">‹</button>
-        <button type="button" aria-label="下一个搜索结果" data-testid="docx-search-next" :disabled="disabled || !searchResultCount" @click="emit('searchNext')">›</button>
+        <span
+          data-testid="docx-search-status"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >{{ searchResultCount ? `${searchResultIndex + 1}/${searchResultCount}` : searchQuery ? '0/0' : '' }}</span>
+        <button type="button" :aria-label="m.common.search.previous" data-testid="docx-search-previous" :disabled="disabled || !searchResultCount" @click="emit('searchPrevious')">‹</button>
+        <button type="button" :aria-label="m.common.search.next" data-testid="docx-search-next" :disabled="disabled || !searchResultCount" @click="emit('searchNext')">›</button>
       </div>
       <button
         type="button"
         class="docx-viewer-toolbar__icon-button"
-        aria-label="Zoom out"
-        title="Zoom out"
+        :aria-label="m.common.zoom.out"
+        :title="m.common.zoom.out"
         :disabled="disabled || zoom <= zoomOptions[0]"
         @click="emit('update:zoom', nextZoom(-1))"
       >
@@ -71,20 +78,20 @@
       <select
         class="docx-viewer-toolbar__zoom"
         data-testid="docx-zoom-select"
-        aria-label="Zoom level"
+        :aria-label="m.common.zoom.level"
         :disabled="disabled"
         :value="zoom"
         @change="onZoomChange"
       >
-        <option v-for="option in zoomOptions" :key="option" :value="option">
+        <option v-for="option in zoomSelectOptions" :key="option" :value="option">
           {{ option }}%
         </option>
       </select>
       <button
         type="button"
         class="docx-viewer-toolbar__icon-button"
-        aria-label="Zoom in"
-        title="Zoom in"
+        :aria-label="m.common.zoom.in"
+        :title="m.common.zoom.in"
         :disabled="disabled || zoom >= zoomOptions[zoomOptions.length - 1]"
         @click="emit('update:zoom', nextZoom(1))"
       >
@@ -101,13 +108,13 @@
         data-testid="docx-show-tracked-changes"
         :aria-pressed="showTrackedChanges"
         :disabled="disabled || trackedChangeCount === 0"
-        :title="trackedChangeCount > 0 ? `${showTrackedChanges ? 'Hide' : 'Show'} ${trackedChangeCount} tracked changes` : 'No tracked changes'"
+        :title="trackedChangesTitle"
         @click="emit('toggleTrackedChanges')"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M5 3h10l4 4v14H5zM15 3v5h4M8 12h8M8 16h5" />
         </svg>
-        <span>修订</span>
+        <span>{{ m.docx.toolbar.trackedChanges }}</span>
         <span v-if="trackedChangeCount > 0" class="docx-viewer-toolbar__count">{{ trackedChangeCount }}</span>
       </button>
       <button
@@ -116,13 +123,13 @@
         data-testid="docx-show-comments"
         :aria-pressed="showComments"
         :disabled="disabled || commentCount === 0"
-        :title="commentCount > 0 ? `${showComments ? 'Hide' : 'Show'} ${commentCount} comments` : 'No comments'"
+        :title="commentsTitle"
         @click="emit('toggleComments')"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M4 5h16v11H9l-5 4zM8 9h8M8 12h5" />
         </svg>
-        <span>批注</span>
+        <span>{{ m.docx.toolbar.comments }}</span>
         <span v-if="commentCount > 0" class="docx-viewer-toolbar__count">{{ commentCount }}</span>
       </button>
 
@@ -132,8 +139,8 @@
         type="button"
         class="docx-viewer-toolbar__icon-button"
         data-testid="docx-theme-toggle"
-        :aria-label="isDark ? 'Use light document theme' : 'Use dark document theme'"
-        :title="isDark ? 'Light document' : 'Dark document'"
+        :aria-label="isDark ? m.docx.toolbar.lightThemeAction : m.docx.toolbar.darkThemeAction"
+        :title="isDark ? m.docx.toolbar.lightDocument : m.docx.toolbar.darkDocument"
         :disabled="disabled"
         @click="emit('toggleTheme')"
       >
@@ -149,8 +156,8 @@
         type="button"
         class="docx-viewer-toolbar__icon-button"
         data-testid="docx-upload"
-        aria-label="Upload DOCX"
-        title="Upload DOCX"
+        :aria-label="m.docx.toolbar.upload"
+        :title="m.docx.toolbar.upload"
         @click="emit('upload')"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -162,8 +169,8 @@
         type="button"
         class="docx-viewer-toolbar__icon-button"
         data-testid="docx-download"
-        aria-label="Download DOCX"
-        title="Download DOCX"
+        :aria-label="m.docx.toolbar.download"
+        :title="m.docx.toolbar.download"
         :disabled="disabled || !canDownload"
         @click="emit('download')"
       >
@@ -176,7 +183,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from "vue"
+import { computed, ref, watch } from "vue"
+import { formatOfficeMessage } from "@arcships/office-interaction"
+import { useDocxMessages } from "../i18n"
 
 const props = withDefaults(
   defineProps<{
@@ -217,14 +226,53 @@ const emit = defineEmits<{
 }>()
 
 const zoomOptions = [50, 75, 100, 125, 150, 175, 200]
+const zoomSelectOptions = computed(() => {
+  if (!Number.isFinite(props.zoom) || zoomOptions.includes(props.zoom)) return zoomOptions
+  return [...zoomOptions, props.zoom].sort((a, b) => a - b)
+})
+const m = useDocxMessages()
+const trackedChangesTitle = computed(() => {
+  if (props.trackedChangeCount <= 0) return m.value.docx.toolbar.trackedChangesNone
+  const template = props.showTrackedChanges
+    ? m.value.docx.toolbar.trackedChangesHide
+    : m.value.docx.toolbar.trackedChangesShow
+  return formatOfficeMessage(template, { count: props.trackedChangeCount })
+})
+const commentsTitle = computed(() => {
+  if (props.commentCount <= 0) return m.value.docx.toolbar.commentsNone
+  const template = props.showComments
+    ? m.value.docx.toolbar.commentsHide
+    : m.value.docx.toolbar.commentsShow
+  return formatOfficeMessage(template, { count: props.commentCount })
+})
 const pageDraft = ref(String(props.currentPage || 1))
+const pageInputRef = ref<HTMLInputElement>()
+const pageInputFocused = ref(false)
 const searchInputRef = ref<HTMLInputElement>()
 const searchComposing = ref(false)
 
+function pageInputIsActive(): boolean {
+  if (pageInputFocused.value) return true
+  return typeof document !== "undefined" && pageInputRef.value === document.activeElement
+}
+
 watch(
   () => props.currentPage,
-  (page) => { pageDraft.value = String(page || 1) },
+  (page) => {
+    // Keep a focused draft intact while the user is typing a page number.
+    if (pageInputIsActive()) return
+    pageDraft.value = String(page || 1)
+  },
 )
+
+function onPageFocus(): void {
+  pageInputFocused.value = true
+}
+
+function onPageBlur(): void {
+  pageInputFocused.value = false
+  commitPage()
+}
 
 function resetPageDraft(): void {
   pageDraft.value = String(props.currentPage || 1)
@@ -267,7 +315,7 @@ function nextZoom(direction: -1 | 1): number {
 
 function onZoomChange(event: Event): void {
   const value = Number((event.target as HTMLSelectElement).value)
-  if (zoomOptions.includes(value)) emit("update:zoom", value)
+  if (Number.isFinite(value) && value > 0) emit("update:zoom", value)
 }
 
 function onSearchEnter(event: KeyboardEvent): void {
@@ -394,15 +442,26 @@ defineExpose({
 }
 .docx-viewer-toolbar__separator { background: #e4e4e7; height: 18px; margin: 0 3px; width: 1px; }
 
-@media (max-width: 720px) {
+@container docx-shell (max-width: 720px) {
   .docx-viewer-toolbar { align-items: stretch; flex-direction: column; gap: 6px; }
   .docx-viewer-toolbar__actions { justify-content: flex-end; }
   .docx-viewer-toolbar__file { flex: 1; max-width: none; }
 }
 
-@media (max-width: 460px) {
+@container docx-shell (max-width: 460px) {
   .docx-viewer-toolbar__file { display: none; }
   .docx-viewer-toolbar__leading { justify-content: space-between; }
   .docx-viewer-toolbar__actions { overflow-x: auto; }
+}
+
+@media (pointer: coarse) {
+  .docx-viewer-toolbar__icon-button,
+  .docx-viewer-toolbar__zoom,
+  .docx-viewer-toolbar__page input,
+  .docx-viewer-toolbar__search input,
+  .docx-viewer-toolbar__search button {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 </style>

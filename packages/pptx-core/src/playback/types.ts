@@ -1,5 +1,13 @@
 export type PptxObjectSource = "slide" | "layout" | "master"
 
+export interface PptxObjectGeometry {
+  /** 原始幻灯片坐标，单位 EMU；仅顶层对象保留。 */
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface PptxObjectIdentity {
   key: string
   slidePath: string
@@ -10,6 +18,8 @@ export interface PptxObjectIdentity {
   explicitMorphName?: string
   creationId?: string
   nodeType: string
+  geometry?: PptxObjectGeometry
+  text?: string
 }
 
 export type PptxMorphMatchMethod =
@@ -167,6 +177,7 @@ export interface PptxMediaItem {
   contentType?: string
   kind: "audio" | "video"
   embedded: boolean
+  autoplay: boolean
   trimStartMs?: number
   trimEndMs?: number
   loop: boolean

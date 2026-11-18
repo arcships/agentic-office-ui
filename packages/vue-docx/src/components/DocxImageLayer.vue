@@ -1,73 +1,88 @@
 <template>
-  <div ref="imageLayerEl" v-if="floatingImages.length > 0" class="docx-image-layer" :style="layerStyle">
+  <div ref="imageLayerEl" v-if="floatingImages.length > 0" class="docx-image-layer-root">
     <div
-      v-for="image of floatingImages"
-      :key="image.key"
-      class="docx-floating-image-container"
-      data-testid="docx-floating-image"
-      :data-image-node-index="image.nodeIndex"
-      :data-image-child-index="image.childIndex"
-      :data-image-layout="image.flowWrapped ? 'wrapped' : 'absolute'"
-      :class="{
-        'docx-floating-image--selected': image.selected,
-      }"
-      :style="imageContainerStyle(image)"
-      @mousedown="onImageMouseDown(image, $event)"
+      v-for="layer of imageLayers"
+      :key="layer.key"
+      class="docx-image-layer"
+      :class="`docx-image-layer--${layer.key}`"
+      :data-docx-image-layer="layer.key"
+      :style="layerStyle(layer.key)"
     >
       <div
-        v-if="image.selected && editable"
-        class="docx-image-wrap-toolbar"
-        data-testid="docx-image-wrap-toolbar"
-        @mousedown.stop
+        v-for="image of layer.images"
+        :key="image.key"
+        class="docx-floating-image-container"
+        data-testid="docx-floating-image"
+        :data-image-node-index="image.nodeIndex"
+        :data-image-child-index="image.childIndex"
+        :data-image-layout="image.flowWrapped ? 'wrapped' : 'absolute'"
+        :data-image-behind="image.behindDocument ? 'true' : undefined"
+        :class="{
+          'docx-floating-image--selected': image.selected,
+        }"
+        :style="imageContainerStyle(image)"
+        @mousedown="onImageMouseDown(image, $event)"
       >
-        <button type="button" data-testid="docx-image-wrap-inline" title="Inline with text" @click.stop="setWrapMode(image, 'inline')">Inline</button>
-        <button type="button" data-testid="docx-image-wrap-square" title="Wrap text around image" @click.stop="setWrapMode(image, 'square')">Square</button>
-        <button type="button" data-testid="docx-image-wrap-behind" title="Behind text" @click.stop="setWrapMode(image, 'behindText')">Behind</button>
-        <button type="button" data-testid="docx-image-wrap-front" title="In front of text" @click.stop="setWrapMode(image, 'inFrontOfText')">Front</button>
-      </div>
 
-      <!-- Resize handles -->
-      <template v-if="image.selected && editable">
+
+
         <div
-          v-for="handle of resizeHandles"
-          :key="handle.position"
-          class="docx-image-resize-handle"
-          data-testid="docx-image-resize-handle"
-          :class="`docx-image-resize-handle--${handle.position}`"
-          :style="handle.style"
-          @mousedown.prevent.stop="onResizeStart(image, handle.position, $event)"
+          v-if="image.selected && editable && !image.behindDocument && !image.lockedAnchor"
+          class="docx-image-wrap-toolbar"
+          data-testid="docx-image-wrap-toolbar"
+          data-docx-thumbnail-exclude="true"
+          @mousedown.stop
+        >
+          <button type="button" data-testid="docx-image-wrap-inline" :title="m.docx.image.inlineTitle" @click.stop="setWrapMode(image, 'inline')">{{ m.docx.image.inline }}</button>
+          <button type="button" data-testid="docx-image-wrap-square" :title="m.docx.image.squareTitle" @click.stop="setWrapMode(image, 'square')">{{ m.docx.image.square }}</button>
+          <button type="button" data-testid="docx-image-wrap-behind" :title="m.docx.image.behindTitle" @click.stop="setWrapMode(image, 'behindText')">{{ m.docx.image.behind }}</button>
+          <button type="button" data-testid="docx-image-wrap-front" :title="m.docx.image.frontTitle" @click.stop="setWrapMode(image, 'inFrontOfText')">{{ m.docx.image.front }}</button>
+        </div>
+
+        <!-- Resize handles -->
+        <template v-if="image.selected && editable && !image.behindDocument && !image.lockedAnchor">
+          <div
+            v-for="handle of resizeHandles"
+            :key="handle.position"
+            class="docx-image-resize-handle"
+            data-testid="docx-image-resize-handle"
+            data-image-resize-handle="true"
+            :class="`docx-image-resize-handle--${handle.position}`"
+            :style="handle.style"
+            @mousedown.prevent.stop="onResizeStart(image, handle.position, $event)"
+          />
+        </template>
+
+        <img
+          v-if="!image.flowWrapped && image.src && !failedImageSourceKeys.has(image.failureKey)"
+          :src="image.src"
+          :alt="image.alt ?? m.docx.image.alt"
+          :draggable="false"
+          :style="imageStyle(image)"
+          class="docx-floating-image"
+          loading="lazy"
+          decoding="async"
+          data-image-state="loading"
+          @load="onImageLoad"
+          @error="onImageError(image, $event)"
         />
-      </template>
 
-      <img
-        v-if="!image.flowWrapped && image.src && !failedImageKeys.has(image.key)"
-        :src="image.src"
-        :alt="image.alt ?? 'Image'"
-        :draggable="false"
-        :style="imageStyle(image)"
-        class="docx-floating-image"
-        loading="lazy"
-        decoding="async"
-        data-image-state="loading"
-        @load="onImageLoad"
-        @error="onImageError(image, $event)"
-      />
-
-      <!-- Fallback for unsupported images -->
-      <div
-        v-else-if="!image.flowWrapped"
-        class="docx-floating-image-fallback"
-        :data-image-state="failedImageKeys.has(image.key) ? 'error' : 'unsupported'"
-        :style="{ width: `${image.widthPx}px`, height: `${image.heightPx}px` }"
-      >
-        {{ image.fallbackLabel ?? "Image" }}
+        <!-- Fallback for unsupported images -->
+        <div
+          v-else-if="!image.flowWrapped"
+          class="docx-floating-image-fallback"
+          :data-image-state="failedImageSourceKeys.has(image.failureKey) ? 'error' : 'unsupported'"
+          :style="{ width: `${image.widthPx}px`, height: `${image.heightPx}px` }"
+        >
+          {{ image.fallbackLabel ?? m.docx.image.alt }}
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onUnmounted } from "vue"
+import { ref, computed, watch, nextTick, onMounted, onUnmounted, onUpdated } from "vue"
 import type {
   DocxEditorController,
   DocxImageLocation,
@@ -79,6 +94,7 @@ import {
   resolveRenderableImageSource,
   shouldRenderWrappedFloatingImage,
 } from "@arcships/docx-core"
+import { useDocxMessages } from "../i18n"
 
 // ── Types ──────────────────────────────────────────────────────────
 interface FloatingImageEntry {
@@ -92,8 +108,18 @@ interface FloatingImageEntry {
   xPx: number
   yPx: number
   flowWrapped: boolean
+  behindDocument: boolean
   selected: boolean
+  lockedAnchor: boolean
+  failureKey: string
   fallbackLabel?: string
+}
+
+interface WrappedImageBox {
+  left: number
+  top: number
+  width: number
+  height: number
 }
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -105,9 +131,14 @@ const props = withDefaults(
     controller: DocxEditorController
     pageNodeSegments: DocumentPageNodeSegment[]
     editable?: boolean
+    zoomFactor?: number
+    /** Image keys (`nodeIndex:childIndex`) rendered by the page cover layer. */
+    skipImageKeys?: readonly string[]
   }>(),
-  { editable: false }
+  { editable: false, zoomFactor: 1 }
 )
+
+const m = useDocxMessages()
 
 // ── State ──────────────────────────────────────────────────────────
 const draggingImage = ref<FloatingImageEntry | null>(null)
@@ -116,9 +147,9 @@ const dragStartY = ref(0)
 const dragStartPosX = ref(0)
 const dragStartPosY = ref(0)
 const dragPreview = ref<{ key: string; xPx: number; yPx: number } | null>(null)
-const failedImageKeys = ref(new Set<string>())
+const failedImageSourceKeys = ref(new Set<string>())
 const imageLayerEl = ref<HTMLElement | null>(null)
-const layoutRevision = ref(0)
+const wrappedBoxes = ref(new Map<string, WrappedImageBox>())
 
 const resizingImage = ref<FloatingImageEntry | null>(null)
 const resizeStartSize = ref<{ w: number; h: number }>({ w: 0, h: 0 })
@@ -126,6 +157,18 @@ const resizeStartPos = ref<{ x: number; y: number }>({ x: 0, y: 0 })
 const resizePosition = ref("se")
 const resizePreview = ref<{ key: string; widthPx: number; heightPx: number } | null>(null)
 let pointerListenersAttached = false
+let resizeObserver: ResizeObserver | null = null
+let wrappedBoxRefreshScheduled = false
+
+function imageSourceFailureKey(src: string | undefined): string {
+  if (!src) return "missing"
+  let hash = 2166136261
+  for (let index = 0; index < src.length; index += 1) {
+    hash ^= src.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return `${src.length}:${(hash >>> 0).toString(36)}`
+}
 
 // ── Computed ───────────────────────────────────────────────────────
 const floatingImages = computed<FloatingImageEntry[]>(() => {
@@ -133,6 +176,7 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
   if (!model) return []
 
   const images: FloatingImageEntry[] = []
+  const skippedImageKeys = new Set(props.skipImageKeys ?? [])
   const pageNodeIndexes = new Set(
     props.pageNodeSegments.map((segment) => segment.nodeIndex)
   )
@@ -142,6 +186,7 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
     node.children.forEach((child, childIndex) => {
       if (child.type !== "image") return
       if (!(child as any).floating) return // Only floating images
+      if (skippedImageKeys.has(`${nodeIndex}:${childIndex}`)) return
 
       const run = child as ImageRunNode
       const src = resolveRenderableImageSource(run) ?? undefined
@@ -157,7 +202,10 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
         xPx: run.floating?.xPx ?? 0,
         yPx: run.floating?.yPx ?? 0,
         flowWrapped: shouldRenderWrappedFloatingImage(run),
+        behindDocument: run.floating?.behindDocument === true,
         selected: selection.kind === "paragraph" && selection.nodeIndex === nodeIndex,
+        lockedAnchor: run.floating?.lockedAnchor === true,
+        failureKey: imageSourceFailureKey(src),
         fallbackLabel: undefined,
       })
     })
@@ -166,15 +214,26 @@ const floatingImages = computed<FloatingImageEntry[]>(() => {
   return images
 })
 
-const layerStyle = computed(() => ({
-  position: "absolute" as const,
-  left: "0",
-  top: "0",
-  width: `${props.pageWidthPx}px`,
-  height: `${props.pageHeightPx}px`,
-  pointerEvents: "none" as const,
-  zIndex: "20",
-}))
+const imageLayers = computed(() => {
+  const behind = floatingImages.value.filter((image) => image.behindDocument)
+  const front = floatingImages.value.filter((image) => !image.behindDocument)
+  return [
+    { key: "behind" as const, images: behind },
+    { key: "front" as const, images: front },
+  ].filter((layer) => layer.images.length > 0)
+})
+
+function layerStyle(kind: "behind" | "front") {
+  return {
+    position: "absolute" as const,
+    left: "0",
+    top: "0",
+    width: `${props.pageWidthPx}px`,
+    height: `${props.pageHeightPx}px`,
+    pointerEvents: "none" as const,
+    zIndex: kind === "behind" ? "-1" : "20",
+  }
+}
 
 const resizeHandles = [
   { position: "nw", style: { top: "-4px", left: "-4px", cursor: "nw-resize" } },
@@ -183,9 +242,15 @@ const resizeHandles = [
   { position: "se", style: { bottom: "-4px", right: "-4px", cursor: "se-resize" } },
 ]
 
+// Pointer deltas are screen pixels; the page content is CSS-scaled by the
+// viewer. Convert them back to page coordinates before mutating the model.
+const pointerScale = computed(() => {
+  const factor = props.zoomFactor
+  return Number.isFinite(factor) && factor > 0 ? factor : 1
+})
+
 // ── Style helpers ──────────────────────────────────────────────────
 function imageContainerStyle(image: FloatingImageEntry): Record<string, string> {
-  void layoutRevision.value
   const drag = dragPreview.value?.key === image.key ? dragPreview.value : undefined
   const resize = resizePreview.value?.key === image.key ? resizePreview.value : undefined
   const flowBox = image.flowWrapped ? wrappedImageBox(image) : undefined
@@ -199,38 +264,118 @@ function imageContainerStyle(image: FloatingImageEntry): Record<string, string> 
     top: `${topPx}px`,
     width: `${resize?.widthPx ?? flowBox?.width ?? image.widthPx}px`,
     height: `${resize?.heightPx ?? flowBox?.height ?? image.heightPx}px`,
-    pointerEvents: "auto",
-    cursor: "move",
-    outline: image.selected ? "2px solid #3b82f6" : "none",
+    pointerEvents: image.behindDocument ? "none" : "auto",
+    cursor: image.lockedAnchor ? "default" : image.behindDocument ? "default" : "move",
+    outline: image.selected && !image.behindDocument ? "2px solid #3b82f6" : "none",
     outlineOffset: "2px",
   }
 }
 
-function wrappedImageBox(
-  image: FloatingImageEntry
-): { left: number; top: number; width: number; height: number } | undefined {
+/**
+ * Box of the in-flow (wrapped) image inside its anchor paragraph, in page
+ * coordinates. Measured from the DOM and cached in `wrappedBoxes`: a wrapped
+ * image moves whenever text above it reflows (edits, font loading, resize,
+ * zoom), so the transparent drag target is re-derived from layout instead of
+ * being frozen at the position it had on the render that created it.
+ */
+function wrappedImageBox(image: FloatingImageEntry): WrappedImageBox | undefined {
+  return wrappedBoxes.value.get(image.key)
+}
+
+function pageSurfaceElement(): HTMLElement | undefined {
   const layer = imageLayerEl.value
-  const surface = layer?.closest<HTMLElement>("[data-docx-page-surface='true']")
-  if (!surface) return undefined
-  const paragraph = surface.querySelector<HTMLElement>(
-    `[data-docx-paragraph-node-index="${image.nodeIndex}"]`
-  )
-  const wrapped = paragraph?.querySelector<HTMLElement>(
-    `[data-docx-image-child-index="${image.childIndex}"][data-docx-image-layout="wrapped"]`
-  )
-  if (!wrapped) return undefined
-  const surfaceRect = surface.getBoundingClientRect()
-  const wrappedRect = wrapped.getBoundingClientRect()
-  const scale = surface.offsetWidth > 0
-    ? surfaceRect.width / surface.offsetWidth
-    : 1
-  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1
-  return {
-    left: (wrappedRect.left - surfaceRect.left) / safeScale,
-    top: (wrappedRect.top - surfaceRect.top) / safeScale,
-    width: wrappedRect.width / safeScale,
-    height: wrappedRect.height / safeScale,
+  if (!layer || typeof layer.closest !== "function") return undefined
+  return layer.closest<HTMLElement>("[data-docx-page-surface='true']") ?? undefined
+}
+
+function measureScale(surface: HTMLElement, surfaceRect: DOMRect): number {
+  const scale =
+    surface.offsetWidth > 0 ? surfaceRect.width / surface.offsetWidth : 1
+  return Number.isFinite(scale) && scale > 0 ? scale : 1
+}
+
+function measureWrappedBoxes(): void {
+  const surface = pageSurfaceElement()
+  const next = new Map<string, WrappedImageBox>()
+  if (
+    surface &&
+    typeof surface.querySelector === "function" &&
+    typeof surface.getBoundingClientRect === "function"
+  ) {
+    const surfaceRect = surface.getBoundingClientRect()
+    const scale = measureScale(surface, surfaceRect)
+    for (const image of floatingImages.value) {
+      if (!image.flowWrapped) continue
+      const paragraph = surface.querySelector<HTMLElement>(
+        `[data-docx-paragraph-node-index="${image.nodeIndex}"]`
+      )
+      const wrapped = paragraph?.querySelector<HTMLElement>(
+        `[data-docx-image-child-index="${image.childIndex}"][data-docx-image-layout="wrapped"]`
+      )
+      if (!wrapped || typeof wrapped.getBoundingClientRect !== "function") continue
+      const wrappedRect = wrapped.getBoundingClientRect()
+      next.set(image.key, {
+        left: (wrappedRect.left - surfaceRect.left) / scale,
+        top: (wrappedRect.top - surfaceRect.top) / scale,
+        width: wrappedRect.width / scale,
+        height: wrappedRect.height / scale,
+      })
+    }
   }
+
+  if (sameWrappedBoxes(next, wrappedBoxes.value)) return
+  wrappedBoxes.value = next
+}
+
+function sameWrappedBoxes(
+  next: Map<string, WrappedImageBox>,
+  current: Map<string, WrappedImageBox>
+): boolean {
+  if (next.size !== current.size) return false
+  for (const [key, box] of next) {
+    const previous = current.get(key)
+    if (!previous) return false
+    if (
+      Math.abs(previous.left - box.left) > 0.5 ||
+      Math.abs(previous.top - box.top) > 0.5 ||
+      Math.abs(previous.width - box.width) > 0.5 ||
+      Math.abs(previous.height - box.height) > 0.5
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+function scheduleWrappedBoxRefresh(): void {
+  if (wrappedBoxRefreshScheduled) return
+  wrappedBoxRefreshScheduled = true
+  void nextTick(() => {
+    wrappedBoxRefreshScheduled = false
+    measureWrappedBoxes()
+  })
+}
+
+function observeWrappedLayout(): void {
+  const ResizeObserverConstructor = globalThis.ResizeObserver
+  if (typeof ResizeObserverConstructor !== "function") return
+  const surface = pageSurfaceElement()
+  if (!surface) return
+  resizeObserver ??= new ResizeObserverConstructor(() => {
+    scheduleWrappedBoxRefresh()
+  })
+  resizeObserver.observe(surface)
+  for (const image of floatingImages.value) {
+    if (!image.flowWrapped) continue
+    const paragraph = surface.querySelector<HTMLElement>(
+      `[data-docx-paragraph-node-index="${image.nodeIndex}"]`
+    )
+    if (paragraph) resizeObserver.observe(paragraph)
+  }
+}
+
+function onWindowResize(): void {
+  scheduleWrappedBoxRefresh()
 }
 
 function imageStyle(image: FloatingImageEntry): Record<string, string> {
@@ -244,21 +389,23 @@ function imageStyle(image: FloatingImageEntry): Record<string, string> {
 function onImageLoad(event: Event): void {
   const target = event.currentTarget as HTMLImageElement | null
   if (target) target.dataset.imageState = "ready"
+  scheduleWrappedBoxRefresh()
 }
 
 function onImageError(image: FloatingImageEntry, event: Event): void {
   const target = event.currentTarget as HTMLImageElement | null
   if (target) target.dataset.imageState = "error"
-  const next = new Set(failedImageKeys.value)
-  next.add(image.key)
-  failedImageKeys.value = next
+  const next = new Set(failedImageSourceKeys.value)
+  next.add(image.failureKey)
+  failedImageSourceKeys.value = next
 }
 
 // ── Mouse handlers ─────────────────────────────────────────────────
 function onImageMouseDown(image: FloatingImageEntry, event: MouseEvent): void {
-  if (!props.editable) return
+  if (!props.editable || image.behindDocument) return
   event.preventDefault()
   props.controller.selectParagraph(image.nodeIndex)
+  if (image.lockedAnchor) return
   draggingImage.value = image
   dragStartX.value = event.clientX
   dragStartY.value = event.clientY
@@ -273,7 +420,7 @@ function onResizeStart(
   position: string,
   event: MouseEvent
 ): void {
-  if (!props.editable) return
+  if (!props.editable || image.lockedAnchor) return
   resizingImage.value = image
   resizeStartSize.value = { w: image.widthPx, h: image.heightPx }
   resizeStartPos.value = { x: event.clientX, y: event.clientY }
@@ -303,10 +450,11 @@ function setWrapMode(image: FloatingImageEntry, mode: DocxImageWrapMode): void {
 }
 
 function updatePointerPreview(event: MouseEvent): void {
+  const scale = pointerScale.value
   if (draggingImage.value) {
     const image = draggingImage.value
-    const xPx = Math.round(dragStartPosX.value + event.clientX - dragStartX.value)
-    const yPx = Math.round(dragStartPosY.value + event.clientY - dragStartY.value)
+    const xPx = Math.round(dragStartPosX.value + (event.clientX - dragStartX.value) / scale)
+    const yPx = Math.round(dragStartPosY.value + (event.clientY - dragStartY.value) / scale)
     dragPreview.value = {
       key: image.key,
       xPx: Math.max(-image.widthPx + 16, Math.min(props.pageWidthPx - 16, xPx)),
@@ -316,8 +464,8 @@ function updatePointerPreview(event: MouseEvent): void {
 
   if (resizingImage.value) {
     const image = resizingImage.value
-    const dx = event.clientX - resizeStartPos.value.x
-    const dy = event.clientY - resizeStartPos.value.y
+    const dx = (event.clientX - resizeStartPos.value.x) / scale
+    const dy = (event.clientY - resizeStartPos.value.y) / scale
     const widthDelta = resizePosition.value.includes("w") ? -dx : dx
     const heightDelta = resizePosition.value.includes("n") ? -dy : dy
     resizePreview.value = {
@@ -382,26 +530,69 @@ watch(() => props.editable, (editable) => {
   if (!editable) finishPointerInteraction(false)
 })
 
-watch(
-  () => floatingImages.value.map((image) => [
+const imageGroupsKey = computed(() =>
+  floatingImages.value.map((image) => [
     image.key,
     image.flowWrapped,
+    image.behindDocument,
     image.xPx,
     image.yPx,
     image.widthPx,
     image.heightPx,
-  ].join(":")).join("|"),
+  ].join(":")).join("|")
+)
+
+// A new document model can reuse the same node/child position. Failure state
+// belongs to the image source, not to that position, so reset it on switch.
+watch(() => props.controller.model, () => {
+  if (failedImageSourceKeys.value.size > 0) {
+    failedImageSourceKeys.value = new Set<string>()
+  }
+})
+
+// Zoom does not resize the surface's layout box (the viewer applies a CSS
+// transform), so the hit box has to be re-measured when the factor changes.
+watch(() => props.zoomFactor, () => scheduleWrappedBoxRefresh())
+
+watch(
+  imageGroupsKey,
   () => {
     void nextTick(() => {
-      layoutRevision.value += 1
+      scheduleWrappedBoxRefresh()
+      observeWrappedLayout()
     })
   },
   { immediate: true }
 )
 
+onMounted(() => {
+  observeWrappedLayout()
+  if (typeof window !== "undefined") {
+    window.addEventListener("resize", onWindowResize)
+  }
+  // Late font loading reflows the text above a wrapped image.
+  const fonts = (globalThis as { document?: Document }).document?.fonts
+  if (fonts && typeof fonts.ready?.then === "function") {
+    void fonts.ready.then(() => scheduleWrappedBoxRefresh())
+  }
+  scheduleWrappedBoxRefresh()
+})
+
+// Any re-render can move the wrapped image (text edit, font swap, decode), so
+// re-measure once the update has been flushed.
+onUpdated(() => {
+  scheduleWrappedBoxRefresh()
+  observeWrappedLayout()
+})
+
 onUnmounted(() => {
   finishPointerInteraction(false)
-  failedImageKeys.value.clear()
+  failedImageSourceKeys.value.clear()
+  if (typeof window !== "undefined") {
+    window.removeEventListener("resize", onWindowResize)
+  }
+  resizeObserver?.disconnect()
+  resizeObserver = null
 })
 </script>
 

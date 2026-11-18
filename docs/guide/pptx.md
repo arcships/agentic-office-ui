@@ -26,6 +26,7 @@ import "@arcships/vue-pptx/style.css"
 | `source` | `null` | `ArrayBuffer`、`Uint8Array` 或文件对象 |
 | `mode` | `browse` | 浏览或演示 |
 | `height` | `100%` | 组件高度 |
+| `minHeight` | 无 | 可选最小高度（数字按 px）；不传时组件不设置最小高度 |
 | `initialSlide` | `0` | 初始页，从零开始 |
 | `autoplay` | `true` | 演示模式自动执行非点击步骤 |
 | `showHiddenSlides` | `false` | 播放时包含隐藏页 |
@@ -33,9 +34,26 @@ import "@arcships/vue-pptx/style.css"
 | `showSidebar` | `true` | 缩略图侧栏 |
 | `showSearch` | `true` | 搜索框 |
 | `showPlaybackControls` | `true` | 播放控制条 |
-| `externalMedia` | `disabled` | 是否允许外部媒体 |
+| `showWarnings` | `true` | 显示文档 `warnings`（备注不支持、宏已忽略等） |
+| `openTimeoutMs` | `30000` | 加载超时毫秒数，超时后进入错误状态；`0` 关闭超时 |
+| `externalMedia` | `disabled` | 是否允许外部媒体；设为 `allowed` 时仍需要 `externalMediaUrlPolicy` 放行 |
+| `externalMediaUrlPolicy` | `undefined` | 外部媒体的 URL 规则：`baseUrl`、`allowedProtocols`、`allowedOrigins` 等 |
+
+外部媒体默认禁用，只作为静态内容报告。只有同时设置 `externalMedia="allowed"` 和 `externalMediaUrlPolicy`，并且目标 URL 通过 `allowedProtocols` / `allowedOrigins` 校验时才真正加载；`javascript:`、`data:` 和未授权来源一律不加载，避免演示文稿自行发起跟踪请求。打印时 `@page` 尺寸取自幻灯片尺寸，工具栏、侧栏和播放控制条自动隐藏。
+
+`limits` 支持完整的归档预算：`maxInputBytes`、`maxArchiveEntries`、`maxSingleEntryBytes`、`maxUncompressedBytes`、`maxMediaBytes`、`maxCompressionRatio`、`maxArchivePathLength`、`maxXmlBytes`、`maxSingleXmlBytes`、`maxXmlDepth`、`maxXmlAttributeBytes`、`maxTextNodeBytes`、`maxRelationships` 和 `maxConcurrency`。宿主只能收紧默认值，不能放宽硬上限。
 
 模板引用公开 `getController()`、`next()`、`previous()`、`play()`、`pause()`、`resume()`、`reset()`、`goToSlide()`、`enterFullscreen()` 和 `exitFullscreen()`。
+
+## 界面状态
+
+`data-state` 暴露当前视图状态：`empty`、`waiting`（舞台尚未挂载）、`loading`、`ready`、`cancelled` 和 `error`。
+
+- 加载失败、超时或取消才会进入 `error`/`cancelled`，并显示重试按钮；
+- 单页渲染失败不会锁死查看器：上一页保持可见，顶部提示第几页失败，并可选择“重试”或“跳过”到相邻页；
+- 切换 `browse`/`present` 会重新打开文档，但保留当前页；
+- 全屏时组件自动占满屏幕，忽略 `height`；演示模式按幻灯片比例等比缩放并留黑边，不会裁切页面；
+- 文档 `warnings` 显示在工具栏下方的提示条中，可用 `warnings` 插槽替换；单页失败提示可用 `slide-error` 插槽替换。
 
 ## 自定义播放器界面
 
@@ -76,4 +94,4 @@ type PptxStageContextMenu = Position & (
 
 无法精确执行的 PowerPoint 内容会报告为近似、静态或未解析。本库不会用静态显示冒充动画完全兼容。程序可以监听 `capability`、`playback-warning` 和 `playback-error`。
 
-宏格式加载后会通过文档 `warnings` 报告宏已忽略。
+宏格式加载后会通过文档 `warnings` 报告宏已忽略，演讲者备注目前同样以 `NOTES_UNSUPPORTED` 报告。`PptxViewer` 默认在工具栏下方显示这些警告；自定义界面可读取 `usePptxDocument` 返回的 `document.warnings`。

@@ -10,33 +10,65 @@ on:
 permissions:
   contents: read
 
+env:
+  NODE_VERSION: "22.13.0"
+
 jobs:
   check:
-    name: Build and package
+    name: Build, test and package
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    env:
+      # run-suite.mjs reuses the build produced by the steps below instead of
+      # rebuilding inside every suite.
+      CI_PREBUILT: "1"
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.0.6
-          run_install: false
-
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22.13.0
-          cache: pnpm
-          package-manager-cache: true
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable corepack for the pinned package manager
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate the pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
 
       - name: Install locked JavaScript dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build workspace packages
-        run: pnpm --filter './packages/*' -r build
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
+      # Typecheck plus every workspace build: the unit suite inspects
+      # apps/demo/dist to verify published chunk separation.
+      - name: Build workspace packages and demo apps
+        run: pnpm build
+
+      - name: Run the unit suite
+        run: pnpm test:unit
+
+      - name: Run the component suite
+        run: pnpm test:component
 
       - name: Package the npm candidate
         if: github.event_name == 'push'
@@ -58,3 +90,58 @@ jobs:
           path: output/release-candidate/
           if-no-files-found: error
           retention-days: 90
+
+  acceptance:
+    name: Acceptance shard (${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Offline verification shards: no upstream checkout, no preview server
+        # and no browser download. Browser suites stay opt-in.
+        shard:
+          - docs
+          - pack
+          - self-test
+          - release-pack
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable corepack for the pinned package manager
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate the pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install locked JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run acceptance shard ${{ matrix.shard }}
+        run: node scripts/ci/run-acceptance-shard.mjs ${{ matrix.shard }}
+
+      - name: Upload shard evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-shard-${{ matrix.shard }}
+          path: output/acceptance/
+          if-no-files-found: ignore
+          retention-days: 14

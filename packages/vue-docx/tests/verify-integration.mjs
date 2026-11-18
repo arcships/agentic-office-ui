@@ -7,6 +7,11 @@
  *
  * Run from repo root:
  *   node packages/vue-docx/tests/verify-integration.mjs
+ *
+ * A run only passes when it actually asserts something: demo fixtures are
+ * mandatory (a missing fixture is a failure, not a skip), and environment
+ * skips are capped by DOCX_INTEGRATION_MAX_SKIPS (default 2, the python-docx
+ * checks). CI registers this script, so an empty green run must stay impossible.
  */
 
 import { readFileSync, existsSync } from "node:fs";
@@ -24,6 +29,15 @@ const REPO_ROOT = resolve(__dirname, "../../..");
 const PASS = "✅";
 const FAIL = "❌";
 const SKIP = "⏭️";
+
+const MAX_SKIPS = Number.parseInt(
+  process.env.DOCX_INTEGRATION_MAX_SKIPS || "2",
+  10,
+);
+if (!Number.isInteger(MAX_SKIPS) || MAX_SKIPS < 0) {
+  console.error("DOCX_INTEGRATION_MAX_SKIPS must be a non-negative integer");
+  process.exit(2);
+}
 
 let passed = 0;
 let failed = 0;
@@ -66,7 +80,7 @@ async function verifyD1() {
     "apps/demo/public/samples/demo.docx",
   );
   if (!existsSync(samplePath)) {
-    skip("Load sample docx", "sample file not found");
+    check("Load sample docx", false, `missing fixture ${samplePath}`);
     return;
   }
 
@@ -165,7 +179,7 @@ async function verifyD2() {
     "apps/demo/public/samples/demo.docx",
   );
   if (!existsSync(samplePath)) {
-    skip("Worker import", "sample file not found");
+    check("Worker import", false, `missing fixture ${samplePath}`);
     return;
   }
 
@@ -274,80 +288,122 @@ async function verifyD2() {
 }
 
 // ---------------------------------------------------------------------------
-// D3: pagination call
+// D3: pagination runtime path
 // ---------------------------------------------------------------------------
 async function verifyD3() {
-  heading("D3: pagination (buildDocumentPageNodeSegments)");
+  heading("D3: pagination runtime path (buildLayoutSnapshot → buildDocumentPageNodeSegments)");
 
+  // Issue #25: the old check called buildDocumentPageNodeSegments directly, so
+  // it passed even though nothing in the product went through that engine. The
+  // runtime path is buildLayoutSnapshot(); assert page counts and page-start
+  // node indexes through it, and assert the coarse estimator disagrees.
   const {
-    buildDocumentPageNodeSegments,
-    defaultStarterModel,
+    buildLayoutSnapshot,
+    layoutDocument,
   } = await import("@arcships/docx-core");
 
-  const model = defaultStarterModel;
-
-  const callbacks = {
-    estimateDocNodeHeightPx: () => 22,
-    paragraphHasVisibleText: (p) => p.children.some(c => c.type === "text" && c.text.length > 0),
-    paragraphIsStructuralSectionBreakSpacer: () => false,
-    estimateParagraphHeightPx: () => 22,
-    estimateParagraphLineHeightPx: () => 22,
-    paragraphLineCountWithinWidth: (p) =>
-      Math.max(1, Math.ceil(p.children
-        .filter(c => c.type === "text")
-        .reduce((sum, c) => sum + c.text.length, 0) / 60)),
-    paragraphWidowControlEnabled: () => true,
-    paragraphCanSplitAcrossPages: () => true,
-    estimateTableRowHeightsPx: () => [22],
+  const PAGE = { pageWidth: 816, pageHeight: 1056, margin: 72 };
+  const metadata = {
+    sourceParts: 1,
+    warnings: [],
+    headerSections: [],
+    footerSections: [],
+    paragraphStyles: [],
   };
+  const paragraph = (text, extra = {}) => ({
+    type: "paragraph",
+    children: [{ type: "text", text }],
+    ...extra,
+  });
+  const startNodeIndexes = (snapshot) =>
+    snapshot.pages.map((page) => page.blocks[0]?.source?.nodeIndex ?? null);
+  const legacyPageCount = (model) => layoutDocument(model, PAGE).length;
 
-  const pages = buildDocumentPageNodeSegments(
-    model,
-    1056,
-    816,
-    callbacks,
-    model.metadata.numberingDefinitions,
-    [],
-    { allowParagraphLineSplitting: true },
-  );
-
-  check("buildDocumentPageNodeSegments returns array", Array.isArray(pages));
-  check("pages is non-empty", pages.length > 0);
-  check("pageCount > 0", pages.length >= 1);
-
-  const firstPage = pages[0];
-  check("first page is array", Array.isArray(firstPage));
-  check("first page has segments", firstPage.length > 0);
-
-  // Verify with multi-paragraph model
-  const multiParaModel = {
+  // 1. Explicit page break: the estimator stacks everything on one page.
+  const breakModel = {
     nodes: [
-      { type: "paragraph", children: [{ type: "text", text: "Page 1 content. ".repeat(20) }] },
-      { type: "paragraph", children: [{ type: "text", text: "Page 1 more text. ".repeat(15) }] },
-      { type: "paragraph", children: [{ type: "text", text: "Page 2 content. ".repeat(30) }] },
+      paragraph("Page one", {
+        sourceXml: '<w:p><w:r><w:t>Page one</w:t></w:r><w:r><w:br w:type="page"/></w:r></w:p>',
+      }),
+      paragraph("Page two body"),
     ],
-    metadata: {
-      sourceParts: 0,
-      warnings: [],
-      headerSections: [],
-      footerSections: [],
-      paragraphStyles: [],
-    },
+    metadata,
   };
+  const breakSnapshot = buildLayoutSnapshot(breakModel, PAGE);
+  check("hard page break produces two runtime pages", breakSnapshot.pages.length === 2,
+    `got ${breakSnapshot.pages.length}`);
+  check("hard page break: second page starts at node 1",
+    startNodeIndexes(breakSnapshot)[1] === 1,
+    `starts=${JSON.stringify(startNodeIndexes(breakSnapshot))}`);
+  check("estimator disagrees with the runtime page count for a hard break",
+    legacyPageCount(breakModel) !== breakSnapshot.pages.length,
+    `estimator=${legacyPageCount(breakModel)}, runtime=${breakSnapshot.pages.length}`);
 
-  const multiPages = buildDocumentPageNodeSegments(
-    multiParaModel,
-    300,
-    400,
-    callbacks,
-    undefined,
-    [],
-    { allowParagraphLineSplitting: true },
+  // 2. pageBreakBefore.
+  const pageBreakBeforeModel = {
+    nodes: [
+      paragraph("Intro"),
+      paragraph("Chapter start", { style: { pageBreakBefore: true } }),
+      paragraph("Chapter body"),
+    ],
+    metadata,
+  };
+  const pageBreakBeforeSnapshot = buildLayoutSnapshot(pageBreakBeforeModel, PAGE);
+  check("pageBreakBefore starts a second runtime page",
+    pageBreakBeforeSnapshot.pages.length === 2,
+    `got ${pageBreakBeforeSnapshot.pages.length}`);
+
+  // 3. Wrapped line counts: the estimator counts one line per paragraph.
+  const longText = "The quick brown fox jumps over the lazy dog. ".repeat(40);
+  const wrappedModel = {
+    nodes: Array.from({ length: 6 }, (_, index) => paragraph(`${index} ${longText}`)),
+    metadata,
+  };
+  const wrappedSnapshot = buildLayoutSnapshot(wrappedModel, PAGE);
+  check("wrapped paragraphs span more than one runtime page",
+    wrappedSnapshot.pages.length > 1,
+    `got ${wrappedSnapshot.pages.length}`);
+  check("wrapped paragraphs: runtime page count exceeds the estimator",
+    wrappedSnapshot.pages.length > legacyPageCount(wrappedModel),
+    `estimator=${legacyPageCount(wrappedModel)}, runtime=${wrappedSnapshot.pages.length}`);
+
+  // 4. Multi-page table: rows must be split into disjoint ranges per page.
+  const tableModel = {
+    nodes: [
+      paragraph("Table intro"),
+      {
+        type: "table",
+        rows: Array.from({ length: 24 }, (_, rowIndex) => ({
+          id: `row-${rowIndex}`,
+          style: { heightTwips: 1440, heightRule: "exact" },
+          cells: [{
+            id: `row-${rowIndex}-cell-0`,
+            nodes: [paragraph(`Row ${rowIndex}`)],
+          }],
+        })),
+      },
+      paragraph("After the table"),
+    ],
+    metadata,
+  };
+  const tableSnapshot = buildLayoutSnapshot(tableModel, PAGE);
+  const tableSegments = tableSnapshot.pages.flatMap((page) =>
+    page.blocks
+      .filter((block) => block.kind === "table")
+      .map((block) => block.tableRowRange)
   );
-
-  check("multi-paragraph model paginates", Array.isArray(multiPages));
-  check("multi-paragraph produces multiple pages or 1 page",
-    multiPages.length >= 1);
+  check("multi-page table is split into row ranges", tableSegments.length >= 2,
+    `segments=${tableSegments.length}`);
+  check("table row ranges start at row 0",
+    tableSegments[0]?.startRowIndex === 0,
+    JSON.stringify(tableSegments));
+  check("table row ranges end at the last row",
+    tableSegments[tableSegments.length - 1]?.endRowIndex === 24,
+    JSON.stringify(tableSegments));
+  check("table row ranges are contiguous",
+    tableSegments.every((range, index) =>
+      index === 0 || range.startRowIndex === tableSegments[index - 1].endRowIndex),
+    JSON.stringify(tableSegments));
 }
 
 // ---------------------------------------------------------------------------
@@ -453,7 +509,7 @@ async function verifyD5() {
     "apps/demo/public/samples/invoice-table.docx",
   );
   if (!existsSync(samplePath)) {
-    skip("basePackage test", "invoice-table.docx not found");
+    check("basePackage test", false, `missing fixture ${samplePath}`);
     return;
   }
 
@@ -510,9 +566,19 @@ async function verifyD5() {
   check("export without basePackage is non-empty",
     exportWithoutPackage.byteLength > 0);
 
-  // With basePackage should preserve more content (styles, numbering, headers)
-  check("basePackage export preserves more content (larger size)",
-    exportWithPackage.byteLength >= exportWithoutPackage.byteLength);
+  // With basePackage must preserve the original package content (styles,
+  // numbering, headers). Strict comparisons: an identical export would mean the
+  // basePackage was ignored, which used to pass with ">=".
+  check("basePackage export preserves more content (strictly larger size)",
+    exportWithPackage.byteLength > exportWithoutPackage.byteLength,
+    `with=${exportWithPackage.byteLength} without=${exportWithoutPackage.byteLength}`);
+  const decodedWithPackage = new TextDecoder("latin1").decode(
+    new Uint8Array(exportWithPackage),
+  );
+  check("basePackage export embeds word/styles.xml",
+    decodedWithPackage.includes("word/styles.xml"));
+  check("basePackage export embeds word/numbering.xml",
+    decodedWithPackage.includes("word/numbering.xml"));
 
   // Verify with python-docx for styles/numbering preservation
   const pythonCheck = spawnSync("python3", ["-c", "import docx; print('ok')"], {
@@ -539,19 +605,16 @@ async function verifyD5() {
     try { unlinkSync(withPath); } catch {}
     try { unlinkSync(withoutPath); } catch {}
 
-    if (pyWith.status === 0) {
-      const withOut = pyWith.stdout.toString().trim();
-      check("python-docx opens with-basePackage export", true, withOut);
-    }
-    if (pyWithout.status === 0) {
-      const withoutOut = pyWithout.stdout.toString().trim();
-      check("python-docx opens without-basePackage export", true, withoutOut);
-    }
+    check("python-docx opens with-basePackage export", pyWith.status === 0,
+      pyWith.stderr?.toString()?.trim());
+    check("python-docx opens without-basePackage export", pyWithout.status === 0,
+      pyWithout.stderr?.toString()?.trim());
 
     if (pyWith.status === 0 && pyWithout.status === 0) {
       const withStyles = parseInt(pyWith.stdout.toString().match(/styles=(\d+)/)?.[1] || "0");
       const withoutStyles = parseInt(pyWithout.stdout.toString().match(/styles=(\d+)/)?.[1] || "0");
-      check("basePackage preserves more styles", withStyles >= withoutStyles);
+      check("basePackage preserves strictly more styles", withStyles > withoutStyles,
+        `with=${withStyles} without=${withoutStyles}`);
     }
   } else {
     skip("python-docx style verification", "python3/python-docx not available");
@@ -602,9 +665,20 @@ async function main() {
 
   console.log(`\n${"=".repeat(60)}`);
   console.log(`  Results: ${PASS} ${passed} passed  ${FAIL} ${failed} failed  ${SKIP} ${skipped} skipped`);
+  console.log(`  Environment skips allowed: ${MAX_SKIPS} (DOCX_INTEGRATION_MAX_SKIPS)`);
   console.log(`${"=".repeat(60)}\n`);
 
-  if (failed > 0) {
+  let gateFailed = false;
+  if (passed === 0) {
+    console.log(`  ${FAIL} no check executed; a run without assertions is not a pass`);
+    gateFailed = true;
+  }
+  if (skipped > MAX_SKIPS) {
+    console.log(`  ${FAIL} ${skipped} skipped checks exceed the allowance of ${MAX_SKIPS}`);
+    gateFailed = true;
+  }
+
+  if (failed > 0 || gateFailed) {
     process.exit(1);
   }
 }

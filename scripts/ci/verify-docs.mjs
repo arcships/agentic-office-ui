@@ -67,9 +67,11 @@ const requiredFiles = [
   "tests/blackbox/race_workflows.py",
   "tests/blackbox/pack_consumer.py",
   "tests/blackbox/ux_parity.py",
+  "tests/blackbox/docx_annotations.py",
   "tests/consumer/template/src/App.vue",
   "scripts/ci/pack-manifests.mjs",
   "scripts/ci/pack-consumer.mjs",
+  "scripts/ci/run-acceptance-shard.mjs",
   "scripts/ci/verify-fixtures.mjs",
   "scripts/ci/verify-docs.mjs",
   "tests/baseline/README.md",
@@ -220,12 +222,27 @@ for (const registered of [
   '"documentation-contract"',
   '"p3-regression-baselines"',
   '"formal-scroll-range-regression"',
+  '"formal-docx-annotations"',
+  '"tests/blackbox/docx_annotations.py"',
   'childSuite("docs", "test:docs")',
 ]) {
   check(`suite registration ${registered}`, runner.includes(registered));
 }
 check("roadmap P1-DOC record exists", roadmap.includes("| P1-DOC-TEST-01 | Codex `/root`"));
-check("CI builds packages", read(".github/workflows/ci.yml").includes("./packages/*"));
+
+// Issue #57: CI must run tests, not only build packages.
+const workflow = read(".github/workflows/ci.yml");
+check(
+  "CI builds packages",
+  workflow.includes("./packages/*") || workflow.includes("pnpm build"),
+);
+check("CI runs the unit suite", workflow.includes("pnpm test:unit"));
+check("CI runs the component suite", workflow.includes("pnpm test:component"));
+check(
+  "CI runs the acceptance shards",
+  workflow.includes("scripts/ci/run-acceptance-shard.mjs"),
+);
+check("CI installs pnpm through corepack", workflow.includes("corepack enable"));
 check("Playwright dependency pinned", /^playwright==\d+\.\d+\.\d+$/m.test(read("requirements-ci.txt")));
 
 const allowlist = JSON.parse(read("tests/blackbox/console_allowlist.json"));

@@ -154,7 +154,10 @@ export const WORD_TABLE_CELL_FALLBACK_PADDING_PX = {
   bottom: 4,
   left: 4,
 } as const;
-export const DEFAULT_UNSPECIFIED_DOCX_FONT_FAMILY = "Times New Roman";
+// Word's blank-document body typeface. The DOM and the text-measurement path
+// both fall back to this family, so an unspecified run measures exactly as it
+// renders instead of being measured as Times New Roman and drawn as Calibri.
+export const DEFAULT_UNSPECIFIED_DOCX_FONT_FAMILY = "Calibri";
 export const MAX_TRAILING_SECTION_TAIL_PARAGRAPHS = 18;
 export const MAX_TRAILING_SECTION_TAIL_OVERFLOW_PX = 700;
 export const SPLITTABLE_TABLE_ROW_ESTIMATE_EXTRA_LINE_COUNT = 2;
@@ -336,6 +339,8 @@ export const DEFAULT_TABLE_CONTEXT_MENU_ACTIONS: DocxTableContextMenuAction[] = 
   { id: "insert-column-right", label: "Insert column right" },
   { id: "delete-row", label: "Delete row", destructive: true },
   { id: "delete-column", label: "Delete column", destructive: true },
+  { id: "merge-cells", label: "Merge cells" },
+  { id: "split-cell", label: "Split cell" },
   { id: "delete-table", label: "Delete table", destructive: true },
 ];
 

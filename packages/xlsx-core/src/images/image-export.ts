@@ -12,21 +12,23 @@ import {
   PKG_REL_NS,
   SPREADSHEET_NS,
   REL_NS,
+  type WorkbookFormControlOrigin,
   type WorkbookImageOrigin,
   type WorkbookImageSheetOrigin,
+  type WorkbookShapeOrigin,
   cloneBytes,
   createImageAnchorNodes,
   getChildElements,
-  getFirstChild,
+  getFirstDescendant,
   getLocalElements,
   normalizeArchivePath,
+  parseRelationships,
   parseXml,
   readArchiveText,
   relativeArchivePath,
   relsPathForDocument,
   serializeXml,
   setChildText,
-  updateMarkerElement,
 } from "./image-parser";
 import {
   parseDrawingObjects,
@@ -95,7 +97,7 @@ export function parseWorkbookChartStyleAssets(bytes: Uint8Array): import("./grid
   const sheetOrigins: Array<WorkbookImageSheetOrigin | null> = [];
 
   workbookSheets.forEach((sheet, workbookSheetIndex) => {
-    const sheetRelationships = parseRelationshipsWrapper(archive, relsPathForDocument(sheet.path), sheet.path);
+    const sheetRelationships = parseRelationships(archive, relsPathForDocument(sheet.path), sheet.path);
     const attachments: XlsxImageAttachment[] = [];
 
     for (const relationship of sheetRelationships.values()) {
@@ -127,9 +129,6 @@ export function parseWorkbookChartStyleAssets(bytes: Uint8Array): import("./grid
   };
 }
 
-import { parseRelationships } from "./image-parser";
-const parseRelationshipsWrapper = parseRelationships;
-
 type XlsxImageAttachment = {
   drawingPath: string;
   drawingRelsPath: string | null;
@@ -151,11 +150,14 @@ export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntime
     workbookSheets
   } = parseWorkbookStructureAssetsFromArchive(archive);
   const objectUrls: string[] = [];
+  const formControlOriginsById = new Map<string, WorkbookFormControlOrigin>();
   const formControlsByWorkbookSheetIndex: XlsxFormControl[][] = [];
   const imagesByWorkbookSheetIndex: XlsxImage[][] = [];
   const shapesByWorkbookSheetIndex: XlsxShape[][] = [];
   const sheetOrigins: Array<WorkbookImageSheetOrigin | null> = [];
   const imageOriginsById = new Map<string, WorkbookImageOrigin>();
+  const shapeOriginsById = new Map<string, WorkbookShapeOrigin>();
+  const sheetPathsByWorkbookSheetIndex = workbookSheets.map((sheet) => sheet.path);
 
   try {
     workbookSheets.forEach((sheet, workbookSheetIndex) => {
@@ -181,7 +183,8 @@ export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntime
         zIndexBase,
         theme,
         sheetStatesByWorkbookSheetIndex[workbookSheetIndex] ?? null,
-        imageOriginsById
+        imageOriginsById,
+        shapeOriginsById
       );
       imageList.push(...drawingImages.images);
       shapeList.push(...drawingImages.shapes);
@@ -198,7 +201,8 @@ export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntime
       sheet.path,
       sheetRelationships,
       workbookSheetIndex,
-      zIndexBase
+      zIndexBase,
+      formControlOriginsById
     );
     const visibleShapeList = shapeList.filter((shape) => !shape.hidden);
     const enrichedFormControlList = enrichFormControlsWithHiddenShapes(
@@ -220,12 +224,15 @@ export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntime
 
     return {
       archive,
+      formControlOriginsById,
       formControlsByWorkbookSheetIndex,
       imageOriginsById,
       imagesByWorkbookSheetIndex,
       namedCellStyleByName,
       objectUrls,
+      shapeOriginsById,
       shapesByWorkbookSheetIndex,
+      sheetPathsByWorkbookSheetIndex,
       sheetOrigins,
       sheetStatesByWorkbookSheetIndex,
       styleById,
@@ -244,33 +251,157 @@ export function parseWorkbookImageAssets(bytes: Uint8Array, limits?: XlsxRuntime
 
 // ── Update image anchor ────────────────────────────────────────────────────
 
+const SPREADSHEET_DRAWING_NS = "http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing";
+const ANCHOR_CHILD_NAMES = new Set(["from", "to", "pos", "ext"]);
+
+function createMarkerNode(document: XMLDocument, name: string, marker: { col: number; colOffsetEmu: number; row: number; rowOffsetEmu: number }) {
+  const markerNode = document.createElementNS(SPREADSHEET_DRAWING_NS, name);
+  for (const [childName, value] of [
+    ["col", marker.col],
+    ["colOff", marker.colOffsetEmu],
+    ["row", marker.row],
+    ["rowOff", marker.rowOffsetEmu],
+  ] as const) {
+    const child = document.createElementNS(SPREADSHEET_DRAWING_NS, childName);
+    child.textContent = String(Math.max(0, Math.round(Number(value) || 0)));
+    markerNode.appendChild(child);
+  }
+  return markerNode;
+}
+
+function createExtNode(document: XMLDocument, anchor: { cx: number; cy: number }) {
+  const ext = document.createElementNS(SPREADSHEET_DRAWING_NS, "ext");
+  ext.setAttribute("cx", String(Math.max(0, Math.round(anchor.cx))));
+  ext.setAttribute("cy", String(Math.max(0, Math.round(anchor.cy))));
+  return ext;
+}
+
 function updateAnchorNode(anchorNode: Element, anchor: XlsxImage["anchor"]) {
-  if (anchor.kind === "two-cell") {
-    updateMarkerElement(getFirstChild(anchorNode, "from"), anchor.from);
-    updateMarkerElement(getFirstChild(anchorNode, "to"), anchor.to);
-    return;
-  }
+  const document = anchorNode.ownerDocument as XMLDocument | null;
+  if (!document) return;
+  const desiredName = anchor.kind === "two-cell"
+    ? "twoCellAnchor"
+    : anchor.kind === "one-cell"
+      ? "oneCellAnchor"
+      : "absoluteAnchor";
+  let target = anchorNode;
 
-  if (anchor.kind === "one-cell") {
-    updateMarkerElement(getFirstChild(anchorNode, "from"), anchor.from);
-    const extNode = getFirstChild(anchorNode, "ext");
-    if (extNode) {
-      extNode.setAttribute("cx", String(Math.max(0, Math.round(anchor.sizeEmu.cx))));
-      extNode.setAttribute("cy", String(Math.max(0, Math.round(anchor.sizeEmu.cy))));
+  if (anchorNode.localName !== desiredName) {
+    const replacement = document.createElementNS(SPREADSHEET_DRAWING_NS, desiredName);
+    for (const attribute of Array.from(anchorNode.attributes)) {
+      if (attribute.name !== "editAs") {
+        replacement.setAttribute(attribute.name, attribute.value);
+      }
     }
-    return;
+    const preserved = Array.from(anchorNode.childNodes).filter(
+      (child) => child.nodeType !== 1 || !ANCHOR_CHILD_NAMES.has((child as Element).localName)
+    );
+    for (const child of preserved) replacement.appendChild(child);
+    anchorNode.parentNode?.replaceChild(replacement, anchorNode);
+    target = replacement;
   }
 
-  const positionNode = getFirstChild(anchorNode, "pos");
-  if (positionNode) {
-    positionNode.setAttribute("x", String(Math.max(0, Math.round(anchor.positionEmu.x))));
-    positionNode.setAttribute("y", String(Math.max(0, Math.round(anchor.positionEmu.y))));
+  for (const child of Array.from(target.childNodes)) {
+    if (child.nodeType === 1 && ANCHOR_CHILD_NAMES.has((child as Element).localName)) {
+      target.removeChild(child);
+    }
   }
-  const extNode = getFirstChild(anchorNode, "ext");
-  if (extNode) {
-    extNode.setAttribute("cx", String(Math.max(0, Math.round(anchor.sizeEmu.cx))));
-    extNode.setAttribute("cy", String(Math.max(0, Math.round(anchor.sizeEmu.cy))));
+
+  const parts: Element[] = [];
+  if (anchor.kind === "two-cell") {
+    parts.push(createMarkerNode(document, "from", anchor.from));
+    parts.push(createMarkerNode(document, "to", anchor.to));
+  } else if (anchor.kind === "one-cell") {
+    parts.push(createMarkerNode(document, "from", anchor.from));
+    parts.push(createExtNode(document, anchor.sizeEmu));
+  } else {
+    const pos = document.createElementNS(SPREADSHEET_DRAWING_NS, "pos");
+    pos.setAttribute("x", String(Math.max(0, Math.round(anchor.positionEmu.x))));
+    pos.setAttribute("y", String(Math.max(0, Math.round(anchor.positionEmu.y))));
+    parts.push(pos);
+    parts.push(createExtNode(document, anchor.sizeEmu));
   }
+  const firstChild = target.firstChild;
+  for (const part of parts) {
+    target.insertBefore(part, firstChild);
+  }
+}
+
+function findNonVisualObject(root: Element, objectId: string, objectKind?: string): Element | null {
+  for (const child of Array.from(root.childNodes)) {
+    if (child.nodeType !== 1) continue;
+    const element = child as Element;
+    if (
+      (!objectKind || element.localName === objectKind)
+      && (element.localName === "pic" || element.localName === "sp" || element.localName === "cxnSp" || element.localName === "graphicFrame")
+      && getFirstDescendant(element, "cNvPr")?.getAttribute("id") === objectId
+    ) {
+      return element;
+    }
+    const nested = findNonVisualObject(element, objectId, objectKind);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function findAnchorForOrigin(document: XMLDocument, origin: WorkbookImageOrigin) {
+  const anchorNodes = createImageAnchorNodes(document);
+  if (origin.objectId) {
+    const match = anchorNodes.find((anchorNode) => Boolean(findNonVisualObject(anchorNode, origin.objectId!)));
+    if (match) return match;
+  }
+  return anchorNodes[origin.anchorIndex] ?? null;
+}
+
+function resolveDrawingDocument(assets: WorkbookImageAssets, origin: WorkbookImageOrigin) {
+  const attachments = assets.sheetOrigins[origin.workbookSheetIndex]?.attachments ?? [];
+  const candidates = origin.drawingPath
+    ? attachments.filter((attachment) => attachment.drawingPath === origin.drawingPath)
+    : attachments;
+  for (const attachment of candidates) {
+    const drawingXml = readArchiveText(assets.archive, attachment.drawingPath);
+    if (!drawingXml) continue;
+    const drawingDocument = parseXml(drawingXml);
+    if (!drawingDocument) continue;
+    const anchorNode = findAnchorForOrigin(drawingDocument, origin);
+    if (anchorNode) {
+      return { anchorNode, drawingDocument, drawingPath: attachment.drawingPath };
+    }
+  }
+  return null;
+}
+
+function hasDrawableChild(anchorNode: Element) {
+  return Array.from(anchorNode.childNodes).some(
+    (child) => child.nodeType === 1
+      && ["pic", "sp", "cxnSp", "graphicFrame"].includes((child as Element).localName)
+  );
+}
+
+function removeDrawingObject(assets: WorkbookImageAssets, origin: WorkbookImageOrigin): boolean {
+  const resolved = resolveDrawingDocument(assets, origin);
+  if (!resolved) return false;
+  const { anchorNode, drawingDocument, drawingPath } = resolved;
+  const objectNode = origin.objectId
+    ? findNonVisualObject(anchorNode, origin.objectId, origin.objectKind)
+    : Array.from(anchorNode.childNodes).find(
+      (child) => child.nodeType === 1 && (child as Element).localName === (origin.objectKind ?? "pic")
+    ) as Element | undefined;
+  const target = objectNode ?? anchorNode;
+  target.parentNode?.removeChild(target);
+  if (target !== anchorNode && !hasDrawableChild(anchorNode)) {
+    anchorNode.parentNode?.removeChild(anchorNode);
+  }
+  assets.archive[normalizeArchivePath(drawingPath)] = strToU8(serializeXml(drawingDocument));
+  return true;
+}
+
+function updateDrawingAnchor(assets: WorkbookImageAssets, origin: WorkbookImageOrigin, anchor: XlsxImage["anchor"]): boolean {
+  const resolved = resolveDrawingDocument(assets, origin);
+  if (!resolved) return false;
+  updateAnchorNode(resolved.anchorNode, anchor);
+  assets.archive[normalizeArchivePath(resolved.drawingPath)] = strToU8(serializeXml(resolved.drawingDocument));
+  return true;
 }
 
 export function updateWorkbookImageAnchor(
@@ -279,42 +410,56 @@ export function updateWorkbookImageAnchor(
   anchor: XlsxImage["anchor"]
 ) {
   const origin = assets.imageOriginsById.get(imageId);
-  if (!origin) {
+  if (!origin || !updateDrawingAnchor(assets, origin, anchor)) {
     return false;
   }
-
-  const attachments = assets.sheetOrigins[origin.workbookSheetIndex]?.attachments ?? [];
-  for (const attachment of attachments) {
-    const drawingXml = readArchiveText(assets.archive, attachment.drawingPath);
-    if (!drawingXml) {
-      continue;
-    }
-
-    const drawingDocument = parseXml(drawingXml);
-    if (!drawingDocument) {
-      continue;
-    }
-
-    const anchorNodes = createImageAnchorNodes(drawingDocument);
-    const anchorNode = anchorNodes[origin.anchorIndex];
-    if (!anchorNode || !getFirstChild(anchorNode, "pic")) {
-      continue;
-    }
-
-    updateAnchorNode(anchorNode, anchor);
-    assets.archive[attachment.drawingPath] = strToU8(serializeXml(drawingDocument));
-    const imageList = assets.imagesByWorkbookSheetIndex[origin.workbookSheetIndex] ?? [];
-    const imageIndex = imageList.findIndex((image) => image.id === imageId);
-    if (imageIndex >= 0) {
-      imageList[imageIndex] = {
-        ...imageList[imageIndex],
-        anchor
-      };
-    }
-    return true;
+  const imageList = assets.imagesByWorkbookSheetIndex[origin.workbookSheetIndex] ?? [];
+  const imageIndex = imageList.findIndex((image) => image.id === imageId);
+  if (imageIndex >= 0) {
+    imageList[imageIndex] = { ...imageList[imageIndex], anchor };
   }
+  return true;
+}
 
-  return false;
+export function updateWorkbookShapeAnchor(
+  assets: WorkbookImageAssets,
+  shapeId: string,
+  anchor: XlsxImage["anchor"]
+) {
+  const origin = assets.shapeOriginsById.get(shapeId);
+  if (!origin || !updateDrawingAnchor(assets, origin, anchor)) {
+    return false;
+  }
+  const shapeList = assets.shapesByWorkbookSheetIndex[origin.workbookSheetIndex] ?? [];
+  const shapeIndex = shapeList.findIndex((shape) => shape.id === shapeId);
+  if (shapeIndex >= 0) {
+    shapeList[shapeIndex] = { ...shapeList[shapeIndex], anchor };
+  }
+  return true;
+}
+
+export function deleteWorkbookImage(assets: WorkbookImageAssets, imageId: string) {
+  const origin = assets.imageOriginsById.get(imageId);
+  if (!origin || !removeDrawingObject(assets, origin)) {
+    return false;
+  }
+  assets.imageOriginsById.delete(imageId);
+  assets.imagesByWorkbookSheetIndex[origin.workbookSheetIndex] = (
+    assets.imagesByWorkbookSheetIndex[origin.workbookSheetIndex] ?? []
+  ).filter((image) => image.id !== imageId);
+  return true;
+}
+
+export function deleteWorkbookShape(assets: WorkbookImageAssets, shapeId: string) {
+  const origin = assets.shapeOriginsById.get(shapeId);
+  if (!origin || !removeDrawingObject(assets, origin)) {
+    return false;
+  }
+  assets.shapeOriginsById.delete(shapeId);
+  assets.shapesByWorkbookSheetIndex[origin.workbookSheetIndex] = (
+    assets.shapesByWorkbookSheetIndex[origin.workbookSheetIndex] ?? []
+  ).filter((shape) => shape.id !== shapeId);
+  return true;
 }
 
 // ── Merge workbook image assets ────────────────────────────────────────────
@@ -409,6 +554,31 @@ function mergeContentTypeForPath(
   }
 }
 
+function ensureContentTypeOverride(
+  targetDocument: XMLDocument,
+  partPath: string,
+  contentType: string
+) {
+  const normalizedPartName = `/${normalizeArchivePath(partPath)}`;
+  const existingOverride = getLocalElements(targetDocument, "Override").find(
+    (node) => node.getAttribute("PartName") === normalizedPartName
+  );
+  if (existingOverride) {
+    existingOverride.setAttribute("ContentType", contentType);
+    return;
+  }
+
+  const targetRoot = targetDocument.documentElement;
+  if (!targetRoot) {
+    return;
+  }
+
+  const overrideNode = targetDocument.createElementNS(CONTENT_TYPES_NS, "Override");
+  overrideNode.setAttribute("PartName", normalizedPartName);
+  overrideNode.setAttribute("ContentType", contentType);
+  targetRoot.appendChild(overrideNode);
+}
+
 function removeDrawingReferences(sheetDocument: XMLDocument, relDocument: XMLDocument) {
   getLocalElements(sheetDocument, "drawing").forEach((node) => node.remove());
   getLocalElements(relDocument, "Relationship")
@@ -431,6 +601,17 @@ function nextRelationshipId(relDocument: XMLDocument) {
   return `rIdReactXlsxImage${index}`;
 }
 
+const DRAWING_SUCCESSOR_LOCAL_NAMES = new Set([
+  "legacyDrawing",
+  "legacyDrawingHF",
+  "picture",
+  "oleObjects",
+  "controls",
+  "webPublishItems",
+  "tableParts",
+  "extLst",
+]);
+
 function appendSheetDrawingReference(
   sheetDocument: XMLDocument,
   relationshipId: string
@@ -443,13 +624,245 @@ function appendSheetDrawingReference(
   const drawingNode = sheetDocument.createElementNS(SPREADSHEET_NS, "drawing");
   drawingNode.setAttributeNS(REL_NS, "r:id", relationshipId);
 
-  const extLst = getFirstChild(worksheet, "extLst");
-  if (extLst) {
-    worksheet.insertBefore(drawingNode, extLst);
+  const successor = Array.from(worksheet.childNodes).find(
+    (child): child is Element => (
+      child.nodeType === 1
+      && DRAWING_SUCCESSOR_LOCAL_NAMES.has((child as Element).localName)
+    )
+  );
+  if (successor) {
+    worksheet.insertBefore(drawingNode, successor);
     return;
   }
 
   worksheet.appendChild(drawingNode);
+}
+
+function createRelationshipsDocument() {
+  return parseXml(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="${PKG_REL_NS}"></Relationships>`
+  );
+}
+
+function nextDrawingPartPath(archive: ArchiveEntries) {
+  let index = 1;
+  while (
+    archive[`xl/drawings/drawingReactXlsx${index}.xml`]
+    || archive[`xl/drawings/_rels/drawingReactXlsx${index}.xml.rels`]
+  ) {
+    index += 1;
+  }
+  return `xl/drawings/drawingReactXlsx${index}.xml`;
+}
+
+function nextDrawingRelationshipId(relDocument: XMLDocument) {
+  const existingIds = new Set(
+    getLocalElements(relDocument, "Relationship")
+      .map((node) => node.getAttribute("Id"))
+      .filter((value): value is string => Boolean(value))
+  );
+
+  let index = 1;
+  while (existingIds.has(`rIdReactXlsxDrawing${index}`)) {
+    index += 1;
+  }
+
+  return `rIdReactXlsxDrawing${index}`;
+}
+
+function remapRelationshipReferences(node: Node, idMap: Map<string, string>) {
+  if (idMap.size === 0) {
+    return;
+  }
+
+  if (node.nodeType === 1) {
+    const element = node as Element;
+    for (let index = 0; index < element.attributes.length; index += 1) {
+      const attribute = element.attributes.item(index);
+      if (!attribute) {
+        continue;
+      }
+      const replacement = idMap.get(attribute.value);
+      if (!replacement) {
+        continue;
+      }
+      if (attribute.namespaceURI === REL_NS || attribute.name.startsWith("r:")) {
+        element.setAttributeNS(attribute.namespaceURI, attribute.name, replacement);
+      }
+    }
+  }
+
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    remapRelationshipReferences(child, idMap);
+  }
+}
+
+function drawingChildElements(drawingDocument: XMLDocument) {
+  return Array.from(drawingDocument.documentElement?.childNodes ?? []).filter(
+    (node): node is Element => node.nodeType === 1
+  );
+}
+
+// Copy a part plus every internal part reachable through its relationship file.
+function copyArchivePartWithDependencies(
+  targetArchive: ArchiveEntries,
+  sourceArchive: ArchiveEntries,
+  targetContentTypesDocument: XMLDocument,
+  originalContentTypesDocument: XMLDocument | null,
+  partPath: string,
+  copiedPartPaths: Set<string>
+) {
+  const normalizedPartPath = normalizeArchivePath(partPath);
+  if (!normalizedPartPath || copiedPartPaths.has(normalizedPartPath)) {
+    return;
+  }
+  copiedPartPaths.add(normalizedPartPath);
+
+  const partBytes = sourceArchive[normalizedPartPath];
+  if (!partBytes) {
+    return;
+  }
+
+  targetArchive[normalizedPartPath] = cloneBytes(partBytes);
+  mergeContentTypeForPath(targetContentTypesDocument, originalContentTypesDocument, normalizedPartPath);
+
+  const relsPath = relsPathForDocument(normalizedPartPath);
+  const relsBytes = sourceArchive[relsPath];
+  if (!relsBytes) {
+    return;
+  }
+
+  targetArchive[relsPath] = cloneBytes(relsBytes);
+  mergeContentTypeForPath(targetContentTypesDocument, originalContentTypesDocument, relsPath);
+
+  const relationships = parseRelationships(sourceArchive, relsPath, normalizedPartPath);
+  for (const relationship of relationships.values()) {
+    if (relationship.targetMode === "External" || relationship.target.startsWith("#")) {
+      continue;
+    }
+    copyArchivePartWithDependencies(
+      targetArchive,
+      sourceArchive,
+      targetContentTypesDocument,
+      originalContentTypesDocument,
+      relationship.target,
+      copiedPartPaths
+    );
+  }
+}
+
+function buildMergedDrawingPart(
+  targetArchive: ArchiveEntries,
+  sourceArchive: ArchiveEntries,
+  targetContentTypesDocument: XMLDocument,
+  originalContentTypesDocument: XMLDocument | null,
+  attachments: XlsxImageAttachment[],
+  copiedPartPaths: Set<string>
+) {
+  const mergedDrawingPath = nextDrawingPartPath(targetArchive);
+  const mergedRelsPath = relsPathForDocument(mergedDrawingPath);
+  const mergedRelDocument = createRelationshipsDocument();
+  if (!mergedRelDocument) {
+    return null;
+  }
+
+  let mergedDrawingDocument: XMLDocument | null = null;
+
+  for (const attachment of attachments) {
+    const drawingXml = readArchiveText(sourceArchive, attachment.drawingPath);
+    const sourceDrawingDocument = drawingXml ? parseXml(drawingXml) : null;
+    if (!sourceDrawingDocument?.documentElement) {
+      continue;
+    }
+
+    let anchorNodes: Element[];
+    if (!mergedDrawingDocument) {
+      mergedDrawingDocument = sourceDrawingDocument;
+      anchorNodes = drawingChildElements(mergedDrawingDocument);
+    } else {
+      anchorNodes = [];
+      for (const child of drawingChildElements(sourceDrawingDocument)) {
+        if (child.localName === "extLst") {
+          continue;
+        }
+        const imported = mergedDrawingDocument.importNode(child, true) as Element;
+        mergedDrawingDocument.documentElement?.appendChild(imported);
+        anchorNodes.push(imported);
+      }
+    }
+
+    const relationshipRecords = attachment.drawingRelsPath
+      ? parseRelationships(sourceArchive, attachment.drawingRelsPath, attachment.drawingPath)
+      : null;
+    const sourceRelsXml = attachment.drawingRelsPath
+      ? readArchiveText(sourceArchive, attachment.drawingRelsPath)
+      : null;
+    const sourceRelsDocument = sourceRelsXml ? parseXml(sourceRelsXml) : null;
+    const idMap = new Map<string, string>();
+
+    if (sourceRelsDocument) {
+      for (const sourceRelationshipNode of getLocalElements(sourceRelsDocument, "Relationship")) {
+        const oldId = sourceRelationshipNode.getAttribute("Id");
+        const type = sourceRelationshipNode.getAttribute("Type");
+        const rawTarget = sourceRelationshipNode.getAttribute("Target");
+        if (!oldId || !type || !rawTarget) {
+          continue;
+        }
+        const record = relationshipRecords?.get(oldId);
+        if (!record) {
+          continue;
+        }
+
+        const relationshipId = nextDrawingRelationshipId(mergedRelDocument);
+        idMap.set(oldId, relationshipId);
+
+        let target = rawTarget;
+        if (record.targetMode !== "External" && !rawTarget.startsWith("#")) {
+          target = relativeArchivePath(mergedDrawingPath, record.target);
+          copyArchivePartWithDependencies(
+            targetArchive,
+            sourceArchive,
+            targetContentTypesDocument,
+            originalContentTypesDocument,
+            record.target,
+            copiedPartPaths
+          );
+        }
+
+        const mergedRelationshipNode = mergedRelDocument.createElementNS(PKG_REL_NS, "Relationship");
+        mergedRelationshipNode.setAttribute("Id", relationshipId);
+        mergedRelationshipNode.setAttribute("Type", type);
+        mergedRelationshipNode.setAttribute("Target", target);
+        if (record.targetMode) {
+          mergedRelationshipNode.setAttribute("TargetMode", record.targetMode);
+        }
+        mergedRelDocument.documentElement?.appendChild(mergedRelationshipNode);
+      }
+    }
+
+    anchorNodes.forEach((node) => remapRelationshipReferences(node, idMap));
+
+    attachment.mediaPaths.forEach((mediaPath) => {
+      copyArchivePartWithDependencies(
+        targetArchive,
+        sourceArchive,
+        targetContentTypesDocument,
+        originalContentTypesDocument,
+        mediaPath,
+        copiedPartPaths
+      );
+    });
+  }
+
+  if (!mergedDrawingDocument) {
+    return null;
+  }
+
+  targetArchive[mergedDrawingPath] = strToU8(serializeXml(mergedDrawingDocument));
+  targetArchive[mergedRelsPath] = strToU8(serializeXml(mergedRelDocument));
+  ensureContentTypeOverride(targetContentTypesDocument, mergedDrawingPath, DRAWING_CONTENT_TYPE);
+  mergeContentTypeForPath(targetContentTypesDocument, originalContentTypesDocument, mergedRelsPath);
+  return mergedDrawingPath;
 }
 
 export function mergeWorkbookImageAssets(
@@ -469,6 +882,8 @@ export function mergeWorkbookImageAssets(
     if (!targetContentTypesDocument) {
       return cloneBytes(savedBytes);
     }
+
+    const copiedPartPaths = new Set<string>();
 
     sheetOrigins.forEach((origin, workbookSheetIndex) => {
       if (!origin?.attachments.length) {
@@ -494,41 +909,25 @@ export function mergeWorkbookImageAssets(
 
       removeDrawingReferences(sheetDocument, relDocument);
 
-      origin.attachments.forEach((attachment) => {
-        const drawingBytes = sourceAssets.archive[attachment.drawingPath];
-        if (!drawingBytes) {
-          return;
-        }
+      const mergedDrawingPath = buildMergedDrawingPart(
+        archive,
+        sourceAssets.archive,
+        targetContentTypesDocument,
+        originalContentTypesDocument,
+        origin.attachments,
+        copiedPartPaths
+      );
+      if (!mergedDrawingPath) {
+        return;
+      }
 
-        archive[attachment.drawingPath] = cloneBytes(drawingBytes);
-        mergeContentTypeForPath(targetContentTypesDocument, originalContentTypesDocument, attachment.drawingPath);
-
-        if (attachment.drawingRelsPath) {
-          const drawingRelsBytes = sourceAssets.archive[attachment.drawingRelsPath];
-          if (drawingRelsBytes) {
-            archive[attachment.drawingRelsPath] = cloneBytes(drawingRelsBytes);
-            mergeContentTypeForPath(targetContentTypesDocument, originalContentTypesDocument, attachment.drawingRelsPath);
-          }
-        }
-
-        attachment.mediaPaths.forEach((mediaPath) => {
-          const mediaBytes = sourceAssets.archive[mediaPath];
-          if (!mediaBytes) {
-            return;
-          }
-
-          archive[mediaPath] = cloneBytes(mediaBytes);
-          mergeContentTypeForPath(targetContentTypesDocument, originalContentTypesDocument, mediaPath);
-        });
-
-        const relationshipId = nextRelationshipId(relDocument);
-        const relationshipNode = relDocument.createElementNS(PKG_REL_NS, "Relationship");
-        relationshipNode.setAttribute("Id", relationshipId);
-        relationshipNode.setAttribute("Type", DRAWING_REL_TYPE);
-        relationshipNode.setAttribute("Target", relativeArchivePath(currentSheet.path, attachment.drawingPath));
-        relDocument.documentElement?.appendChild(relationshipNode);
-        appendSheetDrawingReference(sheetDocument, relationshipId);
-      });
+      const relationshipId = nextRelationshipId(relDocument);
+      const relationshipNode = relDocument.createElementNS(PKG_REL_NS, "Relationship");
+      relationshipNode.setAttribute("Id", relationshipId);
+      relationshipNode.setAttribute("Type", DRAWING_REL_TYPE);
+      relationshipNode.setAttribute("Target", relativeArchivePath(currentSheet.path, mergedDrawingPath));
+      relDocument.documentElement?.appendChild(relationshipNode);
+      appendSheetDrawingReference(sheetDocument, relationshipId);
 
       archive[currentSheet.path] = strToU8(serializeXml(sheetDocument));
       archive[relsPath] = strToU8(serializeXml(relDocument));

@@ -9,8 +9,11 @@ import {
   walk,
 } from "./vue-test-renderer.mjs";
 
-const { DocxEditor, useDocxEditor } = await importFromDemo("@arcships/vue-docx");
-const { createBlankDocumentModel } = await importFromDemo("@arcships/docx-core");
+const { DocxEditor, DocxParagraphHost, useDocxEditor } = await importFromDemo("@arcships/vue-docx");
+const { createBlankDocumentModel, serializeDocx } = await importFromDemo("@arcships/docx-core");
+const { strFromU8, unzipSync } = await import(
+  new URL("../..", import.meta.url).href + "packages/docx-core/node_modules/fflate/esm/browser.js"
+);
 
 function paragraphText(node) {
   if (!node || node.type !== "paragraph") return "";
@@ -134,16 +137,20 @@ function installDomEnvironment(t) {
 
   function textLeaves(host) {
     const result = [];
-    function visit(node, withinNumberingLabel = false) {
-      const numbered = withinNumberingLabel || matchesSelector(
+    function visit(node, flags = {}) {
+      const numbered = flags.numbered || matchesSelector(
         node,
         "[data-docx-numbering-label='true']",
       );
+      const deleted = flags.deleted || matchesSelector(
+        node,
+        "[data-docx-tracked-change='deletion']",
+      );
       if (node?.nodeType === 3) {
-        result.push({ node, text: node.textContent ?? "", numbered });
+        result.push({ node, text: node.textContent ?? "", numbered, deleted });
         return;
       }
-      for (const child of node?.childNodes ?? []) visit(child, numbered);
+      for (const child of node?.childNodes ?? []) visit(child, { numbered, deleted });
     }
     visit(host);
     return result;
@@ -206,6 +213,7 @@ function installDomEnvironment(t) {
         pieces.push({
           text: leaf.text.slice(from - leafStart, to - leafStart),
           numbered: leaf.numbered,
+          deleted: leaf.deleted,
           removed: false,
         });
       }
@@ -216,12 +224,17 @@ function installDomEnvironment(t) {
         return pieces.filter((piece) => !piece.removed).map((piece) => piece.text).join("");
       },
       querySelectorAll(selector) {
-        if (selector === "[data-docx-numbering-label='true']") {
-          return pieces.filter((piece) => piece.numbered).map((piece) => ({
-            remove() { piece.removed = true; },
-          }));
-        }
-        return [];
+        // Production queries one selector list (numbering labels, note markers,
+        // tracked deletions); this fixture only builds numbering-label and
+        // deletion pieces.
+        const parts = String(selector).split(",").map((part) => part.trim()).filter(Boolean);
+        const matchesPiece = (piece) => parts.some((part) => (
+          (part === "[data-docx-numbering-label='true']" && piece.numbered) ||
+          (part === "[data-docx-tracked-change='deletion']" && piece.deleted)
+        ));
+        return pieces.filter(matchesPiece).map((piece) => ({
+          remove() { piece.removed = true; },
+        }));
       },
     };
   }
@@ -397,6 +410,30 @@ function setHostDomText(host, text, documentObject, numberingLabel = "") {
   return contentText;
 }
 
+function setHostDomWithTrackedDeletion(host, before, deleted, after, documentObject) {
+  decorateElement(host, documentObject);
+  const textNode = (text, parent) => ({
+    nodeType: 3,
+    textContent: text,
+    childNodes: [],
+    parentElement: parent,
+    parentNode: parent,
+  });
+  const beforeNode = textNode(before, host);
+  const deletionSpan = {
+    type: "span",
+    props: { "data-docx-tracked-change": "deletion" },
+    childNodes: [],
+    parentElement: host,
+    parentNode: host,
+  };
+  decorateElement(deletionSpan, documentObject);
+  deletionSpan.childNodes = [textNode(deleted, deletionSpan)];
+  const afterNode = textNode(after, host);
+  host.childNodes = [beforeNode, deletionSpan, afterNode];
+  return { beforeNode, afterNode, deletionSpan };
+}
+
 function installRendererDom(mounted, documentObject) {
   for (const node of walk(mounted.root)) decorateElement(node, documentObject);
   const editorRoot = walk(mounted.root).find((node) => node.props?.["data-testid"] === "docx-editor");
@@ -463,6 +500,35 @@ test("real DOM Range updates activeTextRange and ignores the numbering label", a
   assert.deepEqual(mounted.controller.activeTextRange, {
     start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
     end: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 5 },
+  });
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("caret offsets skip tracked-change deletion text", async (t) => {
+  const mounted = await mountEditableDocument(t, ["abcdef"]);
+  const [paragraph] = paragraphHosts(mounted.root);
+  // The model text is "abcdef"; the deleted revision "XYZ" is rendered for
+  // review but is not part of the paragraph text.
+  const { afterNode } = setHostDomWithTrackedDeletion(
+    paragraph,
+    "ab",
+    "XYZ",
+    "cdef",
+    mounted.dom.document,
+  );
+  const pageBody = walk(mounted.root)
+    .find((node) => node.props?.["data-docx-page-body"] === "true");
+  assert.ok(pageBody, "page body should render");
+
+  eventHandler(pageBody, "pointerdown")({ target: paragraph });
+  // Click immediately after the deleted text: the caret sits at model offset 2.
+  mounted.dom.setSelection(afterNode, 0);
+  mounted.dom.dispatchDocument("selectionchange");
+  await vue.nextTick();
+
+  assert.deepEqual(mounted.controller.activeTextRange, {
+    start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
+    end: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
   });
   assert.deepEqual(mounted.warnings, []);
 });
@@ -585,5 +651,159 @@ test("composition text is committed on blur after compositionend", async (t) => 
   await vue.nextTick();
 
   assert.equal(paragraphText(mounted.controller.model.nodes[0]), "输入完成");
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("pending caret style survives the input range update and styles the typed text", async (t) => {
+  const mounted = await mountEditableDocument(t, ["abcdef"]);
+  const [paragraph] = paragraphHosts(mounted.root);
+  setHostDomText(paragraph, "abcdef", mounted.dom.document);
+  mounted.controller.selectParagraph(0);
+  await vue.nextTick();
+  mounted.controller.setActiveTextRange({
+    start: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
+    end: { location: { kind: "paragraph", nodeIndex: 0 }, offset: 2 },
+  });
+  await vue.nextTick();
+  mounted.controller.toggleBold();
+  await vue.nextTick();
+  assert.equal(mounted.controller.pendingRunStyle?.bold, true);
+
+  const typed = setHostDomText(paragraph, "abXcdef", mounted.dom.document);
+  mounted.dom.setSelection(typed, 3);
+  eventHandler(paragraph, "input")({});
+  await vue.nextTick();
+  assert.equal(
+    mounted.controller.pendingRunStyle?.bold,
+    true,
+    "typing extends the range but must not discard the pending style",
+  );
+
+  eventHandler(paragraph, "blur")();
+  await vue.nextTick();
+  const runs = mounted.controller.model.nodes[0].children.filter((child) => child.type === "text");
+  const inserted = runs.find((run) => run.text === "X");
+  assert.ok(inserted);
+  assert.equal(inserted.style?.bold, true);
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("export commits every live paragraph draft before reading the model", async (t) => {
+  const mounted = await mountEditableDocument(t, ["start", "second"]);
+  const [paragraph, secondParagraph] = paragraphHosts(mounted.root);
+  setHostDomText(paragraph, "start edited", mounted.dom.document);
+  eventHandler(paragraph, "input")({});
+  setHostDomText(secondParagraph, "second edited", mounted.dom.document);
+  eventHandler(secondParagraph, "input")({});
+  assert.equal(paragraphText(mounted.controller.model.nodes[0]), "start");
+  assert.equal(paragraphText(mounted.controller.model.nodes[1]), "second");
+
+  let exportedModel;
+  mounted.controller.registerPendingExportModelTransformer((model) => {
+    exportedModel = model;
+    return model;
+  });
+  mounted.controller.exportDocx();
+
+  assert.ok(exportedModel, "export must receive the flushed model");
+  assert.equal(paragraphText(exportedModel.nodes[0]), "start edited");
+  assert.equal(paragraphText(exportedModel.nodes[1]), "second edited");
+  const bytes = await serializeDocx(exportedModel);
+  const documentXml = strFromU8(unzipSync(new Uint8Array(bytes))["word/document.xml"]);
+  assert.match(documentXml, /start edited/, "the serialized document must contain the flushed edit");
+  assert.match(documentXml, /second edited/, "the serializer must rebuild every flushed paragraph");
+  await vue.nextTick();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("unmounting DocxEditor commits every live paragraph draft", async (t) => {
+  const mounted = await mountEditableDocument(t, ["start", "second"]);
+  const [paragraph, secondParagraph] = paragraphHosts(mounted.root);
+  setHostDomText(paragraph, "start edited", mounted.dom.document);
+  eventHandler(paragraph, "input")({});
+  setHostDomText(secondParagraph, "second edited", mounted.dom.document);
+  eventHandler(secondParagraph, "input")({});
+  assert.equal(paragraphText(mounted.controller.model.nodes[0]), "start");
+
+  mounted.app.unmount();
+  await vue.nextTick();
+
+  assert.equal(paragraphText(mounted.controller.model.nodes[0]), "start edited");
+  assert.equal(paragraphText(mounted.controller.model.nodes[1]), "second edited");
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("unmount commits a live paragraph draft instead of dropping it", async (t) => {
+  const dom = installDomEnvironment(t);
+  const show = vue.ref(true);
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useDocxEditor({ starterModel: starterModel(["start"]) });
+      return () => show.value
+        ? vue.h(DocxParagraphHost, {
+            paragraph: controller.model.nodes[0],
+            paragraphIndex: 0,
+            editable: true,
+            controller,
+            onTextInput: (nodeIndex, text) => controller.commitParagraphText(nodeIndex, text),
+          })
+        : null;
+    },
+  });
+  const mounted = await mount(Harness);
+  const host = walk(mounted.root).find(
+    (node) => node.props?.["data-testid"] === "editor-paragraph"
+  );
+  assert.ok(host, "paragraph host should render");
+  setHostDomText(host, "start edited", dom.document);
+  eventHandler(host, "input")({});
+  assert.equal(paragraphText(controller.model.nodes[0]), "start");
+
+  show.value = false;
+  await vue.nextTick();
+  assert.equal(paragraphText(controller.model.nodes[0]), "start edited");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("Tab and Shift+Tab change the selected list item's level", async (t) => {
+  const mounted = await mountEditableDocument(t, ["Item"]);
+  let [paragraph] = paragraphHosts(mounted.root);
+  setHostDomText(paragraph, "Item", mounted.dom.document);
+
+  mounted.controller.toggleList("unordered");
+  await vue.nextTick();
+  assert.equal(mounted.controller.model.nodes[0].style.numbering.ilvl, 0);
+
+  paragraph = paragraphHosts(mounted.root)[0];
+  let prevented = false;
+  eventHandler(paragraph, "keydown")({
+    key: "Tab",
+    shiftKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    isComposing: false,
+    preventDefault() { prevented = true; },
+  });
+  await vue.nextTick();
+  assert.equal(prevented, true);
+  assert.equal(mounted.controller.model.nodes[0].style.numbering.ilvl, 1);
+
+  paragraph = paragraphHosts(mounted.root)[0];
+  prevented = false;
+  eventHandler(paragraph, "keydown")({
+    key: "Tab",
+    shiftKey: true,
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    isComposing: false,
+    preventDefault() { prevented = true; },
+  });
+  await vue.nextTick();
+  assert.equal(prevented, true);
+  assert.equal(mounted.controller.model.nodes[0].style.numbering.ilvl, 0);
   assert.deepEqual(mounted.warnings, []);
 });

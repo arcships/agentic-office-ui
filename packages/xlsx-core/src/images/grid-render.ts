@@ -9,6 +9,7 @@ import type {
   XlsxCellRange,
   XlsxCellHyperlink,
   XlsxCellComment,
+  XlsxDataValidation,
   XlsxFormControl,
   XlsxImage,
   XlsxResolvedCellStyle,
@@ -24,8 +25,10 @@ import {
   DRAWING_REL_TYPE,
   REL_NS,
   type RelationshipRecord,
+  type WorkbookFormControlOrigin,
   type WorkbookImageOrigin,
   type WorkbookImageSheetOrigin,
+  type WorkbookShapeOrigin,
   getChildElements,
   getFirstChild,
   getFirstDescendant,
@@ -76,6 +79,7 @@ export type WorkbookSheetState = {
   conditionalFormatRules: XlsxConditionalFormatRule[];
   hyperlinks: XlsxCellHyperlink[];
   comments: XlsxCellComment[];
+  dataValidations?: XlsxDataValidation[];
   defaultColWidthPx: number;
   defaultRowHeightPx: number;
   hasHorizontalMerges: boolean;
@@ -117,12 +121,15 @@ export type WorkbookTableMetadata = {
 
 export type WorkbookImageAssets = {
   archive: ArchiveEntries;
+  formControlOriginsById: Map<string, WorkbookFormControlOrigin>;
   formControlsByWorkbookSheetIndex: XlsxFormControl[][];
   imageOriginsById: Map<string, WorkbookImageOrigin>;
   imagesByWorkbookSheetIndex: XlsxImage[][];
   namedCellStyleByName: Record<string, XlsxResolvedCellStyle>;
   objectUrls: string[];
+  shapeOriginsById: Map<string, WorkbookShapeOrigin>;
   shapesByWorkbookSheetIndex: XlsxShape[][];
+  sheetPathsByWorkbookSheetIndex: string[];
   sheetStatesByWorkbookSheetIndex: Array<WorkbookSheetState | null>;
   sheetOrigins: Array<WorkbookImageSheetOrigin | null>;
   styleById: Record<number, XlsxResolvedCellStyle>;
@@ -240,6 +247,52 @@ function parseSqrefRanges(sqref: string | null | undefined): XlsxCellRange[] {
     });
 }
 
+// ── Data validation ────────────────────────────────────────────────────────
+
+function parseBooleanAttribute(node: Element, name: string, fallback: boolean): boolean {
+  const value = node.getAttribute(name);
+  if (value === null) {
+    return fallback;
+  }
+  return value !== "0" && value.toLocaleLowerCase() !== "false";
+}
+
+function parseSheetDataValidations(document: Document): XlsxDataValidation[] {
+  return getLocalElements(document, "dataValidation").flatMap((node) => {
+    if (node.namespaceURI && node.namespaceURI !== SPREADSHEET_NS) {
+      return [];
+    }
+    const ranges = parseSqrefRanges(node.getAttribute("sqref"));
+    const validationType = node.getAttribute("type");
+    if (!validationType || ranges.length === 0) {
+      return [];
+    }
+
+    const isList = validationType.toLocaleLowerCase() === "list";
+    const formula1 = getFirstChild(node, "formula1")?.textContent?.trim() || undefined;
+    const formula2 = getFirstChild(node, "formula2")?.textContent?.trim() || undefined;
+    return [{
+      allowBlank: node.hasAttribute("allowBlank")
+        ? parseBooleanAttribute(node, "allowBlank", true)
+        : undefined,
+      errorMessage: node.getAttribute("error") ?? undefined,
+      errorStyle: node.getAttribute("errorStyle") ?? "stop",
+      errorTitle: node.getAttribute("errorTitle") ?? undefined,
+      inputMessage: node.getAttribute("prompt") ?? undefined,
+      inputTitle: node.getAttribute("promptTitle") ?? undefined,
+      listSource: isList ? formula1 : undefined,
+      operator: node.getAttribute("operator") ?? undefined,
+      ranges,
+      showDropdown: isList ? !parseBooleanAttribute(node, "showDropDown", false) : undefined,
+      showErrorAlert: parseBooleanAttribute(node, "showErrorMessage", true),
+      showInputMessage: parseBooleanAttribute(node, "showInputMessage", false),
+      validationType,
+      value1: isList ? undefined : formula1,
+      value2: isList ? undefined : formula2,
+    } satisfies XlsxDataValidation];
+  });
+}
+
 function parseConditionalFormatValueObject(node: Element | null): XlsxConditionalFormatValueObject | null {
   if (!node) {
     return null;
@@ -252,9 +305,14 @@ function parseConditionalFormatValueObject(node: Element | null): XlsxConditiona
 
   const rawValue = node.getAttribute("val") ?? getFirstChild(node, "f")?.textContent ?? undefined;
   const numericValue = rawValue !== undefined ? Number(rawValue) : Number.NaN;
+  const isFormula = type.trim().toLowerCase() === "formula";
   return {
     type,
-    value: Number.isFinite(numericValue) ? numericValue : undefined
+    value: Number.isFinite(numericValue)
+      ? numericValue
+      : isFormula && rawValue !== undefined && rawValue.trim().length > 0
+        ? rawValue.trim()
+        : undefined
   };
 }
 
@@ -623,6 +681,7 @@ export function parseSheetState(
   const includeCachedFormulaValues = options?.includeCachedFormulaValues ?? true;
   const cachedFormulaValues: Record<string, string> = {};
   const conditionalFormatRules = parseConditionalFormatRules(document);
+  const dataValidations = parseSheetDataValidations(document);
   const hyperlinks = parseCellHyperlinks(archive, path, document);
   const comments = parseCellComments(archive, path);
   const sparklines = parseSheetSparklines(document, options?.themePalette);
@@ -742,6 +801,7 @@ export function parseSheetState(
     colWidthOverridesPx,
     colStyleIds,
     conditionalFormatRules,
+    dataValidations,
     hyperlinks,
     comments,
     defaultColWidthPx: sheetColumnWidthToPixels(defaultColWidth, columnWidthCharacterWidthPx),

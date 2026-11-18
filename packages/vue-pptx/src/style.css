@@ -5,12 +5,15 @@
   --pptx-text: #18181b;
   --pptx-muted: #71717a;
   --pptx-accent: #2563eb;
+  /* Latin first, then CJK/Japanese/Korean fallbacks; hosts and deck themes can override. */
+  --pptx-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "WenQuanYi Micro Hei", "Malgun Gothic", "Yu Gothic UI", sans-serif;
   background: var(--pptx-bg);
+  container: pptx-viewer / inline-size;
   color: var(--pptx-text);
   display: flex;
   flex-direction: column;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  min-height: 320px;
+  font-family: var(--pptx-font-family);
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
   outline: none;
@@ -32,6 +35,15 @@
   --pptx-text: #f4f4f5;
   --pptx-muted: #b3b3b8;
   background: #050505;
+}
+
+/* The inline height keeps the demo's "calc(100vh - 190px)" box in the page;
+   fullscreen must fill the screen instead of leaving black bars. */
+.pptx-viewer:fullscreen {
+  block-size: 100vh;
+  inline-size: 100vw;
+  max-block-size: none;
+  max-inline-size: none;
 }
 
 .pptx-viewer__toolbar {
@@ -69,23 +81,69 @@
 .pptx-viewer__sidebar { background: var(--pptx-panel); border-right: 1px solid var(--pptx-border); flex: 0 0 180px; overflow: auto; padding: 12px; }
 .pptx-viewer__stage-wrap { display: block; flex: 1 1 auto; min-height: 0; min-width: 0; overflow: auto; position: relative; }
 .pptx-viewer__stage { box-sizing: border-box; inline-size: min(100%, 1280px); margin-inline: auto; min-height: 1px; padding: 24px; }
-.pptx-stage { box-sizing: border-box; min-height: 1px; }
+.pptx-stage { box-sizing: border-box; min-height: 1px; touch-action: pan-x pan-y; }
 .pptx-viewer__stage[aria-hidden="true"] { visibility: hidden; }
 .pptx-viewer__message { inset: 0; align-items: center; color: var(--pptx-muted); display: flex; justify-content: center; position: absolute; z-index: 2; }
 .pptx-viewer__message--error { color: #b91c1c; padding: 24px; text-align: center; }
+.pptx-viewer__message > button { margin-inline-start: 8px; }
 
+.pptx-viewer__warnings {
+  background: color-mix(in srgb, #f59e0b 14%, var(--pptx-panel));
+  border-bottom: 1px solid var(--pptx-border);
+  color: var(--pptx-text);
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  font-size: 12px;
+  gap: 2px;
+  padding: 6px 10px;
+}
+
+.pptx-viewer__warning { margin: 0; }
+
+.pptx-viewer__slide-error {
+  align-items: center;
+  background: color-mix(in srgb, #f59e0b 22%, var(--pptx-panel));
+  border-bottom: 1px solid #f59e0b;
+  color: var(--pptx-text);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 12px;
+  gap: 8px;
+  inset-block-start: 0;
+  inset-inline: 0;
+  justify-content: space-between;
+  padding: 6px 10px;
+  position: absolute;
+  z-index: 3;
+}
+
+.pptx-viewer__slide-error-actions { display: flex; gap: 6px; }
+.pptx-viewer__slide-error button { background: var(--pptx-panel); border: 1px solid var(--pptx-border); border-radius: 6px; color: inherit; cursor: pointer; min-height: 26px; padding: 2px 8px; }
+
+/* Letterbox the presented slide instead of clipping it: --pptx-slide-aspect
+   and --pptx-slide-ratio are supplied by PptxViewer from the deck size. */
 .pptx-viewer--present .pptx-viewer__stage-wrap {
+  container-type: size;
   display: grid;
   overflow: hidden;
   place-items: center;
 }
 
 .pptx-viewer--present .pptx-viewer__stage {
+  aspect-ratio: var(--pptx-slide-aspect, 16 / 9);
+  block-size: auto;
   inline-size: 100%;
   max-block-size: 100%;
   max-inline-size: 100%;
   margin-inline: 0;
   padding: 0;
+}
+
+@supports (container-type: size) {
+  .pptx-viewer--present .pptx-viewer__stage {
+    inline-size: min(100%, calc(100cqh * var(--pptx-slide-ratio, 1.7778)));
+  }
 }
 
 .pptx-viewer__playback-controls {
@@ -145,9 +203,27 @@
 .pptx-thumbnail--active { border-color: var(--pptx-accent); box-shadow: 0 0 0 1px var(--pptx-accent); }
 .pptx-thumbnail__canvas { background: white; display: block; min-height: 84px; overflow: hidden; pointer-events: none; width: 100%; }
 .pptx-thumbnail__canvas[data-error="true"]::after { color: #b91c1c; content: "缩略图失败"; display: block; font-size: 11px; padding: 24px 4px; text-align: center; }
-.pptx-thumbnail__label { align-items: center; color: var(--pptx-muted); display: flex; font-size: 12px; gap: 6px; justify-content: center; padding-top: 6px; }
+.pptx-thumbnail__label { align-items: center; color: var(--pptx-muted); display: flex; font-size: 12px; gap: 6px; justify-content: center; line-height: 16px; padding-top: 6px; }
 
-@media (max-width: 720px) {
+/* Fixed sidebar rows keep the virtual window and its spacers pixel-aligned. */
+.pptx-viewer__sidebar-spacer { pointer-events: none; }
+.pptx-viewer__sidebar .pptx-thumbnail {
+  block-size: var(--pptx-thumbnail-item-height, auto);
+  box-sizing: border-box;
+  margin-block-end: 0;
+  overflow: hidden;
+}
+
+@media (pointer: coarse) {
+  .pptx-viewer__toolbar button,
+  .pptx-viewer__search input,
+  .pptx-viewer__playback-controls button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+@container pptx-viewer (max-width: 720px) {
   .pptx-viewer__toolbar { align-items: stretch; flex-wrap: wrap; }
   .pptx-viewer__search { flex-basis: 100%; max-width: none; order: 3; }
   .pptx-viewer__sidebar { display: none; }
@@ -155,4 +231,26 @@
   .pptx-viewer--present .pptx-viewer__stage { padding: 0; }
   .pptx-viewer__capability { display: none; }
   .pptx-viewer__playback-controls { overflow-x: auto; }
+}
+
+@media print {
+  .pptx-viewer {
+    background: #fff !important;
+    color: #000 !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  .pptx-viewer__toolbar,
+  .pptx-viewer__sidebar,
+  .pptx-viewer__playback-controls,
+  .pptx-viewer__message { display: none !important; }
+  .pptx-viewer__body,
+  .pptx-viewer__stage-wrap { display: block !important; overflow: visible !important; }
+  .pptx-viewer__stage {
+    inline-size: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
 }

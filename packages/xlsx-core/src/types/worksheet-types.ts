@@ -3,6 +3,7 @@ import type { XlsxChart, XlsxChartElementSelection, XlsxChartsheet } from "./cha
 import type { XlsxThemePalette } from "./theme-types";
 import type {
   XlsxFormControl,
+  XlsxFormControlInput,
   XlsxImage,
   XlsxImageRect,
   XlsxImageResizeHandlePosition,
@@ -53,8 +54,10 @@ export interface XlsxTableStyleDefinition {
 // ── Conditional formatting ───────────────────────────────────────────────
 
 export interface XlsxConditionalFormatValueObject {
+  /** Raw cfvo type: min, max, num, percent, percentile, formula, autoMin/autoMax. */
   type: string;
-  value?: number;
+  /** Numeric bound, or the raw formula text for `formula` cfvos. */
+  value?: number | string;
 }
 
 export interface XlsxConditionalDataBarRule {
@@ -109,13 +112,68 @@ export interface XlsxDataValidation {
   allowBlank?: boolean;
   errorMessage?: string;
   errorStyle?: string;
+  errorTitle?: string;
   inputMessage?: string;
+  inputTitle?: string;
   listSource?: string;
+  operator?: string;
   ranges: XlsxCellRange[];
   showDropdown?: boolean;
   showErrorAlert?: boolean;
   showInputMessage?: boolean;
   validationType: string;
+  value1?: string;
+  value2?: string;
+}
+
+/** Built-in validation message keys that hosts can localize. */
+export type XlsxDataValidationMessageKey =
+  | "list"
+  | "whole"
+  | "decimal"
+  | "textLength"
+  | "date"
+  | "time"
+  | "generic";
+
+/** Feedback produced when user input violates a data validation rule. */
+export interface XlsxDataValidationFeedback {
+  cell: XlsxCellAddress;
+  kind: "error" | "information" | "warning";
+  message: string;
+  /** Set for built-in messages; hosts may localize on this key. */
+  defaultMessageKey?: XlsxDataValidationMessageKey;
+  title?: string;
+}
+
+export type XlsxSheetProtectionAction =
+  | "autoFilter"
+  | "deleteColumns"
+  | "deleteRows"
+  | "formatCells"
+  | "formatColumns"
+  | "formatRows"
+  | "insertColumns"
+  | "insertHyperlinks"
+  | "insertRows"
+  | "objects"
+  | "pivotTables"
+  | "scenarios"
+  | "selectLockedCells"
+  | "selectUnlockedCells"
+  | "sort";
+
+/**
+ * Sheet protection parsed from the worksheet `sheetProtection` record.
+ *
+ * `flags` mirrors the protection state reported by the workbook engine for
+ * each OOXML attribute. Treat `enabled` as the authoritative signal for
+ * read-only behaviour and read individual flags only when a host needs the
+ * finer-grained Excel permissions.
+ */
+export interface XlsxSheetProtection {
+  enabled: boolean;
+  flags: Partial<Record<XlsxSheetProtectionAction, boolean>>;
 }
 
 export interface XlsxFreezePanes {
@@ -139,6 +197,8 @@ export interface XlsxSheetData {
   dataValidations: XlsxDataValidation[];
   name: string;
   visibility: XlsxSheetVisibility;
+  /** Parsed sheet protection; `null` or omitted for unprotected sheets. */
+  protection?: XlsxSheetProtection | null;
   columnWidthCharacterWidthPx?: number;
   defaultColWidthPx: number;
   defaultRowHeightPx: number;
@@ -534,7 +594,7 @@ export interface XlsxLoadError {
 }
 
 export interface XlsxDiagnostic {
-  type: "load-start" | "load-deferred" | "load-resumed" | "load-success" | "load-error" | "load-cancelled" | "download" | "worker-error" | "image-decode-error";
+  type: "load-start" | "load-deferred" | "load-resumed" | "load-success" | "load-error" | "load-cancelled" | "download" | "export-warning" | "worker-error" | "image-decode-error";
   requestId: number;
   /** Globally unique task identity supplied by the instance loading boundary. */
   taskId?: string;
@@ -542,6 +602,8 @@ export interface XlsxDiagnostic {
   url?: string;
   bytes?: number;
   imageId?: string;
+  /** Human-readable export warning, such as macro loss on .xlsm/.xltm sources. */
+  message?: string;
   error?: XlsxLoadError;
 }
 
@@ -554,6 +616,16 @@ export interface UseXlsxViewerControllerOptions {
    * @default false
    */
   allowResizeInReadOnly?: boolean;
+  /**
+   * Allows mutations on worksheets that declare OOXML sheet protection.
+   *
+   * By default a protected worksheet behaves like a read-only sheet while it
+   * is active. Set this to `true` when the host enforces protection itself or
+   * intentionally offers an unlock path.
+   *
+   * @default false
+   */
+  allowProtectedSheetEditing?: boolean;
   /**
    * Defers loading until `continueDeferredLoad()` is called when the file is larger than this byte threshold.
    * Set to `0` to parse immediately.
@@ -592,6 +664,14 @@ export interface UseXlsxViewerControllerOptions {
    * @default 25 * 1024 * 1024
    */
   maxFileSizeBytes?: number;
+  /**
+   * Locale used for number and date formats that do not name one of their own
+   * (`[$-407]`-style sections always win), for example `"de-DE"`. Typed values
+   * and displayed values both follow it.
+   *
+   * @default "en-US"
+   */
+  locale?: string;
   /**
    * Maximum number of undo and redo entries retained by this controller
    * instance.
@@ -678,14 +758,48 @@ export interface XlsxViewerController {
   canDownload: boolean;
   canExport: boolean;
   canLoadDeferred: boolean;
+  /**
+   * Why the most recent recalculation fell back to cached formula values, or
+   * `null` when formulas are current. Recalculation never traps the workbook
+   * silently: hosts can render `message` and call `recalculate()` to retry.
+   */
+  calculationStatus: {
+    reason: "unresolved-sheet-refs" | "calculate-trapped" | "recovery-snapshot-unavailable";
+    message: string;
+  } | null;
   canRedo: boolean;
   canUndo: boolean;
   canZoomIn: boolean;
   canZoomOut: boolean;
+  /**
+   * Abandons a deferred load and returns the viewer to its empty state.
+   *
+   * Ignored when no load is deferred; the pending source bytes are released
+   * without parsing.
+   */
+  cancelDeferredLoad: () => void;
   clearSelectedCells: () => void;
   clearSelection: () => void;
+  /**
+   * Commits user-entered text to a cell in the active worksheet.
+   *
+   * Text that starts with `=` is written as a formula through
+   * `setCellFormula`; any other text is written as a value through
+   * `setCellValue`, so editing a formula cell never replaces the formula with
+   * the value it displays. Text that already matches the cell's formula or
+   * coerced value is dropped without touching the workbook or undo history.
+   *
+   * Inline cell editing and the formula bar both commit through this method.
+   *
+   * @param cell Zero-based row and column address in the active worksheet.
+   * @param text Text entered by the user, for example `"=SUM(A1:A3)"` or `"42"`.
+   * @returns `true` when the cell was written.
+   */
+  commitCellInput: (cell: XlsxCellAddress, text: string) => boolean;
   continueDeferredLoad: () => void;
   copySelectionToClipboard: () => Promise<boolean>;
+  dataValidationFeedback: XlsxDataValidationFeedback | null;
+  dismissDataValidationFeedback: () => void;
   defaultZoomScale: number;
   deferredLoadFileSize: number | null;
   defineNamedRange: (name: string, range?: XlsxCellRange | null) => void;
@@ -705,6 +819,8 @@ export interface XlsxViewerController {
   getChartById: (id: string) => XlsxChart | null;
   getChartSeriesFormula: (chartId: string, seriesIndex: number) => string;
   getChartsheetById: (id: string) => XlsxChartsheet | null;
+  getCellDataValidation: (cell?: XlsxCellAddress | null) => XlsxDataValidation | null;
+  getDataValidationListOptions: (validation: XlsxDataValidation) => string[];
   formControls: XlsxFormControl[];
   getSheetCharts: (sheetIndex?: number) => XlsxChart[];
   getSheetFormControls: (sheetIndex?: number) => XlsxFormControl[];
@@ -717,11 +833,23 @@ export interface XlsxViewerController {
   getCellSnapshotAsync?: (workbookSheetIndex: number, row: number, col: number, signal?: AbortSignal) => Promise<{
     displayValue: string;
     formula: string;
+    /** Resolved number format of the cell, so the viewer can localize it. */
+    numberFormat?: XlsxCellNumberFormatInput | null;
   }>;
   isLoadDeferred: boolean;
   isLoading: boolean;
+  isActiveSheetProtected: boolean;
+  isEditingLocked: boolean;
   isChartsLoading: boolean;
   isWorkerBacked?: boolean;
+  /**
+   * Warning raised by the most recent export, for example when an `.xlsm` or
+   * `.xltm` source is written as a macro-free `.xlsx`. Cleared when a new
+   * source starts loading.
+   */
+  lastExportWarning: string | null;
+  /** Locale used for number and date formats that do not name one. */
+  locale: string;
   maxConcurrentImageDecodes?: number;
   sourceState: XlsxSourceState;
   sourceError: XlsxLoadError | null;
@@ -736,6 +864,17 @@ export interface XlsxViewerController {
   removeActiveSheet: () => void;
   readOnly: boolean;
   recalculate: () => void;
+  /**
+   * Re-resolves chart categories and values from the current workbook model.
+   *
+   * Main-thread mode refreshes from the live workbook. Worker-backed mode asks
+   * the Worker to refresh from its own edited workbook snapshot, so charts do
+   * not stay on the source file's cached chart XML values after an in-worker
+   * edit.
+   *
+   * @returns `false` when no workbook or Worker is available.
+   */
+  refreshChartData: () => Promise<boolean>;
   revision: number;
   resetZoom: () => void;
   resizeChartBy: (
@@ -817,8 +956,32 @@ export interface XlsxViewerController {
   selectedFormulaTarget: XlsxFormulaTarget;
   selectedImage: XlsxImage | null;
   selectedImageId: string | null;
+  selectedShape: XlsxShape | null;
+  selectedShapeId: string | null;
+  getShapeById: (id: string) => XlsxShape | null;
+  selectShape: (id: string | null) => void;
+  clearSelectedShape: () => void;
+  setShapeRect: (id: string, rect: XlsxImageRect) => void;
+  moveShapeBy: (id: string, deltaX: number, deltaY: number) => void;
+  resizeShapeBy: (id: string, handle: XlsxImageResizeHandlePosition, deltaX: number, deltaY: number) => void;
+  deleteShape: (id: string) => boolean;
+  deleteImage: (id: string) => boolean;
+  deleteChart: (id: string) => boolean;
+  addFormControl: (input: XlsxFormControlInput) => XlsxFormControl | null;
+  updateFormControl: (id: string, patch: Partial<XlsxFormControlInput>) => boolean;
+  removeFormControl: (id: string) => boolean;
+  getFormControlById: (id: string) => XlsxFormControl | null;
+  getFormControlItems: (sheetIndex?: number) => XlsxFormControl[];
   setSelectedFormula: (formula: string) => boolean;
   setSelectedCellFormula: (formula: string) => void;
+  /**
+   * Switches the locale used by number and date formats that name none of
+   * their own, and repaints the workbook.
+   *
+   * @param locale BCP-47 tag such as `"de-DE"`; omitted or invalid values fall
+   * back to `"en-US"`.
+   */
+  setDocumentLocale: (locale?: string) => void;
   /**
    * Applies persisted Excel style properties to the active cell.
    *
@@ -882,6 +1045,19 @@ export interface XlsxViewerEditing {
   canRedo: boolean;
   canUndo: boolean;
   clearSelectedCells: () => void;
+  /**
+   * Commits user-entered text to a cell in the active worksheet.
+   *
+   * Text that starts with `=` is written as a formula, anything else as a
+   * value, so an edited formula cell keeps its formula. Text that already
+   * matches the cell's formula or coerced value is dropped without touching
+   * the workbook or undo history.
+   *
+   * @param cell Zero-based row and column address in the active worksheet.
+   * @param text Text entered by the user, for example `"=SUM(A1:A3)"` or `"42"`.
+   * @returns `true` when the cell was written.
+   */
+  commitCellInput: (cell: XlsxCellAddress, text: string) => boolean;
   copySelectionToClipboard: () => Promise<boolean>;
   defineNamedRange: (name: string, range?: XlsxCellRange | null) => void;
   fillSelection: (targetRange: XlsxCellRange) => void;
@@ -984,6 +1160,22 @@ export interface XlsxViewerImages {
   selectedChartId: string | null;
   selectedImage: XlsxImage | null;
   selectedImageId: string | null;
+  selectedShape: XlsxShape | null;
+  selectedShapeId: string | null;
+  getShapeById: (id: string) => XlsxShape | null;
+  selectShape: (id: string | null) => void;
+  clearSelectedShape: () => void;
+  setShapeRect: (id: string, rect: XlsxImageRect) => void;
+  moveShapeBy: (id: string, deltaX: number, deltaY: number) => void;
+  resizeShapeBy: (id: string, handle: XlsxImageResizeHandlePosition, deltaX: number, deltaY: number) => void;
+  deleteShape: (id: string) => boolean;
+  deleteImage: (id: string) => boolean;
+  deleteChart: (id: string) => boolean;
+  addFormControl: (input: XlsxFormControlInput) => XlsxFormControl | null;
+  updateFormControl: (id: string, patch: Partial<XlsxFormControlInput>) => boolean;
+  removeFormControl: (id: string) => boolean;
+  getFormControlById: (id: string) => XlsxFormControl | null;
+  getFormControlItems: (sheetIndex?: number) => XlsxFormControl[];
   selectChart: (id: string | null) => void;
   selectChartElement: (selection: XlsxChartElementSelection | null) => void;
   selectImage: (id: string | null) => void;
@@ -1055,6 +1247,13 @@ export interface XlsxSheetThumbnail {
 
 export interface XlsxViewerThumbnails {
   paintThumbnail: (sheetIndex: number, canvas: HTMLCanvasElement | null) => boolean;
+  /**
+   * Warms the preview data (geometry and cell values) for the given sheets so a
+   * later `paintThumbnail` only draws. Callers schedule this on idle, hovered
+   * tabs first; the composable dedupes per sheet revision, caps how many sheets
+   * one call warms and ignores unknown indices.
+   */
+  prefetchThumbnails: (sheetIndices: readonly number[]) => void;
   thumbnails: XlsxSheetThumbnail[];
 }
 

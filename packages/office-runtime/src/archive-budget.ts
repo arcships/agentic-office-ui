@@ -48,6 +48,36 @@ export interface OfficeArchiveValidationResult extends OfficeArchiveSummary {
   formulas: number;
 }
 
+/**
+ * One archive entry a format parser already decoded. Parsers that own the only
+ * unzip pass hand these parts to `validateOfficeArchiveParts` instead of letting
+ * the runtime decompress the archive again.
+ */
+export interface OfficeArchivePart {
+  /** Archive path as stored in the central directory. */
+  name: string;
+  /** Decoded XML text for `.xml`, `.rels` and `[Content_Types].xml` parts. */
+  text?: string;
+  /** Actual decoded byte length; measured from `text` when omitted. */
+  bytes?: number;
+}
+
+export interface OfficeArchivePartsOptions {
+  format: Exclude<OfficeFormat, "pdf">;
+  signal?: AbortSignal;
+}
+
+export interface OfficeArchivePartsValidation {
+  sourceFormat: OoxmlSourceFormat;
+  entryCount: number;
+  uncompressedBytes: number;
+  xmlBytes: number;
+  relationships: number;
+  worksheets: number;
+  sharedStrings: number;
+  formulas: number;
+}
+
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (!signal?.aborted) return;
   throw new OfficeLoadError({
@@ -230,6 +260,24 @@ function decodeXml(bytes: Uint8Array): string {
   }
 }
 
+/** Count the UTF-8 bytes of a decoded string without allocating a copy. */
+export function utf8ByteLength(text: string): number {
+  let bytes = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    if (code < 0x80) bytes += 1;
+    else if (code < 0x800) bytes += 2;
+    else if (code >= 0xd800 && code <= 0xdbff) {
+      const next = text.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        bytes += 4;
+        index += 1;
+      } else bytes += 3;
+    } else bytes += 3;
+  }
+  return bytes;
+}
+
 function findTagEnd(xml: string, start: number): number {
   let quote = "";
   for (let index = start + 1; index < xml.length; index += 1) {
@@ -274,19 +322,40 @@ function cellReferenceXmlAttribute(tag: string): { row: number; column: number }
   return { row, column: columnNumber(match[2]) };
 }
 
+function assertXmlEntryBytes(
+  name: string,
+  byteLength: number,
+  limits: Readonly<OfficeLimits>,
+): void {
+  assertLimit(byteLength, limits.maxSingleXmlBytes, "maxSingleXmlBytes", "xml");
+  if (/^xl\/worksheets\/[^/]+\.xml$/i.test(name)) {
+    assertLimit(byteLength, limits.maxWorksheetXmlBytes, "maxWorksheetXmlBytes", "xml");
+  }
+  if (/^xl\/sharedStrings\.xml$/i.test(name)) {
+    assertLimit(byteLength, limits.maxSharedStringsBytes, "maxSharedStringsBytes", "xml");
+  }
+}
+
 export function validateOfficeXmlEntry(
   name: string,
   bytes: Uint8Array,
   limits: Readonly<OfficeLimits>,
 ): OfficeXmlEntrySummary {
-  assertLimit(bytes.byteLength, limits.maxSingleXmlBytes, "maxSingleXmlBytes", "xml");
-  if (/^xl\/worksheets\/[^/]+\.xml$/i.test(name)) {
-    assertLimit(bytes.byteLength, limits.maxWorksheetXmlBytes, "maxWorksheetXmlBytes", "xml");
-  }
-  if (/^xl\/sharedStrings\.xml$/i.test(name)) {
-    assertLimit(bytes.byteLength, limits.maxSharedStringsBytes, "maxSharedStringsBytes", "xml");
-  }
-  const xml = decodeXml(bytes);
+  assertXmlEntryBytes(name, bytes.byteLength, limits);
+  return validateOfficeXmlText(name, decodeXml(bytes), limits, bytes.byteLength);
+}
+
+/**
+ * Validate one already decoded XML part. `byteLength` is the part's decoded UTF-8
+ * byte length and is only needed when the caller already knows it.
+ */
+export function validateOfficeXmlText(
+  name: string,
+  xml: string,
+  limits: Readonly<OfficeLimits>,
+  byteLength: number = utf8ByteLength(xml),
+): OfficeXmlEntrySummary {
+  assertXmlEntryBytes(name, byteLength, limits);
   if (/<!DOCTYPE\b/i.test(xml) || /<!ENTITY\b/i.test(xml)) {
     throw invalidXml(`XML 文件 ${name} 包含被禁止的文档类型或实体声明。`);
   }
@@ -506,6 +575,75 @@ export function validateOfficeArchive(
   return Object.freeze({
     ...central,
     sourceFormat: detected.format as OoxmlSourceFormat,
+    uncompressedBytes: totalUncompressed,
+    xmlBytes: totalXmlBytes,
+    relationships,
+    worksheets,
+    sharedStrings,
+    formulas,
+  });
+}
+
+/**
+ * Validate the parts a format parser already decoded, so the archive is only
+ * decompressed once. Entry paths, per-entry and total byte budgets, XML depth,
+ * text-node and attribute budgets, relationship counts and the OOXML family
+ * are enforced exactly like `validateOfficeArchive`. Parts without decoded text
+ * (binary parts or media a lazy resolver has not loaded yet) contribute size only.
+ */
+export function validateOfficeArchiveParts(
+  parts: readonly OfficeArchivePart[],
+  limits: Readonly<OfficeLimits>,
+  options: OfficeArchivePartsOptions,
+): OfficeArchivePartsValidation {
+  const seenNames = new Set<string>();
+  let entryCount = 0;
+  let totalUncompressed = 0;
+  let totalXmlBytes = 0;
+  let relationships = 0;
+  let worksheets = 0;
+  let sharedStrings = 0;
+  let formulas = 0;
+  let contentTypes = "";
+  for (const part of parts) {
+    throwIfAborted(options.signal);
+    const name = validateEntryName(part.name.normalize("NFC"), limits);
+    if (seenNames.has(name)) throw invalidArchive(`压缩包包含重复文件路径：${name}。`);
+    seenNames.add(name);
+    entryCount += 1;
+    assertLimit(entryCount, limits.maxArchiveEntries, "maxArchiveEntries", "archive");
+    const byteLength = part.text === undefined ? part.bytes : utf8ByteLength(part.text);
+    if (byteLength === undefined) {
+      throw new OfficeLoadError({
+        code: "INVALID_ARGUMENT",
+        message: `压缩包条目 ${name} 缺少实际大小。`,
+        phase: "archive",
+      });
+    }
+    assertLimit(byteLength, limits.maxSingleEntryBytes, "maxSingleEntryBytes", "archive");
+    totalUncompressed += byteLength;
+    assertLimit(totalUncompressed, limits.maxUncompressedBytes, "maxUncompressedBytes", "archive");
+    if (part.text === undefined || !isXmlEntry(name)) continue;
+    totalXmlBytes += byteLength;
+    assertLimit(totalXmlBytes, limits.maxXmlBytes, "maxXmlBytes", "xml");
+    const summary = validateOfficeXmlText(name, part.text, limits, byteLength);
+    relationships += summary.relationships;
+    assertLimit(relationships, limits.maxRelationships, "maxRelationships", "xml");
+    worksheets += summary.worksheets;
+    sharedStrings += summary.sharedStrings;
+    formulas += summary.formulas;
+    assertLimit(worksheets, limits.maxWorksheets, "maxWorksheets", "xml");
+    assertLimit(sharedStrings, limits.maxSharedStrings, "maxSharedStrings", "xml");
+    assertLimit(formulas, limits.maxFormulaCount, "maxFormulaCount", "xml");
+    if (name === "[Content_Types].xml") contentTypes = part.text;
+  }
+  const detected = contentTypes ? detectOoxmlSourceFormat(contentTypes) : undefined;
+  if (!detected || detected.family !== options.format) {
+    throw invalidArchive(`文件不是有效的 ${options.format.toUpperCase()} 文档。`);
+  }
+  return Object.freeze({
+    sourceFormat: detected.format as OoxmlSourceFormat,
+    entryCount,
     uncompressedBytes: totalUncompressed,
     xmlBytes: totalXmlBytes,
     relationships,

@@ -2,7 +2,7 @@
   <div
     :class="['office-object-outline-layer', props.className, { 'is-interactive': props.interactive }]"
     :role="props.interactive ? 'listbox' : undefined"
-    :aria-label="props.interactive ? props.ariaLabel : undefined"
+    :aria-label="props.interactive ? props.ariaLabel ?? m.vueUi.objectOutline.defaultAriaLabel : undefined"
     data-testid="office-object-outline-layer"
     @keydown="onKeydown"
   >
@@ -43,18 +43,27 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, nextTick } from "vue"
+import { formatOfficeMessage, resolveOfficeMessages } from "@arcships/office-interaction"
 import type {
   OfficeObjectOutline,
   OfficeObjectOutlineLayerProps,
   OfficeOutlineConfirmOptions,
 } from "../types"
+import { useOfficeUiMessages } from "../i18n"
 
 const props = withDefaults(defineProps<OfficeObjectOutlineLayerProps>(), {
   activeId: undefined,
   interactive: true,
-  ariaLabel: "可选择的文档对象",
+  ariaLabel: undefined,
   className: "",
+  locale: undefined,
+  messages: undefined,
 })
+
+const inheritedMessages = useOfficeUiMessages()
+const m = computed(() => (props.locale || props.messages)
+  ? resolveOfficeMessages(props.locale, props.messages)
+  : inheritedMessages.value)
 
 const emit = defineEmits<{
   activate: [item: OfficeObjectOutline]
@@ -72,8 +81,12 @@ const effectiveActiveId = computed(() => {
 })
 const activeItem = computed(() => props.items.find((item) => item.id === effectiveActiveId.value))
 const activeAnnouncement = computed(() => activeItem.value
-  ? `${activeItem.value.label}，${activeItem.value.kind}`
-  : props.items.length ? "没有可用对象" : "没有候选对象",
+  ? formatOfficeMessage(m.value.vueUi.objectOutline.itemDescription, {
+    label: activeItem.value.label,
+    kind: activeItem.value.kind,
+    reliability: activeItem.value.reliability ?? "unknown",
+  })
+  : props.items.length ? m.value.vueUi.objectOutline.noObjects : m.value.vueUi.objectOutline.noCandidates,
 )
 
 function optionId(id: string): string {
@@ -101,7 +114,11 @@ function outlineStyle(item: OfficeObjectOutline): Record<string, string> {
 }
 
 function outlineAriaLabel(item: OfficeObjectOutline): string {
-  return `${item.label}，类型 ${item.kind}，识别可靠度 ${item.reliability ?? "unknown"}`
+  return formatOfficeMessage(m.value.vueUi.objectOutline.itemDescription, {
+    label: item.label,
+    kind: item.kind,
+    reliability: item.reliability ?? "unknown",
+  })
 }
 
 function activate(item: OfficeObjectOutline): void {

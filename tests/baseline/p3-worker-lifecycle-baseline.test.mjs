@@ -266,7 +266,7 @@ test("P3-WORKER-01 regression: XLSX cancellation terminates its Worker", async (
   assert.equal(terminatedAtCancellation, 1);
 });
 
-test("P3-WORKER-01 regression: XLSX Worker errors do not silently rerun on main thread", async (t) => {
+test("P3-WORKER-01 regression: XLSX Worker errors fall back to the main thread with a diagnostic", async (t) => {
   installWorkerGlobal(t);
   configureXlsxMainThreadWasm();
   const diagnostics = [];
@@ -299,13 +299,25 @@ test("P3-WORKER-01 regression: XLSX Worker errors do not silently rerun on main 
     );
     assert.equal(
       controller.sourceState,
-      "error",
-      `XLSX silently reported ${controller.sourceState} after its Worker failed`,
+      "ready",
+      `XLSX reported ${controller.sourceState} after its Worker failed`,
+    );
+    assert.equal(controller.isWorkerBacked, false);
+    assert.ok(controller.workbook, "main-thread fallback did not produce a workbook");
+    assert.equal(
+      diagnostics.filter((event) => event.type === "worker-error").length,
+      1,
+      "the Worker failure was not reported as a diagnostic",
     );
     assert.equal(
       diagnostics.some((event) => event.type === "load-success"),
+      true,
+      "main-thread fallback did not report load-success",
+    );
+    assert.equal(
+      diagnostics.some((event) => event.type === "load-error"),
       false,
-      "XLSX emitted load-success after silently rerunning on the main thread",
+      "the Worker failure escaped as a load error",
     );
   } finally {
     mounted.app.unmount();

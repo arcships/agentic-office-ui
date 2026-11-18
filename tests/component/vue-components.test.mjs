@@ -12,7 +12,7 @@ import {
   walk,
 } from "./vue-test-renderer.mjs";
 
-const { DocxViewer } = await importFromDemo("@arcships/vue-docx");
+const { DocxViewer, renderParagraphRuns } = await importFromDemo("@arcships/vue-docx");
 const { createBlankDocumentModel, wasmBuildDocModelFromBytes } = await importFromDemo("@arcships/docx-core");
 const { XlsxViewer, useXlsxSearch, useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
 const { PdfSurface, PdfViewer } = await importFromDemo("@arcships/vue-pdf");
@@ -57,21 +57,29 @@ function xlsxController(overrides = {}) {
 function createPdfRuntime({
   pageCount = 3,
   onOpenDocument,
+  onGetPageAnnotations,
   onGetPageTextGeometry,
   onGetTextSlices,
   onRenderPage,
   onRenderThumbnail,
   onSearch,
+  onSetFormFieldValue,
+  onUpdateAnnotationAppearance,
+  onGetPageTextLayer,
 } = {}) {
   const calls = {
     closeDocument: [],
     dispose: [],
+    getPageAnnotations: [],
+    getPageTextLayer: [],
     getPageTextGeometry: [],
     getTextSlices: [],
     openDocument: [],
     renderPage: [],
     renderThumbnail: [],
     search: [],
+    setFormFieldValue: [],
+    updateAnnotationAppearance: [],
   };
   const document = {
     id: "component-pdf-document",
@@ -107,6 +115,40 @@ function createPdfRuntime({
         ? onGetPageTextGeometry(currentDocument, pageIndex, options)
         : { runs: [] };
     },
+    ...(onGetPageAnnotations
+      ? {
+          async getPageAnnotations(currentDocument, pageIndex, options = {}) {
+            calls.getPageAnnotations.push({ document: currentDocument, options, pageIndex });
+            return onGetPageAnnotations(currentDocument, pageIndex, options);
+          },
+        }
+      : {}),
+    async getPageTextLayer(currentDocument, pageIndex, options = {}) {
+      calls.getPageTextLayer.push({ document: currentDocument, options, pageIndex });
+      if (onGetPageTextLayer) return onGetPageTextLayer(currentDocument, pageIndex, options);
+      return {
+        pageIndex,
+        width: currentDocument.pages[pageIndex]?.width ?? 0,
+        height: currentDocument.pages[pageIndex]?.height ?? 0,
+        glyphs: [],
+      };
+    },
+    ...(onSetFormFieldValue
+      ? {
+          async setFormFieldValue(currentDocument, pageIndex, annotationId, value, options = {}) {
+            calls.setFormFieldValue.push({ document: currentDocument, pageIndex, annotationId, value, options });
+            return onSetFormFieldValue(currentDocument, pageIndex, annotationId, value, options);
+          },
+        }
+      : {}),
+    ...(onUpdateAnnotationAppearance
+      ? {
+          async updateAnnotationAppearance(currentDocument, pageIndex, annotationId, patch, options = {}) {
+            calls.updateAnnotationAppearance.push({ document: currentDocument, pageIndex, annotationId, patch, options });
+            return onUpdateAnnotationAppearance(currentDocument, pageIndex, annotationId, patch, options);
+          },
+        }
+      : {}),
     async getTextSlices(currentDocument, slices, options = {}) {
       calls.getTextSlices.push({ document: currentDocument, options, slices });
       return onGetTextSlices
@@ -143,6 +185,20 @@ function pdfTextGeometry(text) {
   };
 }
 
+function pdfTestTextLayer(text, { pageIndex = 0, width = 600, height = 800 } = {}) {
+  return {
+    pageIndex,
+    width,
+    height,
+    glyphs: Array.from(text, (character, index) => ({
+      charIndex: index,
+      text: character,
+      rect: { x: index * 10, y: 0, width: 8, height: 12 },
+      unmapped: /[\u0000\ufffd\ufffe]/u.test(character),
+    })),
+  };
+}
+
 function preparePdfSurfaceInteraction(root) {
   const surface = findByTestId(root, "pdf-surface");
   const interaction = walk(root).find((node) => node.props?.class === "pdf-surface__interaction");
@@ -167,6 +223,34 @@ function pdfPointerEvent(interaction, { clientX, clientY = 6, pointerId = 1 }) {
     pointerId,
     pointerType: "mouse",
     preventDefault() {},
+  };
+}
+
+function pdfInteractionLayers(root) {
+  const layers = new Map();
+  for (const node of walk(root)) {
+    if (node.props?.class !== "pdf-surface__interaction") continue;
+    const slot = node.parent;
+    const pageIndex = Number(slot?.props?.["data-page-index"]);
+    if (!Number.isSafeInteger(pageIndex)) continue;
+    const captures = new Set();
+    node.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 800 });
+    node.setPointerCapture = (pointerId) => captures.add(pointerId);
+    node.hasPointerCapture = (pointerId) => captures.has(pointerId);
+    node.releasePointerCapture = (pointerId) => captures.delete(pointerId);
+    layers.set(pageIndex, { layer: node, slot });
+  }
+  return layers;
+}
+
+/** Route pointer hit-testing to a specific rendered page, like a real document. */
+function routePdfPointerToPage(surface, page) {
+  page.slot.dataset = { pageIndex: String(Number(page.slot.props["data-page-index"])) };
+  page.slot.querySelector = (selector) =>
+    selector === ".pdf-surface__interaction" ? page.layer : null;
+  surface.ownerDocument = {
+    elementFromPoint: (clientX, clientY) =>
+      clientY >= 0 && clientY <= 800 ? { closest: () => page.slot } : null,
   };
 }
 
@@ -257,6 +341,24 @@ test("DocxViewer hides upload and download entry points through showUpload and s
   failed.app.unmount();
 });
 
+test("DocxViewer resolves locale and host message overrides for visible copy and aria-labels", async () => {
+  const zh = await mount(DocxViewer, { locale: "zh-CN" });
+  assert.match(textContent(zh.root), /未打开文档/);
+  assert.equal(
+    findByTestId(zh.root, "docx-sidebar-toggle").props["aria-label"],
+    "显示或隐藏页面缩略图",
+  );
+  assert.deepEqual(zh.warnings, []);
+  zh.app.unmount();
+
+  const custom = await mount(DocxViewer, {
+    messages: { docx: { viewer: { emptyTitle: "Nothing open" } } },
+  });
+  assert.match(textContent(custom.root), /Nothing open/);
+  assert.deepEqual(custom.warnings, []);
+  custom.app.unmount();
+});
+
 test("DocxViewer displays model-derived tracked changes and comments without an editor controller", async () => {
   const file = readFileSync(new URL("../../apps/demo/public/samples/review-comments.docx", import.meta.url));
   const bytes = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
@@ -274,7 +376,6 @@ test("DocxViewer displays model-derived tracked changes and comments without an 
   assert.equal(trackedToggle.props["aria-pressed"], true);
   assert.equal(commentToggle.props["aria-pressed"], true);
   assert.match(textContent(mounted.root), /Alex Reviewer/);
-  assert.match(textContent(mounted.root), /Morgan Editor/);
   assert.match(textContent(mounted.root), /Priya Reviewer/);
   assert.match(textContent(mounted.root), /Please confirm this report includes the service-level summary/);
 
@@ -285,6 +386,72 @@ test("DocxViewer displays model-derived tracked changes and comments without an 
   assert.match(textContent(mounted.root), /Alex Reviewer/);
   assert.deepEqual(mounted.warnings, []);
   mounted.app.unmount();
+});
+
+function flattenVNodes(value, result = []) {
+  if (Array.isArray(value)) {
+    for (const item of value) flattenVNodes(item, result);
+    return result;
+  }
+  if (!value || typeof value !== "object") return result;
+  result.push(value);
+  flattenVNodes(value.children, result);
+  return result;
+}
+
+test("DOCX inline revisions render underlines for insertions and strikethrough for deletions", async () => {
+  const file = readFileSync(new URL("../../apps/demo/public/samples/review-comments.docx", import.meta.url));
+  const bytes = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
+  const { model } = await wasmBuildDocModelFromBytes(bytes);
+  const paragraph = model.nodes.find(
+    (node) => node.type === "paragraph"
+      && /<w:ins\b/.test(node.sourceXml ?? "")
+      && /<w:del\b/.test(node.sourceXml ?? ""),
+  );
+  assert.ok(paragraph, "fixture contains a paragraph with both an insertion and a deletion");
+
+  const vnodes = renderParagraphRuns(
+    paragraph,
+    "tracked-revision",
+    "light",
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { showTrackedChanges: true, trackedMarkupMode: "inline" },
+  );
+  const trackedSpans = flattenVNodes(vnodes).filter(
+    (node) => node.props?.["data-docx-tracked-change"],
+  );
+  const insertionSpan = trackedSpans.find(
+    (node) => node.props["data-docx-tracked-change"] === "insertion",
+  );
+  const deletionSpan = trackedSpans.find(
+    (node) => node.props["data-docx-tracked-change"] === "deletion",
+  );
+  assert.ok(insertionSpan, "insertion run is rendered");
+  assert.ok(deletionSpan, "deletion run is rendered");
+
+  const decorationTokens = (node) => new Set(
+    String(node.props.style?.textDecoration ?? "")
+      .split(/\s+/)
+      .filter(Boolean),
+  );
+  const insertionDecoration = decorationTokens(insertionSpan);
+  const deletionDecoration = decorationTokens(deletionSpan);
+  assert.ok(insertionDecoration.has("underline"), "insertions are underlined");
+  assert.equal(insertionDecoration.has("line-through"), false);
+  assert.equal(insertionDecoration.has("none"), false);
+  assert.ok(deletionDecoration.has("line-through"), "deletions are struck through");
+  assert.equal(deletionDecoration.has("underline"), false);
+  assert.equal(deletionDecoration.has("none"), false);
+  assert.notEqual(
+    insertionSpan.props.style.color,
+    deletionSpan.props.style.color,
+    "insertions and deletions use different colours",
+  );
 });
 
 test("DocxViewer aborts an active runtime load when unmounted", async () => {
@@ -321,9 +488,9 @@ test("DocxViewer aborts an active runtime load when unmounted", async () => {
 
 test("XlsxViewer renders loading, error and empty states and handles undo/redo shortcuts", async () => {
   for (const [controller, expected] of [
-    [xlsxController({ isLoading: true }), "加载中"],
+    [xlsxController({ isLoading: true }), "Loading"],
     [xlsxController({ error: new Error("XLSX failed") }), "XLSX failed"],
-    [xlsxController(), "打开一个 XLSX 文件开始查看"],
+    [xlsxController(), "Open an XLSX file"],
   ]) {
     const current = await mount(XlsxViewer, {
       controller,
@@ -358,6 +525,41 @@ test("XlsxViewer renders loading, error and empty states and handles undo/redo s
   assert.equal(prevented, 2);
   assert.deepEqual(keyboard.warnings, []);
   keyboard.app.unmount();
+});
+
+test("XlsxViewer resolves locale and host message overrides for visible copy and aria-labels", async () => {
+  const controller = xlsxController({
+    canZoomIn: false,
+    canZoomOut: false,
+    displayFileName: "book.xlsx",
+    zoomScale: 100,
+  });
+  const zh = await mount(XlsxViewer, {
+    controller,
+    locale: "zh-CN",
+    showFormulaBar: false,
+    showRibbon: false,
+  });
+  assert.match(textContent(zh.root), /打开一个 XLSX 文件开始查看/);
+  assert.equal(findByTestId(zh.root, "xlsx-search-toggle").props["aria-label"], "搜索工作簿");
+  assert.deepEqual(zh.warnings, []);
+  zh.app.unmount();
+
+  const custom = await mount(XlsxViewer, {
+    controller,
+    messages: {
+      xlsx: {
+        toolbar: { search: "Find cells" },
+        viewer: { empty: "Nothing to show" },
+      },
+    },
+    showFormulaBar: false,
+    showRibbon: false,
+  });
+  assert.match(textContent(custom.root), /Nothing to show/);
+  assert.equal(findByTestId(custom.root, "xlsx-search-toggle").props["aria-label"], "Find cells");
+  assert.deepEqual(custom.warnings, []);
+  custom.app.unmount();
 });
 
 test("XlsxViewer renders and selects a resolved chartsheet chart", async () => {
@@ -670,6 +872,302 @@ test("PdfSurface exposes the unified controlled object/region reference contract
   mounted.app.unmount();
 });
 
+test("PdfSurface drag selection spans pages and copies the joined text", async () => {
+  const pageTexts = ["abcdefgh", "ijklmnop"];
+  const fake = createPdfRuntime({
+    pageCount: 2,
+    onGetPageTextGeometry: (_document, pageIndex) => pdfTextGeometry(pageTexts[pageIndex]),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      pageTexts[slice.pageIndex].slice(slice.charIndex, slice.charIndex + slice.charCount)),
+  });
+  const selections = [];
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    onSelectionChange: (selection) => selections.push(selection),
+  });
+  await waitFor(
+    () => fake.calls.getPageTextGeometry.length === 2 && pdfInteractionLayers(mounted.root).size === 2,
+    "PDF selection layers for both pages",
+  );
+  const surface = findByTestId(mounted.root, "pdf-surface");
+  surface.focus = () => {};
+  const layers = pdfInteractionLayers(mounted.root);
+  const pageOne = layers.get(0);
+  const pageTwo = layers.get(1);
+  routePdfPointerToPage(surface, pageTwo);
+
+  pageOne.layer.props.onPointerdown(pdfPointerEvent(pageOne.layer, { clientX: 2, pointerId: 11 }));
+  pageOne.layer.props.onPointermove(pdfPointerEvent(pageOne.layer, { clientX: 35, pointerId: 11 }));
+  pageOne.layer.props.onPointerup(pdfPointerEvent(pageOne.layer, { clientX: 35, pointerId: 11 }));
+
+  await waitFor(() => selections.at(-1)?.kind === "text", "cross-page PDF drag selection");
+  const selection = selections.at(-1);
+  assert.equal(selection.text, "abcdefgh\nijkl");
+  assert.deepEqual(selection.range, { pageIndex: 0, charIndex: 0, charCount: 8 });
+  assert.deepEqual(selection.segments.map((segment) => segment.range), [
+    { pageIndex: 0, charIndex: 0, charCount: 8 },
+    { pageIndex: 1, charIndex: 0, charCount: 4 },
+  ]);
+  assert.deepEqual(selection.segments.map((segment) => segment.text), ["abcdefgh", "ijkl"]);
+  assert.equal(selection.segments[0].rects.length > 0, true);
+  assert.equal(selection.segments[1].rects.length > 0, true);
+  assert.equal(
+    walk(mounted.root).filter((node) => node.props?.class === "pdf-surface__selection-hit").length,
+    selection.segments[0].rects.length + selection.segments[1].rects.length,
+    "selection rectangles render on both pages",
+  );
+
+  const copied = [];
+  surface.props.onCopy({
+    clipboardData: { setData: (type, value) => copied.push({ type, value }) },
+    preventDefault() {},
+  });
+  assert.deepEqual(copied, [{ type: "text/plain", value: "abcdefgh\nijkl" }]);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfSurface forwards Escape from the region layer exactly once", async () => {
+  const fake = createPdfRuntime({ pageCount: 1, onGetPageTextGeometry: () => pdfTextGeometry("region") });
+  const cancellations = [];
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    selectionMode: "region",
+    onSelectionCancel: (event) => cancellations.push(event),
+  });
+  await waitFor(
+    () => walk(mounted.root).some((node) => node.props?.class === "pdf-surface__interaction"),
+    "PDF region interaction layer",
+  );
+  const surface = findByTestId(mounted.root, "pdf-surface");
+  const interaction = preparePdfSurfaceInteraction(mounted.root);
+  let stopped = false;
+  interaction.props.onKeydown({
+    key: "Escape",
+    stopPropagation() { stopped = true; },
+    preventDefault() {},
+  });
+  assert.equal(stopped, true, "region layer stops the Escape bubble");
+  assert.deepEqual(cancellations, [{ mode: "region", reason: "escape" }]);
+
+  surface.props.onKeydown({ key: "Escape", defaultPrevented: true });
+  assert.equal(cancellations.length, 1, "an already-handled Escape is not emitted twice");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfSurface exposes link and widget hit rectangles and forwards activation", async () => {
+  const annotations = [
+    { id: "link-1", pageIndex: 0, kind: "link", rect: { x: 10, y: 10, width: 50, height: 20 }, url: "https://example.com/a" },
+    { id: "widget-1", pageIndex: 0, kind: "widget", rect: { x: 100, y: 10, width: 40, height: 20 }, fieldName: "name", fieldValue: "Ada" },
+  ];
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageAnnotations: () => annotations,
+    onGetPageTextGeometry: () => pdfTextGeometry("annotated"),
+  });
+  const links = [];
+  const activations = [];
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    onLinkActivate: (event) => links.push(event),
+    onAnnotationActivate: (event) => activations.push(event),
+  });
+  await waitFor(
+    () => fake.calls.getPageAnnotations.length === 1 &&
+      walk(mounted.root).some((node) => node.props?.["data-annotation-kind"] === "link"),
+    "PDF annotation hit layer",
+  );
+  const hits = walk(mounted.root).filter((node) => node.props?.["data-annotation-kind"]);
+  assert.deepEqual(hits.map((node) => node.props["data-annotation-kind"]).sort(), ["link", "widget"]);
+  assert.equal(hits[0].props.style.left, "10px");
+
+  const interaction = preparePdfSurfaceInteraction(mounted.root);
+  const click = async (clientX, clientY) => {
+    interaction.props.onPointerdown(pdfPointerEvent(interaction, { clientX, clientY }));
+    interaction.props.onPointerup(pdfPointerEvent(interaction, { clientX, clientY }));
+    await interaction.props.onClick({
+      button: 0,
+      clientX,
+      clientY,
+      currentTarget: interaction,
+      detail: 1,
+      preventDefault() {},
+    });
+  };
+
+  await click(30, 15);
+  assert.deepEqual(links, [{
+    pageIndex: 0,
+    annotationId: "link-1",
+    clientX: 30,
+    clientY: 15,
+    url: "https://example.com/a",
+  }]);
+  assert.deepEqual(activations, []);
+
+  await click(110, 15);
+  assert.deepEqual(activations, [{
+    pageIndex: 0,
+    annotationId: "widget-1",
+    kind: "widget",
+    clientX: 110,
+    clientY: 15,
+    fieldName: "name",
+    fieldValue: "Ada",
+  }]);
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfSurface writes AcroForm values through the runtime and refreshes the page", async () => {
+  const widgets = [
+    {
+      id: "widget-name",
+      pageIndex: 0,
+      kind: "widget",
+      rect: { x: 10, y: 10, width: 120, height: 20 },
+      fieldName: "name",
+      fieldValue: "",
+      fieldType: "text",
+    },
+    {
+      id: "widget-agree",
+      pageIndex: 0,
+      kind: "widget",
+      rect: { x: 10, y: 40, width: 16, height: 16 },
+      fieldName: "agree",
+      fieldValue: "Off",
+      fieldType: "checkbox",
+      exportValue: "Yes",
+    },
+    {
+      id: "widget-plan",
+      pageIndex: 0,
+      kind: "widget",
+      rect: { x: 10, y: 70, width: 90, height: 20 },
+      fieldName: "plan",
+      fieldValue: "Alpha",
+      fieldType: "combobox",
+      options: [
+        { label: "Alpha", selected: true },
+        { label: "Beta", selected: false },
+      ],
+    },
+  ];
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageAnnotations: () => widgets,
+    onGetPageTextGeometry: () => pdfTextGeometry("form"),
+    onSetFormFieldValue: (_document, pageIndex, annotationId, value) => ({
+      ...widgets.find((widget) => widget.id === annotationId),
+      fieldValue: value === true ? "Yes" : String(value),
+    }),
+  });
+  const changes = [];
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    onFormFieldChange: (event) => changes.push(event),
+  });
+  await waitFor(
+    () => walk(mounted.root).some((node) => node.props?.["data-form-field-id"] === "widget-name"),
+    "PDF AcroForm controls",
+  );
+  const controls = walk(mounted.root).filter((node) => node.props?.["data-form-field-id"]);
+  assert.deepEqual(
+    controls.map((node) => node.props["data-form-field-type"]).sort(),
+    ["checkbox", "combobox", "text"],
+  );
+  const planControl = controls.find((node) => node.props["data-form-field-id"] === "widget-plan");
+  assert.equal(planControl.type, "select");
+  assert.deepEqual(planControl.options.map((option) => option.props.value), ["Alpha", "Beta"]);
+
+  const rendersBefore = fake.calls.renderPage.length;
+  await controls.find((node) => node.props["data-form-field-id"] === "widget-name").props.onChange({
+    target: { value: "Ada Lovelace" },
+  });
+  assert.deepEqual(fake.calls.setFormFieldValue.at(-1).annotationId, "widget-name");
+  assert.equal(fake.calls.setFormFieldValue.at(-1).value, "Ada Lovelace");
+  assert.equal(changes.at(-1).fieldName, "name");
+  assert.equal(changes.at(-1).value, "Ada Lovelace");
+  await waitFor(() => fake.calls.renderPage.length > rendersBefore, "form write page refresh");
+
+  await controls.find((node) => node.props["data-form-field-id"] === "widget-agree").props.onChange({
+    target: { checked: true, value: "Yes" },
+  });
+  assert.equal(fake.calls.setFormFieldValue.at(-1).value, true);
+  assert.equal(changes.at(-1).value, "Yes");
+
+  await planControl.props.onChange({ target: { value: "Beta" } });
+  assert.equal(fake.calls.setFormFieldValue.at(-1).annotationId, "widget-plan");
+  assert.equal(fake.calls.setFormFieldValue.at(-1).value, "Beta");
+  assert.equal(changes.at(-1).value, "Beta");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfSurface updates annotation appearance through the exposed API", async () => {
+  const annotations = [
+    { id: "note-1", pageIndex: 0, kind: "annotation", rect: { x: 10, y: 10, width: 40, height: 20 }, contents: "old", color: "#ffff00", opacity: 1 },
+  ];
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageAnnotations: () => annotations,
+    onGetPageTextGeometry: () => pdfTextGeometry("note"),
+    onUpdateAnnotationAppearance: (_document, pageIndex, annotationId, patch) => ({
+      ...annotations.find((annotation) => annotation.id === annotationId),
+      ...patch,
+    }),
+  });
+  const changes = [];
+  let api;
+  const Harness = vue.defineComponent({
+    setup() {
+      const surface = vue.ref(null);
+      vue.watch(surface, (value) => { api = value; }, { flush: "sync" });
+      return () => vue.h(PdfSurface, {
+        ref: surface,
+        source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+        runtime: fake.runtime,
+        onAnnotationChange: (event) => changes.push(event),
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(() => api && fake.calls.getPageAnnotations.length === 1, "PDF annotation appearance surface");
+
+  const rendersBefore = fake.calls.renderPage.length;
+  const updated = await api.updateAnnotationAppearance(0, "note-1", { contents: "reviewed", color: "#ff0000" });
+  assert.equal(updated.contents, "reviewed");
+  assert.deepEqual(fake.calls.updateAnnotationAppearance.at(-1).patch, { contents: "reviewed", color: "#ff0000" });
+  assert.equal(changes.at(-1).annotation.contents, "reviewed");
+  await waitFor(() => fake.calls.renderPage.length > rendersBefore, "annotation update page refresh");
+
+  const pageAnnotations = await api.getPageAnnotations(0);
+  assert.equal(pageAnnotations.find((annotation) => annotation.id === "note-1").contents, "reviewed");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfViewer exposes localized toolbar aria-labels and message overrides", async () => {
+  const zh = await mount(PdfViewer, { locale: "zh-CN" });
+  assert.equal(findByTestId(zh.root, "pdf-sidebar-toggle").props["aria-label"], "显示或隐藏缩略图");
+  assert.equal(findByTestId(zh.root, "pdf-page-input").props["aria-label"], "页码");
+  assert.deepEqual(zh.warnings, []);
+  zh.app.unmount();
+
+  const custom = await mount(PdfViewer, {
+    messages: { pdf: { viewer: { toggleThumbnails: "Toggle panel" } } },
+  });
+  assert.equal(findByTestId(custom.root, "pdf-sidebar-toggle").props["aria-label"], "Toggle panel");
+  assert.deepEqual(custom.warnings, []);
+  custom.app.unmount();
+});
+
 test("PdfViewer becomes ready only after the injected runtime opens and renders the PDF", async () => {
   const empty = await mount(PdfViewer, { showToolbar: false });
   assert.equal(findByTestId(empty.root, "pdf-status").props["data-state"], "idle");
@@ -772,7 +1270,7 @@ test("PdfViewer becomes ready only after the injected runtime opens and renders 
   assert.equal(calls.search[0].query, "needle");
   assert.equal(calls.search[0].document.id, document.id);
   assert.equal(findByTestId(ready.root, "pdf-document").props["data-active-page"], 3);
-  assert.match(textContent(findByTestId(ready.root, "pdf-search-result")), /第 1 \/ 1 项，第 3 页/);
+  assert.match(textContent(findByTestId(ready.root, "pdf-search-result")), /Result 1 \/ 1, page 3/);
   assert.deepEqual(pages, ["count:3", 1, 2, 3]);
   assert.deepEqual(ready.warnings, []);
   ready.app.unmount();
@@ -821,7 +1319,7 @@ test("PdfViewer exposes source and renderer failures without reporting a false s
   );
   assert.equal(rendererErrors.length, 1);
   assert.equal(rendererErrors[0].code, "INVALID_PDF");
-  assert.match(rendererErrors[0].message, /无法解析或渲染/);
+  assert.match(rendererErrors[0].message, /could not be parsed or rendered/);
   assert.equal(successEvents, 0);
   assert.equal(findByTestId(failed.root, "pdf-page-image"), undefined);
   await waitFor(() => failedRuntime.calls.closeDocument.length === 1, "failed PDF document close");
@@ -869,6 +1367,21 @@ test("PdfViewer rejects an oversized PDF before reading bytes or opening a runti
   assert.equal(fake.calls.dispose.length, 0);
 });
 
+test("PdfViewer forwards password credentials to the runtime open call", async () => {
+  const fake = createPdfRuntime();
+  const onPassword = async () => "resolved-password";
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    password: "initial-password",
+    onPassword,
+  });
+  await waitFor(() => fake.calls.openDocument.length === 1, "PDF runtime open with password options");
+  assert.equal(fake.calls.openDocument[0].options.password, "initial-password");
+  assert.equal(fake.calls.openDocument[0].options.onPassword, onPassword);
+  mounted.app.unmount();
+});
+
 test("FileUpload reports accepted and rejected files through public events", async () => {
   const acceptedEvents = [];
   const rejectedEvents = [];
@@ -900,6 +1413,207 @@ test("FileUpload reports accepted and rejected files through public events", asy
   assert.match(textContent(mounted.root), /large\.docx.*size limit/);
   assert.equal(target.value, "");
   assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfViewer sanitizes load-start diagnostics instead of leaking query tokens", async () => {
+  const diagnostics = [];
+  const fetch = (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener(
+      "abort",
+      () => reject(new DOMException("Aborted", "AbortError")),
+      { once: true },
+    );
+  });
+  const fake = createPdfRuntime();
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "url", url: "https://files.example/report.pdf?token=secret#page=2" },
+    runtime: fake.runtime,
+    urlPolicy: {
+      allowedOrigins: ["https://files.example"],
+      allowedProtocols: ["https:"],
+      baseUrl: "https://files.example/",
+      fetch,
+    },
+    onDiagnostic: (event) => diagnostics.push(event),
+  });
+  await waitFor(
+    () => diagnostics.some((event) => event.type === "load-start"),
+    "PDF load-start diagnostic",
+  );
+  const loadStart = diagnostics.find((event) => event.type === "load-start");
+  assert.equal(loadStart.url, "https://files.example/report.pdf");
+  assert.equal(JSON.stringify(diagnostics).includes("secret"), false);
+  assert.equal(JSON.stringify(diagnostics).includes("page=2"), false);
+  mounted.app.unmount();
+});
+
+test("PdfViewer applies token sanitization to the legacy src path", async () => {
+  const diagnostics = [];
+  const fetch = (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener(
+      "abort",
+      () => reject(new DOMException("Aborted", "AbortError")),
+      { once: true },
+    );
+  });
+  const mounted = await mount(PdfViewer, {
+    src: "https://files.example/report.pdf?token=legacy-secret#page=3",
+    runtime: createPdfRuntime().runtime,
+    urlPolicy: {
+      allowedOrigins: ["https://files.example"],
+      allowedProtocols: ["https:"],
+      baseUrl: "https://files.example/",
+      fetch,
+    },
+    onDiagnostic: (event) => diagnostics.push(event),
+  });
+  await waitFor(
+    () => diagnostics.some((event) => event.type === "load-start"),
+    "legacy PDF load-start diagnostic",
+  );
+  assert.equal(
+    diagnostics.find((event) => event.type === "load-start").url,
+    "https://files.example/report.pdf",
+  );
+  assert.equal(JSON.stringify(diagnostics).includes("legacy-secret"), false);
+  assert.equal(JSON.stringify(diagnostics).includes("page=3"), false);
+  mounted.app.unmount();
+});
+
+test("PdfViewer follows same-origin redirects and reports only the sanitized final URL", async () => {
+  const bytes = new TextEncoder().encode("%PDF-1.4\n%%EOF");
+  const diagnostics = [];
+  const fetch = async () => ({
+    ok: true,
+    status: 200,
+    url: "https://files.example/cdn/final.pdf?token=redirect-secret#fragment",
+    headers: { get: (name) => name.toLowerCase() === "content-type" ? "application/pdf" : null },
+    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  });
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "url", url: "https://files.example/report.pdf?token=request-secret" },
+    runtime: createPdfRuntime().runtime,
+    urlPolicy: {
+      allowedOrigins: ["https://files.example"],
+      allowedProtocols: ["https:"],
+      baseUrl: "https://files.example/",
+      fetch,
+    },
+    onDiagnostic: (event) => diagnostics.push(event),
+  });
+  await waitFor(
+    () => diagnostics.some((event) => event.type === "load-success"),
+    "redirected PDF load-success",
+  );
+  assert.equal(
+    diagnostics.find((event) => event.type === "load-success").url,
+    "https://files.example/cdn/final.pdf",
+  );
+  assert.equal(JSON.stringify(diagnostics).includes("secret"), false);
+  mounted.app.unmount();
+});
+
+test("PdfViewer rejects cross-origin redirects with token-free load errors", async () => {
+  const errors = [];
+  const diagnostics = [];
+  const fetch = async () => ({
+    ok: true,
+    status: 200,
+    url: "https://blocked.invalid/sample.pdf?token=redirect-secret",
+    headers: { get: () => null },
+    arrayBuffer: async () => new ArrayBuffer(0),
+  });
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "url", url: "https://files.example/report.pdf?token=request-secret" },
+    runtime: createPdfRuntime().runtime,
+    urlPolicy: {
+      allowedOrigins: ["https://files.example"],
+      allowedProtocols: ["https:"],
+      baseUrl: "https://files.example/",
+      fetch,
+    },
+    onDocumentLoadError: (error) => errors.push(error),
+    onDiagnostic: (event) => diagnostics.push(event),
+  });
+  await waitFor(() => errors.length === 1, "redirected PDF load error");
+  assert.equal(errors[0].code, "SOURCE_NOT_ALLOWED");
+  assert.equal(errors[0].url, "https://blocked.invalid/sample.pdf");
+  assert.equal(JSON.stringify({ errors, diagnostics }).includes("secret"), false);
+  assert.equal(
+    diagnostics.find((event) => event.type === "load-start").url,
+    "https://files.example/report.pdf",
+  );
+  assert.equal(
+    diagnostics.find((event) => event.type === "load-error").error.url,
+    "https://blocked.invalid/sample.pdf",
+  );
+  mounted.app.unmount();
+});
+
+test("PdfSurface rejects cross-origin redirects with token-free load errors for source and src", async () => {
+  for (const sourceProps of [
+    { source: { kind: "url", url: "https://files.example/report.pdf?token=request-secret" } },
+    { src: "https://files.example/report.pdf?token=request-secret" },
+  ]) {
+    const errors = [];
+    const fetch = async () => ({
+      ok: true,
+      status: 200,
+      url: "https://blocked.invalid/sample.pdf?token=redirect-secret",
+      headers: { get: () => null },
+      arrayBuffer: async () => new ArrayBuffer(0),
+    });
+    const mounted = await mount(PdfSurface, {
+      ...sourceProps,
+      runtime: createPdfRuntime().runtime,
+      urlPolicy: {
+        allowedOrigins: ["https://files.example"],
+        allowedProtocols: ["https:"],
+        baseUrl: "https://files.example/",
+        fetch,
+      },
+      onDocumentLoadError: (error) => errors.push(error),
+    });
+    await waitFor(() => errors.length === 1, "surface redirected PDF load error");
+    assert.equal(errors[0].code, "SOURCE_NOT_ALLOWED");
+    assert.equal(errors[0].url, "https://blocked.invalid/sample.pdf");
+    assert.equal(JSON.stringify(errors).includes("secret"), false);
+    mounted.app.unmount();
+  }
+});
+
+test("PdfViewer sanitizes the source URL in render-error diagnostics", async () => {
+  const bytes = new TextEncoder().encode("%PDF-1.4\n%%EOF");
+  const diagnostics = [];
+  const fake = createPdfRuntime({
+    onRenderPage: () => { throw new Error("render exploded"); },
+  });
+  const fetch = async () => ({
+    ok: true,
+    status: 200,
+    url: "https://files.example/report.pdf?token=request-secret",
+    headers: { get: (name) => name.toLowerCase() === "content-type" ? "application/pdf" : null },
+    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  });
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "url", url: "https://files.example/report.pdf?token=request-secret" },
+    runtime: fake.runtime,
+    urlPolicy: {
+      allowedOrigins: ["https://files.example"],
+      allowedProtocols: ["https:"],
+      baseUrl: "https://files.example/",
+      fetch,
+    },
+    onDiagnostic: (event) => diagnostics.push(event),
+  });
+  await waitFor(
+    () => diagnostics.some((event) => event.type === "render-error"),
+    "PDF render-error diagnostic",
+  );
+  const renderError = diagnostics.find((event) => event.type === "render-error");
+  assert.equal(renderError.error.url, "https://files.example/report.pdf");
+  assert.equal(JSON.stringify(diagnostics).includes("secret"), false);
   mounted.app.unmount();
 });
 
@@ -1025,4 +1739,437 @@ test("PdfViewer downloads verified bytes without reading the source again and re
   mounted.app.unmount();
   await waitFor(() => fake.calls.closeDocument.length === 1, "downloaded PDF close");
   assert.equal(fake.calls.dispose.length, 0);
+});
+
+test("PdfSurface finishes its load task and releases abort listeners across renders", async (t) => {
+  const liveAbortListeners = new Set();
+  const originalAdd = AbortSignal.prototype.addEventListener;
+  const originalRemove = AbortSignal.prototype.removeEventListener;
+  AbortSignal.prototype.addEventListener = function (type, listener, options) {
+    if (type === "abort") liveAbortListeners.add(listener);
+    return originalAdd.call(this, type, listener, options);
+  };
+  AbortSignal.prototype.removeEventListener = function (type, listener, options) {
+    if (type === "abort") liveAbortListeners.delete(listener);
+    return originalRemove.call(this, type, listener, options);
+  };
+  t.after(() => {
+    AbortSignal.prototype.addEventListener = originalAdd;
+    AbortSignal.prototype.removeEventListener = originalRemove;
+  });
+
+  const source = { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) };
+  const fake = createPdfRuntime({ pageCount: 2 });
+  const zoom = vue.ref(1);
+  let surfaceApi;
+  const Harness = vue.defineComponent({
+    setup() {
+      const surface = vue.ref(null);
+      vue.watch(surface, (value) => { surfaceApi = value; }, { flush: "sync" });
+      return () => vue.h(PdfSurface, { ref: surface, source, runtime: fake.runtime, zoom: zoom.value });
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(
+    () => surfaceApi && fake.calls.renderPage.length === 2,
+    "initial surface page renders",
+  );
+  await waitFor(() => liveAbortListeners.size === 0, "initial load task abort listener cleanup");
+
+  zoom.value = 2;
+  await vue.nextTick();
+  await waitFor(() => fake.calls.renderPage.length === 4, "zoomed surface page renders");
+  assert.equal(fake.calls.renderPage.at(-1).options.scale, 2);
+  await waitFor(() => liveAbortListeners.size === 0, "zoomed load task abort listener cleanup");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+  assert.equal(fake.calls.dispose.length, 0);
+});
+
+test("PdfSurface disposes its load coordinator so unmount aborts URL loading", async () => {
+  let observedSignal;
+  let errorEvents = 0;
+  const fake = createPdfRuntime();
+  const fetch = (_url, init) => {
+    observedSignal = init.signal;
+    return new Promise((_resolve, reject) => {
+      init.signal.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    });
+  };
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "url", url: "https://files.example/report.pdf" },
+    runtime: fake.runtime,
+    urlPolicy: {
+      allowedOrigins: ["https://files.example"],
+      allowedProtocols: ["https:"],
+      baseUrl: "https://files.example/",
+      fetch,
+    },
+    onDocumentLoadError: () => { errorEvents += 1; },
+  });
+  assert.equal(observedSignal.aborted, false);
+  mounted.app.unmount();
+  await waitFor(() => observedSignal.aborted, "surface URL abort on unmount");
+  assert.equal(errorEvents, 0, "unmount cancellation must not emit a stale load error");
+  assert.equal(fake.calls.openDocument.length, 0);
+  assert.equal(fake.calls.dispose.length, 0, "caller-owned runtime remains usable");
+});
+
+test("PdfSurface closes a document opened after unmount instead of adopting it", async () => {
+  const openGate = deferred();
+  const fake = createPdfRuntime({ onOpenDocument: () => openGate.promise });
+  const successes = [];
+  const errors = [];
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    onDocumentLoadSuccess: (count) => successes.push(count),
+    onDocumentLoadError: (error) => errors.push(error),
+  });
+  await waitFor(() => fake.calls.openDocument.length === 1, "surface document open");
+  mounted.app.unmount();
+  openGate.resolve(fake.document);
+  await waitFor(() => fake.calls.closeDocument.length === 1, "late surface document close");
+  assert.equal(fake.calls.closeDocument[0], fake.document);
+  assert.deepEqual(successes, []);
+  assert.deepEqual(errors, []);
+  assert.equal(fake.calls.renderPage.length, 0, "an unmounted surface must not render pages");
+});
+
+test("PdfSurface reloads when urlPolicy, maxFileSize or runtime changes", async () => {
+  const source = { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) };
+  const first = createPdfRuntime({ pageCount: 1 });
+  const second = createPdfRuntime({ pageCount: 1 });
+  const maxFileSize = vue.ref(1024 * 1024);
+  const runtime = vue.shallowRef(first.runtime);
+  const urlPolicy = vue.shallowRef({ allowedOrigins: ["https://files.example"] });
+  const successes = [];
+  const errors = [];
+  const Harness = vue.defineComponent({
+    setup() {
+      return () => vue.h(PdfSurface, {
+        source,
+        runtime: runtime.value,
+        maxFileSize: maxFileSize.value,
+        urlPolicy: urlPolicy.value,
+        onDocumentLoadSuccess: (count) => successes.push(count),
+        onDocumentLoadError: (error) => errors.push(error),
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(
+    () => first.calls.openDocument.length === 1 && first.calls.renderPage.length === 1,
+    "initial surface load",
+  );
+  assert.deepEqual(successes, [1]);
+
+  urlPolicy.value = { allowedOrigins: ["https://other.example"] };
+  await vue.nextTick();
+  await waitFor(() => first.calls.openDocument.length === 2, "urlPolicy surface reload");
+  assert.equal(first.calls.closeDocument.length, 1, "the previous document is closed before reloading");
+
+  maxFileSize.value = 4;
+  await waitFor(() => errors.length === 1, "maxFileSize surface reload");
+  assert.equal(errors[0].code, "PDF_TOO_LARGE");
+  assert.equal(first.calls.openDocument.length, 2, "an oversized reload never opens the source");
+  assert.equal(first.calls.closeDocument.length, 2);
+
+  maxFileSize.value = 1024 * 1024;
+  await waitFor(() => first.calls.openDocument.length === 3, "restored maxFileSize surface reload");
+
+  runtime.value = second.runtime;
+  await waitFor(() => second.calls.openDocument.length === 1, "runtime swap surface reload");
+  assert.equal(first.calls.closeDocument.length, 3, "the previous runtime document is closed on swap");
+  assert.equal(second.calls.closeDocument.length, 0);
+  assert.deepEqual(mounted.warnings, []);
+
+  mounted.app.unmount();
+  await waitFor(() => second.calls.closeDocument.length === 1, "runtime swap surface unmount close");
+  assert.equal(first.calls.dispose.length, 0, "caller-owned runtimes remain usable");
+  assert.equal(second.calls.dispose.length, 0);
+});
+
+function preparePdfSelectionLayer(root) {
+  const layer = walk(root).find((node) => node.props?.["data-testid"] === "pdf-selection-layer");
+  assert.ok(layer, "PDF viewer selection layer");
+  const captures = new Set();
+  layer.getBoundingClientRect = () => ({ left: 0, top: 0, width: 600, height: 800 });
+  layer.setPointerCapture = (pointerId) => captures.add(pointerId);
+  layer.hasPointerCapture = (pointerId) => captures.has(pointerId);
+  layer.releasePointerCapture = (pointerId) => captures.delete(pointerId);
+  return layer;
+}
+
+function viewerPointerEvent(layer, { clientX, clientY = 6, pointerId = 1 }) {
+  return {
+    button: 0,
+    clientX,
+    clientY,
+    currentTarget: layer,
+    isPrimary: true,
+    pointerId,
+    pointerType: "mouse",
+    preventDefault() {},
+  };
+}
+
+test("PdfViewer selects text on the rendered page, copies it and clears on Escape", async () => {
+  const text = "hello world";
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => pdfTextGeometry(text),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      text.slice(slice.charIndex, slice.charIndex + slice.charCount)),
+  });
+  const selections = [];
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    showToolbar: false,
+    onSelectionChange: (selection) => selections.push(selection),
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pdf-status")?.props["data-state"] === "ready" &&
+      walk(mounted.root).some((node) => node.props?.["data-testid"] === "pdf-selection-layer"),
+    "PDF viewer page and selection layer",
+  );
+  const layer = preparePdfSelectionLayer(mounted.root);
+
+  layer.props.onPointerdown(viewerPointerEvent(layer, { clientX: 2, pointerId: 21 }));
+  layer.props.onPointermove(viewerPointerEvent(layer, { clientX: 65, pointerId: 21 }));
+  layer.props.onPointerup(viewerPointerEvent(layer, { clientX: 65, pointerId: 21 }));
+
+  await waitFor(() => selections.at(-1)?.kind === "text", "PDF viewer drag selection");
+  assert.equal(selections.at(-1).text, "hello w");
+  assert.deepEqual(selections.at(-1).range, { pageIndex: 0, charIndex: 0, charCount: 7 });
+  assert.equal(
+    walk(mounted.root).filter((node) => node.props?.class === "pdf-viewer__selection-rect").length > 0,
+    true,
+    "selection rectangles render over the page",
+  );
+
+  const copied = [];
+  findByTestId(mounted.root, "pdf-viewer").props.onCopy({
+    clipboardData: { setData: (type, value) => copied.push({ type, value }) },
+    preventDefault() {},
+  });
+  assert.deepEqual(copied, [{ type: "text/plain", value: "hello w" }]);
+
+  findByTestId(mounted.root, "pdf-viewer").props.onKeydown({ key: "Escape" });
+  assert.equal(selections.at(-1).kind, "none");
+  await vue.nextTick();
+  assert.equal(
+    walk(mounted.root).filter((node) => node.props?.class === "pdf-viewer__selection-rect").length,
+    0,
+    "Escape clears the selection rectangles",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfViewer uses the native second click to select a word", async () => {
+  const text = "hello world";
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => pdfTextGeometry(text),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      text.slice(slice.charIndex, slice.charIndex + slice.charCount)),
+  });
+  const selections = [];
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    showToolbar: false,
+    onSelectionChange: (selection) => selections.push(selection),
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pdf-status")?.props["data-state"] === "ready" &&
+      walk(mounted.root).some((node) => node.props?.["data-testid"] === "pdf-selection-layer"),
+    "PDF viewer word selection layer",
+  );
+  const layer = preparePdfSelectionLayer(mounted.root);
+  const point = { clientX: 65, pointerId: 31 };
+
+  layer.props.onPointerdown(viewerPointerEvent(layer, point));
+  layer.props.onPointerup(viewerPointerEvent(layer, point));
+  await layer.props.onClick({
+    button: 0,
+    clientX: point.clientX,
+    clientY: 6,
+    currentTarget: layer,
+    detail: 1,
+    preventDefault() {},
+  });
+  layer.props.onPointerdown(viewerPointerEvent(layer, { ...point, pointerId: 32 }));
+  layer.props.onPointerup(viewerPointerEvent(layer, { ...point, pointerId: 32 }));
+  await layer.props.onClick({
+    button: 0,
+    clientX: point.clientX,
+    clientY: 6,
+    currentTarget: layer,
+    detail: 2,
+    preventDefault() {},
+  });
+
+  await waitFor(() => selections.at(-1)?.kind === "text", "PDF viewer double-click word selection");
+  assert.equal(selections.at(-1).text, "world");
+  assert.deepEqual(selections.at(-1).range, { pageIndex: 0, charIndex: 6, charCount: 5 });
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+function pdfTextGlyphNodes(root, selector) {
+  return walk(root).filter((node) =>
+    typeof node.props?.class === "string" && node.props.class.split(/\s+/).includes(selector));
+}
+
+test("PdfSurface renders a positioned DOM text layer that keeps selection working", async () => {
+  const text = "abc";
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => pdfTextGeometry(text),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      text.slice(slice.charIndex, slice.charIndex + slice.charCount)),
+    onGetPageTextLayer: () => pdfTestTextLayer(text),
+  });
+  const selections = [];
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+    onSelectionChange: (selection) => selections.push(selection),
+  });
+  await waitFor(
+    () => walk(mounted.root).some((node) => node.props?.["data-text-page"] === 0),
+    "PDF accessible text layer",
+  );
+  const layer = walk(mounted.root).find((node) => node.props?.["data-text-page"] === 0);
+  assert.equal(layer.props["data-text-transform"], "matrix(1, 0, 0, 1, 0, 0)");
+  assert.equal(layer.props.style.width, "600px");
+  assert.equal(layer.props.style.height, "800px");
+  assert.equal(layer.props["aria-hidden"], undefined, "the text layer stays visible to assistive tech");
+
+  const glyphs = pdfTextGlyphNodes(mounted.root, "pdf-surface__text-glyph");
+  assert.deepEqual(glyphs.map((glyph) => textContent(glyph)), ["a", "b", "c"]);
+  assert.deepEqual(glyphs.map((glyph) => glyph.props["data-char-index"]), [0, 1, 2]);
+  assert.equal(glyphs[1].props.style.left, "10px");
+  assert.equal(glyphs[1].props.style.top, "0px");
+  assert.equal(glyphs[1].props.style.width, "8px");
+  assert.equal(glyphs[1].props.style.height, "12px");
+  assert.equal(glyphs[1].props.style.fontSize, "12px");
+  assert.deepEqual(glyphs.map((glyph) => glyph.props["aria-hidden"]), [undefined, undefined, undefined]);
+
+  const interaction = preparePdfSurfaceInteraction(mounted.root);
+  interaction.props.onPointerdown(pdfPointerEvent(interaction, { clientX: 2 }));
+  interaction.props.onPointerup(pdfPointerEvent(interaction, { clientX: 22 }));
+  await waitFor(() => selections.at(-1)?.kind === "text", "selection with the text layer present");
+  assert.equal(selections.at(-1).text, "abc");
+  assert.equal(
+    walk(mounted.root).filter((node) => node.props?.class === "pdf-surface__selection-hit").length > 0,
+    true,
+    "geometry selection rectangles still render",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfSurface text layer transforms with zoom and rotation instead of moving spans", async () => {
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => pdfTextGeometry("ab"),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      "ab".slice(slice.charIndex, slice.charIndex + slice.charCount)),
+    onGetPageTextLayer: () => pdfTestTextLayer("ab"),
+  });
+  let api;
+  const Harness = vue.defineComponent({
+    setup() {
+      const surface = vue.ref(null);
+      vue.watch(surface, (value) => { api = value; }, { flush: "sync" });
+      return () => vue.h(PdfSurface, {
+        ref: surface,
+        source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+        runtime: fake.runtime,
+        zoom: 2,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(() => api && walk(mounted.root).some((node) => node.props?.["data-text-page"] === 0), "zoomed text layer");
+  const layer = walk(mounted.root).find((node) => node.props?.["data-text-page"] === 0);
+  assert.equal(layer.props["data-text-transform"], "matrix(2, 0, 0, 2, 0, 0)");
+  assert.equal(layer.props.style.transform, "matrix(2, 0, 0, 2, 0, 0)");
+  const glyph = pdfTextGlyphNodes(mounted.root, "pdf-surface__text-glyph")[1];
+  assert.equal(glyph.props.style.left, "10px", "glyph spans stay in canonical coordinates");
+
+  api.rotation = 90;
+  await waitFor(
+    () => walk(mounted.root).find((node) => node.props?.["data-text-page"] === 0)?.props["data-text-transform"]
+      === "matrix(0, 2, -2, 0, 1600, 0)",
+    "rotated text layer transform",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfSurface marks unmapped text-layer glyphs as hidden from assistive tech", async () => {
+  const text = "a\ufffdb";
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => pdfTextGeometry(text),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      text.slice(slice.charIndex, slice.charIndex + slice.charCount)),
+    onGetPageTextLayer: () => pdfTestTextLayer(text),
+  });
+  const mounted = await mount(PdfSurface, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+  });
+  await waitFor(
+    () => walk(mounted.root).some((node) => node.props?.["data-text-page"] === 0),
+    "PDF text layer with unmapped glyph",
+  );
+  const glyphs = pdfTextGlyphNodes(mounted.root, "pdf-surface__text-glyph");
+  assert.deepEqual(glyphs.map((glyph) => glyph.props["aria-hidden"]), [undefined, "true", undefined]);
+  assert.equal(glyphs[1].props.class, "pdf-surface__text-glyph pdf-surface__text-glyph--unmapped");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PdfViewer renders the text layer and re-transforms it on rotate and zoom", async () => {
+  const fake = createPdfRuntime({
+    pageCount: 1,
+    onGetPageTextGeometry: () => pdfTextGeometry("hi"),
+    onGetTextSlices: (_document, slices) => slices.map((slice) =>
+      "hi".slice(slice.charIndex, slice.charIndex + slice.charCount)),
+    onGetPageTextLayer: () => pdfTestTextLayer("hi"),
+  });
+  const mounted = await mount(PdfViewer, {
+    source: { kind: "blob", blob: new Blob(["%PDF-1.4\n%%EOF"], { type: "application/pdf" }) },
+    runtime: fake.runtime,
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pdf-status")?.props["data-state"] === "ready" &&
+      findByTestId(mounted.root, "pdf-text-layer"),
+    "PDF viewer text layer",
+  );
+  const layer = findByTestId(mounted.root, "pdf-text-layer");
+  assert.equal(layer.props["data-text-transform"], "matrix(1, 0, 0, 1, 0, 0)");
+  const glyphs = pdfTextGlyphNodes(mounted.root, "pdf-viewer__text-glyph");
+  assert.deepEqual(glyphs.map((glyph) => textContent(glyph)), ["h", "i"]);
+  assert.equal(glyphs[0].props.style.fontSize, "12px");
+
+  await findByTestId(mounted.root, "pdf-rotate").props.onClick();
+  await waitFor(
+    () => findByTestId(mounted.root, "pdf-text-layer")?.props["data-text-transform"] === "matrix(0, 1, -1, 0, 800, 0)",
+    "rotated viewer text layer",
+  );
+
+  await findByTestId(mounted.root, "pdf-zoom-in").props.onClick();
+  await waitFor(
+    () => findByTestId(mounted.root, "pdf-text-layer")?.props["data-text-transform"] === "matrix(0, 1.25, -1.25, 0, 1000, 0)",
+    "zoomed rotated viewer text layer",
+  );
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
 });

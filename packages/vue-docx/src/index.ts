@@ -87,6 +87,33 @@ export {
   type ParagraphRunRenderOptions,
 } from "./render"
 
+// ---- Annotation gutter ----
+
+/**
+ * Screen-space metrics for the DOCX annotation gutter. Exposed so hosts that
+ * lay out their own scroll surface can reserve the gutter's footprint.
+ */
+export {
+  DOCX_ANNOTATION_GUTTER_WIDTH_PX,
+  DOCX_ANNOTATION_GUTTER_GAP_PX,
+  DOCX_ANNOTATION_GUTTER_DRAWER_MAX_WIDTH_PX,
+  DOCX_ANNOTATION_GUTTER_DRAWER_WIDTH_PX,
+  DOCX_ANNOTATION_GUTTER_DRAWER_TAB_WIDTH_PX,
+  annotationGutterReservedWidthPx,
+  annotationGutterPaneStyle,
+  annotationGutterDrawerPaneStyle,
+  annotationGutterUsesDrawer,
+  annotationGutterCardTopPx,
+  annotationGutterMarkerStyle,
+  annotationGutterLeaderStyle,
+  normalizeAnnotationGutterZoom,
+} from "./components/gutter-metrics"
+export {
+  useDocxGutterLayout,
+  type DocxGutterLayout,
+  type DocxGutterLayoutOptions,
+} from "./composables/gutter-layout"
+
 // ---- Composables ----
 
 export { useDocxEditor } from "./composables/useDocxEditor"

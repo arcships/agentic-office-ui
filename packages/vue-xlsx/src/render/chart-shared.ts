@@ -1,5 +1,30 @@
 /** @jsxImportSource vue */
-import type { XlsxChart } from "@arcships/xlsx-core";
+import type { XlsxChart, XlsxChartSeries } from "@arcships/xlsx-core";
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction";
+import type { ChartLabels } from "./chart-types";
+
+/** Localized accessible name for a chart without an explicit title or name. */
+export function resolveChartAriaLabel(
+  chart: Pick<XlsxChart, "title" | "name">,
+  labels?: Pick<ChartLabels, "ariaLabel">,
+): string {
+  return chart.title ?? chart.name ?? labels?.ariaLabel ?? officeMessagesEn.xlsx.chart.ariaLabel
+}
+
+/** Localized legend/stage name for a chart series without an explicit name. */
+export function resolveChartSeriesLabel(
+  series: Pick<XlsxChartSeries, "name"> | null | undefined,
+  index: number,
+  labels?: Pick<ChartLabels, "seriesName">,
+): string {
+  const name = series?.name?.trim();
+  if (name) return name;
+  return formatOfficeMessage(
+    labels?.seriesName ?? officeMessagesEn.xlsx.chart.seriesName,
+    { number: index + 1 },
+  );
+}
+
 
 // ---- Color utilities ----
 
@@ -158,17 +183,86 @@ export function normalizeCategoryLabel(value: unknown) {
     .trim();
 }
 
+function isWideSvgCharacter(character: string) {
+  return /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/.test(character);
+}
+
+export function estimateSvgCharacterWidth(character: string, fontSize = 10) {
+  return isWideSvgCharacter(character) ? fontSize : Math.max(4.2, fontSize * 0.56);
+}
+
+export function estimateSvgTextWidth(value: string, fontSize = 10) {
+  if (!value) {
+    return 0;
+  }
+  let width = 0;
+  for (const character of Array.from(value)) {
+    width += estimateSvgCharacterWidth(character, fontSize);
+  }
+  return width;
+}
+
 export function truncateSvgText(value: string, maxWidth: number, fontSize = 10) {
   if (!value || maxWidth <= 0) {
     return "";
   }
   const charWidth = Math.max(4.2, fontSize * 0.56);
   const maxChars = Math.max(1, Math.floor(maxWidth / charWidth));
-  if (value.length <= maxChars) {
+  if (Array.from(value).length <= maxChars) {
     return value;
   }
   if (maxChars <= 1) {
     return "…";
   }
-  return `${value.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
+  const characters = Array.from(value);
+  return `${characters.slice(0, Math.max(0, maxChars - 1)).join("").trimEnd()}…`;
+}
+
+export function wrapSvgText(value: string, maxWidth: number, fontSize = 10) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) {
+    return [""];
+  }
+  if (maxWidth <= 0) {
+    return [normalized];
+  }
+  const lines: string[] = [];
+  let current = "";
+  let currentWidth = 0;
+  let lastBreakIndex = -1;
+
+  const pushLine = () => {
+    if (current.trim().length > 0) {
+      lines.push(current.trim());
+    }
+    current = "";
+    currentWidth = 0;
+    lastBreakIndex = -1;
+  };
+
+  for (const character of Array.from(normalized)) {
+    const characterWidth = estimateSvgCharacterWidth(character, fontSize);
+    const wouldOverflow = current.length > 0 && currentWidth + characterWidth > maxWidth;
+    if (wouldOverflow) {
+      if (lastBreakIndex > 0) {
+        const head = current.slice(0, lastBreakIndex).trim();
+        const tail = current.slice(lastBreakIndex).trim();
+        if (head.length > 0) {
+          lines.push(head);
+        }
+        current = tail;
+        currentWidth = estimateSvgTextWidth(tail, fontSize);
+        lastBreakIndex = -1;
+      } else {
+        pushLine();
+      }
+    }
+    if (character === " " || character === "-" || character === "/") {
+      lastBreakIndex = current.length;
+    }
+    current += character;
+    currentWidth += characterWidth;
+  }
+  pushLine();
+  return lines.length > 0 ? lines : [normalized];
 }

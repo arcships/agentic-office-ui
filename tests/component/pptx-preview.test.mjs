@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -28,7 +29,7 @@ function deferred() {
   return { promise, reject, resolve };
 }
 
-function documentWithSlides(count, fileName = "preview.pptx") {
+function documentWithSlides(count, fileName = "preview.pptx", warnings = []) {
   return {
     fileName,
     height: 540,
@@ -38,15 +39,18 @@ function documentWithSlides(count, fileName = "preview.pptx") {
       index,
       number: index + 1,
     })),
-    warnings: [],
+    warnings,
   };
 }
 
-function createSession({ document = documentWithSlides(3), open } = {}) {
+function createSession({ document = documentWithSlides(3), open, renderSlide, withRefresh = false } = {}) {
   const calls = {
     clearSearchHighlights: 0,
     dispose: 0,
+    open: [],
+    refresh: 0,
     renderSlide: [],
+    renderThumbnail: [],
     setZoom: [],
   };
   let currentSlideIndex = 0;
@@ -56,6 +60,7 @@ function createSession({ document = documentWithSlides(3), open } = {}) {
     get currentSlideIndex() { return currentSlideIndex; },
     get zoomPercent() { return zoomPercent; },
     async open(source, options) {
+      calls.open.push(options);
       const loaded = open ? await open(source, options) : document;
       session.document = loaded;
       currentSlideIndex = options?.initialSlide ?? 0;
@@ -63,9 +68,14 @@ function createSession({ document = documentWithSlides(3), open } = {}) {
     },
     async renderSlide(index) {
       calls.renderSlide.push(index);
+      if (renderSlide) await renderSlide(index, session);
       currentSlideIndex = index;
     },
-    renderThumbnail() { return null; },
+    renderThumbnail(index, target, width) {
+      calls.renderThumbnail.push({ index, target, width });
+      return null;
+    },
+    ...(withRefresh ? { async refresh() { calls.refresh += 1; } } : {}),
     searchText() { return []; },
     async highlightSearchResult() { return null; },
     clearSearchHighlights() { calls.clearSearchHighlights += 1; },
@@ -79,13 +89,15 @@ function createSession({ document = documentWithSlides(3), open } = {}) {
   return { calls, session };
 }
 
-function createPlaybackSession({ document = documentWithSlides(3) } = {}) {
-  const preview = createSession({ document });
+function createPlaybackSession({ document = documentWithSlides(3), open, renderSlide } = {}) {
+  const preview = createSession({ document, open, renderSlide });
   const listeners = new Set();
   const calls = {
     ...preview.calls,
     activateObject: [],
     createPlaybackController: 0,
+    createPlaybackControllerOptions: [],
+    disposeController: 0,
     goToSlide: [],
     next: 0,
     pause: 0,
@@ -129,14 +141,16 @@ function createPlaybackSession({ document = documentWithSlides(3) } = {}) {
       listener({ type: "capability", report: capability });
       return () => listeners.delete(listener);
     },
-    dispose() {},
+    dispose() { calls.disposeController += 1; },
   };
   const session = {
     ...preview.session,
     playbackDocument: { capability, slides: [] },
     capabilityReport: capability,
-    createPlaybackController() {
+    createPlaybackController(options) {
       calls.createPlaybackController += 1;
+      calls.createPlaybackControllerOptions.push(options);
+      snapshot = { ...snapshot, slideIndex: options?.initialSlide ?? 0 };
       return controller;
     },
     dispose() {
@@ -158,6 +172,85 @@ function createPlaybackSession({ document = documentWithSlides(3) } = {}) {
 
 function button(root, label) {
   return walk(root).find((node) => node.type === "button" && node.props?.["aria-label"] === label);
+}
+
+function classNames(node) {
+  return String(node?.props?.class || "").split(/\s+/).filter(Boolean);
+}
+
+function nodesWithClass(root, className) {
+  return walk(root).filter((node) => classNames(node).includes(className));
+}
+
+function thumbnails(root) {
+  return nodesWithClass(root, "pptx-thumbnail").filter((node) => node.type === "button");
+}
+
+function installIntersectionObserver(t) {
+  const original = globalThis.IntersectionObserver;
+  const instances = [];
+  class StubIntersectionObserver {
+    constructor(callback, options) {
+      this.callback = callback;
+      this.options = options;
+      this.targets = new Set();
+      this.disconnected = false;
+      instances.push(this);
+    }
+
+    observe(target) {
+      this.targets.add(target);
+    }
+
+    unobserve(target) {
+      this.targets.delete(target);
+    }
+
+    disconnect() {
+      this.disconnected = true;
+      this.targets.clear();
+    }
+
+    intersect(target) {
+      this.targets.delete(target);
+      this.callback([{ target, isIntersecting: true }]);
+    }
+  }
+  globalThis.IntersectionObserver = StubIntersectionObserver;
+  t.after(() => {
+    if (original) globalThis.IntersectionObserver = original;
+    else delete globalThis.IntersectionObserver;
+  });
+  return instances;
+}
+
+function installFontFaceSet(t) {
+  const originalDocument = globalThis.document;
+  const listeners = new Set();
+  let resolveReady;
+  const ready = new Promise((resolve) => { resolveReady = resolve; });
+  const fonts = {
+    ready,
+    status: "loading",
+    addEventListener(type, listener) {
+      if (type === "loadingdone") listeners.add(listener);
+    },
+    removeEventListener(type, listener) {
+      if (type === "loadingdone") listeners.delete(listener);
+    },
+  };
+  globalThis.document = { fonts };
+  t.after(() => {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  });
+  return {
+    emitLoadingDone() {
+      for (const listener of [...listeners]) listener({ type: "loadingdone" });
+    },
+    listenerCount: () => listeners.size,
+    resolveReady: () => resolveReady(fonts),
+  };
 }
 
 test("PptxStage and composables expose the minimal document and playback controls", async () => {
@@ -282,6 +375,15 @@ test("PptxStage only consumes controlled gesture zoom wheels", async () => {
   assert.deepEqual(mounted.warnings, []);
 });
 
+test("PptxViewer defaults to English copy and exposes translated aria-labels", async () => {
+  const mounted = await mount(PptxViewer);
+  assert.match(textContent(mounted.root), /Open a PPTX file to get started/);
+  assert.ok(button(mounted.root, "Next slide"));
+  assert.ok(button(mounted.root, "Previous slide"));
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
 test("PptxViewer exposes loading, ready navigation, hidden-page marker and cleanup", async () => {
   const pending = deferred();
   const { calls, session } = createSession({ open: () => pending.promise });
@@ -295,6 +397,7 @@ test("PptxViewer exposes loading, ready navigation, hidden-page marker and clean
     },
     showSearch: false,
     showSidebar: false,
+    locale: "zh-CN",
     onLoadStart: () => events.push("start"),
     onLoadSuccess: (document) => events.push(["success", document.slides.length]),
     onSlideChange: (index) => events.push(["slide", index]),
@@ -396,6 +499,7 @@ test("PptxViewer present mode wires playback controls and forwards playback even
     source: new Uint8Array([7, 8, 9]),
     mode: "present",
     autoplay: false,
+    locale: "zh-CN",
     documentSessionFactory: (_element, options) => {
       sessionOptions = options;
       return playback.session;
@@ -467,4 +571,542 @@ test("PptxViewer present mode wires playback controls and forwards playback even
   mounted.app.unmount();
   assert.equal(playback.calls.dispose, 1);
   assert.deepEqual(mounted.warnings, []);
+});
+
+test("PptxViewer keeps the deck reachable when a single slide fails to render", async () => {
+  const broken = new Set([2]);
+  const { calls, session } = createSession({
+    document: documentWithSlides(4),
+    renderSlide(index) {
+      if (broken.has(index)) throw new Error(`slide ${index} broke`);
+    },
+  });
+  const failures = [];
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([1, 2, 3]),
+    sessionFactory: () => session,
+    showSearch: false,
+    showSidebar: false,
+    locale: "zh-CN",
+    onSlideError: (error, index) => failures.push([index, error.message]),
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state",
+  );
+  button(mounted.root, "下一页").props.onClick();
+  await waitFor(() => calls.renderSlide.includes(1), "second slide render");
+  button(mounted.root, "下一页").props.onClick();
+  await waitFor(() => failures.length === 1, "slide failure event");
+
+  const viewer = findByTestId(mounted.root, "pptx-viewer");
+  assert.equal(viewer.props["data-state"], "ready");
+  assert.equal(viewer.props["data-slide-error"], 2);
+  assert.deepEqual(failures, [[2, "页面渲染失败：slide 2 broke"]]);
+  assert.match(textContent(findByTestId(mounted.root, "pptx-slide-error")), /第 3 页渲染失败/);
+  // The previous slide stays on screen instead of being replaced by a fatal error.
+  assert.match(textContent(findByTestId(mounted.root, "pptx-page-counter")), /2 \/ 4/);
+  assert.equal(findByTestId(mounted.root, "pptx-stage").props["aria-hidden"], false);
+  assert.equal(findByTestId(mounted.root, "pptx-error"), undefined);
+
+  // Retry fails again and keeps the deck usable.
+  findByTestId(mounted.root, "pptx-slide-retry").props.onClick();
+  await waitFor(() => failures.length === 2, "slide retry failure");
+  assert.deepEqual(failures, [
+    [2, "页面渲染失败：slide 2 broke"],
+    [2, "页面渲染失败：slide 2 broke"],
+  ]);
+
+  // Once the slide renders, retry clears the banner and navigation continues.
+  broken.delete(2);
+  findByTestId(mounted.root, "pptx-slide-retry").props.onClick();
+  await waitFor(() => findByTestId(mounted.root, "pptx-slide-error") === undefined, "slide retry success");
+  assert.equal(findByTestId(mounted.root, "pptx-viewer").props["data-slide-index"], 2);
+
+  // Skipping the failed slide jumps to the next one instead of stalling.
+  broken.add(3);
+  button(mounted.root, "下一页").props.onClick();
+  await waitFor(() => findByTestId(mounted.root, "pptx-slide-error") !== undefined, "second slide failure");
+  assert.equal(findByTestId(mounted.root, "pptx-viewer").props["data-slide-error"], 3);
+  findByTestId(mounted.root, "pptx-slide-skip").props.onClick();
+  await waitFor(() => findByTestId(mounted.root, "pptx-slide-error") === undefined, "skipped slide");
+  assert.equal(findByTestId(mounted.root, "pptx-viewer").props["data-state"], "ready");
+
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("PptxViewer keeps the current slide when switching between browse and present", async () => {
+  const playback = createPlaybackSession({ document: documentWithSlides(4) });
+  const source = new Uint8Array([4, 5, 6]);
+  const mode = vue.ref("browse");
+  const Harness = vue.defineComponent({
+    setup() {
+      return () => vue.h(PptxViewer, {
+        source,
+        mode: mode.value,
+        autoplay: false,
+        sessionFactory: () => playback.session,
+        documentSessionFactory: () => playback.session,
+        showSearch: false,
+        showSidebar: false,
+        locale: "zh-CN",
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "browse ready state",
+  );
+
+  button(mounted.root, "下一页").props.onClick();
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-slide-index"] === 1,
+    "browse slide 2",
+  );
+  button(mounted.root, "下一页").props.onClick();
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-slide-index"] === 2,
+    "browse slide 3",
+  );
+
+  mode.value = "present";
+  await waitFor(
+    () => playback.calls.createPlaybackControllerOptions.length === 1,
+    "playback controller for present mode",
+  );
+  assert.equal(playback.calls.open.at(-1).initialSlide, 2);
+  assert.equal(playback.calls.createPlaybackControllerOptions[0].initialSlide, 2);
+  assert.equal(findByTestId(mounted.root, "pptx-viewer").props["data-slide-index"], 2);
+  // Present mode letterboxes using the deck aspect ratio instead of clipping.
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-stage").props.style?.["--pptx-slide-aspect"] === "960 / 540",
+    "letterboxed present stage",
+  );
+  assert.deepEqual(findByTestId(mounted.root, "pptx-stage").props.style, {
+    "--pptx-slide-aspect": "960 / 540",
+    "--pptx-slide-ratio": "1.7778",
+  });
+
+  mode.value = "browse";
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready"
+      && !findByTestId(mounted.root, "pptx-viewer").props.class.includes("pptx-viewer--present"),
+    "browse mode restored",
+  );
+  assert.equal(playback.calls.open.at(-1).initialSlide, 2);
+  assert.equal(findByTestId(mounted.root, "pptx-viewer").props["data-slide-index"], 2);
+  assert.equal(
+    findByTestId(mounted.root, "pptx-stage").props.style?.["--pptx-slide-aspect"],
+    undefined,
+  );
+
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("PptxViewer surfaces a cancelled load instead of spinning forever", async () => {
+  const { PptxPreviewError } = await importFromDemo("@arcships/pptx-core");
+  let attempts = 0;
+  const { session } = createSession({
+    open: async () => {
+      attempts += 1;
+      if (attempts === 1) throw new PptxPreviewError("ABORTED", "PPTX 加载已取消。");
+      return documentWithSlides(2);
+    },
+  });
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([7]),
+    sessionFactory: () => session,
+    showSearch: false,
+    showSidebar: false,
+    locale: "zh-CN",
+  });
+
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "cancelled",
+    "cancelled state",
+  );
+  assert.equal(findByTestId(mounted.root, "pptx-loading"), undefined);
+  assert.match(textContent(findByTestId(mounted.root, "pptx-cancelled")), /已取消/);
+
+  findByTestId(mounted.root, "pptx-cancelled-retry").props.onClick();
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "cancelled load retried",
+  );
+  assert.equal(attempts, 2);
+
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("PptxViewer stops loading when a load times out", async () => {
+  const { calls, session } = createSession({ open: () => new Promise(() => {}) });
+  const errors = [];
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([8]),
+    sessionFactory: () => session,
+    openTimeoutMs: 20,
+    showSearch: false,
+    showSidebar: false,
+    locale: "zh-CN",
+    onLoadError: (error) => errors.push(error.code),
+  });
+
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "error",
+    "load timeout error state",
+  );
+  assert.deepEqual(errors, ["TIMEOUT"]);
+  assert.match(textContent(findByTestId(mounted.root, "pptx-error")), /超过 20 毫秒/);
+  assert.equal(findByTestId(mounted.root, "pptx-loading"), undefined);
+  assert.equal(calls.dispose, 1);
+
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("PptxViewer reports document command failures instead of leaking rejections", async () => {
+  const { session } = createSession();
+  session.setZoom = async () => { throw new Error("zoom failed"); };
+  const failures = [];
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([9, 9]),
+    sessionFactory: () => session,
+    showSearch: false,
+    showSidebar: false,
+    locale: "zh-CN",
+    onDocumentError: (error) => failures.push(error.message),
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state",
+  );
+
+  button(mounted.root, "放大").props.onClick();
+  await waitFor(() => failures.length === 1, "zoom failure event");
+  assert.deepEqual(failures, ["zoom failed"]);
+  assert.equal(findByTestId(mounted.root, "pptx-viewer").props["data-state"], "ready");
+
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("PptxViewer clears the inline height while fullscreen", async () => {
+  const listeners = new Map();
+  const fakeDocument = {
+    fullscreenElement: null,
+    addEventListener(type, listener) { listeners.set(type, listener); },
+    removeEventListener(type, listener) {
+      if (listeners.get(type) === listener) listeners.delete(type);
+    },
+  };
+  globalThis.document = fakeDocument;
+  try {
+    const { session } = createSession();
+    const mounted = await mount(PptxViewer, {
+      source: new Uint8Array([1]),
+      height: "calc(100vh - 190px)",
+      sessionFactory: () => session,
+      showSearch: false,
+      showSidebar: false,
+      locale: "zh-CN",
+    });
+    await waitFor(
+      () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+      "PPTX ready state",
+    );
+    assert.deepEqual(findByTestId(mounted.root, "pptx-viewer").props.style, {
+      height: "calc(100vh - 190px)",
+      maxHeight: "calc(100vh - 190px)",
+    });
+
+    // The test renderer hands template refs a copy of the host node, so the
+    // fullscreen element stands in for a container that holds the viewer.
+    fakeDocument.fullscreenElement = { contains: () => true };
+    listeners.get("fullscreenchange")();
+    await vue.nextTick();
+    assert.equal(findByTestId(mounted.root, "pptx-viewer").props.style, undefined);
+
+    fakeDocument.fullscreenElement = null;
+    listeners.get("fullscreenchange")();
+    await vue.nextTick();
+    assert.deepEqual(findByTestId(mounted.root, "pptx-viewer").props.style, {
+      height: "calc(100vh - 190px)",
+      maxHeight: "calc(100vh - 190px)",
+    });
+
+    mounted.app.unmount();
+    assert.deepEqual(mounted.warnings, []);
+  } finally {
+    delete globalThis.document;
+  }
+});
+
+test("PptxViewer renders document warnings and lets the host replace them", async () => {
+  const warnings = [{
+    code: "NOTES_UNSUPPORTED",
+    message: "当前静态底座尚未解析演讲者备注。",
+  }];
+  const { session } = createSession({ document: documentWithSlides(2, "notes.pptx", warnings) });
+
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([2]),
+    sessionFactory: () => session,
+    showSearch: false,
+    showSidebar: false,
+    locale: "zh-CN",
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state",
+  );
+  assert.match(textContent(findByTestId(mounted.root, "pptx-warnings")), /演讲者备注/);
+  mounted.app.unmount();
+
+  const hidden = await mount(PptxViewer, {
+    source: new Uint8Array([2]),
+    sessionFactory: () => createSession({ document: documentWithSlides(2, "notes.pptx", warnings) }).session,
+    showSearch: false,
+    showSidebar: false,
+    showWarnings: false,
+    locale: "zh-CN",
+  });
+  await waitFor(
+    () => findByTestId(hidden.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state without warnings",
+  );
+  assert.equal(findByTestId(hidden.root, "pptx-warnings"), undefined);
+  hidden.app.unmount();
+
+  const slotted = await mount(vue.defineComponent({
+    setup() {
+      return () => vue.h(
+        PptxViewer,
+        {
+          source: new Uint8Array([3]),
+          sessionFactory: () => createSession({ document: documentWithSlides(2, "notes.pptx", warnings) }).session,
+          showSearch: false,
+          showSidebar: false,
+        },
+        { warnings: ({ warnings: list }) => vue.h("p", { class: "custom-warning" }, `${list.length} warnings`) },
+      );
+    },
+  }));
+  await waitFor(
+    () => findByTestId(slotted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state with warning slot",
+  );
+  assert.match(textContent(findByTestId(slotted.root, "pptx-warnings")), /1 warnings/);
+  slotted.app.unmount();
+});
+
+test("PptxViewer rebuilds playback when showHiddenSlides changes", async () => {
+  const playback = createPlaybackSession();
+  const source = new Uint8Array([5]);
+  const showHiddenSlides = vue.ref(false);
+  const Harness = vue.defineComponent({
+    setup() {
+      return () => vue.h(PptxViewer, {
+        source,
+        mode: "present",
+        autoplay: false,
+        showHiddenSlides: showHiddenSlides.value,
+        documentSessionFactory: () => playback.session,
+        showSearch: false,
+        showSidebar: false,
+      });
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(
+    () => playback.calls.createPlaybackControllerOptions.length >= 1,
+    "playback controller",
+  );
+  assert.equal(playback.calls.createPlaybackControllerOptions[0].skipHiddenSlides, true);
+
+  showHiddenSlides.value = true;
+  await waitFor(
+    () => playback.calls.createPlaybackControllerOptions.length >= 2,
+    "playback controller rebuilt for hidden slides",
+  );
+  assert.equal(playback.calls.createPlaybackControllerOptions.at(-1).skipHiddenSlides, false);
+
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("pptx-viewer stylesheet keeps the fullscreen and letterbox rules", async () => {
+  const { readFileSync } = await import("node:fs");
+  const css = readFileSync(
+    new URL("../../packages/vue-pptx/src/style.css", import.meta.url),
+    "utf8",
+  );
+  assert.match(css, /\.pptx-viewer:fullscreen\s*\{/);
+  assert.match(css, /aspect-ratio:\s*var\(--pptx-slide-aspect/);
+  assert.match(css, /--pptx-slide-ratio/);
+});
+
+test("PptxViewer windows the sidebar and shares one thumbnail observer", async (t) => {
+  const observers = installIntersectionObserver(t);
+  const { calls, session } = createSession({ document: documentWithSlides(240) });
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([1]),
+    sessionFactory: () => session,
+    showSearch: false,
+    locale: "zh-CN",
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state",
+  );
+  // 960x540 slide at the default 148px thumbnail width => 132px rows.
+  const sidebar = findByTestId(mounted.root, "pptx-sidebar");
+  assert.equal(sidebar.props.style["--pptx-thumbnail-item-height"], "132px");
+
+  const initial = thumbnails(mounted.root);
+  assert.equal(initial.length, 12, "only the visible window plus overscan may mount");
+  assert.equal(initial[0].props["data-pptx-thumbnail-index"], 0);
+  assert.equal(initial.at(-1).props["data-pptx-thumbnail-index"], 11);
+  const initialSpacers = nodesWithClass(mounted.root, "pptx-viewer__sidebar-spacer");
+  assert.equal(initialSpacers.length, 1);
+  assert.equal(initialSpacers[0].props.style.height, `${(240 - 12) * 132}px`);
+
+  assert.equal(observers.length, 1, "the whole sidebar must share a single observer");
+  assert.equal(observers[0].options.rootMargin, "240px");
+  assert.equal(observers[0].targets.size, 12);
+  assert.deepEqual(calls.renderThumbnail, [], "thumbnails wait until they approach the viewport");
+
+  const observed = [...observers[0].targets].find((node) => node.props["data-pptx-thumbnail-index"] === 2);
+  assert.ok(observed, "the third thumbnail must be observed");
+  observers[0].intersect(observed);
+  await vue.nextTick();
+  assert.deepEqual(calls.renderThumbnail.map((call) => call.index), [2]);
+  assert.equal(calls.renderThumbnail[0].width, 148);
+
+  sidebar.props.onScrollPassive({ target: { scrollTop: 30 * 132, clientHeight: 660 } });
+  await vue.nextTick();
+  const scrolled = thumbnails(mounted.root);
+  assert.equal(scrolled.length, 12);
+  assert.equal(scrolled[0].props["data-pptx-thumbnail-index"], 27);
+  assert.equal(scrolled.at(-1).props["data-pptx-thumbnail-index"], 38);
+  const scrolledSpacers = nodesWithClass(mounted.root, "pptx-viewer__sidebar-spacer");
+  assert.equal(scrolledSpacers.length, 2);
+  assert.equal(scrolledSpacers[0].props.style.height, `${27 * 132}px`);
+  assert.equal(observers[0].targets.size, 12, "scrolled-out thumbnails must unobserve");
+
+  mounted.app.unmount();
+  assert.equal(observers[0].disconnected, true);
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("PptxViewer re-measures the stage and thumbnails once per loaded font batch", async (t) => {
+  const fontSet = installFontFaceSet(t);
+  const { calls, session } = createSession({ document: documentWithSlides(3), withRefresh: true });
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([1]),
+    sessionFactory: () => session,
+    showSearch: false,
+    locale: "zh-CN",
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state",
+  );
+  assert.deepEqual(calls.renderThumbnail.map((call) => call.index), [0, 1, 2]);
+  assert.equal(calls.refresh, 0);
+
+  fontSet.emitLoadingDone();
+  fontSet.emitLoadingDone();
+  fontSet.emitLoadingDone();
+  await waitFor(() => calls.refresh === 1, "PPTX refresh after fonts load");
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls.refresh, 1, "one font batch must coalesce into one refresh");
+
+  await waitFor(() => calls.renderThumbnail.length === 6, "thumbnail repaint after fonts load");
+  assert.deepEqual(
+    calls.renderThumbnail.slice(3).map((call) => call.index).sort((left, right) => left - right),
+    [0, 1, 2],
+    "thumbnails must render again with the loaded font metrics",
+  );
+
+  fontSet.resolveReady();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(calls.refresh, 1, "fonts.ready must not repeat a batch already reported by loadingdone");
+  assert.equal(calls.renderThumbnail.length, 6);
+
+  mounted.app.unmount();
+  assert.equal(fontSet.listenerCount(), 0);
+  const refreshed = calls.refresh;
+  fontSet.emitLoadingDone();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(calls.refresh, refreshed, "the font listener must be removed on unmount");
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("PptxViewer refreshes once when webfonts settle through fonts.ready", async (t) => {
+  const fontSet = installFontFaceSet(t);
+  const { calls, session } = createSession({ document: documentWithSlides(2), withRefresh: true });
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([1]),
+    sessionFactory: () => session,
+    showSearch: false,
+    locale: "zh-CN",
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state",
+  );
+  assert.equal(calls.refresh, 0);
+  assert.deepEqual(calls.renderThumbnail.map((call) => call.index), [0, 1]);
+
+  fontSet.resolveReady();
+  await waitFor(() => calls.refresh === 1, "fonts.ready refresh");
+  await waitFor(() => calls.renderThumbnail.length === 4, "thumbnail repaint after fonts.ready");
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(calls.refresh, 1);
+  mounted.app.unmount();
+  assert.deepEqual(mounted.warnings, []);
+});
+
+test("PptxViewer tolerates sessions without a refresh hook", async (t) => {
+  const fontSet = installFontFaceSet(t);
+  const { session } = createSession({ document: documentWithSlides(2) });
+  const mounted = await mount(PptxViewer, {
+    source: new Uint8Array([1]),
+    sessionFactory: () => session,
+    showSearch: false,
+    locale: "zh-CN",
+  });
+  await waitFor(
+    () => findByTestId(mounted.root, "pptx-viewer")?.props["data-state"] === "ready",
+    "PPTX ready state",
+  );
+
+  fontSet.emitLoadingDone();
+  fontSet.resolveReady();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal(findByTestId(mounted.root, "pptx-viewer").props["data-state"], "ready");
+  assert.deepEqual(mounted.warnings, []);
+  mounted.app.unmount();
+});
+
+test("PPTX viewer styles keep a CJK-aware font stack", async () => {
+  const style = await readFile(
+    new URL("../../packages/vue-pptx/src/style.css", import.meta.url),
+    "utf8",
+  );
+  const stack = /--pptx-font-family:\s*([^;]+);/u.exec(style)?.[1] ?? "";
+  for (const family of [
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei",
+    "Noto Sans CJK SC",
+    "Source Han Sans SC",
+  ]) {
+    assert.ok(stack.includes(`"${family}"`), `font stack must include ${family}`);
+  }
+  assert.match(style, /font-family:\s*var\(--pptx-font-family\)/u);
 });

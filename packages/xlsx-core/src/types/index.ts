@@ -16,7 +16,11 @@ export type {
   XlsxConditionalFormatRule,
   // Data validation / freeze panes
   XlsxDataValidation,
+  XlsxDataValidationFeedback,
+  XlsxDataValidationMessageKey,
   XlsxFreezePanes,
+  XlsxSheetProtection,
+  XlsxSheetProtectionAction,
   XlsxSheetVisibility,
   // Sheet data
   XlsxSheetData,
@@ -83,6 +87,7 @@ export type {
   XlsxImageAnchor,
   // Image
   XlsxImage,
+  XlsxImageSourceRect,
   // Shape
   XlsxShapeFill,
   XlsxShapeStroke,
@@ -93,6 +98,7 @@ export type {
   // Form controls
   XlsxFormControlKind,
   XlsxFormControl,
+  XlsxFormControlInput,
   // Image rect / resize
   XlsxImageRect,
   XlsxImageResizeHandlePosition,

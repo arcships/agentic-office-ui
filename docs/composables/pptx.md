@@ -20,9 +20,19 @@ const document = usePptxDocument(stage, {
 - `state`、`error`、`document`、`capability`；
 - `activeIndex` 和 `zoomPercent`；
 - `open()`、`close()`、`goTo()`、`nextSlide()`、`previousSlide()` 和 `setZoom()`；
+- `slideError`（当前页渲染失败记录）和 `clearSlideError()`；
+- `refresh()`：重新渲染当前视图并重新测量文字；
 - 高级逃生出口 `getSession()`。
 
-舞台尚未挂载时进入 `waiting-for-stage`。快速更换舞台或来源时销毁旧会话，只保留最新加载结果。
+`state` 为 `idle`、`waiting-for-stage`、`loading`、`ready`、`cancelled`、`error` 或 `disposed`。舞台尚未挂载时进入 `waiting-for-stage`。快速更换舞台或来源时销毁旧会话，只保留最新加载结果。
+
+`openTimeoutMs`（默认 30000，`0` 关闭）为舞台等待和加载设置超时；超时后进入 `error` 并报告 `TIMEOUT`。被新请求取代或取消的加载（`ABORTED`、`STALE_RESULT`）进入 `cancelled`，不会无限停留在 `loading`。
+
+`goTo()` 失败时仍然抛错，但单页渲染失败不再把 `state` 切到 `error`：失败记录在 `slideError` 中，上一页保持可见，宿主可以重试或跳过；只有加载失败才会进入 `error`。
+
+`open(source, { initialSlide })` 可以覆盖本次打开的初始页。舞台元素变化或同一来源重新打开时，组合函数保留当前 `activeIndex`。
+
+浏览器里 `document.fonts` 的 `loadingdone` 和 `ready` 会自动触发一次 `refresh()`：同一批字体只重绘一次，之后才惰性加载的字体还会再次触发。这样在 webfont 到达之前渲染的文字不会一直保留回退字体的断行和自动缩放结果；会话没有实现可选的 `refresh()` 时自动跳过。
 
 `renderMode: "list"` 纵向连续渲染全部幻灯片，适合普通 Surface 浏览；`goTo()`、`nextSlide()` 和 `previousSlide()` 在该模式下滚动定位页面。`renderMode: "slide"` 只渲染当前页，供播放控制器使用。`PptxPreviewSession` 默认使用列表模式，`PptxDocumentSession` 默认使用单页模式；自定义组合时建议显式指定，避免把播放控制器接到列表 Surface。
 
@@ -37,6 +47,8 @@ const playback = usePptxPlayback(document, {
   },
 })
 ```
+
+`enabled` 和 `skipHiddenSlides` 可以传值、`ref` 或 getter；值变化时重建播放控制器，并从当前页继续。
 
 它必须接收 `usePptxDocument` 的返回值，并为当前文档会话持有唯一播放控制器。公开状态包括 `controller`、`snapshot`、`status`、`capability`、`lastWarning` 和 `lastError`。
 

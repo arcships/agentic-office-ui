@@ -13,7 +13,7 @@
     <div
       v-if="selectionMode === 'region'"
       class="pptx-stage__region-layer"
-      aria-label="选择幻灯片区域"
+      :aria-label="m.pptx.stage.region"
       tabindex="0"
       @pointerdown="onRegionPointerDown"
       @pointermove="onRegionPointerMove"
@@ -29,6 +29,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { clampSurfaceZoom, nextSurfaceZoom } from "@arcships/office-runtime/gesture-zoom"
+import { createTouchGestureTracker, nextDoubleTapZoom } from "@arcships/office-runtime/touch-gestures"
 import type {
   PptxStageContextMenu,
   PptxStageObjectClick,
@@ -55,9 +56,13 @@ import {
   type OfficeObjectReference,
   type OfficeReferenceCandidatePreview,
   type OfficeReferenceError,
+  type OfficeRegionDraftChange,
   type OfficeSelectionMode,
   type ResolveReferenceResult,
 } from "@arcships/office-interaction"
+import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
+import { formatOfficeMessage, localizeOfficeObjectDescriptor, localizeOfficeResolveResult, localizeOfficeDescriptorLabel } from "@arcships/office-interaction"
+import { providePptxMessages } from "./i18n"
 
 const props = withDefaults(defineProps<{
   /** Controlled zoom factor. 1 = 100%. */
@@ -68,14 +73,24 @@ const props = withDefaults(defineProps<{
   documentId?: string
   selectionMode?: OfficeSelectionMode
   emitReferenceCandidates?: boolean
+  locale?: OfficeLocale
+  messages?: OfficeMessagesOverride
 }>(), {
   enableGestureZoom: true,
   scrollContainer: null,
   selectionMode: "content",
   emitReferenceCandidates: false,
+  locale: undefined,
+  messages: undefined,
 })
 
 const elementRef = ref<HTMLElement | null>(null)
+const m = providePptxMessages(() => props.locale, () => props.messages)
+const descriptor = (
+  key: keyof typeof m.value.common.descriptors,
+  values: Record<string, string | number> = {},
+) => formatOfficeMessage(m.value.common.descriptors[key], values)
+const confirmFailed = () => formatOfficeMessage(m.value.common.reference.confirmFailed, { format: "PPTX" })
 const hostRef = ref<HTMLElement | null>(null)
 const selectionMode = computed(() => props.selectionMode)
 const revisionCounter = ref(0)
@@ -186,7 +201,7 @@ function confirmDraft(
   try {
     emit("referenceConfirm", confirmOfficeReferenceDraft(draft, { referenceId: createOfficeReferenceId(), trigger, additiveRequested, ...(snapshot ? { snapshot } : {}) }))
   } catch (reason) {
-    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to confirm PPTX reference.")
+    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : confirmFailed())
   }
 }
 
@@ -198,7 +213,7 @@ const emit = defineEmits<{
   documentRevisionChange: [revision: OfficeDocumentRevision]
   referenceCandidateChange: [change: { candidates: readonly OfficeReferenceCandidatePreview[]; activeCandidateId?: string }]
   referenceConfirm: [event: ReturnType<typeof confirmOfficeReferenceDraft>]
-  regionDraftChange: [event: { phase: "start" | "change"; region: { space: "slide"; slideIndex: number; rect: NormalizedRect } }]
+  regionDraftChange: [event: OfficeRegionDraftChange]
   selectionCancel: [event: { mode: OfficeSelectionMode; reason: "escape" | "pointer-cancel" | "programmatic" }]
   referenceResolve: [event: { referenceId: string; result: ResolveReferenceResult }]
   referenceError: [error: OfficeReferenceError]
@@ -243,8 +258,8 @@ function controlledZoom(): number | undefined {
     : undefined
 }
 
-function resolveHit(event: MouseEvent): StageHit | null {
-  const target = event.target as Element | null
+function resolveHitAt(rawTarget: unknown): StageHit | null {
+  const target = rawTarget as Element | null
   if (!target || typeof target.closest !== "function") return null
   const slideElement = target.closest<HTMLElement>("[data-slide-index]")
   const slideIndex = Number(slideElement?.dataset.slideIndex)
@@ -256,19 +271,26 @@ function resolveHit(event: MouseEvent): StageHit | null {
   }
 }
 
+function resolveHit(event: MouseEvent): StageHit | null {
+  return resolveHitAt(event.target)
+}
+
 function candidateForHit(hit: StageHit): OfficeReferenceCandidatePreview | undefined {
   const context = referenceContext()
   if (!context.document.slides[hit.slideIndex]) return undefined
   if (hit.objectKey) {
     const draft = createPptxObjectReferenceDraft(context, hit.slideIndex, hit.objectKey)
     const identity = context.playbackDocument.slides[hit.slideIndex]?.objects.find((object) => object.key === hit.objectKey)
-    const label = identity?.name || `${draft.kind} ${identity?.shapeId ?? ""}`.trim()
+    const rawLabel = identity?.name || `${draft.kind} ${identity?.shapeId ?? ""}`.trim()
+    const label = identity?.name?.trim()
+      ? identity.name.trim()
+      : localizeOfficeDescriptorLabel(rawLabel, m.value.common)
     return {
       candidateId: `pptx:object:${hit.objectKey}`,
       draft,
       preview: {
         label,
-        path: [{ kind: "document", label: "Presentation" }, { kind: "slide", label: `Slide ${hit.slideIndex + 1}` }, { kind: draft.kind, label }],
+        path: [{ kind: "document", label: descriptor("presentation") }, { kind: "slide", label: descriptor("slide", { number: hit.slideIndex + 1 }) }, { kind: draft.kind, label }],
       },
       hit: "direct",
       depth: 2,
@@ -278,7 +300,7 @@ function candidateForHit(hit: StageHit): OfficeReferenceCandidatePreview | undef
   return {
     candidateId: `pptx:slide:${hit.slideIndex}`,
     draft,
-    preview: { label: `Slide ${hit.slideIndex + 1}`, path: [{ kind: "document", label: "Presentation" }, { kind: "slide", label: `Slide ${hit.slideIndex + 1}` }] },
+    preview: { label: descriptor("slide", { number: hit.slideIndex + 1 }), path: [{ kind: "document", label: descriptor("presentation") }, { kind: "slide", label: descriptor("slide", { number: hit.slideIndex + 1 }) }] },
     hit: "inside",
     depth: 1,
   }
@@ -298,7 +320,7 @@ function hitTest(point: { clientX: number; clientY: number }): readonly OfficeRe
     const slideCandidate = candidateForHit({ slideIndex })
     return slideCandidate ? [candidate, slideCandidate] : [candidate]
   } catch (reason) {
-    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : "PPTX hit test failed.")
+    emitReferenceError("hit-test", "HIT_TEST_FAILED", reason instanceof Error ? reason.message : formatOfficeMessage(m.value.common.reference.hitTestFailed, { format: "PPTX" }))
     return []
   }
 }
@@ -361,12 +383,12 @@ function onTextSelectionMouseUp(): void {
     const text = selection.toString()
     confirmDraft(draft, "pointer", {
       label: text.length > 80 ? `${text.slice(0, 77)}…` : text,
-      path: [{ kind: "document", label: "Presentation" }, { kind: "slide", label: `Slide ${slideIndex + 1}` }, { kind: "text-range", label: "Selected text" }],
+      path: [{ kind: "document", label: descriptor("presentation") }, { kind: "slide", label: descriptor("slide", { number: slideIndex + 1 }) }, { kind: "text-range", label: m.value.common.selectedText }],
       content: { text },
     })
     ignoreNextObjectClick = true
   } catch (reason) {
-    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : "Unable to create PPTX text reference.")
+    emitReferenceError("describe", "INVALID_REFERENCE", reason instanceof Error ? reason.message : formatOfficeMessage(m.value.common.reference.createFailed, { format: "PPTX" }))
   }
 }
 
@@ -511,9 +533,11 @@ function onRegionPointerDown(event: PointerEvent): void {
   const bounds = slide?.getBoundingClientRect()
   if (!bounds || bounds.width <= 0 || bounds.height <= 0 || !Number.isSafeInteger(slideIndex)) return
   regionGesture.value = { pointerId: event.pointerId, slideIndex, bounds, startX: event.clientX, startY: event.clientY }
-  regionRect.value = { x: clampUnit((event.clientX - bounds.left) / bounds.width), y: clampUnit((event.clientY - bounds.top) / bounds.height), width: 0, height: 0 }
+  const x = clampUnit((event.clientX - bounds.left) / bounds.width)
+  const y = clampUnit((event.clientY - bounds.top) / bounds.height)
+  regionRect.value = { x, y, width: 0, height: 0 }
   ;(event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId)
-  emit("regionDraftChange", { phase: "start", region: { space: "slide", slideIndex, rect: regionRect.value } })
+  emit("regionDraftChange", { phase: "start", point: { space: "slide", slideIndex, x, y } })
   event.preventDefault()
 }
 
@@ -547,21 +571,50 @@ function onRegionKeyboardCancel(): void {
   emit("selectionCancel", { mode: "region", reason: "escape" })
 }
 
-function onContextMenu(event: MouseEvent): void {
-  const hit = resolveHit(event)
-  if (!hit) return
+function emitStageContextMenu(hit: StageHit, clientX: number, clientY: number): void {
   const rect = hostRef.value?.getBoundingClientRect?.()
   const position = {
     slideIndex: hit.slideIndex,
-    clientX: event.clientX,
-    clientY: event.clientY,
-    containerX: rect ? event.clientX - rect.left : 0,
-    containerY: rect ? event.clientY - rect.top : 0,
+    clientX,
+    clientY,
+    containerX: rect ? clientX - rect.left : 0,
+    containerY: rect ? clientY - rect.top : 0,
   }
   emit("contextMenu", hit.objectKey
     ? { ...position, kind: "object", objectKey: hit.objectKey }
     : { ...position, kind: "slide" })
 }
+
+function onContextMenu(event: MouseEvent): void {
+  if (touchGestures.shouldSuppressContextMenu(event.clientX, event.clientY)) {
+    event.preventDefault()
+    return
+  }
+  const hit = resolveHit(event)
+  if (!hit) return
+  emitStageContextMenu(hit, event.clientX, event.clientY)
+}
+
+const touchGestures = createTouchGestureTracker({
+  isEnabled: () => selectionMode.value === "content" && props.enableGestureZoom !== false,
+  isDoubleTapEnabled: () => controlledZoom() !== undefined,
+  getZoom: controlledZoom,
+  onZoom: (zoom, center) => requestGestureZoom(zoom, center.clientX, center.clientY),
+  onDoubleTap: (pointer) => {
+    const current = controlledZoom()
+    if (current === undefined) return
+    requestGestureZoom(nextDoubleTapZoom(current), pointer.clientX, pointer.clientY)
+  },
+  onLongPress: (pointer) => {
+    const hit = resolveHitAt(pointer.target)
+    if (hit) emitStageContextMenu(hit, pointer.clientX, pointer.clientY)
+  },
+})
+
+function onTouchPointerDown(event: PointerEvent): void { touchGestures.pointerDown(event) }
+function onTouchPointerMove(event: PointerEvent): void { touchGestures.pointerMove(event) }
+function onTouchPointerUp(event: PointerEvent): void { touchGestures.pointerUp(event) }
+function onTouchPointerCancel(event: PointerEvent): void { touchGestures.pointerCancel(event) }
 
 watch(() => props.zoom, (next) => {
   if (pendingAnchor && typeof next === "number" && clampSurfaceZoom(next) === pendingAnchor.requestedZoom) {
@@ -581,6 +634,10 @@ onMounted(() => {
   host.addEventListener("gesturestart", onGestureStart, { passive: false })
   host.addEventListener("gesturechange", onGestureChange as EventListener, { passive: false })
   host.addEventListener("gestureend", onGestureEnd)
+  host.addEventListener("pointerdown", onTouchPointerDown, { passive: true })
+  host.addEventListener("pointermove", onTouchPointerMove, { passive: true })
+  host.addEventListener("pointerup", onTouchPointerUp)
+  host.addEventListener("pointercancel", onTouchPointerCancel)
   if (typeof MutationObserver !== "undefined") {
     contentObserver = new MutationObserver(scheduleRevisionChange)
     contentObserver.observe(element, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-slide-index", "data-pptx-object-key", "data-pptx-paragraph-index"] })
@@ -592,11 +649,16 @@ watch(() => props.documentId, scheduleRevisionChange)
 
 onBeforeUnmount(() => {
   gestureToken += 1
+  touchGestures.reset()
   const host = hostRef.value
   host?.removeEventListener("wheel", onWheel)
   host?.removeEventListener("gesturestart", onGestureStart)
   host?.removeEventListener("gesturechange", onGestureChange as EventListener)
   host?.removeEventListener("gestureend", onGestureEnd)
+  host?.removeEventListener("pointerdown", onTouchPointerDown)
+  host?.removeEventListener("pointermove", onTouchPointerMove)
+  host?.removeEventListener("pointerup", onTouchPointerUp)
+  host?.removeEventListener("pointercancel", onTouchPointerCancel)
   contentObserver?.disconnect()
   contentObserver = undefined
 })
@@ -614,12 +676,13 @@ defineExpose({
     if (signal?.aborted) throw new DOMException("PPTX reference description aborted.", "AbortError")
     const descriptor = describePptxReference(referenceContext(), reference)
     if (!descriptor) throw new Error("PPTX reference is not resolvable in the current revision.")
-    return descriptor
+    return localizeOfficeObjectDescriptor(descriptor, m.value.common)
   },
   async resolveReference(reference: OfficeObjectReference): Promise<ResolveReferenceResult> {
     const result = resolvePptxReference(referenceContext(), reference)
-    emit("referenceResolve", { referenceId: reference.referenceId, result })
-    return result
+    const localized = localizeOfficeResolveResult(result, m.value.common)
+    emit("referenceResolve", { referenceId: reference.referenceId, result: localized })
+    return localized
   },
   async scrollToReference(reference: OfficeObjectReference): Promise<void> {
     const result = resolvePptxReference(referenceContext(), reference)
@@ -630,7 +693,7 @@ defineExpose({
     slide?.scrollIntoView({ behavior: "smooth", block: "center" })
   },
   async captureReferencePreview(reference: OfficeObjectReference): Promise<Blob> {
-    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", "PPTX preview capture is not provided by the Stage; use the host's capture pipeline.", reference.referenceId)
+    emitReferenceError("capture", "CAPTURE_UNSUPPORTED", formatOfficeMessage(m.value.common.reference.captureUnsupported, { format: "PPTX" }), reference.referenceId)
     throw new Error("PPTX reference preview capture is unsupported")
   },
 })
@@ -640,6 +703,7 @@ defineExpose({
 .pptx-stage {
   background: var(--pptx-surface-bg, transparent);
   position: relative;
+  touch-action: pan-x pan-y;
 }
 
 .pptx-stage__content {

@@ -7,6 +7,8 @@ from urllib.parse import quote
 
 from playwright.sync_api import sync_playwright
 
+from browser_launch import launch_browser
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="验证 PPTX 连续重播后的浏览器堆内存和资源释放。")
@@ -17,11 +19,17 @@ def main() -> None:
     module_url = args.app_url + "/@fs" + quote(str(workspace / "packages/pptx-core/src/browser.ts"), safe="/")
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = launch_browser(playwright.chromium, headless=True)
         page = browser.new_page()
         console_errors = []
         page_errors = []
-        page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+        page.on(
+            "console",
+            lambda message: console_errors.append(message.text)
+            if message.type == "error"
+            and not (message.location or {}).get("url", "").endswith("/favicon.ico")
+            else None,
+        )
         page.on("pageerror", lambda error: page_errors.append(str(error)))
         page.goto(args.app_url)
         page.wait_for_load_state("networkidle")

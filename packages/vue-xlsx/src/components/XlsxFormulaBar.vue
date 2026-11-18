@@ -5,7 +5,7 @@
       data-testid="xlsx-name-box"
       :value="nameBoxValue"
       readonly
-      title="Active cell"
+      :title="m.xlsx.formulaBar.activeCell"
     />
     <span class="xlsx-formula-bar__fx">fx</span>
     <input
@@ -14,18 +14,21 @@
       data-testid="xlsx-formula-input"
       :disabled="!hasFormulaTarget || isReadOnly"
       :value="formulaDraft"
-      placeholder="Enter a formula or value"
+      :placeholder="m.xlsx.formulaBar.placeholder"
       @blur="commitFormula(); focusedField = null"
       @focus="onFormulaFocus"
       @input="onFormulaInput"
       @keydown="onFormulaKeydown"
+      @compositionstart="onFormulaCompositionStart"
+      @compositionend="onFormulaCompositionEnd"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, type CSSProperties } from "vue";
+import { computed, nextTick, ref, watch, type CSSProperties } from "vue";
 import type { XlsxViewerController } from "@arcships/xlsx-core";
+import { useXlsxMessages } from "../i18n";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -34,11 +37,14 @@ const props = defineProps<{
 }>();
 
 const formulaInputRef = ref<HTMLInputElement | null>(null);
+const m = useXlsxMessages();
 const formulaDraft = ref("");
 const formulaInitialValue = ref("");
 const focusedField = ref<"formula" | null>(null);
+const isFormulaComposing = ref(false);
+let commitFormulaOnCompositionEnd = false;
 
-const isReadOnly = computed(() => props.readOnly ?? props.controller.readOnly);
+const isReadOnly = computed(() => props.readOnly === true || props.controller.isEditingLocked === true || (props.readOnly === undefined && props.controller.readOnly));
 
 const hasFormulaTarget = computed(() => {
   const addr = props.controller.activeCellAddress;
@@ -92,12 +98,36 @@ function commitFormula(nextFormula?: string) {
 }
 
 function onFormulaKeydown(event: KeyboardEvent) {
+  if (isFormulaComposing.value || event.isComposing || event.keyCode === 229) {
+    // Let the IME consume the key. Enter confirms the composition; remember it
+    // so the formula is committed once the final composition text is in place.
+    if (event.key === "Enter") commitFormulaOnCompositionEnd = true;
+    return;
+  }
+
   if (event.key === "Enter") {
     event.preventDefault();
     commitFormula();
     focusedField.value = null;
     formulaInputRef.value?.blur();
   }
+}
+
+function onFormulaCompositionStart() {
+  isFormulaComposing.value = true;
+  commitFormulaOnCompositionEnd = false;
+}
+
+function onFormulaCompositionEnd() {
+  isFormulaComposing.value = false;
+  if (!commitFormulaOnCompositionEnd) return;
+  commitFormulaOnCompositionEnd = false;
+  // The final composition text lands via @input before this tick completes.
+  void nextTick(() => {
+    commitFormula();
+    focusedField.value = null;
+    formulaInputRef.value?.blur();
+  });
 }
 </script>
 
@@ -152,5 +182,13 @@ function onFormulaKeydown(event: KeyboardEvent) {
 .xlsx-formula-bar__formula-input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (pointer: coarse) {
+  .xlsx-formula-bar button,
+  .xlsx-formula-bar input,
+  .xlsx-formula-bar select {
+    min-height: 44px;
+  }
 }
 </style>

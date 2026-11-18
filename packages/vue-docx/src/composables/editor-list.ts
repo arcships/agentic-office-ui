@@ -2,61 +2,122 @@
 //
 // Extracted from useDocxEditor.ts.
 
-import type { DocModel } from "@arcships/docx-core"
+import type { DocModel, ParagraphNode } from "@arcships/docx-core"
 import type { DocxListType } from "@arcships/docx-core"
 import {
-  cloneDocModel,
-  paragraphListType,
-  resolveSelectedParagraphLocation,
+  cloneDocModelShallow,
+  cloneDocNode,
+  cloneNumberingDefinitions,
+  ensureListNumberingId,
   getParagraphAtLocation,
+  paragraphListType,
+  resolveMaxNumberingLevel,
+  resolveSelectedParagraphLocation,
 } from "@arcships/docx-core"
-import type { EditorCore } from "./editor-shared"
+import type { ApplyModelChangeOptions, EditorCore } from "./editor-shared"
+import { selectedParagraphLocations } from "./editor-paragraph-range"
 
 export function createEditorList(
   ctx: EditorCore,
-  applyChange: (updater: (current: DocModel) => DocModel, successStatus?: string) => void,
+  applyChange: (
+    updater: (current: DocModel) => DocModel,
+    successStatus?: string,
+    options?: ApplyModelChangeOptions
+  ) => void,
 ) {
+  const cloneModelForListEdit = (
+    current: DocModel,
+    locations: ReturnType<typeof selectedParagraphLocations>
+  ): DocModel => {
+    const nextModel = cloneDocModelShallow(current)
+    const touched = new Set<number>()
+    for (const location of locations) {
+      touched.add(
+        location.kind === "paragraph"
+          ? location.nodeIndex
+          : location.tableIndex
+      )
+    }
+    for (const nodeIndex of touched) {
+      const node = current.nodes[nodeIndex]
+      if (node) nextModel.nodes[nodeIndex] = cloneDocNode(node)
+    }
+    nextModel.metadata.numberingDefinitions = cloneNumberingDefinitions(
+      current.metadata.numberingDefinitions
+    )
+    return nextModel
+  }
+
   const toggleList = (listType: DocxListType): void => {
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
-      const loc = resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, ctx.activeTextRangeSnapshot.value)
-      const { paragraph: para } = getParagraphAtLocation(nextModel, loc)
-      if (!para) return current
-      if (!para.style) para.style = {}
-      const currentListType = paragraphListType(para, current.metadata.numberingDefinitions)
-      if (listType === "unordered") {
-        if (currentListType === "unordered") {
+      const locations = selectedParagraphLocations(
+        current,
+        ctx.selectionSnapshot.value,
+        ctx.activeTextRangeSnapshot.value
+      )
+      const nextModel = cloneModelForListEdit(current, locations)
+      const paragraphs: ParagraphNode[] = []
+      for (const location of locations) {
+        const { paragraph } = getParagraphAtLocation(nextModel, location)
+        if (paragraph) paragraphs.push(paragraph)
+      }
+      if (paragraphs.length === 0) {
+        ctx.status.value = ctx.statusMessage("listParagraphNotFound")
+        return current
+      }
+
+      // Toggling a list type applies to the whole selection: it is removed only
+      // when every selected paragraph already carries that list type.
+      const removeList = paragraphs.every(
+        (para) => paragraphListType(para, current.metadata.numberingDefinitions) === listType
+      )
+      if (removeList) {
+        for (const para of paragraphs) {
+          if (!para.style) para.style = {}
           para.style.numbering = undefined
-        } else {
-          para.style.numbering = { numId: 1, ilvl: 0 }
+          para.sourceXml = undefined
         }
-      } else {
-        if (currentListType === "ordered") {
-          para.style.numbering = undefined
-        } else {
-          para.style.numbering = { numId: 2, ilvl: 0 }
+        return nextModel
+      }
+
+      const numId = ensureListNumberingId(nextModel, listType)
+      for (const para of paragraphs) {
+        if (!para.style) para.style = {}
+        para.style.numbering = {
+          numId,
+          ilvl: Math.max(0, para.style.numbering?.ilvl ?? 0),
         }
+        para.sourceXml = undefined
       }
       return nextModel
-    })
+    }, listType === "unordered"
+      ? ctx.statusMessage("listAppliedBullet")
+      : ctx.statusMessage("listAppliedNumbered"))
   }
 
   const adjustSelectedListDepth = (levelDelta: number, _draftText?: string): boolean => {
     const currentModel = ctx.model.value
     const loc = resolveSelectedParagraphLocation(ctx.selectionSnapshot.value, ctx.activeTextRangeSnapshot.value)
-    if (loc.kind !== "paragraph") return false
+    const para = getParagraphAtLocation(currentModel, loc).paragraph
+    if (!para?.style?.numbering) return false
 
-    const para = currentModel.nodes[loc.nodeIndex]
-    if (!para || para.type !== "paragraph" || !para.style?.numbering) return false
-
-    const currentIlvl = para.style.numbering.ilvl ?? 0
-    const nextIlvl = Math.max(0, Math.min(8, currentIlvl + levelDelta))
-    if (nextIlvl === currentIlvl) return false
+    const currentIlvl = Math.max(0, para.style.numbering.ilvl ?? 0)
+    const maxLevel = resolveMaxNumberingLevel(
+      currentModel.metadata.numberingDefinitions,
+      para.style.numbering.numId
+    )
+    const nextIlvl = Math.max(0, Math.min(maxLevel, currentIlvl + levelDelta))
+    if (nextIlvl === currentIlvl) {
+      if (levelDelta > 0 && currentIlvl >= maxLevel) {
+        ctx.status.value = ctx.statusMessage("maximumListLevel", { level: maxLevel + 1 })
+      }
+      return false
+    }
 
     applyChange((current) => {
-      const nextModel = cloneDocModel(current)
-      const nextPara = nextModel.nodes[loc.nodeIndex]
-      if (!nextPara || nextPara.type !== "paragraph" || !nextPara.style?.numbering) return current
+      const nextModel = cloneModelForListEdit(current, [loc])
+      const nextPara = getParagraphAtLocation(nextModel, loc).paragraph
+      if (!nextPara?.style?.numbering) return current
       nextPara.style.numbering = { ...nextPara.style.numbering, ilvl: nextIlvl }
       nextPara.sourceXml = undefined
       return nextModel

@@ -18,6 +18,8 @@ export interface DocumentPageBorderEdge {
   cssBorder?: string;
   offsetPx?: number;
   shadow?: boolean;
+  /** Normalized `#rrggbb` border colour, when the document specifies one. */
+  color?: string;
 }
 
 export interface DocumentPageBorders {
@@ -59,6 +61,50 @@ export function pageMarginPaddingStyle(
     paddingRight: `${marginsPx.right}px`,
     paddingBottom: `${marginsPx.bottom}px`,
     paddingLeft: `${marginsPx.left}px`,
+  };
+}
+
+/**
+ * Origin that floating DOCX images are positioned against.
+ *
+ * `.docx-page-surface` is the positioned ancestor of every page body: its
+ * padding box starts at the page edge (the margins are rendered as padding), so
+ * `page`-relative anchors are measured from `left/top = 0` while
+ * `margin`/`column`-relative anchors are offset by the page margins.
+ */
+export interface DocxFloatingPageOriginPx {
+  left: number;
+  top: number;
+  marginLeft: number;
+  marginTop: number;
+  columnLeft: number;
+  columnTop: number;
+  pageWidth: number;
+}
+
+export function resolveFloatingPageOriginPx(
+  pageWidthPx: number | undefined,
+  marginsPx?: { top: number; right: number; bottom: number; left: number }
+): DocxFloatingPageOriginPx {
+  const pageWidth =
+    Number.isFinite(pageWidthPx) && (pageWidthPx as number) > 0
+      ? Math.max(1, Math.round(pageWidthPx as number))
+      : DEFAULT_DOC_PAGE_WIDTH;
+  const marginLeft = Number.isFinite(marginsPx?.left)
+    ? Math.max(0, Math.round(marginsPx?.left as number))
+    : 0;
+  const marginTop = Number.isFinite(marginsPx?.top)
+    ? Math.max(0, Math.round(marginsPx?.top as number))
+    : 0;
+
+  return {
+    left: 0,
+    top: 0,
+    marginLeft,
+    marginTop,
+    columnLeft: marginLeft,
+    columnTop: marginTop,
+    pageWidth,
   };
 }
 
@@ -136,6 +182,18 @@ function normalizeHexColor(value?: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Resolve a document-level page background from the raw `w:background/@w:color`
+ * value. Word writes bare six-digit values (for example `FFF2CC`); CSS needs a
+ * leading `#`. `auto` and malformed values return `undefined` so callers keep
+ * the theme page colour.
+ */
+export function resolveDocumentBackgroundColor(
+  value?: string
+): string | undefined {
+  return normalizeHexColor(value);
+}
+
 function borderTypeToCssStyle(rawType?: string): string | undefined {
   const value = rawType?.trim().toLowerCase();
   if (!value || value === "none" || value === "nil") {
@@ -210,6 +268,7 @@ function parseSectionPageBorderEdge(
     shadow:
       readStringAttribute(edgeTag, "w:shadow")?.trim().toLowerCase() === "1" ||
       readStringAttribute(edgeTag, "w:shadow")?.trim().toLowerCase() === "true",
+    color,
   };
 }
 
@@ -232,9 +291,12 @@ export function parseSectionPageBorders(
     : undefined;
 }
 
-export function parseSectionLayout(sectionPropertiesXml?: string): DocumentLayoutMetrics {
+export function parseSectionLayout(
+  sectionPropertiesXml?: string,
+  fallbackLayout: DocumentLayoutMetrics = DEFAULT_DOCUMENT_LAYOUT
+): DocumentLayoutMetrics {
   if (!sectionPropertiesXml) {
-    return DEFAULT_DOCUMENT_LAYOUT;
+    return fallbackLayout;
   }
 
   const pageSizeTag = sectionPropertiesXml.match(/<w:pgSz\b[^>]*>/i)?.[0];
@@ -242,26 +304,26 @@ export function parseSectionLayout(sectionPropertiesXml?: string): DocumentLayou
   const docGridTag = sectionPropertiesXml.match(/<w:docGrid\b[^>]*\/?>/i)?.[0];
 
   const rawPageWidthPx =
-    twipsToPixels(readTwipsAttribute(pageSizeTag, "w:w")) ?? DEFAULT_DOCUMENT_LAYOUT.pageWidthPx;
+    twipsToPixels(readTwipsAttribute(pageSizeTag, "w:w")) ?? fallbackLayout.pageWidthPx;
   const rawPageHeightPx =
-    twipsToPixels(readTwipsAttribute(pageSizeTag, "w:h")) ?? DEFAULT_DOCUMENT_LAYOUT.pageHeightPx;
+    twipsToPixels(readTwipsAttribute(pageSizeTag, "w:h")) ?? fallbackLayout.pageHeightPx;
   const pageSize = resolvePageSizeForOrientation({
     widthPx: rawPageWidthPx,
     heightPx: rawPageHeightPx,
     orientation: readStringAttribute(pageSizeTag, "w:orient"),
   });
   const topMarginPx =
-    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:top")) ?? DEFAULT_DOCUMENT_LAYOUT.marginsPx.top;
+    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:top")) ?? fallbackLayout.marginsPx.top;
   const rightMarginPx =
-    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:right")) ?? DEFAULT_DOCUMENT_LAYOUT.marginsPx.right;
+    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:right")) ?? fallbackLayout.marginsPx.right;
   const bottomMarginPx =
-    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:bottom")) ?? DEFAULT_DOCUMENT_LAYOUT.marginsPx.bottom;
+    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:bottom")) ?? fallbackLayout.marginsPx.bottom;
   const leftMarginPx =
-    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:left")) ?? DEFAULT_DOCUMENT_LAYOUT.marginsPx.left;
+    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:left")) ?? fallbackLayout.marginsPx.left;
   const headerDistancePx =
-    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:header")) ?? DEFAULT_DOCUMENT_LAYOUT.headerDistancePx;
+    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:header")) ?? fallbackLayout.headerDistancePx;
   const footerDistancePx =
-    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:footer")) ?? DEFAULT_DOCUMENT_LAYOUT.footerDistancePx;
+    twipsToPixels(readTwipsAttribute(pageMarginTag, "w:footer")) ?? fallbackLayout.footerDistancePx;
   // Word only snaps lines to the document grid for explicit grid types.
   // A bare <w:docGrid w:linePitch="..."/> (type "default") stores the pitch
   // but applies no grid, and Word writes that boilerplate into most documents.
@@ -271,8 +333,8 @@ export function parseSectionLayout(sectionPropertiesXml?: string): DocumentLayou
     docGridType === "linesandchars" ||
     docGridType === "snaptochars"
       ? twipsToPixels(readTwipsAttribute(docGridTag, "w:linePitch")) ??
-        DEFAULT_DOCUMENT_LAYOUT.docGridLinePitchPx
-      : DEFAULT_DOCUMENT_LAYOUT.docGridLinePitchPx;
+        fallbackLayout.docGridLinePitchPx
+      : fallbackLayout.docGridLinePitchPx;
 
   return {
     pageWidthPx: pageSize.widthPx,

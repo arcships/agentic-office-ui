@@ -4,7 +4,7 @@ import {
   validateOfficeArchive,
 } from "@arcships/office-runtime";
 import { unzipSync } from "fflate";
-import { validateXlsxImageAssets } from "./images/image-budget";
+import { isXlsxImagePath, validateXlsxImageAssets } from "./images/image-budget";
 
 const MIB = 1024 * 1024;
 
@@ -187,6 +187,10 @@ export function validateXlsxArchive(
     throw new DOMException("XLSX 图片验证已取消。", "AbortError");
   }
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
-  validateXlsxImageAssets(unzipSync(bytes), resolvedLimits);
+  // Only image entries need to be inflated here. Expanding the complete archive
+  // just to find `xl/media/*` doubled the cost of every validated workbook.
+  validateXlsxImageAssets(unzipSync(bytes, {
+    filter: (file) => isXlsxImagePath(file.name),
+  }), resolvedLimits);
   return archiveResult as XlsxArchiveValidationResult;
 }

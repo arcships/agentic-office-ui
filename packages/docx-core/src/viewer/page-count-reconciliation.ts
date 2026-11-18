@@ -10,6 +10,14 @@ export interface PageCountReconciliationOptions<TPage> {
   buildPagesAtScale: (heightScale: number) => TPage[];
   maxDifference?: number;
   scales?: number[];
+  /**
+   * Scaling the virtual page height above 1 packs more content onto every
+   * page than the physical page can show; the tail is clipped at render time.
+   * Such candidates are rejected by default. Set this only when the caller
+   * clips the overflowing content explicitly and reports it.
+   */
+  allowPageContentOverflow?: boolean;
+  onRejectedOverflowCandidate?: (candidate: PageCountCandidate<TPage>) => void;
 }
 
 const PAGE_COUNT_RECONCILIATION_REFINEMENT_STEPS = 10;
@@ -119,11 +127,22 @@ export function resolveMeasuredBodyFooterOverlapLatchState(options: {
   };
 }
 
+function candidateOverflowsPhysicalPage<TPage>(
+  candidate: PageCountCandidate<TPage>
+): boolean {
+  return candidate.scale > 1.0001;
+}
+
 function isBetterCandidate<TPage>(
   candidate: PageCountCandidate<TPage>,
   incumbent: PageCountCandidate<TPage>,
-  targetPageCount: number
+  targetPageCount: number,
+  allowPageContentOverflow: boolean
 ): boolean {
+  if (!allowPageContentOverflow && candidateOverflowsPhysicalPage(candidate)) {
+    return false;
+  }
+
   const candidateDifference = Math.abs(candidate.pageCount - targetPageCount);
   const incumbentDifference = Math.abs(incumbent.pageCount - targetPageCount);
   if (candidateDifference !== incumbentDifference) {
@@ -157,6 +176,8 @@ export function reconcilePageCountCandidateToTargetCountByScalingHeight<TPage>(
     buildPagesAtScale,
     maxDifference = 3,
     scales: customScales,
+    allowPageContentOverflow = false,
+    onRejectedOverflowCandidate,
   } = options;
   const safeTargetPageCount = Math.max(1, Math.round(targetPageCount));
   const initialPageCount = initialPages.length;
@@ -218,7 +239,21 @@ export function reconcilePageCountCandidateToTargetCountByScalingHeight<TPage>(
         lowerScale +
         (interval * step) / PAGE_COUNT_RECONCILIATION_REFINEMENT_STEPS;
       const candidate = buildCandidateAtScale(scale);
-      if (isBetterCandidate(candidate, selectedCandidate, safeTargetPageCount)) {
+      if (
+        !allowPageContentOverflow &&
+        candidateOverflowsPhysicalPage(candidate)
+      ) {
+        onRejectedOverflowCandidate?.(candidate);
+        continue;
+      }
+      if (
+        isBetterCandidate(
+          candidate,
+          selectedCandidate,
+          safeTargetPageCount,
+          allowPageContentOverflow
+        )
+      ) {
         selectedCandidate = candidate;
       }
       if (
@@ -227,7 +262,8 @@ export function reconcilePageCountCandidateToTargetCountByScalingHeight<TPage>(
           isBetterCandidate(
             candidate,
             bestExactCandidate,
-            safeTargetPageCount
+            safeTargetPageCount,
+            allowPageContentOverflow
           ))
       ) {
         bestExactCandidate = candidate;
@@ -242,7 +278,21 @@ export function reconcilePageCountCandidateToTargetCountByScalingHeight<TPage>(
 
   for (const scale of scales) {
     const candidate = buildCandidateAtScale(scale);
-    if (isBetterCandidate(candidate, selectedCandidate, safeTargetPageCount)) {
+    if (
+      !allowPageContentOverflow &&
+      candidateOverflowsPhysicalPage(candidate)
+    ) {
+      onRejectedOverflowCandidate?.(candidate);
+      continue;
+    }
+    if (
+      isBetterCandidate(
+        candidate,
+        selectedCandidate,
+        safeTargetPageCount,
+        allowPageContentOverflow
+      )
+    ) {
       selectedCandidate = candidate;
     }
     if (candidate.pageCount === safeTargetPageCount) {

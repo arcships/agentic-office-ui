@@ -16,7 +16,8 @@ pnpm add @arcships/docx-core
 | `@arcships/docx-core/core` | 平台无关的纯数据能力 |
 | `@arcships/docx-core/runtime` | `createDocxRuntime` 实例入口 |
 | `@arcships/docx-core/wasm-url` | 包自带的 `bundledDocxWasmUrl` |
-| `@arcships/docx-core/worker` | 独立 Worker 资源 |
+| `@arcships/docx-core/worker` | 独立导入 Worker 资源 |
+| `@arcships/docx-core/export-worker` | 独立导出 Worker 资源 |
 | `@arcships/docx-core/assets/docx_wasm_bg.wasm` | WASM 资源 |
 
 ## 快速示例
@@ -38,9 +39,13 @@ try {
 }
 ```
 
+## Worker 策略
+
+UI 环境中的导入和导出都必须在专用 Worker 中执行：导入不会回退到主线程同步 WASM 解析，导出不会在主线程展开图片字节或执行同步序列化。无 UI 的 Node 等宿主可以使用 `exportDocxBuffer` 的内联回退。导出支持 `onProgress`、`AbortSignal` 取消和 `maxExportMs` 超时。
+
 ## 资源限制
 
-实例级限制覆盖输入字节、压缩包条目、解压字节、XML、关系、图片、模型节点、布局页数和解析时间。超限返回结构化错误（含 `actual` / `allowed`），默认值由 `DEFAULT_DOCX_RUNTIME_LIMITS` 给出。
+实例级限制覆盖输入字节、压缩包条目、解压字节、XML、关系、图片、模型节点、布局页数、解析时间与导出时间。超限返回结构化错误（含 `actual` / `allowed`），默认值由 `DEFAULT_DOCX_RUNTIME_LIMITS` 给出。
 
 ## 文字、页面与区域引用
 

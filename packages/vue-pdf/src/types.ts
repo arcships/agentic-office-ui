@@ -1,5 +1,6 @@
 import type { PdfSource, PdfUrlPolicy } from "./pdf-url-policy"
-import type { PdfRenderRuntime } from "./pdf/pdf-render-runtime"
+import type { PdfPasswordHandler, PdfRenderRuntime } from "./pdf/pdf-render-runtime"
+import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
 
 export interface PdfViewerProps {
   src?: string
@@ -13,10 +14,20 @@ export interface PdfViewerProps {
   pdfiumWasmUrl?: string
   /** Maximum accepted PDF source size in bytes. Defaults to 50 MiB. */
   maxFileSize?: number
+  /** Password for encrypted PDF documents. */
+  password?: string
+  /** Invoked when an encrypted PDF needs a password. */
+  onPassword?: PdfPasswordHandler
   fileName?: string
   defaultZoom?: number
   className?: string
   showToolbar?: boolean
   showDownload?: boolean
   showRotateControls?: boolean
+  /** Optional minimum height; the viewer itself does not impose one. */
+  minHeight?: string | number
+  /** Dark viewer chrome and page surround. Defaults to false. */
+  isDark?: boolean
+  locale?: OfficeLocale
+  messages?: OfficeMessagesOverride
 }

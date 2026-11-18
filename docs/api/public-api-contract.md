@@ -27,6 +27,7 @@
 |  | `./wasm-url` | `./dist/wasm-url.d.ts` | `./dist/wasm-url.js` |
 |  | `./assets/docx_wasm_bg.wasm` | 不适用 | `./dist/assets/docx_wasm_bg.wasm` |
 |  | `./worker` | 不适用 | `./dist/docx-import-worker.js` |
+|  | `./export-worker` | 不适用 | `./dist/docx-export-worker.js` |
 |  | `./package.json` | 不适用 | `./package.json` |
 | `@arcships/xlsx-core` | `.` | `./dist/index.d.ts` | `./dist/index.js` |
 |  | `./core` | `./dist/core.d.ts` | `./dist/core.js` |
@@ -62,12 +63,18 @@ Worker 和 WASM 必须来自安装后的真实包。消费项目不得从 demo �
 - `@arcships/docx-core/core`：平台无关的文档模型、标准化、克隆、布局及不可变段落、表格和文字样式命令。
 - `@arcships/docx-core/runtime`：`createDocxRuntime`、`DocxRuntime`、`DocxRuntimeConfig`、来源与限制类型，以及 DOCX 导入的公开诊断和错误类型。
 - `@arcships/docx-core/wasm-url`：包自带的 `bundledDocxWasmUrl`。
+- 根入口的 `exportDocxBuffer(model, basePackage, options)` 在 UI 环境中使用专用导出 Worker，支持 `onProgress`、`AbortSignal` 取消和 `maxExportMs` 超时；`createBundledDocxExportWorker` 与 `@arcships/docx-core/export-worker` 供自定义 Worker 配置。`DocxExportError` 返回结构化 `ABORTED`、`TIMEOUT`、`WORKER_UNAVAILABLE` 或 `EXPORT_FAILED`。
 - 根入口：保留现有模型、布局、序列化、解析和编辑命令，供 `0.x` 兼容使用。新代码如只需要纯数据能力，应改用 `./core`；需要 Worker/WASM 时应改用 `./runtime`。
 - 根入口同时提供 `createDocxTextReferenceDraft`、`createDocxPageReferenceDraft`、`createDocxRegionReferenceDraft`、`resolveDocxReference` 和 `describeDocxReference`。它们只把已有 DOCX 模型选区转换/解析为统一引用，不持有宿主的引用集合。
+- 根入口的 `TextStyle` 继续兼容原有布尔字段，同时新增 underline/strike 变体、`caps`/`smallCaps`、字符间距与缩放、分脚本字体、run 边框、文字阴影/描边和 `direction`；`ParagraphStyle` 新增 `direction`。`paragraphTypographyStyle` 与 `isJustifiedAlignment` 供渲染层统一处理扩展对齐和 RTL。
 
-`DocxRuntimeConfig.limits` 使用实例自己的 `DocxRuntimeLimits`。公开限制覆盖输入字节、压缩包条目与解压字节、XML、关系、图片、模型节点、布局页数和解析时间；默认值由 `DEFAULT_DOCX_RUNTIME_LIMITS` 给出，`resolveDocxRuntimeLimits` 返回已约束的实例快照。超限会在高成本解析、图片解码或布局之前停止，并通过结构化错误返回实际值与允许值。
+`DocxRuntimeConfig.limits` 使用实例自己的 `DocxRuntimeLimits`。公开限制覆盖输入字节、压缩包条目与解压字节、XML、关系、图片、模型节点、布局页数、解析时间与导出时间；默认值由 `DEFAULT_DOCX_RUNTIME_LIMITS` 给出，`resolveDocxRuntimeLimits` 返回已约束的实例快照。超限会在高成本解析、图片解码或布局之前停止，并通过结构化错误返回实际值与允许值。UI 环境不会回退到主线程同步 WASM 解析。
 
 根入口同时公开低层校验辅助项 `assertDocxModelBudget`、`assertDocxParseTime`、`validateDocxImageAssets` 和 `DocxImageBudgetSnapshot`，供自定义导入流程复用与内置 Runtime 相同的模型、耗时和图片规则。
+
+单节点编辑采用写时复制：`cloneDocModelShallow(model)` 只复制模型对象、`nodes` 数组和 `metadata` 对象，`cloneDocNode(node)` 深拷贝被编辑的顶层节点，`cloneDocModelNodes(model, indexes)` 深拷贝命令涉及的一组顶层节点，`cloneDocModelSectionLists(model, region)` 复制页眉/页脚 section 列表外壳。它们与 `model` 共享未修改的节点、页眉页脚节点和图片 `data` 缓冲区。`cloneDocModel(model)` 继续完整拷贝文档图（包括图片字节），用于导入、标准化和长生命周期检查点。编辑路径共享的图片 `data` 只能读，调用方不得原地写入。（issue #37）
+
+文本提交合并：`DocxEditorTransactionPatch.textCommitKey` 标记一次文本提交的目标，相同键且无其他事务介入的连续提交只写一条撤销历史；`DocxEditorController.endTextCommitBurst()` 显式结束当前 burst（段落/单元格宿主在 blur 时已自动调用）。选区变化、格式/结构命令、撤销重做、导入/新建均会结束 burst。约定与测试见 [`docs/testing/docx-edit-history-performance.md`](../testing/docx-edit-history-performance.md) 第 4 节。
 
 推荐实例写法：
 
@@ -94,6 +101,7 @@ try {
 - `@arcships/xlsx-core/runtime`：`createXlsxRuntime`、实例配置、Worker 客户端、来源检查、加载错误和诊断类型。
 - `@arcships/xlsx-core/wasm-url`：包自带的 `bundledXlsxWasmUrl`。
 - 根入口：保留现有数据、图片、图表、Worker 和控制器类型供 `0.x` 兼容使用。新代码应按纯数据或运行能力选择 `./core`、`./runtime`。
+- 图表：`refreshChartDataFromWorkbook(workbook, chartsByWorkbookSheetIndex, chartsheets)` 从编辑后的工作簿重新解析图表分类和值，保留图表定义与锚点；Worker 客户端也提供 `refreshCharts()`，不会重新解析源文件字节。
 - 根入口同时提供工作表、单元格、A1 范围、整行、整列、图表和人工 sheet 区域的 `createXlsx*ReferenceDraft`、`resolveXlsxReference` 与 `describeXlsxReference`。适配器优先使用 sheet id 和 drawing id；名称/类型证据只有唯一时才用于迁移。
 
 `XlsxRuntimeConfig.limits` 使用实例自己的 `XlsxRuntimeLimits`。公开限制除通用输入、压缩包、XML、关系、图片和解析时间外，还覆盖工作表 XML、共享字符串、行列、工作表数量和公式数量。`DEFAULT_XLSX_RUNTIME_LIMITS` 是默认值，`resolveXlsxRuntimeLimits` 返回实例快照；`validateXlsxArchive` 可在创建工作簿前执行同一套检查。
@@ -146,23 +154,35 @@ DOCX 受控只读文档面、分页切片、缩放测量、纸面主题与批注
 - `XlsxDiagnostic`、`XlsxLoadError`、`XlsxLoadErrorCode`、`XlsxSourceKind`、`XlsxSourceState`、`XlsxUrlPolicy`。
 - 样式：`@arcships/vue-xlsx/style.css`。
 - 可选功能：`@arcships/vue-xlsx/chart`、`@arcships/vue-xlsx/map`、`@arcships/vue-xlsx/webgl`。根入口保留旧渲染名称的异步兼容外观；新代码可显式导入对应子入口。未使用功能时不会请求其实现分包。
+- 工作表缩略图：`useXlsxViewerThumbnails` 只在需要时读取单元格（首次悬停或显式预热），`prefetchThumbnails` 在空闲时预热指定工作表、按 `revision` 去重、单次最多 3 张，`paintThumbnail` 随后只绘制。
 - 历史记录：控制器选项 `historyMaxEntries` 和 `historyMaxBytes` 同时生效，默认最多 100 条、估算 32 MiB。
+- 图表数据：`refreshChartData()` 在主线程工作簿或 Worker 当前工作簿上重新解析图表分类和值，用于源单元格编辑后刷新绘图。
 
 网格、工具栏、功能区、公式栏、工作表标签、图表/图片/选区浮层、菜单及单独渲染函数是旧的低层出口，兼容期限见第 6 节。
 
 ### 3.5 `@arcships/vue-pdf`
 
-稳定入口为 `PdfViewer`，以及根入口导出的属性、PDF 来源、诊断和错误类型。PDF 查看器默认创建自己专用的 `PdfRenderRuntime`，也可由宿主通过 `runtime` 属性注入实例；`pdfiumWasmUrl` 可覆盖包内默认资源地址。`createPdfRenderRuntime`、`bundledPdfiumWasmUrl`、`PdfRenderRuntimeConfig` 和页面、搜索、渲染类型是公开的实例配置入口。`DEFAULT_PDF_MAX_FILE_SIZE`、`PdfLoadOptions.maxFileSize` 和 `PdfViewer.maxFileSize` 是公开的整份文件体积配置入口。新代码使用 `@arcships/vue-pdf/style.css`。
+稳定入口为 `PdfViewer`，以及根入口导出的属性、PDF 来源、诊断和错误类型。PDF 查看器默认创建自己专用的 `PdfRenderRuntime`，也可由宿主通过 `runtime` 属性注入实例；`pdfiumWasmUrl` 可覆盖包内默认资源地址。`createPdfRenderRuntime`、`bundledPdfiumWasmUrl`、`PdfRenderRuntimeConfig` 和页面、搜索、渲染类型是公开的实例配置入口。`DEFAULT_PDF_MAX_FILE_SIZE`、`PdfLoadOptions.maxFileSize` 和 `PdfViewer.maxFileSize` 是公开的整份文件体积配置入口；`DEFAULT_PDF_MAX_RENDER_PIXELS`、`PdfRenderRuntimeConfig.maxRenderPixels` 和 `PdfRenderError.code` 约束单页渲染预算。`password` 与 `onPassword` 为加密 PDF 提供密码通道。新代码使用 `@arcships/vue-pdf/style.css`。
 
 根入口还提供 `createPdfTextReferenceDraft`、`createPdfPageReferenceDraft`、`createPdfRegionReferenceDraft`、`resolvePdfReference`、`describePdfReference` 和 `normalizePdfReferenceRect`。解析器通过调用方传入的 Runtime 与当前 `PdfRenderDocument` 验证字符范围或重新搜索，不上传正文，也不管理确认后的产品状态。
 
-PDF Runtime 只接收已经取得并验证的 `ArrayBuffer`，不会再次请求原始 PDF 地址。默认使用包内 PDFium Worker，关闭外部字体回退；Worker 或 WASM 初始化失败会返回错误，不会把验证字节状态当成渲染成功。宿主自带严格内容安全策略时，需要允许 `worker-src blob:`，并允许读取 `@arcships/vue-pdf/assets/pdfium.wasm` 对应的同源资源。
+PDF Runtime 只接收已经取得并验证的 `ArrayBuffer`，不会再次请求原始 PDF 地址。URL 来源必须显式提供 `urlPolicy`；加载会跟随重定向并在读取正文前用同一协议与来源规则重新校验最终地址，跨来源或协议降级重定向返回 `SOURCE_NOT_ALLOWED`。`PdfVerifiedDocument.resolvedUrl`、`PdfLoadError` 与诊断中的 URL 都去除查询串、片段和内嵌凭据。默认使用包内 PDFium Worker，关闭外部字体回退；Worker 或 WASM 初始化失败会返回错误，不会把验证字节状态当成渲染成功。宿主自带严格内容安全策略时，需要允许 `worker-src blob:`，并允许读取 `@arcships/vue-pdf/assets/pdfium.wasm` 对应的同源资源。
 
 PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 MiB`，宿主可公开调整，不叠加第二层隐藏硬上限。本地 Blob 在读取前检查声明大小；URL 有可信 `Content-Length` 时先检查响应头，否则在取得正文后、创建 PDF 引擎前检查实际字节。超过当前值返回 `PDF_TOO_LARGE`，包含 `actual` 和 `allowed`，并且不显示旧页面或创建新页面。页数、单页像素、总内存和并发页不是公开拒绝条件。
 
+文本选择可以跨页：`PdfSelectionState` 的 `text` 是完整选区文字（多页用 `\n` 连接），`range`/`rects` 仍描述第一页，`segments` 按文档顺序给出每页的 `PdfSelectionSegment`。多页选区只用于选择和复制；PDF 引用仍是单页文本范围。`PdfRenderRuntime.getPageAnnotations?` 是可选能力，返回 `PdfRenderAnnotation`（链接、表单控件和其他批注的规范化矩形、链接目标、字段名和批注文字）。`PdfSurface` 据此渲染不可见的链接/控件命中层，并在点击时发出 `linkActivate`（`url`、`targetPageIndex`、`blocked`）或 `annotationActivate`（`kind`、`fieldName`、`fieldValue`、`contents`）。链接只接受绝对 `http`、`https`、`mailto` 地址并去掉内嵌凭据；提供了 `urlPolicy` 时还会按该策略再次校验，未通过的链接以 `blocked: true` 上报而不会自动跳转。
+
+AcroForm 写入通过 `PdfRenderRuntime.setFormFieldValue?()` 完成：`PdfSurface` 为文本、复选框、单选框、下拉框和列表框渲染原生控件，提交后调用 Runtime、刷新页面位图并发出 `formFieldChange`（失败为 `formFieldError`）。`resolvePdfFormFieldValue()` 把 `PdfFormFieldValue`（字符串或布尔值）转换成 PDFium 表单值：文本字段接受字符串，复选框接受布尔值，单选与选择字段接受选项标签或索引。只读字段仍显示控件但被禁用；无法写入的 Runtime 不渲染控件，避免出现看似可编辑但实际无效的输入框。
+
+批注外观编辑通过 `PdfRenderRuntime.updateAnnotationAppearance?()` 完成：`PdfAnnotationAppearancePatch` 支持 `contents`、`color`、`opacity`、`strokeColor` 和 `strokeWidth`，Runtime 重写批注并重新生成外观流，`PdfSurface.updateAnnotationAppearance(pageIndex, annotationId, patch)` 随后刷新页面位图并发出 `annotationChange`（失败为 `annotationError`）。`PdfAnnotationAppearancePatch`、`PdfFormFieldType`、`PdfFormFieldValue`、`PdfFormFieldOption` 和 `PdfFormFieldDescriptor` 是根入口类型。
+
+无障碍文本层通过 `PdfRenderRuntime.getPageTextLayer?()` 提供：`PdfPageTextLayer` 给出 canonical 页宽高和按 PDFium 阅读顺序排列的 `PdfPageTextLayerGlyph`（`charIndex`、`text`、glyph `rect`、`unmapped`）。`PdfSurface` 与 `PdfViewer` 为每个 glyph 渲染透明 `<span>`，位置来自 glyph box，并只用一个 CSS matrix 随缩放与 0/90/180/270 旋转变换；文本层不是 `aria-hidden`，屏幕阅读器、浏览器查找和 CJK 提取均可读取，`unmapped` glyph 标记 `aria-hidden` 且不可选。文本层 `pointer-events: none`，指针选择仍由自定义 interaction layer 处理，因此跨页选择、链接/表单命中与区域选择不变。`PdfPageTextLayer` 和 `PdfPageTextLayerGlyph` 是根入口类型。
+
 ### 3.6 `@arcships/vue-ui`
 
-稳定入口为 `OfficeObjectOutlineLayer`、`OfficeRegionSelector`、`SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`，以及根入口导出的属性和事件类型。新代码使用 `@arcships/vue-ui/style.css`。
+稳定入口为 `OfficeObjectOutlineLayer`、`OfficeRegionSelector`、`SignaturePad`、`FileUpload`、`FileThumbnail`、`BoundingBoxCitations`、`LayoutBlocks`、`Spinner`、`Tooltip`、`OfficeFindBar`、`OfficeLiveStatus`、`useOfficeMenuKeyboard` 和 `resolveOfficeMenuKeyCommand`，以及根入口导出的属性和事件类型。新代码使用 `@arcships/vue-ui/style.css`。
+
+`OfficeLiveStatus` 是所有 Office 视图共享的单一 `role=status` / `aria-live` 区域：视图只改文本，不改节点，因此加载、错误、页码和幻灯片切换都能被辅助技术重新播报。`useOfficeMenuKeyboard` 统一 DOCX 与 XLSX 右键菜单的键盘语义：打开时把焦点放到第一个 `menuitem`，上下方向键、`Home`、`End` 在菜单项之间循环，`Escape` / `Tab` 关闭菜单并把焦点还给打开它的表面；`resolveOfficeMenuKeyCommand` 是可单测的纯函数版本。
 
 两个 Office 选择原语依赖 `@arcships/office-interaction` 的公开类型。它们只消费规范化几何和受控临时状态：不解析 Office 文件，不从 DOM 猜测格式对象，也不保存引用集合。轮廓层负责候选可视化和键盘事件；区域框负责 `0..1` 坐标中的拖选与键盘调整。确认后的工具栏、引用列表和 Agent 工作流由宿主实现。
 
@@ -174,6 +194,8 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 
 无法精确执行的 PPTX 内容通过能力报告标记为近似、静态或未解析；公开说明不得宣称完整兼容 PowerPoint 全部动画。
 
+浏览器入口还提供 `loadPptxArchive`、`PPTX_ARCHIVE_READER` 和 `resolvePptxExternalMediaUrl`。`PptxPreviewLimits` 覆盖完整的归档预算（压缩比、路径长度、XML 总量与单部件、嵌套层数、标签与文本节点、关系数）。每次加载只解压一次：`inspectOfficeArchive` 只读中央目录，渲染器完成唯一一次解压，共享校验器直接检查已解码的部件。外部媒体默认禁用；`externalMedia: "allowed"` 必须同时配合 `externalMediaUrlPolicy`，目标 URL 经协议和来源校验后才加载。
+
 ### 3.8 `@arcships/vue-pptx`
 
 稳定入口为 `PptxViewer`、`PptxThumbnail`、`PptxStage`、`usePptxDocument`、`usePptxPlayback`、`PptxStageSelection`、`PptxStageObjectClick`、`PptxStageContextMenu` 和其他公开类型。`PptxViewer` 默认纵向连续浏览；`mode="present"` 使用单页舞台并提供下一步、上一步、暂停、继续、重播、跳页、媒体恢复和全屏。自定义静态 Surface 使用 `PptxStage` + `usePptxDocument(renderMode: "list")`，自定义播放器增加 `usePptxPlayback` 并使用 `renderMode: "slide"`。样式从 `@arcships/vue-pptx/style.css` 导入。
@@ -183,6 +205,8 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 根入口提供框架无关、零运行时依赖的 `OfficeObjectReference`、`OfficeReferenceConfirmEvent`、四种格式定位器和四维可靠度类型。运行时入口包括引用与确认事件的 `parse` / `safeParse`、规范化稳定序列化、候选排序、几何计算、短生命周期选择 reducer、候选导航状态和键盘解释器。
 
 引用只保存文档修订、语义、格式定位器、内容指纹和规范化区域，不保存 DOM、Vue 实例、Blob URL 或截图位图。`OfficeInteractionValidationError` 的 `code` 固定为 `INVALID_OFFICE_INTERACTION`，详细原因从结构化 `issues` 读取。该包不解析 Office 文件、不渲染界面、不保存引用集合、不调用 Agent，也不修改文件；格式包负责生成定位器，宿主决定如何组织和使用确认后的引用。
+
+根入口同时提供共享消息目录：`officeMessagesEn`、`officeMessagesZhCN`、`OfficeLocale`、`OfficeMessagesOverride`、`resolveOfficeLocale`、`resolveOfficeMessages`、`formatOfficeMessage`、`formatOfficeDate` 和 `formatOfficeNumber`。`DocxViewer`、`DocxEditor`、`DocxDocumentSurface`、`XlsxViewer`、`XlsxSheetSurface`、`PptxViewer`、`PdfViewer` 与 `PdfSurface` 均接受 `locale`（默认 `"en"`，内置 `"zh-CN"`）和 `messages` 深合并覆盖；用户可见文案和 aria-label 不再写死在组件内。
 
 ### 3.10 统一 Surface 引用选择
 
@@ -194,7 +218,7 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 
 ### 3.11 统一 Surface 缩放
 
-`DocxDocumentSurface`、`XlsxSheetSurface`、`PdfSurface` 和 `PptxStage` 统一接受倍率 `zoom?: number`、`enableGestureZoom?: boolean`，并发出 `update:zoom`。传入 `zoom` 后，Surface 在 50%–200% 范围内处理 `Ctrl+wheel` 和支持的 pinch；普通 wheel 不被拦截。未传 `zoom` 时保持旧缩放接口和行为。
+`DocxDocumentSurface`、`XlsxSheetSurface`、`PdfSurface` 和 `PptxStage` 统一接受倍率 `zoom?: number`、`enableGestureZoom?: boolean`，并发出 `update:zoom`。传入 `zoom` 后，Surface 在 50%–200% 范围内处理 `Ctrl+wheel`、trackpad pinch、两指 pointer pinch、双击缩放和 WebKit gesture；普通 wheel 不被拦截。触屏长按打开上下文菜单，原生重复 `contextmenu` 在长按后被抑制。未传 `zoom` 时保持旧缩放接口和行为。完整契约见 `docs/touch-interaction-spec.md`。
 
 `zoom` 与旧缩放属性或 `fitWidth` 同时存在时以受控 `zoom` 为准。宿主应使用 `v-model:zoom` 持有产品级百分比、toolbar 和切文件重置；页面、幻灯片或 XLSX 单元格锚点由各 Surface 自己恢复。
 
@@ -240,7 +264,14 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 | `PdfViewer` | `document-load-success` | 页数 |
 | `PdfViewer` | `document-load-error` | `PdfLoadError` |
 | `PdfViewer` | `active-page-change` | 当前页码，从 1 开始 |
+| `PdfViewer` | `selectionChange` | `PdfSelectionState`；当前页拖选、双击选词、复制和 `Escape` 清除共用同一状态 |
 | `PdfViewer` | `diagnostic` | `PdfDiagnostic`，加载类型为 `load-start`、`load-success`、`load-error`、`load-cancelled`；页面类型为 `render-start`、`render-success`、`render-error`；搜索类型为 `search-start`、`search-success`、`search-error`；另有 `object-url-revoked` 和 `download`。可读取 `runtimeId`、`taskId`、页码、页数、缩放、旋转、匹配数和结构化错误 |
+| `PdfSurface` | `selectionChange` | `PdfSelectionState`；多页选区通过 `segments` 给出每页范围 |
+| `PdfSurface` | `selectionCancel` | `{ mode, reason }`；区域层按一次 Escape 只发出一次 `escape` |
+| `PdfSurface` | `linkActivate` | 页码、`annotationId`、容器坐标，以及 `url`、`targetPageIndex`、`blocked` 中的可用项 |
+| `PdfSurface` | `annotationActivate` | 页码、`annotationId`、`kind`（`widget`/`annotation`）、容器坐标，以及 `fieldName`、`fieldValue`、`contents` |
+| `PdfSurface` | `formFieldChange`、`formFieldError` | 写入成功的 widget（含 `fieldName`、`fieldType`、`value`、完整 annotation）或失败原因 |
+| `PdfSurface` | `annotationChange`、`annotationError` | 更新后的批注与所用 `PdfAnnotationAppearancePatch`，或失败原因 |
 
 ### 4.4 `vue-ui`
 
@@ -289,10 +320,10 @@ PDF 唯一的资源拒绝配置是整份文件体积 `maxFileSize`：默认 `50 
 |  |  | `TIMEOUT` | 解析超过实例配置的时间上限 |
 |  |  | `RUNTIME_DISPOSED` | 已销毁的实例被再次使用 |
 | `xlsx-core` / `vue-xlsx` | `XlsxLoadError` / `XlsxLoadErrorCode` | `SOURCE_NOT_ALLOWED`、`FETCH_FAILED`、`INVALID_WORKBOOK`、`LIMIT_EXCEEDED`、`IMAGE_LIMIT_EXCEEDED`、`INVALID_IMAGE`、`IMAGE_DECODE_FAILED`、`TIMEOUT`、`WORKER_UNAVAILABLE`、`ABORTED` | 分别表示来源、获取、格式、资源、图片、超时、Worker 和取消错误；资源错误可含 `phase`、`limit`、`actual`、`allowed` |
-| `xlsx-core` | `XlsxWorkerError` / `XlsxWorkerErrorCode` | `LIMIT_EXCEEDED`、`TIMEOUT`、`INVALID_SOURCE`、`WORKER_FAILED` | Worker 内资源超限、超时、输入无效或执行失败；失败的 Worker 会被终止，不会静默转主线程 |
+| `xlsx-core` | `XlsxWorkerError` / `XlsxWorkerErrorCode` | `LIMIT_EXCEEDED`、`TIMEOUT`、`INVALID_SOURCE`、`WORKER_FAILED`、`SUPERSEDED` | Worker 内资源超限、超时、输入无效或执行失败，或加载被更新的一次加载取代；资源、输入和串行队列导致的失败会终止该 Worker、不静默转主线程，`SUPERSEDED` 只拒绝被取代的加载 |
 | `xlsx-core/runtime` | `XlsxRuntimeError` / `XlsxRuntimeErrorCode` | `RUNTIME_DISPOSED` | 已销毁的 XLSX Runtime 被再次使用；错误同时保留 `format: "xlsx"` 和 `runtimeId` |
 | `vue-xlsx` | `XlsxFileSizeLimitExceededError` | 类的公开字段 | 本地输入超过控制器允许的文件大小 |
-| `vue-pdf` | `PdfSourceError` / `PdfLoadErrorCode` | `SOURCE_NOT_ALLOWED`、`FETCH_FAILED`、`INVALID_PDF`、`PDF_TOO_LARGE`、`ABORTED` | 分别表示来源被拒绝、获取失败、PDF 无效、整份文件超过当前 `maxFileSize` 和取消；体积错误同时提供 `actual`、`allowed` |
+| `vue-pdf` | `PdfSourceError` / `PdfLoadErrorCode` | `SOURCE_NOT_ALLOWED`、`FETCH_FAILED`、`INVALID_PDF`、`PDF_TOO_LARGE`、`ENCRYPTED`、`ABORTED` | 分别表示来源被拒绝、获取失败、PDF 无效、整份文件超过当前 `maxFileSize`、文档需要密码和取消；体积错误同时提供 `actual`、`allowed` |
 | `vue-ui` | `FileUploadRejection` / `FileUploadRejectionCode` | `FILE_TYPE_NOT_ACCEPTED`、`FILE_TOO_LARGE` | 文件类型不符合 `accept`，或文件超过 `maxSize` |
 | `pptx-core` / `vue-pptx` | `PptxPreviewError`、`PptxPlaybackError` | `ABORTED`、`STALE_RESULT`、`LIMIT_EXCEEDED`、`INVALID_SOURCE`、`PARSE_FAILED` 及播放错误码 | 加载、资源限制、解析、对象匹配、媒体和播放控制错误 |
 

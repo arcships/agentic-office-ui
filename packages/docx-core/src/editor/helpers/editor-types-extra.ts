@@ -32,6 +32,7 @@ import type {
   DocxSectionParagraphLocation,
   DocxSelectedFormField,
   DocxSelectionSessionKind,
+  DocxTableCellSelectionRange,
   DocxTextRange,
   DocxTextRangeLocation,
   DocxTrackedChange,
@@ -102,6 +103,8 @@ export interface UseDocxImageWrapMenuResult {
 
 export interface DocxEditorController {
   model: DocModel;
+  /** True when the model differs from the last loaded/new/exported model. */
+  isDirty: boolean;
   documentLoadNonce: number;
   fileName: string;
   status: string;
@@ -131,6 +134,11 @@ export interface DocxEditorController {
   activeBorderPresets: DocxBorderPresetState;
   availableParagraphStyles: ParagraphStyleDefinition[];
   trackedChanges: DocxTrackedChange[];
+  /**
+   * Number of collected revisions, or `null` while revisions are hidden and the
+   * collection is intentionally skipped (see `showTrackedChanges`).
+   */
+  trackedChangeCount: number | null;
   showTrackedChanges: boolean;
   comments: DocxComment[];
   showComments: boolean;
@@ -143,6 +151,15 @@ export interface DocxEditorController {
   registerPendingExportModelTransformer: (
     transformer?: (model: DocModel) => DocModel
   ) => void;
+  /** Register a synchronous text-draft flusher (mounted text hosts). */
+  registerTextDraftFlusher: (flusher: () => void) => () => void;
+  /** Commit any live contentEditable drafts into the model. */
+  flushTextDrafts: () => void;
+  /**
+   * Close the current text-commit burst so the next keystroke opens a new undo
+   * entry. Called on blur; hosts can also call it at their own command boundary.
+   */
+  endTextCommitBurst: () => void;
   setStatus: (value: string | ((prev: string) => string)) => void;
   setDocumentTheme: (theme: DocxDocumentTheme) => void;
   setShowTrackedChanges: (showTrackedChanges: boolean) => void;
@@ -150,6 +167,18 @@ export interface DocxEditorController {
   syncPaginationInfo: (pagination: DocxPaginationInfo) => void;
   toggleShowTrackedChanges: () => void;
   toggleShowComments: () => void;
+  acceptTrackedChange: (changeId: string) => boolean;
+  rejectTrackedChange: (changeId: string) => boolean;
+  acceptTrackedChangesInTableRow: (
+    tableIndex: number,
+    rowIndex: number
+  ) => boolean;
+  rejectTrackedChangesInTableRow: (
+    tableIndex: number,
+    rowIndex: number
+  ) => boolean;
+  acceptAllTrackedChanges: () => boolean;
+  rejectAllTrackedChanges: () => boolean;
   importDocxFile: (file: File) => Promise<void>;
   newDocument: () => void;
   exportDocx: () => void;
@@ -171,7 +200,10 @@ export interface DocxEditorController {
   setLink: (link?: string) => void;
   selectFormField: (location?: DocxFormFieldLocation) => void;
   toggleFormCheckbox: (location: DocxFormFieldLocation) => void;
-  setFormFieldValue: (location: DocxFormFieldLocation, value: string) => void;
+  /** Returns false when the value violates the field's constraints. */
+  setFormFieldValue: (location: DocxFormFieldLocation, value: string) => boolean;
+  /** Closes the current inline editing session (one undo entry per session). */
+  endFormFieldEdit: (location?: DocxFormFieldLocation) => void;
   updateFormFieldWidget: (
     location: DocxFormFieldLocation,
     patch: Partial<NonNullable<FormFieldRunNode["widget"]>>
@@ -234,10 +266,23 @@ export interface DocxEditorController {
   ) => void;
   setParagraphDropCapText: (nodeIndex: number, text: string) => void;
   moveImage: (source: DocxImageLocation, target: DocxImageDropTarget) => void;
-  setActiveTextRange: (range?: DocxTextRange) => void;
+  setActiveTextRange: (
+    range?: DocxTextRange,
+    options?: { preservePendingRunStyle?: boolean },
+  ) => void;
   selectParagraph: (nodeIndex: number) => void;
   selectTableCell: (
     tableIndex: number,
+    rowIndex: number,
+    cellIndex: number
+  ) => void;
+  selectTableCellRange: (
+    tableIndex: number,
+    range: DocxTableCellSelectionRange,
+    tableRuntimeKey?: string
+  ) => void;
+  selectTableCellByRuntimeKey: (
+    tableRuntimeKey: string,
     rowIndex: number,
     cellIndex: number
   ) => void;
@@ -246,11 +291,19 @@ export interface DocxEditorController {
     cells: Array<{ rowIndex: number; cellIndex: number }>
   ) => void;
   setTableColumnWidths: (tableIndex: number, widthsPx: number[]) => void;
+  /**
+   * Inserts a row on the requested side of the reference row.
+   * `rowIndex` is the index of that reference row, not the insertion index.
+   */
   insertTableRow: (
     tableIndex: number,
     rowIndex: number,
     direction: "above" | "below"
   ) => void;
+  /**
+   * Inserts a column on the requested side of the reference cell.
+   * `cellIndex` is the index of that reference cell, not the insertion index.
+   */
   insertTableColumn: (
     tableIndex: number,
     cellIndex: number,
@@ -264,6 +317,15 @@ export interface DocxEditorController {
     rowIndex?: number
   ) => void;
   deleteTable: (tableIndex: number) => void;
+  mergeTableCells: (
+    tableIndex: number,
+    range: DocxTableCellSelectionRange
+  ) => void;
+  splitTableCell: (
+    tableIndex: number,
+    rowIndex: number,
+    cellIndex: number
+  ) => void;
   moveTable: (tableIndex: number, targetNodeIndex: number) => void;
   moveEmbeddedTableToBody: (
     tableRuntimeKey: string,
@@ -279,6 +341,19 @@ export interface DocxEditorController {
     tableIndex: number,
     rowIndex: number,
     cellIndex: number,
+    text: string
+  ) => void;
+  commitTableCellTextByRuntimeKey: (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number,
+    text: string
+  ) => void;
+  commitTableCellParagraphTextByRuntimeKey: (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number,
+    paragraphIndex: number,
     text: string
   ) => void;
   commitTableCellParagraphTextRecursive: (
@@ -303,6 +378,8 @@ export type DocxTableContextMenuActionId =
   | "insert-column-right"
   | "delete-row"
   | "delete-column"
+  | "merge-cells"
+  | "split-cell"
   | "delete-table";
 
 export type DocxContextMenuActionId =
@@ -386,6 +463,15 @@ export interface DocxTableContextMenuRenderProps {
 export interface DocxContextMenuContext {
   /** Type of target that opened the menu. */
   kind: "text" | "table" | "image";
+  /**
+   * Viewport coordinates (`clientX`/`clientY`) of the pointer that opened the
+   * menu. The built-in menu anchors itself here; custom menus use it as the
+   * placement point.
+   */
+  position?: {
+    x: number;
+    y: number;
+  };
   /** Active text range when the menu was opened from text. */
   activeTextRange?: DocxTextRange;
   /** Text location under the pointer when available. */
@@ -671,8 +757,9 @@ export interface UseDocxFormFieldsResult {
   formFields: DocxSelectedFormField[];
   selectedFormField?: DocxSelectedFormField;
   selectFormField: (location?: DocxFormFieldLocation) => void;
-  setFormFieldValue: (location: DocxFormFieldLocation, value: string) => void;
+  setFormFieldValue: (location: DocxFormFieldLocation, value: string) => boolean;
   toggleFormCheckbox: (location: DocxFormFieldLocation) => void;
+  endFormFieldEdit: (location?: DocxFormFieldLocation) => void;
   updateFormFieldWidget: (
     location: DocxFormFieldLocation,
     patch: Partial<NonNullable<FormFieldRunNode["widget"]>>
@@ -684,6 +771,8 @@ export interface UseDocxFormFieldsResult {
 
 export interface UseDocxTrackChangesResult {
   trackedChanges: DocxTrackedChange[];
+  /** `null` while revisions are hidden, because the collection is skipped. */
+  trackedChangeCount: number | null;
   showTrackedChanges: boolean;
   setShowTrackedChanges: (showTrackedChanges: boolean) => void;
   toggleShowTrackedChanges: () => void;
@@ -691,6 +780,10 @@ export interface UseDocxTrackChangesResult {
   getChangesForLocation: (
     location: DocxTextRangeLocation
   ) => DocxTrackedChange[];
+  acceptTrackedChange: (changeId: string) => boolean;
+  rejectTrackedChange: (changeId: string) => boolean;
+  acceptAllTrackedChanges: () => boolean;
+  rejectAllTrackedChanges: () => boolean;
 }
 
 export interface UseDocxCommentsResult {
@@ -849,6 +942,11 @@ export interface UseDocxPageThumbnailsOptions {
    * @defaultValue `false`
    */
   disabled?: boolean;
+  /** Localized copy painted or reported when a thumbnail cannot render. */
+  labels?: {
+    unavailableLabel?: string;
+    unavailableReason?: string;
+  };
 }
 
 export type DocxPageThumbnailStatus =

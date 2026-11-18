@@ -4,6 +4,7 @@ export { bundledXlsxWasmUrl } from "./wasm-asset";
 
 export { safeCalculate, tryRecalculate } from "./safe-calculate";
 export type { SafeCalculateSkipReason, SafeCalculateResult, SafeCalculateOptions } from "./safe-calculate";
+export { normalizeTypedDateCells, parseIsoDateCell } from "./typed-dates";
 export { trackXlsxWorkbookLifetime } from "./workbook-lifetime";
 
 export { XlsxWorkerClient, XlsxWorkerError, createBundledXlsxWorker } from "./worker-client";
@@ -46,12 +47,22 @@ export {
   normalizeWorkbookTableMetadata,
   validateXlsxImageAssets,
   updateWorkbookImageAnchor,
+  updateWorkbookShapeAnchor,
+  deleteWorkbookImage,
+  deleteWorkbookShape,
+  addWorkbookFormControl,
+  updateWorkbookFormControl,
+  deleteWorkbookFormControl,
   mergeWorkbookImageAssets,
   emuToPixels,
   pixelsToEmu,
   pxToSheetColumnWidth,
   resolveSheetColumnWidthPixels,
+  resolveSheetColumnWidthPx,
   resolveSheetRowHeightPixels,
+  resolveSheetRowHeightPx,
+  createAnchoredRectCache,
+  parseA1CellReference,
   resolveRenderedSheetAxisPixels,
   resolveContentSheetAxisPixels,
   anchorToAbsoluteRect,
@@ -59,6 +70,9 @@ export {
   resizeImageRect,
 } from "./images";
 export type {
+  WorkbookFormControlOrigin,
+  WorkbookImageOrigin,
+  WorkbookShapeOrigin,
   WorkbookImageSheetOrigin,
   WorkbookTableMetadata,
   WorkbookImageAssets,
@@ -70,9 +84,11 @@ export {
   buildChartSeriesFormula,
   parseChartSeriesFormula,
   applyChartSeriesFormula,
+  refreshChartDataFromWorkbook,
   loadWorkbookChartAssets,
   updateWorkbookChartAnchor,
   updateWorkbookChartDefinition,
+  deleteWorkbookChart,
 } from "./charts";
 export type {
   ParsedChartSeriesFormula,
@@ -126,8 +142,11 @@ export type {
   XlsxConditionalFormatValueObject,
   XlsxConditionalIconSetRule,
   XlsxDataValidation,
+  XlsxDataValidationFeedback,
+  XlsxDataValidationMessageKey,
   XlsxFileTooLargeRenderProps,
   XlsxFormControl,
+  XlsxFormControlInput,
   XlsxFormControlKind,
   XlsxFreezePanes,
   XlsxImage,
@@ -137,6 +156,7 @@ export type {
   XlsxImageRenderProps,
   XlsxImageResizeHandlePosition,
   XlsxImageSelectionRenderProps,
+  XlsxImageSourceRect,
   XlsxResolvedCellStyle,
   XlsxScrollerRenderProps,
   XlsxShape,
@@ -146,6 +166,8 @@ export type {
   XlsxShapeTextBox,
   XlsxShapeTextRun,
   XlsxSheetData,
+  XlsxSheetProtection,
+  XlsxSheetProtectionAction,
   XlsxSheetThumbnail,
   XlsxSheetThumbnailResolution,
   XlsxSheetVisibility,

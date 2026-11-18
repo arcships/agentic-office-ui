@@ -24,14 +24,23 @@ export * from "./thumbnail-cache";
 // DOCX import (main thread + worker dual path)
 export * from "./docx-import";
 
+// DOCX export (dedicated Worker; headless inline fallback)
+export * from "./docx-export";
+
 // Content signing (FNV-1a structural hash for change detection)
 export * from "./content-signature";
 
 // Section layout (page margins, borders, twips conversion)
 export * from "./section-layout";
 
+// Page background pattern/shading paint (CSS + canvas)
+export * from "./page-pattern-paint";
+
 // Image rendering (TIFF → PNG, EMF/WMF placeholder)
 export * from "./image-render";
 
 // Page count reconciliation (height-scaling page count alignment)
 export * from "./page-count-reconciliation";
+
+// Text-measurement cache invalidation (web-font loading, font-set changes)
+export * from "./font-metrics";

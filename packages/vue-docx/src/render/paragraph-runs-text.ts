@@ -5,6 +5,7 @@
 // Translates JSX to Vue h() calls.
 
 import { h, type VNode } from "vue"
+import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy"
 import type { ParagraphNode, TextRunNode } from "@arcships/docx-core"
 import {
   runStyleToCss,
@@ -14,6 +15,7 @@ import {
   updateEstimatedLineWidthPxForText,
   resolveTabSpacerWidthPx,
   noteMarkerLabel,
+  isJustifiedAlignment,
 } from "@arcships/docx-core"
 import type { DocxDocumentTheme } from "@arcships/docx-core"
 import type { ParagraphTrackedInlineChange } from "@arcships/docx-core"
@@ -40,6 +42,8 @@ export interface TextRunRenderContext {
   pageNumberFormat?: string
   resolveStyleRefFieldValue?: (target: string) => string | undefined
   tocLinkColor?: string | undefined
+  /** Pre-formatted marker labels keyed by raw w:id (see buildDocumentPageNotes). */
+  noteMarkerLabels?: { footnote?: Map<number, string>; endnote?: Map<number, string> }
 }
 
 export interface TextRunRenderResult {
@@ -64,16 +68,20 @@ export function renderTextRun(
   const textStyle = {
     ...trackedInlineStyle(
       runStyleToCss(child.style, ctx.documentTheme),
-      trackedInlineChange
+      trackedInlineChange,
+      ctx.documentTheme
     ),
     ...commentHighlightStyle(ctx.documentTheme, undefined),
   }
 
-  const noteLabel = noteMarkerLabel(
-    child.noteReference,
-    new Map(),
-    new Map()
-  )
+  const noteRef = child.noteReference
+  const suppliedLabel = noteRef
+    ? noteRef.kind === "footnote"
+      ? ctx.noteMarkerLabels?.footnote?.get(noteRef.id)
+      : ctx.noteMarkerLabels?.endnote?.get(noteRef.id)
+    : undefined
+  // Fall back to raw display indexes / w:id for callers that supply no labels.
+  const noteLabel = suppliedLabel ?? noteMarkerLabel(noteRef, new Map(), new Map())
 
   // Note marker (footnote/endnote)
   if (noteLabel) {
@@ -84,6 +92,7 @@ export function renderTextRun(
           {
             key,
             ...annotationAttributes,
+            "data-docx-note-marker": "true",
             style: {
               ...textStyle,
               verticalAlign: "super",
@@ -135,9 +144,11 @@ export function renderTextRun(
   }
 
   // Hyperlink
-  if (child.link) {
+  const linkHref = child.link ? sanitizeOfficeLink(child.link) : undefined
+  if (linkHref) {
     return renderHyperlinkRun(
       child,
+      linkHref,
       key,
       textOverride,
       ctx,
@@ -178,13 +189,13 @@ function buildTabStyle(
 
 function renderHyperlinkRun(
   child: TextRunNode,
+  linkHref: string,
   key: string,
   textOverride: string,
   ctx: TextRunRenderContext,
   annotationAttributes: Record<string, string>,
   trackedInlineChange: ParagraphTrackedInlineChange | undefined
 ): TextRunRenderResult {
-  const linkHref = child.link!
   const isInternalLink = linkHref.startsWith("#")
   const isToc = false // isTableOfContentsParagraph handled by caller
 
@@ -198,14 +209,16 @@ function renderHyperlinkRun(
               : "inherit",
             textDecoration: "none",
           },
-          trackedInlineChange
+          trackedInlineChange,
+          ctx.documentTheme
         ),
         ...commentHighlightStyle(ctx.documentTheme, undefined),
       }
     : {
         ...trackedInlineStyle(
           linkStyleToCss(child.style, ctx.documentTheme),
-          trackedInlineChange
+          trackedInlineChange,
+          ctx.documentTheme
         ),
         ...commentHighlightStyle(ctx.documentTheme, undefined),
       }
@@ -255,7 +268,8 @@ function renderPlainTextRun(
   annotationAttributes: Record<string, string>
 ): TextRunRenderResult {
   const shouldControlSoftBreakStretch =
-    ctx.paragraph.style?.align === "justify" && textOverride.includes("\n")
+    isJustifiedAlignment(ctx.paragraph.style?.align) &&
+    textOverride.includes("\n")
 
   if (!shouldControlSoftBreakStretch) {
     return {

@@ -36,6 +36,10 @@ function createHostNode(type, text = "") {
     dispatchEvent(event) {
       listeners.get(event.type)?.(event);
     },
+    // Focus APIs used by components that move focus after keyboard commits.
+    focus() {},
+    blur() {},
+    select() {},
   };
 }
 
@@ -58,6 +62,11 @@ function resolveTeleportTarget(selector) {
     teleportTargets.set(selector, target);
   }
   return target;
+}
+
+/** Returns the host node a component teleports into (defaults to `body`). */
+export function teleportTarget(selector = "body") {
+  return resolveTeleportTarget(selector);
 }
 
 const renderer = vue.createRenderer({

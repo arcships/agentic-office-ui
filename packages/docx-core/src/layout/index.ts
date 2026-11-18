@@ -6,6 +6,8 @@ import type {
 } from "../engine/types";
 import {
   layoutDocument,
+  paragraphToLayout,
+  tableToLayout,
   type LayoutOptions,
   type LayoutPage,
   type LayoutParagraphBlock,
@@ -13,6 +15,15 @@ import {
   type LayoutTableBlock,
   type LayoutBlock,
 } from "./layout-engine";
+import {
+  paginateDocumentLayout,
+  paginateDocumentLayoutWithNoteReserve,
+  resolvePaginationSectionGeometry,
+  type PaginatedPageBlock,
+  type PaginationMeasurementFeedback,
+  type PaginationSectionGeometry
+} from "./pagination-layout";
+import type { ParagraphLineRange, TableRowRange } from "./page-segmentation-core";
 export type {
   LayoutOptions,
   LayoutPage,
@@ -22,9 +33,24 @@ export type {
   LayoutBlock,
 };
 export { layoutDocument };
+export type { PaginationMeasurementFeedback } from "./pagination-layout";
+export {
+  paginateDocumentLayout,
+  resolvePaginationSectionGeometry
+} from "./pagination-layout";
+export type {
+  PaginatedDocumentLayout,
+  PaginatedPage,
+  PaginatedPageBlock,
+  PaginationSectionGeometry
+} from "./pagination-layout";
 export * from "./pagination";
+export * from "./pagination-iteration";
 export * from "./page-segmentation-core";
 export * from "./page-segmentation-table";
+// `pagination-layout` is intentionally not re-exported: it is the adapter that
+// wires `buildDocumentPageNodeSegments` into `buildLayoutSnapshot`, not new
+// public API surface.
 
 const DEFAULT_LAYOUT_OPTIONS: Required<LayoutOptions> = {
   pageWidth: 816,
@@ -32,10 +58,19 @@ const DEFAULT_LAYOUT_OPTIONS: Required<LayoutOptions> = {
   margin: 72,
   minLineHeight: 22,
   paragraphSpacing: 8,
-  tableCellPadding: 8
+  tableCellPadding: 8,
+  respectSectionLayout: true
 };
 
-export type LayoutSnapshotOptions = LayoutOptions;
+export interface LayoutSnapshotOptions extends LayoutOptions {
+  /**
+   * Reserve the height of the notes printed at the bottom of a page so body
+   * text does not run into them (default: true).
+   */
+  reserveNoteHeight?: boolean;
+  /** Measured-height feedback from the previous render pass (#99). */
+  measurementFeedback?: PaginationMeasurementFeedback;
+}
 
 export interface LayoutSnapshotRect {
   x: number;
@@ -90,6 +125,8 @@ export interface LayoutFragmentSource {
   rowIndex?: number;
   cellIndex?: number;
   paragraphIndex?: number;
+  /** Body column this fragment is rendered in (0 for single-column pages). */
+  columnIndex?: number;
 }
 
 export interface LayoutSnapshotTextRun {
@@ -119,6 +156,8 @@ export interface LayoutSnapshotParagraphFragment {
   align: ParagraphAlignment;
   headingLevel?: HeadingLevel;
   runs: LayoutSnapshotRun[];
+  /** Set when the paragraph is split across pages by the pagination engine. */
+  paragraphLineRange?: ParagraphLineRange;
   source?: LayoutFragmentSource;
 }
 
@@ -141,6 +180,8 @@ export interface LayoutSnapshotTableFragment {
   id: string;
   framePx: LayoutSnapshotRect;
   rows: LayoutSnapshotTableRowFragment[];
+  /** Set when the table rows are split across pages by the pagination engine. */
+  tableRowRange?: TableRowRange;
   source?: LayoutFragmentSource;
 }
 
@@ -154,6 +195,10 @@ export interface LayoutSnapshotPage {
   pageSizePx: LayoutSnapshotPageSize;
   marginsPx: LayoutSnapshotMargins;
   contentBoxPx: LayoutSnapshotRect;
+  /** Real body column layout for this page's section. */
+  columnCount: number;
+  columnGapPx: number;
+  columnWidthsPx: number[];
   blocks: LayoutSnapshotBlockFragment[];
 }
 
@@ -164,60 +209,53 @@ export interface LayoutSnapshot {
   pages: LayoutSnapshotPage[];
 }
 
-function normalizeLayoutOptions(options: LayoutSnapshotOptions = {}): Required<LayoutOptions> {
+function normalizeLayoutOptions(options: LayoutSnapshotOptions = {}): Required<LayoutOptions> & {
+  measurementFeedback?: PaginationMeasurementFeedback;
+} {
   return {
     ...DEFAULT_LAYOUT_OPTIONS,
     ...options
   };
 }
 
-function createResolvedLayoutMetrics(
-  options: Required<LayoutOptions>
+function resolvedLayoutMetricsFromGeometry(
+  geometry: PaginationSectionGeometry
 ): ResolvedLayoutMetrics {
-  const marginPx = Math.max(0, Math.round(options.margin));
-  const pageWidthPx = Math.max(1, Math.round(options.pageWidth));
-  const pageHeightPx = Math.max(1, Math.round(options.pageHeight));
   return {
     pageSizePx: {
-      width: pageWidthPx,
-      height: pageHeightPx
+      width: geometry.pageWidthPx,
+      height: geometry.pageHeightPx
     },
-    marginsPx: {
-      top: marginPx,
-      right: marginPx,
-      bottom: marginPx,
-      left: marginPx
-    },
-    contentBoxPx: {
-      x: marginPx,
-      y: marginPx,
-      width: Math.max(0, pageWidthPx - marginPx * 2),
-      height: Math.max(0, pageHeightPx - marginPx * 2)
-    }
+    marginsPx: { ...geometry.marginsPx },
+    contentBoxPx: { ...geometry.contentBoxPx }
   };
 }
 
-function resolveSections(
+function resolveSectionsFromGeometry(
   model: DocModel,
-  layout: ResolvedLayoutMetrics
+  sectionGeometries: PaginationSectionGeometry[],
+  fallbackLayout: ResolvedLayoutMetrics,
+  respectSectionLayout: boolean
 ): ResolvedDocumentSection[] {
-  const sections = model.metadata.sections ?? [];
-  if (sections.length === 0) {
+  const hasExplicitSections = (model.metadata.sections ?? []).length > 0;
+  if (sectionGeometries.length === 0) {
     return [
       {
         index: 0,
         startNodeIndex: 0,
         synthetic: true,
-        layout
+        layout: fallbackLayout
       }
     ];
   }
 
-  return sections.map((section, index) => ({
+  return sectionGeometries.map((geometry, index) => ({
     index,
-    startNodeIndex: section.startNodeIndex,
-    synthetic: false,
-    layout
+    startNodeIndex: geometry.startNodeIndex,
+    synthetic: !hasExplicitSections,
+    layout: respectSectionLayout
+      ? resolvedLayoutMetricsFromGeometry(geometry)
+      : fallbackLayout
   }));
 }
 
@@ -226,14 +264,44 @@ export function resolveDocumentForLayout(
   options: LayoutSnapshotOptions = {}
 ): ResolvedDocument {
   const normalizedOptions = normalizeLayoutOptions(options);
-  const layout = createResolvedLayoutMetrics(normalizedOptions);
+  const sectionGeometries = resolvePaginationSectionGeometry(model, {
+    pageWidthPx: normalizedOptions.pageWidth,
+    pageHeightPx: normalizedOptions.pageHeight,
+    marginPx: normalizedOptions.margin
+  });
+  const layout = resolvedLayoutMetricsFromGeometry(
+    sectionGeometries[0] ?? {
+      startNodeIndex: 0,
+      pageWidthPx: normalizedOptions.pageWidth,
+      pageHeightPx: normalizedOptions.pageHeight,
+      marginsPx: {
+        top: normalizedOptions.margin,
+        right: normalizedOptions.margin,
+        bottom: normalizedOptions.margin,
+        left: normalizedOptions.margin
+      },
+      contentBoxPx: {
+        x: normalizedOptions.margin,
+        y: normalizedOptions.margin,
+        width: Math.max(0, normalizedOptions.pageWidth - normalizedOptions.margin * 2),
+        height: Math.max(0, normalizedOptions.pageHeight - normalizedOptions.margin * 2)
+      }
+    }
+  );
+
+  const sections = resolveSectionsFromGeometry(
+    model,
+    sectionGeometries,
+    layout,
+    normalizedOptions.respectSectionLayout
+  );
 
   return {
     source: "layout-engine-adapter",
     nodeCount: model.nodes.length,
     pageCountHint: model.metadata.documentPageCount,
     layout,
-    sections: resolveSections(model, layout),
+    sections,
     metadata: {
       sourceParts: model.metadata.sourceParts,
       warningCount: model.metadata.warnings.length,
@@ -297,97 +365,186 @@ function snapshotRunFromLegacyRun(run: LayoutRun): LayoutSnapshotRun {
   };
 }
 
+function snapshotParagraphFragment(params: {
+  block: LayoutParagraphBlock;
+  framePx: LayoutSnapshotRect;
+  source?: LayoutFragmentSource;
+  paragraphLineRange?: ParagraphLineRange;
+}): LayoutSnapshotParagraphFragment {
+  return {
+    kind: "paragraph",
+    id: params.block.id,
+    framePx: params.framePx,
+    align: params.block.align,
+    headingLevel: params.block.headingLevel,
+    runs: params.block.runs.map(snapshotRunFromLegacyRun),
+    paragraphLineRange: params.paragraphLineRange,
+    source: params.source
+  };
+}
+
 function snapshotParagraphFromLegacyBlock(
   block: LayoutParagraphBlock,
   source?: LayoutFragmentSource
 ): LayoutSnapshotParagraphFragment {
-  return {
-    kind: "paragraph",
-    id: block.id,
+  return snapshotParagraphFragment({
+    block,
     framePx: snapshotRectFromLegacyBlock(block),
-    align: block.align,
-    headingLevel: block.headingLevel,
-    runs: block.runs.map(snapshotRunFromLegacyRun),
     source
-  };
+  });
 }
 
-function snapshotTableFromLegacyBlock(block: LayoutTableBlock): LayoutSnapshotTableFragment {
-  const tableSource = legacyBlockSource(block.id);
+function snapshotTableFragment(params: {
+  block: LayoutTableBlock;
+  framePx: LayoutSnapshotRect;
+  source?: LayoutFragmentSource;
+  tableRowRange?: TableRowRange;
+}): LayoutSnapshotTableFragment {
+  const tableSource = params.source;
+  const rowStartIndex = Math.max(0, Math.round(params.tableRowRange?.startRowIndex ?? 0));
+  const rowEndIndex = Math.max(
+    rowStartIndex,
+    Math.round(params.tableRowRange?.endRowIndex ?? params.block.rows.length)
+  );
 
   return {
     kind: "table",
-    id: block.id,
-    framePx: snapshotRectFromLegacyBlock(block),
-    rows: block.rows.map((row, rowIndex) => ({
-      id: row.id,
-      backgroundColor: row.backgroundColor,
-      cells: row.cells.map((cell, cellIndex) => ({
-        id: cell.id,
-        colSpan: cell.colSpan,
-        backgroundColor: cell.backgroundColor,
-        paragraphs: cell.paragraphs.map((paragraph, paragraphIndex) =>
-          snapshotParagraphFromLegacyBlock(paragraph, {
-            kind: "table-cell-paragraph",
-            nodeIndex: tableSource?.nodeIndex ?? -1,
-            rowIndex,
-            cellIndex,
-            paragraphIndex
-          })
-        ),
-        source:
-          tableSource !== undefined
-            ? {
-                kind: "table-cell",
-                nodeIndex: tableSource.nodeIndex,
-                rowIndex,
-                cellIndex
-              }
-            : undefined
-      }))
-    })),
+    id: params.block.id,
+    framePx: params.framePx,
+    rows: params.block.rows.slice(rowStartIndex, rowEndIndex).map((row, visibleRowIndex) => {
+      const rowIndex = rowStartIndex + visibleRowIndex;
+      return {
+        id: row.id,
+        backgroundColor: row.backgroundColor,
+        cells: row.cells.map((cell, cellIndex) => ({
+          id: cell.id,
+          colSpan: cell.colSpan,
+          backgroundColor: cell.backgroundColor,
+          paragraphs: cell.paragraphs.map((paragraph, paragraphIndex) =>
+            snapshotParagraphFromLegacyBlock(paragraph, {
+              kind: "table-cell-paragraph",
+              nodeIndex: tableSource?.nodeIndex ?? -1,
+              rowIndex,
+              cellIndex,
+              paragraphIndex
+            })
+          ),
+          source:
+            tableSource !== undefined
+              ? {
+                  kind: "table-cell",
+                  nodeIndex: tableSource.nodeIndex,
+                  rowIndex,
+                  cellIndex
+                }
+              : undefined
+        }))
+      };
+    }),
+    tableRowRange: params.tableRowRange,
     source: tableSource
   };
 }
 
-function snapshotBlockFromLegacyBlock(
-  block: LayoutParagraphBlock | LayoutTableBlock
-): LayoutSnapshotBlockFragment {
-  if (block.kind === "table") {
-    return snapshotTableFromLegacyBlock(block);
+function snapshotPageBlock(params: {
+  block: PaginatedPageBlock;
+  model: DocModel;
+  options: Required<LayoutOptions>;
+}): LayoutSnapshotBlockFragment | undefined {
+  const node = params.model.nodes[params.block.nodeIndex];
+  if (!node) {
+    return undefined;
   }
 
-  return snapshotParagraphFromLegacyBlock(block, legacyBlockSource(block.id));
-}
-
-function snapshotPageFromLegacyPage(
-  page: LayoutPage,
-  index: number,
-  layout: ResolvedLayoutMetrics
-): LayoutSnapshotPage {
-  return {
-    index,
-    number: page.number,
-    pageSizePx: layout.pageSizePx,
-    marginsPx: layout.marginsPx,
-    contentBoxPx: layout.contentBoxPx,
-    blocks: page.blocks.map(snapshotBlockFromLegacyBlock)
+  const source: LayoutFragmentSource = {
+    kind: params.block.kind,
+    nodeIndex: params.block.nodeIndex,
+    columnIndex: params.block.columnIndex
   };
+
+  if (node.type === "table") {
+    const block = tableToLayout(
+      node,
+      `table-${params.block.nodeIndex}`,
+      params.block.framePx.x,
+      params.block.framePx.y,
+      params.block.framePx.width,
+      params.options
+    );
+    return snapshotTableFragment({
+      block,
+      framePx: params.block.framePx,
+      source,
+      tableRowRange: params.block.tableRowRange
+    });
+  }
+
+  const block = paragraphToLayout(
+    node,
+    `paragraph-${params.block.nodeIndex}`,
+    params.block.framePx.x,
+    params.block.framePx.y,
+    params.block.framePx.width,
+    params.options.minLineHeight
+  );
+  return snapshotParagraphFragment({
+    block,
+    framePx: params.block.framePx,
+    source,
+    paragraphLineRange: params.block.paragraphLineRange
+  });
 }
 
+/**
+ * Builds the viewer layout snapshot from the real pagination engine
+ * (`buildDocumentPageNodeSegments`) rather than the legacy one-line-per-paragraph
+ * estimator in `layoutDocument()`.
+ *
+ * `layoutDocument()` remains exported for the public `core` entry point and for
+ * static block stacking, but it is no longer the page-boundary source of truth.
+ */
 export function buildLayoutSnapshot(
   model: DocModel,
   options: LayoutSnapshotOptions = {}
 ): LayoutSnapshot {
   const resolvedDocument = resolveDocumentForLayout(model, options);
-  const legacyPages = layoutDocument(model, options);
+  const normalizedOptions = normalizeLayoutOptions(options);
+  const paginationOptions = {
+    pageWidthPx: normalizedOptions.pageWidth,
+    pageHeightPx: normalizedOptions.pageHeight,
+    marginPx: normalizedOptions.margin,
+    suppressSpacingBeforeAfterPageBreak:
+      model.metadata.compatibility?.suppressSpacingBeforeAfterPageBreak === true,
+    measurementFeedback: normalizedOptions.measurementFeedback
+  };
+  // Notes render at the bottom of their page; reserve that height during
+  // pagination so body content (and the notes themselves) never overflow.
+  const paginated =
+    options.reserveNoteHeight === false
+      ? paginateDocumentLayout(model, paginationOptions)
+      : paginateDocumentLayoutWithNoteReserve(model, paginationOptions);
 
   return {
     version: 1,
     source: "layout-engine-adapter",
     resolvedDocument,
-    pages: legacyPages.map((page, index) =>
-      snapshotPageFromLegacyPage(page, index, resolvedDocument.layout)
-    )
+    pages: paginated.pages.map((page) => ({
+      index: page.index,
+      number: page.index + 1,
+      pageSizePx: {
+        width: page.geometry.pageWidthPx,
+        height: page.geometry.pageHeightPx
+      },
+      marginsPx: page.geometry.marginsPx,
+      contentBoxPx: page.geometry.contentBoxPx,
+      columnCount: page.geometry.columnCount,
+      columnGapPx: page.geometry.columnGapPx,
+      columnWidthsPx: page.geometry.columnWidthsPx,
+      blocks: page.blocks
+        .map((block) =>
+          snapshotPageBlock({ block, model, options: normalizedOptions })
+        )
+        .filter((block): block is LayoutSnapshotBlockFragment => block !== undefined)
+    }))
   };
 }

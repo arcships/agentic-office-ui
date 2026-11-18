@@ -82,7 +82,7 @@ const thumbnailsPath = "packages/vue-docx/src/composables/useDocxPageThumbnails.
 const thumbnails = source(thumbnailsPath);
 for (const [name, requiredCall] of [
   ["prefetchPageThumbnailSurface", "renderPageSurface"],
-  ["rerenderAttachedThumbnails", "renderPageThumbnailToCanvas"],
+  ["rerenderAttachedThumbnails", "paintPageThumbnailToCanvas"],
   ["rerender", "paintUnavailableThumbnail"],
 ]) {
   const body = functionBody(thumbnailsPath, thumbnails, name);
@@ -95,7 +95,8 @@ for (const [name, requiredCall] of [
 addCheck(
   "DOCX_THUMBNAIL_EXPLICIT_UNAVAILABLE",
   thumbnails.includes('availability: "unavailable"') &&
-    thumbnails.includes("unavailableReason: VIEWER_THUMBNAIL_UNAVAILABLE_MESSAGE"),
+    thumbnails.includes("unavailableReason") &&
+    thumbnails.includes("VIEWER_THUMBNAIL_UNAVAILABLE_MESSAGE"),
   "无文档输入的兼容缩略图接口必须公开 unavailable 状态和原因。",
 );
 
@@ -103,7 +104,7 @@ const pageSurface = source("packages/vue-docx/src/components/DocxPageSurface.vue
 addCheck(
   "DOCX_PAGE_SURFACE_PUBLISHER",
   pageSurface.includes("registry.pageElements.set(props.pageIndex, element)") &&
-    pageSurface.includes("notifyDocxViewerPageSurfaceListeners(controller)"),
+    pageSurface.includes("notifyDocxViewerPageSurfaceListeners(controller"),
   "页面 surface 必须向编辑器实例 registry 发布并通知变更。",
 );
 

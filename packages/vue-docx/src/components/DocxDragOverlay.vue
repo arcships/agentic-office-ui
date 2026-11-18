@@ -9,7 +9,7 @@
       <div v-if="importMode" class="docx-drag-overlay-import">
         <div class="docx-drag-overlay-import-icon">📂</div>
         <div class="docx-drag-overlay-import-text">
-          Drop DOCX file to import
+          {{ m.docx.dragOverlay.drop }}
         </div>
       </div>
     </div>
@@ -19,11 +19,13 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import type { DocxEditorController } from "@arcships/docx-core"
+import { useDocxMessages } from "../i18n"
 
 // ── Props ──────────────────────────────────────────────────────────
 defineProps<{
   controller: DocxEditorController
 }>()
+const m = useDocxMessages()
 
 // ── State (managed externally via provide/inject or parent) ─────────
 const visible = computed(() => false)

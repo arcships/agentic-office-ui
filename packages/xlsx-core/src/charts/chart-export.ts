@@ -77,6 +77,9 @@ export function normalizeChartAxis(raw: unknown): XlsxChartAxis | null {
     : null;
 
   return {
+    axisType: axis.axisType === "date" || axis.axisType === "category" || axis.axisType === "value" || axis.axisType === "series"
+      ? axis.axisType
+      : undefined,
     crossId: typeof rawAxis.crossId === "number" && Number.isFinite(rawAxis.crossId) ? rawAxis.crossId : undefined,
     crosses: typeof axis.crosses === "string" ? axis.crosses : undefined,
     crossBetween: typeof axis.crossBetween === "string" ? axis.crossBetween : undefined,
@@ -84,6 +87,8 @@ export function normalizeChartAxis(raw: unknown): XlsxChartAxis | null {
     id: typeof rawAxis.id === "number" && Number.isFinite(rawAxis.id) ? rawAxis.id : undefined,
     labelPosition: typeof axis.labelPosition === "string" ? axis.labelPosition : undefined,
     logBase: typeof axis.logBase === "number" ? axis.logBase : undefined,
+    majorTimeUnit: typeof axis.majorTimeUnit === "string" ? axis.majorTimeUnit : undefined,
+    minorTimeUnit: typeof axis.minorTimeUnit === "string" ? axis.minorTimeUnit : undefined,
     orientation: typeof axis.orientation === "string" ? axis.orientation : undefined,
     majorUnit: typeof axis.majorUnit === "number" ? axis.majorUnit : undefined,
     max: typeof axis.max === "number" ? axis.max : undefined,
@@ -124,7 +129,15 @@ export function readChartAxisFromXml(axisNode: Element | null): Partial<XlsxChar
 
   const numFmt = getFirstLocalChild(axisNode, "numFmt");
   const scalingNode = getFirstLocalChild(axisNode, "scaling");
+  const axisType = axisNode.localName === "dateAx"
+    ? "date"
+    : axisNode.localName === "catAx"
+      ? "category"
+      : axisNode.localName === "serAx"
+        ? "series"
+        : "value";
   return {
+    axisType,
     crossId: readChartNumericAttribute(axisNode, "crossAx"),
     crosses: getFirstLocalChild(axisNode, "crosses")?.getAttribute("val") ?? undefined,
     crossBetween: getFirstLocalChild(axisNode, "crossBetween")?.getAttribute("val") ?? undefined,
@@ -136,6 +149,8 @@ export function readChartAxisFromXml(axisNode: Element | null): Partial<XlsxChar
     id: readChartNumericAttribute(axisNode, "axId"),
     labelPosition: getFirstLocalChild(axisNode, "tickLblPos")?.getAttribute("val") ?? undefined,
     logBase: readChartNumericAttribute(getFirstLocalChild(axisNode, "scaling"), "logBase"),
+    majorTimeUnit: getFirstLocalChild(axisNode, "majorTimeUnit")?.getAttribute("val") ?? undefined,
+    minorTimeUnit: getFirstLocalChild(axisNode, "minorTimeUnit")?.getAttribute("val") ?? undefined,
     orientation: getFirstLocalChild(scalingNode ?? axisNode, "orientation")?.getAttribute("val") ?? undefined,
     majorGridlines: Boolean(getFirstLocalChild(axisNode, "majorGridlines")),
     majorTickMark: getFirstLocalChild(axisNode, "majorTickMark")?.getAttribute("val") ?? undefined,
@@ -229,8 +244,16 @@ export function normalizeChartDataLabels(raw: unknown): XlsxChartDataLabels | nu
         return normalized;
       })()
     : undefined;
+  const numberFormat = labels.numberFormat && typeof labels.numberFormat === "object"
+    ? labels.numberFormat as Record<string, unknown>
+    : null;
   return {
+    numberFormat: numberFormat ? {
+      formatCode: typeof numberFormat.formatCode === "string" ? numberFormat.formatCode : undefined,
+      sourceLinked: typeof numberFormat.sourceLinked === "boolean" ? numberFormat.sourceLinked : undefined
+    } : undefined,
     pointLabels: pointLabels && pointLabels.length > 0 ? pointLabels : undefined,
+    position: typeof labels.position === "string" ? labels.position : undefined,
     raw: labels,
     showBubbleSize: typeof labels.showBubbleSize === "boolean" ? labels.showBubbleSize : undefined,
     showCategoryName: typeof labels.showCategoryName === "boolean" ? labels.showCategoryName : undefined,
@@ -372,7 +395,8 @@ export function normalizeChartTypeGroup(
   workbookSheetIndex: number,
   chartId: string,
   raw: unknown,
-  index: number
+  index: number,
+  skipHidden = false
 ): XlsxChartTypeGroup | null {
   if (!raw || typeof raw !== "object") {
     return null;
@@ -391,7 +415,7 @@ export function normalizeChartTypeGroup(
     overlap: typeof group.overlap === "number" && Number.isFinite(group.overlap) ? group.overlap : undefined,
     raw: group,
     series: rawSeries.map((entry, seriesIndex) => (
-      normalizeChartSeries(workbook, workbookSheetIndex, `${chartId}-group-${index}`, entry, seriesIndex)
+      normalizeChartSeries(workbook, workbookSheetIndex, `${chartId}-group-${index}`, entry, seriesIndex, skipHidden)
     )),
     varyColors: typeof group.varyColors === "boolean" ? group.varyColors : undefined
   };
@@ -538,6 +562,7 @@ export function collectChartOriginsForSheet(
         chartKind: relationship.type === CHART_EX_REL_TYPE ? "modern" : "classic",
         chartPath: relationship.target,
         drawingPath: attachment.drawingPath,
+        objectId: getFirstLocalDescendant(graphicFrame, "cNvPr")?.getAttribute("id") ?? undefined,
         workbookSheetIndex: origin.workbookSheetIndex
       });
       chartAnchorIndex += 1;
@@ -665,7 +690,9 @@ export function setChartTitle(chartNode: Element, value: string | undefined) {
   t.textContent = value;
   r.appendChild(t);
   p.appendChild(r);
-  rich.append(bodyPr, lstStyle, p);
+  rich.appendChild(bodyPr);
+  rich.appendChild(lstStyle);
+  rich.appendChild(p);
   tx.appendChild(rich);
   titleNode.appendChild(tx);
 }
@@ -809,6 +836,16 @@ export function updateDataLabels(chartTypeNode: Element, labels: XlsxChartDataLa
   }
 
   const labelsNode = ensureChild(chartTypeNode, "dLbls");
+  if (labels.position) {
+    ensureChild(labelsNode, "dLblPos").setAttribute("val", labels.position);
+  }
+  if (labels.numberFormat?.formatCode) {
+    const numFmt = ensureChild(labelsNode, "numFmt");
+    numFmt.setAttribute("formatCode", labels.numberFormat.formatCode);
+    if (labels.numberFormat.sourceLinked !== undefined) {
+      numFmt.setAttribute("sourceLinked", labels.numberFormat.sourceLinked ? "1" : "0");
+    }
+  }
   if (labels.showLegendKey !== undefined) {
     setBooleanValue(labelsNode, "showLegendKey", labels.showLegendKey);
   }
@@ -850,13 +887,63 @@ export function updateWorkbookChartAnchor(
     return false;
   }
 
-  const anchorNode = getChartAnchorNodes(drawingDocument)[origin.anchorIndex];
+  const anchorNode = findChartAnchorNode(drawingDocument, origin);
   if (!anchorNode) {
     return false;
   }
 
   updateAnchorNode(anchorNode, anchor);
   imageAssets.archive[normalizeArchivePath(origin.drawingPath)] = strToU8(serializeXml(drawingDocument));
+  return true;
+}
+
+function findChartAnchorNode(document: XMLDocument, origin: WorkbookChartOrigin) {
+  const anchorNodes = getChartAnchorNodes(document);
+  if (origin.objectId) {
+    const match = anchorNodes.find((anchorNode) => (
+      getFirstLocalDescendant(anchorNode, "cNvPr")?.getAttribute("id") === origin.objectId
+    ));
+    if (match) return match;
+  }
+  return anchorNodes[origin.anchorIndex] ?? null;
+}
+
+export function deleteWorkbookChart(
+  imageAssets: Pick<WorkbookImageAssets, "archive">,
+  chartAssets: WorkbookChartAssets,
+  chartId: string
+) {
+  const origin = chartAssets.chartOriginsById.get(chartId);
+  if (!origin) {
+    return false;
+  }
+  const drawingXml = readArchiveText(imageAssets.archive, origin.drawingPath);
+  if (!drawingXml) {
+    return false;
+  }
+  const drawingDocument = parseXml(drawingXml);
+  if (!drawingDocument) {
+    return false;
+  }
+  const anchorNode = findChartAnchorNode(drawingDocument, origin);
+  const graphicFrame = anchorNode ? getFirstLocalDescendant(anchorNode, "graphicFrame") : null;
+  if (!anchorNode || !graphicFrame) {
+    return false;
+  }
+  const parent = graphicFrame.parentNode;
+  parent?.removeChild(graphicFrame);
+  const remainingDrawable = Array.from(anchorNode.childNodes).some(
+    (child) => child.nodeType === 1
+      && ["pic", "sp", "cxnSp", "graphicFrame"].includes((child as Element).localName)
+  );
+  if (!remainingDrawable) {
+    anchorNode.parentNode?.removeChild(anchorNode);
+  }
+  imageAssets.archive[normalizeArchivePath(origin.drawingPath)] = strToU8(serializeXml(drawingDocument));
+  chartAssets.chartOriginsById.delete(chartId);
+  chartAssets.chartsByWorkbookSheetIndex = chartAssets.chartsByWorkbookSheetIndex.map((sheetCharts) => (
+    sheetCharts.filter((chart) => chart.id !== chartId)
+  ));
   return true;
 }
 

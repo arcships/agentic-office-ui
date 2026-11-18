@@ -30,6 +30,7 @@ export interface DocxRuntimeLimits {
   maxDocxNodes?: number;
   maxDocxPages?: number;
   maxParseMs?: number;
+  maxExportMs?: number;
 }
 
 export const DEFAULT_DOCX_RUNTIME_LIMITS: Readonly<DocxRuntimeLimits> = Object.freeze({
@@ -55,6 +56,7 @@ export const DEFAULT_DOCX_RUNTIME_LIMITS: Readonly<DocxRuntimeLimits> = Object.f
   maxDocxNodes: 1_000_000,
   maxDocxPages: 10_000,
   maxParseMs: 30_000,
+  maxExportMs: 60_000,
 });
 
 const DOCX_RUNTIME_HARD_LIMITS: Readonly<DocxRuntimeLimits> = Object.freeze({
@@ -80,6 +82,7 @@ const DOCX_RUNTIME_HARD_LIMITS: Readonly<DocxRuntimeLimits> = Object.freeze({
   maxDocxNodes: 5_000_000,
   maxDocxPages: 50_000,
   maxParseMs: 120_000,
+  maxExportMs: 300_000,
 });
 
 export function resolveDocxRuntimeLimits(

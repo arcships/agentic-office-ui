@@ -411,3 +411,87 @@ test("region session cancellation clears only transient state and keeps host-con
   assert.equal(result.state.phase, "idle")
   assert.equal(result.state.regionDraft, undefined)
 })
+
+test("region drafts start at a point and only the change phase carries a positive rectangle", () => {
+  assert.deepEqual(
+    interaction.parseOfficeRegionDraftChange({
+      phase: "start",
+      point: { space: "page", pageIndex: 2, x: 0.25, y: 0.5 },
+    }),
+    { phase: "start", point: { space: "page", pageIndex: 2, x: 0.25, y: 0.5 } },
+  )
+  assert.deepEqual(
+    interaction.parseOfficeRegionDraftChange({
+      phase: "start",
+      point: { space: "slide", slideIndex: 1, x: 0.1, y: 0.2 },
+    }).point,
+    { space: "slide", slideIndex: 1, x: 0.1, y: 0.2 },
+  )
+  assert.deepEqual(
+    interaction.parseOfficeRegionDraftChange({
+      phase: "change",
+      region: { space: "page", pageIndex: 0, rect: { x: 0.1, y: 0.1, width: 0.2, height: 0.3 } },
+    }).region.rect,
+    { x: 0.1, y: 0.1, width: 0.2, height: 0.3 },
+  )
+
+  const zeroArea = interaction.safeParseOfficeRegionDraftChange({
+    phase: "change",
+    region: { space: "page", pageIndex: 0, rect: { x: 0.1, y: 0.1, width: 0, height: 0 } },
+  })
+  assert.equal(zeroArea.success, false)
+  assert.equal(zeroArea.error.issues[0].path, "$regionDraft.region.rect")
+
+  const legacyStartRect = interaction.safeParseOfficeRegionDraftChange({
+    phase: "start",
+    region: { space: "page", pageIndex: 0, rect: { x: 0.1, y: 0.1, width: 0, height: 0 } },
+  })
+  assert.equal(legacyStartRect.success, false)
+
+  const outOfRange = interaction.safeParseOfficeRegionDraftChange({
+    phase: "start",
+    point: { space: "page", pageIndex: 0, x: 1.2, y: 0 },
+  })
+  assert.equal(outOfRange.success, false)
+})
+
+test("resolve failures map onto declared error codes without flattening revision changes", () => {
+  assert.equal(
+    interaction.officeReferenceErrorForResult("docx", { status: "exact" }),
+    undefined,
+  )
+  assert.equal(
+    interaction.officeReferenceErrorForResult("docx", { status: "ambiguous", candidates: [], reasonCodes: ["docx.multiple"] }),
+    undefined,
+  )
+
+  const revision = interaction.officeReferenceErrorForResult(
+    "docx",
+    { status: "unsupported", reasonCode: "docx.reflow-requires-reselection" },
+    { referenceId: "ref-1" },
+  )
+  assert.deepEqual(revision, {
+    code: "REVISION_CHANGED",
+    operation: "resolve",
+    format: "docx",
+    recoverable: true,
+    referenceId: "ref-1",
+    message: "docx.reflow-requires-reselection",
+  })
+  assert.equal(
+    interaction.officeReferenceErrorForResult("docx", { status: "not-found", reasonCode: "docx.document-id-mismatch" }).code,
+    "REVISION_CHANGED",
+  )
+  assert.equal(
+    interaction.officeReferenceErrorForResult("docx", { status: "unsupported", reasonCode: "docx.text-quote-unavailable" }).code,
+    "REVISION_CHANGED",
+  )
+  assert.equal(
+    interaction.officeReferenceErrorForResult("docx", { status: "not-found", reasonCode: "docx.text-not-found" }).code,
+    "RESOLVE_FAILED",
+  )
+  assert.equal(
+    interaction.officeReferenceErrorForResult("docx", { status: "not-found", reasonCode: "docx.text-not-found" }, { operation: "describe" }).code,
+    "DESCRIBE_FAILED",
+  )
+})

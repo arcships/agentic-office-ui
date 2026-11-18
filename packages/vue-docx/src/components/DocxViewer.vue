@@ -3,6 +3,7 @@
     ref="viewerRef"
     class="docx-viewer"
     :class="[{ 'docx-viewer--dark': darkTheme }, className]"
+    :style="minHeightStyle"
     data-testid="docx-viewer"
     :data-state="viewerState"
     :data-show-tracked-changes="String(effectiveShowTrackedChanges)"
@@ -14,8 +15,14 @@
       ref="uploadInputRef"
       class="docx-viewer__file-input"
       type="file"
-      accept=".docx,.docm,.dotx,.dotm,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-word.document.macroEnabled.12,application/vnd.openxmlformats-officedocument.wordprocessingml.template,application/vnd.ms-word.template.macroEnabled.12"
+      :accept="DOCX_FILE_ACCEPT"
       @change="onUploadChange"
+    />
+
+    <OfficeLiveStatus
+      test-id="docx-live-status"
+      :message="liveStatusMessage"
+      :busy="liveStatusBusy"
     />
 
     <DocxViewerToolbar
@@ -57,6 +64,7 @@
         v-if="sidebarOpen && renderableModel"
         :model="renderableModel"
         :layout-options="layoutOptions"
+        :is-dark="darkTheme"
         :current-page="currentPage"
         :total-pages="totalPages"
         :show-toggle="false"
@@ -67,8 +75,8 @@
         <div v-if="isLoading" class="docx-viewer-state" data-testid="docx-loading-state">
           <div class="docx-viewer-loading-spinner" />
           <div>
-            <strong>Opening document</strong>
-            <span>Loading DOCX…</span>
+            <strong>{{ m.docx.viewer.loadingTitle }}</strong>
+            <span>{{ m.docx.viewer.loadingDetail }}</span>
           </div>
         </div>
 
@@ -86,10 +94,10 @@
             <path d="M12 3 2.8 19h18.4L12 3Z" /><path d="M12 9v4M12 17h.01" />
           </svg>
           <div>
-            <strong>Unable to open this document</strong>
+            <strong>{{ m.docx.viewer.errorTitle }}</strong>
             <span v-if="errorCode(error)" class="docx-viewer-error-code">{{ errorCode(error) }}</span>
             <span>{{ error.message }}</span>
-            <button v-if="showUpload" type="button" @click="uploadInputRef?.click()">Choose another Word file</button>
+            <button v-if="showUpload" type="button" @click="uploadInputRef?.click()">{{ m.docx.viewer.chooseAnother }}</button>
           </div>
         </div>
 
@@ -98,9 +106,9 @@
             <path d="M6 2.8h8l4 4V21H6zM14 2.8V7h4" />
           </svg>
           <div>
-            <strong>No document open</strong>
-            <span>{{ emptyState }}</span>
-            <button v-if="showUpload" type="button" @click="uploadInputRef?.click()">Choose Word file</button>
+            <strong>{{ m.docx.viewer.emptyTitle }}</strong>
+            <span>{{ effectiveEmptyState }}</span>
+            <button v-if="showUpload" type="button" @click="uploadInputRef?.click()">{{ m.docx.viewer.chooseFile }}</button>
           </div>
         </div>
 
@@ -114,6 +122,8 @@
           :editable="false"
           :show-tracked-changes="effectiveShowTrackedChanges"
           :show-comments="effectiveShowComments"
+          :locale="locale"
+          :messages="messages"
           @page-count-change="onPageCountChange"
           @visible-page-range="onVisiblePageRange"
           @search-state-change="onSearchStateChange"
@@ -127,11 +137,25 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue"
 import type { DocModel, DocxImportResult, DocxRuntime, DocxRuntimeLoader, LayoutOptions } from "@arcships/docx-core"
-import { collectCommentsFromModel, collectTrackedChangesFromModel, createDocxRuntime, DocxImportError } from "@arcships/docx-core"
+import {
+  collectCommentsFromModel,
+  collectTrackedChangesFromModel,
+  createDocxRuntime,
+  DocxImportError,
+  primeCommentAnchors,
+} from "@arcships/docx-core"
 import type { DocxSearchState } from "../composables/useDocxSearch"
+import {
+  DOCX_FILE_ACCEPT,
+  isSupportedDocxFileName,
+} from "../composables/docx-file-types"
+import { OfficeLiveStatus } from "@arcships/vue-ui"
+import type { OfficeLocale, OfficeMessagesOverride } from "@arcships/office-interaction"
 import DocxDocumentSurface from "./DocxDocumentSurface.vue"
 import DocxThumbnailPanel from "./DocxThumbnailPanel.vue"
 import DocxViewerToolbar from "./DocxViewerToolbar.vue"
+import { formatOfficeMessage } from "@arcships/office-interaction"
+import { provideDocxMessages } from "../i18n"
 
 const props = withDefaults(
   defineProps<{
@@ -147,25 +171,32 @@ const props = withDefaults(
     showDownload?: boolean
     defaultThumbnailsOpen?: boolean
     defaultZoom?: number
+    /** Optional minimum height; the viewer itself does not impose one. */
+    minHeight?: string | number
     isDark?: boolean
     defaultShowTrackedChanges?: boolean
     defaultShowComments?: boolean
     showTrackedChanges?: boolean | null
     showComments?: boolean | null
+    locale?: OfficeLocale
+    messages?: OfficeMessagesOverride
   }>(),
   {
-    emptyState: "Upload or provide a DOCX file to start.",
+    emptyState: undefined,
     fileName: "document.docx",
     showToolbar: true,
     showUpload: true,
     showDownload: true,
     defaultThumbnailsOpen: false,
     defaultZoom: 100,
+    minHeight: undefined,
     isDark: false,
     defaultShowTrackedChanges: true,
     defaultShowComments: true,
     showTrackedChanges: null,
     showComments: null,
+    locale: "en",
+    messages: undefined,
   },
 )
 
@@ -181,6 +212,7 @@ const emit = defineEmits<{
 }>()
 
 const isLoading = ref(false)
+const m = provideDocxMessages(() => props.locale, () => props.messages)
 const error = ref<Error | undefined>()
 const parsedModel = ref<DocModel | undefined>()
 const layoutLimitExceeded = ref(false)
@@ -196,6 +228,11 @@ const totalPages = ref(0)
 const sidebarOpen = ref(props.defaultThumbnailsOpen)
 const zoomPercent = ref(normalizeZoom(props.defaultZoom))
 const darkTheme = ref(props.isDark)
+const minHeightStyle = computed(() => {
+  const value = props.minHeight
+  if (value === undefined) return undefined
+  return { minHeight: typeof value === "number" ? `${value}px` : value }
+})
 const internalShowTrackedChanges = ref(props.defaultShowTrackedChanges)
 const internalShowComments = ref(props.defaultShowComments)
 const searchQuery = ref("")
@@ -210,6 +247,7 @@ const effectiveFile = computed(() => internalFile.value ?? props.file)
 const resolvedModel = computed(() => props.model ?? parsedModel.value)
 const renderableModel = computed(() => layoutLimitExceeded.value ? undefined : resolvedModel.value)
 const displayFileName = computed(() => internalFileName.value || props.fileName)
+const effectiveEmptyState = computed(() => props.emptyState ?? m.value.docx.viewer.emptyDetail)
 const effectiveShowTrackedChanges = computed(() => props.showTrackedChanges ?? internalShowTrackedChanges.value)
 const effectiveShowComments = computed(() => props.showComments ?? internalShowComments.value)
 const viewerTrackedChanges = computed(() => renderableModel.value ? collectTrackedChangesFromModel(renderableModel.value) : [])
@@ -219,6 +257,21 @@ const viewerState = computed(() => {
   if (error.value) return "error"
   if (renderableModel.value) return "ready"
   return "idle"
+})
+
+const liveStatusBusy = computed(() => viewerState.value === "loading")
+
+// The viewer used to reveal its state to sighted users only: loading, page and
+// error transitions were never announced. A single stable live region now
+// carries every state change for assistive technology.
+const liveStatusMessage = computed(() => {
+  if (viewerState.value === "loading") return m.value.docx.viewer.live.loading
+  if (error.value) return formatOfficeMessage(m.value.docx.viewer.live.error, { message: error.value.message })
+  if (!renderableModel.value) return m.value.docx.viewer.emptyTitle
+  const total = totalPages.value
+  if (total <= 0) return m.value.docx.viewer.live.ready
+  const page = Math.min(Math.max(currentPage.value, 1), total)
+  return formatOfficeMessage(m.value.docx.viewer.live.readyPages, { page, total })
 })
 
 const ownedRuntime = createDocxRuntime()
@@ -335,11 +388,12 @@ watch(
     try {
       const result = await loader.load(newFile, { transferBuffer: false })
       if (!active) return
+      primeCommentAnchors(result.model)
       pendingLoadResult.value = result
       parsedModel.value = result.model
     } catch (cause) {
       if (!active) return
-      const normalized = cause instanceof Error ? cause : new Error("Unknown DOCX parse error")
+      const normalized = cause instanceof Error ? cause : new Error(m.value.docx.viewer.parseError)
       error.value = normalized
       pendingLoadResult.value = undefined
       emit("load-error", normalized)
@@ -355,7 +409,7 @@ function onPageCountChange(count: number): void {
   if (allowed !== undefined && count > allowed) {
     const normalized = new DocxImportError(
       "LIMIT_EXCEEDED",
-      `DOCX 页数 ${count} 超过允许值 ${allowed}。`,
+      formatOfficeMessage(m.value.docx.viewer.pageLimitExceeded, { count, allowed }),
       { phase: "layout", limit: "maxDocxPages", actual: count, allowed },
     )
     pendingLoadResult.value = undefined
@@ -393,9 +447,40 @@ async function onUploadChange(event: Event): Promise<void> {
   const file = input.files?.[0]
   input.value = ""
   if (!file) return
+  if (!isSupportedDocxFileName(file.name)) {
+    internalFile.value = undefined
+    const unsupported = new Error(m.value.docx.viewer.unsupportedFile)
+    error.value = unsupported
+    emit("load-error", unsupported)
+    return
+  }
   emit("file-selected", file)
+
+  const allowed = loaderRuntime.limits?.maxInputBytes
+  if (allowed !== undefined && Number.isFinite(file.size) && file.size > allowed) {
+    const limitError = new DocxImportError(
+      "LIMIT_EXCEEDED",
+      formatOfficeMessage(m.value.docx.viewer.fileTooLarge, { actual: file.size, allowed }),
+      { phase: "input", limit: "maxInputBytes", actual: file.size, allowed },
+    )
+    error.value = limitError
+    emit("load-error", limitError)
+    return
+  }
+
+  let buffer: ArrayBuffer
+  try {
+    buffer = await file.arrayBuffer()
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause)
+    const readError = new Error(`Failed to read ${file.name}: ${message}`, { cause })
+    error.value = readError
+    emit("load-error", readError)
+    return
+  }
+
   internalFileName.value = file.name
-  internalFile.value = await file.arrayBuffer()
+  internalFile.value = buffer
 }
 
 function downloadFile(): void {
@@ -469,6 +554,7 @@ function errorNumber(value: Error, key: "actual" | "allowed"): number | undefine
   --docx-border: #e4e4e7;
   --docx-foreground: #18181b;
   --docx-toolbar-bg: #fff;
+  container: docx-shell / inline-size;
   background: #f4f4f5;
   border: 1px solid var(--docx-border);
   border-radius: 10px;
@@ -476,7 +562,6 @@ function errorNumber(value: Error, key: "actual" | "allowed"): number | undefine
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 320px;
   min-width: 0;
   overflow: hidden;
   width: 100%;
@@ -537,4 +622,22 @@ function errorNumber(value: Error, key: "actual" | "allowed"): number | undefine
   width: 24px;
 }
 @keyframes docx-viewer-spin { to { transform: rotate(360deg); } }
+
+@media print {
+  .docx-viewer {
+    background: #fff !important;
+    color: #000 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  .docx-viewer__file-input,
+  .docx-viewer-toolbar,
+  .docx-thumbnail-panel { display: none !important; }
+  .docx-viewer__body,
+  .docx-viewer__content { display: block !important; overflow: visible !important; }
+  .docx-viewer-state { min-height: 0 !important; padding: 0 !important; }
+}
 </style>

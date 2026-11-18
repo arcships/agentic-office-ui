@@ -8,20 +8,27 @@
         data-testid="xlsx-chartsheet-chart"
         @pointerdown="controller.selectChart(chart.id)"
       >
-        <div v-if="controller.isChartsLoading" class="xlsx-chartsheet__loading">Loading chart…</div>
+        <div v-if="controller.isChartsLoading" class="xlsx-chartsheet__loading">{{ m.xlsx.chart.loading }}</div>
         <MemoChartSvg
           v-else-if="chart.chartType !== 'Unsupported'"
           :chart="chart"
+          :chart-labels="{
+            ariaLabel: m.xlsx.chart.ariaLabel,
+            unsupportedType: m.xlsx.chart.unsupportedType,
+            other: m.xlsx.chart.other,
+            seriesName: m.xlsx.chart.seriesName,
+            surfaceSeries: m.xlsx.chart.surfaceSeries,
+          }"
           :rect="chartRect"
           :palette="palette"
           :selected-chart-element="controller.selectedChartId === chart.id ? controller.selectedChartElement : null"
           :on-chart-element-pointer-down="onChartElementPointerDown"
           :on-chart-element-double-click="onChartElementDoubleClick"
         />
-        <div v-else class="xlsx-chartsheet__empty">This chart type is not available yet.</div>
+        <div v-else class="xlsx-chartsheet__empty">{{ m.xlsx.chart.unavailable }}</div>
       </div>
       <div v-if="charts.length === 0 && !controller.isChartsLoading" class="xlsx-chartsheet__empty">
-        This chart sheet does not expose an embedded chart payload.
+        {{ m.xlsx.chart.noPayload }}
       </div>
     </div>
   </div>
@@ -32,6 +39,7 @@ import { computed } from "vue";
 import type { XlsxChart, XlsxChartElementSelection, XlsxViewerController } from "@arcships/xlsx-core";
 import { MemoChartSvg } from "../optional/lazy-renderers";
 import type { ChartRendererPalette } from "../render/chart-types";
+import { useXlsxMessages } from "../i18n";
 
 const props = defineProps<{
   controller: XlsxViewerController;
@@ -39,6 +47,7 @@ const props = defineProps<{
 }>();
 
 const chartRect = { height: 360, left: 0, top: 0, width: 640 };
+const m = useXlsxMessages();
 const charts = computed(() => props.controller.charts as XlsxChart[]);
 const palette = computed<ChartRendererPalette>(() => ({
   border: props.isDark ? "#52525b" : "#d4d4d8",
@@ -79,7 +88,7 @@ function onChartElementDoubleClick(selection: XlsxChartElementSelection): void {
   min-width: 0;
   padding: 16px;
 }
-.xlsx-chartsheet__chart { min-height: 360px; min-width: 0; overflow: hidden; position: relative; }
+.xlsx-chartsheet__chart { aspect-ratio: 16 / 9; min-height: 0; min-width: 0; overflow: hidden; position: relative; }
 .xlsx-chartsheet__chart :deep(svg) { height: 100%; max-height: 440px; width: 100%; }
 .xlsx-chartsheet__loading,
 .xlsx-chartsheet__empty {
@@ -88,7 +97,8 @@ function onChartElementDoubleClick(selection: XlsxChartElementSelection): void {
   display: flex;
   font-size: 13px;
   justify-content: center;
-  min-height: 320px;
+  min-height: 0;
+  padding: 24px;
   text-align: center;
 }
 </style>

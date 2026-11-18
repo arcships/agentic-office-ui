@@ -20,6 +20,7 @@ import {
   resolveAutoLineSpacingMultiple,
   tableBorderPresetState,
   paragraphBorderPresetState,
+  parseEmbeddedTableRuntimeKey,
 } from "@arcships/docx-core"
 import {
   firstRunStyle,
@@ -32,10 +33,15 @@ import {
   getParagraphAtLocation,
   collectTrackedChangesFromModel,
   collectCommentsFromModel,
+  primeCommentAnchors,
+  applyTrackedChangeDecision,
 } from "@arcships/docx-core"
 
 import type {
   DocModel,
+  DocxTrackedChange,
+  DocxTrackedChangeDecision,
+  DocxTrackedChangeDecisionScope,
   ParagraphNode,
   TextRunNode,
   OoxmlPackage,
@@ -53,6 +59,7 @@ import type {
   DocxFormFieldLocation,
   DocxDocumentTheme,
   DocxSelectionSessionKind,
+  DocxTableCellSelectionRange,
   DocxLineSpacingInfo,
   DocxLineSpacingRule,
   DocxBorderContext,
@@ -66,9 +73,10 @@ import type {
   DocxSectionParagraphLocation,
   DocxSectionImageLocation,
   UseDocxEditorOptions,
+  DocxEditorStatusMessages,
   ParagraphLocation,
-  DocxTextRangeLocation,
 } from "@arcships/docx-core"
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction"
 
 import type { EditorCore } from "./editor-shared"
 import { createEditorTransaction } from "./editor-transaction"
@@ -92,11 +100,46 @@ function typedKeys<T extends object>(obj: T): (keyof T)[] {
   return Object.keys(obj) as (keyof T)[]
 }
 
+// Shared empty result so a hidden revision list keeps a stable identity and
+// never allocates on keystrokes.
+const EMPTY_TRACKED_CHANGES: DocxTrackedChange[] = []
+
+const DEFAULT_STATUS_MESSAGES: DocxEditorStatusMessages =
+  officeMessagesEn.docx.editor.status
+
+function resolveStatusMessages(
+  option: UseDocxEditorOptions["statusMessages"],
+): DocxEditorStatusMessages {
+  const provided = typeof option === "function" ? option() : option
+  return { ...DEFAULT_STATUS_MESSAGES, ...provided }
+}
+
 // ── useDocxEditor ──────────────────────────────────────────────────
+
+type RuntimeKeyTableController = {
+  selectTableCellByRuntimeKey: (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number
+  ) => void
+  commitTableCellTextByRuntimeKey: (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number,
+    text: string
+  ) => void
+  commitTableCellParagraphTextByRuntimeKey: (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number,
+    paragraphIndex: number,
+    text: string
+  ) => void
+}
 
 export function useDocxEditor(
   options: UseDocxEditorOptions = {}
-): DocxEditorController {
+): DocxEditorController & RuntimeKeyTableController {
   // --- starter template ---
   const starterModel = options.starterModel ?? defaultStarterModel
   assertValidDocxModel(starterModel)
@@ -104,10 +147,21 @@ export function useDocxEditor(
 
   // --- core state ---
   const model = ref<DocModel>(cloneDocModel(starterTemplate))
+  primeCommentAnchors(model.value)
+  const cleanModel = ref<DocModel>(model.value)
+  const isDirty = computed(() => model.value !== cleanModel.value)
   const basePackage = ref<OoxmlPackage | undefined>(undefined)
   const documentLoadNonce = ref(0)
-  const fileName = ref(options.initialFileName ?? "(new document)")
-  const status = ref(options.initialStatus ?? "Ready")
+  const initialFileName = options.initialFileName ?? officeMessagesEn.docx.editor.newDocument
+  const fileName = ref(initialFileName)
+  const statusMessage = (
+    key: keyof DocxEditorStatusMessages,
+    values: Record<string, string | number> = {},
+  ): string => formatOfficeMessage(
+    resolveStatusMessages(options.statusMessages)[key] ?? DEFAULT_STATUS_MESSAGES[key],
+    values,
+  )
+  const status = ref(options.initialStatus ?? statusMessage("ready"))
   const importError = ref<Error | undefined>(undefined)
   const isImporting = ref(false)
 
@@ -155,6 +209,15 @@ export function useDocxEditor(
   const selectionSessionKind = ref<DocxSelectionSessionKind>("idle")
   let selectionSessionTimeout: ReturnType<typeof setTimeout> | null = null
   const selectionSessionKindInternal = shallowRef<DocxSelectionSessionKind>("idle")
+  const textDraftFlushers = new Set<() => void>()
+  const flushTextDrafts = (): void => {
+    for (const flusher of [...textDraftFlushers]) flusher()
+  }
+
+  // The transaction module owns the burst state; this holder lets the editor
+  // context (built first) expose a stable closer to every sub-module.
+  let endTextCommitBurstImpl: () => void = () => {}
+  const endTextCommitBurst = (): void => endTextCommitBurstImpl()
 
   // --- refs (mutable snapshots for synchronous access in callbacks) ---
   let modelSnapshot = model.value
@@ -347,8 +410,22 @@ export function useDocxEditor(
   )
 
   // --- derived: tracked changes / comments ---
-  const trackedChanges = computed(() => collectTrackedChangesFromModel(model.value))
+  // Collecting revisions walks every paragraph and table cell, so it only runs
+  // while the markup is actually rendered. Hidden revisions cost nothing on
+  // keystrokes; `trackedChangeCount` stays `null` until they are shown.
+  const trackedChanges = computed<DocxTrackedChange[]>(() =>
+    showTrackedChanges.value ? collectTrackedChangesFromModel(model.value) : EMPTY_TRACKED_CHANGES
+  )
+  const trackedChangeCount = computed<number | null>(() =>
+    showTrackedChanges.value ? trackedChanges.value.length : null
+  )
   const comments = computed(() => collectCommentsFromModel(model.value))
+
+  // --- edits that silently drop revision markup ---
+  // Every text edit clears `sourceXml`, which is where revisions live. The
+  // transaction dispatcher reports exactly which paragraphs lost their
+  // revision markup (see createEditorTransaction) instead of letting the
+  // gutter cards disappear without explanation.
 
   // --- derived: booleans ---
   const hasUnorderedList = computed(() => selectedListType.value === "unordered")
@@ -438,6 +515,7 @@ export function useDocxEditor(
   // --- pagination reset on document load ---
   watch(documentLoadNonce, () => {
     paginationInfo.value = { currentPage: 1, totalPages: 1 }
+    activeFormFieldEditKey = undefined
   })
 
   // ═══════════════════════════════════════════════════════════════════
@@ -446,9 +524,10 @@ export function useDocxEditor(
 
   const ctx: EditorCore = {
     // refs
-    model, selection, activeTextRange, pendingRunStyle, history, historyBudget,
+    model, cleanModel, isDirty, selection, activeTextRange, pendingRunStyle, history, historyBudget,
     estimateHistorySnapshotBytes, status,
-    selectedFormFieldLocation, documentLoadNonce, fileName, importError,
+    statusMessage,
+    selectedFormFieldLocation, documentLoadNonce, fileName, initialFileName, importError,
     isImporting, documentTheme, showTrackedChanges, showComments,
     paginationInfo, historyRestoreRequest, basePackage,
     selectionSessionKind, selectionSessionKindInternal, embeddedFontLoadNonce,
@@ -468,6 +547,9 @@ export function useDocxEditor(
     loadedEmbeddedFontFaces: { get value() { return loadedEmbeddedFontFaces }, set value(v) { loadedEmbeddedFontFaces = v } },
     activeImportAbortController: { get value() { return activeImportAbortController }, set value(v) { activeImportAbortController = v } },
     pendingExportModelTransformer: { get value() { return pendingExportModelTransformer }, set value(v) { pendingExportModelTransformer = v } },
+    flushTextDrafts,
+    endTextCommitBurst,
+    activeFormFieldEditKey: { get value() { return activeFormFieldEditKey }, set value(v) { activeFormFieldEditKey = v } },
     starterTemplate,
 
     // computed
@@ -495,7 +577,13 @@ export function useDocxEditor(
   // ═══════════════════════════════════════════════════════════════════
 
   // 1. editor-transaction (must be first — creates dispatch + applyChange)
-  const { dispatchEditorTransaction, applyModelChange } = createEditorTransaction(ctx)
+  const {
+    dispatchEditorTransaction,
+    applyModelChange,
+    endTextCommitBurst: endBurstInTransaction,
+    keepsTextCommitBurst,
+  } = createEditorTransaction(ctx)
+  endTextCommitBurstImpl = endBurstInTransaction
 
   // 2. editor-history
   const { undo, redo } = createEditorHistory(ctx)
@@ -522,7 +610,7 @@ export function useDocxEditor(
   const lst = createEditorList(ctx, applyModelChange)
 
   // 10. editor-clipboard
-  const clp = createEditorClipboard(ctx)
+  const clp = createEditorClipboard(ctx, txt.insertTextAtSelection)
 
   // 11. editor-import-export
   const ie = createEditorImportExport(ctx)
@@ -533,6 +621,7 @@ export function useDocxEditor(
 
   let activeImportAbortController: AbortController | undefined
   let pendingExportModelTransformer: ((model: DocModel) => DocModel) | undefined
+  let activeFormFieldEditKey: string | undefined
 
   const setStatus = (v: string | ((prev: string) => string)): void => {
     status.value = typeof v === "function" ? v(status.value) : v
@@ -545,29 +634,146 @@ export function useDocxEditor(
   const syncPaginationInfo = (pagination: DocxPaginationInfo): void => {
     paginationInfo.value = pagination
   }
+  const registerTextDraftFlusher = (flusher: () => void): (() => void) => {
+    textDraftFlushers.add(flusher)
+    return () => { textDraftFlushers.delete(flusher) }
+  }
+  const clearPendingRunStyle = (): void => {
+    if (pendingRunStyleSnapshot === undefined && pendingRunStyle.value === undefined) return
+    pendingRunStyleSnapshot = undefined
+    pendingRunStyle.value = undefined
+  }
+
+  // ── tracked-change decisions ─────────────────────────────────────
+  // Every decision goes through the transaction dispatcher, so accepting or
+  // rejecting a revision is a single undoable step and shares the history
+  // budget with ordinary edits.
+  const decideTrackedChanges = (
+    decision: DocxTrackedChangeDecision,
+    scope?: DocxTrackedChangeDecisionScope
+  ): boolean => {
+    let applied = false
+    dispatchEditorTransaction((current) => {
+      const result = applyTrackedChangeDecision(current.model, decision, scope)
+      if (result.model === current.model) return undefined
+      applied = true
+      const count = result.resolvedChangeIds.length
+      const status = decision === "accept"
+        ? (count === 1
+          ? ctx.statusMessage("acceptedChange")
+          : ctx.statusMessage("acceptedChanges", { count }))
+        : (count === 1
+          ? ctx.statusMessage("rejectedChange")
+          : ctx.statusMessage("rejectedChanges", { count }))
+      const keptFormatting =
+        result.clearedOnlyChangeIds.length > 0
+          ? (result.clearedOnlyChangeIds.length === 1
+            ? ctx.statusMessage("formattingClearedOne")
+            : ctx.statusMessage("formattingCleared", { count: result.clearedOnlyChangeIds.length }))
+          : ""
+      return {
+        model: result.model,
+        status: `${status}${keptFormatting}`,
+        clearSelectedFormField: true,
+      }
+    })
+    return applied
+  }
+
+  const acceptTrackedChange = (changeId: string): boolean =>
+    decideTrackedChanges("accept", { changeIds: [changeId] })
+  const rejectTrackedChange = (changeId: string): boolean =>
+    decideTrackedChanges("reject", { changeIds: [changeId] })
+  const acceptTrackedChangesInTableRow = (tableIndex: number, rowIndex: number): boolean =>
+    decideTrackedChanges("accept", {
+      nodeIndex: tableIndex,
+      tableRowRange: { startRowIndex: rowIndex, endRowIndex: rowIndex + 1 },
+    })
+  const rejectTrackedChangesInTableRow = (tableIndex: number, rowIndex: number): boolean =>
+    decideTrackedChanges("reject", {
+      nodeIndex: tableIndex,
+      tableRowRange: { startRowIndex: rowIndex, endRowIndex: rowIndex + 1 },
+    })
+  const acceptAllTrackedChanges = (): boolean => decideTrackedChanges("accept")
+  const rejectAllTrackedChanges = (): boolean => decideTrackedChanges("reject")
 
   // Browser-originated ranges are already reflected in the DOM. Keep the
   // synchronous snapshot current without issuing a DOM restore request that
   // would fight the user's live selection.
-  const setActiveTextRange = (range?: DocxTextRange): void => {
+  const setActiveTextRange = (
+    range?: DocxTextRange,
+    options?: { preservePendingRunStyle?: boolean },
+  ): void => {
     const nextRange = normalizeEditorCursorStateForModel(
       modelSnapshot,
       selectionSnapshot,
       range
     ).activeTextRange
     if (sameTextRange(activeTextRangeSnapshot, nextRange)) return
+    // A real selection/caret move discards a pending caret style. Typing
+    // passes preservePendingRunStyle because the input event extends the range
+    // before the draft is committed on blur/export.
+    if (!options?.preservePendingRunStyle) clearPendingRunStyle()
+    // A selection change ends the typing burst, except for the caret following
+    // the text that the burst just committed (which stays in the same
+    // paragraph/cell and is collapsed).
+    if (!keepsTextCommitBurst(nextRange)) endTextCommitBurst()
     activeTextRangeSnapshot = cloneTextRange(nextRange)
     activeTextRange.value = nextRange
   }
   const selectParagraph = (nodeIndex: number): void => {
+    clearPendingRunStyle()
     dispatchEditorTransaction(() => ({
       selection: { kind: "paragraph", nodeIndex },
       activeTextRange: undefined,
     }))
   }
   const selectTableCell = (tableIndex: number, rowIndex: number, cellIndex: number): void => {
+    clearPendingRunStyle()
     dispatchEditorTransaction(() => ({
       selection: { kind: "table-cell", tableIndex, rowIndex, cellIndex },
+      activeTextRange: undefined,
+    }))
+  }
+  const selectTableCellRange = (
+    tableIndex: number,
+    range: DocxTableCellSelectionRange,
+    tableRuntimeKey?: string
+  ): void => {
+    clearPendingRunStyle()
+    dispatchEditorTransaction(() => ({
+      selection: {
+        kind: "table-cell",
+        tableIndex,
+        rowIndex: range.focusRowIndex,
+        cellIndex: range.focusCellIndex,
+        ...(tableRuntimeKey ? { tableRuntimeKey } : undefined),
+        cellRange: {
+          tableIndex,
+          anchorRowIndex: range.anchorRowIndex,
+          anchorCellIndex: range.anchorCellIndex,
+          focusRowIndex: range.focusRowIndex,
+          focusCellIndex: range.focusCellIndex,
+        },
+      },
+      activeTextRange: undefined,
+    }))
+  }
+  const selectTableCellByRuntimeKey = (
+    tableRuntimeKey: string,
+    rowIndex: number,
+    cellIndex: number
+  ): void => {
+    const location = parseEmbeddedTableRuntimeKey(tableRuntimeKey)
+    if (!location) return
+    dispatchEditorTransaction(() => ({
+      selection: {
+        kind: "table-cell",
+        tableIndex: location.hostTableIndex,
+        rowIndex,
+        cellIndex,
+        tableRuntimeKey,
+      },
       activeTextRange: undefined,
     }))
   }
@@ -578,6 +784,7 @@ export function useDocxEditor(
 
   return {
     get model() { return model.value },
+    get isDirty() { return isDirty.value },
     get documentLoadNonce() { return documentLoadNonce.value },
     get fileName() { return fileName.value },
     get status() { return status.value },
@@ -602,6 +809,7 @@ export function useDocxEditor(
     get activeBorderPresets() { return activeBorderPresets.value },
     get availableParagraphStyles() { return availableParagraphStyles.value },
     get trackedChanges() { return trackedChanges.value },
+    get trackedChangeCount() { return trackedChangeCount.value },
     get showTrackedChanges() { return showTrackedChanges.value },
     get comments() { return comments.value },
     get showComments() { return showComments.value },
@@ -612,6 +820,9 @@ export function useDocxEditor(
     get canUndo() { return canUndo.value },
     get canRedo() { return canRedo.value },
     registerPendingExportModelTransformer: ie.registerPendingExportModelTransformer,
+    registerTextDraftFlusher,
+    flushTextDrafts,
+    endTextCommitBurst,
     setStatus,
     setDocumentTheme: setDocumentThemeFn,
     setShowTrackedChanges: setShowTrackedChangesFn,
@@ -619,6 +830,12 @@ export function useDocxEditor(
     syncPaginationInfo,
     toggleShowTrackedChanges: toggleShowTrackedChangesFn,
     toggleShowComments: toggleShowCommentsFn,
+    acceptTrackedChange,
+    rejectTrackedChange,
+    acceptTrackedChangesInTableRow,
+    rejectTrackedChangesInTableRow,
+    acceptAllTrackedChanges,
+    rejectAllTrackedChanges,
     importDocxFile: ie.importDocxFile,
     newDocument: ie.newDocument,
     exportDocx: ie.exportDocx,
@@ -641,6 +858,7 @@ export function useDocxEditor(
     selectFormField: ff.selectFormField,
     toggleFormCheckbox: ff.toggleFormCheckbox,
     setFormFieldValue: ff.setFormFieldValue,
+    endFormFieldEdit: ff.endFormFieldEdit,
     updateFormFieldWidget: ff.updateFormFieldWidget,
     applyBorderPreset: fmt.applyBorderPreset,
     setAlignment: fmt.setAlignment,
@@ -663,6 +881,8 @@ export function useDocxEditor(
     setActiveTextRange,
     selectParagraph,
     selectTableCell,
+    selectTableCellRange,
+    selectTableCellByRuntimeKey,
     clearTableCellContents: tbl.clearTableCellContents,
     setTableColumnWidths: tbl.setTableColumnWidths,
     insertTableRow: tbl.insertTableRow,
@@ -670,12 +890,16 @@ export function useDocxEditor(
     deleteTableRow: tbl.deleteTableRow,
     deleteTableColumn: tbl.deleteTableColumn,
     deleteTable: tbl.deleteTable,
+    mergeTableCells: tbl.mergeTableCells,
+    splitTableCell: tbl.splitTableCell,
     moveTable: tbl.moveTable,
     moveEmbeddedTableToBody: tbl.moveEmbeddedTableToBody,
     replaceExpandedSelection: txt.replaceExpandedSelection,
     deleteExpandedSelection: txt.deleteExpandedSelection,
     commitParagraphText: txt.commitParagraphText,
     commitTableCellText: txt.commitTableCellText,
+    commitTableCellTextByRuntimeKey: txt.commitTableCellTextByRuntimeKey,
+    commitTableCellParagraphTextByRuntimeKey: txt.commitTableCellParagraphTextByRuntimeKey,
     commitTableCellParagraphTextRecursive: txt.commitTableCellParagraphTextRecursive,
     commitSectionParagraphText: txt.commitSectionParagraphText,
     copy: clp.copy,

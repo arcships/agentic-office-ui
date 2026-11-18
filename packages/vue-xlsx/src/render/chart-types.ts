@@ -1,7 +1,7 @@
 /** @jsxImportSource vue */
 import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 import type { Feature, Geometry } from "geojson";
-import type { XlsxChart, XlsxChartAxis, XlsxChartElementSelection, XlsxChartSeries, XlsxImageRect } from "@arcships/xlsx-core";
+import type { XlsxChart, XlsxChartAxis, XlsxChartDataLabels, XlsxChartElementSelection, XlsxChartSeries, XlsxImageRect } from "@arcships/xlsx-core";
 
 export type ChartRendererPalette = {
   border: string;
@@ -10,8 +10,20 @@ export type ChartRendererPalette = {
   text: string;
 };
 
+export type ChartLabels = {
+  ariaLabel: string;
+  /** Template with a `{type}` placeholder. */
+  unsupportedType: string;
+  other: string;
+  /** Template with a `{number}` placeholder. */
+  seriesName: string;
+  /** Template with a `{number}` placeholder. */
+  surfaceSeries: string;
+};
+
 export type ChartSvgProps = {
   chart: XlsxChart;
+  chartLabels?: ChartLabels;
   onChartElementDoubleClick?: (selection: XlsxChartElementSelection, event: MouseEvent) => void;
   onChartElementPointerDown?: (selection: XlsxChartElementSelection, event: PointerEvent) => void;
   palette: ChartRendererPalette;
@@ -31,9 +43,19 @@ export type PlotRect = {
   width: number;
 };
 
+export type ChartLegendMetrics = {
+  entryLines: string[][];
+  height: number;
+  maxTextWidth: number;
+  rowHeights: number[];
+  rows: number[][];
+  width: number;
+};
+
 export type ChartLayout = {
   height: number;
   legendItems: LegendItem[];
+  legendMetrics?: ChartLegendMetrics;
   legendPosition: string | undefined;
   plot: PlotRect;
   titleHeight: number;
@@ -82,6 +104,7 @@ export type ComboRenderableGroup = {
   axisIds: number[];
   categoryAxis: XlsxChartAxis | null;
   chartType: string;
+  dataLabels?: XlsxChartDataLabels | null;
   gapWidth?: number;
   is3d?: boolean;
   raw?: Record<string, unknown>;

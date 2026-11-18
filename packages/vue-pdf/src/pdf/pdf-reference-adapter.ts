@@ -10,6 +10,7 @@ import type {
   PdfObjectLocator,
   ResolveReferenceResult,
 } from "@arcships/office-interaction"
+import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction"
 import type { PageTextSlice } from "@embedpdf/models"
 import type {
   PdfRenderDocument,
@@ -18,6 +19,14 @@ import type {
   PdfRenderRuntime,
   PdfSearchHit,
 } from "./pdf-render-runtime"
+import {
+  fnv1a32,
+  isPdfPageContentSignature,
+  isPdfPageSignature,
+  pdfPageAncestorKeys,
+  pdfPageBaseSignature,
+  pdfPageContentSignature,
+} from "./pdf-page-signature"
 
 export type PdfOfficeReference = Extract<
   OfficeObjectReference,
@@ -29,10 +38,24 @@ export type PdfOfficeReferenceDraft = Extract<
   { document: { format: "pdf" } }
 >
 
+export interface PdfReferenceDescriptorLabels {
+  document: string
+  page: (pageIndex: number) => string
+  selectedText: string
+  textRange: string
+  selectedRegion: string
+  textLabel: (text: string) => string
+  regionOnPage: (pageIndex: number) => string
+}
+
 export interface PdfReferenceContext {
   revision: OfficeDocumentRevision & { format: "pdf" }
   document: PdfRenderDocument
-  runtime: Pick<PdfRenderRuntime, "getTextSlices" | "search">
+  runtime: Pick<PdfRenderRuntime, "getTextSlices" | "search"> & {
+    getPageContentHash?: PdfRenderRuntime["getPageContentHash"]
+  }
+  /** Localized labels for descriptors emitted to hosts. */
+  descriptors?: PdfReferenceDescriptorLabels
 }
 
 export interface PdfTextReferenceSelection {
@@ -82,15 +105,7 @@ function pdfTextReliability(text: string): OfficeObjectReliability {
 }
 
 function textContentHash(text: string): string {
-  let hash = 0x811c9dc5
-  for (let index = 0; index < text.length; index += 1) {
-    const code = text.charCodeAt(index)
-    hash ^= code & 0xff
-    hash = Math.imul(hash, 0x01000193)
-    hash ^= code >>> 8
-    hash = Math.imul(hash, 0x01000193)
-  }
-  return `fnv1a32:${text.length}:${(hash >>> 0).toString(16).padStart(8, "0")}`
+  return fnv1a32(text)
 }
 
 function hasMatchingTextFingerprint(text: string, fingerprint?: OfficeObjectFingerprint): boolean {
@@ -129,12 +144,17 @@ function pageAt(context: PdfReferenceContext, pageIndex: number): PdfRenderPageI
   return Number.isSafeInteger(pageIndex) && pageIndex >= 0 ? context.document.pages[pageIndex] : undefined
 }
 
-function pageSignature(page: PdfRenderPageInfo): string {
-  return `pdf-page-v1:${page.width}:${page.height}:${page.rotation}`
-}
-
 function pageSignatureMatches(reference: PdfOfficeReference, page: PdfRenderPageInfo): boolean {
-  return reference.fingerprint?.ancestorKeys?.includes(pageSignature(page)) === true
+  const keys = reference.fingerprint?.ancestorKeys ?? []
+  const pageKeys = keys.filter(isPdfPageSignature)
+  if (!pageKeys.length) return false
+  if (!pageKeys.filter((key) => !isPdfPageContentSignature(key)).every((key) => key === pdfPageBaseSignature(page))) {
+    return false
+  }
+  const contentKeys = pageKeys.filter(isPdfPageContentSignature)
+  if (!contentKeys.length) return true
+  const current = pdfPageContentSignature(page)
+  return !!current && contentKeys.includes(current)
 }
 
 function assertPageRegion(region: Extract<ManualRegionLocator, { space: "page" }>, pageCount: number): void {
@@ -184,7 +204,7 @@ function textFingerprint(text: string, page: PdfRenderPageInfo): OfficeObjectFin
   return {
     ...(text.length <= TEXT_QUOTE_LIMIT ? { exactText: text } : {}),
     contentHash: textContentHash(text),
-    ancestorKeys: [pageSignature(page)],
+    ancestorKeys: pdfPageAncestorKeys(page),
   }
 }
 
@@ -237,7 +257,7 @@ export function createPdfPageReferenceDraft(
     kind: "page",
     source: "native",
     locator: { type: "format", format: "pdf", value: { kind: "page", pageIndex } },
-    fingerprint: { ancestorKeys: [pageSignature(page)] },
+    fingerprint: { ancestorKeys: pdfPageAncestorKeys(page) },
     reliability: copyReliability(PDF_PAGE_RELIABILITY),
   }
 }
@@ -255,7 +275,7 @@ export function createPdfRegionReferenceDraft(
     kind: "region",
     source: "manual",
     locator: { type: "manual-region", format: "pdf", value: region },
-    fingerprint: { ancestorKeys: [pageSignature(page)] },
+    fingerprint: { ancestorKeys: pdfPageAncestorKeys(page) },
     fallbackRegion: region,
     reliability: copyReliability(PDF_REGION_RELIABILITY),
   }
@@ -290,7 +310,22 @@ function currentRegionReference(
   return { ...reference, document: context.revision } as PdfOfficeReference
 }
 
+function resolveDescriptorLabels(context: PdfReferenceContext): PdfReferenceDescriptorLabels {
+  if (context.descriptors) return context.descriptors
+  const messages = officeMessagesEn.common
+  return {
+    document: messages.descriptors.document,
+    page: (pageIndex) => formatOfficeMessage(messages.descriptors.page, { number: pageIndex + 1 }),
+    selectedText: messages.selectedText,
+    textRange: messages.descriptors.textRange,
+    selectedRegion: messages.descriptors.selectedRegion,
+    textLabel: (text) => formatOfficeMessage(messages.descriptors.textLabel, { text }),
+    regionOnPage: (pageIndex) => formatOfficeMessage(messages.descriptors.regionOnPage, { number: pageIndex + 1 }),
+  }
+}
+
 function textDescriptor(
+  context: PdfReferenceContext,
   reference: PdfOfficeReference,
   text: string,
   page: PdfRenderPageInfo,
@@ -309,14 +344,17 @@ function textDescriptor(
       }]
     : undefined
   const labelText = text.replace(/\s+/gu, " ").trim()
+  const labels = resolveDescriptorLabels(context)
   return {
     objectId: `pdf:text:${pageIndex}:${locator?.kind === "text-range" ? `${locator.charIndex}:${locator.charCount}` : "unknown"}`,
     draft: draftFromReference(reference),
-    label: labelText ? `Text: ${labelText.slice(0, 80)}` : "Text range",
+    label: labelText
+      ? labels.textLabel(labelText.slice(0, 80))
+      : labels.textRange,
     path: [
-      { kind: "document", label: "Document" },
-      { kind: "page", label: `Page ${pageIndex + 1}` },
-      { kind: "text-range", label: "Selected text" },
+      { kind: "document", label: labels.document },
+      { kind: "page", label: labels.page(pageIndex) },
+      { kind: "text-range", label: labels.selectedText },
     ],
     childrenState: "none",
     content: { text },
@@ -329,18 +367,19 @@ function textDescriptor(
   }
 }
 
-function simpleDescriptor(reference: PdfOfficeReference): OfficeObjectDescriptor {
+function simpleDescriptor(context: PdfReferenceContext, reference: PdfOfficeReference): OfficeObjectDescriptor {
   const region = reference.locator.type === "manual-region" ? reference.locator.value : undefined
   const locator = reference.locator.type === "format" ? reference.locator.value : undefined
   const pageIndex = region?.pageIndex ?? (locator?.kind === "page" ? locator.pageIndex : 0)
+  const labels = resolveDescriptorLabels(context)
   return {
     objectId: region ? `pdf:region:${pageIndex}:${JSON.stringify(region.rect)}` : `pdf:page:${pageIndex}`,
     draft: draftFromReference(reference),
-    label: region ? `Region on page ${pageIndex + 1}` : `Page ${pageIndex + 1}`,
+    label: region ? labels.regionOnPage(pageIndex) : labels.page(pageIndex),
     path: [
-      { kind: "document", label: "Document" },
-      { kind: "page", label: `Page ${pageIndex + 1}` },
-      ...(region ? [{ kind: "region" as const, label: "Selected region" }] : []),
+      { kind: "document", label: labels.document },
+      { kind: "page", label: labels.page(pageIndex) },
+      ...(region ? [{ kind: "region" as const, label: labels.selectedRegion }] : []),
     ],
     childrenState: region ? "none" : "unknown",
     ...(region ? {
@@ -358,6 +397,26 @@ function throwIfAborted(signal?: AbortSignal): void {
   const error = new Error("PDF reference resolution aborted")
   error.name = "AbortError"
   throw error
+}
+
+async function ensureCurrentPageContentHash(
+  context: PdfReferenceContext,
+  page: PdfRenderPageInfo,
+  reference: PdfOfficeReference,
+  signal?: AbortSignal,
+): Promise<void> {
+  const keys = reference.fingerprint?.ancestorKeys ?? []
+  if (!keys.some(isPdfPageContentSignature) || page.contentHash) return
+  const getPageContentHash = context.runtime.getPageContentHash
+  if (typeof getPageContentHash !== "function") return
+  try {
+    const hash = await getPageContentHash.call(context.runtime, context.document, page.index, { signal })
+    if (typeof hash === "string" && hash) page.contentHash = hash
+  } catch (error) {
+    throwIfAborted(signal)
+    if ((error as Error)?.name === "AbortError") throw error
+    throw error
+  }
 }
 
 async function readTextAtLocator(
@@ -439,11 +498,12 @@ export async function resolvePdfReference(
     const page = pageAt(context, pageIndex)
     if (!page) return { status: "not-found", reasonCode: "pdf.page-not-found" }
     if (sameRevision(pdfReference.document, context.revision)) {
-      return { status: "exact", reference: pdfReference, descriptor: simpleDescriptor(pdfReference) }
+      return { status: "exact", reference: pdfReference, descriptor: simpleDescriptor(context, pdfReference) }
     }
-    if (!pdfReference.fingerprint?.ancestorKeys?.some((key) => key.startsWith("pdf-page-v1:"))) {
+    if (!pdfReference.fingerprint?.ancestorKeys?.some(isPdfPageSignature)) {
       return { status: "unsupported", reasonCode: "pdf.page-signature-unavailable" }
     }
+    await ensureCurrentPageContentHash(context, page, pdfReference, signal)
     if (!pageSignatureMatches(pdfReference, page)) {
       return { status: "not-found", reasonCode: "pdf.page-signature-changed" }
     }
@@ -453,7 +513,7 @@ export async function resolvePdfReference(
     return {
       status: "relocated",
       reference: relocated,
-      descriptor: simpleDescriptor(relocated),
+      descriptor: simpleDescriptor(context, relocated),
       reasonCodes: ["pdf.revision-changed", "pdf.page-signature-match"],
     }
   }
@@ -472,7 +532,7 @@ export async function resolvePdfReference(
       return {
         status: "exact",
         reference: pdfReference,
-        descriptor: textDescriptor(pdfReference, currentText, page),
+        descriptor: textDescriptor(context, pdfReference, currentText, page),
       }
     }
     const relocated = currentFormatReference(
@@ -485,7 +545,7 @@ export async function resolvePdfReference(
     return {
       status: "relocated",
       reference: relocated,
-      descriptor: textDescriptor(relocated, currentText, page),
+      descriptor: textDescriptor(context, relocated, currentText, page),
       reasonCodes: ["pdf.revision-changed", "pdf.locator-stable"],
     }
   }
@@ -514,7 +574,7 @@ export async function resolvePdfReference(
       status: "ambiguous",
       candidates: bestHits.map((hit) => {
         const candidate = referenceFromHit(context, pdfReference, hit)
-        return textDescriptor(candidate, hit.match, context.document.pages[hit.pageIndex]!, hit.rects)
+        return textDescriptor(context, candidate, hit.match, context.document.pages[hit.pageIndex]!, hit.rects)
       }),
       reasonCodes: ["pdf.multiple-text-matches"],
     }
@@ -524,7 +584,7 @@ export async function resolvePdfReference(
   return {
     status: "relocated",
     reference: relocated,
-    descriptor: textDescriptor(relocated, hit.match, context.document.pages[hit.pageIndex]!, hit.rects),
+    descriptor: textDescriptor(context, relocated, hit.match, context.document.pages[hit.pageIndex]!, hit.rects),
     reasonCodes: ["pdf.revision-changed", "pdf.text-quote-match"],
   }
 }

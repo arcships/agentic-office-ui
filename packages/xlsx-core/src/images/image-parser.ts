@@ -65,6 +65,26 @@ export type XlsxImageAttachment = {
 
 export type WorkbookImageOrigin = {
   anchorIndex: number;
+  /** Drawing part that owns this object, when known. */
+  drawingPath?: string;
+  /** `cNvPr@id` of the picture/shape element; stable across reorder and deletion. */
+  objectId?: string;
+  /** Element local name inside the anchor (`pic`, `sp`, `cxnSp`, `graphicFrame`). */
+  objectKind?: string;
+  workbookSheetIndex: number;
+};
+
+export type WorkbookShapeOrigin = WorkbookImageOrigin;
+
+export type WorkbookFormControlOrigin = {
+  /** Sheet part that owns the `<control>` element. */
+  sheetPath: string;
+  /** Position among sheet `<control>` elements, used when `shapeId` is absent. */
+  controlIndex: number;
+  /** Stable identifier from the worksheet `control@shapeId`. */
+  shapeId: number | null;
+  /** Relationship target for the control properties part. */
+  ctrlPropPath: string | null;
   workbookSheetIndex: number;
 };
 
@@ -378,7 +398,32 @@ export function parseAnchor(anchorNode: Element) {
   if (anchorNode.localName === "anchor") {
     const from = parseMarker(getFirstChild(anchorNode, "from"));
     const to = parseMarker(getFirstChild(anchorNode, "to"));
-    return from && to ? { from, kind: "two-cell" as const, to } : null;
+    if (from && to) return { from, kind: "two-cell" as const, to };
+    const extNode = getFirstChild(anchorNode, "ext");
+    if (from && extNode) {
+      return {
+        from,
+        kind: "one-cell" as const,
+        sizeEmu: {
+          cx: Number(extNode.getAttribute("cx") ?? 0),
+          cy: Number(extNode.getAttribute("cy") ?? 0),
+        },
+      };
+    }
+    const positionNode = getFirstChild(anchorNode, "pos");
+    return positionNode && extNode
+      ? {
+          kind: "absolute" as const,
+          positionEmu: {
+            x: Number(positionNode.getAttribute("x") ?? 0),
+            y: Number(positionNode.getAttribute("y") ?? 0),
+          },
+          sizeEmu: {
+            cx: Number(extNode.getAttribute("cx") ?? 0),
+            cy: Number(extNode.getAttribute("cy") ?? 0),
+          },
+        }
+      : null;
   }
 
   if (anchorNode.localName === "twoCellAnchor") {
@@ -471,6 +516,46 @@ export function parseTransformRect(xfrmNode: Element | null) {
     x: Number(offNode.getAttribute("x") ?? 0),
     y: Number(offNode.getAttribute("y") ?? 0)
   };
+}
+
+/**
+ * Parse DrawingML `a:srcRect` into normalized crop fractions. Values are
+ * stored as thousandths of a percent (`25000` = 25%) and are clamped so that
+ * at least one percent of the source remains visible on each axis.
+ */
+export function parseImageSourceRect(node: Element): XlsxImage["srcRect"] | undefined {
+  const srcRectNode = getFirstDescendant(node, "srcRect");
+  if (!srcRectNode) {
+    return undefined;
+  }
+
+  const readFraction = (name: string) => {
+    const raw = Number(srcRectNode.getAttribute(name) ?? 0);
+    if (!Number.isFinite(raw) || raw <= 0) {
+      return 0;
+    }
+    return Math.min(0.99, raw / 100000);
+  };
+
+  let left = readFraction("l");
+  let right = readFraction("r");
+  let top = readFraction("t");
+  let bottom = readFraction("b");
+  if (left + right >= 0.99) {
+    const scale = 0.98 / (left + right);
+    left *= scale;
+    right *= scale;
+  }
+  if (top + bottom >= 0.99) {
+    const scale = 0.98 / (top + bottom);
+    top *= scale;
+    bottom *= scale;
+  }
+  if (left === 0 && right === 0 && top === 0 && bottom === 0) {
+    return undefined;
+  }
+
+  return { bottom, left, right, top };
 }
 
 export function applyGroupTransform(rect: DrawingRectEmu, group: GroupTransform): DrawingRectEmu {

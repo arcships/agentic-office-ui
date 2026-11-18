@@ -278,6 +278,8 @@ output/acceptance/<commit>/<suite-id>/<run-id>/
 
 通过条件：真实 Worker 必须被证明；Viewer 和 Editor 都使用正式构建；所有可见且宣称支持的 P1 能力必须通过，不能用隐藏错误或主线程回退代替。
 
+`DOCX-107` 中批注与修订 gutter 的自动覆盖点由 `tests/blackbox/docx_annotations.py` 提供（默认 3 张卡片，隐藏批注后剩 2 张，全部隐藏后为 0，恢复后回到 3 张），它已登记在根 `pnpm test:blackbox` 套件中；该用例只运行 headless Chromium，不需要上游仓库。
+
 ## 8. `BB-SEC-URL`：URL、下载与内容隔离
 
 所有安全用例只能在隔离的 localhost 环境执行。测试脚本只设置本地内存标记，不访问外部攻击地址，不执行系统命令。

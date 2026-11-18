@@ -5,7 +5,9 @@ import type {
   XlsxCellStyleInput
 } from "@arcships/xlsx-core";
 import { loadWorkbookChartAssets } from "@arcships/xlsx-core";
+import { officeMessagesEn } from "@arcships/office-interaction";
 import { cellAddressToA1, normalizeRange, rangeContainsCell, rangeToA1 } from "./selection";
+import { shiftFormulaReferences } from "./formula-references";
 import {
   applyCellMutationState,
   cloneCellStyle,
@@ -16,6 +18,8 @@ import {
   type HistoryEntry
 } from "./internal";
 import { buildSheetList, buildVisibleSheetIndexMap } from "./workbook-state";
+import { canonicalizeFormula, resolveCellInput, resolveFormulaNumberFormat } from "./cell-input";
+import { resolveEffectiveCellNumberFormat } from "./formatting";
 import type { XlsxControllerContext } from "./internal";
 
 export { applyCellMutationState, cloneCellStyle, coerceUserEnteredValue, normalizeCellValue, pushHistoryEntry };
@@ -58,7 +62,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
   function clearSelectedCells() {
     const worksheet = ctx.getActiveWorksheet();
     const targetRange = ctx.selection.value ?? (ctx.activeCell.value ? { start: ctx.activeCell.value, end: ctx.activeCell.value } : null);
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value || !targetRange) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value || !targetRange) {
       return;
     }
 
@@ -89,36 +93,63 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       }
     }
 
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
     ctx.recordRangeEditHistory(mutations, normalized, ctx.activeCell.value ?? normalized.start);
   }
 
   function setCellValue(cell: XlsxCellAddress, value: string) {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
       return;
     }
+
+    const validationCheck = ctx.checkCellValue(cell, value);
+    if (!validationCheck.accepted) {
+      ctx.setValidationFeedback(validationCheck.feedback);
+      return;
+    }
+    ctx.setValidationFeedback(validationCheck.feedback);
 
     const before = ctx.captureCellMutationState(cell);
     if (!before) {
       return;
     }
 
-    const nextValue = coerceUserEnteredValue(value);
-    worksheet.setCell(cellAddressToA1(cell), nextValue);
+    const input = resolveCellInput(value, {
+      date1904: worksheet.date1904 === true,
+      locale: ctx.locale.value,
+      numberFormat: resolveEffectiveCellNumberFormat(
+        worksheet.getCellStyleAt(cell.row, cell.col),
+        ctx.activeSheet.value,
+        cell.row,
+        cell.col
+      )
+    });
+    const address = cellAddressToA1(cell);
+    if (input.kind === "formula") {
+      worksheet.setFormula(address, input.formula);
+    } else {
+      worksheet.setCell(address, input.value);
+    }
+    if (input.numberFormat) {
+      worksheet.setCellStyleAt(cell.row, cell.col, { numberFormat: input.numberFormat });
+    }
+
     const after = ctx.captureCellMutationState(cell);
     if (!after) {
       return;
     }
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
     ctx.recordCellEditHistory(cell, before, after);
   }
 
   function setCellFormula(cell: XlsxCellAddress, formula: string) {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
       return;
     }
 
@@ -127,24 +158,95 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       return;
     }
 
-    const trimmedFormula = formula.trim();
+    const trimmedFormula = canonicalizeFormula(formula);
     if (!trimmedFormula) {
       worksheet.setCell(cellAddressToA1(cell), "");
     } else {
       worksheet.setFormula(cellAddressToA1(cell), trimmedFormula);
+      const numberFormat = resolveFormulaNumberFormat(
+        trimmedFormula,
+        resolveEffectiveCellNumberFormat(
+          worksheet.getCellStyleAt(cell.row, cell.col),
+          ctx.activeSheet.value,
+          cell.row,
+          cell.col
+        ),
+        ctx.locale.value
+      );
+      if (numberFormat) {
+        worksheet.setCellStyleAt(cell.row, cell.col, { numberFormat });
+      }
     }
     const after = ctx.captureCellMutationState(cell);
     if (!after) {
       return;
     }
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
     ctx.recordCellEditHistory(cell, before, after);
+  }
+
+  function readCellRawValue(cell: XlsxCellAddress) {
+    const worksheet = ctx.getActiveWorksheet();
+    if (!worksheet) {
+      return null;
+    }
+
+    const cellValue = worksheet.getCellAt(cell.row, cell.col);
+    try {
+      return normalizeCellValue(cellValue.toJs());
+    } finally {
+      cellValue.free();
+    }
+  }
+
+  /**
+   * Commits user-entered text as either a formula or a value.
+   *
+   * Inline editing and the formula bar both feed raw user text in here, so a
+   * cell that holds `=SUM(A1:B1)` keeps its formula unless the user actually
+   * types a value. Text that already matches the cell's formula or coerced
+   * value is dropped without touching the workbook or the undo history.
+   */
+  function commitCellInput(cell: XlsxCellAddress, input: string) {
+    const worksheet = ctx.getActiveWorksheet();
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
+      return false;
+    }
+
+    const text = input ?? "";
+    const trimmedText = text.trim();
+    if (trimmedText.length > 1 && trimmedText.startsWith("=")) {
+      if ((worksheet.getFormulaAt(cell.row, cell.col) ?? "") === trimmedText) {
+        return false;
+      }
+
+      setCellFormula(cell, trimmedText);
+      return true;
+    }
+
+    const resolved = resolveCellInput(text, {
+      date1904: worksheet.date1904 === true,
+      locale: ctx.locale.value,
+      numberFormat: resolveEffectiveCellNumberFormat(
+        worksheet.getCellStyleAt(cell.row, cell.col),
+        ctx.activeSheet.value,
+        cell.row,
+        cell.col
+      )
+    });
+    if (resolved.kind === "value" && Object.is(resolved.value, readCellRawValue(cell))) {
+      return false;
+    }
+
+    setCellValue(cell, text);
+    return true;
   }
 
   function setCellStyle(cell: XlsxCellAddress, style: XlsxCellStyleInput) {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
       return;
     }
 
@@ -189,8 +291,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       return false;
     }
 
-    setCellFormula(ctx.activeCell.value, formula);
-    return true;
+    return commitCellInput(ctx.activeCell.value, formula);
   }
 
   function setSelectedCellStyle(style: XlsxCellStyleInput) {
@@ -203,7 +304,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
   function setRangeStyle(range: XlsxCellRange, style: XlsxCellStyleInput) {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
       return;
     }
 
@@ -247,10 +348,14 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
   function fillSelection(targetRange: XlsxCellRange) {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.workbook.value || !ctx.selection.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value || !ctx.selection.value) {
       return;
     }
 
+    const beforeSnapshot = {
+      activeCell: ctx.activeCell.value,
+      selection: ctx.selection.value
+    };
     const sourceRange = normalizeRange(ctx.selection.value);
     const nextRange = normalizeRange(targetRange);
     const sourceHeight = sourceRange.end.row - sourceRange.start.row + 1;
@@ -279,7 +384,12 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
         const sourceStyle = cloneCellStyle(worksheet.getCellStyleAt(sourceRow, sourceCol));
 
         if (sourceFormula) {
-          worksheet.setFormula(cellAddressToA1(targetCell), sourceFormula);
+          // Fill tiles the source range, so each copy shifts its relative
+          // references by the distance from the cell it was copied from.
+          worksheet.setFormula(
+            cellAddressToA1(targetCell),
+            shiftFormulaReferences(sourceFormula, row - sourceRow, col - sourceCol)
+          );
         } else {
           const sourceCellValue = worksheet.getCellAt(sourceRow, sourceCol);
           try {
@@ -308,17 +418,18 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       }
     }
 
-    ctx.maybeRecalculateWorkbook(ctx.workbook.value);
-    ctx.refreshWorkbookState(ctx.workbook.value);
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
     ctx.selection.value = nextRange;
     ctx.activeCell.value = nextRange.end;
     ctx.selectionAnchorRef.value = nextRange.start;
-    ctx.recordRangeEditHistory(mutations, nextRange, nextRange.end);
+    ctx.recordRangeEditHistory(mutations, nextRange, nextRange.end, beforeSnapshot);
   }
 
   function mergeSelection() {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.selection.value || !ctx.workbook.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.selection.value || !ctx.workbook.value) {
       return;
     }
 
@@ -329,7 +440,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
 
   function unmergeSelection() {
     const worksheet = ctx.getActiveWorksheet();
-    if (ctx.readOnly.value || !worksheet || !ctx.selection.value || !ctx.workbook.value) {
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.selection.value || !ctx.workbook.value) {
       return;
     }
 
@@ -343,8 +454,12 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       return;
     }
 
+    const baseName = name?.trim() || officeMessagesEn.xlsx.sheetTabs.defaultName;
+    if (/[\\/:*?\[\]]/.test(baseName)) {
+      throw new Error(officeMessagesEn.xlsx.diagnostics.sheetNameInvalid);
+    }
+
     ctx.recordHistoryBeforeMutation();
-    const baseName = name?.trim() || "Sheet";
     let candidate = baseName;
     let counter = 2;
     while (ctx.workbook.value.sheetIndex(candidate) !== undefined) {
@@ -373,21 +488,20 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       ctx.setChartAssets(nextChartAssets);
     }
     const nextIndex = nextSheets.findIndex((sheet) => sheet.name === candidate);
-    ctx.activeSheetIndex.value = nextIndex >= 0 ? nextIndex : 0;
-    const nextTabIndex = nextChartAssets?.tabs.findIndex((tab) => tab.kind === "sheet" && tab.name === candidate) ?? -1;
-    if (nextTabIndex >= 0) {
-      ctx.activeTabIndex.value = nextTabIndex;
-    }
+    ctx.switchToSheet(nextIndex >= 0 ? nextIndex : 0);
     ctx.revision.value = ctx.revision.value + 1;
   }
 
   function removeActiveSheet() {
     const activeSheetData = ctx.activeSheet.value;
-    if (ctx.readOnly.value || !ctx.workbook.value || !activeSheetData || ctx.sheets.value.length <= 1) {
+    if (ctx.isEditingLocked.value || !ctx.workbook.value || !activeSheetData || ctx.sheets.value.length <= 1) {
       return;
     }
 
     ctx.recordHistoryBeforeMutation();
+    const removedVisibleIndex = ctx.sheets.value.findIndex(
+      (sheet) => sheet.workbookSheetIndex === activeSheetData.workbookSheetIndex
+    );
     ctx.workbook.value.removeSheet(activeSheetData.workbookSheetIndex);
     ctx.sheetOriginsRef.value = ctx.sheetOriginsRef.value.filter((_, index) => index !== activeSheetData.workbookSheetIndex);
     ctx.imagesByWorkbookSheetIndex.value = ctx.imagesByWorkbookSheetIndex.value.filter((_, index) => index !== activeSheetData.workbookSheetIndex);
@@ -410,7 +524,15 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     if (ctx.imageAssetsRef.value) {
       ctx.setChartAssets(loadWorkbookChartAssets(ctx.workbook.value, ctx.imageAssetsRef.value, buildVisibleSheetIndexMap(nextSheets), ctx.showHiddenSheets));
     }
-    ctx.activeSheetIndex.value = Math.max(0, Math.min(ctx.activeSheetIndex.value, nextSheets.length - 1));
+    // The removed sheet's selection must not follow us onto its successor, and
+    // the successor has to own both the tab and the sheet index: deleting a
+    // middle sheet keeps the tab index but shifts which sheet it points at.
+    clearSelection();
+    const nextIndex = Math.max(
+      0,
+      Math.min(removedVisibleIndex >= 0 ? removedVisibleIndex : ctx.activeSheetIndex.value, nextSheets.length - 1)
+    );
+    ctx.switchToSheet(nextIndex);
     ctx.revision.value = ctx.revision.value + 1;
   }
 
@@ -442,6 +564,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     setCellValue,
     setCellFormula,
     setCellStyle,
+    commitCellInput,
     setSelectedCellValue,
     setSelectedCellFormula,
     setSelectedFormula,

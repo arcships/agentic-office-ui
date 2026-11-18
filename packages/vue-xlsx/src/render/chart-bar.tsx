@@ -2,11 +2,14 @@ import { scaleBand, scaleLinear, scalePoint } from "d3-scale";
 import { area as d3Area, curveLinear, line as d3Line } from "d3-shape";
 import type { CurveFactory } from "d3-shape";
 import type { XlsxChart, XlsxChartElementSelection, XlsxChartSeries, XlsxImageRect } from "@arcships/xlsx-core";
-import { chartSeriesColor, chartSeriesStrokeColor, chartPointColor, safeNumber, clamp, darkenColor, lightenColor, coerceLooseNumber, resolveRenderableSeriesValue, resolveChartTextColor, resolveChartAxisTextColor, resolveChartMutedTextColor, buildChartFontFamily, formatTickValue, formatPercentTickValue, chartElementDataProps, barChartElementDataProps, resolveChartElementTarget, resolveChartSelectionFromTarget, isSelectedChartSeries, isSelectedChartPoint, isSelectedChartPointOrSeries, renderSelectionRectHandles, renderSelectionPointHandles, normalizeRendererHexColor, toSvgNumber, normalizeChartMarkerSymbol, markerSymbolPath, normalizeLegendPosition, parseRgbColor, mixRgbColor, escapeCssFontFamilyToken, DEFAULT_CHART_FONT_STACK, DEFAULT_CHART_TEXT_COLOR, DEFAULT_CHART_MUTED_TEXT_COLOR, truncateSvgText, getCategoryLabels, normalizeCategoryLabel, estimateReferencePointCount, isHistogramLikeSeries, isHistogramLikeChart, resolve3dFrameOffsets, resolveAxisDomainWithChartOverrides, resolveCategoryBandPadding, chartSeriesBarColors, buildNumericTickValues, buildNiceStep, resolveNumericAxisDomain, renderCartesianAxes, renderExtrudedRect, buildChartStages, resolveChartStageSubtotal, computeBoxWhiskerStats, resolveBoxWhiskerVisibility, resolveBoxWhiskerQuartileMethod, computePercentile, renderLineOrAreaChart3d, projectCartesian3dPoint, scaleProjectedVector, buildLinearSvgPath, buildRibbonSvgPath, renderRadialFrustum, sampleProjectedEllipseArc, isComboChart, getComboLegendSeries, findAxisForGroup, buildComboGroups, resolveStockRoleIndices, resolveStockPalette, normalizeBuiltinPieStyleId, getBuiltinPiePalette, resolvePiePointColor, selectPrimaryPieSeriesIndex, buildPieEntries, buildHierarchyData, resolveHierarchyNodeColor, resolveTreemapNodeColor, excelTreemapTile, normalizePieArc, resolvePieFrontSegments, pieEllipsePoint, buildPieOuterWallPath, isPieFrontFacingAngle, buildPieRadialWallPath, TWO_PI, normalizeRegionMapKey, resolveRegionMapFeature, resolveRegionMapBaseColor, resolveRegionMapDataColor, resolveRegionMapValueColors, resolveRegionMapColorStrings, resolveRegionMapLayoutProperties, resolveRegionMapFeatureSet, getRegionMapBaseFeatures, resolveRegionMapValueColorFromStops, resolveRegionMapValueColor, resolveRegionMapNoDataColor, resolveSurfaceBaseColor, normalizeBuiltinSurfaceStyleId, hasExplicitSurfaceBaseColor, buildMonochromeSurfacePalette, getBuiltinSurfacePalette, shouldPreferBuiltinSurfacePalette, getSurfaceBandCount, getSurfaceColorStops, resolveSurfaceBandPaletteColor, getSurfaceDomain, resolveSurfaceColor, resolveSurfaceBandColor, resolveSurfaceBandIndex, buildSurfaceSmoothPath, splitSurfacePointRuns, connectSurfaceContourSegments, getSurfaceWireframePalette, resolveSurfaceWireframeColor, resolveSurfacePlotRect, buildSurfaceLegendItems, isContourSurfaceChart, getLegendItems, buildLayout, normalizeRenderableChartType, renderSurfaceAxes, renderTitle, renderLegend, buildRegionMapLegendItems, buildStockLegendItems, excelSerialToDate, isLikelyDateFormatCode, formatExcelDateSerial, formatCategoryLabel } from "./chart-renderer";
+import { chartSeriesColor, chartSeriesStrokeColor, chartPointColor, safeNumber, clamp, darkenColor, lightenColor, coerceLooseNumber, resolveRenderableSeriesValue, resolveChartTextColor, resolveChartAxisTextColor, resolveChartMutedTextColor, buildChartFontFamily, formatTickValue, formatPercentTickValue, chartElementDataProps, barChartElementDataProps, resolveChartElementTarget, resolveChartSelectionFromTarget, isSelectedChartSeries, isSelectedChartPoint, isSelectedChartPointOrSeries, renderSelectionRectHandles, renderSelectionPointHandles, normalizeRendererHexColor, toSvgNumber, normalizeChartMarkerSymbol, markerSymbolPath, normalizeLegendPosition, parseRgbColor, mixRgbColor, escapeCssFontFamilyToken, DEFAULT_CHART_FONT_STACK, DEFAULT_CHART_TEXT_COLOR, DEFAULT_CHART_MUTED_TEXT_COLOR, truncateSvgText, getCategoryLabels, normalizeCategoryLabel, estimateReferencePointCount, isHistogramLikeSeries, isHistogramLikeChart, resolve3dFrameOffsets, resolveAxisDomainWithChartOverrides, resolveAxisLogBase, resolveLogAxisDomain, createValueScale, resolveCategoryBandPadding, chartSeriesBarColors, buildNumericTickValues, buildNiceStep, resolveNumericAxisDomain, renderCartesianAxes, renderExtrudedRect, buildChartStages, resolveChartStageSubtotal, computeBoxWhiskerStats, resolveBoxWhiskerVisibility, resolveBoxWhiskerQuartileMethod, computePercentile, renderLineOrAreaChart3d, projectCartesian3dPoint, scaleProjectedVector, buildLinearSvgPath, buildRibbonSvgPath, renderRadialFrustum, sampleProjectedEllipseArc, isComboChart, getComboLegendSeries, findAxisForGroup, buildComboGroups, resolveStockRoleIndices, resolveStockPalette, normalizeBuiltinPieStyleId, getBuiltinPiePalette, resolvePiePointColor, selectPrimaryPieSeriesIndex, buildPieEntries, buildHierarchyData, resolveHierarchyNodeColor, resolveTreemapNodeColor, excelTreemapTile, normalizePieArc, resolvePieFrontSegments, pieEllipsePoint, buildPieOuterWallPath, isPieFrontFacingAngle, buildPieRadialWallPath, TWO_PI, normalizeRegionMapKey, resolveRegionMapFeature, resolveRegionMapBaseColor, resolveRegionMapDataColor, resolveRegionMapValueColors, resolveRegionMapColorStrings, resolveRegionMapLayoutProperties, resolveRegionMapFeatureSet, getRegionMapBaseFeatures, resolveRegionMapValueColorFromStops, resolveRegionMapValueColor, resolveRegionMapNoDataColor, resolveSurfaceBaseColor, normalizeBuiltinSurfaceStyleId, hasExplicitSurfaceBaseColor, buildMonochromeSurfacePalette, getBuiltinSurfacePalette, shouldPreferBuiltinSurfacePalette, getSurfaceBandCount, getSurfaceColorStops, resolveSurfaceBandPaletteColor, getSurfaceDomain, resolveSurfaceColor, resolveSurfaceBandColor, resolveSurfaceBandIndex, buildSurfaceSmoothPath, splitSurfacePointRuns, connectSurfaceContourSegments, getSurfaceWireframePalette, resolveSurfaceWireframeColor, resolveSurfacePlotRect, buildSurfaceLegendItems, isContourSurfaceChart, getLegendItems, buildLayout, normalizeRenderableChartType, renderSurfaceAxes, renderTitle, renderLegend, buildRegionMapLegendItems, buildStockLegendItems, excelSerialToDate, isLikelyDateFormatCode, formatExcelDateSerial, formatCategoryLabel } from "./chart-renderer";
 import type { ChartRendererPalette, ChartSvgProps, ChartLayout, LegendItem, BarRect, PlotRect, ChartStage, ChartHierarchyDatum, ComboRenderableGroup, BoxWhiskerStats, SurfaceDomain, RegionMapFeature, SurfacePathPoint, SurfaceContourSegment, ChartElementDataOptions } from "./chart-renderer";
+import type { ChartLabels } from "./chart-types";
+import { resolveChartSeriesLabel } from "./chart-shared";
+import { buildDataLabelText, hasVisibleDataLabels, resolveDataLabelsForPoint, resolveDataLabelPosition } from "./chart-labels";
 
 
-export function renderBarChart(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, chartType: string, selectedChartElement?: XlsxChartElementSelection | null) {
+export function renderBarChart(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, chartType: string, selectedChartElement?: XlsxChartElementSelection | null, labels?: ChartLabels) {
   if (chart.series.length === 0) {
     return null;
   }
@@ -63,7 +66,7 @@ export function renderBarChart(chart: XlsxChart, palette: ChartRendererPalette, 
 
   if (isPercentStacked) {
     for (let categoryIndex = 0; categoryIndex < categoryCount; categoryIndex += 1) {
-      const total = matrix.reduce((sum, row) => sum + Math.max(0, row[categoryIndex] ?? 0), 0);
+      const total = matrix.reduce((sum, row) => sum + Math.abs(row[categoryIndex] ?? 0), 0);
       for (let seriesIndex = 0; seriesIndex < seriesCount; seriesIndex += 1) {
         matrix[seriesIndex][categoryIndex] = total > 0 ? ((matrix[seriesIndex][categoryIndex] ?? 0) / total) * 100 : 0;
       }
@@ -107,12 +110,21 @@ export function renderBarChart(chart: XlsxChart, palette: ChartRendererPalette, 
     maxValue = 1;
   }
 
-  const valueDomain = resolveAxisDomainWithChartOverrides(
-    chart.valueAxis,
-    minValue,
-    maxValue,
-    true
-  );
+  const valueDomain = resolveAxisLogBase(chart.valueAxis)
+    ? (() => {
+        const positiveValues = matrix.flat().filter((value) => value > 0);
+        return resolveLogAxisDomain(
+          chart.valueAxis,
+          positiveValues.length > 0 ? Math.min(...positiveValues) : minValue,
+          maxValue
+        );
+      })()
+    : resolveAxisDomainWithChartOverrides(
+        chart.valueAxis,
+        minValue,
+        maxValue,
+        true
+      );
   minValue = valueDomain.min;
   maxValue = valueDomain.max;
 
@@ -156,17 +168,20 @@ export function renderBarChart(chart: XlsxChart, palette: ChartRendererPalette, 
     : frameOffsets?.depthY;
 
   const shouldReverseValueAxis = chart.valueAxis?.orientation === "maxMin";
-  const valueScale = scaleLinear()
-    .domain([minValue, maxValue])
-    .range(
-      isHorizontal
-        ? (shouldReverseValueAxis ? [plot.left + plot.width, plot.left] : [plot.left, plot.left + plot.width])
-        : (shouldReverseValueAxis ? [plot.top, plot.top + plot.height] : [plot.top + plot.height, plot.top])
-    );
+  const valueScale = createValueScale(
+    chart.valueAxis,
+    minValue,
+    maxValue,
+    isHorizontal
+      ? (shouldReverseValueAxis ? [plot.left + plot.width, plot.left] : [plot.left, plot.left + plot.width])
+      : (shouldReverseValueAxis ? [plot.top, plot.top + plot.height] : [plot.top + plot.height, plot.top])
+  );
 
-  const ticks = isPercentStacked
-    ? buildNumericTickValues(minValue, maxValue, chart.valueAxis?.majorUnit ?? 20)
-    : valueDomain.ticks;
+  const ticks = resolveAxisLogBase(chart.valueAxis)
+    ? valueDomain.ticks
+    : isPercentStacked
+      ? buildNumericTickValues(minValue, maxValue, chart.valueAxis?.majorUnit ?? 20)
+      : valueDomain.ticks;
   const categoryPositions = categories.map((category) => {
     const bandStart = categoryScale(category) ?? 0;
     return bandStart + categoryScale.bandwidth() / 2;
@@ -258,8 +273,10 @@ export function renderBarChart(chart: XlsxChart, palette: ChartRendererPalette, 
       }
 
       if (isHorizontal) {
-        const x1 = valueScale(start);
-        const x2 = valueScale(end);
+        const scaleStart = resolveAxisLogBase(chart.valueAxis) ? Math.max(start, minValue) : start;
+        const scaleEnd = resolveAxisLogBase(chart.valueAxis) ? Math.max(end, minValue) : end;
+        const x1 = valueScale(scaleStart);
+        const x2 = valueScale(scaleEnd);
         const maxPositive = positiveTotals[categoryIndex] ?? 0;
         const maxNegative = negativeTotals[categoryIndex] ?? 0;
         bars.push({
@@ -290,8 +307,10 @@ export function renderBarChart(chart: XlsxChart, palette: ChartRendererPalette, 
           width: Math.max(1, Math.abs(x2 - x1))
         });
       } else {
-        const y1 = valueScale(start);
-        const y2 = valueScale(end);
+        const scaleStart = resolveAxisLogBase(chart.valueAxis) ? Math.max(start, minValue) : start;
+        const scaleEnd = resolveAxisLogBase(chart.valueAxis) ? Math.max(end, minValue) : end;
+        const y1 = valueScale(scaleStart);
+        const y2 = valueScale(scaleEnd);
         const maxPositive = positiveTotals[categoryIndex] ?? 0;
         const maxNegative = negativeTotals[categoryIndex] ?? 0;
         bars.push({
@@ -385,7 +404,7 @@ export function renderBarChart(chart: XlsxChart, palette: ChartRendererPalette, 
     categoryPositions,
     ticks,
     (value) => valueScale(value),
-    isPercentStacked ? formatPercentTickValue : formatTickValue
+    { categoryAxis: chart.categoryAxis, percentValuesAreScaled: isPercentStacked, valueAxis: chart.valueAxis }
   );
   const depthAxisColor = chart.axisLineColor ?? chart.chartAreaBorderColor ?? palette.border;
   const depthGridColor = lightenColor(depthAxisColor, 0.48);
@@ -436,7 +455,7 @@ export function renderBarChart(chart: XlsxChart, palette: ChartRendererPalette, 
             x={x + 7}
             y={y + 3}
           >
-            {series.name ?? `Series ${seriesIndex + 1}`}
+            {resolveChartSeriesLabel(series, seriesIndex, labels)}
           </text>
         );
       })}
@@ -495,6 +514,65 @@ export function renderBarChart(chart: XlsxChart, palette: ChartRendererPalette, 
               y={bar.top}
             />
           ))}
+      {renderedBars.map((bar) => {
+        const series = chart.series[bar.seriesIndex];
+        const labels = resolveDataLabelsForPoint(chart, bar.categoryIndex, series);
+        if (!labels || !hasVisibleDataLabels(labels)) {
+          return null;
+        }
+        const labelValue = isPercentStacked
+          ? matrix[bar.seriesIndex]?.[bar.categoryIndex] ?? bar.value
+          : bar.value;
+        const text = buildDataLabelText(chart, series, labels, {
+          categoryLabel: categories[bar.categoryIndex],
+          percentValue: isPercentStacked,
+          value: labelValue
+        });
+        if (!text) {
+          return null;
+        }
+        const position = resolveDataLabelPosition(labels, "outEnd");
+        const isPositive = bar.value >= 0;
+        let labelX = bar.left + bar.width / 2;
+        let labelY = bar.top - 4;
+        let textAnchor = "middle";
+        if (bar.isHorizontal) {
+          if (position === "inEnd") {
+            labelX = isPositive ? bar.left + bar.width - 4 : bar.left + 4;
+            textAnchor = isPositive ? "end" : "start";
+          } else if (position === "ctr") {
+            labelX = bar.left + bar.width / 2;
+          } else if (position === "inBase") {
+            labelX = isPositive ? bar.left + 4 : bar.left + bar.width - 4;
+            textAnchor = isPositive ? "start" : "end";
+          } else {
+            labelX = isPositive ? bar.left + bar.width + 4 : bar.left - 4;
+            textAnchor = isPositive ? "start" : "end";
+          }
+          labelY = bar.top + bar.height / 2 + 3;
+        } else if (position === "inEnd") {
+          labelY = isPositive ? bar.top + 11 : bar.top + bar.height - 4;
+        } else if (position === "ctr") {
+          labelY = bar.top + bar.height / 2 + 3;
+        } else if (position === "inBase") {
+          labelY = isPositive ? bar.top + bar.height - 4 : bar.top + 11;
+        } else {
+          labelY = isPositive ? bar.top - 4 : bar.top + bar.height + 12;
+        }
+        return (
+          <text
+            fill={resolveChartTextColor(chart)}
+            font-size={10}
+            key={`bar-data-label-${bar.key}`}
+            pointer-events="none"
+            text-anchor={textAnchor}
+            x={labelX}
+            y={labelY}
+          >
+            {text}
+          </text>
+        );
+      })}
       {renderedBars.map((bar) => (
         isSelectedChartPoint(selectedChartElement, chart.id, bar.seriesIndex, bar.categoryIndex)
         || (
@@ -508,8 +586,8 @@ export function renderBarChart(chart: XlsxChart, palette: ChartRendererPalette, 
   );
 }
 
-export function renderWaterfallChart(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, selectedChartElement?: XlsxChartElementSelection | null) {
-  const stages = buildChartStages(chart);
+export function renderWaterfallChart(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, selectedChartElement?: XlsxChartElementSelection | null, chartLabels?: ChartLabels) {
+  const stages = buildChartStages(chart, chartLabels);
   if (stages.length === 0) {
     return null;
   }
@@ -635,8 +713,8 @@ export function renderWaterfallChart(chart: XlsxChart, palette: ChartRendererPal
   );
 }
 
-export function renderFunnelChart(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, selectedChartElement?: XlsxChartElementSelection | null) {
-  const stages = buildChartStages(chart)
+export function renderFunnelChart(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, selectedChartElement?: XlsxChartElementSelection | null, chartLabels?: ChartLabels) {
+  const stages = buildChartStages(chart, chartLabels)
     .map((stage) => ({ ...stage, value: Math.max(0, stage.value) }))
     .filter((stage) => stage.value > 0);
   if (stages.length === 0) {
@@ -693,7 +771,7 @@ export function renderFunnelChart(chart: XlsxChart, palette: ChartRendererPalett
   );
 }
 
-export function renderBoxWhiskerChart(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, selectedChartElement?: XlsxChartElementSelection | null) {
+export function renderBoxWhiskerChart(chart: XlsxChart, palette: ChartRendererPalette, layout: ChartLayout, selectedChartElement?: XlsxChartElementSelection | null, labels?: ChartLabels) {
   const visibleSeries = chart.series.filter((series) => series.hidden !== true);
   if (visibleSeries.length === 0) {
     return null;
@@ -701,7 +779,7 @@ export function renderBoxWhiskerChart(chart: XlsxChart, palette: ChartRendererPa
 
   const seriesStats = visibleSeries.map((series, index) => ({
     color: series.color ?? chartSeriesColor(chart, typeof series.formatIdx === "number" ? series.formatIdx : index),
-    label: normalizeCategoryLabel(series.name) || `Series ${index + 1}`,
+    label: normalizeCategoryLabel(series.name) || resolveChartSeriesLabel(series, index, labels),
     lineColor: series.lineColor ?? series.color ?? chartSeriesColor(chart, typeof series.formatIdx === "number" ? series.formatIdx : index),
     series,
     stats: computeBoxWhiskerStats(series),

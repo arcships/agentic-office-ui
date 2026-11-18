@@ -1,5 +1,6 @@
 import type {
   DocModel,
+  DocNode,
   FormFieldRunNode,
   HeadingLevel,
   ParagraphAlignment,
@@ -8,6 +9,16 @@ import type {
   TableNode,
   TextStyle
 } from "../engine/types";
+import { shareImageData } from "../engine/clone";
+import type { DocumentLayoutMetrics } from "../viewer/section-layout";
+import { parseSectionLayout } from "../viewer/section-layout";
+import {
+  resolveDocumentSectionsFromMetadata,
+  resolveSectionIndexForNodeIndex,
+  sectionBreakPropertiesStartNewPage,
+  sectionBreakRequiredPageParity,
+  type SectionStartPageParity
+} from "./sections";
 
 export interface LayoutOptions {
   pageWidth?: number;
@@ -16,6 +27,12 @@ export interface LayoutOptions {
   minLineHeight?: number;
   paragraphSpacing?: number;
   tableCellPadding?: number;
+  /**
+   * Use each section's own `w:pgSz`/`w:pgMar` (parsed from its `w:sectPr`)
+   * instead of applying the single document-level geometry to every section.
+   * Defaults to `true`.
+   */
+  respectSectionLayout?: boolean;
 }
 
 export interface LayoutTextRun {
@@ -77,9 +94,22 @@ export interface LayoutTableBlock {
 
 export type LayoutBlock = LayoutParagraphBlock | LayoutTableBlock;
 
+export interface LayoutPageLayout {
+  pageWidth: number;
+  pageHeight: number;
+  marginTop: number;
+  marginRight: number;
+  marginBottom: number;
+  marginLeft: number;
+}
+
 export interface LayoutPage {
   number: number;
   blocks: LayoutBlock[];
+  /** Zero-based model section active when the page was started. */
+  sectionIndex?: number;
+  /** Per-section page geometry this page is rendered with. */
+  layout?: LayoutPageLayout;
 }
 
 const DEFAULT_OPTIONS: Required<LayoutOptions> = {
@@ -88,7 +118,8 @@ const DEFAULT_OPTIONS: Required<LayoutOptions> = {
   margin: 72,
   minLineHeight: 22,
   paragraphSpacing: 8,
-  tableCellPadding: 8
+  tableCellPadding: 8,
+  respectSectionLayout: true
 };
 
 function headingScale(level?: HeadingLevel): number {
@@ -158,7 +189,7 @@ function formFieldDisplayText(field: FormFieldRunNode): string {
   }
 }
 
-function paragraphToLayout(
+export function paragraphToLayout(
   paragraph: ParagraphNode,
   idPrefix: string,
   x: number,
@@ -195,7 +226,7 @@ function paragraphToLayout(
       widthPx: child.widthPx,
       heightPx: child.heightPx,
       contentType: child.contentType,
-      data: child.data ? new Uint8Array(child.data) : undefined,
+      data: shareImageData(child.data),
       floating: Boolean(child.floating)
     };
   });
@@ -235,7 +266,7 @@ function paragraphsForTableCellNodes(nodes: TableCellContentNode[]): ParagraphNo
   return paragraphs;
 }
 
-function tableToLayout(
+export function tableToLayout(
   table: TableNode,
   idPrefix: string,
   x: number,
@@ -314,45 +345,334 @@ function estimateBlockHeight(block: LayoutBlock): number {
   return block.height;
 }
 
+// Header/footer content occupies the page margin band. When it grows past the
+// nominal margin, Word pushes the body down instead of growing the paper. The
+// legacy paginator must reserve that overflow so body lines do not slide under
+// the footer.
+const PAGE_FURNITURE_INTER_PARAGRAPH_GAP_PX = 8;
+
+function pageFurnitureNodeHasVisibleContent(node: DocNode): boolean {
+  if (node.type === "table") {
+    return true;
+  }
+
+  return node.children.some((child) => {
+    if (child.type === "text") {
+      return child.text.trim().length > 0;
+    }
+    return child.type === "image" || child.type === "form-field";
+  });
+}
+
+function estimatePageFurnitureSectionHeightPx(
+  nodes: DocNode[] | undefined,
+  availableWidthPx: number,
+  options: Required<LayoutOptions>
+): number {
+  const visibleNodes = (nodes ?? []).filter(pageFurnitureNodeHasVisibleContent);
+  if (visibleNodes.length === 0) {
+    return 0;
+  }
+
+  const heightPx = visibleNodes.reduce((sum, node) => {
+    const block =
+      node.type === "paragraph"
+        ? paragraphToLayout(
+            node,
+            "page-furniture",
+            0,
+            0,
+            availableWidthPx,
+            options.minLineHeight
+          )
+        : tableToLayout(node, "page-furniture", 0, 0, availableWidthPx, options);
+    return sum + block.height;
+  }, 0);
+
+  return (
+    heightPx +
+    Math.max(0, visibleNodes.length - 1) * PAGE_FURNITURE_INTER_PARAGRAPH_GAP_PX
+  );
+}
+
+export function resolvePageFurnitureReservePx(
+  model: DocModel,
+  options: Required<LayoutOptions>
+): { headerReservePx: number; footerReservePx: number } {
+  const metadata = model.metadata;
+  if (!metadata) {
+    return { headerReservePx: 0, footerReservePx: 0 };
+  }
+  const section = metadata.sections?.[0];
+  const sectionPropertiesXml =
+    section?.sectionPropertiesXml ?? metadata.sectionPropertiesXml;
+  const sectionLayout = parseSectionLayout(sectionPropertiesXml);
+  const headerSections =
+    section?.headerSections && section.headerSections.length > 0
+      ? section.headerSections
+      : metadata.headerSections;
+  const footerSections =
+    section?.footerSections && section.footerSections.length > 0
+      ? section.footerSections
+      : metadata.footerSections;
+  const availableWidthPx = Math.max(
+    24,
+    options.pageWidth - options.margin * 2
+  );
+  const estimateGroupsHeightPx = (
+    groups: Array<{ nodes?: DocNode[] }> | undefined
+  ): number =>
+    (groups ?? []).reduce(
+      (largest, group) =>
+        Math.max(
+          largest,
+          estimatePageFurnitureSectionHeightPx(
+            group.nodes,
+            availableWidthPx,
+            options
+          )
+        ),
+      0
+    );
+  const headerHeightPx = estimateGroupsHeightPx(headerSections);
+  const footerHeightPx = estimateGroupsHeightPx(footerSections);
+
+  return {
+    headerReservePx:
+      headerHeightPx > 0
+        ? Math.max(
+            0,
+            Math.round(
+              headerHeightPx + sectionLayout.headerDistancePx - options.margin
+            )
+          )
+        : 0,
+    footerReservePx:
+      footerHeightPx > 0
+        ? Math.max(
+            0,
+            Math.round(
+              footerHeightPx + sectionLayout.footerDistancePx - options.margin
+            )
+          )
+        : 0
+  };
+}
+
+interface ResolvedLayoutSection {
+  startNodeIndex: number;
+  layout: DocumentLayoutMetrics;
+  startsNewPage: boolean;
+  parity?: SectionStartPageParity;
+}
+
+function baseLayoutMetrics(options: Required<LayoutOptions>): DocumentLayoutMetrics {
+  const marginPx = Math.max(0, Math.round(options.margin));
+  return {
+    pageWidthPx: Math.max(1, Math.round(options.pageWidth)),
+    pageHeightPx: Math.max(1, Math.round(options.pageHeight)),
+    marginsPx: {
+      top: marginPx,
+      right: marginPx,
+      bottom: marginPx,
+      left: marginPx
+    },
+    headerDistancePx: marginPx,
+    footerDistancePx: marginPx,
+    docGridLinePitchPx: undefined
+  };
+}
+
+function resolveLayoutSections(
+  model: DocModel,
+  baseLayout: DocumentLayoutMetrics,
+  respectSectionLayout: boolean,
+  useSectionZeroLayout: boolean
+): ResolvedLayoutSection[] {
+  return resolveDocumentSectionsFromMetadata(model.metadata).map(
+    (section, sectionIndex) => {
+      // Explicit layout options win for section 0; otherwise its own `w:sectPr`
+      // is authoritative, like every later section.
+      const layout =
+        respectSectionLayout && (sectionIndex > 0 || useSectionZeroLayout)
+          ? parseSectionLayout(section.sectionPropertiesXml, baseLayout)
+          : baseLayout;
+      return {
+        startNodeIndex: Math.max(0, Math.round(section.startNodeIndex)),
+        layout,
+        startsNewPage:
+          sectionIndex > 0 &&
+          sectionBreakPropertiesStartNewPage(section.sectionPropertiesXml ?? ""),
+        parity:
+          sectionIndex > 0
+            ? sectionBreakRequiredPageParity(section.sectionPropertiesXml)
+            : undefined
+      };
+    }
+  );
+}
+
+function layoutPageGeometry(layout: DocumentLayoutMetrics): LayoutPageLayout {
+  return {
+    pageWidth: layout.pageWidthPx,
+    pageHeight: layout.pageHeightPx,
+    marginTop: layout.marginsPx.top,
+    marginRight: layout.marginsPx.right,
+    marginBottom: layout.marginsPx.bottom,
+    marginLeft: layout.marginsPx.left
+  };
+}
+
+function layoutSectionGeometryChanged(
+  left: DocumentLayoutMetrics,
+  right: DocumentLayoutMetrics
+): boolean {
+  return (
+    left.pageWidthPx !== right.pageWidthPx ||
+    left.pageHeightPx !== right.pageHeightPx ||
+    left.marginsPx.top !== right.marginsPx.top ||
+    left.marginsPx.right !== right.marginsPx.right ||
+    left.marginsPx.bottom !== right.marginsPx.bottom ||
+    left.marginsPx.left !== right.marginsPx.left
+  );
+}
+
 export function layoutDocument(model: DocModel, options: LayoutOptions = {}): LayoutPage[] {
   const resolved = { ...DEFAULT_OPTIONS, ...options };
-  const pages: LayoutPage[] = [{ number: 1, blocks: [] }];
-  const contentWidth = resolved.pageWidth - resolved.margin * 2;
-  const pageBottom = resolved.pageHeight - resolved.margin;
-  let cursorY = resolved.margin;
+  const baseLayout = baseLayoutMetrics(resolved);
+  const useSectionZeroLayout =
+    options.pageWidth === undefined &&
+    options.pageHeight === undefined &&
+    options.margin === undefined;
+  const sections = resolveLayoutSections(
+    model,
+    baseLayout,
+    resolved.respectSectionLayout,
+    useSectionZeroLayout
+  );
+  if (sections.length === 0) {
+    sections.push({
+      startNodeIndex: 0,
+      layout: baseLayout,
+      startsNewPage: false
+    });
+  }
+
+  const pages: LayoutPage[] = [];
+  let currentSectionIndex = 0;
+  let currentLayout = sections[0].layout;
+  const { headerReservePx, footerReservePx } = resolvePageFurnitureReservePx(
+    model,
+    resolved
+  );
+  let contentWidthPx = 1;
+  let pageBottomPx = 1;
+  let cursorY = 0;
+
+  const applyLayoutBounds = (): void => {
+    contentWidthPx = Math.max(
+      1,
+      currentLayout.pageWidthPx -
+        currentLayout.marginsPx.left -
+        currentLayout.marginsPx.right
+    );
+    pageBottomPx =
+      currentLayout.pageHeightPx -
+      currentLayout.marginsPx.bottom -
+      footerReservePx;
+    cursorY = currentLayout.marginsPx.top + headerReservePx;
+  };
+
+  const startPage = (): void => {
+    pages.push({
+      number: pages.length + 1,
+      blocks: [],
+      sectionIndex: currentSectionIndex,
+      layout: layoutPageGeometry(currentLayout)
+    });
+    applyLayoutBounds();
+  };
+
+  applyLayoutBounds();
+
+  const startSectionPage = (parity?: SectionStartPageParity): void => {
+    startPage();
+    if (parity) {
+      const nextPageNumber = pages.length;
+      const startsOnEvenPage = nextPageNumber % 2 === 0;
+      if (startsOnEvenPage !== (parity === "even")) {
+        // Word inserts a blank page so an `evenPage`/`oddPage` section starts
+        // on the required page-number parity.
+        pages.push({
+          number: pages.length + 1,
+          blocks: [],
+          sectionIndex: currentSectionIndex,
+          layout: layoutPageGeometry(currentLayout)
+        });
+      }
+    }
+  };
+
+  startPage();
 
   for (const [index, node] of model.nodes.entries()) {
+    const sectionIndex = resolveSectionIndexForNodeIndex(
+      sections,
+      index,
+      currentSectionIndex
+    );
+    if (sectionIndex !== currentSectionIndex) {
+      const previousLayout = currentLayout;
+      const nextSection = sections[sectionIndex];
+      currentSectionIndex = sectionIndex;
+      currentLayout = nextSection.layout;
+      const startsNewPage =
+        nextSection.startsNewPage ||
+        layoutSectionGeometryChanged(previousLayout, currentLayout);
+      if (startsNewPage) {
+        if (pages[pages.length - 1].blocks.length > 0) {
+          startSectionPage(nextSection.parity);
+        } else {
+          pages[pages.length - 1].sectionIndex = currentSectionIndex;
+          pages[pages.length - 1].layout = layoutPageGeometry(currentLayout);
+          applyLayoutBounds();
+        }
+      }
+    }
+
     const block =
       node.type === "paragraph"
         ? paragraphToLayout(
             node,
             `paragraph-${index}`,
-            resolved.margin,
+            currentLayout.marginsPx.left,
             cursorY,
-            contentWidth,
+            contentWidthPx,
             resolved.minLineHeight
           )
-        : tableToLayout(node, `table-${index}`, resolved.margin, cursorY, contentWidth, resolved);
+        : tableToLayout(
+            node,
+            `table-${index}`,
+            currentLayout.marginsPx.left,
+            cursorY,
+            contentWidthPx,
+            resolved
+          );
 
     const blockHeight = estimateBlockHeight(block);
     const currentPage = pages[pages.length - 1];
 
-    if (cursorY + blockHeight > pageBottom && currentPage.blocks.length > 0) {
-      pages.push({
-        number: pages.length + 1,
-        blocks: []
-      });
-      cursorY = resolved.margin;
-
-      if (block.kind === "paragraph") {
-        block.y = cursorY;
-      } else {
-        block.y = cursorY;
-      }
+    if (cursorY + blockHeight > pageBottomPx && currentPage.blocks.length > 0) {
+      startPage();
+      block.y = cursorY;
     }
 
     pages[pages.length - 1].blocks.push(block);
-    cursorY += blockHeight + (block.kind === "paragraph" ? spacingForBlock(resolved.paragraphSpacing, block.headingLevel) : resolved.paragraphSpacing + 10);
+    cursorY +=
+      blockHeight +
+      (block.kind === "paragraph"
+        ? spacingForBlock(resolved.paragraphSpacing, block.headingLevel)
+        : resolved.paragraphSpacing + 10);
   }
 
   return pages;
