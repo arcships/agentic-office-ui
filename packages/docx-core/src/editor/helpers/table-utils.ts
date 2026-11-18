@@ -11,7 +11,8 @@ import type {
   TableBoxSpacing,
   TableCellStyle,
   TableNode,
-  TableRowStyle
+  TableRowStyle,
+  TableStyle
 } from "../../engine/types";
 import {
   normalizeBorderType,
@@ -63,6 +64,13 @@ export function resolveFloatingTableSide(
     return "left";
   }
 
+  // An explicit `w:horzAnchor` makes `w:tblpX` an offset from that anchor's
+  // left edge, so a large offset is a table dropped to the right — not a
+  // right-anchored table. Only the anchor-less case keeps the old heuristic.
+  if (typeof floating.horizontalAnchor === "string" && floating.horizontalAnchor) {
+    return "left";
+  }
+
   if (Number.isFinite(floating.xTwips) && (floating.xTwips as number) > 1440) {
     return "right";
   }
@@ -83,7 +91,14 @@ export function tableWrapperStyle(
   }
 
   const side = resolveFloatingTableSide(table) ?? "left";
-  const marginTop = twipsToPixels(floating.topFromTextTwips) ?? 0;
+  // A table dragged with the move handle carries its drop position in `tblpX` /
+  // `tblpY`. The wrapper keeps its float and its text distances and shifts by
+  // that offset, so the table lands where it was dropped: the offset counts
+  // from the margin on the side the text wraps away from, like Word's
+  // `horzAnchor="margin"`, and from the anchor paragraph vertically.
+  const offsetLeftPx = signedTwipsToPixels(floating.xTwips);
+  const offsetTopPx = signedTwipsToPixels(floating.yTwips);
+  const marginTop = (twipsToPixels(floating.topFromTextTwips) ?? 0) + offsetTopPx;
   const marginBottom = twipsToPixels(floating.bottomFromTextTwips) ?? 8;
   const marginLeftFromText = twipsToPixels(floating.leftFromTextTwips) ?? 8;
   const marginRightFromText = twipsToPixels(floating.rightFromTextTwips) ?? 8;
@@ -94,11 +109,167 @@ export function tableWrapperStyle(
     marginTop,
     marginBottom,
     marginLeft:
-      side === "left" ? marginLeftFromText + indentPx : marginLeftFromText,
+      (side === "left" ? marginLeftFromText + indentPx : marginLeftFromText) +
+      (side === "left" ? offsetLeftPx : 0),
     marginRight:
-      side === "right" ? marginRightFromText + indentPx : marginRightFromText,
+      (side === "right" ? marginRightFromText + indentPx : marginRightFromText) +
+      (side === "right" ? offsetLeftPx : 0),
     position: "relative",
     zIndex: 1,
+  };
+}
+
+/** Twips to CSS pixels without clamping: drop offsets may be negative. */
+function signedTwipsToPixels(twips?: number): number {
+  if (!Number.isFinite(twips)) {
+    return 0;
+  }
+  return Math.round((twips as number) / TWIPS_PER_PIXEL);
+}
+
+/** Fields a caller may change on `TableStyle.floating` (`setTableFloating`). */
+export interface DocxTableFloatingUpdate {
+  xTwips?: number;
+  yTwips?: number;
+  horizontalAnchor?: "text" | "margin" | "page";
+  verticalAnchor?: "text" | "margin" | "page";
+  horizontalAlign?: "left" | "center" | "right" | "inside" | "outside";
+  verticalAlign?: "top" | "center" | "bottom" | "inside" | "outside";
+  leftFromTextTwips?: number;
+  rightFromTextTwips?: number;
+  topFromTextTwips?: number;
+  bottomFromTextTwips?: number;
+}
+
+const TABLE_HORIZONTAL_ANCHORS = new Set(["text", "margin", "page"]);
+const TABLE_HORIZONTAL_ALIGNMENTS = new Set([
+  "left",
+  "center",
+  "right",
+  "inside",
+  "outside",
+]);
+const TABLE_VERTICAL_ALIGNMENTS = new Set([
+  "top",
+  "center",
+  "bottom",
+  "inside",
+  "outside",
+]);
+
+function normalizedTableOption(
+  value: unknown,
+  allowed: ReadonlySet<string>
+): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  return allowed.has(normalized) ? normalized : undefined;
+}
+
+/**
+ * Merges a `setTableFloating` patch into an existing floating style.
+ *
+ * Non-finite numbers and unknown anchor/alignment names are refused instead of
+ * being written to `w:tblpPr`, and a patch that changes nothing leaves the
+ * table's current style untouched. Omitted fields keep their value, so dragging
+ * a table a second time only moves it.
+ */
+export function mergeTableFloatingStyle(
+  base: TableStyle["floating"],
+  update: DocxTableFloatingUpdate
+): TableStyle["floating"] {
+  const next: NonNullable<TableStyle["floating"]> = { ...(base ?? {}) };
+  const num = (value: unknown): number | undefined =>
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.round(value)
+      : undefined;
+  const assign = (
+    key: keyof DocxTableFloatingUpdate,
+    value: string | number | undefined
+  ): void => {
+    if (value === undefined) return;
+    (next as Record<string, string | number>)[key] = value;
+  };
+
+  assign("xTwips", num(update.xTwips));
+  assign("yTwips", num(update.yTwips));
+  assign("leftFromTextTwips", num(update.leftFromTextTwips));
+  assign("rightFromTextTwips", num(update.rightFromTextTwips));
+  assign("topFromTextTwips", num(update.topFromTextTwips));
+  assign("bottomFromTextTwips", num(update.bottomFromTextTwips));
+  assign(
+    "horizontalAnchor",
+    normalizedTableOption(update.horizontalAnchor, TABLE_HORIZONTAL_ANCHORS)
+  );
+  assign(
+    "verticalAnchor",
+    normalizedTableOption(update.verticalAnchor, TABLE_HORIZONTAL_ANCHORS)
+  );
+  assign(
+    "horizontalAlign",
+    normalizedTableOption(update.horizontalAlign, TABLE_HORIZONTAL_ALIGNMENTS)
+  );
+  assign(
+    "verticalAlign",
+    normalizedTableOption(update.verticalAlign, TABLE_VERTICAL_ALIGNMENTS)
+  );
+
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+/** Rendered width of a floating table that has to stay reachable on its page. */
+const MIN_TABLE_VISIBLE_PX = 42;
+
+export interface DocxTableFloatingDrop {
+  /** Floating offsets the table already has, in CSS pixels from its anchors. */
+  startXPx?: number;
+  startYPx?: number;
+  /** Pointer movement since the drag started, in CSS pixels. */
+  deltaXPx: number;
+  deltaYPx: number;
+  /** Page width in CSS pixels; together with the width it clamps the drop. */
+  pageWidthPx?: number;
+  /** Rendered table width in CSS pixels. */
+  tableWidthPx?: number;
+}
+
+/**
+ * The `setTableFloating` patch for a table dropped at `start + delta`.
+ *
+ * The drop anchors the table to the page margin horizontally and to its own
+ * paragraph vertically — the pair Word writes when a table is dragged out of
+ * the text flow — and carries the drop position in twips. The existing wrapper
+ * style renders that position and keeps the surrounding text wrapping on the
+ * other side of the table.
+ */
+export function resolveTableFloatingDropPatch(
+  drop: DocxTableFloatingDrop
+): DocxTableFloatingUpdate {
+  const deltaXPx = Number.isFinite(drop.deltaXPx) ? Math.round(drop.deltaXPx) : 0;
+  const deltaYPx = Number.isFinite(drop.deltaYPx) ? Math.round(drop.deltaYPx) : 0;
+  const startXPx = Number.isFinite(drop.startXPx) ? Math.round(drop.startXPx as number) : 0;
+  const startYPx = Number.isFinite(drop.startYPx) ? Math.round(drop.startYPx as number) : 0;
+
+  let xPx = startXPx + deltaXPx;
+  const pageWidthPx = Number.isFinite(drop.pageWidthPx)
+    ? Math.round(drop.pageWidthPx as number)
+    : undefined;
+  if (pageWidthPx !== undefined && pageWidthPx > 0) {
+    const tableWidthPx = Number.isFinite(drop.tableWidthPx)
+      ? Math.max(0, Math.round(drop.tableWidthPx as number))
+      : 0;
+    const minXPx = tableWidthPx > 0 ? MIN_TABLE_VISIBLE_PX - tableWidthPx : 0;
+    const maxXPx = Math.max(minXPx, pageWidthPx - MIN_TABLE_VISIBLE_PX);
+    xPx = Math.min(Math.max(xPx, minXPx), maxXPx);
+  }
+
+  return {
+    xTwips: Math.round(xPx * TWIPS_PER_PIXEL),
+    yTwips: Math.round((startYPx + deltaYPx) * TWIPS_PER_PIXEL),
+    horizontalAnchor: "margin",
+    verticalAnchor: "text",
   };
 }
 

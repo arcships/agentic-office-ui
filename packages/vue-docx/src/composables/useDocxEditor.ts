@@ -1058,6 +1058,7 @@ export function useDocxEditor(
     clearTableSelection: tbl.clearTableSelection,
     setTableColumnWidths: tbl.setTableColumnWidths,
     setTableRowHeight: tbl.setTableRowHeight,
+    setTableFloating: tbl.setTableFloating,
     insertTableRow: tbl.insertTableRow,
     insertTableColumn: tbl.insertTableColumn,
     deleteTableRow: tbl.deleteTableRow,

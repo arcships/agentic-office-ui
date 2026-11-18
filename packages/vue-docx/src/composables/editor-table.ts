@@ -19,6 +19,7 @@ import {
   insertTableColumn as insertTableColumnOnGrid,
   insertTableRow as insertTableRowOnGrid,
   mergeTableCells as mergeTableCellsOnGrid,
+  mergeTableFloatingStyle,
   moveBodyNodeInModel,
   paragraphLocationFromTextRangeLocation,
   paragraphText,
@@ -31,6 +32,7 @@ import {
   tableCellSelectionRangeCells,
   tableCellSelectionRangeHasMultipleCells,
   tableColumnCount,
+  type DocxTableFloatingUpdate,
 } from "@arcships/docx-core"
 import type { ApplyModelChangeOptions, EditorCore } from "./editor-shared"
 
@@ -464,6 +466,59 @@ export function createEditorTable(
     }, ctx.statusMessage("resizedTableRow"))
   }
 
+  /**
+   * Floats a body table at a drop position, or (`update === null`) puts it back
+   * into the text flow. The model carries the position in `TableStyle.floating`,
+   * which the wrapper style renders and the serializer writes as `w:tblpPr`.
+   */
+  const setTableFloating = (
+    tableIndex: number,
+    update: DocxTableFloatingUpdate | null
+  ): void => {
+    const table = ctx.modelSnapshot.value.nodes[tableIndex]
+    if (table?.type !== "table") {
+      refuse("cannotFloatTableNotFound")
+      return
+    }
+
+    if (update === null) {
+      // An inline table has nothing to clear, and a no-op must not open an undo
+      // entry the user cannot see.
+      if (!table.style?.floating) return
+      applyChange((current) => {
+        const nextModel = cloneModelForTableEdit(current, tableIndex)
+        const node = nextModel.nodes[tableIndex]
+        if (!node || node.type !== "table") return current
+        if (node.style) {
+          const { floating: _floating, ...rest } = node.style
+          node.style = rest
+        }
+        // The rebuilt table must not carry the old `w:tblpPr`.
+        node.sourceXml = undefined
+        return nextModel
+      }, ctx.statusMessage("inlinedTable"))
+      return
+    }
+
+    const floating = mergeTableFloatingStyle(table.style?.floating, update)
+    if (!floating) return
+    if (
+      JSON.stringify(floating) ===
+      JSON.stringify(table.style?.floating ?? null)
+    ) {
+      return
+    }
+
+    applyChange((current) => {
+      const nextModel = cloneModelForTableEdit(current, tableIndex)
+      const node = nextModel.nodes[tableIndex]
+      if (!node || node.type !== "table") return current
+      node.style = { ...(node.style ?? {}), floating }
+      node.sourceXml = undefined
+      return nextModel
+    }, ctx.statusMessage("floatedTable"))
+  }
+
   const mergeTableCells = (
     tableIndex: number, range: DocxTableCellSelectionRange
   ): void => {
@@ -623,6 +678,7 @@ export function createEditorTable(
     clearTableSelection,
     setTableColumnWidths,
     setTableRowHeight,
+    setTableFloating,
     mergeTableCells,
     splitTableCell,
     moveTable,

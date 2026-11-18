@@ -199,10 +199,15 @@ const missing = await surface.revealBookmark("No_Such_Bookmark")
 | 表单域属性对话框 | 双击表单域打开，编辑值、类型、名称、占位提示、必填、最大长度和下拉选项；保存为一次撤销 | `:show-form-field-dialog="false"` | `updateFormField()` |
 | 链接悬浮卡片 | 鼠标悬停链接显示打开/编辑/删除；编辑和删除会先选中链接文字 | `:show-link-card="false"` | `setLink()`；打开时发出 `link-open` 事件 |
 | 表格行高拖拽 | 悬停或选中表格后拖动行边界；提交 `w:trHeight`（`atLeast`） | `:show-row-resize-handles="false"`（`DocxTableHost`） | `setTableRowHeight()` |
+| 表格移动手柄 | 表格左上角的手柄：点击选中整张表格，拖到新位置后转为浮动表格（拖动时显示虚线幽灵框） | `:show-table-move-handle="false"`（`DocxTableHost`） | `setTableFloating()` |
 | 段落样式悬浮预览 | 悬停工具栏样式选择器时按各样式自身的字体/字号/缩进渲染示例，点击即应用 | `:show-style-preview="false"` | `setParagraphStyle()` / `setHeading()` |
 | 段落/表格拖拽排序 | 悬停正文段落或表格显示拖拽手柄，拖动到目标位置后插入；手柄支持 `↑`/`↓`，`Esc` 取消 | `:show-node-reorder="false"` | `moveBodyNode()` |
 
 拖拽排序一次移动只产生一条撤销记录：落在节点自身位置（前或后）视为无操作，不写入历史；跨分节拖动时，分节起始位置跟随对应节点，而不是由被移动的节点重新定义分节。
+
+表格移动手柄只出现在正文表格的第一页片段上：嵌套表格位于单元格内，页眉页脚表格没有可寻址的正文节点，两者都不会浮动。拖动超过 3px 才算拖拽，否则只是一次“选中整张表格”的点击（选区是一个覆盖全部单元格的 `cellRange`）。落下时调用 `setTableFloating(tableIndex, update)`，`update` 由 `resolveTableFloatingDropPatch()` 从指针位移（px → twips）算出：`xTwips` / `yTwips` 是落下位置，`horizontalAnchor` 为 `margin`、`verticalAnchor` 为 `text`（Word 把表格拖出文字流时写的锚点对）。再拖一次只改变位置，`leftFromText` / `rightFromText` 等环绕距离沿用上一次的值；`setTableFloating(tableIndex, null)` 把表格放回文字流。每次调用只写一条撤销记录，只读表格不渲染手柄，页码、筛选、嵌套表格等宿主可以传 `:show-table-move-handle="false"` 关闭。
+
+浮动位置存在 `TableStyle.floating`，导出时由序列化补丁写成 `w:tblPr/w:tblpPr`（`w:tblpX` / `w:tblpY`、`w:vertAnchor` / `w:horzAnchor` 与环绕距离），并保证 `tblpPr` 是 `tblPr` 的第一个子元素。引擎会按模型重建被编辑过的表格，所以单元格编辑不再让浮动表格退回内联；重新打开导出的文件时，`w:tblpPr` 又解析回同一个 `floating`。渲染继续复用 `tableWrapperStyle()`：表格按环绕侧浮动，`tblpX` / `tblpY` 折算成相对锚点的外边距，文字绕在另一侧。
 
 表单域的值只有在符合字段约束时才会写入模型：下拉值必须来自选项列表，日期必须是有效日期，文本遵守最大长度；被拒绝的保存不会修改文档，撤销栈也不增加。
 

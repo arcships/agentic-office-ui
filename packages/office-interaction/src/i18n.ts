@@ -240,6 +240,8 @@ export interface OfficeDocxMessages {
     borders: string
     insertImage: string
     insertTable: string
+    /** Tooltip of the drag handle that floats a table. */
+    moveTableHandle: string
     zoom: string
     /** Template with a `{url}` placeholder. */
     removeLink: string
@@ -371,6 +373,9 @@ export interface OfficeDocxMessages {
       resizedTableRow: string
       tableRowHeightPositive: string
       tableRowHeightTargetUnavailable: string
+      floatedTable: string
+      inlinedTable: string
+      cannotFloatTableNotFound: string
       movedBodyNode: string
       cannotMoveBodyNodeNotFound: string
       updatedFormField: string
@@ -1446,6 +1451,7 @@ export const officeMessagesEn: OfficeMessages = {
       borders: "Borders",
       insertImage: "Insert image",
       insertTable: "Insert table",
+      moveTableHandle: "Drag to move or float this table",
       zoom: "Zoom",
       removeLink: 'Remove link "{url}"?',
       unsupportedLink: "Only http, https, mailto, internal #fragment, and relative links are allowed.",
@@ -1557,6 +1563,9 @@ export const officeMessagesEn: OfficeMessages = {
         resizedTableRow: "Resized table row",
         tableRowHeightPositive: "Unsupported: row height must be positive",
         tableRowHeightTargetUnavailable: "Unsupported: table row target unavailable",
+        floatedTable: "Floated table",
+        inlinedTable: "Table back in the text flow",
+        cannotFloatTableNotFound: "Cannot float: table not found",
         movedBodyNode: "Moved paragraph or table",
         cannotMoveBodyNodeNotFound: "Cannot move: paragraph or table not found",
         updatedFormField: "Updated form field",
@@ -2565,6 +2574,7 @@ export const officeMessagesZhCN: OfficeMessages = {
       borders: "边框",
       insertImage: "插入图片",
       insertTable: "插入表格",
+      moveTableHandle: "拖动以移动或浮动表格",
       zoom: "缩放",
       removeLink: "移除链接“{url}”？",
       unsupportedLink: "仅允许 http、https、mailto、内部 #片段和相对链接。",
@@ -2676,6 +2686,9 @@ export const officeMessagesZhCN: OfficeMessages = {
         resizedTableRow: "已调整表格行高",
         tableRowHeightPositive: "不支持：表格行高必须为正数",
         tableRowHeightTargetUnavailable: "不支持：表格行目标不可用",
+        floatedTable: "已将表格浮动",
+        inlinedTable: "表格已回到文字流",
+        cannotFloatTableNotFound: "无法浮动：未找到表格",
         movedBodyNode: "已移动段落或表格",
         cannotMoveBodyNodeNotFound: "无法移动：未找到段落或表格",
         updatedFormField: "已更新表单域",

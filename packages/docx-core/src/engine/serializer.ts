@@ -39,6 +39,13 @@ import {
   isTableMergeStoryPart,
   modelNeedsTableRowMergeSerialization
 } from "./table-merge-serialization";
+import {
+  applyTableFloatingToDocumentXml,
+  applyTableFloatingToPackage,
+  applyTableFloatingToPartContent,
+  isTableFloatingStoryPart,
+  modelNeedsTableFloatingSerialization
+} from "./table-floating-serialization";
 import { mapsToWasmPackage, wasmModelToDocumentXml, wasmSerializeDocx } from "./wasm";
 
 /**
@@ -80,6 +87,11 @@ function patchDocumentXml(
   // once the rest of the part is final.
   if (modelNeedsTableRowMergeSerialization(model)) {
     patched = applyTableRowMergesToDocumentXml(patched, model);
+  }
+  // Same rebuild path for `TableStyle.floating`: a table dragged to a position
+  // keeps its `w:tblpPr` (drop position, anchors and wrap distances).
+  if (modelNeedsTableFloatingSerialization(model)) {
+    patched = applyTableFloatingToDocumentXml(patched, model);
   }
   return patched;
 }
@@ -162,7 +174,8 @@ function modelNeedsDocumentXmlPatch(model: DocModel): boolean {
     modelNeedsNoteReferenceSerialization(model) ||
     modelNeedsCommentRangeSerialization(model) ||
     modelNeedsFormFieldRequiredPatch(model) ||
-    modelNeedsTableRowMergeSerialization(model)
+    modelNeedsTableRowMergeSerialization(model) ||
+    modelNeedsTableFloatingSerialization(model)
   );
 }
 
@@ -253,6 +266,7 @@ function patchSerializedDocxBytes(
   const needsComments = modelNeedsCommentSerialization(model);
   const needsSectionParts = modelHasSectionParts(model);
   const needsMerges = modelNeedsTableRowMergeSerialization(model);
+  const needsFloating = modelNeedsTableFloatingSerialization(model);
   if (!needsDocumentPatch && !needsComments && !needsSectionParts) {
     return bytes;
   }
@@ -291,6 +305,18 @@ function patchSerializedDocxBytes(
       if (!isTableMergeStoryPart(name)) continue;
       const text = strFromU8(archive[name]);
       const patched = applyTableRowMergesToPartContent(name, text, model);
+      if (patched !== text) {
+        archive[name] = strToU8(patched);
+        changed = true;
+      }
+    }
+  }
+  if (needsFloating) {
+    // Header and footer tables are rebuilt the same way as body tables.
+    for (const name of Object.keys(archive)) {
+      if (!isTableFloatingStoryPart(name)) continue;
+      const text = strFromU8(archive[name]);
+      const patched = applyTableFloatingToPartContent(name, text, model);
       if (patched !== text) {
         archive[name] = strToU8(patched);
         changed = true;
@@ -339,8 +365,11 @@ export async function serializeDocModel(
   );
   const { parseDocx } = await import("./ooxml-core");
   return applyCommentsToPackage(
-    applyTableRowMergesToPackage(
-      patchPackageDocumentXml(await parseDocx(bytes), prepared),
+    applyTableFloatingToPackage(
+      applyTableRowMergesToPackage(
+        patchPackageDocumentXml(await parseDocx(bytes), prepared),
+        prepared
+      ),
       prepared
     ),
     prepared

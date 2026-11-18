@@ -88,7 +88,7 @@ const editor = useDocxEditor({ initialFileName: "document.docx" })
 
 `DocxFormFieldDialog`、`DocxLinkHoverCard` 和 `DocxStylePreviewPopover` 与 `DocxEditor` 使用同一份文案库（`provideDocxMessages`），在 `DocxEditor` 内部挂载时自动跟随 `locale`/`messages`。
 
-只要宿主自己渲染手柄，就可以关闭 `DocxEditor` 的对应属性（`show-node-reorder`、`show-style-preview` 等），不会出现两套控件。
+只要宿主自己渲染手柄，就可以关闭 `DocxEditor` 的对应属性（`show-node-reorder`、`show-style-preview` 等），不会出现两套控件。表格移动手柄属于 `DocxTableHost`，用 `:show-table-move-handle="false"` 关闭；宿主自己实现时同样调用 `controller.setTableFloating()`，并用 `resolveTableFloatingDropPatch()` 把指针位移换算成落下位置。
 
 ## 内部书签导航
 
