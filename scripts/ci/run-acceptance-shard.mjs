@@ -65,6 +65,9 @@ const shards = [
     needsBuild: false,
     steps: [
       command("documentation-contract", process.execPath, ["scripts/ci/verify-docs.mjs"]),
+      command("open-source-attribution", process.execPath, [
+        "scripts/ci/verify-attribution.mjs",
+      ]),
     ],
   },
   {

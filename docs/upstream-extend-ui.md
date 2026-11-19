@@ -6,6 +6,8 @@ This repository is a Vue 3 workspace for office/document UI components. It is in
 
 The original Extend UI / Extend AI projects, package names, API concepts, and product direction belong to Extend and their maintainers. This repository should preserve attribution and avoid obscuring the upstream origin of the ideas it is implementing.
 
+> For the 0.8 UI work, the authoritative upstream index is [docs/upstream/extend-ui.md](upstream/extend-ui.md) (pinned `extend-hq/ui` commit `70fe70c6f1e1eee53954c6923f3d9f583557a57e`), together with [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md). This page remains the historical note for the `@extend-ai/react-docx` and `@extend-ai/react-xlsx` packages.
+
 ## Upstream references
 
 Information below was checked via the npm registry during repository setup.
