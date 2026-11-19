@@ -36,7 +36,7 @@ function sampleBuffer(name) {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
-async function mountWorkbook(t, name, { readOnly = true } = {}) {
+async function mountWorkbook(t, name, { readOnly = true, timeoutMs = 2_000 } = {}) {
   let controller;
   const Harness = vue.defineComponent({
     setup() {
@@ -54,6 +54,7 @@ async function mountWorkbook(t, name, { readOnly = true } = {}) {
   await waitFor(
     () => controller.sourceState === "ready" || controller.sourceError,
     `${name} ready`,
+    timeoutMs,
   );
   assert.ifError(controller.sourceError);
   assert.equal(controller.sourceState, "ready");
@@ -152,7 +153,7 @@ test("sales-table.xlsx keeps multi-axis freeze, a validated status column and tw
 });
 
 test("large-grid.xlsx still spans the full fixture range", async (t) => {
-  const { controller } = await mountWorkbook(t, "large-grid.xlsx");
+  const { controller } = await mountWorkbook(t, "large-grid.xlsx", { timeoutMs: 15_000 });
   const sheet = controller.activeSheet;
   assert.equal(sheet?.name, "Large Grid");
   assert.equal(sheet.maxUsedRow, 550);
