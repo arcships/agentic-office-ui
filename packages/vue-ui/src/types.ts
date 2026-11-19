@@ -1,3 +1,4 @@
+import type { Component } from "vue"
 import type {
   NormalizedRect,
   OfficeLocale,
@@ -18,12 +19,42 @@ export interface SignaturePadProps {
   className?: string
 }
 
+/** Built-in upload glyph or a host-supplied icon component. */
+export type FileUploadAcceptedIcon = "image" | "pdf" | "sheet" | Component
+
+/**
+ * One accepted file-type glyph in the upload icon cluster.
+ *
+ * `label` is retained for API parity with the Extend prop shape; the glyphs
+ * themselves are decorative. Defaults to Image / PDF / Sheet.
+ */
+export interface FileUploadAcceptedType {
+  label?: string
+  icon?: FileUploadAcceptedIcon
+}
+
 export interface FileUploadProps {
   accept?: string
   multiple?: boolean
   maxSize?: number
   disabled?: boolean
   className?: string
+  /** Heading copy. Defaults to the localized upload prompt. */
+  title?: string
+  /** Supporting copy under the heading; hidden when omitted. */
+  description?: string
+  /** Drop-target chip copy when idle. */
+  browseLabel?: string
+  /** Drop-target chip copy while dragging. */
+  draggingLabel?: string
+  /** Glyphs shown in the icon cluster. Defaults to Image / PDF / Sheet. */
+  acceptedFileTypes?: FileUploadAcceptedType[]
+  /** Render the selected-file list under the drop zone. Defaults to false. */
+  showFileList?: boolean
+  /** Paint the optional animated border beam while dragging. */
+  showBorderBeam?: boolean
+  /** Border-beam palette hint, kept for parity with the Extend API. */
+  borderBeamTheme?: "light" | "dark"
 }
 
 export type FileUploadRejectionCode = "FILE_TYPE_NOT_ACCEPTED" | "FILE_TOO_LARGE"
@@ -39,12 +70,33 @@ export interface FileThumbnailFile {
   name: string
   type: string
   url?: string
+  size?: number
 }
 
 export interface FileThumbnailProps {
   file: FileThumbnailFile
-  size?: "sm" | "md" | "lg"
+  /**
+   * Preview width. The named sizes keep the pre-0.8 API compatible; a number
+   * is interpreted as pixels and a string is passed through as a CSS length.
+   */
+  size?: "sm" | "md" | "lg" | number | string
   className?: string
+  /** Explicit preview image URL. Falls back to `file.url` for image types. */
+  previewImageUrl?: string | null
+  /** Preview aspect ratio, e.g. `16 / 9`. Defaults to a square tile. */
+  previewAspectRatio?: number
+  /** Extra class merged on the preview (aspect-ratio) layer. */
+  previewClassName?: string
+  /** Show the loading overlay, independent of image loading. */
+  isLoading?: boolean
+  /** Force the muted error/empty fallback. */
+  hasError?: boolean
+  /** Render the file-type glyph in the fallback layer. */
+  showTypeGlyph?: boolean
+  /** Render the file name and type under the preview (inline row layout). */
+  showMeta?: boolean
+  /** Image alt text. Defaults to the file name. */
+  alt?: string
 }
 
 export interface BoundingBoxField {

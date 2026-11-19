@@ -56,6 +56,7 @@
 | reka-ui（运行时 primitive） | MIT | Copyright (c) 2023 radix-vue | [`licenses/reka-ui-MIT.txt`](licenses/reka-ui-MIT.txt) |
 | Lucide（`@lucide/vue`） | ISC | Copyright (c) 2026 Lucide Icons and Contributors | [`licenses/lucide-ISC.txt`](licenses/lucide-ISC.txt) |
 | Geist / Geist Mono | SIL Open Font License 1.1 | Copyright (c) 2023 Vercel, in collaboration with basement.studio | [`licenses/geist-OFL-1.1.txt`](licenses/geist-OFL-1.1.txt) |
+| Hugeicons（`@hugeicons/core-free-icons`） | MIT | Copyright (c) 2025 Hugeicons | [`licenses/hugeicons-MIT.txt`](licenses/hugeicons-MIT.txt) |
 
 许可证文件是上游原文的逐字副本，不添加本地文件头。根仓库仍为 Apache-2.0（[`../../LICENSE`](../../LICENSE)），第三方声明集中在 [`../../THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md)。
 
@@ -171,9 +172,9 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 | `apps/v4/components/extend/pdf-editor-dialogs.tsx` | 打印、截取、安全、属性对话框 | `packages/vue-pdf/src/components/PdfEditorDialogs.vue` | reference-only | #162 |
 | `apps/v4/components/extend/pdf-editor-properties.tsx` | 表单字段与文档属性面板 | `packages/vue-pdf/src/components/PdfEditorProperties.vue` | reference-only | #162 |
 | `apps/v4/components/extend/pdf-editor-shared.tsx` | 共享 context、feature flag、颜色预设 | `packages/vue-pdf/src/components/PdfEditor.vue` | reference-only | #162 |
-| `apps/v4/components/extend/document-viewer-sidebar.tsx` | inline/overlay 文档侧栏、skeleton、动画 | `packages/vue-ui/src/components/DocumentViewerSidebar.vue` | reference-only | #158 抽出，#163 补齐，#162 复用 |
-| `apps/v4/components/extend/file-upload.tsx` | 拖拽区、accept chips、文件列表、ready/error | `packages/vue-ui/src/components/FileUpload.vue` | reference-only | 现有实现早于固定提交，本批次重新对齐视觉 |
-| `apps/v4/components/extend/file-thumbnail.tsx` | 方形/可配置预览卡、blur-in、错误回退 | `packages/vue-ui/src/components/FileThumbnail.vue` | reference-only | #163 |
+| `apps/v4/components/extend/document-viewer-sidebar.tsx` | inline/overlay 文档侧栏、skeleton、动画 | `packages/vue-ui/src/components/chrome/DocumentViewerSidebar.vue` | reference-only | 规范组件由 #158 在 `components/chrome/` 实现；#163 只记录缩略图条集成 seam，不重复实现 |
+| `apps/v4/components/extend/file-upload.tsx` | 拖拽区、accept chips、文件列表、ready/error | `packages/vue-ui/src/components/FileUpload.vue` | adapted | #163 用 scoped CSS + `--office-*` token 重写；Hugeicons 提供与参考一致的 glyph 数据 |
+| `apps/v4/components/extend/file-thumbnail.tsx` | 方形/可配置预览卡、blur-in、错误回退 | `packages/vue-ui/src/components/FileThumbnail.vue` | adapted | #163 重写 preview 卡、reveal、loading 与 error fallback |
 | `apps/v4/components/extend/docx-viewer.tsx` | DOCX viewer chrome 与翻页 | `packages/vue-docx/src/components/DocxViewer.vue` | reference-only | #159 |
 | `apps/v4/components/extend/docx-editor.tsx` | DOCX editor chrome 与格式控件 | `packages/vue-docx/src/components/DocxEditor.vue` | reference-only | #159 |
 | `apps/v4/components/extend/docx-annotation-card.tsx` | 评论与修订 gutter 卡片 | `packages/vue-docx/src/components/DocxAnnotationCard.vue` | reference-only | #159 |

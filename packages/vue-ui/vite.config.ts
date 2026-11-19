@@ -47,6 +47,7 @@ export default defineConfig({
         "reka-ui",
         "signature_pad",
         "@arcships/office-interaction",
+        "@hugeicons/core-free-icons",
         "@lucide/vue",
       ],
     },

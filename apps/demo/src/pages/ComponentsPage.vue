@@ -28,13 +28,21 @@
             <FileUpload
               accept=".pdf,.docx"
               :max-size="2 * 1024 * 1024"
+              show-file-list
+              title="Click to upload or drop files"
+              description="PDF or DOCX, up to 2 MB"
               @files-accepted="uploaded = $event"
             />
             <p v-if="uploaded.length" class="result">Uploaded: {{ uploaded.map(f => f.name).join(', ') }}</p>
           </div>
           <div>
             <h4>Disabled state</h4>
-            <FileUpload accept=".xlsx" disabled />
+            <FileUpload
+              accept=".xlsx"
+              disabled
+              title="Upload disabled"
+              description="This drop zone is not interactive"
+            />
           </div>
         </div>
       </section>
@@ -42,11 +50,36 @@
       <section>
         <h3>FileThumbnail</h3>
         <div class="thumbnail-grid">
-          <FileThumbnail :file="{ name: 'large-contract.pdf', type: 'application/pdf' }" />
-          <FileThumbnail :file="{ name: 'legal-contract.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }" />
-          <FileThumbnail :file="{ name: 'financial-model.xlsx', type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }" />
-          <FileThumbnail :file="{ name: 'invoice.png', type: 'image/png', url: '/samples/invoice.png' }" />
-          <FileThumbnail :file="{ name: 'very-long-unknown-document-name-without-known-type.bin', type: '' }" />
+          <FileThumbnail
+            :file="{ name: 'large-contract.pdf', type: 'application/pdf' }"
+            :size="96"
+            show-meta
+            show-type-glyph
+          />
+          <FileThumbnail
+            :file="{ name: 'legal-contract.docx', type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }"
+            :size="96"
+            show-meta
+            show-type-glyph
+          />
+          <FileThumbnail
+            :file="{ name: 'financial-model.xlsx', type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }"
+            :size="96"
+            show-meta
+            show-type-glyph
+          />
+          <FileThumbnail
+            :file="{ name: 'contract-page.png', type: 'image/png' }"
+            :size="96"
+            show-meta
+            preview-image-url="/samples/contract-page.png"
+          />
+          <FileThumbnail
+            :file="{ name: 'very-long-unknown-document-name-without-known-type.bin', type: '' }"
+            :size="96"
+            show-meta
+            show-type-glyph
+          />
         </div>
       </section>
 

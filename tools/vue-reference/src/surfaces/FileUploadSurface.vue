@@ -28,10 +28,14 @@ defineProps<{ cellWidth: number }>();
   >
     <FileUpload
       :accept="uploadFixture.accept"
+      :accepted-file-types="uploadFixture.acceptedFileTypes"
+      :browse-label="uploadCopy.browseLabel"
+      :description="uploadCopy.description"
+      :dragging-label="uploadCopy.draggingLabel"
       :multiple="uploadFixture.multiple"
       :max-size="uploadFixture.maxSizeBytes"
-    >
-      <template #label>{{ uploadCopy.title }}</template>
-    </FileUpload>
+      show-file-list
+      :title="uploadCopy.title"
+    />
   </ParityCell>
 </template>
