@@ -405,6 +405,11 @@ def images_in(model: dict[str, object]) -> list[dict[str, object]]:
     ]
 
 
+def distributed_column_widths(width_twips: int, count: int) -> list[int]:
+    base, remainder = divmod(width_twips, count)
+    return [base] * (count - 1) + [base + remainder]
+
+
 def run_table_image(page, attempt_dir: Path) -> dict[str, object]:
     before = read_snapshot(page, "editor-model-snapshot")
     before_table_count = int(before.get("tableCount", 0))
@@ -427,7 +432,20 @@ def run_table_image(page, attempt_dir: Path) -> dict[str, object]:
     assert len(table["rows"]) == 3, table
     assert all(len(row["cells"]) == 3 for row in table["rows"]), table
     assert table["style"]["layout"] == "fixed", table
-    assert sum(table["style"]["columnWidthsTwips"]) == 7200, table
+    # Insert Table derives its width from the page content width (900px page
+    # minus margins), not from the old fixed 7200-twip example. The column
+    # widths must add up to that derived table width.
+    width_twips = int(table["style"]["widthTwips"])
+    widths = [int(width) for width in table["style"]["columnWidthsTwips"]]
+    assert width_twips > 0, table
+    # default 900px page - 2 * 56px margins = 788px = 11820 twips.
+    assert width_twips == 11820, table
+    assert sum(widths) == width_twips, table
+    assert len(set(widths)) == 1, table
+    # Keep the real Insert Table width: Insert Column grows the nominal table
+    # width in the model, while the surface still lays the columns out inside
+    # the page content box. Drag deltas are measured against that rendered box.
+    table_width_twips = width_twips
 
     # Select a real table cell, then extend the table through the toolbar.
     cell = cell_locator(page, table_index, 0, 0)
@@ -452,7 +470,8 @@ def run_table_image(page, attempt_dir: Path) -> dict[str, object]:
     extended = table_at(with_columns, table_index)
     assert extended is not None
     assert len(extended["rows"]) == 4, extended
-    widths_before_drag = list(extended["style"]["columnWidthsTwips"])
+    widths_before_drag = distributed_column_widths(table_width_twips, len(extended["style"]["columnWidthsTwips"]))
+    assert len(widths_before_drag) == 4, extended
 
     # Real pointer drag on the first column boundary.
     handle = page.locator(
@@ -462,7 +481,9 @@ def run_table_image(page, attempt_dir: Path) -> dict[str, object]:
     handle_box = handle.bounding_box()
     assert handle_box, "column resize handle has no box"
     handle_x = handle_box["x"] + handle_box["width"] / 2
-    handle_y = handle_box["y"] + min(40, handle_box["height"] / 2)
+    # Stay above the first row boundary: row-resize handles are full-width
+    # strips and would intercept a drag started near a row edge.
+    handle_y = handle_box["y"] + min(8, handle_box["height"] / 2)
     page.mouse.move(handle_x, handle_y)
     page.mouse.down()
     page.mouse.move(handle_x + 36, handle_y, steps=6)
@@ -478,7 +499,9 @@ def run_table_image(page, attempt_dir: Path) -> dict[str, object]:
     )
     resized_table = table_at(dragged, table_index)
     assert resized_table is not None
-    assert sum(resized_table["style"]["columnWidthsTwips"]) == sum(widths_before_drag), resized_table
+    resized_widths = [int(width) for width in resized_table["style"]["columnWidthsTwips"]]
+    assert sum(resized_widths) == table_width_twips, resized_table
+    assert int(resized_table["style"]["widthTwips"]) == table_width_twips, resized_table
 
     # Real toolbar image picker (it creates the file input on demand).
     # Select a body paragraph first: an image inserted into a selected table
