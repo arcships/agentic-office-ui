@@ -108,6 +108,7 @@ import {
   resolveRichTextRuns,
   resolveWorkbookColor,
   resolveWorkbookFillStyle,
+  withTableCellStyle,
   type XlsxPrintLayout,
   type XlsxPrintPage,
   type XlsxCellTextRun,
@@ -328,6 +329,18 @@ function cellStyle(
     workbookStyle = rowStyleId !== undefined
       ? sheet.styleById[rowStyleId]
       : colStyleId !== undefined ? sheet.styleById[colStyleId] : undefined;
+  }
+  if ((props.controller.tables?.length ?? 0) > 0) {
+    workbookStyle = withTableCellStyle(workbookStyle, props.controller.tables, { col, row }, {
+      declaredTableStyleOverrides: (() => {
+        const styleId = sheet.cellStyleIds?.[cellAddressToA1({ col, row })]
+          ?? sheet.rowStyleIds[row]
+          ?? sheet.colStyleIds[col];
+        return styleId === undefined ? null : sheet.styleById[styleId]?.tableStyleOverrides;
+      })(),
+      namedCellStyleByName: sheet.namedCellStyleByName,
+      tableStyleByName: sheet.tableStyleByName,
+    });
   }
   const parsedLayout = sheet.cellTextLayouts?.[cellAddressToA1({ col, row })];
   if (parsedLayout) {

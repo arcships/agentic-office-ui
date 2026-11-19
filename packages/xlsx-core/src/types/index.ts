@@ -78,6 +78,18 @@ export type {
   XlsxTable,
   XlsxTableSortDirection,
   XlsxTableSortState,
+  // Pivot tables, slicers and defined names
+  XlsxPivotAggregation,
+  XlsxPivotShowAs,
+  XlsxPivotFieldAxis,
+  XlsxPivotFieldItem,
+  XlsxPivotField,
+  XlsxPivotDataField,
+  XlsxPivotSource,
+  XlsxPivotTable,
+  XlsxSlicerItem,
+  XlsxSlicer,
+  XlsxDefinedName,
   // Authoring inputs
   XlsxCellCommentInput,
   XlsxCellHyperlinkInput,
@@ -117,6 +129,7 @@ export type {
   XlsxViewerZoom,
   XlsxViewerEditing,
   XlsxViewerTables,
+  XlsxViewerPivot,
   XlsxViewerImages,
   XlsxViewerCharts,
   // Thumbnails

@@ -130,6 +130,7 @@ const WORKSHEET_CHILD_ORDER = [
   "controls",
   "webPublishItems",
   "tableParts",
+  "pivotTableParts",
   "extLst",
 ];
 

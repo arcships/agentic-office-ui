@@ -13,16 +13,19 @@ import type {
   XlsxCellHyperlink,
   XlsxCellComment,
   XlsxDataValidation,
+  XlsxDefinedName,
   XlsxFormControl,
   XlsxFreezePanes,
   XlsxImage,
   XlsxPageBreak,
   XlsxPageMargins,
   XlsxPageSetup,
+  XlsxPivotTable,
   XlsxPrintOptions,
   XlsxPrintTitles,
   XlsxResolvedCellStyle,
   XlsxShape,
+  XlsxSlicer,
   XlsxSparkline,
   XlsxTable,
   XlsxTableStyleDefinition,
@@ -80,6 +83,8 @@ import {
   parseWorkbookPrintMetadata,
   parseWorksheetPrintState,
 } from "../print/page-setup";
+import { definedNamesForWorksheet, parseWorkbookDefinedNames } from "../defined-names";
+import { parseWorksheetPivotTables, parseWorksheetSlicers } from "../pivot";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -95,7 +100,19 @@ export type WorkbookSheetState = {
    * `composeAutoFilterRanges` once the table parts are parsed.
    */
   autoFilterRanges?: XlsxAutoFilterRange[];
+  /** Workbook and sheet-scoped defined names visible on this worksheet. */
+  definedNames?: XlsxDefinedName[];
+  /** Pivot tables anchored on this worksheet. */
+  pivotTables?: XlsxPivotTable[];
+  /** Slicers attached to this worksheet's pivot tables. */
+  slicers?: XlsxSlicer[];
   cachedFormulaValues: Record<string, string>;
+  /**
+   * Explicit cell style ids (`<c r="A1" s="3">`), keyed by A1 address. The
+   * table-style resolver uses the referenced `styleById` record's declared
+   * subtrees to decide which cell formatting overrides the table style.
+   */
+  cellStyleIds?: Record<string, number>;
   /**
    * Cells whose explicit style carries rotation or shrink-to-fit alignment,
    * keyed by A1 address. Only these cells need the extra map; renderers fall
@@ -823,6 +840,7 @@ export function parseSheetState(
   const colWidthOverridesPx: Record<number, number> = {};
   const rowStyleIds: Record<number, number> = {};
   const colStyleIds: Record<number, number> = {};
+  const cellStyleIds: Record<string, number> = {};
   const cellTextLayouts: Record<string, { shrinkToFit?: boolean; textRotation?: number }> = {};
   let minContentCol = Number.POSITIVE_INFINITY;
   let minContentRow = Number.POSITIVE_INFINITY;
@@ -919,6 +937,9 @@ export function parseSheetState(
 
       const cellStyleId = Number(cellNode.getAttribute("s") ?? Number.NaN);
       if (cellRef && Number.isFinite(cellStyleId)) {
+        if (cellStyleId > 0) {
+          cellStyleIds[cellRef] = cellStyleId;
+        }
         const textLayout = textLayoutOfStyle(options?.styleById?.[cellStyleId]);
         if (textLayout) {
           cellTextLayouts[cellRef] = textLayout;
@@ -963,6 +984,7 @@ export function parseSheetState(
   return {
     autoFilterRanges,
     cachedFormulaValues,
+    cellStyleIds: Object.keys(cellStyleIds).length > 0 ? cellStyleIds : undefined,
     cellTextLayouts: Object.keys(cellTextLayouts).length > 0 ? cellTextLayouts : undefined,
     freezePanes,
     richTextCells,
@@ -1342,21 +1364,35 @@ export function parseWorkbookStructureAssetsFromArchive(
   const tableMetadataByWorkbookSheetIndex = worksheetSheets.map((sheet) =>
     parseWorksheetTableMetadata(archive, sheet.path)
   );
+  const definedNameMetadata = parseWorkbookDefinedNames(archive, workbookSheets);
+  const pivotTablesByWorkbookSheetIndex = worksheetSheets.map((sheet) =>
+    parseWorksheetPivotTables(archive, sheet.path)
+  );
+  const slicersByWorkbookSheetIndex = worksheetSheets.map((sheet, worksheetIndex) =>
+    parseWorksheetSlicers(archive, sheet.path, worksheetIndex)
+  );
   return {
     contentTypes,
     namedCellStyleByName,
-    sheetStatesByWorkbookSheetIndex: sheetStates.map((state, worksheetIndex) =>
-      state
-        ? {
-            ...state,
-            ...printMetadata[worksheetTabIndexes[worksheetIndex]],
-            autoFilterRanges: composeAutoFilterRanges(
-              state.autoFilterRanges,
-              tableMetadataByWorkbookSheetIndex[worksheetIndex]
-            )
-          }
-        : state
-    ),
+    sheetStatesByWorkbookSheetIndex: sheetStates.map((state, worksheetIndex) => {
+      if (!state) {
+        return state;
+      }
+      const workbookTabIndex = worksheetTabIndexes[worksheetIndex] ?? worksheetIndex;
+      const definedNames = definedNamesForWorksheet(definedNameMetadata, workbookTabIndex);
+      const pivotTables = pivotTablesByWorkbookSheetIndex[worksheetIndex] ?? [];
+      return {
+        ...state,
+        ...printMetadata[workbookTabIndex],
+        autoFilterRanges: composeAutoFilterRanges(
+          state.autoFilterRanges,
+          tableMetadataByWorkbookSheetIndex[worksheetIndex]
+        ),
+        definedNames,
+        pivotTables,
+        slicers: slicersByWorkbookSheetIndex[worksheetIndex] ?? []
+      };
+    }),
     styleById,
     tableMetadataByWorkbookSheetIndex,
     tableStyleByName,
