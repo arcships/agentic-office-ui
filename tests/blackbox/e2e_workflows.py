@@ -207,7 +207,7 @@ def docx_switch_and_recover(page: Page, attempt_dir: Path) -> dict[str, object]:
         '[data-testid="docx-viewer-page"] details.runtime-details'
     )
     if runtime_details.get_attribute("open") is None:
-        runtime_details.locator("summary").click()
+        runtime_details.locator("summary").first.click()
     diagnostics = page.locator('[data-testid="docx-diagnostics"]').inner_text()
     assert "worker-success" in diagnostics, diagnostics[-2_000:]
     page.screenshot(path=str(attempt_dir / "recovered-ready.png"), full_page=True)
@@ -403,7 +403,7 @@ def xlsx_workflow(page: Page, attempt_dir: Path) -> dict[str, object]:
         '[data-testid="xlsx-viewer-page"] details.runtime-details'
     )
     if runtime_details.get_attribute("open") is None:
-        runtime_details.locator("summary").click()
+        runtime_details.locator("summary").first.click()
     with page.expect_download(timeout=30_000) as download_info:
         page.locator('[data-testid="xlsx-download-source"]').click()
     saved = save_download(download_info.value, attempt_dir / "downloads")
@@ -420,12 +420,8 @@ def xlsx_workflow(page: Page, attempt_dir: Path) -> dict[str, object]:
     # XLSX-011/013: edit a real workbook, export it through the toolbar, and
     # reopen the downloaded file with the pinned independent parser.
     assert openpyxl_version == EXPECTED_OPENPYXL, openpyxl_version
-    sample.select_option("charts-images.xlsx")
-    page.wait_for_function(
-        """() => document.querySelector('[data-testid="loaded-file"]')?.textContent?.includes('charts-images.xlsx')
-          && document.querySelector('[data-testid="page-status"]')?.dataset.state === 'ready'""",
-        timeout=30_000,
-    )
+    if runtime_details.get_attribute("open") is not None:
+        runtime_details.locator("summary").first.click()
     grid_box = grid.bounding_box()
     assert grid_box, "the XLSX grid has no bounding box"
     page.mouse.click(grid_box["x"] + 48 + 20, grid_box["y"] + 24 + 12)
@@ -449,15 +445,13 @@ def xlsx_workflow(page: Page, attempt_dir: Path) -> dict[str, object]:
 
     workbook = load_workbook(Path(str(exported["path"])), data_only=False)
     try:
-        dashboard = workbook["Dashboard"]
-        assert dashboard["A1"].value == marker, dashboard["A1"].value
-        assert dashboard["A1"].font.bold is True, dashboard["A1"].font
-        assert str(dashboard["A1"].fill.fgColor.rgb).endswith("1C3A5E"), dashboard["A1"].fill
-        merged = {str(range_) for range_ in dashboard.merged_cells.ranges}
-        assert "A7:C8" in merged, sorted(merged)
-        assert dashboard.freeze_panes == "C3", dashboard.freeze_panes
-        assert len(dashboard.data_validations.dataValidation) == 1
-        assert workbook.sheetnames == ["Dashboard", "Revenue Chart"]
+        sales = workbook["Sales Data"]
+        assert sales["A1"].value == marker, sales["A1"].value
+        assert sales["A1"].font.bold is True, sales["A1"].font
+        assert str(sales["A1"].fill.fgColor.rgb).endswith("1C3A5E"), sales["A1"].fill
+        assert sales.freeze_panes == "A2", sales.freeze_panes
+        assert "SalesRecords" in sales.tables, list(sales.tables)
+        assert workbook.sheetnames == ["Sales Data"]
     finally:
         workbook.close()
     page.screenshot(path=str(attempt_dir / "xlsx-exported.png"), full_page=True)

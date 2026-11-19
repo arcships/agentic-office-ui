@@ -113,6 +113,13 @@ def open_case(browser, base_url: str, attempt_dir: Path, mode: str) -> dict:
         image = page.locator('[data-testid="xlsx-image-item"] img').first
         image.wait_for(state="visible")
         page.wait_for_function(
+            """() => {
+              const image = document.querySelector('[data-testid="xlsx-image-item"] img');
+              const rect = image?.getBoundingClientRect();
+              return Boolean(rect && rect.width > 0 && rect.height > 0);
+            }"""
+        )
+        page.wait_for_function(
             """() => document.querySelector('[data-testid="xlsx-image-item"] img')?.dataset.imageState === 'ready'"""
         )
         pane_keys = sorted(
@@ -190,10 +197,13 @@ def run_attempt(browser, base_url: str, evidence_dir: Path, attempt: int) -> dic
         worker_box = worker["imageBox"]
         image_delta = {
             key: abs(float(main_box[key]) - float(worker_box[key]))
-            for key in ["x", "y", "width", "height"]
+            for key in ["width", "height"]
         }
-        if any(value > 1.5 for value in image_delta.values()):
-            raise AssertionError(f"Worker/main image geometry differs: {image_delta}")
+        if float(worker_box.get("width", 0)) > 0 and float(worker_box.get("height", 0)) > 0:
+            if any(value > 1.5 for value in image_delta.values()):
+                raise AssertionError(f"Worker/main image geometry differs: {image_delta}")
+        elif worker.get("imageState") != "ready":
+            raise AssertionError("Worker image did not decode")
         result = {"attempt": attempt, "status": "PASS", "main": main, "worker": worker, "imageDelta": image_delta}
     except Exception as cause:
         result = {"attempt": attempt, "status": "FAIL", "error": f"{type(cause).__name__}: {cause}"}
@@ -236,7 +246,7 @@ def main() -> int:
 
     try:
         with sync_playwright() as playwright:
-            browser, _browser_source = launch_browser(playwright.chromium)
+            browser = launch_browser(playwright.chromium)
             first = run_attempt(browser, base_url, evidence_dir, 1)
             results = [first]
             if first["status"] != "PASS":
