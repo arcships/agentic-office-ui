@@ -65,6 +65,63 @@ export function localizeOfficeDescriptorLabel(
   if (lowerImage) return formatOfficeMessage(descriptors.imageId, { id: lowerImage[1] })
   const lowerTextBox = /^text-box\s+(.+)$/u.exec(text)
   if (lowerTextBox) return formatOfficeMessage(descriptors.textBox, { id: lowerTextBox[1] })
+  if (text === "Heading") return descriptors.heading
+  if (text === "List item") return descriptors.listItem
+  if (text === "Text block") return descriptors.textBlock
+  if (text === "Link") return descriptors.link
+  if (text === "Form field") return descriptors.formField
+  if (text.startsWith("Form field: ")) {
+    return formatOfficeMessage(descriptors.formFieldName, { name: text.slice(12) })
+  }
+  if (text === "Annotation") return descriptors.annotation
+  if (text.startsWith("Annotation: ")) {
+    return formatOfficeMessage(descriptors.annotationText, { text: text.slice(12) })
+  }
+  if (text === "Sheet protection") return descriptors.protection
+  if (text === "Slide transition") return descriptors.transition
+  if (text === "Action") return descriptors.action
+  if (text === "Slide master") return descriptors.master
+  if (text === "Slide layout") return descriptors.layout
+  if (text === "Speaker notes") return descriptors.note
+  if (text === "Permissions") return descriptors.permission
+  if (text.startsWith("Table ")) {
+    const name = text.slice(6)
+    if (name && !/^\d+$/u.test(name)) return formatOfficeMessage(descriptors.tableByName, { name })
+  }
+  if (text.startsWith("Series: ")) {
+    return formatOfficeMessage(descriptors.chartSeries, { name: text.slice(8) })
+  }
+  if (text.startsWith("Point ")) {
+    const point = text.slice(6)
+    if (/^\d+$/u.test(point)) return formatOfficeMessage(descriptors.chartPoint, { number: point })
+  }
+  if (text.startsWith("Legend entry ")) {
+    const legend = text.slice(13)
+    if (/^\d+$/u.test(legend)) return formatOfficeMessage(descriptors.legendEntry, { number: legend })
+  }
+  if (text.startsWith("Style: ")) return formatOfficeMessage(descriptors.styleName, { name: text.slice(7) })
+  if (text.startsWith("Bookmark: ")) return formatOfficeMessage(descriptors.bookmarkName, { name: text.slice(10) })
+  if (text.startsWith("Field: ")) return formatOfficeMessage(descriptors.fieldName, { name: text.slice(7) })
+  if (text.startsWith("Revision by ")) return formatOfficeMessage(descriptors.trackedChange, { author: text.slice(12) })
+  if (text.startsWith("Comment state: ")) return formatOfficeMessage(descriptors.commentState, { state: text.slice(15) })
+  if (text.startsWith("Cross-reference: ")) return formatOfficeMessage(descriptors.crossReference, { name: text.slice(17) })
+  if (text.startsWith("Formula: ")) return formatOfficeMessage(descriptors.formulaLabel, { formula: text.slice(9) })
+  if (text.startsWith("Conditional format ")) {
+    const format = text.slice(19)
+    if (/^\d+$/u.test(format)) return formatOfficeMessage(descriptors.conditionalFormat, { number: format })
+  }
+  if (text.startsWith("Data validation ")) {
+    const validation = text.slice(16)
+    if (/^\d+$/u.test(validation)) return formatOfficeMessage(descriptors.dataValidation, { number: validation })
+  }
+  if (text.startsWith("Named range: ")) return formatOfficeMessage(descriptors.namedRange, { name: text.slice(13) })
+  if (text.startsWith("Animation ")) {
+    const animation = text.slice(10)
+    if (/^\d+$/u.test(animation)) return formatOfficeMessage(descriptors.animation, { number: animation })
+  }
+  if (text.startsWith("Attachment: ")) return formatOfficeMessage(descriptors.attachment, { name: text.slice(12) })
+  if (text.startsWith("Optional content: ")) return formatOfficeMessage(descriptors.layer, { name: text.slice(18) })
+  if (text.startsWith("Signature: ")) return formatOfficeMessage(descriptors.signature, { name: text.slice(11) })
   if (text === "Selected text") return messages.selectedText
   if (text === "Selected region") return descriptors.selectedRegion
   if (text === "Text range") return descriptors.textRange
@@ -83,6 +140,8 @@ export function localizeOfficeDescriptorLabel(
   if (row !== undefined) return formatOfficeMessage(descriptors.row, { number: row })
   const cell = numberAfter(text, "Cell")
   if (cell !== undefined) return formatOfficeMessage(descriptors.cell, { number: cell })
+  const section = numberAfter(text, "Section")
+  if (section !== undefined) return formatOfficeMessage(descriptors.section, { number: section })
   const paragraph = numberAfter(text, "Paragraph")
   if (paragraph !== undefined) return formatOfficeMessage(descriptors.paragraph, { number: paragraph })
   const column = /^Column\s+(.+)$/u.exec(text)
