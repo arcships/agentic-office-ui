@@ -56,6 +56,12 @@ const region = ref<NormalizedRect | null>(null)
 - [开始使用](https://github.com/arcships/agentic-office-ui/blob/master/docs/guide/getting-started.md)
 - [公开接口合同](https://github.com/arcships/agentic-office-ui/blob/master/docs/api/public-api-contract.md)
 
+## Open-source attribution
+
+本包以 Apache-2.0 发布，并参考或包含第三方作品。许可证全文、版权声明、使用范围与上游文件索引见
+[THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md) 与 [docs/upstream/extend-ui.md](../../docs/upstream/extend-ui.md)。
+从 Extend UI（MIT，固定 commit `70fe70c`）改写或复制的文件带有文件级来源头。
+
 ## License
 
 Apache-2.0
