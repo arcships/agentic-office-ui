@@ -32,9 +32,15 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
-    "./style.css": "./dist/style.css"
+    "./style.css": "./dist/style.css",
+    "./tokens.css": "./dist/tokens.css",
+    "./theme.css": "./dist/theme.css"
   },
-  "sideEffects": ["./dist/style.css"],
+  "sideEffects": [
+    "./dist/style.css",
+    "./dist/tokens.css",
+    "./dist/theme.css"
+  ],
   "scripts": {
     "build": "vite build && vue-tsc --declaration --emitDeclarationOnly --outDir dist",
     "prepack": "pnpm run build",
@@ -53,6 +59,7 @@
   },
   "dependencies": {
     "@arcships/office-interaction": "^0.7.1",
+    "@lucide/vue": "^1.76.0",
     "signature_pad": "^5.1.3"
   }
 }

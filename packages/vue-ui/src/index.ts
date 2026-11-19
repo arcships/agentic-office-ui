@@ -27,6 +27,41 @@ export { default as Tooltip } from "./components/Tooltip.vue"
 export { default as OfficeFindBar } from "./components/OfficeFindBar.vue"
 export { default as OfficeLiveStatus } from "./components/OfficeLiveStatus.vue"
 
+// Theme provider and icon adapter
+export { default as OfficeThemeProvider } from "./components/OfficeThemeProvider.vue"
+export { default as OfficeIcon } from "./components/OfficeIcon.vue"
+export {
+  OFFICE_DARK_MEDIA_QUERY,
+  OFFICE_DENSITY_ATTRIBUTE,
+  OFFICE_THEME_ATTRIBUTE,
+  OFFICE_THEME_INJECTION_KEY,
+  OFFICE_THEME_RESOLVED_ATTRIBUTE,
+  officeSystemPrefersDark,
+  provideOfficeTheme,
+  resolveOfficeTheme,
+  useOfficeTheme,
+} from "./composables/office-theme"
+export type {
+  OfficeDensity,
+  OfficeResolvedTheme,
+  OfficeTheme,
+  OfficeThemeContext,
+} from "./composables/office-theme"
+export {
+  OFFICE_ICONS,
+  OFFICE_ICON_NAMES,
+  OFFICE_ICON_REGISTRY_INJECTION_KEY,
+  normalizeOfficeIconName,
+  provideOfficeIcons,
+  resolveOfficeIcon,
+  useOfficeIcons,
+} from "./icons"
+export type {
+  OfficeIconComponent,
+  OfficeIconName,
+  OfficeIconRegistry,
+} from "./icons"
+
 // Shared keyboard semantics for Office context menus
 export {
   OFFICE_MENU_ITEM_SELECTOR,

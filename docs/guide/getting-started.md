@@ -46,6 +46,8 @@ import "@arcships/vue-ui/style.css"
 
 所有查看器都带打印样式：打印时工具栏、缩略图、状态栏等外壳自动隐藏，限制高度的 flex 容器会改为随纸张内容展开；DOCX 打印会自动关闭页面虚拟化并逐页分页。`@arcships/vue-ui/style.css` 还提供一份跨查看器的打印基线。
 
+需要 Office 设计 token、`light` / `dark` / `system` 主题或 `OfficeIcon` 时，再额外引入 `@arcships/vue-ui/theme.css`，并在页面外层使用 `OfficeThemeProvider`。token 表、暗色示例、字体加载和宿主覆盖方式见 [Office 设计 token、主题与图标](../design/office-theme.md)。
+
 ## 最小示例
 
 ```vue
