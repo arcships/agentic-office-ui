@@ -103,6 +103,24 @@
 [Vue primitive 层](ui-primitives.md)。示例页在 demo 的 `/primitives` 路由，展示每个 primitive 的
 default/hover/focus/disabled/loading 状态。
 
+## 共享 Office chrome（0.8）
+
+`@arcships/vue-ui` 还提供一层与格式无关的 viewer/editor chrome：
+
+| 组件 | 用途 |
+|---|---|
+| `OfficeToolbar` / `OfficeToolbarGroup` / `OfficeToolbarSeparator` | 48px 最小高度、`px-3 py-2`、4/8px gap、底边和 `bg-background`；390px 可换行 |
+| `OfficeIconButton` | ghost/active/disabled；28/32px 桌面尺寸，coarse pointer 44px 命中区 |
+| `OfficePageControl` | 当前页/总页数、数字输入、Enter/Escape/方向键/Home/End |
+| `OfficeZoomControl` | 缩小/放大、百分比预设、Fit width / Fit page / Actual size |
+| `OfficeSearchPopover` | 查询、命中计数、上一个/下一个、Aa/全字/正则选项 |
+| `OfficeStatusBar` | 页码、状态、文件名、warning/error live region |
+| `OfficeEmptyState` / `OfficeErrorState` / `OfficeLoadingState` | 统一空/错/加载状态与进度条 |
+| `DocumentViewerSidebar` / `DocumentViewerSidebarSkeleton` | 160px 缩略图侧栏；inline/overlay、ResizeObserver、skeleton、200ms open/close 动画 |
+
+完整 API、i18n 键、键盘/ARIA 合同、响应式截图证据和 #159–#162 接入顺序见
+[共享 Office chrome](office-chrome.md)。示例页在 demo 的 `/chrome` 路由。四个 viewer 本批尚未迁移。
+
 ## 通用约定
 
 - Vue 属性在模板中使用短横线名称，例如 `showToolbar` 写作 `show-toolbar`。

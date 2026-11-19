@@ -54,6 +54,14 @@ export interface OfficeZoomMessages {
   out: string
   level: string
   reset: string
+  /** Zoom-select preset: scale the page to the available width. */
+  fitWidth: string
+  /** Zoom-select preset: scale the page to fit the viewport height. */
+  fitPage: string
+  /** Zoom-select preset: 100% without fit scaling. */
+  actualSize: string
+  /** Percent label template with a `{value}` placeholder. */
+  percent: string
 }
 
 export interface OfficePageMessages {
@@ -67,6 +75,29 @@ export interface OfficePageMessages {
   of: string
   /** Template with `{current}` and `{total}` placeholders. */
   indicator: string
+}
+
+/** Shared labels for the Office viewer/editor chrome (issue #158). */
+export interface OfficeChromeMessages {
+  /** Accessible name of `OfficeToolbar`; hosts can override with `label`. */
+  toolbar: string
+  /** Accessible name of `DocumentViewerSidebar`. */
+  sidebar: string
+  /** Accessible name of the sidebar toggle rendered by hosts. */
+  sidebarToggle: string
+  /** Accessible name of `OfficeStatusBar`. */
+  statusBar: string
+  /** Label prefix shown before a document file name. */
+  fileName: string
+  error: string
+  warning: string
+  retry: string
+  emptyTitle: string
+  emptyDescription: string
+  errorTitle: string
+  errorDescription: string
+  loadingTitle: string
+  loadingDescription: string
 }
 
 export interface OfficeCommonMessages {
@@ -200,6 +231,7 @@ export interface OfficeCommonMessages {
     signature: string
     permission: string
   }
+  chrome: OfficeChromeMessages
 }
 
 export interface OfficeDocxMessages {
@@ -1516,6 +1548,10 @@ export const officeMessagesEn: OfficeMessages = {
       out: "Zoom out",
       level: "Zoom level",
       reset: "Fit to window",
+      fitWidth: "Fit width",
+      fitPage: "Fit page",
+      actualSize: "Actual size",
+      percent: "{value}%",
     },
     page: {
       label: "Page",
@@ -1602,6 +1638,22 @@ export const officeMessagesEn: OfficeMessages = {
       layer: "Optional content: {name}",
       signature: "Signature: {name}",
       permission: "Permissions",
+    },
+    chrome: {
+      toolbar: "Document toolbar",
+      sidebar: "Document pages",
+      sidebarToggle: "Toggle document pages",
+      statusBar: "Document status",
+      fileName: "File",
+      error: "Error",
+      warning: "Warning",
+      retry: "Try again",
+      emptyTitle: "No document open",
+      emptyDescription: "Open a file to get started.",
+      errorTitle: "Unable to open this document",
+      errorDescription: "Check the file and try again.",
+      loadingTitle: "Opening document",
+      loadingDescription: "Preparing the document…",
     },
   },
   docx: {
@@ -2783,6 +2835,10 @@ export const officeMessagesZhCN: OfficeMessages = {
       out: "缩小",
       level: "缩放比例",
       reset: "恢复适合窗口",
+      fitWidth: "适合宽度",
+      fitPage: "适合页面",
+      actualSize: "实际大小",
+      percent: "{value}%",
     },
     page: {
       label: "页",
@@ -2869,6 +2925,22 @@ export const officeMessagesZhCN: OfficeMessages = {
       layer: "可选内容组：{name}",
       signature: "签名：{name}",
       permission: "权限",
+    },
+    chrome: {
+      toolbar: "文档工具栏",
+      sidebar: "文档页面",
+      sidebarToggle: "切换文档页面",
+      statusBar: "文档状态",
+      fileName: "文件",
+      error: "错误",
+      warning: "警告",
+      retry: "重试",
+      emptyTitle: "未打开文档",
+      emptyDescription: "打开一个文件开始。",
+      errorTitle: "无法打开此文档",
+      errorDescription: "请检查文件后重试。",
+      loadingTitle: "正在打开文档",
+      loadingDescription: "正在准备文档…",
     },
   },
   docx: {
