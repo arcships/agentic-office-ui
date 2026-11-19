@@ -1,0 +1,55 @@
+# Vendored Extend UI notices
+
+The files in this directory (`ui/`, `extend/`) and the vendored stylesheets in
+`../styles/extend-*.css` are copied or adapted from
+[`extend-hq/ui`](https://github.com/extend-hq/ui) at commit
+`70fe70c6f1e1eee53954c6923f3d9f583557a57e` (2026-11-17).
+
+Copyright (c) 2026 CrowdView Inc, dba Extend. Portions Copyright (c) 2023 shadcn.
+
+Licensed under the MIT License. The full upstream license text is kept at
+[`docs/upstream/licenses/extend-ui-MIT.txt`](../../../../docs/upstream/licenses/extend-ui-MIT.txt)
+and is reproduced in [`THIRD_PARTY_NOTICES.md`](../../../../THIRD_PARTY_NOTICES.md).
+
+## MIT License
+
+Copyright (c) 2026 CrowdView Inc, dba Extend
+Portions Copyright (c) 2023 shadcn
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## Files and what changed
+
+| File | Upstream source | Change |
+|---|---|---|
+| `ui/button.tsx` | `apps/v4/components/ui/button.tsx` | Base UI `useRender`/`mergeProps` replaced with a plain `<button>`; class strings unchanged |
+| `ui/spinner.tsx` | `apps/v4/registry/new-york-v4/ui/spinner.tsx` | `IconPlaceholder` resolved to Hugeicons `Loading03Icon` |
+| `ui/card.tsx` | `apps/v4/registry/new-york-v4/ui/card.tsx` | `useRender` replaced with `<div>`; only `Card` copied |
+| `ui/separator.tsx` | `apps/v4/registry/new-york-v4/ui/separator.tsx` | Base UI Separator replaced with a `<div>`; classes unchanged |
+| `ui/select.tsx` | `apps/v4/registry/new-york-v4/ui/select.tsx` | Static trigger/value only (`selectTriggerVariants` copied verbatim); no popup |
+| `extend/file-thumbnail.tsx` | `apps/v4/components/extend/file-thumbnail.tsx` | Rendered markup and classes unchanged |
+| `extend/file-upload.tsx` | `apps/v4/components/extend/file-upload.tsx` | `border-beam` dependency dropped (`BorderBeam` only paints while dragging); icons resolved directly; vendored `Card` |
+| `extend/document-viewer-sidebar.tsx` | `apps/v4/components/extend/document-viewer-sidebar.tsx` | Rendered markup and classes unchanged |
+| `extend/pdf-toolbar.tsx` | `apps/v4/components/extend/pdf-viewer.tsx` | Toolbar subset: tooltip/popover/select popups dropped, static trigger classes kept |
+| `../styles/extend-globals.css` | `apps/v4/app/globals.css` | Only the `@import` graph narrowed; the rest is byte-identical (sha256 of the body is verified by `scripts/ci/extract-extend-tokens.mjs`) |
+| `../styles/extend-shadcn-tailwind.css` | `apps/v4/app/shadcn-tailwind.css` | Provenance header only |
+| `../lib/cn.ts` | `apps/v4/lib/utils.ts` | `siteConfig`/`absoluteUrl` dropped |
+
+Hugeicons (`@hugeicons/react`, `@hugeicons/core-free-icons`) is the icon set the
+pinned reference resolves by default (`apps/v4/components/icon-placeholder.tsx`).

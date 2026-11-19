@@ -36,6 +36,11 @@
     "test:docs": "node scripts/ci/run-suite.mjs docs",
     "test:release": "node scripts/ci/run-suite.mjs release",
     "ci:self-test": "node scripts/ci/verify-failure-propagation.mjs",
+    "ui:parity": "node scripts/ci/pixel-parity.mjs",
+    "ui:parity:report": "node scripts/ci/pixel-parity.mjs --report-only",
+    "ui:parity:self-check": "node scripts/ci/pixel-parity.mjs --self-check --out output/ui-parity-selfcheck",
+    "ui:tokens": "node scripts/ci/extract-extend-tokens.mjs",
+    "ui:tokens:check": "node scripts/ci/extract-extend-tokens.mjs --check",
     "check": "node scripts/ci/run-suite.mjs check"
   },
   "devDependencies": {

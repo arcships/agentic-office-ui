@@ -109,8 +109,8 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 
 | Extend 文件 | 用途 | 我们的目标文件 | 状态 | 备注 |
 |---|---|---|---|---|
-| `apps/v4/app/globals.css` | 语义 token：radius、色阶、ring、shadow、spacing | `packages/vue-ui/src/styles/tokens.css` | reference-only | 只映射数值，不复制 CSS；若改为复制必须改成 copied 并加头 |
-| `apps/v4/app/legacy-themes.css` | 主题变体、暗色作用域、字体变量 | `packages/vue-ui/src/styles/theme.css` | reference-only | 我们用 `[data-office-theme]` 作用域，选择器策略独立 |
+| `apps/v4/app/globals.css` | 语义 token：radius、色阶、ring、shadow、spacing | `packages/vue-ui/src/styles/tokens.css` | adapted | 只映射数值，不复制 CSS；文件头记录了固定 commit，按 #167 反向检查归为 adapted |
+| `apps/v4/app/legacy-themes.css` | 主题变体、暗色作用域、字体变量 | `packages/vue-ui/src/styles/theme.css` | adapted | 我们用 `[data-office-theme]` 作用域，选择器策略独立；文件头记录固定 commit |
 | `apps/v4/app/shadcn-tailwind.css` | Tailwind 与 CSS 变量桥接 | — | not-used | 仓库不使用 Tailwind 或 preflight |
 | `apps/v4/lib/fonts.ts` | Geist / Geist Mono / 文档字体族 | `packages/vue-ui/src/styles/fonts.css` | reference-only | 只参考字体栈与可变字体意图，不使用 next/font |
 | `apps/v4/lib/font-definitions.ts` | 文档站字体元数据 | `packages/vue-ui/src/styles/fonts.css` | reference-only | 只有 Geist / Geist Mono 条目相关 |
@@ -216,8 +216,8 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 |---|---|---|---|---|
 | `apps/v4/components/ui/*.tsx` | primitive 目录约定 | `packages/vue-ui/src/components/ui/` | adapted | 该目录下任何 `.vue` / `.ts` / `.css` 都源自对应 Extend primitive，必须带来源头 |
 | `apps/v4/components/ui/*.tsx` | 共用 Office chrome 目录约定 | `packages/vue-ui/src/components/office/` | adapted | #158 新建的 toolbar/sidebar/state 组件按 Extend PDF/DOCX chrome 尺寸实现，必须带来源头 |
-| `apps/v4 vendored reference snapshot (components)` | #155 像素对照 harness 复制的上游组件 | `tools/extend-reference/src/vendor/` | copied | 逐字副本，见下节路径与 NOTICE 约定 |
-| `apps/v4 vendored reference snapshot (styles)` | #155 harness 复制的上游 CSS | `tools/extend-reference/src/styles/` | copied | 只包含 `extend-*` 副本；`parity.css` 是 harness 自有代码，不在范围内 |
+| `apps/v4 vendored reference snapshot (components)` | #155 像素对照 harness 复制的上游组件 | `tools/extend-reference/src/vendor/` | adapted | 类名与结构对齐上游；改动清单见 `vendor/NOTICE.md`（render-prop 换成原生元素、去掉 border-beam 依赖、不复制弹层） |
+| `apps/v4 vendored reference snapshot (styles)` | #155 harness 复制的上游 CSS | `tools/extend-reference/src/styles/` | adapted | `extend-globals.css` 只裁剪 `@import` 图，正文由 `extract-extend-tokens.mjs` 校验 sha256；`extend-shadcn-tailwind.css` 除来源头外逐字复制；`parity.css` 是 harness 自有代码，不在范围内 |
 
 ## 与 #155 协调：`tools/extend-reference` 路径约定
 
@@ -248,6 +248,8 @@ tools/extend-reference/
 4. 只复制渲染所需的最小文件集；不要复制上游的 `package.json`、锁文件或字体二进制。字体通过依赖引入（OFL 见 Geist 许可证副本）。
 5. 如果改为从仓库外 checkout 读取上游源码而不 vendoring，则 `src/vendor/` 不创建，本行保持 `copied` 但校验器只报告 pending；此时必须在 `UPSTREAM.md` 记录 checkout 的 commit 和获取方式。
 6. `tools/extend-reference` 只用于对照验证，不进入任何公开包的构建产物。
+
+2026-11-20 状态（#155）：上表路径已落地。`src/vendor/` 下 9 个组件文件、`src/styles/extend-globals.css`、`src/styles/extend-shadcn-tailwind.css`、`src/lib/cn.ts` 均带来源头；`src/vendor/NOTICE.md`、`src/vendor/` 同级 `UPSTREAM.md` 与 `README.md` 记录改动清单。上游 CSS 正文的 sha256 由 `docs/design/extend-token-sources.json` 固定并在 `scripts/ci/extract-extend-tokens.mjs --extend-dir <checkout>` 时与上游 checkout 交叉校验。
 
 ## 维护流程
 

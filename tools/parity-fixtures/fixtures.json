@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "reference": {
+    "repo": "extend-hq/ui",
+    "commit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
+    "commitDate": "2026-11-17",
+    "license": "MIT",
+    "pages": {
+      "components": "https://www.extend.ai/ui/docs/components",
+      "blocks": "https://www.extend.ai/ui/blocks"
+    }
+  },
+  "fonts": {
+    "sans": "Geist Variable",
+    "mono": "Geist Mono Variable",
+    "source": "@fontsource-variable/geist, @fontsource-variable/geist-mono (stand-in for next/font Geist in apps/v4/lib/fonts.ts)"
+  },
+  "copy": {
+    "fileUpload": {
+      "title": "Click to upload or drop files",
+      "description": "PDF, DOC/DOCX, XLSX, CSV, PNG, or JPG",
+      "browseLabel": "Browse files",
+      "draggingLabel": "Drop to add",
+      "rejection": "This file type is not supported here."
+    },
+    "pdfToolbar": {
+      "pageLabel": "Page",
+      "ofLabel": "of",
+      "zoomValue": "100%",
+      "searchLabel": "Search text",
+      "actionsLabel": "Open PDF actions",
+      "sidebarLabel": "Pages sidebar"
+    },
+    "buttons": {
+      "label": "Upload document",
+      "outline": "Outline",
+      "secondary": "Secondary",
+      "ghost": "Ghost",
+      "destructive": "Delete",
+      "link": "Read the docs",
+      "iconAlt": "Page actions"
+    }
+  },
+  "documents": [
+    {
+      "id": "pdf",
+      "name": "quarterly-report.pdf",
+      "type": "application/pdf",
+      "sizeBytes": 2416640,
+      "pages": 12,
+      "extendSurface": "pdf-viewer"
+    },
+    {
+      "id": "docx",
+      "name": "legal-contract.docx",
+      "type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "sizeBytes": 184320,
+      "pages": 8,
+      "extendSurface": "docx-viewer"
+    },
+    {
+      "id": "xlsx",
+      "name": "financial-model.xlsx",
+      "type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "sizeBytes": 512000,
+      "sheets": 4,
+      "extendSurface": "xlsx-viewer"
+    },
+    {
+      "id": "pptx",
+      "name": "roadmap-review.pptx",
+      "type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "sizeBytes": 734003,
+      "slides": 9,
+      "extendSurface": "pptx-viewer"
+    },
+    {
+      "id": "png",
+      "name": "contract-page.png",
+      "type": "image/png",
+      "sizeBytes": 48128,
+      "asset": "/samples/contract-page.png"
+    }
+  ],
+  "fileUpload": {
+    "accept": ".pdf,.doc,.docx,.xlsx,.csv,.png,.jpg,.jpeg,application/pdf",
+    "multiple": true,
+    "maxSizeBytes": 26214400,
+    "acceptedFileTypes": [
+      { "label": "Image", "icon": "image" },
+      { "label": "PDF", "icon": "pdf" },
+      { "label": "Sheet", "icon": "sheet" }
+    ],
+    "selectedFile": {
+      "name": "quarterly-report.pdf",
+      "mimeType": "application/pdf",
+      "content": "parity fixture"
+    },
+    "rejectedFile": {
+      "name": "notes.txt",
+      "mimeType": "text/plain",
+      "content": "parity fixture"
+    }
+  },
+  "pdfToolbar": {
+    "activePage": 3,
+    "numPages": 12,
+    "zoomPercent": 100,
+    "sidebarOpen": false,
+    "showRotateControls": true,
+    "showDownload": true,
+    "showUpload": true
+  },
+  "documentSidebar": {
+    "widthPx": 160,
+    "inline": true,
+    "open": true
+  },
+  "blocks": {
+    "citations": [
+      { "id": "c1", "page": 2, "label": "Clause 4.2", "text": "The supplier shall deliver within 30 days." },
+      { "id": "c2", "page": 5, "label": "Clause 9.1", "text": "Liability is capped at the contract value." }
+    ],
+    "layoutBlocks": [
+      { "id": "b1", "type": "heading", "text": "Payment terms" },
+      { "id": "b2", "type": "paragraph", "text": "Invoices are due within 30 days of receipt." },
+      { "id": "b3", "type": "table", "rows": 3, "columns": 4 },
+      { "id": "b4", "type": "figure", "text": "Figure 1 — Payment flow" }
+    ],
+    "signature": {
+      "label": "Authorized signature",
+      "name": "Dana Whitfield",
+      "date": "2026-11-17"
+    },
+    "splits": [
+      { "id": "s1", "pages": "1-4", "title": "Scope" },
+      { "id": "s2", "pages": "5-8", "title": "Obligations" },
+      { "id": "s3", "pages": "9-12", "title": "Signatures" }
+    ],
+    "fileSystem": [
+      { "id": "f1", "name": "contracts", "type": "folder", "children": 3 },
+      { "id": "f2", "name": "legal-contract.docx", "type": "docx", "sizeBytes": 184320 },
+      { "id": "f3", "name": "quarterly-report.pdf", "type": "pdf", "sizeBytes": 2416640 }
+    ]
+  }
+}

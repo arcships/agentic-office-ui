@@ -148,17 +148,17 @@
       "upstreamFile": "apps/v4/app/globals.css",
       "purpose": "Semantic design tokens: radius, color scales, ring, shadows, spacing.",
       "target": "packages/vue-ui/src/styles/tokens.css",
-      "status": "reference-only",
+      "status": "adapted",
       "issues": ["#155", "#156"],
-      "notes": "Numbers are re-expressed as Vue tokens; no CSS is copied."
+      "notes": "Numbers are re-expressed as Vue tokens; no CSS is copied, but the file header records the pinned commit, so #167's reverse check treats it as adapted (header present)."
     },
     {
       "upstreamFile": "apps/v4/app/legacy-themes.css",
       "purpose": "Theme variants, dark scope, and font variable wiring.",
       "target": "packages/vue-ui/src/styles/theme.css",
-      "status": "reference-only",
+      "status": "adapted",
       "issues": ["#156"],
-      "notes": "Scoped under [data-office-theme]; our own selector strategy."
+      "notes": "Scoped under [data-office-theme]; our own selector strategy. The file header records the pinned commit, so #167's reverse check treats it as adapted."
     },
     {
       "upstreamFile": "apps/v4/app/shadcn-tailwind.css",
@@ -773,19 +773,19 @@
     },
     {
       "upstreamFile": "apps/v4 vendored reference snapshot (components)",
-      "purpose": "Verbatim upstream component copies rendered by the #155 parity harness.",
+      "purpose": "Upstream component copies rendered by the #155 parity harness.",
       "target": "tools/extend-reference/src/vendor/",
-      "status": "copied",
+      "status": "adapted",
       "issues": ["#155"],
-      "notes": "Mirrors the upstream source files used by the reference surfaces. Every copied ts, tsx, css, or vue file must carry the header, and vendor/NOTICE.md must reproduce the Extend MIT notice."
+      "notes": "Markup and class strings match upstream; adaptations are listed in tools/extend-reference/src/vendor/NOTICE.md (render-prop plumbing replaced by native elements, the border-beam dependency dropped, popups not vendored). Every ts, tsx, css, or vue file in this directory must carry the header, and vendor/NOTICE.md must reproduce the Extend MIT notice."
     },
     {
       "upstreamFile": "apps/v4 vendored reference snapshot (styles)",
-      "purpose": "Verbatim upstream CSS copies used by the reference harness.",
+      "purpose": "Upstream CSS copies used by the reference harness.",
       "target": "tools/extend-reference/src/styles/",
-      "status": "copied",
+      "status": "adapted",
       "issues": ["#155"],
-      "notes": "Only the extend-* copies are upstream; parity.css is harness-authored and excluded.",
+      "notes": "extend-globals.css narrows only the @import graph; the rest is verified byte-for-byte against the pinned upstream body hash by scripts/ci/extract-extend-tokens.mjs. extend-shadcn-tailwind.css is byte-identical below its provenance header. parity.css is harness-authored and excluded.",
       "exclude": ["parity.css"]
     }
   ],

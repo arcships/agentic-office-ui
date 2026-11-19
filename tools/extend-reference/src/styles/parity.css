@@ -1,0 +1,27 @@
+/*
+ * Harness stylesheet for the pinned Extend reference.
+ *
+ * `extend-globals.css` is the vendored upstream globals.css (import graph
+ * narrowed; see the provenance header inside). The rules below only wire the
+ * Geist fonts, which upstream loads through next/font in apps/v4/lib/fonts.ts:
+ * next/font injects the same `--font-sans` / `--font-mono` variables, so the
+ * computed font stack is equivalent to the pinned reference.
+ */
+@import "./extend-globals.css";
+
+:root {
+  --font-sans:
+    "Geist Variable", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-mono:
+    "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  /* Matches `antialiased` on the reference layout body. */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

@@ -1,0 +1,130 @@
+/*
+ * Harness bridge + preflight parity for the subject side.
+ *
+ * Tokens come from the real #156 layer:
+ *   `@arcships/vue-ui/theme.css` (imported from main.ts, aliased to
+ *   packages/vue-ui/src/styles/theme.css by vite.config.ts).
+ *
+ * The components under comparison are not migrated to `--office-*` yet
+ * (#157/#163 own that), so this file maps the shadcn-style custom properties
+ * they still read (`var(--border, ...)`, `var(--radius, ...)`) onto the office
+ * tokens. The mapping is one-way and contains no values, so a token change in
+ * #156 flows into the screenshots.
+ *
+ * Preflight: Extend ships Tailwind's preflight. The reset below reproduces the
+ * preflight rules that affect layout metrics (box sizing, border defaults,
+ * control font inheritance, margin reset) so both pages start from the same
+ * browser baseline.
+ */
+
+[data-office-theme] {
+  /* Font wiring, not a token change: #156 exposes `--office-font-sans: Geist, ...`
+   * and expects the host to load the Geist family. This page loads it through
+   * @fontsource-variable, whose family name is "Geist Variable", so the host
+   * override points the token at the loaded family. The reference page sets the
+   * same stack on `--font-sans`. */
+  --office-font-sans:
+    "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --office-font-mono:
+    "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --background: var(--office-background);
+  --foreground: var(--office-foreground);
+  --border: var(--office-border);
+  --input: var(--office-input);
+  --ring: var(--office-ring);
+  --primary: var(--office-primary);
+  --primary-foreground: var(--office-primary-foreground);
+  --secondary: var(--office-secondary);
+  --secondary-foreground: var(--office-secondary-foreground);
+  --muted: var(--office-muted);
+  --muted-foreground: var(--office-muted-foreground);
+  --accent: var(--office-accent);
+  --accent-foreground: var(--office-accent-foreground);
+  --card: var(--office-card);
+  --card-foreground: var(--office-card-foreground);
+  --popover: var(--office-popover);
+  --popover-foreground: var(--office-popover-foreground);
+  --destructive: var(--office-destructive);
+  --destructive-foreground: var(--office-destructive-foreground);
+  --radius: var(--office-radius);
+  --radius-sm: var(--office-radius-sm);
+  --radius-md: var(--office-radius-md);
+  --radius-lg: var(--office-radius-lg);
+  --radius-xl: var(--office-radius-xl);
+  --shadow-xs: var(--office-shadow-xs);
+  --shadow-sm: var(--office-shadow-sm);
+}
+
+/* Tailwind v4 preflight parity (only the rules that move a box or a glyph). */
+*,
+::before,
+::after {
+  box-sizing: border-box;
+  border-width: 0;
+  border-style: solid;
+  border-color: currentColor;
+}
+
+html {
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  tab-size: 4;
+  font-family: var(--office-font-sans);
+  font-feature-settings: normal;
+  font-variation-settings: normal;
+}
+
+body {
+  margin: 0;
+  line-height: inherit;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-synthesis-weight: none;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+figure,
+blockquote,
+dl,
+dd {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  background: transparent;
+  margin: 0;
+  padding: 0;
+}
+
+button {
+  cursor: pointer;
+}
+
+img,
+svg,
+video,
+canvas {
+  display: block;
+  vertical-align: middle;
+}
+
+img,
+video {
+  max-width: 100%;
+  height: auto;
+}
