@@ -3,7 +3,7 @@
     <div class="xlsx-headermenu-backdrop" data-testid="xlsx-headermenu-backdrop" @pointerdown="emit('close')" />
     <div
       ref="menuRef"
-      class="xlsx-headermenu"
+      class="office-ui office-menu__content office-menu__viewport xlsx-headermenu"
       :data-testid="isColumn ? 'xlsx-column-menu-list' : 'xlsx-row-menu-list'"
       :style="menuStyle"
       role="menu"
@@ -13,7 +13,7 @@
       <button
         v-for="item in items"
         :key="item.id"
-        class="xlsx-headermenu__item"
+        class="office-menu__item xlsx-headermenu__item"
         :data-testid="item.testId"
         role="menuitem"
         @click="run(item)"
@@ -199,18 +199,41 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.xlsx-headermenu-backdrop { bottom: 0; left: 0; position: fixed; right: 0; top: 0; z-index: 9999; }
+/*
+ * Row/column header menu: the shared `.office-menu__content` surface with the
+ * imperative positioning layer. Keyboard handling already delegates to the
+ * shared `resolveOfficeMenuKeyCommand`, so arrow/Escape/Tab semantics match
+ * the cell context menu and the Office dropdown menus.
+ */
+.xlsx-headermenu-backdrop {
+  inset: 0;
+  position: fixed;
+  z-index: 9999;
+}
+
 .xlsx-headermenu {
-  background: #ffffff; border: 1px solid #d4d4d8; border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12); min-width: 168px; padding: 4px;
+  min-inline-size: 168px;
+  position: fixed;
 }
+
 .xlsx-headermenu__item {
-  align-items: center; background: transparent; border: none; border-radius: 4px;
-  color: #18181b; cursor: pointer; display: flex; font-family: inherit;
-  font-size: 12px; height: 28px; padding: 0 8px; text-align: left; width: 100%;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  inline-size: 100%;
+  text-align: start;
 }
-.xlsx-headermenu__item:hover { background: #f4f4f5; }
+
+.xlsx-headermenu__item:hover:not(:disabled),
+.xlsx-headermenu__item:focus-visible:not(:disabled) {
+  background: var(--office-accent);
+  color: var(--office-accent-foreground);
+  outline: none;
+}
+
 @media (pointer: coarse) {
-  .xlsx-headermenu__item { height: 44px; }
+  .xlsx-headermenu__item {
+    min-block-size: 44px;
+  }
 }
 </style>

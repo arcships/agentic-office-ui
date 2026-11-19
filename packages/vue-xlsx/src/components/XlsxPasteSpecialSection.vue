@@ -16,7 +16,7 @@
     <div class="xlsx-authoring__actions">
       <button
         type="button"
-        class="xlsx-authoring__button xlsx-authoring__button--primary"
+        class="office-button office-button--default office-button--size-sm xlsx-authoring__button xlsx-authoring__button--primary"
         data-testid="xlsx-paste-special-apply"
         @click="applyPaste"
       >{{ m.xlsx.authoring.pasteSpecial.paste }}</button>

@@ -111,7 +111,6 @@
         >
           <div
             class="xlsx-viewer__deferred-card"
-            :class="{ 'xlsx-viewer__deferred-card--dark': isDark }"
           >
             <div class="xlsx-viewer__deferred-title">{{ m.xlsx.viewer.deferredTitle }}</div>
             <div
@@ -985,10 +984,10 @@ defineExpose({
 }
 
 .xlsx-viewer__deferred-card {
-  background: #ffffff;
-  border: 1px solid #d4d4d8;
-  border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+  background: var(--office-popover, #ffffff);
+  border: var(--office-border-width, 1px) solid var(--office-border, #d4d4d8);
+  border-radius: var(--office-radius-lg, 12px);
+  box-shadow: 0 12px 32px color-mix(in oklab, var(--office-foreground, #18181b) 12%, transparent);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -996,11 +995,6 @@ defineExpose({
   padding: 20px;
   text-align: center;
   width: 100%;
-}
-
-.xlsx-viewer__deferred-card--dark {
-  background: #27272a;
-  border-color: #3f3f46;
 }
 
 .xlsx-viewer__deferred-title {
@@ -1016,12 +1010,8 @@ defineExpose({
 }
 
 .xlsx-viewer__deferred-size {
-  color: #71717a;
+  color: var(--office-muted-foreground, #71717a);
   line-height: 1.5;
-}
-
-.xlsx-viewer__deferred-card--dark .xlsx-viewer__deferred-size {
-  color: #a1a1aa;
 }
 
 .xlsx-viewer__deferred-actions {
@@ -1033,17 +1023,13 @@ defineExpose({
 
 .xlsx-viewer__deferred-button {
   background: transparent;
-  border: 1px solid #d4d4d8;
-  border-radius: 7px;
+  border: var(--office-border-width, 1px) solid var(--office-input, #d4d4d8);
+  border-radius: var(--office-radius-md, 7px);
   color: inherit;
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--office-text-xs, 0.75rem);
   padding: 7px 16px;
-}
-
-.xlsx-viewer__deferred-card--dark .xlsx-viewer__deferred-button {
-  border-color: #52525b;
 }
 
 .xlsx-viewer__deferred-button:hover:not(:disabled) {
@@ -1051,13 +1037,13 @@ defineExpose({
 }
 
 .xlsx-viewer__deferred-button--primary {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #ffffff;
+  background: var(--office-primary, #2563eb);
+  border-color: var(--office-primary, #2563eb);
+  color: var(--office-primary-foreground, #ffffff);
 }
 
 .xlsx-viewer__deferred-button--primary:hover:not(:disabled) {
-  background: #1d4ed8;
+  background: color-mix(in oklab, var(--office-primary, #2563eb) 88%, transparent);
 }
 
 .xlsx-viewer__deferred-button:disabled {
@@ -1066,7 +1052,7 @@ defineExpose({
 }
 
 .xlsx-viewer__deferred-button:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--office-ring, #2563eb);
   outline-offset: 2px;
 }
 

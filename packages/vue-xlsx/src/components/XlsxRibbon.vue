@@ -28,7 +28,7 @@
             :disabled="controlsDisabled || !controller.canRedo"
             @click="controller.redo()"
           />
-        </OfficeToolbarGroup>
+      </OfficeToolbarGroup>
 
         <OfficeToolbarSeparator class="xlsx-ribbon__separator" />
 
@@ -421,14 +421,12 @@
             @click="emit('authoring', 'names')"
           >{{ m.xlsx.ribbon.nameManager }}</OfficeButton>
         </OfficeToolbarGroup>
-      </OfficeToolbarGroup>
 
-      <template #trailing>
         <label class="xlsx-ribbon__readonly" :title="m.xlsx.ribbon.readOnlyTitle">
           <input data-testid="xlsx-ribbon-read-only" type="checkbox" :checked="isReadOnly" @change="emit('update:readOnly', ($event.target as HTMLInputElement).checked)" />
           <span>{{ m.common.readOnly }}</span>
         </label>
-      </template>
+      </OfficeToolbarGroup>
     </OfficeToolbar>
   </OfficeThemeProvider>
 </template>
@@ -701,11 +699,14 @@ function deleteColumn(): void {
 
 .xlsx-ribbon__controls {
   flex: 1 1 auto;
+  flex-wrap: wrap;
   min-inline-size: 0;
 }
 
 .xlsx-ribbon__group {
-  flex: 0 0 auto;
+  /* Shrinkable so a 390px host lets each cluster wrap instead of overflowing. */
+  flex: 0 1 auto;
+  min-inline-size: 0;
 }
 
 .xlsx-ribbon__separator {
@@ -826,6 +827,14 @@ function deleteColumn(): void {
   stroke-linejoin: round;
   stroke-width: 1.7;
   inline-size: 16px;
+}
+
+@container xlsx-viewer (max-width: 620px) {
+  /* Wrapped clusters stay scrollable instead of eating the grid height. */
+  .xlsx-ribbon {
+    max-block-size: 132px;
+    overflow-y: auto;
+  }
 }
 
 @container xlsx-viewer (max-width: 560px) {

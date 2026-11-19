@@ -3,7 +3,7 @@
     <div class="xlsx-autofilter-backdrop" data-testid="xlsx-autofilter-backdrop" @pointerdown="emit('close')" />
     <div
       ref="menuRef"
-      class="xlsx-autofilter"
+      class="office-ui office-popover__content xlsx-autofilter"
       data-testid="xlsx-autofilter-menu"
       :style="menuStyle"
       role="dialog"
@@ -11,21 +11,21 @@
       @keydown="onKeydown"
     >
       <button
-        class="xlsx-autofilter__item"
+        class="office-menu__item xlsx-autofilter__item"
         data-testid="xlsx-autofilter-sort-ascending"
         :disabled="sortDisabled"
         type="button"
         @click="sort('ascending')"
       >{{ m.xlsx.contextMenu.sortAscending }}</button>
       <button
-        class="xlsx-autofilter__item"
+        class="office-menu__item xlsx-autofilter__item"
         data-testid="xlsx-autofilter-sort-descending"
         :disabled="sortDisabled"
         type="button"
         @click="sort('descending')"
       >{{ m.xlsx.contextMenu.sortDescending }}</button>
-      <div class="xlsx-autofilter__separator" />
-      <div class="xlsx-autofilter__section" role="group" :aria-label="m.xlsx.autoFilter.filterByValue">
+      <div class="office-menu__separator xlsx-autofilter__separator" />
+      <div class="office-menu__label xlsx-autofilter__section" role="group" :aria-label="m.xlsx.autoFilter.filterByValue">
         {{ m.xlsx.autoFilter.filterByValue }}
       </div>
       <label class="xlsx-autofilter__check xlsx-autofilter__check--all">
@@ -55,16 +55,16 @@
           {{ m.xlsx.autoFilter.noValues }}
         </span>
       </div>
-      <div class="xlsx-autofilter__separator" />
+      <div class="office-menu__separator xlsx-autofilter__separator" />
       <div class="xlsx-autofilter__actions">
         <button
-          class="xlsx-autofilter__button"
+          class="office-button office-button--outline office-button--size-sm xlsx-autofilter__button"
           data-testid="xlsx-autofilter-clear"
           type="button"
           @click="clear"
         >{{ m.xlsx.autoFilter.clear }}</button>
         <button
-          class="xlsx-autofilter__button xlsx-autofilter__button--primary"
+          class="office-button office-button--default office-button--size-sm xlsx-autofilter__button xlsx-autofilter__button--primary"
           data-testid="xlsx-autofilter-apply"
           type="button"
           @click="apply"
@@ -228,62 +228,119 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.xlsx-autofilter-backdrop { bottom: 0; left: 0; position: fixed; right: 0; top: 0; z-index: 9999; }
+/*
+ * The panel is the shared `.office-popover__content` surface; rows reuse the
+ * `.office-menu__*` geometry so the AutoFilter popover and the context menus
+ * read as one design-system family. Only the value list and the checkbox rows
+ * need local rules.
+ */
+.xlsx-autofilter-backdrop {
+  inset: 0;
+  position: fixed;
+  z-index: 9999;
+}
+
 .xlsx-autofilter {
-  background: #fff;
-  border: 1px solid #d4d4d8;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px #0000001f;
-  color: #18181b;
   display: flex;
   flex-direction: column;
-  max-height: 320px;
-  min-width: 188px;
-  padding: 4px;
+  max-block-size: 320px;
+  min-inline-size: 188px;
+  padding: var(--office-ui-space-1);
+  position: fixed;
 }
-.xlsx-autofilter__item,
-.xlsx-autofilter__button {
-  align-items: center;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  color: inherit;
+
+.xlsx-autofilter__item {
+  border: 0;
   cursor: pointer;
-  display: flex;
   font-family: inherit;
-  font-size: 12px;
-  height: 28px;
-  padding: 0 8px;
-  text-align: left;
+  inline-size: 100%;
+  text-align: start;
 }
-.xlsx-autofilter__item:hover,
-.xlsx-autofilter__button:hover { background: #f4f4f5; }
-.xlsx-autofilter__item:disabled { cursor: default; opacity: .45; }
-.xlsx-autofilter__item:disabled:hover { background: transparent; }
-.xlsx-autofilter__separator { background: #e4e4e7; height: 1px; margin: 4px 0; }
-.xlsx-autofilter__section { color: #71717a; font-size: 11px; padding: 2px 8px; }
-.xlsx-autofilter__values { display: flex; flex-direction: column; max-height: 160px; overflow-y: auto; padding: 0 4px; }
+
+.xlsx-autofilter__item:hover:not(:disabled),
+.xlsx-autofilter__button:hover:not(:disabled) {
+  background: var(--office-accent);
+  color: var(--office-accent-foreground);
+}
+
+.xlsx-autofilter__item:disabled {
+  cursor: default;
+  opacity: 0.64;
+}
+
+.xlsx-autofilter__item:disabled:hover {
+  background: transparent;
+}
+
+.xlsx-autofilter__button {
+  font-size: var(--office-text-xs);
+}
+
+.xlsx-autofilter__section {
+  padding-block: 2px;
+}
+
+.xlsx-autofilter__values {
+  display: flex;
+  flex-direction: column;
+  max-block-size: 160px;
+  overflow-y: auto;
+  padding-inline: var(--office-ui-space-1);
+}
+
 .xlsx-autofilter__check {
   align-items: center;
-  border-radius: 4px;
+  border-radius: var(--office-radius-sm);
   display: flex;
-  font-size: 12px;
-  gap: 6px;
-  min-height: 24px;
-  padding: 0 4px;
+  font-size: var(--office-text-xs);
+  gap: var(--office-ui-space-1-5);
+  min-block-size: 24px;
+  padding-inline: var(--office-ui-space-1);
   white-space: nowrap;
 }
-.xlsx-autofilter__check:hover { background: #f4f4f5; }
-.xlsx-autofilter__check input { accent-color: #2563eb; margin: 0; }
-.xlsx-autofilter__check--all { padding: 0 8px; }
-.xlsx-autofilter__blank { color: #71717a; font-style: italic; }
-.xlsx-autofilter__empty { color: #71717a; font-size: 11px; padding: 4px; }
-.xlsx-autofilter__actions { display: flex; gap: 4px; justify-content: flex-end; }
-.xlsx-autofilter__button--primary { background: #2563eb; color: #fff; }
-.xlsx-autofilter__button--primary:hover { background: #1d4ed8; }
+
+.xlsx-autofilter__check:hover {
+  background: var(--office-accent);
+}
+
+.xlsx-autofilter__check input {
+  accent-color: var(--office-primary);
+  margin: 0;
+}
+
+.xlsx-autofilter__check--all {
+  padding-inline: var(--office-ui-space-2);
+}
+
+.xlsx-autofilter__blank,
+.xlsx-autofilter__empty {
+  color: var(--office-muted-foreground);
+  font-size: var(--office-text-xs);
+}
+
+.xlsx-autofilter__blank {
+  font-style: italic;
+}
+
+.xlsx-autofilter__empty {
+  padding: var(--office-ui-space-1);
+}
+
+.xlsx-autofilter__actions {
+  display: flex;
+  gap: var(--office-ui-space-1);
+  justify-content: flex-end;
+  padding-block-start: var(--office-ui-space-1);
+}
+
 @media (pointer: coarse) {
   .xlsx-autofilter__item,
-  .xlsx-autofilter__button { height: 44px; }
-  .xlsx-autofilter__check { min-height: 36px; }
+  .xlsx-autofilter__button {
+    min-block-size: 44px;
+  }
+
+  .xlsx-autofilter__check {
+    min-block-size: 36px;
+  }
 }
 </style>
