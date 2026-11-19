@@ -333,6 +333,14 @@ import {
 } from "@arcships/xlsx-core";
 import { sanitizeOfficeLink } from "@arcships/office-runtime/link-policy";
 import { GRID_HEADER_HEIGHT_PX, GRID_ROW_HEADER_WIDTH_PX, gridZoomFactor } from "./grid-metrics";
+import {
+  isSameRange,
+  resolveHorizontalJumpDirection,
+  resolveJumpTarget,
+  resolveLastUsedDisplayIndex,
+  resolvePageRowStep,
+  type GridAxisDirection,
+} from "./grid-keyboard";
 import { nextGridA11yId } from "./grid-a11y";
 import XlsxClipboardNotice from "./XlsxClipboardNotice.vue";
 import { useClipboardCopyNotice } from "../composables/useClipboardCopyNotice";
@@ -4894,10 +4902,40 @@ function onDblClick(event: MouseEvent) {
   nextTick(() => { editInputRef.value?.focus(); editInputRef.value?.select(); });
 }
 
+/**
+ * Writes the inline draft where Excel puts it.
+ *
+ * A single cell takes the entry as usual. Only `Enter` asks for
+ * `fillSelection`: over a multi-cell selection it fills that whole selection in
+ * one undo step (`commitSelectionInput`), which is what Excel does instead of
+ * keeping the entry in the active cell only. Tab, blur and the commit-and-move
+ * keys still write the active cell, so leaving the editor never overwrites a
+ * range the user only selected.
+ */
+function commitEditingDraft(cell: XlsxCellAddress, fillSelection = false) {
+  const fillRange = props.controller.commitSelectionInput;
+  if (fillSelection && hasRangeSelection() && !editingLocked.value && typeof fillRange === "function") {
+    return fillRange.call(props.controller, editingValue.value);
+  }
+  return props.controller.commitCellInput(cell, editingValue.value);
+}
+
 function commitEdit() {
   if (!editingCell.value) return;
   formulaReferenceEditing.end(FORMULA_REFERENCE_OWNER_GRID);
-  props.controller.commitCellInput(editingCell.value, editingValue.value);
+  commitEditingDraft(editingCell.value);
+  editingCell.value = null;
+  editingValue.value = "";
+  isEditComposing.value = false;
+  commitEditOnCompositionEnd = false;
+  void nextTick(() => containerRef.value?.focus());
+}
+
+/** `Enter` confirms the draft, filling a multi-cell selection with it. */
+function commitEditFillingSelection() {
+  if (!editingCell.value) return;
+  formulaReferenceEditing.end(FORMULA_REFERENCE_OWNER_GRID);
+  commitEditingDraft(editingCell.value, true);
   editingCell.value = null;
   editingValue.value = "";
   isEditComposing.value = false;
@@ -5043,7 +5081,11 @@ function onEditKeydown(event: KeyboardEvent) {
   } else if (event.key === "Enter") {
     event.stopPropagation();
     event.preventDefault();
-    commitEdit();
+    // Excel confirms an entry and steps down with Enter; Shift+Enter steps
+    // back up, committing the same draft first. Plain Enter fills a multi-cell
+    // selection, the other exits leave the rest of the range untouched.
+    if (event.shiftKey) commitAndMoveCell(-1, 0);
+    else commitEditFillingSelection();
   } else if (event.key === "Escape") {
     event.stopPropagation();
     event.preventDefault();
@@ -5076,13 +5118,14 @@ function onEditCompositionEnd() {
   if (!commitEditOnCompositionEnd) return;
   commitEditOnCompositionEnd = false;
   // v-model writes the final composition text during compositionend listeners,
-  // so wait one tick before reading editingValue.
-  void nextTick(commitEdit);
+  // so wait one tick before reading editingValue. The Enter that ended the
+  // composition confirms the draft like any other Enter.
+  void nextTick(commitEditFillingSelection);
 }
 
 function commitAndTab() {
   if (!editingCell.value) return;
-  props.controller.commitCellInput(editingCell.value, editingValue.value);
+  commitEditingDraft(editingCell.value);
   const nextCell = getAdjacentCell(editingCell.value, 0, 1);
   if (!nextCell) return;
   props.controller.selectCell(nextCell);
@@ -5096,7 +5139,7 @@ function commitAndTab() {
 function commitAndMoveCell(rowDelta: number, colDelta: number) {
   const cell = editingCell.value;
   if (!cell) return;
-  props.controller.commitCellInput(cell, editingValue.value);
+  commitEditingDraft(cell);
   formulaReferenceEditing.end(FORMULA_REFERENCE_OWNER_GRID);
   editingCell.value = null;
   editingValue.value = "";
@@ -5133,6 +5176,164 @@ function moveCell(rowDelta: number, colDelta: number, extend: boolean) {
     props.controller.selectCell(cell);
   }
   scrollToCell(cell);
+}
+
+/** Whether the current selection covers more than the active cell. */
+function hasRangeSelection(): boolean {
+  const range = selection.value;
+  if (!range) return false;
+  return range.start.row !== range.end.row || range.start.col !== range.end.col;
+}
+
+/** Whether an arrow key moves the focus by one cell on either axis. */
+function isArrowKey(key: string): boolean {
+  return key === "ArrowUp" || key === "ArrowDown" || key === "ArrowLeft" || key === "ArrowRight";
+}
+
+/**
+ * Excel's Escape: a range selection collapses back to its active cell.
+ *
+ * @returns `true` when a range was collapsed, so the key was consumed.
+ */
+function collapseSelectionToActiveCell(): boolean {
+  const cell = activeCell.value;
+  if (!cell || !hasRangeSelection()) return false;
+  props.controller.selectCell(cell);
+  return true;
+}
+
+/**
+ * Whether a cell holds data for the edge jumps.
+ *
+ * `Ctrl+Arrow` and the `End` key treat a cell with any rendered text as the
+ * end of a run, the same way Excel stops on a cell with a value, a formula
+ * result or a formatted constant.
+ */
+function isCellOccupied(cell: XlsxCellAddress): boolean {
+  return String(getGridCellDisplayValue(cell) ?? "").trim().length > 0;
+}
+
+/** Last display row or column covered by the sheet's used range. */
+function usedDisplayEdge(axis: "row" | "column"): number {
+  const indices = axis === "row" ? displayRows.value : displayCols.value;
+  const fallback = Math.max(0, indices.length - 1);
+  const sheet = activeSheet.value;
+  if (!sheet) return fallback;
+  return resolveLastUsedDisplayIndex(
+    indices,
+    axis === "row" ? sheet.maxUsedRow : sheet.maxUsedCol,
+    fallback,
+  );
+}
+
+/** The used range's last cell, or `null` for an empty sheet. */
+function usedRangeEndCell(): XlsxCellAddress | null {
+  const sheet = activeSheet.value;
+  if (!sheet || sheet.maxUsedRow < 0 || sheet.maxUsedCol < 0) return null;
+  return getSheetCell(usedDisplayEdge("row"), usedDisplayEdge("column"));
+}
+
+/**
+ * `Ctrl/Cmd+A`: select the used range.
+ *
+ * The first press selects the used extent; a second press escalates to the
+ * whole display grid, exactly what the corner click (`selectAxisRange`) does.
+ * An empty sheet therefore selects everything straight away.
+ */
+function selectUsedRange(): void {
+  const first = getSheetCell(0, 0);
+  const end = usedRangeEndCell();
+  if (first && end && !isSameRange(selection.value, { start: first, end })) {
+    props.controller.selectRange({ start: first, end });
+    scrollToCell(end);
+    return;
+  }
+  selectAxisRange({ actualIndex: 0, kind: "corner" });
+}
+
+/** `PageUp`/`PageDown`: one viewport of rows, keeping the column. */
+function moveCellByPage(direction: GridAxisDirection, extend: boolean): void {
+  const step = resolvePageRowStep(effectiveRowHeights.value, bodyViewportSize().height);
+  moveCell(direction * step, 0, extend);
+}
+
+/**
+ * `Home`/`End`: the start or the data end of the active row.
+ *
+ * `Home` lands on the row's first column. `End` lands on the row's last
+ * non-empty cell and falls back to the last display column when the row is
+ * empty, which is where Excel's `End` mode would stop next.
+ */
+function moveToRowEdge(edge: "start" | "end", extend: boolean): void {
+  const current = activeCell.value;
+  if (!current) return;
+  const cols = displayCols.value;
+  if (cols.length === 0) return;
+  let target: XlsxCellAddress = { row: current.row, col: cols[0] };
+  if (edge === "end") {
+    target = { row: current.row, col: cols[cols.length - 1] };
+    for (let index = cols.length - 1; index >= 0; index -= 1) {
+      const candidate = { row: current.row, col: cols[index] };
+      if (isCellOccupied(candidate)) {
+        target = candidate;
+        break;
+      }
+    }
+  }
+  moveSelectionTo(target, extend ? current : null);
+}
+
+/** `Ctrl/Cmd+Home` / `Ctrl/Cmd+End`: the sheet's first and last used cell. */
+function moveToSheetEdge(edge: "start" | "end", extend: boolean): void {
+  const rows = displayRows.value;
+  const cols = displayCols.value;
+  if (rows.length === 0 || cols.length === 0) return;
+  const first = getSheetCell(0, 0);
+  // Excel always counts A1 as part of the used range, so `Ctrl+End` on an
+  // empty sheet lands there instead of on the last displayed cell.
+  const target = edge === "start" ? first : usedRangeEndCell() ?? first;
+  if (!target) return;
+  moveSelectionTo(target, extend ? activeCell.value : null);
+}
+
+/**
+ * `Ctrl/Cmd` + arrow: jump to the edge of the data region under the cursor.
+ *
+ * The column axis is mirrored on an RTL sheet, so `←` walks towards the higher
+ * display index there, matching the plain arrow keys.
+ */
+function jumpToEdge(key: string, extend: boolean): void {
+  const current = activeCell.value;
+  if (!current) return;
+  const displayRow = sheetRowToDisplayIndex.value.get(current.row);
+  const displayCol = sheetColToDisplayIndex.value.get(current.col);
+  if (displayRow === undefined || displayCol === undefined) return;
+
+  let target: XlsxCellAddress | null;
+  if (key === "ArrowUp" || key === "ArrowDown") {
+    const rows = displayRows.value;
+    const direction: GridAxisDirection = key === "ArrowUp" ? -1 : 1;
+    const index = resolveJumpTarget(displayRow, direction, rows.length, (display) =>
+      isCellOccupied({ row: rows[display], col: current.col }),
+    );
+    target = getSheetCell(index, displayCol);
+  } else {
+    const cols = displayCols.value;
+    const direction = resolveHorizontalJumpDirection(key, isRightToLeft.value);
+    const index = resolveJumpTarget(displayCol, direction, cols.length, (display) =>
+      isCellOccupied({ row: current.row, col: cols[display] }),
+    );
+    target = getSheetCell(displayRow, index);
+  }
+  if (!target) return;
+  moveSelectionTo(target, extend ? current : null);
+}
+
+/** Moves the selection to `target`, extending from `anchor` when one is given. */
+function moveSelectionTo(target: XlsxCellAddress, anchor: XlsxCellAddress | null): void {
+  if (anchor) props.controller.selectRange({ start: anchor, end: target });
+  else props.controller.selectCell(target);
+  scrollToCell(target);
 }
 
 function startEdit(cell: XlsxCellAddress) {
@@ -5236,17 +5437,45 @@ function onGridKeydown(event: KeyboardEvent) {
       event.preventDefault();
       return;
     }
+    // With nothing to cancel, Escape collapses a range selection back to its
+    // active cell, exactly like Excel; a single cell is left to the browser.
+    if (collapseSelectionToActiveCell()) {
+      event.preventDefault();
+      return;
+    }
   }
 
   const active = activeCell.value;
   if (!active) return;
 
-  if ((event.ctrlKey || event.metaKey) && event.key === "c") {
+  const modified = event.ctrlKey || event.metaKey;
+  if (modified && event.key === "c") {
     if (hasDomTextSelection()) return;
     event.preventDefault(); void copySelection(); return;
   }
-  if ((event.ctrlKey || event.metaKey) && event.key === "x") { event.preventDefault(); if (!editingLocked.value) props.controller.cutSelection?.(); return; }
-  if ((event.ctrlKey || event.metaKey) && event.key === "v") { event.preventDefault(); props.controller.pasteFromClipboard(); return; }
+  if (modified && event.key === "x") { event.preventDefault(); if (!editingLocked.value) props.controller.cutSelection?.(); return; }
+  if (modified && event.key === "v") { event.preventDefault(); props.controller.pasteFromClipboard(); return; }
+  if (modified && event.key.toLocaleLowerCase() === "a") { event.preventDefault(); selectUsedRange(); return; }
+  // Ctrl/Cmd+Arrow jumps to the edge of the current data region.
+  if (modified && !event.altKey && isArrowKey(event.key)) {
+    event.preventDefault(); jumpToEdge(event.key, event.shiftKey); return;
+  }
+
+  // Page keys move by a viewport of rows, Home/End by row or sheet extents;
+  // each keeps Shift for extending the selection. `Ctrl/Cmd+PageUp/PageDown`
+  // belongs to the sheet tabs (#11), so it is left to the viewer.
+  if (!modified && (event.key === "PageDown" || event.key === "PageUp")) {
+    event.preventDefault();
+    moveCellByPage(event.key === "PageUp" ? -1 : 1, event.shiftKey);
+    return;
+  }
+  if (event.key === "Home" || event.key === "End") {
+    event.preventDefault();
+    const edge = event.key === "Home" ? "start" : "end";
+    if (modified) moveToSheetEdge(edge, event.shiftKey);
+    else moveToRowEdge(edge, event.shiftKey);
+    return;
+  }
 
   const handlers: Record<string, () => void> = {
     ArrowUp: () => moveCell(-1, 0, event.shiftKey),
@@ -5256,7 +5485,12 @@ function onGridKeydown(event: KeyboardEvent) {
     // Tab follows reading order, which is leftwards on an RTL sheet: the next
     // display column is still `+1`.
     Tab: () => { event.preventDefault(); moveCell(0, 1, false); },
-    Enter: () => { if (!editingLocked.value) startEdit(active); },
+    // Shift+Enter steps up one row; plain Enter opens the editor, and an entry
+    // confirmed over a multi-cell selection fills that selection.
+    Enter: () => {
+      if (event.shiftKey) { moveCell(-1, 0, false); return; }
+      if (!editingLocked.value) startEdit(active);
+    },
     Delete: () => { if (!editingLocked.value) props.controller.clearSelectedCells(); },
     Backspace: () => { if (!editingLocked.value) props.controller.setCellValue(active, ""); },
     F2: () => { if (!editingLocked.value) startEdit(active); },

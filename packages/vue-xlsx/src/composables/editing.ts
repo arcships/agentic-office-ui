@@ -132,22 +132,25 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     ctx.recordRangeEditHistory(mutations, normalized, ctx.activeCell.value ?? normalized.start);
   }
 
-  function setCellValue(cell: XlsxCellAddress, value: string) {
+  /**
+   * Resolves and writes one user entry, validation included.
+   *
+   * The write is history-free and does not recalculate, so callers can record
+   * one entry per cell (`setCellValue`) or one entry for a whole range
+   * (`commitSelectionInput`) and recalculate once at the end.
+   *
+   * @returns `true` when the entry was accepted and written.
+   */
+  function writeCellValue(cell: XlsxCellAddress, value: string) {
     const worksheet = ctx.getActiveWorksheet();
     if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
-      return;
+      return false;
     }
 
     const validationCheck = ctx.checkCellValue(cell, value);
-    if (!validationCheck.accepted) {
-      ctx.setValidationFeedback(validationCheck.feedback);
-      return;
-    }
     ctx.setValidationFeedback(validationCheck.feedback);
-
-    const before = ctx.captureCellMutationState(cell);
-    if (!before) {
-      return;
+    if (!validationCheck.accepted) {
+      return false;
     }
 
     const input = resolveCellInput(value, {
@@ -169,6 +172,23 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     if (input.numberFormat) {
       worksheet.setCellStyleAt(cell.row, cell.col, { numberFormat: input.numberFormat });
     }
+    return true;
+  }
+
+  function setCellValue(cell: XlsxCellAddress, value: string) {
+    const worksheet = ctx.getActiveWorksheet();
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value) {
+      return;
+    }
+
+    const before = ctx.captureCellMutationState(cell);
+    if (!before) {
+      return;
+    }
+
+    if (!writeCellValue(cell, value)) {
+      return;
+    }
 
     const after = ctx.captureCellMutationState(cell);
     if (!after) {
@@ -178,6 +198,63 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
       ctx.refreshWorkbookState(ctx.workbook.value);
     }
     ctx.recordCellEditHistory(cell, before, after);
+  }
+
+  /**
+   * Writes one entry into every cell of the selection as a single undo step.
+   *
+   * This is Excel's fill: with a multi-cell selection active, a confirmed
+   * entry lands in the whole range instead of only the active cell. Input
+   * follows `commitCellInput`'s rules and formulas are copied verbatim, so a
+   * filled `=A1` keeps pointing at A1 instead of shifting per cell.
+   *
+   * @returns How many cells were written.
+   */
+  function commitSelectionInput(input: string) {
+    const worksheet = ctx.getActiveWorksheet();
+    const range = ctx.selection.value;
+    const active = ctx.activeCell.value;
+    if (ctx.isEditingLocked.value || !worksheet || !ctx.workbook.value || !range || !active) {
+      return 0;
+    }
+
+    const text = input ?? "";
+    const normalized = normalizeRange(range);
+    const mutations: import("./internal").RangeCellMutation[] = [];
+    for (let row = normalized.start.row; row <= normalized.end.row; row += 1) {
+      for (let col = normalized.start.col; col <= normalized.end.col; col += 1) {
+        if (worksheet.isMergedSecondary(row, col)) {
+          continue;
+        }
+
+        const cell = { row, col };
+        const before = ctx.captureCellMutationState(cell);
+        if (!before) {
+          continue;
+        }
+        if (!writeCellValue(cell, text)) {
+          continue;
+        }
+        const after = ctx.captureCellMutationState(cell);
+        if (!after) {
+          continue;
+        }
+        mutations.push({
+          after,
+          before,
+          cell
+        });
+      }
+    }
+
+    if (mutations.length === 0) {
+      return 0;
+    }
+    if (ctx.maybeRecalculateWorkbook(ctx.workbook.value)) {
+      ctx.refreshWorkbookState(ctx.workbook.value);
+    }
+    ctx.recordRangeEditHistory(mutations, normalized, active);
+    return mutations.length;
   }
 
   function setCellFormula(cell: XlsxCellAddress, formula: string) {
@@ -809,6 +886,7 @@ export function createEditingDomain(ctx: XlsxControllerContext) {
     setCellFormula,
     setCellStyle,
     commitCellInput,
+    commitSelectionInput,
     setSelectedCellValue,
     setSelectedCellFormula,
     setSelectedFormula,

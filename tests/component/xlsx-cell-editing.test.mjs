@@ -96,7 +96,15 @@ function functionNode(name) {
 // the component source against a real controller. This is the same technique
 // xlsx-grid-scroll.test.mjs uses for grid internals.
 async function loadInlineEditor(controller) {
-  const required = ["onDblClick", "commitEdit", "startEdit", "commitAndTab"];
+  const required = [
+    "onDblClick",
+    "commitEdit",
+    "commitEditFillingSelection",
+    "startEdit",
+    "commitAndTab",
+    "commitEditingDraft",
+    "hasRangeSelection",
+  ];
   const bodies = required.map((name) => {
     const node = functionNode(name);
     assert.ok(node, `missing XlsxGrid.${name}`);
@@ -111,6 +119,12 @@ async function loadInlineEditor(controller) {
     const props = { controller: null, readOnly: false };
     const editingCell = { value: null };
     const editingValue = { value: "" };
+    // The grid derives both from its props; the getters keep this harness in
+    // step with the controller the test swaps in after loading.
+    const selection = { get value() { return props.controller?.selection ?? null; } };
+    const editingLocked = {
+      get value() { return props.readOnly === true || props.controller?.isEditingLocked === true; },
+    };
     // Formula-reference highlighting is exercised by its own component test;
     // this harness only needs the editing hooks to exist and stay the same
     // no-op places the real session would end/update.
@@ -144,7 +158,7 @@ async function loadInlineEditor(controller) {
     ${inputValueHelper ? "" : "function getCellInputValue(cell) { return props.controller.getCellDisplayValue(cell); }"}
   `;
   const output = ts.transpileModule(
-    `${prelude}\n${bodies.join("\n")}\nexport { props, editingCell, editingValue, onDblClick, commitEdit, startEdit, commitAndTab, setHitTestResult, setAdjacentCell };`,
+    `${prelude}\n${bodies.join("\n")}\nexport { props, editingCell, editingValue, onDblClick, commitEdit, commitEditFillingSelection, startEdit, commitAndTab, setHitTestResult, setAdjacentCell };`,
     {
       compilerOptions: {
         module: ts.ModuleKind.ESNext,
@@ -246,6 +260,66 @@ test("inline editing stores hard line breaks without flattening the cell", async
     controller.undo();
     await vue.nextTick();
     assert.equal(controller.getCellDisplayValue(cell), original, "one undo restores the previous cell");
+  } finally {
+    app.unmount();
+  }
+});
+
+test("inline editor fills a multi-cell selection as one undo step", async () => {
+  const { controller, app } = await mountController();
+  try {
+    const editor = await loadInlineEditor(controller);
+    const cells = [
+      { row: 30, col: 8 },
+      { row: 30, col: 9 },
+      { row: 31, col: 8 },
+      { row: 31, col: 9 },
+    ];
+    const originals = cells.map((cell) => controller.getCellDisplayValue(cell));
+    const undoDepth = await countUndoDepth(controller);
+
+    controller.selectRange({ start: cells[0], end: cells[3] });
+    await vue.nextTick();
+    editor.startEdit(controller.activeCell);
+    editor.editingValue.value = "filled";
+    editor.commitEditFillingSelection();
+    await vue.nextTick();
+    assert.deepEqual(
+      cells.map((cell) => controller.getCellDisplayValue(cell)),
+      ["filled", "filled", "filled", "filled"],
+      "an entry confirmed over a range lands in every cell",
+    );
+    assert.deepEqual(
+      { start: controller.selection.start, end: controller.selection.end },
+      { start: cells[0], end: cells[3] },
+      "the filled range stays selected",
+    );
+    assert.equal(
+      await countUndoDepth(controller),
+      undoDepth + 1,
+      "the whole fill is a single undo entry",
+    );
+    controller.undo();
+    await vue.nextTick();
+    assert.deepEqual(
+      cells.map((cell) => controller.getCellDisplayValue(cell)),
+      originals,
+      "one undo restores every filled cell",
+    );
+
+    const formulaCells = [{ row: 30, col: 10 }, { row: 31, col: 10 }];
+    controller.selectRange({ start: formulaCells[0], end: formulaCells[1] });
+    await vue.nextTick();
+    editor.startEdit(controller.activeCell);
+    editor.editingValue.value = "=SUM(A1:A2)";
+    editor.commitEditFillingSelection();
+    await vue.nextTick();
+    assert.equal(controller.getCellFormula(formulaCells[0]), "=SUM(A1:A2)");
+    assert.equal(
+      controller.getCellFormula(formulaCells[1]),
+      "=SUM(A1:A2)",
+      "a filled formula keeps its references instead of shifting per cell",
+    );
   } finally {
     app.unmount();
   }
