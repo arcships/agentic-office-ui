@@ -269,6 +269,7 @@ command("core-behavior-5", process.execPath, [
       "tests/component/i18n-source.test.mjs",
       "tests/component/i18n-runtime.test.mjs",
       "tests/component/office-selection-ui.test.mjs",
+      "tests/component/pdf-object-selection.test.mjs",
       "tests/component/region-annotator.test.mjs",
       "tests/component/office-reference-surfaces.test.mjs",
       "tests/component/docx-reference-surfaces.test.mjs",
