@@ -58,7 +58,13 @@ export function createPptxTransitionSoundPlayer(
   const stop = () => {
     if (!current) return
     current.element.pause()
-    if (current.sourceUrl) callbacks.releaseSource?.(current.item, current.sourceUrl)
+    if (current.sourceUrl) {
+      // Do not revoke the blob while the element is still loading it: Chromium
+      // reports ERR_FILE_NOT_FOUND for the in-flight media request.
+      const item = current.item
+      const url = current.sourceUrl
+      setTimeout(() => callbacks.releaseSource?.(item, url), 1000)
+    }
     current = null
   }
 

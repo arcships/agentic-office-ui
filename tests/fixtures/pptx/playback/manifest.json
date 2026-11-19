@@ -141,7 +141,11 @@
       "slides": 12,
       "focusSlideIndex": 11,
       "expectations": [
-        { "feature": "text:by-word", "disposition": "strict", "count": 3 }
+        {
+          "feature": "text:by-word",
+          "disposition": "strict",
+          "count": 3
+        }
       ],
       "xmlMarkers": [
         "<p:charRg st=\"0\" end=\"2\"/>",
@@ -158,9 +162,21 @@
       "slides": 12,
       "focusSlideIndex": 11,
       "expectations": [
-        { "feature": "chart:element", "disposition": "strict", "count": 1 },
-        { "feature": "chart:series", "disposition": "static", "count": 1 },
-        { "feature": "chart-build:series", "disposition": "static", "count": 1 }
+        {
+          "feature": "chart:element",
+          "disposition": "strict",
+          "count": 1
+        },
+        {
+          "feature": "chart:series",
+          "disposition": "static",
+          "count": 1
+        },
+        {
+          "feature": "chart-build:series",
+          "disposition": "static",
+          "count": 1
+        }
       ],
       "xmlMarkers": [
         "<p:oleChartEl type=\"chart\"/>",
@@ -179,8 +195,16 @@
       "slides": 12,
       "focusSlideIndex": 11,
       "expectations": [
-        { "feature": "table:cell", "disposition": "strict", "count": 2 },
-        { "feature": "table-build:cell", "disposition": "static", "count": 1 }
+        {
+          "feature": "table:cell",
+          "disposition": "strict",
+          "count": 2
+        },
+        {
+          "feature": "table-build:cell",
+          "disposition": "static",
+          "count": 1
+        }
       ],
       "xmlMarkers": [
         "<p:pRg st=\"0\" end=\"0\"/>",
@@ -198,13 +222,21 @@
       "slides": 12,
       "focusSlideIndex": 0,
       "expectations": [
-        { "feature": "transition:sound", "disposition": "strict", "count": 1 }
+        {
+          "feature": "transition:sound",
+          "disposition": "strict",
+          "count": 1
+        }
       ],
       "otherSlideExpectations": [
         {
           "slideIndex": 1,
           "expectations": [
-            { "feature": "transition:3d:cube", "disposition": "static", "count": 1 }
+            {
+              "feature": "transition:3d:cube",
+              "disposition": "static",
+              "count": 1
+            }
           ]
         }
       ],
