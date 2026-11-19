@@ -1,8 +1,9 @@
 """Issue #157 — deterministic primitive gallery screenshots.
 
-The #155 pixel-parity harness is not present in this worktree, so this script
-captures element-level evidence for Button/Input/Select/Dialog/Tooltip and the
-whole gallery in light/dark. It deliberately fails on console errors.
+Supplementary evidence for the docs gallery and a real-browser interaction
+smoke test. Pixel comparison against Extend lives in the #155 harness
+(`pnpm ui:parity`); this script captures the demo gallery in light/dark and
+deliberately fails on console errors.
 """
 
 from __future__ import annotations

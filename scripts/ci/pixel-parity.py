@@ -194,10 +194,10 @@ def target_locator(page, cell, selector: str | None):
     return target
 
 
-def apply_interaction(page, target, interaction: dict) -> None:
+def apply_interaction(page, target, interaction: dict, cell=None) -> None:
     kind = interaction.get("type", "none")
     selector = interaction.get("selector")
-    element = resolve_interaction_target(target, selector)
+    element = resolve_interaction_target(target, selector, cell)
 
     if kind == "none":
         return
@@ -253,15 +253,28 @@ def apply_interaction(page, target, interaction: dict) -> None:
     raise RuntimeError(f"unsupported interaction: {kind}")
 
 
-def resolve_interaction_target(target, selector: str | None):
+def resolve_interaction_target(target, selector: str | None, cell=None):
     """A selector may match the measured target itself (a Button cell whose
-    target is the <button>) or a descendant (the FileUpload dropzone)."""
+    target is the <button>), a descendant (the FileUpload dropzone), or a
+    sibling inside the same cell (a Tooltip bubble is measured while its
+    trigger is hovered)."""
     first = target.first
     if not selector:
         return first
+    if target.count() == 0:
+        if cell is not None:
+            return cell.locator(selector).first
+        return first
     if first.evaluate("(el, selector) => el.matches(selector)", selector):
         return first
-    return target.locator(selector).first
+    descendant = target.locator(selector).first
+    if descendant.count():
+        return descendant
+    if cell is not None:
+        in_cell = cell.locator(selector).first
+        if in_cell.count():
+            return in_cell
+    return descendant
 
 
 def release_interaction(page, interaction: dict) -> None:
@@ -1127,11 +1140,15 @@ def capture_side(
     cell = cell_locator(page, state["id"])
     cell.wait_for(state="attached", timeout=10_000)
     target = target_locator(page, cell, target_selector)
-    if target.count() == 0:
-        raise RuntimeError(f"no parity target for cell {state['id']}")
     interaction = state.get("interaction") or {"type": "none"}
-    apply_interaction(page, target, interaction)
+    # Some targets only mount after the interaction (a tooltip bubble appears
+    # on hover). Resolve the interaction from the cell in that case, then wait
+    # for the measured target before capturing.
+    if target.count() == 0 and not interaction.get("selector"):
+        raise RuntimeError(f"no parity target for cell {state['id']}")
+    apply_interaction(page, target, interaction, cell)
     try:
+        target.first.wait_for(state="attached", timeout=5_000)
         captured = capture(page, cell, target, destination, padding)
     finally:
         release_interaction(page, interaction)

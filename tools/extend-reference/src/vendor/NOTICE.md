@@ -39,10 +39,13 @@ SOFTWARE.
 | File | Upstream source | Change |
 |---|---|---|
 | `ui/button.tsx` | `apps/v4/components/ui/button.tsx` | Base UI `useRender`/`mergeProps` replaced with a plain `<button>`; class strings unchanged |
-| `ui/spinner.tsx` | `apps/v4/registry/new-york-v4/ui/spinner.tsx` | `IconPlaceholder` resolved to Hugeicons `Loading03Icon` |
+| `ui/spinner.tsx` | `apps/v4/registry/new-york-v4/ui/spinner.tsx` | `IconPlaceholder` resolved to an inline Lucide Loader2 SVG (matches `OfficeSpinner`) |
 | `ui/card.tsx` | `apps/v4/registry/new-york-v4/ui/card.tsx` | `useRender` replaced with `<div>`; only `Card` copied |
 | `ui/separator.tsx` | `apps/v4/registry/new-york-v4/ui/separator.tsx` | Base UI Separator replaced with a `<div>`; classes unchanged |
-| `ui/select.tsx` | `apps/v4/registry/new-york-v4/ui/select.tsx` | Static trigger/value only (`selectTriggerVariants` copied verbatim); no popup |
+| `ui/select.tsx` | `apps/v4/registry/new-york-v4/ui/select.tsx` | Static trigger/value only (`selectTriggerVariants` copied verbatim); chevron is an inline Lucide SVG; no popup |
+| `ui/input.tsx` | `apps/v4/registry/new-york-v4/ui/input.tsx` | Base UI Input replaced by a native `<input>`; wrapper/input class strings unchanged |
+| `ui/dialog.tsx` | `apps/v4/registry/new-york-v4/ui/dialog.tsx` | Base UI dialog/portal/backdrop replaced by static divs with the same class strings so the open surface can be measured |
+| `ui/tooltip.tsx` | `apps/v4/registry/new-york-v4/ui/tooltip.tsx` | Base UI tooltip popup replaced by static markup with the same class strings and `data-parity-tooltip-content` |
 | `extend/file-thumbnail.tsx` | `apps/v4/components/extend/file-thumbnail.tsx` | Rendered markup and classes unchanged |
 | `extend/file-upload.tsx` | `apps/v4/components/extend/file-upload.tsx` | `border-beam` dependency dropped (`BorderBeam` only paints while dragging); icons resolved directly; vendored `Card` |
 | `extend/document-viewer-sidebar.tsx` | `apps/v4/components/extend/document-viewer-sidebar.tsx` | Rendered markup and classes unchanged |

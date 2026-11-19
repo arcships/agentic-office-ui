@@ -41,16 +41,12 @@ const classes = computed(() =>
     "office-ui",
     "office-button",
     `office-button--${props.variant}`,
-    `office-button--${props.size}`,
+    `office-button--size-${props.size}`,
     props.class,
   ),
 )
 
-const spinnerSize = computed(() => {
-  if (props.size === "xs" || props.size === "icon-sm") return "xs"
-  if (props.size === "lg" || props.size === "icon-lg") return "default"
-  return "sm"
-})
+const spinnerSize = "default" as const
 </script>
 
 <template>

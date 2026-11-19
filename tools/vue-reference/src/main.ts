@@ -1,6 +1,7 @@
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "@arcships/vue-ui/theme.css";
+import "../../../packages/vue-ui/src/styles/ui.css";
 import "./parity.css";
 
 import { createApp } from "vue";

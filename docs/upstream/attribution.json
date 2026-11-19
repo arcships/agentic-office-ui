@@ -793,8 +793,8 @@
       "purpose": "Upstream component copies rendered by the #155 parity harness.",
       "target": "tools/extend-reference/src/vendor/",
       "status": "adapted",
-      "issues": ["#155"],
-      "notes": "Markup and class strings match upstream; adaptations are listed in tools/extend-reference/src/vendor/NOTICE.md (render-prop plumbing replaced by native elements, the border-beam dependency dropped, popups not vendored). Every ts, tsx, css, or vue file in this directory must carry the header, and vendor/NOTICE.md must reproduce the Extend MIT notice."
+      "issues": ["#155", "#157"],
+      "notes": "Markup and class strings match upstream for the Button/Input/Select/Dialog/Tooltip surfaces; adaptations are listed in tools/extend-reference/src/vendor/NOTICE.md (render-prop plumbing replaced by native elements, the border-beam dependency dropped, popups rendered as static measurable markup). Every ts, tsx, css, or vue file in this directory must carry the header, and vendor/NOTICE.md must reproduce the Extend MIT notice."
     },
     {
       "upstreamFile": "apps/v4 vendored reference snapshot (styles)",

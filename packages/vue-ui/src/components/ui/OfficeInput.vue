@@ -1,5 +1,6 @@
 <!-- Adapted from extend-hq/ui 70fe70c6f1e1eee53954c6923f3d9f583557a57e (MIT). Copyright (c) 2026 CrowdView Inc, dba Extend; portions Copyright (c) 2023 shadcn. -->
 <script setup lang="ts">
+defineOptions({ inheritAttrs: false })
 import { computed } from "vue"
 import { officeClass, type OfficeControlSize } from "./types"
 
@@ -32,12 +33,19 @@ const emit = defineEmits<{
   "update:modelValue": [value: string]
 }>()
 
-const classes = computed(() =>
+const controlClasses = computed(() =>
   officeClass(
     "office-ui",
+    "office-input-control",
+    props.size !== "default" && `office-input-control--${props.size}`,
+    props.class,
+  ),
+)
+
+const inputClasses = computed(() =>
+  officeClass(
     "office-input",
     props.size !== "default" && `office-input--${props.size}`,
-    props.class,
   ),
 )
 
@@ -47,16 +55,23 @@ function onInput(event: Event) {
 </script>
 
 <template>
-  <input
-    v-bind="$attrs"
-    :class="classes"
-    :type="props.type"
-    :value="props.modelValue"
-    :placeholder="props.placeholder"
-    :disabled="props.disabled"
-    :readonly="props.readonly"
-    :aria-invalid="props.invalid ? 'true' : undefined"
-    :data-slot="'input'"
-    @input="onInput"
-  />
+  <span
+    :class="controlClasses"
+    :data-size="props.size"
+    :data-disabled="props.disabled ? 'true' : undefined"
+    data-slot="input-control"
+  >
+    <input
+      v-bind="$attrs"
+      :class="inputClasses"
+      :type="props.type"
+      :value="props.modelValue"
+      :placeholder="props.placeholder"
+      :disabled="props.disabled"
+      :readonly="props.readonly"
+      :aria-invalid="props.invalid ? 'true' : undefined"
+      data-slot="input"
+      @input="onInput"
+    />
+  </span>
 </template>
