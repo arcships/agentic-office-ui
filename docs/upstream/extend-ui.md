@@ -126,25 +126,26 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 
 | Extend 文件 | 用途 | 我们的目标文件 | 状态 | 备注 |
 |---|---|---|---|---|
-| `apps/v4/components/ui/button.tsx` | Button 变体与尺寸 | `packages/vue-ui/src/components/ui/Button.vue` | adapted | 用 reka-ui slot 行为 + scoped CSS 重写；IconButton 复用 icon 尺寸 |
-| `apps/v4/components/ui/input.tsx` | Input 样式与 focus ring | `packages/vue-ui/src/components/ui/Input.vue` | adapted | 高度、圆角、边框 alpha、focus-visible ring 来自上游 class 列表 |
-| `apps/v4/components/ui/input.tsx` | Textarea 复用 Input 样式 | `packages/vue-ui/src/components/ui/Textarea.vue` | adapted | 上游没有 textarea.tsx，多行控件沿用 Input 的 token |
-| `apps/v4/components/ui/select.tsx` | Select：portal、碰撞定位、滚动按钮 | `packages/vue-ui/src/components/ui/Select.vue` | adapted | 行为交给 reka-ui，视觉层对齐上游 |
-| `apps/v4/components/ui/dropdown-menu.tsx` | 下拉菜单、item、separator、快捷键 | `packages/vue-ui/src/components/ui/DropdownMenu.vue` | adapted | — |
-| `apps/v4/components/ui/context-menu.tsx` | 右键上下文菜单 | `packages/vue-ui/src/components/ui/ContextMenu.vue` | adapted | item 样式与 DropdownMenu 共用 |
-| `apps/v4/components/ui/dialog.tsx` | 模态框、header/footer、关闭按钮、backdrop | `packages/vue-ui/src/components/ui/Dialog.vue` | adapted | — |
-| `apps/v4/components/ui/sheet.tsx` | 边缘抽屉 | `packages/vue-ui/src/components/ui/Sheet.vue` | adapted | 基于 Dialog primitive |
-| `apps/v4/components/ui/popover.tsx` | 锚定浮层与箭头 | `packages/vue-ui/src/components/ui/Popover.vue` | adapted | — |
-| `apps/v4/components/ui/tooltip.tsx` | Tooltip 浮层、延迟、偏移 | `packages/vue-ui/src/components/ui/Tooltip.vue` | adapted | 落地后替换现有 `components/Tooltip.vue`；现有文件在 #157 之前保持独立 |
-| `apps/v4/components/ui/tabs.tsx` | Tab list / trigger / panel | `packages/vue-ui/src/components/ui/Tabs.vue` | adapted | — |
-| `apps/v4/components/ui/toggle.tsx` | Toggle 变体与按下态 | `packages/vue-ui/src/components/ui/Toggle.vue` | adapted | — |
-| `apps/v4/components/ui/badge.tsx` | Badge 变体与尺寸 | `packages/vue-ui/src/components/ui/Badge.vue` | adapted | — |
-| `apps/v4/components/ui/card.tsx` | Card 外壳、header、content、footer | `packages/vue-ui/src/components/ui/Card.vue` | adapted | — |
-| `apps/v4/components/ui/separator.tsx` | 方向分隔线 | `packages/vue-ui/src/components/ui/Separator.vue` | adapted | — |
-| `apps/v4/components/ui/skeleton.tsx` | 加载占位 | `packages/vue-ui/src/components/ui/Skeleton.vue` | adapted | — |
-| `apps/v4/components/ui/spinner.tsx` | 加载指示 | `packages/vue-ui/src/components/ui/Spinner.vue` | adapted | 现有 `components/Spinner.vue` 在 #157 之前保持独立 |
-| `apps/v4/components/ui/scroll-area.tsx` | 自定义滚动条区域 | `packages/vue-ui/src/components/ui/ScrollArea.vue` | adapted | — |
-| `apps/v4/components/ui/sonner.tsx` | Toast 外观配置 | `packages/vue-ui/src/components/ui/Toast.vue` | adapted | 只沿用视觉 token，行为来自 vue-sonner |
+| `apps/v4/components/ui/button.tsx` | Button 变体与尺寸 | `packages/vue-ui/src/components/ui/OfficeButton.vue` | adapted | 用 reka-ui slot 行为 + scoped CSS 重写；IconButton 复用 icon 尺寸 |
+| `apps/v4/components/ui/button.tsx` | 图标按钮尺寸、ghost/active 与触控区 | `packages/vue-ui/src/components/ui/OfficeIconButton.vue` | adapted | 复用 Button；新增必需的可访问名称与 `aria-pressed` |
+| `apps/v4/components/ui/input.tsx` | Input 样式与 focus ring | `packages/vue-ui/src/components/ui/OfficeInput.vue` | adapted | 高度、圆角、边框 alpha、focus-visible ring 来自上游 class 列表 |
+| `apps/v4/components/ui/input.tsx` | Textarea 复用 Input 样式 | `packages/vue-ui/src/components/ui/OfficeTextarea.vue` | adapted | 上游没有 textarea.tsx，多行控件沿用 Input 的 token |
+| `apps/v4/components/ui/select.tsx` | Select：portal、碰撞定位、滚动按钮 | `packages/vue-ui/src/components/ui/OfficeSelect.vue` | adapted | 行为交给 reka-ui，视觉层对齐上游 |
+| `apps/v4/components/ui/dropdown-menu.tsx` | 下拉菜单、item、separator、快捷键 | `packages/vue-ui/src/components/ui/OfficeDropdownMenu.vue` | adapted | — |
+| `apps/v4/components/ui/context-menu.tsx` | 右键上下文菜单 | `packages/vue-ui/src/components/ui/OfficeContextMenu.vue` | adapted | item 样式与 DropdownMenu 共用 |
+| `apps/v4/components/ui/dialog.tsx` | 模态框、header/footer、关闭按钮、backdrop | `packages/vue-ui/src/components/ui/OfficeDialog.vue` | adapted | — |
+| `apps/v4/components/ui/sheet.tsx` | 边缘抽屉 | `packages/vue-ui/src/components/ui/OfficeSheet.vue` | adapted | 基于 Dialog primitive |
+| `apps/v4/components/ui/popover.tsx` | 锚定浮层与箭头 | `packages/vue-ui/src/components/ui/OfficePopover.vue` | adapted | — |
+| `apps/v4/components/ui/tooltip.tsx` | Tooltip 浮层、延迟、偏移 | `packages/vue-ui/src/components/ui/OfficeTooltip.vue` | adapted | 现有 `components/Tooltip.vue` 保持公开 API，内部委托 OfficeTooltip |
+| `apps/v4/components/ui/tabs.tsx` | Tab list / trigger / panel | `packages/vue-ui/src/components/ui/OfficeTabs.vue` | adapted | — |
+| `apps/v4/components/ui/toggle.tsx` | Toggle 变体与按下态 | `packages/vue-ui/src/components/ui/OfficeToggle.vue` | adapted | — |
+| `apps/v4/components/ui/badge.tsx` | Badge 变体与尺寸 | `packages/vue-ui/src/components/ui/OfficeBadge.vue` | adapted | — |
+| `apps/v4/components/ui/card.tsx` | Card 外壳、header、content、footer | `packages/vue-ui/src/components/ui/OfficeCard.vue` | adapted | — |
+| `apps/v4/components/ui/separator.tsx` | 方向分隔线 | `packages/vue-ui/src/components/ui/OfficeSeparator.vue` | adapted | — |
+| `apps/v4/components/ui/skeleton.tsx` | 加载占位 | `packages/vue-ui/src/components/ui/OfficeSkeleton.vue` | adapted | — |
+| `apps/v4/components/ui/spinner.tsx` | 加载指示 | `packages/vue-ui/src/components/ui/OfficeSpinner.vue` | adapted | 现有 `components/Spinner.vue` 保持公开 API，内部委托 OfficeSpinner |
+| `apps/v4/components/ui/scroll-area.tsx` | 自定义滚动条区域 | `packages/vue-ui/src/components/ui/OfficeScrollArea.vue` | adapted | — |
+| `apps/v4/components/ui/sonner.tsx` | Toast 外观配置 | `packages/vue-ui/src/components/ui/OfficeToastProvider.vue` | adapted | 只沿用视觉 token，行为来自 reka-ui Toast（未使用 vue-sonner） |
 | `apps/v4/components/ui/alert.tsx` | 内联提示容器 | `packages/vue-ui/src/components/OfficeErrorState.vue` | reference-only | #158 的空/错状态保持宿主可配置，只借用信息层级 |
 | `apps/v4/components/ui/color-picker.tsx` | 带预设与 alpha 的取色器 | `packages/vue-xlsx/src/components/XlsxAuthoringDialog.vue` | reference-only | #160 计划用于填充色/字体色；真正复制前必须复核状态 |
 | `apps/v4/components/ui/accordion.tsx` | Accordion | — | not-used | Office 界面不需要 |
@@ -214,6 +215,7 @@ adapted/copied 文件必须在文件顶部（前 15 行内）包含：
 
 | Extend 文件 | 用途 | 我们的目标文件 | 状态 | 备注 |
 |---|---|---|---|---|
+| `apps/v4/registry/new-york-v4/ui/*.tsx` | 所有 primitive 共用的 token 样式规则 | `packages/vue-ui/src/styles/ui.css` | adapted | Tailwind utility 改写为 `office-*` class，只读取 `--office-*` token |
 | `apps/v4/components/ui/*.tsx` | primitive 目录约定 | `packages/vue-ui/src/components/ui/` | adapted | 该目录下任何 `.vue` / `.ts` / `.css` 都源自对应 Extend primitive，必须带来源头 |
 | `apps/v4/components/ui/*.tsx` | 共用 Office chrome 目录约定 | `packages/vue-ui/src/components/office/` | adapted | #158 新建的 toolbar/sidebar/state 组件按 Extend PDF/DOCX chrome 尺寸实现，必须带来源头 |
 | `apps/v4 vendored reference snapshot (components)` | #155 像素对照 harness 复制的上游组件 | `tools/extend-reference/src/vendor/` | copied | 逐字副本，见下节路径与 NOTICE 约定 |

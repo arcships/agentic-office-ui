@@ -10,6 +10,7 @@ import {
   type OfficeThemeContext,
 } from "../composables/office-theme"
 import { provideOfficeUiMessages, useOfficeUiLocale, useOfficeUiMessages } from "../i18n"
+import { provideOfficePortalTarget } from "../composables/office-portal"
 
 export interface OfficeThemeProviderProps {
   /** Requested scheme. `system` follows `prefers-color-scheme`. */
@@ -54,6 +55,10 @@ provideOfficeUiMessages(
   () => props.messages ?? inheritedMessages.value,
 )
 
+// Portalled overlays must stay inside the themed subtree; see office-portal.ts.
+const portalTarget = ref<HTMLElement | null>(null)
+provideOfficePortalTarget(portalTarget)
+
 let mediaQuery: MediaQueryList | undefined
 
 function handleMediaChange(event: MediaQueryListEvent): void {
@@ -95,6 +100,7 @@ onBeforeUnmount(teardownMediaQuery)
     :data-office-density="density"
     :lang="locale"
   >
+    <span ref="portalTarget" class="office-theme__portal" />
     <slot />
   </component>
 </template>
@@ -103,6 +109,11 @@ onBeforeUnmount(teardownMediaQuery)
 /* `contents` keeps the provider out of layout so wrapping a viewer or an app
  * shell cannot change flex/grid sizing. Custom properties still inherit. */
 .office-theme {
+  display: contents;
+}
+
+/* A Teleport target inherits the provider's tokens without joining layout. */
+.office-theme__portal {
   display: contents;
 }
 </style>
