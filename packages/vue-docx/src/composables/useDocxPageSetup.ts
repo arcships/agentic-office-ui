@@ -15,6 +15,7 @@ import {
   type DocxPageMarginsUpdate,
   type DocxPageSize,
   type DocxPageSizeUpdate,
+  type DocxSectionColumns,
   type DocxSectionPageSetup,
   type DocxSectionRegion,
 } from "@arcships/docx-core"
@@ -37,9 +38,13 @@ export interface UseDocxPageSetupResult {
   activeSection: ComputedRef<DocxPageSetupSection>
   pageSize: ComputedRef<DocxPageSize>
   margins: ComputedRef<DocxPageMargins>
+  /** Body columns of the active section (`w:cols`). */
+  columns: ComputedRef<DocxSectionColumns>
   selectSection: (sectionIndex: number) => void
   applyMargins: (margins: DocxPageMarginsUpdate) => boolean
   applyPageSize: (pageSize: DocxPageSizeUpdate) => boolean
+  /** Set the active section's body column count (1–45). */
+  applyColumns: (count: number) => boolean
   /** Apply paper size and margins as one undoable step. */
   applyPageSetup: (patch: DocxPageSetupPatch) => boolean
   addHeaderFooter: (kind: DocxSectionRegion, referenceType?: string) => boolean
@@ -77,7 +82,12 @@ export function resolveCaretSectionIndex(
 export function useDocxPageSetup(
   controller: Pick<
     DocxEditorController,
-    "model" | "selection" | "setPageMargins" | "setPageSize" | "addHeaderFooter"
+    | "model"
+    | "selection"
+    | "setPageMargins"
+    | "setPageSize"
+    | "setSectionColumns"
+    | "addHeaderFooter"
   >
 ): UseDocxPageSetupResult {
   const sections = computed<DocxPageSetupSection[]>(() =>
@@ -125,6 +135,7 @@ export function useDocxPageSetup(
 
   const pageSize = computed(() => activeSection.value.pageSize)
   const margins = computed(() => activeSection.value.margins)
+  const columns = computed(() => activeSection.value.columns)
 
   const selectSection = (sectionIndex: number): void => {
     pinnedSectionIndex = clampSectionIndex(sectionIndex, sections.value.length)
@@ -136,6 +147,9 @@ export function useDocxPageSetup(
 
   const applyPageSize = (update: DocxPageSizeUpdate): boolean =>
     controller.setPageSize(activeSectionIndex.value, update)
+
+  const applyColumns = (count: number): boolean =>
+    controller.setSectionColumns(activeSectionIndex.value, { count })
 
   const applyPageSetup = (patch: DocxPageSetupPatch): boolean => {
     const sizeChanged = patch.pageSize
@@ -162,9 +176,11 @@ export function useDocxPageSetup(
     activeSection,
     pageSize,
     margins,
+    columns,
     selectSection,
     applyMargins,
     applyPageSize,
+    applyColumns,
     applyPageSetup,
     addHeaderFooter,
   }

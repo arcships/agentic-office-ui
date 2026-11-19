@@ -549,7 +549,7 @@ export default defineComponent({
       const wrapClearances = wrappedImageClearances()
       const paragraphSlotRef = { value: 0 }
       const columns =
-        !props.editable && props.pageColumns && props.pageColumns.length > 1
+        props.pageColumns && props.pageColumns.length > 1
           ? props.pageColumns
           : undefined
 

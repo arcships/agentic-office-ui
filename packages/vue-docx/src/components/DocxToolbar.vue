@@ -400,6 +400,28 @@
 
     <div class="docx-toolbar-separator" />
 
+    <!-- Body columns of the caret's section -->
+    <div class="docx-toolbar-group">
+      <select
+        data-testid="editor-columns"
+        class="docx-toolbar-select docx-toolbar-select-sm"
+        :value="pageSetup.columns.value.count"
+        :title="m.docx.editor.columns"
+        :aria-label="m.docx.editor.columns"
+        @change="onColumnsChange"
+      >
+        <option
+          v-for="option of columnOptions"
+          :key="option.count"
+          :value="option.count"
+        >
+          {{ option.label }}
+        </option>
+      </select>
+    </div>
+
+    <div class="docx-toolbar-separator" />
+
     <!-- Line spacing -->
     <div class="docx-toolbar-group">
       <select
@@ -704,6 +726,32 @@ const pageSetupSectionOptions = computed(() =>
     sectionNumber: section.sectionNumber,
   }))
 )
+
+// ── Section columns ─────────────────────────────────────────────────
+// The toolbar offers Word's common 1/2/3-column choices and keeps a larger
+// count visible when the imported section already uses one. Changing the
+// value applies to the section that holds the caret.
+function columnsLabel(count: number): string {
+  if (count === 1) return m.value.docx.editor.columnsOne
+  if (count === 2) return m.value.docx.editor.columnsTwo
+  if (count === 3) return m.value.docx.editor.columnsThree
+  return formatOfficeMessage(m.value.docx.editor.columnsMore, { count })
+}
+
+const columnOptions = computed(() => {
+  const current = Math.max(1, Math.round(pageSetup.columns.value.count))
+  const counts = [1, 2, 3]
+  if (!counts.includes(current)) counts.push(current)
+  return counts
+    .sort((left, right) => left - right)
+    .map((count) => ({ count, label: columnsLabel(count) }))
+})
+
+function onColumnsChange(event: Event): void {
+  const value = Number((event.target as HTMLSelectElement | null)?.value)
+  if (!Number.isFinite(value)) return
+  pageSetup.applyColumns(value)
+}
 
 function onPageSetupApply(patch: DocxPageSetupApplyPatch): void {
   pageSetup.applyPageSetup(patch)

@@ -163,8 +163,9 @@ export type {
   LogicalBoundaryRange
 } from "./table-grid-projection";
 
-// Section page setup (w:pgSz / w:pgMar) read + rewrite helpers
+// Section page setup (w:pgSz / w:pgMar / w:cols) read + rewrite helpers
 export {
+  DEFAULT_DOCX_COLUMN_SPACE_TWIPS,
   DEFAULT_DOCX_PAGE_MARGINS,
   DEFAULT_DOCX_PAGE_SIZE,
   DEFAULT_SECTION_PROPERTIES_XML,
@@ -172,9 +173,11 @@ export {
   TWIPS_PER_INCH,
   matchDocxPageSizePreset,
   normalizePageSizeOrientation,
+  readSectionColumns,
   readSectionPageMargins,
   readSectionPageSize,
   resolveDocxPageSizePreset,
+  writeSectionColumns,
   writeSectionPageMargins,
   writeSectionPageSize,
 } from "./section-properties";
@@ -185,4 +188,6 @@ export type {
   DocxPageSize,
   DocxPageSizePreset,
   DocxPageSizeUpdate,
+  DocxSectionColumns,
+  DocxSectionColumnsUpdate,
 } from "./section-properties";

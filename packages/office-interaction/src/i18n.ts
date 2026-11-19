@@ -240,6 +240,12 @@ export interface OfficeDocxMessages {
     justify: string
     bulletList: string
     numberedList: string
+    columns: string
+    columnsOne: string
+    columnsTwo: string
+    columnsThree: string
+    /** Template with a `{count}` placeholder. */
+    columnsMore: string
     increaseIndent: string
     increaseIndentTitle: string
     decreaseIndent: string
@@ -404,6 +410,7 @@ export interface OfficeDocxMessages {
       revisionLossMany: string
       pageMarginsUpdated: string
       pageSizeUpdated: string
+      sectionColumnsUpdated: string
       headerAdded: string
       footerAdded: string
       /** Template with a `{count}` placeholder. */
@@ -1559,6 +1566,11 @@ export const officeMessagesEn: OfficeMessages = {
       justify: "Justify",
       bulletList: "Bullet list",
       numberedList: "Numbered list",
+      columns: "Columns",
+      columnsOne: "1 column",
+      columnsTwo: "2 columns",
+      columnsThree: "3 columns",
+      columnsMore: "{count} columns",
       increaseIndent: "Increase indent",
       increaseIndentTitle: "Increase list indent (Tab)",
       decreaseIndent: "Decrease indent",
@@ -1697,6 +1709,7 @@ export const officeMessagesEn: OfficeMessages = {
         revisionLossMany: "Tracked changes in {count} edited paragraphs were resolved with the edit",
         pageMarginsUpdated: "Page margins updated",
         pageSizeUpdated: "Paper size and orientation updated",
+        sectionColumnsUpdated: "Section columns updated",
         headerAdded: "Header added",
         footerAdded: "Footer added",
         replacedMatches: "Replaced {count}",
@@ -2759,6 +2772,11 @@ export const officeMessagesZhCN: OfficeMessages = {
       justify: "两端对齐",
       bulletList: "项目符号列表",
       numberedList: "编号列表",
+      columns: "分栏",
+      columnsOne: "1 栏",
+      columnsTwo: "2 栏",
+      columnsThree: "3 栏",
+      columnsMore: "{count} 栏",
       increaseIndent: "增加缩进",
       increaseIndentTitle: "增加列表缩进 (Tab)",
       decreaseIndent: "减少缩进",
@@ -2897,6 +2915,7 @@ export const officeMessagesZhCN: OfficeMessages = {
         revisionLossMany: "已编辑的 {count} 个段落中的修订已随编辑一起处理",
         pageMarginsUpdated: "已更新页边距",
         pageSizeUpdated: "已更新纸张大小与方向",
+        sectionColumnsUpdated: "已更新分栏",
         headerAdded: "已添加页眉",
         footerAdded: "已添加页脚",
         replacedMatches: "已替换 {count} 处",
