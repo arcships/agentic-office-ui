@@ -12,6 +12,7 @@
 | 文档 | 用途 |
 |---|---|
 | [design/office-theme.md](design/office-theme.md) | Office 设计 token、light/dark/system 主题、Geist 字体与 Lucide 图标适配（0.8） |
+| [components/ui-primitives.md](components/ui-primitives.md) | reka-ui primitive 层：Button/Input/Select/Menu/Dialog/Sheet/Tooltip/Tabs/Toast 的 props、键盘/ARIA 与 token 规则（0.8） |
 
 ## 使用者文档
 

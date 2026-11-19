@@ -65,11 +65,34 @@
 
 ### `Spinner`
 
-`size` 支持 `sm`、`md` 和 `lg`，没有业务事件。
+`size` 支持 `sm`、`md` 和 `lg`（`md` 等价于 primitive 的 `default`），没有业务事件。内部委托 `OfficeSpinner`；新代码可以直接使用后者，并传 `label` 控制可访问名称。
 
 ### `Tooltip`
 
-属性包括 `content`、`side`、`align` 和 `delayMs`。默认插槽放置触发元素。
+属性包括 `content`、`side`、`align`、`delayMs` 和 `className`。默认插槽放置触发元素。内部委托 `OfficeTooltip`（reka-ui），因此具备碰撞定位、焦点触发的 ARIA 关联和 `delayDuration` 行为；样式和公开 props 保持向后兼容。
+
+## Token 驱动 primitive（0.8）
+
+`@arcships/vue-ui` 在 0.8 提供基于 reka-ui 的完整 primitive 层，视觉全部读取 `--office-*` token，不引入 Tailwind/preflight：
+
+| Primitive | 用途 |
+|---|---|
+| `OfficeButton` / `OfficeIconButton` | 六种 variant、七种 size、disabled/loading/asChild；图标按钮强制 `label` |
+| `OfficeInput` / `OfficeTextarea` | 受控输入、invalid、disabled、readonly、三种尺寸 |
+| `OfficeSelect` | 选项/分组/分隔符数组、portal、键盘选择和碰撞定位 |
+| `OfficeDropdownMenu` / `OfficeContextMenu` | 共用 `OfficeMenuEntry` 描述符；item/checkbox/separator/label/group/submenu |
+| `OfficeDialog` / `OfficeSheet` | v-model:open、焦点陷阱、Esc/backdrop、标题与描述 ARIA、footer、四向 Sheet |
+| `OfficePopover` / `OfficeTooltip` | 可配置 side/align/offset 的 portal 浮层；Tooltip 支持延迟与 disabled |
+| `OfficeTabs` | default/underline、横向/纵向、roving tabindex 和动态面板 slot |
+| `OfficeToggle` | 受控按下态、`aria-pressed`、outline variant |
+| `OfficeBadge` / `OfficeCard` | variant/size；卡片标题、描述、header/body/footer |
+| `OfficeSeparator` / `OfficeSkeleton` / `OfficeSpinner` | 装饰分隔符、reduced-motion 骨架、状态 spinner |
+| `OfficeScrollArea` | Reka 自定义滚动条，viewport 可聚焦 |
+| `OfficeToastProvider` + `useOfficeToast()` | success/error/warning/info/loading、promise、更新与关闭 |
+
+完整 props、事件、slot、键盘/ARIA 合同、token 规则和包体积预算见
+[Vue primitive 层](ui-primitives.md)。示例页在 demo 的 `/primitives` 路由，展示每个 primitive 的
+default/hover/focus/disabled/loading 状态。
 
 ## 通用约定
 
