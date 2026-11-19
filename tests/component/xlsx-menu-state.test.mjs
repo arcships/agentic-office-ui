@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
 
@@ -9,6 +10,7 @@ import {
   importFromDemo,
   mount,
   vue,
+  waitFor,
 } from "./vue-test-renderer.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "../..");
@@ -140,6 +142,49 @@ async function loadMenuGeometry() {
 
 const geometry = await loadMenuGeometry();
 
+// Loading a real workbook needs the WASM runtime and the XML helpers the
+// controller installs for workbook parsing.
+const requireFromXlsxCore = createRequire(
+  new URL("../../packages/xlsx-core/package.json", import.meta.url),
+);
+const xmldom = requireFromXlsxCore("@xmldom/xmldom");
+globalThis.DOMParser ??= xmldom.DOMParser;
+globalThis.Node ??= xmldom.Node;
+globalThis.XMLSerializer ??= xmldom.XMLSerializer;
+const { setWasmSource } = await importFromDemo("@arcships/xlsx-core");
+const wasmBytes = readFileSync(
+  new URL("../../packages/xlsx-core/dist/assets/duke_sheets_wasm_bg.wasm", import.meta.url),
+);
+setWasmSource(
+  wasmBytes.buffer.slice(wasmBytes.byteOffset, wasmBytes.byteOffset + wasmBytes.byteLength),
+);
+const { useXlsxViewerController } = await importFromDemo("@arcships/vue-xlsx");
+
+function sampleBuffer(name) {
+  const bytes = readFileSync(
+    new URL(`../../apps/demo/public/samples/${name}`, import.meta.url),
+  );
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
+
+async function mountLoadedController(options) {
+  let controller;
+  const Harness = vue.defineComponent({
+    setup() {
+      controller = useXlsxViewerController(options);
+      return () => vue.h("div", controller.sourceState);
+    },
+  });
+  const mounted = await mount(Harness);
+  await waitFor(
+    () => controller.sourceState === "ready" || controller.sourceError,
+    "XLSX controller ready state",
+  );
+  assert.ifError(controller.sourceError);
+  assert.equal(controller.sourceState, "ready");
+  return { ...mounted, controller };
+}
+
 test("XLSX 右键菜单只监听当前网格，并在显示前选择命中单元格", () => {
   assert.doesNotMatch(CONTEXT_MENU_SOURCE, /document\.addEventListener\(["']contextmenu/);
   assert.match(CONTEXT_MENU_SOURCE, /targetElement/);
@@ -226,11 +271,34 @@ test("XlsxViewer 把 Ribbon 的只读请求作为受控事件转发", async () =
   mounted.app.unmount();
 });
 
-test("XLSX 验证页分别公开 Worker 请求值和实际执行来源", () => {
-  assert.match(DEMO_SOURCE, /data-testid="xlsx-worker-requested"/);
-  assert.match(DEMO_SOURCE, /data-testid="xlsx-worker-actual"/);
-  assert.match(DEMO_SOURCE, /current\.isWorkerBacked \? "Worker" : "主线程"/);
-  assert.match(DEMO_SOURCE, /@update:read-only="onReadOnlyChange"/);
+test("XLSX 可编辑加载在主线程解析，Worker 只用于只读加载", async (t) => {
+  // `typeof Worker` is the controller's capability check; a stub keeps the
+  // decision observable on Node without starting a real worker thread.
+  const originalWorker = globalThis.Worker;
+  globalThis.Worker = class Worker {};
+  t.after(() => {
+    if (originalWorker === undefined) delete globalThis.Worker;
+    else globalThis.Worker = originalWorker;
+  });
+
+  const { app, controller } = await mountLoadedController({
+    file: sampleBuffer("financial-model.xlsx"),
+    fileName: "financial-model.xlsx",
+    readOnly: false,
+    skipXmlParsing: true,
+    useWorker: true,
+  });
+  t.after(() => app.unmount());
+
+  assert.equal(controller.readOnly, false);
+  assert.equal(
+    controller.isWorkerBacked,
+    false,
+    "an editable load must not claim Worker-backed rendering",
+  );
+  const worksheet = controller.getActiveWorksheet();
+  assert.ok(worksheet, "the main thread still parsed a usable workbook");
+  worksheet.free();
 });
 
 test("XLSX 格式栏读取活动单元格样式，并将字体效果作为可取消开关", () => {

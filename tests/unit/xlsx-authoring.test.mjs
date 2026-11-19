@@ -136,6 +136,11 @@ test("hyperlinks keep external URLs as relationships and internal targets as loc
   assert.match(rels, /Target="https:\/\/example.com\/report\?a=1&amp;b=2"/);
   assert.match(rels, /TargetMode="External"/);
   assert.match(sheetXml(assets.archive), /<hyperlink ref="B5" r:id="[^"]+" tooltip="Report"\/>/);
+  // CT_Hyperlinks does not declare `count`; strict OOXML readers such as
+  // openpyxl reject the attribute, so the authoring writer must not add it.
+  const hyperlinkContainer = sheetXml(assets.archive).match(/<hyperlinks[^>]*>/)?.[0] ?? "";
+  assert.ok(hyperlinkContainer, "the sheet keeps a hyperlinks container");
+  assert.doesNotMatch(hyperlinkContainer, /\bcount=/);
 
   const internal = core.setWorkbookCellHyperlink(assets, 0, { row: 5, col: 1 }, {
     target: "#P&L!A1",
@@ -149,6 +154,23 @@ test("hyperlinks keep external URLs as relationships and internal targets as loc
   assert.deepEqual(core.setWorkbookCellHyperlink(assets, 0, cell, null), [
     { cell: { row: 5, col: 1 }, target: "#P&L!A1", tooltip: undefined },
   ]);
+});
+
+test("the exported package does not declare a count on its hyperlink list", () => {
+  const { workbook, assets } = loadAssets("charts-images.xlsx");
+  try {
+    const merged = core.mergeWorkbookSheetAuthoringAssets(
+      workbook.saveXlsxBytes(),
+      assets.archive,
+    );
+    const xml = strFromU8(unzipSync(merged)["xl/worksheets/sheet1.xml"]);
+    const container = xml.match(/<hyperlinks[^>]*>/)?.[0] ?? "";
+    assert.ok(container, "the fixture hyperlink survives the export");
+    assert.doesNotMatch(container, /\bcount=/, container);
+    assert.match(xml, /ref="A2"/);
+  } finally {
+    workbook.free();
+  }
 });
 
 test("conditional formats round-trip color scales, data bars and icon sets", () => {

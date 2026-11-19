@@ -57,7 +57,7 @@
       />
     </div>
 
-    <p v-if="error" class="error" data-testid="xlsx-surface-error">{{ error }}</p>
+    <p v-if="surfaceError" class="error" data-testid="xlsx-surface-error" :data-error-code="surfaceErrorCode">{{ surfaceError }}</p>
 
     <div class="surface-container" data-testid="xlsx-surface-container">
       <div v-if="loading" class="surface-overlay">加载中…</div>
@@ -71,26 +71,37 @@
         :zoom="zoom"
         @cellDoubleClick="onCellDoubleClick"
         @contextMenu="onContextMenu"
+        @diagnostic="onDiagnostic"
+        @stateChange="onHostStateChange"
         @selectionChange="onSelectionChange"
         @searchStateChange="searchState = $event"
         @update:zoom="zoom = $event"
       />
       <div v-else class="empty" data-testid="xlsx-surface-empty">
-        <p>选择示例或打开本地 Excel、CSV 文件。</p>
+        <p>{{ surfaceError ? "工作簿无法打开。" : "选择示例或打开本地 Excel、CSV 文件。" }}</p>
       </div>
     </div>
 
     <div class="status-grid" data-testid="xlsx-surface-status">
-      <div><strong>文件：</strong>{{ displayName || "未打开" }}</div>
-      <div><strong>选中：</strong>{{ selectionInfo }}</div>
-      <div><strong>右键：</strong>{{ contextMenuInfo }}</div>
+      <div><strong>文件：</strong><span data-testid="xlsx-surface-file">{{ displayName || "未打开" }}</span></div>
+      <div><strong>状态：</strong><span data-testid="xlsx-surface-state" :data-state="surfaceState">{{ surfaceState }}</span></div>
+      <div><strong>选中：</strong><span data-testid="xlsx-surface-selection">{{ selectionInfo }}</span></div>
+      <div><strong>右键：</strong><span data-testid="xlsx-surface-context">{{ contextMenuInfo }}</span></div>
+    </div>
+
+    <div class="diagnostics" data-testid="xlsx-surface-diagnostics" aria-live="polite">
+      <ol>
+        <li v-for="entry in diagnostics" :key="entry.id" :data-diagnostic-type="entry.type">
+          #{{ entry.requestId }} {{ entry.type }}<span v-if="entry.error?.code"> · {{ entry.error.code }}</span><span v-if="entry.bytes !== undefined"> · {{ entry.bytes }} bytes</span>
+        </li>
+      </ol>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, ref, shallowRef, type PropType } from "vue"
-import type { XlsxViewerController } from "@arcships/xlsx-core"
+import { computed, defineComponent, h, ref, shallowRef, watch, type PropType } from "vue"
+import type { XlsxDiagnostic, XlsxViewerController } from "@arcships/xlsx-core"
 import {
   useXlsxViewerController,
   XlsxSheetSurface,
@@ -107,14 +118,36 @@ const XlsxSurfaceHost = defineComponent({
     readOnly: { type: Boolean, default: false },
     zoom: { type: Number, default: 1 },
   },
-  emits: ["cellDoubleClick", "contextMenu", "selectionChange", "objectClick", "searchStateChange", "update:zoom"],
+  emits: [
+    "cellDoubleClick",
+    "contextMenu",
+    "selectionChange",
+    "objectClick",
+    "searchStateChange",
+    "update:zoom",
+    "diagnostic",
+    "stateChange",
+  ],
   setup(props, { emit, expose }) {
     const controller: XlsxViewerController = useXlsxViewerController({
       file: props.file ?? undefined,
       fileName: props.fileName,
       get readOnly() { return props.readOnly },
-      onDiagnostic: () => {},
+      // Surface pages own their error slot: forward diagnostics instead of
+      // swallowing them so a corrupt workbook cannot leave a blank page.
+      onDiagnostic: (diagnostic: XlsxDiagnostic) => emit("diagnostic", diagnostic),
     })
+    watch(
+      () => [controller.sourceState, controller.sourceError] as const,
+      ([state, sourceError]) => {
+        emit("stateChange", {
+          state,
+          errorCode: sourceError?.code ?? null,
+          errorMessage: sourceError?.message ?? null,
+        })
+      },
+      { immediate: true },
+    )
     const surface = ref<InstanceType<typeof XlsxSheetSurface>>()
     expose({
       search: (query: string) => surface.value?.search(query),
@@ -147,6 +180,7 @@ const samples = [
   { file: "sales-table.xlsx", label: "销售表" },
   { file: "charts-images.xlsx", label: "图表、图片、条件格式、迷你图、超链接、批注、形状与控件" },
   { file: "large-grid.xlsx", label: "大表格" },
+  { file: "corrupted.xlsx", label: "损坏文件（失败用例）" },
 ]
 
 // ── State ────────────────────────────────────────────────────────────
@@ -182,6 +216,23 @@ const surfaceKey = computed(() =>
 
 const selectionInfo = ref("—")
 const contextMenuInfo = ref("—")
+
+interface HostState {
+  state: string
+  errorCode: string | null
+  errorMessage: string | null
+}
+const hostState = ref<HostState>({ state: "idle", errorCode: null, errorMessage: null })
+const diagnostics = ref<Array<XlsxDiagnostic & { id: number }>>([])
+let diagnosticId = 0
+
+const surfaceState = computed(() => error.value ? "error" : hostState.value.state)
+const surfaceErrorCode = computed(() => error.value ? "SURFACE_LOAD_FAILED" : hostState.value.errorCode ?? "")
+// A controller load error used to leave `activeSheet` null with nothing but a
+// blank container. Surface it next to the fetch errors instead.
+const surfaceError = computed(
+  () => error.value ?? hostState.value.errorMessage ?? null,
+)
 
 // ── Actions ──────────────────────────────────────────────────────────
 const fileInputRef = ref<HTMLInputElement>()
@@ -236,9 +287,23 @@ function closeSearch(): void {
   surfaceHostRef.value?.clearSearch()
 }
 
-function onContextMenu(ctx: { clientX: number; clientY: number; sheetName?: string; selection?: Record<string, unknown> }): void {
-  const cell = ctx.selection ? `${String(ctx.selection)}` : ctx.sheetName ?? "sheet"
-  contextMenuInfo.value = `${cell}`
+function onContextMenu(ctx: { clientX: number; clientY: number; sheetName?: string; selection?: { start: { row: number; col: number }; end: { row: number; col: number } } }): void {
+  const range = ctx.selection
+  if (!range) {
+    contextMenuInfo.value = ctx.sheetName ?? "sheet"
+    return
+  }
+  const start = cellAddress(range.start)
+  const end = cellAddress(range.end)
+  contextMenuInfo.value = start === end ? start : `${start}:${end}`
+}
+
+function onDiagnostic(diagnostic: XlsxDiagnostic): void {
+  diagnostics.value = [...diagnostics.value.slice(-9), { ...diagnostic, id: ++diagnosticId }]
+}
+
+function onHostStateChange(state: HostState): void {
+  hostState.value = state
 }
 
 function onSelectionChange(sel: { kind: string; range?: { start: { row: number; col: number }; end: { row: number; col: number } }; value?: string }): void {
@@ -252,6 +317,10 @@ function colLabel(col: number): string {
   let n = col
   while (n >= 0) { label = String.fromCharCode(65 + (n % 26)) + label; n = Math.floor(n / 26) - 1 }
   return label
+}
+
+function cellAddress(cell: { row: number; col: number }): string {
+  return `${colLabel(cell.col)}${cell.row + 1}`
 }
 
 void loadSelectedSample()
@@ -291,6 +360,8 @@ h2 { margin-bottom: 4px; }
 }
 .empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted-foreground); }
 .error { color: #ef4444; font-size: 13px; margin-bottom: 8px; }
+.diagnostics { margin-top: 8px; font-size: 13px; color: var(--muted-foreground); }
+.diagnostics ol { margin: 0; padding-left: 20px; }
 
 .status-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;

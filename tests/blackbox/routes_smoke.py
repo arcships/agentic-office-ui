@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -30,6 +31,7 @@ ROUTES = [
     ("CI-ROUTE-DOCX-VIEWER", "/docx-viewer"),
     ("CI-ROUTE-DOCX-EDITOR", "/docx-editor"),
     ("CI-ROUTE-XLSX-VIEWER", "/xlsx-viewer"),
+    ("CI-ROUTE-XLSX-SURFACE", "/xlsx-surface"),
     ("CI-ROUTE-PPTX-VIEWER", "/pptx-viewer"),
     ("CI-ROUTE-PDF-VIEWER", "/pdf-viewer"),
     ("CI-ROUTE-PDF-SURFACE", "/pdf-surface"),
@@ -41,6 +43,7 @@ READY_ROUTES = {
     "/docx-viewer",
     "/docx-editor",
     "/xlsx-viewer",
+    "/xlsx-surface",
     "/pdf-viewer",
     "/runtime-isolation",
     "/runtime-limits",
@@ -105,6 +108,17 @@ def wait_ready(page, route: str) -> None:
             "() => document.querySelector('.xlsx-grid')?.getBoundingClientRect().height > 0",
             timeout=10_000,
         )
+    if route == "/xlsx-surface":
+        # The surface page auto-loads its first sample and exposes the grid plus
+        # the host-managed status line.
+        page.locator('[data-testid="xlsx-surface-file"]').wait_for(
+            state="visible", timeout=30_000
+        )
+        page.wait_for_function(
+            """() => document.querySelector('[data-testid="xlsx-grid"]')?.getBoundingClientRect().height > 0
+              && document.querySelector('[data-testid="xlsx-surface-file"]')?.textContent?.includes('financial-model.xlsx')""",
+            timeout=30_000,
+        )
     if route == "/pdf-surface":
         # The surface route starts without a document: the shell and its idle
         # status must render, and the page-level error slot must stay empty
@@ -118,6 +132,63 @@ def wait_ready(page, route: str) -> None:
         page.locator('[data-testid="pdf-surface-page-load-error"]').wait_for(
             state="detached", timeout=10_000
         )
+
+
+def verify_xlsx_surface(page, attempt_dir: Path) -> dict[str, object]:
+    """The surface route must show controller failures and a real selection."""
+    page.locator('[data-testid="xlsx-grid"]').wait_for(state="visible", timeout=30_000)
+    page.locator(
+        '[data-testid="xlsx-surface-state"][data-state="ready"]'
+    ).wait_for(state="visible", timeout=30_000)
+    # Diagnostics used to be swallowed by the surface host; a successful load
+    # must still be observable in the page-level list.
+    page.locator(
+        '[data-testid="xlsx-surface-diagnostics"] [data-diagnostic-type="load-success"]'
+    ).wait_for(state="visible", timeout=10_000)
+
+    canvas = page.locator('[data-testid="xlsx-grid"] canvas.xlsx-grid__body')
+    canvas.wait_for(state="visible", timeout=10_000)
+    box = canvas.bounding_box()
+    assert box, "the XLSX surface body canvas has no bounding box"
+    page.mouse.click(box["x"] + 20, box["y"] + 12)
+    page.mouse.click(box["x"] + 20, box["y"] + 12, button="right")
+    page.locator('[data-testid="xlsx-context-menu"]').wait_for(
+        state="visible", timeout=10_000
+    )
+    context_info = page.locator('[data-testid="xlsx-surface-context"]').inner_text()
+    assert "[object Object]" not in context_info, context_info
+    assert re.search(r"[A-Z]+\d+", context_info), context_info
+    page.mouse.click(5, 5)
+
+    # A corrupt sample must surface the controller error instead of leaving a
+    # blank surface container.
+    page.locator('[data-testid="xlsx-surface-sample-select"]').select_option(
+        "corrupted.xlsx"
+    )
+    error = page.locator('[data-testid="xlsx-surface-error"]')
+    error.wait_for(state="visible", timeout=30_000)
+    error_code = error.get_attribute("data-error-code")
+    assert error_code, "the surface error slot must expose a stable error code"
+    page.locator(
+        '[data-testid="xlsx-surface-state"][data-state="error"]'
+    ).wait_for(state="visible", timeout=10_000)
+    page.screenshot(path=str(attempt_dir / "xlsx-surface-corrupted.png"), full_page=True)
+
+    # Recovering to a valid sample clears the error and mounts the grid again.
+    page.locator('[data-testid="xlsx-surface-sample-select"]').select_option(
+        "financial-model.xlsx"
+    )
+    page.wait_for_function(
+        """() => document.querySelector('[data-testid="xlsx-surface-state"]')?.dataset.state === 'ready'
+          && document.querySelector('[data-testid="xlsx-grid"]')?.getBoundingClientRect().height > 0""",
+        timeout=30_000,
+    )
+    error.wait_for(state="detached", timeout=10_000)
+    return {
+        "context": context_info,
+        "errorCode": error_code,
+        "recovered": "financial-model.xlsx",
+    }
 
 
 def page_state(page) -> dict[str, object]:
@@ -147,6 +218,10 @@ def run_attempt(browser, case_id: str, route: str, attempt: int) -> dict[str, ob
         direct = page_state(page)
         assert direct["bodyTextLength"] > 0 and direct["headings"] > 0, direct
         page.screenshot(path=str(attempt_dir / "direct.png"), full_page=True)
+
+        surface = None
+        if route == "/xlsx-surface":
+            surface = verify_xlsx_surface(page, attempt_dir)
 
         page.reload(wait_until="networkidle")
         wait_ready(page, route)
@@ -183,6 +258,7 @@ def run_attempt(browser, case_id: str, route: str, attempt: int) -> dict[str, ob
             "status": "PASS",
             "direct": direct,
             "refresh": refreshed,
+            "surface": surface,
             "events": events.events,
         }
     except Exception as error:

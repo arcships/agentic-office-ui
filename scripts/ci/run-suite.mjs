@@ -201,6 +201,18 @@ const suites = {
     ], {
       env: { RUN_PYTHON_MODULES: "openpyxl", NODE: process.execPath },
     }),
+    // The real controller + toolbar export path, reopened with pinned openpyxl.
+    command("xlsx-controller-export-openpyxl", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/xlsx_export_controller_openpyxl.py",
+    ], {
+      env: { RUN_PYTHON_MODULES: "openpyxl", NODE: process.execPath },
+    }),
+    // Every tests/unit and tests/component file must be wired into a suite;
+    // two XLSX component files were dead code before issue #62.
+    command("test-registration", process.execPath, [
+      "scripts/ci/verify-test-registration.mjs",
+    ]),
     command("fixture-manifest", process.execPath, [
       "scripts/ci/verify-fixtures.mjs",
     ], {
@@ -227,6 +239,9 @@ const suites = {
       "tests/component/pptx-preview.test.mjs",
       "tests/component/pptx-hyperlinks.test.mjs",
       "tests/component/xlsx-race.test.mjs",
+      "tests/component/xlsx-anchored-panes.test.mjs",
+      "tests/component/xlsx-menu-state.test.mjs",
+      "tests/component/xlsx-fixture-structure.test.mjs",
       "tests/component/xlsx-export.test.mjs",
       "tests/component/xlsx-deferred-load.test.mjs",
       "tests/component/docx-render-parity.test.mjs",
@@ -439,6 +454,16 @@ const suites = {
         BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-fidelity-content"),
       },
     }),
+    // Merge/worker parity and the multi-axis freeze fixture were only covered
+    // by this unregistered suite before issue #62.
+    command("formal-xlsx-worker-visuals", process.execPath, [
+      "scripts/ci/run-python.mjs",
+      "tests/blackbox/xlsx_worker_visuals.py",
+    ], {
+      env: {
+        BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-xlsx-worker-visuals"),
+      },
+    }),
     command("formal-security-workflows", process.execPath, [
       "scripts/ci/run-python.mjs",
       "tests/blackbox/security_workflows.py",
@@ -462,7 +487,6 @@ const suites = {
       env: {
         BLACKBOX_EVIDENCE_DIR: path.join(suiteDir, "formal-race-regression"),
       },
-      allowBlocked: true,
     }),
   ],
   pdf: [

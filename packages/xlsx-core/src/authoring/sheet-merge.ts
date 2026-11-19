@@ -279,7 +279,10 @@ function applyHyperlinks(
   if (hyperlinkCount === 0) {
     return;
   }
-  imported.setAttribute("count", String(hyperlinkCount));
+  // CT_Hyperlinks has no `count` attribute; openpyxl 3.1.5 rejects it even
+  // though Excel tolerates it, and the XLSX-011 acceptance reopens exports
+  // with that pinned parser.
+  imported.removeAttribute("count");
   insertSheetChild(savedDocument, imported);
 }
 

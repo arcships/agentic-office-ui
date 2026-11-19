@@ -18,6 +18,11 @@ from playwright.sync_api import Page, sync_playwright
 
 from browser_evidence import BrowserEvidence
 from docx import Document
+from openpyxl import __version__ as openpyxl_version
+from openpyxl import load_workbook
+
+
+EXPECTED_OPENPYXL = "3.1.5"
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -404,7 +409,59 @@ def xlsx_workflow(page: Page, attempt_dir: Path) -> dict[str, object]:
     saved = save_download(download_info.value, attempt_dir / "downloads")
     assert saved["bytes"] > 0, saved
     assert str(saved["fileName"]).endswith(".xlsx"), saved
+    # XLSX-013: the source download must be the verified fixture bytes, not a
+    # re-requested URL or a re-serialized workbook.
+    fixture = ROOT / "apps" / "demo" / "public" / "samples" / "sales-table.xlsx"
+    assert hashlib.sha256(Path(str(saved["path"])).read_bytes()).hexdigest() == hashlib.sha256(
+        fixture.read_bytes()
+    ).hexdigest(), "the source download must match the fixture bytes"
     page.screenshot(path=str(attempt_dir / "xlsx-recovered-downloaded.png"), full_page=True)
+
+    # XLSX-011/013: edit a real workbook, export it through the toolbar, and
+    # reopen the downloaded file with the pinned independent parser.
+    assert openpyxl_version == EXPECTED_OPENPYXL, openpyxl_version
+    sample.select_option("charts-images.xlsx")
+    page.wait_for_function(
+        """() => document.querySelector('[data-testid="loaded-file"]')?.textContent?.includes('charts-images.xlsx')
+          && document.querySelector('[data-testid="page-status"]')?.dataset.state === 'ready'""",
+        timeout=30_000,
+    )
+    grid_box = grid.bounding_box()
+    assert grid_box, "the XLSX grid has no bounding box"
+    page.mouse.click(grid_box["x"] + 48 + 20, grid_box["y"] + 24 + 12)
+    page.wait_for_function(
+        "() => !document.querySelector('[data-testid=\"xlsx-formula-input\"]')?.disabled",
+        timeout=10_000,
+    )
+    marker = "E2E-XLSX-EXPORT"
+    formula.fill(marker)
+    page.locator('[data-testid="page-status"]').click()
+    page.wait_for_function(
+        "expected => document.querySelector('[data-testid=\"xlsx-formula-input\"]')?.value === expected",
+        arg=marker,
+        timeout=10_000,
+    )
+    with page.expect_download(timeout=30_000) as export_info:
+        page.locator('[data-testid="xlsx-toolbar-export"]').click()
+    exported = save_download(export_info.value, attempt_dir / "downloads")
+    assert exported["bytes"] > 0, exported
+    assert str(exported["fileName"]).endswith(".xlsx"), exported
+
+    workbook = load_workbook(Path(str(exported["path"])), data_only=False)
+    try:
+        dashboard = workbook["Dashboard"]
+        assert dashboard["A1"].value == marker, dashboard["A1"].value
+        assert dashboard["A1"].font.bold is True, dashboard["A1"].font
+        assert str(dashboard["A1"].fill.fgColor.rgb).endswith("1C3A5E"), dashboard["A1"].fill
+        merged = {str(range_) for range_ in dashboard.merged_cells.ranges}
+        assert "A7:C8" in merged, sorted(merged)
+        assert dashboard.freeze_panes == "C3", dashboard.freeze_panes
+        assert len(dashboard.data_validations.dataValidation) == 1
+        assert workbook.sheetnames == ["Dashboard", "Revenue Chart"]
+    finally:
+        workbook.close()
+    page.screenshot(path=str(attempt_dir / "xlsx-exported.png"), full_page=True)
+
     return {
         "firstSheet": first_name,
         "secondSheet": second_name,
@@ -412,6 +469,11 @@ def xlsx_workflow(page: Page, attempt_dir: Path) -> dict[str, object]:
         "errorCode": error_code,
         "recoveredFile": "sales-table.xlsx",
         "download": saved,
+        "exported": exported,
+        "exportEdit": marker,
+        "merged": ["A7:C8"],
+        "freezePanes": "C3",
+        "openpyxl": openpyxl_version,
     }
 
 

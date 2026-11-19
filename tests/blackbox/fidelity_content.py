@@ -397,6 +397,45 @@ def run_docx(browser, attempt_dir: Path) -> dict[str, object]:
         context.close()
 
 
+XLSX_CANVAS_PIXEL_PROBE = """() => {
+  const grid = document.querySelector('[data-testid="xlsx-grid"]');
+  const canvas = grid?.querySelector('canvas.xlsx-grid__body');
+  if (!grid || !canvas) return null;
+  const cssWidth = canvas.getBoundingClientRect().width;
+  if (!cssWidth) return null;
+  const dpr = canvas.width / cssWidth;
+  const colWidth = Number(grid.dataset.firstColumnWidth) || 80;
+  const rowHeight = Number(grid.dataset.firstRowHeight) || 20;
+  const ctx = canvas.getContext('2d');
+  const sample = (firstCol, firstRow, cols, rows) => {
+    const x = Math.round(firstCol * colWidth * dpr);
+    const y = Math.round(firstRow * rowHeight * dpr);
+    const width = Math.max(1, Math.round(cols * colWidth * dpr));
+    const height = Math.max(1, Math.round(rows * rowHeight * dpr));
+    const data = ctx.getImageData(x, y, width, height).data;
+    let nonWhite = 0, red = 0, green = 0, blue = 0;
+    for (let index = 0; index < data.length; index += 4) {
+      const r = data[index], g = data[index + 1], b = data[index + 2], a = data[index + 3];
+      if (a < 16 || (r > 245 && g > 245 && b > 245)) continue;
+      nonWhite += 1;
+      if (r > g + 24 && r > b + 24) red += 1;
+      else if (g > r + 16 && g > b + 8) green += 1;
+      else if (b > r + 24 && b > g + 10) blue += 1;
+    }
+    return { nonWhite, red, green, blue };
+  };
+  return {
+    colWidth,
+    rowHeight,
+    colorScaleMin: sample(1, 1, 1, 1),
+    colorScaleMax: sample(1, 4, 1, 1),
+    dataBar: sample(2, 2, 1, 1),
+    sparkline: sample(3, 1, 1, 1),
+    iconSet: sample(3, 2, 1, 3),
+  };
+}"""
+
+
 def run_xlsx(browser, attempt_dir: Path) -> dict[str, object]:
     context = browser.new_context(viewport={"width": 1440, "height": 900}, locale="zh-CN")
     page = context.new_page()
@@ -410,8 +449,6 @@ def run_xlsx(browser, attempt_dir: Path) -> dict[str, object]:
         expected = {
             "xlsx-hyperlink-count": 1,
             "xlsx-comment-count": 1,
-            "xlsx-conditional-format-count": 3,
-            "xlsx-sparkline-count": 1,
             "xlsx-shape-count": 1,
             "xlsx-form-control-count": 1,
         }
@@ -429,6 +466,53 @@ def run_xlsx(browser, attempt_dir: Path) -> dict[str, object]:
         grid = page.locator('[data-testid="xlsx-grid"]')
         box = grid.bounding_box()
         expect(box is not None, "网格没有可见尺寸")
+        # Fixture features that were previously unasserted: merged cells, a
+        # freeze on both axes and the list validation rule.
+        expect(grid.get_attribute("data-merged-region-count") == "1", "合并区域数量错误")
+        expect(grid.get_attribute("data-freeze-row") == "2", "冻结行数量错误")
+        expect(grid.get_attribute("data-freeze-column") == "2", "冻结列数量错误")
+        expect(int(grid.get_attribute("data-data-validation-count") or 0) >= 1, "数据验证规则缺失")
+
+        # Conditional formats and sparklines used to be asserted against the
+        # model that computed them. Sample the real canvas instead: B2/B5 are
+        # the colour-scale endpoints, C3 carries a data bar, D2 a sparkline and
+        # D3:D5 the traffic-light icon set.
+        pixels = None
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            pixels = page.evaluate(XLSX_CANVAS_PIXEL_PROBE)
+            if (
+                pixels
+                and pixels["colorScaleMax"]["green"] > 40
+                and pixels["dataBar"]["blue"] > 40
+            ):
+                break
+            page.wait_for_timeout(200)
+        expect(pixels is not None, "XLSX 正文画布没有可采样的像素")
+        if pixels:
+            expect(pixels["colWidth"] > 0 and pixels["rowHeight"] > 0, pixels)
+            expect(
+                pixels["colorScaleMin"]["red"] > 40,
+                f"色阶最小端未绘制: {pixels['colorScaleMin']}",
+            )
+            expect(
+                pixels["colorScaleMax"]["green"] > 40,
+                f"色阶最大端未绘制: {pixels['colorScaleMax']}",
+            )
+            expect(
+                pixels["dataBar"]["blue"] > 40,
+                f"数据条未绘制: {pixels['dataBar']}",
+            )
+            expect(
+                pixels["sparkline"]["blue"] > 3,
+                f"迷你图未绘制: {pixels['sparkline']}",
+            )
+            expect(
+                pixels["iconSet"]["nonWhite"] > 0
+                and (pixels["iconSet"]["red"] + pixels["iconSet"]["green"]) > 0,
+                f"图标集未绘制: {pixels['iconSet']}",
+            )
+
         first_width = float(grid.get_attribute("data-first-column-width") or 80)
         page.mouse.move(box["x"] + 48 + first_width + 20, box["y"] + 24 + 24 + 12)
         page.locator('[data-testid="xlsx-comment-popover"]').wait_for(timeout=5_000)
@@ -440,7 +524,7 @@ def run_xlsx(browser, attempt_dir: Path) -> dict[str, object]:
         expect(page.locator('[data-testid="xlsx-name-box"]').input_value() == "A7", "内部超链接没有跳转到 A7")
         page.screenshot(path=str(attempt_dir / "xlsx-rich-content.png"), full_page=True)
         evidence.assert_clean()
-        return {"status": "PASS", "counts": observed, "hyperlinkTarget": "A7"}
+        return {"status": "PASS", "counts": observed, "pixels": pixels, "hyperlinkTarget": "A7"}
     finally:
         evidence.save(attempt_dir)
         context.close()

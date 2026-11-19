@@ -575,7 +575,9 @@ export function setWorkbookCellHyperlink(
   if (remaining.length === 0) {
     removeSheetChildren(document, "hyperlinks");
   } else {
-    getLocalElements(document, "hyperlinks")[0]?.setAttribute("count", String(remaining.length));
+    // CT_Hyperlinks does not declare `count`; keep the part readable by strict
+    // OOXML consumers such as openpyxl.
+    getLocalElements(document, "hyperlinks")[0]?.removeAttribute("count");
   }
 
   // Drop relationships no hyperlink references any more so export stays clean.

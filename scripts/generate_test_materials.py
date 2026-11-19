@@ -20,6 +20,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.comments import Comment
 from openpyxl.formatting.rule import ColorScaleRule, DataBarRule, IconSetRule
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.worksheet.table import Table as XlsxTable, TableStyleInfo
 from PIL import Image, ImageDraw, ImageFont
 from reportlab import rl_config
@@ -1332,7 +1333,12 @@ def make_pdf_large(path: Path):
 def style_header(ws):
     fill = PatternFill("solid", fgColor="1C3A5E")
     font = Font(color="FFFFFF", bold=True)
+    # Only style header cells that carry a label: fixtures such as the sales
+    # table put far-right helper columns on row 1, and a blanket row loop would
+    # paint every empty column in between.
     for cell in ws[1]:
+        if cell.value in (None, ""):
+            continue
         cell.fill = fill
         cell.font = font
         cell.alignment = Alignment(horizontal="center")
@@ -1390,13 +1396,37 @@ def make_sales_table(path: Path):
         units = random.randint(5, 180)
         price = random.choice([49, 89, 129, 249])
         ws.append([random.choice(regions), f"Rep {i%17+1}", random.choice(products), f"2026-{(i%12)+1:02d}", units, price, f"=E{i+1}*F{i+1}", "Long note validating overflow and cell text truncation behavior in the grid viewer."])
+    # Status is an input column outside the table: its list validation is the
+    # fixture contract for the data-validation UI, not part of SalesRecords.
+    statuses = ["Active", "On Hold", "Closed"]
+    ws["I1"] = "Status"
+    for row in range(2, ws.max_row + 1):
+        ws.cell(row, 9, statuses[row % len(statuses)])
+    validation = DataValidation(
+        type="list",
+        formula1='"Active,On Hold,Closed"',
+        allow_blank=True,
+        showErrorMessage=True,
+        errorTitle="Invalid status",
+        error="Pick Active, On Hold or Closed.",
+    )
+    ws.add_data_validation(validation)
+    validation.add(f"I2:I{ws.max_row}")
     style_header(ws)
-    ws.freeze_panes = "A2"
-    widths = [14, 12, 18, 12, 10, 12, 14, 58]
+    # Freeze rows *and* columns so a real fixture exercises the four-pane
+    # clipping path (A1:B2 stays pinned while both axes scroll).
+    ws.freeze_panes = "C3"
+    widths = [14, 12, 18, 12, 10, 12, 14, 58, 12]
     for idx, width in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(idx)].width = width
+    # Two-letter column labels with explicit widths prove the parser maps
+    # column letters beyond "Z" to workbook indices.
+    ws["AA1"] = "Region rollup"
+    ws["AB1"] = "Owner"
     for cell in ws[1]:
         cell.border = Border(bottom=Side(style="medium", color="1C3A5E"))
+    for name, width in {"AA": 26, "AB": 16}.items():
+        ws.column_dimensions[name].width = width
     sales_table = XlsxTable(displayName="SalesRecords", ref=f"A1:H{ws.max_row}")
     sales_table.tableStyleInfo = TableStyleInfo(
         name="TableStyleMedium2",
@@ -1430,6 +1460,20 @@ def make_charts_images(path: Path, image_path: Path):
     ws["D1"].font = Font(color="FFFFFF", bold=True)
     ws["D3"], ws["D4"], ws["D5"] = 3, 2, 1
     ws.conditional_formatting.add("D3:D5", IconSetRule("3TrafficLights1", "num", [1, 2, 3], showValue=True))
+    # A list validation on the sparkline/icon column exercises the validation
+    # overlay against a real workbook instead of a synthetic part.
+    trend_validation = DataValidation(
+        type="list",
+        formula1='"1,2,3"',
+        allow_blank=True,
+        showErrorMessage=True,
+        errorTitle="Invalid trend",
+        error="Pick 1, 2 or 3.",
+    )
+    ws.add_data_validation(trend_validation)
+    trend_validation.add("D2:D5")
+    # Multi-axis freeze: both rows and columns stay pinned while scrolling.
+    ws.freeze_panes = "C3"
     ws.row_dimensions[7].height = 28
     ws.row_dimensions[8].height = 28
     chart = BarChart()

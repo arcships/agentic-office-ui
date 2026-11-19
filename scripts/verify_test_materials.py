@@ -433,14 +433,114 @@ if encrypted_reader.is_encrypted:
         f"{encrypted_pdf['file']}: decrypted pages lost their text layer",
     )
 
+# XLSX fixture contract read through openpyxl. The browser and component
+# suites assert these exact features, so a regeneration that drops the merge,
+# the freeze panes, the validation rules or the two-letter column widths must
+# fail material verification instead of leaving an empty fixture behind.
+xlsx_expectations: dict[str, dict[str, object]] = {
+    "financial-model.xlsx": {
+        "sheets": ["Assumptions", "P&L", "Notes"],
+        "charts": 1,
+        "merged": [],
+        "freeze": None,
+        "validations": 0,
+    },
+    "sales-table.xlsx": {
+        "sheets": ["Sales Data"],
+        "charts": 0,
+        "merged": [],
+        "freeze": "C3",
+        "validations": 1,
+        "tables": ["SalesRecords"],
+        "columnWidths": {"AA": 26.0, "AB": 16.0},
+        "maxRow": 181,
+        "maxColumn": 28,
+    },
+    "charts-images.xlsx": {
+        "sheets": ["Dashboard", "Revenue Chart"],
+        "charts": 1,
+        "images": 1,
+        "merged": ["A7:C8"],
+        "freeze": "C3",
+        "validations": 1,
+        "conditionalFormats": 3,
+        "maxRow": 8,
+        "maxColumn": 4,
+    },
+    "large-grid.xlsx": {
+        "sheets": ["Large Grid"],
+        "charts": 0,
+        "merged": [],
+        "freeze": None,
+        "validations": 0,
+        "maxRow": 551,
+        "maxColumn": 60,
+    },
+}
+
 for name in valid_xlsx:
     path = SAMPLES / name
     wb = load_workbook(path, data_only=False, read_only=False)
+    sheet = wb.worksheets[0] if name != "charts-images.xlsx" else wb["Dashboard"]
+    expected = xlsx_expectations[name]
+    validations = sum(len(ws.data_validations.dataValidation) for ws in wb.worksheets)
+    charts = sum(len(getattr(ws, "_charts", [])) for ws in wb.worksheets)
+    images = sum(len(getattr(ws, "_images", [])) for ws in wb.worksheets)
+    conditional_formats = len(list(sheet.conditional_formatting._cf_rules))
     report["xlsx"][name] = {
         "sheets": wb.sheetnames,
         "bytes": path.stat().st_size,
+        "freeze": sheet.freeze_panes,
+        "merged": [str(range_) for range_ in sheet.merged_cells.ranges],
+        "validations": validations,
+        "charts": charts,
+        "images": images,
+        "conditionalFormats": conditional_formats,
+        "maxRow": sheet.max_row,
+        "maxColumn": sheet.max_column,
     }
+    expect(wb.sheetnames == expected["sheets"], f"{name}: expected sheets {expected['sheets']}, got {wb.sheetnames}")
     expect(len(wb.sheetnames) > 0, f"{name}: workbook must contain at least one sheet")
+    expect(
+        [str(range_) for range_ in sheet.merged_cells.ranges] == expected["merged"],
+        f"{name}: expected merged regions {expected['merged']}, got {[str(range_) for range_ in sheet.merged_cells.ranges]}",
+    )
+    expect(
+        sheet.freeze_panes == expected["freeze"],
+        f"{name}: expected freeze panes {expected['freeze']}, got {sheet.freeze_panes}",
+    )
+    expect(
+        validations == expected["validations"],
+        f"{name}: expected {expected['validations']} data validation rules, got {validations}",
+    )
+    expect(
+        charts == expected["charts"],
+        f"{name}: expected {expected['charts']} worksheet charts, got {charts}",
+    )
+    expect(
+        images == expected.get("images", 0),
+        f"{name}: expected {expected.get('images', 0)} embedded images, got {images} (Pillow is required to read them)",
+    )
+    expect(
+        conditional_formats == expected.get("conditionalFormats", 0),
+        f"{name}: expected {expected.get('conditionalFormats', 0)} conditional-format ranges, got {conditional_formats}",
+    )
+    expect(
+        sheet.max_row == expected.get("maxRow", sheet.max_row),
+        f"{name}: expected {expected.get('maxRow')} rows, got {sheet.max_row}",
+    )
+    expect(
+        sheet.max_column == expected.get("maxColumn", sheet.max_column),
+        f"{name}: expected {expected.get('maxColumn')} columns, got {sheet.max_column}",
+    )
+    for column, width in expected.get("columnWidths", {}).items():
+        actual = sheet.column_dimensions[column].width
+        expect(actual == width, f"{name}: expected column {column} width {width}, got {actual}")
+    for table_name in expected.get("tables", []):
+        expect(
+            table_name in sheet.tables,
+            f"{name}: table {table_name} is missing from {list(sheet.tables)}",
+        )
     wb.close()
 
 for name in valid_png:
