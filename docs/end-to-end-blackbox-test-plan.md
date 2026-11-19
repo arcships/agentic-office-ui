@@ -432,6 +432,8 @@ find "$PACK_DIR" -maxdepth 1 -name '*.tgz' -print
 
 材料的来源、类别、关键行为和校验值必须来自 `test-data/manifest.json`；更细的工作表、公式、合并、图表和图片断言由独立核心测试明确写出，不能由测试读取同一渲染结果后自我验证。上述用例分别纳入 `BB-P0-ROUTES`、`BB-RACE`、`BB-PERF-XLSX`、`BB-SEC-URL` 和 `BB-RELEASE`。
 
+XLSX 的单元/组件用例由每次 CI 运行执行；浏览器用例（`E2E-XLSX-WORKFLOW`、`BB-RACE`、`P4-FIDELITY-XLSX-WORKER-01`、`CI-ROUTE-XLSX-SURFACE`）由 `.github/workflows/ci.yml` 的 `blackbox` 作业在夜间或手动触发时执行。`XLSX-011` 同时由无浏览器的控制器+工具栏导出用例覆盖（`tests/blackbox/xlsx_export_controller_openpyxl.py`）；条件格式和迷你图以正文画布像素采样断言，不再比较演示页自己计算出的模型计数；合并区、双轴冻结、数据验证和 `AA`/`AB` 列宽由真实夹具与 `scripts/verify_test_materials.py` 的材料契约共同约束。
+
 ### 13.2 PDF Viewer
 
 | 用例 ID | 优先级 | 操作 | 可观察断言 |

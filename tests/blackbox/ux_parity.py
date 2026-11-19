@@ -3156,10 +3156,12 @@ def run_suite(settings: Settings) -> int:
 
         local_stable = all(result["status"] == "PASS" for result in results)
         stable = local_stable and upstream_status == "PASS"
+        # A local assertion failure is a FAIL even when the optional upstream
+        # checkout is unavailable; only a stable local run may report BLOCKED.
         suite_result = (
             "PASS"
             if stable
-            else "BLOCKED" if upstream_status == "BLOCKED" else "FAIL"
+            else "BLOCKED" if local_stable and upstream_status == "BLOCKED" else "FAIL"
         )
         update_environment(
             settings,

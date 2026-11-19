@@ -139,12 +139,12 @@
       "sha256": "d42c4527a7a3235ae566d990c7760cc402576f37f4545c2d54b7d07ed4ea257d"
     },
     "sales-table.xlsx": {
-      "bytes": 13226,
-      "sha256": "9ba1564c45283d64879cb4d53bb1ae3af0c1478cd10c76268d1b0c2d729a0dfa"
+      "bytes": 14265,
+      "sha256": "9f14239c8cb11cf4f191693dcb4686e9fc2c3a1c036e4e27166ab4881f6c1dbb"
     },
     "charts-images.xlsx": {
-      "bytes": 32070,
-      "sha256": "d012d0bcaf13a461a21e676642403b76a6ec13799b3126f2f5d50203c400694b"
+      "bytes": 32255,
+      "sha256": "a92bbb9b840dbe01dfb24a0a158946e8f71a0dd0966bcd30780117726d91d18e"
     },
     "large-grid.xlsx": {
       "bytes": 134402,
