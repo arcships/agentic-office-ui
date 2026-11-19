@@ -38,6 +38,7 @@ http://localhost:5173
 | XLSX Viewer | `/#/xlsx-viewer` | `apps/demo/src/pages/XlsxViewerPage.vue` | workbook、sheet tabs、cell edit、zoom |
 | PDF Viewer | `/#/pdf-viewer` | `apps/demo/src/pages/PdfViewerPage.vue` | PDF 上传、工具栏、缩放、搜索、缩略图、下载 |
 | Components | `/#/components` | `apps/demo/src/pages/ComponentsPage.vue` | SignaturePad、FileUpload、FileThumbnail、Spinner、BoundingBox、LayoutBlocks、Tooltip |
+| File components story | `/#/file-components` | `apps/demo/src/pages/FileComponentsPage.vue` | FileUpload 的 default/drag/file-list/rejected、FileThumbnail 的 empty/image/loading/error/16:9/long-name、light/dark |
 
 ## 组件覆盖清单
 
@@ -279,24 +280,26 @@ http://localhost:5173
 
 通过标准：
 
-- 合法文件触发 `Uploaded: filename`。
-- 非法文件显示错误。
-- dragover 样式变化。
-- disabled 场景禁止打开 picker。
+- 合法文件触发 `files-accepted`；开启 `showFileList` 时出现文件名、`type - size` 与 Ready。
+- 非法文件显示错误（类型拒绝显示参考文案，尺寸/混合批次保留详细原因）。
+- dragover 样式变化、图标 cluster 抬升；chip 文案切换到 drop label。
+- disabled 场景禁止打开 picker、拖放和键盘激活。
+- 390 / 768 / 1440、light/dark 状态可在 demo 的 `/#/file-components` story 页检查。
 
 ### FileThumbnail
 
 步骤：
 
-1. 检查 PDF、XLSX、PNG 三个现有样式。
-2. 补充 DOCX、unknown、长文件名、无 MIME type。
+1. 检查空 fallback、图片、loading、error + type glyph、16:9 和长文件名。
+2. 补充 DOCX、unknown、无 MIME type。
 3. 检查文本截断、图标、颜色。
 
 通过标准：
 
-- 图标、扩展名、文件名清晰。
-- 长文件名截断合理。
-- unknown 类型有 fallback 样式。
+- 图片首次加载有 blur-in/overlay，重复挂载直接显示。
+- 长文件名/类型截断合理，Ready 徽标不被挤出。
+- unknown 类型和失败图片回退到 muted fallback；开启 `showTypeGlyph` 时显示 glyph。
+- demo 的 `/#/file-components` 覆盖 light/dark 与 390 / 768 / 1440。
 
 ### Spinner
 

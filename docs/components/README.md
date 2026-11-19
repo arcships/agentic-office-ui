@@ -54,7 +54,7 @@
 
 ### `FileUpload`
 
-属性：`accept`、`multiple`、`maxSize`、`disabled`、`className`。事件：`files-accepted` 和 `files-rejected`。拒绝结果包含稳定的 `code`、原始 `file` 和可显示的 `message`。
+属性：`accept`、`multiple`、`maxSize`、`disabled`、`className`，以及 0.8 新增的可选视觉/交互属性：`title`、`description`、`browseLabel`、`draggingLabel`、`acceptedFileTypes`、`showFileList`、`showBorderBeam`、`borderBeamTheme`。事件保持 `files-accepted` 和 `files-rejected`；拒绝结果包含稳定的 `code`、原始 `file` 和可显示的 `message`。默认 `showFileList=false` 以避免与宿主自己的文件列表重复；需要 Extend 内置列表时显式开启。完整合同、像素对照和状态说明见[File components](file-components.md)。
 
 ### `SignaturePad`
 
@@ -62,7 +62,7 @@
 
 ### `FileThumbnail`
 
-接收 `file: { name, type, url? }` 和 `size: "sm" | "md" | "lg"`，用于显示文件类型和预览信息。
+接收 `file: { name, type, url?, size? }`、`size`（`sm`/`md`/`lg`，或像素/CSS 长度）、`previewImageUrl`、`previewAspectRatio`、`isLoading`、`hasError`、`showTypeGlyph`、`showMeta`、`alt` 和 `className`。方形/自定义比例预览卡包含图片 blur-in、loading overlay、error/empty fallback；需要旧版文件名/类型行时设置 `showMeta`。完整合同见[File components](file-components.md)。
 
 ### `BoundingBoxCitations`
 

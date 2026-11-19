@@ -82,8 +82,8 @@ async function captureRegionPreview() {
 | `OfficeRegionSelector` | 鼠标或键盘框选规范化区域 |
 | `OfficeRegionAnnotator` | 在截图上添加箭头、矩形、文字和高亮，输出可序列化标注文档 |
 | `SignaturePad` | 签名板 |
-| `FileUpload` | 文件上传（含校验） |
-| `FileThumbnail` | 文件缩略图 |
+| `FileUpload` | 文件上传（含校验、可选内置文件列表与 BorderBeam） |
+| `FileThumbnail` | 文件预览卡（方形/自定义比例、blur-in、loading/error/fallback） |
 | `BoundingBoxCitations` | 引用框标注 |
 | `LayoutBlocks` | 版面块 |
 | `Spinner` | 加载指示（兼容入口；新代码可用 `OfficeSpinner`） |
@@ -136,7 +136,7 @@ import { OfficeIcon, OfficeThemeProvider } from "@arcships/vue-ui"
 
 `captureRegion()` 返回的 `url` 由调用方释放；`OfficeRegionAnnotator` 只为 `Blob` 类型的 `image` 创建 URL，并在替换/卸载时撤销。
 
-`FileUpload` 发出 `files-accepted`（通过校验的 `File[]`）和 `files-rejected`（`FileUploadRejection[]`，含 `code`、`file`、`message`）。`SignaturePad` 发出 `update:signature`。
+`FileUpload` 发出 `files-accepted`（通过校验的 `File[]`）和 `files-rejected`（`FileUploadRejection[]`，含 `code`、`file`、`message`）。0.8 新增的 `title`、`description`、`browseLabel`、`draggingLabel`、`acceptedFileTypes`、`showFileList`、`showBorderBeam` 都是可选参数；`showFileList` 默认 `false`，开启后按 Extend 布局渲染大小/类型/Ready。`FileThumbnail` 新增 `previewImageUrl`、`previewAspectRatio`、`isLoading`、`hasError`、`showTypeGlyph`、`showMeta` 等可选参数，`size` 仍接受 `sm`/`md`/`lg`，也接受像素或 CSS 长度。`SignaturePad` 发出 `update:signature`。
 
 ## 文档
 
