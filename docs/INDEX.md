@@ -50,6 +50,7 @@
 | [file-format-support-plan.md](file-format-support-plan.md) | XLSX、DOCX、PPTX、PDF View 的文件格式支持范围、接入边界和实施顺序 |
 | [plan/stabilization-roadmap.md](plan/stabilization-roadmap.md) | 唯一任务顺序、依赖、状态和执行证据来源 |
 | [end-to-end-blackbox-test-plan.md](end-to-end-blackbox-test-plan.md) | 用户侧黑盒用例、通过标准和发布暂停条件 |
+| [fixture-corpus.md](fixture-corpus.md) | 真实夹具库的 fixture → feature → issue → test 覆盖矩阵（0.8，生成） |
 | [upstream-parity-gap-audit.md](upstream-parity-gap-audit.md) | DOCX/XLSX 与官方 Extend UI React 的固定基准、差异和收口状态 |
 | [upstream/extend-ui.md](upstream/extend-ui.md) | Extend UI 固定 commit 上游索引、许可证副本与文件级归属状态（0.8，CI 校验） |
 | [testing/agent-execution-runbook.md](testing/agent-execution-runbook.md) | 正式构建、浏览器、真实压缩包和证据的执行步骤 |

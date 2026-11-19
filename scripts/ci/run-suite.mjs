@@ -75,6 +75,7 @@ const suites = {
       "tests/unit/docx-search.test.mjs",
       "tests/unit/docx-replace.test.mjs",
       "tests/unit/docx-fixture-fidelity.test.mjs",
+      "tests/unit/fixture-corpus.test.mjs",
       "tests/unit/docx-form-field-required.test.mjs",
       "tests/unit/docx-model-preservation.test.mjs",
       "tests/unit/docx-export-prepare-model.test.mjs",

@@ -34,6 +34,18 @@ if (manifest.containsSensitiveData !== false) {
 if (!Array.isArray(manifest.entries) || manifest.entries.length === 0) {
   failures.push("manifest entries must be non-empty");
 }
+const coveragePath = manifest.coverage ? path.resolve(root, manifest.coverage) : null;
+let coverage = null;
+if (coveragePath) {
+  if (!existsSync(coveragePath)) {
+    failures.push(`coverage matrix does not exist: ${manifest.coverage}`);
+  } else {
+    coverage = JSON.parse(readFileSync(coveragePath, "utf8"));
+    if (!Array.isArray(coverage.fixtures) || coverage.fixtures.length === 0) {
+      failures.push("coverage matrix fixtures must be non-empty");
+    }
+  }
+}
 
 for (const [sourceId, source] of Object.entries(manifest.sources || {})) {
   if (source.kind !== "generated") failures.push(`${sourceId}: source must be generated`);
@@ -55,6 +67,11 @@ for (const entry of manifest.entries || []) {
   if (!manifest.sources?.[entry.source]) entryFailures.push("unknown source");
   if (!entry.expected) entryFailures.push("missing expected behavior");
   if (!/^[a-f0-9]{64}$/.test(entry.sha256 || "")) entryFailures.push("invalid sha256");
+  if (!Array.isArray(entry.features) || entry.features.length === 0) {
+    entryFailures.push("features must be a non-empty tag list");
+  } else if (entry.features.some((feature) => typeof feature !== "string" || !feature.trim())) {
+    entryFailures.push("features must contain non-empty strings");
+  }
 
   const filePath = path.resolve(samplesRoot, entry.file || "");
   if (!filePath.startsWith(`${samplesRoot}${path.sep}`) || !existsSync(filePath)) {
@@ -66,7 +83,7 @@ for (const entry of manifest.entries || []) {
     if (sha256 !== entry.sha256) entryFailures.push(`sha256 ${sha256} != ${entry.sha256}`);
     const firstEight = bytes.subarray(0, 8);
     const isCorrupted = entry.file.startsWith("corrupted.");
-    if ((entry.type === "docx" || entry.type === "xlsx") && !isCorrupted) {
+    if (["docx", "xlsx", "xlsm", "pptx"].includes(entry.type) && !isCorrupted) {
       if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) entryFailures.push("missing ZIP signature");
     } else if (entry.type === "pdf" && !isCorrupted) {
       if (bytes.subarray(0, 4).toString("ascii") !== "%PDF") entryFailures.push("missing PDF signature");
@@ -112,6 +129,45 @@ for (const group of byHash.values()) {
 
 for (const required of ["normal", "boundary", "malicious", "large"]) {
   if (!categories.has(required)) failures.push(`missing fixture category ${required}`);
+}
+
+if (coverage) {
+  const coverageByFile = new Map();
+  for (const item of coverage.fixtures) {
+    if (!item.file || coverageByFile.has(item.file)) {
+      failures.push(`coverage matrix has a duplicate or empty fixture: ${item.file}`);
+      continue;
+    }
+    coverageByFile.set(item.file, item);
+    if (!Array.isArray(item.features) || item.features.length === 0) {
+      failures.push(`${item.file}: coverage matrix features must be non-empty`);
+    }
+    if (!Array.isArray(item.issues) || item.issues.some((issue) => !Number.isInteger(issue) || issue <= 0)) {
+      failures.push(`${item.file}: coverage matrix issues must be positive integers`);
+    }
+    if (!Array.isArray(item.tests) || item.tests.length === 0) {
+      failures.push(`${item.file}: coverage matrix needs at least one test or acceptance script`);
+    } else {
+      for (const script of item.tests) {
+        if (typeof script !== "string" || !existsSync(path.resolve(root, script))) {
+          failures.push(`${item.file}: coverage test does not exist: ${script}`);
+        }
+      }
+    }
+  }
+  for (const entry of manifest.entries || []) {
+    const item = coverageByFile.get(entry.file);
+    if (!item) {
+      failures.push(`${entry.file}: missing from the coverage matrix`);
+      continue;
+    }
+    if (JSON.stringify(entry.features) !== JSON.stringify(item.features)) {
+      failures.push(`${entry.file}: manifest features differ from the coverage matrix`);
+    }
+  }
+  for (const file of coverageByFile.keys()) {
+    if (!seenFiles.has(file)) failures.push(`${file}: coverage matrix references an unknown fixture`);
+  }
 }
 
 const summary = {

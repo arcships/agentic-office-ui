@@ -55,6 +55,9 @@ const requiredFiles = [
   "scripts/ci/p4-reproducible-pack.mjs",
   "scripts/ci/prepare-release-artifact.mjs",
   "test-data/manifest.json",
+  "test-data/corpus-coverage.json",
+  "docs/fixture-corpus.md",
+  "tests/unit/fixture-corpus.test.mjs",
   "tests/unit/docx-core.test.mjs",
   "tests/unit/docx-fixture-fidelity.test.mjs",
   "tests/unit/xlsx-core.test.mjs",
@@ -279,7 +282,12 @@ check(
     ),
 );
 const fixtures = JSON.parse(read("test-data/manifest.json"));
-check("fixture manifest has 28 entries", fixtures.entries?.length === 28, fixtures.entries?.length);
+check("fixture manifest has 38 entries", fixtures.entries?.length === 38, fixtures.entries?.length);
+check("fixture manifest links its coverage matrix", fixtures.coverage === "test-data/corpus-coverage.json");
+check(
+  "fixture manifest entries declare features",
+  fixtures.entries?.every((entry) => Array.isArray(entry.features) && entry.features.length > 0),
+);
 check("fixture manifest excludes sensitive data", fixtures.containsSensitiveData === false);
 check(
   "consumer template has no source alias",
