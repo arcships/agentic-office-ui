@@ -129,7 +129,7 @@ test("XlsxGrid returns keyboard focus after committing or cancelling cell editin
   assert.match(SCRIPT_SOURCE, /function commitEdit\(\)[\s\S]*nextTick\(\(\) => containerRef\.value\?\.focus\(\)\)/);
   assert.match(SCRIPT_SOURCE, /function cancelEdit\(\)[\s\S]*nextTick\(\(\) => containerRef\.value\?\.focus\(\)\)/);
   assert.match(functionNode("onEditKeydown").getText(AST), /isComposingKeyboardEvent\(event\)/);
-  assert.match(functionNode("onEditCompositionEnd").getText(AST), /nextTick\(commitEdit\)/);
+  assert.match(functionNode("onEditCompositionEnd").getText(AST), /nextTick\(commitEditFillingSelection\)/);
 });
 
 test("XlsxGrid display indices keep hidden row and column workbook addresses", () => {

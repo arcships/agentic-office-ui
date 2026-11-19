@@ -282,10 +282,21 @@ test("Ctrl/Cmd+X cuts from the grid and Escape cancels the pending move", async 
     assert.equal(controller.cancelCut(), true);
     assert.equal(controller.cancelCut(), false, "cancelling twice is a no-op");
 
-    // A plain Escape without a pending cut keeps its existing meaning.
+    // A plain Escape with no pending cut collapses a range onto its active
+    // cell; a single-cell selection leaves the key to the browser.
+    const collapseEscape = keydownEvent("Escape");
+    grid.props.onKeydown(collapseEscape.event);
+    await vue.nextTick();
+    assert.equal(collapseEscape.preventedCount(), 1, "Escape collapses the range left by the cancelled cut");
+    assert.deepEqual(
+      controller.selection,
+      { start: { row: 1, col: 10 }, end: { row: 1, col: 10 } },
+      "the range collapses onto the active cell",
+    );
+
     const idleEscape = keydownEvent("Escape");
     grid.props.onKeydown(idleEscape.event);
-    assert.equal(idleEscape.preventedCount(), 0);
+    assert.equal(idleEscape.preventedCount(), 0, "a single cell leaves Escape alone");
   } finally {
     app.unmount();
   }

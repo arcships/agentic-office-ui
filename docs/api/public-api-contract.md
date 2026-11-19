@@ -335,6 +335,8 @@ XLSX 绘图剪贴板合同：图表、图片和形状共用同一套内部剪贴
 
 XLSX 自动筛选合同：`controller.autoFilterRanges` 汇总工作表 `<autoFilter ref>` 和表部件的 `<autoFilter>`（`{ reference, start, end, headerRowCount, dataEndRow, columns, source, tableName? }`，同一区域以表定义优先）；`autoFilterStates` 给出当前列条件及 `hiddenRows`，`hiddenAutoFilterRows` 是所有条件隐藏的绝对行号。`applyAutoFilterValues(reference, columnIndex, values, { includeBlank })` 应用或移除单列筛选，`clearAutoFilter(reference?)` 清除一个/全部范围，二者只改视图、不改单元格、合并区域或冻结窗格；`getAutoFilterColumnValues(range, columnIndex)` 返回去重后的显示值（含空白）。`sortAutoFilter(reference, columnIndex, direction)` 是一次可撤销的范围编辑，只读/受保护工作表或数据区有合并时返回 `false`。筛选条件在导出时写回工作表或表部件的 `autoFilter`，重开工作簿后仍生效。`XlsxTableHeaderMenuRenderProps` 增加 `autoFilter`、`applyFilter`、`clearFilter`、`filterValues`、`getValueOptions`、`hasFilter`、`hasValueFilter`，`table` 在纯工作表筛选时为 `null`；`XlsxViewer`/`XlsxSheetSurface`/`XlsxGrid` 通过 `#table-header-menu` 插槽把参数交给宿主替换内置 `▾` 触发器。
 
+XLSX 网格键盘与多格填充合同：`XlsxGrid` 聚焦时实现 Excel 的 `PageUp`/`PageDown`（正文视口高度的一屏并保留一行重叠）、`Home`/`End`（行首/行内最后一个非空单元格）、`Ctrl/Cmd+Home`/`Ctrl/Cmd+End`（A1/已用区域右下角，空表为 A1）、`Ctrl/Cmd+A`（第一次已用区域，第二次整张显示网格；空表一次全选）、`Ctrl/Cmd+Arrow`（数据区边缘，RTL 下与普通方向键同向镜像）和 `Escape`（收拢区域选区）；带 `Shift` 时扩展选区。翻页步长、跳转落点、已用区域收敛和选区比较集中在 `packages/vue-xlsx/src/components/grid-keyboard.ts`（`resolvePageRowStep()`、`resolveHorizontalJumpDirection()`、`resolveJumpTarget()`、`resolveLastUsedDisplayIndex()`、`isSameRange()`），组件只做事件接线。多格选区上按 `Enter` 会打开编辑器，在编辑器里再按 `Enter` 时调用 `XlsxViewerController.commitSelectionInput(text: string) => number`：`Tab`、失焦和上下方向键仍只写活动单元格；填充本身与 `commitCellInput()` 使用相同的 `=` 公式/值判定，公式原样复制不位移，跳过合并延续单元格和验证失败的单元格，整个填充只写一条撤销记录并保持选区，返回写入的单元格数（工作表锁定、条目被拒或无写入时为 `0`）。
+
 ### 4.3 `vue-pdf`
 
 | 组件 | 事件 | 参数 |

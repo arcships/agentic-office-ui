@@ -73,6 +73,19 @@ const controller = useXlsxViewerController({
 
 自动筛选隐藏的行不计入合计，并在状态栏标记为 `Filtered`。状态栏只读取当前选区，最多 10,000 个单元格；更大的选区会显示 `…` 标记，悬停提示扫描上限。Worker 只读视图通过 `controller.getSelectionStatsAsync()` 在 Worker 内聚合，不把单元格传回主线程。用 `showStatusBar="false"` 可隐藏状态栏；自建界面可以直接挂载导出的 `XlsxStatusBar`，或用 `useXlsxSelectionStats(controller)` 复用同一套汇总逻辑。
 
+## 网格键盘导航
+
+网格聚焦时导航键按 Excel 的习惯工作（方向键、`Tab`、`Enter`、`Delete`、`Backspace`、`F2` 和 `Ctrl/Cmd+C`/`X`/`V` 保持原有行为）：
+
+- `PageUp`/`PageDown`：按正文视口高度上下翻一屏并保留一行重叠；列不变，`Shift` 同时扩展选区，翻过末行时停在最后一行。
+- `Home`/`End`：跳到当前行的第一列，或该行最后一个非空单元格（整行为空时落到最后显示的列）；`Ctrl/Cmd+Home`/`Ctrl/Cmd+End` 跳到 A1 和已用区域右下角，空表的 `Ctrl/Cmd+End` 也停在 A1。`Shift` 同样扩展选区。
+- `Ctrl/Cmd+A`：第一次选中已用区域，再按一次等同于点击左上角全选按钮（整个显示网格）；空表第一次按下即全选。
+- `Ctrl/Cmd+Arrow`：跳到当前数据区的边缘——连续非空区域停在最后一格，遇到空格跳到下一个非空单元格，之后没有数据时停在坐标轴末端；RTL 工作表里 `←`/`→` 与普通方向键一样按视觉方向镜像。
+- `Escape`：没有待取消的剪切时，把多格选区收拢到活动单元格；单格选区不拦截，`Escape` 仍交回浏览器。
+- `Shift+Enter`：向上移动一格；在内联编辑器里则先提交草稿再上移。多格选区上按 `Enter` 会打开编辑器，在编辑器里再按 `Enter` 提交时用 `controller.commitSelectionInput(text)` 把同一内容填入整个选区——公式原样复制、引用不位移，合并延续单元格和验证失败的单元格跳过，整次填充只写一条撤销记录，选区保持不变；`Tab`、失焦和上下方向键仍然只写活动单元格。
+
+翻页步长、跳转落点和已用区域收敛由 `packages/vue-xlsx/src/components/grid-keyboard.ts` 的纯函数实现，组件只负责把按键接到这些函数上。
+
 ## 单元格编辑
 
 双击单元格、按 `Enter` 或 `F2` 打开内联编辑器。编辑器是 `textarea`，可以输入多行：

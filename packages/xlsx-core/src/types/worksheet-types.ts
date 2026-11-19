@@ -1598,6 +1598,25 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
    * @returns `true` when the cell was written.
    */
   commitCellInput: (cell: XlsxCellAddress, text: string) => boolean;
+  /**
+   * Writes one entry into every cell of the selection as a single undo step.
+   *
+   * This is Excel's fill: with a multi-cell selection active, an entry
+   * confirmed in the grid's inline editor with `Enter` lands in the whole
+   * range instead of only in the active cell. `Tab`, blurring the editor and
+   * the commit-and-move keys still write only the active cell. Hosts can bind
+   * the same operation to `Ctrl+Enter` for their own chrome.
+   *
+   * Input follows `commitCellInput`'s rules — `=` text is a formula, other
+   * text is a value — and a formula is copied verbatim, so its references do
+   * not shift. Merged continuation cells and cells whose entry fails data
+   * validation are skipped, and the selection stays put.
+   *
+   * @param text Text entered by the user, for example `"=TODAY()"` or `"n/a"`.
+   * @returns How many cells were written; `0` when the sheet is locked, the
+   *   entry was rejected, or the range has no writable cell.
+   */
+  commitSelectionInput: (text: string) => number;
   continueDeferredLoad: () => void;
   copySelectionToClipboard: () => Promise<boolean>;
   /**

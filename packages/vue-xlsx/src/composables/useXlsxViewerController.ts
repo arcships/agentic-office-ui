@@ -1935,6 +1935,7 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     setCellValue: editingDomain.setCellValue,
     replaceInSheet: replaceDomain.replaceInSheet,
     commitCellInput: editingDomain.commitCellInput,
+    commitSelectionInput: editingDomain.commitSelectionInput,
     setRangeStyle: editingDomain.setRangeStyle,
     setSelectionBorders: editingDomain.setSelectionBorders,
     setSelectedFormula: editingDomain.setSelectedFormula,
