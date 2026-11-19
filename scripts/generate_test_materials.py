@@ -12,7 +12,7 @@ from typing import Callable
 from docx import Document
 from docx.enum.section import WD_ORIENT, WD_SECTION
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Inches, Pt, RGBColor
+from docx.shared import Inches, Mm, Pt, RGBColor
 from openpyxl import Workbook
 from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.drawing.image import Image as XlsxImage
@@ -1054,6 +1054,92 @@ def make_docx_sections_columns(path: Path, image_path: Path):
     write_docx_parts(path, entries)
 
 
+def make_docx_page_sizes(path: Path):
+    """A4 portrait, A4 landscape and US Letter sections in one document.
+
+    The demo must derive paper geometry from each section's `w:pgSz` instead of
+    passing Letter dimensions from the host, so this fixture deliberately mixes
+    millimetre and inch page sizes and gives every section its own header and
+    footer. Each section spans more than one page, so the parity page has to
+    compare page geometry and repeated furniture for six or more pages, and the
+    landscape section is the only one whose paper is wider than it is tall.
+    """
+    doc = Document()
+    set_doc_defaults(doc)
+
+    def configure(
+        section,
+        width,
+        height,
+        orientation,
+        header,
+        footer,
+        heading,
+        body,
+        paragraph_count,
+    ):
+        section.page_width = width
+        section.page_height = height
+        section.orientation = orientation
+        section.header.is_linked_to_previous = False
+        section.footer.is_linked_to_previous = False
+        section.header.paragraphs[0].text = header
+        section.header.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        section.footer.paragraphs[0].text = footer
+        section.footer.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_heading(heading, 1)
+        for index in range(1, paragraph_count + 1):
+            doc.add_paragraph(
+                f"{heading} paragraph {index:02d}. {body} "
+                "This text repeats so the section has to span several pages and "
+                "its header and footer have to repeat on every page of it."
+            )
+
+    a4_width, a4_height = Mm(210), Mm(297)
+    letter_width, letter_height = Inches(8.5), Inches(11)
+
+    portrait = doc.sections[0]
+    configure(
+        portrait,
+        a4_width,
+        a4_height,
+        WD_ORIENT.PORTRAIT,
+        "A4 Portrait Header",
+        "A4 Portrait Footer",
+        "A4 Portrait Section",
+        "Portrait pages use the ISO A4 (210 x 297 mm) paper size.",
+        28,
+    )
+
+    landscape = doc.add_section(WD_SECTION.NEW_PAGE)
+    configure(
+        landscape,
+        a4_height,
+        a4_width,
+        WD_ORIENT.LANDSCAPE,
+        "A4 Landscape Header",
+        "A4 Landscape Footer",
+        "A4 Landscape Section",
+        "Landscape pages keep A4 paper but swap its width and height.",
+        14,
+    )
+
+    letter = doc.add_section(WD_SECTION.NEW_PAGE)
+    configure(
+        letter,
+        letter_width,
+        letter_height,
+        WD_ORIENT.PORTRAIT,
+        "Letter Portrait Header",
+        "Letter Portrait Footer",
+        "US Letter Section",
+        "The final section switches back to US Letter (8.5 x 11 in).",
+        18,
+    )
+
+    doc.save(path)
+
+
 def make_invoice_png(path: Path):
     img = Image.new("RGB", (1000, 1330), "white")
     d = ImageDraw.Draw(img)
@@ -1497,6 +1583,7 @@ def fixture_builders() -> dict[str, Callable[[], None]]:
         "review-threads.docx": lambda: make_docx_review_threads(SAMPLES / "review-threads.docx"),
         "table-structures.docx": lambda: make_docx_table_structures(SAMPLES / "table-structures.docx"),
         "sections-columns.docx": lambda: make_docx_sections_columns(SAMPLES / "sections-columns.docx", invoice_png),
+        "page-sizes.docx": lambda: make_docx_page_sizes(SAMPLES / "page-sizes.docx"),
         "demo.docx": lambda: make_docx_legal_contract(SAMPLES / "demo.docx"),
         "corrupted.docx": lambda: make_corrupted(SAMPLES / "corrupted.docx", "This is not a valid DOCX package. "),
         "sample.pdf": lambda: make_pdf_sample(SAMPLES / "sample.pdf"),

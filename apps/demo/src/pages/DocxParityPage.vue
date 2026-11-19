@@ -68,58 +68,33 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 
 import { useRoute } from "vue-router"
 import { createDocxRuntime, type DocModel } from "@arcships/docx-core"
 import { DocxEditor, DocxViewer } from "@arcships/vue-docx"
+import {
+  EMPTY_INTERACTION,
+  EMPTY_STRUCTURE,
+  buildRenderStructure,
+  compareRenderStructures,
+  type ImageShape,
+  type InteractionShape,
+  type NodeShape,
+  type PageShape,
+  type ParityDiff,
+  type RenderStructure,
+  type SectionShape,
+} from "../lib/docx-parity"
 
 type PageState = "idle" | "loading" | "ready" | "error"
-type ImageShape = { alt: string; sourceKind: string }
-type CellShape = { text: string; images: ImageShape[] }
-type NodeShape =
-  | { type: "paragraph"; text: string; images: ImageShape[] }
-  | { type: "table"; text: string; rows: CellShape[][]; images: ImageShape[] }
-type SectionShape = { text: string; images: ImageShape[] }
-type PageShape = {
-  index: number
-  nodes: NodeShape[]
-  text: string
-  tables: number
-  cells: number
-  images: number
-  header: SectionShape
-  footer: SectionShape
-}
-type InteractionShape = {
-  contentEditableTrue: number
-  inputs: number
-  selects: number
-  resizeHandles: number
-}
-type RenderStructure = {
-  pageCount: number
-  pages: PageShape[]
-  totals: { nodes: number; paragraphs: number; tables: number; cells: number; images: number }
-  interaction: InteractionShape
-}
-type ParityDiff = { equal: boolean; differences: string[] }
 
 const samples = [
   { file: "legal-contract.docx", label: "多页合同" },
   { file: "invoice-table.docx", label: "发票表格" },
   { file: "report-with-image.docx", label: "图文报告" },
   { file: "chinese-mixed.docx", label: "中英文混排" },
+  { file: "page-sizes.docx", label: "A4 / 横向 / Letter 混排" },
 ] as const
 type SampleFile = (typeof samples)[number]["file"]
 const allowedSamples = new Set(samples.map((sample) => sample.file))
-const emptyInteraction = (): InteractionShape => ({
-  contentEditableTrue: 0,
-  inputs: 0,
-  selects: 0,
-  resizeHandles: 0,
-})
-const emptyStructure = (): RenderStructure => ({
-  pageCount: 0,
-  pages: [],
-  totals: { nodes: 0, paragraphs: 0, tables: 0, cells: 0, images: 0 },
-  interaction: emptyInteraction(),
-})
+const emptyInteraction = EMPTY_INTERACTION
+const emptyStructure = EMPTY_STRUCTURE
 
 const route = useRoute()
 const runtime = createDocxRuntime()
@@ -192,28 +167,6 @@ function normalizeSection(section: Element | null): SectionShape {
   }
 }
 
-function normalizeViewerPage(page: Element, position: number): PageShape {
-  const bodyNodes = Array.from(page.children)
-    .filter((child) => !child.classList.contains("docx-page-section--header"))
-    .filter((child) => !child.classList.contains("docx-page-section--footer"))
-    .filter((child) =>
-      child.classList.contains("docx-viewer-paragraph") ||
-      child.classList.contains("docx-viewer-table"),
-    )
-    .map((child) =>
-      child.classList.contains("docx-viewer-table")
-        ? normalizeTable(child)
-        : normalizeParagraph(child),
-    )
-  return pageShape(
-    position,
-    bodyNodes,
-    normalizeSection(page.querySelector(".docx-page-section--header")),
-    normalizeSection(page.querySelector(".docx-page-section--footer")),
-    page,
-  )
-}
-
 function normalizeEditorPage(wrapper: Element): PageShape {
   const surface = wrapper.querySelector('[data-docx-page-surface="true"]')
   const body = surface?.querySelector('[data-docx-page-body="true"]')
@@ -281,34 +234,12 @@ function mergeInteraction(left: InteractionShape, right: InteractionShape): Inte
   }
 }
 
-function buildStructure(pages: PageShape[], interaction: InteractionShape): RenderStructure {
-  const orderedPages = [...pages].sort((left, right) => left.index - right.index)
-  const nodes = orderedPages.flatMap((page) => page.nodes)
-  return {
-    pageCount: orderedPages.length,
-    pages: orderedPages,
-    totals: {
-      nodes: nodes.length,
-      paragraphs: nodes.filter((node) => node.type === "paragraph").length,
-      tables: nodes.filter((node) => node.type === "table").length,
-      cells: nodes.reduce(
-        (total, node) => total + (node.type === "table" ? node.rows.flat().length : 0),
-        0,
-      ),
-      images: orderedPages.reduce((total, page) => total + page.images, 0),
-    },
-    interaction,
-  }
-}
-
-function collectLegacyViewerStructure(): RenderStructure | undefined {
-  const root = viewerHost.value
-  if (!root) return undefined
-  const pageElements = Array.from(root.querySelectorAll('[data-testid="docx-page"]'))
-  if (pageElements.length === 0) return undefined
-  const pages = pageElements
-    .map((page, index) => normalizeViewerPage(page, index))
-  return buildStructure(pages, readInteraction(root))
+function buildStructure(
+  pages: PageShape[],
+  interaction: InteractionShape,
+  meta: { declaredPageCount: number; scannedSteps: number },
+): RenderStructure {
+  return buildRenderStructure(pages, interaction, meta)
 }
 
 function waitForPaint(delay = 0): Promise<void> {
@@ -324,9 +255,13 @@ async function collectVirtualStructure(
   host: HTMLElement | undefined,
   expectedPages: number,
   sequence: number,
-): Promise<RenderStructure> {
+): Promise<RenderStructure | undefined> {
   const scrollRoot = host?.querySelector<HTMLElement>(".docx-viewer-root")
-  if (!host || !scrollRoot) return emptyStructure()
+  if (!host || !scrollRoot) {
+    // Returning an empty structure here used to let two "empty" sides compare
+    // equal and report PASS without rendering a single page.
+    throw new Error("分页文档面没有挂载：找不到 .docx-viewer-root")
+  }
 
   const pageMap = new Map<number, PageShape>()
   let interaction = emptyInteraction()
@@ -347,79 +282,49 @@ async function collectVirtualStructure(
   capture()
   const declaredPageCount = Number(scrollRoot.dataset.docxPageCount)
   const targetPageCount = Number.isFinite(declaredPageCount) && declaredPageCount > 0
-    ? declaredPageCount
-    : expectedPages
-  const initialMaxScroll = Math.max(0, scrollRoot.scrollHeight - scrollRoot.clientHeight)
+    ? Math.floor(declaredPageCount)
+    : Math.max(0, Math.floor(expectedPages))
   const viewportStep = Math.max(540, Math.floor(scrollRoot.clientHeight * 0.75))
-  const scanSteps = Math.min(
-    64,
-    Math.max(targetPageCount * 2, Math.ceil(initialMaxScroll / viewportStep) + 1),
-  )
-  for (let step = 0; step <= scanSteps; step += 1) {
-    if (sequence !== loadSequence) return emptyStructure()
-    // Page measurement can increase the virtual spacer while the scan is in
-    // progress. Re-read the current maximum so the final step still reaches
-    // the real last page instead of stopping at a stale offset.
+  let scannedSteps = 0
+  // A fixed 64-step cap used to stop the scan in the middle of a long document
+  // while still comparing what had been mounted. The required step count now
+  // follows the current virtual height, and page measurement may grow it while
+  // the scan runs, so re-read it on every iteration.
+  for (let step = 0; ; step += 1) {
+    if (sequence !== loadSequence) return undefined
     const currentMaxScroll = Math.max(0, scrollRoot.scrollHeight - scrollRoot.clientHeight)
-    scrollRoot.scrollTop = scanSteps === 0
+    const requiredSteps = Math.max(
+      targetPageCount,
+      Math.ceil(currentMaxScroll / viewportStep) + 1,
+    )
+    // Past the real bottom the loop only keeps retrying to let late page
+    // measurement mount stragglers; it is not a comparison shortcut.
+    if (step > requiredSteps + 4) break
+    const position = Math.min(step, requiredSteps)
+    scrollRoot.scrollTop = requiredSteps === 0
       ? 0
-      : Math.round(currentMaxScroll * step / scanSteps)
+      : Math.round(currentMaxScroll * position / requiredSteps)
     scrollRoot.dispatchEvent(new Event("scroll"))
     await waitForPaint(20)
     capture()
+    scannedSteps += 1
+    if (step >= requiredSteps && pageMap.size >= targetPageCount) break
   }
   for (let attempt = 0; attempt < 4 && pageMap.size < targetPageCount; attempt += 1) {
-    if (sequence !== loadSequence) return emptyStructure()
+    if (sequence !== loadSequence) return undefined
     scrollRoot.scrollTop = Math.max(0, scrollRoot.scrollHeight - scrollRoot.clientHeight)
     scrollRoot.dispatchEvent(new Event("scroll"))
     await waitForPaint(80)
     capture()
+    scannedSteps += 1
   }
   scrollRoot.scrollTop = previousTop
   scrollRoot.dispatchEvent(new Event("scroll"))
   await waitForPaint()
-  return buildStructure([...pageMap.values()], interaction)
-}
-
-function compareStructures(left: unknown, right: unknown): ParityDiff {
-  const differences: string[] = []
-  const visit = (leftValue: unknown, rightValue: unknown, path: string): void => {
-    if (differences.length >= 200 || Object.is(leftValue, rightValue)) return
-    if (Array.isArray(leftValue) || Array.isArray(rightValue)) {
-      if (!Array.isArray(leftValue) || !Array.isArray(rightValue)) {
-        differences.push(`${path}: 类型不同`)
-        return
-      }
-      if (leftValue.length !== rightValue.length) {
-        differences.push(`${path}.length: ${leftValue.length} != ${rightValue.length}`)
-      }
-      const length = Math.max(leftValue.length, rightValue.length)
-      for (let index = 0; index < length; index += 1) {
-        visit(leftValue[index], rightValue[index], `${path}[${index}]`)
-      }
-      return
-    }
-    if (
-      typeof leftValue === "object" && leftValue !== null &&
-      typeof rightValue === "object" && rightValue !== null
-    ) {
-      const keys = new Set([
-        ...Object.keys(leftValue as Record<string, unknown>),
-        ...Object.keys(rightValue as Record<string, unknown>),
-      ])
-      for (const key of keys) {
-        visit(
-          (leftValue as Record<string, unknown>)[key],
-          (rightValue as Record<string, unknown>)[key],
-          `${path}.${key}`,
-        )
-      }
-      return
-    }
-    differences.push(`${path}: ${JSON.stringify(leftValue)} != ${JSON.stringify(rightValue)}`)
-  }
-  visit(left, right, "structure")
-  return { equal: differences.length === 0, differences }
+  return buildStructure([...pageMap.values()], interaction, {
+    declaredPageCount: targetPageCount,
+    scannedSteps,
+  })
 }
 
 async function collectAndCompare(sequence: number): Promise<void> {
@@ -429,12 +334,27 @@ async function collectAndCompare(sequence: number): Promise<void> {
   // Both public components now use the same virtualized document surface.
   // Scan the complete virtual scroll range instead of treating the currently
   // mounted page subset as the full document.
-  const viewer = await collectVirtualStructure(viewerHost.value, 0, sequence)
-  const editor = await collectVirtualStructure(editorHost.value, viewer.pageCount, sequence)
-  if (sequence !== loadSequence) return
+  let viewer: RenderStructure | undefined
+  let editor: RenderStructure | undefined
+  try {
+    viewer = await collectVirtualStructure(viewerHost.value, 0, sequence)
+    if (!viewer || sequence !== loadSequence) return
+    viewerStructure.value = viewer
+    editor = await collectVirtualStructure(editorHost.value, viewer.pageCount, sequence)
+    if (!editor || sequence !== loadSequence) return
+  } catch (error) {
+    if (sequence !== loadSequence) return
+    pageState.value = "error"
+    loadError.value = error instanceof Error ? error.message : String(error)
+    parityDiff.value = {
+      equal: false,
+      differences: ["渲染结构采集失败，未完成比较"],
+    }
+    return
+  }
   viewerStructure.value = viewer
   editorStructure.value = editor
-  parityDiff.value = compareStructures(viewer, editor)
+  parityDiff.value = compareRenderStructures(viewer, editor)
   pageState.value = "ready"
 }
 

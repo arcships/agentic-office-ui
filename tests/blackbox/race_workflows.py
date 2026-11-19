@@ -192,6 +192,7 @@ def assert_race_evidence(
     violations = evidence.violations()
     case_cancelled_files = {
         "RACE-DOCX-SLOW-LATEST": {"invoice-table.docx"},
+        "RACE-DOCX-SURFACE-SLOW-LATEST": {"invoice-table.docx"},
         "RACE-DOCX-SWITCH-20": {
             "demo.docx",
             "corrupted.docx",
@@ -363,6 +364,42 @@ def docx_switch_20(page: Page, base_url: str, attempt_dir: Path) -> dict[str, ob
     assert final["resources"]["activeWorkers"] == 0, final
     page.screenshot(path=str(attempt_dir / "docx-switch-20.png"), full_page=True)
     return {"switchCount": len(sequence), "final": final}
+
+
+def docx_surface_slow_latest(
+    page: Page, base_url: str, attempt_dir: Path
+) -> dict[str, object]:
+    """The surface page must ignore a slow sample after a newer switch.
+
+    This route had no request id and no AbortController: awaiting fetch + parse
+    let the older document overwrite the newer one. The delayed response here
+    finishes after the switch to invoice-table.docx.
+    """
+    slow = "demo.docx"
+    before = event_count(base_url, "delay-start", slow)
+    page.goto(f"{base_url}/#/docx-surface", wait_until="domcontentloaded")
+    selector = page.locator('[data-testid="docx-surface-sample-select"]')
+    selector.wait_for(state="visible")
+    wait_for_event_count(base_url, "delay-start", slow, before)
+    finished = event_count(base_url, "delay-finished", slow)
+    selector.select_option("invoice-table.docx")
+    wait_ready(page, "invoice-table.docx")
+    wait_for_event_count(base_url, "delay-finished", slow, finished)
+    page.wait_for_timeout(250)
+
+    status = page.locator('[data-testid="page-status"]').get_attribute("data-state")
+    loaded = page.locator('[data-testid="loaded-file"]').inner_text()
+    first_page = page.locator('[data-docx-page-index="0"]').inner_text()
+    assert status == "ready", status
+    assert "invoice-table.docx" in loaded, loaded
+    assert "INVOICE" in first_page.upper(), first_page[:300]
+    assert page.locator('[data-testid="docx-surface-error"]').count() == 0
+    page.screenshot(path=str(attempt_dir / "docx-surface-slow-latest.png"), full_page=True)
+    return {
+        "status": status,
+        "loadedFile": loaded,
+        "firstPage": first_page[:300],
+    }
 
 
 def docx_unmount(page: Page, base_url: str, attempt_dir: Path) -> dict[str, object]:
@@ -767,6 +804,7 @@ def main() -> int:
             "demo.docx",
             [
                 ("RACE-DOCX-SLOW-LATEST", docx_slow_latest),
+                ("RACE-DOCX-SURFACE-SLOW-LATEST", docx_surface_slow_latest),
                 ("RACE-DOCX-SWITCH-20", docx_switch_20),
                 ("RACE-DOCX-UNMOUNT", docx_unmount),
                 ("RACE-DOCX-EXPORT-DOUBLE", docx_double_export),

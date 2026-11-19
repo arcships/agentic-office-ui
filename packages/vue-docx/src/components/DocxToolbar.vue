@@ -503,10 +503,10 @@
 
     <!-- Insert image + Insert table + New comment -->
     <div class="docx-toolbar-group">
-      <button class="docx-toolbar-btn" :title="m.docx.editor.insertImage" @click="onInsertImage">
+      <button data-testid="editor-insert-image" type="button" class="docx-toolbar-btn" :title="m.docx.editor.insertImage" @click="onInsertImage">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="m5 18 5-5 3 3 2-2 4 4" /></svg>
       </button>
-      <button class="docx-toolbar-btn" :title="m.docx.editor.insertTable" @click="controller.insertTable()">
+      <button data-testid="editor-insert-table" type="button" class="docx-toolbar-btn" :title="m.docx.editor.insertTable" @click="controller.insertTable()">
         <svg class="docx-toolbar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1" /><path d="M3 10h18M3 15h18M9 4v16M15 4v16" /></svg>
       </button>
       <button

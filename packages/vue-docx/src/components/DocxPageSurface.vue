@@ -8,6 +8,7 @@
     <div
       ref="pageSurfaceRef"
       data-docx-page-surface="true"
+      :data-docx-page-paper-width="pageLayout.pageWidthPx"
       :data-docx-page-paper-height="pageLayout.pageHeightPx"
       class="docx-page-surface"
       :style="surfaceStyle"

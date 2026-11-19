@@ -90,7 +90,6 @@
         ref="surfaceRef"
         :key="surfaceKey"
         :model="model"
-        :layout-options="{ pageWidth: 816, pageHeight: 1056 }"
         :show-tracked-changes="showTrackedChanges"
         :show-comments="showComments"
         :zoom="fitWidth ? undefined : zoom"
@@ -131,7 +130,8 @@
     </section>
 
     <div class="status-grid" data-testid="docx-surface-status">
-      <div><strong>文件：</strong>{{ displayName || "未打开" }}</div>
+      <div data-testid="page-status" :data-state="pageState"><strong>状态：</strong>{{ pageState }}</div>
+      <div data-testid="loaded-file"><strong>文件：</strong>{{ displayName || "未打开" }}</div>
       <div><strong>页数：</strong>{{ totalPages }}</div>
       <div><strong>当前页：</strong>{{ currentPage + 1 }}</div>
       <div><strong>选中：</strong>{{ selectionInfo }}</div>
@@ -157,6 +157,7 @@ import {
   type OfficeSelectionMode,
 } from "@arcships/vue-docx"
 import { OfficeFindBar } from "@arcships/vue-ui"
+import { createLatestRequestGate } from "../lib/latest-request"
 
 // ── Samples ──────────────────────────────────────────────────────────
 const samples = [
@@ -169,6 +170,7 @@ const samples = [
   { file: "review-threads.docx", label: "Review threads — 批注线程、跨段范围、表格修订" },
   { file: "table-structures.docx", label: "Table structures — vMerge、嵌套表、重复表头" },
   { file: "sections-columns.docx", label: "Sections — 纵横混排、分栏、文本框、水印" },
+  { file: "page-sizes.docx", label: "Page sizes — A4、A4 横向与 Letter 混排" },
 ]
 
 // ── State ────────────────────────────────────────────────────────────
@@ -179,6 +181,10 @@ const sourceKind = ref("pending")
 const error = ref<string | null>(null)
 const ready = ref(false)
 const loadCounter = ref(0)
+const pageState = computed(() =>
+  error.value ? "error" : ready.value ? "ready" : displayName.value ? "loading" : "idle",
+)
+const loadGate = createLatestRequestGate()
 
 const showTrackedChanges = ref(true)
 const showComments = ref(true)
@@ -236,25 +242,38 @@ const runtime = shallowRef(createDocxRuntime({
 
 // ── Actions ──────────────────────────────────────────────────────────
 async function loadSelectedSample(): Promise<void> {
+  // Latest wins: a slow sample that resolves after a newer one must not
+  // overwrite the model, and unmount aborts whatever is still in flight.
+  const request = loadGate.begin()
   const fileName = selectedSample.value
+  const loader = runtime.value.createLoader()
+  request.signal.addEventListener("abort", () => loader.cancel(), { once: true })
   error.value = null
   ready.value = false
   totalPages.value = 0
   currentPage.value = 0
   try {
-    const response = await fetch(`/samples/${encodeURIComponent(fileName)}`)
+    const response = await fetch(`/samples/${encodeURIComponent(fileName)}`, {
+      signal: request.signal,
+    })
+    if (!request.isCurrent()) return
     if (!response.ok) {
       error.value = `Sample not found: ${fileName}`
       return
     }
     const buffer = await response.arrayBuffer()
-    const result = await runtime.value.createLoader().load(buffer, { transferBuffer: false })
+    if (!request.isCurrent()) return
+    const result = await loader.load(buffer, { transferBuffer: false })
+    if (!request.isCurrent()) return
     model.value = result.model
     displayName.value = fileName
     sourceKind.value = result.source
     loadCounter.value++
   } catch (cause) {
+    if (!request.isCurrent() || request.signal.aborted) return
     error.value = `Failed to load: ${String(cause)}`
+  } finally {
+    loader.dispose()
   }
 }
 
@@ -327,6 +346,7 @@ async function simulateDocumentUpdate(): Promise<void> {
 
 // ── Teardown ─────────────────────────────────────────────────────────
 onBeforeUnmount(() => {
+  loadGate.abort()
   runtime.value.dispose()
 })
 
