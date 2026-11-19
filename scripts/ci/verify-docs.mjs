@@ -76,6 +76,10 @@ const requiredFiles = [
   "scripts/ci/run-acceptance-shard.mjs",
   "scripts/ci/verify-fixtures.mjs",
   "scripts/ci/verify-docs.mjs",
+  "scripts/ci/verify-attribution.mjs",
+  "THIRD_PARTY_NOTICES.md",
+  "docs/upstream/extend-ui.md",
+  "docs/upstream/licenses/extend-ui-MIT.txt",
   "tests/baseline/README.md",
 ];
 if (process.env.DOCS_PROBE_MISSING === "1") {
@@ -231,6 +235,7 @@ for (const registered of [
   '"tests/blackbox/fidelity_content.py"',
   '"tests/unit/docx-fixture-fidelity.test.mjs"',
   '"tests/component/docx-fixture-fidelity.test.mjs"',
+  '"scripts/ci/verify-attribution.mjs"',
   'childSuite("docs", "test:docs")',
 ]) {
   check(`suite registration ${registered}`, runner.includes(registered));

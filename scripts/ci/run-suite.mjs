@@ -192,6 +192,7 @@ command("core-behavior-5", process.execPath, [
       "tests/unit/pptx-speaker-notes.test.mjs",
       "tests/unit/pptx-transitions.test.mjs",
       "tests/unit/core-purity.test.mjs",
+      "tests/unit/attribution-contract.test.mjs",
 
     ]),
     command("core-boundary", process.execPath, [
@@ -659,6 +660,13 @@ command("vue-component-behavior-5", process.execPath, [
     ], {
       env: {
         DOCS_EVIDENCE_DIR: path.join(suiteDir, "documentation-contract"),
+      },
+    }),
+    command("open-source-attribution", process.execPath, [
+      "scripts/ci/verify-attribution.mjs",
+    ], {
+      env: {
+        ATTRIBUTION_EVIDENCE_DIR: path.join(suiteDir, "open-source-attribution"),
       },
     }),
   ],
