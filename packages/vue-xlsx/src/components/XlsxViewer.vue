@@ -14,6 +14,7 @@
     @drop="onDrop"
     tabindex="0"
   >
+    <OfficeThemeProvider :theme="isDark ? 'dark' : 'light'" :locale="locale" :messages="messages">
     <XlsxToolbar
       v-if="showDefaultToolbar"
       ref="toolbarRef"
@@ -70,7 +71,10 @@
         class="xlsx-viewer__loading"
       >
         <slot name="loading">
-          <span class="xlsx-viewer__loading-text">{{ m.xlsx.viewer.loading }}</span>
+          <OfficeLoadingState
+            :title="m.xlsx.viewer.loading"
+            description=""
+          />
         </slot>
       </div>
       <div
@@ -81,7 +85,10 @@
           name="error"
           :error="localizedError"
         >
-          <span class="xlsx-viewer__error-text">{{ localizedError?.message }}</span>
+          <OfficeErrorState
+            :error="localizedError?.message"
+            :show-retry="false"
+          />
         </slot>
       </div>
       <XlsxChartsheetSurface
@@ -146,7 +153,11 @@
         class="xlsx-viewer__empty"
       >
         <slot name="empty">
-          <span class="xlsx-viewer__empty-text">{{ m.xlsx.viewer.empty }}</span>
+          <OfficeEmptyState
+            :title="m.xlsx.viewer.empty"
+            description=""
+            icon="table"
+          />
         </slot>
       </div>
       <template v-else>
@@ -243,6 +254,7 @@
       :controller="controller"
       :is-dark="isDark ?? false"
     />
+    </OfficeThemeProvider>
   </div>
 </template>
 
@@ -270,6 +282,12 @@ import type { XlsxAuthoringDialogKind } from "./authoring-dialog";
 import XlsxChartsheetSurface from "./XlsxChartsheetSurface.vue";
 import { formatBinaryBytes } from "../composables/formatting";
 import { OfficeLiveStatus } from "@arcships/vue-ui";
+import {
+  OfficeEmptyState,
+  OfficeErrorState,
+  OfficeLoadingState,
+  OfficeThemeProvider,
+} from "@arcships/vue-ui";
 import { FILE_DROP_OUTLINE, useFileDrop } from "@arcships/vue-ui";
 import { XLSX_FILE_EXTENSIONS, XLSX_FILE_MIME_TYPES } from "../composables/xlsx-file-types";
 import { useXlsxSearch, type XlsxSearchState } from "../composables/useXlsxSearch";
