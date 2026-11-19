@@ -318,6 +318,7 @@ const suites = {
       "tests/component/xlsx-table-styles.test.mjs",
       "tests/component/xlsx-pivot-slicers.test.mjs",
       "tests/component/xlsx-name-box.test.mjs",
+      "tests/component/xlsx-worker-defined-names.test.mjs",
       "tests/component/xlsx-fill-handle-autofit.test.mjs",
       "tests/component/xlsx-grid-freeze-panes.test.mjs",
       "tests/component/xlsx-grid-rtl.test.mjs",

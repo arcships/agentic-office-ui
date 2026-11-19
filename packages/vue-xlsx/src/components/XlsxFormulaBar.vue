@@ -157,10 +157,21 @@ const nameBoxFocused = ref(false);
 const nameBoxDraft = ref("");
 const nameBoxActiveIndex = ref(-1);
 const definedNames = computed<XlsxDefinedName[]>(() => props.controller.definedNames ?? []);
+// The name box seeds itself with the active cell (`B2`) so a host can read the
+// current address. That seed is not a filter: while the draft is an A1 address
+// or range, list every defined name (the usual Excel behaviour) instead of
+// hiding all of them for not containing "B2".
+function isA1AddressQuery(value: string) {
+  const trimmed = value.trim();
+  return trimmed.length > 0 && parseA1RangeReference(trimmed.replace(/\$/g, "")) !== null;
+}
 const nameBoxMatches = computed(() => {
   const query = nameBoxDraft.value.trim().toLowerCase();
+  if (!query || isA1AddressQuery(query)) {
+    return definedNames.value;
+  }
   return definedNames.value.filter((entry) =>
-    !query || entry.name.toLowerCase().includes(query)
+    entry.name.toLowerCase().includes(query)
   );
 });
 const showNameBoxList = computed(() => nameBoxFocused.value && nameBoxMatches.value.length > 0);

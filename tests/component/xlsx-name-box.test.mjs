@@ -149,6 +149,29 @@ test("the name box also accepts a typed A1 range", async (t) => {
   assert.equal(controller.selectedRangeAddress, "B2:D3");
 });
 
+test("focusing after selecting a cell does not filter names by the address", async (t) => {
+  const { controller, input, root } = await mountNameBox(t);
+  controller.selectCell({ col: 1, row: 1 });
+  await vue.nextTick();
+  assert.equal(input.props.value, "B2");
+
+  input.props.onFocus();
+  await vue.nextTick();
+  const list = findByTestId(root, "xlsx-name-box-list");
+  assert.ok(list, "the name list opens with the active-cell seed");
+  const options = () => walk(list)
+    .filter((node) => node.props?.["data-name-box-option"] !== undefined);
+  assert.deepEqual(options().map((node) => node.props["data-name"]), [
+    "CurrentProduct",
+    "RevenueTotal",
+    "SalesData",
+  ]);
+
+  input.props.onInput({ target: { value: "Sale" } });
+  await vue.nextTick();
+  assert.deepEqual(options().map((node) => node.props["data-name"]), ["SalesData"]);
+});
+
 test("Escape restores the active-cell address", async (t) => {
   const { controller, input } = await mountNameBox(t);
   controller.selectCell({ col: 1, row: 1 });
