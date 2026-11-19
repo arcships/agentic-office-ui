@@ -67,6 +67,11 @@ const suites = {
       "tests/unit/vue-ui-design-tokens.test.mjs",
       "tests/unit/extend-parity-harness.test.mjs",
       "tests/unit/vue-ui-primitives-contract.test.mjs",
+      "tests/unit/office-interaction-objects.test.mjs",
+      "tests/unit/docx-object-index.test.mjs",
+      "tests/unit/xlsx-object-index.test.mjs",
+      "tests/unit/pptx-object-index.test.mjs",
+      "tests/unit/pdf-object-index.test.mjs",
       "tests/unit/product-visual-matrix.test.mjs",
 
       "tests/unit/runtime-demo-limits.test.mjs",
