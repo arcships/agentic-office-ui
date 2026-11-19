@@ -1,0 +1,2232 @@
+{
+  "$schema": "./extend-tokens.schema.json",
+  "generatedBy": "node scripts/ci/extract-extend-tokens.mjs",
+  "generatedAt": "2026-11-19T17:36:15.094Z",
+  "provenance": {
+    "repo": "extend-hq/ui",
+    "commit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
+    "commitDate": "2026-11-17",
+    "upstreamFile": "apps/v4/app/globals.css",
+    "upstreamSha256": "f929d2c1de31312f6fc53bd9a7fff9f6a3feff46d4d5fd65805fea2deddbc759",
+    "vendoredFile": "tools/extend-reference/src/styles/extend-globals.css",
+    "vendoredBodySha256": "44bf6997bde067b701806833e88db08cfa75ae62b1805b63ee9b382107b44eca",
+    "vendoredBodyMarker": "@custom-variant style-vega",
+    "upstreamVerification": "verified against ../extend-ui/apps/v4/app/globals.css",
+    "tailwindThemeFile": "node_modules/.pnpm/tailwindcss@4.2.4/node_modules/tailwindcss/theme.css",
+    "fonts": {
+      "source": "apps/v4/lib/fonts.ts",
+      "sans": "Geist",
+      "mono": "Geist Mono",
+      "harnessStandIn": "@fontsource-variable/geist + @fontsource-variable/geist-mono"
+    },
+    "notes": [
+      "Text sizes, line heights, letter spacing, spacing, shadows and the default transition timing are Tailwind v4 defaults that Extend consumes implicitly; they are read from the pinned tailwindcss theme.css rather than from globals.css.",
+      "--alpha(color / n%) is resolved as color-mix(in oklab, color n%, transparent). All Extend uses are black/white, where the sRGB and oklab results agree, so the resolved value is exact for this file.",
+      "color-mix(in srgb, ...) is resolved by mixing sRGB channels; color-mix(in oklab, ...) is flagged approximate."
+    ]
+  },
+  "colors": {
+    "light": {
+      "background": {
+        "raw": "oklch(1 0 0)",
+        "resolved": "rgb(255 255 255)",
+        "hex": "#ffffff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "foreground": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "card": {
+        "raw": "var(--color-white)",
+        "resolved": "rgb(255 255 255)",
+        "hex": "#ffffff",
+        "alpha": 1,
+        "kind": "hex"
+      },
+      "card-foreground": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "popover": {
+        "raw": "var(--color-white)",
+        "resolved": "rgb(255 255 255)",
+        "hex": "#ffffff",
+        "alpha": 1,
+        "kind": "hex"
+      },
+      "popover-foreground": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "primary": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "primary-foreground": {
+        "raw": "var(--color-neutral-50)",
+        "resolved": "rgb(250 250 250)",
+        "hex": "#fafafa",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "secondary": {
+        "raw": "--alpha(var(--color-black) / 4%)",
+        "resolved": "rgb(0 0 0 / 0.04)",
+        "hex": "#000000",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "secondary-foreground": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "muted": {
+        "raw": "--alpha(var(--color-black) / 4%)",
+        "resolved": "rgb(0 0 0 / 0.04)",
+        "hex": "#000000",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "muted-foreground": {
+        "raw": "color-mix( in srgb, var(--color-neutral-500) 90%, var(--color-black) )",
+        "resolved": "rgb(104 104 104)",
+        "hex": "#686868",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "accent": {
+        "raw": "--alpha(var(--color-black) / 4%)",
+        "resolved": "rgb(0 0 0 / 0.04)",
+        "hex": "#000000",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "accent-foreground": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "destructive": {
+        "raw": "var(--color-red-500)",
+        "resolved": "rgb(251 44 54)",
+        "hex": "#fb2c36",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "destructive-foreground": {
+        "raw": "var(--color-red-700)",
+        "resolved": "rgb(193 0 7)",
+        "hex": "#c10007",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "border": {
+        "raw": "--alpha(var(--color-black) / 8%)",
+        "resolved": "rgb(0 0 0 / 0.08)",
+        "hex": "#000000",
+        "alpha": 0.08,
+        "kind": "alpha"
+      },
+      "input": {
+        "raw": "--alpha(var(--color-black) / 10%)",
+        "resolved": "rgb(0 0 0 / 0.1)",
+        "hex": "#000000",
+        "alpha": 0.1,
+        "kind": "alpha"
+      },
+      "ring": {
+        "raw": "var(--color-neutral-400)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "chart-1": {
+        "raw": "var(--color-blue-300)",
+        "resolved": "rgb(142 197 255)",
+        "hex": "#8ec5ff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "chart-2": {
+        "raw": "var(--color-blue-500)",
+        "resolved": "rgb(43 127 255)",
+        "hex": "#2b7fff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "chart-3": {
+        "raw": "var(--color-blue-600)",
+        "resolved": "rgb(21 93 252)",
+        "hex": "#155dfc",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "chart-4": {
+        "raw": "var(--color-blue-700)",
+        "resolved": "rgb(20 71 230)",
+        "hex": "#1447e6",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "chart-5": {
+        "raw": "var(--color-blue-800)",
+        "resolved": "rgb(25 60 184)",
+        "hex": "#193cb8",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "sidebar": {
+        "raw": "var(--color-neutral-50)",
+        "resolved": "rgb(250 250 250)",
+        "hex": "#fafafa",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "sidebar-foreground": {
+        "raw": "color-mix( in srgb, var(--color-neutral-800) 64%, var(--sidebar) )",
+        "resolved": "rgb(114 114 114)",
+        "hex": "#727272",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "sidebar-primary": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "sidebar-primary-foreground": {
+        "raw": "var(--color-neutral-50)",
+        "resolved": "rgb(250 250 250)",
+        "hex": "#fafafa",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "sidebar-accent": {
+        "raw": "--alpha(var(--color-black) / 4%)",
+        "resolved": "rgb(0 0 0 / 0.04)",
+        "hex": "#000000",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "sidebar-accent-foreground": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "sidebar-border": {
+        "raw": "--alpha(var(--color-black) / 6%)",
+        "resolved": "rgb(0 0 0 / 0.06)",
+        "hex": "#000000",
+        "alpha": 0.06,
+        "kind": "alpha"
+      },
+      "sidebar-ring": {
+        "raw": "var(--color-neutral-400)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "surface": {
+        "raw": "oklch(0.98 0 0)",
+        "resolved": "rgb(248 248 248)",
+        "hex": "#f8f8f8",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "surface-foreground": {
+        "raw": "var(--foreground)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "code": {
+        "raw": "var(--surface)",
+        "resolved": "rgb(248 248 248)",
+        "hex": "#f8f8f8",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "code-foreground": {
+        "raw": "var(--surface-foreground)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "code-highlight": {
+        "raw": "oklch(0.96 0 0)",
+        "resolved": "rgb(242 242 242)",
+        "hex": "#f2f2f2",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "code-number": {
+        "raw": "oklch(0.56 0 0)",
+        "resolved": "rgb(116 116 116)",
+        "hex": "#747474",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "selection": {
+        "raw": "oklch(0.145 0 0)",
+        "resolved": "rgb(10 10 10)",
+        "hex": "#0a0a0a",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "selection-foreground": {
+        "raw": "oklch(1 0 0)",
+        "resolved": "rgb(255 255 255)",
+        "hex": "#ffffff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "info": {
+        "raw": "var(--color-blue-500)",
+        "resolved": "rgb(43 127 255)",
+        "hex": "#2b7fff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "info-foreground": {
+        "raw": "var(--color-blue-700)",
+        "resolved": "rgb(20 71 230)",
+        "hex": "#1447e6",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "success": {
+        "raw": "var(--color-emerald-500)",
+        "resolved": "rgb(0 188 125)",
+        "hex": "#00bc7d",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "success-foreground": {
+        "raw": "var(--color-emerald-700)",
+        "resolved": "rgb(0 122 85)",
+        "hex": "#007a55",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "warning": {
+        "raw": "var(--color-amber-500)",
+        "resolved": "rgb(254 154 0)",
+        "hex": "#fe9a00",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "warning-foreground": {
+        "raw": "var(--color-amber-700)",
+        "resolved": "rgb(187 77 0)",
+        "hex": "#bb4d00",
+        "alpha": 1,
+        "kind": "oklch"
+      }
+    },
+    "dark": {
+      "background": {
+        "raw": "oklch(0.145 0 0)",
+        "resolved": "rgb(10 10 10)",
+        "hex": "#0a0a0a",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "foreground": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "card": {
+        "raw": "color-mix(in srgb, var(--background) 98%, var(--color-white))",
+        "resolved": "rgb(15 15 15)",
+        "hex": "#0f0f0f",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "card-foreground": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "popover": {
+        "raw": "color-mix(in srgb, var(--background) 98%, var(--color-white))",
+        "resolved": "rgb(15 15 15)",
+        "hex": "#0f0f0f",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "popover-foreground": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "primary": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "primary-foreground": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "secondary": {
+        "raw": "--alpha(var(--color-white) / 4%)",
+        "resolved": "rgb(255 255 255 / 0.04)",
+        "hex": "#ffffff",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "secondary-foreground": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "muted": {
+        "raw": "--alpha(var(--color-white) / 4%)",
+        "resolved": "rgb(255 255 255 / 0.04)",
+        "hex": "#ffffff",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "muted-foreground": {
+        "raw": "color-mix( in srgb, var(--color-neutral-500) 90%, var(--color-white) )",
+        "resolved": "rgb(129 129 129)",
+        "hex": "#818181",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "accent": {
+        "raw": "--alpha(var(--color-white) / 4%)",
+        "resolved": "rgb(255 255 255 / 0.04)",
+        "hex": "#ffffff",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "accent-foreground": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "destructive": {
+        "raw": "color-mix( in srgb, var(--color-red-500) 90%, var(--color-white) )",
+        "resolved": "rgb(251 65 74)",
+        "hex": "#fb414a",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "destructive-foreground": {
+        "raw": "var(--color-red-400)",
+        "resolved": "rgb(255 100 103)",
+        "hex": "#ff6467",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "border": {
+        "raw": "--alpha(var(--color-white) / 6%)",
+        "resolved": "rgb(255 255 255 / 0.06)",
+        "hex": "#ffffff",
+        "alpha": 0.06,
+        "kind": "alpha"
+      },
+      "input": {
+        "raw": "--alpha(var(--color-white) / 8%)",
+        "resolved": "rgb(255 255 255 / 0.08)",
+        "hex": "#ffffff",
+        "alpha": 0.08,
+        "kind": "alpha"
+      },
+      "ring": {
+        "raw": "var(--color-neutral-500)",
+        "resolved": "rgb(115 115 115)",
+        "hex": "#737373",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "chart-1": {
+        "raw": "var(--color-blue-300)",
+        "resolved": "rgb(142 197 255)",
+        "hex": "#8ec5ff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "chart-2": {
+        "raw": "var(--color-blue-500)",
+        "resolved": "rgb(43 127 255)",
+        "hex": "#2b7fff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "chart-3": {
+        "raw": "var(--color-blue-600)",
+        "resolved": "rgb(21 93 252)",
+        "hex": "#155dfc",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "chart-4": {
+        "raw": "var(--color-blue-700)",
+        "resolved": "rgb(20 71 230)",
+        "hex": "#1447e6",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "chart-5": {
+        "raw": "var(--color-blue-800)",
+        "resolved": "rgb(25 60 184)",
+        "hex": "#193cb8",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "sidebar": {
+        "raw": "color-mix( in srgb, var(--color-neutral-950) 97%, var(--color-white) )",
+        "resolved": "rgb(17 17 17)",
+        "hex": "#111111",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "sidebar-foreground": {
+        "raw": "color-mix( in srgb, var(--color-neutral-100) 64%, var(--sidebar) )",
+        "resolved": "rgb(163 163 163)",
+        "hex": "#a3a3a3",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "sidebar-primary": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "sidebar-primary-foreground": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "sidebar-accent": {
+        "raw": "--alpha(var(--color-white) / 4%)",
+        "resolved": "rgb(255 255 255 / 0.04)",
+        "hex": "#ffffff",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "sidebar-accent-foreground": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "sidebar-border": {
+        "raw": "--alpha(var(--color-white) / 5%)",
+        "resolved": "rgb(255 255 255 / 0.05)",
+        "hex": "#ffffff",
+        "alpha": 0.05,
+        "kind": "alpha"
+      },
+      "sidebar-ring": {
+        "raw": "var(--color-neutral-400)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "surface": {
+        "raw": "oklch(0.2 0 0)",
+        "resolved": "rgb(22 22 22)",
+        "hex": "#161616",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "surface-foreground": {
+        "raw": "oklch(0.708 0 0)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "code": {
+        "raw": "var(--surface)",
+        "resolved": "rgb(22 22 22)",
+        "hex": "#161616",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "code-foreground": {
+        "raw": "var(--surface-foreground)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "code-highlight": {
+        "raw": "oklch(0.27 0 0)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "code-number": {
+        "raw": "oklch(0.72 0 0)",
+        "resolved": "rgb(164 164 164)",
+        "hex": "#a4a4a4",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "selection": {
+        "raw": "oklch(0.922 0 0)",
+        "resolved": "rgb(229 229 229)",
+        "hex": "#e5e5e5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "selection-foreground": {
+        "raw": "oklch(0.205 0 0)",
+        "resolved": "rgb(23 23 23)",
+        "hex": "#171717",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "info": {
+        "raw": "var(--color-blue-500)",
+        "resolved": "rgb(43 127 255)",
+        "hex": "#2b7fff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "info-foreground": {
+        "raw": "var(--color-blue-400)",
+        "resolved": "rgb(81 162 255)",
+        "hex": "#51a2ff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "success": {
+        "raw": "var(--color-emerald-500)",
+        "resolved": "rgb(0 188 125)",
+        "hex": "#00bc7d",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "success-foreground": {
+        "raw": "var(--color-emerald-400)",
+        "resolved": "rgb(0 212 146)",
+        "hex": "#00d492",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "warning": {
+        "raw": "var(--color-amber-500)",
+        "resolved": "rgb(254 154 0)",
+        "hex": "#fe9a00",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "warning-foreground": {
+        "raw": "var(--color-amber-400)",
+        "resolved": "rgb(255 185 0)",
+        "hex": "#ffb900",
+        "alpha": 1,
+        "kind": "oklch"
+      }
+    }
+  },
+  "radius": {
+    "raw": "0.625rem",
+    "basePx": "10px",
+    "rem": 0.625,
+    "scale": {
+      "sm": {
+        "raw": "calc(var(--radius) * 0.6)",
+        "px": "6px",
+        "varName": "--radius-sm",
+        "tailwindTheme": "calc(var(--radius) * 0.6)"
+      },
+      "md": {
+        "raw": "calc(var(--radius) * 0.8)",
+        "px": "8px",
+        "varName": "--radius-md",
+        "tailwindTheme": "calc(var(--radius) * 0.8)"
+      },
+      "lg": {
+        "raw": "calc(var(--radius) * 1)",
+        "px": "10px",
+        "varName": "--radius-lg",
+        "tailwindTheme": "var(--radius)"
+      },
+      "xl": {
+        "raw": "calc(var(--radius) * 1.4)",
+        "px": "14px",
+        "varName": "--radius-xl",
+        "tailwindTheme": "calc(var(--radius) * 1.4)"
+      },
+      "2xl": {
+        "raw": "calc(var(--radius) * 1.8)",
+        "px": "18px",
+        "varName": "--radius-2xl",
+        "tailwindTheme": "calc(var(--radius) * 1.8)"
+      },
+      "3xl": {
+        "raw": "calc(var(--radius) * 2.2)",
+        "px": "22px",
+        "varName": "--radius-3xl",
+        "tailwindTheme": "calc(var(--radius) * 2.2)"
+      },
+      "4xl": {
+        "raw": "calc(var(--radius) * 2.6)",
+        "px": "26px",
+        "varName": "--radius-4xl",
+        "tailwindTheme": "calc(var(--radius) * 2.6)"
+      }
+    }
+  },
+  "typography": {
+    "scale": {
+      "xs": {
+        "fontSize": "0.75rem",
+        "fontSizePx": 12,
+        "lineHeight": "calc(1 / 0.75)",
+        "lineHeightPx": "calc(1 / 0.75)",
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "xs--line-height": {
+        "fontSize": "calc(1 / 0.75)",
+        "fontSizePx": null,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "sm": {
+        "fontSize": "0.875rem",
+        "fontSizePx": 14,
+        "lineHeight": "calc(1.25 / 0.875)",
+        "lineHeightPx": "calc(1.25 / 0.875)",
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "sm--line-height": {
+        "fontSize": "calc(1.25 / 0.875)",
+        "fontSizePx": null,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "base": {
+        "fontSize": "1rem",
+        "fontSizePx": 16,
+        "lineHeight": "calc(1.5 / 1)",
+        "lineHeightPx": "calc(1.5 / 1)",
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "base--line-height": {
+        "fontSize": "calc(1.5 / 1)",
+        "fontSizePx": null,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "lg": {
+        "fontSize": "1.125rem",
+        "fontSizePx": 18,
+        "lineHeight": "calc(1.75 / 1.125)",
+        "lineHeightPx": "calc(1.75 / 1.125)",
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "lg--line-height": {
+        "fontSize": "calc(1.75 / 1.125)",
+        "fontSizePx": null,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "xl": {
+        "fontSize": "1.25rem",
+        "fontSizePx": 20,
+        "lineHeight": "calc(1.75 / 1.25)",
+        "lineHeightPx": "calc(1.75 / 1.25)",
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "xl--line-height": {
+        "fontSize": "calc(1.75 / 1.25)",
+        "fontSizePx": null,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "2xl": {
+        "fontSize": "1.5rem",
+        "fontSizePx": 24,
+        "lineHeight": "calc(2 / 1.5)",
+        "lineHeightPx": "calc(2 / 1.5)",
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "2xl--line-height": {
+        "fontSize": "calc(2 / 1.5)",
+        "fontSizePx": null,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "3xl": {
+        "fontSize": "1.875rem",
+        "fontSizePx": 30,
+        "lineHeight": "calc(2.25 / 1.875)",
+        "lineHeightPx": "calc(2.25 / 1.875)",
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "3xl--line-height": {
+        "fontSize": "calc(2.25 / 1.875)",
+        "fontSizePx": null,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "4xl": {
+        "fontSize": "2.25rem",
+        "fontSizePx": 36,
+        "lineHeight": "calc(2.5 / 2.25)",
+        "lineHeightPx": "calc(2.5 / 2.25)",
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "4xl--line-height": {
+        "fontSize": "calc(2.5 / 2.25)",
+        "fontSizePx": null,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "5xl": {
+        "fontSize": "3rem",
+        "fontSizePx": 48,
+        "lineHeight": "1",
+        "lineHeightPx": "1",
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "5xl--line-height": {
+        "fontSize": "1",
+        "fontSizePx": 1,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "6xl": {
+        "fontSize": "3.75rem",
+        "fontSizePx": 60,
+        "lineHeight": "1",
+        "lineHeightPx": "1",
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "6xl--line-height": {
+        "fontSize": "1",
+        "fontSizePx": 1,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "7xl": {
+        "fontSize": "4.5rem",
+        "fontSizePx": 72,
+        "lineHeight": "1",
+        "lineHeightPx": "1",
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "7xl--line-height": {
+        "fontSize": "1",
+        "fontSizePx": 1,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "8xl": {
+        "fontSize": "6rem",
+        "fontSizePx": 96,
+        "lineHeight": "1",
+        "lineHeightPx": "1",
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "8xl--line-height": {
+        "fontSize": "1",
+        "fontSizePx": 1,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "9xl": {
+        "fontSize": "8rem",
+        "fontSizePx": 128,
+        "lineHeight": "1",
+        "lineHeightPx": "1",
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "9xl--line-height": {
+        "fontSize": "1",
+        "fontSizePx": 1,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "shadow-2xs": {
+        "fontSize": "0px 1px 0px rgb(0 0 0 / 0.15)",
+        "fontSizePx": 0,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "shadow-xs": {
+        "fontSize": "0px 1px 1px rgb(0 0 0 / 0.2)",
+        "fontSizePx": 0,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "shadow-sm": {
+        "fontSize": "0px 1px 0px rgb(0 0 0 / 0.075), 0px 1px 1px rgb(0 0 0 / 0.075), 0px 2px 2px rgb(0 0 0 / 0.075)",
+        "fontSizePx": 0,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "shadow-md": {
+        "fontSize": "0px 1px 1px rgb(0 0 0 / 0.1), 0px 1px 2px rgb(0 0 0 / 0.1), 0px 2px 4px rgb(0 0 0 / 0.1)",
+        "fontSizePx": 0,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      },
+      "shadow-lg": {
+        "fontSize": "0px 1px 2px rgb(0 0 0 / 0.1), 0px 3px 2px rgb(0 0 0 / 0.1), 0px 4px 8px rgb(0 0 0 / 0.1)",
+        "fontSizePx": 0,
+        "lineHeight": null,
+        "lineHeightPx": null,
+        "letterSpacing": null,
+        "fontWeight": null
+      }
+    },
+    "fonts": {
+      "sans": "var(--font-sans)",
+      "mono": "var(--font-mono)",
+      "sansFallback": "\"Geist Variable\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "monoFallback": "\"Geist Mono Variable\", ui-monospace, SFMono-Regular, Menlo, monospace",
+      "note": "apps/v4/lib/fonts.ts loads Geist/Geist Mono through next/font and assigns --font-sans / --font-mono; the harness uses the same families from @fontsource-variable."
+    }
+  },
+  "spacing": {
+    "base": {
+      "raw": "0.25rem",
+      "px": 4
+    },
+    "scalePx": {
+      "1": 4,
+      "2": 8,
+      "3": 12,
+      "4": 16,
+      "5": 20,
+      "6": 24,
+      "8": 32,
+      "0.5": 2,
+      "1.5": 6,
+      "2.5": 10,
+      "3.5": 14
+    },
+    "note": "Extend components use calc(--spacing(n) - 1px) for the 1px inset border, e.g. button px-[calc(--spacing(3)-1px)] = 11px."
+  },
+  "shadows": {
+    "2xs": {
+      "raw": "0 1px rgb(0 0 0 / 0.05)",
+      "utility": "--shadow-2xs"
+    },
+    "xs": {
+      "raw": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+      "utility": "--shadow-xs"
+    },
+    "sm": {
+      "raw": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
+      "utility": "--shadow-sm"
+    },
+    "md": {
+      "raw": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+      "utility": "--shadow-md"
+    },
+    "lg": {
+      "raw": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+      "utility": "--shadow-lg"
+    },
+    "xl": {
+      "raw": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+      "utility": "--shadow-xl"
+    },
+    "2xl": {
+      "raw": "0 25px 50px -12px rgb(0 0 0 / 0.25)",
+      "utility": "--shadow-2xl"
+    },
+    "inset-2xs": {
+      "raw": "inset 0 1px rgb(0 0 0 / 0.05)",
+      "utility": "--inset-shadow-2xs"
+    },
+    "inset-xs": {
+      "raw": "inset 0 1px 1px rgb(0 0 0 / 0.05)",
+      "utility": "--inset-shadow-xs"
+    },
+    "inset-sm": {
+      "raw": "inset 0 2px 4px rgb(0 0 0 / 0.05)",
+      "utility": "--inset-shadow-sm"
+    },
+    "inner": {
+      "raw": "inset 0 2px 4px 0 rgb(0 0 0 / 0.05)",
+      "utility": "--shadow-inner"
+    }
+  },
+  "ring": {
+    "color": {
+      "light": {
+        "raw": "var(--color-neutral-400)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "dark": {
+        "raw": "var(--color-neutral-500)",
+        "resolved": "rgb(115 115 115)",
+        "hex": "#737373",
+        "alpha": 1,
+        "kind": "oklch"
+      }
+    },
+    "focusRing": {
+      "source": "button.tsx default variant",
+      "classes": [
+        "focus-visible:ring-2",
+        "focus-visible:ring-offset-1",
+        "focus-visible:ring-offset-background"
+      ],
+      "width": "2px",
+      "offset": "1px",
+      "offsetColor": {
+        "light": {
+          "raw": "oklch(1 0 0)",
+          "resolved": "rgb(255 255 255)",
+          "hex": "#ffffff",
+          "alpha": 1,
+          "kind": "oklch"
+        },
+        "dark": {
+          "raw": "oklch(0.145 0 0)",
+          "resolved": "rgb(10 10 10)",
+          "hex": "#0a0a0a",
+          "alpha": 1,
+          "kind": "oklch"
+        }
+      },
+      "note": "Select trigger uses focus-visible:ring-[3px] instead of 2px (see mapping.ringWidth)."
+    }
+  },
+  "motion": {
+    "defaultDuration": "150ms",
+    "defaultTimingFunction": "cubic-bezier(0.4, 0, 0.2, 1)",
+    "animation": {
+      "skeleton": "skeleton 2s -1s infinite linear",
+      "spin": "spin 1s linear infinite"
+    },
+    "durations": [
+      {
+        "class": "duration-[160ms]",
+        "ms": 160
+      },
+      {
+        "class": "duration-200",
+        "ms": 200
+      },
+      {
+        "class": "duration-500",
+        "ms": 500
+      }
+    ],
+    "easings": [
+      {
+        "class": "ease-[cubic-bezier(0.22,1,0.36,1)]",
+        "value": "cubic-bezier(0.22,1,0.36,1)"
+      },
+      {
+        "class": "ease-out",
+        "value": "out"
+      }
+    ]
+  },
+  "mapping": [
+    {
+      "extendToken": "--background",
+      "officeToken": "--office-background",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "oklch(1 0 0)",
+        "resolved": "rgb(255 255 255)",
+        "hex": "#ffffff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "oklch(0.145 0 0)",
+        "resolved": "rgb(10 10 10)",
+        "hex": "#0a0a0a",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [
+        {
+          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
+          "fallback": "#fff"
+        },
+        {
+          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "fallback": "#fff"
+        }
+      ],
+      "currentRepoValue": "#fff"
+    },
+    {
+      "extendToken": "--foreground",
+      "officeToken": "--office-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [
+        {
+          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
+          "fallback": "#111827"
+        },
+        {
+          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
+          "fallback": "#111827"
+        },
+        {
+          "file": "packages/vue-ui/src/components/FileThumbnail.vue",
+          "fallback": "#111"
+        },
+        {
+          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "fallback": "#111827"
+        }
+      ],
+      "currentRepoValue": "#111827 | #111"
+    },
+    {
+      "extendToken": "--card",
+      "officeToken": "--office-card",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-white)",
+        "resolved": "rgb(255 255 255)",
+        "hex": "#ffffff",
+        "alpha": 1,
+        "kind": "hex"
+      },
+      "extendDark": {
+        "raw": "color-mix(in srgb, var(--background) 98%, var(--color-white))",
+        "resolved": "rgb(15 15 15)",
+        "hex": "#0f0f0f",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--card-foreground",
+      "officeToken": "--office-card-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--popover",
+      "officeToken": "--office-popover",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-white)",
+        "resolved": "rgb(255 255 255)",
+        "hex": "#ffffff",
+        "alpha": 1,
+        "kind": "hex"
+      },
+      "extendDark": {
+        "raw": "color-mix(in srgb, var(--background) 98%, var(--color-white))",
+        "resolved": "rgb(15 15 15)",
+        "hex": "#0f0f0f",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "currentRepoUsage": [
+        {
+          "file": "packages/vue-ui/src/components/Tooltip.vue",
+          "fallback": "#fff"
+        }
+      ],
+      "currentRepoValue": "#fff"
+    },
+    {
+      "extendToken": "--popover-foreground",
+      "officeToken": "--office-popover-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [
+        {
+          "file": "packages/vue-ui/src/components/Tooltip.vue",
+          "fallback": "#111827"
+        }
+      ],
+      "currentRepoValue": "#111827"
+    },
+    {
+      "extendToken": "--primary",
+      "officeToken": "--office-primary",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [
+        {
+          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "fallback": "#111827"
+        },
+        {
+          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "fallback": "#111827"
+        },
+        {
+          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "fallback": "#111827"
+        },
+        {
+          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "fallback": "#111827"
+        }
+      ],
+      "currentRepoValue": "#111827"
+    },
+    {
+      "extendToken": "--primary-foreground",
+      "officeToken": "--office-primary-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-neutral-50)",
+        "resolved": "rgb(250 250 250)",
+        "hex": "#fafafa",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--secondary",
+      "officeToken": "--office-secondary",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "--alpha(var(--color-black) / 4%)",
+        "resolved": "rgb(0 0 0 / 0.04)",
+        "hex": "#000000",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "extendDark": {
+        "raw": "--alpha(var(--color-white) / 4%)",
+        "resolved": "rgb(255 255 255 / 0.04)",
+        "hex": "#ffffff",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--secondary-foreground",
+      "officeToken": "--office-secondary-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--muted",
+      "officeToken": "--office-muted",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "--alpha(var(--color-black) / 4%)",
+        "resolved": "rgb(0 0 0 / 0.04)",
+        "hex": "#000000",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "extendDark": {
+        "raw": "--alpha(var(--color-white) / 4%)",
+        "resolved": "rgb(255 255 255 / 0.04)",
+        "hex": "#ffffff",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "currentRepoUsage": [
+        {
+          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
+          "fallback": "#f5f5f5"
+        },
+        {
+          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "fallback": "#f5f5f5"
+        },
+        {
+          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
+          "fallback": "#f5f5f5"
+        },
+        {
+          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
+          "fallback": "#f5f5f5"
+        }
+      ],
+      "currentRepoValue": "#f5f5f5"
+    },
+    {
+      "extendToken": "--muted-foreground",
+      "officeToken": "--office-muted-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "color-mix( in srgb, var(--color-neutral-500) 90%, var(--color-black) )",
+        "resolved": "rgb(104 104 104)",
+        "hex": "#686868",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "extendDark": {
+        "raw": "color-mix( in srgb, var(--color-neutral-500) 90%, var(--color-white) )",
+        "resolved": "rgb(129 129 129)",
+        "hex": "#818181",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "currentRepoUsage": [
+        {
+          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
+          "fallback": "#737373"
+        },
+        {
+          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
+          "fallback": "#737373"
+        },
+        {
+          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
+          "fallback": "#737373"
+        },
+        {
+          "file": "packages/vue-ui/src/components/FileThumbnail.vue",
+          "fallback": "#737373"
+        },
+        {
+          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "fallback": "#737373"
+        },
+        {
+          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "fallback": "#737373"
+        }
+      ],
+      "currentRepoValue": "#737373"
+    },
+    {
+      "extendToken": "--accent",
+      "officeToken": "--office-accent",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "--alpha(var(--color-black) / 4%)",
+        "resolved": "rgb(0 0 0 / 0.04)",
+        "hex": "#000000",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "extendDark": {
+        "raw": "--alpha(var(--color-white) / 4%)",
+        "resolved": "rgb(255 255 255 / 0.04)",
+        "hex": "#ffffff",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "currentRepoUsage": [
+        {
+          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "fallback": "#f5f5f5"
+        }
+      ],
+      "currentRepoValue": "#f5f5f5"
+    },
+    {
+      "extendToken": "--accent-foreground",
+      "officeToken": "--office-accent-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--destructive",
+      "officeToken": "--office-destructive",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-red-500)",
+        "resolved": "rgb(251 44 54)",
+        "hex": "#fb2c36",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "color-mix( in srgb, var(--color-red-500) 90%, var(--color-white) )",
+        "resolved": "rgb(251 65 74)",
+        "hex": "#fb414a",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "currentRepoUsage": [
+        {
+          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "fallback": "#ef4444"
+        }
+      ],
+      "currentRepoValue": "#ef4444"
+    },
+    {
+      "extendToken": "--destructive-foreground",
+      "officeToken": "--office-destructive-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-red-700)",
+        "resolved": "rgb(193 0 7)",
+        "hex": "#c10007",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-red-400)",
+        "resolved": "rgb(255 100 103)",
+        "hex": "#ff6467",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--border",
+      "officeToken": "--office-border",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "--alpha(var(--color-black) / 8%)",
+        "resolved": "rgb(0 0 0 / 0.08)",
+        "hex": "#000000",
+        "alpha": 0.08,
+        "kind": "alpha"
+      },
+      "extendDark": {
+        "raw": "--alpha(var(--color-white) / 6%)",
+        "resolved": "rgb(255 255 255 / 0.06)",
+        "hex": "#ffffff",
+        "alpha": 0.06,
+        "kind": "alpha"
+      },
+      "currentRepoUsage": [
+        {
+          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
+          "fallback": "#e5e7eb"
+        },
+        {
+          "file": "packages/vue-ui/src/components/BoundingBoxCitations.vue",
+          "fallback": "#e5e7eb"
+        },
+        {
+          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "fallback": "#e5e7eb"
+        },
+        {
+          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "fallback": "#e5e7eb"
+        },
+        {
+          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
+          "fallback": "#e5e7eb"
+        },
+        {
+          "file": "packages/vue-ui/src/components/LayoutBlocks.vue",
+          "fallback": "#e5e7eb"
+        }
+      ],
+      "currentRepoValue": "#e5e7eb"
+    },
+    {
+      "extendToken": "--input",
+      "officeToken": "--office-input",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "--alpha(var(--color-black) / 10%)",
+        "resolved": "rgb(0 0 0 / 0.1)",
+        "hex": "#000000",
+        "alpha": 0.1,
+        "kind": "alpha"
+      },
+      "extendDark": {
+        "raw": "--alpha(var(--color-white) / 8%)",
+        "resolved": "rgb(255 255 255 / 0.08)",
+        "hex": "#ffffff",
+        "alpha": 0.08,
+        "kind": "alpha"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--ring",
+      "officeToken": "--office-ring",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-neutral-400)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-neutral-500)",
+        "resolved": "rgb(115 115 115)",
+        "hex": "#737373",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [
+        {
+          "file": "packages/vue-ui/src/components/FileUpload.vue",
+          "fallback": "#3b82f6"
+        }
+      ],
+      "currentRepoValue": "#3b82f6"
+    },
+    {
+      "extendToken": "--chart-1",
+      "officeToken": "--office-chart-1",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-blue-300)",
+        "resolved": "rgb(142 197 255)",
+        "hex": "#8ec5ff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-blue-300)",
+        "resolved": "rgb(142 197 255)",
+        "hex": "#8ec5ff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--chart-2",
+      "officeToken": "--office-chart-2",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-blue-500)",
+        "resolved": "rgb(43 127 255)",
+        "hex": "#2b7fff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-blue-500)",
+        "resolved": "rgb(43 127 255)",
+        "hex": "#2b7fff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--chart-3",
+      "officeToken": "--office-chart-3",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-blue-600)",
+        "resolved": "rgb(21 93 252)",
+        "hex": "#155dfc",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-blue-600)",
+        "resolved": "rgb(21 93 252)",
+        "hex": "#155dfc",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--chart-4",
+      "officeToken": "--office-chart-4",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-blue-700)",
+        "resolved": "rgb(20 71 230)",
+        "hex": "#1447e6",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-blue-700)",
+        "resolved": "rgb(20 71 230)",
+        "hex": "#1447e6",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--chart-5",
+      "officeToken": "--office-chart-5",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-blue-800)",
+        "resolved": "rgb(25 60 184)",
+        "hex": "#193cb8",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-blue-800)",
+        "resolved": "rgb(25 60 184)",
+        "hex": "#193cb8",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--sidebar",
+      "officeToken": "--office-sidebar",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-neutral-50)",
+        "resolved": "rgb(250 250 250)",
+        "hex": "#fafafa",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "color-mix( in srgb, var(--color-neutral-950) 97%, var(--color-white) )",
+        "resolved": "rgb(17 17 17)",
+        "hex": "#111111",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--sidebar-foreground",
+      "officeToken": "--office-sidebar-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "color-mix( in srgb, var(--color-neutral-800) 64%, var(--sidebar) )",
+        "resolved": "rgb(114 114 114)",
+        "hex": "#727272",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "extendDark": {
+        "raw": "color-mix( in srgb, var(--color-neutral-100) 64%, var(--sidebar) )",
+        "resolved": "rgb(163 163 163)",
+        "hex": "#a3a3a3",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--sidebar-primary",
+      "officeToken": "--office-sidebar-primary",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--sidebar-primary-foreground",
+      "officeToken": "--office-sidebar-primary-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-neutral-50)",
+        "resolved": "rgb(250 250 250)",
+        "hex": "#fafafa",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--sidebar-accent",
+      "officeToken": "--office-sidebar-accent",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "--alpha(var(--color-black) / 4%)",
+        "resolved": "rgb(0 0 0 / 0.04)",
+        "hex": "#000000",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "extendDark": {
+        "raw": "--alpha(var(--color-white) / 4%)",
+        "resolved": "rgb(255 255 255 / 0.04)",
+        "hex": "#ffffff",
+        "alpha": 0.04,
+        "kind": "alpha"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--sidebar-accent-foreground",
+      "officeToken": "--office-sidebar-accent-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-neutral-800)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-neutral-100)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--sidebar-border",
+      "officeToken": "--office-sidebar-border",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "--alpha(var(--color-black) / 6%)",
+        "resolved": "rgb(0 0 0 / 0.06)",
+        "hex": "#000000",
+        "alpha": 0.06,
+        "kind": "alpha"
+      },
+      "extendDark": {
+        "raw": "--alpha(var(--color-white) / 5%)",
+        "resolved": "rgb(255 255 255 / 0.05)",
+        "hex": "#ffffff",
+        "alpha": 0.05,
+        "kind": "alpha"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--sidebar-ring",
+      "officeToken": "--office-sidebar-ring",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-neutral-400)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-neutral-400)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--surface",
+      "officeToken": "--office-surface",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "oklch(0.98 0 0)",
+        "resolved": "rgb(248 248 248)",
+        "hex": "#f8f8f8",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "oklch(0.2 0 0)",
+        "resolved": "rgb(22 22 22)",
+        "hex": "#161616",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--surface-foreground",
+      "officeToken": "--office-surface-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--foreground)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "oklch(0.708 0 0)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--code",
+      "officeToken": "--office-code",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--surface)",
+        "resolved": "rgb(248 248 248)",
+        "hex": "#f8f8f8",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--surface)",
+        "resolved": "rgb(22 22 22)",
+        "hex": "#161616",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--code-foreground",
+      "officeToken": "--office-code-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--surface-foreground)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--surface-foreground)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--code-highlight",
+      "officeToken": "--office-code-highlight",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "oklch(0.96 0 0)",
+        "resolved": "rgb(242 242 242)",
+        "hex": "#f2f2f2",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "oklch(0.27 0 0)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--code-number",
+      "officeToken": "--office-code-number",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "oklch(0.56 0 0)",
+        "resolved": "rgb(116 116 116)",
+        "hex": "#747474",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "oklch(0.72 0 0)",
+        "resolved": "rgb(164 164 164)",
+        "hex": "#a4a4a4",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--selection",
+      "officeToken": "--office-selection",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "oklch(0.145 0 0)",
+        "resolved": "rgb(10 10 10)",
+        "hex": "#0a0a0a",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "oklch(0.922 0 0)",
+        "resolved": "rgb(229 229 229)",
+        "hex": "#e5e5e5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--selection-foreground",
+      "officeToken": "--office-selection-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "oklch(1 0 0)",
+        "resolved": "rgb(255 255 255)",
+        "hex": "#ffffff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "oklch(0.205 0 0)",
+        "resolved": "rgb(23 23 23)",
+        "hex": "#171717",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--info",
+      "officeToken": "--office-info",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-blue-500)",
+        "resolved": "rgb(43 127 255)",
+        "hex": "#2b7fff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-blue-500)",
+        "resolved": "rgb(43 127 255)",
+        "hex": "#2b7fff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--info-foreground",
+      "officeToken": "--office-info-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-blue-700)",
+        "resolved": "rgb(20 71 230)",
+        "hex": "#1447e6",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-blue-400)",
+        "resolved": "rgb(81 162 255)",
+        "hex": "#51a2ff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--success",
+      "officeToken": "--office-success",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-emerald-500)",
+        "resolved": "rgb(0 188 125)",
+        "hex": "#00bc7d",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-emerald-500)",
+        "resolved": "rgb(0 188 125)",
+        "hex": "#00bc7d",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--success-foreground",
+      "officeToken": "--office-success-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-emerald-700)",
+        "resolved": "rgb(0 122 85)",
+        "hex": "#007a55",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-emerald-400)",
+        "resolved": "rgb(0 212 146)",
+        "hex": "#00d492",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--warning",
+      "officeToken": "--office-warning",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-amber-500)",
+        "resolved": "rgb(254 154 0)",
+        "hex": "#fe9a00",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-amber-500)",
+        "resolved": "rgb(254 154 0)",
+        "hex": "#fe9a00",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    },
+    {
+      "extendToken": "--warning-foreground",
+      "officeToken": "--office-warning-foreground",
+      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "extendLight": {
+        "raw": "var(--color-amber-700)",
+        "resolved": "rgb(187 77 0)",
+        "hex": "#bb4d00",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "extendDark": {
+        "raw": "var(--color-amber-400)",
+        "resolved": "rgb(255 185 0)",
+        "hex": "#ffb900",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "currentRepoUsage": [],
+      "currentRepoValue": null
+    }
+  ]
+}

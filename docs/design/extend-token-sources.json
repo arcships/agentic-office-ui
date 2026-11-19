@@ -1,0 +1,12 @@
+{
+  "$comment": "Pinned inputs for scripts/ci/extract-extend-tokens.mjs. Update both hashes together when bumping the reference commit, and re-vendor tools/extend-reference/src/styles/extend-globals.css.",
+  "repo": "extend-hq/ui",
+  "commit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
+  "commitDate": "2026-11-17",
+  "globalsPath": "apps/v4/app/globals.css",
+  "globalsSha256": "f929d2c1de31312f6fc53bd9a7fff9f6a3feff46d4d5fd65805fea2deddbc759",
+  "bodyMarker": "@custom-variant style-vega",
+  "bodySha256": "44bf6997bde067b701806833e88db08cfa75ae62b1805b63ee9b382107b44eca",
+  "fontsPath": "apps/v4/lib/fonts.ts",
+  "tailwindVersion": "4.2.4 (matches the pinned repo's lockfile)"
+}

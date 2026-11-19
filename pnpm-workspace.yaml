@@ -1,3 +1,7 @@
 packages:
   - "packages/*"
   - "apps/*"
+  # Parity harness inputs (reference + comparison surfaces). They are private
+  # tools, not published packages, and are built explicitly by
+  # scripts/ci/pixel-parity.mjs rather than by the workspace build.
+  - "tools/*"
