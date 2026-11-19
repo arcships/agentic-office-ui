@@ -127,7 +127,7 @@ test("charts-images.xlsx exposes its merge, multi-axis freeze and list validatio
 });
 
 test("sales-table.xlsx keeps multi-axis freeze, a validated status column and two-letter widths", async (t) => {
-  const { controller } = await mountWorkbook(t, "sales-table.xlsx");
+  const { controller } = await mountWorkbook(t, "sales-table-validated.xlsx");
   const sheet = controller.activeSheet;
   assert.equal(sheet?.name, "Sales Data");
   assert.deepEqual(controller.freezePanes, { row: 2, col: 2 });
@@ -177,7 +177,7 @@ test("XlsxGrid publishes the fixture merge, freeze and validation counts to the 
 });
 
 test("the sales fixture's list validation drives a real dropdown", async (t) => {
-  const { controller } = await mountWorkbook(t, "sales-table.xlsx", { readOnly: false });
+  const { controller } = await mountWorkbook(t, "sales-table-validated.xlsx", { readOnly: false });
   const restoreEnvironment = installGridEnvironment();
   const grid = await mount(XlsxGrid, { controller });
   t.after(() => {

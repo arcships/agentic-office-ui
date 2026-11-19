@@ -208,6 +208,18 @@ test("XlsxGrid renders a real scroll surface and coalesces scroll painting by an
   globalThis.Document = class Document {};
   globalThis.ShadowRoot = class ShadowRoot {};
 
+  const originalWidth = Object.getOwnPropertyDescriptor(Object.prototype, "clientWidth");
+  const originalHeight = Object.getOwnPropertyDescriptor(Object.prototype, "clientHeight");
+  Object.defineProperty(Object.prototype, "clientWidth", {
+    configurable: true,
+    get() { return this.__clientWidth ?? 1600; },
+    set(value) { this.__clientWidth = value; },
+  });
+  Object.defineProperty(Object.prototype, "clientHeight", {
+    configurable: true,
+    get() { return this.__clientHeight ?? 600; },
+    set(value) { this.__clientHeight = value; },
+  });
   const controller = createWheelController();
   let displayValueReads = 0;
   const readDisplayValue = controller.getCellDisplayValue;
@@ -224,6 +236,10 @@ test("XlsxGrid renders a real scroll surface and coalesces scroll painting by an
   });
   t.after(() => {
     mounted.app.unmount();
+    if (originalWidth) Object.defineProperty(Object.prototype, "clientWidth", originalWidth);
+    else delete Object.prototype.clientWidth;
+    if (originalHeight) Object.defineProperty(Object.prototype, "clientHeight", originalHeight);
+    else delete Object.prototype.clientHeight;
     if (previousWindow === undefined) delete globalThis.window;
     else globalThis.window = previousWindow;
     if (previousResizeObserver === undefined) delete globalThis.ResizeObserver;
@@ -235,6 +251,11 @@ test("XlsxGrid renders a real scroll surface and coalesces scroll painting by an
   });
 
   const grid = findByTestId(mounted.root, "xlsx-grid");
+  grid.getBoundingClientRect = () => ({
+    bottom: 600, height: 600, left: 0, right: 1600, top: 0, width: 1600,
+  });
+  resizeCallback?.([{ contentRect: { height: 600, width: 1600 } }]);
+  await vue.nextTick();
   const scrollSpace = findByTestId(mounted.root, "xlsx-grid-scroll-space");
   const viewport = nodesWithClass(mounted.root, "xlsx-grid__viewport")[0];
   assert.ok(grid, "the grid renders its scroll container");
@@ -481,6 +502,18 @@ function nodesWithClass(root, className) {
 
 test("XlsxViewer Ctrl/Cmd+wheel zoom keeps the cell under the cursor anchored", async (t) => {
   const restoreEnvironment = installWheelEnvironment();
+  const originalWidth = Object.getOwnPropertyDescriptor(Object.prototype, "clientWidth");
+  const originalHeight = Object.getOwnPropertyDescriptor(Object.prototype, "clientHeight");
+  Object.defineProperty(Object.prototype, "clientWidth", {
+    configurable: true,
+    get() { return this.__clientWidth ?? 1600; },
+    set(value) { this.__clientWidth = value; },
+  });
+  Object.defineProperty(Object.prototype, "clientHeight", {
+    configurable: true,
+    get() { return this.__clientHeight ?? 600; },
+    set(value) { this.__clientHeight = value; },
+  });
   const controller = createWheelController();
   const mounted = await mount(XlsxViewer, {
     controller,

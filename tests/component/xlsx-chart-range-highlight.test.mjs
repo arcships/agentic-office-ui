@@ -224,10 +224,23 @@ test("sheet surface mounts the highlight layer above the grid canvas", async (t)
   );
   const surface = await mount(XlsxSheetSurface, { controller });
   try {
+    const grid = findByTestId(surface.root, "xlsx-grid");
+    if (grid) {
+      grid.clientWidth = 1600;
+      grid.clientHeight = 600;
+      grid.getBoundingClientRect = () => ({
+        bottom: 600, height: 600, left: 0, right: 1600, top: 0, width: 1600,
+      });
+    }
+    controller.clearHighlightedRanges();
+    controller.highlightRanges(
+      [{ end: { col: 2, row: 3 }, start: { col: 0, row: 1 } }],
+      { color: "#22c55e" },
+    );
     await vue.nextTick();
     const layer = findByTestId(surface.root, "xlsx-range-highlight-layer");
     assert.ok(layer, "XlsxSheetSurface renders the range highlight layer");
-    assert.equal(highlightNodes(surface.root).length, 1);
+    assert.equal(highlightNodes(surface.root).length, 4, "freeze panes split the range into four fragments");
     const order = walk(surface.root);
     assert.ok(
       order.indexOf(findByTestId(surface.root, "xlsx-grid")) < order.indexOf(layer),

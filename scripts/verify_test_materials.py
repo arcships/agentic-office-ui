@@ -46,6 +46,7 @@ valid_pdf = [
 valid_xlsx = [
     "financial-model.xlsx",
     "sales-table.xlsx",
+    "sales-table-validated.xlsx",
     "charts-images.xlsx",
     "large-grid.xlsx",
 ]
@@ -445,7 +446,7 @@ xlsx_expectations: dict[str, dict[str, object]] = {
         "freeze": None,
         "validations": 0,
     },
-    "sales-table.xlsx": {
+    "sales-table-validated.xlsx": {
         "sheets": ["Sales Data"],
         "charts": 0,
         "merged": [],
