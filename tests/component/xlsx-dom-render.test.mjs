@@ -148,6 +148,8 @@ async function mountGrid(t, options = {}) {
     width: VIEWPORT.width,
   });
   grid.style = {};
+  grid.clientWidth = VIEWPORT.width;
+  grid.clientHeight = VIEWPORT.height;
   grid.scrollLeft = 0;
   grid.scrollTop = 0;
   grid.focus = () => {};
@@ -557,6 +559,8 @@ async function mountViewer(t, options = {}) {
     width: VIEWPORT.width,
   });
   grid.style = {};
+  grid.clientWidth = VIEWPORT.width;
+  grid.clientHeight = VIEWPORT.height;
   grid.scrollLeft = 0;
   grid.scrollTop = 0;
   t.after(() => mounted.app.unmount());

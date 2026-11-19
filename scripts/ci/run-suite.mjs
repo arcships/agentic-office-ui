@@ -291,6 +291,11 @@ const suites = {
       "tests/component/docx-drawing-objects.test.mjs",
       "tests/component/docx-block-highlights.test.mjs",
       "tests/component/docx-page-budget.test.mjs",
+    ]),
+    command("vue-component-behavior-2", process.execPath, [
+      "--test",
+      "--expose-gc",
+      "--test-concurrency=1",
       "tests/component/pdf-surface-lazy-render.test.mjs",
       "tests/component/pdf-view-modes.test.mjs",
       "tests/component/pdf-navigation-aids.test.mjs",
