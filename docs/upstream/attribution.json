@@ -212,15 +212,23 @@
     {
       "upstreamFile": "apps/v4/components/ui/button.tsx",
       "purpose": "Button primitive with variants and sizes.",
-      "target": "packages/vue-ui/src/components/ui/Button.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeButton.vue",
       "status": "adapted",
       "issues": ["#157"],
       "notes": "Markup, variants, and sizes re-expressed with reka-ui slot behavior and scoped CSS. IconButton reuses the icon sizes."
     },
     {
+      "upstreamFile": "apps/v4/components/ui/button.tsx",
+      "purpose": "Icon-only button sizes, ghost/active state and touch target.",
+      "target": "packages/vue-ui/src/components/ui/OfficeIconButton.vue",
+      "status": "adapted",
+      "issues": ["#157"],
+      "notes": "Reuses the Button primitive; adds a required accessible label and aria-pressed active state."
+    },
+    {
       "upstreamFile": "apps/v4/components/ui/input.tsx",
       "purpose": "Input primitive styling and focus ring.",
-      "target": "packages/vue-ui/src/components/ui/Input.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeInput.vue",
       "status": "adapted",
       "issues": ["#157"],
       "notes": "Height, radius, border alpha, and focus-visible ring are derived from the upstream class list."
@@ -228,7 +236,7 @@
     {
       "upstreamFile": "apps/v4/components/ui/input.tsx",
       "purpose": "Textarea variant of the input styling (no dedicated upstream file).",
-      "target": "packages/vue-ui/src/components/ui/Textarea.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeTextarea.vue",
       "status": "adapted",
       "issues": ["#157"],
       "notes": "Upstream has no textarea.tsx; the input tokens are extended to a multi-line control."
@@ -236,7 +244,7 @@
     {
       "upstreamFile": "apps/v4/components/ui/select.tsx",
       "purpose": "Select primitive with portal, collision handling, and scroll buttons.",
-      "target": "packages/vue-ui/src/components/ui/Select.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeSelect.vue",
       "status": "adapted",
       "issues": ["#157"],
       "notes": "reka-ui provides the behavior; the visual layer follows upstream."
@@ -244,110 +252,110 @@
     {
       "upstreamFile": "apps/v4/components/ui/dropdown-menu.tsx",
       "purpose": "Dropdown menu shell, items, separators, and shortcuts.",
-      "target": "packages/vue-ui/src/components/ui/DropdownMenu.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeDropdownMenu.vue",
       "status": "adapted",
       "issues": ["#157"]
     },
     {
       "upstreamFile": "apps/v4/components/ui/context-menu.tsx",
       "purpose": "Right-click context menu with the same item styling.",
-      "target": "packages/vue-ui/src/components/ui/ContextMenu.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeContextMenu.vue",
       "status": "adapted",
       "issues": ["#157"]
     },
     {
       "upstreamFile": "apps/v4/components/ui/dialog.tsx",
       "purpose": "Modal dialog, header, footer, close button, and backdrop.",
-      "target": "packages/vue-ui/src/components/ui/Dialog.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeDialog.vue",
       "status": "adapted",
       "issues": ["#157"]
     },
     {
       "upstreamFile": "apps/v4/components/ui/sheet.tsx",
       "purpose": "Edge sheet built on the dialog primitive.",
-      "target": "packages/vue-ui/src/components/ui/Sheet.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeSheet.vue",
       "status": "adapted",
       "issues": ["#157"]
     },
     {
       "upstreamFile": "apps/v4/components/ui/popover.tsx",
       "purpose": "Anchored popover surface and arrow.",
-      "target": "packages/vue-ui/src/components/ui/Popover.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficePopover.vue",
       "status": "adapted",
       "issues": ["#157"]
     },
     {
       "upstreamFile": "apps/v4/components/ui/tooltip.tsx",
       "purpose": "Tooltip surface, delay, and side offset.",
-      "target": "packages/vue-ui/src/components/ui/Tooltip.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeTooltip.vue",
       "status": "adapted",
       "issues": ["#157"],
-      "notes": "Replaces the standalone packages/vue-ui/src/components/Tooltip.vue once #157 lands; the existing file stays independent for now."
+      "notes": "The standalone packages/vue-ui/src/components/Tooltip.vue stays public and delegates to OfficeTooltip."
     },
     {
       "upstreamFile": "apps/v4/components/ui/tabs.tsx",
       "purpose": "Tab list, trigger, and panel styling.",
-      "target": "packages/vue-ui/src/components/ui/Tabs.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeTabs.vue",
       "status": "adapted",
       "issues": ["#157"]
     },
     {
       "upstreamFile": "apps/v4/components/ui/toggle.tsx",
       "purpose": "Toggle variants and pressed state.",
-      "target": "packages/vue-ui/src/components/ui/Toggle.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeToggle.vue",
       "status": "adapted",
       "issues": ["#157"]
     },
     {
       "upstreamFile": "apps/v4/components/ui/badge.tsx",
       "purpose": "Badge variants and sizes.",
-      "target": "packages/vue-ui/src/components/ui/Badge.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeBadge.vue",
       "status": "adapted",
       "issues": ["#157"]
     },
     {
       "upstreamFile": "apps/v4/components/ui/card.tsx",
       "purpose": "Card shell, header, content, and footer.",
-      "target": "packages/vue-ui/src/components/ui/Card.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeCard.vue",
       "status": "adapted",
       "issues": ["#157"]
     },
     {
       "upstreamFile": "apps/v4/components/ui/separator.tsx",
       "purpose": "Orientation-aware separator.",
-      "target": "packages/vue-ui/src/components/ui/Separator.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeSeparator.vue",
       "status": "adapted",
       "issues": ["#157"]
     },
     {
       "upstreamFile": "apps/v4/components/ui/skeleton.tsx",
       "purpose": "Loading placeholder.",
-      "target": "packages/vue-ui/src/components/ui/Skeleton.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeSkeleton.vue",
       "status": "adapted",
       "issues": ["#157"]
     },
     {
       "upstreamFile": "apps/v4/components/ui/spinner.tsx",
       "purpose": "Loading spinner.",
-      "target": "packages/vue-ui/src/components/ui/Spinner.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeSpinner.vue",
       "status": "adapted",
       "issues": ["#157"],
-      "notes": "The existing packages/vue-ui/src/components/Spinner.vue remains independent until #157 replaces it."
+      "notes": "The standalone packages/vue-ui/src/components/Spinner.vue stays public and delegates to OfficeSpinner."
     },
     {
       "upstreamFile": "apps/v4/components/ui/scroll-area.tsx",
       "purpose": "Custom scrollbar area.",
-      "target": "packages/vue-ui/src/components/ui/ScrollArea.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeScrollArea.vue",
       "status": "adapted",
       "issues": ["#157"]
     },
     {
       "upstreamFile": "apps/v4/components/ui/sonner.tsx",
       "purpose": "Toast surface configuration.",
-      "target": "packages/vue-ui/src/components/ui/Toast.vue",
+      "target": "packages/vue-ui/src/components/ui/OfficeToastProvider.vue",
       "status": "adapted",
       "issues": ["#157"],
-      "notes": "Visual tokens only; the behavior comes from vue-sonner."
+      "notes": "Visual tokens only; the behavior comes from reka-ui Toast, not vue-sonner."
     },
     {
       "upstreamFile": "apps/v4/components/ui/alert.tsx",
@@ -453,6 +461,15 @@
       "issues": ["#157"],
       "notes": "Superseded by sonner.tsx upstream and vue-sonner locally."
     },
+    {
+      "upstreamFile": "apps/v4/registry/new-york-v4/ui/*.tsx",
+      "purpose": "Token-driven visual rules shared by every primitive.",
+      "target": "packages/vue-ui/src/styles/ui.css",
+      "status": "adapted",
+      "issues": ["#157"],
+      "notes": "Tailwind utilities are re-expressed as office-* classes using --office-* tokens; no Tailwind or preflight."
+    }
+,
     {
       "upstreamFile": "apps/v4/components/ui/*.tsx",
       "purpose": "Convention guard for the planned primitive directory.",

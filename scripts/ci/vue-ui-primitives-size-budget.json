@@ -1,0 +1,10 @@
+{
+  "issue": 157,
+  "description": "Budget for the reka-ui primitive layer added to @arcships/vue-ui.",
+  "measurement": "gzipSync(level 9) over packages/vue-ui/dist/index.js + dist/style.css",
+  "baselineCommit": "2d1204d (feat/0.8 with #156 merged, before #157)",
+  "baselineGzipBytes": 19140,
+  "baselineNote": "Vite 6 build report on the merge base: dist/index.js 15.60 kB gzip + dist/style.css 3.54 kB gzip.",
+  "budgetBytes": 35840,
+  "budgetNote": "Issue #157: new gzip <= 35 KB excluding icon payload. Icons stay external via @lucide/vue and OfficeIcon."
+}

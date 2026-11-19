@@ -6,6 +6,7 @@ import "@arcships/vue-xlsx/style.css"
 import "@arcships/vue-pptx/style.css"
 import "@arcships/vue-pdf/style.css"
 import "@arcships/vue-ui/style.css"
+import "@arcships/vue-ui/theme.css"
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -22,6 +23,7 @@ const router = createRouter({
     { path: "/pdf-surface", component: () => import("./pages/PdfSurfacePage.vue") },
     { path: "/pdf-viewer", component: () => import("./pages/PdfViewerPage.vue") },
     { path: "/components", component: () => import("./pages/ComponentsPage.vue") },
+    { path: "/primitives", component: () => import("./pages/PrimitivesPage.vue") },
     { path: "/runtime-isolation", component: () => import("./pages/RuntimeIsolationPage.vue") },
     { path: "/docx-parity", component: () => import("./pages/DocxParityPage.vue") },
     { path: "/runtime-limits", component: () => import("./pages/RuntimeLimitsPage.vue") },

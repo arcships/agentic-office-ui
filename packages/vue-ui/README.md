@@ -86,10 +86,26 @@ async function captureRegionPreview() {
 | `FileThumbnail` | 文件缩略图 |
 | `BoundingBoxCitations` | 引用框标注 |
 | `LayoutBlocks` | 版面块 |
-| `Spinner` | 加载指示 |
-| `Tooltip` | 提示 |
+| `Spinner` | 加载指示（兼容入口；新代码可用 `OfficeSpinner`） |
+| `Tooltip` | 提示（兼容入口；内部委托 `OfficeTooltip`） |
 | `OfficeThemeProvider` | 提供 `light` / `dark` / `system` 主题、密度、locale 和共享主题上下文 |
 | `OfficeIcon` | 基于 `@lucide/vue` 的统一图标入口，支持尺寸、线宽和可访问名称 |
+
+### reka-ui primitive 层（0.8）
+
+| Primitive | 用途 |
+|---|---|
+| `OfficeButton` / `OfficeIconButton` | 六种 variant、七种 size、disabled/loading/asChild，图标按钮强制可访问名称 |
+| `OfficeInput` / `OfficeTextarea` | 受控输入、invalid、disabled、readonly、三种尺寸 |
+| `OfficeSelect` | 选项/分组/分隔符、portal、键盘选择和碰撞定位 |
+| `OfficeDropdownMenu` / `OfficeContextMenu` | item/checkbox/separator/label/group/submenu 描述符 |
+| `OfficeDialog` / `OfficeSheet` | 焦点陷阱、Esc/backdrop、标题/描述 ARIA、四向 Sheet |
+| `OfficePopover` / `OfficeTooltip` | 可配置 side/align/offset 的 portal 浮层 |
+| `OfficeTabs` / `OfficeToggle` | 键盘可访问的标签页和受控按下态 |
+| `OfficeBadge` / `OfficeCard` / `OfficeSeparator` / `OfficeSkeleton` / `OfficeSpinner` / `OfficeScrollArea` | 展示与布局原语 |
+| `OfficeToastProvider` / `useOfficeToast` | success/error/warning/info/loading、更新和关闭 |
+
+Primitive 视觉只读取 `--office-*` token，不引入 Tailwind/preflight；`reka-ui` 与 `@lucide/vue` 在库构建中保持 external。完整 props、键盘/ARIA 合同和包体积预算见 [Vue primitive 层](https://github.com/arcships/agentic-office-ui/blob/master/docs/components/ui-primitives.md)。
 
 ## 主题与图标
 
@@ -125,6 +141,7 @@ import { OfficeIcon, OfficeThemeProvider } from "@arcships/vue-ui"
 ## 文档
 
 - [组件手册](https://github.com/arcships/agentic-office-ui/blob/master/docs/components/README.md)
+- [Vue primitive 层](https://github.com/arcships/agentic-office-ui/blob/master/docs/components/ui-primitives.md)
 - [设计 token、主题与图标](https://github.com/arcships/agentic-office-ui/blob/master/docs/design/office-theme.md)
 - [区域截图与标注](https://github.com/arcships/agentic-office-ui/blob/master/docs/api/region-capture-and-annotation.md)
 

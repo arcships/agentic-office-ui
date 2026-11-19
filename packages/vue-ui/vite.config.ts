@@ -42,7 +42,13 @@ export default defineConfig({
             ? "[name][extname]"
             : "assets/[name]-[hash][extname]",
       },
-      external: ["vue", "signature_pad", "@arcships/office-interaction", "@lucide/vue"],
+      external: [
+        "vue",
+        "reka-ui",
+        "signature_pad",
+        "@arcships/office-interaction",
+        "@lucide/vue",
+      ],
     },
   },
 })

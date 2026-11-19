@@ -5,6 +5,7 @@
  */
 
 import "./print.css"
+import "./styles/ui.css"
 
 // Signature pad
 export { default as SignaturePad } from "./components/SignaturePad.vue"
@@ -26,6 +27,9 @@ export { default as Spinner } from "./components/Spinner.vue"
 export { default as Tooltip } from "./components/Tooltip.vue"
 export { default as OfficeFindBar } from "./components/OfficeFindBar.vue"
 export { default as OfficeLiveStatus } from "./components/OfficeLiveStatus.vue"
+
+// Primitive layer (issue #157): token-driven Reka UI components
+export * from "./components/ui"
 
 // Theme provider and icon adapter
 export { default as OfficeThemeProvider } from "./components/OfficeThemeProvider.vue"

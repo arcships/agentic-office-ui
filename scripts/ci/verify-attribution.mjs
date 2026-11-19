@@ -292,6 +292,10 @@ check("docs index links the upstream index", read("docs/INDEX.md").includes("ups
 const pending = [];
 const headerChecked = [];
 const coveredTargets = [];
+// Every target in the index (including reference-only) makes a file "listed";
+// the reverse check must not report a reference-only file as unindexed just
+// because it mentions the pinned commit.
+const indexedTargets = [];
 
 function targetFiles(entry) {
   const excluded = new Set(entry.exclude || []);
@@ -310,6 +314,7 @@ function targetFiles(entry) {
 }
 
 for (const entry of manifest.index || []) {
+  if (entry.target) indexedTargets.push(entry.target);
   if (!headerRequiringStatuses.has(entry.status) || !entry.target) continue;
   coveredTargets.push(entry.target);
   const files = targetFiles(entry);
@@ -333,7 +338,7 @@ for (const entry of manifest.index || []) {
 
 function isCoveredByIndex(file) {
   const relative = rel(file);
-  return coveredTargets.some((target) =>
+  return indexedTargets.some((target) =>
     target.endsWith("/") ? relative.startsWith(normalizeTarget(target) + "/") : normalizeTarget(target) === relative,
   );
 }
