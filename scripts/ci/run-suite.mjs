@@ -97,6 +97,7 @@ const suites = {
       "tests/unit/docx-image-layer-order.test.mjs",
       "tests/unit/docx-reference-adapter.test.mjs",
       "tests/unit/docx-document-blocks.test.mjs",
+      "tests/unit/docx-source-graph.test.mjs",
       "tests/unit/docx-table-selection.test.mjs",
       "tests/unit/docx-history-cache.test.mjs",
       "tests/unit/docx-edit-structural-sharing.test.mjs",

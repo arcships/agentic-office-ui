@@ -4,3 +4,12 @@ export * from "./ids";
 export * from "./segmentation";
 export * from "./extract";
 export * from "./geometry";
+export { inspectDocumentSource } from "./source-graph";
+export type {
+  DocumentSourceAsset,
+  DocumentSourceGraph,
+  DocumentSourcePart,
+  PreservedFeature,
+  SourceAttribute,
+  SourceElement,
+} from "./source-graph";
