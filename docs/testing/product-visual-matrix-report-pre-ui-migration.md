@@ -1,7 +1,7 @@
 # Product visual matrix
 
 - Mode: `report-only`
-- Generated: 2026-11-19T19:07:51.738392+00:00
+- Generated: 2026-11-19T19:15:05.515406+00:00
 - Git HEAD: `3e0f13ddb2ad1bd5d0e1499dbc54b855ccad57b3`
 - Browser: 149.0.7827.55
 - Baseline: `tests/baseline/visual`
