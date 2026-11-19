@@ -259,6 +259,12 @@ function parseColor(rawValue, palette, depth = 0) {
   if (value === "transparent") {
     return { rgb: [0, 0, 0], alpha: 0, kind: "keyword" };
   }
+  if (value === "black") {
+    return { rgb: [0, 0, 0], alpha: 1, kind: "keyword" };
+  }
+  if (value === "white") {
+    return { rgb: [255, 255, 255], alpha: 1, kind: "keyword" };
+  }
   if (value === "currentColor") {
     return { rgb: [0, 0, 0], alpha: 1, kind: "keyword" };
   }
@@ -336,15 +342,22 @@ function parseColor(rawValue, palette, depth = 0) {
       percentage: stop.percentage,
     }));
     const total = stops.reduce((sum, stop) => sum + stop.percentage, 0) || 100;
-    let rgb = [0, 0, 0];
+    // CSS color-mix() interpolates premultiplied alpha, so a transparent stop
+    // must not drag the visible colour towards black.
     let alpha = 0;
+    let premultiplied = [0, 0, 0];
     for (const stop of stops) {
       const weight = stop.percentage / total;
-      rgb = rgb.map((channel, index) => channel + stop.color.rgb[index] * weight);
       alpha += stop.color.alpha * weight;
+      premultiplied = premultiplied.map(
+        (channel, index) => channel + stop.color.rgb[index] * stop.color.alpha * weight,
+      );
     }
+    const rgb = alpha === 0
+      ? [0, 0, 0]
+      : premultiplied.map((channel) => Math.round(channel / alpha));
     return {
-      rgb: rgb.map((channel) => Math.round(channel)),
+      rgb,
       alpha,
       kind: `color-mix-${mix.space}`,
       approximate: mix.space !== "srgb",
@@ -460,16 +473,6 @@ function collectCurrentUsage() {
   return usage;
 }
 
-function collectOfficeTokenPresence() {
-  const files = walkSourceFiles(["packages", "apps"], [".vue", ".css", ".ts"]);
-  const present = new Set();
-  for (const file of files) {
-    const text = readText(file);
-    for (const match of text.matchAll(/--office-[\w-]+/g)) present.add(match[0]);
-  }
-  return present;
-}
-
 function collectComponentMotion(componentFiles) {
   const durations = new Map();
   const easings = new Map();
@@ -505,6 +508,147 @@ function collectComponentMotion(componentFiles) {
     easings: [...easings.values()].sort((left, right) =>
       left.class.localeCompare(right.class),
     ),
+  };
+}
+
+function readOfficeThemeLayer() {
+  const tokensPath = path.join(root, "packages/vue-ui/src/styles/tokens.css");
+  const themePath = path.join(root, "packages/vue-ui/src/styles/theme.css");
+  if (!existsSync(tokensPath)) return null;
+  const tokensCss = readText(tokensPath);
+  const lightDecls = extractDeclarations(extractBlock(tokensCss, "[data-office-theme]"));
+  let darkDecls = new Map();
+  if (existsSync(themePath)) {
+    const themeCss = readText(themePath);
+    if (themeCss.includes('[data-office-theme="dark"] {')) {
+      darkDecls = extractDeclarations(
+        extractBlock(themeCss, '[data-office-theme="dark"]'),
+      );
+    }
+  }
+  return {
+    lightDecls,
+    darkDecls,
+    files: [rootRelative(tokensPath), rootRelative(themePath)],
+  };
+}
+
+function toPx(raw, radiusBasePx) {
+  if (raw === null || raw === undefined) return null;
+  const value = raw.trim();
+  if (value === "0") return 0;
+  const px = value.match(/^(-?[\d.]+)px$/);
+  if (px) return Number(px[1]);
+  const rem = value.match(/^(-?[\d.]+)rem$/);
+  if (rem) return Number((Number.parseFloat(rem[1]) * 16).toFixed(4));
+  const calc = value.match(/calc\(\s*var\(--office-radius\)\s*\*\s*([\d.]+)\s*\)/);
+  if (calc) return Number((radiusBasePx * Number(calc[1])).toFixed(4));
+  if (/^var\(--office-radius\)$/.test(value)) return radiusBasePx;
+  const ratio = value.match(/^calc\(\s*([\d.]+)\s*\/\s*([\d.]+)\s*\)$/);
+  if (ratio) return Number((Number(ratio[1]) / Number(ratio[2])).toFixed(4));
+  return null;
+}
+
+function buildTokenLayer({ tailwind, typography, officeLightDecls, radius }) {
+  const office = (name) => officeLightDecls.get(`--office-${name}`) ?? null;
+  const radiusBasePx = Number.parseFloat(radius.basePx);
+  const px = (raw) => toPx(raw, radiusBasePx);
+  const normalize = (value) =>
+    value === null || value === undefined
+      ? null
+      : value.replace(/\s+/g, " ").replace(/\s*,\s*/g, ", ").trim();
+  const entries = [];
+
+  const push = (entry) => {
+    entries.push({
+      ...entry,
+      match: entry.compare
+        ? entry.compare()
+        : entry.extend.px !== null &&
+            entry.office.px !== null &&
+            entry.extend.px === entry.office.px,
+    });
+    delete entries[entries.length - 1].compare;
+  };
+
+  const scalar = (group, token, extendRaw, officeRaw, note) => {
+    push({
+      group,
+      token,
+      extend: { raw: extendRaw, px: px(extendRaw) },
+      office: { raw: officeRaw, px: px(officeRaw) },
+      ...(note ? { note } : {}),
+    });
+  };
+
+  scalar("radius", "--radius", radius.raw, office("radius"));
+  for (const [name, value] of Object.entries(radius.scale)) {
+    scalar("radius", `--radius-${name}`, value.px, office(`radius-${name}`));
+  }
+
+  scalar("ring", "--ring-width (button focus-visible:ring-2)", "2px", office("ring-width"));
+  scalar(
+    "ring",
+    "--ring-offset-width (focus-visible:ring-offset-1)",
+    "1px",
+    office("ring-offset-width"),
+  );
+  scalar("border", "--border-width", "1px", office("border-width"));
+
+  for (const shadow of ["xs", "sm"]) {
+    const extendRaw = tailwind.defaults.get(`--shadow-${shadow}`) ?? null;
+    const officeRaw = office(`shadow-${shadow}`);
+    push({
+      group: "shadow",
+      token: `--shadow-${shadow}`,
+      extend: { raw: extendRaw },
+      office: { raw: officeRaw },
+      compare: () => normalize(extendRaw) === normalize(officeRaw),
+    });
+  }
+
+  for (const size of ["xs", "sm", "base", "lg", "xl"]) {
+    scalar(
+      "typography",
+      `--text-${size}`,
+      tailwind.defaults.get(`--text-${size}`) ?? null,
+      office(`text-${size}`),
+    );
+    push({
+      group: "typography",
+      token: `--leading-${size}`,
+      extend: {
+        raw: typography[size]?.lineHeight ?? null,
+        px: typography[size]?.lineHeightPx ?? null,
+      },
+      office: { raw: office(`leading-${size}`), px: px(office(`leading-${size}`)) },
+    });
+  }
+
+  scalar("control", "control-height (button h-9)", "2.25rem", office("control-height"));
+  scalar(
+    "control",
+    "control-height-sm (button sm:h-8)",
+    "2rem",
+    office("control-height-sm"),
+  );
+  scalar(
+    "control",
+    "control-padding-inline (px-[calc(--spacing(3)-1px)])",
+    "11px",
+    office("control-padding-inline"),
+    "Extend subtracts the 1px border from the 12px spacing step; the office token is the full inline inset, so a 12px token + 1px border renders 13px unless the consumer subtracts it.",
+  );
+  scalar("control", "control-gap (gap-2)", "8px", office("control-gap"));
+
+  const matched = entries.filter((entry) => entry.match).length;
+  const mismatched = entries.filter(
+    (entry) => entry.match === false && entry.office.raw !== null,
+  ).length;
+  const missing = entries.filter((entry) => entry.office.raw === null).length;
+  return {
+    entries,
+    summary: { total: entries.length, matched, mismatched, missing },
   };
 }
 
@@ -598,13 +742,23 @@ function main() {
       const lineHeight = tailwind.defaults.get(`${name}--line-height`) ?? null;
       const letterSpacing = tailwind.defaults.get(`${name}--letter-spacing`) ?? null;
       const weight = tailwind.defaults.get(`${name}--font-weight`) ?? null;
+      const lineHeightPx = lineHeight?.endsWith("rem")
+        ? Number((Number.parseFloat(lineHeight) * 16).toFixed(2))
+        : lineHeight?.startsWith("calc(")
+          ? Number(
+              (
+                Number.parseFloat(lineHeight.slice(5, -1).split("/")[0]) /
+                Number.parseFloat(lineHeight.slice(5, -1).split("/")[1])
+              * Number.parseFloat(value) *
+                (value.endsWith("rem") ? 16 : 1)
+            ).toFixed(2),
+          )
+          : lineHeight;
       typography[size[1]] = {
         fontSize: value,
         fontSizePx: Number.parseFloat(value) * (value.endsWith("rem") ? 16 : 1),
         lineHeight,
-        lineHeightPx: lineHeight?.endsWith("rem")
-          ? Number((Number.parseFloat(lineHeight) * 16).toFixed(2))
-          : lineHeight,
+        lineHeightPx,
         letterSpacing,
         fontWeight: weight,
       };
@@ -660,28 +814,85 @@ function main() {
   };
 
   const currentUsage = collectCurrentUsage();
-  const officeTokensPresent = collectOfficeTokenPresence();
+  const office = readOfficeThemeLayer();
+
+  const officePaletteFor = (themeDecls) => {
+    const merged = new Map([
+      ...tailwind.palette,
+      ...(office?.lightDecls ?? new Map()),
+      ...(office?.darkDecls ?? new Map()),
+      ...themeDecls,
+    ]);
+    return merged;
+  };
+  const officeLightPalette = officePaletteFor(office?.lightDecls ?? new Map());
+  const officeDarkPalette = officePaletteFor(office?.darkDecls ?? new Map());
+
+  const officeColor = (theme, name) => {
+    const declarations = theme === "dark" ? office?.darkDecls : office?.lightDecls;
+    if (!declarations) return null;
+    const raw = declarations.get(`--office-${name}`);
+    if (raw === undefined) return null;
+    return colorReport(raw, theme === "dark" ? officeDarkPalette : officeLightPalette);
+  };
+
+  const colorDelta = (extendColor, officeColorValue) => {
+    if (!extendColor || !officeColorValue) {
+      return { comparable: false, matches: false, maxChannelDelta: null, alphaDelta: null };
+    }
+    const toRgb = (hex) => [
+      Number.parseInt(hex.slice(1, 3), 16),
+      Number.parseInt(hex.slice(3, 5), 16),
+      Number.parseInt(hex.slice(5, 7), 16),
+    ];
+    const left = toRgb(extendColor.hex);
+    const right = toRgb(officeColorValue.hex);
+    const maxChannelDelta = Math.max(...[0, 1, 2].map((index) => Math.abs(left[index] - right[index])));
+    const alphaDelta = Number(Math.abs(extendColor.alpha - officeColorValue.alpha).toFixed(4));
+    return {
+      comparable: true,
+      matches: maxChannelDelta <= 2 && alphaDelta <= 0.005,
+      maxChannelDelta,
+      alphaDelta,
+    };
+  };
+
   const mapping = SEMANTIC_COLORS.map((name) => {
     const officeToken = OFFICE_TOKEN_BY_SEMANTIC[name];
     const usage = currentUsage.get(`--${name}`) ?? [];
+    const officeLight = officeColor("light", name);
+    const officeDark = officeColor("dark", name);
     return {
       extendToken: `--${name}`,
       officeToken,
-      officeTokenStatus: officeTokensPresent.has(officeToken)
-        ? "present"
-        : "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      officeTokenStatus: officeLight ? "present" : "missing-in-token-layer",
       extendLight: light[name],
       extendDark: dark[name],
+      officeLight,
+      officeDark,
+      lightDelta: colorDelta(light[name], officeLight),
+      darkDelta: colorDelta(dark[name], officeDark),
       currentRepoUsage: usage,
       currentRepoValue:
         usage.length === 0
           ? null
           : [...new Set(usage.map((entry) => entry.fallback))].join(" | "),
+      note: officeLight
+        ? undefined
+        : `#156 does not declare ${officeToken}; the pinned reference does declare ${`--${name}`}.`,
     };
   });
 
+  const tokenLayer = buildTokenLayer({
+    tailwind,
+    typography,
+    officeLightDecls: office?.lightDecls ?? new Map(),
+    officeDarkDecls: office?.darkDecls ?? new Map(),
+    radius,
+    mapping,
+  });
+
   const report = {
-    $schema: "./extend-tokens.schema.json",
     generatedBy: "node scripts/ci/extract-extend-tokens.mjs",
     generatedAt: new Date().toISOString(),
     provenance: {
@@ -734,6 +945,11 @@ function main() {
     shadows,
     ring,
     motion,
+    tokenLayer: {
+      sources: office?.files ?? [],
+      note: "Compares the pinned reference values with the #156 `--office-*` layer (packages/vue-ui/src/styles/tokens.css + theme.css). Color rows also compare the resolved light/dark values with a 2/255 per-channel tolerance.",
+      ...tokenLayer,
+    },
     mapping,
   };
 
@@ -760,6 +976,9 @@ function main() {
       const strip = (value) => {
         const clone = JSON.parse(JSON.stringify(value));
         delete clone.generatedAt;
+        // `--check` runs without an upstream checkout, so the verification
+        // marker is environment-dependent and must not count as drift.
+        if (clone.provenance) delete clone.provenance.upstreamVerification;
         return JSON.stringify(clone, null, 2);
       };
       matches = strip(parsed) === strip(JSON.parse(serialized));

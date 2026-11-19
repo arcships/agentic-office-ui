@@ -1,7 +1,6 @@
 {
-  "$schema": "./extend-tokens.schema.json",
   "generatedBy": "node scripts/ci/extract-extend-tokens.mjs",
-  "generatedAt": "2026-11-19T17:36:15.094Z",
+  "generatedAt": "2026-11-19T18:06:31.945Z",
   "provenance": {
     "repo": "extend-hq/ui",
     "commit": "70fe70c6f1e1eee53954c6923f3d9f583557a57e",
@@ -11,7 +10,7 @@
     "vendoredFile": "tools/extend-reference/src/styles/extend-globals.css",
     "vendoredBodySha256": "44bf6997bde067b701806833e88db08cfa75ae62b1805b63ee9b382107b44eca",
     "vendoredBodyMarker": "@custom-variant style-vega",
-    "upstreamVerification": "verified against ../extend-ui/apps/v4/app/globals.css",
+    "upstreamVerification": "not-run",
     "tailwindThemeFile": "node_modules/.pnpm/tailwindcss@4.2.4/node_modules/tailwindcss/theme.css",
     "fonts": {
       "source": "apps/v4/lib/fonts.ts",
@@ -730,7 +729,7 @@
         "fontSize": "0.75rem",
         "fontSizePx": 12,
         "lineHeight": "calc(1 / 0.75)",
-        "lineHeightPx": "calc(1 / 0.75)",
+        "lineHeightPx": 16,
         "letterSpacing": null,
         "fontWeight": null
       },
@@ -746,7 +745,7 @@
         "fontSize": "0.875rem",
         "fontSizePx": 14,
         "lineHeight": "calc(1.25 / 0.875)",
-        "lineHeightPx": "calc(1.25 / 0.875)",
+        "lineHeightPx": 20,
         "letterSpacing": null,
         "fontWeight": null
       },
@@ -762,7 +761,7 @@
         "fontSize": "1rem",
         "fontSizePx": 16,
         "lineHeight": "calc(1.5 / 1)",
-        "lineHeightPx": "calc(1.5 / 1)",
+        "lineHeightPx": 24,
         "letterSpacing": null,
         "fontWeight": null
       },
@@ -778,7 +777,7 @@
         "fontSize": "1.125rem",
         "fontSizePx": 18,
         "lineHeight": "calc(1.75 / 1.125)",
-        "lineHeightPx": "calc(1.75 / 1.125)",
+        "lineHeightPx": 28,
         "letterSpacing": null,
         "fontWeight": null
       },
@@ -794,7 +793,7 @@
         "fontSize": "1.25rem",
         "fontSizePx": 20,
         "lineHeight": "calc(1.75 / 1.25)",
-        "lineHeightPx": "calc(1.75 / 1.25)",
+        "lineHeightPx": 28,
         "letterSpacing": null,
         "fontWeight": null
       },
@@ -810,7 +809,7 @@
         "fontSize": "1.5rem",
         "fontSizePx": 24,
         "lineHeight": "calc(2 / 1.5)",
-        "lineHeightPx": "calc(2 / 1.5)",
+        "lineHeightPx": 32,
         "letterSpacing": null,
         "fontWeight": null
       },
@@ -826,7 +825,7 @@
         "fontSize": "1.875rem",
         "fontSizePx": 30,
         "lineHeight": "calc(2.25 / 1.875)",
-        "lineHeightPx": "calc(2.25 / 1.875)",
+        "lineHeightPx": 36,
         "letterSpacing": null,
         "fontWeight": null
       },
@@ -842,7 +841,7 @@
         "fontSize": "2.25rem",
         "fontSizePx": 36,
         "lineHeight": "calc(2.5 / 2.25)",
-        "lineHeightPx": "calc(2.5 / 2.25)",
+        "lineHeightPx": 40,
         "letterSpacing": null,
         "fontWeight": null
       },
@@ -1126,11 +1125,374 @@
       }
     ]
   },
+  "tokenLayer": {
+    "sources": [
+      "packages/vue-ui/src/styles/tokens.css",
+      "packages/vue-ui/src/styles/theme.css"
+    ],
+    "note": "Compares the pinned reference values with the #156 `--office-*` layer (packages/vue-ui/src/styles/tokens.css + theme.css). Color rows also compare the resolved light/dark values with a 2/255 per-channel tolerance.",
+    "entries": [
+      {
+        "group": "radius",
+        "token": "--radius",
+        "extend": {
+          "raw": "0.625rem",
+          "px": 10
+        },
+        "office": {
+          "raw": "0.625rem",
+          "px": 10
+        },
+        "match": true
+      },
+      {
+        "group": "radius",
+        "token": "--radius-sm",
+        "extend": {
+          "raw": "6px",
+          "px": 6
+        },
+        "office": {
+          "raw": "calc(var(--office-radius) * 0.6)",
+          "px": 6
+        },
+        "match": true
+      },
+      {
+        "group": "radius",
+        "token": "--radius-md",
+        "extend": {
+          "raw": "8px",
+          "px": 8
+        },
+        "office": {
+          "raw": "calc(var(--office-radius) * 0.8)",
+          "px": 8
+        },
+        "match": true
+      },
+      {
+        "group": "radius",
+        "token": "--radius-lg",
+        "extend": {
+          "raw": "10px",
+          "px": 10
+        },
+        "office": {
+          "raw": "var(--office-radius)",
+          "px": 10
+        },
+        "match": true
+      },
+      {
+        "group": "radius",
+        "token": "--radius-xl",
+        "extend": {
+          "raw": "14px",
+          "px": 14
+        },
+        "office": {
+          "raw": "calc(var(--office-radius) * 1.4)",
+          "px": 14
+        },
+        "match": true
+      },
+      {
+        "group": "radius",
+        "token": "--radius-2xl",
+        "extend": {
+          "raw": "18px",
+          "px": 18
+        },
+        "office": {
+          "raw": "calc(var(--office-radius) * 1.8)",
+          "px": 18
+        },
+        "match": true
+      },
+      {
+        "group": "radius",
+        "token": "--radius-3xl",
+        "extend": {
+          "raw": "22px",
+          "px": 22
+        },
+        "office": {
+          "raw": "calc(var(--office-radius) * 2.2)",
+          "px": 22
+        },
+        "match": true
+      },
+      {
+        "group": "radius",
+        "token": "--radius-4xl",
+        "extend": {
+          "raw": "26px",
+          "px": 26
+        },
+        "office": {
+          "raw": "calc(var(--office-radius) * 2.6)",
+          "px": 26
+        },
+        "match": true
+      },
+      {
+        "group": "ring",
+        "token": "--ring-width (button focus-visible:ring-2)",
+        "extend": {
+          "raw": "2px",
+          "px": 2
+        },
+        "office": {
+          "raw": "2px",
+          "px": 2
+        },
+        "match": true
+      },
+      {
+        "group": "ring",
+        "token": "--ring-offset-width (focus-visible:ring-offset-1)",
+        "extend": {
+          "raw": "1px",
+          "px": 1
+        },
+        "office": {
+          "raw": "1px",
+          "px": 1
+        },
+        "match": true
+      },
+      {
+        "group": "border",
+        "token": "--border-width",
+        "extend": {
+          "raw": "1px",
+          "px": 1
+        },
+        "office": {
+          "raw": "1px",
+          "px": 1
+        },
+        "match": true
+      },
+      {
+        "group": "shadow",
+        "token": "--shadow-xs",
+        "extend": {
+          "raw": "0 1px 2px 0 rgb(0 0 0 / 0.05)"
+        },
+        "office": {
+          "raw": "0 1px 2px 0 rgb(0 0 0 / 0.05)"
+        },
+        "match": true
+      },
+      {
+        "group": "shadow",
+        "token": "--shadow-sm",
+        "extend": {
+          "raw": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)"
+        },
+        "office": {
+          "raw": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)"
+        },
+        "match": true
+      },
+      {
+        "group": "typography",
+        "token": "--text-xs",
+        "extend": {
+          "raw": "0.75rem",
+          "px": 12
+        },
+        "office": {
+          "raw": "0.75rem",
+          "px": 12
+        },
+        "match": true
+      },
+      {
+        "group": "typography",
+        "token": "--leading-xs",
+        "extend": {
+          "raw": "calc(1 / 0.75)",
+          "px": 16
+        },
+        "office": {
+          "raw": "1rem",
+          "px": 16
+        },
+        "match": true
+      },
+      {
+        "group": "typography",
+        "token": "--text-sm",
+        "extend": {
+          "raw": "0.875rem",
+          "px": 14
+        },
+        "office": {
+          "raw": "0.875rem",
+          "px": 14
+        },
+        "match": true
+      },
+      {
+        "group": "typography",
+        "token": "--leading-sm",
+        "extend": {
+          "raw": "calc(1.25 / 0.875)",
+          "px": 20
+        },
+        "office": {
+          "raw": "1.25rem",
+          "px": 20
+        },
+        "match": true
+      },
+      {
+        "group": "typography",
+        "token": "--text-base",
+        "extend": {
+          "raw": "1rem",
+          "px": 16
+        },
+        "office": {
+          "raw": "1rem",
+          "px": 16
+        },
+        "match": true
+      },
+      {
+        "group": "typography",
+        "token": "--leading-base",
+        "extend": {
+          "raw": "calc(1.5 / 1)",
+          "px": 24
+        },
+        "office": {
+          "raw": "1.5rem",
+          "px": 24
+        },
+        "match": true
+      },
+      {
+        "group": "typography",
+        "token": "--text-lg",
+        "extend": {
+          "raw": "1.125rem",
+          "px": 18
+        },
+        "office": {
+          "raw": "1.125rem",
+          "px": 18
+        },
+        "match": true
+      },
+      {
+        "group": "typography",
+        "token": "--leading-lg",
+        "extend": {
+          "raw": "calc(1.75 / 1.125)",
+          "px": 28
+        },
+        "office": {
+          "raw": "1.75rem",
+          "px": 28
+        },
+        "match": true
+      },
+      {
+        "group": "typography",
+        "token": "--text-xl",
+        "extend": {
+          "raw": "1.25rem",
+          "px": 20
+        },
+        "office": {
+          "raw": "1.25rem",
+          "px": 20
+        },
+        "match": true
+      },
+      {
+        "group": "typography",
+        "token": "--leading-xl",
+        "extend": {
+          "raw": "calc(1.75 / 1.25)",
+          "px": 28
+        },
+        "office": {
+          "raw": "1.75rem",
+          "px": 28
+        },
+        "match": true
+      },
+      {
+        "group": "control",
+        "token": "control-height (button h-9)",
+        "extend": {
+          "raw": "2.25rem",
+          "px": 36
+        },
+        "office": {
+          "raw": "2.25rem",
+          "px": 36
+        },
+        "match": true
+      },
+      {
+        "group": "control",
+        "token": "control-height-sm (button sm:h-8)",
+        "extend": {
+          "raw": "2rem",
+          "px": 32
+        },
+        "office": {
+          "raw": "2rem",
+          "px": 32
+        },
+        "match": true
+      },
+      {
+        "group": "control",
+        "token": "control-padding-inline (px-[calc(--spacing(3)-1px)])",
+        "extend": {
+          "raw": "11px",
+          "px": 11
+        },
+        "office": {
+          "raw": "0.75rem",
+          "px": 12
+        },
+        "note": "Extend subtracts the 1px border from the 12px spacing step; the office token is the full inline inset, so a 12px token + 1px border renders 13px unless the consumer subtracts it.",
+        "match": false
+      },
+      {
+        "group": "control",
+        "token": "control-gap (gap-2)",
+        "extend": {
+          "raw": "8px",
+          "px": 8
+        },
+        "office": {
+          "raw": "0.5rem",
+          "px": 8
+        },
+        "match": true
+      }
+    ],
+    "summary": {
+      "total": 27,
+      "matched": 26,
+      "mismatched": 1,
+      "missing": 0
+    }
+  },
   "mapping": [
     {
       "extendToken": "--background",
       "officeToken": "--office-background",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "oklch(1 0 0)",
         "resolved": "rgb(255 255 255)",
@@ -1144,6 +1506,32 @@
         "hex": "#0a0a0a",
         "alpha": 1,
         "kind": "oklch"
+      },
+      "officeLight": {
+        "raw": "oklch(1 0 0)",
+        "resolved": "rgb(255 255 255)",
+        "hex": "#ffffff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(14.5% 0 0)",
+        "resolved": "rgb(10 10 10)",
+        "hex": "#0a0a0a",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [
         {
@@ -1160,7 +1548,7 @@
     {
       "extendToken": "--foreground",
       "officeToken": "--office-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-neutral-800)",
         "resolved": "rgb(38 38 38)",
@@ -1174,6 +1562,32 @@
         "hex": "#f5f5f5",
         "alpha": 1,
         "kind": "oklch"
+      },
+      "officeLight": {
+        "raw": "oklch(26.9% 0 0)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(97% 0 0)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [
         {
@@ -1198,7 +1612,7 @@
     {
       "extendToken": "--card",
       "officeToken": "--office-card",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-white)",
         "resolved": "rgb(255 255 255)",
@@ -1213,13 +1627,39 @@
         "alpha": 1,
         "kind": "color-mix-srgb"
       },
+      "officeLight": {
+        "raw": "oklch(1 0 0)",
+        "resolved": "rgb(255 255 255)",
+        "hex": "#ffffff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "color-mix(in srgb, var(--office-background) 98%, white)",
+        "resolved": "rgb(15 15 15)",
+        "hex": "#0f0f0f",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--card-foreground",
       "officeToken": "--office-card-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-neutral-800)",
         "resolved": "rgb(38 38 38)",
@@ -1234,13 +1674,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(26.9% 0 0)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(97% 0 0)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--popover",
       "officeToken": "--office-popover",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-white)",
         "resolved": "rgb(255 255 255)",
@@ -1254,6 +1720,32 @@
         "hex": "#0f0f0f",
         "alpha": 1,
         "kind": "color-mix-srgb"
+      },
+      "officeLight": {
+        "raw": "oklch(1 0 0)",
+        "resolved": "rgb(255 255 255)",
+        "hex": "#ffffff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "color-mix(in srgb, var(--office-background) 98%, white)",
+        "resolved": "rgb(15 15 15)",
+        "hex": "#0f0f0f",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [
         {
@@ -1266,7 +1758,7 @@
     {
       "extendToken": "--popover-foreground",
       "officeToken": "--office-popover-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-neutral-800)",
         "resolved": "rgb(38 38 38)",
@@ -1280,6 +1772,32 @@
         "hex": "#f5f5f5",
         "alpha": 1,
         "kind": "oklch"
+      },
+      "officeLight": {
+        "raw": "oklch(26.9% 0 0)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(97% 0 0)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [
         {
@@ -1292,7 +1810,7 @@
     {
       "extendToken": "--primary",
       "officeToken": "--office-primary",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-neutral-800)",
         "resolved": "rgb(38 38 38)",
@@ -1306,6 +1824,32 @@
         "hex": "#f5f5f5",
         "alpha": 1,
         "kind": "oklch"
+      },
+      "officeLight": {
+        "raw": "oklch(26.9% 0 0)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(97% 0 0)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [
         {
@@ -1330,7 +1874,7 @@
     {
       "extendToken": "--primary-foreground",
       "officeToken": "--office-primary-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-neutral-50)",
         "resolved": "rgb(250 250 250)",
@@ -1345,13 +1889,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(98.5% 0 0)",
+        "resolved": "rgb(250 250 250)",
+        "hex": "#fafafa",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(26.9% 0 0)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--secondary",
       "officeToken": "--office-secondary",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "--alpha(var(--color-black) / 4%)",
         "resolved": "rgb(0 0 0 / 0.04)",
@@ -1366,13 +1936,41 @@
         "alpha": 0.04,
         "kind": "alpha"
       },
+      "officeLight": {
+        "raw": "color-mix(in oklab, black 4%, transparent)",
+        "resolved": "rgb(0 0 0 / 0.04)",
+        "hex": "#000000",
+        "alpha": 0.04,
+        "kind": "color-mix-oklab",
+        "approximate": "mixed in sRGB; upstream mixes in oklab"
+      },
+      "officeDark": {
+        "raw": "color-mix(in oklab, white 4%, transparent)",
+        "resolved": "rgb(255 255 255 / 0.04)",
+        "hex": "#ffffff",
+        "alpha": 0.04,
+        "kind": "color-mix-oklab",
+        "approximate": "mixed in sRGB; upstream mixes in oklab"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--secondary-foreground",
       "officeToken": "--office-secondary-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-neutral-800)",
         "resolved": "rgb(38 38 38)",
@@ -1387,13 +1985,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(26.9% 0 0)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(97% 0 0)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--muted",
       "officeToken": "--office-muted",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "--alpha(var(--color-black) / 4%)",
         "resolved": "rgb(0 0 0 / 0.04)",
@@ -1407,6 +2031,34 @@
         "hex": "#ffffff",
         "alpha": 0.04,
         "kind": "alpha"
+      },
+      "officeLight": {
+        "raw": "color-mix(in oklab, black 4%, transparent)",
+        "resolved": "rgb(0 0 0 / 0.04)",
+        "hex": "#000000",
+        "alpha": 0.04,
+        "kind": "color-mix-oklab",
+        "approximate": "mixed in sRGB; upstream mixes in oklab"
+      },
+      "officeDark": {
+        "raw": "color-mix(in oklab, white 4%, transparent)",
+        "resolved": "rgb(255 255 255 / 0.04)",
+        "hex": "#ffffff",
+        "alpha": 0.04,
+        "kind": "color-mix-oklab",
+        "approximate": "mixed in sRGB; upstream mixes in oklab"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [
         {
@@ -1431,7 +2083,7 @@
     {
       "extendToken": "--muted-foreground",
       "officeToken": "--office-muted-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "color-mix( in srgb, var(--color-neutral-500) 90%, var(--color-black) )",
         "resolved": "rgb(104 104 104)",
@@ -1445,6 +2097,32 @@
         "hex": "#818181",
         "alpha": 1,
         "kind": "color-mix-srgb"
+      },
+      "officeLight": {
+        "raw": "color-mix(in srgb, oklch(55.6% 0 0) 90%, black)",
+        "resolved": "rgb(104 104 104)",
+        "hex": "#686868",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "officeDark": {
+        "raw": "color-mix(in srgb, oklch(55.6% 0 0) 90%, white)",
+        "resolved": "rgb(129 129 129)",
+        "hex": "#818181",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [
         {
@@ -1477,7 +2155,7 @@
     {
       "extendToken": "--accent",
       "officeToken": "--office-accent",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "--alpha(var(--color-black) / 4%)",
         "resolved": "rgb(0 0 0 / 0.04)",
@@ -1492,6 +2170,34 @@
         "alpha": 0.04,
         "kind": "alpha"
       },
+      "officeLight": {
+        "raw": "color-mix(in oklab, black 4%, transparent)",
+        "resolved": "rgb(0 0 0 / 0.04)",
+        "hex": "#000000",
+        "alpha": 0.04,
+        "kind": "color-mix-oklab",
+        "approximate": "mixed in sRGB; upstream mixes in oklab"
+      },
+      "officeDark": {
+        "raw": "color-mix(in oklab, white 4%, transparent)",
+        "resolved": "rgb(255 255 255 / 0.04)",
+        "hex": "#ffffff",
+        "alpha": 0.04,
+        "kind": "color-mix-oklab",
+        "approximate": "mixed in sRGB; upstream mixes in oklab"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [
         {
           "file": "packages/vue-ui/src/components/FileUpload.vue",
@@ -1503,7 +2209,7 @@
     {
       "extendToken": "--accent-foreground",
       "officeToken": "--office-accent-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-neutral-800)",
         "resolved": "rgb(38 38 38)",
@@ -1518,13 +2224,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(26.9% 0 0)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(97% 0 0)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--destructive",
       "officeToken": "--office-destructive",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-red-500)",
         "resolved": "rgb(251 44 54)",
@@ -1539,6 +2271,32 @@
         "alpha": 1,
         "kind": "color-mix-srgb"
       },
+      "officeLight": {
+        "raw": "oklch(63.7% 0.237 25.331)",
+        "resolved": "rgb(251 44 54)",
+        "hex": "#fb2c36",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "color-mix(in srgb, oklch(63.7% 0.237 25.331) 90%, white)",
+        "resolved": "rgb(251 65 74)",
+        "hex": "#fb414a",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [
         {
           "file": "packages/vue-ui/src/components/FileUpload.vue",
@@ -1550,7 +2308,7 @@
     {
       "extendToken": "--destructive-foreground",
       "officeToken": "--office-destructive-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-red-700)",
         "resolved": "rgb(193 0 7)",
@@ -1565,13 +2323,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(50.5% 0.213 27.518)",
+        "resolved": "rgb(193 0 7)",
+        "hex": "#c10007",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(70.4% 0.191 22.216)",
+        "resolved": "rgb(255 100 103)",
+        "hex": "#ff6467",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--border",
       "officeToken": "--office-border",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "--alpha(var(--color-black) / 8%)",
         "resolved": "rgb(0 0 0 / 0.08)",
@@ -1585,6 +2369,34 @@
         "hex": "#ffffff",
         "alpha": 0.06,
         "kind": "alpha"
+      },
+      "officeLight": {
+        "raw": "color-mix(in oklab, black 8%, transparent)",
+        "resolved": "rgb(0 0 0 / 0.08)",
+        "hex": "#000000",
+        "alpha": 0.08,
+        "kind": "color-mix-oklab",
+        "approximate": "mixed in sRGB; upstream mixes in oklab"
+      },
+      "officeDark": {
+        "raw": "color-mix(in oklab, white 6%, transparent)",
+        "resolved": "rgb(255 255 255 / 0.06)",
+        "hex": "#ffffff",
+        "alpha": 0.06,
+        "kind": "color-mix-oklab",
+        "approximate": "mixed in sRGB; upstream mixes in oklab"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [
         {
@@ -1617,7 +2429,7 @@
     {
       "extendToken": "--input",
       "officeToken": "--office-input",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "--alpha(var(--color-black) / 10%)",
         "resolved": "rgb(0 0 0 / 0.1)",
@@ -1632,13 +2444,41 @@
         "alpha": 0.08,
         "kind": "alpha"
       },
+      "officeLight": {
+        "raw": "color-mix(in oklab, black 10%, transparent)",
+        "resolved": "rgb(0 0 0 / 0.1)",
+        "hex": "#000000",
+        "alpha": 0.1,
+        "kind": "color-mix-oklab",
+        "approximate": "mixed in sRGB; upstream mixes in oklab"
+      },
+      "officeDark": {
+        "raw": "color-mix(in oklab, white 8%, transparent)",
+        "resolved": "rgb(255 255 255 / 0.08)",
+        "hex": "#ffffff",
+        "alpha": 0.08,
+        "kind": "color-mix-oklab",
+        "approximate": "mixed in sRGB; upstream mixes in oklab"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--ring",
       "officeToken": "--office-ring",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-neutral-400)",
         "resolved": "rgb(161 161 161)",
@@ -1653,6 +2493,32 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(70.8% 0 0)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(55.6% 0 0)",
+        "resolved": "rgb(115 115 115)",
+        "hex": "#737373",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [
         {
           "file": "packages/vue-ui/src/components/FileUpload.vue",
@@ -1664,7 +2530,7 @@
     {
       "extendToken": "--chart-1",
       "officeToken": "--office-chart-1",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-blue-300)",
         "resolved": "rgb(142 197 255)",
@@ -1678,6 +2544,32 @@
         "hex": "#8ec5ff",
         "alpha": 1,
         "kind": "oklch"
+      },
+      "officeLight": {
+        "raw": "oklch(80.9% 0.105 251.813)",
+        "resolved": "rgb(142 197 255)",
+        "hex": "#8ec5ff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(80.9% 0.105 251.813)",
+        "resolved": "rgb(142 197 255)",
+        "hex": "#8ec5ff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [],
       "currentRepoValue": null
@@ -1685,7 +2577,7 @@
     {
       "extendToken": "--chart-2",
       "officeToken": "--office-chart-2",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-blue-500)",
         "resolved": "rgb(43 127 255)",
@@ -1699,6 +2591,32 @@
         "hex": "#2b7fff",
         "alpha": 1,
         "kind": "oklch"
+      },
+      "officeLight": {
+        "raw": "oklch(62.3% 0.214 259.815)",
+        "resolved": "rgb(43 127 255)",
+        "hex": "#2b7fff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(62.3% 0.214 259.815)",
+        "resolved": "rgb(43 127 255)",
+        "hex": "#2b7fff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [],
       "currentRepoValue": null
@@ -1706,7 +2624,7 @@
     {
       "extendToken": "--chart-3",
       "officeToken": "--office-chart-3",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-blue-600)",
         "resolved": "rgb(21 93 252)",
@@ -1720,6 +2638,32 @@
         "hex": "#155dfc",
         "alpha": 1,
         "kind": "oklch"
+      },
+      "officeLight": {
+        "raw": "oklch(54.6% 0.245 262.881)",
+        "resolved": "rgb(21 93 252)",
+        "hex": "#155dfc",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(54.6% 0.245 262.881)",
+        "resolved": "rgb(21 93 252)",
+        "hex": "#155dfc",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [],
       "currentRepoValue": null
@@ -1727,7 +2671,7 @@
     {
       "extendToken": "--chart-4",
       "officeToken": "--office-chart-4",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-blue-700)",
         "resolved": "rgb(20 71 230)",
@@ -1741,6 +2685,32 @@
         "hex": "#1447e6",
         "alpha": 1,
         "kind": "oklch"
+      },
+      "officeLight": {
+        "raw": "oklch(48.8% 0.243 264.376)",
+        "resolved": "rgb(20 71 230)",
+        "hex": "#1447e6",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(48.8% 0.243 264.376)",
+        "resolved": "rgb(20 71 230)",
+        "hex": "#1447e6",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [],
       "currentRepoValue": null
@@ -1748,7 +2718,7 @@
     {
       "extendToken": "--chart-5",
       "officeToken": "--office-chart-5",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-blue-800)",
         "resolved": "rgb(25 60 184)",
@@ -1763,13 +2733,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(42.4% 0.199 265.638)",
+        "resolved": "rgb(25 60 184)",
+        "hex": "#193cb8",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(42.4% 0.199 265.638)",
+        "resolved": "rgb(25 60 184)",
+        "hex": "#193cb8",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--sidebar",
       "officeToken": "--office-sidebar",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-neutral-50)",
         "resolved": "rgb(250 250 250)",
@@ -1784,13 +2780,39 @@
         "alpha": 1,
         "kind": "color-mix-srgb"
       },
+      "officeLight": {
+        "raw": "oklch(98.5% 0 0)",
+        "resolved": "rgb(250 250 250)",
+        "hex": "#fafafa",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "color-mix(in srgb, oklch(14.5% 0 0) 97%, white)",
+        "resolved": "rgb(17 17 17)",
+        "hex": "#111111",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--sidebar-foreground",
       "officeToken": "--office-sidebar-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "color-mix( in srgb, var(--color-neutral-800) 64%, var(--sidebar) )",
         "resolved": "rgb(114 114 114)",
@@ -1805,13 +2827,39 @@
         "alpha": 1,
         "kind": "color-mix-srgb"
       },
+      "officeLight": {
+        "raw": "color-mix( in srgb, oklch(26.9% 0 0) 64%, var(--office-sidebar) )",
+        "resolved": "rgb(114 114 114)",
+        "hex": "#727272",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "officeDark": {
+        "raw": "color-mix( in srgb, oklch(97% 0 0) 64%, var(--office-sidebar) )",
+        "resolved": "rgb(163 163 163)",
+        "hex": "#a3a3a3",
+        "alpha": 1,
+        "kind": "color-mix-srgb"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--sidebar-primary",
       "officeToken": "--office-sidebar-primary",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-neutral-800)",
         "resolved": "rgb(38 38 38)",
@@ -1826,13 +2874,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(26.9% 0 0)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(97% 0 0)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--sidebar-primary-foreground",
       "officeToken": "--office-sidebar-primary-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-neutral-50)",
         "resolved": "rgb(250 250 250)",
@@ -1847,13 +2921,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(98.5% 0 0)",
+        "resolved": "rgb(250 250 250)",
+        "hex": "#fafafa",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(26.9% 0 0)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--sidebar-accent",
       "officeToken": "--office-sidebar-accent",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "--alpha(var(--color-black) / 4%)",
         "resolved": "rgb(0 0 0 / 0.04)",
@@ -1868,13 +2968,41 @@
         "alpha": 0.04,
         "kind": "alpha"
       },
+      "officeLight": {
+        "raw": "color-mix(in oklab, black 4%, transparent)",
+        "resolved": "rgb(0 0 0 / 0.04)",
+        "hex": "#000000",
+        "alpha": 0.04,
+        "kind": "color-mix-oklab",
+        "approximate": "mixed in sRGB; upstream mixes in oklab"
+      },
+      "officeDark": {
+        "raw": "color-mix(in oklab, white 4%, transparent)",
+        "resolved": "rgb(255 255 255 / 0.04)",
+        "hex": "#ffffff",
+        "alpha": 0.04,
+        "kind": "color-mix-oklab",
+        "approximate": "mixed in sRGB; upstream mixes in oklab"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--sidebar-accent-foreground",
       "officeToken": "--office-sidebar-accent-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-neutral-800)",
         "resolved": "rgb(38 38 38)",
@@ -1889,13 +3017,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(26.9% 0 0)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(97% 0 0)",
+        "resolved": "rgb(245 245 245)",
+        "hex": "#f5f5f5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--sidebar-border",
       "officeToken": "--office-sidebar-border",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "--alpha(var(--color-black) / 6%)",
         "resolved": "rgb(0 0 0 / 0.06)",
@@ -1910,13 +3064,41 @@
         "alpha": 0.05,
         "kind": "alpha"
       },
+      "officeLight": {
+        "raw": "color-mix(in oklab, black 6%, transparent)",
+        "resolved": "rgb(0 0 0 / 0.06)",
+        "hex": "#000000",
+        "alpha": 0.06,
+        "kind": "color-mix-oklab",
+        "approximate": "mixed in sRGB; upstream mixes in oklab"
+      },
+      "officeDark": {
+        "raw": "color-mix(in oklab, white 5%, transparent)",
+        "resolved": "rgb(255 255 255 / 0.05)",
+        "hex": "#ffffff",
+        "alpha": 0.05,
+        "kind": "color-mix-oklab",
+        "approximate": "mixed in sRGB; upstream mixes in oklab"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--sidebar-ring",
       "officeToken": "--office-sidebar-ring",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-neutral-400)",
         "resolved": "rgb(161 161 161)",
@@ -1931,13 +3113,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(70.8% 0 0)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(70.8% 0 0)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--surface",
       "officeToken": "--office-surface",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "oklch(0.98 0 0)",
         "resolved": "rgb(248 248 248)",
@@ -1952,13 +3160,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(98% 0 0)",
+        "resolved": "rgb(248 248 248)",
+        "hex": "#f8f8f8",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(20% 0 0)",
+        "resolved": "rgb(22 22 22)",
+        "hex": "#161616",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--surface-foreground",
       "officeToken": "--office-surface-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--foreground)",
         "resolved": "rgb(38 38 38)",
@@ -1973,13 +3207,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "var(--office-foreground)",
+        "resolved": "rgb(38 38 38)",
+        "hex": "#262626",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(70.8% 0 0)",
+        "resolved": "rgb(161 161 161)",
+        "hex": "#a1a1a1",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--code",
       "officeToken": "--office-code",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "missing-in-token-layer",
       "extendLight": {
         "raw": "var(--surface)",
         "resolved": "rgb(248 248 248)",
@@ -1994,13 +3254,28 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": null,
+      "officeDark": null,
+      "lightDelta": {
+        "comparable": false,
+        "matches": false,
+        "maxChannelDelta": null,
+        "alphaDelta": null
+      },
+      "darkDelta": {
+        "comparable": false,
+        "matches": false,
+        "maxChannelDelta": null,
+        "alphaDelta": null
+      },
       "currentRepoUsage": [],
-      "currentRepoValue": null
+      "currentRepoValue": null,
+      "note": "#156 does not declare --office-code; the pinned reference does declare --code."
     },
     {
       "extendToken": "--code-foreground",
       "officeToken": "--office-code-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "missing-in-token-layer",
       "extendLight": {
         "raw": "var(--surface-foreground)",
         "resolved": "rgb(38 38 38)",
@@ -2015,13 +3290,28 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": null,
+      "officeDark": null,
+      "lightDelta": {
+        "comparable": false,
+        "matches": false,
+        "maxChannelDelta": null,
+        "alphaDelta": null
+      },
+      "darkDelta": {
+        "comparable": false,
+        "matches": false,
+        "maxChannelDelta": null,
+        "alphaDelta": null
+      },
       "currentRepoUsage": [],
-      "currentRepoValue": null
+      "currentRepoValue": null,
+      "note": "#156 does not declare --office-code-foreground; the pinned reference does declare --code-foreground."
     },
     {
       "extendToken": "--code-highlight",
       "officeToken": "--office-code-highlight",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "missing-in-token-layer",
       "extendLight": {
         "raw": "oklch(0.96 0 0)",
         "resolved": "rgb(242 242 242)",
@@ -2036,13 +3326,28 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": null,
+      "officeDark": null,
+      "lightDelta": {
+        "comparable": false,
+        "matches": false,
+        "maxChannelDelta": null,
+        "alphaDelta": null
+      },
+      "darkDelta": {
+        "comparable": false,
+        "matches": false,
+        "maxChannelDelta": null,
+        "alphaDelta": null
+      },
       "currentRepoUsage": [],
-      "currentRepoValue": null
+      "currentRepoValue": null,
+      "note": "#156 does not declare --office-code-highlight; the pinned reference does declare --code-highlight."
     },
     {
       "extendToken": "--code-number",
       "officeToken": "--office-code-number",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "missing-in-token-layer",
       "extendLight": {
         "raw": "oklch(0.56 0 0)",
         "resolved": "rgb(116 116 116)",
@@ -2057,13 +3362,28 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": null,
+      "officeDark": null,
+      "lightDelta": {
+        "comparable": false,
+        "matches": false,
+        "maxChannelDelta": null,
+        "alphaDelta": null
+      },
+      "darkDelta": {
+        "comparable": false,
+        "matches": false,
+        "maxChannelDelta": null,
+        "alphaDelta": null
+      },
       "currentRepoUsage": [],
-      "currentRepoValue": null
+      "currentRepoValue": null,
+      "note": "#156 does not declare --office-code-number; the pinned reference does declare --code-number."
     },
     {
       "extendToken": "--selection",
       "officeToken": "--office-selection",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "oklch(0.145 0 0)",
         "resolved": "rgb(10 10 10)",
@@ -2078,13 +3398,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(14.5% 0 0)",
+        "resolved": "rgb(10 10 10)",
+        "hex": "#0a0a0a",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(92.2% 0 0)",
+        "resolved": "rgb(229 229 229)",
+        "hex": "#e5e5e5",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--selection-foreground",
       "officeToken": "--office-selection-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "oklch(1 0 0)",
         "resolved": "rgb(255 255 255)",
@@ -2099,13 +3445,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(1 0 0)",
+        "resolved": "rgb(255 255 255)",
+        "hex": "#ffffff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(20.5% 0 0)",
+        "resolved": "rgb(23 23 23)",
+        "hex": "#171717",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--info",
       "officeToken": "--office-info",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-blue-500)",
         "resolved": "rgb(43 127 255)",
@@ -2120,13 +3492,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(62.3% 0.214 259.815)",
+        "resolved": "rgb(43 127 255)",
+        "hex": "#2b7fff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(62.3% 0.214 259.815)",
+        "resolved": "rgb(43 127 255)",
+        "hex": "#2b7fff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--info-foreground",
       "officeToken": "--office-info-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-blue-700)",
         "resolved": "rgb(20 71 230)",
@@ -2141,13 +3539,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(48.8% 0.243 264.376)",
+        "resolved": "rgb(20 71 230)",
+        "hex": "#1447e6",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(70.7% 0.165 254.624)",
+        "resolved": "rgb(81 162 255)",
+        "hex": "#51a2ff",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--success",
       "officeToken": "--office-success",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-emerald-500)",
         "resolved": "rgb(0 188 125)",
@@ -2162,13 +3586,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(69.6% 0.17 162.48)",
+        "resolved": "rgb(0 188 125)",
+        "hex": "#00bc7d",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(69.6% 0.17 162.48)",
+        "resolved": "rgb(0 188 125)",
+        "hex": "#00bc7d",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--success-foreground",
       "officeToken": "--office-success-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-emerald-700)",
         "resolved": "rgb(0 122 85)",
@@ -2183,13 +3633,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(50.8% 0.118 165.612)",
+        "resolved": "rgb(0 122 85)",
+        "hex": "#007a55",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(76.5% 0.177 163.223)",
+        "resolved": "rgb(0 212 146)",
+        "hex": "#00d492",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--warning",
       "officeToken": "--office-warning",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-amber-500)",
         "resolved": "rgb(254 154 0)",
@@ -2204,13 +3680,39 @@
         "alpha": 1,
         "kind": "oklch"
       },
+      "officeLight": {
+        "raw": "oklch(76.9% 0.188 70.08)",
+        "resolved": "rgb(254 154 0)",
+        "hex": "#fe9a00",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(76.9% 0.188 70.08)",
+        "resolved": "rgb(254 154 0)",
+        "hex": "#fe9a00",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
       "currentRepoUsage": [],
       "currentRepoValue": null
     },
     {
       "extendToken": "--warning-foreground",
       "officeToken": "--office-warning-foreground",
-      "officeTokenStatus": "pending (#156 adds the --office-* layer; no --office-* custom property exists in the repo yet)",
+      "officeTokenStatus": "present",
       "extendLight": {
         "raw": "var(--color-amber-700)",
         "resolved": "rgb(187 77 0)",
@@ -2224,6 +3726,32 @@
         "hex": "#ffb900",
         "alpha": 1,
         "kind": "oklch"
+      },
+      "officeLight": {
+        "raw": "oklch(55.5% 0.163 48.998)",
+        "resolved": "rgb(187 77 0)",
+        "hex": "#bb4d00",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "officeDark": {
+        "raw": "oklch(82.8% 0.189 84.429)",
+        "resolved": "rgb(255 185 0)",
+        "hex": "#ffb900",
+        "alpha": 1,
+        "kind": "oklch"
+      },
+      "lightDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
+      },
+      "darkDelta": {
+        "comparable": true,
+        "matches": true,
+        "maxChannelDelta": 0,
+        "alphaDelta": 0
       },
       "currentRepoUsage": [],
       "currentRepoValue": null
