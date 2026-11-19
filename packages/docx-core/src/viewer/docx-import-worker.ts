@@ -1,6 +1,8 @@
 import { buildDocModel } from "../engine/doc-model";
 import { parseDocx } from "../engine/ooxml-core";
 import { setWasmSource } from "../engine/wasm";
+import { buildDocumentSourceGraph } from "../blocks/source-graph";
+import type { DocumentSourceGraph } from "../blocks/source-graph";
 import { importOpenDocumentBuffer, isOpenDocumentBytes } from "./open-document";
 import {
   OfficeLoadError,
@@ -119,12 +121,21 @@ self.addEventListener(
         parseMs: parsedAt - startedAt,
         buildModelMs: finishedAt - parsedAt,
       };
+      let sourceGraph: DocumentSourceGraph | undefined;
+      if (request.sourceGraph) {
+        try {
+          sourceGraph = buildDocumentSourceGraph(pkg);
+        } catch {
+          // An optional diagnostic must not turn a successful import into a failure.
+        }
+      }
       const response: DocxImportWorkerResponse = {
         id: request.id,
         type: "success",
         package: pkg,
         model,
         timings,
+        ...(sourceGraph ? { sourceGraph } : {}),
       };
       self.postMessage(response);
     } catch (error) {

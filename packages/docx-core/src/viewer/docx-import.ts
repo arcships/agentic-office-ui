@@ -2,6 +2,10 @@ import type { DocModel } from "../engine/types";
 import type { OoxmlPackage } from "../engine/ooxml-core";
 import { initWasm } from "../engine/wasm";
 import {
+  buildDocumentSourceGraph,
+  type DocumentSourceGraph,
+} from "../blocks/source-graph";
+import {
   OfficeLoadError,
   validateOfficeArchive,
 } from "@arcships/office-runtime";
@@ -120,6 +124,12 @@ export interface DocxImportOptions {
   /** Snapshot into this import call; runtime callers normally configure it once. */
   limits?: DocxRuntimeLimits;
   onDiagnostic?: (event: DocxImportDiagnostic) => void;
+  /**
+   * Receives the source graph after a successful DOCX import. The graph is
+   * large (one node per XML construct), so it is built only when a callback is
+   * configured. Diagnostics never change the import result.
+   */
+  onSourceGraph?: (graph: DocumentSourceGraph) => void;
   /** Supplied by an instance runtime; direct calls receive a unique id. */
   requestId?: string;
 }
@@ -136,6 +146,8 @@ export interface DocxImportWorkerRequest {
   buffer: ArrayBuffer;
   wasmSource: WorkerWasmSource;
   limits: Readonly<DocxRuntimeLimits>;
+  /** Build the optional source graph in the Worker rather than the host. */
+  sourceGraph?: boolean;
 }
 
 export interface DocxImportWorkerSuccessResponse {
@@ -144,6 +156,7 @@ export interface DocxImportWorkerSuccessResponse {
   package: OoxmlPackage;
   model: DocModel;
   timings: DocxImportWorkerTimings;
+  sourceGraph?: DocumentSourceGraph;
 }
 
 export interface DocxImportWorkerErrorResponse {
@@ -322,6 +335,27 @@ function reportDiagnostic(options: DocxImportOptions, event: DocxImportDiagnosti
   }
 }
 
+function reportSourceGraph(
+  options: DocxImportOptions,
+  graph: DocumentSourceGraph | undefined,
+): void {
+  if (!graph || !options.onSourceGraph) return;
+  try {
+    options.onSourceGraph(graph);
+  } catch {
+    // Diagnostics must not change a document loading result.
+  }
+}
+
+function reportPackageSourceGraph(options: DocxImportOptions, pkg: OoxmlPackage): void {
+  if (!options.onSourceGraph) return;
+  try {
+    reportSourceGraph(options, buildDocumentSourceGraph(pkg));
+  } catch {
+    // A source graph is optional diagnostics; never fail the import for it.
+  }
+}
+
 function isFallbackAllowed(buffer: ArrayBuffer, options: DocxImportOptions): boolean {
   const maxBytes = options.mainThreadFallbackMaxBytes ?? 0;
   return (
@@ -466,6 +500,7 @@ async function importDocxOnMainThread(
       wasmUrl: typeof wasmSource === "string" ? wasmSource : undefined,
       timings: result.timings,
     });
+    reportPackageSourceGraph(options, pkg);
     return result;
   } catch (error) {
     let normalized = toDocxImportError(error);
@@ -727,6 +762,7 @@ export async function importDocxBuffer(
         workerUrl: options.workerUrl,
         timings: response.timings,
       });
+      reportSourceGraph(options, response.sourceGraph);
       settle(() =>
         resolve({
           package: response.package,
@@ -749,6 +785,7 @@ export async function importDocxBuffer(
         buffer,
         wasmSource,
         limits,
+        ...(options.onSourceGraph ? { sourceGraph: true } : {}),
       };
       const transfer = options.transferBuffer ? [buffer] : [];
       worker.postMessage(request, transfer);

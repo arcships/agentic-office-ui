@@ -25,6 +25,7 @@ import {
 } from "./resource-limits";
 import { bundledDocxWasmUrl } from "./viewer/bundled-assets";
 import type { WorkerWasmSource } from "./viewer/wasm-source";
+import type { DocumentSourceGraph } from "./blocks/source-graph";
 
 export { bundledDocxWasmUrl } from "./viewer/bundled-assets";
 export { DocxImportError } from "./viewer/docx-import";
@@ -38,6 +39,14 @@ export type {
   DocxImportWorkerTimings,
 } from "./viewer/docx-import";
 export type { WorkerWasmSource } from "./viewer/wasm-source";
+export type {
+  DocumentSourceAsset,
+  DocumentSourceGraph,
+  DocumentSourcePart,
+  PreservedFeature,
+  SourceAttribute,
+  SourceElement,
+} from "./blocks/source-graph";
 
 export interface DocxFileLike {
   readonly name?: string;
@@ -80,6 +89,11 @@ export interface DocxRuntimeConfig {
   /** Per-instance input, archive, XML, model and parsing budgets. */
   limits?: DocxRuntimeLimits;
   onDiagnostic?: (event: DocxImportDiagnostic) => void;
+  /**
+   * Receives the parsed package's source graph after a successful import. The
+   * graph is built only when this callback (or a per-call callback) is set.
+   */
+  onSourceGraph?: (graph: DocumentSourceGraph) => void;
 }
 
 export interface DocxRuntimeLoader {
@@ -189,6 +203,10 @@ export function createDocxRuntime(config: DocxRuntimeConfig = {}): DocxRuntime {
       try { runtimeConfig.onDiagnostic?.(runtimeEvent); } catch { /* diagnostics are isolated */ }
       try { options.onDiagnostic?.(runtimeEvent); } catch { /* diagnostics are isolated */ }
     };
+    const notifySourceGraph = (graph: DocumentSourceGraph): void => {
+      try { runtimeConfig.onSourceGraph?.(graph); } catch { /* diagnostics are isolated */ }
+      try { options.onSourceGraph?.(graph); } catch { /* diagnostics are isolated */ }
+    };
     return importDocxBuffer(buffer, {
       ...options,
       signal,
@@ -202,6 +220,8 @@ export function createDocxRuntime(config: DocxRuntimeConfig = {}): DocxRuntime {
         options.mainThreadFallbackMaxBytes ?? runtimeConfig.mainThreadFallbackMaxBytes,
       limits: runtimeConfig.limits,
       onDiagnostic: notify,
+      onSourceGraph:
+        runtimeConfig.onSourceGraph || options.onSourceGraph ? notifySourceGraph : undefined,
     });
   };
 
