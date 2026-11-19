@@ -65,6 +65,7 @@ const suites = {
       "tests/unit/office-runtime.test.mjs",
       "tests/unit/viewer-keys.test.mjs",
       "tests/unit/vue-ui-design-tokens.test.mjs",
+      "tests/unit/extend-parity-harness.test.mjs",
       "tests/unit/runtime-demo-limits.test.mjs",
       "tests/unit/office-interaction.test.mjs",
       "tests/unit/i18n.test.mjs",
