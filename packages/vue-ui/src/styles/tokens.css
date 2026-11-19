@@ -15,6 +15,7 @@
  *   --primary (neutral-800)        -> --office-primary
  *   focus ring (2px)               -> --office-ring-width
  *   --shadow-xs / --shadow-sm      -> --office-shadow-xs / --office-shadow-sm
+ *   --shadow-md                    -> --office-shadow-md
  *
  * Scope: every declaration lives under `[data-office-theme]`. Importing this
  * file does not touch `:root`, `html` or `body`, so a host application keeps
@@ -62,6 +63,7 @@
   --office-ring-offset-width: 1px;
   --office-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --office-shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --office-shadow-md: 0 4px 6px -1px oklab(0 0 0 / 0.1), 0 2px 4px -2px oklab(0 0 0 / 0.1);
 
   /* ── Icons ───────────────────────────────────────────────────────────── */
   --office-icon-size: 1rem;
