@@ -12,6 +12,8 @@
 | 文档 | 用途 |
 |---|---|
 | [design/office-theme.md](design/office-theme.md) | Office 设计 token、light/dark/system 主题、Geist 字体与 Lucide 图标适配（0.8） |
+| [design/extend-parity-harness.md](design/extend-parity-harness.md) | Extend UI 对照 harness：矩阵、阈值、DOM 协议、产物与各 issue 的 delta（#155） |
+| [design/extend-tokens.md](design/extend-tokens.md) | `docs/design/extend-tokens.json` 的生成方式、解析规则与 `--office-*` 映射差异（#155） |
 
 ## 使用者文档
 
