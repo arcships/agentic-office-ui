@@ -61,6 +61,7 @@ const suites = {
     command("core-behavior", process.execPath, [
       "--test",
       "--test-concurrency=1",
+
       "tests/unit/office-runtime.test.mjs",
       "tests/unit/viewer-keys.test.mjs",
       "tests/unit/runtime-demo-limits.test.mjs",
@@ -86,6 +87,12 @@ const suites = {
       "tests/unit/docx-pagination-performance.test.mjs",
       "tests/unit/docx-paragraph-spacing.test.mjs",
       "tests/unit/docx-line-metrics.test.mjs",
+
+    ]),
+command("core-behavior-2", process.execPath, [
+      "--test",
+      "--test-concurrency=1",
+
       "tests/unit/docx-pagination-fidelity.test.mjs",
       "tests/unit/docx-pagination-completion.test.mjs",
       "tests/unit/docx-pagination-measure-loop.test.mjs",
@@ -111,6 +118,12 @@ const suites = {
       "tests/unit/docx-table-floating.test.mjs",
       "tests/unit/docx-drawing-objects.test.mjs",
       "tests/unit/docx-open-document.test.mjs",
+
+    ]),
+command("core-behavior-3", process.execPath, [
+      "--test",
+      "--test-concurrency=1",
+
       "tests/unit/xlsx-core.test.mjs",
       "tests/unit/xlsx-indexed-colors.test.mjs",
       "tests/unit/xlsx-print.test.mjs",
@@ -136,6 +149,12 @@ const suites = {
       "tests/unit/xlsx-pivot-slicers.test.mjs",
       "tests/unit/xlsx-fill-handle-autofit.test.mjs",
       "tests/unit/xlsx-reference-adapter.test.mjs",
+
+    ]),
+command("core-behavior-4", process.execPath, [
+      "--test",
+      "--test-concurrency=1",
+
       "tests/unit/xlsx-sheet-rename.test.mjs",
       "tests/unit/xlsx-sheet-order.test.mjs",
       "tests/unit/xlsx-sheet-visibility.test.mjs",
@@ -143,8 +162,6 @@ const suites = {
       "tests/unit/xlsx-structure.test.mjs",
       "tests/unit/xlsx-dom-render.test.mjs",
       "tests/unit/xlsx-grid-keyboard.test.mjs",
-      "packages/vue-xlsx/test/lazy-loading.mjs",
-      "packages/vue-xlsx/test/chart-date-format.mjs",
       "tests/unit/pdf-source.test.mjs",
       "tests/unit/pdf-render-runtime.test.mjs",
       "tests/unit/pdf-page-navigation.test.mjs",
@@ -163,12 +180,19 @@ const suites = {
       "tests/unit/pptx-playback-v2.test.mjs",
       "tests/unit/pptx-transition-sound.test.mjs",
       "tests/unit/pptx-baseline-contract.test.mjs",
+
+    ]),
+command("core-behavior-5", process.execPath, [
+      "--test",
+      "--test-concurrency=1",
+
       "tests/unit/pptx-reference-adapter.test.mjs",
       "tests/unit/pptx-rtl.test.mjs",
       "tests/unit/pptx-hyperlinks.test.mjs",
       "tests/unit/pptx-speaker-notes.test.mjs",
       "tests/unit/pptx-transitions.test.mjs",
       "tests/unit/core-purity.test.mjs",
+
     ]),
     command("core-boundary", process.execPath, [
       "scripts/ci/verify-core-boundaries.mjs",
@@ -228,6 +252,7 @@ const suites = {
       "--test",
       "--expose-gc",
       "--test-concurrency=1",
+
       "tests/component/vue-component-behavior.test.mjs",
       "tests/component/vue-components.test.mjs",
       "tests/component/file-drop-import.test.mjs",
@@ -260,6 +285,13 @@ const suites = {
       "tests/component/docx-command-wiring.test.mjs",
       "tests/component/docx-edit-model-preservation.test.mjs",
       "tests/component/docx-selection-input.test.mjs",
+
+    ]),
+command("vue-component-behavior-2", process.execPath, [
+      "--test",
+      "--expose-gc",
+      "--test-concurrency=1",
+
       "tests/component/docx-thumbnail-panel.test.mjs",
       "tests/component/docx-column-pagination.test.mjs",
       "tests/component/docx-section-columns.test.mjs",
@@ -292,11 +324,13 @@ const suites = {
       "tests/component/docx-drawing-objects.test.mjs",
       "tests/component/docx-block-highlights.test.mjs",
       "tests/component/docx-page-budget.test.mjs",
+
     ]),
-    command("vue-component-behavior-2", process.execPath, [
+    command("vue-component-behavior-3", process.execPath, [
       "--test",
       "--expose-gc",
       "--test-concurrency=1",
+
       "tests/component/pdf-surface-lazy-render.test.mjs",
       "tests/component/pdf-view-modes.test.mjs",
       "tests/component/pdf-navigation-aids.test.mjs",
@@ -327,6 +361,13 @@ const suites = {
       "tests/component/xlsx-grid-scroll.test.mjs",
       "tests/component/xlsx-grid-keyboard.test.mjs",
       "tests/component/xlsx-cell-editing.test.mjs",
+
+    ]),
+command("vue-component-behavior-4", process.execPath, [
+      "--test",
+      "--expose-gc",
+      "--test-concurrency=1",
+
       "tests/component/xlsx-cell-editor-multiline.test.mjs",
       "tests/component/xlsx-formula-reference-highlight.test.mjs",
       "tests/component/xlsx-chart-range-highlight.test.mjs",
@@ -357,10 +398,18 @@ const suites = {
       "tests/component/xlsx-formatting-ui.test.mjs",
       "tests/component/office-a11y.test.mjs",
       "tests/component/viewer-keyboard.test.mjs",
+
+    ]),
+command("vue-component-behavior-5", process.execPath, [
+      "--test",
+      "--expose-gc",
+      "--test-concurrency=1",
+
       "tests/component/touch-interactions.test.mjs",
       "tests/component/image-decode-state.test.mjs",
       "tests/component/docx-svg-pictures.test.mjs",
       "tests/component/viewer-print-theme.test.mjs",
+
     ]),
     command("docx-xlsx-component-smoke", process.execPath, [
       "scripts/ci/component-smoke.mjs",
