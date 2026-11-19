@@ -118,10 +118,69 @@ def navigate_ready(page) -> None:
           && document.querySelectorAll('[data-testid="editor-paragraph"]').length >= 3""",
         timeout=30_000,
     )
-    acceptance_panel = page.get_by_test_id("editor-acceptance-panel")
-    if acceptance_panel.get_attribute("open") is None:
-        acceptance_panel.locator("summary").click()
-    acceptance_panel.locator(".acceptance-actions").wait_for(state="visible")
+    # Acceptance drives the real toolbar. The former "自动化验收入口" buttons
+    # called insertTableRow/setImageWrapMode directly, so the toolbar and the
+    # pointer drag/resize paths were never exercised.
+    page.get_by_test_id("docx-editor-toolbar").wait_for(state="visible", timeout=30_000)
+
+
+def set_dom_text_range(locator, start: int, end: int) -> None:
+    locator.evaluate(
+        """(element, offsets) => {
+          const textNodes = [];
+          const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+          let current = walker.nextNode();
+          while (current) {
+            const parent = current.parentElement;
+            if (!parent?.closest('[data-docx-numbering-label="true"]')) textNodes.push(current);
+            current = walker.nextNode();
+          }
+          const resolve = (offset) => {
+            let remaining = offset;
+            for (const node of textNodes) {
+              const length = node.textContent?.length || 0;
+              if (remaining <= length) return {node, offset: remaining};
+              remaining -= length;
+            }
+            const node = textNodes[textNodes.length - 1];
+            if (!node) return {node: element, offset: 0};
+            return {node, offset: node.textContent?.length || 0};
+          };
+          const selection = window.getSelection();
+          const range = document.createRange();
+          const anchor = resolve(offsets.start);
+          const focus = resolve(offsets.end);
+          element.focus();
+          range.setStart(anchor.node, anchor.offset);
+          range.setEnd(focus.node, focus.offset);
+          selection.removeAllRanges();
+          selection.addRange(range);
+          element.dispatchEvent(new Event('selectionchange', { bubbles: true }));
+        }""",
+        {"start": start, "end": end},
+    )
+
+
+def wait_for_docx_selection_offsets(page, start: int, end: int, timeout_ms: int = 10_000) -> None:
+    page.wait_for_function(
+        """expected => {
+          const raw = document.querySelector('[data-testid="editor-selection-snapshot"]')?.textContent;
+          if (!raw) return false;
+          const range = JSON.parse(raw).activeTextRange;
+          return range?.start?.offset === expected.start && range?.end?.offset === expected.end;
+        }""",
+        arg={"start": start, "end": end},
+        timeout=timeout_ms,
+    )
+
+
+def cell_locator(page, table_index: int, row: int = 0, cell: int = 0):
+    return page.locator(
+        f'[data-docx-table-cell-paragraph-host="true"]'
+        f'[data-docx-table-index="{table_index}"]'
+        f'[data-docx-table-row-index="{row}"]'
+        f'[data-docx-table-cell-index="{cell}"]'
+    ).first
 
 
 def target_paragraph(model: dict[str, object]) -> tuple[int, dict[str, object]]:
@@ -225,12 +284,21 @@ def bold_text(node: dict[str, object]) -> str:
 
 def run_format_history(page, attempt_dir: Path) -> dict[str, object]:
     before = read_snapshot(page, "editor-model-snapshot")
-    node_index, _ = target_paragraph(before)
-    page.get_by_test_id("editor-test-format-range").click()
+    node_index, node = target_paragraph(before)
+    original = str(node["text"])
+    start = original.index("editing")
+    end = start + len("editing")
+    target = page.locator(
+        f'[data-testid="editor-paragraph"][data-node-index="{node_index}"]'
+    ).first
+    target.wait_for(state="visible")
+    set_dom_text_range(target, start, end)
+    wait_for_docx_selection_offsets(page, start, end)
+    page.get_by_test_id("editor-bold").click()
     formatted = wait_for_model(
         page,
         lambda model: "editing" in bold_text(model["nodes"][node_index]),
-        "partial bold formatting",
+        "partial bold formatting through the real toolbar",
     )
     selected = read_snapshot(page, "editor-selection-snapshot")
     active_range = selected.get("activeTextRange")
@@ -274,7 +342,12 @@ def run_format_history(page, attempt_dir: Path) -> dict[str, object]:
             "redoSelection": redo_selection,
         },
     )
-    return {"nodeIndex": node_index, "range": active_range, "boldText": "editing"}
+    return {
+        "nodeIndex": node_index,
+        "range": active_range,
+        "boldText": "editing",
+        "selection": {"start": start, "end": end},
+    }
 
 
 def run_readonly(page, attempt_dir: Path) -> dict[str, object]:
@@ -293,9 +366,12 @@ def run_readonly(page, attempt_dir: Path) -> dict[str, object]:
 
     dispatch_composition(page, node_index, "不得写入", 3)
     page.keyboard.press("Control+b")
-    page.get_by_test_id("editor-test-format-range").click()
-    page.get_by_test_id("editor-test-insert-table").click()
-    page.get_by_test_id("editor-test-insert-image").click()
+    # The real toolbar is disabled by the read-only fieldset. Click through the
+    # DOM so the test proves the command path refuses to mutate, not just that
+    # Playwright refuses to click a disabled control.
+    assert page.get_by_test_id("editor-bold").is_disabled()
+    for test_id in ("editor-insert-table", "editor-insert-image"):
+        page.get_by_test_id(test_id).evaluate("button => button.click()")
     page.wait_for_timeout(250)
     after = read_snapshot(page, "editor-model-snapshot")
     assert after == before, {"before": before, "after": after}
@@ -305,58 +381,207 @@ def run_readonly(page, attempt_dir: Path) -> dict[str, object]:
     return {"nodeIndex": node_index, "modelUnchanged": True}
 
 
+ACCEPTANCE_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="160">'
+    '<rect width="240" height="160" fill="#2563eb"/></svg>'
+).encode("utf-8")
+
+
+def table_at(model: dict[str, object], table_index: int) -> dict[str, object] | None:
+    nodes = model.get("nodes")
+    if not isinstance(nodes, list) or table_index >= len(nodes):
+        return None
+    node = nodes[table_index]
+    return node if isinstance(node, dict) and node.get("type") == "table" else None
+
+
+def images_in(model: dict[str, object]) -> list[dict[str, object]]:
+    return [
+        run
+        for node in model.get("nodes", [])
+        if node.get("type") == "paragraph"
+        for run in node.get("runs", [])
+        if run.get("type") == "image"
+    ]
+
+
 def run_table_image(page, attempt_dir: Path) -> dict[str, object]:
     before = read_snapshot(page, "editor-model-snapshot")
     before_table_count = int(before.get("tableCount", 0))
     before_image_count = int(before.get("imageCount", 0))
-    page.get_by_test_id("editor-test-insert-table").click()
+
+    # Real toolbar button, not a test-only hook.
+    page.get_by_test_id("editor-insert-table").click()
     with_table = wait_for_model(
         page,
         lambda model: model.get("tableCount") == before_table_count + 1,
         "table transaction",
     )
-    tables = [node for node in with_table["nodes"] if node.get("type") == "table"]
-    assert len(tables) == before_table_count + 1
-    table = tables[-1]
-    assert len(table["rows"]) == 4, table
-    assert all(len(row["cells"]) == 4 for row in table["rows"]), table
+    table_index = max(
+        index
+        for index, node in enumerate(with_table["nodes"])
+        if node.get("type") == "table"
+    )
+    table = table_at(with_table, table_index)
+    assert table is not None
+    assert len(table["rows"]) == 3, table
+    assert all(len(row["cells"]) == 3 for row in table["rows"]), table
     assert table["style"]["layout"] == "fixed", table
-    assert table["style"]["columnWidthsTwips"] == [1440, 1980, 2160, 2340], table
+    assert sum(table["style"]["columnWidthsTwips"]) == 7200, table
 
-    page.get_by_test_id("editor-test-insert-image").click()
+    # Select a real table cell, then extend the table through the toolbar.
+    cell = cell_locator(page, table_index, 0, 0)
+    cell.wait_for(state="visible", timeout=10_000)
+    cell.click()
+    page.get_by_test_id("editor-table-row-below").click()
+    wait_for_model(
+        page,
+        lambda model: len((table_at(model, table_index) or {}).get("rows", [])) == 4,
+        "toolbar row insertion",
+    )
+    cell_locator(page, table_index, 0, 0).click()
+    page.get_by_test_id("editor-table-column-right").click()
+    with_columns = wait_for_model(
+        page,
+        lambda model: all(
+            len(row["cells"]) == 4
+            for row in (table_at(model, table_index) or {}).get("rows", [])
+        ),
+        "toolbar column insertion",
+    )
+    extended = table_at(with_columns, table_index)
+    assert extended is not None
+    assert len(extended["rows"]) == 4, extended
+    widths_before_drag = list(extended["style"]["columnWidthsTwips"])
+
+    # Real pointer drag on the first column boundary.
+    handle = page.locator(
+        f'[data-docx-table-index="{table_index}"] .docx-table-column-handle'
+    ).first
+    handle.wait_for(state="visible", timeout=10_000)
+    handle_box = handle.bounding_box()
+    assert handle_box, "column resize handle has no box"
+    handle_x = handle_box["x"] + handle_box["width"] / 2
+    handle_y = handle_box["y"] + min(40, handle_box["height"] / 2)
+    page.mouse.move(handle_x, handle_y)
+    page.mouse.down()
+    page.mouse.move(handle_x + 36, handle_y, steps=6)
+    page.mouse.up()
+    dragged = wait_for_model(
+        page,
+        lambda model: (
+            (candidate := table_at(model, table_index)) is not None
+            and candidate["style"]["columnWidthsTwips"][0] >= widths_before_drag[0] + 500
+            and candidate["style"]["columnWidthsTwips"][1] <= widths_before_drag[1] - 500
+        ),
+        "pointer column resize",
+    )
+    resized_table = table_at(dragged, table_index)
+    assert resized_table is not None
+    assert sum(resized_table["style"]["columnWidthsTwips"]) == sum(widths_before_drag), resized_table
+
+    # Real toolbar image picker (it creates the file input on demand).
+    # Select a body paragraph first: an image inserted into a selected table
+    # cell is inline, while the floating-image pointer path needs a paragraph.
+    page.locator(
+        '[data-testid="editor-paragraph"][contenteditable="true"]'
+    ).filter(has_text="This paragraph is ready for editing").first.click()
+    with page.expect_file_chooser(timeout=10_000) as chooser_info:
+        page.get_by_test_id("editor-insert-image").click()
+    chooser_info.value.set_files(
+        {"name": "acceptance.svg", "mimeType": "image/svg+xml", "buffer": ACCEPTANCE_SVG}
+    )
     with_image = wait_for_model(
         page,
         lambda model: model.get("imageCount") == before_image_count + 1,
         "image transaction",
     )
-    images = [
-        run
-        for node in with_image["nodes"]
-        if node.get("type") == "paragraph"
-        for run in node.get("runs", [])
-        if run.get("type") == "image"
-    ]
+    images = images_in(with_image)
     assert len(images) == before_image_count + 1, images
     image = images[-1]
-    assert image["widthPx"] == 160, image
-    assert image["heightPx"] == 90, image
+    assert image["widthPx"] == 240, image
+    assert image["heightPx"] == 160, image
     assert image["floating"]["wrapType"] == "square", image
-    assert image["floating"]["xPx"] == 12, image
-    assert image["floating"]["yPx"] == 6, image
-    assert image["floating"]["wrapText"] == "bothSides", image
-    assert image["floating"]["distRPx"] == 12, image
-    assert image["floating"]["distBPx"] == 8, image
+    assert image["floating"]["behindDocument"] is False, image
+
+    floating = page.get_by_test_id("docx-floating-image").last
+    floating.wait_for(state="visible", timeout=10_000)
+    floating.click()
+    page.get_by_test_id("docx-image-wrap-toolbar").wait_for(state="visible", timeout=10_000)
+    page.get_by_test_id("docx-image-wrap-front").click()
+    wait_for_model(
+        page,
+        lambda model: images_in(model)[-1]["floating"]["wrapType"] == "none",
+        "image wrap mode change through the floating toolbar",
+    )
+    page.get_by_test_id("docx-image-wrap-square").click()
+    wait_for_model(
+        page,
+        lambda model: images_in(model)[-1]["floating"]["wrapType"] == "square",
+        "image wrap mode return to square",
+    )
+
+    # Real pointer drag on the floating image, then on its south-east handle.
+    image_box = floating.bounding_box()
+    assert image_box
+    start_x = image_box["x"] + image_box["width"] / 2
+    start_y = image_box["y"] + image_box["height"] / 2
+    page.mouse.move(start_x, start_y)
+    page.mouse.down()
+    page.mouse.move(start_x + 24, start_y - 12, steps=4)
+    page.mouse.up()
+    moved = wait_for_model(
+        page,
+        lambda model: (
+            bool(images_in(model))
+            and abs(int(images_in(model)[-1]["floating"]["xPx"]) - 96) <= 2
+            and abs(int(images_in(model)[-1]["floating"]["yPx"]) - 60) <= 2
+        ),
+        "pointer image move",
+    )
+
+    resize_handle = floating.locator(
+        '.docx-image-resize-handle--se[data-testid="docx-image-resize-handle"]'
+    )
+    resize_box = resize_handle.bounding_box()
+    assert resize_box, "image resize handle has no box"
+    resize_x = resize_box["x"] + resize_box["width"] / 2
+    resize_y = resize_box["y"] + resize_box["height"] / 2
+    page.mouse.move(resize_x, resize_y)
+    page.mouse.down()
+    page.mouse.move(resize_x + 40, resize_y + 20, steps=4)
+    page.mouse.up()
+    resized = wait_for_model(
+        page,
+        lambda model: (
+            bool(images_in(model))
+            and abs(int(images_in(model)[-1].get("widthPx") or 0) - 280) <= 2
+            and abs(int(images_in(model)[-1].get("heightPx") or 0) - 180) <= 2
+        ),
+        "pointer image resize",
+    )
     assert not page.get_by_test_id("editor-status").inner_text().startswith("Unsupported:")
     assert page.get_by_test_id("editor-history-state").get_attribute("data-can-undo") == "true"
     write_json(
         attempt_dir / "table-image.json",
-        {"before": before, "withTable": with_table, "withImage": with_image},
+        {
+            "before": before,
+            "withTable": with_table,
+            "withColumns": with_columns,
+            "afterDrag": dragged,
+            "withImage": with_image,
+            "afterMove": moved,
+            "afterResize": resized,
+            "columnWidthsBeforeDrag": widths_before_drag,
+            "columnWidthsAfterDrag": resized_table["style"]["columnWidthsTwips"],
+        },
     )
     return {
-        "tableRows": len(table["rows"]),
-        "tableColumns": len(table["rows"][0]["cells"]),
-        "columnWidthsTwips": table["style"]["columnWidthsTwips"],
-        "image": image,
+        "tableRows": len(resized_table["rows"]),
+        "tableColumns": len(resized_table["rows"][0]["cells"]),
+        "columnWidthsBeforeDrag": widths_before_drag,
+        "columnWidthsAfterDrag": resized_table["style"]["columnWidthsTwips"],
+        "image": images_in(resized)[-1],
     }
 
 

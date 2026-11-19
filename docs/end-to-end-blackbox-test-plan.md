@@ -158,7 +158,7 @@ P0/P1 整改必须同时提供一个只使用公开接口的测试消费页。�
 
 | 类型 | 材料 |
 |---|---|
-| DOCX | `demo.docx`、`legal-contract.docx`、`invoice-table.docx`、`report-with-image.docx`、`chinese-mixed.docx`、`review-comments.docx`、`review-threads.docx`（批注线程/跨段范围/表格修订）、`table-structures.docx`（vMerge/嵌套表/重复表头/页眉表格）、`sections-columns.docx`（纵横混排/分栏/文本框/水印）、`corrupted.docx` |
+| DOCX | `demo.docx`、`legal-contract.docx`、`invoice-table.docx`、`report-with-image.docx`、`chinese-mixed.docx`、`review-comments.docx`、`review-threads.docx`（批注线程/跨段范围/表格修订）、`table-structures.docx`（vMerge/嵌套表/重复表头/页眉表格）、`sections-columns.docx`（纵横混排/分栏/文本框/水印）、`page-sizes.docx`（A4 纵向/A4 横向/Letter 混排与逐节页眉页脚）、`corrupted.docx` |
 | XLSX | `financial-model.xlsx`、`sales-table.xlsx`、`charts-images.xlsx`、`large-grid.xlsx`、`corrupted.xlsx` |
 | PDF | `sample.pdf`、`scanned-invoice.pdf`、`rotated-pages.pdf`、`large-contract.pdf`、`cjk-report.pdf`、`encrypted.pdf`、`corrupted.pdf` |
 | 图像与结构数据 | `invoice.png`、`contract-page.png`、`ocr-layout.json`、`field-citations.json` |
@@ -259,7 +259,7 @@ output/acceptance/<commit>/<suite-id>/<run-id>/
 | DOCX-002 | P0 | 在测试消费页通过公开 runtime 配置传入无效 `workerUrl` | 页面显示可操作错误；默认不在主线程继续重解析 | console、公开诊断事件、错误结构、主线程长任务 |
 | DOCX-003 | P0 | 在测试消费页通过公开 runtime 配置传入自定义 `wasmUrl` | 主线程和 Worker 使用同一配置；没有未配置的默认 WASM 请求 | 完整网络记录和公开诊断事件 |
 | DOCX-004 | P1 | 逐个切换五个有效 DOCX | 每份文档标题、正文和页数属于当前材料；无旧状态 | 每份材料截图、页面数、材料名 |
-| DOCX-005 | P1 | 加载合同、表格、图片、中文材料 | 分页、表格正文、图片、中文、页眉页脚按承诺显示；未支持项明确标注 | 关键区域截图和已知差异 |
+| DOCX-005 | P1 | 加载合同、表格、图片、中文与 `page-sizes.docx`（A4/横向/Letter 混排）材料 | 分页、表格正文、图片、中文、逐节纸张尺寸和页眉页脚按承诺显示；未支持项明确标注 | 关键区域截图和已知差异 |
 | DOCX-006 | P1 | 加载 `corrupted.docx` 后恢复到 `demo.docx` | 损坏文件有稳定错误；恢复后内容和工具栏可用 | 错误与恢复证据 |
 
 ### 7.2 编辑器
@@ -273,10 +273,21 @@ output/acceptance/<commit>/<suite-id>/<run-id>/
 | DOCX-105 | P1 | 插入表格，编辑不同单元格，增删行列 | 单元格正文可见，操作只影响目标表格，可撤销 | 表格截图和导出结果 |
 | DOCX-106 | P1 | 插入图片，拖动、缩放并切换环绕方式 | 预览和提交尺寸/位置一致；导出后保留 | 操作轨迹、导出再导入截图 |
 | DOCX-107 | P1 | 切换只读、修订、批注、表单域 | 只读禁止修改；任何可见入口都有真实行为或明确禁用说明 | 控件状态和结果 |
-| DOCX-108 | P1 | 导出 DOCX，再在新上下文重新导入 | 文本、表格、图片和关键格式保留；文件可由 `python-docx` 打开 | 下载文件、校验值、重导截图 |
+| DOCX-108 | P1 | 导出 DOCX，再在新上下文重新导入 | 文本、表格、图片和关键格式保留；python-docx 能打开下载文件并读到编辑后的段落；重新导入后的模型投影与导出前一致 | 下载文件、SHA-256、python-docx 结果、重导模型差分 |
 | DOCX-109 | P2 | 快捷键、右键菜单、主题、缩放和缩略图 | 可见功能与说明一致，不影响文档状态和撤销历史 | 交互录像或连续截图 |
 
 通过条件：真实 Worker 必须被证明；Viewer 和 Editor 都使用正式构建；所有可见且宣称支持的 P1 能力必须通过，不能用隐藏错误或主线程回退代替。
+
+### 7.3 验收完整性约束
+
+下列约束由 `tests/blackbox/docx_parity.py`、`tests/blackbox/docx_editing.py`、`tests/blackbox/e2e_workflows.py` 与 `tests/blackbox/race_workflows.py` 直接执行，不能靠截图或代码审查代替：
+
+- 一致性页面在任一侧渲染 0 页时判 FAIL；虚拟滚动必须挂载到声明的全部页数，扫描不再有固定 64 步上限。采集结果携带 `declaredPageCount` 与 `scannedSteps`，未完成的结构不能判为一致。
+- 每一页都必须渲染非空页眉和页脚，且页眉/页脚文本必须属于该材料声明的集合；`page-sizes.docx` 还必须出现 A4 纵向（794×1123）、A4 横向（1123×794）和 Letter（816×1056）三种纸张尺寸。
+- Demo 页面不得向 Viewer/Surface 传入 `layout-options` 或固定 816×1056；纸张尺寸必须来自每节 `w:pgSz`。
+- 表格和图片验收只能通过真实工具栏与指针事件完成：点击插入表格、选中单元格后增行增列、拖动列边界、通过文件选择器插入图片、拖动图片和缩放手柄。Demo 里的测试专用按钮已删除，仅保留明确标注“不计入验收”的公开 API 快照与导出字节夹具。
+- 导出验收必须把下载文件写盘、用 python-docx 重新打开并断言段落/表格/图片，再通过公开导入路径重新导入，对文本、表格和图片投影做差分。
+- `/docx-surface` 使用请求序号与 `AbortController`；延迟返回的旧样例不得覆盖新样例，该竞态由 `RACE-DOCX-SURFACE-SLOW-LATEST` 覆盖。
 
 `DOCX-107` 中批注与修订 gutter 的自动覆盖点由 `tests/blackbox/docx_annotations.py` 提供（默认 3 张卡片，隐藏批注后剩 2 张，全部隐藏后为 0，恢复后回到 3 张），它已登记在根 `pnpm test:blackbox` 套件中；该用例只运行 headless Chromium，不需要上游仓库。
 

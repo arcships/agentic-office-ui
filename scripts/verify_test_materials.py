@@ -2,10 +2,11 @@
 
 The manifest only pins file names, bytes and hashes. This script opens every
 fixture with a real parser and checks the behaviours the black-box suites rely
-on: PDF page counts, `/Rotate` metadata, image-only pages, encryption and
-searchable text (including CJK). It is executed by the PDF CI suite, so a
-regenerated fixture that silently loses rotation or gains a text layer fails
-the build.
+on: DOCX paragraph/table/section counts, section page sizes and headers, PDF
+page counts, `/Rotate` metadata, image-only pages, encryption and searchable
+text (including CJK). It is executed by the PDF CI suite, so a regenerated
+fixture that silently loses rotation or gains a text layer fails the build, and
+by the DOCX suites before they assert page, furniture or export content.
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ valid_docx = [
     "review-threads.docx",
     "table-structures.docx",
     "sections-columns.docx",
+    "page-sizes.docx",
 ]
 valid_pdf = [
     "sample.pdf",
@@ -107,15 +109,108 @@ def expect(condition: bool, message: str) -> None:
         failures.append(message)
 
 
+# Exact body shape of every valid DOCX fixture. These numbers are part of the
+# fixture contract: a regeneration that drops paragraphs or a table has to fail
+# material verification instead of quietly narrowing what the browser suites
+# can observe.
+docx_expectations: dict[str, dict[str, int]] = {
+    "demo.docx": {"paragraphs": 125, "tables": 1, "sections": 1},
+    "legal-contract.docx": {"paragraphs": 125, "tables": 1, "sections": 1},
+    "invoice-table.docx": {"paragraphs": 4, "tables": 1, "sections": 1},
+    "report-with-image.docx": {"paragraphs": 9, "tables": 0, "sections": 1},
+    "chinese-mixed.docx": {"paragraphs": 8, "tables": 0, "sections": 1},
+    "review-comments.docx": {"paragraphs": 4, "tables": 0, "sections": 1},
+    "review-threads.docx": {"paragraphs": 9, "tables": 1, "sections": 1},
+    "table-structures.docx": {"paragraphs": 3, "tables": 2, "sections": 1},
+    "sections-columns.docx": {"paragraphs": 41, "tables": 0, "sections": 3},
+    "page-sizes.docx": {"paragraphs": 65, "tables": 0, "sections": 3},
+}
+
+
 for name in valid_docx:
     path = SAMPLES / name
     doc = Document(path)
     report["docx"][name] = {
         "paragraphs": len(doc.paragraphs),
         "tables": len(doc.tables),
+        "sections": len(doc.sections),
+        "headerPreview": [
+            " ".join(paragraph.text for paragraph in section.header.paragraphs).strip()
+            for section in doc.sections
+        ],
+        "footerPreview": [
+            " ".join(paragraph.text for paragraph in section.footer.paragraphs).strip()
+            for section in doc.sections
+        ],
         "bytes": path.stat().st_size,
     }
     expect(len(doc.paragraphs) > 0, f"{name}: expected at least one paragraph")
+    # The black-box DOCX suites assert exact page, table and furniture content.
+    # Recording the counts without asserting them let a regenerated fixture lose
+    # half of its body while material verification still reported PASS.
+    expected = docx_expectations[name]
+    expect(
+        len(doc.paragraphs) == expected["paragraphs"],
+        f"{name}: expected {expected['paragraphs']} paragraphs, got {len(doc.paragraphs)}",
+    )
+    expect(
+        len(doc.tables) == expected["tables"],
+        f"{name}: expected {expected['tables']} tables, got {len(doc.tables)}",
+    )
+    expect(
+        len(doc.sections) == expected["sections"],
+        f"{name}: expected {expected['sections']} sections, got {len(doc.sections)}",
+    )
+    headers = report["docx"][name]["headerPreview"]
+    footers = report["docx"][name]["footerPreview"]
+    expect(
+        all(headers) and all(footers),
+        f"{name}: every section must keep a non-empty header and footer, got {headers} / {footers}",
+    )
+
+# Paper geometry is read from `w:pgSz`, so a fixture that silently switches back
+# to Letter cannot satisfy the A4/landscape/mixed-size acceptance case.
+page_size_expectations: dict[str, list[tuple[int, int, str]]] = {
+    "legal-contract.docx": [(12240, 15840, "PORTRAIT")],
+    "sections-columns.docx": [
+        (12240, 15840, "PORTRAIT"),
+        (15840, 12240, "LANDSCAPE"),
+        (12240, 15840, "PORTRAIT"),
+    ],
+    "page-sizes.docx": [
+        (11906, 16838, "PORTRAIT"),
+        (16838, 11906, "LANDSCAPE"),
+        (12240, 15840, "PORTRAIT"),
+    ],
+}
+page_size_headers = {
+    "sections-columns.docx": [
+        "Section One Header",
+        "Section Two Landscape Header",
+        "Section Three Two Column Header",
+    ],
+    "page-sizes.docx": [
+        "A4 Portrait Header",
+        "A4 Landscape Header",
+        "Letter Portrait Header",
+    ],
+}
+for name, sizes in page_size_expectations.items():
+    doc = Document(SAMPLES / name)
+    actual = [
+        (section.page_width.twips, section.page_height.twips, str(section.orientation).split(" ")[0])
+        for section in doc.sections
+    ]
+    expect(actual == sizes, f"{name}: expected page sizes {sizes}, got {actual}")
+    if name in page_size_headers:
+        actual_headers = [
+            " ".join(paragraph.text for paragraph in section.header.paragraphs).strip()
+            for section in doc.sections
+        ]
+        expect(
+            actual_headers == page_size_headers[name],
+            f"{name}: expected section headers {page_size_headers[name]}, got {actual_headers}",
+        )
 
 
 # ---------------------------------------------------------------------------

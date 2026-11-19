@@ -79,7 +79,6 @@
         v-model:is-dark="isDark"
         v-model:show-tracked-changes="showTrackedChanges"
         v-model:show-comments="showComments"
-        :layout-options="{ pageWidth: 816, pageHeight: 1056 }"
         style="height: 78vh;"
         @load-start="onViewerLoadStart"
         @load-success="onViewerLoadSuccess"
@@ -147,6 +146,7 @@ const samples = [
   { file: "review-threads.docx", label: "Review threads — 批注线程、跨段范围、表格修订" },
   { file: "table-structures.docx", label: "Table structures — vMerge、嵌套表、重复表头" },
   { file: "sections-columns.docx", label: "Sections — 纵横混排、分栏、文本框、水印" },
+  { file: "page-sizes.docx", label: "Page sizes — A4、A4 横向与 Letter 混排" },
   { file: "corrupted.docx", label: "Corrupted DOCX — negative test" },
 ]
 

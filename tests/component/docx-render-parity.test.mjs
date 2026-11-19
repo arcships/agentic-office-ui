@@ -321,6 +321,108 @@ test("DocxViewer and read-only DocxEditor render one public DocModel with identi
   mounted.app.unmount();
 });
 
+function paperSizes(root) {
+  return walk(root)
+    .filter((node) =>
+      node.props?.["data-docx-page-wrapper"] === true ||
+      node.props?.["data-docx-page-wrapper"] === "true")
+    .map((wrapper) => {
+      const surface = descendants(wrapper).find((node) =>
+        node.props?.["data-docx-page-surface"] === true ||
+        node.props?.["data-docx-page-surface"] === "true");
+      return `${surface?.props?.["data-docx-page-paper-width"]}x${surface?.props?.["data-docx-page-paper-height"]}`;
+    });
+}
+
+function parityHarness(model) {
+  return vue.defineComponent({
+    setup() {
+      return () => vue.h("div", { "data-testid": "docx-parity-harness" }, [
+        vue.h("section", { "data-testid": "parity-viewer" }, [
+          vue.h(DocxViewer, { model, showToolbar: false }),
+        ]),
+        vue.h("section", { "data-testid": "parity-editor" }, [vue.h(DocxEditor, {
+          model,
+          editable: false,
+          showToolbar: false,
+          showThumbnails: false,
+        })]),
+      ]);
+    },
+  });
+}
+
+test("DOCX parity asserts header/footer furniture and real page sizes", async (t) => {
+  installDomEnvironment(t);
+  const cases = [
+    {
+      file: "legal-contract.docx",
+      headers: ["Master Services Agreement"],
+      footers: ["Confidential"],
+      sizes: ["816x1056"],
+      first: "816x1056",
+    },
+    {
+      file: "page-sizes.docx",
+      headers: ["A4 Portrait Header", "A4 Landscape Header", "Letter Portrait Header"],
+      footers: ["A4 Portrait Footer", "A4 Landscape Footer", "Letter Portrait Footer"],
+      sizes: ["1123x794", "794x1123", "816x1056"],
+      first: "794x1123",
+    },
+  ];
+
+  for (const entry of cases) {
+    const file = readFileSync(new URL(`../../apps/demo/public/samples/${entry.file}`, import.meta.url));
+    const bytes = file.buffer.slice(file.byteOffset, file.byteOffset + file.byteLength);
+    const { model } = await wasmBuildDocModelFromBytes(bytes);
+    const mounted = await mount(parityHarness(model));
+    await vue.nextTick();
+    try {
+      const viewerRoot = walk(mounted.root).find((node) => node.props?.["data-testid"] === "parity-viewer");
+      const editorRoot = walk(mounted.root).find((node) => node.props?.["data-testid"] === "parity-editor");
+      const viewer = structure(viewerPages(viewerRoot), interaction(viewerRoot));
+      const editor = structure(surfacePages(editorRoot), interaction(editorRoot));
+
+      assert.ok(viewer.pageCount > 0, `${entry.file} must render pages`);
+      assert.equal(editor.pageCount, viewer.pageCount, entry.file);
+      assert.deepEqual(editor, viewer, `${entry.file}: viewer and editor must match`);
+
+      for (const [label, pages] of [["viewer", viewer.pages], ["editor", editor.pages]]) {
+        for (const page of pages) {
+          assert.ok(page.header.text, `${entry.file} ${label} page ${page.index} has no header`);
+          assert.ok(page.footer.text, `${entry.file} ${label} page ${page.index} has no footer`);
+          assert.ok(
+            entry.headers.some((text) => page.header.text.includes(text)),
+            `${entry.file} ${label} page ${page.index} unexpected header: ${page.header.text}`,
+          );
+          assert.ok(
+            entry.footers.some((text) => page.footer.text.includes(text)),
+            `${entry.file} ${label} page ${page.index} unexpected footer: ${page.footer.text}`,
+          );
+        }
+      }
+
+      const viewerSizes = paperSizes(viewerRoot);
+      const editorSizes = paperSizes(editorRoot);
+      assert.ok(viewerSizes.length > 0, `${entry.file}: no paper surface was rendered`);
+      assert.equal(
+        viewerSizes[0],
+        entry.first,
+        `${entry.file}: the first page must use the document's section size`,
+      );
+      assert.deepEqual(editorSizes, viewerSizes, `${entry.file}: editor paper sizes`);
+      for (const size of new Set(viewerSizes)) {
+        assert.ok(
+          entry.sizes.includes(size),
+          `${entry.file}: unexpected paper size ${size}`,
+        );
+      }
+    } finally {
+      mounted.app.unmount();
+    }
+  }
+});
+
 const PAGE_FIELD_XML = [
   "<w:p>",
   '<w:r><w:fldChar w:fldCharType="begin"/></w:r>',

@@ -166,6 +166,15 @@
       "sha256": "ceadaeae36915496b5903c983674341a80d98c21d2138ce2a97bcaa27f816ac9"
     },
     {
+      "file": "page-sizes.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "render an A4 portrait section, an A4 landscape section and a US Letter section with distinct per-section headers and footers",
+      "bytes": 38003,
+      "sha256": "28719a3e26d8e1328c04b2f73204ef82aef0ad0ecce664049ddcf3134ec77d6f"
+    },
+    {
       "file": "report-with-image.docx",
       "type": "docx",
       "category": "normal",
