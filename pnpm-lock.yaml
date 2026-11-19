@@ -553,9 +553,6 @@ importers:
       vite:
         specifier: 6.4.3
         version: 6.4.3(@types/node@22.20.1)(jiti@2.7.0)(lightningcss@1.32.0)
-      vue-tsc:
-        specifier: 3.3.6
-        version: 3.3.6(typescript@5.9.3)
 
 packages:
 

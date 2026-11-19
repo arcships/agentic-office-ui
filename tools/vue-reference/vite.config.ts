@@ -18,14 +18,24 @@ const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 export default defineConfig({
   plugins: [vue(), pdfiumWasm()],
   resolve: {
-    alias: {
-      "@arcships/vue-ui": fileURLToPath(
-        new URL("./src/shims/vue-ui.ts", import.meta.url),
-      ),
-      "@arcships/office-interaction": fileURLToPath(
-        new URL("../../packages/office-interaction/src/index.ts", import.meta.url),
-      ),
-    },
+    alias: [
+      {
+        find: "@arcships/vue-ui/theme.css",
+        replacement: fileURLToPath(
+          new URL("../../packages/vue-ui/src/styles/theme.css", import.meta.url),
+        ),
+      },
+      {
+        find: "@arcships/vue-ui",
+        replacement: fileURLToPath(new URL("./src/shims/vue-ui.ts", import.meta.url)),
+      },
+      {
+        find: "@arcships/office-interaction",
+        replacement: fileURLToPath(
+          new URL("../../packages/office-interaction/src/index.ts", import.meta.url),
+        ),
+      },
+    ],
   },
   build: {
     outDir: "dist",

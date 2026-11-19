@@ -1,103 +1,60 @@
 /*
- * Token bridge for the parity harness.
+ * Harness bridge + preflight parity for the subject side.
  *
- * The subject side (@arcships/vue-ui + @arcships/vue-pdf) currently reads the
- * shadcn-style custom properties with hard-coded fallbacks (`var(--border,
- * #e5e7eb)`). This file feeds both sides the *same* token inputs as the pinned
- * Extend reference (apps/v4/app/globals.css), so a pixel delta in the report is
- * a component-level delta and not a missing-token delta. Token-level drift is
- * reported separately by docs/design/extend-tokens.json.
+ * Tokens come from the real #156 layer:
+ *   `@arcships/vue-ui/theme.css` (imported from main.ts, aliased to
+ *   packages/vue-ui/src/styles/theme.css by vite.config.ts).
  *
- * When #156 lands, replace this file with `@arcships/vue-ui/theme.css`; the
- * values below are the ones that issue must reproduce.
+ * The components under comparison are not migrated to `--office-*` yet
+ * (#157/#163 own that), so this file maps the shadcn-style custom properties
+ * they still read (`var(--border, ...)`, `var(--radius, ...)`) onto the office
+ * tokens. The mapping is one-way and contains no values, so a token change in
+ * #156 flows into the screenshots.
  *
- * Preflight: Extend ships Tailwind's preflight. The compact reset at the bottom
- * reproduces the preflight rules that affect layout/metrics (box sizing, border
- * defaults, control font inheritance, margin reset) so both pages start from
- * the same browser baseline.
+ * Preflight: Extend ships Tailwind's preflight. The reset below reproduces the
+ * preflight rules that affect layout metrics (box sizing, border defaults,
+ * control font inheritance, margin reset) so both pages start from the same
+ * browser baseline.
  */
 
-:root {
-  --radius: 0.625rem;
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
-
-  --font-sans:
-    "Geist Variable", ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI", sans-serif;
-  --font-mono:
+[data-office-theme] {
+  /* Font wiring, not a token change: #156 exposes `--office-font-sans: Geist, ...`
+   * and expects the host to load the Geist family. This page loads it through
+   * @fontsource-variable, whose family name is "Geist Variable", so the host
+   * override points the token at the loaded family. The reference page sets the
+   * same stack on `--font-sans`. */
+  --office-font-sans:
+    "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --office-font-mono:
     "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.269 0 0);
-  --card: #fff;
-  --card-foreground: oklch(0.269 0 0);
-  --popover: #fff;
-  --popover-foreground: oklch(0.269 0 0);
-  --primary: oklch(0.269 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: color-mix(in srgb, #000 4%, transparent);
-  --secondary-foreground: oklch(0.269 0 0);
-  --muted: color-mix(in srgb, #000 4%, transparent);
-  --muted-foreground: color-mix(in srgb, oklch(0.556 0 0) 90%, #000);
-  --accent: color-mix(in srgb, #000 4%, transparent);
-  --accent-foreground: oklch(0.269 0 0);
-  --destructive: oklch(0.637 0.237 25.331);
-  --destructive-foreground: oklch(0.505 0.213 27.518);
-  --border: color-mix(in srgb, #000 8%, transparent);
-  --input: color-mix(in srgb, #000 10%, transparent);
-  --ring: oklch(0.708 0 0);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: color-mix(in srgb, oklch(0.269 0 0) 64%, var(--sidebar));
-  --sidebar-accent: color-mix(in srgb, #000 4%, transparent);
-  --sidebar-accent-foreground: oklch(0.269 0 0);
-  --sidebar-border: color-mix(in srgb, #000 6%, transparent);
-  --surface: oklch(0.98 0 0);
-  --success: oklch(0.696 0.17 162.48);
-  --success-foreground: oklch(0.508 0.118 165.612);
-  --warning: oklch(0.769 0.188 70.08);
-  --warning-foreground: oklch(0.555 0.163 48.998);
-  --info: oklch(0.623 0.214 259.815);
-  --info-foreground: oklch(0.488 0.243 264.376);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.97 0 0);
-  --card: color-mix(in srgb, var(--background) 98%, #fff);
-  --card-foreground: oklch(0.97 0 0);
-  --popover: color-mix(in srgb, var(--background) 98%, #fff);
-  --popover-foreground: oklch(0.97 0 0);
-  --primary: oklch(0.97 0 0);
-  --primary-foreground: oklch(0.269 0 0);
-  --secondary: color-mix(in srgb, #fff 4%, transparent);
-  --secondary-foreground: oklch(0.97 0 0);
-  --muted: color-mix(in srgb, #fff 4%, transparent);
-  --muted-foreground: color-mix(in srgb, oklch(0.556 0 0) 90%, #fff);
-  --accent: color-mix(in srgb, #fff 4%, transparent);
-  --accent-foreground: oklch(0.97 0 0);
-  --destructive: color-mix(in srgb, oklch(0.637 0.237 25.331) 90%, #fff);
-  --destructive-foreground: oklch(0.704 0.191 22.216);
-  --border: color-mix(in srgb, #fff 6%, transparent);
-  --input: color-mix(in srgb, #fff 8%, transparent);
-  --ring: oklch(0.556 0 0);
-  --sidebar: color-mix(in srgb, oklch(0.145 0 0) 97%, #fff);
-  --sidebar-foreground: color-mix(in srgb, oklch(0.97 0 0) 64%, var(--sidebar));
-  --sidebar-accent: color-mix(in srgb, #fff 4%, transparent);
-  --sidebar-accent-foreground: oklch(0.97 0 0);
-  --sidebar-border: color-mix(in srgb, #fff 5%, transparent);
-  --surface: oklch(0.2 0 0);
-  --success: oklch(0.696 0.17 162.48);
-  --success-foreground: oklch(0.765 0.177 163.223);
-  --warning: oklch(0.769 0.188 70.08);
-  --warning-foreground: oklch(0.828 0.189 84.429);
-  --info: oklch(0.623 0.214 259.815);
-  --info-foreground: oklch(0.707 0.165 254.624);
+  --background: var(--office-background);
+  --foreground: var(--office-foreground);
+  --border: var(--office-border);
+  --input: var(--office-input);
+  --ring: var(--office-ring);
+  --primary: var(--office-primary);
+  --primary-foreground: var(--office-primary-foreground);
+  --secondary: var(--office-secondary);
+  --secondary-foreground: var(--office-secondary-foreground);
+  --muted: var(--office-muted);
+  --muted-foreground: var(--office-muted-foreground);
+  --accent: var(--office-accent);
+  --accent-foreground: var(--office-accent-foreground);
+  --card: var(--office-card);
+  --card-foreground: var(--office-card-foreground);
+  --popover: var(--office-popover);
+  --popover-foreground: var(--office-popover-foreground);
+  --destructive: var(--office-destructive);
+  --destructive-foreground: var(--office-destructive-foreground);
+  --radius: var(--office-radius);
+  --radius-sm: var(--office-radius-sm);
+  --radius-md: var(--office-radius-md);
+  --radius-lg: var(--office-radius-lg);
+  --radius-xl: var(--office-radius-xl);
+  --shadow-xs: var(--office-shadow-xs);
+  --shadow-sm: var(--office-shadow-sm);
 }
 
 /* Tailwind v4 preflight parity (only the rules that move a box or a glyph). */
@@ -114,7 +71,7 @@ html {
   line-height: 1.5;
   -webkit-text-size-adjust: 100%;
   tab-size: 4;
-  font-family: var(--font-sans);
+  font-family: var(--office-font-sans);
   font-feature-settings: normal;
   font-variation-settings: normal;
 }

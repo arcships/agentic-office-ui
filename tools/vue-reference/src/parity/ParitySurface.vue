@@ -6,7 +6,7 @@ defineProps<{ surface: string; theme: ParityTheme }>();
 
 <template>
   <div
-    :class="[theme === 'dark' ? 'dark' : '', 'parity-surface']"
+    class="parity-surface"
     data-parity-app="vue-reference"
     :data-parity-surface="surface"
     :data-parity-theme="theme"
@@ -24,7 +24,7 @@ defineProps<{ surface: string; theme: ParityTheme }>();
   flex-direction: column;
   align-items: flex-start;
   gap: 16px;
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--office-background);
+  color: var(--office-foreground);
 }
 </style>
