@@ -13,12 +13,22 @@ import type {
 import { formatOfficeMessage, officeMessagesEn } from "@arcships/office-interaction"
 import type { PageTextSlice } from "@embedpdf/models"
 import type {
+  PdfRenderAnnotation,
   PdfRenderDocument,
   PdfRenderPageInfo,
   PdfRenderRect,
   PdfRenderRuntime,
   PdfSearchHit,
 } from "./pdf-render-runtime"
+import type {
+  PdfBehaviorRecord,
+  PdfVisualObjectDetection,
+} from "./pdf-native-objects"
+import {
+  PDF_BEHAVIOR_REFERENCE_KIND,
+  pdfBehaviorLocatorValue,
+  pdfNativeObjectType,
+} from "./pdf-native-objects"
 import {
   fnv1a32,
   isPdfPageContentSignature,
@@ -56,6 +66,12 @@ export interface PdfReferenceContext {
   }
   /** Localized labels for descriptors emitted to hosts. */
   descriptors?: PdfReferenceDescriptorLabels
+  /** Native link/widget/annotation objects of the current revision. */
+  annotations?: readonly PdfRenderAnnotation[]
+  /** Visual recognizer results of the current revision, one page at a time. */
+  visualObjects?: readonly (PdfVisualObjectDetection & { pageIndex: number })[]
+  /** Stage 4 behaviors: link actions, form rules, annotation state, … */
+  behaviors?: readonly PdfBehaviorRecord[]
 }
 
 export interface PdfTextReferenceSelection {
@@ -78,6 +94,34 @@ const PDF_PAGE_RELIABILITY: OfficeObjectReliability = {
   boundary: { level: "exact", score: 1, reasonCodes: ["pdf.page-boundary"] },
   hierarchy: { level: "exact", score: 1, reasonCodes: ["pdf.page-index"] },
   relocation: { level: "likely", reasonCodes: ["pdf.page-signature"] },
+}
+
+const PDF_LINK_RELIABILITY: OfficeObjectReliability = {
+  semantic: { level: "exact", score: 1, reasonCodes: ["pdf.native-link"] },
+  boundary: { level: "exact", score: 1, reasonCodes: ["pdf.annotation-rect"] },
+  hierarchy: { level: "exact", score: 1, reasonCodes: ["pdf.page-index"] },
+  relocation: { level: "likely", reasonCodes: ["pdf.annotation-id"] },
+}
+
+const PDF_FORM_RELIABILITY: OfficeObjectReliability = {
+  semantic: { level: "exact", score: 1, reasonCodes: ["pdf.native-form-widget"] },
+  boundary: { level: "exact", score: 1, reasonCodes: ["pdf.widget-rect"] },
+  hierarchy: { level: "exact", score: 1, reasonCodes: ["pdf.page-index"] },
+  relocation: { level: "likely", reasonCodes: ["pdf.widget-id"] },
+}
+
+const PDF_ANNOTATION_RELIABILITY: OfficeObjectReliability = {
+  semantic: { level: "exact", score: 1, reasonCodes: ["pdf.native-annotation"] },
+  boundary: { level: "exact", score: 1, reasonCodes: ["pdf.annotation-rect"] },
+  hierarchy: { level: "exact", score: 1, reasonCodes: ["pdf.page-index"] },
+  relocation: { level: "uncertain", reasonCodes: ["pdf.annotation-id"] },
+}
+
+const PDF_BEHAVIOR_RELIABILITY: OfficeObjectReliability = {
+  semantic: { level: "exact", score: 1, reasonCodes: ["pdf.native-behavior"] },
+  boundary: { level: "exact", score: 1, reasonCodes: ["pdf.behavior-native-id"] },
+  hierarchy: { level: "exact", score: 1, reasonCodes: ["pdf.page-index"] },
+  relocation: { level: "likely", reasonCodes: ["pdf.behavior-native-id"] },
 }
 
 const PDF_REGION_RELIABILITY: OfficeObjectReliability = {
@@ -242,6 +286,168 @@ export function createPdfTextReferenceDraft(
     ...(fallbackRegion ? { fallbackRegion } : {}),
     reliability: pdfTextReliability(selection.text),
   }
+}
+
+function pageAncestorKeys(page: PdfRenderPageInfo): readonly string[] {
+  return pdfPageAncestorKeys(page)
+}
+
+function nativeObjectReliability(
+  objectType: "link" | "form" | "annotation",
+): OfficeObjectReliability {
+  if (objectType === "link") return copyReliability(PDF_LINK_RELIABILITY)
+  if (objectType === "form") return copyReliability(PDF_FORM_RELIABILITY)
+  return copyReliability(PDF_ANNOTATION_RELIABILITY)
+}
+
+function nativeObjectKind(objectType: "link" | "form" | "annotation"): PdfReferenceKindValue {
+  if (objectType === "link") return "link"
+  if (objectType === "form") return "form-control"
+  return "annotation"
+}
+
+type PdfReferenceKindValue = NonNullable<PdfOfficeReference["kind"]>
+
+/**
+ * Create a reference to a native PDF link, form widget or annotation.
+ *
+ * The annotation rectangle is normalized against the current page, so a link
+ * selected in object mode keeps a page region fallback even when the native id
+ * cannot be resolved after a document update.
+ */
+export function createPdfNativeObjectReferenceDraft(
+  context: PdfReferenceContext,
+  annotation: PdfRenderAnnotation,
+): PdfOfficeReferenceDraft {
+  assertContext(context)
+  const page = pageAt(context, annotation.pageIndex)
+  if (!page) throw new RangeError("PDF annotation pageIndex is outside the current document")
+  const id = annotation.id.trim()
+  if (!id) throw new TypeError("PDF native objects require a non-empty annotation id")
+  const rect = normalizePdfReferenceRect(page, annotation.rect)
+  if (!rect) throw new RangeError("PDF annotation rectangle is outside the current page")
+  const objectType = pdfNativeObjectType(annotation)
+  const region = { space: "page" as const, pageIndex: annotation.pageIndex, rect }
+  return {
+    schemaVersion: 1,
+    document: context.revision,
+    kind: nativeObjectKind(objectType),
+    source: "native",
+    locator: {
+      type: "format",
+      format: "pdf",
+      value: {
+        kind: "native-object",
+        pageIndex: annotation.pageIndex,
+        objectType,
+        nativeId: id,
+      },
+    },
+    fingerprint: {
+      ...(annotation.url ? { contentHash: textContentHash(annotation.url) } : {}),
+      ...(annotation.fieldName ? { objectName: annotation.fieldName } : {}),
+      ...(annotation.contents ? { exactText: annotation.contents.slice(0, TEXT_QUOTE_LIMIT) } : {}),
+      ancestorKeys: [
+        ...pageAncestorKeys(page),
+        `pdf.native-object:${objectType}:${id}`,
+      ],
+    },
+    fallbackRegion: region,
+    reliability: nativeObjectReliability(objectType),
+  }
+}
+
+function visualReliability(detection: PdfVisualObjectDetection): OfficeObjectReliability {
+  return {
+    semantic: { ...detection.reliability.semantic, reasonCodes: [...detection.reliability.semantic.reasonCodes] },
+    boundary: { ...detection.reliability.boundary, reasonCodes: [...detection.reliability.boundary.reasonCodes] },
+    hierarchy: { ...detection.reliability.hierarchy, reasonCodes: [...detection.reliability.hierarchy.reasonCodes] },
+    relocation: { ...detection.reliability.relocation, reasonCodes: [...detection.reliability.relocation.reasonCodes] },
+  }
+}
+
+/**
+ * Create a reference from a visual recognizer result.
+ *
+ * The visual locator carries the provider id, so two providers with different
+ * models never shadow each other's objects, and the normalized region stays as
+ * the page-area fallback.
+ */
+export function createPdfVisualObjectReferenceDraft(
+  context: PdfReferenceContext,
+  providerId: string,
+  pageIndex: number,
+  detection: PdfVisualObjectDetection,
+): PdfOfficeReferenceDraft {
+  assertContext(context)
+  if (!providerId.trim()) throw new TypeError("PDF visual objects require a provider id")
+  const page = pageAt(context, pageIndex)
+  if (!page) throw new RangeError("PDF visual object pageIndex is outside the current document")
+  const { x, y, width, height } = detection.region
+  if (![x, y, width, height].every(Number.isFinite)) {
+    throw new TypeError("PDF visual object coordinates must be finite")
+  }
+  if (x < 0 || y < 0 || width <= 0 || height <= 0 || x + width > 1 || y + height > 1) {
+    throw new RangeError("PDF visual object must be a positive rectangle inside normalized page space")
+  }
+  const kind = detection.kind
+  return {
+    schemaVersion: 1,
+    document: context.revision,
+    kind,
+    source: "visual",
+    locator: {
+      type: "format",
+      format: "pdf",
+      value: {
+        kind: "visual-object",
+        pageIndex,
+        providerId,
+        objectId: detection.objectId,
+        region: detection.region,
+      },
+    },
+    fingerprint: {
+      ...(detection.content?.text
+        ? { contentHash: textContentHash(detection.content.text) }
+        : {}),
+      ...(detection.label ? { objectName: detection.label } : {}),
+      ancestorKeys: [
+        ...pageAncestorKeys(page),
+        `pdf.visual-object:${providerId}:${detection.objectId}`,
+      ],
+    },
+    fallbackRegion: { space: "page", pageIndex, rect: detection.region },
+    reliability: visualReliability(detection),
+  } as PdfOfficeReferenceDraft
+}
+
+/** Create a stage 4 invisible-behavior reference (link action, form rule, …). */
+export function createPdfBehaviorReferenceDraft(
+  context: PdfReferenceContext,
+  record: PdfBehaviorRecord,
+): PdfOfficeReferenceDraft {
+  assertContext(context)
+  const current = (context.behaviors ?? []).find((candidate) => candidate.instanceId === record.instanceId)
+  if (!current) throw new RangeError("PDF behavior is not present in the reference context")
+  return {
+    schemaVersion: 1,
+    document: context.revision,
+    kind: PDF_BEHAVIOR_REFERENCE_KIND[current.behavior],
+    source: "native",
+    locator: {
+      type: "format",
+      format: "pdf",
+      value: pdfBehaviorLocatorValue(current),
+    },
+    fingerprint: {
+      ancestorKeys: [
+        `pdf.behavior:${current.behavior}`,
+        `pdf.behavior-instance:${current.instanceId}`,
+      ],
+    },
+    reliability: copyReliability(PDF_BEHAVIOR_RELIABILITY),
+  } as PdfOfficeReferenceDraft
 }
 
 export function createPdfPageReferenceDraft(
@@ -478,6 +684,137 @@ function referenceFromHit(
   )
 }
 
+function nativeObjectDescriptor(
+  context: PdfReferenceContext,
+  reference: PdfOfficeReference,
+  annotation: PdfRenderAnnotation,
+  page: PdfRenderPageInfo,
+): OfficeObjectDescriptor {
+  const rect = normalizePdfReferenceRect(page, annotation.rect) ?? { x: 0, y: 0, width: 1, height: 1 }
+  const objectType = pdfNativeObjectType(annotation)
+  const kind = nativeObjectKind(objectType)
+  const label = objectType === "link"
+    ? "Link"
+    : objectType === "form"
+      ? `Form field${annotation.fieldName ? `: ${annotation.fieldName}` : ""}`
+      : annotation.contents?.trim()
+        ? `Annotation: ${annotation.contents.replace(/\s+/gu, " ").trim().slice(0, 80)}`
+        : `Annotation ${annotation.id}`
+  return {
+    objectId: `pdf:native:${annotation.pageIndex}:${objectType}:${annotation.id}`,
+    draft: draftFromReference(reference),
+    label,
+    path: [
+      { kind: "document", label: "PDF" },
+      { kind: "page", label: `Page ${annotation.pageIndex + 1}` },
+      { kind, label },
+    ],
+    childrenState: "none",
+    ...((annotation.url || annotation.fieldValue || annotation.contents) ? {
+      content: {
+        ...(annotation.url ? { text: annotation.url } : annotation.contents ? { text: annotation.contents } : {}),
+        ...(annotation.fieldValue ? { value: annotation.fieldValue } : {}),
+      },
+    } : {}),
+    visual: {
+      fragments: [{ container: { space: "page", pageIndex: annotation.pageIndex }, rect }],
+      layoutVersion: reference.document.revision,
+    },
+    facets: {
+      nativeId: annotation.id,
+      objectType,
+      ...(annotation.url ? { url: annotation.url } : {}),
+      ...(annotation.targetPageIndex === undefined ? {} : { targetPageIndex: annotation.targetPageIndex }),
+      ...(annotation.fieldName ? { fieldName: annotation.fieldName } : {}),
+      ...(annotation.fieldType ? { fieldType: annotation.fieldType } : {}),
+      ...(annotation.readOnly === undefined ? {} : { readOnly: annotation.readOnly }),
+    },
+  }
+}
+
+function visualObjectDescriptor(
+  reference: PdfOfficeReference,
+  detection: PdfVisualObjectDetection,
+  pageIndex: number,
+): OfficeObjectDescriptor {
+  const label = detection.label?.trim()
+    || detection.content?.text?.replace(/\s+/gu, " ").trim().slice(0, 80)
+    || detection.kind
+  return {
+    objectId: `pdf:visual:${pageIndex}:${detection.objectId}`,
+    draft: draftFromReference(reference),
+    label,
+    path: [
+      { kind: "document", label: "PDF" },
+      { kind: "page", label: `Page ${pageIndex + 1}` },
+      { kind: detection.kind, label },
+    ],
+    childrenState: detection.kind === "table" ? "available" : "none",
+    ...(detection.content?.text ? { content: { text: detection.content.text } } : {}),
+    visual: {
+      fragments: [{ container: { space: "page", pageIndex }, rect: detection.region }],
+      layoutVersion: reference.document.revision,
+    },
+    facets: {
+      objectId: detection.objectId,
+      ...(detection.parentObjectId ? { parentObjectId: detection.parentObjectId } : {}),
+    },
+  }
+}
+
+function pdfBehaviorDescriptor(
+  reference: PdfOfficeReference,
+  record: PdfBehaviorRecord,
+): OfficeObjectDescriptor {
+  return {
+    objectId: `pdf:behavior:${record.instanceId}`,
+    draft: draftFromReference(reference),
+    label: record.label,
+    path: record.path.map((entry) => ({ ...entry })),
+    childrenState: "none",
+    ...(record.content === undefined ? {} : { content: { ...record.content } }),
+    facets: {
+      ...record.facets,
+      behavior: record.behavior,
+      instanceId: record.instanceId,
+      referenceKind: PDF_BEHAVIOR_REFERENCE_KIND[record.behavior],
+    },
+  }
+}
+
+function referenceFromDraft(draft: PdfOfficeReferenceDraft): PdfOfficeReference {
+  return { ...draft, referenceId: "descriptor" } as PdfOfficeReference
+}
+
+/** Describe a native link/form/annotation without committing a reference. */
+export function describePdfNativeObject(
+  context: PdfReferenceContext,
+  annotation: PdfRenderAnnotation,
+): OfficeObjectDescriptor {
+  const draft = createPdfNativeObjectReferenceDraft(context, annotation)
+  const page = pageAt(context, annotation.pageIndex)!
+  return nativeObjectDescriptor(context, referenceFromDraft(draft), annotation, page)
+}
+
+/** Describe a visual recognizer result without committing a reference. */
+export function describePdfVisualObject(
+  context: PdfReferenceContext,
+  providerId: string,
+  pageIndex: number,
+  detection: PdfVisualObjectDetection,
+): OfficeObjectDescriptor {
+  const draft = createPdfVisualObjectReferenceDraft(context, providerId, pageIndex, detection)
+  return visualObjectDescriptor(referenceFromDraft(draft), detection, pageIndex)
+}
+
+/** Describe a stage 4 PDF behavior without committing a reference. */
+export function describePdfBehavior(
+  context: PdfReferenceContext,
+  record: PdfBehaviorRecord,
+): OfficeObjectDescriptor {
+  return pdfBehaviorDescriptor(referenceFromDraft(createPdfBehaviorReferenceDraft(context, record)), record)
+}
+
 export async function resolvePdfReference(
   context: PdfReferenceContext,
   reference: OfficeObjectReference,
@@ -493,6 +830,74 @@ export async function resolvePdfReference(
 
   const region = pdfReference.locator.type === "manual-region" ? pdfReference.locator.value : undefined
   const locator = pdfReference.locator.type === "format" ? pdfReference.locator.value : undefined
+  const isCurrentRevision = sameRevision(pdfReference.document, context.revision)
+
+  if (locator?.kind === "native-object") {
+    if (context.annotations === undefined) {
+      return { status: "unsupported", reasonCode: "pdf.annotation-evidence-unavailable" }
+    }
+    const page = pageAt(context, locator.pageIndex)
+    if (!page) return { status: "not-found", reasonCode: "pdf.page-not-found" }
+    const annotation = context.annotations.find((candidate) =>
+      candidate.pageIndex === locator.pageIndex
+      && candidate.id === locator.nativeId
+      && pdfNativeObjectType(candidate) === locator.objectType)
+    if (!annotation) return { status: "not-found", reasonCode: "pdf.native-object-not-found" }
+    if (isCurrentRevision) {
+      return { status: "exact", reference: pdfReference, descriptor: nativeObjectDescriptor(context, pdfReference, annotation, page) }
+    }
+    const relocated = currentFormatReference(context, pdfReference, locator)
+    return {
+      status: "relocated",
+      reference: relocated,
+      descriptor: nativeObjectDescriptor(context, relocated, annotation, page),
+      reasonCodes: ["pdf.revision-changed", "pdf.annotation-id-match"],
+    }
+  }
+
+  if (locator?.kind === "visual-object") {
+    if (context.visualObjects === undefined) {
+      return { status: "unsupported", reasonCode: "pdf.visual-provider-unavailable" }
+    }
+    const page = pageAt(context, locator.pageIndex)
+    if (!page) return { status: "not-found", reasonCode: "pdf.page-not-found" }
+    const detection = context.visualObjects.find((candidate) =>
+      candidate.objectId === locator.objectId && candidate.pageIndex === locator.pageIndex)
+    if (!detection) return { status: "not-found", reasonCode: "pdf.visual-object-not-found" }
+    if (isCurrentRevision) {
+      return { status: "exact", reference: pdfReference, descriptor: visualObjectDescriptor(pdfReference, detection, locator.pageIndex) }
+    }
+    const relocated = currentFormatReference(context, pdfReference, {
+      ...locator,
+      region: detection.region,
+    }, { space: "page", pageIndex: locator.pageIndex, rect: detection.region })
+    return {
+      status: "relocated",
+      reference: relocated,
+      descriptor: visualObjectDescriptor(relocated, detection, locator.pageIndex),
+      reasonCodes: ["pdf.revision-changed", "pdf.visual-object-id-match"],
+    }
+  }
+
+  if (locator?.kind === "behavior") {
+    if (context.behaviors === undefined) {
+      return { status: "unsupported", reasonCode: "pdf.behavior-evidence-unavailable" }
+    }
+    const record = context.behaviors.find((candidate) => candidate.instanceId === locator.nativeId)
+    if (!record || record.behavior !== locator.behavior) {
+      return { status: "not-found", reasonCode: "pdf.behavior-not-found" }
+    }
+    if (isCurrentRevision) {
+      return { status: "exact", reference: pdfReference, descriptor: pdfBehaviorDescriptor(pdfReference, record) }
+    }
+    const relocated = currentFormatReference(context, pdfReference, pdfBehaviorLocatorValue(record))
+    return {
+      status: "relocated",
+      reference: relocated,
+      descriptor: pdfBehaviorDescriptor(relocated, record),
+      reasonCodes: ["pdf.revision-changed", "pdf.behavior-native-id"],
+    }
+  }
   if (region || locator?.kind === "page") {
     const pageIndex = region ? region.pageIndex : locator?.kind === "page" ? locator.pageIndex : -1
     const page = pageAt(context, pageIndex)
@@ -522,7 +927,6 @@ export async function resolvePdfReference(
     return { status: "unsupported", reasonCode: "pdf.reference-kind-unsupported" }
   }
   const currentText = await readTextAtLocator(context, locator, signal)
-  const isCurrentRevision = sameRevision(pdfReference.document, context.revision)
   if (currentText !== undefined && (
     hasMatchingTextFingerprint(currentText, pdfReference.fingerprint)
     || isCurrentRevision && !hasVerifiableTextFingerprint(pdfReference.fingerprint)

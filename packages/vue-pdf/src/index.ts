@@ -64,10 +64,16 @@ export {
   resolvePdfPageRenderParameters,
 } from "./pdf/pdf-render-runtime"
 export {
+  createPdfBehaviorReferenceDraft,
+  createPdfNativeObjectReferenceDraft,
   createPdfPageReferenceDraft,
   createPdfRegionReferenceDraft,
   createPdfTextReferenceDraft,
+  createPdfVisualObjectReferenceDraft,
+  describePdfBehavior,
+  describePdfNativeObject,
   describePdfReference,
+  describePdfVisualObject,
   normalizePdfReferenceRect,
   resolvePdfReference,
 } from "./pdf/pdf-reference-adapter"
@@ -78,6 +84,40 @@ export type {
   PdfReferenceDescriptorLabels,
   PdfTextReferenceSelection,
 } from "./pdf/pdf-reference-adapter"
+export {
+  createPdfBehaviorLabels,
+  createPdfBehaviorRecords,
+  PDF_BEHAVIOR_REFERENCE_KIND,
+  pdfBehaviorLocatorValue,
+  pdfNativeObjectType,
+} from "./pdf/pdf-native-objects"
+export type {
+  PdfAttachmentSource,
+  PdfBehaviorKind,
+  PdfBehaviorLabels,
+  PdfBehaviorRecord,
+  PdfBehaviorSource,
+  PdfLayerSource,
+  PdfPermissionsSource,
+  PdfSignatureSource,
+  PdfVisualObjectDetection,
+  PdfVisualObjectProvider,
+} from "./pdf/pdf-native-objects"
+export {
+  createPdfObjectRegistry,
+  pdfBehaviorObjectDescriptor,
+  pdfBehaviorReferenceKind,
+  pdfNativeObjectDescriptor,
+  pdfVisualObjectDescriptor,
+  withPdfVisualPage,
+  PDF_BEHAVIOR_OBJECT_PROVIDER,
+  PDF_NATIVE_OBJECT_PROVIDER,
+  PDF_STAGE2_KINDS,
+  PDF_STAGE4_KINDS,
+  PDF_VISUAL_KINDS,
+  PDF_VISUAL_OBJECT_PROVIDER,
+} from "./pdf/pdf-object-index"
+export type { PdfVisualObjectRecord } from "./pdf/pdf-object-index"
 export type {
   PdfAnnotationAppearancePatch,
   PdfFormFieldDescriptor,
