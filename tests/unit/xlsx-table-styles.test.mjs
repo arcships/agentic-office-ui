@@ -16,6 +16,9 @@ const xmldom = requireFromXlsxCore("@xmldom/xmldom");
 globalThis.DOMParser ??= xmldom.DOMParser;
 globalThis.Node ??= xmldom.Node;
 globalThis.XMLSerializer ??= xmldom.XMLSerializer;
+const { strFromU8, strToU8, unzipSync, zipSync } = await import(
+  pathToFileURL(requireFromXlsxCore.resolve("fflate")).href
+);
 
 const core = await import(
   pathToFileURL(requireFromXlsxCore.resolve("@arcships/xlsx-core")).href
@@ -208,6 +211,25 @@ test("default cell fonts do not erase the table header emphasis", () => {
   assert.deepEqual(header.numberFormat, { formatType: "general" });
 });
 
+test("headerless tables paint the first body stripe instead of header style", () => {
+  const table = makeTable({
+    end: { col: 2, row: 3 },
+    headerRowCount: 0,
+    reference: "A1:C4",
+  });
+
+  const firstBodyRow = resolveCellStyle(table, { col: 0, row: 0 });
+  assert.deepEqual(firstBodyRow.fill, {
+    color: { theme: 4, tint: 0.8 },
+    fillType: "solid",
+  });
+  assert.notEqual(firstBodyRow.font.bold, true, "row 0 is data, not a table header");
+  assert.deepEqual(firstBodyRow.font.color, { theme: 1 });
+
+  const secondBodyRow = resolveCellStyle(table, { col: 0, row: 1 });
+  assert.equal(secondBodyRow.fill, undefined);
+});
+
 test("sheet tables are found by cell and table-free sheets short-circuit", () => {
   const table = makeTable();
   assert.equal(core.findTableAtCell([table], { col: 1, row: 3 })?.name, "Sales");
@@ -216,6 +238,68 @@ test("sheet tables are found by cell and table-free sheets short-circuit", () =>
   const base = { font: { bold: true } };
   assert.equal(core.withTableCellStyle(base, [], { col: 0, row: 0 }), base);
   assert.equal(core.withTableCellStyle(base, [table], { col: 9, row: 9 }), base);
+});
+
+function customTableStyleWorkbook() {
+  const archive = unzipSync(sampleBytes("sales-table.xlsx"));
+  const styles = strFromU8(archive["xl/styles.xml"]);
+  const dxfs = '<dxfs count="2">'
+    + '<dxf><font><b/><color rgb="FFFF0000"/></font><fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/><bgColor indexed="64"/></patternFill></fill></dxf>'
+    + '<dxf><font><i/><color rgb="FF00FF00"/></font></dxf>'
+    + "</dxfs>";
+  const tableStyles = '<tableStyles count="1" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleLight16">'
+    + '<tableStyle name="SalesCustom" count="1">'
+    + '<tableStyleElement type="headerRow" dxfId="0"/>'
+    + '<tableStyleElement type="firstRowStripe" dxfId="1"/>'
+    + "</tableStyle></tableStyles>";
+  const withDxfs = /<tableStyles\b[^>]*\/>/.test(styles)
+    ? styles.replace(/<tableStyles\b[^>]*\/>/, `${dxfs}${tableStyles}`)
+    : styles.replace("<colors>", `${dxfs}${tableStyles}<colors>`);
+  archive["xl/styles.xml"] = strToU8(withDxfs);
+  archive["xl/tables/table1.xml"] = strToU8(
+    strFromU8(archive["xl/tables/table1.xml"]).replace(
+      'name="TableStyleMedium2"',
+      'name="SalesCustom"',
+    ),
+  );
+  return zipSync(archive);
+}
+
+test("workbook-defined table styles and dxfs survive export and reload", () => {
+  const bytes = customTableStyleWorkbook();
+  const assets = core.parseWorkbookImageAssets(bytes);
+  const sourceStyle = assets.tableStyleByName.SalesCustom;
+  assert.ok(sourceStyle?.headerRow, "the source table style is parsed before export");
+  assert.equal(
+    core.resolveWorkbookFillStyle(sourceStyle.headerRow.fill, assets.themePalette).backgroundColor,
+    "#ffff00",
+  );
+
+  const saved = core.mergeWorkbookSheetAuthoringAssets(
+    wasm.Workbook.fromBytes(bytes).saveXlsxBytes(),
+    assets.archive,
+  );
+  const archive = unzipSync(saved);
+  const stylesXml = strFromU8(archive["xl/styles.xml"]);
+  assert.match(stylesXml, /<dxfs count="2"/);
+  assert.match(stylesXml, /name="SalesCustom"/);
+
+  const reloaded = core.parseWorkbookStructureAssets(saved);
+  const style = reloaded.tableStyleByName.SalesCustom;
+  assert.ok(style?.headerRow, "the custom table style survives the round-trip");
+  assert.equal(
+    core.resolveWorkbookFillStyle(style.headerRow.fill, reloaded.themePalette).backgroundColor,
+    "#ffff00",
+  );
+  assert.equal(
+    core.resolveWorkbookColor(style.headerRow.font.color, reloaded.themePalette),
+    "#ff0000",
+  );
+  assert.equal(style.firstRowStripe.font.italic, true);
+  assert.equal(
+    reloaded.tableMetadataByWorkbookSheetIndex[0][0].styleInfo.name,
+    "SalesCustom",
+  );
 });
 
 test("the sample workbook carries its table style through export and reload", () => {

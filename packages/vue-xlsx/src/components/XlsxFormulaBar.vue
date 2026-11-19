@@ -156,7 +156,12 @@ const nameBoxValue = computed(() => {
 const nameBoxFocused = ref(false);
 const nameBoxDraft = ref("");
 const nameBoxActiveIndex = ref(-1);
-const definedNames = computed<XlsxDefinedName[]>(() => props.controller.definedNames ?? []);
+const definedNames = computed<XlsxDefinedName[]>(() => {
+  // The list must recompute when `defineNamedRange()` bumps the workbook
+  // revision; the engine's named-range array is not reactive by itself.
+  void props.controller.revision;
+  return props.controller.definedNames ?? [];
+});
 // The name box seeds itself with the active cell (`B2`) so a host can read the
 // current address. That seed is not a filter: while the draft is an A1 address
 // or range, list every defined name (the usual Excel behaviour) instead of
@@ -166,6 +171,9 @@ function isA1AddressQuery(value: string) {
   return trimmed.length > 0 && parseA1RangeReference(trimmed.replace(/\$/g, "")) !== null;
 }
 const nameBoxMatches = computed(() => {
+  // `defineNamedRange()` updates the engine list and bumps `revision`; without
+  // reading it here an open list never notices a name added while it is shown.
+  void props.controller.revision;
   const query = nameBoxDraft.value.trim().toLowerCase();
   if (!query || isA1AddressQuery(query)) {
     return definedNames.value;
@@ -199,7 +207,7 @@ function onNameBoxInput(event: Event) {
   nameBoxActiveIndex.value = -1;
 }
 
-function onNameBoxKeydown(event: KeyboardEvent) {
+async function onNameBoxKeydown(event: KeyboardEvent) {
   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
     if (nameBoxMatches.value.length === 0) return;
     event.preventDefault();
@@ -221,23 +229,23 @@ function onNameBoxKeydown(event: KeyboardEvent) {
     event.preventDefault();
     const active = nameBoxMatches.value[nameBoxActiveIndex.value];
     if (active) {
-      goToDefinedName(active);
+      await goToDefinedName(active);
     } else {
-      commitNameBoxText(nameBoxDraft.value);
+      await commitNameBoxText(nameBoxDraft.value);
     }
     nameBoxDraft.value = nameBoxValue.value;
     nameBoxActiveIndex.value = -1;
   }
 }
 
-function onNameBoxOption(entry: XlsxDefinedName) {
-  if (goToDefinedName(entry)) {
+async function onNameBoxOption(entry: XlsxDefinedName) {
+  if (await goToDefinedName(entry)) {
     nameBoxDraft.value = nameBoxValue.value;
     nameBoxActiveIndex.value = -1;
   }
 }
 
-function selectRangeOnSheet(
+async function selectRangeOnSheet(
   sheetName: string | null | undefined,
   range: { start: { col: number; row: number }; end: { col: number; row: number } },
 ) {
@@ -248,22 +256,26 @@ function selectRangeOnSheet(
     );
     if (index >= 0) {
       props.controller.setActiveSheetIndex(index);
+      // The navigation domain still watches `activeTabIndex` and clears the
+      // selection when the tab change flushes. Select only after that watcher
+      // ran, otherwise a cross-sheet defined name lands on an empty selection.
+      await nextTick();
     }
   }
   props.controller.selectRange(range);
 }
 
-function goToDefinedName(entry: XlsxDefinedName) {
+async function goToDefinedName(entry: XlsxDefinedName) {
   const target = resolveNamedRangeTarget(
     entry.range,
     entry.sheetName ?? props.controller.activeSheet?.name ?? null,
   );
   if (!target) return false;
-  selectRangeOnSheet(target.sheetName, target.range);
+  await selectRangeOnSheet(target.sheetName, target.range);
   return true;
 }
 
-function commitNameBoxText(text: string) {
+async function commitNameBoxText(text: string) {
   const trimmed = text.trim();
   if (!trimmed) return false;
   const entry = definedNames.value.find(

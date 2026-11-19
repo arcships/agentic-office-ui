@@ -1007,6 +1007,96 @@ function applyWorksheetPrintLayouts(
   return changed;
 }
 
+const STYLE_CHILD_ORDER = [
+  "numFmts",
+  "fonts",
+  "fills",
+  "borders",
+  "cellStyleXfs",
+  "cellXfs",
+  "cellStyles",
+  "dxfs",
+  "tableStyles",
+  "colors",
+  "extLst",
+];
+
+function replaceStyleElement(
+  document: XMLDocument,
+  localName: string,
+  sourceNode: Element,
+) {
+  const imported = document.importNode(sourceNode, true) as Element;
+  const existing = getLocalElements(document, localName)[0] ?? null;
+  if (existing?.parentNode) {
+    existing.parentNode.replaceChild(imported, existing);
+    return;
+  }
+  const root = document.documentElement;
+  if (!root) {
+    return;
+  }
+  const rank = STYLE_CHILD_ORDER.indexOf(localName);
+  if (rank >= 0) {
+    for (const child of Array.from(root.childNodes)) {
+      if (child.nodeType !== 1) {
+        continue;
+      }
+      const childRank = STYLE_CHILD_ORDER.indexOf((child as Element).localName);
+      if (childRank > rank) {
+        root.insertBefore(imported, child);
+        return;
+      }
+    }
+  }
+  root.appendChild(imported);
+}
+
+/**
+ * Carries workbook-defined table styles and their differential styles into the
+ * engine's saved `xl/styles.xml`.
+ *
+ * The engine rewrites styles.xml from the cell styles it knows about and emits
+ * `<dxfs count="0"/>` / `<tableStyles count="0"/>`. Custom table styles and
+ * conditional-format `dxf`s are authored OOXML that the engine does not model,
+ * so without this merge an exported workbook loses them and the table falls
+ * back to a built-in style (or no conditional formatting). Replacing the dxfs
+ * list keeps the source `dxfId` indexes valid for both tables and conditional
+ * formats copied elsewhere in this merge.
+ */
+function applyWorkbookTableStyles(
+  sourceArchive: ArchiveEntries,
+  savedArchive: ArchiveEntries,
+) {
+  const sourceXml = readArchiveText(sourceArchive, "xl/styles.xml");
+  const savedXml = readArchiveText(savedArchive, "xl/styles.xml");
+  if (!sourceXml || !savedXml) {
+    return false;
+  }
+  const sourceDocument = parseXml(sourceXml);
+  const savedDocument = parseXml(savedXml);
+  if (!sourceDocument?.documentElement || !savedDocument?.documentElement) {
+    return false;
+  }
+  const sourceDxfs = getLocalElements(sourceDocument, "dxfs")[0] ?? null;
+  const sourceTableStyles = getLocalElements(sourceDocument, "tableStyles")[0] ?? null;
+  const hasDxfs = Boolean(sourceDxfs && getChildElements(sourceDxfs, "dxf").length > 0);
+  const hasTableStyles = Boolean(
+    sourceTableStyles && getChildElements(sourceTableStyles, "tableStyle").length > 0,
+  );
+  if (!hasDxfs && !hasTableStyles) {
+    return false;
+  }
+  if (hasDxfs && sourceDxfs) {
+    replaceStyleElement(savedDocument, "dxfs", sourceDxfs);
+  }
+  if (hasTableStyles && sourceTableStyles) {
+    replaceStyleElement(savedDocument, "tableStyles", sourceTableStyles);
+  }
+  savedArchive["xl/styles.xml"] = strToU8(serializeXml(savedDocument));
+  return true;
+}
+
 /**
  * Writes the authored worksheet objects — freeze pane, hyperlinks, conditional
  * formats, data validations, comments, tables and print set-up — into freshly
@@ -1114,6 +1204,8 @@ export function mergeWorkbookSheetAuthoringAssets(
       changed = true;
     }
 
+    const tableStylesChanged = applyWorkbookTableStyles(sourceArchive, savedArchive);
+    if (tableStylesChanged) changed = true;
     const printLayoutsChanged = applyWorksheetPrintLayouts(sourceArchive, savedArchive);
     if (printLayoutsChanged) changed = true;
     const pivotPartsChanged = applyWorkbookPivotParts(sourceArchive, savedArchive);
