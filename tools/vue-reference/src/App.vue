@@ -2,10 +2,15 @@
 import manifest from "../../parity-fixtures/manifest.json";
 import { readQuery } from "./fixtures";
 import ParitySurface from "./parity/ParitySurface.vue";
+import ButtonSurface from "./surfaces/ButtonSurface.vue";
+import DialogSurface from "./surfaces/DialogSurface.vue";
 import FileThumbnailSurface from "./surfaces/FileThumbnailSurface.vue";
 import FileUploadSurface from "./surfaces/FileUploadSurface.vue";
+import InputSurface from "./surfaces/InputSurface.vue";
 import MissingSurface from "./surfaces/MissingSurface.vue";
 import PdfToolbarSurface from "./surfaces/PdfToolbarSurface.vue";
+import SelectSurface from "./surfaces/SelectSurface.vue";
+import TooltipSurface from "./surfaces/TooltipSurface.vue";
 
 type Surface = (typeof manifest.surfaces)[number];
 
@@ -35,6 +40,28 @@ function subjectStatus(surface: Surface): "available" | "missing" {
       :note="surface.notes"
       :pending-issue="surface.pendingIssue ?? '#unknown'"
       :states="surface.states"
+    />
+    <ButtonSurface
+      v-else-if="surface.id === 'button'"
+      :cell-width="surface.cellWidth"
+    />
+    <InputSurface
+      v-else-if="surface.id === 'input'"
+      :cell-width="surface.cellWidth"
+    />
+    <SelectSurface
+      v-else-if="surface.id === 'select'"
+      :cell-width="surface.cellWidth"
+    />
+    <DialogSurface
+      v-else-if="surface.id === 'dialog'"
+      :cell-width="surface.cellWidth"
+      :theme="theme"
+    />
+    <TooltipSurface
+      v-else-if="surface.id === 'tooltip'"
+      :cell-width="surface.cellWidth"
+      :theme="theme"
     />
     <FileUploadSurface
       v-else-if="surface.id === 'file-upload'"

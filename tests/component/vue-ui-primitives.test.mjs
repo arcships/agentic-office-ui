@@ -244,7 +244,7 @@ test("Button applies variants, sizes, disabled and loading", async (t) => {
 
   const [primary, disabled, loading] = [...document.querySelectorAll("button")];
   assert.match(primary.className, /office-button--destructive/);
-  assert.match(primary.className, /office-button--lg/);
+  assert.match(primary.className, /office-button--size-lg/);
   primary.click();
   assert.deepEqual(clicks, ["click"]);
 
@@ -310,7 +310,10 @@ test("Input and Textarea support v-model, sizes, invalid and disabled", async (t
   await flush();
 
   const input = document.querySelector('[data-testid="input"]');
-  assert.match(input.className, /office-input--sm/);
+  assert.match(
+    input.closest("[data-slot=input-control]").className,
+    /office-input-control--sm/,
+  );
   input.value = "changed";
   input.dispatchEvent(new Event("input", { bubbles: true }));
   await flush(0);

@@ -356,10 +356,10 @@ node --test --test-concurrency=1 tests/unit/vue-ui-primitives-contract.test.mjs
 
 | 文件 | 构建后 | gzip |
 |---|---|---|
-| `dist/index.js` | 104,152 B | 22,554 B |
-| `dist/style.css` | 47,550 B | 7,557 B |
-| 合计 | | 30,111 B |
-| 相对基线新增 | | 10,971 B |
+| `dist/index.js` | 149,672 B | 33,770 B |
+| `dist/style.css` | 61,278 B | 9,188 B |
+| 合计 | | 42,958 B |
+| 相对基线新增 | | 23,818 B |
 
 `reka-ui`、`@lucide/vue`、`vue` 在库构建中保持 external；图标不进入本包产物，仍由
 `OfficeIcon` 的内置注册表或宿主按需提供。预算测试同时断言 `dist/index.js` 不内联
@@ -367,17 +367,31 @@ node --test --test-concurrency=1 tests/unit/vue-ui-primitives-contract.test.mjs
 
 ## 7. Extend / shadcn 视觉对照状态
 
-本轮没有可运行的 #155 像素对比 harness（`/tmp/b08-155/scripts/ci/pixel-parity.mjs` 与
-`pnpm ui:parity` 在该 worktree 中不存在）。因此：
+已接入 #155 harness（`tools/extend-reference` + `tools/vue-reference` +
+`tools/parity-fixtures`）。同一份文案/数据、4 个 viewport（1440×900、1280×720、
+768×1024、390×844）、light/dark 和 DPR 2 下运行：
 
-- 已按 Extend `registry/new-york-v4/ui` 的 class 清单逐项映射尺寸、圆角、间距、颜色层级、
-  focus ring、disabled/loading 和菜单高亮；
-- demo 新增 `/primitives` gallery，包含 default/hover/focus/disabled/loading 状态和固定
-  `data-testid`；`scripts/ci/capture-primitives-gallery.py` 通过 Playwright 生成确定性元素
-  截图（1280×960、DPR 1、light/dark、无 console error），本轮证据在
-  `output/parity/`（Button/Input/Select content/Dialog/Tooltip/Toast 及整页）；
-- Button/Input/Select/Dialog/Tooltip 的像素 diff **尚未**由 #155 harness 验证，不能声明
-  `≤0.1%` 通过；#155 落地后应使用其 baseline 重新测量并记录实际 delta。
+```bash
+pnpm ui:parity -- --only button,input,select,dialog,tooltip
+```
+
+最终矩阵 200 个 case：**196 pass**，4 个 `input/focus/light` 失败。失败不是可见色差：
+52 个物理像素、单通道 **1/255**、diff ratio **0.077%**，均低于“≤0.1% / ≤2”目标；
+harness 额外的 2×2 连续差异规则把 4px 的抗锯齿弧线判为 fail。实测矩阵：
+
+| primitive | 状态 | 结果 |
+|---|---|---|
+| Button | 14 状态 × 8 | 全部 pass（0 px） |
+| Input | default/disabled/invalid/size-sm × 8 | pass；focus/light × 4 为上述 52 px 抗锯齿残差（focus/dark pass） |
+| Select | 4 状态 × 8 | 全部 pass（0 px） |
+| Dialog | open × 8 | 全部 pass（0 px；移动端高度/圆角/边框已对齐） |
+| Tooltip | open × 8 | 全部 pass（0 px） |
+
+已按 Extend `registry/new-york-v4/ui` 的 class 清单逐项映射尺寸、圆角、间距、颜色层级、
+focus ring、disabled/loading 和菜单高亮；参照侧只 vendored 最小文件（Button/Input/Select/
+Dialog/Tooltip + Spinner），均带 MIT 来源头并在 `docs/upstream/attribution.json` 登记。
+Demo 的 `/primitives` gallery 仍保留 default/hover/focus/disabled/loading 状态截图，作为
+不依赖 harness 的补充证据（`docs/assets/ui-primitives/`）。
 
 本轮固定状态截图（light/dark、1280×960、DPR 1）：
 

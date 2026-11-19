@@ -84,7 +84,7 @@ function statusIcon(toast: ToastObject): OfficeIconName {
         </div>
         <ToastAction
           v-if="toast.actionProps"
-          class="office-ui office-button office-button--outline office-button--sm office-toast__action"
+          class="office-ui office-button office-button--outline office-button--size-sm office-toast__action"
           data-slot="toast-action"
         />
         <ToastClose

@@ -2,10 +2,14 @@ import manifest from "../../parity-fixtures/manifest.json";
 import type { ParityTheme } from "./parity/ParitySurface";
 import { ParitySurface } from "./parity/ParitySurface";
 import { ButtonSurface } from "./surfaces/ButtonSurface";
+import { DialogSurface } from "./surfaces/DialogSurface";
 import { DocumentSidebarSurface } from "./surfaces/DocumentSidebarSurface";
 import { FileThumbnailSurface } from "./surfaces/FileThumbnailSurface";
 import { FileUploadSurface } from "./surfaces/FileUploadSurface";
+import { InputSurface } from "./surfaces/InputSurface";
 import { PdfToolbarSurface } from "./surfaces/PdfToolbarSurface";
+import { SelectSurface } from "./surfaces/SelectSurface";
+import { TooltipSurface } from "./surfaces/TooltipSurface";
 
 type Surface = (typeof manifest.surfaces)[number];
 
@@ -14,6 +18,10 @@ const renderers: Record<
   (props: { cellWidth: number }) => React.ReactElement
 > = {
   button: ButtonSurface,
+  input: InputSurface,
+  select: SelectSurface,
+  dialog: DialogSurface,
+  tooltip: TooltipSurface,
   "file-upload": FileUploadSurface,
   "file-thumbnail": FileThumbnailSurface,
   "pdf-toolbar": PdfToolbarSurface,

@@ -23,11 +23,10 @@
       "id": "button",
       "title": "Button",
       "referenceComponent": "apps/v4/components/ui/button.tsx",
-      "subjectComponent": null,
-      "subjectStatus": "missing",
-      "pendingIssue": "#157",
+      "subjectComponent": "packages/vue-ui/src/components/ui/OfficeButton.vue",
+      "subjectStatus": "available",
       "cellWidth": 240,
-      "notes": "Reference baseline only: @arcships/vue-ui has no Button primitive yet (blocked on the reka-ui primitive layer in #157 and the token layer in #156).",
+      "notes": "Primitive layer #157. Reference and subject use the same copy, Geist font, variants, sizes and interaction states.",
       "states": [
         { "id": "default", "label": "default", "matrixState": "default", "interaction": { "type": "none" } },
         { "id": "hover", "label": "hover", "matrixState": "hover", "interaction": { "type": "hover", "selector": "button" } },
@@ -43,6 +42,69 @@
         { "id": "size-sm", "label": "size sm", "matrixState": "default", "interaction": { "type": "none" } },
         { "id": "size-lg", "label": "size lg", "matrixState": "default", "interaction": { "type": "none" } },
         { "id": "icon-sm", "label": "icon sm", "matrixState": "default", "interaction": { "type": "none" } }
+      ]
+    },
+    {
+      "id": "input",
+      "title": "Input",
+      "referenceComponent": "apps/v4/components/ui/input.tsx",
+      "subjectComponent": "packages/vue-ui/src/components/ui/OfficeInput.vue",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-slot=input-control]",
+      "referenceTargetSelector": "[data-slot=input-control]",
+      "cellWidth": 300,
+      "notes": "Primitive layer #157. The wrapper (border, radius, focus ring) is the measured target; the inner input keeps the reference height/padding contract.",
+      "states": [
+        { "id": "default", "label": "default", "matrixState": "default", "interaction": { "type": "none" } },
+        { "id": "focus", "label": "focus", "matrixState": "focus", "interaction": { "type": "focus", "selector": "input" } },
+        { "id": "disabled", "label": "disabled", "matrixState": "disabled", "interaction": { "type": "none" } },
+        { "id": "invalid", "label": "invalid", "matrixState": "error", "interaction": { "type": "none" } },
+        { "id": "size-sm", "label": "size sm", "matrixState": "default", "interaction": { "type": "none" } }
+      ]
+    },
+    {
+      "id": "select",
+      "title": "Select",
+      "referenceComponent": "apps/v4/components/ui/select.tsx",
+      "subjectComponent": "packages/vue-ui/src/components/ui/OfficeSelect.vue",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-slot=select-trigger]",
+      "referenceTargetSelector": "[data-slot=select-trigger]",
+      "cellWidth": 320,
+      "notes": "Primitive layer #157. Closed trigger, disabled and placeholder states; popup positioning stays covered by the component suite.",
+      "states": [
+        { "id": "default", "label": "default", "matrixState": "default", "interaction": { "type": "none" } },
+        { "id": "focus", "label": "focus", "matrixState": "focus", "interaction": { "type": "focus", "selector": "[data-slot=select-trigger]" } },
+        { "id": "disabled", "label": "disabled", "matrixState": "disabled", "interaction": { "type": "none" } },
+        { "id": "placeholder", "label": "placeholder", "matrixState": "default", "interaction": { "type": "none" } }
+      ]
+    },
+    {
+      "id": "dialog",
+      "title": "Dialog",
+      "referenceComponent": "apps/v4/components/ui/dialog.tsx",
+      "subjectComponent": "packages/vue-ui/src/components/ui/OfficeDialog.vue",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-slot=dialog-content]",
+      "referenceTargetSelector": "[data-slot=dialog-popup]",
+      "cellWidth": 560,
+      "notes": "Primitive layer #157. Open dialog with the same header, empty panel, footer and close button as the reference.",
+      "states": [
+        { "id": "open", "label": "open", "matrixState": "default", "interaction": { "type": "none" } }
+      ]
+    },
+    {
+      "id": "tooltip",
+      "title": "Tooltip",
+      "referenceComponent": "apps/v4/components/ui/tooltip.tsx",
+      "subjectComponent": "packages/vue-ui/src/components/ui/OfficeTooltip.vue",
+      "subjectStatus": "available",
+      "subjectTargetSelector": "[data-slot=tooltip-content]",
+      "referenceTargetSelector": "[data-parity-tooltip-content]",
+      "cellWidth": 220,
+      "notes": "Primitive layer #157. The visible bubble is the measured target; the trigger uses the same copy and hover interaction.",
+      "states": [
+        { "id": "open", "label": "open", "matrixState": "hover", "interaction": { "type": "hover", "selector": "[data-parity-tooltip-trigger]" } }
       ]
     },
     {

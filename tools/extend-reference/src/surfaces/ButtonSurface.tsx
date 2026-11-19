@@ -1,6 +1,3 @@
-import { HugeiconsIcon } from "@hugeicons/react";
-import { MoreHorizontalIcon } from "@hugeicons/core-free-icons";
-
 import { fixtures } from "../fixtures";
 import { ParityCell } from "../parity/ParitySurface";
 import { Button } from "../vendor/ui/button";
@@ -66,7 +63,20 @@ const cells: Array<{
     matrixState: "default",
     render: () => (
       <Button size="icon-sm" aria-label={copy.iconAlt}>
-        <HugeiconsIcon icon={MoreHorizontalIcon} className="size-4" />
+        <svg
+          aria-hidden="true"
+          className="size-4"
+          fill="none"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="2"
+          viewBox="0 0 24 24"
+        >
+          <circle cx="5" cy="12" r="1" />
+          <circle cx="12" cy="12" r="1" />
+          <circle cx="19" cy="12" r="1" />
+        </svg>
       </Button>
     ),
   },
