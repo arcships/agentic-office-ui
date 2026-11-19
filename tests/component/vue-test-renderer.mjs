@@ -19,10 +19,6 @@ function createHostNode(type, text = "") {
     props: {},
     children: [],
     parent: null,
-    // Layout reads at mount time: `undefined` would poison every
-    // `Math.max(...)` in the grid and hide real dimension regressions.
-    clientWidth: 0,
-    clientHeight: 0,
     get options() {
       return type === "select" ? this.children.filter((child) => child.type === "option") : undefined;
     },
