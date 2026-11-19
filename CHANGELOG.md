@@ -2,6 +2,19 @@
 
 All notable changes to the `@arcships` package family are documented in this file.
 
+## [0.7.1] - 2026-11-19
+
+Batch B: 66 upstream/test-gap issues completed and independently audited.
+
+### DOCX
+- Drawing objects (text boxes, shapes, SmartArt, charts, OLE, equations), drop caps, multi-column sections, table range selection/move/floating, bookmark navigation, revision display modes, host render hooks, image z-order, font metrics/kerning, block/word extraction and highlights, OpenDocument view-only import, document source graph, pre-serialization and clone-safe worker export.
+
+### XLSX
+- Table styles, pivot/slicer detection, defined names, AutoFilter, rich text, indexed colours, locale numbers, formula reference highlighting, chart type/style/media/range highlighting, preset shapes, text rotation/shrink-to-fit, drawing clipboard, fill handle/auto-fit, keyboard navigation, status bar, DOM render fallback, RTL, mobile layout and the expanded acceptance surface.
+
+### PPTX / PDF
+- Presenter view and speaker notes, extended transitions, by-word/char and table/chart animation targets, transition sounds, hyperlinks/context menu, slide sorter, PDF outline/page labels/shared thumbnails and unified view modes.
+
 ## [0.7.0] - 2026-11-18
 
 ### XLSX test surface: registration, CI, export, pixel fidelity and fixtures (#62)
