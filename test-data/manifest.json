@@ -18,7 +18,15 @@
       "source": "synthetic-v1",
       "expected": "parse a workbook with charts, an embedded image, merged cells, multi-axis freeze panes, data validation and conditional-format visuals",
       "bytes": 32255,
-      "sha256": "a92bbb9b840dbe01dfb24a0a158946e8f71a0dd0966bcd30780117726d91d18e"
+      "sha256": "a92bbb9b840dbe01dfb24a0a158946e8f71a0dd0966bcd30780117726d91d18e",
+      "features": [
+        "xlsx:chart",
+        "xlsx:image",
+        "xlsx:merged-cells",
+        "xlsx:freeze-panes",
+        "xlsx:data-validation",
+        "xlsx:conditional-format"
+      ]
     },
     {
       "file": "chinese-mixed.docx",
@@ -27,7 +35,11 @@
       "source": "synthetic-v1",
       "expected": "parse mixed Chinese and Latin text without losing characters",
       "bytes": 35981,
-      "sha256": "189b875ed681299e768ef21806a80295b592bc6f237972ca2a8d4e0154f8e91e"
+      "sha256": "189b875ed681299e768ef21806a80295b592bc6f237972ca2a8d4e0154f8e91e",
+      "features": [
+        "docx:cjk-text",
+        "docx:mixed-script"
+      ]
     },
     {
       "file": "cjk-report.pdf",
@@ -36,7 +48,11 @@
       "source": "synthetic-v1",
       "expected": "extract per-page CJK text and search Chinese keywords",
       "bytes": 3301,
-      "sha256": "ce48dfe7f6a27ba0541ee408c12b3c441f3fd0abb72c43f0d41174091157147e"
+      "sha256": "ce48dfe7f6a27ba0541ee408c12b3c441f3fd0abb72c43f0d41174091157147e",
+      "features": [
+        "pdf:cjk-text",
+        "pdf:text-layer"
+      ]
     },
     {
       "file": "contract-page.png",
@@ -45,7 +61,10 @@
       "source": "synthetic-v1",
       "expected": "decode a synthetic contract page image",
       "bytes": 33306,
-      "sha256": "8494b9445d9e1e77f8ef6cae4789afa6c435efde3c9901f75678ae189d6e37d9"
+      "sha256": "8494b9445d9e1e77f8ef6cae4789afa6c435efde3c9901f75678ae189d6e37d9",
+      "features": [
+        "image:png"
+      ]
     },
     {
       "file": "corrupted.docx",
@@ -54,7 +73,10 @@
       "source": "synthetic-v1",
       "expected": "reject as PARSE_FAILED and keep the page recoverable",
       "bytes": 680,
-      "sha256": "192b0379d3e2fb80d1097af0352734be79e66462d345e1cfacaa9eed49dedc6b"
+      "sha256": "192b0379d3e2fb80d1097af0352734be79e66462d345e1cfacaa9eed49dedc6b",
+      "features": [
+        "negative:corrupt-package"
+      ]
     },
     {
       "file": "corrupted.pdf",
@@ -63,7 +85,10 @@
       "source": "synthetic-v1",
       "expected": "reject invalid PDF bytes",
       "bytes": 460,
-      "sha256": "28e13c89c4c9cee8c95d1d642acf36bffd2e691798f6ce183aba72a67b434b76"
+      "sha256": "28e13c89c4c9cee8c95d1d642acf36bffd2e691798f6ce183aba72a67b434b76",
+      "features": [
+        "negative:corrupt-package"
+      ]
     },
     {
       "file": "corrupted.xlsx",
@@ -72,7 +97,27 @@
       "source": "synthetic-v1",
       "expected": "reject invalid workbook bytes",
       "bytes": 680,
-      "sha256": "ad01e8e26ac9f42456a5ed9c4df5a68616ba2d889aaa9a64115f29b7ad22d7a2"
+      "sha256": "ad01e8e26ac9f42456a5ed9c4df5a68616ba2d889aaa9a64115f29b7ad22d7a2",
+      "features": [
+        "negative:corrupt-package"
+      ]
+    },
+    {
+      "file": "deck-structure.pptx",
+      "type": "pptx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "render one master, three layouts and their placeholders, SmartArt, a video placeholder and CJK runs",
+      "features": [
+        "pptx:slide-master",
+        "pptx:slide-layout",
+        "pptx:placeholder",
+        "pptx:smartart",
+        "pptx:video-placeholder",
+        "pptx:cjk-text"
+      ],
+      "bytes": 15533,
+      "sha256": "09f1dfebf704d303f16ccb824ab5daa4d87cb906f44f0ce025b69cc3a87c215f"
     },
     {
       "file": "demo.docx",
@@ -82,7 +127,44 @@
       "expected": "parse the default multi-page DOCX demo",
       "aliasOf": "legal-contract.docx",
       "bytes": 37275,
-      "sha256": "8f918f37b62dee50d65fc6fe120c4f58753579e1f314698c2e6f23400a7d1b35"
+      "sha256": "8f918f37b62dee50d65fc6fe120c4f58753579e1f314698c2e6f23400a7d1b35",
+      "features": [
+        "docx:long-document"
+      ]
+    },
+    {
+      "file": "docx-embedded-objects.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "parse a text box, a shape, SmartArt, an embedded chart, an OLE object and an OMML equation without dropping their relationships",
+      "features": [
+        "docx:textbox",
+        "docx:shape",
+        "docx:smartart",
+        "docx:chart",
+        "docx:ole-object",
+        "docx:math-omml"
+      ],
+      "bytes": 39816,
+      "sha256": "0d2bb06b7cec0fa37a718af03e0277475297ddacd3535d59e8d6eed6de0afb7a"
+    },
+    {
+      "file": "docx-fields-controls.docx",
+      "type": "docx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "parse PAGE/NUMPAGES/STYLEREF fields with roman and letter formats, block and inline content controls, tracked moveFrom/moveTo revisions and a footnote in a table cell",
+      "features": [
+        "docx:field-page-roman",
+        "docx:field-numpages-alpha",
+        "docx:field-styleref-roman",
+        "docx:content-control",
+        "docx:tracked-move",
+        "docx:footnote-in-table"
+      ],
+      "bytes": 36724,
+      "sha256": "e7892dbecd8e9b9d435dbe0a2731edf645510c7c1cf01ad27510868c12cca7e5"
     },
     {
       "file": "encrypted.pdf",
@@ -91,7 +173,10 @@
       "source": "synthetic-v1",
       "expected": "reject without a password and open with the documented password arcships",
       "bytes": 2710,
-      "sha256": "90bbe4989aee286e7562536b2eec8674f5ee6a0266ef006932bfb449cbac9be1"
+      "sha256": "90bbe4989aee286e7562536b2eec8674f5ee6a0266ef006932bfb449cbac9be1",
+      "features": [
+        "pdf:encrypted"
+      ]
     },
     {
       "file": "field-citations.json",
@@ -100,7 +185,10 @@
       "source": "synthetic-v1",
       "expected": "parse citation bounding boxes",
       "bytes": 1142,
-      "sha256": "9484e91f8f14babb36ff0587f4a4eb8f39026b17fe7e5d2e9d926ac3ff0731e3"
+      "sha256": "9484e91f8f14babb36ff0587f4a4eb8f39026b17fe7e5d2e9d926ac3ff0731e3",
+      "features": [
+        "ocr:field-citations"
+      ]
     },
     {
       "file": "financial-model.xlsx",
@@ -109,7 +197,12 @@
       "source": "synthetic-v1",
       "expected": "parse formulas, formatted numbers and multiple sheets",
       "bytes": 8129,
-      "sha256": "d42c4527a7a3235ae566d990c7760cc402576f37f4545c2d54b7d07ed4ea257d"
+      "sha256": "d42c4527a7a3235ae566d990c7760cc402576f37f4545c2d54b7d07ed4ea257d",
+      "features": [
+        "xlsx:formulas",
+        "xlsx:number-format",
+        "xlsx:multiple-sheets"
+      ]
     },
     {
       "file": "invoice-table.docx",
@@ -118,7 +211,11 @@
       "source": "synthetic-v1",
       "expected": "preserve invoice text and table structure through roundtrip",
       "bytes": 36004,
-      "sha256": "340d3b8c0e4517d7c789eeea6fefc7006bab13c665b6e607e19d41edc49e68b9"
+      "sha256": "340d3b8c0e4517d7c789eeea6fefc7006bab13c665b6e607e19d41edc49e68b9",
+      "features": [
+        "docx:table",
+        "docx:merged-cells"
+      ]
     },
     {
       "file": "invoice.png",
@@ -127,7 +224,10 @@
       "source": "synthetic-v1",
       "expected": "decode a synthetic invoice image",
       "bytes": 29397,
-      "sha256": "0d5b4c9566a36280cd1e9b0458ff95483a19f6e8f00e4c48dfe5d0efe8132611"
+      "sha256": "0d5b4c9566a36280cd1e9b0458ff95483a19f6e8f00e4c48dfe5d0efe8132611",
+      "features": [
+        "image:png"
+      ]
     },
     {
       "file": "large-contract.pdf",
@@ -136,7 +236,10 @@
       "source": "synthetic-v1",
       "expected": "open a 240-page contract for first-render and page-turn timing",
       "bytes": 208838,
-      "sha256": "47d575278e886ba6fd8f745df8a1ce37c258a7b6999dcca562d0164cad761923"
+      "sha256": "47d575278e886ba6fd8f745df8a1ce37c258a7b6999dcca562d0164cad761923",
+      "features": [
+        "pdf:large"
+      ]
     },
     {
       "file": "large-grid.xlsx",
@@ -145,7 +248,10 @@
       "source": "synthetic-v1",
       "expected": "parse and scroll a large worksheet fixture",
       "bytes": 134402,
-      "sha256": "7d25999db907b88a47a9417c582169e3416bd4c3d02b8f897e1b9d41130fe2d2"
+      "sha256": "7d25999db907b88a47a9417c582169e3416bd4c3d02b8f897e1b9d41130fe2d2",
+      "features": [
+        "xlsx:large-grid"
+      ]
     },
     {
       "file": "legal-contract.docx",
@@ -154,7 +260,10 @@
       "source": "synthetic-v1",
       "expected": "parse a multi-page legal contract",
       "bytes": 37275,
-      "sha256": "8f918f37b62dee50d65fc6fe120c4f58753579e1f314698c2e6f23400a7d1b35"
+      "sha256": "8f918f37b62dee50d65fc6fe120c4f58753579e1f314698c2e6f23400a7d1b35",
+      "features": [
+        "docx:long-document"
+      ]
     },
     {
       "file": "ocr-layout.json",
@@ -163,7 +272,10 @@
       "source": "synthetic-v1",
       "expected": "parse OCR layout coordinates and rotated blocks",
       "bytes": 1734,
-      "sha256": "ceadaeae36915496b5903c983674341a80d98c21d2138ce2a97bcaa27f816ac9"
+      "sha256": "ceadaeae36915496b5903c983674341a80d98c21d2138ce2a97bcaa27f816ac9",
+      "features": [
+        "ocr:layout"
+      ]
     },
     {
       "file": "page-sizes.docx",
@@ -172,7 +284,41 @@
       "source": "synthetic-v1",
       "expected": "render an A4 portrait section, an A4 landscape section and a US Letter section with distinct per-section headers and footers",
       "bytes": 38003,
-      "sha256": "28719a3e26d8e1328c04b2f73204ef82aef0ad0ecce664049ddcf3134ec77d6f"
+      "sha256": "28719a3e26d8e1328c04b2f73204ef82aef0ad0ecce664049ddcf3134ec77d6f",
+      "features": [
+        "docx:section-page-size",
+        "docx:section-orientation"
+      ]
+    },
+    {
+      "file": "pdf-1000-pages.pdf",
+      "type": "pdf",
+      "category": "large",
+      "source": "synthetic-v1",
+      "expected": "open 1000 pages, extract the first and last page markers and keep the 1000-page budget",
+      "features": [
+        "pdf:large",
+        "pdf:text-layer"
+      ],
+      "bytes": 557618,
+      "sha256": "f448aa339124fa5d60448525aedfb370ed852d96ba5d4271d3f758a849f1826c"
+    },
+    {
+      "file": "pdf-acroform-annotations.pdf",
+      "type": "pdf",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "read AcroForm widgets, highlight/free-text/link annotations, attachments, an OCG and signature/DocMDP metadata",
+      "features": [
+        "pdf:acroform",
+        "pdf:annotation",
+        "pdf:attachment",
+        "pdf:ocg",
+        "pdf:signature-field",
+        "pdf:docmdp"
+      ],
+      "bytes": 11028,
+      "sha256": "f7081936078067aeaf27f48616e748a951cb1ec43c4f6e6ad68bbd80b65a7918"
     },
     {
       "file": "report-with-image.docx",
@@ -181,7 +327,10 @@
       "source": "synthetic-v1",
       "expected": "parse and render an embedded image",
       "bytes": 56892,
-      "sha256": "736d71d2aed7802e51ddea4aa7b8b2980ad4ebccce5ce4c9b69105e469f15c6d"
+      "sha256": "736d71d2aed7802e51ddea4aa7b8b2980ad4ebccce5ce4c9b69105e469f15c6d",
+      "features": [
+        "docx:image"
+      ]
     },
     {
       "file": "review-comments.docx",
@@ -190,7 +339,13 @@
       "source": "synthetic-v1",
       "expected": "render tracked changes, comments, footnotes, endnotes and document search",
       "bytes": 36885,
-      "sha256": "9e8d1852f7cde12e83bd91d0452a2941fff5b4b55f901235d1ba5c22f1f60e09"
+      "sha256": "9e8d1852f7cde12e83bd91d0452a2941fff5b4b55f901235d1ba5c22f1f60e09",
+      "features": [
+        "docx:comments",
+        "docx:tracked-changes",
+        "docx:footnotes",
+        "docx:endnotes"
+      ]
     },
     {
       "file": "review-threads.docx",
@@ -199,7 +354,14 @@
       "source": "synthetic-v1",
       "expected": "render comment threads with replies, resolved threads, two comments on one paragraph, a cross-paragraph range, a cell comment, a header comment, row deletion and row-height revisions",
       "bytes": 38005,
-      "sha256": "28c5029ab40dae32ed8f73a4fe33aaa5ecf0f8d5308e71a9ee5d1c77b228b3b3"
+      "sha256": "28c5029ab40dae32ed8f73a4fe33aaa5ecf0f8d5308e71a9ee5d1c77b228b3b3",
+      "features": [
+        "docx:threaded-comments",
+        "docx:resolved-comment",
+        "docx:comment-in-table",
+        "docx:comment-in-header",
+        "docx:tracked-changes"
+      ]
     },
     {
       "file": "rotated-pages.pdf",
@@ -208,7 +370,10 @@
       "source": "synthetic-v1",
       "expected": "open an upright page and a page whose /Rotate 90 metadata viewers must apply",
       "bytes": 2413,
-      "sha256": "902b9020b732a72ea75540154948e7e1cf94c2866304dc54cac7a4370bf989a6"
+      "sha256": "902b9020b732a72ea75540154948e7e1cf94c2866304dc54cac7a4370bf989a6",
+      "features": [
+        "pdf:rotation"
+      ]
     },
     {
       "file": "sales-table-validated.xlsx",
@@ -217,7 +382,13 @@
       "source": "synthetic-v1",
       "expected": "parse multi-axis freeze panes, list validation and two-letter column widths",
       "bytes": 14290,
-      "sha256": "c9e4a6f24730892495b7c28ef6bc7df3bd314e0798f1ac3d7e603a799375553a"
+      "sha256": "c9e4a6f24730892495b7c28ef6bc7df3bd314e0798f1ac3d7e603a799375553a",
+      "features": [
+        "xlsx:freeze-panes",
+        "xlsx:data-validation",
+        "xlsx:table",
+        "xlsx:column-width"
+      ]
     },
     {
       "file": "sales-table.xlsx",
@@ -226,7 +397,12 @@
       "source": "synthetic-v1",
       "expected": "parse a sales workbook with tables, formulas and number formats",
       "bytes": 13226,
-      "sha256": "9ba1564c45283d64879cb4d53bb1ae3af0c1478cd10c76268d1b0c2d729a0dfa"
+      "sha256": "9ba1564c45283d64879cb4d53bb1ae3af0c1478cd10c76268d1b0c2d729a0dfa",
+      "features": [
+        "xlsx:table",
+        "xlsx:formulas",
+        "xlsx:number-format"
+      ]
     },
     {
       "file": "sample.pdf",
@@ -235,7 +411,10 @@
       "source": "synthetic-v1",
       "expected": "open a valid PDF fixture",
       "bytes": 4652,
-      "sha256": "76e533d35599f1f2c7f92785bba4a111053ca9361913bb809e9c13aa6c262253"
+      "sha256": "76e533d35599f1f2c7f92785bba4a111053ca9361913bb809e9c13aa6c262253",
+      "features": [
+        "pdf:text-layer"
+      ]
     },
     {
       "file": "scanned-invoice.pdf",
@@ -244,7 +423,11 @@
       "source": "synthetic-v1",
       "expected": "open image-only scanned pages without a native text layer",
       "bytes": 39398,
-      "sha256": "f68a038d6c88558d6057b82be14d8b29491112f36cbbe56638b8792d0c5dea26"
+      "sha256": "f68a038d6c88558d6057b82be14d8b29491112f36cbbe56638b8792d0c5dea26",
+      "features": [
+        "pdf:scanned",
+        "pdf:image-only"
+      ]
     },
     {
       "file": "sections-columns.docx",
@@ -253,7 +436,13 @@
       "source": "synthetic-v1",
       "expected": "render portrait, landscape and two-column sections with per-section headers, a text box and a behind-text watermark",
       "bytes": 59524,
-      "sha256": "c4c1b8ad5f7ab70f4b2d8c7e572a1492b2d614149f80ddcff7041b514a9b994a"
+      "sha256": "c4c1b8ad5f7ab70f4b2d8c7e572a1492b2d614149f80ddcff7041b514a9b994a",
+      "features": [
+        "docx:section-orientation",
+        "docx:section-columns",
+        "docx:textbox",
+        "docx:watermark"
+      ]
     },
     {
       "file": "table-structures.docx",
@@ -262,7 +451,93 @@
       "source": "synthetic-v1",
       "expected": "render vertical merges, grid spans, nested tables, multi-paragraph cells, repeating tblHeader rows and a table inside the page header",
       "bytes": 37303,
-      "sha256": "1c5453c9e0b16a0fc96a4b88655f14796f061aadca1bcc251281d3b3389a6adf"
+      "sha256": "1c5453c9e0b16a0fc96a4b88655f14796f061aadca1bcc251281d3b3389a6adf",
+      "features": [
+        "docx:table",
+        "docx:vertical-merge",
+        "docx:grid-span",
+        "docx:nested-table",
+        "docx:table-header-repeat"
+      ]
+    },
+    {
+      "file": "xlsx-chart-families.xlsx",
+      "type": "xlsx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "parse column/bar, stacked/100%, line, pie, doughnut, scatter, radar, area, combo and 3D chart families",
+      "features": [
+        "xlsx:chart-family-bar",
+        "xlsx:chart-family-line",
+        "xlsx:chart-family-pie",
+        "xlsx:chart-family-scatter",
+        "xlsx:chart-family-radar",
+        "xlsx:chart-family-area",
+        "xlsx:chart-combo-one-axis",
+        "xlsx:chart-combo-two-axis",
+        "xlsx:chart-3d-fallback"
+      ],
+      "bytes": 14425,
+      "sha256": "6ede177e6ecaa13d1c698a22f04cff0239619a02ad7e3063d40b93a1d5922f03"
+    },
+    {
+      "file": "xlsx-large-scale.xlsx",
+      "type": "xlsx",
+      "category": "large",
+      "source": "synthetic-v1",
+      "expected": "open and scroll a 100k-row sheet and a 10k-column used range without exhausting memory",
+      "features": [
+        "xlsx:large-rows",
+        "xlsx:wide-columns"
+      ],
+      "bytes": 1396073,
+      "sha256": "387e16c03f2e34c9f966e8c73b180f5d07b02587077f6ffdd9e9ee7ab2a97422"
+    },
+    {
+      "file": "xlsx-macros.xlsm",
+      "type": "xlsm",
+      "category": "boundary",
+      "source": "synthetic-v1",
+      "expected": "open a macro-enabled workbook and report the inert VBA project stub without executing it",
+      "features": [
+        "xlsx:macro-enabled",
+        "xlsx:vba-project-stub"
+      ],
+      "bytes": 5446,
+      "sha256": "015736efc09b7ca00c522c18945e1d9c75ba8ec952cbf460be997260344b05c9"
+    },
+    {
+      "file": "xlsx-negative-databar-icons.xlsx",
+      "type": "xlsx",
+      "category": "normal",
+      "source": "synthetic-v1",
+      "expected": "parse data bars over negative values, 4- and 5-icon sets, percentile/percent/list/formula conditional-format inputs",
+      "features": [
+        "xlsx:data-bar-negative",
+        "xlsx:icon-set-4",
+        "xlsx:icon-set-5",
+        "xlsx:cfvo-num",
+        "xlsx:cfvo-percent",
+        "xlsx:cfvo-percentile",
+        "xlsx:cfvo-formula"
+      ],
+      "bytes": 5869,
+      "sha256": "c546723ee845ee75788d4dc7f889a9db56295e217b8f2dd34dcbf5e174e2e70a"
+    },
+    {
+      "file": "xlsx-protected-1904.xlsx",
+      "type": "xlsx",
+      "category": "boundary",
+      "source": "synthetic-v1",
+      "expected": "open a date-1904 workbook whose workbook structure and worksheet carry passwords",
+      "features": [
+        "xlsx:date-1904",
+        "xlsx:workbook-protection",
+        "xlsx:sheet-protection"
+      ],
+      "bytes": 5661,
+      "sha256": "decd9182ee680ca0fb4351bf8854b65dfacd36b624eadf085731b881e9fa9e81"
     }
-  ]
+  ],
+  "coverage": "test-data/corpus-coverage.json"
 }

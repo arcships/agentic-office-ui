@@ -179,7 +179,7 @@ P0/P1 整改必须同时提供一个只使用公开接口的测试消费页。�
 }
 ```
 
-所有材料由 `scripts/generate_test_materials.py` 以固定种子、固定时间戳和稳定 ZIP/PDF 元数据生成。`node scripts/ci/verify-fixtures.mjs` 检查完整文件集合、类型签名、分类覆盖、别名和校验值；损坏材料只记录稳定错误类别，不记录随浏览器变化的完整堆栈。
+所有材料由 `scripts/generate_test_materials.py` 以固定种子、固定时间戳和稳定 ZIP/PDF 元数据生成。0.8 起每个 manifest entry 都带 `features: []` 标签，`test-data/corpus-coverage.json` 与生成的 `docs/fixture-corpus.md` 记录 fixture → feature → issue → test 矩阵；新增的 DOCX 嵌入对象/字段/SDT/tracked move、XLSX 宏/保护/1904/图表族/负值 data bar/图标集/100k 行/10k 列、PPTX master/layout/SmartArt/video/CJK 和 PDF AcroForm/annotation/attachment/OCG/signature/1000 页夹具都至少被 `tests/unit/fixture-corpus.test.mjs` 和 `scripts/verify_test_materials.py` 引用。`node scripts/ci/verify-fixtures.mjs` 检查完整文件集合、类型签名、分类覆盖、别名、feature 标签、覆盖矩阵和校验值；损坏材料只记录稳定错误类别，不记录随浏览器变化的完整堆栈。
 
 ## 5. 结果、证据和严重级别
 

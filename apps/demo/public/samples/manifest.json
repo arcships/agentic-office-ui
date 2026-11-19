@@ -28,8 +28,20 @@
     "bytes": 680
   },
   {
+    "name": "deck-structure.pptx",
+    "bytes": 15533
+  },
+  {
     "name": "demo.docx",
     "bytes": 37275
+  },
+  {
+    "name": "docx-embedded-objects.docx",
+    "bytes": 39816
+  },
+  {
+    "name": "docx-fields-controls.docx",
+    "bytes": 36724
   },
   {
     "name": "encrypted.pdf",
@@ -72,6 +84,14 @@
     "bytes": 38003
   },
   {
+    "name": "pdf-1000-pages.pdf",
+    "bytes": 557618
+  },
+  {
+    "name": "pdf-acroform-annotations.pdf",
+    "bytes": 11028
+  },
+  {
     "name": "report-with-image.docx",
     "bytes": 56892
   },
@@ -110,5 +130,25 @@
   {
     "name": "table-structures.docx",
     "bytes": 37303
+  },
+  {
+    "name": "xlsx-chart-families.xlsx",
+    "bytes": 14425
+  },
+  {
+    "name": "xlsx-large-scale.xlsx",
+    "bytes": 1396073
+  },
+  {
+    "name": "xlsx-macros.xlsm",
+    "bytes": 5446
+  },
+  {
+    "name": "xlsx-negative-databar-icons.xlsx",
+    "bytes": 5869
+  },
+  {
+    "name": "xlsx-protected-1904.xlsx",
+    "bytes": 5661
   }
 ]
