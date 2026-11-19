@@ -41,6 +41,7 @@ import {
   addHeaderFooter as addSectionHeaderFooter,
   setPageMargins as applySectionPageMargins,
   setPageSize as applySectionPageSize,
+  setSectionColumns as applySectionColumns,
 } from "@arcships/docx-core"
 
 import type {
@@ -82,6 +83,7 @@ import type {
   DocxSectionRegion,
   DocxPageMarginsUpdate,
   DocxPageSizeUpdate,
+  DocxSectionColumnsUpdate,
   DocxPageSetupCommandOptions,
   DocxRevisionDisplay,
   AddHeaderFooterOptions,
@@ -758,6 +760,17 @@ export function useDocxEditor(
       { pushHistory: options?.pushHistory }
     )
 
+  const setSectionColumns = (
+    sectionIndex: number,
+    columns: DocxSectionColumnsUpdate,
+    options?: DocxPageSetupCommandOptions
+  ): boolean =>
+    applyModelChange(
+      (current) => applySectionColumns(current, sectionIndex, columns),
+      ctx.statusMessage("sectionColumnsUpdated"),
+      { pushHistory: options?.pushHistory }
+    )
+
   const addHeaderFooter = (
     sectionIndex: number,
     kind: DocxSectionRegion,
@@ -1081,6 +1094,7 @@ export function useDocxEditor(
     commitSectionParagraphText: txt.commitSectionParagraphText,
     setPageMargins,
     setPageSize,
+    setSectionColumns,
     addHeaderFooter,
     writeSelectionToClipboardData: clp.writeSelectionToClipboardData,
     pasteClipboardData: async (sources) => clp.pasteClipboardData(sources),

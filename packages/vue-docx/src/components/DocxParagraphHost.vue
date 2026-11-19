@@ -194,7 +194,7 @@ const paragraphStyle = computed<Record<string, any>>(() => {
   }
 
   const lineRange = props.lineRange
-  if (lineRange && !props.editable) {
+  if (lineRange) {
     const lineHeightPx = Math.max(1, Math.round(lineRange.lineHeightPx))
     const startLineIndex = Math.max(0, Math.round(lineRange.startLineIndex))
     const endLineIndex = Math.max(
@@ -213,14 +213,16 @@ const paragraphStyle = computed<Record<string, any>>(() => {
       ? marginBottomPx
       : 0
     // Pull the paragraph up so the first line of the slice lands at the top of
-    // the slot, then clip everything after the slice.
+    // the slot, then clip everything after the slice. Editable slices use
+    // `clip` rather than `hidden`: a scroll container would let focus scroll
+    // the full paragraph inside the fragment and reveal the wrong lines.
     resolved.marginTop = `${topSpacingPx - startLineIndex * lineHeightPx}px`
     resolved.marginBottom = `${bottomSpacingPx}px`
     resolved.height = `${Math.max(
       lineHeightPx,
       sliceLineCount * lineHeightPx + topSpacingPx + bottomSpacingPx
     )}px`
-    resolved.overflow = "hidden"
+    resolved.overflow = props.editable ? "clip" : "hidden"
   }
 
   return resolved

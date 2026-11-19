@@ -48,7 +48,7 @@ import type {
   DocxTrackedChange,
   ParagraphLocation
 } from "./editor-types";
-import type { DocxPageMarginsUpdate, DocxPageSizeUpdate } from "../../engine/section-properties";
+import type { DocxPageMarginsUpdate, DocxPageSizeUpdate, DocxSectionColumnsUpdate } from "../../engine/section-properties";
 import type { AddHeaderFooterOptions } from "../page-setup-ops";
 import type { DocxTableFloatingUpdate } from "./table-utils";
 
@@ -574,6 +574,16 @@ export interface DocxEditorController {
   setPageSize: (
     sectionIndex: number,
     pageSize: DocxPageSizeUpdate,
+    options?: DocxPageSetupCommandOptions
+  ) => boolean;
+  /**
+   * Set the body columns of one section (`w:cols`, 1–45). The command rewrites
+   * `w:num`/`w:space`, drops stale explicit column widths and leaves every
+   * other `w:sectPr` child intact. One undo entry.
+   */
+  setSectionColumns: (
+    sectionIndex: number,
+    columns: DocxSectionColumnsUpdate,
     options?: DocxPageSetupCommandOptions
   ) => boolean;
   /**

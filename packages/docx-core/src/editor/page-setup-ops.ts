@@ -19,15 +19,19 @@ import type {
 import { cloneDocModelShallow } from "../engine/clone";
 import {
   DEFAULT_SECTION_PROPERTIES_XML,
+  readSectionColumns,
   readSectionPageMargins,
   readSectionPageSize,
   addSectionPartReference,
+  writeSectionColumns,
   writeSectionPageMargins,
   writeSectionPageSize,
   type DocxPageMargins,
   type DocxPageMarginsUpdate,
   type DocxPageSize,
-  type DocxPageSizeUpdate
+  type DocxPageSizeUpdate,
+  type DocxSectionColumns,
+  type DocxSectionColumnsUpdate
 } from "../engine/section-properties";
 import {
   paragraphSectionPropertiesXml,
@@ -41,6 +45,8 @@ export interface DocxSectionPageSetup {
   startNodeIndex: number;
   pageSize: DocxPageSize;
   margins: DocxPageMargins;
+  /** Body columns of the section (`w:cols`), 1 when single-column. */
+  columns: DocxSectionColumns;
   sectionPropertiesXml: string;
 }
 
@@ -254,6 +260,22 @@ export function setPageSize(
   );
 }
 
+/**
+ * Set the body columns of one section (`w:cols`). Changing the count rewrites
+ * `w:num` and clears explicit per-column widths, so the section flows through
+ * the requested number of equal columns; every other `sectPr` child is
+ * preserved. One undo entry.
+ */
+export function setSectionColumns(
+  model: DocModel,
+  sectionIndex: number,
+  columns: DocxSectionColumnsUpdate
+): DocModel {
+  return applySectionPropertiesUpdate(model, sectionIndex, (sectionPropertiesXml) =>
+    writeSectionColumns(sectionPropertiesXml, columns)
+  );
+}
+
 /** Page geometry of every section, in document order. */
 export function resolvePageSetup(model: DocModel): DocxSectionPageSetup[] {
   const sections = model.metadata.sections ?? [];
@@ -265,6 +287,7 @@ export function resolvePageSetup(model: DocModel): DocxSectionPageSetup[] {
         startNodeIndex: 0,
         pageSize: readSectionPageSize(sectionPropertiesXml),
         margins: readSectionPageMargins(sectionPropertiesXml),
+        columns: readSectionColumns(sectionPropertiesXml),
         sectionPropertiesXml
       }
     ];
@@ -277,6 +300,7 @@ export function resolvePageSetup(model: DocModel): DocxSectionPageSetup[] {
       startNodeIndex: section.startNodeIndex,
       pageSize: readSectionPageSize(sectionPropertiesXml),
       margins: readSectionPageMargins(sectionPropertiesXml),
+      columns: readSectionColumns(sectionPropertiesXml),
       sectionPropertiesXml
     };
   });

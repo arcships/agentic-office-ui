@@ -42,6 +42,24 @@ export type DocxPageSizePreset =
   | "a5"
   | "b5";
 
+/** Body column layout of a section (`<w:cols>`). */
+export interface DocxSectionColumns {
+  /** Text columns on the section's pages, at least 1. */
+  count: number;
+  /** Space between two adjacent columns in twips (OOXML `w:space`). */
+  spaceTwips: number;
+  /** Explicit per-column widths in twips, when the section declares them. */
+  widthsTwips?: number[];
+}
+
+/** Column patch: omitted fields keep their current value. */
+export interface DocxSectionColumnsUpdate {
+  /** Number of columns; 1 keeps the text in one body column. */
+  count?: number;
+  /** Space between columns in twips (OOXML `w:space`). */
+  spaceTwips?: number;
+}
+
 /**
  * Common paper sizes in portrait twips. Values match Word's own `w:pgSz`
  * output for each preset.
@@ -59,6 +77,9 @@ export const DOCX_PAGE_SIZE_PRESETS: Readonly<
 });
 
 export const TWIPS_PER_INCH = 1440;
+
+/** Word's default spacing between section columns: half an inch. */
+export const DEFAULT_DOCX_COLUMN_SPACE_TWIPS = 720;
 
 /** Word's default: US Letter with 1in margins and 0.5in header/footer. */
 export const DEFAULT_DOCX_PAGE_MARGINS: DocxPageMargins = Object.freeze({
@@ -406,6 +427,93 @@ export function writeSectionPageSize(
     // A stale paper code would name a different size than the new edges.
     "w:code": undefined,
   });
+}
+
+/** Read `<w:cols>` with Word's one-column, half-inch-gap defaults. */
+export function readSectionColumns(
+  sectionPropertiesXml?: string,
+): DocxSectionColumns {
+  const tag = sectionPropertiesXml
+    ? readElement(sectionPropertiesXml, "w:cols")
+    : undefined;
+  const rawCount = readAttribute(tag, "w:num");
+  const parsedCount = rawCount === undefined ? 1 : Math.round(Number(rawCount));
+  const count = Number.isFinite(parsedCount) ? Math.max(1, parsedCount) : 1;
+  const widthsTwips = [...String(tag ?? "").matchAll(/<w:col\b[^>]*\/?>/gi)]
+    .map((match) => normalizeTwips(readAttribute(match[0], "w:w"), 0))
+    .filter((width) => width > 0);
+
+  return {
+    count,
+    spaceTwips: normalizeTwips(
+      readAttribute(tag, "w:space"),
+      DEFAULT_DOCX_COLUMN_SPACE_TWIPS,
+    ),
+    ...(count > 1 && widthsTwips.length === count ? { widthsTwips } : {}),
+  };
+}
+
+/**
+ * Rewrite `<w:cols>` in a `w:sectPr` fragment.
+ *
+ * Changing the count drops explicit `<w:col>` widths and a stale
+ * `w:equalWidth="0"`, so the new count uses equal columns like Word's Columns
+ * dialog. Every other `sectPr` child, and `w:sep`, are preserved.
+ */
+export function writeSectionColumns(
+  sectionPropertiesXml: string,
+  columns: DocxSectionColumnsUpdate,
+): string {
+  const current = readSectionColumns(sectionPropertiesXml);
+  const count =
+    columns.count === undefined
+      ? current.count
+      : Math.max(1, Math.min(45, Math.round(columns.count)));
+  const spaceTwips =
+    columns.spaceTwips === undefined
+      ? current.spaceTwips
+      : normalizeTwips(columns.spaceTwips, current.spaceTwips);
+
+  if (count === current.count && spaceTwips === current.spaceTwips) {
+    return sectionPropertiesXml;
+  }
+
+  const xml = /^<w:sectPr\b/i.test(sectionPropertiesXml.trim())
+    ? sectionPropertiesXml
+    : `<w:sectPr>${sectionPropertiesXml}</w:sectPr>`;
+  const existing = readElement(xml, "w:cols");
+  if (!existing) {
+    return upsertSectionChildElement(xml, "w:cols", {
+      ...(count > 1 ? { "w:num": count } : {}),
+      "w:space": spaceTwips,
+    });
+  }
+
+  // Replacing the whole element drops explicit `<w:col>` children (and their
+  // attributes) from the previous count. A gap-only edit keeps the existing
+  // start tag so unequal column widths survive.
+  const startTag = existing.match(/^<w:cols\b[^>]*?>/i)?.[0] ?? "";
+  if (count === current.count && startTag.length > 0) {
+    const updatedStartTag = startTag.endsWith("/>")
+      ? renderElement(
+          "w:cols",
+          mergeAttributes(readAttributes(startTag), { "w:space": spaceTwips }),
+        )
+      : `<w:cols ${mergeAttributes(readAttributes(startTag), {
+          "w:space": spaceTwips,
+        })
+          .map(([name, value]) => `${name}="${value}"`)
+          .join(" ")}>`;
+    return xml.replace(startTag, updatedStartTag);
+  }
+
+  const separator = startTag.match(/\bw:sep="([^"]*)"/i)?.[1];
+  const replacement = renderElement("w:cols", [
+    ...(count > 1 ? [["w:num", String(count)] as [string, string]] : []),
+    ["w:space", String(spaceTwips)],
+    ...(separator === undefined ? [] : [["w:sep", separator] as [string, string]]),
+  ]);
+  return xml.replace(existing, replacement);
 }
 
 /** Insert a header/footer reference (`<w:headerReference>`) into a sectPr. */

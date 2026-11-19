@@ -163,6 +163,23 @@ const fields = tracker.fieldsForPage(2)
 
 编辑器和查看器一样接受 `isDark` 和 `minHeight`。传入 `isDark` 时外壳、工具栏、缩略图和纸张一起切换为深色；不传时跟随 `controller.documentTheme`。`minHeight` 可选，数字按 px；不传时组件不设置最小高度。打印时工具栏、缩略图和状态栏自动隐藏，为每页插入分页，并按文档页面尺寸设置 `@page`。
 
+## 分栏
+
+带 `<w:cols w:num="2">`（或 3 栏以上）的分节在查看器和编辑器里都按真实分栏渲染：正文按“第一栏从上到下、再第二栏”的顺序流动，`w:space` 决定栏间距，`w:col` 的不等宽栏宽会被沿用，段内的显式分栏符会换到下一栏。分节最后一页按 Word 的方式平衡各栏高度。跨栏拆分的段落只显示属于该栏的行段；每一段仍是可编辑的（`overflow: clip` 防止焦点把隐藏行滚进可视区），光标和选区继续使用整段的字符偏移。
+
+工具栏的分栏选择器（`data-testid="editor-columns"`）作用于光标所在分节，提供 1/2/3 栏；导入文档已有更多栏时保留该值可选。宿主也可以直接调用控制器命令，或使用模型层工具：
+
+```ts
+editor.setSectionColumns(0, { count: 2 })       // 一次撤销记录
+editor.setSectionColumns(0, { spaceTwips: 360 }) // 只改栏间距
+
+import { readSectionColumns, writeSectionColumns } from "@arcships/docx-core"
+readSectionColumns(sectionPropertiesXml) // { count, spaceTwips, widthsTwips? }
+writeSectionColumns(sectionPropertiesXml, { count: 3 })
+```
+
+命令会同步 `metadata.sections`、中间分节段落上的 `w:sectPr` 以及最后一节的正文级 `metadata.sectionPropertiesXml`，因此修改分栏后导出、重新打开仍然保留。切换栏数会清除旧栏数留下的 `<w:col>` 宽度；只改栏间距时保留不等宽栏宽。
+
 ## 导出前的模型准备
 
 导出（`exportDocx()`、`getDocxBytes()`、`serializeDocx()`、`serializeDocModel()`、`modelToDocumentXml()`）会先调用 `prepareModelForSerialization(model)`：递归正文、页眉、页脚、分节页眉/页脚、脚注和尾注，再把折叠表格网格投影到物理列。
