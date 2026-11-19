@@ -212,12 +212,14 @@
           "import": "./dist/index.js",
           "default": "./dist/index.js"
         },
-        "./style.css": "./dist/style.css"
+        "./style.css": "./dist/style.css",
+        "./tokens.css": "./dist/tokens.css",
+        "./theme.css": "./dist/theme.css"
       },
       "deprecatedSymbols": [],
       "rootDeclarationFingerprint": {
-        "count": 55,
-        "sha256": "cb478384057f0fd5201bb0ee2e0f306a81db62ca866b6734c0c274edac14793a"
+        "count": 80,
+        "sha256": "a5eb736dfc728c7918d939e0e168b9f5529cd5b8e7a60ef91cd2bd5d0971e8a6"
       }
     },
     {
@@ -308,6 +310,8 @@
     "@arcships/vue-pdf/style.css",
     "@arcships/vue-ui",
     "@arcships/vue-ui/style.css",
+    "@arcships/vue-ui/tokens.css",
+    "@arcships/vue-ui/theme.css",
     "@arcships/pptx-core",
     "@arcships/pptx-core/browser",
     "@arcships/pptx-core/package.json",
