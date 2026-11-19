@@ -304,6 +304,39 @@ test("XLSX worker: a failed load keeps the previous workbook addressable", async
   );
 });
 
+test("XLSX worker: sheets carry pivot, slicer and defined-name metadata", async () => {
+  const bytes = readFileSync(
+    new URL("../../test-data/corpus/xlsx-pivot-slicers.xlsx", import.meta.url),
+  );
+  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const payload = { buffer, limits };
+  if (!wasmSourceSent) {
+    payload.wasmSource = wasmBuffer;
+    wasmSourceSent = true;
+  }
+  const response = await workerScope.request("load", payload).response;
+  assert.equal(response.success, true, `load failed: ${JSON.stringify(response)}`);
+  const [sheet] = response.result.sheets;
+  assert.equal(sheet.hasPivotTable, true);
+  assert.equal(sheet.pivotTables.length, 1);
+  assert.equal(sheet.pivotTables[0].name, "PivotTable1");
+  assert.deepEqual(sheet.pivotTables[0].rowFields, [0]);
+  assert.equal(sheet.pivotTables[0].dataFields[0].name, "Sum of Revenue");
+  assert.equal(sheet.slicers.length, 1);
+  assert.equal(sheet.slicers[0].name, "Region");
+  assert.deepEqual(sheet.slicers[0].items.map((item) => item.caption), [
+    "East",
+    "West",
+    "North",
+    "South",
+  ]);
+  assert.deepEqual(sheet.definedNames.map((entry) => entry.name), [
+    "SalesData",
+    "RevenueTotal",
+    "CurrentProduct",
+  ]);
+});
+
 test("XLSX worker: cell snapshots carry the resolved number format", async () => {
   const source = new sheetsWasm.Workbook();
   const sheet = source.getSheet(0);

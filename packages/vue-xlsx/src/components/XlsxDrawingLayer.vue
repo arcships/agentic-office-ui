@@ -4,6 +4,7 @@
     data-testid="xlsx-drawing-layer"
     :data-shape-count="shapeItems.length"
     :data-form-control-count="controlItems.length"
+    :data-slicer-count="slicerItems.length"
     :style="layerStyle"
   >
     <div
@@ -114,6 +115,34 @@
         <span v-else>{{ item.control.label || item.control.name || controlLabel(item.control.kind) }}</span>
         <span v-if="item.control.kind === 'checkbox' || item.control.kind === 'radio'">{{ item.control.label || item.control.name }}</span>
       </div>
+      <div
+        v-for="item in pane.slicers"
+        :key="item.slicer.name"
+        class="xlsx-drawing-layer__slicer"
+        data-testid="xlsx-slicer"
+        :data-slicer-name="item.slicer.name"
+        :data-slicer-cache="item.slicer.cacheName || undefined"
+        :data-slicer-count="item.slicer.items.length"
+        :style="item.style"
+        role="group"
+        :aria-label="item.slicer.caption || item.slicer.name"
+        :title="formatOfficeMessage(m.xlsx.drawing.slicerHint, { name: item.slicer.caption || item.slicer.name })"
+      >
+        <div class="xlsx-drawing-layer__slicer-header">
+          {{ item.slicer.caption || item.slicer.name }}
+        </div>
+        <div class="xlsx-drawing-layer__slicer-items">
+          <span
+            v-for="slicerItem in item.slicer.items"
+            :key="slicerItem.key"
+            class="xlsx-drawing-layer__slicer-item"
+            :class="{ 'xlsx-drawing-layer__slicer-item--selected': slicerItem.selected }"
+            data-slicer-item
+            :data-slicer-key="slicerItem.key"
+            :data-selected="slicerItem.selected ? 'true' : 'false'"
+          >{{ slicerItem.caption }}</span>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -135,6 +164,7 @@ import {
 } from "@arcships/xlsx-core"
 import { createGridPaneLayout, gridBodyLayerStyle, resolveAnchorRect, type GridPaneKey } from "./grid-metrics"
 import { DRAWING_RESIZE_HANDLES, drawingHandleStyle, useDrawingGestures } from "./drawing-interaction"
+import { formatOfficeMessage } from "@arcships/office-interaction"
 import { useXlsxMessages } from "../i18n"
 
 const props = defineProps<{
@@ -369,10 +399,20 @@ const controlItems = computed(() => (props.controller.formControls as XlsxFormCo
     return [{ control, pane: item.pane, rect: item.rect, style: item.style }]
   }))
 
+const slicerItems = computed(() => (props.controller.slicers ?? []).flatMap((slicer) => {
+  if (!slicer.anchor) return []
+  const item = itemPlacement(slicer.anchor, 900000)
+  if (!paneLayout.value.isVisible(item.rect, item.pane, props.viewportWidth ?? 0, props.viewportHeight ?? 0)) {
+    return []
+  }
+  return [{ pane: item.pane, rect: item.rect, slicer, style: item.style }]
+}))
+
 const panes = computed(() => paneLayout.value.panes.map((pane) => ({
   ...pane,
   shapes: shapeItems.value.filter((item) => item.pane === pane.key),
   controls: controlItems.value.filter((item) => item.pane === pane.key),
+  slicers: slicerItems.value.filter((item) => item.pane === pane.key),
 })))
 
 function onShapePointerDown(item: { shape: XlsxShape; rect: XlsxImageRect }, event: PointerEvent) {
@@ -574,4 +614,19 @@ function controlLabel(kind: XlsxFormControl["kind"]): string { return ({ dropdow
   height: 8px; pointer-events: auto; position: absolute; width: 8px;
   z-index: 1000000;
 }
+.xlsx-drawing-layer__slicer {
+  background: #ffffff; border: 1px solid #bfbfbf; box-sizing: border-box;
+  color: #1f2937; display: flex; flex-direction: column; overflow: hidden;
+  pointer-events: auto; position: absolute;
+}
+.xlsx-drawing-layer__slicer-header {
+  background: #1f3864; color: #ffffff; font-size: 11px; font-weight: 600;
+  overflow: hidden; padding: 4px 6px; text-overflow: ellipsis; white-space: nowrap;
+}
+.xlsx-drawing-layer__slicer-items { display: flex; flex-direction: column; gap: 2px; overflow: hidden; padding: 4px; }
+.xlsx-drawing-layer__slicer-item {
+  border: 1px solid transparent; font-size: 11px; overflow: hidden;
+  padding: 2px 4px; text-overflow: ellipsis; white-space: nowrap;
+}
+.xlsx-drawing-layer__slicer-item--selected { background: #dbeafe; border-color: #2563eb; }
 </style>

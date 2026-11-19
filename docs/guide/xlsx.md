@@ -109,6 +109,20 @@ const controller = useXlsxViewerController({
 - 导出时会把当前“应用/清除”的条件写回工作表或表部件的 `autoFilter`，重新打开后筛选状态保持一致；没有筛选操作时导出字节不变。只读 Worker 视图由 Worker 返回范围显示值，菜单和筛选同样可用（排序仍是只读禁止）。
 - 宿主可以替换内置 `▾` 触发器：`XlsxViewer`/`XlsxSheetSurface`/`XlsxGrid` 的 `#table-header-menu` 插槽接收 `XlsxTableHeaderMenuRenderProps`（`cell`、`column`、`table`、`autoFilter`、`direction`、`sortAscending`、`sortDescending`、`getValueOptions`、`applyFilter`、`clearFilter`、`hasFilter`、`triggerIcon` 和必须绑定的 `triggerProps`）。菜单本体仍由查看器提供，排序、筛选、清除和撤销走同一条路径。
 
+## 表格样式
+
+带 `<tableStyleInfo name="TableStyleMedium2" showRowStripes="1"/>` 的表不再渲染成普通单元格。`xlsx-core` 内置 Excel 的 60 个表格样式（`TableStyleLight1–21`、`TableStyleMedium1–28`、`TableStyleDark1–11`，来自 ECMA-376 / Apache POI 的预设定义），`xl/styles.xml` 中的自定义 `<tableStyles>` 优先于同名内置样式。`withTableCellStyle()` 按 Excel 的层叠顺序把表样式套到每个单元格：整表 → 行列条纹 → 首末列 → 表头行 → 总计行 → 表头/总计首末单元格；表头、条纹和总计行的字体、填充与边框使用与普通单元格相同的 `resolveWorkbookFillStyle()` / `resolveWorkbookColor()`，所以主题色和 tint 在 canvas、DOM、打印预览里一致。
+
+单元格自己的显式格式仍然优先：`cellStyleIds` 找到单元格的 `xf`，只把其中声明的 `font`/`fill`/`border` 覆盖到表样式上，未声明的属性（例如默认字体）不会抹掉表头的加粗白字。只给表格部分加样式、单元格不写 `s` 属性时，表样式完全生效；`sales-table.xlsx` 的 `TableStyleMedium2` 行条纹即可用 `renderMode="dom"` 在 DOM 中直接验证。`resolveBuiltinTableStyle()`、`resolveTableCellStyle()`、`withTableCellStyle()`、`findTableAtCell()` 和 `BUILTIN_TABLE_STYLES` 从 `@arcships/xlsx-core` 根入口导出，宿主可复用同一套解析。
+
+## 透视表、切片器与定义名称
+
+查看器把透视表当成“静态缓存输出 + 可检查的定义”：单元格仍按文件里缓存的值绘制，`controller.hasPivotTable`、`controller.pivotTables`（以及 `XlsxSheetData.pivotTables`）给出每个透视表的 `name`、`cacheId`、输出区域 `range`、源区域/表 `source`、行/列/页字段、值字段（11 种聚合与 14 种 showAs）、字段成员、`layout`（compact/outline/tabular）、`styleInfo` 和 `refreshOnLoad`。网格在透视表输出区域左上角显示 `xlsx-pivot-badge`（`data-pivot-name`，文案来自 `xlsx.pivot.staticPreview`），明确提示这是缓存值，刷新需要在 Excel 中完成；`data-pivot-count`/`data-pivot-names` 同时挂在网格根节点上，供宿主显示自己的提示。
+
+切片器不再消失：工作表的 `xl/slicers/*.xml`、`xl/slicerCaches/*.xml` 和绘图锚点会被解析成 `controller.slicers`（`XlsxSlicer`：`name`、`caption`、`cacheName`、`sourceName`、`pivotTables`、`style`、`columnCount`、`items`（含选中状态）和 `anchor`）。有锚点的切片器以 `xlsx-slicer` 卡片挂到绘图层，显示标题、成员列表和当前选中项，滚动/缩放/冻结时跟随单元格；没有锚点的切片器仍出现在 `controller.slicers` 中，但不会被绘制。卡片是只读预览，悬停提示说明需要在 Excel 中更改选择。
+
+`controller.definedNames`（以及 `XlsxSheetData.definedNames`）列出工作簿级和工作表级的定义名称，形状为 `{ name, scope: "workbook" | "sheet", sheetName?, range, comment?, hidden? }`；`_xlnm.*` 内置名称（打印区域、筛选区域等）由打印/筛选代码自己消费，不会混进名称列表。公式栏左侧的名称框现在可以输入名称或 A1 区域：聚焦时列出 `controller.definedNames`（`xlsx-name-box-list` / `[data-name-box-option]`，工作表级名称带所属表名），选择或回车后跳到对应区域；也接受直接输入的 `B2:D3`，`Escape` 恢复当前单元格地址。导出时透视表、切片器、缓存定义、绘图和定义名称都会随工作簿保留，重新打开后元数据一致。
+
 ## 公式引用高亮
 
 编辑公式时，内联编辑器和公式栏都会解析光标处的公式文本，并用 Excel 的引用颜色标出目标：

@@ -48,6 +48,7 @@ import {
   normalizeWorkbookDefinedNames,
   revokeWorkbookImageAssets,
   safeCalculate,
+  toDefinedNameSummary,
   trackXlsxWorkbookLifetime,
   type SafeCalculateSkipReason,
   type WorkbookChartAssets,
@@ -1983,6 +1984,14 @@ export function useXlsxViewerController(options: UseXlsxViewerControllerOptions)
     sortAutoFilter: autoFilterDomain.sortAutoFilter,
     get tabs() { return tabs.value; },
     get tables() { return historyDomain.tables.value; },
+    get definedNames() {
+      return structureDomain.getNamedRanges()
+        .filter((entry) => !entry.name.toLowerCase().startsWith("_xlnm."))
+        .map((entry) => toDefinedNameSummary(entry, sheets.value));
+    },
+    get pivotTables() { return activeSheet.value?.pivotTables ?? []; },
+    get hasPivotTable() { return (activeSheet.value?.pivotTables?.length ?? 0) > 0; },
+    get slicers() { return activeSheet.value?.slicers ?? []; },
     undo: historyDomain.undo,
     unmergeSelection: editingDomain.unmergeSelection,
     updateChart: chartImageDomain.updateChart,

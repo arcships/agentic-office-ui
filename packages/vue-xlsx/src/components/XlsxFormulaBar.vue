@@ -6,13 +6,47 @@
     :data-formula-reference-ranges="formulaReferenceRangeList || undefined"
     :data-formula-reference-active="activeFormulaReferenceAddress || undefined"
   >
-    <input
-      class="xlsx-formula-bar__name-box"
-      data-testid="xlsx-name-box"
-      :value="nameBoxValue"
-      readonly
-      :title="m.xlsx.formulaBar.activeCell"
-    />
+    <div class="xlsx-formula-bar__name-box-wrap">
+      <input
+        class="xlsx-formula-bar__name-box"
+        data-testid="xlsx-name-box"
+        :value="nameBoxFocused ? nameBoxDraft : nameBoxValue"
+        :aria-expanded="showNameBoxList ? 'true' : 'false'"
+        aria-autocomplete="list"
+        role="combobox"
+        :title="m.xlsx.formulaBar.goToName"
+        @blur="onNameBoxBlur"
+        @focus="onNameBoxFocus"
+        @input="onNameBoxInput"
+        @keydown="onNameBoxKeydown"
+      />
+      <div
+        v-if="showNameBoxList"
+        class="xlsx-formula-bar__name-box-list"
+        data-testid="xlsx-name-box-list"
+        role="listbox"
+        :aria-label="m.xlsx.formulaBar.definedNames"
+      >
+        <button
+          v-for="(entry, index) in nameBoxMatches"
+          :key="`${entry.scope}:${entry.sheetName ?? ''}:${entry.name}`"
+          type="button"
+          class="xlsx-formula-bar__name-box-option"
+          :class="{ 'xlsx-formula-bar__name-box-option--active': index === nameBoxActiveIndex }"
+          data-name-box-option
+          :data-name="entry.name"
+          :data-scope="entry.scope"
+          :data-sheet-name="entry.sheetName || undefined"
+          role="option"
+          :aria-selected="index === nameBoxActiveIndex ? 'true' : 'false'"
+          @mousedown.prevent
+          @click="onNameBoxOption(entry)"
+        >
+          <span class="xlsx-formula-bar__name-box-option-name">{{ entry.name }}</span>
+          <span v-if="entry.scope === 'sheet' && entry.sheetName" class="xlsx-formula-bar__name-box-option-scope">{{ entry.sheetName }}</span>
+        </button>
+      </div>
+    </div>
     <span class="xlsx-formula-bar__fx">fx</span>
     <div class="xlsx-formula-bar__field">
       <!-- The input keeps its native caret, selection and IME behaviour; this
@@ -60,13 +94,15 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch, type CSSProperties } from "vue";
-import type { XlsxViewerController } from "@arcships/xlsx-core";
+import type { XlsxDefinedName, XlsxViewerController } from "@arcships/xlsx-core";
 import { useXlsxMessages } from "../i18n";
 import {
   collectFormulaReferences,
   formulaReferenceSegments,
+  resolveNamedRangeTarget,
   type FormulaReferenceCollection,
 } from "../composables/formula-reference-highlight";
+import { parseA1RangeReference } from "../composables/selection";
 import {
   createNamedRangeResolver,
   FORMULA_REFERENCE_OWNER_FORMULA_BAR,
@@ -112,6 +148,124 @@ const nameBoxValue = computed(() => {
   }
   return props.controller.activeCellAddress ?? "";
 });
+
+// ── Name box ────────────────────────────────────────────────────────────
+// The name box lists the workbook's defined names and navigates to the range
+// they resolve to; typing an A1 address or range also jumps there, matching
+// Excel. The list is a plain combobox so hosts stay free to restyle it.
+const nameBoxFocused = ref(false);
+const nameBoxDraft = ref("");
+const nameBoxActiveIndex = ref(-1);
+const definedNames = computed<XlsxDefinedName[]>(() => props.controller.definedNames ?? []);
+const nameBoxMatches = computed(() => {
+  const query = nameBoxDraft.value.trim().toLowerCase();
+  return definedNames.value.filter((entry) =>
+    !query || entry.name.toLowerCase().includes(query)
+  );
+});
+const showNameBoxList = computed(() => nameBoxFocused.value && nameBoxMatches.value.length > 0);
+
+watch(nameBoxValue, (value) => {
+  if (!nameBoxFocused.value) {
+    nameBoxDraft.value = value;
+  }
+}, { immediate: true });
+
+function onNameBoxFocus() {
+  nameBoxFocused.value = true;
+  nameBoxDraft.value = nameBoxValue.value;
+  nameBoxActiveIndex.value = -1;
+}
+
+function onNameBoxBlur() {
+  nameBoxFocused.value = false;
+  nameBoxDraft.value = nameBoxValue.value;
+  nameBoxActiveIndex.value = -1;
+}
+
+function onNameBoxInput(event: Event) {
+  nameBoxDraft.value = (event.target as HTMLInputElement).value;
+  nameBoxActiveIndex.value = -1;
+}
+
+function onNameBoxKeydown(event: KeyboardEvent) {
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    if (nameBoxMatches.value.length === 0) return;
+    event.preventDefault();
+    const delta = event.key === "ArrowDown" ? 1 : -1;
+    const next = nameBoxActiveIndex.value + delta;
+    nameBoxActiveIndex.value = next < 0
+      ? nameBoxMatches.value.length - 1
+      : next % nameBoxMatches.value.length;
+    return;
+  }
+  if (event.key === "Escape") {
+    event.preventDefault();
+    nameBoxDraft.value = nameBoxValue.value;
+    nameBoxActiveIndex.value = -1;
+    (event.target as HTMLInputElement).blur();
+    return;
+  }
+  if (event.key === "Enter") {
+    event.preventDefault();
+    const active = nameBoxMatches.value[nameBoxActiveIndex.value];
+    if (active) {
+      goToDefinedName(active);
+    } else {
+      commitNameBoxText(nameBoxDraft.value);
+    }
+    nameBoxDraft.value = nameBoxValue.value;
+    nameBoxActiveIndex.value = -1;
+  }
+}
+
+function onNameBoxOption(entry: XlsxDefinedName) {
+  if (goToDefinedName(entry)) {
+    nameBoxDraft.value = nameBoxValue.value;
+    nameBoxActiveIndex.value = -1;
+  }
+}
+
+function selectRangeOnSheet(
+  sheetName: string | null | undefined,
+  range: { start: { col: number; row: number }; end: { col: number; row: number } },
+) {
+  const targetSheet = sheetName?.toLowerCase();
+  if (targetSheet && targetSheet !== props.controller.activeSheet?.name.toLowerCase()) {
+    const index = props.controller.sheets.findIndex(
+      (sheet) => sheet.name.toLowerCase() === targetSheet,
+    );
+    if (index >= 0) {
+      props.controller.setActiveSheetIndex(index);
+    }
+  }
+  props.controller.selectRange(range);
+}
+
+function goToDefinedName(entry: XlsxDefinedName) {
+  const target = resolveNamedRangeTarget(
+    entry.range,
+    entry.sheetName ?? props.controller.activeSheet?.name ?? null,
+  );
+  if (!target) return false;
+  selectRangeOnSheet(target.sheetName, target.range);
+  return true;
+}
+
+function commitNameBoxText(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const entry = definedNames.value.find(
+    (candidate) => candidate.name.toLowerCase() === trimmed.toLowerCase(),
+  );
+  if (entry) {
+    return goToDefinedName(entry);
+  }
+  const range = parseA1RangeReference(trimmed.replace(/\$/g, ""));
+  if (!range) return false;
+  props.controller.selectRange(range);
+  return true;
+}
 
 const barStyle = computed<CSSProperties>(() => ({
   alignItems: "center",
@@ -333,6 +487,40 @@ onBeforeUnmount(() => {
   width: 90px;
   flex-shrink: 0;
 }
+.xlsx-formula-bar__name-box-wrap { flex-shrink: 0; position: relative; }
+.xlsx-formula-bar__name-box-list {
+  background: #ffffff;
+  border: 1px solid #d4d4d8;
+  border-radius: 4px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
+  display: flex;
+  flex-direction: column;
+  left: 0;
+  max-height: 240px;
+  min-width: 180px;
+  overflow-y: auto;
+  position: absolute;
+  top: calc(100% + 2px);
+  z-index: 40;
+}
+.xlsx-formula-bar__name-box-option {
+  align-items: baseline;
+  background: transparent;
+  border: 0;
+  color: #18181b;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 12px;
+  gap: 8px;
+  justify-content: space-between;
+  padding: 4px 8px;
+  text-align: left;
+  white-space: nowrap;
+}
+.xlsx-formula-bar__name-box-option:hover,
+.xlsx-formula-bar__name-box-option--active { background: #dbeafe; }
+.xlsx-formula-bar__name-box-option-scope { color: #71717a; font-size: 11px; }
 
 .xlsx-formula-bar__fx {
   align-items: center;

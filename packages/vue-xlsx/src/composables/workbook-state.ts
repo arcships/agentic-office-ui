@@ -29,10 +29,12 @@ import {
   type XlsxCellComment,
   type XlsxConditionalFormatRule,
   type XlsxDataValidation,
+  type XlsxDefinedName,
   type XlsxFreezePanes,
   type XlsxPageBreak,
   type XlsxPageMargins,
   type XlsxPageSetup,
+  type XlsxPivotTable,
   type XlsxPrintOptions,
   type XlsxPrintTitles,
   type XlsxResolvedCellStyle,
@@ -40,6 +42,7 @@ import {
   type XlsxSelectionSummary,
   type XlsxSheetData,
   type XlsxSheetVisibility,
+  type XlsxSlicer,
   type XlsxSparkline,
   type XlsxTable,
   type XlsxTableSortDirection,
@@ -201,12 +204,16 @@ export function buildSheetList(
   sheetStatesByWorkbookSheetIndex?: Array<{
     autoFilterRanges?: XlsxAutoFilterRange[];
     cachedFormulaValues?: Record<string, string>;
+    cellStyleIds?: Record<string, number>;
     cellTextLayouts?: Record<string, { shrinkToFit?: boolean; textRotation?: number }>;
     columnWidthCharacterWidthPx?: number;
     colWidthOverridesPx?: Record<number, number>;
     colStyleIds?: Record<number, number>;
     conditionalFormatRules?: XlsxConditionalFormatRule[];
     dataValidations?: XlsxDataValidation[];
+    definedNames?: XlsxDefinedName[];
+    pivotTables?: XlsxPivotTable[];
+    slicers?: XlsxSlicer[];
     freezePanes?: XlsxFreezePanes | null;
     hyperlinks?: XlsxCellHyperlink[];
     comments?: XlsxCellComment[];
@@ -268,7 +275,12 @@ export function buildSheetList(
       if (!usedRange) {
         sheets.push({
           autoFilterRanges: sheetState?.autoFilterRanges ?? [],
+          definedNames: sheetState?.definedNames ?? [],
+          pivotTables: sheetState?.pivotTables ?? [],
+          hasPivotTable: (sheetState?.pivotTables?.length ?? 0) > 0,
+          slicers: sheetState?.slicers ?? [],
           cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
+          cellStyleIds: sheetState?.cellStyleIds,
           cellTextLayouts: hasCellTextLayouts(sheetState?.cellTextLayouts),
           columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
           richTextCells: hasRichTextCells(sheetState?.richTextCells),
@@ -348,7 +360,12 @@ export function buildSheetList(
 
       sheets.push({
         autoFilterRanges: sheetState?.autoFilterRanges ?? [],
+        definedNames: sheetState?.definedNames ?? [],
+        pivotTables: sheetState?.pivotTables ?? [],
+        hasPivotTable: (sheetState?.pivotTables?.length ?? 0) > 0,
+        slicers: sheetState?.slicers ?? [],
         cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
+        cellStyleIds: sheetState?.cellStyleIds,
         cellTextLayouts: hasCellTextLayouts(sheetState?.cellTextLayouts),
         columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
         richTextCells: hasRichTextCells(sheetState?.richTextCells),

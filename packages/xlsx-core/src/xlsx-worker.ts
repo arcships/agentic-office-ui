@@ -589,7 +589,12 @@ function buildSheetList(
     if (!usedRange) {
       sheetsByWorkbookSheetIndex.push({
         autoFilterRanges: sheetState?.autoFilterRanges ?? [],
+        definedNames: sheetState?.definedNames ?? [],
+        pivotTables: sheetState?.pivotTables ?? [],
+        hasPivotTable: (sheetState?.pivotTables?.length ?? 0) > 0,
+        slicers: sheetState?.slicers ?? [],
         cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
+        cellStyleIds: sheetState?.cellStyleIds,
         cellTextLayouts: hasCellTextLayouts(sheetState?.cellTextLayouts),
         columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
         colCount: 0,
@@ -661,7 +666,12 @@ function buildSheetList(
 
     sheetsByWorkbookSheetIndex.push({
       autoFilterRanges: sheetState?.autoFilterRanges ?? [],
+      definedNames: sheetState?.definedNames ?? [],
+      pivotTables: sheetState?.pivotTables ?? [],
+      hasPivotTable: (sheetState?.pivotTables?.length ?? 0) > 0,
+      slicers: sheetState?.slicers ?? [],
       cachedFormulaValues: sheetState?.cachedFormulaValues ?? {},
+      cellStyleIds: sheetState?.cellStyleIds,
       cellTextLayouts: hasCellTextLayouts(sheetState?.cellTextLayouts),
       columnWidthCharacterWidthPx: sheetState?.columnWidthCharacterWidthPx,
       colCount: visibleCols.length,

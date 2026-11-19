@@ -6,6 +6,7 @@ import type {
   XlsxFormControl,
   XlsxFormControlInput,
   XlsxImage,
+  XlsxImageAnchor,
   XlsxImageRect,
   XlsxImageResizeHandlePosition,
   XlsxShape,
@@ -134,6 +135,13 @@ export interface XlsxResolvedCellStyle {
   };
   fill?: Record<string, unknown>;
   font?: Record<string, unknown>;
+  /**
+   * Font/fill/border subtrees the cell's `xf` record declares itself, parsed
+   * from `fontId`/`fillId`/`borderId` + `apply*`. Renderers layer a table style
+   * below only these properties so an unstyled table cell keeps the table's
+   * header and banding, while an explicitly formatted cell wins.
+   */
+  tableStyleOverrides?: XlsxResolvedCellStyle;
 }
 
 export interface XlsxTableStyleDefinition {
@@ -459,6 +467,12 @@ export type XlsxSheetNameIssue =
 export interface XlsxSheetData {
   cachedFormulaValues: Record<string, string>;
   /**
+   * Explicit cell style ids keyed by A1 address. The table-style resolver uses
+   * the referenced `styleById` record's declared subtrees to keep explicit
+   * cell formatting above the table style.
+   */
+  cellStyleIds?: Record<string, number>;
+  /**
    * Rotation and shrink-to-fit alignment of cells whose style overrides the
    * row/column alignment, keyed by A1 address.
    *
@@ -514,6 +528,14 @@ export interface XlsxSheetData {
   maxVerticalMergeEndRow: number;
   /** Exact merged ranges used by Worker-backed viewers. */
   mergedRegions?: XlsxCellRange[];
+  /** Workbook and sheet-scoped defined names visible on this sheet. */
+  definedNames?: XlsxDefinedName[];
+  /** Pivot tables anchored on this sheet, in workbook order. */
+  pivotTables?: XlsxPivotTable[];
+  /** `true` when the sheet has at least one pivot table. */
+  hasPivotTable?: boolean;
+  /** Slicers connected to this sheet's pivot tables. */
+  slicers?: XlsxSlicer[];
   minUsedCol: number;
   minUsedRow: number;
   maxUsedCol: number;
@@ -881,6 +903,178 @@ export interface XlsxTable {
 }
 
 export type XlsxTableSortDirection = "ascending" | "descending";
+
+// ── Pivot tables, slicers and defined names ──────────────────────────────
+
+/** Aggregation a pivot table's data field applies to its source values. */
+export type XlsxPivotAggregation =
+  | "sum"
+  | "count"
+  | "countNums"
+  | "average"
+  | "min"
+  | "max"
+  | "product"
+  | "stdDev"
+  | "stdDevp"
+  | "var"
+  | "varp";
+
+/** "Show Values As" calculation of a pivot data field. */
+export type XlsxPivotShowAs =
+  | "normal"
+  | "percentOfGrandTotal"
+  | "percentOfRowTotal"
+  | "percentOfColumnTotal"
+  | "percentOfParentRowTotal"
+  | "percentOfParentColumnTotal"
+  | "difference"
+  | "percentDifference"
+  | "percent"
+  | "runningTotal"
+  | "percentRunningTotal"
+  | "rankAscending"
+  | "rankDescending"
+  | "index";
+
+/** Which pivot area a cached source field is placed on. */
+export type XlsxPivotFieldAxis = "row" | "column" | "page" | "data" | "hidden";
+
+/** One item of a pivot field's cached item list. */
+export interface XlsxPivotFieldItem {
+  /** Caption Excel renders for the item, from the pivot cache's shared items. */
+  caption: string;
+  /** `pivotField/item/@x` or `@t` key used by the item list. */
+  key: string;
+  /** `item/@h="1"`: Excel hides the item (filtered out or collapsed). */
+  hidden?: boolean;
+}
+
+/** One cached source field of a pivot table, with the area it feeds. */
+export interface XlsxPivotField {
+  /** Zero-based index in the pivot cache's `cacheFields` list. */
+  index: number;
+  /** Source field name from `pivotCacheDefinition/cacheField/@name`. */
+  name: string;
+  axis: XlsxPivotFieldAxis;
+  /** Cached members, in the cache's item order. */
+  items: XlsxPivotFieldItem[];
+}
+
+/** One value field of a pivot table. */
+export interface XlsxPivotDataField {
+  aggregation: XlsxPivotAggregation;
+  /** Zero-based index in the pivot cache's `cacheFields` list. */
+  fieldIndex: number;
+  /** Display caption, for example `Sum of Revenue`. */
+  name: string;
+  /** `dataField/@numFmtId` when the field overrides the workbook number format. */
+  numberFormatId?: number;
+  showAs: XlsxPivotShowAs;
+}
+
+/** Worksheet range or table a pivot cache reads its records from. */
+export interface XlsxPivotSource {
+  /** Source worksheet name. */
+  sheet?: string;
+  /** A1 range when the source is a worksheet range. */
+  range?: string;
+  /** Table name when the source is a table. */
+  table?: string | null;
+}
+
+/**
+ * One pivot table anchored on a worksheet.
+ *
+ * The viewer renders the cached cell output of the pivot (the values Excel
+ * stored in the worksheet part) and exposes the definition so hosts can show
+ * what the static table represents and warn that refreshing it needs Excel.
+ */
+export interface XlsxPivotTable {
+  /** `pivotTableDefinition/@cacheId` the table reads from. */
+  cacheId: number;
+  /** Value fields (`dataFields`) in report order. */
+  dataFields: XlsxPivotDataField[];
+  /** Cached source fields, in cache order. */
+  fields: XlsxPivotField[];
+  /** `pivotTableDefinition/@dataCaption`, usually `Values`. */
+  dataCaption?: string;
+  /** `pivotField/@axis="axisCol"` field indexes in report order. */
+  columnFields: number[];
+  /** Compact, outline or tabular report layout. */
+  layout: "compact" | "outline" | "tabular";
+  /** `pivotTableDefinition/@name`. */
+  name: string;
+  /** `pivotField/@axis="axisPage"` field indexes in report order. */
+  pageFields: number[];
+  /** Where the cached pivot output sits, from `location/@ref`. */
+  range: XlsxCellRange;
+  /** Whether Excel recalculates the pivot when the workbook opens. */
+  refreshOnLoad: boolean;
+  /** `pivotField/@axis="axisRow"` field indexes in report order. */
+  rowFields: number[];
+  /** Source range or table from the pivot cache definition. */
+  source?: XlsxPivotSource;
+  /** `pivotTableStyleInfo`, when the pivot declares a style. */
+  styleInfo?: XlsxTableStyleInfo;
+}
+
+/** One cached member of a slicer. */
+export interface XlsxSlicerItem {
+  caption: string;
+  /** Pivot-cache item key. */
+  key: string;
+  /** `slicerCacheDefinition/data/.../i/@s="1"`: the item is selected. */
+  selected: boolean;
+}
+
+/**
+ * One slicer attached to a worksheet's pivot tables.
+ *
+ * Slicers are drawing objects in Excel; the viewer exposes their definition and
+ * anchor so hosts can render a static card and explain that changing the
+ * selection needs Excel.
+ */
+export interface XlsxSlicer {
+  /** Drawing anchor when the slicer's shape was found in a drawing part. */
+  anchor?: XlsxImageAnchor;
+  /** `slicer/@caption` shown in the slicer header. */
+  caption?: string;
+  /** `slicerCacheDefinition/@name` the slicer reads. */
+  cacheName?: string;
+  /** Number of item columns the slicer lays out (`slicer/@columnCount`). */
+  columnCount?: number;
+  items: XlsxSlicerItem[];
+  /** `slicer/@name`. */
+  name: string;
+  /** Pivot table names the slicer cache is connected to. */
+  pivotTables: string[];
+  /** Source field name (`slicerCacheDefinition/@sourceName`). */
+  sourceName?: string;
+  /** Built-in slicer style name (`slicer/@style`). */
+  style?: string;
+  /** Workbook sheet index of the worksheet that owns the slicer. */
+  workbookSheetIndex: number;
+}
+
+/**
+ * One workbook or sheet-scoped defined name (Excel's Name Manager row).
+ *
+ * `range` keeps Excel's A1 syntax, for example `Sheet1!$A$1:$C$3` or
+ * `SUM(Sheet1!$A$1:$A$3)`; it is the `definedName` element's text. Sheet-scoped
+ * names carry the owning sheet name and `scope: "sheet"`.
+ */
+export interface XlsxDefinedName {
+  /** Optional comment written by Excel's Name Manager. */
+  comment?: string;
+  hidden?: boolean;
+  name: string;
+  /** A1 reference or formula the name points at. */
+  range: string;
+  scope: "workbook" | "sheet";
+  /** Worksheet name for a sheet-scoped name. */
+  sheetName?: string;
+}
 
 export interface XlsxTableSortState {
   columnIndex: number;
@@ -2002,6 +2196,14 @@ export interface XlsxViewerController extends XlsxViewerAuthoring {
     signal?: AbortSignal,
   ) => Promise<XlsxSelectionSummary | null>;
   tables: XlsxTable[];
+  /** Workbook and sheet-scoped defined names visible on the active sheet. */
+  definedNames: XlsxDefinedName[];
+  /** Pivot tables anchored on the active sheet. */
+  pivotTables: XlsxPivotTable[];
+  /** `true` when the active sheet contains at least one pivot table. */
+  hasPivotTable: boolean;
+  /** Slicers attached to the active sheet's pivot tables. */
+  slicers: XlsxSlicer[];
   tabs: XlsxWorkbookTab[];
   undo: () => void;
   unmergeSelection: () => void;
@@ -2327,6 +2529,14 @@ export interface XlsxViewerTables {
   sortState: XlsxTableSortState | null;
   sortTable: (tableName: string, columnIndex: number, direction: XlsxTableSortDirection) => void;
   tables: XlsxTable[];
+}
+
+/** Static, read-only pivot-table and slicer metadata of the active sheet. */
+export interface XlsxViewerPivot {
+  definedNames: XlsxDefinedName[];
+  hasPivotTable: boolean;
+  pivotTables: XlsxPivotTable[];
+  slicers: XlsxSlicer[];
 }
 
 export interface XlsxViewerImages {

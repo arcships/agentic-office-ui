@@ -867,6 +867,10 @@ export interface OfficeXlsxMessages {
   }
   formulaBar: {
     activeCell: string
+    /** Tooltip/accessible label of the name box that navigates to a name. */
+    goToName: string
+    /** Accessible label of the defined-name list. */
+    definedNames: string
     placeholder: string
   }
   chart: {
@@ -1074,6 +1078,12 @@ export interface OfficeXlsxMessages {
     label: string
     groupBox: string
     unknown: string
+    /** Template with a `{name}` placeholder for a slicer card. */
+    slicerHint: string
+  }
+  pivot: {
+    /** Template with a `{name}` placeholder; the cached output is static. */
+    staticPreview: string
   }
   selection: {
     /** Template with an `{address}` placeholder. */
@@ -2138,6 +2148,8 @@ export const officeMessagesEn: OfficeMessages = {
     },
     formulaBar: {
       activeCell: "Active cell",
+      goToName: "Go to a cell, range or defined name",
+      definedNames: "Defined names",
       placeholder: "Enter a formula or value",
     },
     chart: {
@@ -2335,6 +2347,10 @@ export const officeMessagesEn: OfficeMessages = {
       label: "Label",
       groupBox: "Group box",
       unknown: "Control",
+      slicerHint: "Slicer \u201c{name}\u201d: static preview. Change the selection in Excel.",
+    },
+    pivot: {
+      staticPreview: "Pivot table \u201c{name}\u201d: static cached values. Refresh it in Excel.",
     },
     selection: {
       current: "Current selection {address}",
@@ -3338,6 +3354,8 @@ export const officeMessagesZhCN: OfficeMessages = {
     },
     formulaBar: {
       activeCell: "活动单元格",
+      goToName: "跳转到单元格、区域或定义名称",
+      definedNames: "定义名称",
       placeholder: "输入公式或值",
     },
     chart: {
@@ -3535,6 +3553,10 @@ export const officeMessagesZhCN: OfficeMessages = {
       label: "标签",
       groupBox: "分组框",
       unknown: "控件",
+      slicerHint: "切片器“{name}”：静态预览，请在 Excel 中更改选择。",
+    },
+    pivot: {
+      staticPreview: "透视表“{name}”：静态缓存值，请在 Excel 中刷新。",
     },
     selection: {
       current: "当前选择 {address}",

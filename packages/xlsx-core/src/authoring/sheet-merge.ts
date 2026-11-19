@@ -32,7 +32,17 @@ import {
 } from "./sheet-authoring";
 
 const AUTHORING_FRAGMENT_PATTERN =
-  /<(?:[A-Za-z0-9]+:)?(pane|hyperlinks|conditionalFormatting|dataValidations|tableParts|legacyDrawing)[\s>/]/;
+  /<(?:[A-Za-z0-9]+:)?(pane|hyperlinks|conditionalFormatting|dataValidations|tableParts|pivotTableParts|slicerList|legacyDrawing)[\s>/]/;
+
+const PIVOT_TABLE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable";
+const PIVOT_CACHE_DEFINITION_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition";
+const SLICER_REL_TYPE = "http://schemas.microsoft.com/office/2007/relationships/slicer";
+const SLICER_CACHE_REL_TYPE = "http://schemas.microsoft.com/office/2007/relationships/slicerCache";
+const PIVOT_TABLE_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml";
+const PIVOT_CACHE_DEFINITION_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml";
+const PIVOT_CACHE_RECORDS_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml";
+const SLICER_CONTENT_TYPE = "application/vnd.ms-excel.slicer+xml";
+const SLICER_CACHE_CONTENT_TYPE = "application/vnd.ms-excel.slicerCache+xml";
 
 const PAGE_LAYOUT_ELEMENTS = [
   "printOptions",
@@ -377,6 +387,175 @@ function applyTables(options: {
   insertSheetChild(options.savedDocument, importedParts);
 }
 
+function copyPartPreservingPath(
+  savedArchive: ArchiveEntries,
+  sourceArchive: ArchiveEntries,
+  partPath: string,
+  contentType: string,
+) {
+  const normalized = normalizeArchivePath(partPath);
+  const bytes = sourceArchive[normalized];
+  if (!bytes) {
+    return null;
+  }
+  // The source part keeps its own relationships (a pivot cache definition
+  // points at its records part), so preserving the package path is simpler and
+  // safer than renumbering a dependency tree.
+  savedArchive[normalized] = cloneBytes(bytes);
+  ensureContentTypeOverride(savedArchive, normalized, contentType);
+  return normalized;
+}
+
+/**
+ * Copies the pivot table parts a worksheet references into the saved package.
+ *
+ * The WASM engine rewrites cell data but drops `<pivotTableParts>` and the
+ * related parts, so an exported workbook would lose its pivots without this
+ * merge.
+ */
+function applyPivotTableParts(options: {
+  sourceArchive: ArchiveEntries;
+  sourceDocument: XMLDocument;
+  sourceRelationships: Map<string, RelationshipSource>;
+  sourceSheetPath: string;
+  savedArchive: ArchiveEntries;
+  savedDocument: XMLDocument;
+  savedRelationships: XMLDocument;
+  savedSheetPath: string;
+}) {
+  const sourceParts = getLocalElements(options.sourceDocument, "pivotTableParts")[0] ?? null;
+  removeSheetElement(options.savedDocument, "pivotTableParts");
+  removeRelationshipsByType(options.savedRelationships, new Set([PIVOT_TABLE_REL_TYPE]));
+  if (!sourceParts) {
+    return;
+  }
+
+  const importedParts = options.savedDocument.importNode(sourceParts, true) as Element;
+  let copied = 0;
+  for (const pivotPart of getChildElements(importedParts, "pivotTablePart")) {
+    const relationshipId = getRelationshipId(pivotPart);
+    const relationship = relationshipId
+      ? options.sourceRelationships.get(relationshipId)
+      : undefined;
+    if (!relationship || relationship.type !== PIVOT_TABLE_REL_TYPE) {
+      pivotPart.parentNode?.removeChild(pivotPart);
+      continue;
+    }
+    const sourcePath = resolvePartPath(options.sourceSheetPath, relationship.target);
+    const copiedPath = copyPartPreservingPath(
+      options.savedArchive,
+      options.sourceArchive,
+      sourcePath,
+      PIVOT_TABLE_CONTENT_TYPE,
+    );
+    if (!copiedPath) {
+      pivotPart.parentNode?.removeChild(pivotPart);
+      continue;
+    }
+    const nextId = addRelationship(
+      options.savedRelationships,
+      PIVOT_TABLE_REL_TYPE,
+      relativeArchivePath(options.savedSheetPath, copiedPath),
+      null,
+    );
+    if (!nextId) {
+      pivotPart.parentNode?.removeChild(pivotPart);
+      continue;
+    }
+    setRelationshipId(pivotPart, nextId);
+    copied += 1;
+  }
+  if (copied === 0) {
+    return;
+  }
+  importedParts.setAttribute("count", String(copied));
+  insertSheetChild(options.savedDocument, importedParts);
+}
+
+/** The `<extLst>` of a worksheet or workbook, created in schema order. */
+function ensureExtLst(document: XMLDocument, insert: (node: Element) => void) {
+  const existing = getLocalElements(document, "extLst")[0];
+  if (existing) {
+    return existing;
+  }
+  const extLst = document.createElementNS(document.documentElement.namespaceURI ?? "", "extLst");
+  insert(extLst);
+  return extLst;
+}
+
+function removeExtByUri(extLst: Element, uri: string) {
+  for (const extNode of getChildElements(extLst, "ext")) {
+    if (extNode.getAttribute("uri") === uri) {
+      extLst.removeChild(extNode);
+    }
+  }
+}
+
+/** Copies the slicer parts referenced from a worksheet's `<x14:slicerList>`. */
+function applySlicerParts(options: {
+  sourceArchive: ArchiveEntries;
+  sourceDocument: XMLDocument;
+  sourceRelationships: Map<string, RelationshipSource>;
+  sourceSheetPath: string;
+  savedArchive: ArchiveEntries;
+  savedDocument: XMLDocument;
+  savedRelationships: XMLDocument;
+  savedSheetPath: string;
+}) {
+  const sourceSlicerList = getLocalElements(options.sourceDocument, "slicerList")[0] ?? null;
+  if (!sourceSlicerList) {
+    return;
+  }
+  const sourceExt = sourceSlicerList.parentNode;
+  if (!sourceExt || !("localName" in sourceExt) || (sourceExt as Element).localName !== "ext") {
+    return;
+  }
+  const importedExt = options.savedDocument.importNode(sourceExt as Element, true) as Element;
+  const uri = importedExt.getAttribute("uri") ?? "";
+  let copied = 0;
+  for (const slicerNode of getLocalElements(importedExt, "slicer")) {
+    const relationshipId = getRelationshipId(slicerNode);
+    const relationship = relationshipId
+      ? options.sourceRelationships.get(relationshipId)
+      : undefined;
+    if (!relationship || relationship.type !== SLICER_REL_TYPE) {
+      slicerNode.parentNode?.removeChild(slicerNode);
+      continue;
+    }
+    const sourcePath = resolvePartPath(options.sourceSheetPath, relationship.target);
+    const copiedPath = copyPartPreservingPath(
+      options.savedArchive,
+      options.sourceArchive,
+      sourcePath,
+      SLICER_CONTENT_TYPE,
+    );
+    if (!copiedPath) {
+      slicerNode.parentNode?.removeChild(slicerNode);
+      continue;
+    }
+    const nextId = addRelationship(
+      options.savedRelationships,
+      SLICER_REL_TYPE,
+      relativeArchivePath(options.savedSheetPath, copiedPath),
+      null,
+    );
+    if (!nextId) {
+      slicerNode.parentNode?.removeChild(slicerNode);
+      continue;
+    }
+    setRelationshipId(slicerNode, nextId);
+    copied += 1;
+  }
+  if (copied === 0) {
+    return;
+  }
+  const extLst = ensureExtLst(options.savedDocument, (node) => insertSheetChild(options.savedDocument, node));
+  if (uri) {
+    removeExtByUri(extLst, uri);
+  }
+  extLst.appendChild(importedExt);
+}
+
 function applyCommentParts(options: {
   sourceArchive: ArchiveEntries;
   sourceDocument: XMLDocument;
@@ -621,6 +800,189 @@ function applyWorkbookPrintDefinedNames(
  * are left untouched, so exporting an unmodified workbook stays byte-for-byte
  * identical to the engine's output.
  */
+const WORKBOOK_CHILD_ORDER = [
+  "fileVersion",
+  "fileSharing",
+  "workbookPr",
+  "workbookProtection",
+  "bookViews",
+  "sheets",
+  "functionGroups",
+  "externalReferences",
+  "definedNames",
+  "calcPr",
+  "oleSize",
+  "customWorkbookViews",
+  "pivotCaches",
+  "smartTagPr",
+  "smartTagTypes",
+  "webPublishing",
+  "fileRecoveryPr",
+  "webPublishObjects",
+  "extLst",
+];
+
+function insertWorkbookChild(document: XMLDocument, node: Element) {
+  const root = document.documentElement;
+  if (!root) {
+    return;
+  }
+  const rank = WORKBOOK_CHILD_ORDER.indexOf(node.localName);
+  if (rank < 0) {
+    root.appendChild(node);
+    return;
+  }
+  for (const child of Array.from(root.childNodes)) {
+    if (child.nodeType !== 1) {
+      continue;
+    }
+    const childRank = WORKBOOK_CHILD_ORDER.indexOf((child as Element).localName);
+    if (childRank > rank) {
+      root.insertBefore(node, child);
+      return;
+    }
+  }
+  root.appendChild(node);
+}
+
+function pivotPartContentType(path: string) {
+  if (/^xl\/pivotTables\/[^/]+\.xml$/i.test(path)) return PIVOT_TABLE_CONTENT_TYPE;
+  if (/^xl\/pivotCache\/pivotCacheRecords[^/]*\.xml$/i.test(path)) return PIVOT_CACHE_RECORDS_CONTENT_TYPE;
+  if (/^xl\/pivotCache\/[^/]+\.xml$/i.test(path)) return PIVOT_CACHE_DEFINITION_CONTENT_TYPE;
+  if (/^xl\/slicers\/[^/]+\.xml$/i.test(path)) return SLICER_CONTENT_TYPE;
+  if (/^xl\/slicerCaches\/[^/]+\.xml$/i.test(path)) return SLICER_CACHE_CONTENT_TYPE;
+  return null;
+}
+
+function copyPivotPackageParts(savedArchive: ArchiveEntries, sourceArchive: ArchiveEntries) {
+  for (const path of Object.keys(sourceArchive)) {
+    if (!/^xl\/(pivotCache|pivotTables|slicers|slicerCaches)\//i.test(path)) {
+      continue;
+    }
+    savedArchive[path] = cloneBytes(sourceArchive[path]);
+    const contentType = pivotPartContentType(path);
+    if (contentType) {
+      ensureContentTypeOverride(savedArchive, path, contentType);
+    }
+  }
+}
+
+/**
+ * Merges workbook-level pivot caches and slicer caches into saved bytes.
+ *
+ * The workbook part references cache definitions and slicer caches through
+ * relationships, and Excel's slicer list lives in the workbook extLst. Both are
+ * dropped by the engine's save, so they are re-imported here after the sheet
+ * loop.
+ */
+function applyWorkbookPivotParts(sourceArchive: ArchiveEntries, savedArchive: ArchiveEntries) {
+  const sourceXml = readArchiveText(sourceArchive, "xl/workbook.xml");
+  if (!sourceXml) {
+    return false;
+  }
+  const sourceDocument = parseXml(sourceXml);
+  if (!sourceDocument?.documentElement) {
+    return false;
+  }
+  const sourcePivotCaches = getLocalElements(sourceDocument, "pivotCaches")[0] ?? null;
+  const sourceSlicerCaches = getLocalElements(sourceDocument, "slicerCaches")[0] ?? null;
+  if (!sourcePivotCaches && !sourceSlicerCaches) {
+    return false;
+  }
+
+  const savedXml = readArchiveText(savedArchive, "xl/workbook.xml");
+  const savedDocument = savedXml ? parseXml(savedXml) : null;
+  if (!savedDocument?.documentElement) {
+    return false;
+  }
+  const savedRelsPath = "xl/_rels/workbook.xml.rels";
+  const savedRelationships = ensureRelationshipsXml(savedArchive, savedRelsPath);
+  if (!savedRelationships) {
+    return false;
+  }
+  const sourceRelationships = readRawRelationships(sourceArchive, savedRelsPath);
+  copyPivotPackageParts(savedArchive, sourceArchive);
+  ensureRelationshipNamespace(savedDocument);
+  let changed = false;
+
+  if (sourcePivotCaches) {
+    removeSheetElement(savedDocument, "pivotCaches");
+    removeRelationshipsByType(savedRelationships, new Set([PIVOT_CACHE_DEFINITION_REL_TYPE]));
+    const importedCaches = savedDocument.importNode(sourcePivotCaches, true) as Element;
+    let copied = 0;
+    for (const cacheNode of getChildElements(importedCaches, "pivotCache")) {
+      const relationshipId = getRelationshipId(cacheNode);
+      const relationship = relationshipId ? sourceRelationships.get(relationshipId) : undefined;
+      if (!relationship || relationship.type !== PIVOT_CACHE_DEFINITION_REL_TYPE) {
+        cacheNode.parentNode?.removeChild(cacheNode);
+        continue;
+      }
+      const targetPath = resolvePartPath("xl/workbook.xml", relationship.target);
+      const nextId = addRelationship(
+        savedRelationships,
+        PIVOT_CACHE_DEFINITION_REL_TYPE,
+        relativeArchivePath("xl/workbook.xml", targetPath),
+        null,
+      );
+      if (!nextId) {
+        cacheNode.parentNode?.removeChild(cacheNode);
+        continue;
+      }
+      setRelationshipId(cacheNode, nextId);
+      copied += 1;
+    }
+    if (copied > 0) {
+      insertWorkbookChild(savedDocument, importedCaches);
+      changed = true;
+    }
+  }
+
+  if (sourceSlicerCaches) {
+    const sourceExt = sourceSlicerCaches.parentNode;
+    if (sourceExt && "localName" in sourceExt && (sourceExt as Element).localName === "ext") {
+      const importedExt = savedDocument.importNode(sourceExt as Element, true) as Element;
+      const uri = importedExt.getAttribute("uri") ?? "";
+      let copied = 0;
+      for (const cacheNode of getLocalElements(importedExt, "slicerCache")) {
+        const relationshipId = getRelationshipId(cacheNode);
+        const relationship = relationshipId ? sourceRelationships.get(relationshipId) : undefined;
+        if (!relationship || relationship.type !== SLICER_CACHE_REL_TYPE) {
+          cacheNode.parentNode?.removeChild(cacheNode);
+          continue;
+        }
+        const targetPath = resolvePartPath("xl/workbook.xml", relationship.target);
+        const nextId = addRelationship(
+          savedRelationships,
+          SLICER_CACHE_REL_TYPE,
+          relativeArchivePath("xl/workbook.xml", targetPath),
+          null,
+        );
+        if (!nextId) {
+          cacheNode.parentNode?.removeChild(cacheNode);
+          continue;
+        }
+        setRelationshipId(cacheNode, nextId);
+        copied += 1;
+      }
+      if (copied > 0) {
+        const extLst = ensureExtLst(savedDocument, (node) => insertWorkbookChild(savedDocument, node));
+        if (uri) {
+          removeExtByUri(extLst, uri);
+        }
+        extLst.appendChild(importedExt);
+        changed = true;
+      }
+    }
+  }
+
+  if (!changed) {
+    return false;
+  }
+  savedArchive["xl/workbook.xml"] = strToU8(serializeXml(savedDocument));
+  savedArchive[savedRelsPath] = strToU8(serializeXml(savedRelationships));
+  return true;
+}
+
 function applyWorksheetPrintLayouts(
   sourceArchive: ArchiveEntries,
   savedArchive: ArchiveEntries
@@ -716,6 +1078,26 @@ export function mergeWorkbookSheetAuthoringAssets(
         sourceRelationships,
         sourceSheetPath: sourceSheet.path
       });
+      applyPivotTableParts({
+        savedArchive,
+        savedDocument,
+        savedRelationships,
+        savedSheetPath: savedSheet.path,
+        sourceArchive,
+        sourceDocument,
+        sourceRelationships,
+        sourceSheetPath: sourceSheet.path
+      });
+      applySlicerParts({
+        savedArchive,
+        savedDocument,
+        savedRelationships,
+        savedSheetPath: savedSheet.path,
+        sourceArchive,
+        sourceDocument,
+        sourceRelationships,
+        sourceSheetPath: sourceSheet.path
+      });
       applyCommentParts({
         savedArchive,
         savedDocument,
@@ -734,6 +1116,8 @@ export function mergeWorkbookSheetAuthoringAssets(
 
     const printLayoutsChanged = applyWorksheetPrintLayouts(sourceArchive, savedArchive);
     if (printLayoutsChanged) changed = true;
+    const pivotPartsChanged = applyWorkbookPivotParts(sourceArchive, savedArchive);
+    if (pivotPartsChanged) changed = true;
     const workbookChanged = applyWorkbookPrintDefinedNames(sourceArchive, savedArchive);
     if (workbookChanged) changed = true;
     return changed ? zipSync(savedArchive, { level: 6 }) : cloneBytes(savedBytes);

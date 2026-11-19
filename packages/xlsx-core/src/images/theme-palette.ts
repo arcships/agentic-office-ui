@@ -582,7 +582,20 @@ export function parseWorkbookStyles(archive: ArchiveEntries) {
   const tableStyleByName: Record<string, XlsxTableStyleDefinition> = {};
 
   getChildElements(cellXfsNode, "xf").forEach((xfNode, index) => {
-    styleById[index] = parseResolvedXfStyle(xfNode, fonts, fills, borders, checkboxComplementIndices, customNumberFormats);
+    const style = parseResolvedXfStyle(xfNode, fonts, fills, borders, checkboxComplementIndices, customNumberFormats);
+    // A cell's `xf` record overrides the table style only for the subtrees it
+    // actually declares. `fontId=0` points at the workbook default font and
+    // must not erase a table header's bold/white font.
+    const overrides: XlsxResolvedCellStyle = {};
+    for (const component of ["font", "fill", "border"] as const) {
+      const idAttribute = `${component}Id`;
+      const applyAttribute = `apply${component[0].toUpperCase()}${component.slice(1)}`;
+      if (Number(xfNode.getAttribute(idAttribute) ?? 0) > 0
+        && xfNode.getAttribute(applyAttribute) !== "0") {
+        Object.assign(overrides, { [component]: style[component] });
+      }
+    }
+    styleById[index] = { ...style, tableStyleOverrides: overrides };
   });
 
   getChildElements(cellStylesNode ?? document.documentElement, "cellStyle").forEach((cellStyleNode) => {

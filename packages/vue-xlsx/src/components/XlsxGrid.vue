@@ -11,6 +11,9 @@
     :data-auto-filter-range-count="controller.autoFilterRanges?.length ?? 0"
     :data-auto-filter-trigger-count="autoFilterTriggers.length"
     :data-hidden-auto-filter-row-count="controller.hiddenAutoFilterRows?.length ?? 0"
+    :data-pivot-count="controller.pivotTables?.length ?? 0"
+    :data-pivot-names="pivotBadgeViews.length ? pivotBadgeViews.map((badge) => badge.name).join(' ') : undefined"
+    :data-slicer-count="controller.slicers?.length ?? 0"
     :data-worker-backed="String(Boolean(controller.isWorkerBacked))"
     :data-right-to-left="isRightToLeft ? 'true' : undefined"
     :data-cut-range="cutRangeAddress || undefined"
@@ -304,6 +307,15 @@
         </div>
       </div>
     </div>
+    <div
+      v-for="badge in pivotBadgeViews"
+      :key="badge.name"
+      class="xlsx-grid__pivot-badge"
+      data-testid="xlsx-pivot-badge"
+      :data-pivot-name="badge.name"
+      :style="badge.style"
+      :title="badge.label"
+    >{{ badge.label }}</div>
     <XlsxClipboardNotice :message="clipboardNotice" />
   </div>
 </template>
@@ -313,6 +325,7 @@ import { ref, shallowRef, computed, watch, onMounted, onUnmounted, nextTick, typ
 import {
   resolveWorkbookColor,
   resolveWorkbookFillStyle,
+  withTableCellStyle,
   type XlsxAutoFilterRange,
   type XlsxTableHeaderMenuRenderProps,
   type XlsxViewerController,
@@ -806,6 +819,31 @@ const validationDropdownStyle = computed<CSSProperties>(() => {
     top: `${HEADER_HEIGHT + (anchor?.top ?? 0)}px`,
   };
 });
+const pivotBadgeViews = computed(() => {
+  void revision.value;
+  const sheet = activeSheet.value;
+  if (!sheet) return [];
+  return (props.controller.pivotTables ?? []).flatMap((pivot) => {
+    const display = getDisplayCell(pivot.range.start);
+    if (!display) return [];
+    const anchor = paneOverlayRect(pivot.range.start, {
+      contentX: getColOffsetSum(display.col),
+      contentY: getRowOffsetSum(display.row),
+      width: 0,
+      height: 0,
+    });
+    if (!anchor) return [];
+    return [{
+      label: formatOfficeMessage(m.value.xlsx.pivot.staticPreview, { name: pivot.name }),
+      name: pivot.name,
+      style: {
+        left: `${ROW_HEADER_WIDTH + anchor.left}px`,
+        top: `${HEADER_HEIGHT + anchor.top}px`,
+      } as CSSProperties,
+    }];
+  });
+});
+
 const validationFeedbackView = computed(() => {
   const feedback = props.controller.dataValidationFeedback as XlsxDataValidationFeedback | null | undefined;
   if (!feedback) return null;
@@ -2878,6 +2916,22 @@ function resolveCellWorkbookStyle(
     workbookStyle = rowStyleId !== undefined
       ? sheet.styleById[rowStyleId]
       : colStyleId !== undefined ? sheet.styleById[colStyleId] : undefined;
+  }
+  // Excel's table styles sit above the cell's inherited style but below the
+  // cell's own explicit formatting. `withTableCellStyle` performs that merge
+  // and returns the base style unchanged on table-free sheets.
+  const tables = props.controller.tables;
+  if (tables && tables.length > 0) {
+    const explicitStyleId = sheet.cellStyleIds?.[cellAddressToA1(cell)]
+      ?? sheet.rowStyleIds[cell.row]
+      ?? sheet.colStyleIds[cell.col];
+    workbookStyle = withTableCellStyle(workbookStyle, tables, cell, {
+      declaredTableStyleOverrides: explicitStyleId === undefined
+        ? null
+        : sheet.styleById[explicitStyleId]?.tableStyleOverrides,
+      namedCellStyleByName: sheet.namedCellStyleByName,
+      tableStyleByName: sheet.tableStyleByName,
+    });
   }
   // Worker row batches and row/column fallbacks do not always carry the
   // alignment of an explicitly styled cell. `cellTextLayouts` is parsed from
@@ -5596,4 +5650,20 @@ onUnmounted(() => {
 .xlsx-grid__validation-alert--warning { background: #fffbeb; border-color: #fbbf24; color: #78350f; }
 .xlsx-grid__validation-alert--information { background: #eff6ff; border-color: #60a5fa; color: #1e3a8a; }
 .xlsx-grid__validation-dismiss { background: transparent; border: 0; color: inherit; cursor: pointer; font-size: 16px; line-height: 1; padding: 0 2px; position: absolute; right: 4px; top: 3px; }
+.xlsx-grid__pivot-badge {
+  background: rgba(219, 234, 254, .92);
+  border: 1px solid #93c5fd;
+  border-radius: 4px;
+  color: #1e3a8a;
+  font-size: 10px;
+  line-height: 1.3;
+  max-width: 240px;
+  overflow: hidden;
+  padding: 2px 6px;
+  pointer-events: none;
+  position: absolute;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  z-index: 30;
+}
 </style>

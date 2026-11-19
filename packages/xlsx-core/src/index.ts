@@ -40,10 +40,32 @@ export type {
 } from "./runtime/xlsx-runtime";
 
 export {
+  BUILTIN_TABLE_STYLES,
+  findTableAtCell,
+  mergeTableStyle,
+  resolveBuiltinTableStyle,
+  resolveTableCellStyle,
+  withTableCellStyle,
+} from "./table-styles";
+
+export {
   resolveWorkbookColor,
   resolveWorkbookFillColor,
   resolveWorkbookFillStyle,
 } from "./colors";
+
+export {
+  definedNamesForWorksheet,
+  parseWorkbookDefinedNames,
+  toDefinedNameSummary,
+} from "./defined-names";
+export type { WorkbookDefinedNameMetadata } from "./defined-names";
+
+export {
+  listPivotParts,
+  parseWorksheetPivotTables,
+  parseWorksheetSlicers,
+} from "./pivot";
 
 export {
   DEFAULT_PAGE_MARGINS,
@@ -351,6 +373,18 @@ export type {
   XlsxTableSortState,
   XlsxTableStyleDefinition,
   XlsxTableStyleInfo,
+  XlsxPivotAggregation,
+  XlsxPivotShowAs,
+  XlsxPivotFieldAxis,
+  XlsxPivotFieldItem,
+  XlsxPivotField,
+  XlsxPivotDataField,
+  XlsxPivotSource,
+  XlsxPivotTable,
+  XlsxSlicerItem,
+  XlsxSlicer,
+  XlsxDefinedName,
+  XlsxViewerPivot,
   XlsxThemePalette,
   XlsxChartInsertInput,
   XlsxTableCreateInput,

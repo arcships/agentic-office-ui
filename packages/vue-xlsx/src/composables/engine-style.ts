@@ -143,6 +143,9 @@ export function toEngineCellStyle(style: unknown): unknown {
   }
 
   const converted: Record<string, unknown> = { ...record };
+  // Renderer-only metadata recorded by the table-style parser; the engine's
+  // `setCellStyleAt` accepts only font/fill/border/alignment/... groups.
+  delete converted.tableStyleOverrides;
 
   const font = asRecord(record.font);
   if (font) {
